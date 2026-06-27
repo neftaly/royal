@@ -29,6 +29,9 @@
       "@royal/react/jsx-runtime": [
         "./packages/react-royal-fiber/src/jsx-runtime.ts"
       ],
+      "@royal/react/testing": [
+        "./packages/react-royal-fiber/src/testing.ts"
+      ],
       "@royal/tarstate-lens": [
         "./packages/royal-tarstate-lens/src/index.ts"
       ],
@@ -47,6 +50,9 @@
       "react-regl-fiber/jsx-runtime": [
         "./packages/react-regl-fiber-compat/src/jsx-runtime.ts"
       ],
+      "react-regl-fiber/testing": [
+        "./packages/react-regl-fiber-compat/src/testing.ts"
+      ],
       "react-royal-fiber": [
         "./packages/react-royal-fiber-compat/src/index.ts"
       ],
@@ -58,6 +64,9 @@
       ],
       "react-royal-fiber/jsx-runtime": [
         "./packages/react-royal-fiber-compat/src/jsx-runtime.ts"
+      ],
+      "react-royal-fiber/testing": [
+        "./packages/react-royal-fiber-compat/src/testing.ts"
       ]
     },
     "isolatedModules": true,

@@ -19,23 +19,23 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/react': {
     external: ['@royal/renderer-core', 'react'],
     lib: {
-      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts' },
+      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
   },
   'react-regl-fiber': {
-    external: ['@royal/react', '@royal/react/root', '@royal/react/jsx-dev-runtime', '@royal/react/jsx-runtime'],
+    external: ['@royal/react', '@royal/react/root', '@royal/react/jsx-dev-runtime', '@royal/react/jsx-runtime', '@royal/react/testing'],
     lib: {
-      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts' },
+      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
   },
   'react-royal-fiber': {
-    external: ['@royal/react', '@royal/react/root', '@royal/react/jsx-dev-runtime', '@royal/react/jsx-runtime'],
+    external: ['@royal/react', '@royal/react/root', '@royal/react/jsx-dev-runtime', '@royal/react/jsx-runtime', '@royal/react/testing'],
     lib: {
-      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts' },
+      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
@@ -55,14 +55,17 @@ const sourceAliases = [
   { find: '@royal/react/root', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/root.ts') },
   { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-dev-runtime.ts') },
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-runtime.ts') },
+  { find: '@royal/react/testing', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/testing.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/index.ts') },
   { find: 'react-regl-fiber/root', replacement: path.join(repoRoot, 'packages/react-regl-fiber-compat/src/root.ts') },
   { find: 'react-regl-fiber/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react-regl-fiber-compat/src/jsx-dev-runtime.ts') },
   { find: 'react-regl-fiber/jsx-runtime', replacement: path.join(repoRoot, 'packages/react-regl-fiber-compat/src/jsx-runtime.ts') },
+  { find: 'react-regl-fiber/testing', replacement: path.join(repoRoot, 'packages/react-regl-fiber-compat/src/testing.ts') },
   { find: 'react-regl-fiber', replacement: path.join(repoRoot, 'packages/react-regl-fiber-compat/src/index.ts') },
   { find: 'react-royal-fiber/root', replacement: path.join(repoRoot, 'packages/react-royal-fiber-compat/src/root.ts') },
   { find: 'react-royal-fiber/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber-compat/src/jsx-dev-runtime.ts') },
   { find: 'react-royal-fiber/jsx-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber-compat/src/jsx-runtime.ts') },
+  { find: 'react-royal-fiber/testing', replacement: path.join(repoRoot, 'packages/react-royal-fiber-compat/src/testing.ts') },
   { find: 'react-royal-fiber', replacement: path.join(repoRoot, 'packages/react-royal-fiber-compat/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') },
   { find: '@royal/tarstate-lens/v1', replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts') },

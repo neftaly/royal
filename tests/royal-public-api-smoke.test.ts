@@ -16,6 +16,11 @@ import {
   type TextNode as ReactTextNode
 } from '@royal/react';
 import {
+  collectRendererCapabilityRows,
+  orthographic,
+  type RendererCapabilityProbeResult
+} from '@royal/react/testing';
+import {
   layoutText,
   shapeText,
   text,
@@ -115,6 +120,22 @@ describe('Royal public API smoke tests', () => {
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
     expectTypeOf(meshFromNode).toEqualTypeOf<TextMesh>();
     expectTypeOf(legacyRects).toEqualTypeOf<readonly VectorTextRect[]>();
+  });
+
+  it('exposes renderer testing helpers without package-internal imports', () => {
+    const projection = orthographic(-1, 1, -1, 1, 0.1, 100);
+    const result = collectRendererCapabilityRows(
+      {
+        getExtension: () => undefined,
+        getSupportedExtensions: () => []
+      },
+      { includeMissingDiagnostics: true }
+    );
+
+    expect(projection).toHaveLength(16);
+    expect(result.rows.some((row) => row.kind === 'context_version')).toBe(true);
+    expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl')).toBe(true);
+    expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();
   });
 
   it('lets consumers query Royal store lenses without package-internal imports', async () => {

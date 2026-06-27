@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./root": "./src/root.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
-    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts"
+    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
+    "./testing": "./src/testing.ts"
   },
   "files": [
     "src",
