@@ -1,0 +1,80 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@tarstate/core": [
+        "./packages/tarstate-core/src/index.ts"
+      ],
+      "@royal/renderer-core": [
+        "./packages/renderer-core/src/index.ts"
+      ],
+      "@royal/react": [
+        "./packages/react-royal-fiber/src/index.ts"
+      ],
+      "@royal/react/root": [
+        "./packages/react-royal-fiber/src/root.ts"
+      ],
+      "@royal/react/jsx-dev-runtime": [
+        "./packages/react-royal-fiber/src/jsx-dev-runtime.ts"
+      ],
+      "@royal/react/jsx-runtime": [
+        "./packages/react-royal-fiber/src/jsx-runtime.ts"
+      ],
+      "@royal/tarstate-lens": [
+        "./packages/royal-tarstate-lens/src/index.ts"
+      ],
+      "@royal/tarstate-lens/v1": [
+        "./packages/royal-tarstate-lens/src/v1.ts"
+      ],
+      "react-regl-fiber": [
+        "./packages/react-regl-fiber-compat/src/index.ts"
+      ],
+      "react-regl-fiber/root": [
+        "./packages/react-regl-fiber-compat/src/root.ts"
+      ],
+      "react-regl-fiber/jsx-dev-runtime": [
+        "./packages/react-regl-fiber-compat/src/jsx-dev-runtime.ts"
+      ],
+      "react-regl-fiber/jsx-runtime": [
+        "./packages/react-regl-fiber-compat/src/jsx-runtime.ts"
+      ],
+      "react-royal-fiber": [
+        "./packages/react-royal-fiber-compat/src/index.ts"
+      ],
+      "react-royal-fiber/root": [
+        "./packages/react-royal-fiber-compat/src/root.ts"
+      ],
+      "react-royal-fiber/jsx-dev-runtime": [
+        "./packages/react-royal-fiber-compat/src/jsx-dev-runtime.ts"
+      ],
+      "react-royal-fiber/jsx-runtime": [
+        "./packages/react-royal-fiber-compat/src/jsx-runtime.ts"
+      ]
+    },
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "apps/*/src",
+    "packages/*/src",
+    "packages/*/tests",
+    "scripts/*.ts",
+    "tests/*.ts",
+    "vite.config.ts",
+    "types/*.d.ts"
+  ]
+}

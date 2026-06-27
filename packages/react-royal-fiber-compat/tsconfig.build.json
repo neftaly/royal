@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.build.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "paths": {
+      "@royal/react": [
+        "../react-royal-fiber/dist/index.d.ts"
+      ],
+      "@royal/react/root": [
+        "../react-royal-fiber/dist/root.d.ts"
+      ],
+      "@royal/react/jsx-runtime": [
+        "../react-royal-fiber/dist/jsx-runtime.d.ts"
+      ],
+      "@royal/react/jsx-dev-runtime": [
+        "../react-royal-fiber/dist/jsx-dev-runtime.d.ts"
+      ]
+    },
+    "rootDir": "src",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../react-royal-fiber/tsconfig.build.json"
+    }
+  ]
+}

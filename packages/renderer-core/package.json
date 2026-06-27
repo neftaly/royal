@@ -1,0 +1,30 @@
+{
+  "name": "@royal/renderer-core",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -p tsconfig.build.json",
+    "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
+    "test": "vitest run src/*.test.ts"
+  },
+  "devDependencies": {
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

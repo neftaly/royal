@@ -1,0 +1,88 @@
+:root {
+  color-scheme: light dark;
+  --accent: light-dark(#5d54e8, #9ee7d2);
+  --bg: light-dark(#fbf7ef, #15131a);
+  --check-a: light-dark(#eef7f3, #1d1a24);
+  --check-b: light-dark(#dcebe5, #272330);
+  --fg: light-dark(#292433, #f2edf6);
+  --line: light-dark(#e5dccf, #34303e);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  height: 100%;
+}
+
+body,
+#root,
+main {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+}
+
+.examples-header,
+.examples-brand,
+.examples-nav {
+  display: flex;
+  align-items: center;
+}
+
+.examples-header {
+  border-bottom: 1px solid var(--line);
+  gap: 2em;
+  padding: 0.75rem 1rem;
+}
+
+.examples-brand,
+.examples-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.examples-brand {
+  color: inherit;
+  gap: 0.375rem;
+  font-weight: 700;
+}
+
+.examples-nav {
+  flex-wrap: wrap;
+  gap: 2em;
+}
+
+.examples-link.active {
+  text-decoration: underline;
+}
+
+section {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.empty {
+  display: grid;
+  padding: 1rem;
+  place-content: center;
+  text-align: center;
+}
+
+canvas {
+  background-color: var(--check-a);
+  background-image:
+    linear-gradient(45deg, var(--check-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--check-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--check-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--check-b) 75%);
+  background-position: 0 0, 0 0.75rem, 0.75rem -0.75rem, -0.75rem 0;
+  background-size: 1.5rem 1.5rem;
+  display: block;
+  block-size: 100%;
+  inline-size: 100%;
+}

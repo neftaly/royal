@@ -1,0 +1,28 @@
+{
+  "name": "royal",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "check:gpu": "node scripts/gpu.ts check",
+    "dev": "pnpm --filter @royal/examples-react dev",
+    "test": "vitest run scripts/gpu.test.ts tests/*.test.ts && pnpm --filter './apps/*' --if-present test && pnpm --filter './packages/*' --if-present test",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-glsl": "catalog:",
+    "vitest": "catalog:"
+  }
+}
