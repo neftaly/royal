@@ -3,6 +3,7 @@ import { mat4 } from "gl-matrix";
 import { createFloatBuffer, createIndexBuffer } from "./gl";
 import { composeTransform, type Mat4 } from "./matrix";
 import { markGltf, measureGltf } from "./performance";
+import { TextureCache } from "./texture-cache";
 
 type GltfAccessorType = "SCALAR" | "VEC2" | "VEC3";
 
@@ -327,61 +328,18 @@ const loadBuffers = async (
     return await response.arrayBuffer();
   }));
 
-const loadImage = async (src: string, uri: string): Promise<ImageBitmap> => {
-  const response = await fetch(resolveUri(src, uri));
-  if (!response.ok) throw new Error(`Failed to load glTF image: ${uri}`);
-  return await createImageBitmap(await response.blob());
-};
-
-const createTexture = (
-  gl: WebGLRenderingContext,
-  image: ImageBitmap,
-): WebGLTexture => {
-  const texture = gl.createTexture();
-  if (texture === null) throw new Error("Failed to create WebGL texture");
-
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  return texture;
-};
-
-const createFallbackTexture = (gl: WebGLRenderingContext): WebGLTexture => {
-  const texture = gl.createTexture();
-  if (texture === null) throw new Error("Failed to create WebGL texture");
-
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA,
-    1,
-    1,
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    new Uint8Array([255, 255, 255, 255]),
-  );
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  return texture;
-};
-
 export class GltfCache {
   readonly #buffers = new Set<WebGLBuffer>();
   readonly #entries = new Map<string, GltfEntry>();
   readonly #gl: WebGLRenderingContext;
   readonly #onReady: () => void;
-  readonly #textures = new Set<WebGLTexture>();
+  readonly #textureCache: TextureCache;
   #disposed = false;
-  #fallbackTexture: WebGLTexture | undefined;
 
   constructor(gl: WebGLRenderingContext, onReady: () => void) {
     this.#gl = gl;
     this.#onReady = onReady;
+    this.#textureCache = new TextureCache(gl);
   }
 
   get(node: GltfNode): GltfAsset | undefined {
@@ -415,12 +373,9 @@ export class GltfCache {
     for (const buffer of this.#buffers) {
       this.#gl.deleteBuffer(buffer);
     }
-    for (const texture of this.#textures) {
-      this.#gl.deleteTexture(texture);
-    }
     this.#buffers.clear();
-    this.#textures.clear();
     this.#entries.clear();
+    this.#textureCache.dispose();
   }
 
   async #load(src: string): Promise<GltfAsset> {
@@ -429,31 +384,8 @@ export class GltfCache {
     markGltf("document:end");
     measureGltf("document", "document:start", "document:end");
 
-    const textures = new Map<number, Promise<WebGLTexture>>();
     const loadTexture = async (textureIndex: number): Promise<WebGLTexture> => {
-      const existing = textures.get(textureIndex);
-      if (existing !== undefined) return await existing;
-
-      const promise = (async (): Promise<WebGLTexture> => {
-        markGltf(`texture:${textureIndex}:start`);
-        const texture = required(json.textures?.[textureIndex], `texture ${textureIndex}`);
-        const imageIndex = required(texture.source, `texture ${textureIndex} source`);
-        const image = required(json.images?.[imageIndex], `image ${imageIndex}`);
-        const loadedTexture = this.#trackTexture(createTexture(
-          this.#gl,
-          await loadImage(src, required(image.uri, `image ${imageIndex} uri`)),
-        ));
-        markGltf(`texture:${textureIndex}:end`);
-        measureGltf(
-          `texture:${textureIndex}`,
-          `texture:${textureIndex}:start`,
-          `texture:${textureIndex}:end`,
-        );
-        return loadedTexture;
-      })();
-
-      textures.set(textureIndex, promise);
-      return await promise;
+      return await this.#textureCache.loadGltfBaseColorTexture({ json, src, textureIndex });
     };
     const warmedTextures = Promise.all(baseColorTextureIndices(json).map(loadTexture));
     void warmedTextures.catch(() => undefined);
@@ -493,7 +425,7 @@ export class GltfCache {
           normal: this.#track(createFloatBuffer(this.#gl, normal)),
           position: this.#track(createFloatBuffer(this.#gl, position)),
           texCoord: this.#track(createFloatBuffer(this.#gl, texCoord)),
-          texture: this.#getFallbackTexture(),
+          texture: this.#textureCache.getFallbackTexture(),
         };
         primitives.push(renderedPrimitive);
         textureLoads.push(loadTexture(textureIndex).then((texture) => {
@@ -525,18 +457,4 @@ export class GltfCache {
     return buffer;
   }
 
-  #trackTexture(texture: WebGLTexture): WebGLTexture {
-    if (this.#disposed) {
-      this.#gl.deleteTexture(texture);
-      return texture;
-    }
-
-    this.#textures.add(texture);
-    return texture;
-  }
-
-  #getFallbackTexture(): WebGLTexture {
-    this.#fallbackTexture ??= this.#trackTexture(createFallbackTexture(this.#gl));
-    return this.#fallbackTexture;
-  }
 }

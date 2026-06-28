@@ -10,6 +10,7 @@ type MutableFixtureJson = {
 
 const installFixture = (
   configure?: (json: MutableFixtureJson) => void,
+  createImageBitmapImpl: () => Promise<ImageBitmap> = () => Promise.resolve({} as ImageBitmap),
 ): void => {
   const fixture = makeTriangleFixture();
   const json = structuredClone(fixture.json) as MutableFixtureJson;
@@ -28,7 +29,7 @@ const installFixture = (
   }));
   vi.stubGlobal(
     "createImageBitmap",
-    vi.fn(() => Promise.resolve({} as ImageBitmap)),
+    vi.fn(createImageBitmapImpl),
   );
 };
 
@@ -87,5 +88,31 @@ describe("GltfCache bounds", () => {
     expect(bounds?.minZ).toBeCloseTo(0);
     expect(bounds?.maxZ).toBeCloseTo(0);
     cache.dispose();
+  });
+});
+
+describe("GltfCache textures", () => {
+  it("deletes fallback and late-loaded textures when disposed", async () => {
+    let resolveImage!: (image: ImageBitmap) => void;
+    const imagePromise = new Promise<ImageBitmap>((resolve) => {
+      resolveImage = resolve;
+    });
+    installFixture(undefined, () => imagePromise);
+    const { counts, gl } = fakeGl();
+    const cache = new GltfCache(gl, () => undefined);
+    const node = gltf({ src: "https://example.test/triangle.gltf" });
+
+    expect(cache.get(node)).toBeUndefined();
+    await waitFor(() => cache.get(node) !== undefined);
+
+    expect(counts.createTexture).toBe(1);
+    expect(counts.deleteTexture).toBe(0);
+
+    cache.dispose();
+    expect(counts.deleteTexture).toBe(1);
+
+    resolveImage({} as ImageBitmap);
+    await waitFor(() => counts.deleteTexture === 2);
+    expect(counts.createTexture).toBe(2);
   });
 });

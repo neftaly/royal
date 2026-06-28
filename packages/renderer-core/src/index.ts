@@ -24,6 +24,14 @@ export type {
   UnlitMaterialOptions
 } from './material';
 export { standardMaterial, unlitMaterial } from './material';
+export type {
+  Texture2dResource,
+  TextureColorSpace,
+  TextureSampler,
+  TextureSamplerFilter,
+  TextureSamplerWrap,
+  TextureSource
+} from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
