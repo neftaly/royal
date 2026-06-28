@@ -19,6 +19,9 @@ const Sidebar = (): ReactNode => (
                   to={example.path}
                   activeProps={{ className: "examples-link active" }}
                   className="examples-link"
+                  data-example-id={example.id}
+                  data-example-nav-link=""
+                  data-example-route={example.path}
                 >
                   {example.title}
                 </Link>

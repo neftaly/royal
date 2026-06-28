@@ -8,9 +8,25 @@ export const ExamplePage = ({
 }): ReactNode => {
   const Demo = example.Demo;
   const Probe = example.probe;
+  const smoke = example.visualSmoke;
 
   return (
-    <section className="example-page" aria-labelledby="example-title">
+    <section
+      className="example-page"
+      aria-labelledby="example-title"
+      data-example-id={example.id}
+      data-example-route={example.path}
+      data-smoke-canvas-label={smoke.canvasLabel}
+      data-smoke-min-color-buckets={smoke.minColorBuckets}
+      data-smoke-min-painted-ratio={smoke.minPaintedRatio}
+      data-smoke-readable-text={smoke.readableText.join('\n')}
+      data-smoke-surface={smoke.surface}
+      data-smoke-text-quality={
+        smoke.textQuality === undefined ? undefined : JSON.stringify(smoke.textQuality)
+      }
+      data-source-export={example.sourceExport}
+      data-source-file={example.sourceFile}
+    >
       <header className="example-heading">
         <p className="eyebrow">{sectionLabel(example.section)}</p>
         <h1 id="example-title">{example.title}</h1>
@@ -22,19 +38,20 @@ export const ExamplePage = ({
         </div>
         <div className="panel-grid">
           <section className="info-panel source-panel" aria-labelledby="source-heading">
-            <h2 id="source-heading">Source</h2>
+            <div className="panel-title-row">
+              <h2 id="source-heading">Source</h2>
+              <span>{example.sourceFile}</span>
+            </div>
             <pre>
               <code>{example.source}</code>
             </pre>
           </section>
-          <section className="info-panel" aria-labelledby="probe-heading">
-            <h2 id="probe-heading">Probe</h2>
-            {Probe === undefined ? (
-              <p className="muted">No probe data for this scaffold.</p>
-            ) : (
+          {Probe === undefined ? null : (
+            <section className="info-panel" aria-labelledby="probe-heading">
+              <h2 id="probe-heading">Probe</h2>
               <Probe />
-            )}
-          </section>
+            </section>
+          )}
           <section className="info-panel" aria-labelledby="notes-heading">
             <h2 id="notes-heading">Notes</h2>
             <ul className="notes-list">

@@ -11,7 +11,12 @@ import {
 } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
-const rootOptions = { alpha: true, antialias: true, preserveDrawingBuffer: true } as const;
+const rootOptions = {
+  alpha: true,
+  antialias: true,
+  preserveDrawingBuffer: true,
+  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
+} as const;
 
 const helmetScene = (): RenderRoot =>
   scene({

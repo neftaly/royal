@@ -34,11 +34,20 @@ const examples = [
     summary: 'A single Royal canvas with a lit cube and a minimal render graph.',
     Demo: HelloCube,
     source: helloCubeSource,
+    sourceFile: 'cases/HelloCube.tsx',
+    sourceExport: 'HelloCube',
     probe: RenderRowsProbe,
     notes: [
       'Uses the public React canvas wrapper.',
       'Keeps scene construction small enough to read in one pass.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Lit cube',
+      readableText: ['Hello Cube', 'cases/HelloCube.tsx', 'export const HelloCube'],
+      minColorBuckets: 5,
+      minPaintedRatio: 0.01,
+    },
   },
   {
     id: 'imperative-root',
@@ -48,10 +57,19 @@ const examples = [
     summary: 'Creates a Royal root from a canvas ref and renders frames directly.',
     Demo: ImperativeRoot,
     source: imperativeRootSource,
+    sourceFile: 'cases/ImperativeRoot.tsx',
+    sourceExport: 'ImperativeRoot',
     notes: [
       'Useful for adapters that own the DOM node lifecycle.',
       'The root cleanup path calls dispose.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Imperative Royal root',
+      readableText: ['Imperative Root', 'cases/ImperativeRoot.tsx', 'export const ImperativeRoot'],
+      minColorBuckets: 5,
+      minPaintedRatio: 0.01,
+    },
   },
   {
     id: 'gltf-helmet',
@@ -61,10 +79,19 @@ const examples = [
     summary: 'Loads the Damaged Helmet fixture through the Royal glTF node.',
     Demo: GltfHelmet,
     source: gltfHelmetSource,
+    sourceFile: 'cases/GltfHelmet.tsx',
+    sourceExport: 'GltfHelmet',
     notes: [
       'Uses the app fixture public directory for model assets.',
       'Keeps asset loading in the same render graph shape as other cases.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Damaged Helmet glTF model',
+      readableText: ['glTF Helmet', 'cases/GltfHelmet.tsx', 'export const GltfHelmet'],
+      minColorBuckets: 8,
+      minPaintedRatio: 0.04,
+    },
   },
   {
     id: 'interaction-lab',
@@ -74,10 +101,19 @@ const examples = [
     summary: 'Combines pointer input, simple controls, and renderer state updates.',
     Demo: InteractionLab,
     source: interactionLabSource,
+    sourceFile: 'cases/InteractionLab.tsx',
+    sourceExport: 'InteractionLab',
     notes: [
       'Drag in the canvas to rotate the scene.',
       'The range control changes cube scale without replacing renderer APIs.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Interactive multi object scene',
+      readableText: ['Interaction Lab', 'Scale', 'Rotate', 'export const InteractionLab'],
+      minColorBuckets: 8,
+      minPaintedRatio: 0.01,
+    },
   },
   {
     id: 'tarstate-scene',
@@ -87,11 +123,20 @@ const examples = [
     summary: 'Projects workbench layout state into Tarstate lens rows and render probes.',
     Demo: TarstateScene,
     source: tarstateSceneSource,
+    sourceFile: 'cases/TarstateScene.tsx',
+    sourceExport: 'TarstateScene',
     probe: TarstateSourceProbe,
     notes: [
       'Uses the current field helpers through the lens schema.',
       'The probe exposes relation counts from the snapshot.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Tarstate workbench scene',
+      readableText: ['Tarstate Scene', 'cases/TarstateScene.tsx', 'relation', 'export const TarstateScene'],
+      minColorBuckets: 8,
+      minPaintedRatio: 0.08,
+    },
   },
   {
     id: 'text-prototype',
@@ -101,10 +146,30 @@ const examples = [
     summary: 'Shapes vector text, creates mesh data, and renders it in an orthographic pass.',
     Demo: TextPrototype,
     source: textPrototypeSource,
+    sourceFile: 'cases/TextPrototype.tsx',
+    sourceExport: 'TextPrototype',
     notes: [
       'Text stays in the renderer graph as vector text.',
       'The controls show shaping and mesh metrics for the current label.',
     ],
+    visualSmoke: {
+      surface: 'canvas',
+      canvasLabel: 'Vector text prototype',
+      readableText: ['Text Prototype', 'AV office 108%.', 'glyphs', 'vertices', 'export const TextPrototype'],
+      minColorBuckets: 8,
+      minPaintedRatio: 0.08,
+      textQuality: {
+        acceptanceText: 'AV office 108%.',
+        inputLabel: 'Text label',
+        roi: { x: 0.05, y: 0.18, width: 0.78, height: 0.32 },
+        warnThresholds: {
+          minEdgeTransitions: 80,
+          minForegroundPixels: 80,
+          minInkCoverage: 0.002,
+          minLuminanceBuckets: 2,
+        },
+      },
+    },
   },
   {
     id: 'capability-lab',
@@ -114,11 +179,17 @@ const examples = [
     summary: 'Shows capability results and boundary policy data through lens queries.',
     Demo: CapabilityLab,
     source: capabilityLabSource,
+    sourceFile: 'cases/CapabilityLab.tsx',
+    sourceExport: 'CapabilityLab',
     probe: CapabilityRowsProbe,
     notes: [
       'Browser and renderer handles remain adapter-only.',
       'Rows include queued and diagnostic capability outcomes.',
     ],
+    visualSmoke: {
+      surface: 'dom',
+      readableText: ['Capability Lab', 'relations', 'capability results', 'adapter-only handles', 'export const CapabilityLab'],
+    },
   },
   {
     id: 'picking-fuzz-lab',
@@ -128,11 +199,17 @@ const examples = [
     summary: 'Samples pointer positions against layout bounds and displays pick probe rows.',
     Demo: PickingFuzzLab,
     source: pickingFuzzLabSource,
+    sourceFile: 'cases/PickingFuzzLab.tsx',
+    sourceExport: 'PickingFuzzLab',
     probe: PickingRowsProbe,
     notes: [
       'The live stage maps pointer coordinates into grid space.',
       'Probe rows join samples to pick target labels.',
     ],
+    visualSmoke: {
+      surface: 'dom',
+      readableText: ['Picking Fuzz Lab', 'Viewport', 'sampleId', 'targetLabel', 'export const PickingFuzzLab'],
+    },
   },
 ] as const satisfies readonly ExampleDefinition[];
 

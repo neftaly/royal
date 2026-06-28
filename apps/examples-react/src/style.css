@@ -231,12 +231,32 @@ a:focus-visible {
   margin: 0;
 }
 
+.panel-title-row {
+  align-items: baseline;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.panel-title-row span {
+  color: var(--muted);
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .source-panel pre {
   background: light-dark(#11161b, #0c0f12);
   border-radius: 6px;
   color: #eef5f7;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  line-height: 1.55;
   margin: 0;
   max-height: 20rem;
   overflow: auto;
@@ -319,6 +339,11 @@ canvas {
   padding: 0 0.65rem;
 }
 
+.control-readout {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .probe-table {
   border-collapse: collapse;
   font-size: 0.78rem;
@@ -392,6 +417,7 @@ canvas {
   min-width: 0;
   padding: 0.5rem;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .pick-box.active {
@@ -409,6 +435,7 @@ canvas {
 }
 
 .pick-readout {
+  font-size: 0.85rem;
   inset-block-end: 0.75rem;
   inset-inline-start: 0.75rem;
   padding: 0.45rem 0.6rem;
@@ -452,6 +479,11 @@ canvas {
     padding: 0.85rem;
   }
 
+  .demo-panel {
+    aspect-ratio: auto;
+    min-height: 18rem;
+  }
+
   .probe-demo {
     grid-template-columns: 1fr;
   }
@@ -461,8 +493,28 @@ canvas {
     flex-direction: column;
   }
 
+  .panel-title-row {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .panel-title-row span {
+    text-align: left;
+  }
+
   .control-strip label,
   .control-strip input[type="range"] {
     inline-size: 100%;
+  }
+
+  .pick-readout,
+  .pick-probe-overlay {
+    inset-inline: 0.75rem;
+    max-inline-size: none;
+  }
+
+  .pick-readout {
+    inset-block-end: 5.25rem;
   }
 }

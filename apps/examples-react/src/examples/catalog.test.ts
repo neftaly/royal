@@ -22,6 +22,13 @@ describe('example catalog', () => {
       expect(typeof example.Demo).toBe('function');
       expect(example.Demo.name).toMatch(/^[A-Z]/);
       expect(example.source.trim()).not.toBe('');
+      expect(example.sourceFile).toBe(`cases/${example.Demo.name}.tsx`);
+      expect(example.sourceExport).toBe(example.Demo.name);
+      expect(example.visualSmoke.readableText.length).toBeGreaterThan(0);
+      expect(example.visualSmoke.readableText).toContain(example.title);
+      if (example.visualSmoke.surface === 'canvas') {
+        expect(example.visualSmoke.canvasLabel).toEqual(expect.any(String));
+      }
 
       ids.add(example.id);
       paths.add(example.path);
@@ -36,6 +43,7 @@ describe('example catalog', () => {
 
         expect(normalizeSource(example.source)).toBe(normalizeSource(source));
         expect(example.source).toContain('export const ' + example.Demo.name);
+        expect(example.source).toContain('export const ' + example.sourceExport);
       }),
     );
   });
@@ -49,5 +57,13 @@ describe('example catalog', () => {
     expect(new Set(sectionedIds)).toEqual(
       new Set(exampleCatalog.map((example) => example.id)),
     );
+  });
+
+  it('keeps the text prototype route useful for visual text acceptance', () => {
+    const textPrototype = exampleCatalog.find((example) => example.id === 'text-prototype');
+
+    expect(textPrototype?.visualSmoke.readableText).toContain('AV office 108%.');
+    expect(textPrototype?.visualSmoke.textQuality?.acceptanceText).toBe('AV office 108%.');
+    expect(textPrototype?.visualSmoke.textQuality?.warnThresholds.minEdgeTransitions).toBeGreaterThan(0);
   });
 });

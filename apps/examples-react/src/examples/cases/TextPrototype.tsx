@@ -17,7 +17,12 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 const panel = boxGeometry({ size: [1, 1, 0.08] });
 const white = unlitMaterial({ color: [0.94, 0.96, 0.98, 1] });
-const rootOptions = { alpha: true, antialias: true, preserveDrawingBuffer: true } as const;
+const rootOptions = {
+  alpha: true,
+  antialias: true,
+  preserveDrawingBuffer: true,
+  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
+} as const;
 
 const textScene = (label: string): RenderRoot =>
   scene({
@@ -64,7 +69,7 @@ const textScene = (label: string): RenderRoot =>
   });
 
 export const TextPrototype = (): ReactNode => {
-  const [label, setLabel] = useState('Royal layout');
+  const [label, setLabel] = useState('AV office 108%.');
   const metrics = useMemo(() => {
     const layout = layoutText({ text: label, fontSize: 0.72, lineHeight: 0.9 });
     const meshData = textMesh(layout);

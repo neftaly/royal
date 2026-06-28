@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "routes": {
+    "text-prototype": {
+      "textQuality": {
+        "minEdgeTransitions": 2500,
+        "minForegroundPixels": 3200,
+        "minInkCoverage": 0.14,
+        "minLuminanceBuckets": 10
+      }
+    }
+  }
+}
