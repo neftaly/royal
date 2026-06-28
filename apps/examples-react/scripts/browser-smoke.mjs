@@ -312,12 +312,22 @@ const wipExpression = `
         bodyText.includes('fixtures/DamagedHelmet/DamagedHelmet.gltf'),
       hasPicking: bodyText.includes('Picking / Raycasting Fuzz') &&
         bodyText.includes('research/picking-fuzz/picking-fuzz-harness.mjs'),
+      hasOfflineTerrainPipeline: bodyText.includes('Offline Terrain Pipeline') &&
+        bodyText.includes('research/offline-terrain-pipeline/**'),
+      hasDynamicImpostors: bodyText.includes('Dynamic Impostors') &&
+        bodyText.includes('research/dynamic-impostors/**'),
       primaryExampleNavCount: document.querySelectorAll('[data-example-nav-link]').length,
     };
   };
 
   let state = read();
-  while (performance.now() < deadline && (!state.hasPage || !state.hasGltf || !state.hasPicking)) {
+  while (performance.now() < deadline && (
+    !state.hasPage ||
+    !state.hasGltf ||
+    !state.hasPicking ||
+    !state.hasOfflineTerrainPipeline ||
+    !state.hasDynamicImpostors
+  )) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     state = read();
   }
@@ -383,6 +393,8 @@ const assertWipPage = (state) => {
   }
   if (!state.hasGltf) failures.push('missing glTF WIP entry');
   if (!state.hasPicking) failures.push('missing picking WIP entry');
+  if (!state.hasOfflineTerrainPipeline) failures.push('missing offline terrain pipeline WIP entry');
+  if (!state.hasDynamicImpostors) failures.push('missing dynamic impostors WIP entry');
   if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
     failures.push(`primary example nav count changed to ${state.primaryExampleNavCount}`);
   }

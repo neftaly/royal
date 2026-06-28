@@ -26,6 +26,22 @@ const wipDemoLinks: readonly WipDemoLink[] = [
     repoPath: 'research/picking-fuzz/picking-fuzz-harness.mjs',
   },
   {
+    id: 'offline-terrain-pipeline',
+    title: 'Offline Terrain Pipeline',
+    status: 'Pending demo route',
+    summary:
+      'Terrain preprocessing work is reserved for research artifacts until a stable examples route exists.',
+    repoPath: 'research/offline-terrain-pipeline/**',
+  },
+  {
+    id: 'dynamic-impostors',
+    title: 'Dynamic Impostors',
+    status: 'Pending demo route',
+    summary:
+      'Dynamic impostor experiments remain WIP research material and are not part of the primary examples list.',
+    repoPath: 'research/dynamic-impostors/**',
+  },
+  {
     id: 'live-virtual-texturing-hooks',
     title: 'Live Virtual Texturing Hooks',
     status: 'Pending demo route',
