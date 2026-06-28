@@ -8,9 +8,9 @@ This spike stays under `research/virtual-texturing` while the WebGL renderer
 package extraction settles. It does not add public renderer APIs, examples,
 package config, or backend code.
 
-Target the first demo at WebGL. WebGPU can make page-table formats, compute
-visibility, and asynchronous copies cleaner later, but the first design should
-work on WebGL2 and degrade on WebGL1.
+Target the first demo at WebGL2. WebGPU can make page-table formats, compute
+visibility, and asynchronous copies cleaner later, but WebGL1 is unsupported
+and should not get a fallback or reduced virtual-texturing route.
 
 ## First Demo
 
@@ -107,13 +107,13 @@ WebGL2 path:
 - Keep the table representation private to the backend. Public Royal data
   should name assets and material resources, not indirection formats.
 
-WebGL1 fallback:
+Unsupported capabilities:
 
-- Require `OES_standard_derivatives` for usable virtual-texture sampling.
-- Encode entries in normalized `RGBA8`; avoid integer samplers.
-- If derivative support, enough texture units, or texture size limits are
-  missing, render a coarse fallback atlas or a fixed low mip instead of virtual
-  texturing.
+- WebGL1 does not run virtual texturing and should report an unsupported
+  capability path.
+- If a WebGL2 context is available but enough texture units, adequate texture
+  limits, or required texture update support are missing, render a fixed
+  low-mip material instead of virtual texturing.
 
 ### Physical Page Cache
 
@@ -201,19 +201,19 @@ Initial targets:
 - Page-table dirty entry count proportional to uploads and evictions, not full
   table rewrites.
 
-### Missing Extension Fallbacks
+### Capability Policy
 
 The first demo should choose from capability rows:
 
 - WebGL2 plus adequate max texture size: full virtual-texture route.
-- WebGL1 plus `OES_standard_derivatives`: normalized page table and reduced
-  cache size.
-- Missing derivatives, too-small max texture size, missing compressed texture
-  target, or context pressure: fixed low-mip atlas/material.
+- WebGL1: unsupported, with no reduced virtual-texturing route.
+- WebGL2 with too-small max texture size, missing required texture update
+  support, missing compressed texture target, or context pressure: fixed
+  low-mip atlas/material.
 - Missing timer queries: use byte and upload-count budgets only.
 
-Missing optional features should produce diagnostics and still render the
-fallback material.
+Unsupported or insufficient capabilities should produce diagnostics and render
+the fixed low-mip material rather than a reduced virtual-texturing path.
 
 ## Minimal Royal API Surface
 
@@ -261,7 +261,8 @@ public `VirtualTextureNode`.
   prefetch priority, LRU or clock eviction, and hard upload page/byte budgets.
 - Page-table upload: a batched dirty-entry writer that updates only texels
   affected by uploads and evictions. For WebGL2 this starts as `RGBA8`
-  `texSubImage2D`; WebGL1 keeps normalized `RGBA8` if derivatives are present.
+  `texSubImage2D`; WebGL1 is unsupported and should not have a separate
+  encoding path.
 - Shader binding: a private material path that binds the page table, physical
   atlas, fallback texture, page size, border size, and selected indirection
   mode for one virtual albedo texture.

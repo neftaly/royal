@@ -33,7 +33,7 @@ The browser demo should not land until these are true:
 - [ ] Scheduler exposes frame stats for requests, hits, misses, uploads,
   evictions, dirty page-table entries, fallback samples, and seam candidates.
 - [ ] Capability fallback renders a fixed low-mip material when virtual
-  texturing is unavailable.
+  texturing is unavailable; WebGL1 is reported as unsupported, not reduced.
 - [ ] Debug overlay can be toggled without changing the author-facing scene.
 
 Readiness targets for the first real route:
@@ -106,8 +106,8 @@ The overlay must show:
 - Exact hits, misses, fallback samples, and hit ratio.
 - Upload pages, upload bytes, evictions, and estimated upload time.
 - Resident-mip seam candidates.
-- Selected capability path: WebGL2 virtual texture, WebGL1 reduced route, or
-  fixed low-mip fallback.
+- Selected capability path: WebGL2 virtual texture, fixed low-mip fallback, or
+  unsupported WebGL1.
 
 ### Tests
 
@@ -117,7 +117,7 @@ The overlay must show:
 - Visual smoke captures the overlay enabled and disabled.
 - Renderer-internal tests cover page-table entry encoding, resident fallback
   lookup, cache eviction invalidation, upload budget capping, and low-mip
-  fallback selection.
+  fallback selection for unsupported capabilities.
 - Research report check remains runnable while the full demo asset scale is
   still generated outside package APIs.
 
