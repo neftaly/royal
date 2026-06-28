@@ -1,0 +1,32 @@
+{
+  "contractVersion": 1,
+  "worldId": "royal-cheap-blender-world",
+  "tileId": "tile:cheap-blender:lod0:x0:z0",
+  "revision": "cheap-blender-pipeline@0.1.0",
+  "stage": {
+    "id": "cheap-blender-static-tile",
+    "status": "prototype",
+    "recipe": "royal-cheap-terrain-assets@0.1.0"
+  },
+  "tile": {
+    "pageId": "tile:cheap-blender:lod0:x0:z0:page:terrain-main",
+    "kind": "terrain-static-glb-page",
+    "terrainKind": "heightfield-mesh",
+    "quality": "preview",
+    "revision": "cheap-blender-pipeline@0.1.0"
+  },
+  "artifacts": [
+    {
+      "role": "renderable-glb",
+      "path": "out/royal-cheap-blender-tile.glb",
+      "mediaType": "model/gltf-binary",
+      "sha256": "1314e9ca2fbafc633ca4a7d403dcfcda8a8b2305ae3492d216d1e35c4d4e238d",
+      "quality": "preview"
+    }
+  ],
+  "lod": {
+    "identityPolicy": "stable-page-revision",
+    "replacement": "same pageId, newer revision or higher quality",
+    "clientServerRule": "client cache keys use pageId; artifact content uses revision and sha256"
+  }
+}
