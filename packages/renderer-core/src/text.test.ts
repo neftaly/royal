@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  createTextFontFace,
   layoutText,
   shapeText,
   text,
@@ -11,6 +14,16 @@ import {
   type TextNode,
   type TextOptions
 } from './text';
+
+const require = createRequire(import.meta.url);
+const atkinsonHyperlegibleRegular = (): ReturnType<typeof createTextFontFace> =>
+  createTextFontFace({
+    data: readFileSync(require.resolve(
+      '@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.woff'
+    )),
+    family: 'Atkinson Hyperlegible',
+    source: '@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.woff'
+  });
 
 describe('text shaping and mesh generation', () => {
   it('exposes text() as the stable authoring helper over the vector text node', () => {
@@ -167,6 +180,49 @@ describe('text shaping and mesh generation', () => {
     expect(mesh.contours.map((contour) => contour.role)).toEqual(['bar', 'bar', 'stem', 'stem']);
     expect(mesh.vertices).toHaveLength(16);
     expect(mesh.indices).toHaveLength(24);
+  });
+
+  it('shapes real font glyphs with parsed metrics and kerning', () => {
+    const font = atkinsonHyperlegibleRegular();
+    const shaped = shapeText({
+      font,
+      fontSize: 1,
+      text: 'AV'
+    });
+    const glyphs = shaped.run.glyphs;
+
+    expect(shaped.font.family).toBe('Atkinson Hyperlegible');
+    expect(shaped.font.unitsPerEm).toBe(1000);
+    expect(glyphs[0]?.fontGlyphIndex).toBeGreaterThan(0);
+    expect(glyphs[1]?.kerning).toMatchObject({
+      adjustment: expect.any(Number),
+      pair: [glyphs[0]?.glyphId, glyphs[1]?.glyphId]
+    });
+    expect(glyphs[1]?.kerning?.adjustment).toBeLessThan(0);
+    expect(shaped.run.metrics.advance).toBeLessThan(
+      (glyphs[0]?.advance ?? 0) + (glyphs[1]?.advance ?? 0)
+    );
+  });
+
+  it('triangulates real font outlines instead of synthetic contour rectangles', () => {
+    const font = atkinsonHyperlegibleRegular();
+    const layout = layoutText({
+      font,
+      fontSize: 1,
+      text: 'o'
+    });
+    const realMesh = textMeshFromLayout(layout);
+    const syntheticMesh = textMeshFromLayout(layoutText({
+      fontSize: 1,
+      text: 'o'
+    }));
+
+    expect(layout.fontFace).toBe(font);
+    expect(realMesh.contours.map((contour) => contour.role)).toEqual(['outline']);
+    expect(realMesh.vertices.length).toBeGreaterThan(syntheticMesh.vertices.length);
+    expect(realMesh.indices.length).toBeGreaterThan(syntheticMesh.indices.length);
+    expect(realMesh.bounds.yMax).toBeGreaterThan(0.45);
+    expect(realMesh.bounds.yMin).toBeLessThan(0);
   });
 
   it('builds mesh data from either a text node or a layout through textMesh()', () => {

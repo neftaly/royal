@@ -31,6 +31,7 @@ export { mesh } from './mesh';
 export type { RenderPass, RenderPassOptions } from './render-graph';
 export { pass } from './render-graph';
 export type {
+  CreateTextFontFaceOptions,
   LayoutTextOptions,
   ShapeTextOptions,
   ShapeTextResult,
@@ -39,7 +40,9 @@ export type {
   TextBlockMetrics,
   TextBounds,
   TextDiagnosticCode,
+  TextFontData,
   TextFontDescriptor,
+  TextFontFace,
   TextFontMetrics,
   TextGlyphId,
   TextGlyphLayout,
@@ -67,6 +70,7 @@ export type {
   VectorTextStringOptions
 } from './text';
 export {
+  createTextFontFace,
   layoutText,
   shapeText,
   text,

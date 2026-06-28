@@ -1,3 +1,6 @@
+import earcut from 'earcut';
+import opentype from 'opentype.js';
+import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
 import { RenderNodeKind } from './kind';
 import type { Rgba, Vec3 } from './primitives';
 
@@ -57,6 +60,7 @@ export type ShapedTextGlyph = {
   readonly advance: number;
   readonly bounds: TextBounds;
   readonly cluster: number;
+  readonly fontGlyphIndex?: number;
   readonly glyphId: TextGlyphId;
   readonly kerning?: TextKerningMetadata;
   readonly ligature?: TextLigatureMetadata;
@@ -92,6 +96,23 @@ export type TextFontDescriptor = {
   readonly unitsPerEm: number;
 };
 
+export type TextFontData = ArrayBuffer | ArrayBufferView;
+
+export type TextFontFace = {
+  readonly ascender: number;
+  readonly descender: number;
+  readonly family: string;
+  readonly lineGap: number;
+  readonly source?: string;
+  readonly unitsPerEm: number;
+};
+
+export interface CreateTextFontFaceOptions {
+  readonly data: TextFontData;
+  readonly family?: string;
+  readonly source?: string;
+}
+
 export type TextGlyphLayout = {
   readonly bounds: TextBounds;
   readonly glyph: ShapedTextGlyph;
@@ -118,12 +139,13 @@ export type TextLayout = {
   readonly bounds: TextBounds;
   readonly diagnostics: readonly TextShapingDiagnostic[];
   readonly font: TextFontDescriptor;
+  readonly fontFace?: TextFontFace;
   readonly lines: readonly TextLineLayout[];
   readonly metrics: TextBlockMetrics;
   readonly source: string;
 };
 
-export type TextMeshContourRole = 'bar' | 'dot' | 'fill' | 'stem';
+export type TextMeshContourRole = 'bar' | 'dot' | 'fill' | 'outline' | 'stem';
 
 export type TextMeshContour = {
   readonly bounds: TextBounds;
@@ -146,6 +168,7 @@ export type TextMesh = {
 
 export interface ShapeTextOptions {
   readonly clusterOffset?: number;
+  readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly text: string;
@@ -158,6 +181,7 @@ export type ShapeTextResult = {
 };
 
 export interface LayoutTextOptions {
+  readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly origin?: Vec3;
@@ -183,6 +207,7 @@ export interface VectorTextGlyphOptions {
 export interface VectorTextStringOptions {
   readonly cellHeight?: number;
   readonly color: Rgba;
+  readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly glyphs?: never;
   readonly lineHeight?: number;
@@ -194,6 +219,7 @@ export type VectorTextOptions = VectorTextGlyphOptions | VectorTextStringOptions
 export type TextNode = VectorTextNode;
 export interface TextOptions {
   readonly color: Rgba;
+  readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly origin?: Vec3;
@@ -464,6 +490,8 @@ const patternFor = (char: string): readonly string[] => {
 const builtinTextFamily = 'royal-ascii-prototype';
 const replacementGlyphId = 'glyph:.notdef';
 const minimumTextUnit = 0.0001;
+const defaultOutlineFlattenTolerance = 0.0025;
+const fontFaceFonts = new WeakMap<TextFontFace, OpenTypeFont>();
 
 const narrowGlyphs = new Set(['i', 'j', 'l', 'I', '!', '|', '.', ',', ':', ';', "'", '`']);
 const wideGlyphs = new Set(['m', 'w', 'M', 'W', '@', '#', '%', '&']);
@@ -497,6 +525,46 @@ const ligatures = [
 const positiveTextUnit = (value: number): number =>
   Number.isFinite(value) && value > 0 ? value : minimumTextUnit;
 
+const arrayBufferFromFontData = (data: TextFontData): ArrayBuffer => {
+  if (data instanceof ArrayBuffer) return data.slice(0);
+
+  const source = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  const copy = new ArrayBuffer(source.byteLength);
+  new Uint8Array(copy).set(source);
+  return copy;
+};
+
+const firstNameValue = (record: Readonly<Record<string, string>> | undefined): string | undefined => {
+  if (record === undefined) return undefined;
+  return record.en ?? Object.values(record)[0];
+};
+
+const fontName = (font: OpenTypeFont, key: string): string | undefined =>
+  firstNameValue(font.names?.windows?.[key]) ?? firstNameValue(font.names?.macintosh?.[key]);
+
+const fontLineGap = (font: OpenTypeFont): number =>
+  font.tables?.hhea?.lineGap ?? font.tables?.os2?.sTypoLineGap ?? 0;
+
+export const createTextFontFace = (options: CreateTextFontFaceOptions): TextFontFace => {
+  const font = opentype.parse(arrayBufferFromFontData(options.data));
+  const face: TextFontFace = Object.freeze({
+    ascender: font.ascender,
+    descender: font.descender,
+    family: options.family ?? fontName(font, 'fontFamily') ?? fontName(font, 'fullName') ?? 'font',
+    lineGap: fontLineGap(font),
+    ...(options.source === undefined ? {} : { source: options.source }),
+    unitsPerEm: font.unitsPerEm
+  });
+  fontFaceFonts.set(face, font);
+  return face;
+};
+
+const fontForFace = (face: TextFontFace): OpenTypeFont => {
+  const font = fontFaceFonts.get(face);
+  if (font !== undefined) return font;
+  throw new Error('Text font face was not created by createTextFontFace()');
+};
+
 const fontMetrics = (fontSize: number, requestedLineHeight: number | undefined): TextFontMetrics => {
   const size = positiveTextUnit(fontSize);
   const naturalLineHeight = size * 1.2;
@@ -514,11 +582,50 @@ const fontMetrics = (fontSize: number, requestedLineHeight: number | undefined):
   };
 };
 
+const fontFaceMetrics = (
+  face: TextFontFace,
+  fontSize: number,
+  requestedLineHeight: number | undefined
+): TextFontMetrics => {
+  const size = positiveTextUnit(fontSize);
+  const scale = size / face.unitsPerEm;
+  const ascender = face.ascender * scale;
+  const descender = face.descender * scale;
+  const naturalLineHeight = (face.ascender - face.descender + face.lineGap) * scale;
+  const lineHeight = positiveTextUnit(requestedLineHeight ?? naturalLineHeight);
+  const lineGap = Math.max(0, lineHeight - (ascender - descender));
+
+  return {
+    ascender,
+    descender,
+    lineGap,
+    lineHeight,
+    size
+  };
+};
+
 const fontDescriptor = (fontSize: number, lineHeight: number | undefined): TextFontDescriptor => ({
   family: builtinTextFamily,
   metrics: fontMetrics(fontSize, lineHeight),
   unitsPerEm: 1
 });
+
+const fontFaceDescriptor = (
+  face: TextFontFace,
+  fontSize: number,
+  lineHeight: number | undefined
+): TextFontDescriptor => ({
+  family: face.family,
+  metrics: fontFaceMetrics(face, fontSize, lineHeight),
+  unitsPerEm: face.unitsPerEm
+});
+
+const textFontDescriptor = (
+  face: TextFontFace | undefined,
+  fontSize: number,
+  lineHeight: number | undefined
+): TextFontDescriptor =>
+  face === undefined ? fontDescriptor(fontSize, lineHeight) : fontFaceDescriptor(face, fontSize, lineHeight);
 
 const textBounds = (xMin: number, yMin: number, xMax: number, yMax: number): TextBounds => ({
   xMax,
@@ -560,6 +667,23 @@ const isPrintableAscii = (char: string): boolean => {
   return code >= 32 && code <= 126;
 };
 
+const firstCodePoint = (text: string): string | undefined => {
+  const codePoint = text.codePointAt(0);
+  return codePoint === undefined ? undefined : String.fromCodePoint(codePoint);
+};
+
+const isWhitespaceText = (text: string): boolean => {
+  let index = 0;
+
+  while (index < text.length) {
+    const char = firstCodePoint(text.slice(index));
+    if (char === undefined || !whitespaceGlyphs.has(char)) return false;
+    index += char.length;
+  }
+
+  return true;
+};
+
 const asciiAdvance = (char: string): number => {
   if (char === ' ') return 0.34;
   if (char === '\t') return 1.36;
@@ -569,7 +693,7 @@ const asciiAdvance = (char: string): number => {
   if (/[A-Z]/u.test(char)) return 0.66;
   if (/[a-z]/u.test(char)) return 0.54;
   if (/[-_+=/\\]/u.test(char)) return 0.5;
-  if (/[\[\](){}]/u.test(char)) return 0.38;
+  if ('[](){}'.includes(char)) return 0.38;
   return 0.46;
 };
 
@@ -627,6 +751,81 @@ const shapeReplacementGlyph = (
     glyphId: replacementGlyphId,
     offset: [0, 0],
     text: char
+  };
+};
+
+const glyphIdForFontGlyph = (face: TextFontFace, glyph: OpenTypeGlyph): TextGlyphId =>
+  `font:${face.family}:${glyph.index}`;
+
+const fontGlyphBounds = (glyph: OpenTypeGlyph, scale: number): TextBounds => {
+  const box = glyph.getBoundingBox();
+  return textBounds(box.x1 * scale, box.y1 * scale, box.x2 * scale, box.y2 * scale);
+};
+
+const shapeFontText = (options: ShapeTextOptions, face: TextFontFace): ShapeTextResult => {
+  const font = fontForFace(face);
+  const descriptor = fontFaceDescriptor(face, options.fontSize ?? 1, options.lineHeight);
+  const scale = descriptor.metrics.size / face.unitsPerEm;
+  const clusterOffset = options.clusterOffset ?? 0;
+  const diagnostics: TextShapingDiagnostic[] = [];
+  const glyphs: ShapedTextGlyph[] = [];
+  let previousGlyph: OpenTypeGlyph | undefined;
+  let previousGlyphId: TextGlyphId | undefined;
+  let cluster = 0;
+
+  while (cluster < options.text.length) {
+    const codePoint = options.text.codePointAt(cluster);
+    if (codePoint === undefined) break;
+
+    const char = String.fromCodePoint(codePoint);
+    const mapsToSpace = char === '\t';
+    const fontChar = mapsToSpace ? ' ' : char;
+    const supported = mapsToSpace || font.hasChar(fontChar);
+    const glyph = supported ? font.charToGlyph(fontChar) : font.glyphs.get(0) ?? font.charToGlyph(' ');
+    const glyphId = supported ? glyphIdForFontGlyph(face, glyph) : replacementGlyphId;
+    const kerning = previousGlyph === undefined ? 0 : font.getKerningValue(previousGlyph, glyph) * scale;
+    const advanceMultiplier = mapsToSpace ? 4 : 1;
+    const advance = (glyph.advanceWidth ?? face.unitsPerEm) * scale * advanceMultiplier;
+
+    if (!supported) {
+      diagnostics.push({
+        cluster: clusterOffset + cluster,
+        code: 'unsupported-glyph',
+        input: char,
+        message: `Unsupported text glyph ${JSON.stringify(char)}; using ${replacementGlyphId}`,
+        replacementGlyphId
+      });
+    }
+
+    glyphs.push({
+      advance,
+      bounds: mapsToSpace ? emptyBounds : fontGlyphBounds(glyph, scale),
+      cluster: clusterOffset + cluster,
+      fontGlyphIndex: glyph.index,
+      glyphId,
+      ...(kerning === 0 || previousGlyphId === undefined ? {} : {
+        kerning: {
+          adjustment: kerning,
+          pair: [previousGlyphId, glyphId] as const
+        }
+      }),
+      offset: [kerning, 0],
+      text: char
+    });
+
+    previousGlyph = glyph;
+    previousGlyphId = glyphId;
+    cluster += char.length;
+  }
+
+  return {
+    diagnostics,
+    font: descriptor,
+    run: {
+      direction: 'ltr',
+      glyphs,
+      metrics: metricsForRun(glyphs, descriptor.metrics)
+    }
   };
 };
 
@@ -697,6 +896,8 @@ const metricsForRun = (
 });
 
 export const shapeText = (options: ShapeTextOptions): ShapeTextResult => {
+  if (options.font !== undefined) return shapeFontText(options, options.font);
+
   const font = fontDescriptor(options.fontSize ?? 1, options.lineHeight);
   const size = font.metrics.size;
   const clusterOffset = options.clusterOffset ?? 0;
@@ -763,7 +964,7 @@ const lineFallbackBounds = (origin: Vec3, metrics: TextFontMetrics, advance: num
 
 export const layoutText = (options: LayoutTextOptions): TextLayout => {
   const origin = options.origin ?? defaultOrigin;
-  const font = fontDescriptor(options.fontSize ?? 1, options.lineHeight);
+  const font = textFontDescriptor(options.font, options.fontSize ?? 1, options.lineHeight);
   const lines: TextLineLayout[] = [];
   const diagnostics: TextShapingDiagnostic[] = [];
 
@@ -775,6 +976,7 @@ export const layoutText = (options: LayoutTextOptions): TextLayout => {
     ];
     const shaped = shapeText({
       clusterOffset: line.start,
+      ...(options.font === undefined ? {} : { font: options.font }),
       fontSize: font.metrics.size,
       lineHeight: font.metrics.lineHeight,
       text: line.text
@@ -820,6 +1022,7 @@ export const layoutText = (options: LayoutTextOptions): TextLayout => {
     bounds,
     diagnostics,
     font,
+    ...(options.font === undefined ? {} : { fontFace: options.font }),
     lines,
     metrics: {
       height: bounds.yMax - bounds.yMin,
@@ -917,7 +1120,7 @@ const glyphsFromLayout = (layout: TextLayout): readonly VectorTextGlyph[] => {
 };
 
 const legacyVectorGlyphChar = (text: string): string => {
-  const firstChar = [...text][0] ?? ' ';
+  const firstChar = firstCodePoint(text) ?? ' ';
   if (vectorTextSupportedCharacterSet.has(firstChar)) return firstChar;
 
   const lowerChar = firstChar.toLowerCase();
@@ -931,6 +1134,7 @@ export const vectorText = (options: VectorTextOptions): VectorTextNode => {
 
   if (options.text !== undefined) {
     const layout = layoutText({
+      ...(options.font === undefined ? {} : { font: options.font }),
       fontSize: options.fontSize ?? cellHeight,
       ...(options.lineHeight === undefined ? {} : { lineHeight: options.lineHeight }),
       ...(options.origin === undefined ? {} : { origin: options.origin }),
@@ -994,7 +1198,7 @@ const contoursForGlyph = (placement: TextGlyphLayout, glyphIndex: number): reado
   const bounds = placement.bounds;
   const contours: TextMeshContour[] = [];
 
-  if ([...text].every((char) => whitespaceGlyphs.has(char))) return contours;
+  if (isWhitespaceText(text)) return contours;
 
   if (text === '.' || text === ',') {
     addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.55), 'dot');
@@ -1091,18 +1295,348 @@ const appendContour = (
   indices.push(vertex, vertex + 1, vertex + 2, vertex, vertex + 2, vertex + 3);
 };
 
+type OutlinePoint = {
+  readonly x: number;
+  readonly y: number;
+};
+
+type OutlineContour = {
+  readonly area: number;
+  readonly bounds: TextBounds;
+  readonly points: readonly OutlinePoint[];
+};
+
+const transformFontPoint = (origin: Vec3, scale: number, x: number, y: number): OutlinePoint => ({
+  x: origin[0] + x * scale,
+  y: origin[1] + y * scale
+});
+
+const sameOutlinePoint = (left: OutlinePoint | undefined, right: OutlinePoint | undefined): boolean =>
+  left !== undefined && right !== undefined && left.x === right.x && left.y === right.y;
+
+const pushOutlinePoint = (points: OutlinePoint[], point: OutlinePoint): void => {
+  if (!sameOutlinePoint(points.at(-1), point)) points.push(point);
+};
+
+const midpoint = (left: OutlinePoint, right: OutlinePoint): OutlinePoint => ({
+  x: (left.x + right.x) / 2,
+  y: (left.y + right.y) / 2
+});
+
+const pointLineDistance = (point: OutlinePoint, start: OutlinePoint, end: OutlinePoint): number => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  return Math.abs(dy * point.x - dx * point.y + end.x * start.y - end.y * start.x) / length;
+};
+
+const flattenQuadratic = (
+  points: OutlinePoint[],
+  start: OutlinePoint,
+  control: OutlinePoint,
+  end: OutlinePoint,
+  tolerance: number
+): void => {
+  if (pointLineDistance(control, start, end) <= tolerance) {
+    pushOutlinePoint(points, end);
+    return;
+  }
+
+  const startControl = midpoint(start, control);
+  const controlEnd = midpoint(control, end);
+  const middle = midpoint(startControl, controlEnd);
+  flattenQuadratic(points, start, startControl, middle, tolerance);
+  flattenQuadratic(points, middle, controlEnd, end, tolerance);
+};
+
+const flattenCubic = (
+  points: OutlinePoint[],
+  start: OutlinePoint,
+  controlA: OutlinePoint,
+  controlB: OutlinePoint,
+  end: OutlinePoint,
+  tolerance: number
+): void => {
+  if (
+    Math.max(
+      pointLineDistance(controlA, start, end),
+      pointLineDistance(controlB, start, end)
+    ) <= tolerance
+  ) {
+    pushOutlinePoint(points, end);
+    return;
+  }
+
+  const startA = midpoint(start, controlA);
+  const ab = midpoint(controlA, controlB);
+  const bEnd = midpoint(controlB, end);
+  const leftControl = midpoint(startA, ab);
+  const rightControl = midpoint(ab, bEnd);
+  const middle = midpoint(leftControl, rightControl);
+  flattenCubic(points, start, startA, leftControl, middle, tolerance);
+  flattenCubic(points, middle, rightControl, bEnd, end, tolerance);
+};
+
+const signedOutlineArea = (points: readonly OutlinePoint[]): number => {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const next = points[(index + 1) % points.length];
+    if (point === undefined || next === undefined) continue;
+    area += point.x * next.y - next.x * point.y;
+  }
+  return area / 2;
+};
+
+const outlineBounds = (points: readonly OutlinePoint[]): TextBounds =>
+  unionBounds(points.map((point) => textBounds(point.x, point.y, point.x, point.y)));
+
+const pushContour = (contours: OutlineContour[], points: OutlinePoint[]): void => {
+  if (points.length > 1 && sameOutlinePoint(points[0], points.at(-1))) points.pop();
+  if (points.length < 3) return;
+
+  const area = signedOutlineArea(points);
+  if (Math.abs(area) < minimumTextUnit * minimumTextUnit) return;
+  contours.push({
+    area,
+    bounds: outlineBounds(points),
+    points: [...points]
+  });
+};
+
+const fontGlyphContours = (
+  glyph: OpenTypeGlyph,
+  origin: Vec3,
+  scale: number,
+  tolerance: number
+): readonly OutlineContour[] => {
+  const commands = glyph.path?.commands;
+  if (commands === undefined || commands.length === 0) return [];
+
+  const contours: OutlineContour[] = [];
+  let points: OutlinePoint[] = [];
+  let current: OutlinePoint | undefined;
+  let start: OutlinePoint | undefined;
+
+  const closeContour = (): void => {
+    pushContour(contours, points);
+    points = [];
+    current = undefined;
+    start = undefined;
+  };
+
+  for (const command of commands) {
+    if (command.type === 'M') {
+      closeContour();
+      current = transformFontPoint(origin, scale, command.x, command.y);
+      start = current;
+      pushOutlinePoint(points, current);
+      continue;
+    }
+
+    if (current === undefined) continue;
+
+    if (command.type === 'L') {
+      current = transformFontPoint(origin, scale, command.x, command.y);
+      pushOutlinePoint(points, current);
+      continue;
+    }
+
+    if (command.type === 'Q') {
+      const end = transformFontPoint(origin, scale, command.x, command.y);
+      flattenQuadratic(
+        points,
+        current,
+        transformFontPoint(origin, scale, command.x1, command.y1),
+        end,
+        tolerance
+      );
+      current = end;
+      continue;
+    }
+
+    if (command.type === 'C') {
+      const end = transformFontPoint(origin, scale, command.x, command.y);
+      flattenCubic(
+        points,
+        current,
+        transformFontPoint(origin, scale, command.x1, command.y1),
+        transformFontPoint(origin, scale, command.x2, command.y2),
+        end,
+        tolerance
+      );
+      current = end;
+      continue;
+    }
+
+    if (command.type === 'Z') {
+      if (start !== undefined) pushOutlinePoint(points, start);
+      closeContour();
+    }
+  }
+
+  closeContour();
+  return contours;
+};
+
+const boundsContainPoint = (bounds: TextBounds, point: OutlinePoint): boolean =>
+  point.x >= bounds.xMin &&
+  point.x <= bounds.xMax &&
+  point.y >= bounds.yMin &&
+  point.y <= bounds.yMax;
+
+const pointInPolygon = (point: OutlinePoint, polygon: readonly OutlinePoint[]): boolean => {
+  let inside = false;
+
+  for (let index = 0, previousIndex = polygon.length - 1; index < polygon.length; previousIndex = index, index += 1) {
+    const current = polygon[index];
+    const previous = polygon[previousIndex];
+    if (current === undefined || previous === undefined) continue;
+
+    const crossesY = current.y > point.y !== previous.y > point.y;
+    if (!crossesY) continue;
+
+    const x = ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x;
+    if (point.x < x) inside = !inside;
+  }
+
+  return inside;
+};
+
+const contourParents = (contours: readonly OutlineContour[]): readonly (number | undefined)[] =>
+  contours.map((contour, contourIndex) => {
+    const probe = contour.points[0];
+    if (probe === undefined) return undefined;
+
+    let parent: number | undefined;
+    let parentArea = Infinity;
+    for (const [candidateIndex, candidate] of contours.entries()) {
+      if (candidateIndex === contourIndex) continue;
+      const candidateArea = Math.abs(candidate.area);
+      if (candidateArea >= parentArea || candidateArea <= Math.abs(contour.area)) continue;
+      if (!boundsContainPoint(candidate.bounds, probe) || !pointInPolygon(probe, candidate.points)) continue;
+      parent = candidateIndex;
+      parentArea = candidateArea;
+    }
+    return parent;
+  });
+
+const contourDepth = (
+  parents: readonly (number | undefined)[],
+  contourIndex: number,
+  seen: ReadonlySet<number> = new Set()
+): number => {
+  const parent = parents[contourIndex];
+  if (parent === undefined || seen.has(parent)) return 0;
+  return 1 + contourDepth(parents, parent, new Set([...seen, contourIndex]));
+};
+
+const triangulateOutlineComponent = (
+  vertices: TextMeshVertex[],
+  indices: number[],
+  contours: TextMeshContour[],
+  glyphBounds: TextBounds,
+  glyphIndex: number,
+  z: number,
+  outer: OutlineContour,
+  holes: readonly OutlineContour[]
+): void => {
+  const points = [outer.points, ...holes.map((hole) => hole.points)];
+  const data: number[] = [];
+  const holeIndices: number[] = [];
+  const flatPoints: OutlinePoint[] = [];
+
+  for (const [contourIndex, contourPoints] of points.entries()) {
+    if (contourIndex > 0) holeIndices.push(flatPoints.length);
+    for (const point of contourPoints) {
+      flatPoints.push(point);
+      data.push(point.x, point.y);
+    }
+  }
+
+  const triangles = earcut(data, holeIndices, 2);
+  if (triangles.length === 0) return;
+
+  const vertexOffset = vertices.length;
+  for (const point of flatPoints) {
+    vertices.push({
+      glyphCoord: glyphCoord(glyphBounds, point.x, point.y),
+      glyphIndex,
+      position: [point.x, point.y, z]
+    });
+  }
+
+  for (const index of triangles) indices.push(vertexOffset + index);
+  contours.push({
+    bounds: unionBounds([outer.bounds, ...holes.map((hole) => hole.bounds)]),
+    glyphIndex,
+    role: 'outline'
+  });
+};
+
+const appendOutlineGlyph = (
+  vertices: TextMeshVertex[],
+  indices: number[],
+  contours: TextMeshContour[],
+  face: TextFontFace,
+  font: OpenTypeFont,
+  placement: TextGlyphLayout,
+  glyphIndex: number,
+  fontSize: number
+): void => {
+  const fontGlyphIndex = placement.glyph.fontGlyphIndex;
+  if (fontGlyphIndex === undefined) return;
+
+  const glyph = font.glyphs.get(fontGlyphIndex);
+  if (glyph === undefined || whitespaceGlyphs.has(placement.glyph.text)) return;
+
+  const scale = fontSize / face.unitsPerEm;
+  const outlineContours = fontGlyphContours(
+    glyph,
+    placement.origin,
+    scale,
+    defaultOutlineFlattenTolerance * fontSize
+  );
+  const parents = contourParents(outlineContours);
+  const depths = outlineContours.map((_contour, index) => contourDepth(parents, index));
+
+  for (const [index, contour] of outlineContours.entries()) {
+    if ((depths[index] ?? 0) % 2 !== 0) continue;
+    const holes = outlineContours.filter((_candidate, candidateIndex) =>
+      parents[candidateIndex] === index && (depths[candidateIndex] ?? 0) === (depths[index] ?? 0) + 1
+    );
+    triangulateOutlineComponent(
+      vertices,
+      indices,
+      contours,
+      placement.bounds,
+      glyphIndex,
+      placement.origin[2],
+      contour,
+      holes
+    );
+  }
+};
+
 export const textMeshFromLayout = (layout: TextLayout): TextMesh => {
   const contours: TextMeshContour[] = [];
   const vertices: TextMeshVertex[] = [];
   const indices: number[] = [];
   let glyphIndex = 0;
+  const face = layout.fontFace;
+  const font = face === undefined ? undefined : fontForFace(face);
 
   for (const line of layout.lines) {
     for (const placement of line.glyphs) {
-      const glyphContours = contoursForGlyph(placement, glyphIndex);
-      contours.push(...glyphContours);
-      for (const contour of glyphContours) {
-        appendContour(vertices, indices, contour, placement.bounds, placement.origin[2]);
+      if (face !== undefined && font !== undefined) {
+        appendOutlineGlyph(vertices, indices, contours, face, font, placement, glyphIndex, layout.font.metrics.size);
+      } else {
+        const glyphContours = contoursForGlyph(placement, glyphIndex);
+        contours.push(...glyphContours);
+        for (const contour of glyphContours) {
+          appendContour(vertices, indices, contour, placement.bounds, placement.origin[2]);
+        }
       }
       glyphIndex += 1;
     }

@@ -19,10 +19,15 @@
     "test": "vitest run src/*.test.ts"
   },
   "devDependencies": {
+    "@fontsource/atkinson-hyperlegible": "^5.2.8",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "earcut": "^3.0.2",
+    "opentype.js": "^2.0.0"
   }
 }
