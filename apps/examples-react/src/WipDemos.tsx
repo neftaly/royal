@@ -3,19 +3,28 @@ import type { ReactNode } from 'react';
 type WipDemoLink = {
   readonly id: string;
   readonly title: string;
-  readonly status: 'Artifact available' | 'Harness available' | 'Pending demo route';
+  readonly status:
+    | 'Artifact available'
+    | 'Harness available'
+    | 'Pending demo route'
+    | 'Stable route available';
   readonly summary: string;
   readonly repoPath?: string;
+  readonly routePath?: string;
 };
+
+const routeHref = (routePath: string): string =>
+  `${import.meta.env.BASE_URL.replace(/\/$/, '')}${routePath}`;
 
 const wipDemoLinks: readonly WipDemoLink[] = [
   {
     id: 'gltf-asset-viewer',
     title: 'glTF Asset Viewer',
-    status: 'Artifact available',
+    status: 'Stable route available',
     summary:
-      'DamagedHelmet is kept as a repo fixture for renderer glTF work. A browser viewer route is still pending.',
+      'DamagedHelmet now has a stable primary example route using the public glTF asset API subset.',
     repoPath: 'fixtures/DamagedHelmet/DamagedHelmet.gltf',
+    routePath: '/gltf-helmet',
   },
   {
     id: 'picking-raycasting-fuzz',
@@ -82,6 +91,12 @@ const WipDemoCard = ({ demo }: { readonly demo: WipDemoLink }): ReactNode => (
       <div className="wip-path">
         <span>Repo path</span>
         <code>{demo.repoPath}</code>
+      </div>
+    )}
+    {demo.routePath === undefined ? null : (
+      <div className="wip-path">
+        <span>Stable route</span>
+        <a href={routeHref(demo.routePath)}>{demo.routePath}</a>
       </div>
     )}
   </article>

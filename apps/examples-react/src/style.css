@@ -451,6 +451,14 @@ canvas {
   width: fit-content;
 }
 
+.wip-path a {
+  color: var(--accent-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  width: fit-content;
+}
+
 @media (max-width: 1060px) {
   .examples-shell {
     grid-template-columns: 1fr;

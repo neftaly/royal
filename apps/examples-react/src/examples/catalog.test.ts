@@ -12,12 +12,14 @@ describe('examples list', () => {
     expect(examples.map((example) => example.title)).toEqual([
       'Cube',
       'Wireframe',
+      'glTF Helmet',
       'Fake UI + Text/Yoga',
       'Virtual Texturing Terrain',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
       '/wireframe',
+      '/gltf-helmet',
       '/fake-ui-text',
       '/virtual-texturing',
     ]);
@@ -61,7 +63,17 @@ describe('examples list', () => {
   it('keeps WIP demo links out of the primary examples list', () => {
     expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(examples).toHaveLength(4);
+    expect(examples).toHaveLength(5);
+  });
+
+  it('keeps the DamagedHelmet route on the public glTF API subset', () => {
+    const helmet = examples.find((example) => example.id === 'gltf-helmet');
+
+    expect(helmet?.path).toBe('/gltf-helmet');
+    expect(helmet?.source).toContain('gltf({');
+    expect(helmet?.source).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
+    expect(helmet?.source).toContain('directionalLight');
+    expect(helmet?.source).toContain('perspectiveCamera');
   });
 
   it('keeps the fake UI route Yoga-ready without wiring controls', () => {

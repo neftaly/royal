@@ -23,6 +23,12 @@ const smokeExpectations = {
     minColorBuckets: 3,
     minPaintedRatio: 0.003,
   },
+  'gltf-helmet': {
+    surface: 'canvas',
+    canvasLabel: 'glTF DamagedHelmet',
+    minColorBuckets: 5,
+    minPaintedRatio: 0.01,
+  },
   'fake-ui-text': {
     surface: 'canvas',
     canvasLabel: 'Fake UI with renderer text',
@@ -309,6 +315,7 @@ const wipExpression = `
       title: document.querySelector('h1')?.textContent?.trim() ?? '',
       activeNavText: activeLink?.textContent?.trim() ?? '',
       hasGltf: bodyText.includes('glTF Asset Viewer') &&
+        bodyText.includes('/gltf-helmet') &&
         bodyText.includes('fixtures/DamagedHelmet/DamagedHelmet.gltf'),
       hasPicking: bodyText.includes('Picking / Raycasting Fuzz') &&
         bodyText.includes('research/picking-fuzz/picking-fuzz-harness.mjs'),

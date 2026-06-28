@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 import { FakeUiText } from './examples/cases/FakeUiText';
 import fakeUiTextSource from './examples/cases/FakeUiText.tsx?raw';
+import { GltfHelmet } from './examples/cases/GltfHelmet';
+import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { VirtualTexturingTerrain } from './examples/cases/VirtualTexturingTerrain';
@@ -33,6 +35,14 @@ export const examples = [
     Component: WireframeCube,
     source: wireframeCubeSource,
     sourceFile: 'examples/cases/WireframeCube.tsx',
+  },
+  {
+    id: 'gltf-helmet',
+    path: '/gltf-helmet',
+    title: 'glTF Helmet',
+    Component: GltfHelmet,
+    source: gltfHelmetSource,
+    sourceFile: 'examples/cases/GltfHelmet.tsx',
   },
   {
     id: 'fake-ui-text',
