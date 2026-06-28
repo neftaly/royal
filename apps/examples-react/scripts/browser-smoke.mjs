@@ -296,6 +296,36 @@ const smokeExpression = `
 })()
 `;
 
+const wipExpression = `
+(async () => {
+  const deadline = performance.now() + 8000;
+  const read = () => {
+    const page = document.querySelector('[data-wip-page]');
+    const activeLink = document.querySelector('[data-wip-nav-link].active');
+    const bodyText = document.body.textContent ?? '';
+
+    return {
+      hasPage: page !== null,
+      title: document.querySelector('h1')?.textContent?.trim() ?? '',
+      activeNavText: activeLink?.textContent?.trim() ?? '',
+      hasGltf: bodyText.includes('glTF Asset Viewer') &&
+        bodyText.includes('fixtures/DamagedHelmet/DamagedHelmet.gltf'),
+      hasPicking: bodyText.includes('Picking / Raycasting Fuzz') &&
+        bodyText.includes('research/picking-fuzz/picking-fuzz-harness.mjs'),
+      primaryExampleNavCount: document.querySelectorAll('[data-example-nav-link]').length,
+    };
+  };
+
+  let state = read();
+  while (performance.now() < deadline && (!state.hasPage || !state.hasGltf || !state.hasPicking)) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    state = read();
+  }
+
+  return state;
+})()
+`;
+
 const assertRoute = (expected, state) => {
   const failures = [];
   const smoke = smokeExpectations[expected.id];
@@ -341,6 +371,24 @@ const assertRoute = (expected, state) => {
 
   if (failures.length > 0) {
     throw new Error(`${expected.title}: ${failures.join('; ')}`);
+  }
+};
+
+const assertWipPage = (state) => {
+  const failures = [];
+  if (!state.hasPage) failures.push('missing WIP page marker');
+  if (state.title !== 'WIP Demo Links') failures.push(`expected WIP title, received "${state.title}"`);
+  if (state.activeNavText !== 'WIP Demo Links') {
+    failures.push(`active WIP nav text was "${state.activeNavText || 'missing'}"`);
+  }
+  if (!state.hasGltf) failures.push('missing glTF WIP entry');
+  if (!state.hasPicking) failures.push('missing picking WIP entry');
+  if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
+    failures.push(`primary example nav count changed to ${state.primaryExampleNavCount}`);
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`WIP Demo Links: ${failures.join('; ')}`);
   }
 };
 
@@ -417,6 +465,13 @@ const main = async () => {
       console.log(`ok ${route.title}${canvasSummary}`);
     }
 
+    const wipLoaded = session.once('Page.loadEventFired');
+    await session.call('Page.navigate', { url: baseUrl + '/wip' });
+    await wipLoaded;
+    const wipState = await evaluate(session, wipExpression);
+    assertWipPage(wipState);
+    console.log('ok WIP Demo Links');
+
     if (exceptions.length > 0) {
       throw new Error('Browser runtime exceptions: ' + exceptions.join('; '));
     }
@@ -424,7 +479,12 @@ const main = async () => {
     session?.close();
     await stop(browser);
     await stop(preview);
-    await rm(profileDir, { force: true, recursive: true });
+    await rm(profileDir, {
+      force: true,
+      maxRetries: 3,
+      recursive: true,
+      retryDelay: 100,
+    });
   }
 };
 

@@ -58,6 +58,12 @@ describe('examples list', () => {
     expect(examples.some((example) => example.title.toLowerCase().includes('tarstate'))).toBe(false);
   });
 
+  it('keeps WIP demo links out of the primary examples list', () => {
+    expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
+    expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
+    expect(examples).toHaveLength(4);
+  });
+
   it('keeps the fake UI route Yoga-ready without wiring controls', () => {
     const fakeUi = examples.find((example) => example.id === 'fake-ui-text');
 

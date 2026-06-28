@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { Shell } from './Shell';
+import { WipDemos } from './WipDemos';
 import { examples, firstExample, type Example } from './examples';
 
 const ExampleScreen = ({ example }: { readonly example: Example }): ReactNode => {
@@ -62,7 +63,13 @@ const exampleRoutes = examples.map((example) =>
   })
 );
 
-const routeTree = rootRoute.addChildren([indexRoute, ...exampleRoutes]);
+const wipRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/wip',
+  component: WipDemos
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, ...exampleRoutes, wipRoute]);
 const basepath = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 
 export const router = createRouter({ basepath, routeTree });
