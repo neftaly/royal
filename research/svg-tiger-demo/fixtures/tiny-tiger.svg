@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tiny tiger fallback fixture created for Royal SVG tiger demo research.
+  It is covered by this repository's AGPL-3.0-only license and is not derived
+  from the Ghostscript/Inkscape tiger.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 112" width="160" height="112" role="img" aria-label="Tiny tiger fallback">
+  <g id="tiny-tiger" fill="#f2a33a" stroke="#241915" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+    <path id="tail" fill="none" stroke="#241915" stroke-width="7" d="M 118 72 C 142 68, 148 42, 130 32 C 118 25, 110 35, 118 44" />
+    <path id="body" d="M 38 70 C 44 46, 70 34, 103 42 C 126 48, 132 70, 116 86 C 99 102, 56 98, 42 84 C 37 79, 35 75, 38 70 Z" />
+    <path id="head" d="M 45 42 C 49 21, 77 12, 96 28 C 111 40, 106 65, 87 73 C 66 82, 40 65, 45 42 Z" />
+    <path id="left-ear" d="M 50 29 L 43 10 L 62 20 Z" />
+    <path id="right-ear" d="M 88 22 L 100 8 L 101 31 Z" />
+    <path id="chest" fill="#f7e0ac" stroke="none" d="M 73 69 C 82 67, 96 71, 102 83 C 93 92, 69 92, 57 83 C 61 75, 66 71, 73 69 Z" />
+    <path id="muzzle" fill="#f7e0ac" d="M 61 51 C 67 43, 82 43, 89 52 C 88 64, 66 66, 61 51 Z" />
+    <path id="nose" fill="#241915" stroke="none" d="M 72 52 L 80 52 L 76 58 Z" />
+    <path id="mouth" fill="none" stroke="#241915" stroke-width="1.7" d="M 76 58 C 73 63, 68 64, 65 61 M 76 58 C 79 63, 85 63, 88 60" />
+    <path id="left-eye" fill="#241915" stroke="none" d="M 61 42 C 61 39, 65 39, 66 42 C 66 46, 61 46, 61 42 Z" />
+    <path id="right-eye" fill="#241915" stroke="none" d="M 88 41 C 88 38, 93 38, 93 42 C 93 45, 88 45, 88 41 Z" />
+    <path id="foreleg" d="M 59 82 L 52 104 L 65 104 L 72 86 Z" />
+    <path id="hindleg" d="M 101 84 L 101 104 L 116 104 L 115 82 Z" />
+    <g id="stripes" fill="none" stroke="#241915" stroke-width="4">
+      <path id="stripe-head-left" d="M 51 35 L 66 42" />
+      <path id="stripe-head-top" d="M 71 25 L 74 39" />
+      <path id="stripe-head-right" d="M 96 35 L 83 43" />
+      <path id="stripe-body-1" d="M 77 43 L 69 62" />
+      <path id="stripe-body-2" d="M 95 44 L 88 65" />
+      <path id="stripe-body-3" d="M 113 52 L 100 67" />
+      <path id="stripe-tail" d="M 129 33 L 121 45" />
+    </g>
+  </g>
+</svg>
