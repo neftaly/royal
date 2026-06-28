@@ -1,18 +1,67 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { performance } from "node:perf_hooks";
+import { PerformanceObserver, performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 const defaultFixture = new URL("./fixtures/tiny-scene.svg", import.meta.url);
+const tigerFixture = new URL("./fixtures/ghostscript-tiger.svg", import.meta.url);
+const tigerProvenance = new URL("./fixtures/GHOSTSCRIPT-TIGER.provenance.md", import.meta.url);
 const commandCodes = { M: 0, L: 1, Q: 2, C: 3, Z: 4 };
 const commandCoordCount = { M: 2, L: 2, Q: 4, C: 6, Z: 0 };
 const kappa = 0.5522847498307936;
 
+const backendSlots = {
+  "custom-js": {
+    status: "available",
+    role: "Local dependency-free parser adapter for this research harness.",
+    parse: parseWithCustomJsBackend,
+  },
+  "usvg-wasm": {
+    status: "planned",
+    role: "Preferred product parser/normalizer once Rust/WASM is available.",
+    parse: undefined,
+  },
+  "pathfinder-svg": {
+    status: "evaluation-slot",
+    role: "Renderer/reference slot; not preferred as the asset extraction API.",
+    parse: undefined,
+  },
+  "lyon": {
+    status: "evaluation-slot",
+    role: "Geometry/flattening/stroking candidate behind the same normalized command API.",
+    parse: undefined,
+  },
+  "canvaskit": {
+    status: "evaluation-slot",
+    role: "Skia/CanvasKit path extraction or validation slot when the runtime is vendored.",
+    parse: undefined,
+  },
+  "browser-dom": {
+    status: "evaluation-slot",
+    role: "Browser DOM/SVGGeometryElement comparison backend for feature support checks.",
+    parse: undefined,
+  },
+};
+
+export function availableSvgBackends() {
+  return Object.fromEntries(
+    Object.entries(backendSlots).map(([name, slot]) => [
+      name,
+      {
+        status: slot.status,
+        role: slot.role,
+        available: typeof slot.parse === "function",
+      },
+    ]),
+  );
+}
+
 export function parseSvgToPaths(svg, options = {}) {
   const resolvedOptions = {
+    backend: options.backend ?? "custom-js",
     curveMode: options.curveMode ?? "retain",
     flattenTolerance: numberOr(options.flattenTolerance, 0.25),
     transformFlattening: options.transformFlattening ?? true,
@@ -25,20 +74,17 @@ export function parseSvgToPaths(svg, options = {}) {
 
   const warnings = [];
   const started = performance.now();
-  const parsedStarted = performance.now();
-  const document = parseXml(svg, warnings);
-  const xmlParseMs = performance.now() - parsedStarted;
-  const svgNode = findSvgNode(document);
-  if (svgNode === undefined) {
-    throw new Error("No <svg> root found in input.");
-  }
+  const backend = resolveBackend(resolvedOptions.backend);
 
-  const extractionStarted = performance.now();
-  const paths = [];
   const stats = {
     inputBytes: byteLength(svg),
-    xmlParseMs: round(xmlParseMs),
+    backend: backend.name,
+    backendRole: backend.role,
+    backendParseMs: 0,
+    xmlParseMs: 0,
+    sceneWalkMs: 0,
     extractionMs: 0,
+    normalizationMs: 0,
     flattenMs: 0,
     simplifyMs: 0,
     quantizeMs: 0,
@@ -47,32 +93,36 @@ export function parseSvgToPaths(svg, options = {}) {
     shapeElements: 0,
     unsupportedElements: 0,
     transformFlattened: resolvedOptions.transformFlattening,
+    stageOutputs: emptyStageOutputs(),
   };
 
-  const viewBox = readViewBox(svgNode.attrs);
-  const initialState = {
-    transform: identityMatrix(),
-    style: defaultStyle(),
-  };
-
-  walkSvg(svgNode, initialState, {
-    paths,
+  const backendStarted = performance.now();
+  const scene = backend.parse(svg, {
     warnings,
     stats,
     options: resolvedOptions,
   });
+  stats.backendParseMs = round(performance.now() - backendStarted);
 
+  const normalizationStarted = performance.now();
+  const paths = normalizeScene(scene.items, {
+    warnings,
+    stats,
+    options: resolvedOptions,
+  });
+  stats.normalizationMs = round(performance.now() - normalizationStarted);
+  stats.extractionMs = round(stats.backendParseMs + stats.normalizationMs);
   stats.flattenMs = round(stats.flattenMs);
   stats.simplifyMs = round(stats.simplifyMs);
   stats.quantizeMs = round(stats.quantizeMs);
-  stats.extractionMs = round(performance.now() - extractionStarted);
   stats.paths = paths.length;
   stats.commands = countCommands(paths);
   stats.coordinateScalars = countCoordinateScalars(paths);
-  stats.outputJsonBytes = estimateJsonBytes({ viewBox, paths, warnings });
+  stats.outputJsonBytes = estimateJsonBytes({ viewBox: scene.viewBox, paths, warnings });
 
   let result = {
-    viewBox,
+    backend: backend.name,
+    viewBox: scene.viewBox,
     paths,
     warnings,
     stats,
@@ -93,7 +143,13 @@ export function parseSvgToPaths(svg, options = {}) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const svgPath = resolve(args.svg ?? filePathFromUrl(defaultFixture));
+  if (args["list-backends"] === true) {
+    console.log(JSON.stringify(availableSvgBackends(), null, 2));
+    return;
+  }
+
+  const fixture = resolveFixture(args);
+  const svgPath = fixture.path;
   const svg = readFileSync(svgPath, "utf8");
 
   if (args.dump === true) {
@@ -108,8 +164,9 @@ async function main() {
   const quantize = numberOr(args.quantize, 0.001);
   const scenarios = [
     {
-      name: "retain-json",
+      name: `${optionsFromArgs(args).backend}:retain-json`,
       options: {
+        backend: optionsFromArgs(args).backend,
         curveMode: "retain",
         flattenTolerance: tolerance,
         simplify: "none",
@@ -117,8 +174,9 @@ async function main() {
       },
     },
     {
-      name: "flatten-json",
+      name: `${optionsFromArgs(args).backend}:flatten-json`,
       options: {
+        backend: optionsFromArgs(args).backend,
         curveMode: "flatten",
         flattenTolerance: tolerance,
         simplify: "none",
@@ -126,8 +184,9 @@ async function main() {
       },
     },
     {
-      name: "flatten-simplified-json",
+      name: `${optionsFromArgs(args).backend}:flatten-simplified-json`,
       options: {
+        backend: optionsFromArgs(args).backend,
         curveMode: "flatten",
         flattenTolerance: tolerance,
         simplify: "collinear",
@@ -136,8 +195,9 @@ async function main() {
       },
     },
     {
-      name: "flatten-packed-f32",
+      name: `${optionsFromArgs(args).backend}:flatten-packed-f32`,
       options: {
+        backend: optionsFromArgs(args).backend,
         curveMode: "flatten",
         flattenTolerance: tolerance,
         simplify: "collinear",
@@ -158,16 +218,20 @@ async function main() {
 
   const report = {
     prototype: "pathfinder-svg-loading",
+    benchmarkMode: args.bench === true ? "explicit" : "default",
     fixture: {
       path: svgPath,
       name: basename(svgPath),
       bytes: byteLength(svg),
+      label: fixture.label,
+      provenance: fixture.provenance,
     },
     runtime: {
       node: process.version,
       gcAvailable: typeof globalThis.gc === "function",
       iterations,
     },
+    backends: availableSvgBackends(),
     api: "parseSvgToPaths(svg, options) -> { viewBox, paths, warnings, stats }",
     scenarios: scenarioReports,
     workerTransfer,
@@ -181,13 +245,48 @@ async function main() {
   console.log(JSON.stringify(report, null, 2));
 }
 
+function resolveFixture(args) {
+  if (args.svg !== undefined) {
+    return {
+      label: "custom",
+      path: resolve(args.svg),
+      provenance: "caller-supplied",
+    };
+  }
+
+  const fixtureName = args.fixture ?? "tiny";
+  if (fixtureName === "tiny") {
+    return {
+      label: "tiny",
+      path: resolve(filePathFromUrl(defaultFixture)),
+      provenance: "local AGPL-compatible fixture authored for this research prototype",
+    };
+  }
+  if (fixtureName === "tiger") {
+    const path = resolve(filePathFromUrl(tigerFixture));
+    if (!existsSync(path)) {
+      throw new Error(
+        `Tiger fixture is not vendored yet: ${path}. See ${filePathFromUrl(tigerProvenance)} before adding it.`,
+      );
+    }
+    return {
+      label: "ghostscript-tiger",
+      path,
+      provenance: filePathFromUrl(tigerProvenance),
+    };
+  }
+
+  throw new Error(`Unknown fixture "${fixtureName}". Use --fixture tiny, --fixture tiger, or --svg /path/to/file.svg.`);
+}
+
 function runScenario(svg, name, options, iterations) {
   const warmup = Math.min(20, Math.max(3, Math.floor(iterations / 10)));
   for (let index = 0; index < warmup; index += 1) {
     parseSvgToPaths(svg, options);
   }
 
-  if (typeof globalThis.gc === "function") globalThis.gc();
+  const explicitGcBeforeMs = runExplicitGc();
+  const gcObserver = observeGc();
   const memoryBefore = process.memoryUsage();
   const cpuBefore = process.resourceUsage();
   const timings = [];
@@ -200,7 +299,8 @@ function runScenario(svg, name, options, iterations) {
   }
 
   const cpuAfter = process.resourceUsage(cpuBefore);
-  if (typeof globalThis.gc === "function") globalThis.gc();
+  const explicitGcAfterMs = runExplicitGc();
+  const observedGc = gcObserver.stop();
   const memoryAfter = process.memoryUsage();
   const sorted = [...timings].sort((a, b) => a - b);
 
@@ -219,23 +319,80 @@ function runScenario(svg, name, options, iterations) {
     warnings: last.warnings.length,
     lastStageMs: {
       xmlParse: last.stats.xmlParseMs,
+      backendParse: last.stats.backendParseMs,
+      sceneWalk: last.stats.sceneWalkMs,
       extraction: last.stats.extractionMs,
+      normalization: last.stats.normalizationMs,
       flatten: last.stats.flattenMs,
       simplify: last.stats.simplifyMs,
       quantize: last.stats.quantizeMs,
       pack: last.stats.packMs,
     },
+    stageOutputs: last.stats.stageOutputs,
     memory: {
       heapDeltaBytes: memoryAfter.heapUsed - memoryBefore.heapUsed,
       heapDeltaPerIterationBytes: Math.round((memoryAfter.heapUsed - memoryBefore.heapUsed) / iterations),
       rssBytes: memoryAfter.rss,
       heapUsedBytes: memoryAfter.heapUsed,
+      externalBytes: memoryAfter.external,
       arrayBuffersBytes: memoryAfter.arrayBuffers,
+    },
+    gc: {
+      explicitAvailable: typeof globalThis.gc === "function",
+      explicitBeforeMs: explicitGcBeforeMs,
+      explicitAfterMs: explicitGcAfterMs,
+      observed: observedGc,
     },
     cpu: {
       userMicros: cpuAfter.userCPUTime,
       systemMicros: cpuAfter.systemCPUTime,
       maxRssKb: cpuAfter.maxRSS,
+      involuntaryContextSwitches: cpuAfter.involuntaryContextSwitches,
+      voluntaryContextSwitches: cpuAfter.voluntaryContextSwitches,
+      fsRead: cpuAfter.fsRead,
+      fsWrite: cpuAfter.fsWrite,
+    },
+  };
+}
+
+function runExplicitGc() {
+  if (typeof globalThis.gc !== "function") return 0;
+  const started = performance.now();
+  globalThis.gc();
+  return round(performance.now() - started);
+}
+
+function observeGc() {
+  const metrics = {
+    count: 0,
+    durationMs: 0,
+    kinds: {},
+  };
+  let observer;
+  try {
+    observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        metrics.count += 1;
+        metrics.durationMs += entry.duration;
+        const kind = String(entry.kind ?? "unknown");
+        metrics.kinds[kind] = (metrics.kinds[kind] ?? 0) + 1;
+      }
+    });
+    observer.observe({ entryTypes: ["gc"] });
+  } catch {
+    return {
+      stop: () => ({ supported: false, count: 0, durationMs: 0, kinds: {} }),
+    };
+  }
+  return {
+    stop: () => {
+      observer.disconnect();
+      return {
+        supported: true,
+        count: metrics.count,
+        durationMs: round(metrics.durationMs),
+        kinds: metrics.kinds,
+      };
     },
   };
 }
@@ -281,6 +438,56 @@ async function measureWorkerTransfer(result) {
   }
 }
 
+function resolveBackend(name) {
+  const slot = backendSlots[name];
+  if (slot === undefined) {
+    throw new Error(`Unknown SVG backend "${name}". Available slots: ${Object.keys(backendSlots).join(", ")}`);
+  }
+  if (typeof slot.parse !== "function") {
+    throw new Error(`SVG backend "${name}" is a ${slot.status} slot and is not runnable in this JS-only harness.`);
+  }
+  return { name, ...slot };
+}
+
+function parseWithCustomJsBackend(svg, context) {
+  const parsedStarted = performance.now();
+  const document = parseXml(svg, context.warnings);
+  context.stats.xmlParseMs = round(performance.now() - parsedStarted);
+  const svgNode = findSvgNode(document);
+  if (svgNode === undefined) {
+    throw new Error("No <svg> root found in input.");
+  }
+
+  const walkStarted = performance.now();
+  const items = [];
+  const initialState = {
+    transform: identityMatrix(),
+    style: defaultStyle(),
+  };
+  walkSvg(svgNode, initialState, {
+    ...context,
+    items,
+  });
+  context.stats.sceneWalkMs = round(performance.now() - walkStarted);
+  return {
+    viewBox: readViewBox(svgNode.attrs),
+    items,
+    backend: "custom-js",
+  };
+}
+
+function normalizeScene(items, context) {
+  const paths = [];
+  for (const item of items) {
+    const normalized = normalizePathItem(item, {
+      ...context,
+      pathIndex: paths.length,
+    });
+    if (normalized !== undefined) paths.push(normalized);
+  }
+  return paths;
+}
+
 function walkSvg(node, inheritedState, context) {
   const localState = stateForNode(node, inheritedState);
   if (isHidden(localState.style)) return;
@@ -290,8 +497,13 @@ function walkSvg(node, inheritedState, context) {
 
   const commands = commandsForNode(node, context);
   if (commands !== undefined) {
-    const normalized = normalizeCommands(commands, localState.transform, localState.style, node, context);
-    if (normalized !== undefined) context.paths.push(normalized);
+    context.items.push({
+      id: node.attrs.id,
+      source: lowerName,
+      transform: localState.transform,
+      style: localState.style,
+      commands,
+    });
   }
 
   for (const child of node.children) {
@@ -352,40 +564,54 @@ function commandsForNode(node, context) {
   }
 }
 
-function normalizeCommands(commands, transform, style, node, context) {
-  let output = commands;
+function normalizePathItem(item, context) {
+  let output = item.commands;
   const options = context.options;
+  recordStageOutput(context.stats.stageOutputs.backend, output);
 
   if (options.transformFlattening) {
-    output = transformCommands(output, transform);
+    output = transformCommands(output, item.transform);
   }
+  recordStageOutput(context.stats.stageOutputs.normalized, output);
 
   if (options.curveMode === "flatten") {
     const started = performance.now();
+    const before = summarizeCommands(output);
     output = flattenCommands(output, options.flattenTolerance);
+    recordStageDelta(context.stats.stageOutputs.flattened, before, summarizeCommands(output));
     context.stats.flattenMs += performance.now() - started;
+  } else {
+    recordStageOutput(context.stats.stageOutputs.flattened, output);
   }
 
   if (options.simplify !== "none") {
     const started = performance.now();
+    const before = summarizeCommands(output);
     output = simplifyCommands(output, options.simplifyTolerance, options.simplify);
+    recordStageDelta(context.stats.stageOutputs.simplified, before, summarizeCommands(output));
     context.stats.simplifyMs += performance.now() - started;
+  } else {
+    recordStageOutput(context.stats.stageOutputs.simplified, output);
   }
 
   if (options.quantize > 0) {
     const started = performance.now();
+    const before = summarizeCommands(output);
     output = quantizeCommands(output, options.quantize);
     if (options.simplify !== "none") output = simplifyCommands(output, options.quantize, "dedupe");
+    recordStageDelta(context.stats.stageOutputs.quantized, before, summarizeCommands(output));
     context.stats.quantizeMs += performance.now() - started;
+  } else {
+    recordStageOutput(context.stats.stageOutputs.quantized, output);
   }
+  recordStageOutput(context.stats.stageOutputs.final, output);
 
-  const source = localName(node.name);
-  const paint = context.options.styleExtraction ? styleForPath(style, source) : {};
+  const paint = context.options.styleExtraction ? styleForPath(item.style, item.source) : {};
   return {
-    id: node.attrs.id ?? `${source}-${context.paths.length}`,
-    source,
+    id: item.id ?? `${item.source}-${context.pathIndex}`,
+    source: item.source,
     ...paint,
-    transform: options.transformFlattening ? undefined : matrixToObject(transform),
+    transform: options.transformFlattening ? undefined : matrixToObject(item.transform),
     commands: output,
   };
 }
@@ -1228,6 +1454,51 @@ function countCoordinateScalars(paths) {
   }, 0);
 }
 
+function emptyStageOutputs() {
+  return {
+    backend: emptyStageSummary(),
+    normalized: emptyStageSummary(),
+    flattened: emptyStageSummary(),
+    simplified: emptyStageSummary(),
+    quantized: emptyStageSummary(),
+    final: emptyStageSummary(),
+  };
+}
+
+function emptyStageSummary() {
+  return {
+    paths: 0,
+    commandsBefore: 0,
+    commandsAfter: 0,
+    commandsDelta: 0,
+    coordinateScalarsBefore: 0,
+    coordinateScalarsAfter: 0,
+    coordinateScalarsDelta: 0,
+  };
+}
+
+function summarizeCommands(commands) {
+  return {
+    commands: commands.length,
+    coordinateScalars: commands.reduce((total, command) => total + commandCoordCount[command.op], 0),
+  };
+}
+
+function recordStageOutput(summary, commands) {
+  const current = summarizeCommands(commands);
+  recordStageDelta(summary, current, current);
+}
+
+function recordStageDelta(summary, before, after) {
+  summary.paths += 1;
+  summary.commandsBefore += before.commands;
+  summary.commandsAfter += after.commands;
+  summary.commandsDelta += after.commands - before.commands;
+  summary.coordinateScalarsBefore += before.coordinateScalars;
+  summary.coordinateScalarsAfter += after.coordinateScalars;
+  summary.coordinateScalarsDelta += after.coordinateScalars - before.coordinateScalars;
+}
+
 function estimateJsonBytes(value) {
   return byteLength(JSON.stringify(value));
 }
@@ -1255,6 +1526,7 @@ function parseArgs(argv) {
 
 function optionsFromArgs(args) {
   return {
+    backend: args.backend ?? "custom-js",
     curveMode: args.flatten === true ? "flatten" : args["curve-mode"] ?? "retain",
     flattenTolerance: numberOr(args.tolerance, 0.25),
     transformFlattening: args["keep-transforms"] !== true,

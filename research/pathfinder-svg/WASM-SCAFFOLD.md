@@ -43,6 +43,25 @@ old `usvg = 0.9` and renderer/content crates, then builds a Pathfinder scene.
 That is useful reference code, but it is extra weight for a path extraction
 module.
 
+## Backend Adapter Shape
+
+The Rust/WASM crate should enter the JS harness as the `usvg-wasm` backend slot.
+Its first responsibility is to emit neutral scene items, not to own every output
+policy:
+
+```ts
+parseSvgWithUsvg(svg, options) => {
+  viewBox,
+  items: [{ id, source, transform, style, commands }],
+  warnings,
+  stats
+}
+```
+
+The shared JS or product pipeline can then apply transform flattening,
+simplification, quantization, packing, benchmark stats, and transfer tests in
+the same way as the current `custom-js` backend.
+
 ## Export Shape
 
 ```rust

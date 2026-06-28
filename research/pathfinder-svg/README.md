@@ -9,19 +9,31 @@ the current React package rename worktree.
 Run:
 
 ```sh
-node --expose-gc research/pathfinder-svg/svg-path-prototype.mjs
+node --expose-gc research/pathfinder-svg/svg-path-prototype.mjs --backend custom-js --bench
 ```
 
 Dump the normalized API output:
 
 ```sh
-node research/pathfinder-svg/svg-path-prototype.mjs --dump --flatten --simplify collinear --packed
+node research/pathfinder-svg/svg-path-prototype.mjs --backend custom-js --dump --flatten --simplify collinear --packed
+```
+
+List backend slots:
+
+```sh
+node research/pathfinder-svg/svg-path-prototype.mjs --list-backends
 ```
 
 Use another SVG:
 
 ```sh
-node --expose-gc research/pathfinder-svg/svg-path-prototype.mjs --svg /path/to/file.svg --iterations 500
+node --expose-gc research/pathfinder-svg/svg-path-prototype.mjs --backend custom-js --svg /path/to/file.svg --iterations 500
+```
+
+Run the future tiger fixture after vendoring it with provenance:
+
+```sh
+node --expose-gc research/pathfinder-svg/svg-path-prototype.mjs --fixture tiger --iterations 50
 ```
 
 ## What Was Inspected
@@ -63,6 +75,7 @@ Options:
 
 | Option | Purpose |
 | --- | --- |
+| `backend: "custom-js" \| "usvg-wasm" \| "pathfinder-svg" \| "lyon" \| "canvaskit" \| "browser-dom"` | Select a parser adapter slot. Only `custom-js` runs in this JS-only pass. |
 | `curveMode: "retain" \| "flatten"` | Keep cubic/quadratic curves or emit lines. |
 | `flattenTolerance` | Curve flattening tolerance in SVG units. |
 | `transformFlattening` | Apply element/group transforms to command coordinates. |
@@ -98,17 +111,25 @@ Packed output shape:
 Command codes are `M=0`, `L=1`, `Q=2`, `C=3`, `Z=4`. Coordinates are variable
 length by command, which avoids padding and transfers cleanly to workers.
 
+Backend adapters emit neutral scene items. Shared stages then own transform
+flattening, style projection, curve flattening, simplification, quantization,
+packing, and stats. See `BACKENDS.md` for the slot matrix and adapter contract.
+
 ## Benchmark Coverage
 
 The harness reports:
 
-- Parse/extract time across repeated iterations.
+- Backend parse, XML parse, scene-walk, normalization, and full extraction time
+  across repeated iterations.
 - Output path count, command count, coordinate scalar count.
 - Serialized JSON bytes.
 - Packed typed-array bytes.
-- Heap delta and per-iteration heap delta.
-- Process resource usage.
-- Flattening/simplification/packing stage timings.
+- Heap delta, per-iteration heap delta, external memory, and array-buffer memory.
+- Explicit GC timing when `--expose-gc` is enabled, observed GC event count when
+  Node exposes GC performance entries, and process resource usage.
+- Flattening/simplification/quantization/packing stage timings.
+- Stage output deltas for backend, normalized, flattened, simplified, quantized,
+  and final command/coordinate counts.
 - Worker round-trip transfer for typed-array output.
 
 The bundled fixture is intentionally tiny and locally authored. It exercises:
@@ -122,6 +143,21 @@ The bundled fixture is intentionally tiny and locally authored. It exercises:
 - nested transforms
 - fill/stroke metadata
 
+## Backend Slots
+
+Current slots:
+
+- `custom-js`: runnable dependency-free parser adapter for this harness.
+- `usvg-wasm`: intended product parser/normalizer once Rust/WASM tooling is
+  available.
+- `pathfinder-svg`: renderer/reference comparison slot.
+- `lyon`: geometry, flattening, and stroke expansion comparison slot.
+- `canvaskit`: Skia/CanvasKit extraction or validation slot.
+- `browser-dom`: browser DOM/SVGGeometryElement comparison slot.
+
+Only `custom-js` is executable in this environment. The other slots are present
+so benchmark reports and future adapters share one API surface.
+
 ## Tiger Fixture
 
 The Ghostscript tiger SVG was not vendored in this pass. The clear reference for
@@ -133,9 +169,9 @@ the later demo page is Wikimedia Commons:
 - License listed there: GNU AGPL v3 or later.
 
 That source and license are compatible with this AGPL repository, but the later
-demo page should vendor it in a separate patch with an attribution comment or
-sidecar note. This prototype uses `fixtures/tiny-scene.svg` to keep benchmark
-noise and review scope small.
+demo page should vendor it in a separate patch with the sidecar note in
+`fixtures/GHOSTSCRIPT-TIGER.provenance.md`. This prototype uses
+`fixtures/tiny-scene.svg` to keep benchmark noise and review scope small.
 
 ## Recommendation
 
