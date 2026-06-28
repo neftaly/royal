@@ -30,9 +30,43 @@ checkerboard:
 - Stats for frame demand, page hits/misses, uploads, evictions, upload bytes,
   estimated upload time, page-table updates, and shader indirection mode.
 
-The demo assets can be generated offline into small synthetic tiles first. Do
-not check in heavy tile sets; commit only a manifest recipe and lightweight
-sample metadata until the asset pipeline is ready.
+The first slice is now checked in as a tiny deterministic asset bundle. It is
+small enough for review, but it exercises the actual story: generated terrain
+material pages, padded borders, a manifest shape, a cache overlay mock, and
+camera-pan stream stats.
+
+### Landed First Slice
+
+`generate-demo-assets.mjs` writes and verifies `demo-assets/`:
+
+- `demo-assets/manifest.json`: asset-first virtual texture manifest with page
+  dimensions, padding, sampler policy, hashes, preview files, and budget rows.
+- `demo-assets/pages/**`: 21 PNG `RGBA8` pages for a 128 x 128 virtual
+  terrain material, with 32 x 32 usable texels plus a 4 texel border.
+- `demo-assets/preview/terrain-pages-overview.png`: a visual overview of the
+  generated material, including tile boundaries for seam review.
+- `demo-assets/preview/page-cache-debug-overlay.svg`: the intended debug
+  overlay shape: physical slots, resident pages, stream probes, and camera pan.
+- `demo-assets/stats/camera-pan-stream.json`: deterministic cold-pan stats for
+  requests, hits, misses, uploads, evictions, dirty page-table entries,
+  fallback samples, and resident-mip seam candidates.
+
+Run:
+
+```sh
+node research/virtual-texturing/generate-demo-assets.mjs --check
+```
+
+The checker regenerates the expected bytes in memory, compares every committed
+artifact, and verifies that adjacent tile borders match. Current fixture:
+
+- 21 total pages across 3 mips.
+- 28 adjacent tile pairs.
+- 8,960 padded-border pixel comparisons.
+- 0 border mismatches.
+
+This fixture is intentionally tiny. It proves the asset contract and visual
+debug story without freezing renderer APIs or checking in a heavy tile set.
 
 ## Design
 
@@ -189,6 +223,36 @@ Renderer packages can later consume those manifests privately and bind page
 tables, cache atlases, and debug overlays without freezing a megatexture node
 into the public API.
 
+## Renderer Hooks Needed After API Cleanup
+
+Keep these internal to the renderer/backend at first. They are hooks, not a
+public `VirtualTextureNode`.
+
+- Texture resource: an internal virtual texture resource that owns the physical
+  cache atlas texture, the page-table texture, the fallback texture, the
+  decoded-page staging buffer, and the selected manifest variant.
+- Material resource: a material texture slot that can resolve either a normal
+  texture asset or a virtual texture asset id. The public material should keep
+  naming base color/normal/ORM assets plus fallback color or texture.
+- Page loader: a manifest-driven tile fetch/decode path using stable page ids,
+  URI templates, hashes, color space, and variant selection. PNG/RGBA8 is the
+  first dev variant; KTX2 stays a variant of the same asset.
+- Residency scheduler: frame-scoped demand collection, parent fallback lookup,
+  prefetch priority, LRU or clock eviction, and hard upload page/byte budgets.
+- Page-table upload: a batched dirty-entry writer that updates only texels
+  affected by uploads and evictions. For WebGL2 this starts as `RGBA8`
+  `texSubImage2D`; WebGL1 keeps normalized `RGBA8` if derivatives are present.
+- Shader binding: a private material path that binds the page table, physical
+  atlas, fallback texture, page size, border size, and selected indirection
+  mode for one virtual albedo texture.
+- Stats/probe rows: a backend diagnostics stream for requested pages, resident
+  slots, exact hits, misses, fallback samples, uploads, evictions, upload
+  bytes, estimated upload time, dirty page-table entries, and resident-mip
+  seam candidates.
+- Debug overlay: a renderer-owned overlay consuming those probe rows. It should
+  render the cache slots and table state before the material is tuned, so cache
+  churn and seam pressure are visible during review.
+
 ## Prototype
 
 `virtual-texturing-cache-sim.mjs` is a standalone deterministic simulation. It
@@ -227,26 +291,31 @@ code:
 
 ## Recommended Demo Steps After Renderer Split
 
-1. Add a private WebGL texture resource that can own a page-table texture and a
+1. Use `demo-assets/manifest.json` as the first fixture for loader and material
+   work. Do not add a public virtual texture scene node.
+2. Add a private WebGL texture resource that can own a page-table texture and a
    physical page atlas.
-2. Add an internal material path for one virtual albedo texture on terrain,
+3. Add an internal material path for one virtual albedo texture on terrain,
    driven by an asset manifest. Keep public scene code using material assets.
-3. Generate lightweight terrain tiles from a deterministic recipe and stream
-   them through the page scheduler with a strict upload budget.
-4. Add the debug overlay and stats before tuning visuals; otherwise seams and
+4. Stream the lightweight terrain tiles from the deterministic recipe through
+   the page scheduler with a strict upload budget.
+5. Add the debug overlay and stats before tuning visuals; otherwise seams and
    churn are hard to diagnose.
-5. Add KTX2/Basis variants in the manifest, with `RGBA8` fallback using the
+6. Generate the larger 16k demo tile set out of band from the same recipe. Keep
+   only recipes, manifests, and small fixtures in git until storage policy is
+   clear.
+7. Add KTX2/Basis variants in the manifest, with `RGBA8` fallback using the
    exact same page ids and residency policy.
-6. Only then consider a WebGPU path for richer page-table formats, async copy,
+8. Only then consider a WebGPU path for richer page-table formats, async copy,
    compute visibility, or larger caches.
 
 ## Blockers
 
-- Renderer split must settle before adding backend resource code.
+- Renderer package/API cleanup must settle before adding backend resource code.
 - Royal needs an asset manifest/resource concept before this should become
   public API.
 - Current texture code needs compressed texture capability selection before
   KTX2-backed virtual pages can be tested seriously.
 - WebGL timer-query availability varies; budget logic must work without it.
-- Seam handling needs real tile generation with borders before screenshots can
-  prove quality.
+- The tiny fixture proves border generation, but a real screenshot pass still
+  needs renderer integration and a larger streamed tile set.
