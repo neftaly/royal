@@ -73,7 +73,7 @@ const capability = (rows: readonly RendererCapabilityProbeRow[], name: string): 
 };
 
 describe("collectRendererCapabilityRows", () => {
-  it("produces deterministic WebGL1 capability, extension, timer, compressed-format, and limit rows", () => {
+  it("records WebGL1 extension facts without treating them as supported renderer gates", () => {
     const result = collectRendererCapabilityRows(fakeWebGl({
       compressedFormats: [0x83F0, 0x9274],
       extensionObjects: {
@@ -119,7 +119,6 @@ describe("collectRendererCapabilityRows", () => {
       "renderer_capability",
       "renderer_capability",
       "renderer_capability",
-      "renderer_capability",
       "webgl_extension",
       "webgl_extension",
       "webgl_extension",
@@ -133,13 +132,17 @@ describe("collectRendererCapabilityRows", () => {
       "compressed_texture_format",
     ]);
     expect(capability(result.rows, "draw_buffers")).toMatchObject({
-      extension: "WEBGL_draw_buffers",
-      source: "webgl-extension",
-      supported: true,
+      source: "missing",
+      supported: false,
     });
     expect(capability(result.rows, "gpu_timer_query")).toMatchObject({
-      extension: "EXT_disjoint_timer_query",
-      supported: true,
+      source: "missing",
+      supported: false,
+    });
+    expect(result.rows).toContainEqual({
+      kind: "gpu_timer_query_support",
+      queryApi: "none",
+      supported: false,
     });
     expect(result.rows.filter((row) => row.kind === "webgl_extension")).toEqual([
       { kind: "webgl_extension", name: "ANGLE_instanced_arrays", supported: true },
@@ -175,7 +178,11 @@ describe("collectRendererCapabilityRows", () => {
     ]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.key)).toEqual([
       "depth_texture",
+      "draw_buffers",
+      "float_texture",
+      "gpu_timer_query",
       "half_float_texture",
+      "instancing",
       "webgl2",
     ]);
   });

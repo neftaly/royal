@@ -62,19 +62,11 @@ const loadImage = async (src: string, uri: string, label: string): Promise<Image
   return await createImageBitmap(await response.blob());
 };
 
-const isPowerOfTwo = (value: number): boolean =>
-  Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
-
 const usesMipmaps = (gl: WebGLRenderingContext, filter: number): boolean =>
   filter === gl.NEAREST_MIPMAP_NEAREST ||
   filter === gl.LINEAR_MIPMAP_NEAREST ||
   filter === gl.NEAREST_MIPMAP_LINEAR ||
   filter === gl.LINEAR_MIPMAP_LINEAR;
-
-const mipmapFallback = (gl: WebGLRenderingContext, filter: number): number =>
-  filter === gl.NEAREST_MIPMAP_NEAREST || filter === gl.NEAREST_MIPMAP_LINEAR
-    ? gl.NEAREST
-    : gl.LINEAR;
 
 const validMinFilter = (gl: WebGLRenderingContext, filter: number | undefined): number => {
   switch (filter) {
@@ -181,19 +173,14 @@ const createTexture = (
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
 
-  const canMipmap = isPowerOfTwo(image.width) && isPowerOfTwo(image.height);
-  const minFilter = canMipmap || !usesMipmaps(gl, sampler.minFilter)
-    ? sampler.minFilter
-    : mipmapFallback(gl, sampler.minFilter);
-
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sampler.minFilter);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampler.magFilter);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, canMipmap ? sampler.wrapS : gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, canMipmap ? sampler.wrapT : gl.CLAMP_TO_EDGE);
-  if (canMipmap && usesMipmaps(gl, minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, sampler.wrapS);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, sampler.wrapT);
+  if (usesMipmaps(gl, sampler.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
   return texture;
 };
 

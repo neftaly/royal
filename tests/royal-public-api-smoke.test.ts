@@ -147,7 +147,7 @@ describe('Royal public API smoke tests', () => {
     );
 
     expect(result.rows.some((row) => row.kind === 'context_version')).toBe(true);
-    expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl')).toBe(true);
+    expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl2')).toBe(true);
     expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();
   });
 

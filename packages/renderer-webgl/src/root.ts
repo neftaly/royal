@@ -87,7 +87,7 @@ export class WebGlRoot {
   readonly #disposeResizeScheduling: () => void;
   readonly #drawnGltfAssets = new WeakSet<object>();
   readonly #gltfCache: GltfCache;
-  readonly #gl: WebGLRenderingContext;
+  readonly #gl: WebGL2RenderingContext;
   readonly #geometryCache: GeometryCache;
   readonly #gltfProgram: GltfProgram;
   readonly #meshProgram: MeshProgram;
@@ -98,14 +98,14 @@ export class WebGlRoot {
   #scene: RenderRoot | undefined;
 
   constructor(canvas: HTMLCanvasElement, options: WebGlRootOptions = {}) {
-    const gl = canvas.getContext("webgl", {
+    const gl = canvas.getContext("webgl2", {
       alpha: options.alpha ?? true,
       ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
       ...(options.preserveDrawingBuffer === undefined
         ? {}
         : { preserveDrawingBuffer: options.preserveDrawingBuffer }),
     });
-    if (gl === null) throw new Error("WebGL is not available");
+    if (gl === null) throw new Error("WebGL2 is not available");
 
     this.#canvas = canvas;
     this.#gl = gl;

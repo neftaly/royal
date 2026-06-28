@@ -119,7 +119,7 @@ describe("TextureCache", () => {
     expect(mipmaps).toEqual([gl.TEXTURE_2D]);
   });
 
-  it("clamps NPOT textures and disables mipmaps even when the sampler asks for them", async () => {
+  it("keeps NPOT sampler state and mipmaps under the WebGL2 policy", async () => {
     installImage({ height: 32, width: 63 });
     const { gl, mipmaps, texParameters } = fakeTextureGl();
     const cache = new TextureCache(gl);
@@ -140,11 +140,11 @@ describe("TextureCache", () => {
     });
 
     expect(texParameters).toEqual([
-      { param: gl.LINEAR, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.LINEAR_MIPMAP_LINEAR, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
       { param: gl.NEAREST, pname: gl.TEXTURE_MAG_FILTER, target: gl.TEXTURE_2D },
-      { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_S, target: gl.TEXTURE_2D },
-      { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
+      { param: gl.REPEAT, pname: gl.TEXTURE_WRAP_S, target: gl.TEXTURE_2D },
+      { param: gl.MIRRORED_REPEAT, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
     ]);
-    expect(mipmaps).toEqual([]);
+    expect(mipmaps).toEqual([gl.TEXTURE_2D]);
   });
 });

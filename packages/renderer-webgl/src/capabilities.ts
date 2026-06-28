@@ -1,7 +1,6 @@
 export type WebGlContextVersion = 1 | 2 | "unknown";
 
 export type RendererCapabilityName =
-  | "webgl"
   | "webgl2"
   | "webgpu"
   | "draw_buffers"
@@ -15,7 +14,6 @@ export type RendererCapabilityName =
   | "lose_context";
 
 export type RendererCapabilitySource =
-  | "webgl-core"
   | "webgl2-core"
   | "webgl-extension"
   | "webgpu-probe"
@@ -41,7 +39,7 @@ export type GpuTimerQuerySupportRow = {
   readonly kind: "gpu_timer_query_support";
   readonly supported: boolean;
   readonly extension?: string | undefined;
-  readonly queryApi: "webgl2" | "webgl1-extension" | "none";
+  readonly queryApi: "webgl2" | "none";
 };
 
 export type CompressedTextureFormatRow = {
@@ -167,7 +165,6 @@ type CompressedTextureFamily =
   | "unknown";
 
 const wishlistCapabilities: readonly RendererCapabilityName[] = [
-  "webgl",
   "webgl2",
   "webgpu",
   "draw_buffers",
@@ -348,46 +345,23 @@ const capabilityProbes = (
   webgpu: WebGpuProbeInput | undefined,
 ): readonly CapabilityProbe[] => {
   const isWebGl2 = version === 2;
-  const drawBuffers = extensionCapability(
-    "draw_buffers",
-    isWebGl2,
-    extensions.find(["WEBGL_draw_buffers"]),
-    "webgl2-core",
-  );
-  const depthTexture = extensionCapability(
-    "depth_texture",
-    isWebGl2,
-    extensions.find(["WEBGL_depth_texture"]),
-    "webgl2-core",
-  );
-  const instancing = extensionCapability(
-    "instancing",
-    isWebGl2,
-    extensions.find(["ANGLE_instanced_arrays"]),
-    "webgl2-core",
-  );
-  const anisotropy = extensionCapability("anisotropy", false, extensions.find([
+  const drawBuffers = coreWebGl2Capability("draw_buffers", isWebGl2);
+  const depthTexture = coreWebGl2Capability("depth_texture", isWebGl2);
+  const instancing = coreWebGl2Capability("instancing", isWebGl2);
+  const anisotropy = extensionCapability("anisotropy", extensions.find([
     "EXT_texture_filter_anisotropic",
     "MOZ_EXT_texture_filter_anisotropic",
     "WEBKIT_EXT_texture_filter_anisotropic",
   ]));
-  const floatTexture = extensionCapability("float_texture", isWebGl2, extensions.find([
-    "OES_texture_float",
-    "EXT_color_buffer_float",
-  ]), "webgl2-core");
-  const halfFloatTexture = extensionCapability("half_float_texture", isWebGl2, extensions.find([
-    "OES_texture_half_float",
-    "EXT_color_buffer_half_float",
-  ]), "webgl2-core");
+  const floatTexture = coreWebGl2Capability("float_texture", isWebGl2);
+  const halfFloatTexture = coreWebGl2Capability("half_float_texture", isWebGl2);
   const compressedTexture = compressedRows.length > 0
     ? supportedCapability("compressed_texture", "webgl-extension", compressedRows[0]?.extension)
     : missingCapability("compressed_texture");
-  const loseContext = extensionCapability("lose_context", false, extensions.find(["WEBGL_lose_context"]));
+  const loseContext = extensionCapability("lose_context", extensions.find(["WEBGL_lose_context"]));
 
   return wishlistCapabilities.map((capability) => {
     switch (capability) {
-      case "webgl":
-        return supportedCapability("webgl", "webgl-core");
       case "webgl2":
         return isWebGl2
           ? supportedCapability("webgl2", "webgl2-core")
@@ -418,13 +392,19 @@ const capabilityProbes = (
   });
 };
 
+const coreWebGl2Capability = (
+  capability: RendererCapabilityName,
+  isWebGl2: boolean,
+): CapabilityProbe => {
+  return isWebGl2
+    ? supportedCapability(capability, "webgl2-core")
+    : missingCapability(capability);
+};
+
 const extensionCapability = (
   capability: RendererCapabilityName,
-  webGl2Core: boolean,
   extension: ExtensionProbe | undefined,
-  webGl2Source: RendererCapabilitySource = "webgl2-core",
 ): CapabilityProbe => {
-  if (webGl2Core) return supportedCapability(capability, webGl2Source);
   if (extension !== undefined) return supportedCapability(capability, "webgl-extension", extension.name);
   return missingCapability(capability);
 };
@@ -491,10 +471,8 @@ const timerQuerySupport = (
   version: WebGlContextVersion,
   extensions: ReturnType<typeof createExtensionCache>,
 ): ExtensionProbe | undefined => {
-  if (version === 2) {
-    return extensions.find(["EXT_disjoint_timer_query_webgl2", "EXT_disjoint_timer_query"]);
-  }
-  return extensions.find(["EXT_disjoint_timer_query"]);
+  if (version !== 2) return undefined;
+  return extensions.find(["EXT_disjoint_timer_query_webgl2", "EXT_disjoint_timer_query"]);
 };
 
 const timerQueryRow = (timerQuery: ExtensionProbe | undefined): GpuTimerQuerySupportRow => {
@@ -505,7 +483,7 @@ const timerQueryRow = (timerQuery: ExtensionProbe | undefined): GpuTimerQuerySup
   return {
     extension: timerQuery.name,
     kind: "gpu_timer_query_support",
-    queryApi: timerQuery.name === "EXT_disjoint_timer_query_webgl2" ? "webgl2" : "webgl1-extension",
+    queryApi: "webgl2",
     supported: true,
   };
 };
