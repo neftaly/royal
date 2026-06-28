@@ -1,0 +1,222 @@
+{
+  "indexVersion": 1,
+  "world": {
+    "id": "royal-offline-terrain-demo",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z"
+    },
+    "units": "meters",
+    "seed": "royal:offline-terrain:demo:001"
+  },
+  "tileSizeMeters": 64,
+  "heightRangeMeters": [
+    -1,
+    5
+  ],
+  "tiles": [
+    {
+      "id": "tile:offline-terrain-demo:lod0:x0:z0",
+      "pageId": "tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main",
+      "manifestUri": "sample-manifest.json",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "grid": {
+        "x": 0,
+        "z": 0,
+        "level": 0
+      },
+      "bounds": {
+        "min": [
+          -32,
+          -1,
+          -32
+        ],
+        "max": [
+          32,
+          5,
+          32
+        ]
+      },
+      "neighbors": {
+        "north": null,
+        "east": "tile:offline-terrain-demo:lod0:x1:z0",
+        "south": "tile:offline-terrain-demo:lod0:x0:z1",
+        "west": null
+      },
+      "seams": {
+        "east": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x1:z0",
+          "edge": "east",
+          "neighborEdge": "west",
+          "borderHash": "9cfcd49b55960aa2cc5bd9dbf27a82e21f4bc2f4f9b14e714a454f68fb9ba10b",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        },
+        "south": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x0:z1",
+          "edge": "south",
+          "neighborEdge": "north",
+          "borderHash": "ffbe7bca804f513fa85e0cb6547dfe02d33972f61f1a07f1d33269a0d464cf5d",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        }
+      }
+    },
+    {
+      "id": "tile:offline-terrain-demo:lod0:x1:z0",
+      "pageId": "tile:offline-terrain-demo:lod0:x1:z0:page:terrain-main",
+      "manifestUri": "tiles/x1-z0/manifest.json",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "grid": {
+        "x": 1,
+        "z": 0,
+        "level": 0
+      },
+      "bounds": {
+        "min": [
+          32,
+          -1,
+          -32
+        ],
+        "max": [
+          96,
+          5,
+          32
+        ]
+      },
+      "neighbors": {
+        "north": null,
+        "east": null,
+        "south": "tile:offline-terrain-demo:lod0:x1:z1",
+        "west": "tile:offline-terrain-demo:lod0:x0:z0"
+      },
+      "seams": {
+        "south": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x1:z1",
+          "edge": "south",
+          "neighborEdge": "north",
+          "borderHash": "ec2a353d74cb12d49e7fd350b9ec9638cf1e3d60a61e6fc87f072ec9fcc8857a",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        },
+        "west": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x0:z0",
+          "edge": "west",
+          "neighborEdge": "east",
+          "borderHash": "9cfcd49b55960aa2cc5bd9dbf27a82e21f4bc2f4f9b14e714a454f68fb9ba10b",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        }
+      }
+    },
+    {
+      "id": "tile:offline-terrain-demo:lod0:x0:z1",
+      "pageId": "tile:offline-terrain-demo:lod0:x0:z1:page:terrain-main",
+      "manifestUri": "tiles/x0-z1/manifest.json",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "grid": {
+        "x": 0,
+        "z": 1,
+        "level": 0
+      },
+      "bounds": {
+        "min": [
+          -32,
+          -1,
+          32
+        ],
+        "max": [
+          32,
+          5,
+          96
+        ]
+      },
+      "neighbors": {
+        "north": "tile:offline-terrain-demo:lod0:x0:z0",
+        "east": "tile:offline-terrain-demo:lod0:x1:z1",
+        "south": null,
+        "west": null
+      },
+      "seams": {
+        "north": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x0:z0",
+          "edge": "north",
+          "neighborEdge": "south",
+          "borderHash": "ffbe7bca804f513fa85e0cb6547dfe02d33972f61f1a07f1d33269a0d464cf5d",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        },
+        "east": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x1:z1",
+          "edge": "east",
+          "neighborEdge": "west",
+          "borderHash": "b66d8a2aee20158cd0c5151f5b4171c820d6521eb270ef2d70968b3b867c47f4",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        }
+      }
+    },
+    {
+      "id": "tile:offline-terrain-demo:lod0:x1:z1",
+      "pageId": "tile:offline-terrain-demo:lod0:x1:z1:page:terrain-main",
+      "manifestUri": "tiles/x1-z1/manifest.json",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "grid": {
+        "x": 1,
+        "z": 1,
+        "level": 0
+      },
+      "bounds": {
+        "min": [
+          32,
+          -1,
+          32
+        ],
+        "max": [
+          96,
+          5,
+          96
+        ]
+      },
+      "neighbors": {
+        "north": "tile:offline-terrain-demo:lod0:x1:z0",
+        "east": null,
+        "south": null,
+        "west": "tile:offline-terrain-demo:lod0:x0:z1"
+      },
+      "seams": {
+        "north": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x1:z0",
+          "edge": "north",
+          "neighborEdge": "south",
+          "borderHash": "ec2a353d74cb12d49e7fd350b9ec9638cf1e3d60a61e6fc87f072ec9fcc8857a",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        },
+        "west": {
+          "neighborTileId": "tile:offline-terrain-demo:lod0:x0:z1",
+          "edge": "west",
+          "neighborEdge": "east",
+          "borderHash": "b66d8a2aee20158cd0c5151f5b4171c820d6521eb270ef2d70968b3b867c47f4",
+          "heightDeltaMaxMeters": 0,
+          "normalDeltaMaxDegrees": 0
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "recipe": "royal-offline-terrain-world-index-fixture@0.1.0",
+    "generator": {
+      "name": "validate-world-index.mjs",
+      "version": "0.1.0",
+      "command": "node research/offline-terrain-pipeline/validate-world-index.mjs"
+    },
+    "createdAt": "2026-06-28T00:00:00.000Z",
+    "license": "AGPL-3.0-only"
+  }
+}

@@ -1,0 +1,403 @@
+{
+  "schema": "royal.research.dynamic-impostors.manifest.v0",
+  "date": "2026-06-28",
+  "description": "Static forest/impostor fixture for CPU-only LOD and texture residency pressure testing.",
+  "world": {
+    "units": "meters",
+    "upAxis": "Y",
+    "bounds": {
+      "min": [-512, 0, -384],
+      "max": [512, 52, 384]
+    },
+    "cameraPath": {
+      "start": [-260, 14, -180],
+      "end": [280, 18, 190],
+      "lookAheadMeters": 80,
+      "defaultFrames": 72
+    }
+  },
+  "sourceMeshes": [
+    {
+      "id": "fir_cluster_high",
+      "species": "coastal-fir",
+      "meshRef": "asset://forest/source/coastal-fir-high.glb#mesh/fir-cluster",
+      "materialRefs": [
+        "asset://forest/source/coastal-fir-bark.material.json",
+        "asset://forest/source/coastal-fir-needles.material.json"
+      ],
+      "authoringSourceRef": "asset://forest/authoring/coastal-fir.blend#Collection/Fir_Cluster",
+      "collisionRef": "asset://forest/source/coastal-fir-collision.glb#mesh/hull",
+      "bounds": {
+        "center": [0, 17.5, 0],
+        "halfExtents": [4.6, 17.5, 4.2],
+        "radius": 18.4
+      },
+      "triangles": 18240,
+      "meshLod": {
+        "nearMeshRef": "asset://forest/source/coastal-fir-high.glb#mesh/fir-cluster",
+        "midMeshRef": "asset://forest/source/coastal-fir-medium.glb#mesh/fir-cluster",
+        "nearTriangles": 18240,
+        "midTriangles": 6120
+      }
+    },
+    {
+      "id": "beech_cluster_high",
+      "species": "silver-beech",
+      "meshRef": "asset://forest/source/silver-beech-high.glb#mesh/beech-cluster",
+      "materialRefs": [
+        "asset://forest/source/silver-beech-bark.material.json",
+        "asset://forest/source/silver-beech-leaves.material.json"
+      ],
+      "authoringSourceRef": "asset://forest/authoring/silver-beech.blend#Collection/Beech_Cluster",
+      "collisionRef": "asset://forest/source/silver-beech-collision.glb#mesh/hull",
+      "bounds": {
+        "center": [0, 13.2, 0],
+        "halfExtents": [5.8, 13.2, 5.3],
+        "radius": 15.2
+      },
+      "triangles": 22680,
+      "meshLod": {
+        "nearMeshRef": "asset://forest/source/silver-beech-high.glb#mesh/beech-cluster",
+        "midMeshRef": "asset://forest/source/silver-beech-medium.glb#mesh/beech-cluster",
+        "nearTriangles": 22680,
+        "midTriangles": 7480
+      }
+    },
+    {
+      "id": "dead_pine_snag",
+      "species": "dead-pine",
+      "meshRef": "asset://forest/source/dead-pine-high.glb#mesh/snag",
+      "materialRefs": [
+        "asset://forest/source/dead-pine-bark.material.json"
+      ],
+      "authoringSourceRef": "asset://forest/authoring/dead-pine.blend#Collection/Snag",
+      "collisionRef": "asset://forest/source/dead-pine-collision.glb#mesh/hull",
+      "bounds": {
+        "center": [0, 10.8, 0],
+        "halfExtents": [1.7, 10.8, 1.4],
+        "radius": 11.1
+      },
+      "triangles": 4380,
+      "meshLod": {
+        "nearMeshRef": "asset://forest/source/dead-pine-high.glb#mesh/snag",
+        "midMeshRef": "asset://forest/source/dead-pine-medium.glb#mesh/snag",
+        "nearTriangles": 4380,
+        "midTriangles": 1260
+      }
+    }
+  ],
+  "impostorAtlases": [
+    {
+      "id": "forest_oct_2048_albedo_depth_normal_v1",
+      "kind": "octahedral",
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/forest-oct-2048-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/forest-oct-2048-normal-roughness.ktx2",
+        "depth": "asset://forest/impostors/forest-oct-2048-depth.ktx2"
+      },
+      "atlas": {
+        "width": 2048,
+        "height": 2048,
+        "formatPreference": ["ktx2-basis-uastc", "rgba8"],
+        "tileSize": 256,
+        "paddingTexels": 6,
+        "layers": [
+          {
+            "species": "coastal-fir",
+            "sourceMeshId": "fir_cluster_high",
+            "tileRect": [0, 0, 1024, 1024],
+            "pageGroup": "oct/fir"
+          },
+          {
+            "species": "silver-beech",
+            "sourceMeshId": "beech_cluster_high",
+            "tileRect": [1024, 0, 1024, 1024],
+            "pageGroup": "oct/beech"
+          },
+          {
+            "species": "dead-pine",
+            "sourceMeshId": "dead_pine_snag",
+            "tileRect": [0, 1024, 1024, 1024],
+            "pageGroup": "oct/dead-pine"
+          }
+        ]
+      },
+      "octahedral": {
+        "directionCount": 48,
+        "hemisphere": "upper-plus-horizon",
+        "azimuthSteps": 8,
+        "elevationSteps": 6,
+        "normalEncoding": "oct-snorm-rg",
+        "depthEncoding": "viewspace-linear-u16",
+        "blend": {
+          "maxDirections": 3,
+          "weightMode": "octahedral-barycentric"
+        }
+      },
+      "memoryHint": {
+        "rgba8Bytes": 50331648,
+        "uastcBytesEstimate": 9437184,
+        "residentPageBudget": 96
+      }
+    },
+    {
+      "id": "forest_billboard_1024_far_v1",
+      "kind": "axis_billboard",
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/forest-billboard-1024-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/forest-billboard-1024-normal-roughness.ktx2"
+      },
+      "atlas": {
+        "width": 1024,
+        "height": 1024,
+        "formatPreference": ["ktx2-basis-etc1s", "rgba8"],
+        "tileSize": 128,
+        "paddingTexels": 4,
+        "layers": [
+          {
+            "species": "coastal-fir",
+            "sourceMeshId": "fir_cluster_high",
+            "tileRect": [0, 0, 512, 512],
+            "pageGroup": "billboard/fir"
+          },
+          {
+            "species": "silver-beech",
+            "sourceMeshId": "beech_cluster_high",
+            "tileRect": [512, 0, 512, 512],
+            "pageGroup": "billboard/beech"
+          },
+          {
+            "species": "dead-pine",
+            "sourceMeshId": "dead_pine_snag",
+            "tileRect": [0, 512, 512, 512],
+            "pageGroup": "billboard/dead-pine"
+          }
+        ]
+      },
+      "billboard": {
+        "mode": "vertical-axis-camera-facing",
+        "frameCount": 8,
+        "azimuthSteps": 8,
+        "crossFadeMeters": 24,
+        "depthSort": "per-cell-back-to-front"
+      },
+      "memoryHint": {
+        "rgba8Bytes": 8388608,
+        "etc1sBytesEstimate": 1048576,
+        "residentPageBudget": 32
+      }
+    }
+  ],
+  "forestCells": [
+    {
+      "id": "ridge-west",
+      "bounds": {
+        "min": [-512, 0, -384],
+        "max": [-64, 46, 112]
+      },
+      "seed": 12648430,
+      "instanceCount": 3600,
+      "speciesMix": {
+        "coastal-fir": 0.62,
+        "silver-beech": 0.28,
+        "dead-pine": 0.1
+      },
+      "placement": {
+        "distribution": "blue-noise-jittered-grid",
+        "minSpacingMeters": 5.5,
+        "slopeRejectDegrees": 37,
+        "heightSourceRef": "asset://terrain/height/west-ridge-16m.quant"
+      },
+      "culling": {
+        "clusterSizeMeters": 32,
+        "maxClusterRadius": 30,
+        "occlusionProxyRef": "asset://forest/culling/ridge-west-occluders.json"
+      },
+      "residency": {
+        "prefetchRadiusCells": 1,
+        "priority": "camera-forward-high"
+      }
+    },
+    {
+      "id": "valley-center",
+      "bounds": {
+        "min": [-128, 0, -256],
+        "max": [256, 38, 256]
+      },
+      "seed": 195948557,
+      "instanceCount": 5200,
+      "speciesMix": {
+        "coastal-fir": 0.34,
+        "silver-beech": 0.56,
+        "dead-pine": 0.1
+      },
+      "placement": {
+        "distribution": "blue-noise-jittered-grid",
+        "minSpacingMeters": 4.25,
+        "slopeRejectDegrees": 29,
+        "heightSourceRef": "asset://terrain/height/center-valley-16m.quant"
+      },
+      "culling": {
+        "clusterSizeMeters": 28,
+        "maxClusterRadius": 26,
+        "occlusionProxyRef": "asset://forest/culling/valley-center-occluders.json"
+      },
+      "residency": {
+        "prefetchRadiusCells": 2,
+        "priority": "camera-near-critical"
+      }
+    },
+    {
+      "id": "ridge-east",
+      "bounds": {
+        "min": [192, 0, -160],
+        "max": [512, 52, 384]
+      },
+      "seed": 305441741,
+      "instanceCount": 4200,
+      "speciesMix": {
+        "coastal-fir": 0.52,
+        "silver-beech": 0.18,
+        "dead-pine": 0.3
+      },
+      "placement": {
+        "distribution": "blue-noise-jittered-grid",
+        "minSpacingMeters": 5,
+        "slopeRejectDegrees": 41,
+        "heightSourceRef": "asset://terrain/height/east-ridge-16m.quant"
+      },
+      "culling": {
+        "clusterSizeMeters": 32,
+        "maxClusterRadius": 31,
+        "occlusionProxyRef": "asset://forest/culling/ridge-east-occluders.json"
+      },
+      "residency": {
+        "prefetchRadiusCells": 1,
+        "priority": "camera-forward-medium"
+      }
+    }
+  ],
+  "lodPolicy": {
+    "hysteresisMeters": 10,
+    "projectedHeightPixels": {
+      "meshHighMin": 180,
+      "meshMidMin": 92,
+      "octahedralMin": 22,
+      "billboardMin": 5
+    },
+    "distanceMeters": {
+      "meshHighMax": 70,
+      "meshMidMax": 145,
+      "octahedralMax": 420,
+      "billboardMax": 820,
+      "cullAfter": 980
+    },
+    "switchThresholds": [
+      {
+        "from": "mesh",
+        "to": "octahedral",
+        "distanceMeters": 145,
+        "crossFadeMeters": 18,
+        "debugCounter": "lod.mesh_to_oct_switches"
+      },
+      {
+        "from": "octahedral",
+        "to": "billboard",
+        "distanceMeters": 420,
+        "crossFadeMeters": 30,
+        "debugCounter": "lod.oct_to_billboard_switches"
+      },
+      {
+        "from": "billboard",
+        "to": "culled",
+        "distanceMeters": 980,
+        "crossFadeMeters": 60,
+        "debugCounter": "lod.billboard_to_culled_switches"
+      }
+    ]
+  },
+  "virtualTextureHooks": {
+    "pageSize": 128,
+    "pagePaddingTexels": 4,
+    "physicalSlots": 128,
+    "maxUploadsPerFrame": 10,
+    "maxUploadBytesPerFrame": 1048576,
+    "uploadBandwidthBytesPerMs": 786432,
+    "uploadOverheadMs": 0.028,
+    "fallback": {
+      "missingOctahedralPage": "billboard",
+      "missingBillboardPage": "tinted-bounds-card",
+      "missingDepthPage": "alpha-only"
+    },
+    "pageGroups": [
+      {
+        "id": "oct/fir",
+        "atlasId": "forest_oct_2048_albedo_depth_normal_v1",
+        "priorityBase": 90
+      },
+      {
+        "id": "oct/beech",
+        "atlasId": "forest_oct_2048_albedo_depth_normal_v1",
+        "priorityBase": 90
+      },
+      {
+        "id": "oct/dead-pine",
+        "atlasId": "forest_oct_2048_albedo_depth_normal_v1",
+        "priorityBase": 76
+      },
+      {
+        "id": "billboard/fir",
+        "atlasId": "forest_billboard_1024_far_v1",
+        "priorityBase": 38
+      },
+      {
+        "id": "billboard/beech",
+        "atlasId": "forest_billboard_1024_far_v1",
+        "priorityBase": 38
+      },
+      {
+        "id": "billboard/dead-pine",
+        "atlasId": "forest_billboard_1024_far_v1",
+        "priorityBase": 30
+      }
+    ],
+    "pageTableDebug": {
+      "resourceName": "forest-impostor-page-table",
+      "dirtyCounter": "vt.page_table_dirty_entries",
+      "fallbackCounter": "vt.impostor_fallback_samples",
+      "evictionCounter": "vt.impostor_page_evictions"
+    }
+  },
+  "debugMetrics": {
+    "counters": [
+      "forest.instances_total",
+      "forest.instances_visible",
+      "forest.mesh_instances",
+      "forest.octahedral_impostors",
+      "forest.billboard_impostors",
+      "forest.culled_instances",
+      "lod.mesh_to_oct_switches",
+      "lod.oct_to_billboard_switches",
+      "lod.billboard_to_culled_switches",
+      "vt.page_requests",
+      "vt.page_hits",
+      "vt.page_misses",
+      "vt.page_uploads",
+      "vt.page_evictions",
+      "vt.page_table_dirty_entries",
+      "vt.impostor_fallback_samples"
+    ],
+    "histograms": [
+      "forest.distance_to_camera",
+      "forest.projected_height_pixels",
+      "vt.page_residency_age_frames",
+      "lod.switch_crossfade_alpha"
+    ],
+    "frameBudgetRows": {
+      "lodSelectionMs": 0.65,
+      "residencySchedulingMs": 0.35,
+      "textureUploadMs": 1.5,
+      "debugCounterMs": 0.1
+    }
+  }
+}

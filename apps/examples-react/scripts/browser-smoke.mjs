@@ -293,6 +293,78 @@ const smokeExpression = `
 const artifactsExpression = `
 (async () => {
   const deadline = performance.now() + 8000;
+  const validateJsonAsset = (asset, json) => {
+    switch (asset.id) {
+      case 'picking-replay-json':
+        return Array.isArray(json.rows) && json.rows.length >= 4 &&
+          json.fixtureId === 'notched-bounds-contract-smoke';
+      case 'asset-contract-schema':
+        return json.$schema !== undefined && json.properties !== undefined;
+      case 'asset-contract-vt':
+        return Array.isArray(json.artifacts) && json.artifacts.length >= 6 &&
+          Array.isArray(json.bounds) && json.bounds.length >= 4;
+      case 'asset-contract-terrain':
+        return Array.isArray(json.artifacts) && json.artifacts.length >= 9 &&
+          Array.isArray(json.pages) && json.pages.length >= 1;
+      case 'asset-contract-impostors':
+        return Array.isArray(json.artifacts) && json.artifacts.length >= 6 &&
+          Array.isArray(json.bounds) && json.bounds.length >= 7;
+      case 'offline-terrain-manifest':
+        return Array.isArray(json.meshes) && json.meshes.length >= 1 &&
+          Array.isArray(json.materialTextures) && json.materialTextures.length >= 4;
+      case 'offline-terrain-world-index':
+        return Array.isArray(json.tiles) && json.tiles.length >= 4;
+      case 'offline-terrain-schema':
+        return json.$schema !== undefined && json.properties !== undefined;
+      case 'dynamic-impostors-manifest':
+        return Array.isArray(json.sourceMeshes) && json.sourceMeshes.length >= 3 &&
+          Array.isArray(json.impostorAtlases) && json.impostorAtlases.length >= 2;
+      case 'vt-manifest':
+        return Array.isArray(json.pages) && json.pages.length >= 21 &&
+          json.virtualTexture?.mipCount === 3 && json.demoBudget?.cacheSlots === 12;
+      case 'vt-example-fixture':
+        return json.virtualTexture?.mipCount === 3 &&
+          Array.isArray(json.assets?.previewAssets) && json.assets.previewAssets.length >= 2;
+      case 'vt-camera-stats':
+        return Array.isArray(json.frames) && json.frames.length >= 6;
+      default:
+        return false;
+    }
+  };
+  const validateAsset = async (asset) => {
+    try {
+      const response = await fetch(asset.href, { cache: 'no-store' });
+      if (!response.ok) {
+        return { ...asset, ok: false, reason: \`http \${response.status}\` };
+      }
+      if (asset.kind === 'json') {
+        const json = await response.json();
+        const ok = validateJsonAsset(asset, json);
+        return {
+          ...asset,
+          ok,
+          reason: ok ? '' : 'json structure mismatch',
+        };
+      }
+      if (asset.kind === 'svg' || asset.kind === 'html') {
+        const text = await response.text();
+        const marker = asset.kind === 'svg' ? '<svg' : '<!doctype html';
+        return {
+          ...asset,
+          ok: text.toLowerCase().includes(marker),
+          reason: text.toLowerCase().includes(marker) ? '' : \`\${asset.kind} marker missing\`,
+        };
+      }
+      const blob = await response.blob();
+      return {
+        ...asset,
+        ok: blob.size > 0 && blob.type.startsWith('image/'),
+        reason: blob.size > 0 ? '' : 'empty image response',
+      };
+    } catch (error) {
+      return { ...asset, ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+  };
   const read = () => {
     const page = document.querySelector('[data-artifacts-page]');
     const activeLink = document.querySelector('[data-artifacts-nav-link].active');
@@ -301,24 +373,42 @@ const artifactsExpression = `
       hasPage: page !== null,
       title: document.querySelector('h1')?.textContent?.trim() ?? '',
       activeNavText: activeLink?.textContent?.trim() ?? '',
-      links: Array.from(document.querySelectorAll('[data-artifacts-link]')).map((link) => ({
+      artifactCards: Array.from(document.querySelectorAll('.artifact-card[data-artifact-id]')).map((card) => ({
+        id: card.getAttribute('data-artifact-id') ?? '',
+        text: card.textContent?.trim() ?? '',
+      })),
+      assets: Array.from(document.querySelectorAll('[data-artifact-asset]')).map((link) => ({
         href: link.href,
-        id: link.getAttribute('data-artifacts-link-id') ?? '',
-        target: link.getAttribute('data-artifacts-link-target') ?? '',
+        id: link.getAttribute('data-artifact-asset-id') ?? '',
+        artifactId: link.getAttribute('data-artifact-id') ?? '',
+        kind: link.getAttribute('data-artifact-asset-kind') ?? '',
         text: link.textContent?.trim() ?? '',
       })),
-      statusCardCount: document.querySelectorAll('.artifacts-card, [data-artifact-id]').length,
+      previews: Array.from(document.querySelectorAll('[data-artifact-preview]')).map((image) => ({
+        complete: image.complete,
+        id: image.getAttribute('data-artifact-preview-id') ?? '',
+        naturalHeight: image.naturalHeight,
+        naturalWidth: image.naturalWidth,
+        src: image.currentSrc,
+      })),
+      navAssetCount: document.querySelectorAll('[data-artifact-nav-asset]').length,
       primaryExampleNavCount: document.querySelectorAll('[data-example-nav-link]').length,
+      relatedRouteCount: document.querySelectorAll('[data-artifact-related-route]').length,
     };
   };
 
   let state = read();
-  while (performance.now() < deadline && (!state.hasPage || state.links.length === 0)) {
+  while (performance.now() < deadline && (
+    !state.hasPage ||
+    state.artifactCards.length === 0 ||
+    state.assets.length === 0 ||
+    state.previews.some((preview) => !preview.complete || preview.naturalWidth === 0)
+  )) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     state = read();
   }
 
-  return state;
+  return { ...state, assetChecks: await Promise.all(state.assets.map(validateAsset)) };
 })()
 `;
 
@@ -372,24 +462,62 @@ const assertArtifactsPage = (state) => {
   if (state.activeNavText !== 'Research Artifacts') {
     failures.push(`active research artifacts nav text was "${state.activeNavText || 'missing'}"`);
   }
-  const linkIds = new Set(state.links.map((link) => link.id));
+  const artifactIds = new Set(state.artifactCards.map((artifact) => artifact.id));
   for (const expectedId of [
-    'gltf-asset-viewer',
     'picking-raycasting-fuzz',
     'asset-manifest-contract',
     'offline-terrain-pipeline',
     'dynamic-impostors',
     'virtual-texturing-research',
   ]) {
-    if (!linkIds.has(expectedId)) failures.push(`missing ${expectedId} research artifact link`);
+    if (!artifactIds.has(expectedId)) failures.push(`missing ${expectedId} research artifact card`);
   }
-  if (state.links.some((link) => link.href === '' || link.text === '')) {
+  const assetIds = new Set(state.assets.map((asset) => asset.id));
+  for (const expectedId of [
+    'picking-replay-json',
+    'asset-contract-schema',
+    'asset-contract-vt',
+    'asset-contract-terrain',
+    'asset-contract-impostors',
+    'offline-terrain-manifest',
+    'offline-terrain-world-index',
+    'offline-terrain-schema',
+    'dynamic-impostors-manifest',
+    'vt-manifest',
+    'vt-example-fixture',
+    'vt-camera-stats',
+    'vt-overview',
+    'vt-debug-overlay',
+    'vt-report',
+  ]) {
+    if (!assetIds.has(expectedId)) failures.push(`missing ${expectedId} public artifact asset`);
+  }
+  if (state.assets.some((asset) => asset.href === '' || asset.text === '')) {
     failures.push('research artifacts contains an empty link');
   }
-  if (state.links.some((link) => link.target !== 'route' && link.target !== 'repo')) {
-    failures.push('research artifacts contains a link without a real target type');
+  if (state.assets.some((asset) => !asset.href.includes('/artifacts/'))) {
+    failures.push('research artifacts contains a non-public-artifacts asset link');
   }
-  if (state.statusCardCount !== 0) failures.push('research artifacts rendered decorative status cards');
+  if (state.assets.some((asset) => asset.href.includes('github.com'))) {
+    failures.push('research artifacts still relies on GitHub repo links');
+  }
+  if (state.assetChecks.some((asset) => !asset.ok)) {
+    const broken = state.assetChecks
+      .filter((asset) => !asset.ok)
+      .map((asset) => `${asset.id}: ${asset.reason}`)
+      .join('; ');
+    failures.push(`public artifact validation failed: ${broken}`);
+  }
+  if (state.previews.length === 0) failures.push('research artifacts did not render a preview image');
+  if (state.previews.some((preview) => preview.naturalWidth <= 0 || preview.naturalHeight <= 0)) {
+    failures.push('research artifact preview image did not load');
+  }
+  if (state.navAssetCount < artifactIds.size) {
+    failures.push(`research nav exposed ${state.navAssetCount} artifact assets for ${artifactIds.size} cards`);
+  }
+  if (state.relatedRouteCount === 0) {
+    failures.push('missing related real example route link');
+  }
   if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
     failures.push(`primary example nav count changed to ${state.primaryExampleNavCount}`);
   }
@@ -423,7 +551,7 @@ const main = async () => {
     'vite',
     'preview',
     '--config',
-    '../../vite.config.ts',
+    'vite.config.ts',
     '--host',
     host,
     '--port',

@@ -1,0 +1,199 @@
+{
+  "manifestVersion": 1,
+  "world": {
+    "id": "royal-offline-terrain-demo",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z"
+    },
+    "units": "meters",
+    "seed": "royal:offline-terrain:demo:001"
+  },
+  "tile": {
+    "id": "tile:offline-terrain-demo:lod0:x0:z0",
+    "pageId": "tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main",
+    "bounds": {
+      "min": [
+        -32,
+        -1,
+        -32
+      ],
+      "max": [
+        32,
+        5,
+        32
+      ]
+    },
+    "sizeMeters": 64,
+    "heightRangeMeters": [
+      -1,
+      5
+    ],
+    "grid": {
+      "x": 0,
+      "z": 0,
+      "level": 0
+    },
+    "revision": "offline-terrain-pipeline@0.1.0+fixture",
+    "quality": "placeholder"
+  },
+  "lod": {
+    "identityPolicy": "stable-tile-page-revision",
+    "levels": [
+      {
+        "id": "lod0-placeholder",
+        "level": 0,
+        "screenSpaceError": 12,
+        "mesh": "mesh.tile-lod0.glb",
+        "textures": [
+          "texture.albedo-lod0.png",
+          "texture.normal-lod0.png",
+          "texture.material-mask-lod0.png",
+          "texture.albedo-lod0.ktx2-placeholder"
+        ],
+        "preview": "preview.tile-lod0.thumbnail",
+        "quality": "placeholder"
+      }
+    ]
+  },
+  "meshes": [
+    {
+      "id": "mesh.tile-lod0.glb",
+      "uri": "meshes/tile-lod0.glb",
+      "mediaType": "model/gltf-binary",
+      "format": "glb2-placeholder",
+      "bytes": 460,
+      "sha256": "defc30dc8dd8204472c2bbd2ba1e02edde37b36d3b25d94eb97671075a2d28f8",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bounds": {
+        "min": [
+          -32,
+          -1,
+          -32
+        ],
+        "max": [
+          32,
+          5,
+          32
+        ]
+      },
+      "vertexCount": 4,
+      "indexCount": 6,
+      "sourceStage": "node-fixture"
+    }
+  ],
+  "materialTextures": [
+    {
+      "id": "texture.albedo-lod0.png",
+      "uri": "textures/albedo-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 70,
+      "sha256": "58cf1d817cabde3a1d64d160af10e4b7a4d2608795ab04f70cea60fb7bffa4c4",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "slot": "albedo",
+      "dimensions": [
+        1,
+        1
+      ],
+      "colorSpace": "srgb"
+    },
+    {
+      "id": "texture.normal-lod0.png",
+      "uri": "textures/normal-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 70,
+      "sha256": "85048b5e320f93b31e975dfbae7c32a454c19af37c7b68b477edc9a6fd3fd665",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "slot": "normal",
+      "dimensions": [
+        1,
+        1
+      ],
+      "colorSpace": "linear"
+    },
+    {
+      "id": "texture.material-mask-lod0.png",
+      "uri": "textures/material-mask-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 70,
+      "sha256": "936a02cc9956c2d3e3e1c0b9b7d9b19587e36f1ec1168dcdfd01965db5f25fd4",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "slot": "material-mask",
+      "dimensions": [
+        1,
+        1
+      ],
+      "colorSpace": "data"
+    },
+    {
+      "id": "texture.albedo-lod0.ktx2-placeholder",
+      "uri": "textures/albedo-lod0.ktx2.placeholder.json",
+      "mediaType": "application/json",
+      "format": "ktx2-basis-uastc-slot",
+      "bytes": 208,
+      "sha256": "ac3624ba65e27c245ab6f38775cb7d9300bb808573a6576c08130da8025b49ed",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "slot": "albedo",
+      "dimensions": [
+        1,
+        1
+      ],
+      "colorSpace": "srgb"
+    }
+  ],
+  "previews": [
+    {
+      "id": "preview.tile-lod0.thumbnail",
+      "uri": "previews/tile-lod0-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 70,
+      "sha256": "4db44806a470264a611d6aebac7699e338cb2c93aa00bc75746a62dbd12eb1e5",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "role": "thumbnail",
+      "dimensions": [
+        1,
+        1
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "id": "report.build",
+      "uri": "reports/build-report.json",
+      "mediaType": "application/json",
+      "format": "json",
+      "bytes": 224,
+      "sha256": "5733e62bb0d7ea94707c3868b0a09f85419d8472d2b2bb830759fc5bafe427a5",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder"
+    }
+  ],
+  "provenance": {
+    "recipe": "royal-offline-terrain-fixture@0.1.0",
+    "generator": {
+      "name": "offline-terrain-pipeline.mjs",
+      "version": "0.1.0",
+      "command": "node research/offline-terrain-pipeline/offline-terrain-pipeline.mjs --write"
+    },
+    "source": {
+      "kind": "fixture",
+      "uri": "research/offline-terrain-pipeline/fixtures/sample-manifest.json",
+      "revision": "offline-terrain-pipeline@0.1.0"
+    },
+    "inputsHash": "49f44fb6e3a961d39f2774f36e243ffa3f351d9f9e651bdf9d7796e52be92ab5",
+    "createdAt": "2026-06-28T00:00:00.000Z",
+    "machine": "node-only",
+    "license": "AGPL-3.0-only"
+  }
+}

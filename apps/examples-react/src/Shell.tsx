@@ -1,5 +1,6 @@
 import { Link, Outlet } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { researchArtifacts } from './ResearchArtifacts';
 import { examples } from './examples';
 
 const Sidebar = (): ReactNode => (
@@ -39,6 +40,23 @@ const Sidebar = (): ReactNode => (
             Research Artifacts
           </Link>
         </li>
+        {researchArtifacts.map((artifact) => {
+          const primaryAsset = artifact.assets[0];
+          if (primaryAsset === undefined) return null;
+
+          return (
+            <li key={artifact.id}>
+              <a
+                className="examples-link examples-link-subtle"
+                data-artifact-nav-asset=""
+                data-artifact-nav-id={artifact.id}
+                href={primaryAsset.href}
+              >
+                {artifact.title}
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   </aside>

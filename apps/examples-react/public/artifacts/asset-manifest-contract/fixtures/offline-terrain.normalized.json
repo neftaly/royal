@@ -1,0 +1,256 @@
+{
+  "schemaVersion": "royal.research.asset-manifest-contract.v0",
+  "contractStatus": "research-unstable",
+  "asset": {
+    "id": "tile:offline-terrain-demo:lod0:x0:z0",
+    "kind": "terrain-tile",
+    "revision": "offline-terrain-pipeline@0.1.0+fixture",
+    "quality": "placeholder",
+    "label": "Offline terrain pipeline placeholder tile"
+  },
+  "world": {
+    "id": "royal-offline-terrain-demo",
+    "units": "meters",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z",
+      "origin": "tile-grid-center"
+    },
+    "seed": "royal:offline-terrain:demo:001"
+  },
+  "bounds": [
+    {
+      "id": "bounds.terrain.tile.lod0.x0.z0.world",
+      "space": "world",
+      "kind": "aabb3",
+      "units": "meters",
+      "min": [-32, -1, -32],
+      "max": [32, 5, 32]
+    },
+    {
+      "id": "bounds.terrain.tile.lod0.x0.z0.grid",
+      "space": "tile",
+      "kind": "grid2",
+      "units": "tiles",
+      "grid": {"x": 0, "z": 0, "level": 0},
+      "tileSize": 64
+    },
+    {
+      "id": "bounds.terrain.height-range",
+      "space": "world",
+      "kind": "range1",
+      "units": "meters",
+      "min": [-1],
+      "max": [5]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact.terrain.source-manifest",
+      "kind": "source",
+      "uri": "research/offline-terrain-pipeline/fixtures/sample-manifest.json",
+      "mediaType": "application/json",
+      "format": "royal-offline-terrain-manifest",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder"
+    },
+    {
+      "id": "artifact.terrain.source-world-index",
+      "kind": "source",
+      "uri": "research/offline-terrain-pipeline/fixtures/world-index.json",
+      "mediaType": "application/json",
+      "format": "royal-offline-terrain-world-index",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder"
+    },
+    {
+      "id": "mesh.tile-lod0.glb",
+      "kind": "mesh",
+      "uri": "research/offline-terrain-pipeline/fixtures/meshes/tile-lod0.glb",
+      "mediaType": "model/gltf-binary",
+      "format": "glb2-placeholder",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 460,
+      "sha256": "defc30dc8dd8204472c2bbd2ba1e02edde37b36d3b25d94eb97671075a2d28f8",
+      "bounds": ["bounds.terrain.tile.lod0.x0.z0.world"]
+    },
+    {
+      "id": "texture.albedo-lod0.png",
+      "kind": "texture",
+      "uri": "research/offline-terrain-pipeline/fixtures/textures/albedo-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 70,
+      "sha256": "58cf1d817cabde3a1d64d160af10e4b7a4d2608795ab04f70cea60fb7bffa4c4",
+      "dimensions": [1, 1],
+      "slot": "albedo",
+      "colorSpace": "srgb"
+    },
+    {
+      "id": "texture.normal-lod0.png",
+      "kind": "texture",
+      "uri": "research/offline-terrain-pipeline/fixtures/textures/normal-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 70,
+      "sha256": "85048b5e320f93b31e975dfbae7c32a454c19af37c7b68b477edc9a6fd3fd665",
+      "dimensions": [1, 1],
+      "slot": "normal",
+      "colorSpace": "linear"
+    },
+    {
+      "id": "texture.material-mask-lod0.png",
+      "kind": "texture",
+      "uri": "research/offline-terrain-pipeline/fixtures/textures/material-mask-lod0.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 70,
+      "sha256": "936a02cc9956c2d3e3e1c0b9b7d9b19587e36f1ec1168dcdfd01965db5f25fd4",
+      "dimensions": [1, 1],
+      "slot": "material-mask",
+      "colorSpace": "data"
+    },
+    {
+      "id": "texture.albedo-lod0.ktx2-placeholder",
+      "kind": "texture",
+      "uri": "research/offline-terrain-pipeline/fixtures/textures/albedo-lod0.ktx2.placeholder.json",
+      "mediaType": "application/json",
+      "format": "ktx2-basis-uastc-slot",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 208,
+      "sha256": "ac3624ba65e27c245ab6f38775cb7d9300bb808573a6576c08130da8025b49ed",
+      "dimensions": [1, 1],
+      "slot": "albedo",
+      "colorSpace": "srgb"
+    },
+    {
+      "id": "preview.tile-lod0.thumbnail",
+      "kind": "preview",
+      "uri": "research/offline-terrain-pipeline/fixtures/previews/tile-lod0-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 70,
+      "sha256": "4db44806a470264a611d6aebac7699e338cb2c93aa00bc75746a62dbd12eb1e5",
+      "dimensions": [1, 1],
+      "bounds": ["bounds.terrain.tile.lod0.x0.z0.world"]
+    },
+    {
+      "id": "report.build",
+      "kind": "report",
+      "uri": "research/offline-terrain-pipeline/fixtures/reports/build-report.json",
+      "mediaType": "application/json",
+      "format": "json",
+      "revision": "offline-terrain-pipeline@0.1.0+fixture",
+      "quality": "placeholder",
+      "bytes": 224,
+      "sha256": "5733e62bb0d7ea94707c3868b0a09f85419d8472d2b2bb830759fc5bafe427a5"
+    }
+  ],
+  "pages": [
+    {
+      "id": "tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main",
+      "kind": "terrain-tile-page",
+      "artifact": "mesh.tile-lod0.glb",
+      "lodLevel": "lod.terrain.placeholder.0",
+      "bounds": ["bounds.terrain.tile.lod0.x0.z0.world", "bounds.terrain.tile.lod0.x0.z0.grid"],
+      "pageGroup": "page-group.terrain.world-index",
+      "grid": {"x": 0, "z": 0, "level": 0}
+    }
+  ],
+  "lod": {
+    "identityPolicy": "stable-tile-page-revision",
+    "levels": [
+      {
+        "id": "lod.terrain.placeholder.0",
+        "level": 0,
+        "quality": "placeholder",
+        "screenSpaceError": 12,
+        "artifacts": [
+          "mesh.tile-lod0.glb",
+          "texture.albedo-lod0.png",
+          "texture.normal-lod0.png",
+          "texture.material-mask-lod0.png",
+          "texture.albedo-lod0.ktx2-placeholder",
+          "preview.tile-lod0.thumbnail"
+        ],
+        "pages": ["tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main"],
+        "bounds": ["bounds.terrain.tile.lod0.x0.z0.world"]
+      }
+    ]
+  },
+  "residency": {
+    "policy": "terrain-world-index-addressed-tile-cache",
+    "budgets": {
+      "tileSizeMeters": 64,
+      "worldIndexTileCount": 4,
+      "heightRangeMinMeters": -1,
+      "heightRangeMaxMeters": 5
+    },
+    "pageGroups": [
+      {
+        "id": "page-group.terrain.world-index",
+        "pages": ["tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main"],
+        "priorityBase": 50
+      }
+    ],
+    "fallbacks": [
+      {
+        "from": "missing tile manifest",
+        "to": "world-index neighbor metadata"
+      }
+    ]
+  },
+  "previews": [
+    {
+      "id": "preview.terrain.tile-lod0.thumbnail",
+      "role": "thumbnail",
+      "artifact": "preview.tile-lod0.thumbnail",
+      "bounds": ["bounds.terrain.tile.lod0.x0.z0.world"]
+    }
+  ],
+  "debug": [
+    {
+      "id": "debug.terrain.build-report",
+      "role": "build-report",
+      "artifact": "report.build"
+    }
+  ],
+  "provenance": {
+    "sources": [
+      {
+        "kind": "source-manifest",
+        "uri": "research/offline-terrain-pipeline/fixtures/sample-manifest.json"
+      },
+      {
+        "kind": "source-world-index",
+        "uri": "research/offline-terrain-pipeline/fixtures/world-index.json"
+      }
+    ],
+    "recipe": "royal-offline-terrain-fixture@0.1.0",
+    "generator": "offline-terrain-pipeline.mjs"
+  },
+  "extensions": {
+    "source": {
+      "manifestVersion": 1,
+      "tile": {
+        "id": "tile:offline-terrain-demo:lod0:x0:z0",
+        "pageId": "tile:offline-terrain-demo:lod0:x0:z0:page:terrain-main"
+      },
+      "worldIndexNeighbors": {
+        "east": "tile:offline-terrain-demo:lod0:x1:z0",
+        "south": "tile:offline-terrain-demo:lod0:x0:z1"
+      }
+    }
+  }
+}
