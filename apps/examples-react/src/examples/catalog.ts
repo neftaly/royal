@@ -52,7 +52,7 @@ root.render(scene({
   ],
 }));
 
-root.unmount();`;
+root.dispose();`;
 
 const interactiveSceneSource = `const [rotation, setRotation] = useState([0.35, 0.7, 0]);
 const [scale, setScale] = useState(1);
@@ -135,7 +135,7 @@ const examples = [
     source: imperativeRootSource,
     notes: [
       'Useful for adapters that own the DOM node lifecycle.',
-      'The root cleanup path calls unmount.',
+      'The root cleanup path calls dispose.',
     ],
   },
   {

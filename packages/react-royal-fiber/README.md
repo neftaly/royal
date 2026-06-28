@@ -1,11 +1,9 @@
 # @royal/react
 
-Legacy React bridge for Royal, a WebGL renderer targeting XR and low-end
-devices.
+React bridge for Royal, a WebGL renderer targeting XR and low-end devices.
 
-New examples and documentation should import the canonical React facade from
-`@royal/react`. This package remains as the legacy implementation bridge for
-existing `@royal/react` consumers and for compatibility with older code.
+Examples and documentation should import the canonical React facade from
+`@royal/react`.
 
 ## Example
 
@@ -37,9 +35,6 @@ createRoot(canvas).render(
   </scene>
 );
 ```
-
-Legacy imports from `@royal/react` continue to work, but should not be used
-for new Royal examples.
 
 ## Workflows
 

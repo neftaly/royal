@@ -1,5 +1,3 @@
-/// <reference path="../shader-source.d.ts" />
-
 import gltfFragmentSource from "./shaders/gltf.frag";
 import gltfVertexSource from "./shaders/gltf.vert";
 import meshFragmentSource from "./shaders/mesh.frag";

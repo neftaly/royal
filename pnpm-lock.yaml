@@ -100,19 +100,6 @@ importers:
         specifier: 'catalog:'
         version: 8.1.0(@types/node@24.13.2)
 
-  packages/react-regl-fiber-compat:
-    dependencies:
-      '@royal/react':
-        specifier: workspace:*
-        version: link:../react-royal-fiber
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vite:
-        specifier: 'catalog:'
-        version: 8.1.0(@types/node@24.13.2)
-
   packages/react-royal-fiber:
     dependencies:
       '@royal/renderer-core':
@@ -143,19 +130,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.0(@types/node@24.13.2))
-
-  packages/react-royal-fiber-compat:
-    dependencies:
-      '@royal/react':
-        specifier: workspace:*
-        version: link:../react-royal-fiber
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vite:
-        specifier: 'catalog:'
-        version: 8.1.0(@types/node@24.13.2)
 
   packages/renderer-core:
     devDependencies:

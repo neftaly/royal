@@ -87,7 +87,6 @@ describe('Royal public API smoke tests', () => {
     ) => ReactRoyalRoot>();
     expectTypeOf<ReactRoyalRoot>().toMatchTypeOf<{
       readonly dispose: () => void;
-      readonly unmount: () => void;
     }>();
     expectTypeOf(root).toEqualTypeOf<RenderRoot>();
     expectTypeOf(textNode).toEqualTypeOf<ReactTextNode>();

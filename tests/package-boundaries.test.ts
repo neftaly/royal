@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { Canvas, createRoot as createRoyalRoot } from '@royal/react';
 import { createRoot as createRoyalSubpathRoot } from '@royal/react/root';
 import { jsx as royalJsx } from '@royal/react/jsx-runtime';
-import { jsx as reactReglCompatJsx } from 'react-regl-fiber/jsx-runtime';
-import { jsx as reactRoyalCompatJsx } from 'react-royal-fiber/jsx-runtime';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -27,9 +25,7 @@ const workspaceRoots = ['apps', 'packages'] as const;
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react' },
-  { name: 'react-regl-fiber', root: 'packages/react-regl-fiber-compat' },
   { name: '@royal/react', root: 'packages/react-royal-fiber' },
-  { name: 'react-royal-fiber', root: 'packages/react-royal-fiber-compat' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core' },
   { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens' },
   { name: '@tarstate/core', root: 'packages/tarstate-core' }
@@ -116,19 +112,13 @@ describe('package boundaries', () => {
     })));
   });
 
-  it('keeps @royal/react as the implementation and compat packages as wrappers', () => {
+  it('keeps @royal/react as the implementation package', () => {
     const reactManifest = readManifest(path.join(repoRoot, 'packages/react-royal-fiber/package.json'));
-    const reglCompat = readManifest(path.join(repoRoot, 'packages/react-regl-fiber-compat/package.json'));
-    const royalCompat = readManifest(path.join(repoRoot, 'packages/react-royal-fiber-compat/package.json'));
 
     expect(reactManifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
-    expect(reactManifest.dependencies?.['react-regl-fiber']).toBeUndefined();
-    expect(reglCompat.dependencies?.['@royal/react']).toBe('workspace:*');
-    expect(royalCompat.dependencies?.['@royal/react']).toBe('workspace:*');
     expect(typeof Canvas).toBe('function');
     expect(createRoyalRoot).toBe(createRoyalSubpathRoot);
-    expect(reactReglCompatJsx).toBe(royalJsx);
-    expect(reactRoyalCompatJsx).toBe(royalJsx);
+    expect(royalJsx).toBeTypeOf('function');
   });
 
   it('keeps @royal/tarstate-lens v1 behind an explicit public subpath', () => {

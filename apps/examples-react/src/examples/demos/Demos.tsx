@@ -105,7 +105,7 @@ export const ImperativeRootDemo = (): ReactNode => {
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frameId);
-      root.unmount();
+      root.dispose();
     };
   }, []);
 

@@ -49,7 +49,7 @@ describe('WebGL resource lifetime', () => {
     vi.unstubAllGlobals();
   });
 
-  it('caches geometry buffers and releases them on unmount', () => {
+  it('caches geometry buffers and releases them on dispose', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
 
@@ -59,7 +59,7 @@ describe('WebGL resource lifetime', () => {
     expect(counts.createBuffer).toBe(3);
     expect(counts.deleteBuffer).toBe(0);
 
-    root.unmount();
+    root.dispose();
 
     expect(counts.deleteBuffer).toBe(3);
   });
@@ -115,7 +115,7 @@ describe('WebGL resource lifetime', () => {
     expect(canvas.height).toBe(100);
     expect(counts.drawElements).toBe(2);
 
-    root.unmount();
+    root.dispose();
   });
 
   it('renders unlit orthographic meshes without a light', () => {
@@ -180,12 +180,12 @@ describe('WebGL resource lifetime', () => {
     expect(counts.createTexture).toBe(0);
     expect(counts.texImage2D).toBe(0);
 
-    root.unmount();
+    root.dispose();
 
     expect(counts.deleteTexture).toBe(0);
   });
 
-  it('releases replaced dynamic vector text buffers before unmount', () => {
+  it('releases replaced dynamic vector text buffers before dispose', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
     const textScene = (text: string) => scene({
@@ -221,7 +221,7 @@ describe('WebGL resource lifetime', () => {
     expect(counts.createBuffer).toBe(6);
     expect(counts.deleteBuffer).toBe(3);
 
-    root.unmount();
+    root.dispose();
 
     expect(counts.deleteBuffer).toBe(6);
   });
@@ -253,7 +253,7 @@ describe('WebGL resource lifetime', () => {
     expect(matrix[14]).toBeCloseTo(-10.1 / 9.9);
   });
 
-  it('releases glTF buffers and textures on unmount', async () => {
+  it('releases glTF buffers and textures on dispose', async () => {
     installGltfFixture();
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
@@ -278,13 +278,13 @@ describe('WebGL resource lifetime', () => {
     expect(counts.deleteBuffer).toBe(0);
     expect(counts.deleteTexture).toBe(0);
 
-    root.unmount();
+    root.dispose();
 
     expect(counts.deleteBuffer).toBe(counts.createBuffer);
     expect(counts.deleteTexture).toBe(counts.createTexture);
   });
 
-  it('releases a late glTF texture if unmounted before image decode finishes', async () => {
+  it('releases a late glTF texture if disposed before image decode finishes', async () => {
     let resolveBitmap: ((image: ImageBitmap) => void) | undefined;
     installGltfFixture({
       createImageBitmap: () => new Promise((resolve) => {
@@ -307,7 +307,7 @@ describe('WebGL resource lifetime', () => {
 
     root.render(renderGltfScene);
     await waitFor(() => counts.drawElements > 0);
-    root.unmount();
+    root.dispose();
 
     const deletedBeforeLateTexture = counts.deleteTexture;
     resolveBitmap?.({} as ImageBitmap);

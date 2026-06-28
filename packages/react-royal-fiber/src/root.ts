@@ -17,12 +17,7 @@ export interface ReactRoyalRoot {
   render(scene: RenderRoot): void;
   /** Canonical resource cleanup hook. */
   dispose(): void;
-  /** Compatibility cleanup hook. */
-  unmount(): void;
 }
-
-export type ReactReglRootOptions = ReactRoyalRootOptions;
-export type ReactReglRoot = ReactRoyalRoot;
 
 /** Creates an imperative renderer root. */
 export const createRoot = (

@@ -98,4 +98,4 @@ export type {
   Vec4
 } from '@royal/renderer-core';
 export type { CanvasProps } from './canvas';
-export type { ReactReglRoot, ReactReglRootOptions, ReactRoyalRoot, ReactRoyalRootOptions } from './root';
+export type { ReactRoyalRoot, ReactRoyalRootOptions } from './root';

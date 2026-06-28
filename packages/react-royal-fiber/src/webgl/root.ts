@@ -129,7 +129,7 @@ export class WebGlRoot {
     }
   }
 
-  unmount(): void {
+  dispose(): void {
     this.#mounted = false;
     this.#disposeResizeScheduling();
     this.#gltfCache.dispose();
@@ -138,10 +138,6 @@ export class WebGlRoot {
     this.#gl.deleteProgram(this.#gltfProgram.program);
     this.#gl.deleteProgram(this.#meshProgram.program);
     this.#gl.deleteProgram(this.#textProgram.program);
-  }
-
-  dispose(): void {
-    this.unmount();
   }
 
   #renderPass(
