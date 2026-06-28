@@ -8,8 +8,10 @@ readback, and visible-shape oracles.
 ## Current status
 
 Renderer picking integration is still WIP. There is currently no
-`/labs/picking-fuzz` examples route, no `PickingFuzzLab`, and no browser adapter
-that reads live Royal renderer picking state.
+`/labs/picking-fuzz` examples route, no `PickingFuzzLab`, no renderer picking
+API, and no browser adapter that reads live Royal renderer picking state. The
+files in this directory are research-only fixtures and oracles; they do not
+define a supported runtime API for packages or examples.
 
 The standalone harness in this directory is still useful as a research contract
 for geometry and hit-logic validation:
@@ -18,25 +20,63 @@ for geometry and hit-logic validation:
 - compare logical hit results with an independent visible-shape oracle;
 - report mismatches that can be replayed and translated into browser cases.
 
-A future renderer integration should provide a live contract that can:
+A future renderer integration should provide a live probe contract that can:
 
 - drive pointer events against the stage or a canvas;
 - read a live hover id and the latest pick probe/debug rows;
 - compare that logical pick with an independent visible-pixel oracle.
 
-That integration should add a tiny browser-only probe object, for example:
+That integration should add a tiny browser-only probe object. The likely shape
+is:
 
 ```ts
 window.__royalPickingProbe = {
-  hoveredId,
-  rows,
-  geometryStatus,
-  geometryFailures,
+  hoveredId: string | null,
+  rows: PickingReplayRow[],
+  geometryStatus?: string,
+  geometryFailures?: unknown[],
 };
 ```
 
-That object can be populated from the renderer interaction state, from a future
-Tarstate-like picking lab, or from an example-specific probe for WebGL cases.
+That object can be populated from future renderer interaction state, from a
+future Tarstate-like picking lab, or from an example-specific probe for WebGL
+cases. Until that browser object exists, `PickingReplayRow` means the JSON row
+contract in `fixtures/replay-row.schema.json`, not a current renderer export.
+
+## Replay row contract
+
+The replay row contract records the minimum information needed to replay a
+pointer sample and compare a logical pick with an independent visual oracle:
+
+- `pointerSample`: deterministic pointer coordinates, event type, and coordinate
+  space.
+- `expectedHit`: the target id expected by the visible-shape oracle, or `null`.
+- `observedHit`: the target id reported by the picker/probe under test, or
+  `null`.
+- `hitRegionRef`: metadata for the observed hit region, when one exists.
+- `visualBounds`: the visible oracle's target bounds, when visual coverage
+  exists at the sample.
+- `classification`: `match`, `false-positive`, `false-negative`, or
+  `wrong-target`, derived from expected versus observed hit ids.
+
+The committed smoke fixture is intentionally small:
+
+```sh
+node research/picking-fuzz/picking-fuzz-harness.mjs replay/check \
+  research/picking-fuzz/fixtures/notched-bounds-replay.json
+```
+
+The harness can also emit a deterministic replay fixture from the simulated
+grid samples:
+
+```sh
+node research/picking-fuzz/picking-fuzz-harness.mjs emit-replay
+```
+
+`replay/check` validates the row contract and reports classified mismatches. A
+known false positive in a fixture is reported as data; the command fails only
+when the fixture is malformed or a stored classification does not match the
+expected/observed hit ids.
 
 ## Browser driver shape
 
@@ -48,8 +88,8 @@ The automated runner should:
 4. Generate a dense sample set in normalized screen space.
 5. Dispatch `pointermove`, `pointerdown`, and `pointerup` with browser-native
    mouse or pointer APIs.
-6. Read observed state through `window.__royalPickingProbe`, Tarstate lens rows,
-   or the existing probe table fallback.
+6. Read observed state through a future `window.__royalPickingProbe`, Tarstate
+   lens rows, or the existing probe table fallback.
 7. Sample the canvas pixel under the pointer, plus a small neighborhood.
 8. Emit failures where hover/raycast state reports a hit but the visible oracle
    says the pixel neighborhood is empty or belongs to a different target.

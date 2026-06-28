@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 /**
@@ -31,6 +32,18 @@ const defaultTargets = [
   },
 ];
 
+const REPLAY_SCHEMA_VERSION = 1;
+const REPLAY_POINTER_SPACE = 'fixture-css-px';
+const REPLAY_EVENT_TYPE = 'pointermove';
+const EXPECTED_HIT_SOURCE = 'visible-mask-oracle';
+const OBSERVED_HIT_SOURCE = 'bounds-simulator';
+const CLASSIFICATIONS = new Set([
+  'match',
+  'false-positive',
+  'false-negative',
+  'wrong-target',
+]);
+
 const isInsideRect = (point, rect) =>
   point.x >= rect.x &&
   point.x <= rect.x + rect.width &&
@@ -41,6 +54,11 @@ const pickByBounds = (point, targets) =>
   [...targets]
     .sort((a, b) => b.layer - a.layer)
     .find((target) => isInsideRect(point, target.rect))?.id;
+
+const findTarget = (targets, targetId) =>
+  targetId === undefined || targetId === null
+    ? undefined
+    : targets.find((target) => target.id === targetId);
 
 const makeGridSamples = ({
   columns = DEFAULT_COLUMNS,
@@ -134,7 +152,207 @@ const analyzeSamples = ({ samples, targets, visibleTargetAt }) => {
   };
 };
 
+const makeHit = (targetId, source) =>
+  targetId === undefined || targetId === null
+    ? null
+    : {
+        targetId,
+        source,
+      };
+
+const classifyHit = ({ expectedHit, observedHit }) => {
+  const expectedId = expectedHit?.targetId ?? null;
+  const observedId = observedHit?.targetId ?? null;
+
+  if (expectedId === observedId) {
+    return 'match';
+  }
+
+  if (expectedId === null && observedId !== null) {
+    return 'false-positive';
+  }
+
+  if (expectedId !== null && observedId === null) {
+    return 'false-negative';
+  }
+
+  return 'wrong-target';
+};
+
+const makeRegionRef = (target) =>
+  target === undefined
+    ? null
+    : {
+        targetId: target.id,
+        label: target.label,
+        layer: target.layer,
+      };
+
+const makeVisualBounds = (target) =>
+  target === undefined
+    ? null
+    : {
+        targetId: target.id,
+        space: REPLAY_POINTER_SPACE,
+        rect: roundRect(target.rect),
+      };
+
+const makeReplayRow = ({ sample, targets, visibleTargetAt }) => {
+  const observedId = pickByBounds(sample, targets);
+  const expectedId = visibleTargetAt(sample);
+  const observedHit = makeHit(observedId, OBSERVED_HIT_SOURCE);
+  const expectedHit = makeHit(expectedId, EXPECTED_HIT_SOURCE);
+
+  return {
+    rowId: sample.id,
+    pointerSample: {
+      id: sample.id,
+      eventType: REPLAY_EVENT_TYPE,
+      space: REPLAY_POINTER_SPACE,
+      x: round(sample.x),
+      y: round(sample.y),
+    },
+    expectedHit,
+    observedHit,
+    hitRegionRef: makeRegionRef(findTarget(targets, observedId)),
+    visualBounds: makeVisualBounds(findTarget(targets, expectedId)),
+    classification: classifyHit({ expectedHit, observedHit }),
+  };
+};
+
+const makeReplayFixture = ({
+  fixtureId = 'notched-bounds-simulator',
+  samples,
+  targets,
+  visibleTargetAt,
+} = {}) => ({
+  schemaVersion: REPLAY_SCHEMA_VERSION,
+  fixtureId,
+  pointerSpace: REPLAY_POINTER_SPACE,
+  generatedBy: 'research/picking-fuzz/picking-fuzz-harness.mjs',
+  rows: samples.map((sample) => makeReplayRow({ sample, targets, visibleTargetAt })),
+});
+
+const summarizeReplayRows = (rows) => {
+  const counts = Object.fromEntries([...CLASSIFICATIONS].map((kind) => [kind, 0]));
+
+  for (const row of rows) {
+    counts[row.classification] += 1;
+  }
+
+  const mismatches = rows
+    .filter((row) => row.classification !== 'match')
+    .map((row) => ({
+      rowId: row.rowId,
+      x: row.pointerSample.x,
+      y: row.pointerSample.y,
+      expectedId: row.expectedHit?.targetId ?? null,
+      observedId: row.observedHit?.targetId ?? null,
+      classification: row.classification,
+    }));
+
+  return {
+    rowCount: rows.length,
+    mismatchCount: mismatches.length,
+    counts,
+    mismatches,
+  };
+};
+
+const validateReplayFixture = (fixture) => {
+  const errors = [];
+
+  if (fixture === null || typeof fixture !== 'object' || Array.isArray(fixture)) {
+    return ['fixture must be a JSON object'];
+  }
+
+  if (fixture.schemaVersion !== REPLAY_SCHEMA_VERSION) {
+    errors.push(`schemaVersion must be ${REPLAY_SCHEMA_VERSION}`);
+  }
+
+  if (!Array.isArray(fixture.rows)) {
+    errors.push('rows must be an array');
+    return errors;
+  }
+
+  fixture.rows.forEach((row, index) => {
+    const prefix = `rows[${index}]`;
+
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      errors.push(`${prefix} must be an object`);
+      return;
+    }
+
+    if (typeof row.rowId !== 'string' || row.rowId.length === 0) {
+      errors.push(`${prefix}.rowId must be a non-empty string`);
+    }
+
+    if (!isPointerSample(row.pointerSample)) {
+      errors.push(`${prefix}.pointerSample must include id, eventType, space, x, and y`);
+    }
+
+    if (!isHit(row.expectedHit)) {
+      errors.push(`${prefix}.expectedHit must be null or a hit object`);
+    }
+
+    if (!isHit(row.observedHit)) {
+      errors.push(`${prefix}.observedHit must be null or a hit object`);
+    }
+
+    if (!isNullableObject(row.hitRegionRef)) {
+      errors.push(`${prefix}.hitRegionRef must be null or an object`);
+    }
+
+    if (!isNullableObject(row.visualBounds)) {
+      errors.push(`${prefix}.visualBounds must be null or an object`);
+    }
+
+    if (!CLASSIFICATIONS.has(row.classification)) {
+      errors.push(`${prefix}.classification is not a known classification`);
+      return;
+    }
+
+    const derivedClassification = classifyHit(row);
+    if (row.classification !== derivedClassification) {
+      errors.push(
+        `${prefix}.classification must be ${derivedClassification} for expected/observed hit ids`,
+      );
+    }
+  });
+
+  return errors;
+};
+
+const isPointerSample = (value) =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  typeof value.id === 'string' &&
+  typeof value.eventType === 'string' &&
+  typeof value.space === 'string' &&
+  Number.isFinite(value.x) &&
+  Number.isFinite(value.y);
+
+const isHit = (value) =>
+  value === null ||
+  (value !== undefined &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value.targetId === 'string' &&
+    typeof value.source === 'string');
+
+const isNullableObject = (value) =>
+  value === null ||
+  (value !== undefined && typeof value === 'object' && !Array.isArray(value));
+
 const round = (value) => Math.round(value * 1000) / 1000;
+
+const roundRect = (rect) => ({
+  x: round(rect.x),
+  y: round(rect.y),
+  width: round(rect.width),
+  height: round(rect.height),
+});
 
 const printBrowserAdapterSketch = () => {
   console.log(`Browser adapter sketch:
@@ -178,6 +396,48 @@ const runSelfTest = () => {
   }
 };
 
+const runEmitReplay = () => {
+  const fixture = makeReplayFixture({
+    samples: makeGridSamples({ step: 1, jitter: 0 }),
+    targets: defaultTargets,
+    visibleTargetAt: visibleTargetAtPoint,
+  });
+
+  console.log(JSON.stringify(fixture, null, 2));
+};
+
+const runReplayCheck = (fixturePath) => {
+  if (fixturePath === undefined) {
+    console.error('Usage: picking-fuzz-harness.mjs replay/check <fixture.json>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
+  const errors = validateReplayFixture(fixture);
+
+  if (errors.length > 0) {
+    console.error(JSON.stringify({
+      ok: false,
+      fixturePath,
+      errorCount: errors.length,
+      errors,
+    }, null, 2));
+    process.exitCode = 1;
+    return;
+  }
+
+  const summary = summarizeReplayRows(fixture.rows);
+  console.log(JSON.stringify({
+    ok: true,
+    fixturePath,
+    rowCount: summary.rowCount,
+    mismatchCount: summary.mismatchCount,
+    counts: summary.counts,
+    firstMismatches: summary.mismatches.slice(0, 12),
+  }, null, 2));
+};
+
 const runPlan = () => {
   const samples = makeGridSamples({ step: 1 });
   console.log(JSON.stringify({
@@ -188,10 +448,15 @@ const runPlan = () => {
 };
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const args = new Set(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const args = new Set(argv);
 
   if (args.has('--self-test')) {
     runSelfTest();
+  } else if (argv[0] === 'emit-replay' || args.has('--emit-replay')) {
+    runEmitReplay();
+  } else if (argv[0] === 'replay/check' || args.has('--replay-check')) {
+    runReplayCheck(argv[0] === 'replay/check' ? argv[1] : argv[argv.indexOf('--replay-check') + 1]);
   } else if (args.has('--browser-sketch')) {
     printBrowserAdapterSketch();
   } else {
@@ -201,7 +466,12 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 
 export {
   analyzeSamples,
+  classifyHit,
   makeGridSamples,
+  makeReplayFixture,
+  makeReplayRow,
   pickByBounds,
+  summarizeReplayRows,
+  validateReplayFixture,
   visibleTargetAtPoint,
 };

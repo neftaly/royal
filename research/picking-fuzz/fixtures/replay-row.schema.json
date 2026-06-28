@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://royal.local/research/picking-fuzz/replay-row.schema.json",
+  "title": "Royal picking fuzz replay fixture",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schemaVersion", "fixtureId", "pointerSpace", "rows"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "fixtureId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pointerSpace": {
+      "const": "fixture-css-px"
+    },
+    "generatedBy": {
+      "type": "string"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/replayRow"
+      }
+    }
+  },
+  "$defs": {
+    "hit": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetId", "source"],
+          "properties": {
+            "targetId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "replayRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rowId",
+        "pointerSample",
+        "expectedHit",
+        "observedHit",
+        "hitRegionRef",
+        "visualBounds",
+        "classification"
+      ],
+      "properties": {
+        "rowId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pointerSample": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "eventType", "space", "x", "y"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "eventType": {
+              "const": "pointermove"
+            },
+            "space": {
+              "const": "fixture-css-px"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        },
+        "expectedHit": {
+          "$ref": "#/$defs/hit"
+        },
+        "observedHit": {
+          "$ref": "#/$defs/hit"
+        },
+        "hitRegionRef": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["targetId", "label", "layer"],
+              "properties": {
+                "targetId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string"
+                },
+                "layer": {
+                  "type": "number"
+                }
+              }
+            }
+          ]
+        },
+        "visualBounds": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["targetId", "space", "rect"],
+              "properties": {
+                "targetId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "space": {
+                  "const": "fixture-css-px"
+                },
+                "rect": {
+                  "$ref": "#/$defs/rect"
+                }
+              }
+            }
+          ]
+        },
+        "classification": {
+          "enum": ["match", "false-positive", "false-negative", "wrong-target"]
+        }
+      }
+    }
+  }
+}

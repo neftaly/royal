@@ -1,0 +1,114 @@
+{
+  "$schema": "./replay-row.schema.json",
+  "schemaVersion": 1,
+  "fixtureId": "notched-bounds-contract-smoke",
+  "pointerSpace": "fixture-css-px",
+  "generatedBy": "research/picking-fuzz/picking-fuzz-harness.mjs emit-replay",
+  "rows": [
+    {
+      "rowId": "sample-1",
+      "pointerSample": {
+        "id": "sample-1",
+        "eventType": "pointermove",
+        "space": "fixture-css-px",
+        "x": 0,
+        "y": 0
+      },
+      "expectedHit": {
+        "targetId": "viewport",
+        "source": "visible-mask-oracle"
+      },
+      "observedHit": {
+        "targetId": "viewport",
+        "source": "bounds-simulator"
+      },
+      "hitRegionRef": {
+        "targetId": "viewport",
+        "label": "Viewport",
+        "layer": 0
+      },
+      "visualBounds": {
+        "targetId": "viewport",
+        "space": "fixture-css-px",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 8,
+          "height": 5
+        }
+      },
+      "classification": "match"
+    },
+    {
+      "rowId": "sample-9",
+      "pointerSample": {
+        "id": "sample-9",
+        "eventType": "pointermove",
+        "space": "fixture-css-px",
+        "x": 8,
+        "y": 0
+      },
+      "expectedHit": {
+        "targetId": "cube-control",
+        "source": "visible-mask-oracle"
+      },
+      "observedHit": {
+        "targetId": "cube-control",
+        "source": "bounds-simulator"
+      },
+      "hitRegionRef": {
+        "targetId": "cube-control",
+        "label": "Cube Control",
+        "layer": 1
+      },
+      "visualBounds": {
+        "targetId": "cube-control",
+        "space": "fixture-css-px",
+        "rect": {
+          "x": 8,
+          "y": 0,
+          "width": 4,
+          "height": 2
+        }
+      },
+      "classification": "match"
+    },
+    {
+      "rowId": "sample-24",
+      "pointerSample": {
+        "id": "sample-24",
+        "eventType": "pointermove",
+        "space": "fixture-css-px",
+        "x": 10,
+        "y": 1
+      },
+      "expectedHit": null,
+      "observedHit": {
+        "targetId": "cube-control",
+        "source": "bounds-simulator"
+      },
+      "hitRegionRef": {
+        "targetId": "cube-control",
+        "label": "Cube Control",
+        "layer": 1
+      },
+      "visualBounds": null,
+      "classification": "false-positive"
+    },
+    {
+      "rowId": "sample-52",
+      "pointerSample": {
+        "id": "sample-52",
+        "eventType": "pointermove",
+        "space": "fixture-css-px",
+        "x": 12,
+        "y": 3
+      },
+      "expectedHit": null,
+      "observedHit": null,
+      "hitRegionRef": null,
+      "visualBounds": null,
+      "classification": "match"
+    }
+  ]
+}
