@@ -2,7 +2,7 @@ export type CameraKind = 'orthographic-camera' | 'perspective-camera';
 
 export type GeometryKind = 'box';
 
-export type MaterialKind = 'standard' | 'unlit';
+export type MaterialKind = 'standard' | 'unlit' | 'wireframe';
 
 export type RenderGraphKind = 'pass' | 'scene';
 

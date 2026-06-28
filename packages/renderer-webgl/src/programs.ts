@@ -4,6 +4,8 @@ import meshFragmentSource from "./shaders/mesh.frag";
 import meshVertexSource from "./shaders/mesh.vert";
 import textFragmentSource from "./shaders/text.frag";
 import textVertexSource from "./shaders/text.vert";
+import wireframeFragmentSource from "./shaders/wireframe.frag";
+import wireframeVertexSource from "./shaders/wireframe.vert";
 import { attributeLocation, createProgram, uniformLocation } from "./gl";
 
 export interface MeshProgram {
@@ -50,6 +52,20 @@ export interface TextProgram {
   readonly uniforms: {
     readonly color: WebGLUniformLocation;
     readonly viewProjection: WebGLUniformLocation;
+  };
+}
+
+export interface WireframeProgram {
+  readonly attributes: {
+    readonly barycentric: number;
+    readonly position: number;
+  };
+  readonly program: WebGLProgram;
+  readonly uniforms: {
+    readonly color: WebGLUniformLocation;
+    readonly model: WebGLUniformLocation;
+    readonly viewProjection: WebGLUniformLocation;
+    readonly width: WebGLUniformLocation;
   };
 }
 
@@ -108,6 +124,24 @@ export const createTextProgram = (gl: WebGLRenderingContext): TextProgram => {
     uniforms: {
       color: uniformLocation(gl, program, "u_color"),
       viewProjection: uniformLocation(gl, program, "u_viewProjection"),
+    },
+  };
+};
+
+export const createWireframeProgram = (gl: WebGLRenderingContext): WireframeProgram => {
+  const program = createProgram(gl, wireframeVertexSource, wireframeFragmentSource);
+
+  return {
+    program,
+    attributes: {
+      barycentric: attributeLocation(gl, program, "a_barycentric"),
+      position: attributeLocation(gl, program, "a_position"),
+    },
+    uniforms: {
+      color: uniformLocation(gl, program, "u_color"),
+      model: uniformLocation(gl, program, "u_model"),
+      viewProjection: uniformLocation(gl, program, "u_viewProjection"),
+      width: uniformLocation(gl, program, "u_width"),
     },
   };
 };

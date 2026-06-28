@@ -21,9 +21,11 @@ export type {
   StandardMaterial,
   StandardMaterialOptions,
   UnlitMaterial,
-  UnlitMaterialOptions
+  UnlitMaterialOptions,
+  WireframeMaterial,
+  WireframeMaterialOptions
 } from './material';
-export { standardMaterial, unlitMaterial } from './material';
+export { standardMaterial, unlitMaterial, wireframeMaterial } from './material';
 export type {
   SolidTextureOptions,
   SolidTextureRef,

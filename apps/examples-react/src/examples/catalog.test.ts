@@ -132,4 +132,14 @@ describe('examples list', () => {
     );
     expect(materials?.source).toContain('<mesh');
   });
+
+  it('keeps the wireframe route on the backend WebGL wireframe path', () => {
+    const wireframe = examples.find((example) => example.id === 'wireframe');
+
+    expect(wireframe?.path).toBe('/wireframe');
+    expect(wireframe?.source).toContain('wireframeMaterial');
+    expect(wireframe?.source).toContain('<mesh');
+    expect(wireframe?.source).not.toContain('barGeometry');
+    expect(wireframe?.source).not.toMatch(/\bMeshLine\b|\bmeshline\b/);
+  });
 });

@@ -19,9 +19,11 @@ import {
   createGltfProgram,
   createMeshProgram,
   createTextProgram,
+  createWireframeProgram,
   type GltfProgram,
   type MeshProgram,
   type TextProgram,
+  type WireframeProgram,
 } from "./programs";
 import { markGltf } from "./performance";
 import { findDirectionalLight } from "./render-graph";
@@ -93,6 +95,7 @@ export class WebGlRoot {
   readonly #meshProgram: MeshProgram;
   readonly #textCache: TextCache;
   readonly #textProgram: TextProgram;
+  readonly #wireframeProgram: WireframeProgram;
   #mounted = true;
   #renderScheduled = false;
   #scene: RenderRoot | undefined;
@@ -115,6 +118,7 @@ export class WebGlRoot {
     this.#gltfProgram = createGltfProgram(gl);
     this.#meshProgram = createMeshProgram(gl);
     this.#textProgram = createTextProgram(gl);
+    this.#wireframeProgram = createWireframeProgram(gl);
     this.#disposeResizeScheduling = this.#scheduleResizeInvalidation();
   }
 
@@ -150,6 +154,7 @@ export class WebGlRoot {
     this.#gl.deleteProgram(this.#gltfProgram.program);
     this.#gl.deleteProgram(this.#meshProgram.program);
     this.#gl.deleteProgram(this.#textProgram.program);
+    this.#gl.deleteProgram(this.#wireframeProgram.program);
   }
 
   #renderPass(
@@ -185,7 +190,7 @@ export class WebGlRoot {
         case "mesh":
           drawMesh(
             gl,
-            { mesh: this.#meshProgram },
+            { mesh: this.#meshProgram, wireframe: this.#wireframeProgram },
             node,
             {
               directionalLight,

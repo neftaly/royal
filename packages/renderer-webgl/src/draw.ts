@@ -1,21 +1,25 @@
 import {
   type DirectionalLightNode,
   type GltfNode,
+  type Material,
   type MeshNode,
   type TextNode,
   type TextureRef,
+  type WireframeMaterial,
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
 import { bindFloatAttribute } from "./gl";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
-import type { GltfProgram, MeshProgram, TextProgram } from "./programs";
+import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
   asBoxGeometry,
   asMaterial,
 } from "./render-graph";
 import type { TextRenderAsset } from "./text-cache";
 import { TextureCache } from "./texture-cache";
+
+type MeshSurfaceMaterial = Exclude<Material, WireframeMaterial>;
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
@@ -38,12 +42,23 @@ export const drawMesh = (
   gl: WebGLRenderingContext,
   programs: {
     readonly mesh: MeshProgram;
+    readonly wireframe?: WireframeProgram;
   },
   mesh: MeshNode,
   context: MeshDrawContext,
 ): void => {
   if (mesh.geometry.kind === "box") {
-    drawBoxMesh(gl, programs.mesh, mesh, context);
+    const material = asMaterial(mesh);
+    if (material.kind === "wireframe") {
+      if (programs.wireframe === undefined) {
+        throw new Error("WebGL wireframe mesh drawing requires a wireframe program");
+      }
+
+      drawBoxWireframe(gl, programs.wireframe, mesh, material, context);
+      return;
+    }
+
+    drawBoxMesh(gl, programs.mesh, mesh, material, context);
     return;
   }
 
@@ -99,6 +114,16 @@ const meshBaseColor = (
     color: fallbackBaseColor(baseColor),
     reason: texture.kind,
   };
+};
+
+const solidWireframeColor = (
+  material: WireframeMaterial,
+): readonly [number, number, number, number] => {
+  if (material.baseColor.kind !== "solid") {
+    throw new Error("WebGL wireframe material requires a solid baseColor");
+  }
+
+  return material.baseColor.color;
 };
 
 export const drawGltf = (
@@ -184,10 +209,10 @@ const drawBoxMesh = (
   gl: WebGLRenderingContext,
   program: MeshProgram,
   mesh: MeshNode,
+  material: MeshSurfaceMaterial,
   context: MeshDrawContext,
 ): void => {
   const light = context.directionalLight;
-  const material = asMaterial(mesh);
   const unlit = material.kind === "unlit";
   if (!unlit && light === undefined)
     throw new Error("StandardMaterial box mesh requires a directionalLight");
@@ -234,4 +259,43 @@ const drawBoxMesh = (
   );
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.index);
   gl.drawElements(gl.TRIANGLES, geometry.indexCount, gl.UNSIGNED_SHORT, 0);
+};
+
+const drawBoxWireframe = (
+  gl: WebGLRenderingContext,
+  program: WireframeProgram,
+  mesh: MeshNode,
+  material: WireframeMaterial,
+  context: MeshDrawContext,
+): void => {
+  const box = asBoxGeometry(mesh);
+  const geometry = context.geometryCache.boxWireframe(box);
+
+  gl.useProgram(program.program);
+  gl.uniformMatrix4fv(
+    program.uniforms.model,
+    false,
+    composeTransform(mesh.transform),
+  );
+  gl.uniformMatrix4fv(
+    program.uniforms.viewProjection,
+    false,
+    context.viewProjectionMatrix,
+  );
+  gl.uniform4fv(program.uniforms.color, solidWireframeColor(material));
+  gl.uniform1f(program.uniforms.width, material.width);
+
+  bindFloatAttribute(
+    gl,
+    program.attributes.position,
+    geometry.position,
+    3,
+  );
+  bindFloatAttribute(
+    gl,
+    program.attributes.barycentric,
+    geometry.barycentric,
+    3,
+  );
+  gl.drawArrays(gl.TRIANGLES, 0, geometry.vertexCount);
 };
