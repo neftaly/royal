@@ -1,0 +1,100 @@
+# Agent Throughput Research
+
+Date: 2026-06-28
+
+## Scope
+
+This research area measures whether running more agents in parallel actually
+increases landed, green work. It stays under `research/agent-throughput` and
+does not change app code, package exports, build config, or CI wiring.
+
+The first pass uses local git history only. It is intended to expose merge and
+CI repair pressure, not to assign blame for individual commits.
+
+## What We Measure
+
+- Commit-to-green time: how long a feature commit waits before the branch is
+  green again. Local git history cannot see CI timestamps by itself, so paste CI
+  rows into a sidecar file when available.
+- CI failure/fix churn: follow-up commits whose subjects look like `Fix`,
+  `test`, `typecheck`, `lint`, `build`, or similar repair work.
+- Path overlap: top-level scopes and exact files touched by multiple recent
+  commits.
+- Shared-worktree dirty-state risk: lockfiles, root configs, package-boundary
+  tests, generated examples, and other broad files that are easy to dirty while
+  another worker is mid-flight.
+- Breadth value versus merge cost: whether spreading work over many packages or
+  apps keeps worker slots saturated, or just creates more serialized repair and
+  conflict work.
+
+## Analyzer
+
+Run the local analyzer:
+
+```sh
+node research/agent-throughput/analyze-throughput.mjs
+```
+
+Write JSON for repeatable comparison:
+
+```sh
+node research/agent-throughput/analyze-throughput.mjs --format json --out research/agent-throughput/reports/latest.json
+```
+
+Useful knobs:
+
+```sh
+node research/agent-throughput/analyze-throughput.mjs --max-count 75
+node research/agent-throughput/analyze-throughput.mjs --since 2026-06-01
+node research/agent-throughput/analyze-throughput.mjs --ci-json /tmp/ci-runs.json --format json
+```
+
+`--ci-json` is optional and never fetched from the network. Keep it manually
+pasteable. The expected shape is an array of rows like:
+
+```json
+[
+  {
+    "sha": "abc1234",
+    "status": "success",
+    "startedAt": "2026-06-28T01:00:00Z",
+    "completedAt": "2026-06-28T01:12:00Z"
+  }
+]
+```
+
+When CI rows are present, the report includes rough commit-to-green minutes by
+matching each commit hash to the pasted status data. Without that file, CI is
+reported as unavailable and the analyzer relies on local repair-pattern signals.
+
+## Process Experiments To Try Next
+
+- Per-worker temp worktrees: give each worker a temporary worktree for risky
+  or broad changes, then merge back after local gates pass. Measure whether
+  dirty-state interruptions drop.
+- Pre-handoff typecheck gates: require `pnpm typecheck` or the smallest
+  package-local equivalent before handing off shared files. Measure fix commits
+  per feature commit.
+- CI split: separate fast type/package-boundary checks from slower browser or
+  renderer checks so repair commits identify the failing lane sooner.
+- High-churn path serialization: serialize changes to lockfiles, root config,
+  package-boundary tests, generated examples, and public package exports.
+- Claims only for shared paths: keep claims lightweight for shared or churny
+  paths, while allowing disjoint research and app areas to proceed without a
+  central gate.
+
+## How To Read The Report
+
+Treat `parallelizableScopes` as candidate lanes for independent workers and
+`serializedScopes` as paths that need explicit sequencing. A scope is not bad
+because it is busy; it becomes risky when repeated touches, exact-file overlap,
+and fix-after-feature commits line up in the same window.
+
+The first checked-in report is a baseline from current local history. Re-run
+the analyzer after changing worker rules and compare:
+
+- fix-like commits per feature-like commit
+- commits touching serialized scopes
+- repeated exact-file touches
+- root/shared files touched by multiple commits
+- optional commit-to-green minutes when CI rows are pasted

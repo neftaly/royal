@@ -1,0 +1,851 @@
+{
+  "report": "royal-agent-throughput",
+  "generatedAt": "2026-06-28T11:49:41.293Z",
+  "git": {
+    "head": "05f26243c03b89d78156e65a18def591b31a274b",
+    "commitsAnalyzed": 40,
+    "maxCount": 40,
+    "since": null
+  },
+  "commitsByTopLevelScope": [
+    {
+      "scope": "apps/examples-react",
+      "commits": 9,
+      "files": 36,
+      "fixLikeCommits": 1,
+      "featureLikeCommits": 5,
+      "sharedTouches": 5,
+      "churnScore": 54
+    },
+    {
+      "scope": "packages/renderer-webgl",
+      "commits": 6,
+      "files": 10,
+      "fixLikeCommits": 2,
+      "featureLikeCommits": 3,
+      "sharedTouches": 3,
+      "churnScore": 23
+    },
+    {
+      "scope": "tests",
+      "commits": 6,
+      "files": 3,
+      "fixLikeCommits": 2,
+      "featureLikeCommits": 3,
+      "sharedTouches": 6,
+      "churnScore": 22
+    },
+    {
+      "scope": "research/raster-text",
+      "commits": 5,
+      "files": 2,
+      "fixLikeCommits": 1,
+      "featureLikeCommits": 2,
+      "sharedTouches": 0,
+      "churnScore": 7
+    },
+    {
+      "scope": "research/virtual-texturing",
+      "commits": 3,
+      "files": 9,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 3,
+      "sharedTouches": 0,
+      "churnScore": 9
+    },
+    {
+      "scope": "pnpm-lock.yaml",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "featureLikeCommits": 1,
+      "sharedTouches": 2,
+      "churnScore": 8
+    },
+    {
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "files": 6,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 2,
+      "sharedTouches": 1,
+      "churnScore": 7
+    },
+    {
+      "scope": "packages/renderer-core",
+      "commits": 2,
+      "files": 6,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 1,
+      "churnScore": 7
+    },
+    {
+      "scope": ".github",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 2,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 6
+    },
+    {
+      "scope": "research/offline-terrain-pipeline",
+      "commits": 2,
+      "files": 7,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 2,
+      "sharedTouches": 0,
+      "churnScore": 6
+    },
+    {
+      "scope": "research/text-visual-diagnosis",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 4
+    },
+    {
+      "scope": "research/dynamic-impostors",
+      "commits": 2,
+      "files": 3,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 2,
+      "sharedTouches": 0,
+      "churnScore": 2
+    },
+    {
+      "scope": "research/svg-canvas-gateway",
+      "commits": 1,
+      "files": 7,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 5
+    },
+    {
+      "scope": "packages/react",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 3
+    },
+    {
+      "scope": "research/pathfinder-svg",
+      "commits": 1,
+      "files": 5,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 3
+    },
+    {
+      "scope": "vite.config.ts",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 1,
+      "churnScore": 3
+    },
+    {
+      "scope": "research/picking-fuzz",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 1
+    },
+    {
+      "scope": "research/renderer-foundations",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 1
+    },
+    {
+      "scope": "research/shape-extrusion",
+      "commits": 1,
+      "files": 3,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 1
+    },
+    {
+      "scope": "research/tarstate-control-plane",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 1
+    },
+    {
+      "scope": "research/text-vector",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 1
+    },
+    {
+      "scope": "research/visibility-packets",
+      "commits": 1,
+      "files": 2,
+      "fixLikeCommits": 0,
+      "featureLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 1
+    }
+  ],
+  "likelyConflictingOrChurnyScopes": [
+    {
+      "scope": "apps/examples-react",
+      "commits": 9,
+      "files": 36,
+      "fixLikeCommits": 1,
+      "sharedTouches": 5,
+      "churnScore": 54
+    },
+    {
+      "scope": "packages/renderer-webgl",
+      "commits": 6,
+      "files": 10,
+      "fixLikeCommits": 2,
+      "sharedTouches": 3,
+      "churnScore": 23
+    },
+    {
+      "scope": "tests",
+      "commits": 6,
+      "files": 3,
+      "fixLikeCommits": 2,
+      "sharedTouches": 6,
+      "churnScore": 22
+    },
+    {
+      "scope": "research/raster-text",
+      "commits": 5,
+      "files": 2,
+      "fixLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 7
+    },
+    {
+      "scope": "research/virtual-texturing",
+      "commits": 3,
+      "files": 9,
+      "fixLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 9
+    },
+    {
+      "scope": "pnpm-lock.yaml",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "sharedTouches": 2,
+      "churnScore": 8
+    },
+    {
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "files": 6,
+      "fixLikeCommits": 0,
+      "sharedTouches": 1,
+      "churnScore": 7
+    },
+    {
+      "scope": "packages/renderer-core",
+      "commits": 2,
+      "files": 6,
+      "fixLikeCommits": 0,
+      "sharedTouches": 1,
+      "churnScore": 7
+    },
+    {
+      "scope": ".github",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 2,
+      "sharedTouches": 0,
+      "churnScore": 6
+    },
+    {
+      "scope": "research/offline-terrain-pipeline",
+      "commits": 2,
+      "files": 7,
+      "fixLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 6
+    },
+    {
+      "scope": "research/text-visual-diagnosis",
+      "commits": 2,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 4
+    },
+    {
+      "scope": "research/dynamic-impostors",
+      "commits": 2,
+      "files": 3,
+      "fixLikeCommits": 0,
+      "sharedTouches": 0,
+      "churnScore": 2
+    },
+    {
+      "scope": "packages/react",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 1,
+      "sharedTouches": 0,
+      "churnScore": 3
+    },
+    {
+      "scope": "vite.config.ts",
+      "commits": 1,
+      "files": 1,
+      "fixLikeCommits": 0,
+      "sharedTouches": 1,
+      "churnScore": 3
+    }
+  ],
+  "fixAfterFeaturePatterns": [
+    {
+      "commit": "05f2624",
+      "authoredAt": "2026-06-28T23:41:12+12:00",
+      "subject": "Fix examples Canvas createElement children",
+      "scopes": [
+        "apps/examples-react"
+      ],
+      "files": [
+        "apps/examples-react/src/examples/cases/FakeUiText.tsx",
+        "apps/examples-react/src/examples/cases/GltfHelmet.tsx",
+        "apps/examples-react/src/examples/cases/HelloCube.tsx",
+        "apps/examples-react/src/examples/cases/WireframeCube.tsx"
+      ]
+    },
+    {
+      "commit": "988147b",
+      "authoredAt": "2026-06-28T23:36:15+12:00",
+      "subject": "Guard against tracked dist output",
+      "scopes": [
+        "tests"
+      ],
+      "files": [
+        "tests/package-boundaries.test.ts"
+      ]
+    },
+    {
+      "commit": "e988d09",
+      "authoredAt": "2026-06-28T23:29:07+12:00",
+      "subject": "Fix WebGL texture cache test types",
+      "scopes": [
+        "packages/renderer-webgl"
+      ],
+      "files": [
+        "packages/renderer-webgl/tests/texture-cache.test.ts"
+      ]
+    },
+    {
+      "commit": "5b76e26",
+      "authoredAt": "2026-06-28T23:25:30+12:00",
+      "subject": "Harden WebGL texture sampler fallback",
+      "scopes": [
+        "packages/renderer-webgl"
+      ],
+      "files": [
+        "packages/renderer-webgl/src/texture-cache.ts",
+        "packages/renderer-webgl/tests/texture-cache.test.ts"
+      ]
+    },
+    {
+      "commit": "982b421",
+      "authoredAt": "2026-06-28T23:22:41+12:00",
+      "subject": "test: guard renderer package boundaries",
+      "scopes": [
+        "tests"
+      ],
+      "files": [
+        "tests/package-boundaries.test.ts"
+      ]
+    },
+    {
+      "commit": "6c0e9f4",
+      "authoredAt": "2026-06-28T22:33:07+12:00",
+      "subject": "Fix examples lockfile",
+      "scopes": [
+        "pnpm-lock.yaml"
+      ],
+      "files": [
+        "pnpm-lock.yaml"
+      ]
+    },
+    {
+      "commit": "7f423f0",
+      "authoredAt": "2026-06-28T22:13:18+12:00",
+      "subject": "Restore monospace atlas ligature diagnostics",
+      "scopes": [
+        "research/raster-text"
+      ],
+      "files": [
+        "research/raster-text/README.md"
+      ]
+    },
+    {
+      "commit": "f5519e1",
+      "authoredAt": "2026-06-28T17:31:33+12:00",
+      "subject": "Fix docs and CI browser smoke honesty",
+      "scopes": [
+        ".github",
+        "packages/react",
+        "research/text-visual-diagnosis"
+      ],
+      "files": [
+        ".github/workflows/ci.yml",
+        "packages/react/README.md",
+        "research/text-visual-diagnosis/README.md"
+      ]
+    },
+    {
+      "commit": "2f24ee1",
+      "authoredAt": "2026-06-28T17:26:33+12:00",
+      "subject": "Run examples browser smoke in CI",
+      "scopes": [
+        ".github"
+      ],
+      "files": [
+        ".github/workflows/ci.yml"
+      ]
+    }
+  ],
+  "repeatedTouchedFiles": [
+    {
+      "file": "apps/examples-react/src/style.css",
+      "scope": "apps/examples-react",
+      "commits": 5,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add glTF helmet example",
+        "Stack example source panels below previews",
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app",
+        "Use real font outlines in text example"
+      ]
+    },
+    {
+      "file": "research/raster-text/README.md",
+      "scope": "research/raster-text",
+      "commits": 5,
+      "fixLikeCommits": 1,
+      "shared": false,
+      "recentSubjects": [
+        "Restore monospace atlas ligature diagnostics",
+        "Clarify monospace raster text atlas policy",
+        "Clarify monospace atlas ligature policy",
+        "Extend raster text Unicode atlas research",
+        "Add raster text research prototype"
+      ]
+    },
+    {
+      "file": "apps/examples-react/scripts/browser-smoke.mjs",
+      "scope": "apps/examples-react",
+      "commits": 4,
+      "fixLikeCommits": 0,
+      "shared": true,
+      "recentSubjects": [
+        "Add glTF helmet example",
+        "Add WIP links for terrain and impostors",
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/catalog.test.ts",
+      "scope": "apps/examples-react",
+      "commits": 4,
+      "fixLikeCommits": 0,
+      "shared": true,
+      "recentSubjects": [
+        "Convert primary examples to JSX scenes",
+        "Add glTF helmet example",
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/GltfHelmet.tsx",
+      "scope": "apps/examples-react",
+      "commits": 4,
+      "fixLikeCommits": 1,
+      "shared": false,
+      "recentSubjects": [
+        "Fix examples Canvas createElement children",
+        "Convert primary examples to JSX scenes",
+        "Add glTF helmet example",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "tests/package-boundaries.test.ts",
+      "scope": "tests",
+      "commits": 3,
+      "fixLikeCommits": 2,
+      "shared": true,
+      "recentSubjects": [
+        "Guard against tracked dist output",
+        "test: guard renderer package boundaries",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "tests/render-webgl.test.ts",
+      "scope": "tests",
+      "commits": 3,
+      "fixLikeCommits": 0,
+      "shared": true,
+      "recentSubjects": [
+        "Improve glTF visibility bounds",
+        "Add private WebGL visibility culling",
+        "Fence legacy renderer text API"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/FakeUiText.tsx",
+      "scope": "apps/examples-react",
+      "commits": 3,
+      "fixLikeCommits": 1,
+      "shared": false,
+      "recentSubjects": [
+        "Fix examples Canvas createElement children",
+        "Convert primary examples to JSX scenes",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/HelloCube.tsx",
+      "scope": "apps/examples-react",
+      "commits": 3,
+      "fixLikeCommits": 1,
+      "shared": false,
+      "recentSubjects": [
+        "Fix examples Canvas createElement children",
+        "Convert primary examples to JSX scenes",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/WireframeCube.tsx",
+      "scope": "apps/examples-react",
+      "commits": 3,
+      "fixLikeCommits": 1,
+      "shared": false,
+      "recentSubjects": [
+        "Fix examples Canvas createElement children",
+        "Convert primary examples to JSX scenes",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/WipDemos.tsx",
+      "scope": "apps/examples-react",
+      "commits": 3,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add glTF helmet example",
+        "Add WIP links for terrain and impostors",
+        "Add examples WIP demo links page"
+      ]
+    },
+    {
+      "file": "research/virtual-texturing/README.md",
+      "scope": "research/virtual-texturing",
+      "commits": 3,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Prototype virtual texturing live data structures",
+        "Add virtual texturing example handoff",
+        "Add virtual texturing demo readiness report"
+      ]
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "scope": "pnpm-lock.yaml",
+      "commits": 2,
+      "fixLikeCommits": 1,
+      "shared": true,
+      "recentSubjects": [
+        "Add Tarstate demo app",
+        "Fix examples lockfile"
+      ]
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "scope": ".github",
+      "commits": 2,
+      "fixLikeCommits": 2,
+      "shared": false,
+      "recentSubjects": [
+        "Fix docs and CI browser smoke honesty",
+        "Run examples browser smoke in CI"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples.ts",
+      "scope": "apps/examples-react",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add glTF helmet example",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/TarstateScene.tsx",
+      "scope": "apps/examples-react",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Simplify Royal examples app",
+        "Document real-font examples path"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/cases/TextPrototype.tsx",
+      "scope": "apps/examples-react",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Simplify Royal examples app",
+        "Use real font outlines in text example"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/router.tsx",
+      "scope": "apps/examples-react",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/Shell.tsx",
+      "scope": "apps/examples-react",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/tarstate-demo/src/demo.test.ts",
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Improve tarstate demo writer snapshot flow",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "apps/tarstate-demo/src/demo.ts",
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Improve tarstate demo writer snapshot flow",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "apps/tarstate-demo/src/main.ts",
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Improve tarstate demo writer snapshot flow",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "apps/tarstate-demo/src/style.css",
+      "scope": "apps/tarstate-demo",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Improve tarstate demo writer snapshot flow",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "packages/renderer-core/src/index.ts",
+      "scope": "packages/renderer-core",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add offline terrain pipeline POC",
+        "Fence legacy renderer text API"
+      ]
+    },
+    {
+      "file": "packages/renderer-webgl/src/gltf-cache.ts",
+      "scope": "packages/renderer-webgl",
+      "commits": 2,
+      "fixLikeCommits": 0,
+      "shared": false,
+      "recentSubjects": [
+        "Add offline terrain pipeline POC",
+        "Improve glTF visibility bounds"
+      ]
+    }
+  ],
+  "sharedWorktreeDirtyStateSignals": [
+    {
+      "file": "apps/examples-react/scripts/browser-smoke.mjs",
+      "commits": 4,
+      "recentSubjects": [
+        "Add glTF helmet example",
+        "Add WIP links for terrain and impostors",
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/examples-react/src/examples/catalog.test.ts",
+      "commits": 4,
+      "recentSubjects": [
+        "Convert primary examples to JSX scenes",
+        "Add glTF helmet example",
+        "Add examples WIP demo links page",
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "tests/package-boundaries.test.ts",
+      "commits": 3,
+      "recentSubjects": [
+        "Guard against tracked dist output",
+        "test: guard renderer package boundaries",
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "tests/render-webgl.test.ts",
+      "commits": 3,
+      "recentSubjects": [
+        "Improve glTF visibility bounds",
+        "Add private WebGL visibility culling",
+        "Fence legacy renderer text API"
+      ]
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "commits": 2,
+      "recentSubjects": [
+        "Add Tarstate demo app",
+        "Fix examples lockfile"
+      ]
+    },
+    {
+      "file": "apps/examples-react/package.json",
+      "commits": 1,
+      "recentSubjects": [
+        "Simplify Royal examples app"
+      ]
+    },
+    {
+      "file": "apps/tarstate-demo/package.json",
+      "commits": 1,
+      "recentSubjects": [
+        "Add Tarstate demo app"
+      ]
+    },
+    {
+      "file": "tests/royal-public-api-smoke.test.ts",
+      "commits": 1,
+      "recentSubjects": [
+        "Fence legacy renderer text API"
+      ]
+    },
+    {
+      "file": "vite.config.ts",
+      "commits": 1,
+      "recentSubjects": [
+        "Add Tarstate demo app"
+      ]
+    }
+  ],
+  "ci": {
+    "source": "unavailable",
+    "note": "No --ci-json was provided; paste CI rows manually to estimate commit-to-green time."
+  },
+  "recommendations": {
+    "parallelizableScopes": [
+      "research/dynamic-impostors",
+      "research/picking-fuzz",
+      "research/renderer-foundations",
+      "research/shape-extrusion",
+      "research/tarstate-control-plane",
+      "research/text-vector",
+      "research/visibility-packets"
+    ],
+    "serializedScopes": [
+      "apps/examples-react",
+      "packages/renderer-webgl",
+      "tests",
+      "research/raster-text",
+      "research/virtual-texturing",
+      "pnpm-lock.yaml",
+      "apps/tarstate-demo",
+      "packages/renderer-core",
+      ".github",
+      "research/offline-terrain-pipeline",
+      "research/svg-canvas-gateway"
+    ],
+    "serializedFiles": [
+      "apps/examples-react/src/style.css",
+      "research/raster-text/README.md",
+      "apps/examples-react/scripts/browser-smoke.mjs",
+      "apps/examples-react/src/examples/catalog.test.ts",
+      "apps/examples-react/src/examples/cases/GltfHelmet.tsx",
+      "tests/package-boundaries.test.ts",
+      "tests/render-webgl.test.ts",
+      "apps/examples-react/src/examples/cases/FakeUiText.tsx",
+      "apps/examples-react/src/examples/cases/HelloCube.tsx",
+      "apps/examples-react/src/examples/cases/WireframeCube.tsx"
+    ],
+    "notes": [
+      "Use separate worker worktrees for broad app/package changes so dirty state does not block unrelated workers.",
+      "Serialize lockfiles, root configs, package-boundary tests, and example catalogs when multiple workers are active.",
+      "Require a focused typecheck/test gate before handoff for any commit touching serialized scopes.",
+      "Prefer claims for exact shared paths; keep isolated research directories claim-light."
+    ]
+  }
+}
