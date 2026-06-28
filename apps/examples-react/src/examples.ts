@@ -1,12 +1,8 @@
 import type { ComponentType } from 'react';
-import { FakeUiText } from './examples/cases/FakeUiText';
-import fakeUiTextSource from './examples/cases/FakeUiText.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
-import { VirtualTexturingTerrain } from './examples/cases/VirtualTexturingTerrain';
-import virtualTexturingTerrainSource from './examples/cases/VirtualTexturingTerrain.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -43,22 +39,6 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
-  },
-  {
-    id: 'fake-ui-text',
-    path: '/fake-ui-text',
-    title: 'Fake UI + Text/Yoga',
-    Component: FakeUiText,
-    source: fakeUiTextSource,
-    sourceFile: 'examples/cases/FakeUiText.tsx',
-  },
-  {
-    id: 'virtual-texturing-terrain',
-    path: '/virtual-texturing',
-    title: 'Virtual Texturing Terrain',
-    Component: VirtualTexturingTerrain,
-    source: virtualTexturingTerrainSource,
-    sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',
   },
 ] as const satisfies readonly Example[];
 

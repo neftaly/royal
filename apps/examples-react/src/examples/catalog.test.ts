@@ -13,15 +13,11 @@ describe('examples list', () => {
       'Cube',
       'Wireframe',
       'glTF Helmet',
-      'Fake UI + Text/Yoga',
-      'Virtual Texturing Terrain',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
       '/wireframe',
       '/gltf-helmet',
-      '/fake-ui-text',
-      '/virtual-texturing',
     ]);
   });
 
@@ -70,7 +66,28 @@ describe('examples list', () => {
   it('keeps WIP demo links out of the primary examples list', () => {
     expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(examples).toHaveLength(5);
+    expect(examples).toHaveLength(3);
+  });
+
+  it('keeps fixture-only VT out of primary examples', () => {
+    expect(examples.some((example) => String(example.path) === '/virtual-texturing')).toBe(false);
+    expect(examples.some((example) => example.id.includes('virtual-texturing'))).toBe(false);
+    expect(examples.some((example) => example.source.includes('page-cache-debug-overlay'))).toBe(
+      false,
+    );
+    expect(examples.some((example) => example.source.includes('Research fixture preview'))).toBe(
+      false,
+    );
+  });
+
+  it('keeps fake and compatibility text demos out of primary examples', () => {
+    expect(examples.some((example) => String(example.path) === '/fake-ui-text')).toBe(false);
+    expect(examples.some((example) => String(example.path) === '/renderer-text')).toBe(false);
+    expect(
+      examples.some((example) =>
+        /FakeUiText|Yoga|Raster|Atlas|glyphs|vectorText/.test(example.source),
+      ),
+    ).toBe(false);
   });
 
   it('keeps the DamagedHelmet route on the public glTF API subset', () => {
@@ -82,24 +99,5 @@ describe('examples list', () => {
     expect(helmet?.source).toContain('asset={helmetAsset}');
     expect(helmet?.source).toContain('directionalLight');
     expect(helmet?.source).toContain('perspectiveCamera');
-  });
-
-  it('keeps the fake UI route Yoga-ready without wiring controls', () => {
-    const fakeUi = examples.find((example) => example.id === 'fake-ui-text');
-
-    expect(fakeUi?.source).toContain('Yoga is not exposed to the examples app yet');
-    expect(fakeUi?.source).toContain("'aria-label': 'Zoom'");
-    expect(fakeUi?.source).toContain('disabled: true');
-  });
-
-  it('keeps the virtual texturing route honest while renderer hooks are absent', () => {
-    const vt = examples.find((example) => example.id === 'virtual-texturing-terrain');
-
-    expect(vt?.path).toBe('/virtual-texturing');
-    expect(vt?.source).toContain(
-      'Research fixture preview; renderer VT hooks are not active in this route.',
-    );
-    expect(vt?.source).toContain('page-cache-debug-overlay.svg');
-    expect(vt?.source).not.toContain('VirtualTextureNode');
   });
 });

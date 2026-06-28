@@ -29,16 +29,6 @@ const smokeExpectations = {
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
   },
-  'fake-ui-text': {
-    surface: 'canvas',
-    canvasLabel: 'Fake UI with renderer text',
-    minColorBuckets: 8,
-    minPaintedRatio: 0.05,
-  },
-  'virtual-texturing-terrain': {
-    surface: 'fixture-preview',
-    status: 'Research fixture preview; renderer VT hooks are not active in this route.',
-  },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -214,15 +204,6 @@ const smokeExpression = `
       paintedRatio: paintedPixels / (width * height),
     };
   };
-  const imageState = (selector) => {
-    const image = document.querySelector(selector);
-    if (!(image instanceof HTMLImageElement)) return undefined;
-    return {
-      complete: image.complete,
-      naturalHeight: image.naturalHeight,
-      naturalWidth: image.naturalWidth,
-    };
-  };
   const read = () => {
     const page = document.querySelector('.example-page');
     const bodyText = document.body.textContent ?? '';
@@ -257,12 +238,6 @@ const smokeExpression = `
         minPaintedRatio: smoke?.minPaintedRatio ?? 0,
         sample: sampleCanvas(canvas),
       },
-      fixture: {
-        overview: imageState('[data-fixture-image="terrain-pages-overview"]'),
-        overlay: imageState('[data-fixture-image="page-cache-debug-overlay"]'),
-        status: document.querySelector('[data-vt-status]')?.getAttribute('data-vt-status') ?? '',
-        hasStats: bodyText.includes('Exact hits') && bodyText.includes('Border mismatches'),
-      },
       activeNav: activeLink === null ? undefined : {
         id: activeLink.getAttribute('data-example-id') ?? '',
         path: activeLink.getAttribute('data-example-route') ?? '',
@@ -276,21 +251,12 @@ const smokeExpression = `
   const isReady = () => {
     const sourceReady = state.source.hasFile && state.source.hasExport;
     if (!sourceReady || state.route.title === '') return false;
-    if (state.route.surface === 'canvas') {
-      return state.canvas !== undefined &&
-        state.canvas.backingWidth > 0 &&
-        state.canvas.backingHeight > 0 &&
-        state.canvas.sample !== undefined &&
-        state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets &&
-        state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio;
-    }
-    return state.fixture.overview?.complete === true &&
-      state.fixture.overview.naturalWidth > 0 &&
-      state.fixture.overview.naturalHeight > 0 &&
-      state.fixture.overlay?.complete === true &&
-      state.fixture.overlay.naturalWidth > 0 &&
-      state.fixture.overlay.naturalHeight > 0 &&
-      state.fixture.hasStats;
+    return state.canvas !== undefined &&
+      state.canvas.backingWidth > 0 &&
+      state.canvas.backingHeight > 0 &&
+      state.canvas.sample !== undefined &&
+      state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets &&
+      state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -308,36 +274,24 @@ const wipExpression = `
   const read = () => {
     const page = document.querySelector('[data-wip-page]');
     const activeLink = document.querySelector('[data-wip-nav-link].active');
-    const bodyText = document.body.textContent ?? '';
 
     return {
       hasPage: page !== null,
       title: document.querySelector('h1')?.textContent?.trim() ?? '',
       activeNavText: activeLink?.textContent?.trim() ?? '',
-      hasGltf: bodyText.includes('glTF Asset Viewer') &&
-        bodyText.includes('/gltf-helmet') &&
-        bodyText.includes('fixtures/DamagedHelmet/DamagedHelmet.gltf'),
-      hasPickingReplay: bodyText.includes('Picking Replay Contract') &&
-        bodyText.includes('research/picking-fuzz/fixtures/notched-bounds-replay.json'),
-      hasAssetManifestContract: bodyText.includes('Asset Manifest Contract') &&
-        bodyText.includes('research/asset-manifest-contract/**'),
-      hasOfflineTerrainPipeline: bodyText.includes('Offline Terrain Pipeline') &&
-        bodyText.includes('research/offline-terrain-pipeline/**'),
-      hasDynamicImpostors: bodyText.includes('Dynamic Impostors') &&
-        bodyText.includes('research/dynamic-impostors/**'),
+      links: Array.from(document.querySelectorAll('[data-wip-link]')).map((link) => ({
+        href: link.href,
+        id: link.getAttribute('data-wip-link-id') ?? '',
+        target: link.getAttribute('data-wip-link-target') ?? '',
+        text: link.textContent?.trim() ?? '',
+      })),
+      statusCardCount: document.querySelectorAll('.wip-card, [data-wip-demo-id]').length,
       primaryExampleNavCount: document.querySelectorAll('[data-example-nav-link]').length,
     };
   };
 
   let state = read();
-  while (performance.now() < deadline && (
-    !state.hasPage ||
-    !state.hasGltf ||
-    !state.hasPickingReplay ||
-    !state.hasAssetManifestContract ||
-    !state.hasOfflineTerrainPipeline ||
-    !state.hasDynamicImpostors
-  )) {
+  while (performance.now() < deadline && (!state.hasPage || state.links.length === 0)) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     state = read();
   }
@@ -364,29 +318,20 @@ const assertRoute = (expected, state) => {
   if (!state.source.hasFile) failures.push(`source panel missed "${state.source.file}"`);
   if (!state.source.hasExport) failures.push('source panel missed an exported component');
 
-  if (smoke?.surface === 'canvas') {
-    const sample = state.canvas?.sample;
-    if (state.canvas === undefined) {
-      failures.push('missing canvas');
-    } else if (sample === undefined || sample.paintedPixels <= 0) {
-      failures.push('canvas pixels stayed blank');
-    } else {
-      if (sample.colorBuckets < state.canvas.minColorBuckets) {
-        failures.push(`canvas color buckets ${sample.colorBuckets} < ${state.canvas.minColorBuckets}`);
-      }
-      if (sample.paintedRatio < state.canvas.minPaintedRatio) {
-        failures.push(`canvas painted ratio ${sample.paintedRatio.toFixed(4)} < ${state.canvas.minPaintedRatio}`);
-      }
-    }
+  const sample = state.canvas?.sample;
+  if (state.canvas === undefined) {
+    failures.push('missing canvas');
+  } else if (sample === undefined || sample.paintedPixels <= 0) {
+    failures.push('canvas pixels stayed blank');
   } else {
-    if (state.fixture.overview === undefined || state.fixture.overview.naturalWidth <= 0) {
-      failures.push('VT overview image did not load');
+    if (sample.colorBuckets < state.canvas.minColorBuckets) {
+      failures.push(`canvas color buckets ${sample.colorBuckets} < ${state.canvas.minColorBuckets}`);
     }
-    if (state.fixture.overlay === undefined || state.fixture.overlay.naturalWidth <= 0) {
-      failures.push('VT overlay image did not load');
+    if (sample.paintedRatio < state.canvas.minPaintedRatio) {
+      failures.push(
+        `canvas painted ratio ${sample.paintedRatio.toFixed(4)} < ${state.canvas.minPaintedRatio}`,
+      );
     }
-    if (!state.fixture.hasStats) failures.push('VT stats missing');
-    if (state.fixture.status !== smoke?.status) failures.push('VT status text changed');
   }
 
   if (failures.length > 0) {
@@ -401,11 +346,24 @@ const assertWipPage = (state) => {
   if (state.activeNavText !== 'WIP Demo Links') {
     failures.push(`active WIP nav text was "${state.activeNavText || 'missing'}"`);
   }
-  if (!state.hasGltf) failures.push('missing glTF WIP entry');
-  if (!state.hasPickingReplay) failures.push('missing picking replay WIP entry');
-  if (!state.hasAssetManifestContract) failures.push('missing asset manifest contract WIP entry');
-  if (!state.hasOfflineTerrainPipeline) failures.push('missing offline terrain pipeline WIP entry');
-  if (!state.hasDynamicImpostors) failures.push('missing dynamic impostors WIP entry');
+  const linkIds = new Set(state.links.map((link) => link.id));
+  for (const expectedId of [
+    'gltf-asset-viewer',
+    'picking-raycasting-fuzz',
+    'asset-manifest-contract',
+    'offline-terrain-pipeline',
+    'dynamic-impostors',
+    'virtual-texturing-research',
+  ]) {
+    if (!linkIds.has(expectedId)) failures.push(`missing ${expectedId} WIP link`);
+  }
+  if (state.links.some((link) => link.href === '' || link.text === '')) {
+    failures.push('WIP contains an empty link');
+  }
+  if (state.links.some((link) => link.target !== 'route' && link.target !== 'repo')) {
+    failures.push('WIP contains a link without a real target type');
+  }
+  if (state.statusCardCount !== 0) failures.push('WIP rendered decorative status cards');
   if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
     failures.push(`primary example nav count changed to ${state.primaryExampleNavCount}`);
   }
