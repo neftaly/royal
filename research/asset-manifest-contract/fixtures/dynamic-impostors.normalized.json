@@ -1,0 +1,364 @@
+{
+  "schemaVersion": "royal.research.asset-manifest-contract.v0",
+  "contractStatus": "research-unstable",
+  "asset": {
+    "id": "royal.research.dynamic-impostors.forest",
+    "kind": "dynamic-impostor-set",
+    "revision": "royal.research.dynamic-impostors.manifest.v0+2026-06-28",
+    "quality": "draft",
+    "label": "Dynamic forest impostor pressure fixture"
+  },
+  "world": {
+    "id": "royal.research.dynamic-impostors.forest",
+    "units": "meters",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z",
+      "origin": "fixture-world"
+    },
+    "cameraPath": {
+      "start": [-260, 14, -180],
+      "end": [280, 18, 190],
+      "lookAheadMeters": 80,
+      "defaultFrames": 72
+    }
+  },
+  "bounds": [
+    {
+      "id": "bounds.impostor.world",
+      "space": "world",
+      "kind": "aabb3",
+      "units": "meters",
+      "min": [-512, 0, -384],
+      "max": [512, 52, 384]
+    },
+    {
+      "id": "bounds.impostor.cell.ridge-west",
+      "space": "world",
+      "kind": "aabb3",
+      "units": "meters",
+      "min": [-512, 0, -384],
+      "max": [-64, 46, 112]
+    },
+    {
+      "id": "bounds.impostor.cell.valley-center",
+      "space": "world",
+      "kind": "aabb3",
+      "units": "meters",
+      "min": [-128, 0, -256],
+      "max": [256, 38, 256]
+    },
+    {
+      "id": "bounds.impostor.cell.ridge-east",
+      "space": "world",
+      "kind": "aabb3",
+      "units": "meters",
+      "min": [192, 0, -160],
+      "max": [512, 52, 384]
+    },
+    {
+      "id": "bounds.impostor.mesh.fir-cluster",
+      "space": "object",
+      "kind": "sphere",
+      "units": "meters",
+      "center": [0, 17.5, 0],
+      "halfExtents": [4.6, 17.5, 4.2],
+      "radius": 18.4
+    },
+    {
+      "id": "bounds.impostor.atlas.oct.fir",
+      "space": "atlas",
+      "kind": "rect2",
+      "units": "texels",
+      "rect": [0, 0, 1024, 1024]
+    },
+    {
+      "id": "bounds.impostor.atlas.billboard.fir",
+      "space": "atlas",
+      "kind": "rect2",
+      "units": "texels",
+      "rect": [0, 0, 512, 512]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact.impostor.source-manifest",
+      "kind": "source",
+      "uri": "research/dynamic-impostors/fixtures/sample-forest-impostor-manifest.json",
+      "mediaType": "application/json",
+      "format": "royal-dynamic-impostors-manifest",
+      "revision": "royal.research.dynamic-impostors.manifest.v0+2026-06-28",
+      "quality": "draft"
+    },
+    {
+      "id": "artifact.impostor.mesh.fir-cluster.high",
+      "kind": "mesh",
+      "uri": "asset://forest/source/coastal-fir-high.glb#mesh/fir-cluster",
+      "mediaType": "model/gltf-binary",
+      "format": "glb",
+      "revision": "source-authored",
+      "quality": "draft",
+      "bounds": ["bounds.impostor.mesh.fir-cluster"],
+      "triangles": 18240
+    },
+    {
+      "id": "artifact.impostor.mesh.fir-cluster.medium",
+      "kind": "mesh",
+      "uri": "asset://forest/source/coastal-fir-medium.glb#mesh/fir-cluster",
+      "mediaType": "model/gltf-binary",
+      "format": "glb",
+      "revision": "source-authored",
+      "quality": "draft",
+      "bounds": ["bounds.impostor.mesh.fir-cluster"],
+      "triangles": 6120
+    },
+    {
+      "id": "artifact.impostor.atlas.oct",
+      "kind": "atlas",
+      "uri": "asset://forest/impostors/forest-oct-2048",
+      "mediaType": "application/octet-stream",
+      "format": "atlas-texture-set:ktx2-basis-uastc",
+      "revision": "forest_oct_2048_albedo_depth_normal_v1",
+      "quality": "draft",
+      "dimensions": [2048, 2048],
+      "bounds": ["bounds.impostor.atlas.oct.fir"],
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/forest-oct-2048-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/forest-oct-2048-normal-roughness.ktx2",
+        "depth": "asset://forest/impostors/forest-oct-2048-depth.ktx2"
+      }
+    },
+    {
+      "id": "artifact.impostor.atlas.billboard",
+      "kind": "atlas",
+      "uri": "asset://forest/impostors/forest-billboard-1024",
+      "mediaType": "application/octet-stream",
+      "format": "atlas-texture-set:ktx2-basis-etc1s",
+      "revision": "forest_billboard_1024_far_v1",
+      "quality": "draft",
+      "dimensions": [1024, 1024],
+      "bounds": ["bounds.impostor.atlas.billboard.fir"],
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/forest-billboard-1024-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/forest-billboard-1024-normal-roughness.ktx2"
+      }
+    },
+    {
+      "id": "artifact.impostor.page-table",
+      "kind": "page-table",
+      "uri": "asset://forest/runtime/forest-impostor-page-table",
+      "mediaType": "application/octet-stream",
+      "format": "runtime-page-table",
+      "revision": "runtime-derived",
+      "quality": "draft"
+    }
+  ],
+  "pages": [
+    {
+      "id": "page.impostor.oct.fir",
+      "kind": "impostor-atlas-region",
+      "artifact": "artifact.impostor.atlas.oct",
+      "lodLevel": "lod.impostor.octahedral",
+      "bounds": ["bounds.impostor.atlas.oct.fir", "bounds.impostor.mesh.fir-cluster"],
+      "pageGroup": "oct/fir",
+      "sourceMesh": "fir_cluster_high",
+      "species": "coastal-fir",
+      "priority": 90
+    },
+    {
+      "id": "page.impostor.billboard.fir",
+      "kind": "impostor-atlas-region",
+      "artifact": "artifact.impostor.atlas.billboard",
+      "lodLevel": "lod.impostor.billboard",
+      "bounds": ["bounds.impostor.atlas.billboard.fir", "bounds.impostor.mesh.fir-cluster"],
+      "pageGroup": "billboard/fir",
+      "sourceMesh": "fir_cluster_high",
+      "species": "coastal-fir",
+      "priority": 38
+    }
+  ],
+  "lod": {
+    "identityPolicy": "distance-and-projected-height-with-hysteresis",
+    "levels": [
+      {
+        "id": "lod.impostor.mesh-high",
+        "level": 0,
+        "quality": "draft",
+        "artifacts": ["artifact.impostor.mesh.fir-cluster.high"],
+        "bounds": ["bounds.impostor.mesh.fir-cluster"],
+        "distanceMetersMax": 70,
+        "projectedHeightPixelsMin": 180
+      },
+      {
+        "id": "lod.impostor.mesh-mid",
+        "level": 1,
+        "quality": "draft",
+        "artifacts": ["artifact.impostor.mesh.fir-cluster.medium"],
+        "bounds": ["bounds.impostor.mesh.fir-cluster"],
+        "distanceMetersMax": 145,
+        "projectedHeightPixelsMin": 92
+      },
+      {
+        "id": "lod.impostor.octahedral",
+        "level": 2,
+        "quality": "draft",
+        "artifacts": ["artifact.impostor.atlas.oct"],
+        "pages": ["page.impostor.oct.fir"],
+        "bounds": ["bounds.impostor.atlas.oct.fir"],
+        "distanceMetersMax": 420,
+        "projectedHeightPixelsMin": 22
+      },
+      {
+        "id": "lod.impostor.billboard",
+        "level": 3,
+        "quality": "draft",
+        "artifacts": ["artifact.impostor.atlas.billboard"],
+        "pages": ["page.impostor.billboard.fir"],
+        "bounds": ["bounds.impostor.atlas.billboard.fir"],
+        "distanceMetersMax": 820,
+        "projectedHeightPixelsMin": 5
+      },
+      {
+        "id": "lod.impostor.culled",
+        "level": 4,
+        "quality": "draft",
+        "distanceMetersMax": 980
+      }
+    ],
+    "transitions": [
+      {
+        "from": "mesh",
+        "to": "octahedral",
+        "distanceMeters": 145,
+        "crossFadeMeters": 18,
+        "debugCounter": "lod.mesh_to_oct_switches"
+      },
+      {
+        "from": "octahedral",
+        "to": "billboard",
+        "distanceMeters": 420,
+        "crossFadeMeters": 30,
+        "debugCounter": "lod.oct_to_billboard_switches"
+      },
+      {
+        "from": "billboard",
+        "to": "culled",
+        "distanceMeters": 980,
+        "crossFadeMeters": 60,
+        "debugCounter": "lod.billboard_to_culled_switches"
+      }
+    ]
+  },
+  "residency": {
+    "policy": "dynamic-impostor-virtual-texture-page-cache",
+    "budgets": {
+      "pageSize": 128,
+      "pagePaddingTexels": 4,
+      "physicalSlots": 128,
+      "maxUploadsPerFrame": 10,
+      "maxUploadBytesPerFrame": 1048576,
+      "uploadBandwidthBytesPerMs": 786432,
+      "uploadOverheadMs": 0.028
+    },
+    "pageGroups": [
+      {
+        "id": "oct/fir",
+        "atlasArtifact": "artifact.impostor.atlas.oct",
+        "pages": ["page.impostor.oct.fir"],
+        "priorityBase": 90
+      },
+      {
+        "id": "billboard/fir",
+        "atlasArtifact": "artifact.impostor.atlas.billboard",
+        "pages": ["page.impostor.billboard.fir"],
+        "priorityBase": 38
+      }
+    ],
+    "fallbacks": [
+      {
+        "from": "missingOctahedralPage",
+        "to": "billboard"
+      },
+      {
+        "from": "missingBillboardPage",
+        "to": "tinted-bounds-card"
+      },
+      {
+        "from": "missingDepthPage",
+        "to": "alpha-only"
+      }
+    ],
+    "cells": [
+      {
+        "id": "ridge-west",
+        "bounds": ["bounds.impostor.cell.ridge-west"],
+        "instanceCount": 3600,
+        "prefetchRadiusCells": 1,
+        "priority": "camera-forward-high"
+      },
+      {
+        "id": "valley-center",
+        "bounds": ["bounds.impostor.cell.valley-center"],
+        "instanceCount": 5200,
+        "prefetchRadiusCells": 2,
+        "priority": "camera-near-critical"
+      },
+      {
+        "id": "ridge-east",
+        "bounds": ["bounds.impostor.cell.ridge-east"],
+        "instanceCount": 4200,
+        "prefetchRadiusCells": 1,
+        "priority": "camera-forward-medium"
+      }
+    ]
+  },
+  "previews": [
+    {
+      "id": "preview.impostor.fixture-summary",
+      "role": "fixture-summary",
+      "bounds": ["bounds.impostor.world"]
+    }
+  ],
+  "debug": [
+    {
+      "id": "debug.impostor.page-table",
+      "role": "page-table-dirty-counter",
+      "artifact": "artifact.impostor.page-table",
+      "counter": "vt.page_table_dirty_entries"
+    },
+    {
+      "id": "debug.impostor.fallback-samples",
+      "role": "fallback-counter",
+      "counter": "vt.impostor_fallback_samples"
+    },
+    {
+      "id": "debug.impostor.lod-switches",
+      "role": "lod-transition-counter",
+      "counter": "lod.mesh_to_oct_switches"
+    }
+  ],
+  "provenance": {
+    "sources": [
+      {
+        "kind": "source-manifest",
+        "uri": "research/dynamic-impostors/fixtures/sample-forest-impostor-manifest.json"
+      },
+      {
+        "kind": "benchmark",
+        "uri": "research/dynamic-impostors/forest-lod-bench.mjs"
+      }
+    ],
+    "date": "2026-06-28",
+    "description": "Static forest/impostor fixture for CPU-only LOD and texture residency pressure testing."
+  },
+  "extensions": {
+    "source": {
+      "schema": "royal.research.dynamic-impostors.manifest.v0",
+      "sourceMeshes": ["fir_cluster_high", "beech_cluster_high", "dead_pine_snag"],
+      "forestCellCount": 3,
+      "instanceCount": 13000,
+      "atlasLayerSampling": "Fixture normalizes fir layers only; source manifest carries beech and dead-pine layers with the same vocabulary."
+    }
+  }
+}

@@ -1,0 +1,484 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://royal.dev/research/asset-manifest-contract.schema.json",
+  "title": "Royal Research Asset Manifest Contract",
+  "description": "Unstable research-only normalized asset manifest vocabulary. Not exported and not a public API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractStatus",
+    "asset",
+    "world",
+    "bounds",
+    "artifacts",
+    "lod",
+    "residency",
+    "previews",
+    "debug",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "royal.research.asset-manifest-contract.v0"
+    },
+    "contractStatus": {
+      "const": "research-unstable"
+    },
+    "asset": {
+      "$ref": "#/$defs/asset"
+    },
+    "world": {
+      "$ref": "#/$defs/world"
+    },
+    "bounds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bounds"
+      },
+      "minItems": 1
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "minItems": 1
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/page"
+      },
+      "default": []
+    },
+    "lod": {
+      "$ref": "#/$defs/lod"
+    },
+    "residency": {
+      "$ref": "#/$defs/residency"
+    },
+    "previews": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/preview"
+      }
+    },
+    "debug": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/debug"
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Research-specific source details that have not earned normalized fields yet."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$"
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "revision", "quality"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "virtual-texture",
+            "terrain-tile",
+            "terrain-world-index",
+            "dynamic-impostor-set",
+            "mesh",
+            "texture",
+            "debug-report"
+          ]
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quality": {
+          "enum": ["placeholder", "preview", "draft", "research-demo", "final"]
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "units", "coordinateSystem"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "units": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coordinateSystem": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["handedness", "up", "forward"],
+          "properties": {
+            "handedness": {
+              "enum": ["right-handed", "left-handed", "screen-2d", "texture-2d"]
+            },
+            "up": {
+              "type": "string",
+              "minLength": 1
+            },
+            "forward": {
+              "type": "string",
+              "minLength": 1
+            },
+            "origin": {
+              "type": "string"
+            }
+          }
+        },
+        "seed": {
+          "type": ["string", "number"]
+        },
+        "cameraPath": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "space", "kind"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "space": {
+          "enum": ["world", "tile", "object", "virtual-texture", "atlas", "page", "uv", "screen"]
+        },
+        "kind": {
+          "enum": ["aabb3", "rect2", "sphere", "grid2", "range1"]
+        },
+        "units": {
+          "type": "string"
+        },
+        "min": {
+          "$ref": "#/$defs/numberArray"
+        },
+        "max": {
+          "$ref": "#/$defs/numberArray"
+        },
+        "rect": {
+          "$ref": "#/$defs/numberArray"
+        },
+        "center": {
+          "$ref": "#/$defs/numberArray"
+        },
+        "halfExtents": {
+          "$ref": "#/$defs/numberArray"
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0
+        },
+        "tileSize": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "grid": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind", "uri", "revision", "quality"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": ["mesh", "texture", "atlas", "preview", "stats", "report", "debug-overlay", "source", "page-table"]
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quality": {
+          "enum": ["placeholder", "preview", "draft", "research-demo", "final"]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dimensions": {
+          "$ref": "#/$defs/positiveIntegerArray"
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind", "artifact", "bounds"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": ["virtual-texture-page", "terrain-tile-page", "impostor-atlas-region", "impostor-page-group"]
+        },
+        "artifact": {
+          "$ref": "#/$defs/id"
+        },
+        "lodLevel": {
+          "$ref": "#/$defs/id"
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1
+        },
+        "pageGroup": {
+          "$ref": "#/$defs/id"
+        },
+        "priority": {
+          "type": "number"
+        }
+      }
+    },
+    "lod": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["identityPolicy", "levels"],
+      "properties": {
+        "identityPolicy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lodLevel"
+          },
+          "minItems": 1
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "lodLevel": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "level", "quality"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quality": {
+          "enum": ["placeholder", "preview", "draft", "research-demo", "final"]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "residency": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["policy"],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "budgets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "string", "boolean", "null"]
+          }
+        },
+        "pageGroups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "atlasArtifact": {
+                "$ref": "#/$defs/id"
+              },
+              "pages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "role"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact": {
+          "$ref": "#/$defs/id"
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "debug": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "role"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact": {
+          "$ref": "#/$defs/id"
+        },
+        "counter": {
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["sources"],
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["kind", "uri"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "numberArray": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "positiveIntegerArray": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      }
+    }
+  }
+}
