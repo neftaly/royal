@@ -88,6 +88,13 @@ writes `demo-assets/example-fixture.json`, a compact import/copy payload with
 route metadata, preview assets, fixture stats, visual acceptance, and migration
 notes for the future real renderer-backed example.
 
+`webgl2-runtime-design.md` is the research-only design note for the real WebGL2
+runtime path. It separates fixture previews from live renderer implementation,
+names the package-private worker responsibilities, defines page table and
+physical atlas ownership, outlines shader indirection and demand rows, and
+standardizes benchmark counter names. It also keeps the public API boundary
+explicit: there is no public `VirtualTextureNode` yet.
+
 ## Design
 
 ### Page Table / Indirection Texture
