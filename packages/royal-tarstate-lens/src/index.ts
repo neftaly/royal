@@ -2,7 +2,7 @@ import {
   anchoredPath,
   and,
   as,
-  boolean as bool,
+  bool,
   defineSchema,
   eq,
   evaluate,

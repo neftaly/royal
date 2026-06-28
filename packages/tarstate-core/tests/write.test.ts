@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   applyWrites,
   as,
-  boolean as bool,
+  bool,
   defineSchema,
   deleteRow,
   evaluate,

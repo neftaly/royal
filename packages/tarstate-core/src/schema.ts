@@ -36,7 +36,7 @@ export function number(): FieldSpec {
 }
 
 /** Boolean-valued field. */
-export function boolean(): FieldSpec {
+export function bool(): FieldSpec {
   return field('boolean');
 }
 
