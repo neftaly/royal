@@ -2,21 +2,21 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   applyWrites,
   as,
-  bool,
+  booleanField,
   defineSchema,
   deleteRow,
   evaluate,
   from,
   fromObjectSource,
-  id,
+  idField,
   insert,
   nullable,
   optional,
   pipe,
   project,
-  ref,
+  refField,
   relation,
-  string,
+  stringField,
   update,
   upsert,
   write,
@@ -55,34 +55,34 @@ const schema = defineSchema({
   todos: relation<Todo>({
     key: 'id',
     fields: {
-      id: id('todo'),
-      text: string(),
-      done: bool()
+      id: idField('todo'),
+      text: stringField(),
+      done: booleanField()
     }
   }),
   assignments: relation<Assignment>({
     key: 'todoId',
     fields: {
-      todoId: ref('todos.id'),
-      assignee: string()
+      todoId: refField('todos.id'),
+      assignee: stringField()
     }
   }),
   presence: relation<Presence>({
     key: ['workspaceId', 'peerId', 'clientId'],
     ephemeral: true,
     fields: {
-      workspaceId: id('workspace'),
-      peerId: id('peer'),
-      clientId: string(),
-      targetTodoId: optional(ref('todos.id'))
+      workspaceId: idField('workspace'),
+      peerId: idField('peer'),
+      clientId: stringField(),
+      targetTodoId: optional(refField('todos.id'))
     }
   }),
   maybeTodos: relation<MaybeTodo>({
     key: 'id',
     fields: {
-      id: id('maybe-todo'),
-      label: optional(string()),
-      archivedAt: nullable(string())
+      id: idField('maybe-todo'),
+      label: optional(stringField()),
+      archivedAt: nullable(stringField())
     }
   })
 });

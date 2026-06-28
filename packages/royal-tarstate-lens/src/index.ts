@@ -1,23 +1,23 @@
 import {
-  anchoredPath,
+  anchoredPathField,
   and,
   as,
-  bool,
+  booleanField,
   defineSchema,
   eq,
   evaluate,
   from,
-  id,
+  idField,
   join,
   leftJoin,
   maybe,
-  number,
+  numberField,
   optional,
   pipe,
   project,
-  ref,
+  refField,
   relation,
-  string,
+  stringField,
   type Query,
   type QueryResult,
   type RelationLookup,
@@ -406,159 +406,159 @@ export const royalLensSchema = defineSchema({
   scopes: relation<RoyalScopeRow>({
     key: 'scopeId',
     fields: {
-      scopeId: id('royalScope'),
-      compact: bool(),
-      gridColumns: number(),
-      gridRows: number()
+      scopeId: idField('royalScope'),
+      compact: booleanField(),
+      gridColumns: numberField(),
+      gridRows: numberField()
     }
   }),
   layoutNodes: relation<RoyalLayoutNodeRow>({
     key: ['scopeId', 'nodeId'],
     fields: {
-      scopeId: id('royalScope'),
-      nodeId: id('royalNode'),
-      parentNodeId: optional(ref('layoutNodes.nodeId')),
-      path: anchoredPath(),
-      order: number(),
-      label: string(),
-      primitive: string(),
-      tone: string(),
-      role: optional(string()),
-      group: optional(string()),
-      assetId: optional(ref('assets.assetId'))
+      scopeId: idField('royalScope'),
+      nodeId: idField('royalNode'),
+      parentNodeId: optional(refField('layoutNodes.nodeId')),
+      path: anchoredPathField(),
+      order: numberField(),
+      label: stringField(),
+      primitive: stringField(),
+      tone: stringField(),
+      role: optional(stringField()),
+      group: optional(stringField()),
+      assetId: optional(refField('assets.assetId'))
     }
   }),
   layoutBoxes: relation<RoyalLayoutBoxRow>({
     key: ['scopeId', 'boxId'],
     fields: {
-      scopeId: id('royalScope'),
-      boxId: id('royalBox'),
-      x: number(),
-      y: number(),
-      width: number(),
-      height: number(),
-      label: string(),
-      primitive: string(),
-      tone: string(),
-      text: optional(string()),
-      hasInteraction: bool(),
-      assetId: optional(ref('assets.assetId'))
+      scopeId: idField('royalScope'),
+      boxId: idField('royalBox'),
+      x: numberField(),
+      y: numberField(),
+      width: numberField(),
+      height: numberField(),
+      label: stringField(),
+      primitive: stringField(),
+      tone: stringField(),
+      text: optional(stringField()),
+      hasInteraction: booleanField(),
+      assetId: optional(refField('assets.assetId'))
     }
   }),
   pickTargets: relation<RoyalPickTargetRow>({
     key: ['scopeId', 'targetId'],
     fields: {
-      scopeId: id('royalScope'),
-      targetId: id('royalPickTarget'),
-      boxId: ref('layoutBoxes.boxId'),
-      x: number(),
-      y: number(),
-      width: number(),
-      height: number(),
-      role: string(),
-      label: string(),
-      group: optional(string()),
-      layer: number(),
-      disabled: bool()
+      scopeId: idField('royalScope'),
+      targetId: idField('royalPickTarget'),
+      boxId: refField('layoutBoxes.boxId'),
+      x: numberField(),
+      y: numberField(),
+      width: numberField(),
+      height: numberField(),
+      role: stringField(),
+      label: stringField(),
+      group: optional(stringField()),
+      layer: numberField(),
+      disabled: booleanField()
     }
   }),
   renderFlags: relation<RoyalRenderFlagRow>({
     key: ['scopeId', 'boxId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      boxId: ref('layoutBoxes.boxId'),
-      active: bool(),
-      focused: bool(),
-      hovered: bool()
+      scopeId: idField('royalScope'),
+      boxId: refField('layoutBoxes.boxId'),
+      active: booleanField(),
+      focused: booleanField(),
+      hovered: booleanField()
     }
   }),
   activationStates: relation<RoyalActivationStateRow>({
     key: 'scopeId',
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      activationCount: number(),
-      activeId: optional(ref('pickTargets.targetId')),
-      focusedId: optional(ref('pickTargets.targetId')),
-      hoveredId: optional(ref('pickTargets.targetId'))
+      scopeId: idField('royalScope'),
+      activationCount: numberField(),
+      activeId: optional(refField('pickTargets.targetId')),
+      focusedId: optional(refField('pickTargets.targetId')),
+      hoveredId: optional(refField('pickTargets.targetId'))
     }
   }),
   pointerSamples: relation<RoyalPointerSampleRow>({
     key: ['scopeId', 'sampleId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      sampleId: id('royalPointerSample'),
-      sequence: number(),
-      kind: string(),
-      x: number(),
-      y: number(),
-      targetId: optional(ref('pickTargets.targetId'))
+      scopeId: idField('royalScope'),
+      sampleId: idField('royalPointerSample'),
+      sequence: numberField(),
+      kind: stringField(),
+      x: numberField(),
+      y: numberField(),
+      targetId: optional(refField('pickTargets.targetId'))
     }
   }),
   assets: relation<RoyalAssetRow>({
     key: ['scopeId', 'assetId'],
     fields: {
-      scopeId: id('royalScope'),
-      assetId: id('royalAsset'),
-      src: string(),
-      kind: string(),
-      ownerNodeId: ref('layoutNodes.nodeId')
+      scopeId: idField('royalScope'),
+      assetId: idField('royalAsset'),
+      src: stringField(),
+      kind: stringField(),
+      ownerNodeId: refField('layoutNodes.nodeId')
     }
   }),
   assetDiagnostics: relation<RoyalAssetDiagnosticRow>({
     key: ['scopeId', 'diagnosticId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      diagnosticId: id('royalAssetDiagnostic'),
-      assetId: ref('assets.assetId'),
-      src: string(),
-      message: string(),
-      status: string()
+      scopeId: idField('royalScope'),
+      diagnosticId: idField('royalAssetDiagnostic'),
+      assetId: refField('assets.assetId'),
+      src: stringField(),
+      message: stringField(),
+      status: stringField()
     }
   }),
   effectIntents: relation<EffectIntentRow>({
     key: ['scopeId', 'intentId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      intentId: id('effectIntent'),
-      capabilityId: id('capability'),
-      kind: string(),
-      resourceId: id('resource'),
-      payloadKind: string(),
-      sequence: number()
+      scopeId: idField('royalScope'),
+      intentId: idField('effectIntent'),
+      capabilityId: idField('capability'),
+      kind: stringField(),
+      resourceId: idField('resource'),
+      payloadKind: stringField(),
+      sequence: numberField()
     }
   }),
   effectResults: relation<EffectResultRow>({
     key: ['scopeId', 'resultId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      resultId: id('effectResult'),
-      intentId: ref('effectIntents.intentId'),
-      capabilityId: id('capability'),
-      resourceId: id('resource'),
-      status: string(),
-      message: optional(string()),
-      sequence: number()
+      scopeId: idField('royalScope'),
+      resultId: idField('effectResult'),
+      intentId: refField('effectIntents.intentId'),
+      capabilityId: idField('capability'),
+      resourceId: idField('resource'),
+      status: stringField(),
+      message: optional(stringField()),
+      sequence: numberField()
     }
   }),
   capabilityDiagnostics: relation<CapabilityDiagnosticRow>({
     key: ['scopeId', 'diagnosticId'],
     ephemeral: true,
     fields: {
-      scopeId: id('royalScope'),
-      diagnosticId: id('capabilityDiagnostic'),
-      code: string(),
-      capabilityId: id('capability'),
-      message: string(),
-      relationName: optional(string()),
-      resultId: optional(ref('effectResults.resultId')),
-      resourceId: optional(id('resource')),
-      sequence: number()
+      scopeId: idField('royalScope'),
+      diagnosticId: idField('capabilityDiagnostic'),
+      code: stringField(),
+      capabilityId: idField('capability'),
+      message: stringField(),
+      relationName: optional(stringField()),
+      resultId: optional(refField('effectResults.resultId')),
+      resourceId: optional(idField('resource')),
+      sequence: numberField()
     }
   })
 });

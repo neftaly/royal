@@ -7,20 +7,20 @@ or other structured data.
 
 ```tsx
 import {
-  as, evaluate, fromObjectSource, ref, from,
+  as, evaluate, fromObjectSource, refField, from,
   eq, relation, composeSources, maybe, pipe,
-  id, leftJoin, defineSchema, project, string,
+  idField, leftJoin, defineSchema, project, stringField,
 } from '@tarstate/core'
 
 // Define todo data and relationships.
 const schema = defineSchema({
   todos: relation<{ id: string; text: string }>({
     key: 'id',
-    fields: { id: id('todo'), text: string() },
+    fields: { id: idField('todo'), text: stringField() },
   }),
   assignments: relation<{ todoId: string; assignee: string }>({
     key: 'todoId',
-    fields: { todoId: ref('todos.id'), assignee: string() },
+    fields: { todoId: refField('todos.id'), assignee: stringField() },
   }),
 })
 

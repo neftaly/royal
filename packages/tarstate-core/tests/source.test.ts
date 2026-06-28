@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   as,
-  anchoredPath,
+  anchoredPathField,
   composeSources,
   defineSchema,
   evaluate,
   from,
   fromIndexedObjectSource,
   fromObjectSource,
-  id,
+  idField,
   leftJoin,
   maybe,
   optional,
   pipe,
   project,
-  ref,
+  refField,
   relation,
-  string,
+  stringField,
   eq,
   type RelationSource,
   type TarstateDiagnostic
@@ -30,9 +30,9 @@ const schema = defineSchema({
   }>({
     key: 'id',
     fields: {
-      id: id('object'),
-      kind: string(),
-      title: string()
+      id: idField('object'),
+      kind: stringField(),
+      title: stringField()
     }
   }),
   presence: relation<{
@@ -45,11 +45,11 @@ const schema = defineSchema({
     ephemeral: true,
     key: ['workspaceId', 'peerId', 'clientId'],
     fields: {
-      workspaceId: id('workspace'),
-      peerId: id('peer'),
-      clientId: string(),
-      targetObjectId: optional(ref('objects.id')),
-      focusPath: optional(anchoredPath())
+      workspaceId: idField('workspace'),
+      peerId: idField('peer'),
+      clientId: stringField(),
+      targetObjectId: optional(refField('objects.id')),
+      focusPath: optional(anchoredPathField())
     }
   })
 });

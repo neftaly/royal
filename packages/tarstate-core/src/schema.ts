@@ -26,32 +26,32 @@ type RelationInput<Row extends Record<string, unknown>> = {
 };
 
 /** String-valued field. */
-export function string(): FieldSpec {
+export function stringField(): FieldSpec {
   return field('string');
 }
 
 /** Number-valued field. */
-export function number(): FieldSpec {
+export function numberField(): FieldSpec {
   return field('number');
 }
 
 /** Boolean-valued field. */
-export function bool(): FieldSpec {
+export function booleanField(): FieldSpec {
   return field('boolean');
 }
 
 /** String id field, tagged with an application-level domain. */
-export function id(domain: string): FieldSpec {
+export function idField(domain: string): FieldSpec {
   return { ...field('id'), idDomain: domain };
 }
 
 /** String foreign-key field targeting another relation field. */
-export function ref(target: string): FieldSpec {
+export function refField(target: string): FieldSpec {
   return { ...field('ref'), ref: target };
 }
 
 /** Path anchored in a durable object or document. */
-export function anchoredPath(): FieldSpec {
+export function anchoredPathField(): FieldSpec {
   return field('anchoredPath');
 }
 

@@ -4,11 +4,11 @@ import {
   defineSchema,
   evaluate,
   from,
-  id,
+  idField,
   pipe,
   project,
   relation,
-  string,
+  stringField,
   write
 } from '@tarstate/core';
 import {
@@ -46,8 +46,8 @@ const genericSchema = defineSchema({
   users: relation<User>({
     key: 'id',
     fields: {
-      id: id('user'),
-      name: string()
+      id: idField('user'),
+      name: stringField()
     }
   })
 });
