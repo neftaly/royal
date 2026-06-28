@@ -51,11 +51,9 @@ export const ExamplePage = ({
 
 const sectionLabel = (section: ExampleDefinition['section']): string => {
   switch (section) {
-    case 'start-here':
-      return 'Start Here';
-    case 'vertical-slices':
-      return 'Vertical Slices';
-    case 'diagnostics':
-      return 'Diagnostics';
+    case 'primary':
+      return 'Examples';
+    case 'labs-prototypes':
+      return 'Labs/Prototypes';
   }
 };

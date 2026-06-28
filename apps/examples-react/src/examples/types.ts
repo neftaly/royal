@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 
-export type ExampleSection = 'start-here' | 'vertical-slices' | 'diagnostics';
+export type ExampleSection = 'primary' | 'labs-prototypes';
 
 export type ExampleDefinition = {
   readonly id: string;

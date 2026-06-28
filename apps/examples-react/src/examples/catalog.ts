@@ -1,123 +1,38 @@
+import { CapabilityLab } from './cases/CapabilityLab';
+import capabilityLabSource from './cases/CapabilityLab.tsx?raw';
+import { GltfHelmet } from './cases/GltfHelmet';
+import gltfHelmetSource from './cases/GltfHelmet.tsx?raw';
+import { HelloCube } from './cases/HelloCube';
+import helloCubeSource from './cases/HelloCube.tsx?raw';
+import { ImperativeRoot } from './cases/ImperativeRoot';
+import imperativeRootSource from './cases/ImperativeRoot.tsx?raw';
+import { InteractionLab } from './cases/InteractionLab';
+import interactionLabSource from './cases/InteractionLab.tsx?raw';
+import { PickingFuzzLab } from './cases/PickingFuzzLab';
+import pickingFuzzLabSource from './cases/PickingFuzzLab.tsx?raw';
+import { TarstateScene } from './cases/TarstateScene';
+import tarstateSceneSource from './cases/TarstateScene.tsx?raw';
+import { TextPrototype } from './cases/TextPrototype';
+import textPrototypeSource from './cases/TextPrototype.tsx?raw';
 import {
-  CapabilityProbeDemo,
   CapabilityRowsProbe,
-  HelloCubeDemo,
-  ImperativeRootDemo,
-  InteractiveSceneDemo,
-  PickingFuzzShapeDemo,
   PickingRowsProbe,
   RenderRowsProbe,
-  TarstateSceneSourceDemo,
   TarstateSourceProbe,
-  TextLayoutDemo,
-  TextLayoutProbe,
-} from './demos/Demos';
+} from './probes';
 import type {
   ExampleDefinition,
   ExampleSectionDefinition,
 } from './types';
 
-const helloCubeSource = `import { Canvas, boxGeometry, standardMaterial } from '@royal/react';
-
-const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: [0.85, 0.16, 0.18, 1] });
-
-export function HelloCube() {
-  return (
-    <Canvas>
-      <scene>
-        <pass>
-          <perspectiveCamera position={[0, 0, 5]} rotation={[0, 0, 0]} fovY={Math.PI / 4} near={0.1} far={1000} />
-          <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
-          <mesh geometry={cube} material={red} transform={{ position: [0, 0, 0], rotation: [0.4, 0.65, 0] }} />
-        </pass>
-      </scene>
-    </Canvas>
-  );
-}`;
-
-const imperativeRootSource = `import { createRoot, boxGeometry, mesh, scene, pass } from '@royal/react';
-
-const root = createRoot(canvas);
-
-root.render(scene({
-  children: [
-    pass({
-      camera,
-      children: [
-        light,
-        mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material, transform }),
-      ],
-    }),
-  ],
-}));
-
-root.dispose();`;
-
-const interactiveSceneSource = `const [rotation, setRotation] = useState([0.35, 0.7, 0]);
-const [scale, setScale] = useState(1);
-
-<Canvas
-  onPointerMove={(event) => {
-    if (event.buttons !== 1) return;
-    setRotation(([x, y, z]) => [x + event.movementY / 120, y + event.movementX / 120, z]);
-  }}
->
-  {multiObjectScene(rotation, scale)}
-</Canvas>`;
-
-const tarstateSource = `const stores = {
-  documentStore: storeOf(documentState),
-  layoutStore: storeOf(layoutState),
-  interactionStore: storeOf(interactionState),
-  capabilityStore: storeOf(capabilityState),
-};
-
-const snapshot = createRoyalLensSnapshot(stores);
-const renderRows = await evaluateRoyalLens(stores, royalQueries.renderRows);
-
-snapshot.probe.rowCount(royalLensSchema.layoutBoxes);
-renderRows.rows.map((row) => row.boxId);`;
-
-const textLayoutSource = `const layout = layoutText({
-  text: 'Royal layout',
-  fontSize: 0.72,
-  lineHeight: 0.9,
-});
-
-const meshData = textMesh(layout);
-
-<Canvas>
-  {textLayoutScene(layout.source)}
-</Canvas>`;
-
-const capabilityProbeSource = `const boundary = royalCapabilityBoundaryContract;
-const stores = royalStores();
-const rows = await evaluateRoyalLens(stores, royalQueries.capabilityResultRows);
-
-boundary.adapterOnly.includes('DOM nodes');
-rows.rows.map((row) => [row.capabilityId, row.status, row.diagnosticCode]);`;
-
-const pickingSource = `const sample = pointerSample(sequence, gridX, gridY);
-const interaction = {
-  ...interactionState,
-  hoveredId: sample.targetId,
-  pointerSamples: [...previousSamples, sample],
-};
-
-const rows = await evaluateRoyalLens(
-  royalStores({ interaction }),
-  royalQueries.pickProbeRows,
-);`;
-
 const examples = [
   {
     id: 'hello-cube',
     path: '/hello-cube',
-    section: 'start-here',
+    section: 'primary',
     title: 'Hello Cube',
     summary: 'A single Royal canvas with a lit cube and a minimal render graph.',
-    Demo: HelloCubeDemo,
+    Demo: HelloCube,
     source: helloCubeSource,
     probe: RenderRowsProbe,
     notes: [
@@ -128,10 +43,10 @@ const examples = [
   {
     id: 'imperative-root',
     path: '/imperative-root',
-    section: 'start-here',
+    section: 'primary',
     title: 'Imperative Root',
     summary: 'Creates a Royal root from a canvas ref and renders frames directly.',
-    Demo: ImperativeRootDemo,
+    Demo: ImperativeRoot,
     source: imperativeRootSource,
     notes: [
       'Useful for adapters that own the DOM node lifecycle.',
@@ -139,26 +54,39 @@ const examples = [
     ],
   },
   {
-    id: 'interactive-scene',
-    path: '/interactive-scene',
-    section: 'vertical-slices',
-    title: 'Interactive Scene',
+    id: 'gltf-helmet',
+    path: '/gltf-helmet',
+    section: 'primary',
+    title: 'glTF Helmet',
+    summary: 'Loads the Damaged Helmet fixture through the Royal glTF node.',
+    Demo: GltfHelmet,
+    source: gltfHelmetSource,
+    notes: [
+      'Uses the app fixture public directory for model assets.',
+      'Keeps asset loading in the same render graph shape as other cases.',
+    ],
+  },
+  {
+    id: 'interaction-lab',
+    path: '/labs/interaction',
+    section: 'labs-prototypes',
+    title: 'Interaction Lab',
     summary: 'Combines pointer input, simple controls, and renderer state updates.',
-    Demo: InteractiveSceneDemo,
-    source: interactiveSceneSource,
+    Demo: InteractionLab,
+    source: interactionLabSource,
     notes: [
       'Drag in the canvas to rotate the scene.',
       'The range control changes cube scale without replacing renderer APIs.',
     ],
   },
   {
-    id: 'tarstate-scene-source',
-    path: '/tarstate-scene-source',
-    section: 'vertical-slices',
-    title: 'Tarstate Scene Source',
+    id: 'tarstate-scene',
+    path: '/labs/tarstate-scene',
+    section: 'labs-prototypes',
+    title: 'Tarstate Scene',
     summary: 'Projects workbench layout state into Tarstate lens rows and render probes.',
-    Demo: TarstateSceneSourceDemo,
-    source: tarstateSource,
+    Demo: TarstateScene,
+    source: tarstateSceneSource,
     probe: TarstateSourceProbe,
     notes: [
       'Uses the current field helpers through the lens schema.',
@@ -166,27 +94,26 @@ const examples = [
     ],
   },
   {
-    id: 'text-layout',
-    path: '/text-layout',
-    section: 'vertical-slices',
-    title: 'Text + Layout',
+    id: 'text-prototype',
+    path: '/labs/text-prototype',
+    section: 'labs-prototypes',
+    title: 'Text Prototype',
     summary: 'Shapes vector text, creates mesh data, and renders it in an orthographic pass.',
-    Demo: TextLayoutDemo,
-    source: textLayoutSource,
-    probe: TextLayoutProbe,
+    Demo: TextPrototype,
+    source: textPrototypeSource,
     notes: [
       'Text stays in the renderer graph as vector text.',
-      'The probe reads shaping and mesh metrics.',
+      'The controls show shaping and mesh metrics for the current label.',
     ],
   },
   {
-    id: 'capability-probe',
-    path: '/capability-probe',
-    section: 'diagnostics',
-    title: 'Capability Probe',
+    id: 'capability-lab',
+    path: '/labs/capability',
+    section: 'labs-prototypes',
+    title: 'Capability Lab',
     summary: 'Shows capability results and boundary policy data through lens queries.',
-    Demo: CapabilityProbeDemo,
-    source: capabilityProbeSource,
+    Demo: CapabilityLab,
+    source: capabilityLabSource,
     probe: CapabilityRowsProbe,
     notes: [
       'Browser and renderer handles remain adapter-only.',
@@ -194,13 +121,13 @@ const examples = [
     ],
   },
   {
-    id: 'picking-fuzz-shape',
-    path: '/picking-fuzz-shape',
-    section: 'diagnostics',
-    title: 'Picking/Fuzz Shape',
+    id: 'picking-fuzz-lab',
+    path: '/labs/picking-fuzz',
+    section: 'labs-prototypes',
+    title: 'Picking Fuzz Lab',
     summary: 'Samples pointer positions against layout bounds and displays pick probe rows.',
-    Demo: PickingFuzzShapeDemo,
-    source: pickingSource,
+    Demo: PickingFuzzLab,
+    source: pickingFuzzLabSource,
     probe: PickingRowsProbe,
     notes: [
       'The live stage maps pointer coordinates into grid space.',
@@ -211,16 +138,12 @@ const examples = [
 
 const sections = [
   {
-    id: 'start-here',
-    title: 'Start Here',
+    id: 'primary',
+    title: 'Examples',
   },
   {
-    id: 'vertical-slices',
-    title: 'Vertical Slices',
-  },
-  {
-    id: 'diagnostics',
-    title: 'Diagnostics',
+    id: 'labs-prototypes',
+    title: 'Labs/Prototypes',
   },
 ] as const;
 
