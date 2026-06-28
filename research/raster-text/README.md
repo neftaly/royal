@@ -344,9 +344,9 @@ V1 should support:
   correctness matters more than upload churn, emoji/color glyphs, bidi,
   combining marks, CJK, arbitrary user text, and CSS font fallback parity.
 - A restricted monospace atlas for ASCII UI/debug/table text only after an
-  allowlist rejects combining marks, emoji, RTL/bidi content, CJK, proportional
-  fonts, user text, and variable-advance cases with hard diagnostics. Disable
-  ligatures for already-allowed cell rendering.
+  allowlist rejects ligature-sensitive text, combining marks, emoji, RTL/bidi
+  content, CJK, proportional fonts, user text, and variable-advance cases with
+  hard diagnostics. Disable ligatures for already-allowed cell rendering.
 - Renderer-owned cache keys that include resolved font identity, size, DPR,
   paint, font load state, and invalidation policy.
 
