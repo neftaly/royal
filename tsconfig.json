@@ -36,7 +36,7 @@
         "./packages/react/src/testing.ts"
       ],
       "@royal/tarstate-lens": [
-        "./packages/royal-tarstate-lens/src/index.ts"
+        "./packages/royal-tarstate-lens/src/v1.ts"
       ],
       "@royal/tarstate-lens/v1": [
         "./packages/royal-tarstate-lens/src/v1.ts"
