@@ -37,6 +37,12 @@ const REPLAY_POINTER_SPACE = 'fixture-css-px';
 const REPLAY_EVENT_TYPE = 'pointermove';
 const EXPECTED_HIT_SOURCE = 'visible-mask-oracle';
 const OBSERVED_HIT_SOURCE = 'bounds-simulator';
+const VISIBLE_PIXEL_ORACLE_SOURCE = 'visible-mask-oracle';
+const VISIBLE_PIXEL_CLASSIFICATIONS = new Set([
+  'covered-target',
+  'covered-other-target',
+  'empty',
+]);
 const CLASSIFICATIONS = new Set([
   'match',
   'false-positive',
@@ -197,6 +203,26 @@ const makeVisualBounds = (target) =>
         rect: roundRect(target.rect),
       };
 
+const classifyVisiblePixel = ({ expectedId, observedId }) => {
+  if (expectedId === undefined || expectedId === null) {
+    return 'empty';
+  }
+
+  if (observedId === undefined || observedId === null || expectedId === observedId) {
+    return 'covered-target';
+  }
+
+  return 'covered-other-target';
+};
+
+const makeVisiblePixelOracle = ({ expectedId, observedId }) => ({
+  source: VISIBLE_PIXEL_ORACLE_SOURCE,
+  space: REPLAY_POINTER_SPACE,
+  radiusPx: 0,
+  targetId: expectedId ?? null,
+  classification: classifyVisiblePixel({ expectedId, observedId }),
+});
+
 const makeReplayRow = ({ sample, targets, visibleTargetAt }) => {
   const observedId = pickByBounds(sample, targets);
   const expectedId = visibleTargetAt(sample);
@@ -214,6 +240,7 @@ const makeReplayRow = ({ sample, targets, visibleTargetAt }) => {
     },
     expectedHit,
     observedHit,
+    visiblePixelOracle: makeVisiblePixelOracle({ expectedId, observedId }),
     hitRegionRef: makeRegionRef(findTarget(targets, observedId)),
     visualBounds: makeVisualBounds(findTarget(targets, expectedId)),
     classification: classifyHit({ expectedHit, observedHit }),
@@ -254,6 +281,8 @@ const summarizeReplayRows = (rows) => {
   return {
     rowCount: rows.length,
     mismatchCount: mismatches.length,
+    falsePositiveCount: counts['false-positive'],
+    falseNegativeCount: counts['false-negative'],
     counts,
     mismatches,
   };
@@ -299,6 +328,26 @@ const validateReplayFixture = (fixture) => {
       errors.push(`${prefix}.observedHit must be null or a hit object`);
     }
 
+    if (!isVisiblePixelOracle(row.visiblePixelOracle)) {
+      errors.push(
+        `${prefix}.visiblePixelOracle must include source, space, radiusPx, targetId, and classification`,
+      );
+    } else {
+      const expectedId = row.expectedHit?.targetId ?? null;
+      const observedId = row.observedHit?.targetId ?? null;
+      const derivedVisibleClassification = classifyVisiblePixel({ expectedId, observedId });
+
+      if (row.visiblePixelOracle.targetId !== expectedId) {
+        errors.push(`${prefix}.visiblePixelOracle.targetId must match expectedHit target id`);
+      }
+
+      if (row.visiblePixelOracle.classification !== derivedVisibleClassification) {
+        errors.push(
+          `${prefix}.visiblePixelOracle.classification must be ${derivedVisibleClassification} for expected/observed hit ids`,
+        );
+      }
+    }
+
     if (!isNullableObject(row.hitRegionRef)) {
       errors.push(`${prefix}.hitRegionRef must be null or an object`);
     }
@@ -340,6 +389,16 @@ const isHit = (value) =>
     !Array.isArray(value) &&
     typeof value.targetId === 'string' &&
     typeof value.source === 'string');
+
+const isVisiblePixelOracle = (value) =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  typeof value.source === 'string' &&
+  value.space === REPLAY_POINTER_SPACE &&
+  Number.isFinite(value.radiusPx) &&
+  (value.targetId === null || typeof value.targetId === 'string') &&
+  VISIBLE_PIXEL_CLASSIFICATIONS.has(value.classification);
 
 const isNullableObject = (value) =>
   value === null ||
@@ -433,6 +492,8 @@ const runReplayCheck = (fixturePath) => {
     fixturePath,
     rowCount: summary.rowCount,
     mismatchCount: summary.mismatchCount,
+    falsePositiveCount: summary.falsePositiveCount,
+    falseNegativeCount: summary.falseNegativeCount,
     counts: summary.counts,
     firstMismatches: summary.mismatches.slice(0, 12),
   }, null, 2));

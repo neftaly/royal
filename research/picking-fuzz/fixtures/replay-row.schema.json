@@ -78,6 +78,7 @@
         "pointerSample",
         "expectedHit",
         "observedHit",
+        "visiblePixelOracle",
         "hitRegionRef",
         "visualBounds",
         "classification"
@@ -115,6 +116,38 @@
         },
         "observedHit": {
           "$ref": "#/$defs/hit"
+        },
+        "visiblePixelOracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "space", "radiusPx", "targetId", "classification"],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1
+            },
+            "space": {
+              "const": "fixture-css-px"
+            },
+            "radiusPx": {
+              "type": "number",
+              "minimum": 0
+            },
+            "targetId": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            },
+            "classification": {
+              "enum": ["covered-target", "covered-other-target", "empty"]
+            }
+          }
         },
         "hitRegionRef": {
           "oneOf": [

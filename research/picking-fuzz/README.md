@@ -53,6 +53,9 @@ pointer sample and compare a logical pick with an independent visual oracle:
 - `expectedHit`: the target id expected by the visible-shape oracle, or `null`.
 - `observedHit`: the target id reported by the picker/probe under test, or
   `null`.
+- `visiblePixelOracle`: the independent visible-pixel result for the sampled
+  coordinate. `targetId` matches `expectedHit`; `classification` is
+  `covered-target`, `covered-other-target`, or `empty`.
 - `hitRegionRef`: metadata for the observed hit region, when one exists.
 - `visualBounds`: the visible oracle's target bounds, when visual coverage
   exists at the sample.
@@ -76,7 +79,9 @@ node research/picking-fuzz/picking-fuzz-harness.mjs emit-replay
 `replay/check` validates the row contract and reports classified mismatches. A
 known false positive in a fixture is reported as data; the command fails only
 when the fixture is malformed or a stored classification does not match the
-expected/observed hit ids.
+expected/observed hit ids. The summary includes deterministic
+`falsePositiveCount` and `falseNegativeCount` totals so a replay can be compared
+across machines without parsing free-form logs.
 
 ## Browser driver shape
 

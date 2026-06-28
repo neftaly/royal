@@ -22,6 +22,13 @@
         "targetId": "viewport",
         "source": "bounds-simulator"
       },
+      "visiblePixelOracle": {
+        "source": "visible-mask-oracle",
+        "space": "fixture-css-px",
+        "radiusPx": 0,
+        "targetId": "viewport",
+        "classification": "covered-target"
+      },
       "hitRegionRef": {
         "targetId": "viewport",
         "label": "Viewport",
@@ -56,6 +63,13 @@
         "targetId": "cube-control",
         "source": "bounds-simulator"
       },
+      "visiblePixelOracle": {
+        "source": "visible-mask-oracle",
+        "space": "fixture-css-px",
+        "radiusPx": 0,
+        "targetId": "cube-control",
+        "classification": "covered-target"
+      },
       "hitRegionRef": {
         "targetId": "cube-control",
         "label": "Cube Control",
@@ -87,6 +101,13 @@
         "targetId": "cube-control",
         "source": "bounds-simulator"
       },
+      "visiblePixelOracle": {
+        "source": "visible-mask-oracle",
+        "space": "fixture-css-px",
+        "radiusPx": 0,
+        "targetId": null,
+        "classification": "empty"
+      },
       "hitRegionRef": {
         "targetId": "cube-control",
         "label": "Cube Control",
@@ -106,6 +127,13 @@
       },
       "expectedHit": null,
       "observedHit": null,
+      "visiblePixelOracle": {
+        "source": "visible-mask-oracle",
+        "space": "fixture-css-px",
+        "radiusPx": 0,
+        "targetId": null,
+        "classification": "empty"
+      },
       "hitRegionRef": null,
       "visualBounds": null,
       "classification": "match"
