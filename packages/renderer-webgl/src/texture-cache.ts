@@ -4,13 +4,29 @@ type GltfImage = {
   readonly uri?: string;
 };
 
+type GltfSampler = {
+  readonly magFilter?: number;
+  readonly minFilter?: number;
+  readonly wrapS?: number;
+  readonly wrapT?: number;
+};
+
 type GltfTexture = {
+  readonly sampler?: number;
   readonly source?: number;
 };
 
 type GltfTextureDocument = {
   readonly images?: readonly GltfImage[];
+  readonly samplers?: readonly GltfSampler[];
   readonly textures?: readonly GltfTexture[];
+};
+
+type TextureSampler = {
+  readonly magFilter: number;
+  readonly minFilter: number;
+  readonly wrapS: number;
+  readonly wrapT: number;
 };
 
 const required = <T>(value: T | undefined, label: string): T => {
@@ -27,19 +43,90 @@ const loadImage = async (src: string, uri: string): Promise<ImageBitmap> => {
   return await createImageBitmap(await response.blob());
 };
 
+const isPowerOfTwo = (value: number): boolean =>
+  Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
+
+const usesMipmaps = (gl: WebGLRenderingContext, filter: number): boolean =>
+  filter === gl.NEAREST_MIPMAP_NEAREST ||
+  filter === gl.LINEAR_MIPMAP_NEAREST ||
+  filter === gl.NEAREST_MIPMAP_LINEAR ||
+  filter === gl.LINEAR_MIPMAP_LINEAR;
+
+const mipmapFallback = (gl: WebGLRenderingContext, filter: number): number =>
+  filter === gl.NEAREST_MIPMAP_NEAREST || filter === gl.NEAREST_MIPMAP_LINEAR
+    ? gl.NEAREST
+    : gl.LINEAR;
+
+const validMinFilter = (gl: WebGLRenderingContext, filter: number | undefined): number => {
+  switch (filter) {
+    case gl.NEAREST:
+    case gl.LINEAR:
+    case gl.NEAREST_MIPMAP_NEAREST:
+    case gl.LINEAR_MIPMAP_NEAREST:
+    case gl.NEAREST_MIPMAP_LINEAR:
+    case gl.LINEAR_MIPMAP_LINEAR:
+      return filter;
+    default:
+      return gl.LINEAR_MIPMAP_LINEAR;
+  }
+};
+
+const validMagFilter = (gl: WebGLRenderingContext, filter: number | undefined): number => {
+  switch (filter) {
+    case gl.NEAREST:
+    case gl.LINEAR:
+      return filter;
+    default:
+      return gl.LINEAR;
+  }
+};
+
+const validWrapMode = (gl: WebGLRenderingContext, mode: number | undefined): number => {
+  switch (mode) {
+    case gl.CLAMP_TO_EDGE:
+    case gl.MIRRORED_REPEAT:
+    case gl.REPEAT:
+      return mode;
+    default:
+      return gl.REPEAT;
+  }
+};
+
+const textureSampler = (
+  gl: WebGLRenderingContext,
+  json: GltfTextureDocument,
+  texture: GltfTexture,
+): TextureSampler => {
+  const sampler = texture.sampler === undefined ? undefined : json.samplers?.[texture.sampler];
+  return {
+    magFilter: validMagFilter(gl, sampler?.magFilter),
+    minFilter: validMinFilter(gl, sampler?.minFilter),
+    wrapS: validWrapMode(gl, sampler?.wrapS),
+    wrapT: validWrapMode(gl, sampler?.wrapT),
+  };
+};
+
 const createTexture = (
   gl: WebGLRenderingContext,
   image: ImageBitmap,
+  sampler: TextureSampler,
 ): WebGLTexture => {
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
 
+  const canMipmap = isPowerOfTwo(image.width) && isPowerOfTwo(image.height);
+  const minFilter = canMipmap || !usesMipmaps(gl, sampler.minFilter)
+    ? sampler.minFilter
+    : mipmapFallback(gl, sampler.minFilter);
+
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampler.magFilter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, canMipmap ? sampler.wrapS : gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, canMipmap ? sampler.wrapT : gl.CLAMP_TO_EDGE);
+  if (canMipmap && usesMipmaps(gl, minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
   return texture;
 };
 
@@ -115,6 +202,7 @@ export class TextureCache {
     const loadedTexture = this.#track(createTexture(
       this.#gl,
       await loadImage(options.src, required(image.uri, `image ${imageIndex} uri`)),
+      textureSampler(this.#gl, options.json, texture),
     ));
     markGltf(`texture:${options.textureIndex}:end`);
     measureGltf(
