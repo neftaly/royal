@@ -304,7 +304,18 @@ canvas {
 }
 
 .canvas-slot {
+  block-size: 100%;
   min-height: 0;
+}
+
+.canvas-placeholder {
+  align-items: center;
+  background: #171b20;
+  color: #f1f5f7;
+  display: flex;
+  font-weight: 650;
+  justify-content: center;
+  min-block-size: 100%;
 }
 
 .control-strip {
