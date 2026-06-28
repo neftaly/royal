@@ -162,7 +162,9 @@ export class WebGlRoot {
     const clearColor = pass.clearColor;
     const vp = viewProjection(pass.camera, viewport);
     const directionalLight = findDirectionalLight(pass);
-    const packets = buildVisibilityPackets(pass);
+    const packets = buildVisibilityPackets(pass, {
+      gltfBounds: (node) => this.#gltfCache.getBounds(node),
+    });
     const visible = cullVisibilityPackets(packets, extractFrustumPlanes(vp));
 
     gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);

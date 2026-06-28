@@ -2,6 +2,7 @@ import {
   GeometryKind,
   RenderNodeKind,
   type BoxGeometry,
+  type GltfNode,
   type MeshNode,
   type RenderPass,
   type TextNode,
@@ -19,6 +20,7 @@ export enum VisibilityBoundsSource {
   GltfConservative = 2,
   TextLayout = 3,
   Unbounded = 4,
+  GltfAsset = 5,
 }
 
 export interface VisibilityPacketBuffer {
@@ -54,14 +56,20 @@ export interface VisibilityCullResult {
 
 export type FrustumPlanes = Float32Array;
 
-interface Aabb {
+export type VisibilityAabb = {
   readonly maxX: number;
   readonly maxY: number;
   readonly maxZ: number;
   readonly minX: number;
   readonly minY: number;
   readonly minZ: number;
+};
+
+export interface VisibilityPacketBuildContext {
+  readonly gltfBounds?: (node: GltfNode) => VisibilityAabb | undefined;
 }
+
+type Aabb = VisibilityAabb;
 
 interface Sphere {
   readonly centerX: number;
@@ -76,7 +84,10 @@ const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 const CULL_EPSILON = 0.000001;
 
-export const buildVisibilityPackets = (pass: RenderPass): VisibilityPacketBuffer => {
+export const buildVisibilityPackets = (
+  pass: RenderPass,
+  context: VisibilityPacketBuildContext = {},
+): VisibilityPacketBuffer => {
   const capacity = drawableNodeCount(pass);
   const packets = createVisibilityPacketBuffer(capacity);
   let packetIndex = 0;
@@ -93,14 +104,7 @@ export const buildVisibilityPackets = (pass: RenderPass): VisibilityPacketBuffer
         packetIndex += 1;
         break;
       case RenderNodeKind.Gltf:
-        writeUnboundedPacket(
-          packets,
-          packetIndex,
-          nodeIndex,
-          VisibilityPacketKind.Gltf,
-          VisibilityBoundsSource.GltfConservative,
-          hashPacketId(VisibilityPacketKind.Gltf, nodeIndex, node.src),
-        );
+        writeGltfPacket(packets, packetIndex, nodeIndex, node, context);
         packetIndex += 1;
         break;
       case RenderNodeKind.VectorText:
@@ -113,6 +117,38 @@ export const buildVisibilityPackets = (pass: RenderPass): VisibilityPacketBuffer
   }
 
   return { ...packets, count: packetIndex };
+};
+
+const writeGltfPacket = (
+  packets: Omit<VisibilityPacketBuffer, "count">,
+  packetIndex: number,
+  nodeIndex: number,
+  node: GltfNode,
+  context: VisibilityPacketBuildContext,
+): void => {
+  const id = hashPacketId(VisibilityPacketKind.Gltf, nodeIndex, node.src);
+  const bounds = context.gltfBounds?.(node);
+  if (bounds !== undefined && isFiniteAabb(bounds)) {
+    writeBoundedPacket(
+      packets,
+      packetIndex,
+      nodeIndex,
+      VisibilityPacketKind.Gltf,
+      VisibilityBoundsSource.GltfAsset,
+      bounds,
+      id,
+    );
+    return;
+  }
+
+  writeUnboundedPacket(
+    packets,
+    packetIndex,
+    nodeIndex,
+    VisibilityPacketKind.Gltf,
+    VisibilityBoundsSource.GltfConservative,
+    id,
+  );
 };
 
 export const extractFrustumPlanes = (viewProjectionMatrix: Mat4): FrustumPlanes => {

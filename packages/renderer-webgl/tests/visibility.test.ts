@@ -144,4 +144,32 @@ describe("visibility packets", () => {
     expect(Array.from(result.visibleIndices)).toEqual([0]);
     expect(result.stats.culledCount).toBe(0);
   });
+
+  it("culls glTF packets when private asset bounds are available", () => {
+    const model = gltf({
+      src: "https://example.test/model.gltf",
+      transform: {
+        position: [1000, 0, 0],
+        rotation: [0, 0, 0],
+      },
+    });
+    const packets = buildVisibilityPackets(pass({
+      camera,
+      children: [model],
+    }), {
+      gltfBounds: () => ({
+        maxX: 1000.5,
+        maxY: 0.5,
+        maxZ: 0.5,
+        minX: 999.5,
+        minY: -0.5,
+        minZ: -0.5,
+      }),
+    });
+    const result = cullVisibilityPackets(packets, extractFrustumPlanes(viewProjection()));
+
+    expect(packets.boundsSources[0]).toBe(VisibilityBoundsSource.GltfAsset);
+    expect(Array.from(result.visibleIndices)).toEqual([]);
+    expect(result.stats.culledCount).toBe(1);
+  });
 });

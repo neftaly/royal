@@ -1,7 +1,7 @@
 import type { GltfNode } from "@royal/renderer-core";
 import { mat4 } from "gl-matrix";
 import { createFloatBuffer, createIndexBuffer } from "./gl";
-import type { Mat4 } from "./matrix";
+import { composeTransform, type Mat4 } from "./matrix";
 import { markGltf, measureGltf } from "./performance";
 
 type GltfAccessorType = "SCALAR" | "VEC2" | "VEC3";
@@ -11,6 +11,8 @@ type GltfAccessor = {
   readonly byteOffset?: number;
   readonly componentType: number;
   readonly count: number;
+  readonly max?: readonly number[];
+  readonly min?: readonly number[];
   readonly type: GltfAccessorType;
 };
 
@@ -90,7 +92,17 @@ export type GltfPrimitive = {
   texture: WebGLTexture;
 };
 
+export type GltfAssetBounds = {
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly maxZ: number;
+  readonly minX: number;
+  readonly minY: number;
+  readonly minZ: number;
+};
+
 export type GltfAsset = {
+  readonly bounds?: GltfAssetBounds;
   readonly primitives: readonly GltfPrimitive[];
 };
 
@@ -174,6 +186,96 @@ const copyIndexAccessor = (
   const buffer = required(buffers[view.buffer], `buffer ${view.buffer}`);
   const byteOffset = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
   return new Uint16Array(buffer.slice(byteOffset, byteOffset + accessor.count * Uint16Array.BYTES_PER_ELEMENT));
+};
+
+const accessorAabb = (
+  json: GltfJson,
+  accessorIndex: number,
+): GltfAssetBounds | undefined => {
+  const accessor = required(json.accessors?.[accessorIndex], `accessor ${accessorIndex}`);
+  if (accessor.type !== "VEC3") return undefined;
+  const min = accessor.min;
+  const max = accessor.max;
+  if (min === undefined || max === undefined) return undefined;
+  if (min.length < 3 || max.length < 3) return undefined;
+  if (!min.slice(0, 3).every(Number.isFinite) || !max.slice(0, 3).every(Number.isFinite)) {
+    return undefined;
+  }
+
+  return {
+    maxX: Math.max(min[0]!, max[0]!),
+    maxY: Math.max(min[1]!, max[1]!),
+    maxZ: Math.max(min[2]!, max[2]!),
+    minX: Math.min(min[0]!, max[0]!),
+    minY: Math.min(min[1]!, max[1]!),
+    minZ: Math.min(min[2]!, max[2]!),
+  };
+};
+
+const positionAabb = (position: Float32Array): GltfAssetBounds | undefined => {
+  if (position.length < 3) return undefined;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (let offset = 0; offset + 2 < position.length; offset += 3) {
+    const x = position[offset]!;
+    const y = position[offset + 1]!;
+    const z = position[offset + 2]!;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+
+  return { maxX, maxY, maxZ, minX, minY, minZ };
+};
+
+const unionAabb = (
+  a: GltfAssetBounds | undefined,
+  b: GltfAssetBounds,
+): GltfAssetBounds => {
+  if (a === undefined) return b;
+  return {
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+    maxZ: Math.max(a.maxZ, b.maxZ),
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    minZ: Math.min(a.minZ, b.minZ),
+  };
+};
+
+const transformAabb = (bounds: GltfAssetBounds, matrix: Mat4): GltfAssetBounds => {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const x of [bounds.minX, bounds.maxX]) {
+    for (const y of [bounds.minY, bounds.maxY]) {
+      for (const z of [bounds.minZ, bounds.maxZ]) {
+        const transformedX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+        const transformedY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+        const transformedZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+        minX = Math.min(minX, transformedX);
+        minY = Math.min(minY, transformedY);
+        minZ = Math.min(minZ, transformedZ);
+        maxX = Math.max(maxX, transformedX);
+        maxY = Math.max(maxY, transformedY);
+        maxZ = Math.max(maxZ, transformedZ);
+      }
+    }
+  }
+
+  return { maxX, maxY, maxZ, minX, minY, minZ };
 };
 
 const nodeMatrix = (node: GltfNodeJson): Mat4 => {
@@ -301,6 +403,13 @@ export class GltfCache {
     return undefined;
   }
 
+  getBounds(node: GltfNode): GltfAssetBounds | undefined {
+    const entry = this.#entries.get(node.src);
+    if (entry?.state !== "ready") return undefined;
+    if (entry.asset.bounds === undefined) return undefined;
+    return transformAabb(entry.asset.bounds, composeTransform(node.transform));
+  }
+
   dispose(): void {
     this.#disposed = true;
     for (const buffer of this.#buffers) {
@@ -357,6 +466,7 @@ export class GltfCache {
     const scene = required(json.scenes?.[json.scene ?? 0], "default scene");
     const primitives: GltfPrimitive[] = [];
     const textureLoads: Array<Promise<void>> = [];
+    let bounds: GltfAssetBounds | undefined;
 
     for (const nodeIndex of scene.nodes ?? []) {
       const node = required(json.nodes?.[nodeIndex], `node ${nodeIndex}`);
@@ -366,12 +476,15 @@ export class GltfCache {
 
       for (const primitive of mesh.primitives ?? []) {
         const attributes = required(primitive.attributes, "primitive attributes");
-        const position = copyFloatAccessor(json, buffers, required(attributes.POSITION, "POSITION accessor"), "VEC3");
+        const positionAccessor = required(attributes.POSITION, "POSITION accessor");
+        const position = copyFloatAccessor(json, buffers, positionAccessor, "VEC3");
         const normal = copyFloatAccessor(json, buffers, required(attributes.NORMAL, "NORMAL accessor"), "VEC3");
         const texCoord = copyFloatAccessor(json, buffers, required(attributes.TEXCOORD_0, "TEXCOORD_0 accessor"), "VEC2");
         const indices = copyIndexAccessor(json, buffers, required(primitive.indices, "indices accessor"));
         const material = required(json.materials?.[required(primitive.material, "primitive material")], "primitive material");
         const textureIndex = required(material.pbrMetallicRoughness?.baseColorTexture?.index, "base color texture");
+        const localBounds = accessorAabb(json, positionAccessor) ?? positionAabb(position);
+        if (localBounds !== undefined) bounds = unionAabb(bounds, transformAabb(localBounds, model));
 
         const renderedPrimitive: GltfPrimitive = {
           index: this.#track(createIndexBuffer(this.#gl, indices)),
@@ -399,7 +512,7 @@ export class GltfCache {
       this.#entries.set(src, { error, state: "error" });
       this.#onReady();
     });
-    return { primitives };
+    return bounds === undefined ? { primitives } : { bounds, primitives };
   }
 
   #track(buffer: WebGLBuffer): WebGLBuffer {

@@ -303,6 +303,37 @@ describe('WebGL resource lifetime', () => {
     expect(counts.deleteTexture).toBe(counts.createTexture);
   });
 
+  it('skips draw submission for loaded glTF assets outside the frustum', async () => {
+    installGltfFixture();
+    const { counts, gl } = fakeGl();
+    const root = createRoot(fakeCanvas(gl));
+    const renderGltfScene = scene({
+      children: [
+        pass({
+          camera,
+          children: [
+            light,
+            gltf({
+              src: 'https://example.test/triangle.gltf',
+              transform: {
+                position: [1000, 0, 0],
+                rotation: [0, 0, 0]
+              }
+            })
+          ]
+        })
+      ]
+    });
+
+    root.render(renderGltfScene);
+    await waitFor(() => counts.createBuffer > 0);
+    root.render(renderGltfScene);
+
+    expect(counts.drawElements).toBe(0);
+
+    root.dispose();
+  });
+
   it('releases a late glTF texture if disposed before image decode finishes', async () => {
     let resolveBitmap: ((image: ImageBitmap) => void) | undefined;
     installGltfFixture({
