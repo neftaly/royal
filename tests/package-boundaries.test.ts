@@ -23,6 +23,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const workspaceRoots = ['apps', 'packages'] as const;
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const generatedSourceDirectories = new Set(['dist', 'node_modules']);
+const rendererPackageRoots = ['packages/renderer-core', 'packages/renderer-webgl', 'packages/react'] as const;
+const tarstateControlPlanePackageNames = new Set(['@tarstate/core', '@royal/tarstate-lens']);
+const tarstateControlPlanePackageRoots = ['packages/tarstate-core', 'packages/royal-tarstate-lens'] as const;
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react' },
   { name: '@royal/tarstate-demo', root: 'apps/tarstate-demo' },
@@ -94,6 +97,16 @@ function externalPackageName(moduleSpecifier: string): string | undefined {
   return moduleSpecifier.split('/')[0];
 }
 
+function resolvedRelativePackageRoot(filePath: string, moduleSpecifier: string): string | undefined {
+  if (!moduleSpecifier.startsWith('.')) return undefined;
+
+  const resolvedPath = path.resolve(path.dirname(filePath), moduleSpecifier);
+  return tarstateControlPlanePackageRoots.find((packageRoot) => {
+    const absolutePackageRoot = path.join(repoRoot, packageRoot);
+    return resolvedPath === absolutePackageRoot || resolvedPath.startsWith(absolutePackageRoot + path.sep);
+  });
+}
+
 function declaredPackages(manifest: PackageManifest, options: { readonly allowDevDependencies: boolean }): Set<string> {
   const sections = [manifest.dependencies, manifest.optionalDependencies, manifest.peerDependencies, options.allowDevDependencies ? manifest.devDependencies : undefined];
   return new Set([manifest.name, ...sections.flatMap((section) => Object.keys(section ?? {}))].filter((name) => name !== undefined));
@@ -145,6 +158,23 @@ describe('package boundaries', () => {
     expect(manifest.dependencies?.['@tarstate/core']).toBe('workspace:*');
     expect(manifest.dependencies?.['@patchpit/tarstate']).toBeUndefined();
     expect(manifest.exports).toMatchObject({ '.': './src/index.ts', './v1': './src/v1.ts' });
+  });
+
+  it('keeps renderer packages independent from Tarstate control-plane packages', () => {
+    const violations = rendererPackageRoots.flatMap((root) =>
+      listSourceFiles(path.join(repoRoot, root)).flatMap((filePath) =>
+        collectModuleSpecifiers(filePath)
+          .filter((specifier) => {
+            const packageName = externalPackageName(specifier);
+            return packageName === undefined
+              ? resolvedRelativePackageRoot(filePath, specifier) !== undefined
+              : tarstateControlPlanePackageNames.has(packageName);
+          })
+          .map((specifier) => ({ root, file: path.relative(repoRoot, filePath), specifier }))
+      )
+    );
+
+    expect(violations).toEqual([]);
   });
 
   it('keeps reusable packages independent from apps', () => {
