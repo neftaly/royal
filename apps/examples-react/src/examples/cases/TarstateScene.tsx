@@ -3,6 +3,7 @@ import {
 } from '@royal/react';
 import {
   boxGeometry,
+  createTextFontFace,
   mesh,
   orthographicCamera,
   pass,
@@ -11,15 +12,40 @@ import {
   unlitMaterial,
   type Material,
   type RenderRoot,
+  type TextFontFace,
   type Vec3,
 } from '@royal/renderer-core';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { interactionState } from '../demo-data';
 
 const panel = boxGeometry({ size: [1, 1, 0.08] });
 const amber = unlitMaterial({ color: [0.92, 0.55, 0.12, 1] });
 const charcoal = unlitMaterial({ color: [0.1, 0.11, 0.13, 1] });
 const softBlue = unlitMaterial({ color: [0.16, 0.26, 0.42, 1] });
+const textFontSource =
+  '@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.woff';
+const textFontUrl = new URL(
+  '../../../node_modules/@royal/renderer-core/node_modules/@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.woff',
+  import.meta.url,
+).href;
+let textFontFace: Promise<TextFontFace> | undefined;
+const loadTextFontFace = (): Promise<TextFontFace> => {
+  textFontFace ??= fetch(textFontUrl)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load ${textFontSource}: ${response.status}`);
+      }
+      return response.arrayBuffer();
+    })
+    .then((data) =>
+      createTextFontFace({
+        data,
+        family: 'Atkinson Hyperlegible',
+        source: textFontSource,
+      }),
+    );
+  return textFontFace;
+};
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
@@ -39,7 +65,7 @@ const layoutPanel = (
     },
   });
 
-const tarstateScene = (activeBoxId: string | undefined): RenderRoot =>
+const tarstateScene = (activeBoxId: string | undefined, font: TextFontFace): RenderRoot =>
   scene({
     children: [
       pass({
@@ -59,6 +85,7 @@ const tarstateScene = (activeBoxId: string | undefined): RenderRoot =>
           layoutPanel([3.35, -0.65, 0], [2.2, 1.95, 1]),
           text({
             color: [0.92, 0.94, 0.96, 1],
+            font,
             fontSize: 0.34,
             lineHeight: 0.46,
             origin: [-4.0, 0.35, 0.1],
@@ -66,6 +93,7 @@ const tarstateScene = (activeBoxId: string | undefined): RenderRoot =>
           }),
           text({
             color: [0.92, 0.94, 0.96, 1],
+            font,
             fontSize: 0.28,
             lineHeight: 0.4,
             origin: [2.45, 1.55, 0.1],
@@ -73,6 +101,7 @@ const tarstateScene = (activeBoxId: string | undefined): RenderRoot =>
           }),
           text({
             color: [0.92, 0.94, 0.96, 1],
+            font,
             fontSize: 0.25,
             lineHeight: 0.36,
             origin: [2.45, -0.35, 0.1],
@@ -83,8 +112,39 @@ const tarstateScene = (activeBoxId: string | undefined): RenderRoot =>
     ],
   });
 
-export const TarstateScene = (): ReactNode => (
-  <Canvas aria-label="Tarstate workbench scene" rootOptions={rootOptions}>
-    {tarstateScene(interactionState.activeId)}
-  </Canvas>
-);
+export const TarstateScene = (): ReactNode => {
+  const [font, setFont] = useState<TextFontFace>();
+  const [fontError, setFontError] = useState<Error>();
+
+  useEffect(() => {
+    let active = true;
+    loadTextFontFace().then(
+      (loadedFont) => {
+        if (active) setFont(loadedFont);
+      },
+      (error: unknown) => {
+        if (active) setFontError(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (font === undefined) {
+    return (
+      <div className="canvas-slot">
+        <div className="canvas-placeholder" role={fontError === undefined ? 'status' : 'alert'}>
+          {fontError === undefined ? 'Loading text font' : 'Text font failed to load'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Canvas aria-label="Tarstate workbench scene" rootOptions={rootOptions}>
+      {tarstateScene(interactionState.activeId, font)}
+    </Canvas>
+  );
+};

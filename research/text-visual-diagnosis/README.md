@@ -2,8 +2,10 @@
 
 The examples browser smoke requires a `chromium` executable on `PATH` and
 records objective canvas text measurements without adding DOM or raster overlays
-over renderer text. CI installs Chrome and exposes it through a `chromium`
-command before running the smoke.
+over renderer text. Text Prototype now loads a real font and renders real
+outline meshes; these measurements watch that path rather than the no-font
+synthetic compatibility path. CI installs Chrome and exposes it through a
+`chromium` command before running the smoke.
 
 Run the examples browser smoke with an optional JSON report:
 
@@ -15,10 +17,12 @@ If `research/text-visual-diagnosis/text-smoke-oracle.json` exists, or
 `EXAMPLES_TEXT_QA_ORACLE` points at another JSON file, the same measurements
 become hard assertions. Until then the smoke prints provisional text-quality
 warnings for the Text Prototype route. The checked-in example oracle is
-intentionally inactive and stricter than the current synthetic canvas output.
+intentionally inactive so baseline updates stay deliberate.
 
 The Text Prototype acceptance string is `AV office 108%.` because it exercises
 kerning-sensitive pairs, counters/holes, punctuation, numerals, and lowercase.
+The route also reports glyph, outline, and vertex counts from the real-font
+layout/mesh path so regressions are visible in both pixels and mesh data.
 
 ## Artifact policy
 
