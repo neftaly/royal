@@ -32,4 +32,8 @@ const helmetScene = (): RenderRoot => (
 ) as RenderRoot;
 
 export const GltfHelmet = (): ReactNode =>
-  createElement(Canvas, { 'aria-label': 'glTF DamagedHelmet', rootOptions }, helmetScene());
+  createElement(Canvas, {
+    'aria-label': 'glTF DamagedHelmet',
+    children: helmetScene(),
+    rootOptions,
+  });

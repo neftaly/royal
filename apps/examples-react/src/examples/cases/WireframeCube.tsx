@@ -84,4 +84,4 @@ const wireframeScene = (): RenderRoot => {
 };
 
 export const WireframeCube = (): ReactNode =>
-  createElement(Canvas, { 'aria-label': 'Wireframe cube', rootOptions }, wireframeScene());
+  createElement(Canvas, { 'aria-label': 'Wireframe cube', children: wireframeScene(), rootOptions });

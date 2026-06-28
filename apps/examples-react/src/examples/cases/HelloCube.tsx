@@ -37,4 +37,4 @@ const cubeScene = (): RenderRoot => (
 ) as RenderRoot;
 
 export const HelloCube = (): ReactNode =>
-  createElement(Canvas, { 'aria-label': 'Lit cube', rootOptions }, cubeScene());
+  createElement(Canvas, { 'aria-label': 'Lit cube', children: cubeScene(), rootOptions });

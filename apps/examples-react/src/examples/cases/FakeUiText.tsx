@@ -120,7 +120,11 @@ export const FakeUiText = (): ReactNode =>
     createElement(
       'div',
       { className: 'canvas-slot' },
-      createElement(Canvas, { 'aria-label': 'Fake UI with renderer text', rootOptions }, fakeUiScene()),
+      createElement(Canvas, {
+        'aria-label': 'Fake UI with renderer text',
+        children: fakeUiScene(),
+        rootOptions,
+      }),
     ),
     createElement(
       'div',
