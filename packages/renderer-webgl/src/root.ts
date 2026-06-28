@@ -28,6 +28,11 @@ import {
 import { markGltf } from "./performance";
 import { findDirectionalLight } from "./render-graph";
 import { TextCache } from "./text-cache";
+import {
+  buildVisibilityPackets,
+  cullVisibilityPackets,
+  extractFrustumPlanes,
+} from "./visibility";
 
 /** WebGL context options for the renderer root. */
 export interface WebGlRootOptions {
@@ -157,12 +162,23 @@ export class WebGlRoot {
     const clearColor = pass.clearColor;
     const vp = viewProjection(pass.camera, viewport);
     const directionalLight = findDirectionalLight(pass);
+    const packets = buildVisibilityPackets(pass);
+    const visible = cullVisibilityPackets(packets, extractFrustumPlanes(vp));
 
     gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
     gl.clearDepth(1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    for (const node of pass.children) {
+    for (const packetIndex of visible.visibleIndices) {
+      const nodeIndex = packets.nodeIndices[packetIndex];
+      if (nodeIndex === undefined) {
+        throw new Error(`Visibility result references missing packet: ${packetIndex}`);
+      }
+      const node = pass.children[nodeIndex];
+      if (node === undefined) {
+        throw new Error(`Visibility packet references missing render node: ${nodeIndex}`);
+      }
+
       switch (node.kind) {
         case RenderNodeKind.DirectionalLight:
           break;

@@ -144,6 +144,41 @@ describe('WebGL resource lifetime', () => {
     expect(counts.drawElements).toBe(1);
   });
 
+  it('skips draw submission for orthographic meshes outside the frustum', () => {
+    const { counts, gl } = fakeGl();
+    const root = createRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            position: [0, 0, 5],
+            rotation: [0, 0, 0],
+            left: -2,
+            right: 2,
+            bottom: -1,
+            top: 1,
+            near: 0.1,
+            far: 100
+          }),
+          children: [
+            mesh({ geometry: cube, material: unlit }),
+            mesh({
+              geometry: cube,
+              material: unlit,
+              transform: {
+                position: [20, 0, 0],
+                rotation: [0, 0, 0]
+              }
+            })
+          ]
+        })
+      ]
+    }));
+
+    expect(counts.drawElements).toBe(1);
+  });
+
   it('renders text without uploading text textures', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
