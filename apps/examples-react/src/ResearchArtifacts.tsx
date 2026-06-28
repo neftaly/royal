@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-type WipDemoLink = {
+type ArtifactLink = {
   readonly id: string;
   readonly title: string;
   readonly href: string;
@@ -12,7 +12,7 @@ const routeHref = (routePath: string): string =>
 const repoHref = (repoPath: string): string =>
   `https://github.com/neftaly/royal/tree/main/${repoPath}`;
 
-const wipDemoLinks: readonly WipDemoLink[] = [
+const artifactLinks: readonly ArtifactLink[] = [
   {
     id: 'gltf-asset-viewer',
     title: 'glTF Helmet route',
@@ -51,19 +51,19 @@ const wipDemoLinks: readonly WipDemoLink[] = [
   },
 ];
 
-export const WipDemos = (): ReactNode => (
-  <section className="wip-page" data-wip-page="">
-    <header className="example-heading wip-heading">
+export const ResearchArtifacts = (): ReactNode => (
+  <section className="artifacts-page" data-artifacts-page="">
+    <header className="example-heading artifacts-heading">
       <p>Routes and artifacts</p>
-      <h1>WIP Demo Links</h1>
+      <h1>Research Artifacts</h1>
     </header>
-    <ul className="wip-link-list">
-      {wipDemoLinks.map((demo) => (
+    <ul className="artifacts-link-list">
+      {artifactLinks.map((demo) => (
         <li key={demo.id}>
           <a
-            data-wip-link=""
-            data-wip-link-id={demo.id}
-            data-wip-link-target={demo.target}
+            data-artifacts-link=""
+            data-artifacts-link-id={demo.id}
+            data-artifacts-link-target={demo.target}
             href={demo.href}
           >
             {demo.title}

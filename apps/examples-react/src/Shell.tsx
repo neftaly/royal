@@ -26,17 +26,17 @@ const Sidebar = (): ReactNode => (
         ))}
       </ul>
     </nav>
-    <nav className="examples-nav examples-nav-secondary" aria-label="Work in progress">
-      <p>Work in progress</p>
+    <nav className="examples-nav examples-nav-secondary" aria-label="Research artifacts">
+      <p>Research</p>
       <ul>
         <li>
           <Link
-            to="/wip"
+            to="/artifacts"
             activeProps={{ className: 'examples-link active' }}
             className="examples-link"
-            data-wip-nav-link=""
+            data-artifacts-nav-link=""
           >
-            WIP Demo Links
+            Research Artifacts
           </Link>
         </li>
       </ul>

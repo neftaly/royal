@@ -67,8 +67,12 @@ describe('examples list', () => {
     expect(examples.some((example) => example.title.toLowerCase().includes('tarstate'))).toBe(false);
   });
 
-  it('keeps WIP demo links out of the primary examples list', () => {
+  it('keeps research artifacts out of the primary examples list', () => {
+    expect(examples.some((example) => String(example.path) === '/artifacts')).toBe(false);
     expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
+    expect(examples.some((example) => example.title.toLowerCase().includes('research'))).toBe(
+      false,
+    );
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
     expect(examples).toHaveLength(5);
   });

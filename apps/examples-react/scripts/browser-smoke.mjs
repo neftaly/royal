@@ -290,24 +290,24 @@ const smokeExpression = `
 })()
 `;
 
-const wipExpression = `
+const artifactsExpression = `
 (async () => {
   const deadline = performance.now() + 8000;
   const read = () => {
-    const page = document.querySelector('[data-wip-page]');
-    const activeLink = document.querySelector('[data-wip-nav-link].active');
+    const page = document.querySelector('[data-artifacts-page]');
+    const activeLink = document.querySelector('[data-artifacts-nav-link].active');
 
     return {
       hasPage: page !== null,
       title: document.querySelector('h1')?.textContent?.trim() ?? '',
       activeNavText: activeLink?.textContent?.trim() ?? '',
-      links: Array.from(document.querySelectorAll('[data-wip-link]')).map((link) => ({
+      links: Array.from(document.querySelectorAll('[data-artifacts-link]')).map((link) => ({
         href: link.href,
-        id: link.getAttribute('data-wip-link-id') ?? '',
-        target: link.getAttribute('data-wip-link-target') ?? '',
+        id: link.getAttribute('data-artifacts-link-id') ?? '',
+        target: link.getAttribute('data-artifacts-link-target') ?? '',
         text: link.textContent?.trim() ?? '',
       })),
-      statusCardCount: document.querySelectorAll('.wip-card, [data-wip-demo-id]').length,
+      statusCardCount: document.querySelectorAll('.artifacts-card, [data-artifact-id]').length,
       primaryExampleNavCount: document.querySelectorAll('[data-example-nav-link]').length,
     };
   };
@@ -363,12 +363,14 @@ const assertRoute = (expected, state) => {
   }
 };
 
-const assertWipPage = (state) => {
+const assertArtifactsPage = (state) => {
   const failures = [];
-  if (!state.hasPage) failures.push('missing WIP page marker');
-  if (state.title !== 'WIP Demo Links') failures.push(`expected WIP title, received "${state.title}"`);
-  if (state.activeNavText !== 'WIP Demo Links') {
-    failures.push(`active WIP nav text was "${state.activeNavText || 'missing'}"`);
+  if (!state.hasPage) failures.push('missing research artifacts page marker');
+  if (state.title !== 'Research Artifacts') {
+    failures.push(`expected research artifacts title, received "${state.title}"`);
+  }
+  if (state.activeNavText !== 'Research Artifacts') {
+    failures.push(`active research artifacts nav text was "${state.activeNavText || 'missing'}"`);
   }
   const linkIds = new Set(state.links.map((link) => link.id));
   for (const expectedId of [
@@ -379,21 +381,21 @@ const assertWipPage = (state) => {
     'dynamic-impostors',
     'virtual-texturing-research',
   ]) {
-    if (!linkIds.has(expectedId)) failures.push(`missing ${expectedId} WIP link`);
+    if (!linkIds.has(expectedId)) failures.push(`missing ${expectedId} research artifact link`);
   }
   if (state.links.some((link) => link.href === '' || link.text === '')) {
-    failures.push('WIP contains an empty link');
+    failures.push('research artifacts contains an empty link');
   }
   if (state.links.some((link) => link.target !== 'route' && link.target !== 'repo')) {
-    failures.push('WIP contains a link without a real target type');
+    failures.push('research artifacts contains a link without a real target type');
   }
-  if (state.statusCardCount !== 0) failures.push('WIP rendered decorative status cards');
+  if (state.statusCardCount !== 0) failures.push('research artifacts rendered decorative status cards');
   if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
     failures.push(`primary example nav count changed to ${state.primaryExampleNavCount}`);
   }
 
   if (failures.length > 0) {
-    throw new Error(`WIP Demo Links: ${failures.join('; ')}`);
+    throw new Error(`Research Artifacts: ${failures.join('; ')}`);
   }
 };
 
@@ -470,12 +472,12 @@ const main = async () => {
       console.log(`ok ${route.title}${canvasSummary}`);
     }
 
-    const wipLoaded = session.once('Page.loadEventFired');
-    await session.call('Page.navigate', { url: baseUrl + '/wip' });
-    await wipLoaded;
-    const wipState = await evaluate(session, wipExpression);
-    assertWipPage(wipState);
-    console.log('ok WIP Demo Links');
+    const artifactsLoaded = session.once('Page.loadEventFired');
+    await session.call('Page.navigate', { url: baseUrl + '/artifacts' });
+    await artifactsLoaded;
+    const artifactsState = await evaluate(session, artifactsExpression);
+    assertArtifactsPage(artifactsState);
+    console.log('ok Research Artifacts');
 
     if (exceptions.length > 0) {
       throw new Error('Browser runtime exceptions: ' + exceptions.join('; '));

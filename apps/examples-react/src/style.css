@@ -240,19 +240,19 @@ canvas {
   inline-size: 100%;
 }
 
-.wip-page {
+.artifacts-page {
   display: grid;
   gap: 1rem;
   min-height: 100%;
   padding: 1.25rem;
 }
 
-.wip-heading {
+.artifacts-heading {
   display: grid;
   gap: 0.35rem;
 }
 
-.wip-heading p {
+.artifacts-heading p {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 700;
@@ -260,7 +260,7 @@ canvas {
   text-transform: uppercase;
 }
 
-.wip-link-list {
+.artifacts-link-list {
   align-content: start;
   display: grid;
   gap: 0.55rem;
@@ -269,7 +269,7 @@ canvas {
   padding: 0;
 }
 
-.wip-link-list a {
+.artifacts-link-list a {
   color: var(--accent-strong);
   display: inline-block;
   font-size: 0.95rem;
@@ -315,7 +315,7 @@ canvas {
     text-align: left;
   }
 
-  .wip-page {
+  .artifacts-page {
     padding: 0.85rem;
   }
 }
