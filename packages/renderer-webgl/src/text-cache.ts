@@ -1,5 +1,5 @@
 import { textMesh, type TextMesh, type TextNode } from "@royal/renderer-core";
-import { createFloatBuffer, createIndexBuffer } from "./gl";
+import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 
 export interface TextRenderAsset {
   readonly glyphCoord: WebGLBuffer;
@@ -37,7 +37,7 @@ export const textBufferDataFromMesh = (mesh: TextMesh): TextBufferData => {
 };
 
 const createGeometry = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   node: TextNode,
 ): TextRenderAsset => {
   const data = textBufferDataFromMesh(textMesh(node));
@@ -53,11 +53,11 @@ const createGeometry = (
 export class TextCache {
   readonly #assets = new Map<TextNode, TextRenderAsset>();
   readonly #buffers = new Set<WebGLBuffer>();
-  readonly #gl: WebGLRenderingContext;
+  readonly #gl: RendererWebGlContext;
   readonly #liveNodes = new Set<TextNode>();
   #frameActive = false;
 
-  constructor(gl: WebGLRenderingContext) {
+  constructor(gl: RendererWebGlContext) {
     this.#gl = gl;
   }
 

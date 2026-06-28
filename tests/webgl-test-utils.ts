@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { makeTriangleFixture } from './gltf-fixture';
+import type { RendererWebGlContext } from '../packages/renderer-webgl/src/gl';
 
 export type FakeGlCounts = {
   createBuffer: number;
@@ -10,7 +11,7 @@ export type FakeGlCounts = {
   texImage2D?: number;
 };
 
-export const fakeCanvas = (gl: WebGLRenderingContext): HTMLCanvasElement => ({
+export const fakeCanvas = (gl: RendererWebGlContext): HTMLCanvasElement => ({
   height: 600,
   width: 800,
   getBoundingClientRect: () => ({ height: 600, width: 800 }),
@@ -19,7 +20,7 @@ export const fakeCanvas = (gl: WebGLRenderingContext): HTMLCanvasElement => ({
 
 export const fakeGl = (): {
   readonly counts: FakeGlCounts;
-  readonly gl: WebGLRenderingContext;
+  readonly gl: RendererWebGlContext;
 } => {
   const counts: FakeGlCounts = {
     createBuffer: 0,
@@ -118,7 +119,7 @@ export const fakeGl = (): {
       useProgram() {},
       vertexAttribPointer() {},
       viewport() {}
-    } as unknown as WebGLRenderingContext
+    } as unknown as RendererWebGlContext
   };
 };
 

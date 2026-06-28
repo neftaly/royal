@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { drawMesh } from "../src/draw";
 import { GeometryCache } from "../src/geometry-cache";
+import type { RendererWebGlContext } from "../src/gl";
 import { identity } from "../src/matrix";
 import type { MeshProgram, WireframeProgram } from "../src/programs";
 
@@ -62,7 +63,7 @@ const wireframeProgram = (): WireframeProgram => ({
 
 const fakeGl = (): {
   readonly drawArraysCalls: readonly DrawArraysCall[];
-  readonly gl: WebGLRenderingContext;
+  readonly gl: RendererWebGlContext;
   readonly uniformCalls: readonly UniformCall[];
   readonly counts: {
     readonly drawElements: number;
@@ -96,7 +97,7 @@ const fakeGl = (): {
     uniformMatrix4fv() {},
     useProgram() {},
     vertexAttribPointer() {},
-  } as unknown as WebGLRenderingContext;
+  } as unknown as RendererWebGlContext;
 
   return {
     drawArraysCalls,

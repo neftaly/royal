@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { drawMesh } from "../src/draw";
 import { GeometryCache } from "../src/geometry-cache";
+import type { RendererWebGlContext } from "../src/gl";
 import { identity } from "../src/matrix";
 import type { MeshProgram } from "../src/programs";
 import { TextureCache } from "../src/texture-cache";
@@ -49,7 +50,7 @@ const uniformName = (location: WebGLUniformLocation): string =>
 const fakeGl = (): {
   readonly boundTextures: BoundTexture[];
   readonly counts: { readonly drawElements: number };
-  readonly gl: WebGLRenderingContext;
+  readonly gl: RendererWebGlContext;
   readonly uniformCalls: UniformCall[];
 } => {
   let drawElements = 0;
@@ -114,7 +115,7 @@ const fakeGl = (): {
     uniformMatrix4fv() {},
     useProgram() {},
     vertexAttribPointer() {},
-  } as unknown as WebGLRenderingContext;
+  } as unknown as RendererWebGlContext;
 
   return {
     boundTextures,
@@ -137,7 +138,7 @@ const waitFor = async (predicate: () => boolean): Promise<void> => {
 };
 
 const drawTexturedBox = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   textureCache: TextureCache,
   onTextureSettled = (): void => undefined,
 ): void => {

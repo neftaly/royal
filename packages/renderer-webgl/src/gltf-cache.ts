@@ -1,6 +1,6 @@
 import type { GltfAssetRef, GltfNode } from "@royal/renderer-core";
 import { mat4 } from "gl-matrix";
-import { createFloatBuffer, createIndexBuffer } from "./gl";
+import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 import { composeTransform, type Mat4 } from "./matrix";
 import { markGltf, measureGltf } from "./performance";
 import { TextureCache } from "./texture-cache";
@@ -334,12 +334,12 @@ const loadBuffers = async (
 export class GltfCache {
   readonly #buffers = new Set<WebGLBuffer>();
   readonly #entries = new Map<string, GltfEntry>();
-  readonly #gl: WebGLRenderingContext;
+  readonly #gl: RendererWebGlContext;
   readonly #onReady: () => void;
   readonly #textureCache: TextureCache;
   #disposed = false;
 
-  constructor(gl: WebGLRenderingContext, onReady: () => void) {
+  constructor(gl: RendererWebGlContext, onReady: () => void) {
     this.#gl = gl;
     this.#onReady = onReady;
     this.#textureCache = new TextureCache(gl);

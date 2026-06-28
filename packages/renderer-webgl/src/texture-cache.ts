@@ -1,4 +1,5 @@
 import type { TextureAssetRef, TextureSampler as CoreTextureSampler } from "@royal/renderer-core";
+import type { RendererWebGlContext } from "./gl";
 import { markGltf, measureGltf } from "./performance";
 
 type GltfImage = {
@@ -62,13 +63,13 @@ const loadImage = async (src: string, uri: string, label: string): Promise<Image
   return await createImageBitmap(await response.blob());
 };
 
-const usesMipmaps = (gl: WebGLRenderingContext, filter: number): boolean =>
+const usesMipmaps = (gl: RendererWebGlContext, filter: number): boolean =>
   filter === gl.NEAREST_MIPMAP_NEAREST ||
   filter === gl.LINEAR_MIPMAP_NEAREST ||
   filter === gl.NEAREST_MIPMAP_LINEAR ||
   filter === gl.LINEAR_MIPMAP_LINEAR;
 
-const validMinFilter = (gl: WebGLRenderingContext, filter: number | undefined): number => {
+const validMinFilter = (gl: RendererWebGlContext, filter: number | undefined): number => {
   switch (filter) {
     case gl.NEAREST:
     case gl.LINEAR:
@@ -82,7 +83,7 @@ const validMinFilter = (gl: WebGLRenderingContext, filter: number | undefined): 
   }
 };
 
-const validMagFilter = (gl: WebGLRenderingContext, filter: number | undefined): number => {
+const validMagFilter = (gl: RendererWebGlContext, filter: number | undefined): number => {
   switch (filter) {
     case gl.NEAREST:
     case gl.LINEAR:
@@ -92,7 +93,7 @@ const validMagFilter = (gl: WebGLRenderingContext, filter: number | undefined): 
   }
 };
 
-const validWrapMode = (gl: WebGLRenderingContext, mode: number | undefined): number => {
+const validWrapMode = (gl: RendererWebGlContext, mode: number | undefined): number => {
   switch (mode) {
     case gl.CLAMP_TO_EDGE:
     case gl.MIRRORED_REPEAT:
@@ -104,7 +105,7 @@ const validWrapMode = (gl: WebGLRenderingContext, mode: number | undefined): num
 };
 
 const textureSampler = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   json: GltfTextureDocument,
   texture: GltfTexture,
 ): WebGlTextureSampler => {
@@ -118,7 +119,7 @@ const textureSampler = (
 };
 
 const textureSamplerFilter = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   filter: CoreTextureSampler["minFilter"] | CoreTextureSampler["magFilter"] | undefined,
 ): number | undefined => {
   switch (filter) {
@@ -140,7 +141,7 @@ const textureSamplerFilter = (
 };
 
 const textureSamplerWrap = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   wrap: CoreTextureSampler["wrapS"] | undefined,
 ): number | undefined => {
   switch (wrap) {
@@ -156,7 +157,7 @@ const textureSamplerWrap = (
 };
 
 const textureAssetSampler = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   sampler: CoreTextureSampler | undefined,
 ): WebGlTextureSampler => ({
   magFilter: validMagFilter(gl, textureSamplerFilter(gl, sampler?.magFilter)),
@@ -166,7 +167,7 @@ const textureAssetSampler = (
 });
 
 const createTexture = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   image: ImageBitmap,
   sampler: WebGlTextureSampler,
 ): WebGLTexture => {
@@ -184,7 +185,7 @@ const createTexture = (
   return texture;
 };
 
-const createFallbackTexture = (gl: WebGLRenderingContext): WebGLTexture => {
+const createFallbackTexture = (gl: RendererWebGlContext): WebGLTexture => {
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
 
@@ -206,14 +207,14 @@ const createFallbackTexture = (gl: WebGLRenderingContext): WebGLTexture => {
 };
 
 export class TextureCache {
-  readonly #gl: WebGLRenderingContext;
+  readonly #gl: RendererWebGlContext;
   readonly #assetTextureLoads = new Map<string, TextureAssetLoad>();
   readonly #textures = new Set<WebGLTexture>();
   readonly #textureLoads = new Map<string, Promise<WebGLTexture>>();
   #disposed = false;
   #fallbackTexture: WebGLTexture | undefined;
 
-  constructor(gl: WebGLRenderingContext) {
+  constructor(gl: RendererWebGlContext) {
     this.#gl = gl;
   }
 

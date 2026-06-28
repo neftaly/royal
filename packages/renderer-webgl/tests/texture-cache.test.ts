@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { RendererWebGlContext } from "../src/gl";
 import { TextureCache } from "../src/texture-cache";
 
 type TexParameterCall = {
@@ -10,7 +11,7 @@ type TexParameterCall = {
 
 const fakeTextureGl = (): {
   readonly counts: { readonly createTexture: number };
-  readonly gl: WebGLRenderingContext;
+  readonly gl: RendererWebGlContext;
   readonly mipmaps: number[];
   readonly texParameters: TexParameterCall[];
 } => {
@@ -52,7 +53,7 @@ const fakeTextureGl = (): {
       texParameteri(target: GLenum, pname: GLenum, param: GLint) {
         texParameters.push({ param, pname, target });
       },
-    } as unknown as WebGLRenderingContext,
+    } as unknown as RendererWebGlContext,
     mipmaps,
     texParameters,
   };

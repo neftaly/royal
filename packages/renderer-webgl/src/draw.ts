@@ -9,7 +9,7 @@ import {
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
-import { bindFloatAttribute } from "./gl";
+import { bindFloatAttribute, type RendererWebGlContext } from "./gl";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
@@ -39,7 +39,7 @@ export interface TextDrawContext {
 }
 
 export const drawMesh = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   programs: {
     readonly mesh: MeshProgram;
     readonly wireframe?: WireframeProgram;
@@ -83,9 +83,9 @@ type MeshBaseColor =
   };
 
 const defaultAssetFallback = [1, 1, 1, 1] as const;
-const textureCaches = new WeakMap<WebGLRenderingContext, TextureCache>();
+const textureCaches = new WeakMap<RendererWebGlContext, TextureCache>();
 
-const meshTextureCache = (gl: WebGLRenderingContext): TextureCache => {
+const meshTextureCache = (gl: RendererWebGlContext): TextureCache => {
   const cached = textureCaches.get(gl);
   if (cached !== undefined) return cached;
 
@@ -100,7 +100,7 @@ const fallbackBaseColor = (baseColor: TextureRef): readonly [number, number, num
     : defaultAssetFallback;
 
 const meshBaseColor = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   baseColor: TextureRef,
   context: MeshDrawContext,
 ): MeshBaseColor => {
@@ -127,7 +127,7 @@ const solidWireframeColor = (
 };
 
 export const drawGltf = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   programs: {
     readonly gltf: GltfProgram;
   },
@@ -183,7 +183,7 @@ export const drawGltf = (
 };
 
 export const drawVectorText = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   programs: {
     readonly text: TextProgram;
   },
@@ -206,7 +206,7 @@ export const drawVectorText = (
 };
 
 const drawBoxMesh = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   program: MeshProgram,
   mesh: MeshNode,
   material: MeshSurfaceMaterial,
@@ -262,7 +262,7 @@ const drawBoxMesh = (
 };
 
 const drawBoxWireframe = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   program: WireframeProgram,
   mesh: MeshNode,
   material: WireframeMaterial,

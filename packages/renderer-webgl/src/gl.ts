@@ -1,5 +1,7 @@
+export type RendererWebGlContext = WebGL2RenderingContext;
+
 export const createShader = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   type: number,
   source: string,
 ): WebGLShader => {
@@ -20,7 +22,7 @@ export const createShader = (
 };
 
 export const createProgram = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   vertexSource: string,
   fragmentSource: string,
 ): WebGLProgram => {
@@ -46,7 +48,7 @@ export const createProgram = (
 };
 
 export const attributeLocation = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   program: WebGLProgram,
   name: string,
 ): number => {
@@ -56,7 +58,7 @@ export const attributeLocation = (
 };
 
 export const uniformLocation = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   program: WebGLProgram,
   name: string,
 ): WebGLUniformLocation => {
@@ -66,7 +68,7 @@ export const uniformLocation = (
 };
 
 export const createFloatBuffer = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   values: Float32Array,
 ): WebGLBuffer => {
   const buffer = gl.createBuffer();
@@ -79,7 +81,7 @@ export const createFloatBuffer = (
 };
 
 export const createIndexBuffer = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   values: Uint16Array,
 ): WebGLBuffer => {
   const buffer = gl.createBuffer();
@@ -92,7 +94,7 @@ export const createIndexBuffer = (
 };
 
 export const bindFloatAttribute = (
-  gl: WebGLRenderingContext,
+  gl: RendererWebGlContext,
   location: number,
   buffer: WebGLBuffer,
   size: number,

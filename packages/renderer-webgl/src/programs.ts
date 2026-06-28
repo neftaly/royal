@@ -6,7 +6,7 @@ import textFragmentSource from "./shaders/text.frag";
 import textVertexSource from "./shaders/text.vert";
 import wireframeFragmentSource from "./shaders/wireframe.frag";
 import wireframeVertexSource from "./shaders/wireframe.vert";
-import { attributeLocation, createProgram, uniformLocation } from "./gl";
+import { attributeLocation, createProgram, uniformLocation, type RendererWebGlContext } from "./gl";
 
 export interface MeshProgram {
   readonly attributes: {
@@ -69,7 +69,7 @@ export interface WireframeProgram {
   };
 }
 
-export const createMeshProgram = (gl: WebGLRenderingContext): MeshProgram => {
+export const createMeshProgram = (gl: RendererWebGlContext): MeshProgram => {
   const program = createProgram(gl, meshVertexSource, meshFragmentSource);
 
   return {
@@ -92,7 +92,7 @@ export const createMeshProgram = (gl: WebGLRenderingContext): MeshProgram => {
   };
 };
 
-export const createGltfProgram = (gl: WebGLRenderingContext): GltfProgram => {
+export const createGltfProgram = (gl: RendererWebGlContext): GltfProgram => {
   const program = createProgram(gl, gltfVertexSource, gltfFragmentSource);
 
   return {
@@ -112,7 +112,7 @@ export const createGltfProgram = (gl: WebGLRenderingContext): GltfProgram => {
   };
 };
 
-export const createTextProgram = (gl: WebGLRenderingContext): TextProgram => {
+export const createTextProgram = (gl: RendererWebGlContext): TextProgram => {
   const program = createProgram(gl, textVertexSource, textFragmentSource);
 
   return {
@@ -128,7 +128,7 @@ export const createTextProgram = (gl: WebGLRenderingContext): TextProgram => {
   };
 };
 
-export const createWireframeProgram = (gl: WebGLRenderingContext): WireframeProgram => {
+export const createWireframeProgram = (gl: RendererWebGlContext): WireframeProgram => {
   const program = createProgram(gl, wireframeVertexSource, wireframeFragmentSource);
 
   return {

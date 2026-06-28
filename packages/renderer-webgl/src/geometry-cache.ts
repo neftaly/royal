@@ -2,7 +2,7 @@ import {
   type BoxGeometry,
 } from "@royal/renderer-core";
 import { boxGeometryData } from "./geometry-data/box";
-import { createFloatBuffer, createIndexBuffer } from "./gl";
+import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 
 export interface BoxGeometryBuffers {
   readonly index: WebGLBuffer;
@@ -21,9 +21,9 @@ export class GeometryCache {
   readonly #box = new WeakMap<BoxGeometry, BoxGeometryBuffers>();
   readonly #boxWireframe = new WeakMap<BoxGeometry, WireframeBoxGeometryBuffers>();
   readonly #buffers = new Set<WebGLBuffer>();
-  readonly #gl: WebGLRenderingContext;
+  readonly #gl: RendererWebGlContext;
 
-  constructor(gl: WebGLRenderingContext) {
+  constructor(gl: RendererWebGlContext) {
     this.#gl = gl;
   }
 
