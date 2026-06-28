@@ -34,7 +34,7 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
   }
 };
 
-const appPackageNames = new Set(['@royal/examples-react']);
+const appPackageNames = new Set(['@royal/examples-react', '@royal/tarstate-demo']);
 const reactAppPackageNames = new Set(['@royal/examples-react']);
 const fixtureAppPackageNames = new Set(['@royal/examples-react']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };

@@ -25,6 +25,7 @@ const sourceExtensions = new Set(['.ts', '.tsx']);
 const generatedSourceDirectories = new Set(['dist', 'node_modules']);
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react' },
+  { name: '@royal/tarstate-demo', root: 'apps/tarstate-demo' },
   { name: '@royal/react', root: 'packages/react' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core' },
   { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl' },
