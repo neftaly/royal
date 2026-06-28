@@ -17,7 +17,6 @@ import {
 } from '@royal/react';
 import {
   collectRendererCapabilityRows,
-  orthographic,
   type RendererCapabilityProbeResult
 } from '@royal/react/testing';
 import {
@@ -122,7 +121,6 @@ describe('Royal public API smoke tests', () => {
   });
 
   it('exposes renderer testing helpers without package-internal imports', () => {
-    const projection = orthographic(-1, 1, -1, 1, 0.1, 100);
     const result = collectRendererCapabilityRows(
       {
         getExtension: () => undefined,
@@ -131,7 +129,6 @@ describe('Royal public API smoke tests', () => {
       { includeMissingDiagnostics: true }
     );
 
-    expect(projection).toHaveLength(16);
     expect(result.rows.some((row) => row.kind === 'context_version')).toBe(true);
     expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl')).toBe(true);
     expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();

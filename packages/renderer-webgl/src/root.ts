@@ -5,7 +5,6 @@ import {
   type RenderPass,
   type RenderRoot,
 } from "@royal/renderer-core";
-import type { ReactRoyalRootOptions } from "../root";
 import { drawGltf, drawMesh, drawVectorText } from "./draw";
 import { GeometryCache } from "./geometry-cache";
 import { GltfCache } from "./gltf-cache";
@@ -29,6 +28,16 @@ import {
 import { markGltf } from "./performance";
 import { findDirectionalLight } from "./render-graph";
 import { TextCache } from "./text-cache";
+
+/** WebGL context options for the renderer root. */
+export interface WebGlRootOptions {
+  /** @defaultValue `true` */
+  readonly alpha?: boolean;
+  /** @defaultValue `true` */
+  readonly antialias?: boolean;
+  /** @defaultValue `false` */
+  readonly preserveDrawingBuffer?: boolean;
+}
 
 const resizeCanvas = (
   canvas: HTMLCanvasElement,
@@ -85,7 +94,7 @@ export class WebGlRoot {
   #renderScheduled = false;
   #scene: RenderRoot | undefined;
 
-  constructor(canvas: HTMLCanvasElement, options: ReactRoyalRootOptions = {}) {
+  constructor(canvas: HTMLCanvasElement, options: WebGlRootOptions = {}) {
     const gl = canvas.getContext("webgl", {
       alpha: options.alpha ?? true,
       ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
@@ -283,3 +292,9 @@ export class WebGlRoot {
     };
   }
 }
+
+/** Creates an imperative WebGL renderer root. */
+export const createWebGlRoot = (
+  canvas: HTMLCanvasElement,
+  options?: WebGlRootOptions,
+): WebGlRoot => new WebGlRoot(canvas, options);

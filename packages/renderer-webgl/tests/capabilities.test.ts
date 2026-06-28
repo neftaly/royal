@@ -3,7 +3,7 @@ import {
   collectRendererCapabilityRows,
   type RendererCapabilityProbeRow,
   type WebGlLikeContext,
-} from "../src/webgl/webgl-capabilities";
+} from "../src/capabilities";
 
 type FakeWebGlInput = {
   readonly versionLabel: string;

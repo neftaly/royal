@@ -4,11 +4,16 @@
     "composite": true,
     "outDir": "dist",
     "paths": {
-      "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"]
+      "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
+      "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"],
+      "@royal/renderer-webgl/capabilities": ["../renderer-webgl/dist/capabilities.d.ts"]
     },
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [{ "path": "../renderer-core/tsconfig.build.json" }]
+  "references": [
+    { "path": "../renderer-core/tsconfig.build.json" },
+    { "path": "../renderer-webgl/tsconfig.build.json" }
+  ]
 }

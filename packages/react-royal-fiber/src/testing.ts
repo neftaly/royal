@@ -1,2 +1,1 @@
-export * from './webgl/matrix';
-export * from './webgl/webgl-capabilities';
+export * from '@royal/renderer-webgl/capabilities';

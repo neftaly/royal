@@ -105,9 +105,9 @@ importers:
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
-      gl-matrix:
-        specifier: ^3.4.4
-        version: 3.4.4
+      '@royal/renderer-webgl':
+        specifier: workspace:*
+        version: link:../renderer-webgl
     devDependencies:
       '@types/react':
         specifier: ^19.2.17
@@ -132,6 +132,31 @@ importers:
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.0(@types/node@24.13.2))
 
   packages/renderer-core:
+    devDependencies:
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.70.0(oxlint-tsgolint@0.23.0)
+      oxlint-tsgolint:
+        specifier: 'catalog:'
+        version: 0.23.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.0(@types/node@24.13.2)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@types/node@24.13.2)(vite@8.1.0(@types/node@24.13.2))
+
+  packages/renderer-webgl:
+    dependencies:
+      '@royal/renderer-core':
+        specifier: workspace:*
+        version: link:../renderer-core
+      gl-matrix:
+        specifier: ^3.4.4
+        version: 3.4.4
     devDependencies:
       oxlint:
         specifier: 'catalog:'

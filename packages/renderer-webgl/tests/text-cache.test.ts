@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@royal/renderer-core", async () => await import("../../renderer-core/src/index"));
 
 import {
+  text,
   textMeshFromLayout,
-  vectorText,
   vectorTextMesh,
   type TextMesh,
 } from "@royal/renderer-core";
-import { TextCache, textBufferDataFromMesh } from "../src/webgl/text-cache";
+import { TextCache, textBufferDataFromMesh } from "../src/text-cache";
 
 const fakeGl = (): {
   readonly counts: {
@@ -43,7 +43,7 @@ const fakeGl = (): {
 
 describe("TextCache", () => {
   it("packs positions, glyph coordinates, and uint16 indices from text mesh data", () => {
-    const mesh = textMeshFromLayout(vectorText({
+    const mesh = textMeshFromLayout(text({
       color: [1, 1, 1, 1],
       text: "oi",
     }).layout);
@@ -77,11 +77,11 @@ describe("TextCache", () => {
   it("caches generated buffers by vector text node identity", () => {
     const { counts, gl } = fakeGl();
     const cache = new TextCache(gl);
-    const node = vectorText({
+    const node = text({
       color: [1, 1, 1, 1],
       text: "AV",
     });
-    const sameShapeDifferentNode = vectorText({
+    const sameShapeDifferentNode = text({
       color: [1, 1, 1, 1],
       text: "AV",
     });
@@ -99,11 +99,11 @@ describe("TextCache", () => {
   it("sweeps buffers for text nodes not used in the latest frame", () => {
     const { counts, gl } = fakeGl();
     const cache = new TextCache(gl);
-    const first = vectorText({
+    const first = text({
       color: [1, 1, 1, 1],
       text: "first",
     });
-    const second = vectorText({
+    const second = text({
       color: [1, 1, 1, 1],
       text: "second",
     });
@@ -135,7 +135,7 @@ describe("TextCache", () => {
   });
 
   it("packs empty text as empty buffers", () => {
-    const mesh = vectorTextMesh(vectorText({
+    const mesh = vectorTextMesh(text({
       color: [1, 1, 1, 1],
       text: "",
     }));

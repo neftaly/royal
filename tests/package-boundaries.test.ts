@@ -27,6 +27,7 @@ const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react' },
   { name: '@royal/react', root: 'packages/react-royal-fiber' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core' },
+  { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl' },
   { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens' },
   { name: '@tarstate/core', root: 'packages/tarstate-core' }
 ] as const;
@@ -112,10 +113,19 @@ describe('package boundaries', () => {
     })));
   });
 
-  it('keeps @royal/react as the implementation package', () => {
+  it('keeps @royal/react as the WebGL facade package', () => {
     const reactManifest = readManifest(path.join(repoRoot, 'packages/react-royal-fiber/package.json'));
+    const webglManifest = readManifest(path.join(repoRoot, 'packages/renderer-webgl/package.json'));
 
     expect(reactManifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
+    expect(reactManifest.dependencies?.['@royal/renderer-webgl']).toBe('workspace:*');
+    expect(reactManifest.dependencies?.['gl-matrix']).toBeUndefined();
+    expect(webglManifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
+    expect(webglManifest.dependencies?.['gl-matrix']).toBe('^3.4.4');
+    expect(webglManifest.exports).toEqual({
+      '.': './src/index.ts',
+      './capabilities': './src/capabilities.ts'
+    });
     expect(typeof Canvas).toBe('function');
     expect(createRoyalRoot).toBe(createRoyalSubpathRoot);
     expect(royalJsx).toBeTypeOf('function');

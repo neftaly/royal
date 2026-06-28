@@ -16,8 +16,16 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/renderer-core': {
     lib: { entry: 'src/index.ts', formats: ['es'], fileName: () => 'index.js' }
   },
+  '@royal/renderer-webgl': {
+    external: ['@royal/renderer-core'],
+    lib: {
+      entry: { index: 'src/index.ts', capabilities: 'src/capabilities.ts' },
+      formats: ['es'],
+      fileName: (_format, entryName) => entryName + '.js'
+    }
+  },
   '@royal/react': {
-    external: ['@royal/renderer-core', 'react'],
+    external: ['@royal/renderer-core', '@royal/renderer-webgl', '@royal/renderer-webgl/capabilities', 'react'],
     lib: {
       entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
       formats: ['es'],
@@ -36,6 +44,8 @@ const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const appBase = process.env.BASE_PATH ?? '/';
 const sourceAliases = [
   { find: '@tarstate/core', replacement: path.join(repoRoot, 'packages/tarstate-core/src/index.ts') },
+  { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
+  { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/react/root', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/root.ts') },
   { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-dev-runtime.ts') },
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-runtime.ts') },

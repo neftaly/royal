@@ -17,6 +17,12 @@
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],
+      "@royal/renderer-webgl": [
+        "./packages/renderer-webgl/src/index.ts"
+      ],
+      "@royal/renderer-webgl/capabilities": [
+        "./packages/renderer-webgl/src/capabilities.ts"
+      ],
       "@royal/react": [
         "./packages/react-royal-fiber/src/index.ts"
       ],

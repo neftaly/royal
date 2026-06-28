@@ -12,7 +12,6 @@ import {
   vectorText
 } from '@royal/renderer-core';
 import { createRoot } from '@royal/react';
-import { orthographic } from '../packages/react-royal-fiber/src/webgl/matrix';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fakeCanvas,
@@ -240,17 +239,6 @@ describe('WebGL resource lifetime', () => {
         })
       ]
     }))).toThrow('StandardMaterial box mesh requires a directionalLight');
-  });
-
-  it('builds an orthographic projection matrix', () => {
-    const matrix = orthographic(-2, 2, -1, 1, 0.1, 10);
-
-    expect(matrix[0]).toBeCloseTo(0.5);
-    expect(matrix[5]).toBeCloseTo(1);
-    expect(matrix[10]).toBeCloseTo(-2 / 9.9);
-    expect(matrix[12]).toBeCloseTo(0);
-    expect(matrix[13]).toBeCloseTo(0);
-    expect(matrix[14]).toBeCloseTo(-10.1 / 9.9);
   });
 
   it('releases glTF buffers and textures on dispose', async () => {

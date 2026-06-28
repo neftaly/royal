@@ -1,15 +1,7 @@
 import type { RenderRoot } from "@royal/renderer-core";
-import { WebGlRoot } from "./webgl/root";
+import { createWebGlRoot, type WebGlRootOptions } from "@royal/renderer-webgl";
 
-/** WebGL context options for the renderer root. */
-export interface ReactRoyalRootOptions {
-  /** @defaultValue `true` */
-  readonly alpha?: boolean;
-  /** @defaultValue `true` */
-  readonly antialias?: boolean;
-  /** @defaultValue `false` */
-  readonly preserveDrawingBuffer?: boolean;
-}
+export type ReactRoyalRootOptions = WebGlRootOptions;
 
 /** Imperative renderer root bound to one canvas. */
 export interface ReactRoyalRoot {
@@ -23,4 +15,4 @@ export interface ReactRoyalRoot {
 export const createRoot = (
   canvas: HTMLCanvasElement,
   options?: ReactRoyalRootOptions,
-): ReactRoyalRoot => new WebGlRoot(canvas, options);
+): ReactRoyalRoot => createWebGlRoot(canvas, options);
