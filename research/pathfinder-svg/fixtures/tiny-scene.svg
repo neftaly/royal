@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tiny SVG fixture created for the Royal Pathfinder SVG research prototype.
+  It is covered by this repository's AGPL-3.0-only license.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 96" width="128" height="96">
+  <g id="badge" transform="translate(8 6) rotate(-4 56 42)" fill="#f3c64e" stroke="#1b1d24" stroke-width="2">
+    <rect id="plate" x="4" y="8" width="104" height="62" rx="8" />
+    <path
+      id="wave"
+      fill="#3a8fb7"
+      stroke="none"
+      d="M 14 48 C 30 24, 43 70, 60 43 S 87 24, 99 47 L 99 66 L 14 66 Z"
+    />
+    <path
+      id="spark"
+      fill="#f6f1d3"
+      stroke="#1b1d24"
+      stroke-width="1.5"
+      transform="translate(60 20) scale(0.9)"
+      d="M 0 -12 L 4 -3 L 13 0 L 4 3 L 0 12 L -4 3 L -13 0 L -4 -3 Z"
+    />
+  </g>
+  <polyline
+    id="debug-line"
+    fill="none"
+    stroke="#d64242"
+    stroke-width="3"
+    transform="translate(12 82)"
+    points="0,0 24,-8 48,0 72,-8 96,0"
+  />
+</svg>
