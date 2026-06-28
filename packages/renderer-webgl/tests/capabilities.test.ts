@@ -73,33 +73,12 @@ const capability = (rows: readonly RendererCapabilityProbeRow[], name: string): 
 };
 
 describe("collectRendererCapabilityRows", () => {
-  it("records WebGL1 extension facts without treating them as supported renderer gates", () => {
+  it("reports WebGL1 as unsupported without extension-backed capability rows", () => {
     const result = collectRendererCapabilityRows(fakeWebGl({
-      compressedFormats: [0x83F0, 0x9274],
-      extensionObjects: {
-        ANGLE_instanced_arrays: {},
-        EXT_disjoint_timer_query: {},
-        EXT_texture_filter_anisotropic: {},
-        OES_texture_float: {},
-        WEBGL_compressed_texture_s3tc: {
-          COMPRESSED_RGBA_S3TC_DXT1_EXT: 0x83F1,
-          COMPRESSED_RGB_S3TC_DXT1_EXT: 0x83F0,
-        },
-        WEBGL_draw_buffers: {},
-        WEBGL_lose_context: {},
-      },
+      compressedFormats: [0x9274],
       maxCombinedTextureImageUnits: 24,
       maxTextureImageUnits: 12,
       maxTextureSize: 8192,
-      supportedExtensions: [
-        "WEBGL_lose_context",
-        "WEBGL_draw_buffers",
-        "OES_texture_float",
-        "EXT_texture_filter_anisotropic",
-        "EXT_disjoint_timer_query",
-        "WEBGL_compressed_texture_s3tc",
-        "ANGLE_instanced_arrays",
-      ],
       versionLabel: "WebGL 1.0",
     }));
 
@@ -119,17 +98,7 @@ describe("collectRendererCapabilityRows", () => {
       "renderer_capability",
       "renderer_capability",
       "renderer_capability",
-      "webgl_extension",
-      "webgl_extension",
-      "webgl_extension",
-      "webgl_extension",
-      "webgl_extension",
-      "webgl_extension",
-      "webgl_extension",
       "gpu_timer_query_support",
-      "compressed_texture_format",
-      "compressed_texture_format",
-      "compressed_texture_format",
     ]);
     expect(capability(result.rows, "draw_buffers")).toMatchObject({
       source: "missing",
@@ -139,50 +108,32 @@ describe("collectRendererCapabilityRows", () => {
       source: "missing",
       supported: false,
     });
+    expect(capability(result.rows, "compressed_texture")).toMatchObject({
+      source: "missing",
+      supported: false,
+    });
+    expect(capability(result.rows, "webgl2")).toMatchObject({
+      detail: "WebGL 1 contexts are unsupported; renderer requires WebGL 2",
+      source: "missing",
+      supported: false,
+    });
     expect(result.rows).toContainEqual({
       kind: "gpu_timer_query_support",
       queryApi: "none",
       supported: false,
     });
-    expect(result.rows.filter((row) => row.kind === "webgl_extension")).toEqual([
-      { kind: "webgl_extension", name: "ANGLE_instanced_arrays", supported: true },
-      { kind: "webgl_extension", name: "EXT_disjoint_timer_query", supported: true },
-      { kind: "webgl_extension", name: "EXT_texture_filter_anisotropic", supported: true },
-      { kind: "webgl_extension", name: "OES_texture_float", supported: true },
-      { kind: "webgl_extension", name: "WEBGL_compressed_texture_s3tc", supported: true },
-      { kind: "webgl_extension", name: "WEBGL_draw_buffers", supported: true },
-      { kind: "webgl_extension", name: "WEBGL_lose_context", supported: true },
-    ]);
-    expect(result.rows.filter((row) => row.kind === "compressed_texture_format")).toEqual([
-      {
-        extension: "WEBGL_compressed_texture_s3tc",
-        family: "s3tc",
-        format: "COMPRESSED_RGB_S3TC_DXT1_EXT",
-        kind: "compressed_texture_format",
-        value: 0x83F0,
-      },
-      {
-        extension: "WEBGL_compressed_texture_s3tc",
-        family: "s3tc",
-        format: "COMPRESSED_RGBA_S3TC_DXT1_EXT",
-        kind: "compressed_texture_format",
-        value: 0x83F1,
-      },
-      {
-        extension: "webgl_reported",
-        family: "unknown",
-        format: "0x9274",
-        kind: "compressed_texture_format",
-        value: 0x9274,
-      },
-    ]);
+    expect(result.rows.some((row) => row.kind === "webgl_extension")).toBe(false);
+    expect(result.rows.some((row) => row.kind === "compressed_texture_format")).toBe(false);
     expect(result.diagnostics.map((diagnostic) => diagnostic.key)).toEqual([
+      "anisotropy",
+      "compressed_texture",
       "depth_texture",
       "draw_buffers",
       "float_texture",
       "gpu_timer_query",
       "half_float_texture",
       "instancing",
+      "lose_context",
       "webgl2",
     ]);
   });

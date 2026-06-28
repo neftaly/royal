@@ -204,10 +204,14 @@ export const collectRendererCapabilityRows = (
   options: RendererCapabilityProbeOptions = {},
 ): RendererCapabilityProbeResult => {
   const diagnostics: RendererCapabilityDiagnostic[] = [];
-  const extensionCache = createExtensionCache(gl, diagnostics);
   const version = options.contextVersion ?? inferContextVersion(gl);
-  const timerQuery = timerQuerySupport(version, extensionCache);
-  const compressedRows = compressedTextureRows(gl, extensionCache, diagnostics);
+  const extensionCache = version === 2
+    ? createExtensionCache(gl, diagnostics)
+    : emptyExtensionCache;
+  const timerQuery = timerQuerySupport(extensionCache);
+  const compressedRows = version === 2
+    ? compressedTextureRows(gl, extensionCache, diagnostics)
+    : [];
   const capabilities = capabilityProbes(version, extensionCache, timerQuery, compressedRows, options.webgpu);
   const rows: RendererCapabilityProbeRow[] = [
     contextVersionRow(gl, version, diagnostics),
@@ -280,6 +284,11 @@ const createExtensionCache = (
       return undefined;
     },
   };
+};
+
+const emptyExtensionCache: ReturnType<typeof createExtensionCache> = {
+  extensionRows: () => [],
+  find: () => undefined,
 };
 
 const inferContextVersion = (gl: WebGlLikeContext): WebGlContextVersion => {
@@ -365,7 +374,7 @@ const capabilityProbes = (
       case "webgl2":
         return isWebGl2
           ? supportedCapability("webgl2", "webgl2-core")
-          : missingCapability("webgl2", version === "unknown" ? "context version was not reported" : undefined);
+          : missingCapability("webgl2", webGl2MissingDetail(version));
       case "webgpu":
         return webGpuCapability(webgpu);
       case "draw_buffers":
@@ -467,12 +476,15 @@ const capabilityRow = (capability: CapabilityProbe): RendererCapabilityRow => {
   };
 };
 
+const webGl2MissingDetail = (version: WebGlContextVersion): string => {
+  if (version === "unknown") return "context version was not reported; renderer requires WebGL 2";
+  return "WebGL 1 contexts are unsupported; renderer requires WebGL 2";
+};
+
 const timerQuerySupport = (
-  version: WebGlContextVersion,
   extensions: ReturnType<typeof createExtensionCache>,
 ): ExtensionProbe | undefined => {
-  if (version !== 2) return undefined;
-  return extensions.find(["EXT_disjoint_timer_query_webgl2", "EXT_disjoint_timer_query"]);
+  return extensions.find(["EXT_disjoint_timer_query_webgl2"]);
 };
 
 const timerQueryRow = (timerQuery: ExtensionProbe | undefined): GpuTimerQuerySupportRow => {
