@@ -19,19 +19,18 @@ import {
   collectRendererCapabilityRows,
   type RendererCapabilityProbeResult
 } from '@royal/react/testing';
+import * as rendererCore from '@royal/renderer-core';
 import {
   layoutText,
   shapeText,
   text,
   textMesh,
   textMeshFromLayout,
-  vectorTextGlyphRects,
-  vectorTextMesh,
   type ShapeTextResult,
   type TextLayout,
   type TextMesh,
   type TextNode,
-  type VectorTextRect
+  type TextOptions
 } from '@royal/renderer-core';
 import {
   assetIdForSrc,
@@ -104,20 +103,19 @@ describe('Royal public API smoke tests', () => {
     });
     const meshFromLayout = textMeshFromLayout(layout);
     const meshFromNode = textMesh(textNode);
-    const legacyRects = vectorTextGlyphRects(textNode);
 
     expect(shaped.run.glyphs[1]?.kerning?.pair).toEqual(['glyph:A', 'glyph:V']);
     expect(layout.lines).toHaveLength(2);
     expect(meshFromLayout.vertices.length).toBeGreaterThan(0);
     expect(textMesh(layout)).toEqual(meshFromLayout);
     expect(meshFromNode.indices.length).toBeGreaterThan(0);
-    expect(vectorTextMesh(textNode)).toEqual(meshFromNode);
-    expect(legacyRects.length).toBeGreaterThan(0);
+    expect(rendererCore).not.toHaveProperty('vectorTextGlyphRects');
+    expect(rendererCore).not.toHaveProperty('vectorTextSupportedCharacters');
     expectTypeOf(shaped).toEqualTypeOf<ShapeTextResult>();
     expectTypeOf(layout).toEqualTypeOf<TextLayout>();
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
     expectTypeOf(meshFromNode).toEqualTypeOf<TextMesh>();
-    expectTypeOf(legacyRects).toEqualTypeOf<readonly VectorTextRect[]>();
+    expectTypeOf<TextOptions>().not.toHaveProperty('glyphs');
   });
 
   it('exposes renderer testing helpers without package-internal imports', () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   layoutText,
   shapeText,
@@ -7,7 +7,9 @@ import {
   textMeshFromLayout,
   vectorText,
   vectorTextGlyphRects,
-  vectorTextMesh
+  vectorTextMesh,
+  type TextNode,
+  type TextOptions
 } from './text';
 
 describe('text shaping and mesh generation', () => {
@@ -21,6 +23,8 @@ describe('text shaping and mesh generation', () => {
     expect(node.kind).toBe(vectorText({ color: [1, 1, 1, 1], text: '' }).kind);
     expect(node.layout.font.metrics.size).toBe(2);
     expect(node.layout.lines[0]?.glyphs.map((glyph) => glyph.glyph.text).join('')).toBe('Royal');
+    expectTypeOf(text).toEqualTypeOf<(options: TextOptions) => TextNode>();
+    expectTypeOf<TextOptions>().not.toHaveProperty('glyphs');
   });
 
   it('shapes proportional glyph advances and records kerning metadata', () => {

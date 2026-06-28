@@ -73,9 +73,7 @@ export {
   textMesh,
   textMeshFromLayout,
   vectorText,
-  vectorTextGlyphRects,
-  vectorTextMesh,
-  vectorTextSupportedCharacters
+  vectorTextMesh
 } from './text';
 export type {
   Axis,

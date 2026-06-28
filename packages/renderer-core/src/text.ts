@@ -192,7 +192,13 @@ export interface VectorTextStringOptions {
 
 export type VectorTextOptions = VectorTextGlyphOptions | VectorTextStringOptions;
 export type TextNode = VectorTextNode;
-export type TextOptions = VectorTextOptions;
+export interface TextOptions {
+  readonly color: Rgba;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly origin?: Vec3;
+  readonly text: string;
+}
 export type TextGlyphOptions = VectorTextGlyphOptions;
 export type TextStringOptions = VectorTextStringOptions;
 
@@ -954,7 +960,7 @@ export const vectorText = (options: VectorTextOptions): VectorTextNode => {
   };
 };
 
-export const text = vectorText;
+export const text = (options: TextOptions): TextNode => vectorText(options);
 
 const contourBounds = (
   bounds: TextBounds,
