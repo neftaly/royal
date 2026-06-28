@@ -45,7 +45,7 @@ export type RoyalWebGpuProbe = {
 
 export type RoyalWebGlProbe = {
   readonly available: boolean;
-  readonly version: 1 | 2 | "unknown";
+  readonly version: 2 | "unknown";
   readonly features: ReadonlySet<RoyalFeatureRequirement>;
   readonly reason?: string;
 };
@@ -165,36 +165,19 @@ const probeWebGl = (canvas: HTMLCanvasElement | undefined): RoyalWebGlProbe => {
   }
 
   const gl2 = canvas.getContext("webgl2");
-  if (gl2 !== null) {
-    return {
-      available: true,
-      features: new Set(["indexed-geometry", "uint32-indices", "instancing"]),
-      version: 2,
-    };
-  }
-
-  const gl1 = canvas.getContext("webgl");
-  if (gl1 === null) {
+  if (gl2 === null) {
     return {
       available: false,
       features: new Set(),
-      reason: "WebGL context creation returned null.",
+      reason: "WebGL2 context creation returned null. Royal does not support WebGL1.",
       version: "unknown",
     };
   }
 
-  const features: RoyalFeatureRequirement[] = ["indexed-geometry"];
-  if (gl1.getExtension("OES_element_index_uint") !== null) {
-    features.push("uint32-indices");
-  }
-  if (gl1.getExtension("ANGLE_instanced_arrays") !== null) {
-    features.push("instancing");
-  }
-
   return {
     available: true,
-    features: new Set(features),
-    version: 1,
+    features: new Set(["indexed-geometry", "uint32-indices", "instancing"]),
+    version: 2,
   };
 };
 

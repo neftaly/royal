@@ -230,8 +230,8 @@ must say which feature degraded and why.
 | Compute terrain/elevation | compute pass writes buffers/textures | CPU task or baked asset; no GPU compute |
 | Storage buffers | storage/read-write buffers | uniform buffers in WebGL2, textures, or CPU packing; often feature disabled |
 | Indirect draws/GPU culling | compute-generated draw args | CPU culling and explicit draw calls |
-| Large indexed geometry | `uint32` indices broadly available | WebGL2/extension or chunk to `uint16` |
-| Instancing | core instanced draws | WebGL2 or `ANGLE_instanced_arrays`; otherwise duplicate draws |
+| Large indexed geometry | `uint32` indices broadly available | WebGL2 or chunk to `uint16` |
+| Instancing | core instanced draws | WebGL2 instancing; otherwise duplicate draws |
 | Timestamp queries | WebGPU `timestamp-query` | `EXT_disjoint_timer_query*` or CPU timing |
 | Texture compression BC/ASTC/ETC | WebGPU feature gates | WebGL compressed texture extensions or transcoded fallback |
 | Readback/query buffers | mapped/readback buffers | async `readPixels`/PBO only where available, otherwise unsupported |
@@ -248,7 +248,7 @@ Royal packages and is not part of the workspace build. It shows the minimal
 shape needed for:
 
 - probing WebGPU adapter features and limits
-- optionally checking WebGL/WebGL2 availability
+- optionally checking Royal WebGL2 availability
 - choosing a backend for `"webgl"`, `"webgpu"`, or `"auto"`
 - returning missing feature diagnostics before root/device construction is
   wired into public APIs
@@ -270,7 +270,7 @@ private backend exists.
    - record CPU frame time, GPU time where available, and diagnostics
 4. Instancing
    - one geometry with many transforms
-   - compare WebGL2/extension path against WebGPU instancing
+   - compare WebGL2 path against WebGPU instancing
    - include fallback duplicate-draw mode for correctness only
 5. Terrain LOD
    - reuse the terrain research budgets: selected leaves, chunk churn, upload

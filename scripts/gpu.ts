@@ -327,7 +327,7 @@ const readWebGl = async (cdp: CdpClient, sessionId: string): Promise<WebGlReport
     returnByValue: true,
     expression: `(async () => {
       const canvas = document.querySelector('canvas');
-      const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
+      const gl = canvas?.getContext('webgl2');
       const debug = gl?.getExtension('WEBGL_debug_renderer_info');
       const pixels = gl && canvas ? new Uint8Array(canvas.width * canvas.height * 4) : null;
       if (gl && pixels) gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -463,7 +463,7 @@ const readWebGl = async (cdp: CdpClient, sessionId: string): Promise<WebGlReport
         renderer: stringParameter(gl.RENDERER),
         shadingLanguageVersion: stringParameter(gl.SHADING_LANGUAGE_VERSION),
         vendor: stringParameter(gl.VENDOR),
-        version: isWebGl2 ? 2 : 1,
+        version: 2,
         versionLabel: stringParameter(gl.VERSION),
         webgpu: await collectWebGpu()
       };

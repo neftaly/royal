@@ -192,8 +192,8 @@ Deliverables:
 - Residency scheduler that consumes visible packet material demand.
 - Parent fallback lookup, one-ring prefetch, upload page/byte budgets, and
   seam-candidate diagnostics.
-- WebGL2 route first; WebGL1 derivative fallback or fixed low-mip fallback when
-  capability rows require it.
+- WebGL2 virtual-texture route; fixed low-mip fallback when capability rows
+  require it.
 
 Why sixth:
 
@@ -463,7 +463,6 @@ interface VirtualTextureFrameStats {
   readonly estimatedUploadMs: number;
   readonly selectedMode:
     | "webgl2-virtual-texture"
-    | "webgl1-virtual-texture"
     | "fixed-low-mip";
 }
 
