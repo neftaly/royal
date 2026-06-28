@@ -28,11 +28,19 @@ const wipDemoLinks: readonly WipDemoLink[] = [
   },
   {
     id: 'picking-raycasting-fuzz',
-    title: 'Picking / Raycasting Fuzz',
-    status: 'Harness available',
+    title: 'Picking Replay Contract',
+    status: 'Artifact available',
     summary:
-      'The browser-independent oracle exists under research; the examples app does not yet expose the interactive adapter.',
-    repoPath: 'research/picking-fuzz/picking-fuzz-harness.mjs',
+      'The replay fixture documents the pointer sample and hit classification contract before renderer picking integration lands.',
+    repoPath: 'research/picking-fuzz/fixtures/notched-bounds-replay.json',
+  },
+  {
+    id: 'asset-manifest-contract',
+    title: 'Asset Manifest Contract',
+    status: 'Artifact available',
+    summary:
+      'Normalized research fixtures compare asset, artifact, bounds, LOD, residency, and provenance vocabulary across landed pipelines.',
+    repoPath: 'research/asset-manifest-contract/**',
   },
   {
     id: 'offline-terrain-pipeline',

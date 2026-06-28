@@ -317,8 +317,10 @@ const wipExpression = `
       hasGltf: bodyText.includes('glTF Asset Viewer') &&
         bodyText.includes('/gltf-helmet') &&
         bodyText.includes('fixtures/DamagedHelmet/DamagedHelmet.gltf'),
-      hasPicking: bodyText.includes('Picking / Raycasting Fuzz') &&
-        bodyText.includes('research/picking-fuzz/picking-fuzz-harness.mjs'),
+      hasPickingReplay: bodyText.includes('Picking Replay Contract') &&
+        bodyText.includes('research/picking-fuzz/fixtures/notched-bounds-replay.json'),
+      hasAssetManifestContract: bodyText.includes('Asset Manifest Contract') &&
+        bodyText.includes('research/asset-manifest-contract/**'),
       hasOfflineTerrainPipeline: bodyText.includes('Offline Terrain Pipeline') &&
         bodyText.includes('research/offline-terrain-pipeline/**'),
       hasDynamicImpostors: bodyText.includes('Dynamic Impostors') &&
@@ -331,7 +333,8 @@ const wipExpression = `
   while (performance.now() < deadline && (
     !state.hasPage ||
     !state.hasGltf ||
-    !state.hasPicking ||
+    !state.hasPickingReplay ||
+    !state.hasAssetManifestContract ||
     !state.hasOfflineTerrainPipeline ||
     !state.hasDynamicImpostors
   )) {
@@ -399,7 +402,8 @@ const assertWipPage = (state) => {
     failures.push(`active WIP nav text was "${state.activeNavText || 'missing'}"`);
   }
   if (!state.hasGltf) failures.push('missing glTF WIP entry');
-  if (!state.hasPicking) failures.push('missing picking WIP entry');
+  if (!state.hasPickingReplay) failures.push('missing picking replay WIP entry');
+  if (!state.hasAssetManifestContract) failures.push('missing asset manifest contract WIP entry');
   if (!state.hasOfflineTerrainPipeline) failures.push('missing offline terrain pipeline WIP entry');
   if (!state.hasDynamicImpostors) failures.push('missing dynamic impostors WIP entry');
   if (state.primaryExampleNavCount !== Object.keys(smokeExpectations).length) {
