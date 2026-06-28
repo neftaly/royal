@@ -14,9 +14,21 @@ Date: 2026-06-28
 
 Use a staged path.
 
-V1 should be a terrain runtime/asset pipeline wrapper around current Royal primitives and Tarstate-style observable state. It should not try to reproduce Hello Terrain's full WebGPU task graph yet, because Royal's renderer-core currently exposes only small scene/pass/node descriptions and the WebGL backend hard-fails on non-box mesh geometry. A v1 wrapper can still prove the hardest product question: can terrain be modeled as queryable chunk assets with provenance, material assignments, and LOD selection outside the renderer?
+V1 should define the terrain runtime contract around current Royal primitives and
+Tarstate-style observable state. It should not try to reproduce Hello Terrain's
+full WebGPU task graph yet, because Royal's renderer-core currently exposes only
+small scene/pass/node descriptions and the WebGL backend hard-fails on non-box
+mesh geometry. A v1 runtime/schema proof can still answer the core API question:
+can terrain be modeled as queryable chunk assets with provenance, material
+assignments, and LOD selection outside the renderer?
 
-V2 should be the renderer/API change. Hello Terrain's strongest ideas require first-class backend concepts Royal does not yet have: dynamic indexed geometry buffers, instancing, storage/compute buffers, GPU readback, material/elevation shader nodes, and render-backend extension points. Adding terrain as a public core node before those seams exist would create API pressure in the wrong place. Infinigen-style procedural generation should stay a separate background asset-generation concern until that runtime seam is stable.
+V2 should be the renderer/API change. Hello Terrain's strongest ideas require
+first-class backend concepts Royal does not yet have: dynamic indexed geometry
+buffers, instancing, storage/compute buffers, GPU readback, material/elevation
+shader nodes, and render-backend extension points. Adding terrain as a public
+core node before those seams exist would create API pressure in the wrong place.
+Offline procedural generation should stay a separate asset pipeline concern until
+that runtime seam is stable.
 
 ## Hello Terrain Architecture Notes
 
@@ -39,13 +51,19 @@ Hello Terrain should not be described as an Infinigen-style procedural world gen
 
 For Royal, that means Hello Terrain is evidence for the runtime architecture: quadtree LOD, chunk/instance rendering, elevation/material node inputs, compute stages, and query/readback APIs. Infinigen is separate evidence for offline or background procedural asset provenance. The local spike intentionally combines those ideas to test Royal's data model, but that should not be read as a claim about Hello Terrain's feature scope.
 
-## Offline And Holistic LOD Direction
+## Runtime LOD And Offline Artifacts
 
 The more likely Royal product path is not live Infinigen-quality generation in the browser. Infinigen is probably too slow for that. Treat it as a high-quality offline or server-side asset factory that can render/export large scenes, then publish static assets that Royal can stream: mesh tiles, glTF/GLB chunks, height/normal/albedo/roughness tiles, texture pages, object placement manifests, and provenance records.
 
 That still wants LOD, but the ownership is split. The server/offline pipeline owns expensive quality generation, tile promotion, baking, validation, and artifact hashes. The client owns viewport selection, culling, cache policy, cross-fade/replacement, and querying the current best available artifact. A live demo can still start with cheap placeholder tiles or low-sample renders, then stream better artifacts as they finish, but that should be an asset-version update path rather than the core renderer abstraction.
 
 This points to a holistic LOD model: every terrain/object region has stable identity, bounds, coordinate-system metadata, quality tier, artifact kind, dependencies, and provenance. The runtime asks for "best artifact available within budget" and the asset service can answer with fixed offline tiles, live preview tiles, or upgraded offline renders without changing the render graph shape.
+
+Keep the Blender-backed static tile research in
+`research/blender-pipeline/README.md`. This terrain note should only describe the
+runtime/API implications: tile identity, artifact selection, renderer upload
+requirements, query/readback expectations, and schema fields the runtime needs in
+order to consume offline outputs safely.
 
 ## Infinigen Relevance
 
@@ -56,7 +74,9 @@ Infinigen is relevant as an offline/background generation model, not as a runtim
 - Allow expensive generation to run outside the render frame, then publish chunk manifests and artifacts.
 - Keep material/elevation decisions data-driven and reproducible, with enough metadata to regenerate or invalidate chunks.
 
-Royal can borrow the pipeline shape for optional generation: seed plus recipe in, chunk/material/asset rows out. It should not copy Infinigen's Blender/Python implementation or monolithic scene generation into renderer-core.
+Royal can borrow the pipeline shape for optional generation: seed plus recipe in,
+chunk/material/asset rows out. Blender/Python generation belongs in offline or
+server-side asset tooling, not in renderer-core.
 
 ## Royal Fit
 
@@ -68,9 +88,10 @@ Current Royal facts:
 - Materials are flat `StandardMaterial | UnlitMaterial`; there is no shader-node/material graph.
 - `@royal/tarstate-lens` already models app-owned stores as relation rows with diagnostics and write routes. That is a good fit for terrain pipeline state: chunks, assets, readback status, generation jobs, and failures.
 
-This argues for a v1 proof that stays outside public exports and validates the state model and budgets first.
+This argues for a v1 proof that stays outside public exports and validates the
+runtime state model, artifact schema, and budgets first.
 
-## Minimal Proof Target
+## Minimal Runtime Schema Target
 
 Implement first:
 
@@ -86,7 +107,7 @@ Implement first:
    - `terrainAssets`: asset id, chunk id, artifact kind, uri/status/hash/provenance
    - `terrainMaterials`: chunk id, material id, coverage, recipe
    - `terrainGenerationJobs`: chunk id, priority, status, started/finished/diagnostics
-3. A generated mesh contract for one chunk:
+3. A runtime artifact contract for one chunk:
    - positions/normals/indices/material ids, or an artifact URI plus dimensions
 4. A benchmark that sweeps camera positions and records:
    - LOD update ms
@@ -108,14 +129,14 @@ Expected first benchmark gates:
 - deterministic chunk ids/provenance for the same seed and recipe
 - stable diff count when the camera moves less than one chunk hysteresis threshold
 
-## Prototype
+## Standalone Runtime Prototype
 
 `royal-terrain-v1-spike.mjs` is a standalone prototype. It does not import Royal and does not participate in the workspace build. It proves the data path Royal can wrap now:
 
 - deterministic chunk ids and seed-derived heights
 - quadtree-style flat terrain LOD
 - material classification from generated elevation/slope
-- optional Infinigen-style provenance metadata
+- optional offline-generator provenance metadata
 - relation-like rows suitable for a future tarstate lens
 - benchmark output for frame-to-frame chunk churn
 
@@ -144,4 +165,17 @@ Likely v2 API/backend seams:
 
 ## Next Step
 
-Add an internal `@royal/terrain-lens` or `packages/renderer-core/src/terrain-prototype` only after the relation schema is proven by the standalone spike. Keep the first renderer-facing patch tiny: a private indexed geometry draw path or an asset-backed geometry cache, not a public terrain component.
+Proceed on two tracks:
+
+1. Prove the terrain runtime schema outside public package exports: chunk rows,
+   artifact rows, material coverage, generation/readiness status, provenance,
+   coordinate-system metadata, LOD budget fields, and deterministic invalidation
+   keys.
+2. Validate offline manifests in `research/blender-pipeline`: artifact hashes,
+   bounds, coordinate-system conversion, seed/revision invalidation, tile index
+   shape, and diagnostics needed before any renderer consumes a static tile.
+
+Only after both tracks are stable should renderer-core grow a narrow terrain
+dependency, such as a private indexed geometry draw path or asset-backed geometry
+cache. Do not add Blender/Python generation to renderer-core, and do not expose a
+public terrain component before the backend geometry/material seams exist.
