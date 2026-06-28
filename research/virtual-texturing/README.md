@@ -282,17 +282,29 @@ Run:
 
 ```sh
 node research/virtual-texturing/virtual-texturing-cache-sim.mjs
+node research/virtual-texturing/virtual-texturing-cache-sim.mjs --check
 ```
 
 Pass `--frames` to include every simulated frame in the JSON output.
+The check mode validates the deterministic live-data snapshot hash and the
+budget gates. The prototype intentionally uses a 96-slot stress cache, smaller
+than the 256-slot demo recommendation, so uploads and evictions both exercise
+the dirty page-table path.
 
 It models:
 
 - generated virtual page metadata and sample manifest rows
 - derivative-like mip demand from a panning camera
-- physical page cache hits, misses, LRU replacement, and parent fallback
-- page upload count, bytes, and estimated upload time
-- page-table dirty updates
+- physical cache slots as plain data, including slot coordinates, resident page
+  ids, load frames, last-use frames, and LRU replacement
+- page-table entries as plain data, including virtual-page coordinates,
+  physical slot coordinates, `RGBA8`-style encoded bytes, flags, versions, and
+  local UV remap metadata for padded pages
+- upload and eviction events with the page-table entry each upload creates
+- a dirty-entry queue for upload and eviction texels that future renderer code
+  can batch into page-table texture updates
+- residency summaries, per-mip counts, page-table summaries, and seam/debug
+  summaries
 - seam candidates from neighboring visible pages resolving to different mips
 
 ## Benchmark Sketch

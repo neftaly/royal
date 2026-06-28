@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 const config = {
@@ -8,7 +9,7 @@ const config = {
   usableTileSize: 128,
   borderTexels: 4,
   bytesPerTexel: 4,
-  cacheSlots: 256,
+  cacheSlots: 96,
   maxUploadsPerFrame: 8,
   maxUploadBytesPerFrame: 768 * 1024,
   uploadOverheadMs: 0.035,
@@ -19,6 +20,7 @@ const config = {
   warmupFrames: 12
 };
 
+const expectedCheckSha256 = "cb9821041e65472407ca42f8a0112e52c45fab603a0d75148d5c589a5d1c79ee";
 const paddedTileSize = config.usableTileSize + config.borderTexels * 2;
 const bytesPerPage = paddedTileSize * paddedTileSize * config.bytesPerTexel;
 const mipCount = Math.log2(config.virtualSize / config.usableTileSize) + 1;
@@ -62,18 +64,19 @@ function runFrame(index, camera) {
   }
 
   const t1 = performance.now();
-  const uploads = scheduler.drain({
+  const uploadBatch = scheduler.drain({
     maxUploads: config.maxUploadsPerFrame,
     maxBytes: config.maxUploadBytesPerFrame,
     frame: index,
     cache,
     pageTable
   });
+  const dirtyEntries = pageTable.drainDirty(index);
   const uploadScheduleMs = performance.now() - t1;
 
   const seamCandidates = countSeamCandidates(demand.sampleCells, resolved);
-  const estimatedUploadMs = estimateUploadMs(uploads.uploaded);
-  const pageTableUpdates = uploads.uploaded + uploads.evicted;
+  const estimatedUploadMs = estimateUploadMs(uploadBatch.uploaded.length);
+  const pageTableUpdates = dirtyEntries.length;
   const totalSamples = exactHits + misses;
 
   return {
@@ -93,10 +96,10 @@ function runFrame(index, camera) {
     fallbackSamples,
     exactHitRatio: ratio(exactHits, totalSamples),
     fallbackRatio: ratio(fallbackSamples, totalSamples),
-    uploadedPages: uploads.uploaded,
-    uploadBytes: uploads.uploaded * bytesPerPage,
+    uploadedPages: uploadBatch.uploaded.length,
+    uploadBytes: uploadBatch.uploaded.length * bytesPerPage,
     estimatedUploadMs: round(estimatedUploadMs),
-    evictedPages: uploads.evicted,
+    evictedPages: uploadBatch.evicted.length,
     pageTableUpdates,
     residentPages: cache.size,
     queuedPagesAfterBudget: scheduler.size,
@@ -104,7 +107,12 @@ function runFrame(index, camera) {
     demandMs: round(demandMs),
     uploadScheduleMs: round(uploadScheduleMs),
     mipRequests: demand.mipCounts,
-    resolvedMipDeltas: resolvedMipDeltas(demand.pages.values(), resolved)
+    resolvedMipDeltas: resolvedMipDeltas(demand.pages.values(), resolved),
+    uploads: uploadBatch.uploaded.map(uploadEventSummary),
+    evictions: uploadBatch.evicted.map(evictionEventSummary),
+    dirtyEntryQueue: dirtyEntries.map(dirtyEntrySummary),
+    residency: cache.debugSummary(),
+    pageTable: pageTable.debugSummary()
   };
 }
 
@@ -392,31 +400,46 @@ class UploadScheduler {
 
   drain({ maxUploads, maxBytes, frame, cache, pageTable }) {
     const candidates = [...this.requests.values()].sort(compareDemand);
-    let uploaded = 0;
+    const uploaded = [];
+    const evicted = [];
     let bytes = 0;
-    let evicted = 0;
 
     for (const page of candidates) {
-      if (uploaded >= maxUploads) break;
+      if (uploaded.length >= maxUploads) break;
       if (bytes + bytesPerPage > maxBytes) break;
       if (cache.has(page.key)) {
         this.requests.delete(page.key);
         continue;
       }
       const result = cache.insert(page, frame);
-      pageTable.set(page.key, {
+      const entry = pageTable.setResident(page, {
         slot: result.slot,
+        frame,
+        uploadSerial: result.uploadSerial
+      });
+      if (result.evicted) {
+        evicted.push({
+          frame,
+          key: result.evicted.key,
+          slot: result.evicted.slot,
+          mip: result.evicted.mip,
+          x: result.evicted.x,
+          y: result.evicted.y,
+          lastUsedFrame: result.evicted.lastUsedFrame
+        });
+        pageTable.invalidate(result.evicted, { frame, reason: "slot-reused" });
+      }
+      this.requests.delete(page.key);
+      uploaded.push({
+        frame,
+        key: page.key,
         mip: page.mip,
         x: page.x,
         y: page.y,
-        version: frame
+        slot: result.slot,
+        bytes: bytesPerPage,
+        pageTableEntry: entry
       });
-      if (result.evicted) {
-        evicted += 1;
-        pageTable.delete(result.evicted.key);
-      }
-      this.requests.delete(page.key);
-      uploaded += 1;
       bytes += bytesPerPage;
     }
 
@@ -428,7 +451,18 @@ class PhysicalPageCache {
   constructor(capacity) {
     this.capacity = capacity;
     this.pages = new Map();
-    this.freeSlots = Array.from({ length: capacity }, (_, slot) => slot);
+    this.slotColumns = Math.ceil(Math.sqrt(capacity));
+    this.slots = Array.from({ length: capacity }, (_, slot) => ({
+      slot,
+      slotX: slot % this.slotColumns,
+      slotY: Math.floor(slot / this.slotColumns),
+      pageKey: null,
+      status: "free",
+      loadedFrame: null,
+      lastUsedFrame: null
+    }));
+    this.freeSlots = this.slots.map((slot) => slot.slot);
+    this.uploadSerial = 0;
   }
 
   get size() {
@@ -445,14 +479,18 @@ class PhysicalPageCache {
 
   touch(key, frame) {
     const page = this.pages.get(key);
-    if (page) page.lastUsedFrame = frame;
+    if (page) {
+      page.lastUsedFrame = frame;
+      this.slots[page.slot] = slotFromPage(page, this.slotColumns, "resident");
+    }
   }
 
   insert(page, frame) {
     const existing = this.pages.get(page.key);
     if (existing) {
       existing.lastUsedFrame = frame;
-      return { slot: existing.slot, evicted: null };
+      this.slots[existing.slot] = slotFromPage(existing, this.slotColumns, "resident");
+      return { slot: existing.slot, evicted: null, uploadSerial: existing.uploadSerial };
     }
 
     let slot = this.freeSlots.shift();
@@ -463,15 +501,20 @@ class PhysicalPageCache {
       slot = evicted.slot;
     }
 
+    const uploadSerial = this.uploadSerial;
+    this.uploadSerial += 1;
     this.pages.set(page.key, {
       key: page.key,
       mip: page.mip,
       x: page.x,
       y: page.y,
       slot,
-      lastUsedFrame: frame
+      loadedFrame: frame,
+      lastUsedFrame: frame,
+      uploadSerial
     });
-    return { slot, evicted };
+    this.slots[slot] = slotFromPage(this.pages.get(page.key), this.slotColumns, "resident");
+    return { slot, evicted, uploadSerial };
   }
 
   findEvictionCandidate() {
@@ -487,10 +530,277 @@ class PhysicalPageCache {
     }
     return candidate;
   }
+
+  debugSlots() {
+    return this.slots.map((slot) => ({ ...slot }));
+  }
+
+  debugSummary() {
+    const byMip = {};
+    for (const page of this.pages.values()) {
+      byMip[`mip${page.mip}`] = (byMip[`mip${page.mip}`] ?? 0) + 1;
+    }
+    return {
+      residentPages: this.pages.size,
+      freeSlots: this.freeSlots.length,
+      capacity: this.capacity,
+      slotColumns: this.slotColumns,
+      byMip
+    };
+  }
 }
 
 function evictionScore(page) {
   return page.lastUsedFrame * 10 + page.mip;
+}
+
+class PageTable {
+  constructor({ slotColumns }) {
+    this.slotColumns = slotColumns;
+    this.entries = new Map();
+    this.dirtyQueue = new DirtyEntryQueue();
+    this.version = 0;
+  }
+
+  setResident(page, { slot, frame, uploadSerial }) {
+    const entry = {
+      key: page.key,
+      virtualPage: {
+        mip: page.mip,
+        x: page.x,
+        y: page.y
+      },
+      physicalSlot: physicalSlotAddress(slot, this.slotColumns),
+      residentMip: page.mip,
+      mipDelta: 0,
+      flags: ["resident", "exact"],
+      version: this.version,
+      updatedFrame: frame,
+      uploadSerial,
+      seamDebug: {
+        borderTexels: config.borderTexels,
+        paddedTileSize,
+        localUvRemap: [
+          config.borderTexels / paddedTileSize,
+          config.usableTileSize / paddedTileSize
+        ],
+        risk: "exact-resident"
+      }
+    };
+    entry.encodedRgba8 = encodePageTableEntry(entry);
+    this.version += 1;
+    this.entries.set(page.key, entry);
+    this.dirtyQueue.enqueue({
+      op: "upload",
+      frame,
+      key: page.key,
+      tableCoord: tableCoord(page),
+      entry
+    });
+    return entry;
+  }
+
+  invalidate(page, { frame, reason }) {
+    const existing = this.entries.get(page.key);
+    this.entries.delete(page.key);
+    const staleEntry = existing ?? {
+      key: page.key,
+      virtualPage: {
+        mip: page.mip,
+        x: page.x,
+        y: page.y
+      },
+      physicalSlot: null,
+      residentMip: null,
+      mipDelta: null,
+      flags: ["unmapped"],
+      version: this.version,
+      updatedFrame: frame,
+      uploadSerial: null,
+      seamDebug: {
+        borderTexels: config.borderTexels,
+        paddedTileSize,
+        localUvRemap: null,
+        risk: "missing"
+      },
+      encodedRgba8: [0, 0, 0, 0]
+    };
+    const entry = {
+      ...staleEntry,
+      physicalSlot: null,
+      residentMip: null,
+      mipDelta: null,
+      flags: ["unmapped"],
+      version: this.version,
+      updatedFrame: frame,
+      encodedRgba8: [0, 0, 0, 0],
+      seamDebug: {
+        borderTexels: config.borderTexels,
+        paddedTileSize,
+        localUvRemap: null,
+        risk: "missing"
+      }
+    };
+    this.version += 1;
+    this.dirtyQueue.enqueue({
+      op: "evict",
+      frame,
+      key: page.key,
+      reason,
+      tableCoord: tableCoord(page),
+      entry
+    });
+  }
+
+  drainDirty(frame) {
+    return this.dirtyQueue.drain(frame);
+  }
+
+  debugEntries(limit = 24) {
+    return [...this.entries.values()]
+      .sort((a, b) => a.virtualPage.mip - b.virtualPage.mip || a.virtualPage.y - b.virtualPage.y || a.virtualPage.x - b.virtualPage.x)
+      .slice(0, limit)
+      .map(pageTableEntrySummary);
+  }
+
+  debugSummary() {
+    const byMip = {};
+    for (const entry of this.entries.values()) {
+      const key = `mip${entry.virtualPage.mip}`;
+      byMip[key] = (byMip[key] ?? 0) + 1;
+    }
+    return {
+      mappedEntries: this.entries.size,
+      dirtyEntriesPending: this.dirtyQueue.size,
+      version: this.version,
+      byMip
+    };
+  }
+}
+
+class DirtyEntryQueue {
+  constructor() {
+    this.rows = [];
+  }
+
+  get size() {
+    return this.rows.length;
+  }
+
+  enqueue(row) {
+    this.rows.push({
+      sequence: this.rows.length,
+      ...row
+    });
+  }
+
+  drain(frame) {
+    const rows = this.rows.map((row, index) => ({
+      ...row,
+      batchIndex: index,
+      drainedFrame: frame
+    }));
+    this.rows = [];
+    return rows;
+  }
+}
+
+function slotFromPage(page, slotColumns, status) {
+  return {
+    slot: page.slot,
+    slotX: page.slot % slotColumns,
+    slotY: Math.floor(page.slot / slotColumns),
+    pageKey: page.key,
+    mip: page.mip,
+    x: page.x,
+    y: page.y,
+    status,
+    loadedFrame: page.loadedFrame,
+    lastUsedFrame: page.lastUsedFrame,
+    uploadSerial: page.uploadSerial
+  };
+}
+
+function physicalSlotAddress(slot, slotColumns) {
+  return {
+    slot,
+    x: slot % slotColumns,
+    y: Math.floor(slot / slotColumns)
+  };
+}
+
+function tableCoord(page) {
+  return {
+    mip: page.mip,
+    x: page.x,
+    y: page.y
+  };
+}
+
+function encodePageTableEntry(entry) {
+  const slot = entry.physicalSlot;
+  if (!slot) return [0, 0, 0, 0];
+  const flags = entry.flags.includes("resident") ? 1 : 0;
+  const version = (entry.version % 128) << 1;
+  return [
+    clamp(slot.x, 0, 255),
+    clamp(slot.y, 0, 255),
+    clamp(entry.mipDelta ?? 0, 0, 255),
+    clamp(version | flags, 0, 255)
+  ];
+}
+
+function pageTableEntrySummary(entry) {
+  return {
+    key: entry.key,
+    virtualPage: entry.virtualPage,
+    physicalSlot: entry.physicalSlot,
+    residentMip: entry.residentMip,
+    mipDelta: entry.mipDelta,
+    flags: entry.flags,
+    version: entry.version,
+    updatedFrame: entry.updatedFrame,
+    encodedRgba8: entry.encodedRgba8,
+    seamDebug: entry.seamDebug
+  };
+}
+
+function uploadEventSummary(event) {
+  return {
+    key: event.key,
+    slot: event.slot,
+    mip: event.mip,
+    x: event.x,
+    y: event.y,
+    bytes: event.bytes,
+    pageTableEntry: pageTableEntrySummary(event.pageTableEntry)
+  };
+}
+
+function evictionEventSummary(event) {
+  return {
+    key: event.key,
+    slot: event.slot,
+    mip: event.mip,
+    x: event.x,
+    y: event.y,
+    lastUsedFrame: event.lastUsedFrame
+  };
+}
+
+function dirtyEntrySummary(row) {
+  return {
+    sequence: row.sequence,
+    batchIndex: row.batchIndex,
+    op: row.op,
+    key: row.key,
+    reason: row.reason ?? null,
+    tableCoord: row.tableCoord,
+    encodedRgba8: row.entry.encodedRgba8,
+    flags: row.entry.flags,
+    physicalSlot: row.entry.physicalSlot,
+    version: row.entry.version
+  };
 }
 
 function ratio(value, total) {
@@ -523,12 +833,89 @@ function stableHash(input) {
   return hash >>> 0;
 }
 
+function buildLiveDataStructures({ results }) {
+  const lastFrame = results.at(-1);
+  const dirtyOperationCounts = results.reduce((acc, frame) => {
+    for (const row of frame.dirtyEntryQueue) {
+      acc[row.op] = (acc[row.op] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+  const evictionSamples = results
+    .flatMap((frame) => frame.evictions.map((event) => ({ frame: frame.frame, ...event })))
+    .slice(-12);
+  const uploadSamples = results
+    .flatMap((frame) => frame.uploads.map((event) => ({ frame: frame.frame, ...event })))
+    .slice(-12);
+
+  return {
+    pageTableEntries: pageTable.debugEntries(),
+    physicalCacheSlots: cache.debugSlots(),
+    dirtyEntryQueue: {
+      pending: pageTable.dirtyQueue.size,
+      operationCounts: dirtyOperationCounts,
+      lastFrameBatch: lastFrame.dirtyEntryQueue
+    },
+    uploadAndEvictionEvents: {
+      recentUploads: uploadSamples,
+      recentEvictions: evictionSamples
+    },
+    residencySummary: cache.debugSummary(),
+    pageTableSummary: pageTable.debugSummary(),
+    seamDebugSummary: {
+      lastFrameSeamCandidates: lastFrame.seamCandidates,
+      maxSeamCandidates: Math.max(...results.map((frame) => frame.seamCandidates)),
+      resolvedMipDeltasLastFrame: lastFrame.resolvedMipDeltas,
+      borderTexels: config.borderTexels,
+      paddedTileSize
+    }
+  };
+}
+
+function stableReportSha256(report) {
+  return createHash("sha256").update(JSON.stringify(stableReport(report))).digest("hex");
+}
+
+function stableReport(report) {
+  return {
+    config: report.config,
+    summary: report.summary,
+    gates: report.gates,
+    frameSamples: report.frameSamples.map((frame) => ({
+      ...frame,
+      demandMs: 0,
+      uploadScheduleMs: 0
+    })),
+    liveDataStructures: report.liveDataStructures
+  };
+}
+
+function runChecks(report) {
+  const failures = [];
+  for (const [name, gate] of Object.entries(report.gates)) {
+    if (!gate.pass) failures.push(`${name} failed: ${gate.actual} vs ${gate.target}`);
+  }
+  if (report.summary.totalEvictions <= 0) failures.push("expected the stress cache to exercise at least one eviction");
+  if (report.liveDataStructures.dirtyEntryQueue.operationCounts.upload <= 0) failures.push("expected upload dirty entries");
+  if (report.liveDataStructures.dirtyEntryQueue.operationCounts.evict <= 0) failures.push("expected eviction dirty entries");
+  if (report.liveDataStructures.pageTableEntries.length === 0) failures.push("expected resident page-table entries");
+  if (report.liveDataStructures.physicalCacheSlots.length !== config.cacheSlots) failures.push("physical slot count mismatch");
+
+  const sha256 = stableReportSha256(report);
+  if (expectedCheckSha256 && sha256 !== expectedCheckSha256) {
+    failures.push(`deterministic report sha256 mismatch: expected ${expectedCheckSha256}, got ${sha256}`);
+  }
+
+  return { failures, sha256 };
+}
+
 function main() {
   const includeFrames = process.argv.includes("--frames");
+  const check = process.argv.includes("--check");
   const rng = mulberry32(config.seed);
   cache = new PhysicalPageCache(config.cacheSlots);
   scheduler = new UploadScheduler();
-  pageTable = new Map();
+  pageTable = new PageTable({ slotColumns: cache.slotColumns });
 
   const frames = cameraPath(config.frames);
   const sampleManifest = buildManifestSample(rng);
@@ -602,10 +989,19 @@ function main() {
       results[config.warmupFrames],
       results[Math.floor(results.length / 2)],
       results[results.length - 1]
-    ]
+    ],
+    liveDataStructures: buildLiveDataStructures({ results })
   };
 
   if (includeFrames) report.frames = results;
+  if (check) {
+    const { failures, sha256 } = runChecks(report);
+    if (failures.length > 0) {
+      throw new Error(`virtual texturing cache sim check failed:\n${failures.map((failure) => `- ${failure}`).join("\n")}`);
+    }
+    console.log(`virtual texturing cache sim checked: ${config.frames} frames, ${summary.totalEvictions} evictions, sha256 ${sha256}`);
+    return;
+  }
 
   console.log(JSON.stringify(report, null, 2));
 }
