@@ -56,6 +56,7 @@ Run:
 ```sh
 node research/virtual-texturing/generate-demo-assets.mjs --check
 node research/virtual-texturing/generate-demo-report.mjs --check
+node research/virtual-texturing/generate-example-fixture.mjs --check
 ```
 
 The checker regenerates the expected bytes in memory, compares every committed
@@ -80,6 +81,12 @@ browser demo.
 manifest, page metadata, overview image, cache overlay, and camera-pan stats.
 Its `--check` mode validates manifest hashes for pages, previews, and stats,
 then compares the committed report bytes.
+
+`example-plan.md` defines the simplified examples-app prototype route that can
+land before renderer virtual-texturing hooks exist. `generate-example-fixture.mjs`
+writes `demo-assets/example-fixture.json`, a compact import/copy payload with
+route metadata, preview assets, fixture stats, visual acceptance, and migration
+notes for the future real renderer-backed example.
 
 ## Design
 
