@@ -12,12 +12,14 @@ describe('examples list', () => {
     expect(examples.map((example) => example.title)).toEqual([
       'Cube',
       'Wireframe',
+      'Text',
       'Texture Materials',
       'glTF Helmet',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
       '/wireframe',
+      '/text',
       '/texture-materials',
       '/gltf-helmet',
     ]);
@@ -68,7 +70,7 @@ describe('examples list', () => {
   it('keeps WIP demo links out of the primary examples list', () => {
     expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(examples).toHaveLength(4);
+    expect(examples).toHaveLength(5);
   });
 
   it('keeps fixture-only VT out of primary examples', () => {
@@ -84,12 +86,25 @@ describe('examples list', () => {
 
   it('keeps fake and compatibility text demos out of primary examples', () => {
     expect(examples.some((example) => String(example.path) === '/fake-ui-text')).toBe(false);
-    expect(examples.some((example) => String(example.path) === '/renderer-text')).toBe(false);
     expect(
       examples.some((example) =>
-        /FakeUiText|Yoga|Raster|Atlas|glyphs|vectorText/.test(example.source),
+        /FakeUiText|Yoga|glyphs|vectorText/.test(example.source),
       ),
     ).toBe(false);
+  });
+
+  it('keeps the text route on renderer-backed font APIs', () => {
+    const textExample = examples.find((example) => example.id === 'text');
+
+    expect(textExample?.path).toBe('/text');
+    expect(textExample?.source).toContain('createTextFontFace');
+    expect(textExample?.source).toContain("font={font}");
+    expect(textExample?.source).toContain('<text');
+    expect(textExample?.source).toContain(
+      "import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url'",
+    );
+    expect(textExample?.source).not.toMatch(/\bscene\s*\(\s*\{/);
+    expect(textExample?.source).not.toMatch(/\bpass\s*\(\s*\{/);
   });
 
   it('keeps the DamagedHelmet route on the public glTF API subset', () => {

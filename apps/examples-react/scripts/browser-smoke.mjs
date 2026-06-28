@@ -23,6 +23,12 @@ const smokeExpectations = {
     minColorBuckets: 3,
     minPaintedRatio: 0.003,
   },
+  text: {
+    surface: 'canvas',
+    canvasLabel: 'Renderer text',
+    minColorBuckets: 3,
+    minPaintedRatio: 0.003,
+  },
   'texture-materials': {
     surface: 'canvas',
     canvasLabel: 'Texture materials',
@@ -218,6 +224,10 @@ const smokeExpression = `
     const smoke = smokeExpectations[routeId];
     const sourceCode = document.querySelector('.source-panel code')?.textContent ?? '';
     const activeLink = document.querySelector('[data-example-nav-link].active');
+    const demoPanel = document.querySelector('.demo-panel');
+    const sourcePanel = document.querySelector('.source-panel');
+    const demoRect = demoPanel?.getBoundingClientRect();
+    const sourceRect = sourcePanel?.getBoundingClientRect();
     const canvasLabel = smoke?.canvasLabel;
     const canvas = canvasLabel === undefined ? undefined : Array.from(document.querySelectorAll('canvas')).find((candidate) =>
       candidate.getAttribute('aria-label') === canvasLabel
@@ -235,6 +245,12 @@ const smokeExpression = `
         file: dataset.sourceFile ?? '',
         hasFile: dataset.sourceFile === undefined ? false : bodyText.includes(dataset.sourceFile),
         hasExport: sourceCode.includes('export const '),
+      },
+      panelOrder: {
+        sourceAfterPreview: demoPanel !== null && sourcePanel !== null &&
+          (demoPanel.compareDocumentPosition(sourcePanel) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+        sourceBelowPreview: demoRect !== undefined && sourceRect !== undefined &&
+          sourceRect.top >= demoRect.bottom - 1,
       },
       canvas: canvas === undefined ? undefined : {
         label: canvas.getAttribute('aria-label') ?? '',
@@ -323,6 +339,8 @@ const assertRoute = (expected, state) => {
   }
   if (!state.source.hasFile) failures.push(`source panel missed "${state.source.file}"`);
   if (!state.source.hasExport) failures.push('source panel missed an exported component');
+  if (!state.panelOrder.sourceAfterPreview) failures.push('source panel did not follow preview');
+  if (!state.panelOrder.sourceBelowPreview) failures.push('source panel was not below preview');
 
   const sample = state.canvas?.sample;
   if (state.canvas === undefined) {

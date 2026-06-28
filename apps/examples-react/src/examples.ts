@@ -3,6 +3,8 @@ import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
+import { RendererText } from './examples/cases/RendererText';
+import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
@@ -33,6 +35,14 @@ export const examples = [
     Component: WireframeCube,
     source: wireframeCubeSource,
     sourceFile: 'examples/cases/WireframeCube.tsx',
+  },
+  {
+    id: 'text',
+    path: '/text',
+    title: 'Text',
+    Component: RendererText,
+    source: rendererTextSource,
+    sourceFile: 'examples/cases/RendererText.tsx',
   },
   {
     id: 'texture-materials',
