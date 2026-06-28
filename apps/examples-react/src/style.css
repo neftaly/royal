@@ -154,7 +154,7 @@ input:focus-visible {
   align-items: start;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(22rem, 1fr) minmax(22rem, 0.92fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -170,6 +170,7 @@ input:focus-visible {
   aspect-ratio: 16 / 11;
   min-height: 24rem;
   overflow: hidden;
+  width: 100%;
 }
 
 .source-panel {
@@ -445,10 +446,6 @@ canvas {
     "Liberation Mono",
     monospace;
   font-size: 0.78rem;
-}
-
-.wip-path code {
-  color: var(--accent-strong);
   font-weight: 700;
   overflow-wrap: anywhere;
   width: fit-content;
@@ -463,10 +460,6 @@ canvas {
     border-bottom: 1px solid var(--line);
     border-right: 0;
     max-height: 15rem;
-  }
-
-  .example-workbench {
-    grid-template-columns: 1fr;
   }
 
   .demo-panel {
