@@ -1,16 +1,13 @@
+/** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  mesh,
-  orthographicCamera,
-  pass,
-  scene,
   unlitMaterial,
   type RenderNode,
   type RenderRoot,
   type Vec3,
 } from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
-import type { ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 
 const barGeometry = boxGeometry({ size: [1, 1, 0.06] });
 const edgeMaterial = unlitMaterial({ color: [0.38, 0.85, 0.95, 1] });
@@ -29,15 +26,17 @@ const bar = (
   const length = Math.hypot(dx, dy);
   const position: Vec3 = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, 0];
 
-  return mesh({
-    geometry: barGeometry,
-    material,
-    transform: {
-      position,
-      rotation: [0, 0, Math.atan2(dy, dx)],
-      scale: [length, 0.055, 1],
-    },
-  });
+  return (
+    <mesh
+      geometry={barGeometry}
+      material={material}
+      transform={{
+        position,
+        rotation: [0, 0, Math.atan2(dy, dx)],
+        scale: [length, 0.055, 1],
+      }}
+    />
+  ) as RenderNode;
 };
 
 const wireframeScene = (): RenderRoot => {
@@ -54,41 +53,35 @@ const wireframeScene = (): RenderRoot => {
     topRight: [2.05, 0.95] as const,
   };
 
-  return scene({
-    children: [
-      pass({
-        clearColor: [0.04, 0.06, 0.08, 1],
-        camera: orthographicCamera({
-          position: [0, 0, 8],
-          rotation: [0, 0, 0],
-          left: -4,
-          right: 4,
-          bottom: -3,
-          top: 3,
-          near: 0.1,
-          far: 100,
-        }),
-        children: [
-          bar(back.bottomLeft, back.bottomRight, backEdgeMaterial),
-          bar(back.bottomRight, back.topRight, backEdgeMaterial),
-          bar(back.topRight, back.topLeft, backEdgeMaterial),
-          bar(back.topLeft, back.bottomLeft, backEdgeMaterial),
-          bar(front.bottomLeft, front.bottomRight),
-          bar(front.bottomRight, front.topRight),
-          bar(front.topRight, front.topLeft),
-          bar(front.topLeft, front.bottomLeft),
-          bar(front.bottomLeft, back.bottomLeft),
-          bar(front.bottomRight, back.bottomRight),
-          bar(front.topLeft, back.topLeft),
-          bar(front.topRight, back.topRight),
-        ],
-      }),
-    ],
-  });
+  return (
+    <scene>
+      <pass clearColor={[0.04, 0.06, 0.08, 1]}>
+        <orthographicCamera
+          bottom={-3}
+          far={100}
+          left={-4}
+          near={0.1}
+          position={[0, 0, 8]}
+          right={4}
+          rotation={[0, 0, 0]}
+          top={3}
+        />
+        {bar(back.bottomLeft, back.bottomRight, backEdgeMaterial)}
+        {bar(back.bottomRight, back.topRight, backEdgeMaterial)}
+        {bar(back.topRight, back.topLeft, backEdgeMaterial)}
+        {bar(back.topLeft, back.bottomLeft, backEdgeMaterial)}
+        {bar(front.bottomLeft, front.bottomRight)}
+        {bar(front.bottomRight, front.topRight)}
+        {bar(front.topRight, front.topLeft)}
+        {bar(front.topLeft, front.bottomLeft)}
+        {bar(front.bottomLeft, back.bottomLeft)}
+        {bar(front.bottomRight, back.bottomRight)}
+        {bar(front.topLeft, back.topLeft)}
+        {bar(front.topRight, back.topRight)}
+      </pass>
+    </scene>
+  ) as RenderRoot;
 };
 
-export const WireframeCube = (): ReactNode => (
-  <Canvas aria-label="Wireframe cube" rootOptions={rootOptions}>
-    {wireframeScene()}
-  </Canvas>
-);
+export const WireframeCube = (): ReactNode =>
+  createElement(Canvas, { 'aria-label': 'Wireframe cube', rootOptions }, wireframeScene());

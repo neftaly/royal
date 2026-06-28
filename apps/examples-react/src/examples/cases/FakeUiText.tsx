@@ -1,10 +1,6 @@
+/** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  mesh,
-  orthographicCamera,
-  pass,
-  scene,
-  text,
   unlitMaterial,
   type Material,
   type RenderNode,
@@ -13,7 +9,7 @@ import {
   type Vec3,
 } from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
-import type { ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 
 type LayoutBox = {
   readonly color: Rgba;
@@ -66,69 +62,81 @@ const panel = ({ color, label, position, size }: LayoutBox): readonly RenderNode
   ];
 
   return [
-    mesh({
-      geometry: panelGeometry,
-      material: material(color),
-      transform: { position, rotation: [0, 0, 0], scale: size },
-    }),
-    text({
-      color: [0.94, 0.96, 0.98, 1],
-      fontSize: 0.26,
-      lineHeight: 0.34,
-      origin: labelOrigin,
-      text: label,
-    }),
+    (
+      <mesh
+        geometry={panelGeometry}
+        material={material(color)}
+        transform={{ position, rotation: [0, 0, 0], scale: size }}
+      />
+    ) as RenderNode,
+    (
+      <text
+        color={[0.94, 0.96, 0.98, 1]}
+        fontSize={0.26}
+        lineHeight={0.34}
+        origin={labelOrigin}
+        text={label}
+      />
+    ) as RenderNode,
   ];
 };
 
-const fakeUiScene = (): RenderRoot =>
-  scene({
-    children: [
-      pass({
-        clearColor: [0.05, 0.06, 0.08, 1],
-        camera: orthographicCamera({
-          position: [0, 0, 8],
-          rotation: [0, 0, 0],
-          left: -4,
-          right: 4,
-          bottom: -3,
-          top: 3,
-          near: 0.1,
-          far: 100,
-        }),
-        children: [
-          ...layoutBoxes.flatMap(panel),
-          text({
-            color: [0.58, 0.82, 0.95, 1],
-            fontSize: 0.2,
-            lineHeight: 0.3,
-            origin: [-3.18, 0.36, 0.1],
-            text: 'Camera / Key Light / Helmet',
-          }),
-          text({
-            color: [0.95, 0.78, 0.42, 1],
-            fontSize: 0.2,
-            lineHeight: 0.3,
-            origin: [1.94, -0.78, 0.1],
-            text: 'Transform\nMaterial\nBounds',
-          }),
-        ],
-      }),
-    ],
-  });
+const fakeUiScene = (): RenderRoot => (
+  <scene>
+    <pass clearColor={[0.05, 0.06, 0.08, 1]}>
+      <orthographicCamera
+        bottom={-3}
+        far={100}
+        left={-4}
+        near={0.1}
+        position={[0, 0, 8]}
+        right={4}
+        rotation={[0, 0, 0]}
+        top={3}
+      />
+      {layoutBoxes.flatMap(panel)}
+      <text
+        color={[0.58, 0.82, 0.95, 1]}
+        fontSize={0.2}
+        lineHeight={0.3}
+        origin={[-3.18, 0.36, 0.1]}
+        text="Camera / Key Light / Helmet"
+      />
+      <text
+        color={[0.95, 0.78, 0.42, 1]}
+        fontSize={0.2}
+        lineHeight={0.3}
+        origin={[1.94, -0.78, 0.1]}
+        text={'Transform\nMaterial\nBounds'}
+      />
+    </pass>
+  </scene>
+) as RenderRoot;
 
-export const FakeUiText = (): ReactNode => (
-  <div className="stacked-demo">
-    <div className="canvas-slot">
-      <Canvas aria-label="Fake UI with renderer text" rootOptions={rootOptions}>
-        {fakeUiScene()}
-      </Canvas>
-    </div>
-    <div className="control-strip">
-      <label>
-        Zoom
-        <input aria-label="Zoom" defaultValue="100" disabled max="160" min="60" type="range" />
-      </label>
-    </div>
-  </div>
-);
+export const FakeUiText = (): ReactNode =>
+  createElement(
+    'div',
+    { className: 'stacked-demo' },
+    createElement(
+      'div',
+      { className: 'canvas-slot' },
+      createElement(Canvas, { 'aria-label': 'Fake UI with renderer text', rootOptions }, fakeUiScene()),
+    ),
+    createElement(
+      'div',
+      { className: 'control-strip' },
+      createElement(
+        'label',
+        null,
+        'Zoom',
+        createElement('input', {
+          'aria-label': 'Zoom',
+          defaultValue: '100',
+          disabled: true,
+          max: '160',
+          min: '60',
+          type: 'range',
+        }),
+      ),
+    ),
+  );

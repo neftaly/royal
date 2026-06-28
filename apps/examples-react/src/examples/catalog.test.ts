@@ -55,6 +55,13 @@ describe('examples list', () => {
     );
   });
 
+  it('keeps primary renderer examples on JSX scene authoring', () => {
+    for (const example of examples) {
+      expect(example.source).not.toMatch(/\bscene\s*\(\s*\{/);
+      expect(example.source).not.toMatch(/\bpass\s*\(\s*\{/);
+    }
+  });
+
   it('keeps Tarstate out of the primary examples app', () => {
     expect(examples.some((example) => example.source.includes('@royal/tarstate-lens'))).toBe(false);
     expect(examples.some((example) => example.title.toLowerCase().includes('tarstate'))).toBe(false);
@@ -70,7 +77,7 @@ describe('examples list', () => {
     const helmet = examples.find((example) => example.id === 'gltf-helmet');
 
     expect(helmet?.path).toBe('/gltf-helmet');
-    expect(helmet?.source).toContain('gltf({');
+    expect(helmet?.source).toContain('<gltf');
     expect(helmet?.source).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
     expect(helmet?.source).toContain('directionalLight');
     expect(helmet?.source).toContain('perspectiveCamera');
@@ -80,8 +87,8 @@ describe('examples list', () => {
     const fakeUi = examples.find((example) => example.id === 'fake-ui-text');
 
     expect(fakeUi?.source).toContain('Yoga is not exposed to the examples app yet');
-    expect(fakeUi?.source).toContain('aria-label="Zoom"');
-    expect(fakeUi?.source).toContain('disabled');
+    expect(fakeUi?.source).toContain("'aria-label': 'Zoom'");
+    expect(fakeUi?.source).toContain('disabled: true');
   });
 
   it('keeps the virtual texturing route honest while renderer hooks are absent', () => {
