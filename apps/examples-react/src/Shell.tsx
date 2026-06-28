@@ -1,41 +1,41 @@
 import { Link, Outlet } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { exampleSections } from "./examples/catalog";
 
-const Header = (): ReactNode => (
-  <header className="examples-header">
+const Sidebar = (): ReactNode => (
+  <aside className="examples-sidebar">
     <Link className="examples-brand" to="/">
-      <span aria-hidden="true">👑</span>
       <span>Royal</span>
+      <span>Examples</span>
     </Link>
     <nav className="examples-nav" aria-label="Examples">
-      <Link
-        to="/cube"
-        activeProps={{ className: "examples-link active" }}
-        className="examples-link"
-      >
-        Cube
-      </Link>
-      <Link
-        to="/wireframe"
-        activeProps={{ className: "examples-link active" }}
-        className="examples-link"
-      >
-        Wireframe
-      </Link>
-      <Link
-        to="/gltf"
-        activeProps={{ className: "examples-link active" }}
-        className="examples-link"
-      >
-        glTF
-      </Link>
+      {exampleSections.map((section) => (
+        <section className="nav-section" key={section.id}>
+          <h2>{section.title}</h2>
+          <ul>
+            {section.examples.map((example) => (
+              <li key={example.id}>
+                <Link
+                  to={example.path}
+                  activeProps={{ className: "examples-link active" }}
+                  className="examples-link"
+                >
+                  {example.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </nav>
-  </header>
+  </aside>
 );
 
 export const Shell = (): ReactNode => (
   <main className="examples-shell">
-    <Header />
-    <Outlet />
+    <Sidebar />
+    <div className="examples-main">
+      <Outlet />
+    </div>
   </main>
 );

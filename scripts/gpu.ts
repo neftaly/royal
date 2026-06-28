@@ -177,7 +177,7 @@ const parseArgs = (): {
   let browserPath = process.env.CHROMIUM_BIN ?? '/usr/bin/chromium';
   let out = path.join(tmpdir(), `royal-gpu-profile-${Date.now()}.json`);
   let settleMs = 0;
-  let url = 'http://127.0.0.1:5173/cube';
+  let url = 'http://127.0.0.1:5173/hello-cube';
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
