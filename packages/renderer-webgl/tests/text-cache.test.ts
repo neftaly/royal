@@ -4,8 +4,8 @@ vi.mock("@royal/renderer-core", async () => await import("../../renderer-core/sr
 
 import {
   text,
+  textMesh,
   textMeshFromLayout,
-  vectorTextMesh,
   type TextMesh,
 } from "@royal/renderer-core";
 import { TextCache, textBufferDataFromMesh } from "../src/text-cache";
@@ -71,10 +71,10 @@ describe("TextCache", () => {
       vertices: [],
     };
 
-    expect(() => textBufferDataFromMesh(mesh)).toThrow("VectorText geometry exceeds uint16 index capacity");
+    expect(() => textBufferDataFromMesh(mesh)).toThrow("Text geometry exceeds uint16 index capacity");
   });
 
-  it("caches generated buffers by vector text node identity", () => {
+  it("caches generated buffers by text node identity", () => {
     const { counts, gl } = fakeGl();
     const cache = new TextCache(gl);
     const node = text({
@@ -135,7 +135,7 @@ describe("TextCache", () => {
   });
 
   it("packs empty text as empty buffers", () => {
-    const mesh = vectorTextMesh(text({
+    const mesh = textMesh(text({
       color: [1, 1, 1, 1],
       text: "",
     }));

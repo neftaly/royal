@@ -109,18 +109,28 @@ describe('Royal public API smoke tests', () => {
     });
     const meshFromLayout = textMeshFromLayout(layout);
     const meshFromNode = textMesh(textNode);
+    const kernedGlyph = shaped.run.glyphs[1];
 
-    expect(shaped.run.glyphs[1]?.kerning?.pair).toEqual(['glyph:A', 'glyph:V']);
+    expect(kernedGlyph?.kerning?.adjustment).toBeLessThan(0);
+    expect(kernedGlyph?.kerning?.pair).toEqual([
+      shaped.run.glyphs[0]?.glyphId,
+      kernedGlyph?.glyphId
+    ]);
     expect(layout.lines).toHaveLength(2);
     expect(meshFromLayout.vertices.length).toBeGreaterThan(0);
     expect(textMesh(layout)).toEqual(meshFromLayout);
     expect(meshFromNode.indices.length).toBeGreaterThan(0);
+    expect(rendererCore).not.toHaveProperty('vectorText');
+    expect(rendererCore).not.toHaveProperty('vectorTextMesh');
     expect(rendererCore).not.toHaveProperty('vectorTextGlyphRects');
     expect(rendererCore).not.toHaveProperty('vectorTextSupportedCharacters');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorText');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorTextMesh');
     expectTypeOf(shaped).toEqualTypeOf<ShapeTextResult>();
     expectTypeOf(layout).toEqualTypeOf<TextLayout>();
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
     expectTypeOf(meshFromNode).toEqualTypeOf<TextMesh>();
+    expectTypeOf<TextMesh['contours'][number]['role']>().toEqualTypeOf<'outline'>();
     expectTypeOf<TextOptions>().not.toHaveProperty('glyphs');
   });
 

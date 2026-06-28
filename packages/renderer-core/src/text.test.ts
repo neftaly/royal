@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { RenderNodeKind } from './kind';
 import {
   createTextFontFace,
   layoutText,
@@ -33,7 +34,7 @@ describe('text shaping and mesh generation', () => {
       text: 'Royal'
     });
 
-    expect(node.kind).toBe(vectorText({ color: [1, 1, 1, 1], text: '' }).kind);
+    expect(node.kind).toBe(RenderNodeKind.VectorText);
     expect(node.layout.font.metrics.size).toBe(2);
     expect(node.layout.lines[0]?.glyphs.map((glyph) => glyph.glyph.text).join('')).toBe('Royal');
     expectTypeOf(text).toEqualTypeOf<(options: TextOptions) => TextNode>();
@@ -169,7 +170,7 @@ describe('text shaping and mesh generation', () => {
     expect(mesh.indices).toHaveLength(0);
   });
 
-  it('creates contour mesh data instead of ASCII grid rectangles for shaped text', () => {
+  it('creates contour mesh data with semantic contour roles for shaped text', () => {
     const node = vectorText({
       color: [1, 1, 1, 1],
       text: 'o'
@@ -177,7 +178,7 @@ describe('text shaping and mesh generation', () => {
     const mesh = vectorTextMesh(node);
 
     expect(node.layout.font.family).toBe('royal-ascii-prototype');
-    expect(mesh.contours.map((contour) => contour.role)).toEqual(['bar', 'bar', 'stem', 'stem']);
+    expect(mesh.contours.map((contour) => contour.role)).toEqual(['outline', 'outline', 'outline', 'outline']);
     expect(mesh.vertices).toHaveLength(16);
     expect(mesh.indices).toHaveLength(24);
   });

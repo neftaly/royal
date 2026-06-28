@@ -55,19 +55,10 @@ export type {
   TextMeshContour,
   TextMeshContourRole,
   TextMeshVertex,
-  TextGlyphOptions,
   TextNode,
   TextOptions,
   TextRunMetrics,
-  TextStringOptions,
-  TextShapingDiagnostic,
-  VectorTextCell,
-  VectorTextGlyph,
-  VectorTextGlyphOptions,
-  VectorTextNode,
-  VectorTextOptions,
-  VectorTextRect,
-  VectorTextStringOptions
+  TextShapingDiagnostic
 } from './text';
 export {
   createTextFontFace,
@@ -75,9 +66,7 @@ export {
   shapeText,
   text,
   textMesh,
-  textMeshFromLayout,
-  vectorText,
-  vectorTextMesh
+  textMeshFromLayout
 } from './text';
 export type {
   Axis,

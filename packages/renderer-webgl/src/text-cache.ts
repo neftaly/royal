@@ -1,4 +1,4 @@
-import { vectorTextMesh, type TextMesh, type VectorTextNode } from "@royal/renderer-core";
+import { textMesh, type TextMesh, type TextNode } from "@royal/renderer-core";
 import { createFloatBuffer, createIndexBuffer } from "./gl";
 
 export interface TextRenderAsset {
@@ -25,7 +25,7 @@ export const textBufferDataFromMesh = (mesh: TextMesh): TextBufferData => {
 
   for (const index of mesh.indices) {
     if (!Number.isInteger(index) || index < 0 || index > 65535) {
-      throw new Error("VectorText geometry exceeds uint16 index capacity");
+      throw new Error("Text geometry exceeds uint16 index capacity");
     }
   }
 
@@ -38,9 +38,9 @@ export const textBufferDataFromMesh = (mesh: TextMesh): TextBufferData => {
 
 const createGeometry = (
   gl: WebGLRenderingContext,
-  node: VectorTextNode,
+  node: TextNode,
 ): TextRenderAsset => {
-  const data = textBufferDataFromMesh(vectorTextMesh(node));
+  const data = textBufferDataFromMesh(textMesh(node));
 
   return {
     glyphCoord: createFloatBuffer(gl, data.glyphCoord),
@@ -51,10 +51,10 @@ const createGeometry = (
 };
 
 export class TextCache {
-  readonly #assets = new Map<VectorTextNode, TextRenderAsset>();
+  readonly #assets = new Map<TextNode, TextRenderAsset>();
   readonly #buffers = new Set<WebGLBuffer>();
   readonly #gl: WebGLRenderingContext;
-  readonly #liveNodes = new Set<VectorTextNode>();
+  readonly #liveNodes = new Set<TextNode>();
   #frameActive = false;
 
   constructor(gl: WebGLRenderingContext) {
@@ -66,7 +66,7 @@ export class TextCache {
     this.#frameActive = true;
   }
 
-  get(node: VectorTextNode): TextRenderAsset {
+  get(node: TextNode): TextRenderAsset {
     if (this.#frameActive) this.#liveNodes.add(node);
 
     const cached = this.#assets.get(node);

@@ -4,7 +4,7 @@ import {
   type DirectionalLightNode,
   type GltfNode,
   type MeshNode,
-  type VectorTextNode,
+  type TextNode,
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
@@ -111,7 +111,7 @@ export const drawVectorText = (
   programs: {
     readonly text: TextProgram;
   },
-  node: VectorTextNode,
+  node: TextNode,
   asset: TextRenderAsset,
   context: TextDrawContext,
 ): void => {

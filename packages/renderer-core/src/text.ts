@@ -4,26 +4,30 @@ import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
 import { RenderNodeKind } from './kind';
 import type { Rgba, Vec3 } from './primitives';
 
-export type VectorTextCell = {
+type TextCell = {
   readonly center: readonly [number, number];
   readonly column: number;
   readonly span: number;
 };
 
-export type VectorTextGlyph = {
-  readonly cell?: VectorTextCell;
+type TextGlyph = {
+  readonly cell?: TextCell;
   readonly center: Vec3;
   readonly char: string;
   readonly span: number;
 };
 
-export type VectorTextRect = {
+type TextRect = {
   readonly height: number;
   readonly width: number;
   readonly x: number;
   readonly y: number;
   readonly z: number;
 };
+
+export type VectorTextCell = TextCell;
+export type VectorTextGlyph = TextGlyph;
+export type VectorTextRect = TextRect;
 
 export type TextBounds = {
   readonly xMax: number;
@@ -145,7 +149,7 @@ export type TextLayout = {
   readonly source: string;
 };
 
-export type TextMeshContourRole = 'bar' | 'dot' | 'fill' | 'outline' | 'stem';
+export type TextMeshContourRole = 'outline';
 
 export type TextMeshContour = {
   readonly bounds: TextBounds;
@@ -188,14 +192,16 @@ export interface LayoutTextOptions {
   readonly text: string;
 }
 
-export interface VectorTextNode {
+export interface TextNode {
   readonly kind: RenderNodeKind.VectorText;
   readonly cellHeight: number;
   readonly color: Rgba;
   readonly diagnostics: readonly TextShapingDiagnostic[];
-  readonly glyphs: readonly VectorTextGlyph[];
+  readonly glyphs: readonly TextGlyph[];
   readonly layout: TextLayout;
 }
+
+export type VectorTextNode = TextNode;
 
 export interface VectorTextGlyphOptions {
   readonly cellHeight?: number;
@@ -216,7 +222,6 @@ export interface VectorTextStringOptions {
 }
 
 export type VectorTextOptions = VectorTextGlyphOptions | VectorTextStringOptions;
-export type TextNode = VectorTextNode;
 export interface TextOptions {
   readonly color: Rgba;
   readonly font?: TextFontFace;
@@ -1098,8 +1103,8 @@ const legacyLayout = (glyphs: readonly VectorTextGlyph[], cellHeight: number): T
   };
 };
 
-const glyphsFromLayout = (layout: TextLayout): readonly VectorTextGlyph[] => {
-  const glyphs: VectorTextGlyph[] = [];
+const glyphsFromLayout = (layout: TextLayout): readonly TextGlyph[] => {
+  const glyphs: TextGlyph[] = [];
 
   for (const line of layout.lines) {
     for (const placement of line.glyphs) {
@@ -1129,27 +1134,34 @@ const legacyVectorGlyphChar = (text: string): string => {
   return ' ';
 };
 
+type TextNodeOptions = TextOptions & {
+  readonly cellHeight?: number;
+};
+
+const createTextNode = (options: TextNodeOptions): TextNode => {
+  const cellHeight = options.cellHeight ?? options.fontSize ?? 1;
+  const layout = layoutText({
+    ...(options.font === undefined ? {} : { font: options.font }),
+    fontSize: options.fontSize ?? cellHeight,
+    ...(options.lineHeight === undefined ? {} : { lineHeight: options.lineHeight }),
+    ...(options.origin === undefined ? {} : { origin: options.origin }),
+    text: options.text
+  });
+
+  return {
+    kind: RenderNodeKind.VectorText,
+    cellHeight,
+    color: options.color,
+    diagnostics: layout.diagnostics,
+    glyphs: glyphsFromLayout(layout),
+    layout
+  };
+};
+
 export const vectorText = (options: VectorTextOptions): VectorTextNode => {
-  const cellHeight = options.cellHeight ?? ('fontSize' in options ? options.fontSize : undefined) ?? 1;
+  if (options.text !== undefined) return createTextNode(options);
 
-  if (options.text !== undefined) {
-    const layout = layoutText({
-      ...(options.font === undefined ? {} : { font: options.font }),
-      fontSize: options.fontSize ?? cellHeight,
-      ...(options.lineHeight === undefined ? {} : { lineHeight: options.lineHeight }),
-      ...(options.origin === undefined ? {} : { origin: options.origin }),
-      text: options.text
-    });
-
-    return {
-      kind: RenderNodeKind.VectorText,
-      cellHeight,
-      color: options.color,
-      diagnostics: layout.diagnostics,
-      glyphs: glyphsFromLayout(layout),
-      layout
-    };
-  }
+  const cellHeight = options.cellHeight ?? 1;
 
   for (const glyph of options.glyphs) patternFor(glyph.char);
   const layout = legacyLayout(options.glyphs, cellHeight);
@@ -1164,7 +1176,7 @@ export const vectorText = (options: VectorTextOptions): VectorTextNode => {
   };
 };
 
-export const text = (options: TextOptions): TextNode => vectorText(options);
+export const text = (options: TextOptions): TextNode => createTextNode(options);
 
 const contourBounds = (
   bounds: TextBounds,
@@ -1201,54 +1213,56 @@ const contoursForGlyph = (placement: TextGlyphLayout, glyphIndex: number): reado
   if (isWhitespaceText(text)) return contours;
 
   if (text === '.' || text === ',') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.55), 'dot');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.55), 'outline');
     return contours;
   }
 
   if (text === ':' || text === ';') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.28), 'dot');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0.65, 0.72, 0.93), 'dot');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.28), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0.65, 0.72, 0.93), 'outline');
     return contours;
   }
 
   if (text === '-' || text === '_' || text === '=') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.42, 1, 0.58), 'bar');
-    if (text === '=') addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.68, 1, 0.84), 'bar');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.42, 1, 0.58), 'outline');
+    if (text === '=') addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.68, 1, 0.84), 'outline');
     return contours;
   }
 
   if (text === 'i' || text === 'j') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.35, 0, 0.65, 0.68), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.3, 0.82, 0.7, 1), 'dot');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.35, 0, 0.65, 0.68), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.3, 0.82, 0.7, 1), 'outline');
     return contours;
   }
 
   const first = text[0] ?? '';
   if (roundGlyphs.has(first)) {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.78, 1, 1), 'bar');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 1, 0.22), 'bar');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.12, 0.22, 0.9), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.78, 0.12, 1, 0.9), 'stem');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.78, 1, 1), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 1, 0.22), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.12, 0.22, 0.9), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.78, 0.12, 1, 0.9), 'outline');
     return contours;
   }
 
   if (crossbarGlyphs.has(first)) {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.2, 1), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.8, 0, 1, 1), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.42, 0.92, 0.6), 'bar');
-    if (first === 'E' || first === 'F') addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.82, 1, 1), 'bar');
-    if (first === 'E') addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0, 1, 0.18), 'bar');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.2, 1), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.8, 0, 1, 1), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.42, 0.92, 0.6), 'outline');
+    if (first === 'E' || first === 'F') {
+      addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.82, 1, 1), 'outline');
+    }
+    if (first === 'E') addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0, 1, 0.18), 'outline');
     return contours;
   }
 
   if (first === 'm' || first === 'w' || first === 'M' || first === 'W') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.18, 1), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.41, 0.08, 0.59, 0.92), 'stem');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.82, 0, 1, 1), 'stem');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.18, 1), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.41, 0.08, 0.59, 0.92), 'outline');
+    addContour(contours, glyphIndex, contourBounds(bounds, 0.82, 0, 1, 1), 'outline');
     return contours;
   }
 
-  addContour(contours, glyphIndex, bounds, 'fill');
+  addContour(contours, glyphIndex, bounds, 'outline');
   return contours;
 };
 
@@ -1656,7 +1670,7 @@ export const vectorTextMesh = (node: VectorTextNode): TextMesh => {
 };
 
 export const textMesh = (input: TextNode | TextLayout): TextMesh =>
-  'kind' in input ? vectorTextMesh(input) : textMeshFromLayout(input);
+  'kind' in input ? textMeshFromLayout(input.layout) : textMeshFromLayout(input);
 
 export const vectorTextGlyphRects = (node: VectorTextNode): readonly VectorTextRect[] => {
   const rects: VectorTextRect[] = [];

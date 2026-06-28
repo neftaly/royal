@@ -1,6 +1,6 @@
 import type { DirectionalLightNode } from './directional-light';
 import type { GltfNode } from './gltf';
 import type { MeshNode } from './mesh';
-import type { VectorTextNode } from './text';
+import type { TextNode } from './text';
 
-export type RenderNode = MeshNode | GltfNode | DirectionalLightNode | VectorTextNode;
+export type RenderNode = MeshNode | GltfNode | DirectionalLightNode | TextNode;

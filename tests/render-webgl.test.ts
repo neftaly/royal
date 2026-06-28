@@ -9,7 +9,7 @@ import {
   scene,
   standardMaterial,
   unlitMaterial,
-  vectorText
+  text
 } from '@royal/renderer-core';
 import { createRoot } from '@royal/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -144,7 +144,7 @@ describe('WebGL resource lifetime', () => {
     expect(counts.drawElements).toBe(1);
   });
 
-  it('renders vector text without uploading text textures', () => {
+  it('renders text without uploading text textures', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
 
@@ -162,13 +162,9 @@ describe('WebGL resource lifetime', () => {
             far: 100
           }),
           children: [
-            vectorText({
+            text({
               color: [1, 1, 1, 1],
-              glyphs: [{
-                center: [0, 0, 0],
-                char: 'a',
-                span: 1
-              }]
+              text: 'a'
             })
           ]
         })
@@ -184,10 +180,10 @@ describe('WebGL resource lifetime', () => {
     expect(counts.deleteTexture).toBe(0);
   });
 
-  it('releases replaced dynamic vector text buffers before dispose', () => {
+  it('releases replaced dynamic text buffers before dispose', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
-    const textScene = (text: string) => scene({
+    const textScene = (content: string) => scene({
       children: [
         pass({
           camera: orthographicCamera({
@@ -201,9 +197,9 @@ describe('WebGL resource lifetime', () => {
             far: 100
           }),
           children: [
-            vectorText({
+            text({
               color: [1, 1, 1, 1],
-              text
+              text: content
             })
           ]
         })
