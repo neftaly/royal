@@ -17,7 +17,6 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "@royal/renderer-core": "workspace:*",
-    "@royal/tarstate-lens": "workspace:*",
     "@royal/react": "workspace:*"
   },
   "devDependencies": {

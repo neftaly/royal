@@ -1,6 +1,6 @@
-import { Link, Outlet } from "@tanstack/react-router";
-import type { ReactNode } from "react";
-import { exampleSections } from "./examples/catalog";
+import { Link, Outlet } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
+import { examples } from './examples';
 
 const Sidebar = (): ReactNode => (
   <aside className="examples-sidebar">
@@ -9,27 +9,22 @@ const Sidebar = (): ReactNode => (
       <span>Examples</span>
     </Link>
     <nav className="examples-nav" aria-label="Examples">
-      {exampleSections.map((section) => (
-        <section className="nav-section" key={section.id}>
-          <h2>{section.title}</h2>
-          <ul>
-            {section.examples.map((example) => (
-              <li key={example.id}>
-                <Link
-                  to={example.path}
-                  activeProps={{ className: "examples-link active" }}
-                  className="examples-link"
-                  data-example-id={example.id}
-                  data-example-nav-link=""
-                  data-example-route={example.path}
-                >
-                  {example.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      <ul>
+        {examples.map((example) => (
+          <li key={example.id}>
+            <Link
+              to={example.path}
+              activeProps={{ className: 'examples-link active' }}
+              className="examples-link"
+              data-example-id={example.id}
+              data-example-nav-link=""
+              data-example-route={example.path}
+            >
+              {example.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </nav>
   </aside>
 );
