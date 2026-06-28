@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Royal Virtual Texturing Demo Readiness</title>
+  <style>
+    :root { color-scheme: light; --ink: #172026; --muted: #50606a; --line: #cfc4ac; --paper: #f7f4ed; --bg: #e8e1d1; --pass: #2d7d4f; --warn: #a35f00; --info: #315f8d; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; }
+    h1 { margin: 0; font-size: 34px; line-height: 1.1; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    p { margin: 8px 0 0; color: var(--muted); }
+    a { color: var(--info); }
+    .grid { display: grid; gap: 18px; }
+    .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 26px 0; }
+    .two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .panel, .card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+    .card strong { display: block; font-size: 30px; line-height: 1.1; margin: 8px 0; }
+    .thumb { width: 100%; height: auto; border: 1px solid var(--line); background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 9px 7px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .pass { color: var(--pass); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    .info { color: var(--info); font-weight: 700; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    @media (max-width: 840px) { .cards, .two { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Virtual Texturing Demo Readiness</h1>
+      <p><code>royal.generated-terrain-material.vt-demo</code> generated from <code>virtual-terrain-pages@0.1.0</code>. Public API stays asset/material shaped; there is no public <code>VirtualTextureNode</code>.</p>
+    </header>
+
+    <section class="grid cards" aria-label="Summary">
+      <article class="card"><span>Pages</span><strong>21</strong><p>3 mips</p></article>
+      <article class="card"><span>Cache slots</span><strong>12</strong><p>25 KiB frame cap</p></article>
+      <article class="card"><span>Exact hits</span><strong>74.7%</strong><p>tiny cold pan</p></article>
+      <article class="card"><span>Border mismatches</span><strong>0</strong><p>8960 samples</p></article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <h2>Page Table Overview</h2>
+        <img class="thumb" src="../preview/terrain-pages-overview.png" alt="Generated terrain pages overview">
+        <p>128 x 128 virtual texels, 32px usable pages, 4px generated borders.</p>
+      </article>
+      <article class="panel">
+        <h2>Cache Overlay</h2>
+        <img class="thumb" src="../preview/page-cache-debug-overlay.svg" alt="Page cache debug overlay">
+        <p>8 visible slots, 4 resident slots, 6 evictions.</p>
+      </article>
+    </section>
+
+    <section class="panel" style="margin-top: 18px">
+      <h2>Compact SVG Report</h2>
+      <img class="thumb" src="./virtual-texturing-demo-readiness.svg" alt="Generated virtual texturing SVG report">
+    </section>
+
+    <section class="panel" style="margin-top: 18px">
+      <h2>Camera Pan And Seam Checks</h2>
+      <table>
+        <thead><tr><th>Status</th><th>Probe</th><th>Value</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td class="pass">pass</td><td><code>vt.page_hits.exact_ratio</code><br>exact page hit ratio</td><td>0.747</td><td>&gt;= 0.72 in tiny cold-pan sample; &gt;= 0.95 in full warm-pan demo</td></tr>
+<tr><td class="pass">pass</td><td><code>vt.uploads.pages_per_frame</code><br>page uploads per frame</td><td>4</td><td>&lt;= 4</td></tr>
+<tr><td class="pass">pass</td><td><code>vt.page_table.dirty_entries</code><br>dirty page-table entries</td><td>4</td><td>proportional to uploads plus evictions</td></tr>
+<tr><td class="info">info</td><td><code>vt.seams.candidates</code><br>resident-mip seam candidates</td><td>45</td><td>debug pressure row; exact border safety is checked by vt.tile_borders.mismatches</td></tr>
+<tr><td class="pass">pass</td><td><code>vt.tile_borders.mismatches</code><br>padded tile border mismatches</td><td>0</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 18px">
+      <h2>Royal Example Route Contract</h2>
+      <p>When renderer hooks exist, add <code>VirtualTexturingTerrain</code> to <code>apps/examples-react/src/examples/cases</code>, register it at <code>/labs/virtual-texturing</code>, and bind the scene through virtual texture asset and material resources.</p>
+    </section>
+  </main>
+</body>
+</html>

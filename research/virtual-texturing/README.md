@@ -55,6 +55,7 @@ Run:
 
 ```sh
 node research/virtual-texturing/generate-demo-assets.mjs --check
+node research/virtual-texturing/generate-demo-report.mjs --check
 ```
 
 The checker regenerates the expected bytes in memory, compares every committed
@@ -67,6 +68,18 @@ artifact, and verifies that adjacent tile borders match. Current fixture:
 
 This fixture is intentionally tiny. It proves the asset contract and visual
 debug story without freezing renderer APIs or checking in a heavy tile set.
+
+`demo-readiness.md` defines the exact Royal route to add after renderer hooks
+exist: `/labs/virtual-texturing` in the examples app, backed by asset/material
+resources and a private renderer implementation. It also lists the controls,
+debug overlay rows, stats, tests, and gates for moving from this fixture to the
+browser demo.
+
+`generate-demo-report.mjs` writes `demo-assets/report/index.html` and
+`demo-assets/report/virtual-texturing-demo-readiness.svg` from the committed
+manifest, page metadata, overview image, cache overlay, and camera-pan stats.
+Its `--check` mode validates manifest hashes for pages, previews, and stats,
+then compares the committed report bytes.
 
 ## Design
 

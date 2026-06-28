@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760" role="img" aria-labelledby="title desc">
+  <title id="title">Royal virtual texturing demo readiness report</title>
+  <desc id="desc">Summary of page table coverage, cache residency, camera pan stats, and seam checks generated from the research fixture.</desc>
+  <style>
+    text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #172026; }
+    .caption { fill: #50606a; font-size: 13px; }
+    .small { fill: #50606a; font-size: 12px; }
+    .label { fill: #24313a; font-size: 14px; font-weight: 700; }
+    .value { fill: #11191f; font-size: 30px; font-weight: 800; }
+    .panel { fill: #f7f4ed; stroke: #cfc4ac; stroke-width: 1; rx: 8; }
+    .ink { fill: #172026; }
+    .muted { fill: #6c7a82; }
+    .pass { fill: #2d7d4f; }
+    .warn { fill: #a35f00; }
+    .info { fill: #315f8d; }
+    .grid-line { stroke: #172026; stroke-opacity: 0.32; stroke-width: 1; }
+    .axis { stroke: #7d8a91; stroke-width: 1; }
+  </style>
+  <rect width="1120" height="760" fill="#e8e1d1"/>
+  <text x="40" y="50" class="ink" font-size="31" font-weight="850">Virtual Texturing Demo Readiness</text>
+  <text x="40" y="76" class="caption">royal.generated-terrain-material.vt-demo - virtual-terrain-pages@0.1.0</text>
+  <text x="810" y="52" class="label">Public shape</text>
+  <text x="810" y="76" class="caption">asset/material resources, no public VirtualTextureNode</text>
+
+  <rect x="40" y="108" width="245" height="112" class="panel"/>
+  <text x="60" y="140" class="label">Pages</text>
+  <text x="60" y="180" class="value">21</text>
+  <text x="60" y="204" class="caption">3 mips</text>
+<rect x="305" y="108" width="245" height="112" class="panel"/>
+  <text x="325" y="140" class="label">Cache slots</text>
+  <text x="325" y="180" class="value">12</text>
+  <text x="325" y="204" class="caption">25 KiB frame cap</text>
+<rect x="570" y="108" width="245" height="112" class="panel"/>
+  <text x="590" y="140" class="label">Exact hits</text>
+  <text x="590" y="180" class="value">74.7%</text>
+  <text x="590" y="204" class="caption">tiny cold pan</text>
+<rect x="835" y="108" width="245" height="112" class="panel"/>
+  <text x="855" y="140" class="label">Seams</text>
+  <text x="855" y="180" class="value">0</text>
+  <text x="855" y="204" class="caption">8960 border samples</text>
+
+  <rect x="40" y="250" width="420" height="320" class="panel"/>
+  <text x="62" y="284" class="label">Page Table Overview</text>
+  <text x="62" y="306" class="caption">128 x 128 virtual texels, 32px pages, 4px border</text>
+  <text x="62" y="318" class="small">mip 0</text><rect x="62" y="332" width="33" height="33" fill="rgb(115,126,81)" stroke="#172026" stroke-opacity="0.36"/><rect x="97" y="332" width="33" height="33" fill="rgb(109,115,81)" stroke="#172026" stroke-opacity="0.36"/><rect x="132" y="332" width="33" height="33" fill="rgb(105,111,81)" stroke="#172026" stroke-opacity="0.36"/><rect x="167" y="332" width="33" height="33" fill="rgb(118,130,82)" stroke="#172026" stroke-opacity="0.36"/><rect x="62" y="367" width="33" height="33" fill="rgb(87,113,83)" stroke="#172026" stroke-opacity="0.36"/><rect x="97" y="367" width="33" height="33" fill="rgb(86,106,85)" stroke="#172026" stroke-opacity="0.36"/><rect x="132" y="367" width="33" height="33" fill="rgb(83,104,86)" stroke="#172026" stroke-opacity="0.36"/><rect x="167" y="367" width="33" height="33" fill="rgb(91,118,88)" stroke="#172026" stroke-opacity="0.36"/><rect x="62" y="402" width="33" height="33" fill="rgb(81,107,82)" stroke="#172026" stroke-opacity="0.36"/><rect x="97" y="402" width="33" height="33" fill="rgb(103,115,84)" stroke="#172026" stroke-opacity="0.36"/><rect x="132" y="402" width="33" height="33" fill="rgb(114,120,81)" stroke="#172026" stroke-opacity="0.36"/><rect x="167" y="402" width="33" height="33" fill="rgb(107,124,84)" stroke="#172026" stroke-opacity="0.36"/><rect x="62" y="437" width="33" height="33" fill="rgb(112,124,80)" stroke="#172026" stroke-opacity="0.36"/><rect x="97" y="437" width="33" height="33" fill="rgb(118,130,82)" stroke="#172026" stroke-opacity="0.36"/><rect x="132" y="437" width="33" height="33" fill="rgb(119,128,81)" stroke="#172026" stroke-opacity="0.36"/><rect x="167" y="437" width="33" height="33" fill="rgb(121,130,83)" stroke="#172026" stroke-opacity="0.36"/><rect x="62" y="332" width="138" height="138" fill="none" class="grid-line"/><text x="246" y="318" class="small">mip 1</text><rect x="246" y="332" width="29" height="29" fill="rgb(98,115,83)" stroke="#172026" stroke-opacity="0.36"/><rect x="277" y="332" width="29" height="29" fill="rgb(99,115,84)" stroke="#172026" stroke-opacity="0.36"/><rect x="246" y="363" width="29" height="29" fill="rgb(101,118,83)" stroke="#172026" stroke-opacity="0.36"/><rect x="277" y="363" width="29" height="29" fill="rgb(111,123,82)" stroke="#172026" stroke-opacity="0.36"/><rect x="246" y="332" width="60" height="60" fill="none" class="grid-line"/><text x="366" y="318" class="small">mip 2</text><rect x="366" y="332" width="52" height="52" fill="rgb(106,121,82)" stroke="#172026" stroke-opacity="0.36"/><rect x="366" y="332" width="52" height="52" fill="none" class="grid-line"/>
+
+  <rect x="492" y="250" width="588" height="320" class="panel"/>
+  <text x="514" y="284" class="label">Camera Pan Stats</text>
+  <text x="514" y="306" class="caption">6 frames, 3 average uploads, 6 evictions</text>
+  <line x1="532" y1="334" x2="1032" y2="334" class="axis" opacity="0.28"/>
+<line x1="532" y1="368.5" x2="1032" y2="368.5" class="axis" opacity="0.28"/>
+<line x1="532" y1="403" x2="1032" y2="403" class="axis" opacity="0.28"/>
+<line x1="532" y1="437.5" x2="1032" y2="437.5" class="axis" opacity="0.28"/>
+<line x1="532" y1="472" x2="1032" y2="472" class="axis" opacity="0.28"/>
+  <rect x="532" y="334" width="500" height="138" fill="none" class="axis"/>
+  <path d="M 532 472 L 632 393.75 L 732 340.9 L 832 334 L 932 338.55 L 1032 334" fill="none" stroke="#2d7d4f" stroke-width="3" stroke-linejoin="round"/>
+<path d="M 532 334 L 632 334 L 732 334 L 832 368.5 L 932 437.5 L 1032 403" fill="none" stroke="#315f8d" stroke-width="3" stroke-linejoin="round"/>
+<path d="M 532 334 L 632 472 L 732 472 L 832 472 L 932 472 L 1032 472" fill="none" stroke="#a35f00" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="532" y="498" width="12" height="12" fill="#2d7d4f"/>
+      <text x="550" y="509" class="small">exact hit ratio</text>
+<rect x="686" y="498" width="12" height="12" fill="#315f8d"/>
+      <text x="704" y="509" class="small">uploads</text>
+<rect x="840" y="498" width="12" height="12" fill="#a35f00"/>
+      <text x="858" y="509" class="small">seam candidates</text>
+  <circle cx="522" cy="500" r="5" class="pass"/>
+  <text x="538" y="504" class="small">exact page hit ratio: 0.747</text>
+  <text x="822" y="504" class="small">&gt;= 0.72 in tiny cold-pan sample; &gt;= 0.95 in full warm-pan demo</text>
+<circle cx="522" cy="528" r="5" class="pass"/>
+  <text x="538" y="532" class="small">page uploads per frame: 4</text>
+  <text x="822" y="532" class="small">&lt;= 4</text>
+<circle cx="522" cy="556" r="5" class="pass"/>
+  <text x="538" y="560" class="small">dirty page-table entries: 4</text>
+  <text x="822" y="560" class="small">proportional to uploads plus evictions</text>
+<circle cx="522" cy="584" r="5" class="info"/>
+  <text x="538" y="588" class="small">resident-mip seam candidates: 45</text>
+  <text x="822" y="588" class="small">debug pressure row; exact border safety is checked by vt.tile_borders.mismatches</text>
+<circle cx="522" cy="612" r="5" class="pass"/>
+  <text x="538" y="616" class="small">padded tile border mismatches: 0</text>
+  <text x="822" y="616" class="small">0</text>
+
+  <rect x="40" y="602" width="500" height="116" class="panel"/>
+  <text x="62" y="636" class="label">Cache Overlay Snapshot</text>
+  <text x="62" y="658" class="caption">8 visible slots, 4 resident slots</text>
+  <rect x="62" y="676" width="29" height="29" fill="rgb(81,107,82)" opacity="1" stroke="#315f8d" stroke-width="3"/>
+    <text x="76.5" y="720" text-anchor="middle" class="small">0</text>
+<rect x="98" y="676" width="29" height="29" fill="rgb(107,124,84)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="112.5" y="720" text-anchor="middle" class="small">1</text>
+<rect x="134" y="676" width="29" height="29" fill="rgb(98,115,83)" opacity="1" stroke="#315f8d" stroke-width="3"/>
+    <text x="148.5" y="720" text-anchor="middle" class="small">2</text>
+<rect x="170" y="676" width="29" height="29" fill="rgb(101,118,83)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="184.5" y="720" text-anchor="middle" class="small">3</text>
+<rect x="206" y="676" width="29" height="29" fill="rgb(99,115,84)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="220.5" y="720" text-anchor="middle" class="small">4</text>
+<rect x="242" y="676" width="29" height="29" fill="rgb(106,121,82)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="256.5" y="720" text-anchor="middle" class="small">5</text>
+<rect x="278" y="676" width="29" height="29" fill="rgb(115,126,81)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="292.5" y="720" text-anchor="middle" class="small">6</text>
+<rect x="314" y="676" width="29" height="29" fill="rgb(118,130,82)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="328.5" y="720" text-anchor="middle" class="small">7</text>
+<rect x="350" y="676" width="29" height="29" fill="rgb(111,123,82)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="364.5" y="720" text-anchor="middle" class="small">8</text>
+<rect x="386" y="676" width="29" height="29" fill="rgb(114,120,81)" opacity="1" stroke="#f4c542" stroke-width="3"/>
+    <text x="400.5" y="720" text-anchor="middle" class="small">9</text>
+<rect x="422" y="676" width="29" height="29" fill="rgb(112,124,80)" opacity="1" stroke="#315f8d" stroke-width="3"/>
+    <text x="436.5" y="720" text-anchor="middle" class="small">10</text>
+<rect x="458" y="676" width="29" height="29" fill="rgb(121,130,83)" opacity="1" stroke="#315f8d" stroke-width="3"/>
+    <text x="472.5" y="720" text-anchor="middle" class="small">11</text>
+
+  <rect x="580" y="602" width="500" height="116" class="panel"/>
+  <text x="602" y="636" class="label">Demo Gate</text>
+  <text x="602" y="662" class="caption">Fixture is ready for renderer integration when hooks exist.</text>
+  <text x="602" y="690" class="small">Next route: /labs/virtual-texturing in apps/examples-react.</text>
+  <text x="602" y="710" class="small">First renderer work remains private: page table, physical cache, material binding.</text>
+</svg>
