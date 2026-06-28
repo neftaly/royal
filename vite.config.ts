@@ -27,7 +27,7 @@ const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/react': {
     external: ['@royal/renderer-core', '@royal/renderer-webgl', '@royal/renderer-webgl/capabilities', 'react'],
     lib: {
-      entry: { index: 'src/index.ts', root: 'src/root.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
+      entry: { index: 'src/index.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
@@ -46,11 +46,10 @@ const sourceAliases = [
   { find: '@tarstate/core', replacement: path.join(repoRoot, 'packages/tarstate-core/src/index.ts') },
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
-  { find: '@royal/react/root', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/root.ts') },
-  { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-dev-runtime.ts') },
-  { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/jsx-runtime.ts') },
-  { find: '@royal/react/testing', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/testing.ts') },
-  { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react-royal-fiber/src/index.ts') },
+  { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-dev-runtime.ts') },
+  { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
+  { find: '@royal/react/testing', replacement: path.join(repoRoot, 'packages/react/src/testing.ts') },
+  { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') },
   { find: '@royal/tarstate-lens/v1', replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts') },
   { find: '@royal/tarstate-lens', replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/index.ts') }

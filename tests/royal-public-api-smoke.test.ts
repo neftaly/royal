@@ -1,37 +1,36 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import * as reactRoyal from '@royal/react';
 import {
   Canvas,
-  boxGeometry,
   createRoot,
+  type CanvasProps,
+  type RoyalRoot,
+  type RoyalRootOptions
+} from '@royal/react';
+import {
+  boxGeometry,
   mesh,
   pass,
   perspectiveCamera,
   scene,
   standardMaterial,
-  text as reactText,
-  type CanvasProps,
-  type ReactRoyalRoot,
-  type ReactRoyalRootOptions,
   type RenderRoot,
-  type TextNode as ReactTextNode
-} from '@royal/react';
-import {
-  collectRendererCapabilityRows,
-  type RendererCapabilityProbeResult
-} from '@royal/react/testing';
-import * as rendererCore from '@royal/renderer-core';
-import {
+  text,
+  type TextNode,
   layoutText,
   shapeText,
-  text,
   textMesh,
   textMeshFromLayout,
   type ShapeTextResult,
   type TextLayout,
   type TextMesh,
-  type TextNode,
   type TextOptions
 } from '@royal/renderer-core';
+import {
+  collectRendererCapabilityRows,
+  type RendererCapabilityProbeResult
+} from '@royal/react/testing';
+import * as rendererCore from '@royal/renderer-core';
 import {
   assetIdForSrc,
   createRoyalAppBoundary,
@@ -49,7 +48,7 @@ import {
 } from '@royal/tarstate-lens/v1';
 
 describe('Royal public API smoke tests', () => {
-  it('lets consumers build a render root through the @royal/react facade', () => {
+  it('lets consumers build a render root through the React adapter and renderer-core primitives', () => {
     const camera = perspectiveCamera({
       position: [0, 0, 6],
       rotation: [0, 0, 0],
@@ -70,27 +69,34 @@ describe('Royal public API smoke tests', () => {
         })
       ]
     });
-    const textNode = reactText({
+    const textNode = text({
       color: [1, 1, 1, 1],
       text: 'api'
     });
 
     expect(typeof Canvas).toBe('function');
+    expect(reactRoyal).not.toHaveProperty('boxGeometry');
+    expect(reactRoyal).not.toHaveProperty('text');
     expect(root.children[0]?.children).toHaveLength(1);
     expect(textNode.glyphs.map((glyph) => glyph.char).join('')).toBe('api');
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly children: unknown }>();
+    expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly rootOptions?: RoyalRootOptions }>();
+    expectTypeOf<RoyalRootOptions>().toMatchTypeOf<{
+      readonly context?: { readonly antialias?: boolean };
+    }>();
+    expectTypeOf<RoyalRootOptions>().not.toHaveProperty('alpha');
     expectTypeOf(createRoot).toEqualTypeOf<(
       canvas: HTMLCanvasElement,
-      options?: ReactRoyalRootOptions
-    ) => ReactRoyalRoot>();
-    expectTypeOf<ReactRoyalRoot>().toMatchTypeOf<{
+      options?: RoyalRootOptions
+    ) => RoyalRoot>();
+    expectTypeOf<RoyalRoot>().toMatchTypeOf<{
       readonly dispose: () => void;
     }>();
     expectTypeOf(root).toEqualTypeOf<RenderRoot>();
-    expectTypeOf(textNode).toEqualTypeOf<ReactTextNode>();
+    expectTypeOf(textNode).toEqualTypeOf<TextNode>();
   });
 
-  it('exposes renderer-core text shaping, layout, and mesh helpers from the public entrypoint', () => {
+  it('exposes renderer-core text shaping, layout, and mesh helpers from the renderer package', () => {
     const shaped = shapeText({ text: 'AV office' });
     const layout = layoutText({
       fontSize: 2,

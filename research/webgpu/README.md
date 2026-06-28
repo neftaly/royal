@@ -9,10 +9,10 @@ examples, package config, text-vector, or the blender pipeline.
 
 Local source checked:
 
-- `packages/react-royal-fiber/src/root.ts`
-- `packages/react-royal-fiber/src/canvas.ts`
-- `packages/react-royal-fiber/src/webgl/root.ts`
-- `packages/react-royal-fiber/src/webgl/webgl-capabilities.ts`
+- `packages/react/src/root.ts`
+- `packages/react/src/canvas.ts`
+- `packages/renderer-webgl/src/root.ts`
+- `packages/renderer-webgl/src/capabilities.ts`
 - `packages/renderer-core/src/render-graph.ts`
 - `packages/renderer-core/src/geometry.ts`
 - `packages/renderer-core/src/mesh.ts`
@@ -29,9 +29,9 @@ const root = createRoot(canvas, options);
 root.render(scene);
 ```
 
-`ReactRoyalRootOptions` are WebGL context attributes (`alpha`, `antialias`,
-`preserveDrawingBuffer`). `Canvas` creates the root synchronously in a layout
-effect and renders once the scene child is available.
+`RoyalRootOptions` group WebGL context attributes (`alpha`, `antialias`,
+`preserveDrawingBuffer`) under `context`. `Canvas` creates the root
+synchronously in a layout effect and renders once the scene child is available.
 
 Renderer-core is intentionally small: a `Scene` is an ordered list of render
 passes, a pass owns one camera plus render nodes, `MeshNode` accepts a generic

@@ -17,9 +17,6 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react';
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [0.85, 0.16, 0.18, 1] });
 const rootOptions = {
-  alpha: true,
-  antialias: true,
-  preserveDrawingBuffer: true,
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 

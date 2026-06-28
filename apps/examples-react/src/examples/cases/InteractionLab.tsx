@@ -19,9 +19,6 @@ const blue = standardMaterial({ color: [0.1, 0.4, 0.88, 1] });
 const green = standardMaterial({ color: [0.13, 0.58, 0.34, 1] });
 const amber = standardMaterial({ color: [0.92, 0.55, 0.12, 1] });
 const rootOptions = {
-  alpha: true,
-  antialias: true,
-  preserveDrawingBuffer: true,
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 

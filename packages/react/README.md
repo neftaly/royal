@@ -1,24 +1,28 @@
 # @royal/react
 
-React bridge for Royal, a WebGL renderer targeting XR and low-end devices.
+React adapter for Royal.
 
-Examples and documentation should import the canonical React facade from
-`@royal/react`.
+Examples and documentation should import React adapter APIs from `@royal/react`
+and render graph primitives from `@royal/renderer-core`.
 
 ## Example
 
 ```tsx
 /** @jsxImportSource @royal/react */
 import {
-  boxGeometry,
   createRoot,
-  standardMaterial
 } from '@royal/react';
+import {
+  boxGeometry,
+  standardMaterial
+} from '@royal/renderer-core';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });
 
-createRoot(canvas).render(
+createRoot(canvas, {
+  context: { alpha: true, antialias: true }
+}).render(
   <scene>
     <pass>
       <perspectiveCamera

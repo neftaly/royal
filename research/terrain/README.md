@@ -8,7 +8,7 @@ Date: 2026-06-28
 - Hello Terrain source: https://github.com/kenjinp/hello-terrain
 - Infinigen site: https://infinigen.org/
 - Infinigen source/docs: https://github.com/princeton-vl/infinigen
-- Royal local source: `packages/renderer-core`, `packages/react-royal-fiber`, `packages/royal-tarstate-lens`, `packages/tarstate-core`
+- Royal local source: `packages/renderer-core`, `packages/react`, `packages/royal-tarstate-lens`, `packages/tarstate-core`
 
 ## Recommendation
 

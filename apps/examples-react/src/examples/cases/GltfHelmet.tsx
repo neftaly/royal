@@ -12,9 +12,6 @@ import {
 import type { ReactNode } from 'react';
 
 const rootOptions = {
-  alpha: true,
-  antialias: true,
-  preserveDrawingBuffer: true,
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 

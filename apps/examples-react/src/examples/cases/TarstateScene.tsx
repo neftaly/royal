@@ -21,9 +21,6 @@ const amber = unlitMaterial({ color: [0.92, 0.55, 0.12, 1] });
 const charcoal = unlitMaterial({ color: [0.1, 0.11, 0.13, 1] });
 const softBlue = unlitMaterial({ color: [0.16, 0.26, 0.42, 1] });
 const rootOptions = {
-  alpha: true,
-  antialias: true,
-  preserveDrawingBuffer: true,
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 

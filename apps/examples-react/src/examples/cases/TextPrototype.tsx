@@ -18,9 +18,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 const panel = boxGeometry({ size: [1, 1, 0.08] });
 const white = unlitMaterial({ color: [0.94, 0.96, 0.98, 1] });
 const rootOptions = {
-  alpha: true,
-  antialias: true,
-  preserveDrawingBuffer: true,
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 

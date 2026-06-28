@@ -24,19 +24,16 @@
         "./packages/renderer-webgl/src/capabilities.ts"
       ],
       "@royal/react": [
-        "./packages/react-royal-fiber/src/index.ts"
-      ],
-      "@royal/react/root": [
-        "./packages/react-royal-fiber/src/root.ts"
+        "./packages/react/src/index.ts"
       ],
       "@royal/react/jsx-dev-runtime": [
-        "./packages/react-royal-fiber/src/jsx-dev-runtime.ts"
+        "./packages/react/src/jsx-dev-runtime.ts"
       ],
       "@royal/react/jsx-runtime": [
-        "./packages/react-royal-fiber/src/jsx-runtime.ts"
+        "./packages/react/src/jsx-runtime.ts"
       ],
       "@royal/react/testing": [
-        "./packages/react-royal-fiber/src/testing.ts"
+        "./packages/react/src/testing.ts"
       ],
       "@royal/tarstate-lens": [
         "./packages/royal-tarstate-lens/src/index.ts"

@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Canvas, createRoot as createRoyalRoot } from '@royal/react';
-import { createRoot as createRoyalSubpathRoot } from '@royal/react/root';
 import { jsx as royalJsx } from '@royal/react/jsx-runtime';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -23,9 +22,10 @@ type PackageManifest = {
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const workspaceRoots = ['apps', 'packages'] as const;
 const sourceExtensions = new Set(['.ts', '.tsx']);
+const generatedSourceDirectories = new Set(['dist', 'node_modules']);
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react' },
-  { name: '@royal/react', root: 'packages/react-royal-fiber' },
+  { name: '@royal/react', root: 'packages/react' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core' },
   { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl' },
   { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens' },
@@ -55,7 +55,9 @@ function workspacePackageManifests(): readonly { readonly root: string; readonly
 function listSourceFiles(root: string): readonly string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) return listSourceFiles(entryPath);
+    if (entry.isDirectory()) {
+      return generatedSourceDirectories.has(entry.name) ? [] : listSourceFiles(entryPath);
+    }
     return sourceExtensions.has(path.extname(entry.name)) ? [entryPath] : [];
   });
 }
@@ -113,13 +115,19 @@ describe('package boundaries', () => {
     })));
   });
 
-  it('keeps @royal/react as the WebGL facade package', () => {
-    const reactManifest = readManifest(path.join(repoRoot, 'packages/react-royal-fiber/package.json'));
+  it('keeps @royal/react as the React adapter package', () => {
+    const reactManifest = readManifest(path.join(repoRoot, 'packages/react/package.json'));
     const webglManifest = readManifest(path.join(repoRoot, 'packages/renderer-webgl/package.json'));
 
     expect(reactManifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
     expect(reactManifest.dependencies?.['@royal/renderer-webgl']).toBe('workspace:*');
     expect(reactManifest.dependencies?.['gl-matrix']).toBeUndefined();
+    expect(reactManifest.exports).toEqual({
+      '.': './src/index.ts',
+      './jsx-dev-runtime': './src/jsx-dev-runtime.ts',
+      './jsx-runtime': './src/jsx-runtime.ts',
+      './testing': './src/testing.ts'
+    });
     expect(webglManifest.dependencies?.['@royal/renderer-core']).toBe('workspace:*');
     expect(webglManifest.dependencies?.['gl-matrix']).toBe('^3.4.4');
     expect(webglManifest.exports).toEqual({
@@ -127,7 +135,7 @@ describe('package boundaries', () => {
       './capabilities': './src/capabilities.ts'
     });
     expect(typeof Canvas).toBe('function');
-    expect(createRoyalRoot).toBe(createRoyalSubpathRoot);
+    expect(createRoyalRoot).toBeTypeOf('function');
     expect(royalJsx).toBeTypeOf('function');
   });
 

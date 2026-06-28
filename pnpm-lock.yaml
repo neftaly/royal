@@ -64,7 +64,7 @@ importers:
     dependencies:
       '@royal/react':
         specifier: workspace:*
-        version: link:../../packages/react-royal-fiber
+        version: link:../../packages/react
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../../packages/renderer-core
@@ -103,7 +103,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.0(@types/node@24.13.2))
 
-  packages/react-royal-fiber:
+  packages/react:
     dependencies:
       '@royal/renderer-core':
         specifier: workspace:*

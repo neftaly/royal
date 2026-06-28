@@ -9,14 +9,14 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
-import { createRoot, type ReactRoyalRoot, type ReactRoyalRootOptions } from "./root";
+import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
   /** Runtime-validated as a Royal scene. */
   readonly children: unknown;
-  readonly rootOptions?: ReactRoyalRootOptions;
+  readonly rootOptions?: RoyalRootOptions;
 }
 
 const isRenderRoot = (value: unknown): value is RenderRoot =>
@@ -32,7 +32,7 @@ export const Canvas = ({
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rootRef = useRef<ReactRoyalRoot | undefined>(undefined);
+  const rootRef = useRef<RoyalRoot | undefined>(undefined);
   const sceneRef = useRef<RenderRoot | undefined>(undefined);
 
   // React owns the canvas element; Royal owns its WebGL root.
