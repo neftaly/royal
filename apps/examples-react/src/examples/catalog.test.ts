@@ -12,11 +12,13 @@ describe('examples list', () => {
     expect(examples.map((example) => example.title)).toEqual([
       'Cube',
       'Wireframe',
+      'Texture Materials',
       'glTF Helmet',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
       '/wireframe',
+      '/texture-materials',
       '/gltf-helmet',
     ]);
   });
@@ -66,7 +68,7 @@ describe('examples list', () => {
   it('keeps WIP demo links out of the primary examples list', () => {
     expect(examples.some((example) => String(example.path) === '/wip')).toBe(false);
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(examples).toHaveLength(3);
+    expect(examples).toHaveLength(4);
   });
 
   it('keeps fixture-only VT out of primary examples', () => {
@@ -99,5 +101,20 @@ describe('examples list', () => {
     expect(helmet?.source).toContain('asset={helmetAsset}');
     expect(helmet?.source).toContain('directionalLight');
     expect(helmet?.source).toContain('perspectiveCamera');
+  });
+
+  it('keeps the texture materials route on real material and texture APIs', () => {
+    const materials = examples.find((example) => example.id === 'texture-materials');
+
+    expect(materials?.path).toBe('/texture-materials');
+    expect(materials?.source).toContain('standardMaterial');
+    expect(materials?.source).toContain('unlitMaterial');
+    expect(materials?.source).toContain('solidTexture');
+    expect(materials?.source).toContain('textureAsset');
+    expect(materials?.source).toContain("fallback: fallbackTexture");
+    expect(materials?.source).toContain(
+      "import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg'",
+    );
+    expect(materials?.source).toContain('<mesh');
   });
 });

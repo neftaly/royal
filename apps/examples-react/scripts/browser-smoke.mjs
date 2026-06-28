@@ -23,6 +23,12 @@ const smokeExpectations = {
     minColorBuckets: 3,
     minPaintedRatio: 0.003,
   },
+  'texture-materials': {
+    surface: 'canvas',
+    canvasLabel: 'Texture materials',
+    minColorBuckets: 5,
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     surface: 'canvas',
     canvasLabel: 'glTF DamagedHelmet',
