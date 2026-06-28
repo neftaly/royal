@@ -1,5 +1,7 @@
 import {
   Canvas,
+} from '@royal/react';
+import {
   boxGeometry,
   directionalLight,
   mesh,
@@ -9,7 +11,7 @@ import {
   standardMaterial,
   type EulerRads,
   type RenderRoot,
-} from '@royal/react';
+} from '@royal/renderer-core';
 import { useState, type PointerEvent, type ReactNode } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });

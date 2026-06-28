@@ -1,5 +1,7 @@
 import {
   Canvas,
+} from '@royal/react';
+import {
   boxGeometry,
   mesh,
   orthographicCamera,
@@ -10,7 +12,7 @@ import {
   type Material,
   type RenderRoot,
   type Vec3,
-} from '@royal/react';
+} from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 import { interactionState } from '../demo-data';
 

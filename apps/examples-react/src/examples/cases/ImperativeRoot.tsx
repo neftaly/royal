@@ -1,6 +1,8 @@
 import {
-  boxGeometry,
   createRoot,
+} from '@royal/react';
+import {
+  boxGeometry,
   directionalLight,
   mesh,
   pass,
@@ -9,12 +11,12 @@ import {
   standardMaterial,
   type EulerRads,
   type RenderRoot,
-} from '@royal/react';
+} from '@royal/renderer-core';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [0.85, 0.16, 0.18, 1] });
-const rootOptions = { alpha: true, antialias: true } as const;
+const rootOptions = { alpha: true, antialias: true, preserveDrawingBuffer: true } as const;
 
 const cubeScene = (rotation: EulerRads): RenderRoot =>
   scene({

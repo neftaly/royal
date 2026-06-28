@@ -1,5 +1,7 @@
 import {
   Canvas,
+} from '@royal/react';
+import {
   boxGeometry,
   directionalLight,
   mesh,
@@ -8,12 +10,12 @@ import {
   scene,
   standardMaterial,
   type RenderRoot,
-} from '@royal/react';
+} from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [0.85, 0.16, 0.18, 1] });
-const rootOptions = { alpha: true, antialias: true } as const;
+const rootOptions = { alpha: true, antialias: true, preserveDrawingBuffer: true } as const;
 
 const cubeScene = (): RenderRoot =>
   scene({
