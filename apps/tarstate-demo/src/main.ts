@@ -25,22 +25,20 @@ function renderDemo(snapshot: TarstateDemoSnapshot): HTMLElement {
       'Schema',
       table(['Relation', 'Key', 'Fields'], snapshot.schema.map((relation) => [relation.name, relation.key, relation.fields.join(', ')]))
     ),
-    section('Source rows', pre(JSON.stringify(snapshot.sourceRows, null, 2))),
+    section('Source rows', ...relationTables(snapshot.sourceRows, snapshot.schema)),
     section('Query', pre(JSON.stringify(snapshot.query.data, null, 2))),
-    section('Query result', pre(JSON.stringify(snapshot.queryResult.rows, null, 2))),
+    section('Query result before writes', todoRowsTable(snapshot.queryResult.rows)),
     section(
       'Writer patch log',
+      element('p', 'section-dek', snapshot.writerScenario.description),
       table(
-        ['Op', 'Relation', 'Summary'],
-        snapshot.patchLog.map((entry) => [entry.op, entry.relation, entry.summary])
+        ['Step', 'Op', 'Relation', 'Intent', 'Patch'],
+        snapshot.patchLog.map((entry) => [String(entry.index), entry.op, entry.relation, entry.intent, entry.summary])
       ),
       statusLine(`${snapshot.writeResult.applied}/${snapshot.writeResult.patches} patches applied`)
     ),
-    section('Rows after writes', pre(JSON.stringify(snapshot.nextRows.todos, null, 2))),
-    section(
-      'Planned adapters',
-      list(['Automerge document source and writer bridge', 'Immer-backed mutable source adapter', 'Royal renderer lens integration'])
-    )
+    section('Resulting snapshot after writes', ...relationTables(snapshot.nextRows, snapshot.schema)),
+    section('Query result after writes', todoRowsTable(snapshot.nextQueryResult.rows))
   );
 
   return page;
@@ -48,7 +46,7 @@ function renderDemo(snapshot: TarstateDemoSnapshot): HTMLElement {
 
 function hero(): HTMLElement {
   const header = element('header', 'hero');
-  header.append(element('p', 'eyebrow', 'Tarstate demo'), element('h1', undefined, 'Todo queries and writer patches'), element('p', 'dek', 'A small DOM app showing relation schema metadata, object-backed source rows, query evaluation, and write patch application.'));
+  header.append(element('p', 'eyebrow', 'Tarstate demo v2'), element('h1', undefined, 'Todo queries and writer patches'), element('p', 'dek', 'A small DOM app showing source relation rows, the query result, an ordered writer batch, and the resulting snapshot after writes.'));
   return header;
 }
 
@@ -77,10 +75,26 @@ function table(headers: readonly string[], rows: readonly (readonly string[])[])
   return tableElement;
 }
 
-function list(items: readonly string[]): HTMLElement {
-  const listElement = document.createElement('ul');
-  for (const item of items) listElement.append(element('li', undefined, item));
-  return listElement;
+function relationTables(
+  rowsByRelation: TarstateDemoSnapshot['sourceRows'],
+  schema: TarstateDemoSnapshot['schema']
+): readonly HTMLElement[] {
+  return schema.map((relation) => {
+    const group = element('div', 'relation-group');
+    const rows = rowsByRelation[relation.name] ?? [];
+    group.append(
+      element('h3', undefined, `${relation.name} (${rows.length})`),
+      table(relation.fields, rows.map((row) => relation.fields.map((field) => formatRowValue(row, field))))
+    );
+    return group;
+  });
+}
+
+function todoRowsTable(rows: TarstateDemoSnapshot['queryResult']['rows']): HTMLElement {
+  return table(
+    ['id', 'text', 'done', 'writer'],
+    rows.map((row) => [row.id, row.text, formatValue(row.done), formatValue(row.writer)])
+  );
 }
 
 function pre(content: string): HTMLPreElement {
@@ -91,6 +105,21 @@ function pre(content: string): HTMLPreElement {
 
 function statusLine(content: string): HTMLElement {
   return element('p', 'status', content);
+}
+
+function formatRowValue(row: unknown, field: string): string {
+  if (row === null || typeof row !== 'object' || !Object.hasOwn(row, field)) {
+    return '';
+  }
+
+  return formatValue((row as Record<string, unknown>)[field]);
+}
+
+function formatValue(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
 }
 
 function element<TagName extends keyof HTMLElementTagNameMap>(
