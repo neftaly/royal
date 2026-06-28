@@ -15,6 +15,18 @@ Run:
 node research/visibility-packets/visibility-packet-bench.mjs
 ```
 
+The default run covers 1,000, 10,000, and 50,000 synthetic box/text-ish
+packets. To change the sweep:
+
+```sh
+node research/visibility-packets/visibility-packet-bench.mjs --counts 1000,10000,50000
+```
+
+The benchmark is a research check, not a CI gate. It mirrors the private
+`packages/renderer-webgl/src/visibility.ts` packet buffer and sphere/frustum
+culling relation without exporting package internals or changing package
+configuration.
+
 ## Why Visibility Packets First
 
 Royal should land visibility packets before Forward+, deferred rendering, HZB,
@@ -128,9 +140,17 @@ Initial desktop targets for the later internal implementation:
 - Stable visible set for camera jitter smaller than roughly 0.25 px.
 - Offscreen scenes skip at least 90% of draw submissions.
 
-The standalone harness reports these values for synthetic mesh, glTF, text, and
-terrain packets. It intentionally does not test Forward+, deferred, HZB, or
-virtual textures because those should consume packet output, not define it.
+The standalone harness reports these values for synthetic box and text-ish
+packets at 1k, 10k, and 50k counts:
+
+- packet extraction ms and us/packet
+- cull ms, us/packet, visible count, and skipped ratio
+- stable ID churn across rebuilds and reorder
+- visible-set churn under camera jitter
+- overhead compared with the old draw-every-node traversal baseline
+
+It intentionally does not test Forward+, deferred, HZB, or virtual textures
+because those should consume packet output, not define it.
 
 ## Landing In Core After WebGL Extraction
 
