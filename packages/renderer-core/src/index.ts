@@ -13,9 +13,9 @@ export type {
   GeometryKindValue
 } from './geometry';
 export { boxGeometry } from './geometry';
-export type { GltfNode, GltfOptions } from './gltf';
+export type { GltfAssetBounds, GltfAssetRef, GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
-export { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
+export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {
   Material,
   StandardMaterial,
@@ -25,13 +25,18 @@ export type {
 } from './material';
 export { standardMaterial, unlitMaterial } from './material';
 export type {
-  Texture2dResource,
+  SolidTextureOptions,
+  SolidTextureRef,
+  TextureAssetOptions,
+  TextureAssetRef,
   TextureColorSpace,
+  TextureRef,
+  TextureRevision,
   TextureSampler,
   TextureSamplerFilter,
-  TextureSamplerWrap,
-  TextureSource
+  TextureSamplerWrap
 } from './texture';
+export { solidTexture, textureAsset } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';

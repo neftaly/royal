@@ -1,13 +1,11 @@
 import {
   boxGeometry,
-  CameraKind,
   gltf,
   mesh,
   orthographicCamera,
   pass,
   perspectiveCamera,
-  RenderGraphKind,
-  RenderNodeKind,
+  solidTexture,
   standardMaterial,
   type RenderPass
 } from '@royal/renderer-core';
@@ -23,7 +21,7 @@ const camera = perspectiveCamera({
 });
 
 const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: [1, 0, 0, 1] });
+const red = standardMaterial({ baseColor: solidTexture({ color: [1, 0, 0, 1] }) });
 
 describe('render pass clearColor', () => {
   it('defaults to transparent black', () => {
@@ -37,7 +35,7 @@ describe('render pass clearColor', () => {
       children: []
     }) as RenderPass;
 
-    expect(renderPass.kind).toBe(RenderGraphKind.Pass);
+    expect(renderPass.kind).toBe('pass');
     expect(renderPass.clearColor).toEqual([0.1, 0.2, 0.3, 1]);
   });
 
@@ -73,7 +71,7 @@ describe('render pass clearColor', () => {
       children: cameraChild
     }) as RenderPass;
 
-    expect(renderPass.camera.kind).toBe(CameraKind.Orthographic);
+    expect(renderPass.camera.kind).toBe('orthographic-camera');
     expect(renderPass.camera).toEqual(orthographicCamera({
       position: [0, 0, 1],
       rotation: [0, 0, 0],
@@ -100,7 +98,7 @@ describe('render pass clearColor', () => {
     }) as RenderPass;
 
     expect(renderPass.children).toHaveLength(1);
-    expect(renderPass.children[0]?.kind).toBe(RenderNodeKind.VectorText);
+    expect(renderPass.children[0]?.kind).toBe('text');
   });
 
   it('rejects missing JSX cameras', () => {
@@ -152,7 +150,10 @@ describe('transform inputs', () => {
 
   it('keeps explicit glTF scale', () => {
     expect(gltf({
-      src: '/DamagedHelmet/DamagedHelmet.gltf',
+      asset: {
+        id: 'damaged-helmet',
+        uri: '/DamagedHelmet/DamagedHelmet.gltf'
+      },
       transform: {
         position: [0, 0, 0],
         rotation: [0, 0, 0],

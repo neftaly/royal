@@ -1,5 +1,4 @@
 import type { Camera } from './camera';
-import { RenderGraphKind } from './kind';
 import type { Rgba } from './primitives';
 import type { RenderNode } from './render-node';
 
@@ -11,7 +10,7 @@ export type RenderRoot = Scene;
 
 /** One camera plus drawable scene nodes. */
 export interface RenderPass {
-  readonly kind: RenderGraphKind.Pass;
+  readonly kind: 'pass';
   readonly camera: Camera;
   readonly children: readonly RenderNode[];
   readonly clearColor: Rgba;
@@ -26,7 +25,7 @@ export interface RenderPassOptions {
 
 /** Ordered render passes for a frame. */
 export interface Scene {
-  readonly kind: RenderGraphKind.Scene;
+  readonly kind: 'scene';
   readonly children: readonly RenderPass[];
 }
 
@@ -37,7 +36,7 @@ export interface SceneOptions {
 /** Creates a render pass. */
 export const pass = (options: RenderPassOptions): RenderPass => {
   return {
-    kind: RenderGraphKind.Pass,
+    kind: 'pass',
     camera: options.camera,
     children: options.children,
     clearColor: options.clearColor ?? TRANSPARENT_BLACK
@@ -46,6 +45,6 @@ export const pass = (options: RenderPassOptions): RenderPass => {
 
 /** Creates a render scene. */
 export const scene = (options: SceneOptions): RenderRoot => ({
-  kind: RenderGraphKind.Scene,
+  kind: 'scene',
   children: options.children
 });

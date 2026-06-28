@@ -13,6 +13,7 @@ import {
   pass,
   perspectiveCamera,
   scene,
+  solidTexture,
   standardMaterial,
   type RenderRoot,
   text,
@@ -63,7 +64,9 @@ describe('Royal public API smoke tests', () => {
           children: [
             mesh({
               geometry: boxGeometry({ size: [1, 1, 1] }),
-              material: standardMaterial({ color: [0.2, 0.4, 0.8, 1] })
+              material: standardMaterial({
+                baseColor: solidTexture({ color: [0.2, 0.4, 0.8, 1] })
+              })
             })
           ]
         })

@@ -1,6 +1,4 @@
 import {
-  GeometryKind,
-  RenderNodeKind,
   type BoxGeometry,
   type DirectionalLightNode,
   type Material,
@@ -11,10 +9,10 @@ import {
 export const findDirectionalLight = (
   pass: RenderPass,
 ): DirectionalLightNode | undefined =>
-  pass.children.find((node) => node.kind === RenderNodeKind.DirectionalLight);
+  pass.children.find((node) => node.kind === "directional-light");
 
 export const asBoxGeometry = (mesh: MeshNode): BoxGeometry => {
-  if (mesh.geometry.kind !== GeometryKind.Box) {
+  if (mesh.geometry.kind !== "box") {
     throw new Error(
       `Unsupported mesh geometry kind: ${String(mesh.geometry.kind)}`,
     );

@@ -1,5 +1,4 @@
 import type { Geometry, GeometryKindValue } from './geometry';
-import { RenderNodeKind } from './kind';
 import type { Material } from './material';
 import {
   resolveTransform,
@@ -9,7 +8,7 @@ import {
 
 /** Geometry plus material, with an optional transform. */
 export interface MeshNode {
-  readonly kind: RenderNodeKind.Mesh;
+  readonly kind: 'mesh';
   readonly geometry: Geometry<GeometryKindValue>;
   readonly material: Material;
   readonly transform?: Transform;
@@ -24,7 +23,7 @@ export interface MeshOptions {
 
 export const mesh = (options: MeshOptions): MeshNode => {
   const node = {
-    kind: RenderNodeKind.Mesh,
+    kind: 'mesh',
     geometry: options.geometry,
     material: options.material
   } satisfies Omit<MeshNode, 'transform'>;

@@ -1,46 +1,35 @@
-import { MaterialKind } from './kind';
-import type { Rgba } from './primitives';
-import type { Texture2dResource } from './texture';
+import type { TextureRef } from './texture';
 
-/** Flat RGBA material. */
+/** Lit material with a base color texture reference. */
 export interface StandardMaterial {
-  readonly baseColorTexture?: Texture2dResource;
-  readonly kind: MaterialKind.Standard;
-  readonly color: Rgba;
+  readonly kind: 'standard';
+  readonly baseColor: TextureRef;
 }
 
-/** Flat RGBA material that ignores lights. */
+/** Base color material that ignores lights. */
 export interface UnlitMaterial {
-  readonly baseColorTexture?: Texture2dResource;
-  readonly kind: MaterialKind.Unlit;
-  readonly color: Rgba;
+  readonly kind: 'unlit';
+  readonly baseColor: TextureRef;
 }
 
 export type Material = StandardMaterial | UnlitMaterial;
 
 export interface StandardMaterialOptions {
-  readonly baseColorTexture?: Texture2dResource;
-  readonly color: Rgba;
+  readonly baseColor: TextureRef;
 }
 
 export type UnlitMaterialOptions = StandardMaterialOptions;
 
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
-  const material: StandardMaterial = {
-    kind: MaterialKind.Standard,
-    color: options.color
+  return {
+    kind: 'standard',
+    baseColor: options.baseColor
   };
-  return options.baseColorTexture === undefined
-    ? material
-    : { ...material, baseColorTexture: options.baseColorTexture };
 };
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
-  const material: UnlitMaterial = {
-    kind: MaterialKind.Unlit,
-    color: options.color
+  return {
+    kind: 'unlit',
+    baseColor: options.baseColor
   };
-  return options.baseColorTexture === undefined
-    ? material
-    : { ...material, baseColorTexture: options.baseColorTexture };
 };

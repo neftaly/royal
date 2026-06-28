@@ -1,5 +1,4 @@
 import {
-  CameraKind,
   directionalLight,
   gltf,
   mesh,
@@ -15,9 +14,7 @@ import {
   type OrthographicCameraOptions,
   type PerspectiveCameraOptions,
   type RenderElement,
-  RenderGraphKind,
   type RenderNode,
-  RenderNodeKind,
   type RenderPass,
   type RenderPassOptions,
   type TextOptions
@@ -55,22 +52,22 @@ const isCamera = (element: ComponentOutput): element is Camera =>
   typeof element === 'object' &&
   element !== null &&
   'kind' in element &&
-  (element.kind === CameraKind.Perspective || element.kind === CameraKind.Orthographic);
+  (element.kind === 'perspective-camera' || element.kind === 'orthographic-camera');
 
 const isRenderNode = (element: ComponentOutput): element is RenderNode =>
   typeof element === 'object' &&
   element !== null &&
   'kind' in element &&
   (
-    element.kind === RenderNodeKind.Mesh ||
-    element.kind === RenderNodeKind.Gltf ||
-    element.kind === RenderNodeKind.DirectionalLight ||
-    element.kind === RenderNodeKind.VectorText
+    element.kind === 'mesh' ||
+    element.kind === 'gltf' ||
+    element.kind === 'directional-light' ||
+    element.kind === 'text'
   );
 
 const toRenderPasses = (children: RendererJsxChild): readonly RenderPass[] =>
   toArray(children).map((child) => {
-    if (typeof child !== 'object' || child === null || !('kind' in child) || child.kind !== RenderGraphKind.Pass) {
+    if (typeof child !== 'object' || child === null || !('kind' in child) || child.kind !== 'pass') {
       throw new Error('Expected pass child under scene');
     }
 

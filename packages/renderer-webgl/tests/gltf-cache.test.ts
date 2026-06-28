@@ -42,6 +42,14 @@ const loadBounds = async (
   return cache.getBounds(node);
 };
 
+const triangleAsset = (
+  overrides: Partial<Parameters<typeof gltf>[0]["asset"]> = {},
+): Parameters<typeof gltf>[0]["asset"] => ({
+  id: "triangle",
+  uri: "https://example.test/triangle.gltf",
+  ...overrides,
+});
+
 describe("GltfCache bounds", () => {
   it("uses parsed accessor min/max when available", async () => {
     installFixture((json) => {
@@ -54,7 +62,7 @@ describe("GltfCache bounds", () => {
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
     const node = gltf({
-      src: "https://example.test/triangle.gltf",
+      asset: triangleAsset(),
       transform: {
         position: [10, 1, -2],
         rotation: [0, 0, 0],
@@ -77,7 +85,7 @@ describe("GltfCache bounds", () => {
     installFixture();
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ src: "https://example.test/triangle.gltf" });
+    const node = gltf({ asset: triangleAsset() });
 
     const bounds = await loadBounds(cache, node);
 
@@ -100,7 +108,7 @@ describe("GltfCache textures", () => {
     installFixture(undefined, () => imagePromise);
     const { counts, gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ src: "https://example.test/triangle.gltf" });
+    const node = gltf({ asset: triangleAsset() });
 
     expect(cache.get(node)).toBeUndefined();
     await waitFor(() => cache.get(node) !== undefined);
@@ -114,5 +122,25 @@ describe("GltfCache textures", () => {
     resolveImage({} as ImageBitmap);
     await waitFor(() => counts.deleteTexture === 2);
     expect(counts.createTexture).toBe(2);
+  });
+
+  it("reuses loaded assets by id and revision", async () => {
+    installFixture();
+    const { gl } = fakeGl();
+    const cache = new GltfCache(gl, () => undefined);
+    const node = gltf({ asset: triangleAsset({ revision: 1 }) });
+    const sameRevision = gltf({
+      asset: triangleAsset({
+        revision: 1,
+        uri: "https://example.test/alternate-triangle.gltf",
+      }),
+    });
+
+    expect(cache.get(node)).toBeUndefined();
+    await waitFor(() => cache.get(node) !== undefined);
+
+    expect(cache.get(sameRevision)).toBe(cache.get(node));
+    expect(fetch).not.toHaveBeenCalledWith("https://example.test/alternate-triangle.gltf");
+    cache.dispose();
   });
 });

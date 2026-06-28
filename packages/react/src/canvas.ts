@@ -1,7 +1,4 @@
-import {
-  RenderGraphKind,
-  type RenderRoot,
-} from "@royal/renderer-core";
+import type { RenderRoot } from "@royal/renderer-core";
 import {
   createElement,
   useLayoutEffect,
@@ -23,7 +20,7 @@ const isRenderRoot = (value: unknown): value is RenderRoot =>
   typeof value === "object" &&
   value !== null &&
   "kind" in value &&
-  value.kind === RenderGraphKind.Scene;
+  value.kind === "scene";
 
 /** Canvas component that renders one Royal scene child. */
 export const Canvas = ({

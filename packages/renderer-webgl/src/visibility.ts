@@ -1,6 +1,4 @@
 import {
-  GeometryKind,
-  RenderNodeKind,
   type BoxGeometry,
   type GltfNode,
   type MeshNode,
@@ -94,20 +92,20 @@ export const buildVisibilityPackets = (
 
   for (let nodeIndex = 0; nodeIndex < pass.children.length; nodeIndex += 1) {
     const node = pass.children[nodeIndex];
-    if (node === undefined || node.kind === RenderNodeKind.DirectionalLight) {
+    if (node === undefined || node.kind === "directional-light") {
       continue;
     }
 
     switch (node.kind) {
-      case RenderNodeKind.Mesh:
+      case "mesh":
         writeMeshPacket(packets, packetIndex, nodeIndex, node);
         packetIndex += 1;
         break;
-      case RenderNodeKind.Gltf:
+      case "gltf":
         writeGltfPacket(packets, packetIndex, nodeIndex, node, context);
         packetIndex += 1;
         break;
-      case RenderNodeKind.VectorText:
+      case "text":
         writeTextPacket(packets, packetIndex, nodeIndex, node);
         packetIndex += 1;
         break;
@@ -126,7 +124,11 @@ const writeGltfPacket = (
   node: GltfNode,
   context: VisibilityPacketBuildContext,
 ): void => {
-  const id = hashPacketId(VisibilityPacketKind.Gltf, nodeIndex, node.src);
+  const id = hashPacketId(
+    VisibilityPacketKind.Gltf,
+    nodeIndex,
+    `${node.asset.id}:${String(node.asset.revision ?? node.asset.uri)}`,
+  );
   const bounds = context.gltfBounds?.(node);
   if (bounds !== undefined && isFiniteAabb(bounds)) {
     writeBoundedPacket(
@@ -235,7 +237,7 @@ export const cullVisibilityPackets = (
 const drawableNodeCount = (pass: RenderPass): number => {
   let count = 0;
   for (const node of pass.children) {
-    if (node.kind !== RenderNodeKind.DirectionalLight) count += 1;
+    if (node.kind !== "directional-light") count += 1;
   }
   return count;
 };
@@ -266,7 +268,7 @@ const writeMeshPacket = (
   nodeIndex: number,
   mesh: MeshNode,
 ): void => {
-  if (mesh.geometry.kind !== GeometryKind.Box) {
+  if (mesh.geometry.kind !== "box") {
     writeUnboundedPacket(
       packets,
       packetIndex,

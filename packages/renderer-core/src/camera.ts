@@ -1,9 +1,8 @@
-import { CameraKind } from './kind';
 import type { EulerRads, Rads, Vec3 } from './primitives';
 
 /** Perspective camera for a render pass. */
 export interface PerspectiveCamera {
-  readonly kind: CameraKind.Perspective;
+  readonly kind: 'perspective-camera';
   readonly position: Vec3;
   readonly rotation: EulerRads;
   readonly fovY: Rads;
@@ -13,7 +12,7 @@ export interface PerspectiveCamera {
 
 /** Orthographic camera for flat or isometric render passes. */
 export interface OrthographicCamera {
-  readonly kind: CameraKind.Orthographic;
+  readonly kind: 'orthographic-camera';
   readonly position: Vec3;
   readonly rotation: EulerRads;
   readonly left: number;
@@ -47,7 +46,7 @@ export interface OrthographicCameraOptions {
 export type Camera = PerspectiveCamera | OrthographicCamera;
 
 export const perspectiveCamera = (options: PerspectiveCameraOptions): PerspectiveCamera => ({
-  kind: CameraKind.Perspective,
+  kind: 'perspective-camera',
   position: options.position,
   rotation: options.rotation,
   fovY: options.fovY,
@@ -56,7 +55,7 @@ export const perspectiveCamera = (options: PerspectiveCameraOptions): Perspectiv
 });
 
 export const orthographicCamera = (options: OrthographicCameraOptions): OrthographicCamera => ({
-  kind: CameraKind.Orthographic,
+  kind: 'orthographic-camera',
   position: options.position,
   rotation: options.rotation,
   left: options.left,

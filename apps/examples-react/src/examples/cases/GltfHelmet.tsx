@@ -4,6 +4,10 @@ import { Canvas } from '@royal/react';
 import { createElement, type ReactNode } from 'react';
 
 const helmetUrl = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const helmetAsset = {
+  id: 'damaged-helmet',
+  uri: helmetUrl,
+} as const;
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
@@ -20,7 +24,7 @@ const helmetScene = (): RenderRoot => (
       />
       <directionalLight color={[1, 0.96, 0.9, 1]} direction={[0.4, -0.75, -1]} />
       <gltf
-        src={helmetUrl}
+        asset={helmetAsset}
         transform={{
           position: [0, -0.08, 0],
           rotation: [0, 0.34, 0],

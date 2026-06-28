@@ -1,25 +1,9 @@
-export enum CameraKind {
-  Perspective = 1,
-  Orthographic = 2
-}
+export type CameraKind = 'orthographic-camera' | 'perspective-camera';
 
-export enum GeometryKind {
-  Box = 100
-}
+export type GeometryKind = 'box';
 
-export enum MaterialKind {
-  Standard = 200,
-  Unlit = 201
-}
+export type MaterialKind = 'standard' | 'unlit';
 
-export enum RenderGraphKind {
-  Pass = 300,
-  Scene = 301
-}
+export type RenderGraphKind = 'pass' | 'scene';
 
-export enum RenderNodeKind {
-  DirectionalLight = 400,
-  Gltf = 401,
-  Mesh = 402,
-  VectorText = 403
-}
+export type RenderNodeKind = 'directional-light' | 'gltf' | 'mesh' | 'text';

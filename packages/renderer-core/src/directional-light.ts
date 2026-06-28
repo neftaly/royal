@@ -1,9 +1,8 @@
-import { RenderNodeKind } from './kind';
 import type { Direction3, Rgba } from './primitives';
 
 /** Directional light in world space. */
 export interface DirectionalLightNode {
-  readonly kind: RenderNodeKind.DirectionalLight;
+  readonly kind: 'directional-light';
   readonly direction: Direction3;
   readonly color: Rgba;
 }
@@ -15,7 +14,7 @@ export interface DirectionalLightOptions {
 }
 
 export const directionalLight = (options: DirectionalLightOptions): DirectionalLightNode => ({
-  kind: RenderNodeKind.DirectionalLight,
+  kind: 'directional-light',
   direction: options.direction,
   color: options.color
 });

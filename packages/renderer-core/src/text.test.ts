@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { RenderNodeKind } from './kind';
 import {
   createTextFontFace,
   layoutText,
@@ -34,7 +33,7 @@ describe('text shaping and mesh generation', () => {
       text: 'Royal'
     });
 
-    expect(node.kind).toBe(RenderNodeKind.VectorText);
+    expect(node.kind).toBe('text');
     expect(node.layout.font.metrics.size).toBe(2);
     expect(node.layout.lines[0]?.glyphs.map((glyph) => glyph.glyph.text).join('')).toBe('Royal');
     expectTypeOf(text).toEqualTypeOf<(options: TextOptions) => TextNode>();

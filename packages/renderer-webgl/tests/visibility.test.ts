@@ -8,6 +8,7 @@ import {
   mesh,
   orthographicCamera,
   pass,
+  solidTexture,
   text,
   unlitMaterial,
 } from "@royal/renderer-core";
@@ -26,7 +27,12 @@ import {
   VisibilityPacketKind,
 } from "../src/visibility";
 
-const material = unlitMaterial({ color: [1, 0, 0, 1] });
+const material = unlitMaterial({ baseColor: solidTexture({ color: [1, 0, 0, 1] }) });
+
+const modelAsset = {
+  id: "model",
+  uri: "https://example.test/model.gltf",
+};
 
 const camera = orthographicCamera({
   position: [0, 0, 5],
@@ -60,7 +66,7 @@ describe("visibility packets", () => {
       origin: [-1, 1, 0.25],
       text: "a",
     });
-    const model = gltf({ src: "https://example.test/model.gltf" });
+    const model = gltf({ asset: modelAsset });
     const packets = buildVisibilityPackets(pass({
       camera,
       children: [box, label, model],
@@ -131,7 +137,7 @@ describe("visibility packets", () => {
       camera,
       children: [
         gltf({
-          src: "https://example.test/model.gltf",
+          asset: modelAsset,
           transform: {
             position: [1000, 0, 0],
             rotation: [0, 0, 0],
@@ -147,7 +153,7 @@ describe("visibility packets", () => {
 
   it("culls glTF packets when private asset bounds are available", () => {
     const model = gltf({
-      src: "https://example.test/model.gltf",
+      asset: modelAsset,
       transform: {
         position: [1000, 0, 0],
         rotation: [0, 0, 0],

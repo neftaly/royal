@@ -7,6 +7,7 @@ import {
   pass,
   perspectiveCamera,
   scene,
+  solidTexture,
   standardMaterial,
   unlitMaterial,
   text
@@ -28,9 +29,14 @@ const camera = perspectiveCamera({
   far: 1000
 });
 const cube = boxGeometry({ size: [1, 1, 1] });
-const material = standardMaterial({ color: [1, 0, 0, 1] });
-const unlit = unlitMaterial({ color: [1, 0, 0, 1] });
+const redTexture = solidTexture({ color: [1, 0, 0, 1] });
+const material = standardMaterial({ baseColor: redTexture });
+const unlit = unlitMaterial({ baseColor: redTexture });
 const light = directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] });
+const triangleAsset = {
+  id: 'triangle',
+  uri: 'https://example.test/triangle.gltf'
+};
 const renderScene = scene({
   children: [
     pass({
@@ -282,7 +288,7 @@ describe('WebGL resource lifetime', () => {
           camera,
           children: [
             light,
-            gltf({ src: 'https://example.test/triangle.gltf' })
+            gltf({ asset: triangleAsset })
           ]
         })
       ]
@@ -314,7 +320,7 @@ describe('WebGL resource lifetime', () => {
           children: [
             light,
             gltf({
-              src: 'https://example.test/triangle.gltf',
+              asset: triangleAsset,
               transform: {
                 position: [1000, 0, 0],
                 rotation: [0, 0, 0]
@@ -349,7 +355,7 @@ describe('WebGL resource lifetime', () => {
           camera,
           children: [
             light,
-            gltf({ src: 'https://example.test/triangle.gltf' })
+            gltf({ asset: triangleAsset })
           ]
         })
       ]

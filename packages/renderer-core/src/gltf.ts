@@ -1,28 +1,39 @@
-import { RenderNodeKind } from './kind';
 import {
   resolveTransform,
   type Transform,
   type TransformOptions
 } from './primitives';
+import type { Vec3 } from './primitives';
 
-/** glTF asset node loaded from a URL. */
+export interface GltfAssetBounds {
+  readonly max: Vec3;
+  readonly min: Vec3;
+}
+
+export interface GltfAssetRef {
+  readonly bounds?: GltfAssetBounds;
+  readonly id: string;
+  readonly revision?: number | string;
+  readonly uri: string;
+}
+
+/** glTF asset node loaded from an explicit asset reference. */
 export interface GltfNode {
-  readonly kind: RenderNodeKind.Gltf;
-  readonly src: string;
+  readonly kind: 'gltf';
+  readonly asset: GltfAssetRef;
   readonly transform?: Transform;
 }
 
 export interface GltfOptions {
-  /** glTF asset URL. */
-  readonly src: string;
+  readonly asset: GltfAssetRef;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
 }
 
 export const gltf = (options: GltfOptions): GltfNode => {
   const node = {
-    kind: RenderNodeKind.Gltf,
-    src: options.src
+    kind: 'gltf',
+    asset: options.asset
   } satisfies Omit<GltfNode, 'transform'>;
 
   return options.transform === undefined

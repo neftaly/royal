@@ -1,10 +1,9 @@
 import {
-  GeometryKind,
-  MaterialKind,
   type DirectionalLightNode,
   type GltfNode,
   type MeshNode,
   type TextNode,
+  type TextureRef,
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
@@ -40,13 +39,21 @@ export const drawMesh = (
   mesh: MeshNode,
   context: MeshDrawContext,
 ): void => {
-  if (mesh.geometry.kind === GeometryKind.Box) {
+  if (mesh.geometry.kind === "box") {
     drawBoxMesh(gl, programs.mesh, mesh, context);
     return;
   }
 
   throw new Error(
     `Unsupported mesh geometry kind: ${String(mesh.geometry.kind)}`,
+  );
+};
+
+const flatBaseColor = (baseColor: TextureRef): readonly [number, number, number, number] => {
+  if (baseColor.kind === "solid") return baseColor.color;
+  if (baseColor.fallback !== undefined) return baseColor.fallback.color;
+  throw new Error(
+    `WebGL mesh draw does not support asset baseColor textures: ${baseColor.id}`,
   );
 };
 
@@ -137,10 +144,11 @@ const drawBoxMesh = (
 ): void => {
   const light = context.directionalLight;
   const material = asMaterial(mesh);
-  const unlit = material.kind === MaterialKind.Unlit;
+  const unlit = material.kind === "unlit";
   if (!unlit && light === undefined)
     throw new Error("StandardMaterial box mesh requires a directionalLight");
   const geometry = context.geometryCache.box(asBoxGeometry(mesh));
+  const color = flatBaseColor(material.baseColor);
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
@@ -153,7 +161,7 @@ const drawBoxMesh = (
     false,
     context.viewProjectionMatrix,
   );
-  gl.uniform4fv(program.uniforms.color, material.color);
+  gl.uniform4fv(program.uniforms.color, color);
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
   gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
   gl.uniform3fv(program.uniforms.lightDirection, light?.direction ?? [0, 0, -1]);

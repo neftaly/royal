@@ -1,7 +1,6 @@
 import earcut from 'earcut';
 import opentype from 'opentype.js';
 import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
-import { RenderNodeKind } from './kind';
 import type { Rgba, Vec3 } from './primitives';
 
 type TextCell = {
@@ -193,7 +192,7 @@ export interface LayoutTextOptions {
 }
 
 export interface TextNode {
-  readonly kind: RenderNodeKind.VectorText;
+  readonly kind: 'text';
   readonly cellHeight: number;
   readonly color: Rgba;
   readonly diagnostics: readonly TextShapingDiagnostic[];
@@ -1149,7 +1148,7 @@ const createTextNode = (options: TextNodeOptions): TextNode => {
   });
 
   return {
-    kind: RenderNodeKind.VectorText,
+    kind: 'text',
     cellHeight,
     color: options.color,
     diagnostics: layout.diagnostics,
@@ -1167,7 +1166,7 @@ export const vectorText = (options: VectorTextOptions): VectorTextNode => {
   const layout = legacyLayout(options.glyphs, cellHeight);
 
   return {
-    kind: RenderNodeKind.VectorText,
+    kind: 'text',
     cellHeight,
     color: options.color,
     diagnostics: layout.diagnostics,

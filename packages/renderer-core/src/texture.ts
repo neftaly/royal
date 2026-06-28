@@ -12,22 +12,6 @@ export type TextureSamplerFilter =
 
 export type TextureSamplerWrap = 'clamp-to-edge' | 'mirrored-repeat' | 'repeat';
 
-export type TextureSource =
-  | {
-    readonly kind: 'image';
-    readonly image: TexImageSource;
-  }
-  | {
-    readonly kind: 'rgba8';
-    readonly data: Uint8Array | Uint8ClampedArray;
-    readonly height: number;
-    readonly width: number;
-  }
-  | {
-    readonly kind: 'uri';
-    readonly uri: string;
-  };
-
 export interface TextureSampler {
   readonly magFilter?: Extract<TextureSamplerFilter, 'linear' | 'nearest'>;
   readonly minFilter?: TextureSamplerFilter;
@@ -35,11 +19,51 @@ export interface TextureSampler {
   readonly wrapT?: TextureSamplerWrap;
 }
 
-export interface Texture2dResource {
-  readonly id: string;
+export type TextureRevision = number | string;
+
+export interface SolidTextureRef {
+  readonly kind: 'solid';
+  readonly color: Rgba;
   readonly colorSpace?: TextureColorSpace;
-  readonly fallbackColor?: Rgba;
-  readonly revision?: number | string;
-  readonly sampler?: TextureSampler;
-  readonly source: TextureSource;
+  readonly id?: string;
+  readonly revision?: TextureRevision;
 }
+
+export interface TextureAssetRef {
+  readonly kind: 'asset';
+  readonly colorSpace?: TextureColorSpace;
+  readonly fallback?: SolidTextureRef;
+  readonly id: string;
+  readonly revision?: TextureRevision;
+  readonly sampler?: TextureSampler;
+  readonly uri: string;
+}
+
+export type TextureRef = SolidTextureRef | TextureAssetRef;
+
+export interface SolidTextureOptions {
+  readonly color: Rgba;
+  readonly colorSpace?: TextureColorSpace;
+  readonly id?: string;
+  readonly revision?: TextureRevision;
+}
+
+export type TextureAssetOptions = Omit<TextureAssetRef, 'kind'>;
+
+export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => ({
+  kind: 'solid',
+  color: options.color,
+  ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+  ...(options.id === undefined ? {} : { id: options.id }),
+  ...(options.revision === undefined ? {} : { revision: options.revision })
+});
+
+export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => ({
+  kind: 'asset',
+  ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+  ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
+  id: options.id,
+  ...(options.revision === undefined ? {} : { revision: options.revision }),
+  ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
+  uri: options.uri
+});

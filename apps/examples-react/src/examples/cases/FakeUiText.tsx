@@ -1,6 +1,7 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
+  solidTexture,
   unlitMaterial,
   type Material,
   type RenderNode,
@@ -52,7 +53,7 @@ const layoutBoxes: readonly LayoutBox[] = [
   },
 ];
 
-const material = (color: Rgba): Material => unlitMaterial({ color });
+const material = (color: Rgba): Material => unlitMaterial({ baseColor: solidTexture({ color }) });
 
 const panel = ({ color, label, position, size }: LayoutBox): readonly RenderNode[] => {
   const labelOrigin: Vec3 = [

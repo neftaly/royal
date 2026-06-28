@@ -1,6 +1,7 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
+  solidTexture,
   standardMaterial,
   type RenderRoot,
 } from '@royal/renderer-core';
@@ -8,7 +9,9 @@ import { Canvas } from '@royal/react';
 import { createElement, type ReactNode } from 'react';
 
 const cube = boxGeometry({ size: [1.5, 1.5, 1.5] });
-const cubeMaterial = standardMaterial({ color: [0.9, 0.2, 0.16, 1] });
+const cubeMaterial = standardMaterial({
+  baseColor: solidTexture({ color: [0.9, 0.2, 0.16, 1] }),
+});
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;

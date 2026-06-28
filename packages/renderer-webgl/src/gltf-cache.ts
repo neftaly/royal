@@ -1,4 +1,4 @@
-import type { GltfNode } from "@royal/renderer-core";
+import type { GltfAssetRef, GltfNode } from "@royal/renderer-core";
 import { mat4 } from "gl-matrix";
 import { createFloatBuffer, createIndexBuffer } from "./gl";
 import { composeTransform, type Mat4 } from "./matrix";
@@ -311,6 +311,9 @@ const nodeMatrix = (node: GltfNodeJson): Mat4 => {
 const resolveUri = (base: string, uri: string): string =>
   new URL(uri, new URL(base, globalThis.location?.href ?? "http://localhost/")).href;
 
+const gltfCacheKey = (asset: GltfAssetRef): string =>
+  `${asset.id}\u0000${String(asset.revision ?? asset.uri)}`;
+
 const loadJson = async (src: string): Promise<GltfJson> => {
   const response = await fetch(src);
   if (!response.ok) throw new Error(`Failed to load glTF: ${src}`);
@@ -343,26 +346,27 @@ export class GltfCache {
   }
 
   get(node: GltfNode): GltfAsset | undefined {
-    const entry = this.#entries.get(node.src);
+    const cacheKey = gltfCacheKey(node.asset);
+    const entry = this.#entries.get(cacheKey);
     if (entry?.state === "ready") return entry.asset;
     if (entry?.state === "loading") return undefined;
     if (entry?.state === "error") throw entry.error;
 
-    this.#entries.set(node.src, { state: "loading" });
-    void this.#load(node.src).then((asset) => {
+    this.#entries.set(cacheKey, { state: "loading" });
+    void this.#load(node.asset, cacheKey).then((asset) => {
       if (this.#disposed) return;
-      this.#entries.set(node.src, { asset, state: "ready" });
+      this.#entries.set(cacheKey, { asset, state: "ready" });
       this.#onReady();
     }).catch((error: unknown) => {
       if (this.#disposed) return;
-      this.#entries.set(node.src, { error, state: "error" });
+      this.#entries.set(cacheKey, { error, state: "error" });
       this.#onReady();
     });
     return undefined;
   }
 
   getBounds(node: GltfNode): GltfAssetBounds | undefined {
-    const entry = this.#entries.get(node.src);
+    const entry = this.#entries.get(gltfCacheKey(node.asset));
     if (entry?.state !== "ready") return undefined;
     if (entry.asset.bounds === undefined) return undefined;
     return transformAabb(entry.asset.bounds, composeTransform(node.transform));
@@ -378,20 +382,21 @@ export class GltfCache {
     this.#textureCache.dispose();
   }
 
-  async #load(src: string): Promise<GltfAsset> {
+  async #load(asset: GltfAssetRef, cacheKey: string): Promise<GltfAsset> {
+    const uri = asset.uri;
     markGltf("document:start");
-    const json = await loadJson(src);
+    const json = await loadJson(uri);
     markGltf("document:end");
     measureGltf("document", "document:start", "document:end");
 
     const loadTexture = async (textureIndex: number): Promise<WebGLTexture> => {
-      return await this.#textureCache.loadGltfBaseColorTexture({ json, src, textureIndex });
+      return await this.#textureCache.loadGltfBaseColorTexture({ json, src: uri, textureIndex });
     };
     const warmedTextures = Promise.all(baseColorTextureIndices(json).map(loadTexture));
     void warmedTextures.catch(() => undefined);
 
     markGltf("buffers:start");
-    const buffers = await loadBuffers(src, json.buffers ?? []);
+    const buffers = await loadBuffers(uri, json.buffers ?? []);
     markGltf("buffers:end");
     measureGltf("buffers", "buffers:start", "buffers:end");
 
@@ -441,7 +446,7 @@ export class GltfCache {
       markGltf("textures-ready");
     }).catch((error: unknown) => {
       if (this.#disposed) return;
-      this.#entries.set(src, { error, state: "error" });
+      this.#entries.set(cacheKey, { error, state: "error" });
       this.#onReady();
     });
     return bounds === undefined ? { primitives } : { bounds, primitives };

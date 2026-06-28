@@ -1,6 +1,4 @@
 import {
-  CameraKind,
-  RenderNodeKind,
   type Camera,
   type RenderPass,
   type RenderRoot,
@@ -70,7 +68,7 @@ const viewProjection = (
   viewport: { readonly height: number; readonly width: number },
 ): Mat4 => {
   const projection =
-    camera.kind === CameraKind.Perspective
+    camera.kind === "perspective-camera"
       ? perspective(camera.fovY, viewport.width / viewport.height, camera.near, camera.far)
       : orthographic(camera.left, camera.right, camera.bottom, camera.top, camera.near, camera.far);
   const cameraWorld = multiply(
@@ -182,9 +180,9 @@ export class WebGlRoot {
       }
 
       switch (node.kind) {
-        case RenderNodeKind.DirectionalLight:
+        case "directional-light":
           break;
-        case RenderNodeKind.Mesh:
+        case "mesh":
           drawMesh(
             gl,
             { mesh: this.#meshProgram },
@@ -196,7 +194,7 @@ export class WebGlRoot {
             },
           );
           break;
-        case RenderNodeKind.Gltf:
+        case "gltf":
           {
             const asset = this.#gltfCache.get(node);
             if (asset !== undefined) {
@@ -217,7 +215,7 @@ export class WebGlRoot {
             }
           }
           break;
-        case RenderNodeKind.VectorText:
+        case "text":
           {
             const textAsset = this.#textCache.get(node);
             gl.enable(gl.BLEND);

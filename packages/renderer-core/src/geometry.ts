@@ -1,15 +1,15 @@
-import { GeometryKind } from './kind';
+import type { GeometryKind } from './kind';
 import type { Vec3 } from './primitives';
 
 /** Discriminant type for built-in and custom geometry kinds. */
-export type GeometryKindValue = string | number;
+export type GeometryKindValue = string;
 
 export interface Geometry<Kind extends GeometryKindValue = GeometryKind> {
   readonly kind: Kind;
 }
 
 /** Box geometry sized in world units. */
-export interface BoxGeometry extends Geometry<GeometryKind.Box> {
+export interface BoxGeometry extends Geometry<'box'> {
   readonly size: Vec3;
 }
 
@@ -19,6 +19,6 @@ export interface BoxGeometryOptions {
 }
 
 export const boxGeometry = (options: BoxGeometryOptions): BoxGeometry => ({
-  kind: GeometryKind.Box,
+  kind: 'box',
   size: options.size
 });

@@ -79,6 +79,7 @@ describe('examples list', () => {
     expect(helmet?.path).toBe('/gltf-helmet');
     expect(helmet?.source).toContain('<gltf');
     expect(helmet?.source).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
+    expect(helmet?.source).toContain('asset={helmetAsset}');
     expect(helmet?.source).toContain('directionalLight');
     expect(helmet?.source).toContain('perspectiveCamera');
   });

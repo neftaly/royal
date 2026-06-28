@@ -1,6 +1,7 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
+  solidTexture,
   unlitMaterial,
   type RenderNode,
   type RenderRoot,
@@ -10,8 +11,12 @@ import { Canvas } from '@royal/react';
 import { createElement, type ReactNode } from 'react';
 
 const barGeometry = boxGeometry({ size: [1, 1, 0.06] });
-const edgeMaterial = unlitMaterial({ color: [0.38, 0.85, 0.95, 1] });
-const backEdgeMaterial = unlitMaterial({ color: [0.18, 0.42, 0.54, 1] });
+const edgeMaterial = unlitMaterial({
+  baseColor: solidTexture({ color: [0.38, 0.85, 0.95, 1] }),
+});
+const backEdgeMaterial = unlitMaterial({
+  baseColor: solidTexture({ color: [0.18, 0.42, 0.54, 1] }),
+});
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
