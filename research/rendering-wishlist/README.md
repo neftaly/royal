@@ -12,8 +12,8 @@ Royal today has a small authoring surface:
 
 - `@royal/renderer-core`: `scene`, `pass`, cameras, `mesh`, `gltf`,
   `directionalLight`, vector text, and simple materials.
-- `@royal/react`: a WebGL root and JSX/runtime adapter.
-- WebGL internals: geometry, glTF, text, programs, capabilities, and draw
+- `@royal/react`: a WebGL2 root and JSX/runtime adapter.
+- WebGL2 internals: geometry, glTF, text, programs, capabilities, and draw
   caches are implementation details.
 - `@royal/tarstate-lens`: relation-style state, diagnostics, and capability
   boundaries that can host renderer facts without exposing backend handles.
@@ -47,7 +47,7 @@ before adding internal render-packet extraction.
 
 ### 1. Internal Visibility Packets
 
-Build a private render-packet extraction step inside the WebGL backend. It
+Build a private render-packet extraction step inside the WebGL2 backend. It
 should flatten pass children into packets with kind, transform, bounds,
 material/asset key, light metadata, and draw callback. The public `Scene` and
 `RenderPass` shapes can stay unchanged.
@@ -94,20 +94,20 @@ Bench targets:
 - False-negative rule: CPU occlusion may draw too much but must not hide visible
   geometry.
 
-### 3. Optional WebGL Extensions As Capability Rows
+### 3. Optional GPU Features As Capability Rows
 
-Keep optional WebGL support behind capability rows, not public flags. The
-existing probe direction is right: collect facts for WebGL/WebGL2,
-`draw_buffers`, `depth_texture`, instancing, timer queries, anisotropy,
+Keep optional WebGL2/WebGPU support behind capability rows, not public flags.
+The existing probe direction is right: collect facts for backend mode,
+instancing, multiple render targets, depth textures, timer queries, anisotropy,
 float/half-float textures, compressed texture families, and context loss.
 
 Use those facts to choose backend routes:
 
-- `ANGLE_instanced_arrays` or WebGL2 instancing: repeated meshes, terrain
-  tiles, impostors.
-- `WEBGL_draw_buffers` or WebGL2 MRT: deferred/G-buffer experiments only.
-- `WEBGL_depth_texture`: depth prepass, shadow/depth experiments, Hi-Z input.
-- `EXT_disjoint_timer_query`: benchmark rows, never product logic.
+- WebGL2/WebGPU instancing: repeated meshes, terrain tiles, impostors.
+- WebGL2/WebGPU multiple render targets: deferred/G-buffer experiments only.
+- WebGL2/WebGPU depth textures: depth prepass, shadow/depth experiments, Hi-Z
+  input.
+- WebGL2/WebGPU timer queries: benchmark rows, never product logic.
 - Compressed texture extensions: KTX2/Basis target selection.
 - Anisotropy: material quality upgrade only.
 
@@ -129,7 +129,7 @@ Bench targets:
 ### 4. KTX2/Basis Before Megatextures
 
 The texture plan should start with asset compression, not full virtual
-texturing. Current WebGL texture loading uploads decoded `ImageBitmap` data.
+texturing. Current WebGL2 texture loading uploads decoded `ImageBitmap` data.
 For real scenes, add an asset manifest path that selects KTX2/Basis Universal
 textures when compressed texture capability rows support the target family,
 with PNG/JPEG fallback for portability.
@@ -255,7 +255,7 @@ Build direction:
 Prune:
 
 - Do not block near-term demos on GPU occlusion.
-- Do not read back per-object occlusion every frame in WebGL.
+- Do not read back per-object occlusion every frame in WebGL2.
 - Do not couple Hi-Z to glTF only; it should operate on generic visibility
   packets/meshlet bounds.
 
@@ -278,11 +278,10 @@ Soon, no public API change:
 4. Add asset-manifest bounds for glTF-style assets, keeping current loader as
    fallback.
 
-Soon after, still WebGL-capable with gates:
+Soon after, still WebGL2-capable with gates:
 
 1. KTX2/Basis asset variant selection and compressed texture diagnostics.
-2. Instancing route for repeated geometry when WebGL2 or
-   `ANGLE_instanced_arrays` exists.
+2. Instancing route for repeated geometry when WebGL2/WebGPU support exists.
 3. Clustered-light CPU planner and shader prototype behind WebGL2/WebGPU gates.
 4. Offline LOD/meshlet manifest reader with CPU selection and normal draw calls.
 

@@ -22,14 +22,14 @@ Local source checked:
 
 ## Current Royal Shape
 
-Royal currently exposes a synchronous WebGL root:
+Royal currently exposes a synchronous WebGL2 root:
 
 ```ts
 const root = createRoot(canvas, options);
 root.render(scene);
 ```
 
-`RoyalRootOptions` group WebGL context attributes (`alpha`, `antialias`,
+`RoyalRootOptions` group WebGL2 context attributes (`alpha`, `antialias`,
 `preserveDrawingBuffer`) under `context`. `Canvas` creates the root
 synchronously in a layout effect and renders once the scene child is available.
 
@@ -37,13 +37,13 @@ Renderer-core is intentionally small: a `Scene` is an ordered list of render
 passes, a pass owns one camera plus render nodes, `MeshNode` accepts a generic
 `Geometry`, and built-in draw support is still box/glTF/vector text oriented.
 This is the right time to make backend seams explicit before public APIs imply
-that all roots are synchronous WebGL contexts.
+that all roots are synchronous WebGL2 contexts.
 
 ## Recommendation
 
 Make WebGPU a root/backend capability break before adding terrain, generated
 geometry, or advanced material APIs. Do not expose WebGPU-specific component
-props first. Instead, break the low-level root contract once so both WebGL and
+props first. Instead, break the low-level root contract once so both WebGL2 and
 WebGPU can share:
 
 - async readiness
@@ -62,7 +62,7 @@ WebGPU can share:
 Recommended break:
 
 ```ts
-type RoyalBackendMode = "webgl" | "webgpu" | "auto";
+type RoyalBackendMode = "webgl2" | "webgpu" | "auto";
 
 type RoyalRootOptions = {
   readonly backend?: RoyalBackendMode;
@@ -89,15 +89,14 @@ React impact:
   users need to handle WebGPU permission/device failures themselves.
 - Avoid a separate `<WebGpuCanvas>`; backend choice belongs in root options.
 
-### 2. Add `backend: "webgl" | "webgpu" | "auto"`
+### 2. Add `backend: "webgl2" | "webgpu" | "auto"`
 
-Current root options are implicitly WebGL. Break them into backend-specific
+Current root options are implicitly WebGL2. Break them into backend-specific
 groups:
 
 ```ts
 type RoyalWebGlOptions = {
   readonly context?: WebGLContextAttributes;
-  readonly preferWebGl2?: boolean;
 };
 
 type RoyalWebGpuOptions = {
@@ -108,7 +107,7 @@ type RoyalWebGpuOptions = {
 };
 ```
 
-`backend: "auto"` should mean "try WebGPU, then WebGL if policy allows".
+`backend: "auto"` should mean "try WebGPU, then WebGL2 if policy allows".
 `backend: "webgpu"` should fail loudly when WebGPU is unavailable unless the
 caller explicitly chooses a fallback.
 
@@ -118,7 +117,7 @@ Capabilities should be stable facts on the root, not ad hoc backend checks:
 
 ```ts
 type RoyalCapabilities = {
-  readonly backend: "webgl" | "webgpu";
+  readonly backend: "webgl2" | "webgpu";
   readonly features: ReadonlySet<RoyalFeatureRequirement>;
   readonly limits: Readonly<Record<string, number>>;
   readonly diagnostics: readonly RoyalCapabilityDiagnostic[];
@@ -130,9 +129,9 @@ Renderer-core nodes or asset factories should declare requirements such as
 `"timestamp-query"`, or `"texture-compression-bc"`. The root chooses whether to
 render, degrade, or reject based on policy.
 
-The existing WebGL capability probe already collects extension, compressed
-texture, timer query, and WebGPU feature rows. WebGPU should extend that shape
-rather than invent a separate reporting mechanism.
+The existing WebGL2 capability probe already collects compressed texture, timer
+query, and WebGPU feature rows. WebGPU should extend that shape rather than
+invent a separate reporting mechanism.
 
 ### 4. Add Indexed Geometry And Geometry Assets Before Terrain
 
@@ -154,10 +153,10 @@ Recommended break: make `MeshNode.geometry` accept either a procedural geometry
 descriptor or a `GeometryAsset`/asset handle with explicit upload ownership.
 This should land before any public terrain or generated mesh API.
 
-WebGL degradation:
+WebGL2 degradation:
 
 - Use `drawElements` for indexed geometry.
-- Require WebGL2 or `OES_element_index_uint` for `uint32` indices.
+- Require WebGL2 support for `uint32` indices.
 - Split large meshes into `uint16` chunks when allowed by fallback policy.
 - If no fallback is allowed, emit a capability diagnostic instead of silently
   drawing the wrong mesh.
@@ -184,7 +183,7 @@ type RenderPassNode =
 
 Do not hide compute inside materials or terrain components. A compute stage
 should declare which buffers/textures it reads and writes, then a draw pass
-consumes those resources. WebGL roots can reject compute passes, use CPU
+consumes those resources. WebGL2 roots can reject compute passes, use CPU
 precomputation, or consume baked assets according to fallback policy.
 
 ### 6. Define Compute Pass Boundaries Explicitly
@@ -203,7 +202,7 @@ Minimum contract:
 - fallback behavior (`"cpu"`, `"asset"`, `"disable"`, `"error"`)
 - readback permission and latency expectations
 
-WebGL cannot execute compute. It can only consume precomputed buffers/textures
+WebGL2 cannot execute compute. It can only consume precomputed buffers/textures
 or run CPU equivalents.
 
 ### 7. Put Fallback Policy In The Root
@@ -213,7 +212,7 @@ Recommended shape:
 ```ts
 type RoyalFallbackPolicy =
   | "error"
-  | "webgl"
+  | "webgl2"
   | "disable-feature"
   | "cpu"
   | "asset";
@@ -225,21 +224,21 @@ must say which feature degraded and why.
 
 ## WebGPU-Only Degradation Matrix
 
-| Feature | WebGPU path | WebGL degradation |
+| Feature | WebGPU path | WebGL2 degradation |
 | --- | --- | --- |
 | Compute terrain/elevation | compute pass writes buffers/textures | CPU task or baked asset; no GPU compute |
 | Storage buffers | storage/read-write buffers | uniform buffers in WebGL2, textures, or CPU packing; often feature disabled |
 | Indirect draws/GPU culling | compute-generated draw args | CPU culling and explicit draw calls |
 | Large indexed geometry | `uint32` indices broadly available | WebGL2 or chunk to `uint16` |
 | Instancing | core instanced draws | WebGL2 instancing; otherwise duplicate draws |
-| Timestamp queries | WebGPU `timestamp-query` | `EXT_disjoint_timer_query*` or CPU timing |
-| Texture compression BC/ASTC/ETC | WebGPU feature gates | WebGL compressed texture extensions or transcoded fallback |
+| Timestamp queries | WebGPU `timestamp-query` | WebGL2 timer queries or CPU timing |
+| Texture compression BC/ASTC/ETC | WebGPU feature gates | WebGL2 compressed texture extensions or transcoded fallback |
 | Readback/query buffers | mapped/readback buffers | async `readPixels`/PBO only where available, otherwise unsupported |
-| Multi-target pass graph | explicit attachments/resources | WebGL FBOs if supported; otherwise split passes or disable |
+| Multi-target pass graph | explicit attachments/resources | WebGL2 FBOs if supported; otherwise split passes or disable |
 
 Public React API consequence: components should declare requirements or consume
 capability state, but should not expose backend-only props that become no-ops on
-WebGL. Prefer diagnostics and fallback boundaries over implicit behavior.
+WebGL2. Prefer diagnostics and fallback boundaries over implicit behavior.
 
 ## Capability Probe Sketch
 
@@ -249,16 +248,16 @@ shape needed for:
 
 - probing WebGPU adapter features and limits
 - optionally checking Royal WebGL2 availability
-- choosing a backend for `"webgl"`, `"webgpu"`, or `"auto"`
+- choosing a backend for `"webgl2"`, `"webgpu"`, or `"auto"`
 - returning missing feature diagnostics before root/device construction is
   wired into public APIs
 
 ## Initial Benchmark Plan
 
-Start with a benchmark matrix that can run on WebGL today and add WebGPU when a
+Start with a benchmark matrix that can run on WebGL2 today and add WebGPU when a
 private backend exists.
 
-1. WebGL parity
+1. WebGL2 parity
    - same scene, camera, clear color, box mesh, glTF, and vector text output
    - compare draw counts, first draw time, and pixel differences
 2. Buffer upload
@@ -271,7 +270,7 @@ private backend exists.
 4. Instancing
    - one geometry with many transforms
    - compare WebGL2 path against WebGPU instancing
-   - include fallback duplicate-draw mode for correctness only
+   - include duplicate-draw mode for correctness comparisons only
 5. Terrain LOD
    - reuse the terrain research budgets: selected leaves, chunk churn, upload
      bytes, draw count, and frame time while moving the camera
@@ -279,7 +278,7 @@ private backend exists.
      available
 6. Timestamp queries
    - WebGPU `timestamp-query` when supported
-   - WebGL `EXT_disjoint_timer_query` or `EXT_disjoint_timer_query_webgl2`
+   - WebGL2 timer query support when available
    - CPU timing fallback with an explicit "not GPU time" diagnostic
 
 Benchmark output should include backend, adapter/vendor/renderer label,
@@ -290,9 +289,9 @@ unavailable.
 
 1. Add private root/backend factory internals that can return an async-ready
    root without changing public exports yet.
-2. Move current WebGL options under a private backend option object.
+2. Move current WebGL2 options under a private backend option object.
 3. Add private capability rows for root selection and diagnostics.
-4. Add private indexed geometry upload/cache in the WebGL backend.
+4. Add private indexed geometry upload/cache in the WebGL2 backend.
 5. Prototype WebGPU root behind a non-exported test hook or research harness.
 6. Only then break public `createRoot`/`Canvas` options in one release.
 
