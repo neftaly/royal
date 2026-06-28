@@ -38,6 +38,28 @@ The manifest is the source of identity and cache policy. GLB, PNG, KTX2, and
 preview files are content-addressed artifacts referenced by the manifest, not
 implicit runtime state.
 
+## World Index And Seams
+
+`fixtures/world-index.json` models a small multi-tile terrain world without
+depending on Royal runtime APIs. It contains a stable world identity, four tile
+entries, per-tile manifest URIs, grid coordinates, bounds, neighbors, and seam
+metadata. One tile points at the committed `sample-manifest.json`; the remaining
+tile entries show how later durable tile manifests can be referenced before the
+runtime adapter exists.
+
+Validate the world index and seam metadata with:
+
+```sh
+node research/offline-terrain-pipeline/validate-world-index.mjs
+```
+
+The validator is CPU-only Node code. It checks that tile IDs, page IDs, manifest
+URIs, grid coordinates, bounds, neighbor links, reciprocal seam links, seam edge
+names, border hashes, and seam deltas agree. This lets an artist or build worker
+render adjacent tiles on a GPU host, publish durable per-tile manifests plus a
+world index, and catch mismatched borders before Royal consumes those manifests
+later through a private runtime adapter.
+
 ## Durable Outputs
 
 Prefer these output families:
@@ -67,6 +89,7 @@ Validate the committed example and generated bundle:
 
 ```sh
 node research/offline-terrain-pipeline/offline-terrain-pipeline.mjs --check
+node research/offline-terrain-pipeline/validate-world-index.mjs
 ```
 
 The harness writes `sample-output/` with:
@@ -103,9 +126,10 @@ only artifact quality/revision fields:
    upload.
 5. Render review previews: thumbnail, orbit stills, material debug overlays, and
    tile-neighbor seam checks.
-6. Write one manifest per tile/page plus an optional world index manifest.
-7. Validate artifact existence, hashes, dimensions, LOD identity, and provenance
-   before publishing.
+6. Write one manifest per tile/page plus a world index manifest that records
+   tile grid placement, neighbors, and seam hashes.
+7. Validate artifact existence, hashes, dimensions, LOD identity, provenance,
+   reciprocal neighbors, and seam metadata before publishing.
 
 Sketch:
 
