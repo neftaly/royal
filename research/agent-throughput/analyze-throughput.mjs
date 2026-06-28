@@ -203,6 +203,7 @@ function recommend(scopes, repeatedFiles) {
       "Use separate worker worktrees for broad app/package changes so dirty state does not block unrelated workers.",
       "Serialize lockfiles, root configs, package-boundary tests, and example catalogs when multiple workers are active.",
       "Require a focused typecheck/test gate before handoff for any commit touching serialized scopes.",
+      "Run a close sweep after wait/status checks and before new spawn batches; count active worker slots separately from open descendants.",
       "Prefer claims for exact shared paths; keep isolated research directories claim-light."
     ]
   };

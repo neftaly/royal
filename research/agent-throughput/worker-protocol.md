@@ -8,10 +8,16 @@ without turning coordination into a central bottleneck.
 - Keep 70-85% of worker slots busy during normal operation.
 - Reserve 2-4 slots for CI failures, integration emergencies, merge repair, and
   short read-only audits.
+- Track open agents separately from active worker slots. Active slots are
+  agents that are currently editing, testing, integrating, or doing assigned
+  read-only scouting; open agents that have already completed, blocked without
+  further action, or become unnecessary must not count as available capacity.
 - Prefer a lower busy target when recent churn is concentrated in shared files,
   public package APIs, root config, lockfiles, or integration tests.
 - Prefer a higher busy target only when open work is split across disjoint
   package-local or research/docs scopes.
+- Before spawning more work, run a close sweep so completed or abandoned
+  descendants do not occupy worker capacity.
 
 ## Task Classes
 
@@ -65,6 +71,27 @@ interface.
   commands in the handoff.
 - Integration workers: merge status, full relevant CI-equivalent gates, dirty
   tree review, and explicit list of remaining failures or deferred risks.
+- All final handoffs: state whether any descendant agents remain open and, for
+  each one, whether it is active, blocked, or intentionally left open for a
+  named follow-up.
+
+## Agent Lifecycle
+
+- After every wait/status sweep, close any descendant agent whose work is
+  complete, whose blocker has been handed off and no longer needs the process
+  open, or whose assignment has become unnecessary.
+- Treat blocked agents as open only while they are actively waiting on a named
+  decision, external check, or integration owner. Once that blocker is recorded
+  in the marshal handoff or reassigned, close the agent.
+- Keep separate counts for open descendants, active worker slots, reserved
+  slots, and blocked-but-still-needed agents. Use active slots, not open
+  process count, when deciding whether the marshal can spawn more work.
+- Run a close sweep before each new spawn batch, after each merge batch, and
+  before final handoff. The sweep should follow any status collection so the
+  marshal closes agents with current completion/blocker state.
+- Do not leave read-only scouts, completed implementers, or superseded workers
+  open as passive notes. Their findings belong in the marshal log, issue,
+  branch handoff, or final response.
 
 ## WIP Examples
 
@@ -79,9 +106,10 @@ interface.
 - At least once per active marshal block, run an API/decomplection review:
   identify accidental coupling, repeated local workarounds, stale aliases, and
   unclear ownership around touched code.
-- Run a blocking audit after each merge batch and whenever worker occupancy
-  drops below the target band: list blocked workers, blocked files, missing
-  decisions, failing checks, and the next integration slot owner.
+- Run a blocking audit after each merge batch and whenever active worker
+  occupancy drops below the target band: list blocked workers, blocked files,
+  missing decisions, failing checks, descendants closed during the sweep, and
+  the next integration slot owner.
 - Re-run the throughput analyzer after material coordination changes, compare
   churny scopes and repair commits, and adjust serialized scopes before opening
   more worker slots.

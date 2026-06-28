@@ -29,8 +29,13 @@ The marshal loop is:
 5. Use read-only scouts to unblock unclear ownership before opening edit slots.
 6. Batch coupled API changes through an integration worker, then publish the new
    boundary and remaining failures.
-7. Run the pre-handoff checks for each task class before merge or handoff.
-8. Re-run the analyzer and decomplection/blocking review after each material
+7. After each wait/status sweep, close descendants that are complete, blocked
+   with their blocker handed off, or no longer needed.
+8. Track open descendants separately from active worker slots, and run a close
+   sweep before spawning more work.
+9. Run the pre-handoff checks for each task class before merge or handoff,
+   including whether any descendants remain open.
+10. Re-run the analyzer and decomplection/blocking review after each material
    merge batch.
 
 ## What We Measure
@@ -104,6 +109,9 @@ reported as unavailable and the analyzer relies on local repair-pattern signals.
 - Claims only for shared paths: keep claims lightweight for shared or churny
   paths, while allowing disjoint research and app areas to proceed without a
   central gate.
+- Close sweeps before spawn batches: measure whether separating open
+  descendants from active worker slots prevents completed subagents from
+  suppressing throughput.
 
 ## How To Read The Report
 
