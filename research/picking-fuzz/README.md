@@ -5,21 +5,26 @@ regressions. It does not fix the Damaged Helmet hover shape. The goal is to
 make regressions reproducible by separating event generation, observed state
 readback, and visible-shape oracles.
 
-## Current repo hook
+## Current status
 
-The examples app already has `PickingFuzzLab` at `/labs/picking-fuzz`.
-It turns pointer movement into `RoyalInteractionState.pointerSamples`, derives
-`hoveredId`, and renders pick probe rows through
-`evaluateRoyalLens(stores, royalQueries.pickProbeRows)`.
+Renderer picking integration is still WIP. There is currently no
+`/labs/picking-fuzz` examples route, no `PickingFuzzLab`, and no browser adapter
+that reads live Royal renderer picking state.
 
-That gives a usable first contract:
+The standalone harness in this directory is still useful as a research contract
+for geometry and hit-logic validation:
+
+- generate sample coordinates against a target region;
+- compare logical hit results with an independent visible-shape oracle;
+- report mismatches that can be replayed and translated into browser cases.
+
+A future renderer integration should provide a live contract that can:
 
 - drive pointer events against the stage or a canvas;
-- read a live hover id and the latest pick probe rows;
+- read a live hover id and the latest pick probe/debug rows;
 - compare that logical pick with an independent visible-pixel oracle.
 
-The current lab exposes rows through DOM tables. The next integration should add
-a tiny browser-only probe object, for example:
+That integration should add a tiny browser-only probe object, for example:
 
 ```ts
 window.__royalPickingProbe = {
@@ -30,15 +35,15 @@ window.__royalPickingProbe = {
 };
 ```
 
-That object can be populated from the same Tarstate-like state used by
-`PickingFuzzLab`, or from an example-specific probe for WebGL cases.
+That object can be populated from the renderer interaction state, from a future
+Tarstate-like picking lab, or from an example-specific probe for WebGL cases.
 
 ## Browser driver shape
 
 The automated runner should:
 
 1. Start the examples app with a stable viewport and deterministic device scale.
-2. Navigate to each example route.
+2. Navigate to each example route once a route/browser adapter exists.
 3. Find the target canvas or fuzz stage.
 4. Generate a dense sample set in normalized screen space.
 5. Dispatch `pointermove`, `pointerdown`, and `pointerup` with browser-native
@@ -63,8 +68,8 @@ rendered shape has no visible coverage.
 
 Use multiple oracles because a single oracle will overfit:
 
-- **Logical hover oracle**: the target id from Tarstate-like interaction state,
-  example probe rows, or a renderer picking debug surface.
+- **Logical hover oracle**: the target id from future renderer interaction
+  state, example probe rows, or a renderer picking debug surface.
 - **Visible pixel oracle**: `canvas.getImageData()` at the pointer and a small
   radius. A hit on fully transparent background is suspicious.
 - **Object color oracle**: optional debug pass where each pickable object renders
@@ -112,10 +117,12 @@ case can be replayed exactly.
 
 ## Future integration points
 
-1. Add `window.__royalPickingProbe` to the examples shell or the picking lab.
-2. Add a browser dependency such as Playwright only after deciding whether this
+1. Add a `/labs/picking-fuzz` route or another browser entry point for renderer
+   picking fuzz work.
+2. Add `window.__royalPickingProbe` to the examples shell or the picking lab.
+3. Add a browser dependency such as Playwright only after deciding whether this
    belongs in root tests or in `apps/examples-react`.
-3. Convert `picking-fuzz-harness.mjs` into the shared sampler/oracle module used
+4. Convert `picking-fuzz-harness.mjs` into the shared sampler/oracle module used
    by the browser runner.
-4. Add a WebGL object-id/coverage debug readback path for glTF examples,
+5. Add a WebGL object-id/coverage debug readback path for glTF examples,
    including `/gltf-helmet`, without changing helmet picking behavior first.
