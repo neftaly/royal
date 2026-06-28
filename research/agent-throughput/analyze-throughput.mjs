@@ -5,6 +5,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const DEFAULT_MAX_COUNT = 60;
+const SLOT_POLICY = {
+  targetBusyPercent: "70-85",
+  minReserveSlots: 2,
+  maxReserveSlots: 4
+};
 const FIX_SUBJECT_RE = /\b(fix|test|typecheck|lint|build|ci|smoke|guard|harden|restore|repair|regression)\b/i;
 const FEATURE_SUBJECT_RE = /\b(add|prototype|implement|introduce|create|convert|extend|improve|simplify)\b/i;
 const SHARED_FILE_RE = /(^pnpm-lock\.yaml$|^package\.json$|^pnpm-workspace\.yaml$|^vite\.config\.|^tsconfig|^tests\/|\/catalog\.test\.|\/browser-smoke\.mjs$|\/package\.json$)/;
@@ -193,12 +198,48 @@ function recommend(scopes, repeatedFiles) {
     parallelizableScopes,
     serializedScopes,
     serializedFiles,
+    slotPolicy: recommendSlotPolicy(scopes, repeatedFiles),
     notes: [
       "Use separate worker worktrees for broad app/package changes so dirty state does not block unrelated workers.",
       "Serialize lockfiles, root configs, package-boundary tests, and example catalogs when multiple workers are active.",
       "Require a focused typecheck/test gate before handoff for any commit touching serialized scopes.",
       "Prefer claims for exact shared paths; keep isolated research directories claim-light."
     ]
+  };
+}
+
+function recommendSlotPolicy(scopes, repeatedFiles) {
+  const highChurnScopes = scopes.filter((row) => row.churnScore >= 5 || row.sharedTouches > 1).length;
+  const repeatedHotFiles = repeatedFiles.filter((row) => row.commits > 1).length;
+  const sharedHotFiles = repeatedFiles.filter((row) => isSharedFile(row.file)).length;
+  const pressure = highChurnScopes * 2 + repeatedHotFiles + sharedHotFiles;
+
+  if (pressure >= 8) {
+    return {
+      targetBusyPercent: SLOT_POLICY.targetBusyPercent,
+      recommendedBusyPercent: "70-75",
+      reserveSlots: SLOT_POLICY.maxReserveSlots,
+      mode: "conservative",
+      reason: `${highChurnScopes} high-churn scopes, ${repeatedHotFiles} repeated files, ${sharedHotFiles} shared-risk files`
+    };
+  }
+
+  if (pressure >= 4) {
+    return {
+      targetBusyPercent: SLOT_POLICY.targetBusyPercent,
+      recommendedBusyPercent: "75-80",
+      reserveSlots: 3,
+      mode: "balanced",
+      reason: `${highChurnScopes} high-churn scopes, ${repeatedHotFiles} repeated files, ${sharedHotFiles} shared-risk files`
+    };
+  }
+
+  return {
+    targetBusyPercent: SLOT_POLICY.targetBusyPercent,
+    recommendedBusyPercent: "80-85",
+    reserveSlots: SLOT_POLICY.minReserveSlots,
+    mode: "open",
+    reason: `${highChurnScopes} high-churn scopes, ${repeatedHotFiles} repeated files, ${sharedHotFiles} shared-risk files`
   };
 }
 
@@ -313,6 +354,7 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push(`Parallelizable scopes: ${report.recommendations.parallelizableScopes.join(", ") || "none detected"}`);
   lines.push(`Serialized scopes: ${report.recommendations.serializedScopes.join(", ") || "none detected"}`);
+  lines.push(`Slot policy: keep ${report.recommendations.slotPolicy.targetBusyPercent}% busy; current recommendation ${report.recommendations.slotPolicy.recommendedBusyPercent}% busy, reserve ${report.recommendations.slotPolicy.reserveSlots} slots (${report.recommendations.slotPolicy.mode}: ${report.recommendations.slotPolicy.reason}).`);
   lines.push("");
   for (const note of report.recommendations.notes) {
     lines.push(`- ${note}`);

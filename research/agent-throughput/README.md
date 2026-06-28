@@ -11,6 +11,28 @@ does not change app code, package exports, build config, or CI wiring.
 The first pass uses local git history only. It is intended to expose merge and
 CI repair pressure, not to assign blame for individual commits.
 
+## Marshal Protocol
+
+Use [worker-protocol.md](worker-protocol.md) as the reusable marshal protocol
+for worker saturation, task classes, commit policy, batch merges, handoff gates,
+WIP examples, and periodic API/decomplection reviews.
+
+The marshal loop is:
+
+1. Inspect recent churn and active failures.
+2. Fill 70-85% of worker slots, reserving 2-4 slots for CI, integration, and
+   blocking audits.
+3. Assign safe parallel research/docs and package-local work freely when scopes
+   are disjoint.
+4. Serialize high-churn paths, root/shared config, generated examples, public
+   package exports, and coupled API breaks.
+5. Use read-only scouts to unblock unclear ownership before opening edit slots.
+6. Batch coupled API changes through an integration worker, then publish the new
+   boundary and remaining failures.
+7. Run the pre-handoff checks for each task class before merge or handoff.
+8. Re-run the analyzer and decomplection/blocking review after each material
+   merge batch.
+
 ## What We Measure
 
 - Commit-to-green time: how long a feature commit waits before the branch is
@@ -89,6 +111,10 @@ Treat `parallelizableScopes` as candidate lanes for independent workers and
 `serializedScopes` as paths that need explicit sequencing. A scope is not bad
 because it is busy; it becomes risky when repeated touches, exact-file overlap,
 and fix-after-feature commits line up in the same window.
+
+Use `slotPolicy` as the current marshal stance inside the standing protocol:
+the target remains 70-85% busy slots with 2-4 reserved emergency slots, while
+recent churn determines whether to run near the lower or upper end of that band.
 
 The first checked-in report is a baseline from current local history. Re-run
 the analyzer after changing worker rules and compare:
