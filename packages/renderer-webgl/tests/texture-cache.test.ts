@@ -44,12 +44,12 @@ const fakeTextureGl = (): {
         return { id: counts.createTexture } as WebGLTexture;
       },
       deleteTexture() {},
-      generateMipmap(target) {
+      generateMipmap(target: GLenum) {
         mipmaps.push(target);
       },
       pixelStorei() {},
       texImage2D() {},
-      texParameteri(target, pname, param) {
+      texParameteri(target: GLenum, pname: GLenum, param: GLint) {
         texParameters.push({ param, pname, target });
       },
     } as unknown as WebGLRenderingContext,
