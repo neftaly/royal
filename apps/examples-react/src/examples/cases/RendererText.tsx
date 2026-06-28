@@ -5,12 +5,15 @@ import {
   type TextFontFace,
 } from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
 import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url';
 
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
+const headingSampleText = 'Voilà: naïve façade — “Royal”';
+const defaultSampleText = 'Moloch, whose factories dream and croak in the fog';
+const defaultFontSize = 1.15;
 
 const useAtkinsonFont = (): TextFontFace | undefined => {
   const [font, setFont] = useState<TextFontFace>();
@@ -39,7 +42,7 @@ const useAtkinsonFont = (): TextFontFace | undefined => {
   return font;
 };
 
-const textScene = (font: TextFontFace): RenderRoot =>
+const textScene = (font: TextFontFace, sampleText: string, fontSize: number): RenderRoot =>
   (
     <scene>
       <pass clearColor={[0.025, 0.032, 0.038, 1]}>
@@ -56,10 +59,10 @@ const textScene = (font: TextFontFace): RenderRoot =>
         <text
           color={[0.98, 0.92, 0.35, 1]}
           font={font}
-          fontSize={1.15}
+          fontSize={fontSize}
           lineHeight={1.35}
           origin={[-4.95, 0.78, 0]}
-          text={'Royal text\nsharp curves'}
+          text={`${headingSampleText}\n${sampleText}`}
         />
         <text
           color={[0.42, 0.9, 0.82, 1]}
@@ -75,13 +78,54 @@ const textScene = (font: TextFontFace): RenderRoot =>
 
 export const RendererText = (): ReactNode => {
   const font = useAtkinsonFont();
-  const scene = font === undefined ? textScenePlaceholder : textScene(font);
+  const [sampleText, setSampleText] = useState(defaultSampleText);
+  const [fontSize, setFontSize] = useState(defaultFontSize);
+  const scene = font === undefined ? textScenePlaceholder : textScene(font, sampleText, fontSize);
 
-  return createElement(Canvas, {
-    'aria-label': 'Renderer text',
-    children: scene,
-    rootOptions,
-  });
+  const handleSampleTextChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    setSampleText(event.currentTarget.value);
+  };
+
+  const handleFontSizeChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    setFontSize(Number(event.currentTarget.value));
+  };
+
+  return createElement(
+    'div',
+    { className: 'text-example' },
+    createElement(
+      'div',
+      { className: 'text-example-controls' },
+      createElement(
+        'label',
+        { className: 'text-example-field' },
+        createElement('span', null, 'Second line'),
+        createElement('input', {
+          onChange: handleSampleTextChange,
+          type: 'text',
+          value: sampleText,
+        }),
+      ),
+      createElement(
+        'label',
+        { className: 'text-example-field text-example-size-field' },
+        createElement('span', null, `Font size ${fontSize.toFixed(2)}`),
+        createElement('input', {
+          max: 1.6,
+          min: 0.7,
+          onChange: handleFontSizeChange,
+          step: 0.05,
+          type: 'range',
+          value: fontSize,
+        }),
+      ),
+    ),
+    createElement(Canvas, {
+      'aria-label': 'Renderer text',
+      children: scene,
+      rootOptions,
+    }),
+  );
 };
 
 const textScenePlaceholder = (
