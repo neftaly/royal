@@ -367,12 +367,11 @@ const artifactsExpression = `
   };
   const read = () => {
     const page = document.querySelector('[data-artifacts-page]');
-    const activeLink = document.querySelector('[data-artifacts-nav-link].active');
 
     return {
       hasPage: page !== null,
       title: document.querySelector('h1')?.textContent?.trim() ?? '',
-      activeNavText: activeLink?.textContent?.trim() ?? '',
+      artifactsNavCount: document.querySelectorAll('[data-artifacts-nav-link]').length,
       artifactCards: Array.from(document.querySelectorAll('.artifact-card[data-artifact-id]')).map((card) => ({
         id: card.getAttribute('data-artifact-id') ?? '',
         text: card.textContent?.trim() ?? '',
@@ -459,8 +458,8 @@ const assertArtifactsPage = (state) => {
   if (state.title !== 'Research Artifacts') {
     failures.push(`expected research artifacts title, received "${state.title}"`);
   }
-  if (state.activeNavText !== 'Research Artifacts') {
-    failures.push(`active research artifacts nav text was "${state.activeNavText || 'missing'}"`);
+  if (state.artifactsNavCount !== 0) {
+    failures.push(`research artifacts nav is exposed ${state.artifactsNavCount} time(s)`);
   }
   const artifactIds = new Set(state.artifactCards.map((artifact) => artifact.id));
   for (const expectedId of [
@@ -512,8 +511,8 @@ const assertArtifactsPage = (state) => {
   if (state.previews.some((preview) => preview.naturalWidth <= 0 || preview.naturalHeight <= 0)) {
     failures.push('research artifact preview image did not load');
   }
-  if (state.navAssetCount < artifactIds.size) {
-    failures.push(`research nav exposed ${state.navAssetCount} artifact assets for ${artifactIds.size} cards`);
+  if (state.navAssetCount !== 0) {
+    failures.push(`research artifact asset nav is exposed ${state.navAssetCount} time(s)`);
   }
   if (state.relatedRouteCount === 0) {
     failures.push('missing related real example route link');
