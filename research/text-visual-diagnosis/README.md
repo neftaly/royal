@@ -17,3 +17,13 @@ intentionally inactive and stricter than the current synthetic canvas output.
 
 The Text Prototype acceptance string is `AV office 108%.` because it exercises
 kerning-sensitive pairs, counters/holes, punctuation, numerals, and lowercase.
+
+## Artifact policy
+
+This directory keeps diagnosis docs and example thresholds under version
+control. Local PNG captures, machine diagnostics, smoke reports, and active
+oracle files are generated artifacts. Leave them untracked and regenerate them
+from the smoke or diagnosis scripts when investigating a rendering change.
+
+Commit a generated artifact only when it becomes a deliberate review baseline;
+document that baseline in this README at the same time.
