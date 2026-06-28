@@ -30,6 +30,29 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-dependencies: true
+
+      - name: Add Chromium command
+        shell: bash
+        run: |
+          chrome_path='${{ steps.setup-chrome.outputs.chrome-path }}'
+          if [ -z "$chrome_path" ] || [ ! -x "$chrome_path" ]; then
+            echo "::error::setup-chrome did not provide an executable Chrome path."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/bin"
+          {
+            echo '#!/usr/bin/env bash'
+            printf 'exec %q "$@"\n' "$chrome_path"
+          } > "$RUNNER_TEMP/bin/chromium"
+          chmod +x "$RUNNER_TEMP/bin/chromium"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -42,8 +65,8 @@ jobs:
       - name: Examples browser smoke
         run: |
           if ! command -v chromium >/dev/null 2>&1; then
-            echo "::warning::Chromium is not available on this runner; skipping examples browser smoke."
-            exit 0
+            echo "::error::Chromium is not available after setup-chrome."
+            exit 1
           fi
           chromium --version
           pnpm --filter @royal/examples-react test:browser

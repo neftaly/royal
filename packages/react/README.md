@@ -48,8 +48,6 @@ From the repository root:
 pnpm install
 pnpm typecheck
 pnpm test
-pnpm lint
 pnpm build
+pnpm --filter @royal/examples-react test:browser
 ```
-
-Agents should read `AGENTS.md` at the repository root.

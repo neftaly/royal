@@ -1,7 +1,9 @@
 # Text visual diagnosis
 
-The examples browser smoke records objective canvas text measurements without
-adding DOM or raster overlays over renderer text.
+The examples browser smoke requires a `chromium` executable on `PATH` and
+records objective canvas text measurements without adding DOM or raster overlays
+over renderer text. CI installs Chrome and exposes it through a `chromium`
+command before running the smoke.
 
 Run the examples browser smoke with an optional JSON report:
 
