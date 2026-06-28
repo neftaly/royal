@@ -7,10 +7,6 @@ import {
   shapeText,
   text,
   textMesh,
-  textMeshFromLayout,
-  vectorText,
-  vectorTextGlyphRects,
-  vectorTextMesh,
   type TextNode,
   type TextOptions
 } from './text';
@@ -112,54 +108,9 @@ describe('text shaping and mesh generation', () => {
     expect(layout.metrics.lineHeight).toBe(3);
   });
 
-  it('preserves legacy vectorText glyph validation and rectangle compatibility', () => {
-    const legacy = vectorText({
-      color: [1, 1, 1, 1],
-      glyphs: [{
-        center: [0, 0, 0],
-        char: 'a',
-        span: 1
-      }]
-    });
-
-    expect(legacy.layout.font.family).toBe('royal-vector-compat');
-    expect(vectorTextGlyphRects(legacy).length).toBeGreaterThan(0);
-    expect(() => vectorText({
-      color: [1, 1, 1, 1],
-      glyphs: [{
-        center: [0, 0, 0],
-        char: '🙂',
-        span: 2
-      }]
-    })).toThrow('Unsupported vector glyph');
-  });
-
-  it('keeps vectorText({ text }) layout rich while lowering compatibility glyphs for legacy rects', () => {
-    const node = vectorText({
-      color: [1, 1, 1, 1],
-      text: 'AV office 🙂.'
-    });
-
-    expect(node.layout.lines[0]?.glyphs.map((glyph) => glyph.glyph.text)).toEqual([
-      'A',
-      'V',
-      ' ',
-      'o',
-      'ffi',
-      'c',
-      'e',
-      ' ',
-      '🙂',
-      '.'
-    ]);
-    expect(node.glyphs.map((glyph) => glyph.char)).toEqual(['a', 'v', ' ', 'o', 'f', 'c', 'e', ' ', ' ', ' ']);
-    expect(node.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(['unsupported-glyph']);
-    expect(() => vectorTextGlyphRects(node)).not.toThrow();
-  });
-
   it('lays out empty text without vertices or diagnostics', () => {
     const layout = layoutText({ text: '' });
-    const mesh = textMeshFromLayout(layout);
+    const mesh = textMesh(layout);
 
     expect(layout.lines).toHaveLength(1);
     expect(layout.lines[0]?.glyphs).toHaveLength(0);
@@ -170,11 +121,11 @@ describe('text shaping and mesh generation', () => {
   });
 
   it('creates contour mesh data with semantic contour roles for shaped text', () => {
-    const node = vectorText({
+    const node = text({
       color: [1, 1, 1, 1],
       text: 'o'
     });
-    const mesh = vectorTextMesh(node);
+    const mesh = textMesh(node);
 
     expect(node.layout.font.family).toBe('royal-ascii-prototype');
     expect(mesh.contours.map((contour) => contour.role)).toEqual(['outline', 'outline', 'outline', 'outline']);
@@ -211,8 +162,8 @@ describe('text shaping and mesh generation', () => {
       fontSize: 1,
       text: 'o'
     });
-    const realMesh = textMeshFromLayout(layout);
-    const syntheticMesh = textMeshFromLayout(layoutText({
+    const realMesh = textMesh(layout);
+    const syntheticMesh = textMesh(layoutText({
       fontSize: 1,
       text: 'o'
     }));
@@ -231,7 +182,6 @@ describe('text shaping and mesh generation', () => {
       text: 'AV'
     });
 
-    expect(textMesh(node)).toEqual(vectorTextMesh(node));
-    expect(textMesh(node.layout)).toEqual(textMeshFromLayout(node.layout));
+    expect(textMesh(node)).toEqual(textMesh(node.layout));
   });
 });

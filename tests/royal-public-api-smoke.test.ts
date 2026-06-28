@@ -21,7 +21,6 @@ import {
   layoutText,
   shapeText,
   textMesh,
-  textMeshFromLayout,
   type ShapeTextResult,
   type TextLayout,
   type TextMesh,
@@ -81,7 +80,7 @@ describe('Royal public API smoke tests', () => {
     expect(reactRoyal).not.toHaveProperty('boxGeometry');
     expect(reactRoyal).not.toHaveProperty('text');
     expect(root.children[0]?.children).toHaveLength(1);
-    expect(textNode.glyphs.map((glyph) => glyph.char).join('')).toBe('api');
+    expect(textNode.layout.source).toBe('api');
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly children: unknown }>();
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly rootOptions?: RoyalRootOptions }>();
     expectTypeOf<RoyalRootOptions>().toMatchTypeOf<{
@@ -110,7 +109,7 @@ describe('Royal public API smoke tests', () => {
       color: [0.9, 0.9, 0.9, 1],
       text: 'AV'
     });
-    const meshFromLayout = textMeshFromLayout(layout);
+    const meshFromLayout = textMesh(layout);
     const meshFromNode = textMesh(textNode);
     const kernedGlyph = shaped.run.glyphs[1];
 
@@ -127,14 +126,18 @@ describe('Royal public API smoke tests', () => {
     expect(rendererCore).not.toHaveProperty('vectorTextMesh');
     expect(rendererCore).not.toHaveProperty('vectorTextGlyphRects');
     expect(rendererCore).not.toHaveProperty('vectorTextSupportedCharacters');
+    expect(rendererCore).not.toHaveProperty('textMeshFromLayout');
     expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorText');
     expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorTextMesh');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('textMeshFromLayout');
     expectTypeOf(shaped).toEqualTypeOf<ShapeTextResult>();
     expectTypeOf(layout).toEqualTypeOf<TextLayout>();
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
     expectTypeOf(meshFromNode).toEqualTypeOf<TextMesh>();
     expectTypeOf<TextMesh['contours'][number]['role']>().toEqualTypeOf<'outline'>();
     expectTypeOf<TextOptions>().not.toHaveProperty('glyphs');
+    expectTypeOf<TextNode>().not.toHaveProperty('glyphs');
+    expectTypeOf<TextNode>().not.toHaveProperty('cellHeight');
   });
 
   it('exposes renderer testing helpers without package-internal imports', () => {

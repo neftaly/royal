@@ -80,8 +80,7 @@ export {
   layoutText,
   shapeText,
   text,
-  textMesh,
-  textMeshFromLayout
+  textMesh
 } from './text';
 export type {
   Axis,

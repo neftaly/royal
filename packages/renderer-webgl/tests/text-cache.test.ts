@@ -5,9 +5,9 @@ vi.mock("@royal/renderer-core", async () => await import("../../renderer-core/sr
 import {
   text,
   textMesh,
-  textMeshFromLayout,
   type TextMesh,
 } from "@royal/renderer-core";
+import type { RendererWebGlContext } from "../src/gl";
 import { TextCache, textBufferDataFromMesh } from "../src/text-cache";
 
 const fakeGl = (): {
@@ -15,7 +15,7 @@ const fakeGl = (): {
     createBuffer: number;
     deleteBuffer: number;
   };
-  readonly gl: WebGLRenderingContext;
+  readonly gl: RendererWebGlContext;
 } => {
   const counts = {
     createBuffer: 0,
@@ -37,16 +37,16 @@ const fakeGl = (): {
       deleteBuffer() {
         counts.deleteBuffer += 1;
       },
-    } as unknown as WebGLRenderingContext,
+    } as unknown as RendererWebGlContext,
   };
 };
 
 describe("TextCache", () => {
   it("packs positions, glyph coordinates, and uint16 indices from text mesh data", () => {
-    const mesh = textMeshFromLayout(text({
+    const mesh = textMesh(text({
       color: [1, 1, 1, 1],
       text: "oi",
-    }).layout);
+    }));
     const data = textBufferDataFromMesh(mesh);
 
     expect(data.position.length).toBe(mesh.vertices.length * 3);
