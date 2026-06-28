@@ -1,0 +1,18 @@
+{
+  "artifacts": [
+    {
+      "bytes": 58464,
+      "path": "out/royal-cheap-blender-tile.glb"
+    }
+  ],
+  "recipe": "royal-cheap-terrain-assets@0.1.0",
+  "revision": "cheap-blender-pipeline@0.1.0",
+  "seed": "royal:cheap-blender-static-tile:001",
+  "stages": {
+    "exportMs": 218.7,
+    "manifestMs": 0.651,
+    "sceneMs": 17.837,
+    "totalBeforeManifestMs": 236.792,
+    "totalMs": 237.45
+  }
+}

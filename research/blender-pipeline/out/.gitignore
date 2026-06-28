@@ -1,0 +1,6 @@
+# Keep the tiny checked fixture explicit; ignore ad hoc heavier exports here.
+*
+!.gitignore
+!manifest.json
+!timings.json
+!royal-cheap-blender-tile.glb

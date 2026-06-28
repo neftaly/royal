@@ -1,0 +1,296 @@
+{
+  "artifacts": [
+    {
+      "bytes": 58464,
+      "format": "glTF 2.0 GLB",
+      "mediaType": "model/gltf-binary",
+      "path": "out/royal-cheap-blender-tile.glb",
+      "sha256": "1314e9ca2fbafc633ca4a7d403dcfcda8a8b2305ae3492d216d1e35c4d4e238d",
+      "status": "written"
+    },
+    {
+      "bytes": 401,
+      "format": "pipeline timings",
+      "mediaType": "application/json",
+      "path": "out/timings.json",
+      "sha256": "d64ff497fbce9ef31b92e4ac5a8a2e84ccfe518737c39d3040315c8e17a589b4",
+      "status": "written"
+    }
+  ],
+  "assets": [
+    {
+      "assetId": "asset:tree:west",
+      "bounds": {
+        "center": [
+          -18.0,
+          1.364,
+          -9.0
+        ],
+        "max": [
+          -16.2622,
+          5.0727,
+          -7.2175
+        ],
+        "min": [
+          -19.7378,
+          -2.3448,
+          -10.7825
+        ],
+        "size": [
+          3.4756,
+          7.4175,
+          3.565
+        ]
+      },
+      "kind": "tree",
+      "objectNames": [
+        "asset:tree:west:trunk",
+        "asset:tree:west:canopy"
+      ],
+      "position": [
+        -18.0,
+        -2.3448,
+        -9.0
+      ],
+      "provenance": {
+        "inputsHash": "d30685191260b8ecfe4be433a9717d058c0506ba57bdb98f6e6fff2afffb4cbe",
+        "recipe": "royal-cheap-terrain-assets@0.1.0",
+        "seed": "royal:cheap-blender-static-tile:001",
+        "source": "procedural-primitives"
+      },
+      "stage": "cheap-static-fixture"
+    },
+    {
+      "assetId": "asset:tree:ridge",
+      "bounds": {
+        "center": [
+          13.5,
+          5.895,
+          10.0
+        ],
+        "max": [
+          14.9356,
+          8.9587,
+          11.4725
+        ],
+        "min": [
+          12.0644,
+          2.8312,
+          8.5275
+        ],
+        "size": [
+          2.8712,
+          6.1275,
+          2.945
+        ]
+      },
+      "kind": "tree",
+      "objectNames": [
+        "asset:tree:ridge:trunk",
+        "asset:tree:ridge:canopy"
+      ],
+      "position": [
+        13.5,
+        2.8312,
+        10.0
+      ],
+      "provenance": {
+        "inputsHash": "991146a952b615e2a6ff8298fde1611433551465f52d426fdfab7e7b80d22e47",
+        "recipe": "royal-cheap-terrain-assets@0.1.0",
+        "seed": "royal:cheap-blender-static-tile:001",
+        "source": "procedural-primitives"
+      },
+      "stage": "cheap-static-fixture"
+    },
+    {
+      "assetId": "asset:rocks:south",
+      "bounds": {
+        "center": [
+          -4.182,
+          0.2605,
+          19.0413
+        ],
+        "max": [
+          -2.371,
+          1.2462,
+          20.2385
+        ],
+        "min": [
+          -5.9931,
+          -0.7251,
+          17.844
+        ],
+        "size": [
+          3.622,
+          1.9713,
+          2.3945
+        ]
+      },
+      "kind": "rock-cluster",
+      "objectNames": [
+        "asset:rocks:south:rock-1",
+        "asset:rocks:south:rock-2",
+        "asset:rocks:south:rock-3"
+      ],
+      "position": [
+        -4.0,
+        -0.1439,
+        19.0
+      ],
+      "provenance": {
+        "inputsHash": "88fe9ec7d59b86edfd3c6b214ec15b4f6f82967ab5c6390d6144fcc631444ede",
+        "recipe": "royal-cheap-terrain-assets@0.1.0",
+        "seed": "royal:cheap-blender-static-tile:001",
+        "source": "procedural-primitives"
+      },
+      "stage": "cheap-static-fixture"
+    },
+    {
+      "assetId": "asset:cube:survey-marker",
+      "bounds": {
+        "center": [
+          20.0,
+          0.2438,
+          -18.0
+        ],
+        "max": [
+          20.7,
+          0.9438,
+          -17.3
+        ],
+        "min": [
+          19.3,
+          -0.4562,
+          -18.7
+        ],
+        "size": [
+          1.4,
+          1.4,
+          1.4
+        ]
+      },
+      "kind": "cube",
+      "objectNames": [
+        "asset:cube:survey-marker"
+      ],
+      "position": [
+        20.0,
+        -0.4562,
+        -18.0
+      ],
+      "provenance": {
+        "inputsHash": "8c4d61b1a0a004c78f9c8fe8df50fe297ba0c8b61fa3fa13a0edbfbc1679b546",
+        "recipe": "royal-cheap-terrain-assets@0.1.0",
+        "seed": "royal:cheap-blender-static-tile:001",
+        "source": "procedural-primitives"
+      },
+      "stage": "cheap-static-fixture"
+    }
+  ],
+  "bounds": {
+    "center": [
+      0.0,
+      2.1616,
+      0.0
+    ],
+    "max": [
+      32.0,
+      8.9587,
+      32.0
+    ],
+    "min": [
+      -32.0,
+      -4.6354,
+      -32.0
+    ],
+    "size": [
+      64.0,
+      13.5941,
+      64.0
+    ]
+  },
+  "coordinateSystem": {
+    "asset": {
+      "forward": "-Z",
+      "handedness": "right-handed",
+      "name": "Royal/glTF web",
+      "units": "meters",
+      "up": "+Y"
+    },
+    "exporter": {
+      "exportYUp": true,
+      "format": "glTF 2.0"
+    },
+    "sourceBlender": {
+      "forward": "-Y",
+      "handedness": "right-handed",
+      "units": "meters",
+      "up": "+Z"
+    },
+    "sourceToAsset": {
+      "x": "blender.x",
+      "y": "blender.z",
+      "z": "-blender.y"
+    }
+  },
+  "export": {
+    "glb": {
+      "diagnostics": [],
+      "status": "written"
+    }
+  },
+  "generatedAt": "2026-06-28T02:04:45.688979+00:00",
+  "revision": "cheap-blender-pipeline@0.1.0",
+  "schemaVersion": 1,
+  "stage": {
+    "id": "cheap-blender-static-tile",
+    "provenance": {
+      "blenderVersion": "4.3.2",
+      "generator": "research/blender-pipeline/generate_scene.py",
+      "infinigenDependency": "none",
+      "inputsHash": "0662eecc7f5d102a3f4c0b9cf6a567813f2cb3d15fd6df6fa6e5bad4f9fa108d",
+      "pythonVersion": "3.13.5",
+      "seed": "royal:cheap-blender-static-tile:001",
+      "sourceKind": "local-procedural-blender"
+    },
+    "recipe": "royal-cheap-terrain-assets@0.1.0",
+    "status": "prototype"
+  },
+  "terrain": {
+    "bounds": {
+      "center": [
+        0.0,
+        0.6593,
+        0.0
+      ],
+      "max": [
+        32.0,
+        5.954,
+        32.0
+      ],
+      "min": [
+        -32.0,
+        -4.6354,
+        -32.0
+      ],
+      "size": [
+        64.0,
+        10.5894,
+        64.0
+      ]
+    },
+    "heightRecipe": "deterministic sin/cos hills with low ridge term",
+    "kind": "heightfield-mesh",
+    "segmentsPerEdge": 28,
+    "tileSizeMeters": 64
+  },
+  "tileId": "tile:cheap-blender:lod0:x0:z0",
+  "timingsMs": {
+    "exportMs": 218.7,
+    "manifestMs": 0.651,
+    "sceneMs": 17.837,
+    "totalBeforeManifestMs": 236.792,
+    "totalMs": 237.45
+  },
+  "worldId": "royal-cheap-blender-world"
+}
