@@ -38,3 +38,12 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Examples browser smoke
+        run: |
+          if ! command -v chromium >/dev/null 2>&1; then
+            echo "::warning::Chromium is not available on this runner; skipping examples browser smoke."
+            exit 0
+          fi
+          chromium --version
+          pnpm --filter @royal/examples-react test:browser
