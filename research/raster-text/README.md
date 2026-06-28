@@ -346,7 +346,7 @@ V1 should support:
 - A restricted monospace atlas for ASCII UI/debug/table text only after an
   allowlist rejects ligature-sensitive text, combining marks, emoji, RTL/bidi
   content, CJK, proportional fonts, user text, and variable-advance cases with
-  hard diagnostics.
+  hard diagnostics. Disable ligatures for already-allowed cell rendering.
 - Renderer-owned cache keys that include resolved font identity, size, DPR,
   paint, font load state, and invalidation policy.
 
