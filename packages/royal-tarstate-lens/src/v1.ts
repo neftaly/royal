@@ -7,13 +7,13 @@ import {
   type WritePatch
 } from '@tarstate/core';
 import {
-  createRoyalAppBoundary as createPrototypeRoyalAppBoundary,
-  createRoyalLensSnapshot as createPrototypeRoyalLensSnapshot,
-  createStorePatchDispatcher,
-  royalActivationPatchRoute,
-  royalEffectResultPatchRoute,
+  createPrototypeRoyalAppBoundary,
+  createPrototypeRoyalLensSnapshot,
+  createPrototypeStorePatchDispatcher,
+  prototypeRoyalActivationPatchRoute,
+  prototypeRoyalEffectResultPatchRoute,
   royalLensSchema,
-  royalQueries as prototypeRoyalQueries,
+  prototypeRoyalQueries,
   type CapabilityRuntimeState,
   type EffectResultRow,
   type LensSnapshot,
@@ -81,7 +81,7 @@ export type RoyalEffectResultWrite = EffectResultRow;
 export const royalQueries = {
   renderRows: prototypeRoyalQueries.renderRows satisfies Query<RoyalRenderRow>,
   pickProbeRows: prototypeRoyalQueries.pickProbeRows satisfies Query<RoyalPickProbeRow>,
-  capabilityResultRows: prototypeRoyalQueries.scopedCapabilityResultRows satisfies Query<RoyalCapabilityResultRow>
+  capabilityResultRows: prototypeRoyalQueries.capabilityResultRows satisfies Query<RoyalCapabilityResultRow>
 } as const;
 
 export function createRoyalLensSnapshot(input: RoyalLensInput): LensSnapshot {
@@ -102,7 +102,7 @@ export async function evaluateRoyalLens<Row>(
 }
 
 export function createRoyalPatchDispatcher(input: RoyalPatchDispatcherInput): RoyalPatchDispatcher {
-  return createStorePatchDispatcher(isRoyalPatchRouteArray(input) ? input : routesFromInput(input));
+  return createPrototypeStorePatchDispatcher(isRoyalPatchRouteArray(input) ? input : routesFromInput(input));
 }
 
 export function writeRoyalActivation(input: RoyalActivationWrite): WritePatch<typeof royalLensSchema.activationStates> {
@@ -117,8 +117,8 @@ export function writeRoyalEffectResult(input: RoyalEffectResultWrite): WritePatc
 function routesFromInput(input: Exclude<RoyalPatchDispatcherInput, readonly RoyalPatchRoute[]>): readonly RoyalPatchRoute[] {
   return [
     ...(input.routes ?? []),
-    ...(input.interactionStore === undefined ? [] : [royalActivationPatchRoute(input.interactionStore)]),
-    ...(input.capabilityStore === undefined ? [] : [royalEffectResultPatchRoute(input.capabilityStore)])
+    ...(input.interactionStore === undefined ? [] : [prototypeRoyalActivationPatchRoute(input.interactionStore)]),
+    ...(input.capabilityStore === undefined ? [] : [prototypeRoyalEffectResultPatchRoute(input.capabilityStore)])
   ];
 }
 

@@ -605,7 +605,7 @@ export const royalCapabilityBoundaryContract = {
   ]
 } as const satisfies CapabilityBoundaryContract;
 
-export const royalQueries = {
+export const prototypeRoyalQueries = {
   renderRows: pipe(
     from(box),
     leftJoin(
@@ -662,7 +662,7 @@ export const royalQueries = {
       status: assetDiagnostic.status
     })
   ),
-  capabilityResultRows: pipe(
+  unsafeUnscopedCapabilityResultRows: pipe(
     from(effectResult),
     leftJoin(
       from(capabilityDiagnostic),
@@ -679,7 +679,7 @@ export const royalQueries = {
       diagnosticCode: maybe(capabilityDiagnostic.code)
     })
   ) satisfies Query<RoyalCapabilityResultRow>,
-  scopedCapabilityResultRows: pipe(
+  capabilityResultRows: pipe(
     from(effectResult),
     leftJoin(
       from(capabilityDiagnostic),
@@ -713,7 +713,7 @@ export const royalQueries = {
   )
 } as const;
 
-export function createStoreLensSnapshot(
+export function createPrototypeStoreLensSnapshot(
   lenses: readonly StoreLens<unknown, Record<string, unknown>>[],
   options: LensSnapshotOptions = {}
 ): LensSnapshot {
@@ -751,7 +751,7 @@ export function createStoreLensSnapshot(
   };
 }
 
-export function createStorePatchDispatcher(routes: readonly AnyStorePatchRoute[]): StorePatchDispatcher {
+export function createPrototypeStorePatchDispatcher(routes: readonly AnyStorePatchRoute[]): StorePatchDispatcher {
   const routeByRelation = new Map(routes.map((route) => [route.relation.name, route]));
 
   return {
@@ -787,7 +787,7 @@ export function createStorePatchDispatcher(routes: readonly AnyStorePatchRoute[]
   };
 }
 
-export function createRoyalStoreLenses(stores: RoyalLensStores): readonly StoreLens<unknown, Record<string, unknown>>[] {
+export function createPrototypeRoyalStoreLenses(stores: RoyalLensStores): readonly StoreLens<unknown, Record<string, unknown>>[] {
   const lenses: StoreLens<unknown, Record<string, unknown>>[] = [
     {
       relation: royalLensSchema.scopes,
@@ -864,25 +864,25 @@ export function createRoyalStoreLenses(stores: RoyalLensStores): readonly StoreL
   return lenses;
 }
 
-export function createRoyalLensSnapshot(stores: RoyalLensStores): LensSnapshot {
-  return createStoreLensSnapshot(createRoyalStoreLenses(stores), {
+export function createPrototypeRoyalLensSnapshot(stores: RoyalLensStores): LensSnapshot {
+  return createPrototypeStoreLensSnapshot(createPrototypeRoyalStoreLenses(stores), {
     diagnostics: royalProbeDiagnostics
   });
 }
 
-export function createRoyalAppBoundary(stores: RoyalLensStores): RoyalAppBoundary {
+export function createPrototypeRoyalAppBoundary(stores: RoyalLensStores): RoyalAppBoundary {
   return {
-    snapshot: () => createRoyalLensSnapshot(stores),
-    probe: () => createRoyalLensSnapshot(stores).probe,
-    query: async (query) => evaluate(createRoyalLensSnapshot(stores).source, query)
+    snapshot: () => createPrototypeRoyalLensSnapshot(stores),
+    probe: () => createPrototypeRoyalLensSnapshot(stores).probe,
+    query: async (query) => evaluate(createPrototypeRoyalLensSnapshot(stores).source, query)
   };
 }
 
-export async function evaluateRoyalLens<Row>(
+export async function evaluatePrototypeRoyalLens<Row>(
   stores: RoyalLensStores,
   query: Query<Row>
 ): Promise<QueryResult<Row>> {
-  return evaluate(createRoyalLensSnapshot(stores).source, query);
+  return evaluate(createPrototypeRoyalLensSnapshot(stores).source, query);
 }
 
 export function deriveLayoutNodeRows(
@@ -921,14 +921,14 @@ export function assetIdForSrc(src: string): string {
   return `asset:gltf:${src}`;
 }
 
-export function royalActivationPatchRoute(store: WritableStore<RoyalInteractionState>): AnyStorePatchRoute {
+export function prototypeRoyalActivationPatchRoute(store: WritableStore<RoyalInteractionState>): AnyStorePatchRoute {
   return {
     relation: royalLensSchema.activationStates,
     apply: (patch) => applyRoyalActivationPatch(store, patch)
   };
 }
 
-export function royalEffectResultPatchRoute(store: WritableStore<CapabilityRuntimeState>): AnyStorePatchRoute {
+export function prototypeRoyalEffectResultPatchRoute(store: WritableStore<CapabilityRuntimeState>): AnyStorePatchRoute {
   return {
     relation: royalLensSchema.effectResults,
     apply: (patch) => applyRoyalEffectResultPatch(store, patch)

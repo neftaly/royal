@@ -12,16 +12,16 @@ import {
   write
 } from '@tarstate/core';
 import {
-  createRoyalAppBoundary,
-  createRoyalLensSnapshot,
-  createStoreLensSnapshot,
-  createStorePatchDispatcher,
+  createPrototypeRoyalAppBoundary,
+  createPrototypeRoyalLensSnapshot,
+  createPrototypeStoreLensSnapshot,
+  createPrototypeStorePatchDispatcher,
   deriveLayoutNodeRows,
-  royalActivationPatchRoute,
+  prototypeRoyalActivationPatchRoute,
   royalCapabilityBoundaryContract,
-  royalEffectResultPatchRoute,
+  prototypeRoyalEffectResultPatchRoute,
   royalLensSchema,
-  royalQueries,
+  prototypeRoyalQueries,
   stableContainmentId,
   type CapabilityRuntimeState,
   type ReadableStore,
@@ -71,7 +71,7 @@ describe('tarstate Royal/store lens prototype', () => {
       }
     ];
 
-    const snapshot = createStoreLensSnapshot(lenses);
+    const snapshot = createPrototypeStoreLensSnapshot(lenses);
     const result = await evaluate(snapshot.source, userNames);
 
     expect(store.readCount()).toBe(1);
@@ -89,9 +89,9 @@ describe('tarstate Royal/store lens prototype', () => {
 
   it('queries Royal render flags across separate document, layout, and interaction stores', async () => {
     const stores = createRoyalStores();
-    const boundary = createRoyalAppBoundary(stores);
+    const boundary = createPrototypeRoyalAppBoundary(stores);
     const snapshot = boundary.snapshot();
-    const result = await boundary.query(royalQueries.renderRows);
+    const result = await boundary.query(prototypeRoyalQueries.renderRows);
     const button = result.rows.find((row) => row.boxId === 'button-primary');
     const helmet = result.rows.find((row) => row.boxId === 'helmet');
     const log = result.rows.find((row) => row.boxId === 'log');
@@ -152,8 +152,8 @@ describe('tarstate Royal/store lens prototype', () => {
         ]
       }
     });
-    const snapshot = createRoyalLensSnapshot(stores);
-    const result = await evaluate(snapshot.source, royalQueries.pickProbeRows);
+    const snapshot = createPrototypeRoyalLensSnapshot(stores);
+    const result = await evaluate(snapshot.source, prototypeRoyalQueries.pickProbeRows);
     const diagnostics = result.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.relation, diagnostic.field]);
 
     expect(result.rows).toEqual([
@@ -214,7 +214,7 @@ describe('tarstate Royal/store lens prototype', () => {
       }
     });
 
-    const result = await createRoyalAppBoundary(stores).query(royalQueries.capabilityResultRows);
+    const result = await createPrototypeRoyalAppBoundary(stores).query(prototypeRoyalQueries.capabilityResultRows);
 
     expect(result.diagnostics).toEqual([]);
     expect(result.rows).toEqual([
@@ -229,6 +229,52 @@ describe('tarstate Royal/store lens prototype', () => {
         diagnosticCode: 'activation_required'
       }
     ]);
+  });
+
+  it('keeps final capability result rows scoped when result ids collide', async () => {
+    const snapshot = createPrototypeStoreLensSnapshot([
+      {
+        relation: royalLensSchema.effectResults,
+        store: createCountingStore({
+          rows: [
+            {
+              scopeId: 'scope-a',
+              resultId: 'result-shared',
+              intentId: 'intent-a',
+              capabilityId: 'capability:fullscreen',
+              resourceId: 'canvas:main',
+              status: 'ok',
+              sequence: 1
+            }
+          ]
+        }) as ReadableStore<unknown>,
+        rows: (state) => (state as { readonly rows: readonly Record<string, unknown>[] }).rows
+      },
+      {
+        relation: royalLensSchema.capabilityDiagnostics,
+        store: createCountingStore({
+          rows: [
+            {
+              scopeId: 'scope-b',
+              diagnosticId: 'diagnostic-b',
+              code: 'activation_required',
+              capabilityId: 'capability:fullscreen',
+              message: 'wrong scope',
+              resultId: 'result-shared',
+              resourceId: 'canvas:main',
+              sequence: 1
+            }
+          ]
+        }) as ReadableStore<unknown>,
+        rows: (state) => (state as { readonly rows: readonly Record<string, unknown>[] }).rows
+      }
+    ]);
+
+    const finalRows = await evaluate(snapshot.source, prototypeRoyalQueries.capabilityResultRows);
+    const unsafeRows = await evaluate(snapshot.source, prototypeRoyalQueries.unsafeUnscopedCapabilityResultRows);
+
+    expect(finalRows.rows[0]?.diagnosticCode).toBeUndefined();
+    expect(unsafeRows.rows[0]?.diagnosticCode).toBe('activation_required');
   });
 
   it('uses object ids first and containment paths second for distribution-friendly repeated nodes', () => {
@@ -271,7 +317,7 @@ describe('tarstate Royal/store lens prototype', () => {
   it('routes optional tarstate write patches through store middleware instead of owning state', async () => {
     const stores = createRoyalStores();
     const activations = write(royalLensSchema.activationStates);
-    const dispatcher = createStorePatchDispatcher([royalActivationPatchRoute(stores.interactionStore)]);
+    const dispatcher = createPrototypeStorePatchDispatcher([prototypeRoyalActivationPatchRoute(stores.interactionStore)]);
 
     const result = dispatcher.dispatch([
       activations.update('royal', {
@@ -281,8 +327,8 @@ describe('tarstate Royal/store lens prototype', () => {
         hoveredId: 'helmet'
       })
     ]);
-    const snapshot = createRoyalLensSnapshot(stores);
-    const renderRows = await evaluate(snapshot.source, royalQueries.renderRows);
+    const snapshot = createPrototypeRoyalLensSnapshot(stores);
+    const renderRows = await evaluate(snapshot.source, prototypeRoyalQueries.renderRows);
     const helmet = renderRows.rows.find((row) => row.boxId === 'helmet');
 
     expect(result).toEqual({ patches: 1, applied: 1, diagnostics: [] });
@@ -304,9 +350,9 @@ describe('tarstate Royal/store lens prototype', () => {
     const activations = write(royalLensSchema.activationStates);
     const effectResults = write(royalLensSchema.effectResults);
     const layoutBoxes = write(royalLensSchema.layoutBoxes);
-    const activationRoute = royalActivationPatchRoute(stores.interactionStore);
-    const effectResultRoute = royalEffectResultPatchRoute(stores.capabilityStore);
-    const dispatcher = createStorePatchDispatcher([activationRoute, effectResultRoute]);
+    const activationRoute = prototypeRoyalActivationPatchRoute(stores.interactionStore);
+    const effectResultRoute = prototypeRoyalEffectResultPatchRoute(stores.capabilityStore);
+    const dispatcher = createPrototypeStorePatchDispatcher([activationRoute, effectResultRoute]);
 
     const result = dispatcher.dispatch([
       activations.update('royal', {
@@ -326,7 +372,7 @@ describe('tarstate Royal/store lens prototype', () => {
       }),
       layoutBoxes.update({ scopeId: 'royal', boxId: 'helmet' }, { label: 'patched outside layout store' })
     ]);
-    const resultRows = await createRoyalAppBoundary(stores).query(royalQueries.capabilityResultRows);
+    const resultRows = await createPrototypeRoyalAppBoundary(stores).query(prototypeRoyalQueries.capabilityResultRows);
     const storedResult = stores.capabilityStore.getState().results[0];
 
     expect(Object.hasOwn(activationRoute, 'store')).toBe(false);
