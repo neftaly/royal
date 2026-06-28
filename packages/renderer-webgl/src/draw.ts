@@ -15,10 +15,13 @@ import {
   asMaterial,
 } from "./render-graph";
 import type { TextRenderAsset } from "./text-cache";
+import { TextureCache } from "./texture-cache";
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
   readonly geometryCache: GeometryCache;
+  readonly onTextureSettled?: () => void;
+  readonly textureCache?: TextureCache;
   readonly viewProjectionMatrix: Mat4;
 }
 
@@ -49,12 +52,53 @@ export const drawMesh = (
   );
 };
 
-const flatBaseColor = (baseColor: TextureRef): readonly [number, number, number, number] => {
-  if (baseColor.kind === "solid") return baseColor.color;
-  if (baseColor.fallback !== undefined) return baseColor.fallback.color;
-  throw new Error(
-    `WebGL mesh draw does not support asset baseColor textures: ${baseColor.id}`,
-  );
+type MeshBaseColor =
+  | {
+    readonly color: readonly [number, number, number, number];
+    readonly kind: "solid";
+  }
+  | {
+    readonly color: readonly [number, number, number, number];
+    readonly kind: "texture-fallback";
+    readonly reason: "error" | "loading";
+  }
+  | {
+    readonly kind: "texture";
+    readonly texture: WebGLTexture;
+  };
+
+const defaultAssetFallback = [1, 1, 1, 1] as const;
+const textureCaches = new WeakMap<WebGLRenderingContext, TextureCache>();
+
+const meshTextureCache = (gl: WebGLRenderingContext): TextureCache => {
+  const cached = textureCaches.get(gl);
+  if (cached !== undefined) return cached;
+
+  const cache = new TextureCache(gl);
+  textureCaches.set(gl, cache);
+  return cache;
+};
+
+const fallbackBaseColor = (baseColor: TextureRef): readonly [number, number, number, number] =>
+  baseColor.kind === "asset" && baseColor.fallback !== undefined
+    ? baseColor.fallback.color
+    : defaultAssetFallback;
+
+const meshBaseColor = (
+  gl: WebGLRenderingContext,
+  baseColor: TextureRef,
+  context: MeshDrawContext,
+): MeshBaseColor => {
+  if (baseColor.kind === "solid") return { kind: "solid", color: baseColor.color };
+
+  const cache = context.textureCache ?? meshTextureCache(gl);
+  const texture = cache.loadTextureAssetBaseColor(baseColor, context.onTextureSettled);
+  if (texture.kind === "ready") return { kind: "texture", texture: texture.texture };
+  return {
+    kind: "texture-fallback",
+    color: fallbackBaseColor(baseColor),
+    reason: texture.kind,
+  };
 };
 
 export const drawGltf = (
@@ -147,8 +191,9 @@ const drawBoxMesh = (
   const unlit = material.kind === "unlit";
   if (!unlit && light === undefined)
     throw new Error("StandardMaterial box mesh requires a directionalLight");
-  const geometry = context.geometryCache.box(asBoxGeometry(mesh));
-  const color = flatBaseColor(material.baseColor);
+  const box = asBoxGeometry(mesh);
+  const geometry = context.geometryCache.box(box);
+  const baseColor = meshBaseColor(gl, material.baseColor, context);
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
@@ -161,7 +206,16 @@ const drawBoxMesh = (
     false,
     context.viewProjectionMatrix,
   );
-  gl.uniform4fv(program.uniforms.color, color);
+  gl.uniform3fv(program.uniforms.boxSize, box.size);
+  if (baseColor.kind === "texture") {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, baseColor.texture);
+    gl.uniform1i(program.uniforms.baseColor, 0);
+    gl.uniform1i(program.uniforms.useBaseColorTexture, 1);
+  } else {
+    gl.uniform4fv(program.uniforms.color, baseColor.color);
+    gl.uniform1i(program.uniforms.useBaseColorTexture, 0);
+  }
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
   gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
   gl.uniform3fv(program.uniforms.lightDirection, light?.direction ?? [0, 0, -1]);

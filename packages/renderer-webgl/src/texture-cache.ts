@@ -1,3 +1,4 @@
+import type { TextureAssetRef, TextureSampler as CoreTextureSampler } from "@royal/renderer-core";
 import { markGltf, measureGltf } from "./performance";
 
 type GltfImage = {
@@ -22,11 +23,29 @@ type GltfTextureDocument = {
   readonly textures?: readonly GltfTexture[];
 };
 
-type TextureSampler = {
+type WebGlTextureSampler = {
   readonly magFilter: number;
   readonly minFilter: number;
   readonly wrapS: number;
   readonly wrapT: number;
+};
+
+export type TextureAssetLoadResult =
+  | {
+    readonly kind: "error";
+    readonly error: unknown;
+  }
+  | {
+    readonly kind: "loading";
+  }
+  | {
+    readonly kind: "ready";
+    readonly texture: WebGLTexture;
+  };
+
+type TextureAssetLoad = TextureAssetLoadResult | {
+  readonly kind: "loading";
+  readonly promise: Promise<WebGLTexture>;
 };
 
 const required = <T>(value: T | undefined, label: string): T => {
@@ -37,9 +56,9 @@ const required = <T>(value: T | undefined, label: string): T => {
 const resolveUri = (base: string, uri: string): string =>
   new URL(uri, new URL(base, globalThis.location?.href ?? "http://localhost/")).href;
 
-const loadImage = async (src: string, uri: string): Promise<ImageBitmap> => {
+const loadImage = async (src: string, uri: string, label: string): Promise<ImageBitmap> => {
   const response = await fetch(resolveUri(src, uri));
-  if (!response.ok) throw new Error(`Failed to load glTF image: ${uri}`);
+  if (!response.ok) throw new Error(`Failed to load ${label}: ${uri}`);
   return await createImageBitmap(await response.blob());
 };
 
@@ -96,7 +115,7 @@ const textureSampler = (
   gl: WebGLRenderingContext,
   json: GltfTextureDocument,
   texture: GltfTexture,
-): TextureSampler => {
+): WebGlTextureSampler => {
   const sampler = texture.sampler === undefined ? undefined : json.samplers?.[texture.sampler];
   return {
     magFilter: validMagFilter(gl, sampler?.magFilter),
@@ -106,10 +125,58 @@ const textureSampler = (
   };
 };
 
+const textureSamplerFilter = (
+  gl: WebGLRenderingContext,
+  filter: CoreTextureSampler["minFilter"] | CoreTextureSampler["magFilter"] | undefined,
+): number | undefined => {
+  switch (filter) {
+    case "linear":
+      return gl.LINEAR;
+    case "linear-mipmap-linear":
+      return gl.LINEAR_MIPMAP_LINEAR;
+    case "linear-mipmap-nearest":
+      return gl.LINEAR_MIPMAP_NEAREST;
+    case "nearest":
+      return gl.NEAREST;
+    case "nearest-mipmap-linear":
+      return gl.NEAREST_MIPMAP_LINEAR;
+    case "nearest-mipmap-nearest":
+      return gl.NEAREST_MIPMAP_NEAREST;
+    default:
+      return undefined;
+  }
+};
+
+const textureSamplerWrap = (
+  gl: WebGLRenderingContext,
+  wrap: CoreTextureSampler["wrapS"] | undefined,
+): number | undefined => {
+  switch (wrap) {
+    case "clamp-to-edge":
+      return gl.CLAMP_TO_EDGE;
+    case "mirrored-repeat":
+      return gl.MIRRORED_REPEAT;
+    case "repeat":
+      return gl.REPEAT;
+    default:
+      return undefined;
+  }
+};
+
+const textureAssetSampler = (
+  gl: WebGLRenderingContext,
+  sampler: CoreTextureSampler | undefined,
+): WebGlTextureSampler => ({
+  magFilter: validMagFilter(gl, textureSamplerFilter(gl, sampler?.magFilter)),
+  minFilter: validMinFilter(gl, textureSamplerFilter(gl, sampler?.minFilter)),
+  wrapS: validWrapMode(gl, textureSamplerWrap(gl, sampler?.wrapS)),
+  wrapT: validWrapMode(gl, textureSamplerWrap(gl, sampler?.wrapT)),
+});
+
 const createTexture = (
   gl: WebGLRenderingContext,
   image: ImageBitmap,
-  sampler: TextureSampler,
+  sampler: WebGlTextureSampler,
 ): WebGLTexture => {
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
@@ -153,6 +220,7 @@ const createFallbackTexture = (gl: WebGLRenderingContext): WebGLTexture => {
 
 export class TextureCache {
   readonly #gl: WebGLRenderingContext;
+  readonly #assetTextureLoads = new Map<string, TextureAssetLoad>();
   readonly #textures = new Set<WebGLTexture>();
   readonly #textureLoads = new Map<string, Promise<WebGLTexture>>();
   #disposed = false;
@@ -181,12 +249,41 @@ export class TextureCache {
     return promise;
   }
 
+  loadTextureAssetBaseColor(
+    asset: TextureAssetRef,
+    onSettled?: () => void,
+  ): TextureAssetLoadResult {
+    const cacheKey = textureAssetCacheKey(asset);
+    const existing = this.#assetTextureLoads.get(cacheKey);
+    if (existing !== undefined) return textureAssetResult(existing);
+
+    const promise = this.#loadTextureAssetBaseColor(asset);
+    const load = { kind: "loading", promise } satisfies TextureAssetLoad;
+    this.#assetTextureLoads.set(cacheKey, load);
+
+    void promise.then(
+      (texture) => {
+        if (this.#assetTextureLoads.get(cacheKey) !== load) return;
+        this.#assetTextureLoads.set(cacheKey, { kind: "ready", texture });
+        onSettled?.();
+      },
+      (error: unknown) => {
+        if (this.#assetTextureLoads.get(cacheKey) !== load) return;
+        this.#assetTextureLoads.set(cacheKey, { kind: "error", error });
+        onSettled?.();
+      },
+    );
+
+    return { kind: "loading" };
+  }
+
   dispose(): void {
     this.#disposed = true;
     for (const texture of this.#textures) {
       this.#gl.deleteTexture(texture);
     }
     this.#textures.clear();
+    this.#assetTextureLoads.clear();
     this.#textureLoads.clear();
   }
 
@@ -201,7 +298,7 @@ export class TextureCache {
     const image = required(options.json.images?.[imageIndex], `image ${imageIndex}`);
     const loadedTexture = this.#track(createTexture(
       this.#gl,
-      await loadImage(options.src, required(image.uri, `image ${imageIndex} uri`)),
+      await loadImage(options.src, required(image.uri, `image ${imageIndex} uri`), "glTF image"),
       textureSampler(this.#gl, options.json, texture),
     ));
     markGltf(`texture:${options.textureIndex}:end`);
@@ -211,6 +308,15 @@ export class TextureCache {
       `texture:${options.textureIndex}:end`,
     );
     return loadedTexture;
+  }
+
+  async #loadTextureAssetBaseColor(asset: TextureAssetRef): Promise<WebGLTexture> {
+    const base = globalThis.location?.href ?? "http://localhost/";
+    return this.#track(createTexture(
+      this.#gl,
+      await loadImage(base, asset.uri, "texture asset"),
+      textureAssetSampler(this.#gl, asset.sampler),
+    ));
   }
 
   #track(texture: WebGLTexture): WebGLTexture {
@@ -223,3 +329,17 @@ export class TextureCache {
     return texture;
   }
 }
+
+const textureAssetCacheKey = (asset: TextureAssetRef): string =>
+  `${asset.id}\u0000${asset.revision ?? ""}\u0000${asset.uri}`;
+
+const textureAssetResult = (load: TextureAssetLoad): TextureAssetLoadResult => {
+  switch (load.kind) {
+    case "error":
+      return { kind: "error", error: load.error };
+    case "loading":
+      return { kind: "loading" };
+    case "ready":
+      return { kind: "ready", texture: load.texture };
+  }
+};

@@ -13,11 +13,14 @@ export interface MeshProgram {
   };
   readonly program: WebGLProgram;
   readonly uniforms: {
+    readonly baseColor: WebGLUniformLocation;
+    readonly boxSize: WebGLUniformLocation;
     readonly color: WebGLUniformLocation;
     readonly lightColor: WebGLUniformLocation;
     readonly lightDirection: WebGLUniformLocation;
     readonly model: WebGLUniformLocation;
     readonly unlit: WebGLUniformLocation;
+    readonly useBaseColorTexture: WebGLUniformLocation;
     readonly viewProjection: WebGLUniformLocation;
   };
 }
@@ -60,11 +63,14 @@ export const createMeshProgram = (gl: WebGLRenderingContext): MeshProgram => {
       position: attributeLocation(gl, program, "a_position"),
     },
     uniforms: {
+      baseColor: uniformLocation(gl, program, "u_baseColor"),
+      boxSize: uniformLocation(gl, program, "u_boxSize"),
       color: uniformLocation(gl, program, "u_color"),
       lightColor: uniformLocation(gl, program, "u_lightColor"),
       lightDirection: uniformLocation(gl, program, "u_lightDirection"),
       model: uniformLocation(gl, program, "u_model"),
       unlit: uniformLocation(gl, program, "u_unlit"),
+      useBaseColorTexture: uniformLocation(gl, program, "u_useBaseColorTexture"),
       viewProjection: uniformLocation(gl, program, "u_viewProjection"),
     },
   };
