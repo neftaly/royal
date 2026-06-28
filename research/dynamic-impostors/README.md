@@ -32,6 +32,23 @@ Run:
 node research/dynamic-impostors/forest-lod-bench.mjs
 ```
 
+Run the repeatable gate:
+
+```sh
+node research/dynamic-impostors/forest-lod-bench.mjs --check
+```
+
+The check mode exits nonzero when deterministic pressure metrics exceed the
+checked thresholds. It intentionally gates on counts and estimates derived from
+the fixture, not local wall-clock timings, so the result is stable enough for a
+CI-like repeatability check.
+
+Small deterministic overrides are available for focused experiments:
+
+```sh
+node research/dynamic-impostors/forest-lod-bench.mjs --frames 24 --trees 4000 --seed 1234
+```
+
 The harness prints deterministic JSON with:
 
 - Mesh, octahedral impostor, billboard, and culled instance counts.
@@ -39,6 +56,21 @@ The harness prints deterministic JSON with:
 - Atlas layer and page demand.
 - Physical page residency, misses, uploads, evictions, and estimated upload ms.
 - LOD switch churn, debug-counter rows, and update cost estimates.
+
+Metric notes:
+
+- `counts` describe selected representations for a frame. `meshTotal` is the
+  near/mid mesh work that remains after impostor selection.
+- `estimatedDrawCalls` and `estimatedTriangles` are renderer-pressure estimates,
+  not GPU measurements.
+- `pageResidency.hitRatio`, `pageMisses`, `pageUploads`, and `pageEvictions`
+  model virtual-texture residency pressure against the fixture budgets.
+- `lodSwitches.any` tracks representation churn between frames; high values
+  point at threshold or hysteresis pressure.
+- `updateCost.estimatedTextureUploadMs` is budget math from upload bytes and
+  page overhead. `lodSelectionMs`, `residencySchedulingMs`, and `cpuTotalMs`
+  include local CPU timing and are useful for spotting regressions during local
+  work, but they are not part of `--check`.
 
 This is deliberately independent from Royal runtime types. The manifest uses
 stable asset-like strings and plain JSON so renderer work can later map the

@@ -18,8 +18,17 @@ const DEFAULTS = Object.freeze({
   viewHalfAngleDegrees: 58,
   warmupFrames: 3
 });
+const CHECK_THRESHOLDS = Object.freeze({
+  maxAverageTextureUploadMs: 1.35,
+  minAverageHitRatio: 0.955,
+  maxAverageDrawCalls: 5,
+  maxAverageTriangles: 27_000_000,
+  maxTotalPageEvictions: 0,
+  maxTotalLodSwitches: 22_000
+});
 
 const args = parseArgs(process.argv.slice(2));
+const checkMode = booleanArg(args.check, false);
 const manifestPath = stringArg(args.manifest, DEFAULTS.manifest);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const frames = integerArg(args.frames, manifest.world.cameraPath.defaultFrames ?? DEFAULTS.frames);
@@ -44,8 +53,9 @@ for (let frame = 0; frame < frames; frame += 1) {
 const measuredRows = frameRows.slice(Math.min(DEFAULTS.warmupFrames, Math.max(0, frameRows.length - 1)));
 const totals = sumFrames(measuredRows);
 const averages = averageFrames(measuredRows);
+const check = checkMode ? evaluateCheck({ totals, averages }) : null;
 
-console.log(JSON.stringify({
+const report = {
   benchmark: "royal-research-dynamic-impostors-forest-lod",
   date: new Date().toISOString(),
   manifest: {
@@ -70,6 +80,7 @@ console.log(JSON.stringify({
   },
   totals,
   averages,
+  ...(check ? { check } : {}),
   finalResidency: {
     residentPages: pageCache.size,
     residentBytes: pageCache.size * bytesPerPage(manifest),
@@ -77,7 +88,13 @@ console.log(JSON.stringify({
   },
   frames: frameRows,
   caveat: "CPU-only static fixture. Counts are pressure estimates for future Royal texture resources, VT hooks, and visibility/culling APIs; no renderer API is required."
-}, null, 2));
+};
+
+console.log(JSON.stringify(report, null, 2));
+
+if (check && !check.passed) {
+  process.exitCode = 1;
+}
 
 function runFrame(frame) {
   const camera = cameraAtFrame(manifest.world.cameraPath, frame, frames);
@@ -560,6 +577,33 @@ function averageFrames(rows) {
   );
 }
 
+function evaluateCheck({ totals, averages }) {
+  const thresholds = CHECK_THRESHOLDS;
+  const failures = [
+    maxCheck("averages.textureUploadMs", averages.textureUploadMs, thresholds.maxAverageTextureUploadMs),
+    minCheck("averages.hitRatio", averages.hitRatio, thresholds.minAverageHitRatio),
+    maxCheck("averages.drawCalls", averages.drawCalls, thresholds.maxAverageDrawCalls),
+    maxCheck("averages.triangles", averages.triangles, thresholds.maxAverageTriangles),
+    maxCheck("totals.pageEvictions", totals.pageEvictions, thresholds.maxTotalPageEvictions),
+    maxCheck("totals.lodSwitches", totals.lodSwitches, thresholds.maxTotalLodSwitches)
+  ].filter(Boolean);
+
+  return {
+    mode: "threshold",
+    passed: failures.length === 0,
+    thresholds,
+    failures
+  };
+}
+
+function maxCheck(metric, actual, limit) {
+  return actual <= limit ? null : { metric, actual, limit, operator: "<=" };
+}
+
+function minCheck(metric, actual, limit) {
+  return actual >= limit ? null : { metric, actual, limit, operator: ">=" };
+}
+
 function addTriangles(map, meshId, triangles) {
   map.set(meshId, (map.get(meshId) ?? 0) + triangles);
 }
@@ -608,14 +652,28 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (!arg.startsWith("--")) continue;
     const [key, inlineValue] = arg.slice(2).split("=", 2);
-    result[key] = inlineValue ?? argv[i + 1];
-    if (inlineValue === undefined) i += 1;
+    const nextValue = argv[i + 1];
+    if (inlineValue !== undefined) {
+      result[key] = inlineValue;
+    } else if (nextValue === undefined || nextValue.startsWith("--")) {
+      result[key] = true;
+    } else {
+      result[key] = nextValue;
+      i += 1;
+    }
   }
   return result;
 }
 
 function stringArg(value, fallback) {
   return value === undefined ? fallback : String(value);
+}
+
+function booleanArg(value, fallback) {
+  if (value === undefined) return fallback;
+  if (value === true || value === "true" || value === "1" || value === "") return true;
+  if (value === false || value === "false" || value === "0") return false;
+  throw new Error(`Expected boolean, received ${value}`);
 }
 
 function integerArg(value, fallback) {
