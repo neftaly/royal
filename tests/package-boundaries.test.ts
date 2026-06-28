@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Canvas, createRoot as createRoyalRoot } from '@royal/react';
 import { jsx as royalJsx } from '@royal/react/jsx-runtime';
@@ -38,6 +39,12 @@ const expectedPackages = [
 
 function readManifest(manifestPath: string): PackageManifest {
   return JSON.parse(readFileSync(manifestPath, 'utf8')) as PackageManifest;
+}
+
+function trackedGeneratedDistFiles(): readonly string[] {
+  return execFileSync('git', ['ls-files', 'apps/*/dist/**', 'packages/*/dist/**'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
 }
 
 function workspacePackageManifests(): readonly { readonly root: string; readonly manifest: PackageManifest }[] {
@@ -113,6 +120,10 @@ function declaredPackages(manifest: PackageManifest, options: { readonly allowDe
 }
 
 describe('package boundaries', () => {
+  it('keeps generated dist trees out of tracked workspace files', () => {
+    expect(trackedGeneratedDistFiles()).toEqual([]);
+  });
+
   it('keeps the clean Royal workspace shape explicit', () => {
     expect(workspacePackageManifests().map(({ manifest, root }) => ({
       license: manifest.license,
