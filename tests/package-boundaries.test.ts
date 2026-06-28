@@ -164,11 +164,11 @@ describe('package boundaries', () => {
     expect(royalJsx).toBeTypeOf('function');
   });
 
-  it('keeps @royal/tarstate-lens v1 behind an explicit public subpath', () => {
+  it('keeps @royal/tarstate-lens root export on the v1 facade', () => {
     const manifest = readManifest(path.join(repoRoot, 'packages/royal-tarstate-lens/package.json'));
     expect(manifest.dependencies?.['@tarstate/core']).toBe('workspace:*');
     expect(manifest.dependencies?.['@patchpit/tarstate']).toBeUndefined();
-    expect(manifest.exports).toMatchObject({ '.': './src/index.ts', './v1': './src/v1.ts' });
+    expect(manifest.exports).toMatchObject({ '.': './src/v1.ts', './v1': './src/v1.ts' });
   });
 
   it('keeps renderer packages independent from Tarstate control-plane packages', () => {

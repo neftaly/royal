@@ -46,7 +46,7 @@ import {
   type RoyalLayoutRuntimeState,
   type RoyalLensStores,
   type RoyalRenderRow
-} from '@royal/tarstate-lens/v1';
+} from '@royal/tarstate-lens';
 
 describe('Royal public API smoke tests', () => {
   it('lets consumers build a render root through the React adapter and renderer-core primitives', () => {
