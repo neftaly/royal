@@ -1,21 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { as, eq, from, leftJoin, maybe, pipe, project, where } from '@tarstate/core/query';
 import {
-  as,
   anchoredPathField,
   defineSchema,
-  from,
   idField,
-  leftJoin,
-  maybe,
   optional,
-  pipe,
-  project,
   refField,
   relation,
-  stringField,
-  where,
-  eq
-} from '@tarstate/core';
+  stringField
+} from '@tarstate/core/schema';
 
 const schema = defineSchema({
   objects: relation<{

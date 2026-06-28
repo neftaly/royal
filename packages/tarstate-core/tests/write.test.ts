@@ -1,22 +1,21 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { evaluate } from '@tarstate/core/evaluate';
+import { as, from, pipe, project } from '@tarstate/core/query';
 import {
-  applyWrites,
-  as,
   booleanField,
   defineSchema,
-  deleteRow,
-  evaluate,
-  from,
-  fromObjectSource,
   idField,
-  insert,
   nullable,
   optional,
-  pipe,
-  project,
   refField,
   relation,
-  stringField,
+  stringField
+} from '@tarstate/core/schema';
+import { fromObjectSource } from '@tarstate/core/source';
+import {
+  applyWrites,
+  deleteRow,
+  insert,
   update,
   upsert,
   write,
@@ -25,7 +24,7 @@ import {
   type RelationRow,
   type UpdatePatch,
   type WritePatch
-} from '@tarstate/core';
+} from '@tarstate/core/write';
 
 type Todo = {
   readonly id: string;

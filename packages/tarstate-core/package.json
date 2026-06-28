@@ -5,10 +5,16 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./diagnostics": "./src/diagnostics.ts",
+    "./evaluate": "./src/evaluate.ts",
+    "./query": "./src/query.ts",
+    "./schema": "./src/schema.ts",
+    "./source": "./src/source.ts",
+    "./write": "./src/write.ts"
   },
   "scripts": {
-    "test": "vitest run tests/*.test.ts",
+    "test": "vitest run --config ../../vite.config.ts tests/*.test.ts",
     "typecheck": "tsc -p ../../tsconfig.json --noEmit"
   },
   "devDependencies": {

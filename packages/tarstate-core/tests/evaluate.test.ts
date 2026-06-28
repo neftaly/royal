@@ -1,26 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import { evaluate } from '@tarstate/core/evaluate';
+import { as, eq, from, leftJoin, maybe, pipe, project, where } from '@tarstate/core/query';
 import {
-  as,
   anchoredPathField,
-  composeSources,
   defineSchema,
-  evaluate,
-  from,
-  fromIndexedObjectSource,
-  fromObjectSource,
   idField,
-  leftJoin,
-  maybe,
   optional,
-  pipe,
-  project,
   refField,
   relation,
-  stringField,
-  where,
-  eq,
+  stringField
+} from '@tarstate/core/schema';
+import {
+  composeSources,
+  fromIndexedObjectSource,
+  fromObjectSource,
   type RelationSource
-} from '@tarstate/core';
+} from '@tarstate/core/source';
 
 const schema = defineSchema({
   objects: relation<{

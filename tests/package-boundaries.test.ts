@@ -171,6 +171,20 @@ describe('package boundaries', () => {
     expect(manifest.exports).toMatchObject({ '.': './src/v1.ts', './v1': './src/v1.ts' });
   });
 
+  it('keeps @tarstate/core root and taxonomy subpath exports public', () => {
+    const manifest = readManifest(path.join(repoRoot, 'packages/tarstate-core/package.json'));
+
+    expect(manifest.exports).toEqual({
+      '.': './src/index.ts',
+      './diagnostics': './src/diagnostics.ts',
+      './evaluate': './src/evaluate.ts',
+      './query': './src/query.ts',
+      './schema': './src/schema.ts',
+      './source': './src/source.ts',
+      './write': './src/write.ts'
+    });
+  });
+
   it('keeps renderer packages independent from Tarstate control-plane packages', () => {
     const violations = rendererPackageRoots.flatMap((root) =>
       listSourceFiles(path.join(repoRoot, root)).flatMap((filePath) =>
