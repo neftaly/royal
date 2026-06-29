@@ -41,6 +41,12 @@ const smokeExpectations = {
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
   },
+  'virtual-texturing-terrain': {
+    surface: 'canvas',
+    canvasLabel: 'Virtual texturing terrain',
+    minColorBuckets: 6,
+    minPaintedRatio: 0.5,
+  },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -420,6 +426,32 @@ const smokeExpression = `
       samples,
     };
   };
+  const readVirtualTextureProbe = () => {
+    const probe = window.__royalVirtualTextureProbe;
+    if (probe === undefined || probe === null) return undefined;
+
+    return {
+      bytesUploaded: Number(probe.bytesUploaded ?? 0),
+      canvasReadback: probe.canvasReadback ?? { colorBuckets: 0, paintedRatio: 0 },
+      drawCalls: Number(probe.drawCalls ?? 0),
+      error: String(probe.error ?? ''),
+      evictedPageIds: Array.isArray(probe.evictedPageIds) ? probe.evictedPageIds : [],
+      exactPageCount: Number(probe.exactPageCount ?? 0),
+      fallbackPageCount: Number(probe.fallbackPageCount ?? 0),
+      frameCount: Number(probe.frameCount ?? 0),
+      lastPageTableUploadSample: Array.isArray(probe.lastPageTableUploadSample)
+        ? probe.lastPageTableUploadSample
+        : [],
+      lastPhysicalAtlasUpload: String(probe.lastPhysicalAtlasUpload ?? ''),
+      mode: String(probe.mode ?? ''),
+      pageTableReadback: probe.pageTableReadback ?? { nonZeroTexels: 0, texels: 0, uniqueEntries: 0 },
+      pageTableTexelUploads: Number(probe.pageTableTexelUploads ?? 0),
+      physicalAtlasUploads: Number(probe.physicalAtlasUploads ?? 0),
+      ready: probe.ready === true,
+      residentPageIds: Array.isArray(probe.residentPageIds) ? probe.residentPageIds : [],
+      supported: probe.supported === true,
+    };
+  };
   const read = () => {
     const page = document.querySelector('.example-page');
     const bodyText = document.body.textContent ?? '';
@@ -474,6 +506,7 @@ const smokeExpression = `
         textInputNames: Array.from(document.querySelectorAll('.text-example input[type="text"]')).map((input) => input.name),
         textValue: document.querySelector('.text-example input[type="text"]')?.value ?? '',
       } : undefined,
+      virtualTexturing: routeId === 'virtual-texturing-terrain' ? readVirtualTextureProbe() : undefined,
       activeNav: activeLink === null ? undefined : {
         id: activeLink.getAttribute('data-example-id') ?? '',
         path: activeLink.getAttribute('data-example-route') ?? '',
@@ -492,7 +525,8 @@ const smokeExpression = `
       state.canvas.backingHeight > 0 &&
       state.canvas.sample !== undefined &&
       state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets &&
-      state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio;
+      state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio &&
+      (state.route.id !== 'virtual-texturing-terrain' || state.virtualTexturing?.ready === true);
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -715,6 +749,52 @@ const assertRoute = (expected, state) => {
       failures.push('text route missed right-edge canvas sample');
     } else if (edgeRatio > 0.001) {
       failures.push(`text canvas has bright right-edge pixels ${edgeRatio.toFixed(4)}`);
+    }
+  }
+
+  if (expected.id === 'virtual-texturing-terrain') {
+    const vt = state.virtualTexturing;
+    if (vt === undefined) {
+      failures.push('missing virtual texturing probe');
+    } else {
+      if (!vt.supported) failures.push(`virtual texturing probe unsupported: ${vt.error}`);
+      if (vt.mode !== 'webgl2-virtual-texture') {
+        failures.push(`virtual texturing mode was "${vt.mode}"`);
+      }
+      if (!vt.ready) failures.push('virtual texturing probe did not become ready');
+      if (vt.pageTableTexelUploads < 16) {
+        failures.push(`page-table texel uploads ${vt.pageTableTexelUploads} < 16`);
+      }
+      if (vt.physicalAtlasUploads < 5) {
+        failures.push(`physical atlas uploads ${vt.physicalAtlasUploads} < 5`);
+      }
+      if (vt.bytesUploaded <= vt.pageTableTexelUploads * 4) {
+        failures.push('virtual texture upload byte count only covers page-table texels');
+      }
+      if (vt.pageTableReadback.nonZeroTexels < 16) {
+        failures.push(`page-table readback nonzero texels ${vt.pageTableReadback.nonZeroTexels} < 16`);
+      }
+      if (vt.pageTableReadback.uniqueEntries < 3) {
+        failures.push(`page-table readback unique entries ${vt.pageTableReadback.uniqueEntries} < 3`);
+      }
+      if (vt.canvasReadback.colorBuckets < 6) {
+        failures.push(`virtual texture canvas buckets ${vt.canvasReadback.colorBuckets} < 6`);
+      }
+      if (vt.exactPageCount <= 0 || vt.fallbackPageCount <= 0) {
+        failures.push(`virtual texture exact/fallback counts were ${vt.exactPageCount}/${vt.fallbackPageCount}`);
+      }
+      if (vt.evictedPageIds.length === 0) {
+        failures.push('virtual texture cache never evicted a resident page');
+      }
+      if (vt.lastPageTableUploadSample.length < 4) {
+        failures.push('virtual texture page-table upload sample stayed empty');
+      }
+      if (vt.lastPhysicalAtlasUpload === '') {
+        failures.push('virtual texture physical atlas upload marker stayed empty');
+      }
+      if (vt.drawCalls <= 0 || vt.frameCount < 4) {
+        failures.push(`virtual texture draw/frame counts were ${vt.drawCalls}/${vt.frameCount}`);
+      }
     }
   }
 

@@ -7,6 +7,8 @@ import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
+import { VirtualTexturingTerrain } from './examples/cases/VirtualTexturingTerrain';
+import virtualTexturingTerrainSource from './examples/cases/VirtualTexturingTerrain.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -59,6 +61,14 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
+  },
+  {
+    id: 'virtual-texturing-terrain',
+    path: '/virtual-texturing-terrain',
+    title: 'Virtual Texturing Terrain',
+    Component: VirtualTexturingTerrain,
+    source: virtualTexturingTerrainSource,
+    sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',
   },
 ] as const satisfies readonly Example[];
 

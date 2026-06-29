@@ -15,6 +15,7 @@ describe('examples list', () => {
       'Text',
       'Texture Materials',
       'glTF Helmet',
+      'Virtual Texturing Terrain',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
@@ -22,6 +23,7 @@ describe('examples list', () => {
       '/text',
       '/texture-materials',
       '/gltf-helmet',
+      '/virtual-texturing-terrain',
     ]);
   });
 
@@ -74,12 +76,11 @@ describe('examples list', () => {
       false,
     );
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(examples).toHaveLength(5);
+    expect(examples).toHaveLength(6);
   });
 
   it('keeps fixture-only VT out of primary examples', () => {
     expect(examples.some((example) => String(example.path) === '/virtual-texturing')).toBe(false);
-    expect(examples.some((example) => example.id.includes('virtual-texturing'))).toBe(false);
     expect(examples.some((example) => example.source.includes('page-cache-debug-overlay'))).toBe(
       false,
     );
@@ -149,5 +150,19 @@ describe('examples list', () => {
     expect(wireframe?.source).toContain('<mesh');
     expect(wireframe?.source).not.toContain('barGeometry');
     expect(wireframe?.source).not.toMatch(/\bMeshLine\b|\bmeshline\b/);
+  });
+
+  it('keeps the virtual texturing route on live WebGL page-table and atlas uploads', () => {
+    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing-terrain');
+
+    expect(virtualTexturing?.path).toBe('/virtual-texturing-terrain');
+    expect(virtualTexturing?.source).toContain('VirtualTextureRuntime');
+    expect(virtualTexturing?.source).toContain('createVirtualTexturePageTableTexture');
+    expect(virtualTexturing?.source).toContain('uploadVirtualTexturePageTableTexels');
+    expect(virtualTexturing?.source).toContain('texSubImage2D');
+    expect(virtualTexturing?.source).toContain('__royalVirtualTextureProbe');
+    expect(virtualTexturing?.source).not.toContain('VirtualTextureNode');
+    expect(virtualTexturing?.source).not.toContain('terrain-pages-overview');
+    expect(virtualTexturing?.source).not.toContain('page-cache-debug-overlay');
   });
 });
