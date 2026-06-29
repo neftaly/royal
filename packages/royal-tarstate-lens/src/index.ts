@@ -219,6 +219,45 @@ export type RoyalAssetFailureInput = {
   readonly src: string;
 };
 
+export type RoyalTerrainManifestInput = {
+  readonly manifestId: string;
+  readonly datasetId: string;
+  readonly uri: string;
+  readonly version: string;
+  readonly rootTileId: string;
+  readonly minLod: number;
+  readonly maxLod: number;
+};
+
+export type RoyalTerrainTileInput = {
+  readonly tileId: string;
+  readonly manifestId: string;
+  readonly parentTileId?: string;
+  readonly lod: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+export type RoyalTerrainAssetInput = {
+  readonly assetId: string;
+  readonly manifestId: string;
+  readonly tileId: string;
+  readonly kind: string;
+  readonly uri: string;
+  readonly contentHash: string;
+  readonly byteLength: number;
+};
+
+export type RoyalTerrainAssetAvailabilityInput = {
+  readonly assetId: string;
+  readonly available: boolean;
+  readonly status: string;
+  readonly quality: string;
+  readonly qualityRank: number;
+  readonly updatedSequence: number;
+  readonly bytesCached?: number;
+};
+
 export type RoyalDocumentState = {
   readonly scopeId: string;
   readonly root: RoyalLayoutSpecInput;
@@ -243,11 +282,20 @@ export type RoyalInteractionState = {
   readonly pointerSamples: readonly RoyalPointerSampleInput[];
 };
 
+export type RoyalTerrainOfflineState = {
+  readonly scopeId: string;
+  readonly manifests: readonly RoyalTerrainManifestInput[];
+  readonly tiles: readonly RoyalTerrainTileInput[];
+  readonly assets: readonly RoyalTerrainAssetInput[];
+  readonly availability: readonly RoyalTerrainAssetAvailabilityInput[];
+};
+
 export type RoyalLensStores = {
   readonly capabilityStore?: ReadableStore<CapabilityRuntimeState>;
   readonly documentStore?: ReadableStore<RoyalDocumentState>;
   readonly layoutStore: ReadableStore<RoyalLayoutRuntimeState>;
   readonly interactionStore: ReadableStore<RoyalInteractionState>;
+  readonly terrainStore?: ReadableStore<RoyalTerrainOfflineState>;
 };
 
 export type EffectIntentRow = EffectIntentInput & {
@@ -364,6 +412,22 @@ export type RoyalAssetDiagnosticRow = {
   readonly status: string;
 };
 
+export type RoyalTerrainManifestRow = RoyalTerrainManifestInput & {
+  readonly scopeId: string;
+};
+
+export type RoyalTerrainTileRow = RoyalTerrainTileInput & {
+  readonly scopeId: string;
+};
+
+export type RoyalTerrainAssetRow = RoyalTerrainAssetInput & {
+  readonly scopeId: string;
+};
+
+export type RoyalTerrainAssetAvailabilityRow = RoyalTerrainAssetAvailabilityInput & {
+  readonly scopeId: string;
+};
+
 export type RoyalRenderRow = {
   readonly scopeId: string;
   readonly boxId: string;
@@ -400,6 +464,30 @@ export type RoyalPickProbeRow = {
   readonly targetId: string | undefined;
   readonly targetRole: string | undefined;
   readonly targetLabel: string | undefined;
+};
+
+export type RoyalTerrainOfflineAssetRow = {
+  readonly scopeId: string;
+  readonly manifestId: string;
+  readonly datasetId: string;
+  readonly manifestUri: string;
+  readonly version: string;
+  readonly tileId: string;
+  readonly parentTileId: string | undefined;
+  readonly lod: number;
+  readonly x: number;
+  readonly y: number;
+  readonly assetId: string;
+  readonly assetKind: string;
+  readonly assetUri: string;
+  readonly contentHash: string;
+  readonly byteLength: number;
+  readonly available: boolean | undefined;
+  readonly status: string | undefined;
+  readonly quality: string | undefined;
+  readonly qualityRank: number | undefined;
+  readonly updatedSequence: number | undefined;
+  readonly bytesCached: number | undefined;
 };
 
 export const royalLensSchema = defineSchema({
@@ -519,6 +607,58 @@ export const royalLensSchema = defineSchema({
       status: stringField()
     }
   }),
+  terrainManifests: relation<RoyalTerrainManifestRow>({
+    key: ['scopeId', 'manifestId'],
+    fields: {
+      scopeId: idField('royalScope'),
+      manifestId: idField('terrainManifest'),
+      datasetId: idField('terrainDataset'),
+      uri: stringField(),
+      version: stringField(),
+      rootTileId: refField('terrainTiles.tileId'),
+      minLod: numberField(),
+      maxLod: numberField()
+    }
+  }),
+  terrainTiles: relation<RoyalTerrainTileRow>({
+    key: ['scopeId', 'tileId'],
+    fields: {
+      scopeId: idField('royalScope'),
+      tileId: idField('terrainTile'),
+      manifestId: refField('terrainManifests.manifestId'),
+      parentTileId: optional(refField('terrainTiles.tileId')),
+      lod: numberField(),
+      x: numberField(),
+      y: numberField()
+    }
+  }),
+  terrainAssets: relation<RoyalTerrainAssetRow>({
+    key: ['scopeId', 'assetId'],
+    fields: {
+      scopeId: idField('royalScope'),
+      assetId: idField('terrainAsset'),
+      manifestId: refField('terrainManifests.manifestId'),
+      tileId: refField('terrainTiles.tileId'),
+      kind: stringField(),
+      uri: stringField(),
+      contentHash: stringField(),
+      byteLength: numberField()
+    }
+  }),
+  terrainAssetAvailability: relation<RoyalTerrainAssetAvailabilityRow>({
+    key: ['scopeId', 'assetId'],
+    ephemeral: true,
+    fields: {
+      scopeId: idField('royalScope'),
+      assetId: refField('terrainAssets.assetId'),
+      available: booleanField(),
+      status: stringField(),
+      quality: stringField(),
+      qualityRank: numberField(),
+      updatedSequence: numberField(),
+      bytesCached: optional(numberField())
+    }
+  }),
   effectIntents: relation<EffectIntentRow>({
     key: ['scopeId', 'intentId'],
     ephemeral: true,
@@ -569,6 +709,10 @@ const target = as(royalLensSchema.pickTargets, 'target');
 const flag = as(royalLensSchema.renderFlags, 'flag');
 const pointer = as(royalLensSchema.pointerSamples, 'pointer');
 const assetDiagnostic = as(royalLensSchema.assetDiagnostics, 'assetDiagnostic');
+const terrainManifest = as(royalLensSchema.terrainManifests, 'terrainManifest');
+const terrainTile = as(royalLensSchema.terrainTiles, 'terrainTile');
+const terrainAsset = as(royalLensSchema.terrainAssets, 'terrainAsset');
+const terrainAvailability = as(royalLensSchema.terrainAssetAvailability, 'terrainAvailability');
 const effectResult = as(royalLensSchema.effectResults, 'effectResult');
 const capabilityDiagnostic = as(royalLensSchema.capabilityDiagnostics, 'capabilityDiagnostic');
 
@@ -662,6 +806,54 @@ export const prototypeRoyalQueries = {
       status: assetDiagnostic.status
     })
   ),
+  terrainOfflineAssetRows: pipe(
+    from(terrainTile),
+    join(
+      from(terrainManifest),
+      and(
+        eq(terrainTile.scopeId, terrainManifest.scopeId),
+        eq(terrainTile.manifestId, terrainManifest.manifestId)
+      )
+    ),
+    join(
+      from(terrainAsset),
+      and(
+        eq(terrainTile.scopeId, terrainAsset.scopeId),
+        eq(terrainTile.tileId, terrainAsset.tileId),
+        eq(terrainTile.manifestId, terrainAsset.manifestId)
+      )
+    ),
+    leftJoin(
+      from(terrainAvailability),
+      and(
+        eq(terrainAsset.scopeId, terrainAvailability.scopeId),
+        eq(terrainAsset.assetId, terrainAvailability.assetId)
+      )
+    ),
+    project({
+      scopeId: terrainTile.scopeId,
+      manifestId: terrainManifest.manifestId,
+      datasetId: terrainManifest.datasetId,
+      manifestUri: terrainManifest.uri,
+      version: terrainManifest.version,
+      tileId: terrainTile.tileId,
+      parentTileId: maybe(terrainTile.parentTileId),
+      lod: terrainTile.lod,
+      x: terrainTile.x,
+      y: terrainTile.y,
+      assetId: terrainAsset.assetId,
+      assetKind: terrainAsset.kind,
+      assetUri: terrainAsset.uri,
+      contentHash: terrainAsset.contentHash,
+      byteLength: terrainAsset.byteLength,
+      available: maybe(terrainAvailability.available),
+      status: maybe(terrainAvailability.status),
+      quality: maybe(terrainAvailability.quality),
+      qualityRank: maybe(terrainAvailability.qualityRank),
+      updatedSequence: maybe(terrainAvailability.updatedSequence),
+      bytesCached: maybe(terrainAvailability.bytesCached)
+    })
+  ) satisfies Query<RoyalTerrainOfflineAssetRow>,
   unsafeUnscopedCapabilityResultRows: pipe(
     from(effectResult),
     leftJoin(
@@ -861,6 +1053,31 @@ export function createPrototypeRoyalStoreLenses(stores: RoyalLensStores): readon
     );
   }
 
+  if (stores.terrainStore !== undefined) {
+    lenses.push(
+      {
+        relation: royalLensSchema.terrainManifests,
+        store: stores.terrainStore,
+        rows: (state) => deriveTerrainManifestRows(state as RoyalTerrainOfflineState)
+      },
+      {
+        relation: royalLensSchema.terrainTiles,
+        store: stores.terrainStore,
+        rows: (state) => deriveTerrainTileRows(state as RoyalTerrainOfflineState)
+      },
+      {
+        relation: royalLensSchema.terrainAssets,
+        store: stores.terrainStore,
+        rows: (state) => deriveTerrainAssetRows(state as RoyalTerrainOfflineState)
+      },
+      {
+        relation: royalLensSchema.terrainAssetAvailability,
+        store: stores.terrainStore,
+        rows: (state) => deriveTerrainAvailabilityRows(state as RoyalTerrainOfflineState)
+      }
+    );
+  }
+
   return lenses;
 }
 
@@ -932,6 +1149,13 @@ export function prototypeRoyalEffectResultPatchRoute(store: WritableStore<Capabi
   return {
     relation: royalLensSchema.effectResults,
     apply: (patch) => applyRoyalEffectResultPatch(store, patch)
+  };
+}
+
+export function prototypeRoyalTerrainAvailabilityPatchRoute(store: WritableStore<RoyalTerrainOfflineState>): AnyStorePatchRoute {
+  return {
+    relation: royalLensSchema.terrainAssetAvailability,
+    apply: (patch) => applyRoyalTerrainAvailabilityPatch(store, patch)
   };
 }
 
@@ -1093,6 +1317,22 @@ function deriveCapabilityDiagnosticRows(state: CapabilityRuntimeState): readonly
   return state.diagnostics.map((diagnostic) => ({ scopeId: state.scopeId, ...diagnostic }));
 }
 
+function deriveTerrainManifestRows(state: RoyalTerrainOfflineState): readonly RoyalTerrainManifestRow[] {
+  return state.manifests.map((manifest) => ({ scopeId: state.scopeId, ...manifest }));
+}
+
+function deriveTerrainTileRows(state: RoyalTerrainOfflineState): readonly RoyalTerrainTileRow[] {
+  return state.tiles.map((tile) => ({ scopeId: state.scopeId, ...tile }));
+}
+
+function deriveTerrainAssetRows(state: RoyalTerrainOfflineState): readonly RoyalTerrainAssetRow[] {
+  return state.assets.map((asset) => ({ scopeId: state.scopeId, ...asset }));
+}
+
+function deriveTerrainAvailabilityRows(state: RoyalTerrainOfflineState): readonly RoyalTerrainAssetAvailabilityRow[] {
+  return state.availability.map((availability) => ({ scopeId: state.scopeId, ...availability }));
+}
+
 function deriveLayoutNodeRowsAt(
   spec: RoyalLayoutSpecInput,
   scopeId: string,
@@ -1129,6 +1369,16 @@ export function royalProbeDiagnostics(probe: LensProbe): readonly TarstateDiagno
   const targetIds = new Set(pickTargets.map((row) => scopedKey(row.scopeId, row.targetId)));
   const boxIds = new Set(probe.rows(royalLensSchema.layoutBoxes).map((row) => scopedKey(row.scopeId, row.boxId)));
   const assetIds = new Set(probe.rows(royalLensSchema.assets).map((row) => scopedKey(row.scopeId, row.assetId)));
+  const terrainManifestIds = new Set(
+    probe.rows(royalLensSchema.terrainManifests).map((row) => scopedKey(row.scopeId, row.manifestId))
+  );
+  const terrainTileIds = new Set(probe.rows(royalLensSchema.terrainTiles).map((row) => scopedKey(row.scopeId, row.tileId)));
+  const terrainAssetIds = new Set(
+    probe.rows(royalLensSchema.terrainAssets).map((row) => scopedKey(row.scopeId, row.assetId))
+  );
+  const terrainTileManifestByKey = new Map(
+    probe.rows(royalLensSchema.terrainTiles).map((row) => [scopedKey(row.scopeId, row.tileId), row.manifestId])
+  );
 
   for (const pickTarget of pickTargets) {
     if (!boxIds.has(scopedKey(pickTarget.scopeId, pickTarget.boxId))) {
@@ -1171,6 +1421,50 @@ export function royalProbeDiagnostics(probe: LensProbe): readonly TarstateDiagno
     });
   }
 
+  for (const manifest of probe.rows(royalLensSchema.terrainManifests)) {
+    if (!terrainTileIds.has(scopedKey(manifest.scopeId, manifest.rootTileId))) {
+      diagnostics.push(missingRef('terrain manifest points at missing root tile', royalLensSchema.terrainManifests.name, 'rootTileId', manifest.manifestId));
+    }
+  }
+
+  for (const tile of probe.rows(royalLensSchema.terrainTiles)) {
+    if (!terrainManifestIds.has(scopedKey(tile.scopeId, tile.manifestId))) {
+      diagnostics.push(missingRef('terrain tile points at missing manifest', royalLensSchema.terrainTiles.name, 'manifestId', tile.tileId));
+    }
+
+    if (tile.parentTileId !== undefined && !terrainTileIds.has(scopedKey(tile.scopeId, tile.parentTileId))) {
+      diagnostics.push(missingRef('terrain tile points at missing parent tile', royalLensSchema.terrainTiles.name, 'parentTileId', tile.tileId));
+    }
+  }
+
+  for (const asset of probe.rows(royalLensSchema.terrainAssets)) {
+    const tileKey = scopedKey(asset.scopeId, asset.tileId);
+
+    if (!terrainManifestIds.has(scopedKey(asset.scopeId, asset.manifestId))) {
+      diagnostics.push(missingRef('terrain asset points at missing manifest', royalLensSchema.terrainAssets.name, 'manifestId', asset.assetId));
+    }
+
+    if (!terrainTileIds.has(tileKey)) {
+      diagnostics.push(missingRef('terrain asset points at missing tile', royalLensSchema.terrainAssets.name, 'tileId', asset.assetId));
+    }
+
+    if (terrainTileManifestByKey.get(tileKey) !== undefined && terrainTileManifestByKey.get(tileKey) !== asset.manifestId) {
+      diagnostics.push({
+        code: 'stale_presence',
+        message: 'terrain asset manifest differs from tile manifest',
+        relation: royalLensSchema.terrainAssets.name,
+        field: 'manifestId',
+        key: asset.assetId
+      });
+    }
+  }
+
+  for (const availability of probe.rows(royalLensSchema.terrainAssetAvailability)) {
+    if (!terrainAssetIds.has(scopedKey(availability.scopeId, availability.assetId))) {
+      diagnostics.push(missingRef('terrain availability points at missing asset', royalLensSchema.terrainAssetAvailability.name, 'assetId', availability.assetId));
+    }
+  }
+
   return diagnostics;
 }
 
@@ -1196,6 +1490,20 @@ function applyRoyalEffectResultPatch(
 
   if (nextState === undefined) {
     return rejectedStorePatch(patch, `effect result route rejected ${patch.op} for ${patch.relation.name}`);
+  }
+
+  store.setState(nextState);
+  return appliedStorePatch();
+}
+
+function applyRoyalTerrainAvailabilityPatch(
+  store: WritableStore<RoyalTerrainOfflineState>,
+  patch: WritePatch
+): StorePatchRouteResult {
+  const nextState = reduceRoyalTerrainAvailabilityPatch(store.getState(), patch);
+
+  if (nextState === undefined) {
+    return rejectedStorePatch(patch, `terrain availability route rejected ${patch.op} for ${patch.relation.name}`);
   }
 
   store.setState(nextState);
@@ -1300,6 +1608,85 @@ function reduceRoyalEffectResultPatch(state: CapabilityRuntimeState, patch: Writ
   }
 }
 
+function reduceRoyalTerrainAvailabilityPatch(
+  state: RoyalTerrainOfflineState,
+  patch: WritePatch
+): RoyalTerrainOfflineState | undefined {
+  if (patch.relation.name !== royalLensSchema.terrainAssetAvailability.name) {
+    return undefined;
+  }
+
+  switch (patch.op) {
+    case 'insert': {
+      const row = patch.row as RoyalTerrainAssetAvailabilityRow;
+
+      if (row.scopeId !== state.scopeId || state.availability.some((availability) => availability.assetId === row.assetId)) {
+        return undefined;
+      }
+
+      return {
+        ...state,
+        availability: [...state.availability, terrainAvailabilityInputFromRow(row)]
+      };
+    }
+    case 'upsert': {
+      const row = patch.row as RoyalTerrainAssetAvailabilityRow;
+
+      if (row.scopeId !== state.scopeId) {
+        return undefined;
+      }
+
+      const nextAvailability = terrainAvailabilityInputFromRow(row);
+      const availabilityIndex = state.availability.findIndex((availability) => availability.assetId === row.assetId);
+
+      return {
+        ...state,
+        availability:
+          availabilityIndex === -1
+            ? [...state.availability, nextAvailability]
+            : state.availability.map((availability, index) => (index === availabilityIndex ? nextAvailability : availability))
+      };
+    }
+    case 'update': {
+      const assetId = terrainAssetIdFromKey(patch.key, state.scopeId);
+
+      if (assetId === undefined) {
+        return undefined;
+      }
+
+      const availabilityIndex = state.availability.findIndex((availability) => availability.assetId === assetId);
+
+      if (
+        availabilityIndex === -1 ||
+        (patch.changes.scopeId !== undefined && patch.changes.scopeId !== state.scopeId)
+      ) {
+        return undefined;
+      }
+
+      return {
+        ...state,
+        availability: state.availability.map((availability, index) =>
+          index === availabilityIndex
+            ? mergeTerrainAvailabilityChanges(availability, patch.changes as Partial<RoyalTerrainAssetAvailabilityRow>)
+            : availability
+        )
+      };
+    }
+    case 'delete': {
+      const assetId = terrainAssetIdFromKey(patch.key, state.scopeId);
+
+      if (assetId === undefined || !state.availability.some((availability) => availability.assetId === assetId)) {
+        return undefined;
+      }
+
+      return {
+        ...state,
+        availability: state.availability.filter((availability) => availability.assetId !== assetId)
+      };
+    }
+  }
+}
+
 function mergeActivationRow(state: RoyalInteractionState, row: RoyalActivationStateRow): RoyalInteractionState {
   return {
     ...state,
@@ -1354,6 +1741,39 @@ function messagePatch(result: { readonly message?: string }): Pick<EffectResultI
   return result.message === undefined ? {} : { message: result.message };
 }
 
+function terrainAvailabilityInputFromRow(row: RoyalTerrainAssetAvailabilityRow): RoyalTerrainAssetAvailabilityInput {
+  return {
+    assetId: row.assetId,
+    available: row.available,
+    status: row.status,
+    quality: row.quality,
+    qualityRank: row.qualityRank,
+    updatedSequence: row.updatedSequence,
+    ...(row.bytesCached === undefined ? {} : { bytesCached: row.bytesCached })
+  };
+}
+
+function mergeTerrainAvailabilityChanges(
+  availability: RoyalTerrainAssetAvailabilityInput,
+  changes: Partial<RoyalTerrainAssetAvailabilityRow>
+): RoyalTerrainAssetAvailabilityInput {
+  return {
+    assetId: changes.assetId ?? availability.assetId,
+    available: changes.available ?? availability.available,
+    status: changes.status ?? availability.status,
+    quality: changes.quality ?? availability.quality,
+    qualityRank: changes.qualityRank ?? availability.qualityRank,
+    updatedSequence: changes.updatedSequence ?? availability.updatedSequence,
+    ...(Object.hasOwn(changes, 'bytesCached') ? terrainBytesCachedPatch(changes) : terrainBytesCachedPatch(availability))
+  };
+}
+
+function terrainBytesCachedPatch(
+  availability: { readonly bytesCached?: number }
+): Pick<RoyalTerrainAssetAvailabilityInput, 'bytesCached'> | Record<string, never> {
+  return availability.bytesCached === undefined ? {} : { bytesCached: availability.bytesCached };
+}
+
 function keyMatchesScope(input: unknown, scopeId: string): boolean {
   if (typeof input === 'string') {
     return input === scopeId;
@@ -1384,6 +1804,26 @@ function effectResultIdFromKey(input: unknown, scopeId: string): string | undefi
   }
 
   return typeof input.resultId === 'string' ? input.resultId : undefined;
+}
+
+function terrainAssetIdFromKey(input: unknown, scopeId: string): string | undefined {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    return input[0] === scopeId && typeof input[1] === 'string' ? input[1] : undefined;
+  }
+
+  if (!isRecord(input)) {
+    return undefined;
+  }
+
+  if (input.scopeId !== undefined && input.scopeId !== scopeId) {
+    return undefined;
+  }
+
+  return typeof input.assetId === 'string' ? input.assetId : undefined;
 }
 
 function appliedStorePatch(): StorePatchRouteResult {

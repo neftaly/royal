@@ -12,6 +12,7 @@ import {
   createPrototypeStorePatchDispatcher,
   prototypeRoyalActivationPatchRoute,
   prototypeRoyalEffectResultPatchRoute,
+  prototypeRoyalTerrainAvailabilityPatchRoute,
   royalLensSchema,
   prototypeRoyalQueries,
   type CapabilityRuntimeState,
@@ -24,6 +25,9 @@ import {
   type RoyalLensStores,
   type RoyalPickProbeRow,
   type RoyalRenderRow,
+  type RoyalTerrainAssetAvailabilityRow,
+  type RoyalTerrainOfflineAssetRow,
+  type RoyalTerrainOfflineState,
   type StorePatchDispatcher,
   type StorePatchRouteResult,
   type WritableStore
@@ -48,7 +52,17 @@ export type {
   RoyalLayoutRuntimeState,
   RoyalLensStores,
   RoyalPickProbeRow,
-  RoyalRenderRow
+  RoyalRenderRow,
+  RoyalTerrainAssetAvailabilityInput,
+  RoyalTerrainAssetAvailabilityRow,
+  RoyalTerrainAssetInput,
+  RoyalTerrainAssetRow,
+  RoyalTerrainManifestInput,
+  RoyalTerrainManifestRow,
+  RoyalTerrainOfflineAssetRow,
+  RoyalTerrainOfflineState,
+  RoyalTerrainTileInput,
+  RoyalTerrainTileRow
 } from './index.js';
 
 export type RoyalReadableStore<State> = ReadableStore<State>;
@@ -66,6 +80,7 @@ export type RoyalPatchDispatcherInput =
       readonly capabilityStore?: WritableStore<CapabilityRuntimeState>;
       readonly interactionStore?: WritableStore<RoyalInteractionState>;
       readonly routes?: readonly RoyalPatchRoute[];
+      readonly terrainStore?: WritableStore<RoyalTerrainOfflineState>;
     };
 
 export type RoyalActivationWrite = {
@@ -77,11 +92,16 @@ export type RoyalActivationWrite = {
 };
 
 export type RoyalEffectResultWrite = EffectResultRow;
+export type RoyalTerrainAvailabilityWrite = RoyalTerrainAssetAvailabilityRow;
 
 export const royalQueries = {
   renderRows: prototypeRoyalQueries.renderRows satisfies Query<RoyalRenderRow>,
   pickProbeRows: prototypeRoyalQueries.pickProbeRows satisfies Query<RoyalPickProbeRow>,
   capabilityResultRows: prototypeRoyalQueries.capabilityResultRows satisfies Query<RoyalCapabilityResultRow>
+} as const;
+
+export const experimentalTerrainQueries = {
+  offlineAssetRows: prototypeRoyalQueries.terrainOfflineAssetRows satisfies Query<RoyalTerrainOfflineAssetRow>
 } as const;
 
 export function createRoyalLensSnapshot(input: RoyalLensInput): LensSnapshot {
@@ -114,11 +134,18 @@ export function writeRoyalEffectResult(input: RoyalEffectResultWrite): WritePatc
   return write(royalLensSchema.effectResults).upsert(input);
 }
 
+export function writeExperimentalTerrainAvailability(
+  input: RoyalTerrainAvailabilityWrite
+): WritePatch<typeof royalLensSchema.terrainAssetAvailability> {
+  return write(royalLensSchema.terrainAssetAvailability).upsert(input);
+}
+
 function routesFromInput(input: Exclude<RoyalPatchDispatcherInput, readonly RoyalPatchRoute[]>): readonly RoyalPatchRoute[] {
   return [
     ...(input.routes ?? []),
     ...(input.interactionStore === undefined ? [] : [prototypeRoyalActivationPatchRoute(input.interactionStore)]),
-    ...(input.capabilityStore === undefined ? [] : [prototypeRoyalEffectResultPatchRoute(input.capabilityStore)])
+    ...(input.capabilityStore === undefined ? [] : [prototypeRoyalEffectResultPatchRoute(input.capabilityStore)]),
+    ...(input.terrainStore === undefined ? [] : [prototypeRoyalTerrainAvailabilityPatchRoute(input.terrainStore)])
   ];
 }
 
