@@ -431,7 +431,9 @@ const smokeExpression = `
     if (probe === undefined || probe === null) return undefined;
 
     return {
+      atlasPreviewReadback: probe.atlasPreviewReadback ?? { colorBuckets: 0, paintedRatio: 0 },
       bytesUploaded: Number(probe.bytesUploaded ?? 0),
+      camera: probe.camera ?? { distance: 0, moved: false, pitch: 0, targetX: 0, targetZ: 0, yaw: 0 },
       canvasReadback: probe.canvasReadback ?? { colorBuckets: 0, paintedRatio: 0 },
       drawCalls: Number(probe.drawCalls ?? 0),
       error: String(probe.error ?? ''),
@@ -444,12 +446,16 @@ const smokeExpression = `
         : [],
       lastPhysicalAtlasUpload: String(probe.lastPhysicalAtlasUpload ?? ''),
       mode: String(probe.mode ?? ''),
+      pageTablePreviewReadback: probe.pageTablePreviewReadback ?? { colorBuckets: 0, paintedRatio: 0 },
       pageTableReadback: probe.pageTableReadback ?? { nonZeroTexels: 0, texels: 0, uniqueEntries: 0 },
       pageTableTexelUploads: Number(probe.pageTableTexelUploads ?? 0),
       physicalAtlasUploads: Number(probe.physicalAtlasUploads ?? 0),
+      previewDrawCalls: Number(probe.previewDrawCalls ?? 0),
       ready: probe.ready === true,
       residentPageIds: Array.isArray(probe.residentPageIds) ? probe.residentPageIds : [],
       supported: probe.supported === true,
+      terrainDrawCalls: Number(probe.terrainDrawCalls ?? 0),
+      terrainReadback: probe.terrainReadback ?? { colorBuckets: 0, paintedRatio: 0 },
     };
   };
   const read = () => {
@@ -779,6 +785,36 @@ const assertRoute = (expected, state) => {
       }
       if (vt.canvasReadback.colorBuckets < 6) {
         failures.push(`virtual texture canvas buckets ${vt.canvasReadback.colorBuckets} < 6`);
+      }
+      if (vt.terrainDrawCalls <= 0) {
+        failures.push('virtual texture terrain draw count stayed empty');
+      }
+      if (vt.terrainReadback.colorBuckets < 6 || vt.terrainReadback.paintedRatio < 0.2) {
+        failures.push(
+          `virtual texture terrain readback was buckets=${vt.terrainReadback.colorBuckets} painted=${
+            vt.terrainReadback.paintedRatio.toFixed(4)
+          }`,
+        );
+      }
+      if (vt.previewDrawCalls < 2) {
+        failures.push(`virtual texture preview draw count ${vt.previewDrawCalls} < 2`);
+      }
+      if (vt.atlasPreviewReadback.colorBuckets < 4 || vt.atlasPreviewReadback.paintedRatio < 0.2) {
+        failures.push(
+          `virtual texture atlas preview readback was buckets=${vt.atlasPreviewReadback.colorBuckets} painted=${
+            vt.atlasPreviewReadback.paintedRatio.toFixed(4)
+          }`,
+        );
+      }
+      if (vt.pageTablePreviewReadback.colorBuckets < 3 || vt.pageTablePreviewReadback.paintedRatio < 0.2) {
+        failures.push(
+          `virtual texture page-table preview readback was buckets=${
+            vt.pageTablePreviewReadback.colorBuckets
+          } painted=${vt.pageTablePreviewReadback.paintedRatio.toFixed(4)}`,
+        );
+      }
+      if (vt.camera.distance <= 0) {
+        failures.push('virtual texture camera probe did not initialize');
       }
       if (vt.exactPageCount <= 0 || vt.fallbackPageCount <= 0) {
         failures.push(`virtual texture exact/fallback counts were ${vt.exactPageCount}/${vt.fallbackPageCount}`);
