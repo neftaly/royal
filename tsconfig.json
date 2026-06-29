@@ -17,11 +17,23 @@
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],
+      "@royal/renderer-core/svg": [
+        "./packages/renderer-core/src/svg-index.ts"
+      ],
+      "@royal/renderer-core/text": [
+        "./packages/renderer-core/src/text-index.ts"
+      ],
       "@royal/renderer-webgl": [
         "./packages/renderer-webgl/src/index.ts"
       ],
       "@royal/renderer-webgl/capabilities": [
         "./packages/renderer-webgl/src/capabilities.ts"
+      ],
+      "@royal/renderer-webgl/virtual-texturing": [
+        "./packages/renderer-webgl/src/virtual-texturing.ts"
+      ],
+      "@royal/renderer-webgl/virtual-texturing/testing": [
+        "./packages/renderer-webgl/src/virtual-texture-testing.ts"
       ],
       "@royal/react": [
         "./packages/react/src/index.ts"

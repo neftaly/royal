@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseVirtualTextureManifest,
   resolveVirtualTextureManifestPageUri,
-} from "../src/virtual-texture-manifest";
+} from "../src/virtual-texture-testing";
 
 describe("parseVirtualTextureManifest", () => {
   it("normalizes manifest geometry and runtime options", () => {

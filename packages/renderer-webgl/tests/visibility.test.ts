@@ -21,6 +21,8 @@ import {
 } from "../src/matrix";
 import {
   buildVisibilityPackets,
+  createVisibilityCullScratch,
+  createVisibilityPacketScratch,
   cullVisibilityPackets,
   extractFrustumPlanes,
   VisibilityBoundsSource,
@@ -177,5 +179,100 @@ describe("visibility packets", () => {
     expect(packets.boundsSources[0]).toBe(VisibilityBoundsSource.GltfAsset);
     expect(Array.from(result.visibleIndices)).toEqual([]);
     expect(result.stats.culledCount).toBe(1);
+  });
+
+  it("reuses packet and cull scratch buffers without changing visible results", () => {
+    const packetScratch = createVisibilityPacketScratch(4);
+    const cullScratch = createVisibilityCullScratch(4);
+    const visibleBox = mesh({
+      geometry: boxGeometry({ size: [1, 1, 1] }),
+      material,
+    });
+    const offscreenBox = mesh({
+      geometry: boxGeometry({ size: [1, 1, 1] }),
+      material,
+      transform: {
+        position: [20, 0, 0],
+        rotation: [0, 0, 0],
+      },
+    });
+
+    const first = buildVisibilityPackets(pass({
+      camera,
+      children: [visibleBox, offscreenBox],
+    }), { packetScratch });
+    const result = cullVisibilityPackets(first, extractFrustumPlanes(viewProjection()), {
+      scratch: cullScratch,
+    });
+    const second = buildVisibilityPackets(pass({
+      camera,
+      children: [visibleBox],
+    }), { packetScratch });
+
+    expect(first.nodeIndices).toBe(packetScratch.nodeIndices);
+    expect(first.capacity).toBe(4);
+    expect(Array.from(result.visibleIndices)).toEqual([0]);
+    expect(result.visibleIndices.buffer).toBe(cullScratch.visibleIndices.buffer);
+    expect(second.nodeIndices).toBe(packetScratch.nodeIndices);
+    expect(second.count).toBe(1);
+    expect(second.extractionVersion).toBeGreaterThan(first.extractionVersion);
+  });
+
+  it("tracks stable object, material, asset, and version lanes for future LOD decisions", () => {
+    const baseTexture = solidTexture({
+      color: [0.1, 0.2, 0.3, 1],
+      id: "matte-red",
+      revision: 1,
+    });
+    const updatedTexture = solidTexture({
+      color: [0.1, 0.2, 0.3, 1],
+      id: "matte-red",
+      revision: 2,
+    });
+    const sharedMaterial = unlitMaterial({ baseColor: baseTexture });
+    const box = mesh({
+      geometry: boxGeometry({ size: [1, 1, 1] }),
+      material: sharedMaterial,
+    });
+    const sameObjectAgain = buildVisibilityPackets(pass({
+      camera,
+      children: [box],
+    }));
+    const sameObjectThird = buildVisibilityPackets(pass({
+      camera,
+      children: [box],
+    }));
+    const materialRevision = buildVisibilityPackets(pass({
+      camera,
+      children: [
+        mesh({
+          geometry: boxGeometry({ size: [1, 1, 1] }),
+          material: unlitMaterial({ baseColor: updatedTexture }),
+        }),
+      ],
+    }));
+    const model = gltf({
+      asset: {
+        id: "ship",
+        revision: "r1",
+        uri: "https://example.test/ship.gltf",
+      },
+    });
+    const modelPacket = buildVisibilityPackets(pass({
+      camera,
+      children: [model],
+    }));
+
+    expect(sameObjectAgain.objectIdHi[0]).toBe(sameObjectThird.objectIdHi[0]);
+    expect(sameObjectAgain.objectIdLo[0]).toBe(sameObjectThird.objectIdLo[0]);
+    expect(sameObjectAgain.objectVersions[0]).toBe(sameObjectThird.objectVersions[0]);
+    expect(sameObjectAgain.materialIdHi[0]).toBe(materialRevision.materialIdHi[0]);
+    expect(sameObjectAgain.materialIdLo[0]).toBe(materialRevision.materialIdLo[0]);
+    expect(sameObjectAgain.materialVersions[0]).not.toBe(materialRevision.materialVersions[0]);
+    expect(sameObjectAgain.assetIdHi[0]).toBe(0);
+    expect(sameObjectAgain.assetIdLo[0]).toBe(0);
+    expect(modelPacket.assetIdHi[0]).not.toBe(0);
+    expect(modelPacket.assetIdLo[0]).not.toBe(0);
+    expect(modelPacket.assetVersions[0]).not.toBe(0);
   });
 });

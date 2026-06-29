@@ -12,14 +12,27 @@ type PackageConfig = {
   };
 };
 
-const buildConfigsByPackageName: Record<string, PackageConfig> = {
+export const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/renderer-core': {
-    lib: { entry: 'src/index.ts', formats: ['es'], fileName: () => 'index.js' }
+    lib: {
+      entry: {
+        index: 'src/index.ts',
+        svg: 'src/svg-index.ts',
+        text: 'src/text-index.ts'
+      },
+      formats: ['es'],
+      fileName: (_format, entryName) => entryName + '.js'
+    }
   },
   '@royal/renderer-webgl': {
     external: ['@royal/renderer-core'],
     lib: {
-      entry: { index: 'src/index.ts', capabilities: 'src/capabilities.ts' },
+      entry: {
+        index: 'src/index.ts',
+        capabilities: 'src/capabilities.ts',
+        'virtual-texturing': 'src/virtual-texturing.ts',
+        'virtual-texture-testing': 'src/virtual-texture-testing.ts'
+      },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
@@ -42,7 +55,7 @@ const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] :
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const appBase = process.env.BASE_PATH ?? '/';
-const sourceAliases = [
+export const sourceAliases = [
   { find: '@tarstate/core/diagnostics', replacement: path.join(repoRoot, 'packages/tarstate-core/src/diagnostics.ts') },
   { find: '@tarstate/core/evaluate', replacement: path.join(repoRoot, 'packages/tarstate-core/src/evaluate.ts') },
   { find: '@tarstate/core/query', replacement: path.join(repoRoot, 'packages/tarstate-core/src/query.ts') },
@@ -51,7 +64,11 @@ const sourceAliases = [
   { find: '@tarstate/core/write', replacement: path.join(repoRoot, 'packages/tarstate-core/src/write.ts') },
   { find: '@tarstate/core', replacement: path.join(repoRoot, 'packages/tarstate-core/src/index.ts') },
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
+  { find: '@royal/renderer-webgl/virtual-texturing/testing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texture-testing.ts') },
+  { find: '@royal/renderer-webgl/virtual-texturing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texturing.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
+  { find: '@royal/renderer-core/svg', replacement: path.join(repoRoot, 'packages/renderer-core/src/svg-index.ts') },
+  { find: '@royal/renderer-core/text', replacement: path.join(repoRoot, 'packages/renderer-core/src/text-index.ts') },
   { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-dev-runtime.ts') },
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
   { find: '@royal/react/testing', replacement: path.join(repoRoot, 'packages/react/src/testing.ts') },

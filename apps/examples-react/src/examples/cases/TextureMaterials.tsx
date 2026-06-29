@@ -7,7 +7,7 @@ import {
   type RenderRoot,
 } from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const fallbackTexture = solidTexture({
@@ -33,21 +33,6 @@ const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
-const useStaticTextureRefresh = (): void => {
-  const [, setRefreshRevision] = useState(0);
-
-  useEffect(() => {
-    const refreshDelaysMs = [80, 220, 520, 1000];
-    const handles = refreshDelaysMs.map((delay) =>
-      window.setTimeout(() => setRefreshRevision((revision) => revision + 1), delay),
-    );
-
-    return () => {
-      for (const handle of handles) window.clearTimeout(handle);
-    };
-  }, []);
-};
-
 const materialScene = (): RenderRoot => (
   <scene>
     <pass clearColor={[0.035, 0.045, 0.052, 1]}>
@@ -69,11 +54,9 @@ const materialScene = (): RenderRoot => (
       />
     </pass>
   </scene>
-);
+) as RenderRoot;
 
 export const TextureMaterials = (): ReactNode => {
-  useStaticTextureRefresh();
-
   return createElement(Canvas, {
     'aria-label': 'Texture materials',
     children: materialScene(),

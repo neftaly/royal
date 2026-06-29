@@ -25,6 +25,7 @@ export type VirtualTexturePageTableTexelUpload = {
   readonly residentPageId: VirtualTexturePageId | null;
   readonly rgba8: readonly [number, number, number, number];
   readonly tableCoord: VirtualTexturePageAddress;
+  readonly uploadSerial: number | null;
   readonly width: 1;
   readonly xOffset: number;
   readonly yOffset: number;
@@ -137,6 +138,7 @@ const planPageTableUpload = (dirty: VirtualTextureDirtyPageTableEntry): VirtualT
   residentPageId: dirty.entry.residentPageId,
   rgba8: copyRgba8(dirty.entry.encodedRgba8),
   tableCoord: copyPage(dirty.tableCoord),
+  uploadSerial: dirty.entry.uploadSerial,
   width: 1,
   xOffset: dirty.tableCoord.x,
   yOffset: dirty.tableCoord.y,

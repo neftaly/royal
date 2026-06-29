@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "royal.research.renderer-foundations.readiness.v0",
+  "status": "research-roadmap",
+  "exampleReadiness": {
+    "readyForExampleRoute": false,
+    "blocker": "The WebGL renderer still needs private visibility packets, manifest normalization, indexed geometry upload, and material texture resources before these lanes can become real examples.",
+    "nextPrototypeStep": "Land the visibility packet extractor privately in renderer-webgl, then wire manifest-derived bounds into that packet stream before adding new examples."
+  },
+  "stages": [
+    {
+      "id": "visibility-packets",
+      "title": "Visibility Packets",
+      "status": "research-ready",
+      "dependencies": [],
+      "readinessAssets": [
+        "research/visibility-packets/README.md",
+        "research/visibility-packets/visibility-packet-bench.mjs"
+      ],
+      "validationCommands": [
+        "node research/visibility-packets/visibility-packet-bench.mjs --counts 1000,10000"
+      ],
+      "blocker": "No private renderer-webgl packet extractor is wired into pass rendering yet.",
+      "nextPrototypeStep": "Add a frame-local WebGL packet buffer behind RenderPass extraction and report packet/visible/cull counters as private diagnostics."
+    },
+    {
+      "id": "asset-manifest-adapter",
+      "title": "Asset Manifest Adapter",
+      "status": "research-ready",
+      "dependencies": ["visibility-packets"],
+      "readinessAssets": [
+        "research/asset-manifest/validate-blender-manifest.mjs",
+        "research/asset-manifest-contract/validate-normalized-fixtures.mjs",
+        "research/asset-manifest-contract/asset-manifest-contract.schema.json"
+      ],
+      "validationCommands": [
+        "node research/asset-manifest/validate-blender-manifest.mjs",
+        "node research/asset-manifest-contract/validate-normalized-fixtures.mjs"
+      ],
+      "blocker": "Manifest normalization is still research-only and is not consumed by WebGL caches or examples.",
+      "nextPrototypeStep": "Create a private manifest normalizer that can answer bounds and artifact lookup without opening payload files."
+    },
+    {
+      "id": "indexed-geometry-backbone",
+      "title": "Indexed Geometry Backbone",
+      "status": "blocked-by-renderer-api",
+      "dependencies": ["visibility-packets", "asset-manifest-adapter"],
+      "readinessAssets": [
+        "research/shape-extrusion/geometry.mjs",
+        "research/shape-extrusion/shape-extrusion-bench.mjs"
+      ],
+      "validationCommands": [
+        "node research/shape-extrusion/shape-extrusion-bench.mjs --json"
+      ],
+      "blocker": "packages/renderer-webgl/src/render-graph.ts still rejects non-box mesh geometry in the practical draw path.",
+      "nextPrototypeStep": "Add a private IndexedGeometryData upload/cache path with Uint16 indices first, then route one research fixture through it without public exports."
+    },
+    {
+      "id": "svg-path-geometry",
+      "title": "SVG Path Geometry",
+      "status": "blocked-by-renderer-api",
+      "dependencies": ["indexed-geometry-backbone"],
+      "readinessAssets": [
+        "research/pathfinder-svg/svg-path-prototype.mjs",
+        "research/pathfinder-svg/fixtures/tiny-scene.svg"
+      ],
+      "validationCommands": [
+        "node research/pathfinder-svg/svg-path-prototype.mjs --backend custom-js --dump --flatten --simplify collinear --packed"
+      ],
+      "blocker": "Packed SVG paths need a renderer-private tessellation and indexed draw path before they can be rendered as examples.",
+      "nextPrototypeStep": "Lower packed path output into IndexedGeometryData and validate bounds before upload."
+    },
+    {
+      "id": "material-texture-resources",
+      "title": "Material Texture Resources",
+      "status": "planned",
+      "dependencies": ["asset-manifest-adapter", "indexed-geometry-backbone"],
+      "readinessAssets": [
+        "research/virtual-texturing/README.md",
+        "research/asset-manifest-contract/fixtures/virtual-texturing.normalized.json"
+      ],
+      "validationCommands": [
+        "node research/asset-manifest-contract/validate-normalized-fixtures.mjs"
+      ],
+      "blocker": "Current material binding does not have backend-private texture-resource indirection for variants, fallbacks, or residency diagnostics.",
+      "nextPrototypeStep": "Add a private material resource record that can bind solid colors, ordinary textures, fallback textures, and later virtual texture resources."
+    },
+    {
+      "id": "virtual-texture-resources",
+      "title": "Virtual Texture Resources",
+      "status": "blocked-by-runtime-api",
+      "dependencies": ["visibility-packets", "asset-manifest-adapter", "material-texture-resources"],
+      "readinessAssets": [
+        "research/virtual-texturing/demo-assets/manifest.json",
+        "research/virtual-texturing/demo-assets/example-fixture.json",
+        "research/virtual-texturing/virtual-texturing-cache-sim.mjs"
+      ],
+      "validationCommands": [
+        "node research/virtual-texturing/generate-example-fixture.mjs --check",
+        "node research/virtual-texturing/virtual-texturing-cache-sim.mjs --check"
+      ],
+      "blocker": "There is no WebGL-private page loader, page-table texture, physical cache atlas, or material binding path yet.",
+      "nextPrototypeStep": "Consume visible packet material demand and manifest page ids in a private residency scheduler before exposing any route."
+    },
+    {
+      "id": "svg-tiger-demo",
+      "title": "SVG Tiger Demo",
+      "status": "blocked-by-renderer-api",
+      "dependencies": ["svg-path-geometry", "indexed-geometry-backbone"],
+      "readinessAssets": [
+        "research/svg-tiger-demo/check-demo-plan.mjs",
+        "research/svg-tiger-demo/fixtures/tiny-tiger.svg",
+        "research/svg-tiger-demo/PROVENANCE.md"
+      ],
+      "validationCommands": [
+        "node research/svg-tiger-demo/check-demo-plan.mjs"
+      ],
+      "blocker": "The fallback tiger can be parsed and checked, but Royal cannot render packed path geometry through the normal mesh path yet.",
+      "nextPrototypeStep": "Use the path geometry lowering path to render the fallback tiger, then vendor the full Ghostscript tiger only with recorded provenance."
+    },
+    {
+      "id": "terrain-and-lod",
+      "title": "Terrain And LOD",
+      "status": "blocked-by-renderer-api",
+      "dependencies": ["visibility-packets", "asset-manifest-adapter", "indexed-geometry-backbone", "material-texture-resources"],
+      "readinessAssets": [
+        "research/terrain/royal-terrain-v1-spike.mjs",
+        "research/offline-terrain-pipeline/validate-world-index.mjs",
+        "research/offline-terrain-pipeline/fixtures/world-index.json"
+      ],
+      "validationCommands": [
+        "node research/terrain/royal-terrain-v1-spike.mjs",
+        "node research/offline-terrain-pipeline/validate-world-index.mjs"
+      ],
+      "blocker": "Terrain chunks need indexed geometry upload, instancing or packet identity, material resources, and manifest-derived bounds before a real example can render them.",
+      "nextPrototypeStep": "Feed deterministic terrain chunk rows into the private packet/manifest path and render placeholder indexed chunks before adding offline asset streaming."
+    }
+  ]
+}

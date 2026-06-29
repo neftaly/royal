@@ -11,8 +11,8 @@ import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
-  /** Runtime-validated as a Royal scene. */
-  readonly children: unknown;
+  /** Runtime-validated as a Royal scene for JavaScript callers. */
+  readonly children: RenderRoot;
   readonly rootOptions?: RoyalRootOptions;
 }
 
@@ -30,7 +30,6 @@ export const Canvas = ({
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<RoyalRoot | undefined>(undefined);
-  const sceneRef = useRef<RenderRoot | undefined>(undefined);
 
   // React owns the canvas element; Royal owns its WebGL root.
   useLayoutEffect(() => {
@@ -43,7 +42,6 @@ export const Canvas = ({
     return () => {
       root.dispose();
       rootRef.current = undefined;
-      sceneRef.current = undefined;
     };
   }, [rootOptions]);
 
@@ -53,9 +51,8 @@ export const Canvas = ({
     if (!isRenderRoot(children))
       throw new Error("Canvas expects a renderer scene child");
 
-    sceneRef.current = children;
     root.render(children);
-  }, [children]);
+  }, [children, rootOptions]);
 
   return createElement("canvas", { ...canvasProps, ref: canvasRef });
 };

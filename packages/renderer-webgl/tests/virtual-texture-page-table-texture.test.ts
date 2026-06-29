@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { RendererWebGlContext } from "../src/gl";
-import { VirtualTextureRuntime } from "../src/virtual-texture-runtime";
 import {
   coalesceVirtualTexturePageTableTexelUploads,
   createVirtualTexturePageTableTexture,
-  uploadVirtualTexturePageTableTexels,
-  virtualTexturePageTableMipDimensions,
-} from "../src/virtual-texture-page-table-texture";
-import {
   planVirtualTextureUploads,
   type VirtualTexturePageTableTexelUpload,
-} from "../src/virtual-texture-upload-plan";
+  VirtualTextureRuntime,
+  uploadVirtualTexturePageTableTexels,
+  virtualTexturePageTableMipDimensions,
+} from "../src/virtual-texture-testing";
 
 type TexImage2DCall = {
   readonly border: number;
@@ -155,6 +153,7 @@ const pageTableTexelUpload = ({
     x: xOffset,
     y: yOffset,
   },
+  uploadSerial: null,
   width: 1,
   xOffset,
   yOffset,

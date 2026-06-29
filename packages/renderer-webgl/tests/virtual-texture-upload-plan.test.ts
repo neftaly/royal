@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { VirtualTextureRuntime } from "../src/virtual-texture-runtime";
-import { planVirtualTextureUploads, splitVirtualTextureUploadPlan } from "../src/virtual-texture-upload-plan";
+import {
+  planVirtualTextureUploads,
+  splitVirtualTextureUploadPlan,
+  VirtualTextureRuntime,
+} from "../src/virtual-texture-testing";
 
 describe("planVirtualTextureUploads", () => {
   it("plans page-table texel uploads in drained dirty-entry order", () => {

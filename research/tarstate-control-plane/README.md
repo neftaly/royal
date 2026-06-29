@@ -12,6 +12,58 @@ Tarstate should be a cheap control plane for Royal, not the renderer's internal
 data model. The renderer keeps rendering; Tarstate keeps queryable facts,
 commands, probes, diagnostics, and user control state.
 
+## Tarstate Extraction-Readiness Lane
+
+This lane keeps `@tarstate/core` detachable without splitting the repository or
+moving packages. The core package should remain a renderer-agnostic data/query
+library in `packages/tarstate-core`; Royal control-plane schemas and adapters
+belong in `@royal/tarstate-lens`.
+
+Current boundary intent:
+
+- `@tarstate/core` imports no `@royal/*`, no app packages, no renderer packages,
+  and no source-path package internals.
+- Tarstate API consumers import through package exports such as
+  `@tarstate/core`, `@tarstate/core/query`, and `@royal/tarstate-lens`, not
+  `packages/*/src/*` paths.
+- Renderer packages stay independent from `@tarstate/core` and
+  `@royal/tarstate-lens` in both imports and manifests.
+- `@royal/tarstate-lens` may depend on `@tarstate/core`, but it remains the
+  Royal-owned integration layer.
+
+Do not add publishing setup, create a separate repo, split the monorepo, or move
+packages for this lane. A future extraction is justified only when all of these
+criteria are met:
+
+1. Stable API: the root and taxonomy subpath exports have stopped changing in
+   ordinary Royal work.
+2. Independent consumers: non-Royal consumers need Tarstate without renderer,
+   React, app, or Royal lens code.
+3. Release cadence: Tarstate needs versioning and releases independent of
+   Royal's renderer/app cadence.
+4. Package export smoke: focused tests exercise every public `@tarstate/core`
+   import path through package exports.
+5. Lens ownership: `@royal/tarstate-lens` stays Royal-owned unless its schemas,
+   queries, and command abstractions become generic enough for non-Royal users.
+
+## Readiness Fixture
+
+`fixtures/control-plane-snapshot.json` is a tiny machine-checked contract for the
+first control-plane prototype. It records bounded relation policies, sample
+renderer event rows, command kinds, and the exact blocker for an examples route.
+
+Run:
+
+```sh
+node research/tarstate-control-plane/validate-control-plane-fixture.mjs
+```
+
+This is still not ready for a real example route. The missing runtime piece is a
+private renderer/react event sink that emits the fixture's `RoyalControlEvent`
+shape and consumes validated command rows outside draw submission. The next
+prototype step is to replay this fixture into tarstate-lens rows and render a
+read-only inspector from those rows.
+
 ## Model
 
 Keep the three layers separate:
@@ -219,27 +271,33 @@ export const royalControlPlaneSchema = defineSchema({
 ```
 
 ```tsx
-// App composition: Tarstate store beside Royal renderer, not inside it.
+// Non-current pseudocode sketch: controlSink, stable descriptor ids, and
+// selection commands are proposed control-plane APIs, not public exports yet.
+/** @jsxImportSource @royal/react */
 import { createRoyalControlPlane, royalControlQueries } from '@royal/tarstate-lens/control-plane';
 import { createRoot } from '@royal/react';
-import { boxGeometry, scene, pass, mesh, standardMaterial } from '@royal/renderer-core';
+import { boxGeometry, solidTexture, standardMaterial } from '@royal/renderer-core';
 
 const control = createRoyalControlPlane({ rootId: 'main-canvas' });
 const royal = createRoot(canvas, {
   context: { antialias: true },
   controlSink: control.sink,
 });
+const heroMaterial = standardMaterial({
+  baseColor: solidTexture({ color: [1, 0, 0, 1] }),
+});
 
-royal.render(scene({
-  children: [pass({
-    camera,
-    children: [mesh({
-      id: 'hero-cube',
-      geometry: boxGeometry({ size: [1, 1, 1] }),
-      material: standardMaterial({ color: [1, 0, 0, 1] }),
-    })],
-  })],
-}));
+royal.render(
+  <scene>
+    <pass camera={camera}>
+      <mesh
+        id="hero-cube"
+        geometry={boxGeometry({ size: [1, 1, 1] })}
+        material={heroMaterial}
+      />
+    </pass>
+  </scene>
+);
 
 control.dispatch({ kind: 'selectNode', commandId: 'cmd-1', rootId: 'main-canvas', nodeId: 'hero-cube' });
 
@@ -251,17 +309,16 @@ debug overlays, and controls. It still renders Royal through normal descriptors.
 
 ## Boundary Checks
 
-Future implementation patches should add tests that enforce directionality:
+Implementation patches should keep tests enforcing directionality:
 
-1. Extend `tests/package-boundaries.test.ts` with a rule that source files in
-   `packages/renderer-core` and `packages/renderer-webgl` must not import
-   `@tarstate/core`, `@royal/tarstate-lens`, or any package whose name includes
-   `tarstate`.
+1. Keep `tests/package-boundaries.test.ts` checking that renderer package source
+   files and manifests do not import or depend on `@tarstate/core`,
+   `@royal/tarstate-lens`, or any package whose name includes `tarstate`.
 2. Keep `@royal/tarstate-lens` allowed to import `@tarstate/core`. If it needs
    Royal types, prefer event/control DTOs from `@royal/renderer-core`; avoid
    importing `@royal/renderer-webgl`.
-3. Add a manifest assertion that `@royal/renderer-core` and
-   `@royal/renderer-webgl` do not declare Tarstate dependencies.
+3. Keep `@tarstate/core` free of Royal, app, renderer, and source-path package
+   internal imports.
 4. Add a smoke test that creates a renderer root with no control sink, proving
    the renderer works when the control plane is absent.
 5. Add a lens test that feeds synthetic control events into the store and

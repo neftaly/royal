@@ -156,3 +156,32 @@ The static prototype is useful if it can answer these questions without a GPU:
 
 The fixture is intentionally tiny compared with production forests. Its value
 is the contract pressure, not visual output.
+
+## Automatic Policy Prototype
+
+The next research slice models impostors as automatic renderer policy rather
+than app-authored nodes or public thresholds. It uses asset/manifest rows plus
+camera and visibility packets as inputs, then emits renderer-private selection
+and residency packets.
+
+Design note:
+
+```sh
+less research/dynamic-impostors/automatic-renderer-policy.md
+```
+
+Run the validator:
+
+```sh
+node research/dynamic-impostors/automatic-policy-validator.mjs --check
+```
+
+The validator passes the automatic policy fixture and intentionally fails two
+naive variants: one with no camera hysteresis and one that leaks a public
+per-object impostor node/threshold. It also checks alpha/depth ordering,
+terrain/object occlusion uncertainty, memory-pressure fallback labeling,
+nonuniform-scale diagnostics, skinned-object degradation, batching pressure,
+and a WebGL2-portable private packet path.
+
+This slice is still research/prototype only. It does not make impostors
+example-ready and does not imply a public `DynamicImpostorNode` API.

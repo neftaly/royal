@@ -38,10 +38,45 @@ Run:
 
 ```sh
 node research/rendering-wishlist/rendering-budget-sketch.mjs
+node research/rendering-wishlist/rendering-budget-sketch.mjs --check
 ```
 
 This is not a renderer patch. It is a cheap fixture for tuning target numbers
-before adding internal render-packet extraction.
+before adding internal render-packet extraction. `--check` gates only
+deterministic structural pressure values such as visible packet budget, cluster
+overflow, LOD accounting, and highest-mip demand; local timing numbers remain
+reported but are not treated as pass/fail gates.
+
+## VT Browser Benchmark Coverage
+
+The live virtual-texturing hitch benchmark is
+`apps/examples-react/scripts/virtual-texturing-smoothness.mjs`. It should stay
+pointed at browser-observed or probe-observed facts that can catch hitches:
+
+- Initial load: navigation-to-canvas, navigation-to-probe-ready, and first
+  usable probe-ready time when pending pages are drained below the configured
+  threshold.
+- Zoom/rotation hitches: input-correlated rAF p95/max, per-phase rAF p95/max,
+  and phase settle time after wheel/drag bursts.
+- Page request planning: `performance.lastPlanMs` / `maxPlanMs` when the probe
+  exposes them.
+- Worker page generation and saturation: worker availability/count, queue
+  depth, in-flight bytes, generation latency, generated/fallback pages, stale
+  drops, and oldest queued work in frames.
+- Upload bursts: atlas upload count, page-table upload count, page generation
+  time, texture upload time, page-table upload time, and cumulative bytes
+  uploaded.
+- Render frame timing: browser rAF p50/p95/p99/max plus probe frame p95/max and
+  slow-frame count.
+
+Current missing probe TODOs before adding stricter direct timings:
+
+- `cameraInput.handlerDurationMs`: direct wheel/pointer handler self-time. The
+  benchmark currently uses input-correlated rAF as the hitch-catching proxy.
+- `uploadQueue.waitMsByPageOrPriority`: queue age is exposed as
+  `oldestQueuedWorkFrames`, not per-page wait timing.
+- `textureUpload.bytesPerChunk`: only cumulative `bytesUploaded` exists today.
+- `renderFrame.gpuMs`: WebGL timer-query/GPU frame timing is not exposed.
 
 ## Build Order
 
@@ -139,9 +174,10 @@ texture needs page tables, residency tracking, shader indirection, upload
 budgets, and debug views. Megatextures are a research topic until asset
 manifests, compressed textures, and material indirection are stable.
 
-Royal API fit:
+Future-facing API fit (sketch, not current public API):
 
-- Public nodes keep pointing at assets (`gltf({ src })` or a future asset id).
+- Public JSX nodes keep pointing at assets (`<gltf src="..." />` today, or a
+  future asset id).
 - Asset manifests carry texture variants, dimensions, mips, page size,
   color-space, and hashes.
 - Backend caches choose compressed/fallback variants from capabilities.

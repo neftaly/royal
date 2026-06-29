@@ -14,6 +14,7 @@ import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
 export type Example = {
   readonly id: string;
+  readonly maturity: 'product' | 'lab-probe';
   readonly path: string;
   readonly title: string;
   readonly Component: ComponentType;
@@ -24,6 +25,7 @@ export type Example = {
 export const examples = [
   {
     id: 'cube',
+    maturity: 'product',
     path: '/cube',
     title: 'Cube',
     Component: HelloCube,
@@ -32,6 +34,7 @@ export const examples = [
   },
   {
     id: 'wireframe',
+    maturity: 'product',
     path: '/wireframe',
     title: 'Wireframe',
     Component: WireframeCube,
@@ -40,6 +43,7 @@ export const examples = [
   },
   {
     id: 'text',
+    maturity: 'product',
     path: '/text',
     title: 'Text',
     Component: RendererText,
@@ -48,6 +52,7 @@ export const examples = [
   },
   {
     id: 'texture-materials',
+    maturity: 'product',
     path: '/texture-materials',
     title: 'Texture Materials',
     Component: TextureMaterials,
@@ -56,6 +61,7 @@ export const examples = [
   },
   {
     id: 'gltf-helmet',
+    maturity: 'product',
     path: '/gltf-helmet',
     title: 'glTF Helmet',
     Component: GltfHelmet,
@@ -64,8 +70,9 @@ export const examples = [
   },
   {
     id: 'virtual-texturing-terrain',
+    maturity: 'lab-probe',
     path: '/virtual-texturing-terrain',
-    title: 'Virtual Texturing Terrain',
+    title: 'Virtual Texturing Lab Probe',
     Component: VirtualTexturingTerrain,
     source: virtualTexturingTerrainSource,
     sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',

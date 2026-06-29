@@ -28,6 +28,7 @@ import {
 import { markGltf } from "./performance";
 import { findDirectionalLight } from "./render-graph";
 import { TextCache } from "./text-cache";
+import { TextureCache } from "./texture-cache";
 import {
   buildVisibilityPackets,
   cullVisibilityPackets,
@@ -95,6 +96,7 @@ export class WebGlRoot {
   readonly #meshProgram: MeshProgram;
   readonly #textCache: TextCache;
   readonly #textProgram: TextProgram;
+  readonly #textureCache: TextureCache;
   readonly #wireframeProgram: WireframeProgram;
   #mounted = true;
   #renderScheduled = false;
@@ -115,6 +117,7 @@ export class WebGlRoot {
     this.#geometryCache = new GeometryCache(gl);
     this.#gltfCache = new GltfCache(gl, () => this.#renderWhenReady());
     this.#textCache = new TextCache(gl);
+    this.#textureCache = new TextureCache(gl);
     this.#gltfProgram = createGltfProgram(gl);
     this.#meshProgram = createMeshProgram(gl);
     this.#textProgram = createTextProgram(gl);
@@ -151,6 +154,7 @@ export class WebGlRoot {
     this.#gltfCache.dispose();
     this.#geometryCache.dispose();
     this.#textCache.dispose();
+    this.#textureCache.dispose();
     this.#gl.deleteProgram(this.#gltfProgram.program);
     this.#gl.deleteProgram(this.#meshProgram.program);
     this.#gl.deleteProgram(this.#textProgram.program);
@@ -195,6 +199,8 @@ export class WebGlRoot {
             {
               directionalLight,
               geometryCache: this.#geometryCache,
+              onTextureSettled: () => this.#renderWhenReady(),
+              textureCache: this.#textureCache,
               viewProjectionMatrix: vp,
             },
           );

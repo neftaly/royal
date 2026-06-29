@@ -9,6 +9,7 @@ import {
   scene,
   solidTexture,
   standardMaterial,
+  textureAsset,
   unlitMaterial,
   text
 } from '@royal/renderer-core';
@@ -120,6 +121,46 @@ describe('WebGL resource lifetime', () => {
     expect(canvas.height).toBe(100);
     expect(counts.drawElements).toBe(2);
 
+    root.dispose();
+  });
+
+  it('rerenders imperative roots after texture assets settle', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(new Blob(['image'])))));
+    vi.stubGlobal('createImageBitmap', vi.fn(() =>
+      Promise.resolve({ height: 4, width: 4 } as ImageBitmap)
+    ));
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const { counts, gl } = fakeGl();
+    const root = createRoot(fakeCanvas(gl));
+    const textured = unlitMaterial({
+      baseColor: textureAsset({
+        fallback: solidTexture({ color: [0.2, 0.4, 0.6, 1] }),
+        id: 'crate',
+        uri: 'https://example.test/crate.png'
+      })
+    });
+
+    root.render(scene({
+      children: [
+        pass({
+          camera,
+          children: [
+            mesh({ geometry: cube, material: textured })
+          ]
+        })
+      ]
+    }));
+
+    expect(counts.drawElements).toBe(1);
+    await waitFor(() => frameCallbacks.length === 1);
+    frameCallbacks.shift()?.(0);
+
+    expect(fetch).toHaveBeenCalledWith('https://example.test/crate.png');
+    expect(counts.drawElements).toBe(2);
     root.dispose();
   });
 

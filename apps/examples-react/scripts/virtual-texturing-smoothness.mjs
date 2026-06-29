@@ -75,17 +75,34 @@ const benchmarkConfig = {
   gate,
   inputCorrelationWindowMs: envNumber('VT_SMOOTHNESS_INPUT_CORRELATION_WINDOW_MS', 240),
   longFrameMs: envNumber('VT_SMOOTHNESS_LONG_FRAME_MS', smokeMode ? 50 : 50),
+  maxAtlasUploadsPerChunk: envNumber('VT_SMOOTHNESS_MAX_ATLAS_UPLOADS_PER_CHUNK', smokeMode ? 64 : 8),
   maxFullTableRebuildExcess: envNumber('VT_SMOOTHNESS_MAX_FULL_TABLE_REBUILD_EXCESS', smokeMode ? 1_000_000 : 0),
+  maxFirstUsableProbeReadyMs: envNumber('VT_SMOOTHNESS_MAX_FIRST_USABLE_PROBE_READY_MS', smokeMode ? 12_000 : 6_500),
+  maxInputRafDeltaMs: envNumber('VT_SMOOTHNESS_MAX_INPUT_RAF_DELTA_MS', smokeMode ? 900 : 120),
+  maxInputRafP95Ms: envNumber('VT_SMOOTHNESS_INPUT_RAF_P95_MS', smokeMode ? 180 : 24),
   maxLongFrameRatio: envNumber('VT_SMOOTHNESS_MAX_LONG_FRAME_RATIO', smokeMode ? 0.45 : 0.02),
+  maxNavToCanvasMs: envNumber('VT_SMOOTHNESS_MAX_NAV_TO_CANVAS_MS', smokeMode ? 12_000 : 4_500),
+  maxNavToProbeReadyMs: envNumber('VT_SMOOTHNESS_MAX_NAV_TO_PROBE_READY_MS', smokeMode ? 12_000 : 6_000),
+  maxOldestQueuedWorkFrames: envNumber('VT_SMOOTHNESS_MAX_OLDEST_QUEUED_WORK_FRAMES', smokeMode ? 1_000 : 45),
+  maxPageTableUploadsPerChunk: envNumber('VT_SMOOTHNESS_MAX_PAGE_TABLE_UPLOADS_PER_CHUNK', smokeMode ? 512 : 128),
+  maxPhaseSettleMs: envNumber('VT_SMOOTHNESS_MAX_PHASE_SETTLE_MS', smokeMode ? 5_000 : 1_400),
   maxProbeFinalPendingPages: envNumber('VT_SMOOTHNESS_MAX_PROBE_FINAL_PENDING_PAGES', smokeMode ? 96 : 0),
   maxProbeFrameMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_FRAME_MS', smokeMode ? 900 : 66),
+  maxProbePageGenerationMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_PAGE_GENERATION_MS', smokeMode ? 1500 : 50),
   maxProbePendingPages: envNumber('VT_SMOOTHNESS_MAX_PROBE_PENDING_PAGES', smokeMode ? 96 : 16),
+  maxProbePlanMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_PLAN_MS', smokeMode ? 500 : 8),
   maxProbeReadbacksDuringInput: envNumber('VT_SMOOTHNESS_MAX_PROBE_READBACKS_DURING_INPUT', 0),
+  maxProbeSchedulerDelayMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_SCHEDULER_DELAY_MS', smokeMode ? 1500 : 120),
   maxProbeSlowFrames: envNumber('VT_SMOOTHNESS_MAX_PROBE_SLOW_FRAMES', smokeMode ? 160 : 8),
   maxProbeTextureUploadMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_TEXTURE_UPLOAD_MS', smokeMode ? 50 : 2),
+  maxProbeWorkChunkMs: envNumber('VT_SMOOTHNESS_MAX_PROBE_WORK_CHUNK_MS', smokeMode ? 500 : 12),
   maxRafDeltaMs: envNumber('VT_SMOOTHNESS_MAX_RAF_DELTA_MS', smokeMode ? 900 : 120),
   maxRecentEvictionReRequestRatio: envNumber('VT_SMOOTHNESS_MAX_RECENT_EVICTION_RE_REQUEST_RATIO', smokeMode ? 1_000_000 : 0.03),
   maxRepeatedReloadRatio: envNumber('VT_SMOOTHNESS_MAX_REPEATED_RELOAD_RATIO', smokeMode ? 1_000_000 : 0.02),
+  maxUnsettledPhases: envNumber('VT_SMOOTHNESS_MAX_UNSETTLED_PHASES', smokeMode ? 99 : 0),
+  maxWorkerInFlightBytes: envNumber('VT_SMOOTHNESS_MAX_WORKER_IN_FLIGHT_BYTES', smokeMode ? 64 * 1024 * 1024 : 4 * 1024 * 1024),
+  maxWorkerLatencyMs: envNumber('VT_SMOOTHNESS_MAX_WORKER_LATENCY_MS', smokeMode ? 1500 : 250),
+  maxWorkerQueueDepth: envNumber('VT_SMOOTHNESS_MAX_WORKER_QUEUE_DEPTH', smokeMode ? 96 : 16),
   minExactHitRatio: envNumber('VT_SMOOTHNESS_MIN_EXACT_HIT_RATIO', smokeMode ? 0 : 0.95),
   minRafSamples: envNumber('VT_SMOOTHNESS_MIN_RAF_SAMPLES', smokeMode ? 60 : 180),
   probeP95Ms: envNumber('VT_SMOOTHNESS_PROBE_P95_MS', smokeMode ? 220 : 20),
@@ -97,6 +114,9 @@ const benchmarkConfig = {
   requireProbePerformance: !allowMissingProbe,
   smokeMode,
   pointerStepDelayMs: envNumber('VT_SMOOTHNESS_POINTER_STEP_DELAY_MS', smokeMode ? 55 : 45),
+  settlePendingPagesThreshold: envNumber('VT_SMOOTHNESS_SETTLE_PENDING_PAGES_THRESHOLD', smokeMode ? 96 : 0),
+  settleStableSamples: envNumber('VT_SMOOTHNESS_SETTLE_STABLE_SAMPLES', smokeMode ? 2 : 4),
+  settleStableWindowMs: envNumber('VT_SMOOTHNESS_SETTLE_STABLE_WINDOW_MS', smokeMode ? 180 : 350),
   warmupMs: envNumber('VT_SMOOTHNESS_WARMUP_MS', smokeMode ? 750 : 1500),
   wheelBurstDelayMs: envNumber('VT_SMOOTHNESS_WHEEL_BURST_DELAY_MS', smokeMode ? 120 : 90),
 };
@@ -115,6 +135,23 @@ Key overrides:
   VT_SMOOTHNESS_MAX_RECENT_EVICTION_RE_REQUEST_RATIO=0.03
   VT_SMOOTHNESS_RAF_P95_MS=20
   VT_SMOOTHNESS_RAF_P99_MS=33
+  VT_SMOOTHNESS_INPUT_RAF_P95_MS=24
+  VT_SMOOTHNESS_MAX_INPUT_RAF_DELTA_MS=120
+  VT_SMOOTHNESS_MAX_NAV_TO_CANVAS_MS=4500
+  VT_SMOOTHNESS_MAX_NAV_TO_PROBE_READY_MS=6000
+  VT_SMOOTHNESS_MAX_FIRST_USABLE_PROBE_READY_MS=6500
+  VT_SMOOTHNESS_MAX_PHASE_SETTLE_MS=1400
+  VT_SMOOTHNESS_SETTLE_PENDING_PAGES_THRESHOLD=0
+  VT_SMOOTHNESS_SETTLE_STABLE_WINDOW_MS=350
+  VT_SMOOTHNESS_MAX_ATLAS_UPLOADS_PER_CHUNK=8
+  VT_SMOOTHNESS_MAX_PAGE_TABLE_UPLOADS_PER_CHUNK=128
+  VT_SMOOTHNESS_MAX_PROBE_PLAN_MS=8
+  VT_SMOOTHNESS_MAX_PROBE_PAGE_GENERATION_MS=50
+  VT_SMOOTHNESS_MAX_PROBE_WORK_CHUNK_MS=12
+  VT_SMOOTHNESS_MAX_PROBE_SCHEDULER_DELAY_MS=120
+  VT_SMOOTHNESS_MAX_WORKER_QUEUE_DEPTH=16
+  VT_SMOOTHNESS_MAX_WORKER_IN_FLIGHT_BYTES=4194304
+  VT_SMOOTHNESS_MAX_WORKER_LATENCY_MS=250
 `);
   process.exit(0);
 }
@@ -142,6 +179,10 @@ const firstFiniteNumber = (source, names) => {
 const countArray = (value) => Array.isArray(value) ? value.length : undefined;
 const numberOrNull = (value) => Number.isFinite(value) ? round(value) : null;
 const finiteOrNull = (value) => Number.isFinite(value) ? value : null;
+const maxNullable = (...values) => {
+  const finite = values.filter((value) => Number.isFinite(value));
+  return finite.length === 0 ? null : Math.max(...finite);
+};
 
 const finiteSampleValues = (samples, read) => samples
   .map(read)
@@ -158,15 +199,39 @@ const summarizeProbePerformance = (finalPerformance, probeSamples) => {
     return {
       available: false,
       frameTimeP95Ms: null,
+      maxAllocationMs: null,
+      maxInFlightBytes: null,
       maxAdvanceMs: null,
+      maxAtlasUploadCount: null,
+      maxFillMs: null,
       maxFrameMs: null,
+      maxOldestQueuedWorkFrames: null,
       maxPageGenerationMs: null,
       maxPageTableUploadMs: null,
+      maxPageTableUploadCount: null,
+      maxPlanMs: null,
+      maxReadbackMs: null,
+      maxResolvedBasePages: null,
+      maxQueueDepth: null,
+      maxSchedulerDelayMs: null,
       maxSampledPendingPages: null,
       maxTextureUploadMs: null,
+      maxWorkChunkMs: null,
+      maxWorkerGenerationLatencyMs: null,
       pendingPages: null,
+      pendingReadbacks: null,
+      queueDepth: null,
       slowFrameBudgetMs: null,
       slowFrameCount: null,
+      staleDrops: null,
+      staleAtlasUploadDrops: null,
+      stalePageTableUploadDrops: null,
+      staleQueuedDrops: null,
+      workerAvailable: false,
+      workerCount: null,
+      workerFallbackPages: null,
+      workerGeneratedPages: null,
+      workerLastError: '',
     };
   }
 
@@ -174,19 +239,116 @@ const summarizeProbePerformance = (finalPerformance, probeSamples) => {
     samples,
     (sample) => sample.performance?.pendingPages,
   );
+  const maxSampledInFlightBytes = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.inFlightBytes,
+  );
+  const maxSampledOldestQueuedWorkFrames = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.oldestQueuedWorkFrames,
+  );
+  const maxSampledQueueDepth = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.queueDepth,
+  );
+  const maxSampledWorkerLatencyMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.maxWorkerGenerationLatencyMs,
+  );
+  const maxSampledAllocationMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastAllocationMs,
+  );
+  const maxSampledAtlasUploadCount = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastAtlasUploadCount,
+  );
+  const maxSampledFillMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastFillMs,
+  );
+  const maxSampledPageGenerationMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastPageGenerationMs,
+  );
+  const maxSampledPageTableUploadCount = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastPageTableUploadCount,
+  );
+  const maxSampledPageTableUploadMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastPageTableUploadMs,
+  );
+  const maxSampledPlanMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastPlanMs,
+  );
+  const maxSampledReadbackMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastReadbackMs,
+  );
+  const maxSampledResolvedBasePages = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastResolvedBasePages,
+  );
+  const maxSampledSchedulerDelayMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastSchedulerDelayMs,
+  );
+  const maxSampledTextureUploadMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastTextureUploadMs,
+  );
+  const maxSampledWorkChunkMs = maxSampleValue(
+    samples,
+    (sample) => sample.performance?.lastWorkChunkMs,
+  );
 
   return {
     available: true,
     frameTimeP95Ms: numberOrNull(finalPerformance.frameTimeP95Ms),
+    maxAllocationMs: maxNullable(finalPerformance.maxAllocationMs, maxSampledAllocationMs),
+    maxInFlightBytes: maxNullable(finalPerformance.inFlightBytes, maxSampledInFlightBytes),
     maxAdvanceMs: numberOrNull(finalPerformance.maxAdvanceMs),
+    maxAtlasUploadCount: maxNullable(finalPerformance.lastAtlasUploadCount, maxSampledAtlasUploadCount),
+    maxFillMs: maxNullable(finalPerformance.maxFillMs, maxSampledFillMs),
     maxFrameMs: numberOrNull(finalPerformance.maxFrameMs),
-    maxPageGenerationMs: numberOrNull(finalPerformance.maxPageGenerationMs),
-    maxPageTableUploadMs: numberOrNull(finalPerformance.maxPageTableUploadMs),
+    maxOldestQueuedWorkFrames: maxNullable(
+      finalPerformance.oldestQueuedWorkFrames,
+      maxSampledOldestQueuedWorkFrames,
+    ),
+    maxPageGenerationMs: maxNullable(finalPerformance.maxPageGenerationMs, maxSampledPageGenerationMs),
+    maxPageTableUploadMs: maxNullable(finalPerformance.maxPageTableUploadMs, maxSampledPageTableUploadMs),
+    maxPageTableUploadCount: maxNullable(
+      finalPerformance.lastPageTableUploadCount,
+      maxSampledPageTableUploadCount,
+    ),
+    maxPlanMs: maxNullable(finalPerformance.maxPlanMs, maxSampledPlanMs),
+    maxReadbackMs: maxNullable(finalPerformance.maxReadbackMs, maxSampledReadbackMs),
+    maxResolvedBasePages: maxNullable(finalPerformance.lastResolvedBasePages, maxSampledResolvedBasePages),
+    maxQueueDepth: maxNullable(finalPerformance.queueDepth, maxSampledQueueDepth),
+    maxSchedulerDelayMs: maxNullable(finalPerformance.maxSchedulerDelayMs, maxSampledSchedulerDelayMs),
     maxSampledPendingPages: maxSampledPendingPages ?? null,
-    maxTextureUploadMs: numberOrNull(finalPerformance.maxTextureUploadMs),
+    maxTextureUploadMs: maxNullable(finalPerformance.maxTextureUploadMs, maxSampledTextureUploadMs),
+    maxWorkChunkMs: maxNullable(finalPerformance.maxWorkChunkMs, maxSampledWorkChunkMs),
+    maxWorkerGenerationLatencyMs: maxNullable(
+      finalPerformance.maxWorkerGenerationLatencyMs,
+      maxSampledWorkerLatencyMs,
+    ),
     pendingPages: numberOrNull(finalPerformance.pendingPages),
+    pendingReadbacks: numberOrNull(finalPerformance.pendingReadbacks),
+    queueDepth: numberOrNull(finalPerformance.queueDepth),
     slowFrameBudgetMs: numberOrNull(finalPerformance.slowFrameBudgetMs),
     slowFrameCount: numberOrNull(finalPerformance.slowFrameCount),
+    staleDrops: numberOrNull(finalPerformance.staleDrops),
+    staleAtlasUploadDrops: numberOrNull(finalPerformance.staleAtlasUploadDrops),
+    stalePageTableUploadDrops: numberOrNull(finalPerformance.stalePageTableUploadDrops),
+    staleQueuedDrops: numberOrNull(finalPerformance.staleQueuedDrops),
+    workerAvailable: finalPerformance.workerAvailable === true,
+    workerCount: numberOrNull(finalPerformance.workerCount),
+    workerFallbackPages: numberOrNull(finalPerformance.workerFallbackPages),
+    workerGeneratedPages: numberOrNull(finalPerformance.workerGeneratedPages),
+    workerLastError: finalPerformance.workerLastError ?? '',
   };
 };
 
@@ -339,11 +501,6 @@ const summarizeQualityGates = (finalProbe) => {
   };
 };
 
-const maxNullable = (...values) => {
-  const finite = values.filter((value) => Number.isFinite(value));
-  return finite.length === 0 ? null : Math.max(...finite);
-};
-
 const sampleNearInput = (timeMs, inputTimes) =>
   Number.isFinite(timeMs) &&
   inputTimes.some((inputTime) => timeMs >= inputTime && timeMs - inputTime <= benchmarkConfig.inputCorrelationWindowMs);
@@ -351,6 +508,183 @@ const sampleNearInput = (timeMs, inputTimes) =>
 const maxInteractionSampleValue = (samples, read) => {
   const values = finiteSampleValues(samples, read);
   return values.length === 0 ? null : round(Math.max(...values));
+};
+
+const summarizeColdLoad = (result) => {
+  const coldLoad = result.coldLoad ?? {};
+
+  return {
+    firstUsableProbeReadyMs: numberOrNull(coldLoad.firstUsableProbeReadyMs),
+    loadEventEndMs: numberOrNull(coldLoad.loadEventEndMs),
+    navigationToCanvasMs: numberOrNull(coldLoad.canvasFoundMs),
+    navigationToProbePresentMs: numberOrNull(coldLoad.probePresentMs),
+    navigationToProbeReadyMs: numberOrNull(coldLoad.probeReadyMs),
+    source: coldLoad.source ?? 'unknown',
+  };
+};
+
+const phaseSampleRequestKey = (sample) => {
+  const detail = sample?.detail ?? {};
+  const signature = typeof detail.requestSignature === 'string' ? detail.requestSignature : '';
+  if (signature === '') return '';
+  const mip = Number.isFinite(detail.requestedMip) ? detail.requestedMip : 'unknown';
+  return `${mip}:${signature}`;
+};
+
+const derivedPhaseSummary = (phase, sample, stableSamples, stableWindowMs, settled) => ({
+  available: sample !== undefined,
+  endMs: phase.endMs,
+  label: phase.label,
+  observedAtMs: sample?.timeMs,
+  pendingPages: sample?.performance?.pendingPages,
+  requestKey: sample === undefined ? null : phaseSampleRequestKey(sample),
+  requestedMip: sample?.detail?.requestedMip,
+  sampleCount: phase.sampleCount,
+  settled,
+  settleTimeMs: settled && Number.isFinite(sample?.timeMs) && Number.isFinite(phase.endMs)
+    ? sample.timeMs - phase.endMs
+    : undefined,
+  stableSamples,
+  stableWindowMs,
+  startMs: phase.startMs,
+});
+
+const derivePhaseSettles = (result) => {
+  const phaseRuns = result.phaseRuns ?? [];
+  const probeSamples = result.probeSamples ?? [];
+
+  return phaseRuns.map((phase, index) => {
+    const nextStartMs = phaseRuns[index + 1]?.startMs ?? Infinity;
+    const samples = probeSamples.filter((sample) =>
+      Number.isFinite(sample.timeMs) &&
+      sample.timeMs >= phase.endMs &&
+      sample.timeMs < nextStartMs
+    );
+    const summarizedPhase = { ...phase, sampleCount: samples.length };
+    let stableWindowStartMs;
+    let stableSamples = 0;
+    let stableWindowMs = 0;
+    let lastKey = '';
+
+    for (const sample of samples) {
+      const pendingPages = sample.performance?.pendingPages;
+      const requestKey = phaseSampleRequestKey(sample);
+      const ready = Number.isFinite(pendingPages) &&
+        pendingPages <= benchmarkConfig.settlePendingPagesThreshold &&
+        requestKey !== '' &&
+        sample.camera?.interactionActive !== true;
+
+      if (!ready) {
+        stableWindowStartMs = undefined;
+        stableSamples = 0;
+        stableWindowMs = 0;
+        lastKey = requestKey;
+        continue;
+      }
+
+      if (requestKey !== lastKey || stableWindowStartMs === undefined) {
+        stableWindowStartMs = sample.timeMs;
+        stableSamples = 0;
+        stableWindowMs = 0;
+        lastKey = requestKey;
+      }
+
+      stableSamples += 1;
+      stableWindowMs = sample.timeMs - stableWindowStartMs;
+      if (
+        stableSamples >= benchmarkConfig.settleStableSamples &&
+        stableWindowMs >= benchmarkConfig.settleStableWindowMs
+      ) {
+        return derivedPhaseSummary(summarizedPhase, sample, stableSamples, stableWindowMs, true);
+      }
+    }
+
+    const lastSample = samples[samples.length - 1];
+    return derivedPhaseSummary(summarizedPhase, lastSample, stableSamples, stableWindowMs, false);
+  });
+};
+
+const summarizeZoomSettle = (result) => {
+  const rawPhases = Array.isArray(result.phaseSettles) && result.phaseSettles.length > 0
+    ? result.phaseSettles
+    : derivePhaseSettles(result);
+  const phases = rawPhases.map((phase) => ({
+    available: phase.available === true,
+    inputDurationMs: numberOrNull(
+      Number.isFinite(phase.endMs) && Number.isFinite(phase.startMs)
+        ? phase.endMs - phase.startMs
+        : undefined,
+    ),
+    label: phase.label,
+    observedAtMs: numberOrNull(phase.observedAtMs),
+    pendingPages: numberOrNull(phase.pendingPages),
+    requestKey: phase.requestKey ?? null,
+    requestedMip: Number.isFinite(phase.requestedMip) ? phase.requestedMip : null,
+    sampleCount: phase.sampleCount ?? 0,
+    settled: phase.settled === true,
+    settleTimeMs: numberOrNull(phase.settleTimeMs),
+    stableSamples: phase.stableSamples ?? 0,
+    stableWindowMs: numberOrNull(phase.stableWindowMs),
+  }));
+  const availablePhases = phases.filter((phase) => phase.available);
+  const settledPhases = phases.filter((phase) => phase.settled);
+  const settleTimes = settledPhases
+    .map((phase) => phase.settleTimeMs)
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    availablePhases: availablePhases.length,
+    maxSettleTimeMs: settleTimes.length === 0 ? null : round(Math.max(...settleTimes)),
+    pendingPagesThreshold: benchmarkConfig.settlePendingPagesThreshold,
+    phases,
+    p95SettleTimeMs: settleTimes.length === 0 ? null : round(percentile(settleTimes, 0.95)),
+    settledPhases: settledPhases.length,
+    stableSamplesRequired: benchmarkConfig.settleStableSamples,
+    stableWindowMsRequired: benchmarkConfig.settleStableWindowMs,
+    totalPhases: phases.length,
+    unsettledPhases: phases.filter((phase) => phase.available && !phase.settled).length,
+  };
+};
+
+const summarizePhaseHitches = (result) => {
+  const phaseRuns = result.phaseRuns ?? [];
+  const rafSamples = result.rafSamples ?? [];
+  const phases = phaseRuns.map((phase) => {
+    const windowEndMs = phase.endMs + benchmarkConfig.inputCorrelationWindowMs;
+    const samples = rafSamples.filter((sample) =>
+      Number.isFinite(sample.timeMs) &&
+      sample.timeMs >= phase.startMs &&
+      sample.timeMs <= windowEndMs
+    );
+    const deltas = samples.map((sample) => sample.deltaMs).filter((value) => Number.isFinite(value));
+    const slowFrames = deltas.filter((delta) => delta > benchmarkConfig.longFrameMs);
+
+    return {
+      inputDurationMs: numberOrNull(phase.endMs - phase.startMs),
+      label: phase.label,
+      longFrameRatio: deltas.length === 0 ? 0 : round(slowFrames.length / deltas.length),
+      maxMs: deltas.length === 0 ? null : round(Math.max(...deltas)),
+      p95Ms: deltas.length === 0 ? null : round(percentile(deltas, 0.95)),
+      samples: deltas.length,
+      slowFrames: slowFrames.length,
+      windowEndMs: numberOrNull(windowEndMs),
+    };
+  });
+  const maxValues = phases.map((phase) => phase.maxMs).filter((value) => Number.isFinite(value));
+  const p95Values = phases.map((phase) => phase.p95Ms).filter((value) => Number.isFinite(value));
+  const slowFrames = phases.reduce((total, phase) => total + phase.slowFrames, 0);
+  const sampleCount = phases.reduce((total, phase) => total + phase.samples, 0);
+
+  return {
+    availablePhases: phases.filter((phase) => phase.samples > 0).length,
+    inputCorrelationWindowMs: benchmarkConfig.inputCorrelationWindowMs,
+    longFrameRatio: sampleCount === 0 ? 0 : round(slowFrames / sampleCount),
+    phases,
+    slowFrames,
+    totalPhases: phases.length,
+    worstMaxMs: maxValues.length === 0 ? null : round(Math.max(...maxValues)),
+    worstP95Ms: p95Values.length === 0 ? null : round(Math.max(...p95Values)),
+  };
 };
 
 const summarizeInteraction = (result) => {
@@ -362,6 +696,7 @@ const summarizeInteraction = (result) => {
     .sort((a, b) => a - b);
   const rafSamples = result.rafSamples ?? [];
   const inputRafSamples = rafSamples.filter((sample) => sampleNearInput(sample.timeMs, inputTimes));
+  const inputRafLongFrames = inputRafSamples.filter((sample) => sample.deltaMs > benchmarkConfig.longFrameMs);
   const probeSamples = result.probeSamples ?? [];
   const interactionProbeSamples = probeSamples.filter((sample) =>
     sample.camera?.interactionActive === true || sampleNearInput(sample.timeMs, inputTimes)
@@ -402,26 +737,203 @@ const summarizeInteraction = (result) => {
     },
     inputEvents: inputTimes.length,
     inputRaf: {
+      longFrameRatio: inputRafSamples.length === 0 ? 0 : round(inputRafLongFrames.length / inputRafSamples.length),
       maxMs: round(Math.max(0, ...inputRafSamples.map((sample) => sample.deltaMs))),
       p95Ms: round(percentile(inputRafSamples.map((sample) => sample.deltaMs), 0.95)),
       samples: inputRafSamples.length,
+      slowFrames: inputRafLongFrames.length,
     },
     probe: {
       interactionSamples: interactionProbeSamples.length,
       maxAdvanceMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastAdvanceMs),
+      maxAtlasUploadCount: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastAtlasUploadCount),
+      maxInFlightBytes: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.inFlightBytes),
       maxObservedAdvanceMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.maxAdvanceMs),
+      maxOldestQueuedWorkFrames: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.oldestQueuedWorkFrames),
+      maxPageGenerationMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastPageGenerationMs),
+      maxPageTableUploadCount: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastPageTableUploadCount),
+      maxPageTableUploadMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastPageTableUploadMs),
       maxPendingPages: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.pendingPages),
+      maxPlanMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastPlanMs),
+      maxQueueDepth: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.queueDepth),
       maxReadbackMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastReadbackMs),
+      maxSchedulerDelayMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastSchedulerDelayMs),
+      maxTextureUploadMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastTextureUploadMs),
       maxWorkChunkMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastWorkChunkMs),
       maxObservedWorkChunkMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.maxWorkChunkMs),
+      maxWorkerGenerationLatencyMs: maxInteractionSampleValue(interactionProbeSamples, (sample) => sample.performance?.lastWorkerGenerationLatencyMs),
       readbacksDuringInput: readbackCountDuringInput,
     },
+  };
+};
+
+const summarizeUploadBursts = (result, probePerformance) => ({
+  available: probePerformance.available,
+  cumulativeBytesUploaded: firstFiniteNumber(result.finalProbe, ['bytesUploaded']) ?? null,
+  maxAllocationMs: numberOrNull(probePerformance.maxAllocationMs),
+  maxAtlasUploadCount: numberOrNull(probePerformance.maxAtlasUploadCount),
+  maxFillMs: numberOrNull(probePerformance.maxFillMs),
+  maxPageGenerationMs: numberOrNull(probePerformance.maxPageGenerationMs),
+  maxPageTableUploadCount: numberOrNull(probePerformance.maxPageTableUploadCount),
+  maxPageTableUploadMs: numberOrNull(probePerformance.maxPageTableUploadMs),
+  maxTextureUploadMs: numberOrNull(probePerformance.maxTextureUploadMs),
+});
+
+const summarizeDecomplection = ({
+  coldLoad,
+  finalDetail,
+  interaction,
+  phaseHitches,
+  probePerformance,
+  raf,
+  uploadBursts,
+  zoomSettle,
+}) => {
+  const missingProbeTodos = [
+    'TODO probe cameraInput.handlerDurationMs: direct wheel/pointer handler self-time; current benchmark uses input-correlated rAF as the hitch-catching proxy.',
+    'TODO probe uploadQueue.waitMsByPageOrPriority: queue age is exposed only as oldestQueuedWorkFrames, not per-page wait timing.',
+    'TODO probe textureUpload.bytesPerChunk: cumulative bytesUploaded exists, but burst bytes are not exposed per upload chunk.',
+    'TODO probe renderFrame.gpuMs: WebGL timer-query/GPU frame timing is not exposed; current render timing is rAF/probe CPU frame timing.',
+  ];
+
+  if (probePerformance.maxPlanMs === null) {
+    missingProbeTodos.push('TODO probe pageRequestPlanning.lastPlanMs/maxPlanMs: required for separate request-planning timing.');
+  }
+
+  return {
+    cameraInput: {
+      directTimingAvailable: false,
+      inputEvents: interaction.inputEvents,
+      inputRafMaxMs: interaction.inputRaf.maxMs,
+      inputRafP95Ms: interaction.inputRaf.p95Ms,
+      phaseWorstMaxMs: phaseHitches.worstMaxMs,
+      phaseWorstP95Ms: phaseHitches.worstP95Ms,
+      proxy: 'input-correlated requestAnimationFrame deltas',
+    },
+    initialLoad: coldLoad,
+    missingProbeTodos,
+    pageRequestPlanning: {
+      available: probePerformance.maxPlanMs !== null,
+      interactionMaxPlanMs: interaction.probe.maxPlanMs,
+      maxPlanMs: numberOrNull(probePerformance.maxPlanMs),
+      requestedPages: Number.isFinite(finalDetail?.requestedPages) ? finalDetail.requestedPages : null,
+    },
+    renderFrame: {
+      browserRafMaxMs: raf.maxMs,
+      browserRafP95Ms: raf.p95Ms,
+      browserRafP99Ms: raf.p99Ms,
+      probeFrameMaxMs: probePerformance.maxFrameMs,
+      probeFrameP95Ms: probePerformance.frameTimeP95Ms,
+      probeSlowFrames: probePerformance.slowFrameCount,
+    },
+    uploadQueue: {
+      maxAtlasUploadCount: uploadBursts.maxAtlasUploadCount,
+      maxOldestQueuedWorkFrames: probePerformance.maxOldestQueuedWorkFrames,
+      maxPageTableUploadCount: uploadBursts.maxPageTableUploadCount,
+      maxPendingPages: maxNullable(probePerformance.pendingPages, probePerformance.maxSampledPendingPages),
+      maxTextureUploadMs: uploadBursts.maxTextureUploadMs,
+      pendingReadbacks: probePerformance.pendingReadbacks,
+      staleAtlasUploadDrops: probePerformance.staleAtlasUploadDrops,
+      stalePageTableUploadDrops: probePerformance.stalePageTableUploadDrops,
+      staleQueuedDrops: probePerformance.staleQueuedDrops,
+    },
+    workerPageGeneration: {
+      available: probePerformance.workerAvailable,
+      maxInFlightBytes: probePerformance.maxInFlightBytes,
+      maxPageGenerationMs: uploadBursts.maxPageGenerationMs,
+      maxQueueDepth: probePerformance.maxQueueDepth,
+      maxWorkerGenerationLatencyMs: probePerformance.maxWorkerGenerationLatencyMs,
+      staleDrops: probePerformance.staleDrops,
+      workerCount: probePerformance.workerCount,
+      workerFallbackPages: probePerformance.workerFallbackPages,
+      workerGeneratedPages: probePerformance.workerGeneratedPages,
+      workerLastError: probePerformance.workerLastError,
+    },
+    zoomRotationSettle: zoomSettle,
   };
 };
 
 const recommendationsFor = (summary) => {
   const recommendations = [];
   const probe = summary.probePerformance;
+
+  if (
+    (summary.coldLoad.navigationToCanvasMs ?? 0) > benchmarkConfig.maxNavToCanvasMs ||
+    (summary.coldLoad.navigationToProbeReadyMs ?? 0) > benchmarkConfig.maxNavToProbeReadyMs ||
+    (summary.coldLoad.firstUsableProbeReadyMs ?? 0) > benchmarkConfig.maxFirstUsableProbeReadyMs
+  ) {
+    recommendations.push(
+      'Cold load exceeded the navigation-to-canvas or probe-ready budget; inspect initial VT page generation, uploads, and preview readbacks.',
+    );
+  }
+
+  if (
+    (summary.zoomSettle.maxSettleTimeMs ?? 0) > benchmarkConfig.maxPhaseSettleMs ||
+    summary.zoomSettle.unsettledPhases > benchmarkConfig.maxUnsettledPhases
+  ) {
+    recommendations.push(
+      'Zoom/drag phases did not settle quickly; verify pending page drain and whether requested mip/page signatures churn after input ends.',
+    );
+  }
+
+  if (
+    summary.interaction.inputRaf.p95Ms > benchmarkConfig.maxInputRafP95Ms ||
+    summary.interaction.inputRaf.maxMs > benchmarkConfig.maxInputRafDeltaMs
+  ) {
+    recommendations.push(
+      'Input-correlated rAF hitches exceeded budget; inspect zoom/rotate handlers and VT scheduling around wheel and pointer events.',
+    );
+  }
+
+  if (
+    (summary.phaseHitches.worstP95Ms ?? 0) > benchmarkConfig.maxInputRafP95Ms ||
+    (summary.phaseHitches.worstMaxMs ?? 0) > benchmarkConfig.maxInputRafDeltaMs
+  ) {
+    recommendations.push(
+      'A specific zoom/rotate phase hitched; inspect phaseHitches for the label and compare it with planning, worker, and upload burst rows.',
+    );
+  }
+
+  if (
+    probe.available &&
+    (
+      (probe.maxPlanMs ?? 0) > benchmarkConfig.maxProbePlanMs ||
+      (probe.maxSchedulerDelayMs ?? 0) > benchmarkConfig.maxProbeSchedulerDelayMs ||
+      (probe.maxWorkChunkMs ?? 0) > benchmarkConfig.maxProbeWorkChunkMs
+    )
+  ) {
+    recommendations.push(
+      'VT planning or scheduler chunks exceeded budget; inspect maxPlanMs, maxSchedulerDelayMs, and maxWorkChunkMs before attributing the hitch to rendering.',
+    );
+  }
+
+  if (
+    probe.available &&
+    (
+      (probe.maxQueueDepth ?? 0) > benchmarkConfig.maxWorkerQueueDepth ||
+      (probe.maxInFlightBytes ?? 0) > benchmarkConfig.maxWorkerInFlightBytes ||
+      (probe.maxWorkerGenerationLatencyMs ?? 0) > benchmarkConfig.maxWorkerLatencyMs ||
+      (probe.maxOldestQueuedWorkFrames ?? 0) > benchmarkConfig.maxOldestQueuedWorkFrames
+    )
+  ) {
+    recommendations.push(
+      'Worker-backed page generation showed queue saturation or stale work; inspect queueDepth, worker latency, and oldestQueuedWorkFrames.',
+    );
+  }
+
+  if (
+    summary.uploadBursts.available &&
+    (
+      (summary.uploadBursts.maxAtlasUploadCount ?? 0) > benchmarkConfig.maxAtlasUploadsPerChunk ||
+      (summary.uploadBursts.maxPageTableUploadCount ?? 0) > benchmarkConfig.maxPageTableUploadsPerChunk ||
+      (summary.uploadBursts.maxPageGenerationMs ?? 0) > benchmarkConfig.maxProbePageGenerationMs ||
+      (summary.uploadBursts.maxTextureUploadMs ?? 0) > benchmarkConfig.maxProbeTextureUploadMs
+    )
+  ) {
+    recommendations.push(
+      'Texture upload or page-generation bursts exceeded budget; inspect uploadBursts and whether queue draining coincides with input phases.',
+    );
+  }
 
   if (
     summary.raf.p95Ms > benchmarkConfig.rafP95Ms ||
@@ -684,6 +1196,16 @@ const benchmarkExpression = `
       uploadThrashRatio: probe.uploadThrashRatio,
     };
   };
+  const navigationEntry = performance.getEntriesByType('navigation')[0];
+  const navigationStartMs = Number.isFinite(navigationEntry?.startTime) ? navigationEntry.startTime : 0;
+  const finiteTiming = (value) => Number.isFinite(value) ? Number(value.toFixed(2)) : undefined;
+  const coldLoad = {
+    loadEventEndMs: finiteTiming(navigationEntry?.loadEventEnd),
+    source: navigationEntry === undefined ? 'performance-now' : 'navigation-entry',
+  };
+  const markColdLoad = (key) => {
+    if (coldLoad[key] === undefined) coldLoad[key] = finiteTiming(performance.now() - navigationStartMs);
+  };
   const readyDeadline = performance.now() + config.readyTimeoutMs;
   let canvas = document.querySelector('canvas[aria-label="Virtual texturing terrain"]');
   let probe = readProbe();
@@ -691,9 +1213,19 @@ const benchmarkExpression = `
   while (performance.now() < readyDeadline) {
     canvas = document.querySelector('canvas[aria-label="Virtual texturing terrain"]');
     probe = readProbe();
+    if (canvas !== null) markColdLoad('canvasFoundMs');
+    if (probe !== undefined) markColdLoad('probePresentMs');
     const looseReady = probe === undefined || probe.ready === true || probe.error !== '';
     const strictError = typeof probe?.error === 'string' && probe.error !== '';
     const strictReady = probe !== undefined && (probe.ready === true || strictError);
+    if (strictReady || probe?.ready === true) markColdLoad('probeReadyMs');
+    if (
+      probe?.ready === true &&
+      Number.isFinite(probe.performance?.pendingPages) &&
+      probe.performance.pendingPages <= config.settlePendingPagesThreshold
+    ) {
+      markColdLoad('firstUsableProbeReadyMs');
+    }
     if (canvas !== null && (config.requireProbe ? strictReady : looseReady)) break;
     await waitFrame();
   }
@@ -701,6 +1233,7 @@ const benchmarkExpression = `
   if (canvas === null) {
     return {
       ok: false,
+      coldLoad,
       setupError: 'Virtual texturing terrain canvas was not found',
       url: location.href,
     };
@@ -713,6 +1246,7 @@ const benchmarkExpression = `
         height: canvas.height,
         width: canvas.width,
       },
+      coldLoad,
       finalProbe: probe,
       setupError: 'window.__royalVirtualTextureProbe was not found before the ready timeout',
       url: location.href,
@@ -726,6 +1260,7 @@ const benchmarkExpression = `
         height: canvas.height,
         width: canvas.width,
       },
+      coldLoad,
       finalProbe: probe,
       setupError: probe.error
         ? 'window.__royalVirtualTextureProbe reported an error before becoming ready'
@@ -738,8 +1273,16 @@ const benchmarkExpression = `
   await wait(config.warmupMs);
 
   const initialProbe = readProbe();
+  if (
+    initialProbe?.ready === true &&
+    Number.isFinite(initialProbe.performance?.pendingPages) &&
+    initialProbe.performance.pendingPages <= config.settlePendingPagesThreshold
+  ) {
+    markColdLoad('firstUsableProbeReadyMs');
+  }
   const rafDeltas = [];
   const rafSamples = [];
+  const phaseRuns = [];
   const pointerEvents = [];
   const probeSamples = [];
   const wheelEvents = [];
@@ -760,6 +1303,7 @@ const benchmarkExpression = `
     if (nextProbe?.performance !== undefined) {
       probeSamples.push({
         camera: nextProbe.camera,
+        detail: nextProbe.detail,
         frameCount: nextProbe.frameCount,
         performance: nextProbe.performance,
         timeMs: Number(now.toFixed(2)),
@@ -812,6 +1356,7 @@ const benchmarkExpression = `
     const rect = canvas.getBoundingClientRect();
     const startX = rect.left + rect.width * phase.startX;
     const startY = rect.top + rect.height * phase.startY;
+    const phaseStartMs = performance.now();
     dispatchPointer('pointerdown', startX, startY, 1);
     for (let step = 1; step <= phase.steps; step += 1) {
       if (performance.now() >= start + config.durationMs) break;
@@ -821,24 +1366,29 @@ const benchmarkExpression = `
       await wait(config.pointerStepDelayMs);
     }
     dispatchPointer('pointerup', startX + phase.dx, startY + phase.dy, 0);
+    return {
+      endMs: Number(performance.now().toFixed(2)),
+      label: phase.label,
+      startMs: Number(phaseStartMs.toFixed(2)),
+    };
   };
 
   requestAnimationFrame(frameLoop);
 
   const start = performance.now();
   const interactionPhases = [
-    { at: 220, deltaY: -220, dx: 148, dy: -24, startX: 0.42, startY: 0.55, steps: 10, wheelEvery: 2 },
-    { at: 1320, deltaY: 220, dx: -132, dy: 28, startX: 0.58, startY: 0.48, steps: 10, wheelEvery: 2 },
-    { at: 2440, deltaY: -180, dx: 104, dy: 34, startX: 0.46, startY: 0.52, steps: 8, wheelEvery: 2 },
-    { at: 4300, deltaY: 180, dx: -116, dy: -32, startX: 0.55, startY: 0.5, steps: 8, wheelEvery: 2 },
-    { at: 5550, deltaY: -160, dx: 92, dy: 22, startX: 0.48, startY: 0.57, steps: 7, wheelEvery: 2 },
+    { at: 220, deltaY: -220, dx: 148, dy: -24, label: 'zoom-in rotate-right', startX: 0.42, startY: 0.55, steps: 10, wheelEvery: 2 },
+    { at: 1320, deltaY: 220, dx: -132, dy: 28, label: 'zoom-out rotate-left', startX: 0.58, startY: 0.48, steps: 10, wheelEvery: 2 },
+    { at: 2440, deltaY: -180, dx: 104, dy: 34, label: 'zoom-in rotate-right reprise', startX: 0.46, startY: 0.52, steps: 8, wheelEvery: 2 },
+    { at: 4300, deltaY: 180, dx: -116, dy: -32, label: 'zoom-out rotate-left reprise', startX: 0.55, startY: 0.5, steps: 8, wheelEvery: 2 },
+    { at: 5550, deltaY: -160, dx: 92, dy: 22, label: 'final zoom-in rotate', startX: 0.48, startY: 0.57, steps: 7, wheelEvery: 2 },
   ];
 
   for (const phase of interactionPhases) {
     if (performance.now() >= start + config.durationMs) break;
     const waitMs = start + phase.at - performance.now();
     if (waitMs > 0) await wait(waitMs);
-    await performDragZoomPhase(phase);
+    phaseRuns.push(await performDragZoomPhase(phase));
   }
 
   const remainingMs = start + config.durationMs - performance.now();
@@ -853,8 +1403,10 @@ const benchmarkExpression = `
       height: canvas.height,
       width: canvas.width,
     },
+    coldLoad,
     finalProbe,
     initialProbe,
+    phaseRuns,
     pointerEvents,
     probeSamples,
     rafDeltas,
@@ -870,10 +1422,14 @@ const summarize = (result) => {
   const longFrames = rafDeltas.filter((delta) => delta > benchmarkConfig.longFrameMs);
   const probeSamples = result.probeSamples ?? [];
   const finalPerformance = result.finalProbe?.performance;
+  const coldLoad = summarizeColdLoad(result);
   const interaction = summarizeInteraction(result);
+  const phaseHitches = summarizePhaseHitches(result);
   const probePerformance = summarizeProbePerformance(finalPerformance, probeSamples);
   const thrash = summarizeThrash(result.finalProbe);
   const quality = summarizeQualityGates(result.finalProbe);
+  const uploadBursts = summarizeUploadBursts(result, probePerformance);
+  const zoomSettle = summarizeZoomSettle(result);
   const summarizedPerformance = finalPerformance === undefined
     ? undefined
     : {
@@ -881,10 +1437,32 @@ const summarize = (result) => {
         frameTimeSampleCount: finalPerformance.frameTimeSamples?.length ?? 0,
         frameTimeSamples: undefined,
       };
+  const raf = {
+    longFrameRatio: rafDeltas.length === 0 ? 1 : round(longFrames.length / rafDeltas.length),
+    maxMs: round(Math.max(0, ...rafDeltas)),
+    minMs: rafDeltas.length === 0 ? 0 : round(Math.min(...rafDeltas)),
+    p50Ms: round(percentile(rafDeltas, 0.5)),
+    p95Ms: round(percentile(rafDeltas, 0.95)),
+    p99Ms: round(percentile(rafDeltas, 0.99)),
+    samples: rafDeltas.length,
+    slowFrames: longFrames.length,
+  };
+  const decomplection = summarizeDecomplection({
+    coldLoad,
+    finalDetail: result.finalProbe?.detail,
+    interaction,
+    phaseHitches,
+    probePerformance,
+    raf,
+    uploadBursts,
+    zoomSettle,
+  });
 
   const summary = {
     canvas: result.canvas,
+    coldLoad,
     config: benchmarkConfig,
+    decomplection,
     finalProbe: result.finalProbe === undefined
       ? undefined
       : {
@@ -897,20 +1475,12 @@ const summarize = (result) => {
           supported: result.finalProbe.supported,
     },
     interaction,
+    phaseHitches,
     pointerEvents: result.pointerEvents?.length ?? 0,
     probePerformance,
     probeSamples: probeSamples.length,
     quality,
-    raf: {
-      longFrameRatio: rafDeltas.length === 0 ? 1 : round(longFrames.length / rafDeltas.length),
-      maxMs: round(Math.max(0, ...rafDeltas)),
-      minMs: rafDeltas.length === 0 ? 0 : round(Math.min(...rafDeltas)),
-      p50Ms: round(percentile(rafDeltas, 0.5)),
-      p95Ms: round(percentile(rafDeltas, 0.95)),
-      p99Ms: round(percentile(rafDeltas, 0.99)),
-      samples: rafDeltas.length,
-      slowFrames: longFrames.length,
-    },
+    raf,
     setup: {
       error: result.setupError ?? null,
       ok: result.ok === true,
@@ -919,8 +1489,10 @@ const summarize = (result) => {
       probeReady: result.finalProbe?.ready === true,
     },
     thrash,
+    uploadBursts,
     url: result.url,
     wheelEvents: result.wheelEvents?.length ?? 0,
+    zoomSettle,
   };
 
   summary.recommendations = recommendationsFor(summary);
@@ -930,8 +1502,15 @@ const summarize = (result) => {
 const assertSmooth = (result, exceptions) => {
   const summary = summarize(result);
   const failures = [];
+  const coldLoad = summary.coldLoad;
+  const phaseHitches = summary.phaseHitches;
   const performance = summary.probePerformance;
   const quality = summary.quality;
+  const uploadBursts = summary.uploadBursts;
+  const zoomSettle = summary.zoomSettle;
+  const failIfExceeds = (label, value, maxValue) => {
+    if (Number.isFinite(value) && value > maxValue) failures.push(`${label} ${value} > ${maxValue}`);
+  };
 
   if (result.ok !== true) {
     failures.push(result.setupError ?? 'Virtual texturing smoothness probe failed to start');
@@ -955,6 +1534,29 @@ const assertSmooth = (result, exceptions) => {
   }
   if ((Math.abs(summary.interaction.camera.distanceDelta ?? 0) < 0.05)) {
     failures.push('benchmark did not zoom the camera enough to exercise wheel interaction');
+  }
+  failIfExceeds('cold load navigation-to-canvas ms', coldLoad.navigationToCanvasMs, benchmarkConfig.maxNavToCanvasMs);
+  failIfExceeds(
+    'cold load navigation-to-probe-ready ms',
+    coldLoad.navigationToProbeReadyMs,
+    benchmarkConfig.maxNavToProbeReadyMs,
+  );
+  failIfExceeds(
+    'cold load first usable probe-ready ms',
+    coldLoad.firstUsableProbeReadyMs,
+    benchmarkConfig.maxFirstUsableProbeReadyMs,
+  );
+  failIfExceeds('input-correlated rAF p95 ms', summary.interaction.inputRaf.p95Ms, benchmarkConfig.maxInputRafP95Ms);
+  failIfExceeds(
+    'input-correlated rAF max delta ms',
+    summary.interaction.inputRaf.maxMs,
+    benchmarkConfig.maxInputRafDeltaMs,
+  );
+  failIfExceeds('zoom/rotate phase rAF p95 ms', phaseHitches.worstP95Ms, benchmarkConfig.maxInputRafP95Ms);
+  failIfExceeds('zoom/rotate phase rAF max delta ms', phaseHitches.worstMaxMs, benchmarkConfig.maxInputRafDeltaMs);
+  failIfExceeds('zoom/rotate phase settle ms', zoomSettle.maxSettleTimeMs, benchmarkConfig.maxPhaseSettleMs);
+  if (zoomSettle.unsettledPhases > benchmarkConfig.maxUnsettledPhases) {
+    failures.push(`unsettled zoom/rotate phases ${zoomSettle.unsettledPhases} > ${benchmarkConfig.maxUnsettledPhases}`);
   }
   if (summary.interaction.probe.readbacksDuringInput > benchmarkConfig.maxProbeReadbacksDuringInput) {
     failures.push(
@@ -994,9 +1596,67 @@ const assertSmooth = (result, exceptions) => {
       `probe texture upload max ${performance.maxTextureUploadMs}ms > ${benchmarkConfig.maxProbeTextureUploadMs}ms`,
     );
   }
+  if (performance.available && (performance.maxPageGenerationMs ?? 0) > benchmarkConfig.maxProbePageGenerationMs) {
+    failures.push(
+      `probe page generation max ${performance.maxPageGenerationMs}ms > ${benchmarkConfig.maxProbePageGenerationMs}ms`,
+    );
+  }
+  if (performance.available && (performance.maxPlanMs ?? 0) > benchmarkConfig.maxProbePlanMs) {
+    failures.push(`probe request planning max ${performance.maxPlanMs}ms > ${benchmarkConfig.maxProbePlanMs}ms`);
+  }
+  if (performance.available && (performance.maxSchedulerDelayMs ?? 0) > benchmarkConfig.maxProbeSchedulerDelayMs) {
+    failures.push(
+      `probe scheduler delay max ${performance.maxSchedulerDelayMs}ms > ${benchmarkConfig.maxProbeSchedulerDelayMs}ms`,
+    );
+  }
+  if (performance.available && (performance.maxWorkChunkMs ?? 0) > benchmarkConfig.maxProbeWorkChunkMs) {
+    failures.push(`probe work chunk max ${performance.maxWorkChunkMs}ms > ${benchmarkConfig.maxProbeWorkChunkMs}ms`);
+  }
   if (performance.available && (performance.pendingPages ?? 0) > benchmarkConfig.maxProbeFinalPendingPages) {
     failures.push(
       `probe final pending pages ${performance.pendingPages} > ${benchmarkConfig.maxProbeFinalPendingPages}`,
+    );
+  }
+  if (performance.available && (performance.maxQueueDepth ?? 0) > benchmarkConfig.maxWorkerQueueDepth) {
+    failures.push(`worker queue depth ${performance.maxQueueDepth} > ${benchmarkConfig.maxWorkerQueueDepth}`);
+  }
+  if (performance.available && (performance.maxInFlightBytes ?? 0) > benchmarkConfig.maxWorkerInFlightBytes) {
+    failures.push(`worker in-flight bytes ${performance.maxInFlightBytes} > ${benchmarkConfig.maxWorkerInFlightBytes}`);
+  }
+  if (
+    performance.available &&
+    (performance.maxWorkerGenerationLatencyMs ?? 0) > benchmarkConfig.maxWorkerLatencyMs
+  ) {
+    failures.push(
+      `worker generation latency ${performance.maxWorkerGenerationLatencyMs}ms > ${
+        benchmarkConfig.maxWorkerLatencyMs
+      }ms`,
+    );
+  }
+  if (
+    performance.available &&
+    (performance.maxOldestQueuedWorkFrames ?? 0) > benchmarkConfig.maxOldestQueuedWorkFrames
+  ) {
+    failures.push(
+      `oldest queued VT work ${performance.maxOldestQueuedWorkFrames} frames > ${
+        benchmarkConfig.maxOldestQueuedWorkFrames
+      }`,
+    );
+  }
+  if (performance.available && performance.workerLastError !== '') {
+    failures.push(`worker page generator error: ${performance.workerLastError}`);
+  }
+  if (uploadBursts.available && (uploadBursts.maxAtlasUploadCount ?? 0) > benchmarkConfig.maxAtlasUploadsPerChunk) {
+    failures.push(
+      `physical atlas upload burst ${uploadBursts.maxAtlasUploadCount} > ${benchmarkConfig.maxAtlasUploadsPerChunk}`,
+    );
+  }
+  if (
+    uploadBursts.available &&
+    (uploadBursts.maxPageTableUploadCount ?? 0) > benchmarkConfig.maxPageTableUploadsPerChunk
+  ) {
+    failures.push(
+      `page-table upload burst ${uploadBursts.maxPageTableUploadCount} > ${benchmarkConfig.maxPageTableUploadsPerChunk}`,
     );
   }
   const sampledPendingPages = performance.maxSampledPendingPages;

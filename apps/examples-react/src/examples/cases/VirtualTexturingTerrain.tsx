@@ -1,4 +1,9 @@
 import {
+  type VirtualTexturePageAddress,
+  type VirtualTexturePageId,
+} from '@royal/renderer-webgl/virtual-texturing';
+// Temporary: this demo still depends on low-level VT mechanics while it migrates to the public resource facade.
+import {
   VirtualTextureRuntime,
   createVirtualTexturePageTableTexture,
   planVirtualTextureUploads,
@@ -6,18 +11,19 @@ import {
   virtualTexturePageId,
   virtualTexturePageTableMipDimensions,
   type VirtualTextureDebugSnapshot,
-  type VirtualTexturePageAddress,
-  type VirtualTexturePageId,
   type VirtualTexturePageTableTexture,
   type VirtualTexturePageTableTexelUpload,
   type VirtualTexturePhysicalAtlasPageUpload,
-} from '../../../../../packages/renderer-webgl/src/virtual-texturing';
-import { createElement, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+} from '@royal/renderer-webgl/virtual-texturing/testing';
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
 import {
   createWorkerBackedTerrainPageGenerator,
   type PreparedTerrainPageUpload,
   type WorkerBackedTerrainPageGenerator,
 } from './virtual-texturing/worker-page-adapter';
+import {
+  createTerrainPhysicalPagePixels as createGeneratedVirtualTexturePagePixels,
+} from './virtual-texturing/terrain-page-generator';
 
 type PhysicalAtlasTexture = {
   readonly slotColumns: number;
@@ -216,18 +222,6 @@ type CameraController = {
   readonly update: (now: number) => void;
 };
 
-type Rect = {
-  readonly height: number;
-  readonly width: number;
-  readonly x: number;
-  readonly y: number;
-};
-
-type PreviewRects = {
-  readonly atlas: Rect;
-  readonly pageTable: Rect;
-};
-
 type PhysicalAtlasUploadStats = {
   readonly allocationMs: number;
   readonly bytesUploaded: number;
@@ -274,8 +268,19 @@ type ProtectedVirtualTexturePage = {
 
 type VirtualTextureReadbackRequest = {
   readonly height: number;
-  readonly rects: PreviewRects;
   readonly width: number;
+};
+
+type ProbePreviewTarget = {
+  readonly framebuffer: WebGLFramebuffer;
+  readonly height: number;
+  readonly texture: WebGLTexture;
+  readonly width: number;
+};
+
+type ProbePreviewTargets = {
+  readonly atlas: ProbePreviewTarget;
+  readonly pageTable: ProbePreviewTarget;
 };
 
 type PendingVirtualTextureWork = {
@@ -363,10 +368,12 @@ const basePageRows = virtualSize[1] / pageSize;
 const maxVirtualMip = Math.round(Math.log2(Math.max(basePageColumns, basePageRows)));
 const defaultMaxResidentDetail = maxVirtualMip;
 const physicalSlots = 64;
-const terrainSegments = 96;
+const terrainSegments = 1;
 const terrainWorldSize = 8.5;
 const terrainPanLimit = 2.4;
 const terrainVertexStride = 8;
+const atlasProbePreviewSize = 160;
+const pageTableProbePreviewSize = 128;
 const minCameraDistance = 0.85;
 const fullDetailCameraDistance = 2.4;
 const maxCameraDistance = 12;
@@ -407,12 +414,10 @@ in vec2 a_uv;
 uniform mat4 u_viewProjection;
 
 out vec3 v_normal;
-out vec3 v_worldPosition;
 out vec2 v_uv;
 
 void main() {
   v_normal = a_normal;
-  v_worldPosition = a_position;
   v_uv = a_uv;
   gl_Position = u_viewProjection * vec4(a_position, 1.0);
 }
@@ -427,47 +432,20 @@ uniform vec2 u_pageTableSize;
 uniform vec3 u_lightDirection;
 
 in vec3 v_normal;
-in vec3 v_worldPosition;
 in vec2 v_uv;
 out vec4 outColor;
-
-float lineMask(float coordinate, float spacing, float width) {
-  float phase = fract(coordinate / spacing);
-  float distance = min(phase, 1.0 - phase) * spacing;
-
-  return 1.0 - smoothstep(width * 0.45, width, distance);
-}
-
-float surveyMarker(vec2 pageUv, vec2 virtualPage) {
-  float insideBand = step(0.055, pageUv.x) * step(pageUv.x, 0.42) * step(0.06, pageUv.y) * step(pageUv.y, 0.2);
-  vec2 markerCell = floor((pageUv - vec2(0.055, 0.06)) * vec2(34.0, 28.0));
-  float encoded = mod(
-    virtualPage.x * 7.0 + virtualPage.y * 13.0 + markerCell.x * 3.0 + markerCell.y * 5.0,
-    11.0
-  );
-
-  return insideBand * step(encoded, 4.5);
-}
-
-float fallbackChecker(vec2 uv, float mipDelta) {
-  vec2 coarseCell = floor(uv * u_pageTableSize / max(mipDelta, 1.0));
-  return mod(coarseCell.x + coarseCell.y, 2.0);
-}
 
 vec3 sampleVirtualTexture(
   vec2 uv,
   out float pageLine,
-  out float exactBlend,
-  out float mipDelta,
-  out vec2 sampledVirtualPage,
-  out vec2 sampledPageUv
+  out float fallbackAmount
 ) {
-  sampledVirtualPage = min(floor(uv * u_pageTableSize), u_pageTableSize - vec2(1.0));
-  sampledPageUv = fract(uv * u_pageTableSize);
+  vec2 sampledVirtualPage = min(floor(uv * u_pageTableSize), u_pageTableSize - vec2(1.0));
+  vec2 sampledPageUv = fract(uv * u_pageTableSize);
   vec4 entry = texelFetch(u_pageTable, ivec2(sampledVirtualPage), 0);
   float valid = step(0.5 / 255.0, entry.a);
   vec2 slot = floor(entry.rg * 255.0 + 0.5);
-  mipDelta = max(1.0, exp2(floor(entry.b * 255.0 + 0.5)));
+  float mipDelta = max(1.0, exp2(floor(entry.b * 255.0 + 0.5)));
   vec2 fallbackOffset = mod(sampledVirtualPage, mipDelta) / mipDelta;
   vec2 atlasUv = (slot + fallbackOffset + sampledPageUv / mipDelta) / u_atlasSlots;
   vec3 atlasColor = texture(u_physicalAtlas, atlasUv).rgb;
@@ -477,53 +455,26 @@ vec3 sampleVirtualTexture(
   );
 
   pageLine = 1.0 - smoothstep(0.0, 0.018, edgeDistance);
-  exactBlend = 1.0 - step(1.5 / 255.0, entry.b);
+  fallbackAmount = clamp(log2(mipDelta) / 6.0, 0.0, 1.0);
   return mix(vec3(0.16, 0.025, 0.055), atlasColor, valid);
 }
 
 void main() {
   float pageLine = 0.0;
-  float exactBlend = 0.0;
-  float mipDelta = 1.0;
-  vec2 sampledVirtualPage = vec2(0.0);
-  vec2 sampledPageUv = vec2(0.0);
+  float fallbackAmount = 0.0;
   vec2 vtUv = clamp(v_uv, vec2(0.0), vec2(1.0));
   vec3 textureColor = sampleVirtualTexture(
     vtUv,
     pageLine,
-    exactBlend,
-    mipDelta,
-    sampledVirtualPage,
-    sampledPageUv
+    fallbackAmount
   );
-  vec2 virtualTexel = vtUv * 4096.0;
-  float fallbackAmount = clamp(log2(mipDelta) / 6.0, 0.0, 1.0);
-  float residentSharpness = 1.0 - fallbackAmount;
-  float minorGrid = max(lineMask(virtualTexel.x, 64.0, 1.25), lineMask(virtualTexel.y, 64.0, 1.25));
-  float microGrid = max(lineMask(virtualTexel.x, 16.0, 0.64), lineMask(virtualTexel.y, 16.0, 0.64));
-  float contourSignal = dot(textureColor, vec3(0.29, 0.48, 0.23)) + v_worldPosition.y * 0.18;
-  float contourPhase = abs(fract(contourSignal * 13.0) - 0.5) * 2.0;
-  float contour = 1.0 - smoothstep(0.045, 0.105, contourPhase);
-  float marker = surveyMarker(sampledPageUv, sampledVirtualPage);
-  float fallbackBlock = fallbackChecker(vtUv, mipDelta) * fallbackAmount;
-  vec3 crispOverlay = vec3(0.78, 1.0, 0.95) * minorGrid * 0.18 +
-    vec3(0.08, 0.13, 0.16) * microGrid * 0.14 +
-    vec3(1.0, 0.76, 0.24) * marker * 0.62 +
-    vec3(0.02, 0.035, 0.045) * contour * 0.38;
-  vec3 fallbackOverlay = mix(vec3(0.12, 0.06, 0.2), vec3(0.28, 0.16, 0.42), fallbackBlock) * fallbackAmount;
-
-  textureColor = mix(textureColor, textureColor + crispOverlay, residentSharpness);
-  textureColor = mix(textureColor, fallbackOverlay, fallbackAmount * 0.5);
   vec3 normal = normalize(v_normal);
   float light = clamp(dot(normal, normalize(u_lightDirection)), 0.0, 1.0);
-  float slopeShade = smoothstep(0.52, 0.12, normal.y) * 0.12;
-  vec3 fallbackTint = mix(vec3(0.72, 0.78, 0.86), vec3(1.0), exactBlend);
-  vec3 shaded = textureColor * fallbackTint * (0.34 + light * 0.68 + slopeShade);
-  shaded = mix(shaded, vec3(0.92, 0.97, 1.0), pageLine * (0.22 + fallbackAmount * 0.42));
-  float horizonFog = smoothstep(5.5, 12.5, length(v_worldPosition.xz));
-  vec3 fogColor = vec3(0.33, 0.43, 0.51);
+  vec3 fallbackTint = mix(vec3(0.52, 0.48, 0.68), vec3(1.0), 1.0 - fallbackAmount);
+  vec3 shaded = textureColor * fallbackTint * (0.74 + light * 0.26);
+  shaded = mix(shaded, vec3(0.92, 0.97, 1.0), pageLine * 0.36);
 
-  outColor = vec4(mix(shaded, fogColor, horizonFog * 0.35), 1.0);
+  outColor = vec4(shaded, 1.0);
 }
 `;
 const previewVertexShaderSource = `#version 300 es
@@ -702,40 +653,6 @@ const emptyProbe = (): VirtualTextureProbe => ({
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
-const clampByte = (value: number): number => clamp(Math.round(value), 0, 255);
-
-const smoothStep = (edge0: number, edge1: number, value: number): number => {
-  const range = edge1 - edge0;
-  const t = range === 0 ? 0 : clamp((value - edge0) / range, 0, 1);
-  return t * t * (3 - 2 * t);
-};
-
-const mix = (a: number, b: number, t: number): number => a * (1 - t) + b * t;
-
-const mixColor = (
-  a: readonly [number, number, number],
-  b: readonly [number, number, number],
-  t: number,
-): readonly [number, number, number] => [
-  mix(a[0], b[0], t),
-  mix(a[1], b[1], t),
-  mix(a[2], b[2], t),
-];
-
-const fract = (value: number): number => value - Math.floor(value);
-
-const hash2 = (x: number, y: number): number => {
-  const dot = x * 127.1 + y * 311.7;
-  return fract(Math.sin(dot) * 43_758.5453);
-};
-
-const gridLine = (coordinate: number, spacing: number, width: number): number => {
-  const phase = fract(coordinate / spacing);
-  const distance = Math.min(phase, 1 - phase) * spacing;
-
-  return 1 - smoothStep(width * 0.45, width, distance);
-};
-
 const normalizeVec3 = (value: Vec3): Vec3 => {
   const length = Math.hypot(value[0], value[1], value[2]) || 1;
   return [value[0] / length, value[1] / length, value[2] / length];
@@ -816,104 +733,6 @@ const multiplyMatrix = (a: Float32Array, b: Float32Array): Float32Array => {
   }
 
   return out;
-};
-
-const terrainElevation = (u: number, v: number): number => {
-  const x = (clamp(u, 0, 1) - 0.5) * 2;
-  const z = (clamp(v, 0, 1) - 0.5) * 2;
-  const ridge = Math.sin((x * 1.14 - z * 0.38) * Math.PI) * 0.16;
-  const crossRidge = Math.sin((x * 0.42 + z * 1.28) * Math.PI * 1.3) * 0.08;
-  const peak = Math.exp(-((x + 0.18) ** 2 * 5.6 + (z - 0.03) ** 2 * 7.2)) * 1.1;
-  const shoulder = Math.exp(-((x - 0.34) ** 2 * 8.2 + (z + 0.36) ** 2 * 4.8)) * 0.48;
-  const basin = Math.exp(-((x + 0.56) ** 2 * 9 + (z + 0.42) ** 2 * 8)) * 0.34;
-
-  return -0.28 + peak + shoulder + ridge + crossRidge - basin;
-};
-
-const terrainNormal = (u: number, v: number): Vec3 => {
-  const step = 1 / terrainSegments;
-  const left = terrainElevation(u - step, v);
-  const right = terrainElevation(u + step, v);
-  const down = terrainElevation(u, v - step);
-  const up = terrainElevation(u, v + step);
-  const slopeX = (right - left) / (step * 2 * terrainWorldSize);
-  const slopeZ = (up - down) / (step * 2 * terrainWorldSize);
-
-  return normalizeVec3([-slopeX, 1, -slopeZ]);
-};
-
-const terrainColorAt = (
-  u: number,
-  v: number,
-): readonly [number, number, number] => {
-  const height = terrainElevation(u, v);
-  const moisture = Math.sin((u * 5.3 + v * 2.1) * Math.PI) * 0.5 + 0.5;
-  const virtualX = clamp(u, 0, 1) * (virtualSize[0] - 1);
-  const virtualY = clamp(v, 0, 1) * (virtualSize[1] - 1);
-  const texelX = Math.floor(virtualX);
-  const texelY = Math.floor(virtualY);
-  const noise = hash2(texelX, texelY);
-  const detail = Math.sin((u * 193 + v * 89) * Math.PI) * 0.5 + 0.5;
-  const lowland = [84, 122, 78] as const;
-  const grass = [106, 156, 88] as const;
-  const scrub = [142, 136, 86] as const;
-  const rock = [128, 127, 122] as const;
-  const snow = [228, 233, 226] as const;
-  const wet = [58, 94, 92] as const;
-  const ink = [32, 42, 48] as const;
-  const surveyCyan = [96, 226, 216] as const;
-  const surveyAmber = [240, 202, 96] as const;
-  const grassMix = mixColor(lowland, grass, smoothStep(-0.18, 0.32, height));
-  const scrubMix = mixColor(grassMix, scrub, smoothStep(0.16, 0.5, height) * (1 - moisture * 0.3));
-  const rockMix = mixColor(scrubMix, rock, smoothStep(0.48, 0.86, height + detail * 0.08));
-  const snowMix = mixColor(rockMix, snow, smoothStep(0.9, 1.12, height + detail * 0.05));
-  const dampMix = mixColor(wet, snowMix, smoothStep(-0.32, -0.06, height + moisture * 0.08));
-  const contourPhase = Math.abs(fract((height + 1.45) * 18) - 0.5) * 2;
-  const contour = 1 - smoothStep(0.06, 0.12, contourPhase);
-  const majorGrid = Math.max(gridLine(virtualX, 256, 2.2), gridLine(virtualY, 256, 2.2));
-  const minorGrid = Math.max(gridLine(virtualX, 64, 1.35), gridLine(virtualY, 64, 1.35));
-  const microGrid = Math.max(gridLine(virtualX, 16, 0.72), gridLine(virtualY, 16, 0.72));
-  const basePageGrid = Math.max(gridLine(virtualX, pageSize, 2.4), gridLine(virtualY, pageSize, 2.4));
-  const diagonal = gridLine((virtualX + virtualY) * 0.7071, 32, 0.8);
-  const pageX = Math.floor(virtualX / pageSize);
-  const pageY = Math.floor(virtualY / pageSize);
-  const pageU = fract(virtualX / pageSize);
-  const pageV = fract(virtualY / pageSize);
-  const tileX = Math.floor(virtualX / 256);
-  const tileY = Math.floor(virtualY / 256);
-  const tileU = fract(virtualX / 256);
-  const tileV = fract(virtualY / 256);
-  const markerColumn = Math.floor((tileU - 0.055) / 0.027);
-  const markerRow = Math.floor((tileV - 0.06) / 0.035);
-  const markerBand = tileU > 0.055 && tileU < 0.34 && tileV > 0.06 && tileV < 0.19;
-  const markerBit = markerBand &&
-    ((tileX * 13 + tileY * 29 + markerColumn * 5 + markerRow * 7) % 11 < 5);
-  const pageMarkerColumn = Math.floor((pageU - 0.08) / 0.052);
-  const pageMarkerRow = Math.floor((pageV - 0.1) / 0.068);
-  const pageMarkerBand = pageU > 0.08 && pageU < 0.58 && pageV > 0.1 && pageV < 0.28;
-  const pageMarkerBit = pageMarkerBand &&
-    ((pageX * 7 + pageY * 11 + pageMarkerColumn * 3 + pageMarkerRow * 5) % 9 < 4);
-  const pageCrosshair = Math.max(gridLine(pageU, 0.5, 0.018), gridLine(pageV, 0.5, 0.018)) *
-    smoothStep(0.24, 0.38, Math.min(Math.abs(pageU - 0.5), Math.abs(pageV - 0.5)));
-  const grain = 0.92 + noise * 0.12 + detail * 0.04;
-  const contourColor = mixColor(ink, surveyAmber, smoothStep(0.62, 1.02, height));
-  const gridColor = mixColor(surveyCyan, ink, smoothStep(0.0, 0.8, height));
-  const marked = markerBit ? mixColor(dampMix, surveyAmber, 0.78) : dampMix;
-  const pageMarked = pageMarkerBit ? mixColor(marked, surveyAmber, 0.72) : marked;
-  const withMinorGrid = mixColor(
-    pageMarked,
-    gridColor,
-    minorGrid * 0.36 + microGrid * 0.24 + diagonal * 0.16 + pageCrosshair * 0.28,
-  );
-  const withPageGrid = mixColor(withMinorGrid, ink, basePageGrid * 0.52);
-  const withMajorGrid = mixColor(withPageGrid, surveyCyan, majorGrid * 0.76);
-  const withContour = mixColor(withMajorGrid, contourColor, contour * 0.68);
-
-  return [
-    clampByte(withContour[0] * grain),
-    clampByte(withContour[1] * (0.94 + moisture * 0.1)),
-    clampByte(withContour[2] * (0.94 + detail * 0.08)),
-  ];
 };
 
 const createShader = (
@@ -1048,15 +867,13 @@ const createTerrainGeometry = (): {
     for (let column = 0; column <= terrainSegments; column += 1) {
       const u = column / terrainSegments;
       const x = (u - 0.5) * terrainWorldSize;
-      const y = terrainElevation(u, v);
-      const normal = terrainNormal(u, v);
 
       vertices[vertexOffset] = x;
-      vertices[vertexOffset + 1] = y;
+      vertices[vertexOffset + 1] = 0;
       vertices[vertexOffset + 2] = z;
-      vertices[vertexOffset + 3] = normal[0];
-      vertices[vertexOffset + 4] = normal[1];
-      vertices[vertexOffset + 5] = normal[2];
+      vertices[vertexOffset + 3] = 0;
+      vertices[vertexOffset + 4] = 1;
+      vertices[vertexOffset + 5] = 0;
       vertices[vertexOffset + 6] = u;
       vertices[vertexOffset + 7] = v;
       vertexOffset += terrainVertexStride;
@@ -1145,47 +962,65 @@ const createPhysicalAtlasTexture = (
   };
 };
 
+const createProbePreviewTarget = (
+  gl: WebGL2RenderingContext,
+  width: number,
+  height: number,
+  label: string,
+): ProbePreviewTarget => {
+  const texture = gl.createTexture();
+  const framebuffer = gl.createFramebuffer();
+  if (texture === null || framebuffer === null) {
+    throw new Error(`Failed to create virtual-texture ${label} probe preview`);
+  }
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(framebuffer);
+    gl.deleteTexture(texture);
+    throw new Error(`Virtual-texture ${label} probe preview framebuffer is incomplete`);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  return {
+    framebuffer,
+    height,
+    texture,
+    width,
+  };
+};
+
+const createProbePreviewTargets = (gl: WebGL2RenderingContext): ProbePreviewTargets => ({
+  atlas: createProbePreviewTarget(gl, atlasProbePreviewSize, atlasProbePreviewSize, 'atlas'),
+  pageTable: createProbePreviewTarget(gl, pageTableProbePreviewSize, pageTableProbePreviewSize, 'page-table'),
+});
+
 const pagesAtVirtualMip = (mip: number): readonly [number, number] => [
   Math.max(1, Math.ceil(basePageColumns / 2 ** mip)),
   Math.max(1, Math.ceil(basePageRows / 2 ** mip)),
 ];
 
-const pageVirtualUv = (
-  page: VirtualTexturePageAddress,
-  localU: number,
-  localV: number,
-): readonly [number, number] => {
-  const [mipColumns, mipRows] = pagesAtVirtualMip(page.mip);
-
-  return [
-    clamp((page.x + localU) / mipColumns, 0, 1),
-    clamp((page.y + localV) / mipRows, 0, 1),
-  ];
-};
-
-const createTerrainPhysicalPagePixels = (
+const createPlanePhysicalPagePixels = (
   upload: VirtualTexturePhysicalAtlasPageUpload,
 ): PhysicalPagePixels => {
   const allocationStart = performance.now();
   const pixels = new Uint8Array(upload.width * upload.height * 4);
   const allocationMs = performance.now() - allocationStart;
   const fillStart = performance.now();
-
-  for (let y = 0; y < upload.height; y += 1) {
-    for (let x = 0; x < upload.width; x += 1) {
-      const index = (y * upload.width + x) * 4;
-      const localU = upload.width <= 1 ? 0 : x / (upload.width - 1);
-      const localV = upload.height <= 1 ? 0 : y / (upload.height - 1);
-      const [virtualU, virtualV] = pageVirtualUv(upload.sourcePage, localU, localV);
-      const color = terrainColorAt(virtualU, virtualV);
-      const edge = x < 2 || y < 2 || x >= upload.width - 2 || y >= upload.height - 2;
-
-      pixels[index] = edge ? 20 : color[0];
-      pixels[index + 1] = edge ? 28 : color[1];
-      pixels[index + 2] = edge ? 36 : color[2];
-      pixels[index + 3] = 255;
-    }
-  }
+  createGeneratedVirtualTexturePagePixels({
+    height: upload.height,
+    sourcePage: upload.sourcePage,
+    width: upload.width,
+  }, pixels.buffer);
 
   return {
     allocationMs,
@@ -1333,7 +1168,7 @@ const emptyPendingVirtualTextureWork = (): PendingVirtualTextureWork => ({
 const createTerrainVirtualTextureMaterialAdapter = (
   pageGenerator: WorkerBackedTerrainPageGenerator,
 ): VirtualTextureMaterialAdapter => ({
-  createPagePixels: createTerrainPhysicalPagePixels,
+  createPagePixels: createPlanePhysicalPagePixels,
   pageGenerator,
   planRequests: ({ camera, heldDetail, heldFocus, maxResidentDetail }) => {
     const [focusU, focusV] = cameraFocusUv(camera);
@@ -1419,17 +1254,19 @@ const readTextureLevel = (
   };
 };
 
-const readCanvasRegion = (
+const readBoundFramebufferRegion = (
   gl: WebGL2RenderingContext,
+  boundsWidth: number,
+  boundsHeight: number,
   x: number,
   y: number,
   width: number,
   height: number,
 ): CanvasReadback => {
-  const left = clamp(Math.floor(x), 0, Math.max(0, gl.drawingBufferWidth - 1));
-  const bottom = clamp(Math.floor(y), 0, Math.max(0, gl.drawingBufferHeight - 1));
-  const regionWidth = Math.max(1, Math.min(Math.floor(width), gl.drawingBufferWidth - left));
-  const regionHeight = Math.max(1, Math.min(Math.floor(height), gl.drawingBufferHeight - bottom));
+  const left = clamp(Math.floor(x), 0, Math.max(0, boundsWidth - 1));
+  const bottom = clamp(Math.floor(y), 0, Math.max(0, boundsHeight - 1));
+  const regionWidth = Math.max(1, Math.min(Math.floor(width), boundsWidth - left));
+  const regionHeight = Math.max(1, Math.min(Math.floor(height), boundsHeight - bottom));
   const sampleColumns = Math.max(1, Math.min(4, regionWidth));
   const sampleRows = Math.max(1, Math.min(4, regionHeight));
   const sampleWidth = Math.max(1, Math.min(24, Math.floor(regionWidth / sampleColumns)));
@@ -1438,7 +1275,6 @@ const readCanvasRegion = (
   const maxY = bottom + regionHeight - sampleHeight;
   const pixels = new Uint8Array(sampleWidth * sampleHeight * 4);
 
-  gl.readBuffer(gl.BACK);
   const buckets = new Set<string>();
   let painted = 0;
   let texels = 0;
@@ -1466,11 +1302,35 @@ const readCanvasRegion = (
   };
 };
 
+const readCanvasRegion = (
+  gl: WebGL2RenderingContext,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): CanvasReadback => {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readBuffer(gl.BACK);
+  return readBoundFramebufferRegion(gl, gl.drawingBufferWidth, gl.drawingBufferHeight, x, y, width, height);
+};
+
 const readCanvas = (
   gl: WebGL2RenderingContext,
   width: number,
   height: number,
 ): CanvasReadback => readCanvasRegion(gl, 0, 0, width, height);
+
+const readProbePreviewTarget = (
+  gl: WebGL2RenderingContext,
+  target: ProbePreviewTarget,
+): CanvasReadback => {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);
+  const readback = readBoundFramebufferRegion(gl, target.width, target.height, 0, 0, target.width, target.height);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readBuffer(gl.BACK);
+  return readback;
+};
 
 const cameraProbe = (state: CameraState): CameraProbe => ({
   distance: Number(state.distance.toFixed(3)),
@@ -2290,6 +2150,7 @@ const serviceVirtualTextureReadback = (
   runtime: VirtualTextureRuntime,
   gl: WebGL2RenderingContext,
   framebuffer: WebGLFramebuffer,
+  previewTargets: ProbePreviewTargets,
   pageTable: VirtualTexturePageTableTexture,
   probe: VirtualTextureProbe,
   work: PendingVirtualTextureWork,
@@ -2301,20 +2162,8 @@ const serviceVirtualTextureReadback = (
   const sceneReadback = readCanvas(gl, request.width, request.height);
   probe.canvasReadback = sceneReadback;
   probe.terrainReadback = sceneReadback;
-  probe.atlasPreviewReadback = readCanvasRegion(
-    gl,
-    request.rects.atlas.x,
-    request.rects.atlas.y,
-    request.rects.atlas.width,
-    request.rects.atlas.height,
-  );
-  probe.pageTablePreviewReadback = readCanvasRegion(
-    gl,
-    request.rects.pageTable.x,
-    request.rects.pageTable.y,
-    request.rects.pageTable.width,
-    request.rects.pageTable.height,
-  );
+  probe.atlasPreviewReadback = readProbePreviewTarget(gl, previewTargets.atlas);
+  probe.pageTablePreviewReadback = readProbePreviewTarget(gl, previewTargets.pageTable);
   probe.pageTableReadback = readTextureLevel(gl, framebuffer, pageTable);
   updateProbeFromRuntimeStats(
     probe,
@@ -2543,7 +2392,7 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
 
 const viewProjectionMatrix = (camera: CameraState, width: number, height: number): Float32Array => {
   const horizontal = Math.cos(camera.pitch) * camera.distance;
-  const target: Vec3 = [camera.targetX, 0.2, camera.targetZ];
+  const target: Vec3 = [camera.targetX, 0, camera.targetZ];
   const eye: Vec3 = [
     target[0] + Math.sin(camera.yaw) * horizontal,
     target[1] + Math.sin(camera.pitch) * camera.distance,
@@ -2553,30 +2402,6 @@ const viewProjectionMatrix = (camera: CameraState, width: number, height: number
   const view = lookAtMatrix(eye, target, [0, 1, 0]);
 
   return multiplyMatrix(projection, view);
-};
-
-const previewRects = (width: number, height: number, atlas: PhysicalAtlasTexture): PreviewRects => {
-  const margin = Math.max(10, Math.round(Math.min(width, height) * 0.026));
-  const atlasWidth = Math.round(Math.min(width * 0.34, height * 0.38));
-  const atlasHeight = Math.round(atlasWidth * (atlas.slotRows / atlas.slotColumns));
-  const pageTableSize = Math.round(Math.min(width * 0.15, height * 0.2));
-  const atlasX = Math.max(margin, width - atlasWidth - margin);
-  const atlasY = margin;
-
-  return {
-    atlas: {
-      height: atlasHeight,
-      width: atlasWidth,
-      x: atlasX,
-      y: atlasY,
-    },
-    pageTable: {
-      height: pageTableSize,
-      width: pageTableSize,
-      x: Math.max(margin, width - pageTableSize - margin),
-      y: atlasY + atlasHeight + margin,
-    },
-  };
 };
 
 const drawTerrain = (
@@ -2612,13 +2437,16 @@ const drawPreviewTexture = (
   gl: WebGL2RenderingContext,
   renderer: PreviewProgram,
   quad: FullscreenQuad,
-  rect: Rect,
+  target: ProbePreviewTarget,
   texture: WebGLTexture,
   mode: 0 | 1,
   gridSize: readonly [number, number],
   atlas: PhysicalAtlasTexture,
 ): void => {
-  gl.viewport(rect.x, rect.y, rect.width, rect.height);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+  gl.viewport(0, 0, target.width, target.height);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(renderer.program);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -2631,16 +2459,14 @@ const drawPreviewTexture = (
   gl.bindVertexArray(null);
 };
 
-const drawDebugPreviews = (
+const drawProbePreviews = (
   gl: WebGL2RenderingContext,
   renderer: PreviewProgram,
   quad: FullscreenQuad,
   pageTable: VirtualTexturePageTableTexture,
   atlas: PhysicalAtlasTexture,
-  width: number,
-  height: number,
-): PreviewRects => {
-  const rects = previewRects(width, height, atlas);
+  targets: ProbePreviewTargets,
+): void => {
   const pageTableBase = pageTable.mipDimensions[0];
   if (pageTableBase === undefined) throw new Error('Virtual texture page table is missing base level');
 
@@ -2648,7 +2474,7 @@ const drawDebugPreviews = (
     gl,
     renderer,
     quad,
-    rects.atlas,
+    targets.atlas,
     atlas.texture,
     0,
     [atlas.slotColumns, atlas.slotRows],
@@ -2658,14 +2484,13 @@ const drawDebugPreviews = (
     gl,
     renderer,
     quad,
-    rects.pageTable,
+    targets.pageTable,
     pageTable.texture,
     1,
     [pageTableBase.width, pageTableBase.height],
     atlas,
   );
-
-  return rects;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 };
 
 const drawVirtualTexture = (
@@ -2675,6 +2500,7 @@ const drawVirtualTexture = (
   terrainMesh: TerrainMesh,
   previewProgram: PreviewProgram,
   previewQuad: FullscreenQuad,
+  previewTargets: ProbePreviewTargets,
   pageTable: VirtualTexturePageTableTexture,
   atlas: PhysicalAtlasTexture,
   camera: CameraState,
@@ -2693,14 +2519,14 @@ const drawVirtualTexture = (
   drawTerrain(gl, terrainProgram, terrainMesh, pageTable, atlas, camera, width, height);
 
   gl.disable(gl.DEPTH_TEST);
-  const rects = drawDebugPreviews(gl, previewProgram, previewQuad, pageTable, atlas, width, height);
+  drawProbePreviews(gl, previewProgram, previewQuad, pageTable, atlas, previewTargets);
 
   probe.drawCalls += 3;
   probe.terrainDrawCalls += 1;
   probe.previewDrawCalls += 2;
   probe.camera = cameraProbe(camera);
 
-  return { height, rects, width };
+  return { height, width };
 };
 
 const createWebGl2Context = (canvas: HTMLCanvasElement): WebGL2RenderingContext | null =>
@@ -2781,6 +2607,7 @@ const startVirtualTextureDemo = (
   const previewProgram = createPreviewProgram(gl);
   const terrainMesh = createTerrainMesh(gl, terrainProgram.program);
   const previewQuad = createFullscreenVertexArray(gl, previewProgram.program);
+  const previewTargets = createProbePreviewTargets(gl);
   const camera = createCameraController(canvas);
   const pageGenerator = createWorkerBackedTerrainPageGenerator();
   const material = createTerrainVirtualTextureMaterialAdapter(pageGenerator);
@@ -2812,7 +2639,7 @@ const startVirtualTextureDemo = (
         work.pendingReadback !== null &&
         (probe.ready || (pendingWorkPages(work) === 0 && work.initialBaseResolveCursor >= basePages.length))
       ) {
-        serviceVirtualTextureReadback(runtime, gl, framebuffer, pageTable, probe, work);
+        serviceVirtualTextureReadback(runtime, gl, framebuffer, previewTargets, pageTable, probe, work);
       }
 
       return hasPendingVirtualTextureWork(work);
@@ -2842,6 +2669,7 @@ const startVirtualTextureDemo = (
       terrainMesh,
       previewProgram,
       previewQuad,
+      previewTargets,
       pageTable,
       atlas,
       camera.state,
@@ -2869,8 +2697,12 @@ const startVirtualTextureDemo = (
     gl.deleteBuffer(terrainMesh.indexBuffer);
     gl.deleteBuffer(terrainMesh.vertexBuffer);
     gl.deleteFramebuffer(framebuffer);
+    gl.deleteFramebuffer(previewTargets.atlas.framebuffer);
+    gl.deleteFramebuffer(previewTargets.pageTable.framebuffer);
     gl.deleteProgram(previewProgram.program);
     gl.deleteProgram(terrainProgram.program);
+    gl.deleteTexture(previewTargets.atlas.texture);
+    gl.deleteTexture(previewTargets.pageTable.texture);
     gl.deleteTexture(atlas.texture);
     gl.deleteTexture(pageTable.texture);
     gl.deleteVertexArray(previewQuad.vao);
@@ -2914,54 +2746,39 @@ export const VirtualTexturingTerrain = (): ReactNode => {
     setMaxResidentDetail(next);
   };
 
-  return createElement(
-    'div',
-    {
-      'data-virtual-texture-example': '',
-      style: virtualTextureExampleStyle,
-    },
-    createElement(
-      'div',
-      {
-        'data-virtual-texture-controls': '',
-        style: virtualTextureControlsStyle,
-      },
-      createElement(
-        'label',
-        {
-          htmlFor: 'virtual-texture-detail-budget',
-          style: virtualTextureControlLabelStyle,
-        },
-        `Resident detail ${maxResidentDetail}/${maxVirtualMip}`,
-      ),
-      createElement('input', {
-        'aria-label': 'Virtual texture resident detail',
-        'data-virtual-texture-detail-slider': '',
-        id: 'virtual-texture-detail-budget',
-        max: maxVirtualMip,
-        min: 0,
-        name: 'virtual-texture-detail-budget',
-        onChange: handleDetailChange,
-        step: 1,
-        style: virtualTextureRangeStyle,
-        type: 'range',
-        value: maxResidentDetail,
-      }),
-      createElement(
-        'output',
-        {
-          'data-virtual-texture-effective-resolution': effectiveResolution,
-          htmlFor: 'virtual-texture-detail-budget',
-          style: virtualTextureOutputStyle,
-        },
-        `${effectiveResolution}px cap`,
-      ),
-    ),
-    createElement('canvas', {
-      'aria-label': 'Virtual texturing terrain',
-      ref: canvasRef,
-      style: { minHeight: 0 },
-      tabIndex: 0,
-    }),
+  return (
+    <div data-virtual-texture-example="" style={virtualTextureExampleStyle}>
+      <div data-virtual-texture-controls="" style={virtualTextureControlsStyle}>
+        <label htmlFor="virtual-texture-detail-budget" style={virtualTextureControlLabelStyle}>
+          Resident detail {maxResidentDetail}/{maxVirtualMip}
+        </label>
+        <input
+          aria-label="Virtual texture resident detail"
+          data-virtual-texture-detail-slider=""
+          id="virtual-texture-detail-budget"
+          max={maxVirtualMip}
+          min={0}
+          name="virtual-texture-detail-budget"
+          onChange={handleDetailChange}
+          step={1}
+          style={virtualTextureRangeStyle}
+          type="range"
+          value={maxResidentDetail}
+        />
+        <output
+          data-virtual-texture-effective-resolution={effectiveResolution}
+          htmlFor="virtual-texture-detail-budget"
+          style={virtualTextureOutputStyle}
+        >
+          {effectiveResolution}px cap
+        </output>
+      </div>
+      <canvas
+        aria-label="Virtual texturing terrain"
+        ref={canvasRef}
+        style={{ minHeight: 0 }}
+        tabIndex={0}
+      />
+    </div>
   );
 };

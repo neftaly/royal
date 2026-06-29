@@ -1,0 +1,180 @@
+{
+  "schemaVersion": "royal.research.tarstate-control-plane.fixture.v0",
+  "status": "research-fixture",
+  "exampleReadiness": {
+    "readyForExampleRoute": false,
+    "blocker": "No renderer adapter emits RoyalControlEvent snapshots or consumes command rows outside draw submission yet.",
+    "nextPrototypeStep": "Add a private renderer/react event sink that can replay this fixture into tarstate-lens rows, then expose a read-only inspector route backed by those rows."
+  },
+  "budgets": {
+    "diagnostics": 256,
+    "pickSamples": 128,
+    "pointerSamples": 64,
+    "frameStatBuckets": 120,
+    "benchmarkSamples": 240,
+    "commandResults": 128,
+    "statsPeriodMs": 250
+  },
+  "relations": [
+    {
+      "name": "renderRoots",
+      "key": ["rootId"],
+      "policy": "replace",
+      "maxRows": 8,
+      "drawLoopDependency": false
+    },
+    {
+      "name": "renderPasses",
+      "key": ["rootId", "passId"],
+      "policy": "replace",
+      "maxRows": 64,
+      "drawLoopDependency": false
+    },
+    {
+      "name": "renderNodes",
+      "key": ["rootId", "nodeId"],
+      "policy": "replace",
+      "maxRows": 4096,
+      "drawLoopDependency": false
+    },
+    {
+      "name": "rendererCapabilities",
+      "key": ["rootId", "capability"],
+      "policy": "replace",
+      "maxRows": 128,
+      "drawLoopDependency": false
+    },
+    {
+      "name": "diagnostics",
+      "key": ["rootId", "diagnosticId"],
+      "policy": "ring",
+      "budget": "diagnostics",
+      "drawLoopDependency": false
+    },
+    {
+      "name": "assetLoads",
+      "key": ["rootId", "assetId"],
+      "policy": "replace",
+      "maxRows": 1024,
+      "drawLoopDependency": false
+    },
+    {
+      "name": "visibilityStats",
+      "key": ["rootId", "passId", "frameBucket"],
+      "policy": "sampledBucket",
+      "budget": "frameStatBuckets",
+      "drawLoopDependency": false
+    },
+    {
+      "name": "virtualTextureStats",
+      "key": ["rootId", "assetId", "frameBucket"],
+      "policy": "sampledBucket",
+      "budget": "frameStatBuckets",
+      "drawLoopDependency": false
+    },
+    {
+      "name": "commands",
+      "key": ["rootId", "commandId"],
+      "policy": "ring",
+      "budget": "commandResults",
+      "drawLoopDependency": false
+    },
+    {
+      "name": "commandResults",
+      "key": ["rootId", "resultId"],
+      "policy": "ring",
+      "budget": "commandResults",
+      "drawLoopDependency": false
+    }
+  ],
+  "eventRows": [
+    {
+      "kind": "root:created",
+      "rootId": "root:fixture",
+      "backend": "webgl"
+    },
+    {
+      "kind": "scene:accepted",
+      "rootId": "root:fixture",
+      "sceneRevision": 7
+    },
+    {
+      "kind": "pass:stats",
+      "rootId": "root:fixture",
+      "passId": "main",
+      "frameBucket": 42,
+      "stats": {
+        "packetCount": 10000,
+        "visibleCount": 1546,
+        "culledCount": 8454,
+        "cullMs": 0.87,
+        "boundsSourceCounts": {
+          "boxMesh": 7000,
+          "textLayout": 2400,
+          "assetManifest": 600
+        }
+      }
+    },
+    {
+      "kind": "asset:load",
+      "rootId": "root:fixture",
+      "assetId": "asset:virtual-texturing:terrain-pages",
+      "status": "ready",
+      "bytesLoaded": 223840,
+      "selectedVariant": "png-preview"
+    },
+    {
+      "kind": "pick:sample",
+      "rootId": "root:fixture",
+      "sample": {
+        "sampleId": "pick:fixture:0",
+        "x": 192,
+        "y": 128,
+        "passId": "main",
+        "targetId": "node:panel-card",
+        "hitKind": "visible-pixel"
+      }
+    }
+  ],
+  "commandKinds": [
+    {
+      "kind": "selectNode",
+      "target": "nodeId",
+      "resultPolicy": "accepted-or-rejected"
+    },
+    {
+      "kind": "clearSelection",
+      "target": "selectionId",
+      "resultPolicy": "accepted-or-rejected"
+    },
+    {
+      "kind": "setDebugOverlay",
+      "target": "controlState",
+      "resultPolicy": "accepted-or-rejected"
+    },
+    {
+      "kind": "requestCapabilityProbe",
+      "target": "rootId",
+      "resultPolicy": "queued-or-rejected"
+    },
+    {
+      "kind": "requestBenchmarkProbe",
+      "target": "probeId",
+      "resultPolicy": "queued-or-rejected"
+    },
+    {
+      "kind": "setRendererBudget",
+      "target": "budgetName",
+      "resultPolicy": "accepted-or-rejected"
+    }
+  ],
+  "forbiddenPayloadKeys": [
+    "canvas",
+    "domNode",
+    "gl",
+    "gpuDevice",
+    "webglBuffer",
+    "webglProgram",
+    "webglTexture"
+  ]
+}

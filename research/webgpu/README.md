@@ -7,6 +7,24 @@ Date: 2026-06-28
 This is a research note only. It does not change renderer-core, React exports,
 examples, package config, text-vector, or the blender pipeline.
 
+## Readiness Fixture
+
+`fixtures/backend-choice-cases.json` makes the backend-selection recommendation
+executable without requiring a browser or WebGPU device. It covers auto,
+explicit WebGPU, WebGL fallback, and fallback-error behavior against the
+research reducer in `capability-probe.ts`.
+
+Run:
+
+```sh
+node research/webgpu/validate-backend-choice-fixture.mjs
+```
+
+This is not ready for a real examples route yet. The blocker is the current
+synchronous WebGL root contract in the packages. The next prototype step is to
+move this reducer into root creation with tests, then add a diagnostic-only
+examples probe after async root readiness exists.
+
 Local source checked:
 
 - `packages/react/src/root.ts`

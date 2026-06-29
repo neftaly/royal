@@ -2,11 +2,26 @@
 import {
   boxGeometry,
   createTextFontFace,
+  clampTextIndex,
+  editableTextCaretPlacement as caretPlacement,
+  editableTextSelectionRects as selectionRects,
   layoutText,
+  layoutEditableText,
+  nearestEditableTextCaret,
+  nextTextIndex,
+  previousTextIndex,
+  sameEditableTextSelection as sameSelection,
   solidTexture,
+  sortedEditableTextRange as sortedTextRange,
   type RenderNode,
   type RenderRoot,
   type Rgba,
+  type EditableTextCaretEndpoint as TextCaretEndpoint,
+  type EditableTextCaretPlacement as CaretPlacement,
+  type EditableTextLayout,
+  type EditableTextRange as TextRange,
+  type EditableTextSelection as TextSelection,
+  type EditableTextSelectionRect as SelectionRect,
   type TextFontFace,
   type Vec3,
   unlitMaterial,
@@ -21,6 +36,7 @@ import {
   type ClipboardEvent,
   type CompositionEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
@@ -48,6 +64,157 @@ const caretMaterial = unlitMaterial({
 const selectionMaterial = unlitMaterial({
   baseColor: solidTexture({ color: [0.08, 0.28, 0.42, 1] }),
 });
+const contextMenuMaterial = unlitMaterial({
+  baseColor: solidTexture({ color: [0.07, 0.09, 0.11, 0.96] }),
+});
+const contextMenuItemMaterial = unlitMaterial({
+  baseColor: solidTexture({ color: [0.12, 0.15, 0.18, 1] }),
+});
+const contextMenuWidth = 1.34;
+const contextMenuItemHeight = 0.36;
+const contextMenuPadding = 0.08;
+const contextMenuGap = 0.025;
+const contextMenuZ = 0.28;
+const contextMenuMargin = 0.12;
+const contextMenuFontSize = 0.18;
+const contextMenuLineHeight = 0.24;
+const customMenuPasteUnavailableReason = 'custom-menu-paste-requires-browser-prompt';
+
+type ClipboardAction = 'copy' | 'cut' | 'paste';
+
+type ClipboardSource = 'menu' | 'native';
+
+type ClipboardReason =
+  | 'denied'
+  | 'empty-paste'
+  | 'empty-selection'
+  | 'error'
+  | 'success'
+  | 'unavailable';
+
+type ClipboardReadPermission = 'denied' | 'granted' | 'prompt' | 'unavailable' | 'unknown';
+
+type ClipboardResult = {
+  readonly action: ClipboardAction | 'none';
+  readonly at: number;
+  readonly message: string;
+  readonly ok: boolean;
+  readonly reason: ClipboardReason | 'none';
+  readonly source: ClipboardSource | 'none';
+  readonly textLength: number;
+};
+
+type ClipboardOperationResult = Omit<ClipboardResult, 'action' | 'at' | 'source'> & {
+  readonly action: ClipboardAction;
+  readonly source: ClipboardSource;
+};
+
+type ClipboardCounters = {
+  readonly copy: number;
+  readonly cut: number;
+  readonly failure: number;
+  readonly keyboardCopy: number;
+  readonly keyboardCut: number;
+  readonly keyboardPaste: number;
+  readonly menuCopy: number;
+  readonly menuCut: number;
+  readonly menuPaste: number;
+  readonly nativeCopy: number;
+  readonly nativeCut: number;
+  readonly nativePaste: number;
+  readonly paste: number;
+};
+
+type ClipboardFailureState = {
+  readonly action: ClipboardAction | 'none';
+  readonly active: boolean;
+  readonly message: string;
+  readonly reason: ClipboardReason | 'none';
+  readonly source: ClipboardSource | 'none';
+};
+
+type ClipboardState = {
+  readonly counters: ClipboardCounters;
+  readonly failure: ClipboardFailureState;
+  readonly last: ClipboardResult;
+};
+
+type TextContextMenuState = {
+  readonly open: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly worldX: number;
+  readonly worldY: number;
+};
+
+type TextContextMenuEnabled = {
+  readonly copy: boolean;
+  readonly cut: boolean;
+  readonly paste: boolean;
+};
+
+type TextContextMenuCommandLayout = {
+  readonly action: ClipboardAction;
+  readonly enabled: boolean;
+  readonly height: number;
+  readonly label: string;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+type TextContextMenuCommandProbe = TextContextMenuCommandLayout & {
+  readonly clientX: number;
+  readonly clientY: number;
+};
+
+const initialClipboardCounters: ClipboardCounters = {
+  copy: 0,
+  cut: 0,
+  failure: 0,
+  keyboardCopy: 0,
+  keyboardCut: 0,
+  keyboardPaste: 0,
+  menuCopy: 0,
+  menuCut: 0,
+  menuPaste: 0,
+  nativeCopy: 0,
+  nativeCut: 0,
+  nativePaste: 0,
+  paste: 0,
+};
+
+const initialClipboardResult: ClipboardResult = {
+  action: 'none',
+  at: 0,
+  message: '',
+  ok: false,
+  reason: 'none',
+  source: 'none',
+  textLength: 0,
+};
+
+const initialClipboardFailure: ClipboardFailureState = {
+  action: 'none',
+  active: false,
+  message: '',
+  reason: 'none',
+  source: 'none',
+};
+
+const initialClipboardState: ClipboardState = {
+  counters: initialClipboardCounters,
+  failure: initialClipboardFailure,
+  last: initialClipboardResult,
+};
+
+const closedTextContextMenu: TextContextMenuState = {
+  open: false,
+  worldX: 0,
+  worldY: 0,
+  x: 0,
+  y: 0,
+};
 
 type CanvasTextBox = {
   readonly height: number;
@@ -79,67 +246,18 @@ type EditableTextBox = CanvasTextBox & {
   readonly caret: (origin: Vec3) => Vec3;
 };
 
-type TextRange = {
-  readonly end: number;
-  readonly endLine: number | undefined;
-  readonly start: number;
-  readonly startLine: number | undefined;
-};
-
-type TextSelection = {
-  readonly anchor: number;
-  readonly anchorLine: number | undefined;
-  readonly focus: number;
-  readonly focusLine: number | undefined;
-};
-
-type TextCaretEndpoint = {
-  readonly index: number;
-  readonly line: number | undefined;
-};
-
 type TextDragState = {
   readonly anchor: TextCaretEndpoint;
   readonly moved: boolean;
 };
 
-type CaretPlacement = {
-  readonly index: number;
-  readonly line: number;
-  readonly x: number;
+type PendingContextMenuCommand = {
+  readonly action: ClipboardAction;
+  readonly pointerId: number;
 };
 
-type EditableTextLine = {
-  readonly end: number;
-  readonly index: number;
-  readonly placements: readonly CaretPlacement[];
-  readonly start: number;
-  readonly text: string;
-  readonly width: number;
-};
-
-type EditableTextLayout = {
-  readonly ascender: number;
-  readonly caretPlacements: readonly CaretPlacement[];
-  readonly descender: number;
-  readonly font: TextFontFace;
-  readonly fontSize: number;
-  readonly lineHeight: number;
-  readonly lines: readonly EditableTextLine[];
-  readonly maxWidth: number;
-  readonly selectionHeight: number;
-  readonly selectionYOffset: number;
-  readonly wrappedText: string;
-};
-
-type SelectionRect = {
-  readonly end: number;
-  readonly height: number;
-  readonly line: number;
-  readonly start: number;
-  readonly width: number;
-  readonly x: number;
-  readonly y: number;
+type PendingKeyboardPaste = {
+  readonly timeoutId: number;
 };
 
 type TextEditorProbe = {
@@ -182,6 +300,26 @@ type TextEditorProbe = {
   readonly placements: readonly CaretPlacement[];
   readonly selection: TextSelection;
   readonly selectionRects: readonly SelectionRect[];
+  readonly selectedText: string;
+  readonly clipboard: ClipboardState;
+  readonly clipboardReadPermission: ClipboardReadPermission;
+  readonly menu: {
+    readonly commands: readonly TextContextMenuCommandProbe[];
+    readonly enabled: {
+      readonly copy: boolean;
+      readonly cut: boolean;
+      readonly paste: boolean;
+    };
+    readonly failure: boolean;
+    readonly failureReason: ClipboardReason | 'none';
+    readonly open: boolean;
+    readonly unavailableReason: {
+      readonly paste: typeof customMenuPasteUnavailableReason | 'none';
+    };
+    readonly x: number;
+    readonly y: number;
+  };
+  readonly text: string;
   readonly textLength: number;
 };
 
@@ -199,22 +337,6 @@ const measureCanvasText = (
   fontSize: number,
   lineHeight: number,
 ): number => layoutText({ font, fontSize, lineHeight, text }).metrics.width;
-
-const createTextMeasurer = (
-  font: TextFontFace,
-  fontSize: number,
-  lineHeight: number,
-): ((text: string) => number) => {
-  const widths = new Map<string, number>();
-
-  return (text) => {
-    const cached = widths.get(text);
-    if (cached !== undefined) return cached;
-    const width = measureCanvasText(font, text, fontSize, lineHeight);
-    widths.set(text, width);
-    return width;
-  };
-};
 
 const wrapCanvasWord = (
   font: TextFontFace,
@@ -270,201 +392,6 @@ const wrapCanvasText = (
   }
 
   return lines.join('\n');
-};
-
-const textBoundaryIndexes = (text: string): readonly number[] => {
-  const indexes = [0];
-  let index = 0;
-
-  for (const character of Array.from(text)) {
-    index += character.length;
-    indexes.push(index);
-  }
-
-  return indexes;
-};
-
-const textBoundaryIndexesBetween = (text: string, start: number, end: number): readonly number[] =>
-  textBoundaryIndexes(text.slice(start, end)).map((index) => start + index);
-
-const isSoftWrapBreakCharacter = (character: string): boolean =>
-  character === ' ' || character === '\t';
-
-const findWrapLineEnd = (
-  text: string,
-  start: number,
-  end: number,
-  maxWidth: number,
-  measure: (text: string) => number,
-): number => {
-  const boundaries = textBoundaryIndexesBetween(text, start, end).slice(1);
-  let previous = start;
-  let lastBreak = start;
-
-  for (const boundary of boundaries) {
-    const width = measure(text.slice(start, boundary));
-    if (width > maxWidth && previous > start) return lastBreak > start ? lastBreak : previous;
-
-    const character = text.slice(previous, boundary);
-    if (isSoftWrapBreakCharacter(character)) lastBreak = boundary;
-    previous = boundary;
-  }
-
-  return end;
-};
-
-const editableTextLines = (
-  text: string,
-  maxWidth: number,
-  measure: (text: string) => number,
-): readonly Omit<EditableTextLine, 'index' | 'placements' | 'width'>[] => {
-  const lines: Array<Omit<EditableTextLine, 'index' | 'placements' | 'width'>> = [];
-  let paragraphStart = 0;
-
-  for (let index = 0; index <= text.length; index += 1) {
-    if (index < text.length && text[index] !== '\n') continue;
-
-    const paragraphEnd = index;
-    if (paragraphStart === paragraphEnd) {
-      lines.push({ end: paragraphEnd, start: paragraphStart, text: '' });
-    } else {
-      let lineStart = paragraphStart;
-      while (lineStart < paragraphEnd) {
-        const lineEnd = findWrapLineEnd(text, lineStart, paragraphEnd, maxWidth, measure);
-        lines.push({
-          end: lineEnd,
-          start: lineStart,
-          text: text.slice(lineStart, lineEnd),
-        });
-        lineStart = lineEnd;
-      }
-    }
-
-    paragraphStart = index + 1;
-  }
-
-  return lines;
-};
-
-const caretPlacementFor = (
-  line: Pick<EditableTextLine, 'index' | 'start' | 'text'>,
-  index: number,
-  measure: (text: string) => number,
-): CaretPlacement => ({
-  index,
-  line: line.index,
-  x: measure(line.text.slice(0, Math.max(0, index - line.start))),
-});
-
-const editableTextLayout = (
-  font: TextFontFace,
-  text: string,
-  fontSize: number,
-  lineHeight: number,
-  maxWidth: number,
-): EditableTextLayout => {
-  const measure = createTextMeasurer(font, fontSize, lineHeight);
-  const metricProbe = layoutText({ font, fontSize, lineHeight, text: '' }).font.metrics;
-  const lines = editableTextLines(text, maxWidth, measure).map((line, index): EditableTextLine => {
-    const indexedLine = { ...line, index };
-    const placements = textBoundaryIndexesBetween(text, line.start, line.end).map((placementIndex) =>
-      caretPlacementFor(indexedLine, placementIndex, measure)
-    );
-
-    return {
-      ...indexedLine,
-      placements,
-      width: measure(line.text),
-    };
-  });
-  const caretPlacements = lines.flatMap((line) => line.placements);
-
-  return {
-    ascender: metricProbe.ascender,
-    caretPlacements,
-    descender: metricProbe.descender,
-    font,
-    fontSize,
-    lineHeight,
-    lines,
-    maxWidth,
-    selectionHeight: metricProbe.ascender - metricProbe.descender,
-    selectionYOffset: (metricProbe.ascender + metricProbe.descender) / 2,
-    wrappedText: lines.map((line) => line.text).join('\n'),
-  };
-};
-
-const sameSelection = (left: TextSelection, right: TextSelection): boolean =>
-  left.anchor === right.anchor &&
-  left.focus === right.focus &&
-  left.anchorLine === right.anchorLine &&
-  left.focusLine === right.focusLine;
-
-const sortedTextRange = (selection: TextSelection): TextRange => {
-  if (selection.anchor <= selection.focus) {
-    return {
-      end: selection.focus,
-      endLine: selection.focusLine,
-      start: selection.anchor,
-      startLine: selection.anchorLine,
-    };
-  }
-
-  return {
-    end: selection.anchor,
-    endLine: selection.anchorLine,
-    start: selection.focus,
-    startLine: selection.focusLine,
-  };
-};
-
-const caretPlacement = (
-  layout: EditableTextLayout,
-  index: number,
-  lineHint?: number,
-): CaretPlacement | undefined => {
-  const placements = layout.caretPlacements.filter((candidate) => candidate.index === index);
-  if (placements.length === 0) return undefined;
-  if (lineHint !== undefined) {
-    const linePlacement = placements.find((candidate) => candidate.line === lineHint);
-    if (linePlacement !== undefined) return linePlacement;
-  }
-
-  return placements.at(-1);
-};
-
-const selectionRects = (
-  layout: EditableTextLayout,
-  range: TextRange,
-  origin: Vec3,
-): readonly SelectionRect[] => {
-  if (range.start === range.end) return [];
-
-  const startPlacement = caretPlacement(layout, range.start, range.startLine);
-  const endPlacement = caretPlacement(layout, range.end, range.endLine);
-  if (startPlacement === undefined || endPlacement === undefined) return [];
-
-  const rects: SelectionRect[] = [];
-  for (let line = startPlacement.line; line <= endPlacement.line; line += 1) {
-    const lineLayout = layout.lines[line];
-    if (lineLayout === undefined) continue;
-    const xStart = line === startPlacement.line ? startPlacement.x : 0;
-    const xEnd = line === endPlacement.line ? endPlacement.x : lineLayout.width;
-    const width = Math.max(0, xEnd - xStart);
-    if (width <= 0) continue;
-
-    rects.push({
-      end: line === endPlacement.line ? range.end : lineLayout.end,
-      height: layout.selectionHeight,
-      line,
-      start: line === startPlacement.line ? range.start : lineLayout.start,
-      width,
-      x: origin[0] + xStart,
-      y: origin[1] - line * layout.lineHeight + layout.selectionYOffset,
-    });
-  }
-
-  return rects;
 };
 
 const selectionNodes = (
@@ -630,6 +557,55 @@ const caretNode = (position: Vec3, height: number): RenderNode =>
     />
   ) as RenderNode;
 
+const contextMenuNodes = (
+  font: TextFontFace,
+  menu: TextContextMenuState,
+  commands: readonly TextContextMenuCommandLayout[],
+): readonly RenderNode[] => {
+  if (!menu.open) return [];
+  const [x, y] = clampedContextMenuWorldPosition(menu.worldX, menu.worldY);
+  const height = contextMenuHeight();
+  const nodes: RenderNode[] = [
+    (
+      <mesh
+        geometry={boxGeometry({ size: [contextMenuWidth, height, 0.02] })}
+        material={contextMenuMaterial}
+        transform={{
+          position: [x + contextMenuWidth / 2, y - height / 2, contextMenuZ],
+          rotation: [0, 0, 0],
+        }}
+      />
+    ) as RenderNode,
+  ];
+
+  for (const command of commands) {
+    nodes.push(
+      (
+        <mesh
+          geometry={boxGeometry({ size: [command.width, command.height, 0.02] })}
+          material={contextMenuItemMaterial}
+          transform={{
+            position: [command.x + command.width / 2, command.y - command.height / 2, contextMenuZ + 0.01],
+            rotation: [0, 0, 0],
+          }}
+        />
+      ) as RenderNode,
+      (
+        <text
+          color={command.enabled ? [0.92, 0.96, 0.98, 1] : [0.42, 0.47, 0.5, 1]}
+          font={font}
+          fontSize={contextMenuFontSize}
+          lineHeight={contextMenuLineHeight}
+          origin={[command.x + 0.09, command.y - 0.095, contextMenuZ + 0.03]}
+          text={command.label}
+        />
+      ) as RenderNode,
+    );
+  }
+
+  return nodes;
+};
+
 const editableOrigin = (font: TextFontFace): Vec3 => {
   const heading = h1(font, headingSampleText);
   const subheading = h2(font, 'h1 / h2 canvas primitives');
@@ -656,6 +632,75 @@ const canvasPointToWorld = (
   ];
 };
 
+const worldPointToCanvasClient = (
+  canvas: HTMLCanvasElement,
+  worldX: number,
+  worldY: number,
+): readonly [clientX: number, clientY: number] => {
+  const rect = canvas.getBoundingClientRect();
+  return [
+    rect.left + ((worldX - cameraBounds.left) / (cameraBounds.right - cameraBounds.left)) * rect.width,
+    rect.top + ((cameraBounds.top - worldY) / (cameraBounds.top - cameraBounds.bottom)) * rect.height,
+  ];
+};
+
+const contextMenuHeight = (): number =>
+  contextMenuPadding * 2 + contextMenuItemHeight * 3 + contextMenuGap * 2;
+
+const clampedContextMenuWorldPosition = (
+  worldX: number,
+  worldY: number,
+): readonly [x: number, y: number] => {
+  const height = contextMenuHeight();
+  return [
+    Math.max(
+      cameraBounds.left + contextMenuMargin,
+      Math.min(worldX, cameraBounds.right - contextMenuWidth - contextMenuMargin),
+    ),
+    Math.max(
+      cameraBounds.bottom + height + contextMenuMargin,
+      Math.min(worldY, cameraBounds.top - contextMenuMargin),
+    ),
+  ];
+};
+
+const contextMenuCommands = (
+  menu: TextContextMenuState,
+  enabled: TextContextMenuEnabled,
+): readonly TextContextMenuCommandLayout[] => {
+  if (!menu.open) return [];
+  const [x, y] = clampedContextMenuWorldPosition(menu.worldX, menu.worldY);
+  const commands: readonly {
+    readonly action: ClipboardAction;
+    readonly enabled: boolean;
+    readonly label: string;
+  }[] = [
+    { action: 'cut', enabled: enabled.cut, label: 'Cut' },
+    { action: 'copy', enabled: enabled.copy, label: 'Copy' },
+    { action: 'paste', enabled: enabled.paste, label: 'Paste' },
+  ];
+
+  return commands.map((command, index) => ({
+    ...command,
+    height: contextMenuItemHeight,
+    width: contextMenuWidth - contextMenuPadding * 2,
+    x: x + contextMenuPadding,
+    y: y - contextMenuPadding - index * (contextMenuItemHeight + contextMenuGap),
+  }));
+};
+
+const contextMenuCommandAt = (
+  commands: readonly TextContextMenuCommandLayout[],
+  worldX: number,
+  worldY: number,
+): TextContextMenuCommandLayout | undefined =>
+  commands.find((command) =>
+    worldX >= command.x &&
+    worldX <= command.x + command.width &&
+    worldY <= command.y &&
+    worldY >= command.y - command.height
+  );
+
 const nearestCaretPlacement = (
   layout: EditableTextLayout,
   canvas: HTMLCanvasElement,
@@ -664,31 +709,15 @@ const nearestCaretPlacement = (
 ): CaretPlacement => {
   const origin = editableOrigin(layout.font);
   const [worldX, worldY] = canvasPointToWorld(canvas, clientX, clientY);
-  const targetLine = Math.max(
-    0,
-    Math.min(layout.lines.length - 1, Math.round((origin[1] - worldY) / layout.lineHeight)),
-  );
-  const targetX = worldX - origin[0];
-  const linePlacements = layout.caretPlacements.filter((placement) => placement.line === targetLine);
-  const placements = linePlacements.length > 0 ? linePlacements : layout.caretPlacements;
-  let closest = placements[0];
-  let closestDistance = Number.POSITIVE_INFINITY;
-
-  for (const placement of placements) {
-    const lineDistance = Math.abs(placement.line - targetLine) * contentWidth;
-    const distance = Math.abs(placement.x - targetX) + lineDistance;
-    if (distance >= closestDistance) continue;
-    closest = placement;
-    closestDistance = distance;
-  }
-
-  return closest ?? { index: 0, line: 0, x: 0 };
+  return nearestEditableTextCaret(layout, { x: worldX, y: worldY }, origin);
 };
 
 const textScene = (
   font: TextFontFace,
   editableLayout: EditableTextLayout,
   selection: TextSelection,
+  contextMenu: TextContextMenuState,
+  menuCommands: readonly TextContextMenuCommandLayout[],
   showCaret: boolean,
 ): RenderRoot => {
   const heading = h1(font, headingSampleText);
@@ -727,24 +756,10 @@ const textScene = (
           origin: sceneOrigin,
         })}
         {showCaret ? [caretNode(caretPosition, editableLayout.selectionHeight)] : []}
+        {contextMenuNodes(font, contextMenu, menuCommands)}
       </pass>
     </scene>
   ) as RenderRoot;
-};
-
-const clampTextIndex = (text: string, index: number): number =>
-  Math.max(0, Math.min(text.length, index));
-
-const previousTextIndex = (text: string, index: number): number => {
-  if (index <= 0) return 0;
-  const prefix = Array.from(text.slice(0, index));
-  return prefix.slice(0, -1).join('').length;
-};
-
-const nextTextIndex = (text: string, index: number): number => {
-  if (index >= text.length) return text.length;
-  const character = Array.from(text.slice(index))[0] ?? '';
-  return index + character.length;
 };
 
 const capturePointer = (canvas: HTMLCanvasElement, pointerId: number): void => {
@@ -763,6 +778,52 @@ const releasePointer = (canvas: HTMLCanvasElement, pointerId: number): void => {
   }
 };
 
+const rendererTextCanvas = (): HTMLCanvasElement | undefined => {
+  const canvas = document.querySelector('canvas[aria-label="Renderer text editor"]');
+  return canvas instanceof HTMLCanvasElement ? canvas : undefined;
+};
+
+const focusRendererTextCanvas = (): void => {
+  rendererTextCanvas()?.focus({ preventScroll: true });
+};
+
+const clipboardErrorReason = (error: unknown): ClipboardReason =>
+  error instanceof DOMException && error.name === 'NotAllowedError' ? 'denied' : 'error';
+
+const clipboardErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const incrementClipboardCounters = (
+  counters: ClipboardCounters,
+  action: ClipboardAction,
+  source: ClipboardSource,
+  failed: boolean,
+): ClipboardCounters => ({
+  copy: counters.copy + (action === 'copy' ? 1 : 0),
+  cut: counters.cut + (action === 'cut' ? 1 : 0),
+  failure: counters.failure + (failed ? 1 : 0),
+  keyboardCopy: counters.keyboardCopy,
+  keyboardCut: counters.keyboardCut,
+  keyboardPaste: counters.keyboardPaste,
+  menuCopy: counters.menuCopy + (source === 'menu' && action === 'copy' ? 1 : 0),
+  menuCut: counters.menuCut + (source === 'menu' && action === 'cut' ? 1 : 0),
+  menuPaste: counters.menuPaste + (source === 'menu' && action === 'paste' ? 1 : 0),
+  nativeCopy: counters.nativeCopy + (source === 'native' && action === 'copy' ? 1 : 0),
+  nativeCut: counters.nativeCut + (source === 'native' && action === 'cut' ? 1 : 0),
+  nativePaste: counters.nativePaste + (source === 'native' && action === 'paste' ? 1 : 0),
+  paste: counters.paste + (action === 'paste' ? 1 : 0),
+});
+
+const incrementKeyboardShortcutCounter = (
+  counters: ClipboardCounters,
+  action: ClipboardAction,
+): ClipboardCounters => ({
+  ...counters,
+  keyboardCopy: counters.keyboardCopy + (action === 'copy' ? 1 : 0),
+  keyboardCut: counters.keyboardCut + (action === 'cut' ? 1 : 0),
+  keyboardPaste: counters.keyboardPaste + (action === 'paste' ? 1 : 0),
+});
+
 export const RendererText = (): ReactNode => {
   const fontState = useAtkinsonFont();
   const [sampleText, setSampleText] = useState(defaultSampleText);
@@ -773,7 +834,12 @@ export const RendererText = (): ReactNode => {
     focusLine: undefined,
   });
   const [focused, setFocused] = useState(false);
+  const [clipboardState, setClipboardState] = useState<ClipboardState>(initialClipboardState);
+  const [clipboardReadPermission, setClipboardReadPermission] = useState<ClipboardReadPermission>('unknown');
+  const [contextMenu, setContextMenu] = useState<TextContextMenuState>(closedTextContextMenu);
   const dragStateRef = useRef<TextDragState | undefined>(undefined);
+  const pendingContextMenuCommandRef = useRef<PendingContextMenuCommand | undefined>(undefined);
+  const pendingKeyboardPasteRef = useRef<PendingKeyboardPaste | undefined>(undefined);
   const hitTestMetricsRef = useRef({
     count: 0,
     lastClientX: 0,
@@ -788,13 +854,64 @@ export const RendererText = (): ReactNode => {
     () =>
       font === undefined
         ? undefined
-        : editableTextLayout(font, sampleText, defaultFontSize, editableLineHeight, contentWidth),
+        : layoutEditableText({
+            font,
+            fontSize: defaultFontSize,
+            lineHeight: editableLineHeight,
+            maxWidth: contentWidth,
+            text: sampleText,
+          }),
     [font, sampleText],
   );
+  const currentRange = sortedTextRange(selection);
+  const selectedText = sampleText.slice(currentRange.start, currentRange.end);
+  const hasSelection = currentRange.start !== currentRange.end;
+  const canReadNativeClipboard = typeof navigator.clipboard?.readText === 'function';
+  const menuEnabled = {
+    copy: hasSelection,
+    cut: hasSelection,
+    paste: canReadNativeClipboard,
+  } as const;
+  const menuCommands = contextMenuCommands(contextMenu, menuEnabled);
   const scene =
     font !== undefined && editableLayout !== undefined
-      ? textScene(font, editableLayout, selection, focused)
+      ? textScene(font, editableLayout, selection, contextMenu, menuCommands, focused)
       : textScenePlaceholder;
+
+  useEffect(() => {
+    const permissions = navigator.permissions;
+    if (permissions === undefined || typeof permissions.query !== 'function') {
+      setClipboardReadPermission('unavailable');
+      return;
+    }
+
+    let cancelled = false;
+    let status: PermissionStatus | undefined;
+    let handleChange: (() => void) | undefined;
+    const applyState = (state: PermissionState): void => {
+      if (cancelled) return;
+      setClipboardReadPermission(state === 'granted' || state === 'denied' || state === 'prompt' ? state : 'unknown');
+    };
+
+    void permissions
+      .query({ name: 'clipboard-read' as PermissionName })
+      .then((nextStatus) => {
+        status = nextStatus;
+        handleChange = () => applyState(nextStatus.state);
+        applyState(nextStatus.state);
+        nextStatus.addEventListener('change', handleChange);
+      })
+      .catch(() => {
+        if (!cancelled) setClipboardReadPermission('unknown');
+      });
+
+    return () => {
+      cancelled = true;
+      if (status !== undefined && handleChange !== undefined) {
+        status.removeEventListener('change', handleChange);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (font === undefined || editableLayout === undefined) {
@@ -808,6 +925,13 @@ export const RendererText = (): ReactNode => {
       editableLayout.caretPlacements.at(-1) ??
       { index: 0, line: 0, x: 0 };
     const hitTest = hitTestMetricsRef.current;
+    const canvas = rendererTextCanvas();
+    const menuCommandProbe = menuCommands.map((command): TextContextMenuCommandProbe => {
+      const [clientX, clientY] = canvas === undefined
+        ? [0, 0]
+        : worldPointToCanvasClient(canvas, command.x + command.width / 2, command.y - command.height / 2);
+      return { ...command, clientX, clientY };
+    });
     const probe: TextEditorProbe = {
       caret: {
         height: editableLayout.selectionHeight,
@@ -827,7 +951,7 @@ export const RendererText = (): ReactNode => {
         maxMs: hitTest.maxMs,
       },
       hitTestClientPoint: (clientX, clientY) => {
-        const canvas = document.querySelector('.text-example canvas');
+        const canvas = document.querySelector('canvas[aria-label="Renderer text editor"]');
         if (!(canvas instanceof HTMLCanvasElement)) return undefined;
         return nearestCaretPlacement(editableLayout, canvas, clientX, clientY);
       },
@@ -844,7 +968,13 @@ export const RendererText = (): ReactNode => {
             ? requestedFontSize
             : defaultFontSize;
           const lineHeight = fontSize * 1.18;
-          const layout = editableTextLayout(font, sampleText, fontSize, lineHeight, contentWidth);
+          const layout = layoutEditableText({
+            font,
+            fontSize,
+            lineHeight,
+            maxWidth: contentWidth,
+            text: sampleText,
+          });
           const rects = selectionRects(layout, {
             end: sampleText.length,
             endLine: undefined,
@@ -868,6 +998,22 @@ export const RendererText = (): ReactNode => {
       placements: editableLayout.caretPlacements,
       selection,
       selectionRects: selectionRects(editableLayout, range, origin),
+      selectedText,
+      clipboard: clipboardState,
+      clipboardReadPermission,
+      menu: {
+        commands: menuCommandProbe,
+        enabled: menuEnabled,
+        failure: clipboardState.failure.active && clipboardState.failure.source === 'menu',
+        failureReason: clipboardState.failure.source === 'menu' ? clipboardState.failure.reason : 'none',
+        open: contextMenu.open,
+        unavailableReason: {
+          paste: menuEnabled.paste ? 'none' : customMenuPasteUnavailableReason,
+        },
+        x: contextMenu.x,
+        y: contextMenu.y,
+      },
+      text: sampleText,
       textLength: sampleText.length,
     };
 
@@ -877,7 +1023,18 @@ export const RendererText = (): ReactNode => {
         delete window.__royalTextEditorProbe;
       }
     };
-  }, [editableLayout, font, sampleText, selection]);
+  }, [
+    clipboardReadPermission,
+    clipboardState,
+    contextMenu,
+    editableLayout,
+    font,
+    menuCommands,
+    menuEnabled,
+    sampleText,
+    selectedText,
+    selection,
+  ]);
 
   const replaceText = (nextText: string, nextCaretIndex: number): void => {
     const clampedCaret = clampTextIndex(nextText, nextCaretIndex);
@@ -894,6 +1051,175 @@ export const RendererText = (): ReactNode => {
     const range = sortedTextRange(selection);
     const nextText = `${sampleText.slice(0, range.start)}${insertText}${sampleText.slice(range.end)}`;
     replaceText(nextText, range.start + insertText.length);
+  };
+
+  const recordClipboardResult = (result: ClipboardOperationResult): void => {
+    const completed: ClipboardOperationResult & Pick<ClipboardResult, 'at'> = {
+      ...result,
+      at: performance.now(),
+    };
+    setClipboardState((current) => ({
+      counters: incrementClipboardCounters(
+        current.counters,
+        completed.action,
+        completed.source,
+        !completed.ok,
+      ),
+      failure: !completed.ok
+        ? {
+            action: completed.action,
+            active: true,
+            message: completed.message,
+            reason: completed.reason,
+            source: completed.source,
+          }
+        : initialClipboardFailure,
+      last: completed,
+    }));
+  };
+
+  const recordKeyboardShortcut = (action: ClipboardAction): void => {
+    setClipboardState((current) => ({
+      ...current,
+      counters: incrementKeyboardShortcutCounter(current.counters, action),
+    }));
+  };
+
+  const clearPendingKeyboardPaste = (): void => {
+    const pending = pendingKeyboardPasteRef.current;
+    if (pending !== undefined) {
+      window.clearTimeout(pending.timeoutId);
+      pendingKeyboardPasteRef.current = undefined;
+    }
+  };
+
+  const scheduleKeyboardPasteUnsupportedReport = (): void => {
+    clearPendingKeyboardPaste();
+    pendingKeyboardPasteRef.current = {
+      timeoutId: window.setTimeout(() => {
+        pendingKeyboardPasteRef.current = undefined;
+        recordClipboardResult({
+          action: 'paste',
+          message: 'Browser did not dispatch a paste event to the focused canvas and clipboard-read permission is not granted',
+          ok: false,
+          reason: 'unavailable',
+          source: 'native',
+          textLength: 0,
+        });
+      }, 250),
+    };
+  };
+
+  const runKeyboardClipboardShortcut = (action: ClipboardAction): void => {
+    recordKeyboardShortcut(action);
+    if (action === 'paste') {
+      scheduleKeyboardPasteUnsupportedReport();
+    }
+  };
+
+  const writeTextToSystemClipboard = async (
+    text: string,
+    action: 'copy' | 'cut',
+    source: ClipboardSource,
+  ): Promise<boolean> => {
+    if (text === '') {
+      recordClipboardResult({
+        action,
+        message: 'No selected text',
+        ok: false,
+        reason: 'empty-selection',
+        source,
+        textLength: 0,
+      });
+      return false;
+    }
+
+    const clipboard = navigator.clipboard;
+    if (clipboard === undefined || typeof clipboard.writeText !== 'function') {
+      recordClipboardResult({
+        action,
+        message: 'navigator.clipboard.writeText is unavailable',
+        ok: false,
+        reason: 'unavailable',
+        source,
+        textLength: text.length,
+      });
+      return false;
+    }
+
+    try {
+      await clipboard.writeText(text);
+      recordClipboardResult({
+        action,
+        message: '',
+        ok: true,
+        reason: 'success',
+        source,
+        textLength: text.length,
+      });
+      return true;
+    } catch (error) {
+      recordClipboardResult({
+        action,
+        message: clipboardErrorMessage(error),
+        ok: false,
+        reason: clipboardErrorReason(error),
+        source,
+        textLength: text.length,
+      });
+      return false;
+    }
+  };
+
+  const readTextFromNativeClipboard = async (source: ClipboardSource): Promise<boolean> => {
+    const clipboard = navigator.clipboard;
+    if (clipboard === undefined || typeof clipboard.readText !== 'function') {
+      recordClipboardResult({
+        action: 'paste',
+        message: 'navigator.clipboard.readText is unavailable',
+        ok: false,
+        reason: 'unavailable',
+        source,
+        textLength: 0,
+      });
+      return false;
+    }
+
+    try {
+      const pastedText = await clipboard.readText();
+      if (pastedText === '') {
+        recordClipboardResult({
+          action: 'paste',
+          message: 'Clipboard text was empty',
+          ok: false,
+          reason: 'empty-paste',
+          source,
+          textLength: 0,
+        });
+        return false;
+      }
+
+      replaceSelection(pastedText);
+      recordClipboardResult({
+        action: 'paste',
+        message: '',
+        ok: true,
+        reason: 'success',
+        source,
+        textLength: pastedText.length,
+      });
+      return true;
+    } catch (error) {
+      recordClipboardResult({
+        action: 'paste',
+        message: clipboardErrorMessage(error),
+        ok: false,
+        reason: clipboardErrorReason(error),
+        source,
+        textLength: 0,
+      });
+      return false;
+    }
   };
 
   const setCaret = (index: number, extend: boolean): void => {
@@ -964,6 +1290,15 @@ export const RendererText = (): ReactNode => {
       return;
     }
 
+    if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+      const shortcutKey = event.key.toLowerCase();
+      if (shortcutKey === 'c' || shortcutKey === 'x' || shortcutKey === 'v') {
+        const action = shortcutKey === 'c' ? 'copy' : shortcutKey === 'x' ? 'cut' : 'paste';
+        runKeyboardClipboardShortcut(action);
+        return;
+      }
+    }
+
     if (event.metaKey || event.ctrlKey || event.altKey) return;
 
     if (event.key === 'Backspace') {
@@ -1032,12 +1367,96 @@ export const RendererText = (): ReactNode => {
     }
   };
 
+  const writeTextToClipboardEvent = (
+    event: ClipboardEvent<HTMLCanvasElement>,
+    action: 'copy' | 'cut',
+  ): boolean => {
+    if (selectedText === '') {
+      event.preventDefault();
+      recordClipboardResult({
+        action,
+        message: 'No selected text',
+        ok: false,
+        reason: 'empty-selection',
+        source: 'native',
+        textLength: 0,
+      });
+      return false;
+    }
+
+    try {
+      event.clipboardData.setData('text/plain', selectedText);
+      event.preventDefault();
+      recordClipboardResult({
+        action,
+        message: '',
+        ok: true,
+        reason: 'success',
+        source: 'native',
+        textLength: selectedText.length,
+      });
+      return true;
+    } catch (error) {
+      recordClipboardResult({
+        action,
+        message: clipboardErrorMessage(error),
+        ok: false,
+        reason: clipboardErrorReason(error),
+        source: 'native',
+        textLength: selectedText.length,
+      });
+      return false;
+    }
+  };
+
+  const handleCanvasCopy = (event: ClipboardEvent<HTMLCanvasElement>): void => {
+    writeTextToClipboardEvent(event, 'copy');
+  };
+
+  const handleCanvasCut = (event: ClipboardEvent<HTMLCanvasElement>): void => {
+    const didWrite = writeTextToClipboardEvent(event, 'cut');
+    if (didWrite) replaceSelection('');
+  };
+
   const handleCanvasPaste = (event: ClipboardEvent<HTMLCanvasElement>): void => {
-    const pastedText = event.clipboardData.getData('text/plain');
-    if (pastedText === '') return;
+    clearPendingKeyboardPaste();
+    let pastedText: string;
+    try {
+      pastedText = event.clipboardData.getData('text/plain');
+    } catch (error) {
+      recordClipboardResult({
+        action: 'paste',
+        message: clipboardErrorMessage(error),
+        ok: false,
+        reason: clipboardErrorReason(error),
+        source: 'native',
+        textLength: 0,
+      });
+      return;
+    }
+
+    if (pastedText === '') {
+      recordClipboardResult({
+        action: 'paste',
+        message: 'Clipboard event text was empty',
+        ok: false,
+        reason: 'empty-paste',
+        source: 'native',
+        textLength: 0,
+      });
+      return;
+    }
 
     event.preventDefault();
     replaceSelection(pastedText);
+    recordClipboardResult({
+      action: 'paste',
+      message: '',
+      ok: true,
+      reason: 'success',
+      source: 'native',
+      textLength: pastedText.length,
+    });
   };
 
   const handleCanvasCompositionEnd = (event: CompositionEvent<HTMLCanvasElement>): void => {
@@ -1045,8 +1464,59 @@ export const RendererText = (): ReactNode => {
     replaceSelection(event.data);
   };
 
+  const closeContextMenu = (): void => setContextMenu(closedTextContextMenu);
+
+  const handleMenuCopy = (): void => {
+    void writeTextToSystemClipboard(selectedText, 'copy', 'menu');
+    closeContextMenu();
+    focusRendererTextCanvas();
+  };
+
+  const handleMenuCut = (): void => {
+    const cutText = selectedText;
+    void writeTextToSystemClipboard(cutText, 'cut', 'menu').then((ok) => {
+      if (ok) replaceSelection('');
+    });
+    closeContextMenu();
+    focusRendererTextCanvas();
+  };
+
+  const handleMenuPaste = (): void => {
+    void readTextFromNativeClipboard('menu');
+    closeContextMenu();
+    focusRendererTextCanvas();
+  };
+
+  const runContextMenuCommand = (action: ClipboardAction): void => {
+    if (action === 'copy') {
+      handleMenuCopy();
+      return;
+    }
+    if (action === 'cut') {
+      handleMenuCut();
+      return;
+    }
+    handleMenuPaste();
+  };
+
   const handleCanvasPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+    if (event.button !== 0) return;
+
+    if (contextMenu.open) {
+      const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+      const command = contextMenuCommandAt(menuCommands, worldX, worldY);
+      if (command !== undefined) {
+        event.preventDefault();
+        pendingContextMenuCommandRef.current = command.enabled
+          ? { action: command.action, pointerId: event.pointerId }
+          : undefined;
+        return;
+      }
+    }
+
     event.preventDefault();
+    pendingContextMenuCommandRef.current = undefined;
+    closeContextMenu();
     const clicked = setCaretFromCanvasPoint(event, event.shiftKey);
     event.currentTarget.focus({ preventScroll: true });
     setFocused(true);
@@ -1064,40 +1534,68 @@ export const RendererText = (): ReactNode => {
   };
 
   const handleCanvasPointerEnd = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+    const pendingCommand = pendingContextMenuCommandRef.current;
+    if (pendingCommand?.pointerId === event.pointerId) {
+      pendingContextMenuCommandRef.current = undefined;
+      event.preventDefault();
+      const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+      const command = contextMenuCommandAt(menuCommands, worldX, worldY);
+      if (command?.enabled === true && command.action === pendingCommand.action) {
+        runContextMenuCommand(command.action);
+      }
+      return;
+    }
+
     const drag = dragStateRef.current;
     if (drag?.moved === true) {
       event.preventDefault();
       setCaretFromCanvasPoint(event, true, drag.anchor);
     }
     dragStateRef.current = undefined;
+    pendingContextMenuCommandRef.current = undefined;
     releasePointer(event.currentTarget, event.pointerId);
   };
 
-  return createElement(
-    'div',
-    { className: 'text-example' },
-    fontState.status === 'failed'
-      ? createElement('div', { className: 'text-example-fallback', role: 'status' }, sampleText)
-      : createElement(Canvas, {
-          'aria-label': 'Renderer text editor',
-          'aria-multiline': true,
-          'aria-roledescription': 'editable canvas text',
-          'aria-valuetext': sampleText,
-          children: scene,
-          onBlur: () => setFocused(false),
-          onCompositionEnd: handleCanvasCompositionEnd,
-          onFocus: () => setFocused(true),
-          onKeyDown: handleCanvasKeyDown,
-          onPaste: handleCanvasPaste,
-          onPointerCancel: handleCanvasPointerEnd,
-          onPointerDown: handleCanvasPointerDown,
-          onPointerMove: handleCanvasPointerMove,
-          onPointerUp: handleCanvasPointerEnd,
-          role: 'textbox',
-          rootOptions,
-          tabIndex: 0,
-        }),
-  );
+  const handleCanvasContextMenu = (event: ReactMouseEvent<HTMLCanvasElement>): void => {
+    event.preventDefault();
+    if (!hasSelection) {
+      closeContextMenu();
+      return;
+    }
+    const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+    event.currentTarget.focus({ preventScroll: true });
+    setFocused(true);
+    setContextMenu({
+      open: true,
+      worldX,
+      worldY,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  return createElement(Canvas, {
+    'aria-label': 'Renderer text editor',
+    'aria-multiline': true,
+    'aria-roledescription': 'editable canvas text',
+    'aria-valuetext': sampleText,
+    children: scene,
+    onBlur: () => setFocused(false),
+    onCompositionEnd: handleCanvasCompositionEnd,
+    onContextMenu: handleCanvasContextMenu,
+    onCopy: handleCanvasCopy,
+    onCut: handleCanvasCut,
+    onFocus: () => setFocused(true),
+    onKeyDown: handleCanvasKeyDown,
+    onPaste: handleCanvasPaste,
+    onPointerCancel: handleCanvasPointerEnd,
+    onPointerDown: handleCanvasPointerDown,
+    onPointerMove: handleCanvasPointerMove,
+    onPointerUp: handleCanvasPointerEnd,
+    role: 'textbox',
+    rootOptions,
+    tabIndex: 0,
+  });
 };
 
 const textScenePlaceholder = (

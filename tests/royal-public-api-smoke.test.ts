@@ -9,6 +9,7 @@ import {
 } from '@royal/react';
 import {
   boxGeometry,
+  createSvgGatewayGeometry,
   mesh,
   pass,
   perspectiveCamera,
@@ -26,11 +27,26 @@ import {
   type TextMesh,
   type TextOptions
 } from '@royal/renderer-core';
+import * as rendererCoreSvg from '@royal/renderer-core/svg';
+import type { SvgGatewayGeometry as RendererCoreSvgGeometry } from '@royal/renderer-core/svg';
+import * as rendererCoreText from '@royal/renderer-core/text';
+import type {
+  TextLayout as RendererCoreTextLayout,
+  TextMesh as RendererCoreTextMesh
+} from '@royal/renderer-core/text';
 import {
   collectRendererCapabilityRows,
   type RendererCapabilityProbeResult
-} from '@royal/react/testing';
+} from '@royal/renderer-webgl/capabilities';
+import {
+  createVirtualTextureResource,
+  type VirtualTexturePageAddress,
+  type VirtualTextureResource
+} from '@royal/renderer-webgl/virtual-texturing';
 import * as rendererCore from '@royal/renderer-core';
+import * as rendererWebgl from '@royal/renderer-webgl';
+import * as rendererWebglVirtualTexturing from '@royal/renderer-webgl/virtual-texturing';
+import * as tarstateLens from '@royal/tarstate-lens';
 import {
   assetIdForSrc,
   createRoyalAppBoundary,
@@ -46,6 +62,9 @@ import {
   type RoyalLensStores,
   type RoyalRenderRow
 } from '@royal/tarstate-lens';
+
+const researchOnlyRuntimeExportNamePattern =
+  /^(?:customShaderMaterial|shaderUniform|shaderAttribute|DynamicImpostorNode|dynamicImpostor|VirtualTextureNode|VirtualTextureRuntime|LOD|Lod|lod|LODNode|LodNode|lodNode|LevelOfDetailNode|levelOfDetail|dynamicLod|lodLevel|lodRange|lodThreshold|lodDistance|lodPolicy|lodBias|lodBudget|FormControl|formControl|input|textarea|select|PageCache|pageCache|createPageCache|PageTable|pageTable|createPageTable|createVirtualTexturePageTableTexture|uploadVirtualTexturePageTableTexels|virtualTexturePageTableMipDimensions)$/;
 
 describe('Royal public API smoke tests', () => {
   it('lets consumers build a render root through the React adapter and renderer-core primitives', () => {
@@ -98,6 +117,27 @@ describe('Royal public API smoke tests', () => {
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
   });
 
+  it('keeps research-only feature names out of consumer runtime package exports', () => {
+    const publicRuntimeModules = [
+      { module: reactRoyal, specifier: '@royal/react' },
+      { module: rendererCore, specifier: '@royal/renderer-core' },
+      { module: rendererWebgl, specifier: '@royal/renderer-webgl' },
+      {
+        module: rendererWebglVirtualTexturing,
+        specifier: '@royal/renderer-webgl/virtual-texturing'
+      },
+      { module: tarstateLens, specifier: '@royal/tarstate-lens' }
+    ] as const;
+
+    const leakedExports = publicRuntimeModules.flatMap(({ module, specifier }) =>
+      Object.keys(module)
+        .filter((name) => researchOnlyRuntimeExportNamePattern.test(name))
+        .map((name) => `${specifier}.${name}`)
+    );
+
+    expect(leakedExports).toEqual([]);
+  });
+
   it('exposes renderer-core text shaping, layout, and mesh helpers from the renderer package', () => {
     const shaped = shapeText({ text: 'AV office' });
     const layout = layoutText({
@@ -140,7 +180,37 @@ describe('Royal public API smoke tests', () => {
     expectTypeOf<TextNode>().not.toHaveProperty('cellHeight');
   });
 
-  it('exposes renderer testing helpers without package-internal imports', () => {
+  it('exposes heavy renderer-core text and SVG lowering helpers through explicit subpaths', () => {
+    const shaped = rendererCoreText.shapeText({ text: 'AV' });
+    const layout = rendererCoreText.layoutText({
+      fontSize: 1.5,
+      text: 'subpath'
+    });
+    const meshFromLayout = rendererCoreText.textMesh(layout);
+    const geometry = rendererCoreSvg.createSvgGatewayGeometry({
+      height: 1,
+      kind: 'rect',
+      width: 2
+    });
+    const pathContours = rendererCoreSvg.svgPathToContours('M 0 0 L 2 0 L 2 1 Z');
+
+    expect(rendererCoreText.shapeText).toBe(shapeText);
+    expect(rendererCoreText.layoutText).toBe(layoutText);
+    expect(rendererCoreText.textMesh).toBe(textMesh);
+    expect(rendererCoreText).toHaveProperty('layoutEditableText');
+    expect(rendererCoreSvg.createSvgGatewayGeometry).toBe(createSvgGatewayGeometry);
+    expect(shaped.run.glyphs).toHaveLength(2);
+    expect(layout.source).toBe('subpath');
+    expect(meshFromLayout.vertices.length).toBeGreaterThan(0);
+    expect(geometry.kind).toBe('svg-gateway-geometry');
+    expect(geometry.mesh.indices.length).toBeGreaterThan(0);
+    expect(pathContours).toHaveLength(1);
+    expectTypeOf(layout).toEqualTypeOf<RendererCoreTextLayout>();
+    expectTypeOf(meshFromLayout).toEqualTypeOf<RendererCoreTextMesh>();
+    expectTypeOf(geometry).toEqualTypeOf<RendererCoreSvgGeometry>();
+  });
+
+  it('exposes renderer capability diagnostics without package-internal imports', () => {
     const result = collectRendererCapabilityRows(
       {
         getExtension: () => undefined,
@@ -152,6 +222,14 @@ describe('Royal public API smoke tests', () => {
     expect(result.rows.some((row) => row.kind === 'context_version')).toBe(true);
     expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl2')).toBe(true);
     expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();
+  });
+
+  it('exposes the renderer-webgl virtual-texturing facade', () => {
+    const page: VirtualTexturePageAddress = { mip: 0, x: 0, y: 0 };
+
+    expect(createVirtualTextureResource).toBeTypeOf('function');
+    expect(page).toEqual({ mip: 0, x: 0, y: 0 });
+    expectTypeOf<ReturnType<typeof createVirtualTextureResource>>().toEqualTypeOf<VirtualTextureResource>();
   });
 
   it('lets consumers query Royal store lenses without package-internal imports', async () => {
@@ -173,6 +251,12 @@ describe('Royal public API smoke tests', () => {
     );
     expect(snapshot.probe.rowCount(royalLensSchema.layoutBoxes)).toBe(1);
     expect(snapshot.probe.rows(royalLensSchema.layoutBoxes)[0]?.boxId).toBe('card');
+    expect(snapshot.probe.rows(royalLensSchema.assets)[0]).toMatchObject({
+      assetId: 'asset:gltf:status-card',
+      src: '/status.gltf',
+      revision: 'api-rev-1',
+      uri: '/status.gltf'
+    });
     expect(renderRows.diagnostics).toEqual([]);
     expect(renderRows.rows).toEqual([
       {
@@ -195,6 +279,19 @@ describe('Royal public API smoke tests', () => {
     expect(royalCapabilityBoundaryContract.appMayUseRendererHandles).toBe(false);
     expectTypeOf(renderRows.rows).toEqualTypeOf<readonly RoyalRenderRow[]>();
   });
+
+  it('keeps public Tarstate lens v1 free of experimental terrain APIs', () => {
+    expect(tarstateLens).not.toHaveProperty('experimentalTerrainQueries');
+    expect(tarstateLens).not.toHaveProperty('writeExperimentalTerrainAvailability');
+    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainManifests');
+    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainTiles');
+    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainAssets');
+    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainAssetAvailability');
+    expectTypeOf<typeof tarstateLens>().not.toHaveProperty('experimentalTerrainQueries');
+    expectTypeOf<typeof tarstateLens>().not.toHaveProperty('writeExperimentalTerrainAvailability');
+    expectTypeOf<typeof tarstateLens.royalLensSchema>().not.toHaveProperty('terrainManifests');
+    expectTypeOf<RoyalLensStores>().not.toHaveProperty('terrainStore');
+  });
 });
 
 function createApiStores(): RoyalLensStores {
@@ -210,7 +307,11 @@ function createApiStores(): RoyalLensStores {
           primitive: 'panel',
           tone: 'surface',
           gltf: {
-            src: '/status.gltf'
+            asset: {
+              id: 'asset:gltf:status-card',
+              revision: 'api-rev-1',
+              uri: '/status.gltf'
+            }
           }
         }
       ]
@@ -231,7 +332,11 @@ function createApiStores(): RoyalLensStores {
         primitive: 'panel',
         tone: 'surface',
         gltf: {
-          src: '/status.gltf'
+          asset: {
+            id: 'asset:gltf:status-card',
+            revision: 'api-rev-1',
+            uri: '/status.gltf'
+          }
         }
       }
     ],

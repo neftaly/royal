@@ -18,6 +18,22 @@ Visibility packets, path lowering, virtual-texture page tables, cache policy,
 and terrain LOD selection are renderer-private mechanics until there is a
 stable product reason to expose a smaller public contract.
 
+## Readiness Roadmap
+
+`prototype-readiness.json` is the machine-checked handoff for this plan. It
+records each stage, its dependencies, local validation commands, exact blocker,
+and next prototype step.
+
+Run:
+
+```sh
+node research/renderer-foundations/validate-prototype-readiness.mjs
+```
+
+This roadmap is still blocked from becoming real examples. The practical
+renderer gap is private packet extraction, manifest normalization, indexed
+geometry upload, and material texture-resource indirection in WebGL.
+
 ## Current Research Inputs
 
 The plan joins these lanes:

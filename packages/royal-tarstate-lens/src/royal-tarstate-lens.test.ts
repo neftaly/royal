@@ -12,10 +12,12 @@ import {
   write
 } from '@tarstate/core';
 import {
+  assetIdForSrc,
   createPrototypeRoyalAppBoundary,
   createPrototypeRoyalLensSnapshot,
   createPrototypeStoreLensSnapshot,
   createPrototypeStorePatchDispatcher,
+  deriveAssetRows,
   deriveLayoutNodeRows,
   prototypeRoyalActivationPatchRoute,
   royalCapabilityBoundaryContract,
@@ -311,6 +313,83 @@ describe('tarstate Royal/store lens prototype', () => {
       ['root', 'children', 'automerge:node-a'],
       ['root', 'children', 1],
       ['root', 'children', 2]
+    ]);
+  });
+
+  it('normalizes legacy and canonical glTF inputs into asset refs', () => {
+    const bounds = {
+      max: [1, 2, 3],
+      min: [-1, -2, -3]
+    } as const;
+    const tree: RoyalLayoutSpecInput = {
+      label: 'root',
+      tone: 'root',
+      children: [
+        {
+          id: 'legacy',
+          label: 'legacy source',
+          tone: 'media',
+          gltf: {
+            src: '/legacy.gltf'
+          }
+        },
+        {
+          id: 'canonical-direct',
+          label: 'canonical direct asset',
+          tone: 'media',
+          gltf: {
+            bounds,
+            id: 'asset:gltf:helmet',
+            revision: 2,
+            uri: '/helmet.gltf'
+          }
+        },
+        {
+          id: 'canonical-nested',
+          label: 'canonical nested asset',
+          tone: 'media',
+          gltf: {
+            asset: {
+              id: 'asset:gltf:helmet-preview',
+              revision: 'preview-a',
+              uri: '/helmet-preview.gltf'
+            }
+          }
+        }
+      ]
+    };
+    const layoutNodes = deriveLayoutNodeRows(tree, 'assets');
+    const assets = deriveAssetRows(tree, 'assets');
+
+    expect(layoutNodes.find((row) => row.nodeId === 'legacy')?.assetId).toBe(assetIdForSrc('/legacy.gltf'));
+    expect(layoutNodes.find((row) => row.nodeId === 'canonical-direct')?.assetId).toBe('asset:gltf:helmet');
+    expect(layoutNodes.find((row) => row.nodeId === 'canonical-nested')?.assetId).toBe('asset:gltf:helmet-preview');
+    expect(assets).toEqual([
+      {
+        scopeId: 'assets',
+        assetId: assetIdForSrc('/legacy.gltf'),
+        src: '/legacy.gltf',
+        kind: 'gltf',
+        ownerNodeId: 'legacy'
+      },
+      {
+        scopeId: 'assets',
+        assetId: 'asset:gltf:helmet',
+        src: '/helmet.gltf',
+        kind: 'gltf',
+        ownerNodeId: 'canonical-direct',
+        revision: '2',
+        uri: '/helmet.gltf'
+      },
+      {
+        scopeId: 'assets',
+        assetId: 'asset:gltf:helmet-preview',
+        src: '/helmet-preview.gltf',
+        kind: 'gltf',
+        ownerNodeId: 'canonical-nested',
+        revision: 'preview-a',
+        uri: '/helmet-preview.gltf'
+      }
     ]);
   });
 

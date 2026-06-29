@@ -1,0 +1,528 @@
+{
+  "apiVersion": "royal.custom-shader-material.v0",
+  "cases": [
+    {
+      "name": "portable-hologram-valid",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "custom",
+        "codes": []
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:hologram-rim",
+        "revision": "2026-06-29",
+        "label": "Hologram Rim",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "unlit",
+          "baseColor": {
+            "kind": "solid",
+            "color": [0.1, 0.35, 0.8, 1],
+            "colorSpace": "srgb"
+          }
+        },
+        "gates": {
+          "backends": ["webgl2", "webgpu"],
+          "features": ["texture-asset"],
+          "limits": {
+            "fragmentTextureUnits": 1
+          }
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          },
+          "normal": {
+            "semantic": "normal",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [0.2, 0.72, 1, 1]
+          },
+          "pulse": {
+            "type": "float",
+            "default": 0.65
+          },
+          "baseColor": {
+            "type": "texture2d",
+            "default": {
+              "kind": "solid",
+              "color": [1, 1, 1, 1],
+              "colorSpace": "srgb"
+            }
+          }
+        },
+        "runtimeUniforms": {
+          "pulse": 0.25
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position", "normal"],
+            "outputs": {
+              "worldNormal": "vec3"
+            },
+            "code": "let world = royal.model * vec4(attr.position, 1.0);\nout.worldNormal = normalize((royal.normalMatrix * vec4(attr.normal, 0.0)).xyz);\nreturn royal.viewProjection * world;"
+          },
+          "fragment": {
+            "inputs": {
+              "worldNormal": "vec3"
+            },
+            "code": "let rim = pow(1.0 - saturate(dot(normalize(in.worldNormal), royal.viewDir)), 2.0);\nlet lit = 0.35 + rim * uniforms.pulse;\nreturn vec4(uniforms.tint.rgb * lit, uniforms.tint.a);"
+          }
+        }
+      }
+    },
+    {
+      "name": "stable-cache-identity-reordered",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "custom",
+        "codes": [],
+        "sameProgramCacheKeyAs": "portable-hologram-valid",
+        "differentMaterialInstanceKeyFrom": "portable-hologram-valid"
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "label": "Hologram Rim Instance",
+        "revision": "2026-06-29",
+        "id": "example:hologram-rim",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "baseColor": {
+            "color": [0.02, 0.08, 0.16, 1],
+            "kind": "solid",
+            "colorSpace": "srgb"
+          },
+          "kind": "unlit"
+        },
+        "attributes": {
+          "normal": {
+            "type": "vec3",
+            "required": true,
+            "semantic": "normal"
+          },
+          "position": {
+            "required": true,
+            "semantic": "position",
+            "type": "vec3"
+          }
+        },
+        "uniforms": {
+          "baseColor": {
+            "default": {
+              "kind": "solid",
+              "color": [0.8, 0.9, 1, 1],
+              "colorSpace": "srgb"
+            },
+            "type": "texture2d"
+          },
+          "pulse": {
+            "default": 0.15,
+            "type": "float"
+          },
+          "tint": {
+            "default": [0.35, 0.8, 1, 1],
+            "type": "vec4"
+          }
+        },
+        "runtimeUniforms": {
+          "pulse": 0.9
+        },
+        "gates": {
+          "limits": {
+            "fragmentTextureUnits": 1
+          },
+          "features": ["texture-asset"],
+          "backends": ["webgpu", "webgl2"]
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "fragment": {
+            "inputs": {
+              "worldNormal": "vec3"
+            },
+            "code": "let rim = pow(1.0 - saturate(dot(normalize(in.worldNormal), royal.viewDir)), 2.0);\nlet lit = 0.35 + rim * uniforms.pulse;\nreturn vec4(uniforms.tint.rgb * lit, uniforms.tint.a);"
+          },
+          "vertex": {
+            "uses": ["normal", "position"],
+            "outputs": {
+              "worldNormal": "vec3"
+            },
+            "code": "let world = royal.model * vec4(attr.position, 1.0);\nout.worldNormal = normalize((royal.normalMatrix * vec4(attr.normal, 0.0)).xyz);\nreturn royal.viewProjection * world;"
+          }
+        }
+      }
+    },
+    {
+      "name": "unsupported-required-attribute",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_attribute_unsupported"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:needs-tangent",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "standard",
+          "baseColor": {
+            "kind": "solid",
+            "color": [1, 1, 1, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgl2"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          },
+          "tangent": {
+            "semantic": "tangent",
+            "type": "vec4",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [1, 1, 1, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position", "tangent"],
+            "outputs": {
+              "tangentSign": "float"
+            },
+            "code": "out.tangentSign = attr.tangent.w;\nreturn royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {
+              "tangentSign": "float"
+            },
+            "code": "return vec4(uniforms.tint.rgb * in.tangentSign, uniforms.tint.a);"
+          }
+        }
+      }
+    },
+    {
+      "name": "uniform-runtime-type-mismatch",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_uniform_type_mismatch"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:bad-uniform-update",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "unlit",
+          "baseColor": {
+            "kind": "solid",
+            "color": [0.9, 0.2, 0.1, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgl2"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [1, 0.4, 0.2, 1]
+          }
+        },
+        "runtimeUniforms": {
+          "tint": [1, 0.4, 0.2]
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position"],
+            "outputs": {},
+            "code": "return royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {},
+            "code": "return uniforms.tint;"
+          }
+        }
+      }
+    },
+    {
+      "name": "missing-fallback-material",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_fallback_missing"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:no-fallback",
+        "geometryTargets": ["box"],
+        "gates": {
+          "backends": ["webgl2"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [1, 1, 1, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position"],
+            "outputs": {},
+            "code": "return royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {},
+            "code": "return uniforms.tint;"
+          }
+        }
+      }
+    },
+    {
+      "name": "portable-mode-rejects-glsl-token",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_portability_violation"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:raw-glsl-in-portable-mode",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "unlit",
+          "baseColor": {
+            "kind": "solid",
+            "color": [0, 0, 0, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgl2", "webgpu"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [0.2, 0.8, 1, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position"],
+            "outputs": {},
+            "code": "return royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {},
+            "code": "let color = uniforms.tint;\ngl_FragColor;\nreturn color;"
+          }
+        }
+      }
+    },
+    {
+      "name": "capability-gate-falls-back",
+      "capabilities": "webgl2Only",
+      "expect": {
+        "status": "fallback",
+        "codes": ["renderer_backend_unavailable", "renderer_feature_unavailable"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:webgpu-storage-effect",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "standard",
+          "baseColor": {
+            "kind": "solid",
+            "color": [0.7, 0.7, 0.7, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgpu"],
+          "features": ["storage-buffer"],
+          "limits": {
+            "fragmentTextureUnits": 1
+          }
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [0.8, 0.8, 1, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position"],
+            "outputs": {},
+            "code": "return royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {},
+            "code": "return uniforms.tint;"
+          }
+        }
+      }
+    },
+    {
+      "name": "shader-compile-error",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_compile_error"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:compile-error",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "unlit",
+          "baseColor": {
+            "kind": "solid",
+            "color": [1, 0, 1, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgl2"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [1, 0, 1, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position"],
+            "outputs": {},
+            "code": "let broken = SYNTAX_ERROR;\nreturn royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {},
+            "code": "return uniforms.tint;"
+          }
+        }
+      }
+    },
+    {
+      "name": "shader-link-error",
+      "capabilities": "dualBackend",
+      "expect": {
+        "status": "invalid",
+        "codes": ["shader_link_error"]
+      },
+      "descriptor": {
+        "kind": "custom-shader-material",
+        "id": "example:link-error",
+        "geometryTargets": ["box"],
+        "fallback": {
+          "kind": "unlit",
+          "baseColor": {
+            "kind": "solid",
+            "color": [1, 1, 0, 1]
+          }
+        },
+        "gates": {
+          "backends": ["webgl2"]
+        },
+        "attributes": {
+          "position": {
+            "semantic": "position",
+            "type": "vec3",
+            "required": true
+          },
+          "normal": {
+            "semantic": "normal",
+            "type": "vec3",
+            "required": true
+          }
+        },
+        "uniforms": {
+          "tint": {
+            "type": "vec4",
+            "default": [1, 1, 0, 1]
+          }
+        },
+        "snippets": {
+          "language": "royal-shader-v1",
+          "portability": "webgl2-webgpu",
+          "vertex": {
+            "uses": ["position", "normal"],
+            "outputs": {
+              "worldNormal": "vec3"
+            },
+            "code": "out.worldNormal = attr.normal;\nreturn royal.viewProjection * royal.model * vec4(attr.position, 1.0);"
+          },
+          "fragment": {
+            "inputs": {
+              "rimNormal": "vec3"
+            },
+            "code": "let lit = saturate(dot(normalize(in.rimNormal), royal.viewDir));\nreturn vec4(uniforms.tint.rgb * lit, uniforms.tint.a);"
+          }
+        }
+      }
+    }
+  ]
+}

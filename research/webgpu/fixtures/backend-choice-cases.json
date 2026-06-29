@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "royal.research.webgpu.backend-choice-cases.v0",
+  "status": "research-fixture",
+  "exampleReadiness": {
+    "readyForExampleRoute": false,
+    "blocker": "Packages still expose a synchronous WebGL root contract; there is no async backend selection path for examples to request WebGPU and fall back deliberately.",
+    "nextPrototypeStep": "Port the backend-choice reducer into the root creation path with tests, then add a diagnostic-only examples probe route after async root readiness exists."
+  },
+  "cases": [
+    {
+      "name": "auto-prefers-webgpu-when-required-features-are-present",
+      "request": {
+        "backend": "auto",
+        "requiredFeatures": ["compute-pass", "storage-buffer"],
+        "fallback": "webgl"
+      },
+      "probe": {
+        "webgl": {
+          "available": true,
+          "version": 2,
+          "features": ["indexed-geometry", "uint32-indices", "instancing"]
+        },
+        "webgpu": {
+          "available": true,
+          "features": ["timestamp-query", "texture-compression-bc"],
+          "limits": {
+            "maxTextureDimension2D": 8192,
+            "maxBufferSize": 268435456
+          }
+        }
+      },
+      "expected": {
+        "backend": "webgpu",
+        "diagnosticCodes": [],
+        "featuresInclude": ["compute-pass", "storage-buffer", "timestamp-query", "texture-compression-bc"]
+      }
+    },
+    {
+      "name": "auto-falls-back-to-webgl-when-webgpu-is-unavailable",
+      "request": {
+        "backend": "auto",
+        "requiredFeatures": ["indexed-geometry"],
+        "fallback": "webgl"
+      },
+      "probe": {
+        "webgl": {
+          "available": true,
+          "version": 2,
+          "features": ["indexed-geometry", "uint32-indices", "instancing"]
+        },
+        "webgpu": {
+          "available": false,
+          "features": [],
+          "limits": {},
+          "reason": "navigator.gpu is unavailable"
+        }
+      },
+      "expected": {
+        "backend": "webgl",
+        "diagnosticCodes": ["fallback_selected"],
+        "featuresInclude": ["indexed-geometry"]
+      }
+    },
+    {
+      "name": "explicit-webgpu-reports-missing-required-feature",
+      "request": {
+        "backend": "webgpu",
+        "requiredFeatures": ["timestamp-query"],
+        "fallback": "error"
+      },
+      "probe": {
+        "webgl": {
+          "available": true,
+          "version": 2,
+          "features": ["indexed-geometry", "uint32-indices", "instancing"]
+        },
+        "webgpu": {
+          "available": true,
+          "features": [],
+          "limits": {
+            "maxTextureDimension2D": 4096
+          }
+        }
+      },
+      "expected": {
+        "backend": "webgpu",
+        "diagnosticCodes": ["feature_unavailable"],
+        "diagnosticFeatures": ["timestamp-query"],
+        "featuresInclude": ["compute-pass", "storage-buffer"]
+      }
+    },
+    {
+      "name": "fallback-error-keeps-auto-from-silently-choosing-webgl",
+      "request": {
+        "backend": "auto",
+        "requiredFeatures": ["compute-pass"],
+        "fallback": "error"
+      },
+      "probe": {
+        "webgl": {
+          "available": true,
+          "version": 2,
+          "features": ["indexed-geometry", "uint32-indices", "instancing"]
+        },
+        "webgpu": {
+          "available": false,
+          "features": [],
+          "limits": {},
+          "reason": "requestAdapter returned null"
+        }
+      },
+      "expected": {
+        "backend": "webgpu",
+        "diagnosticCodes": ["backend_unavailable"],
+        "featuresInclude": ["compute-pass", "storage-buffer"]
+      }
+    }
+  ]
+}

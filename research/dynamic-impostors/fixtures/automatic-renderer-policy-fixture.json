@@ -1,0 +1,609 @@
+{
+  "schema": "royal.research.dynamic-impostors.automatic-policy.v0",
+  "date": "2026-06-29",
+  "status": "research-only",
+  "description": "CPU-only fixture for automatic renderer-private mesh LOD, billboard, and octahedral impostor policy. It deliberately avoids app-authored impostor nodes and per-object thresholds.",
+  "apiBoundary": {
+    "publicSceneShape": "ordinary asset instances plus renderer-produced visibility packets",
+    "rendererPrivateOutputs": true,
+    "publicRendererNodesAllowed": false,
+    "publicPerObjectThresholdsAllowed": false
+  },
+  "capabilities": {
+    "webgl2": {
+      "instancing": true,
+      "textureArrays": false,
+      "fragmentDepth": false,
+      "computeCulling": false,
+      "path": "instanced-quad-impostors-with-page-table-textures"
+    },
+    "webgpu": {
+      "instancing": true,
+      "textureArrays": true,
+      "storageBuffers": true,
+      "computeCulling": true,
+      "path": "storage-buffer-indirect-impostor-packets"
+    }
+  },
+  "rendererPolicy": {
+    "owner": "renderer-private",
+    "source": [
+      "sourceMeshes.bounds",
+      "sourceMeshes.errorMetrics",
+      "impostorAtlases.pageGroups",
+      "materialTextureBudgets",
+      "cameraPackets",
+      "visibilityPackets"
+    ],
+    "selection": {
+      "qualityTargetPixels": {
+        "default": 4.0,
+        "alpha-foliage": 4.0,
+        "opaque-branch": 5.0
+      },
+      "cullProjectedDiameterBelowPixels": 2.0,
+      "cullDistanceMeters": 920,
+      "preferLowestCostWithinError": true
+    },
+    "hysteresis": {
+      "screenErrorMarginFraction": 0.25,
+      "holdFrames": 2,
+      "cameraJitterPixels": 0.25
+    },
+    "transition": {
+      "minCrossFadeFrames": 4,
+      "mode": "renderer-dithered-alpha",
+      "depthStable": true,
+      "carryPreviousRepresentationDuringFade": true
+    },
+    "fallback": {
+      "missingOctahedralPage": "billboard",
+      "missingBillboardPage": "coarse-bounds-card",
+      "skinnedOrAnimatedImpostor": "mesh-lod-only",
+      "uncertainOcclusion": "draw-conservative-lower-priority"
+    },
+    "batching": {
+      "maxDrawPacketsPerFrame": 8,
+      "instancingKeys": [
+        "representation",
+        "atlasId",
+        "materialClass",
+        "depthPolicy"
+      ]
+    }
+  },
+  "materialTextureBudgets": {
+    "physicalPageSlots": 4,
+    "maxUploadsPerFrame": 2,
+    "pageSize": 128,
+    "bytesPerPage": 65536,
+    "maxUploadBytesPerFrame": 131072,
+    "fallbackQualityLabelsRequired": true
+  },
+  "sourceMeshes": [
+    {
+      "id": "fir_cluster",
+      "meshRef": "asset://forest/source/fir-cluster-high.glb#mesh/fir",
+      "bounds": {
+        "center": [0, 17.5, 0],
+        "halfExtents": [4.6, 17.5, 4.2],
+        "radius": 18.4
+      },
+      "materialClass": "alpha-foliage",
+      "material": {
+        "opacity": "alpha-tested",
+        "depthWrite": true,
+        "sortPolicy": "per-cell-stable-order"
+      },
+      "animation": {
+        "skinned": false,
+        "vertexAnimated": false
+      },
+      "errorMetrics": {
+        "representations": [
+          {
+            "id": "meshHigh",
+            "kind": "mesh",
+            "meshLod": "high",
+            "meshRef": "asset://forest/source/fir-cluster-high.glb#mesh/fir",
+            "geometricErrorMeters": 0.05,
+            "triangles": 18240,
+            "costUnits": 100,
+            "batchKey": "mesh/fir/high"
+          },
+          {
+            "id": "meshMid",
+            "kind": "mesh",
+            "meshLod": "mid",
+            "meshRef": "asset://forest/source/fir-cluster-medium.glb#mesh/fir",
+            "geometricErrorMeters": 0.36,
+            "triangles": 6120,
+            "costUnits": 42,
+            "batchKey": "mesh/fir/mid"
+          },
+          {
+            "id": "octahedral",
+            "kind": "octahedral",
+            "atlasId": "forest_oct_auto_v1",
+            "pageGroup": "oct/fir",
+            "geometricErrorMeters": 1.3,
+            "triangles": 2,
+            "costUnits": 7,
+            "supportsNonUniformScale": false,
+            "batchKey": "impostor/oct/fir"
+          },
+          {
+            "id": "billboard",
+            "kind": "billboard",
+            "atlasId": "forest_billboard_auto_v1",
+            "pageGroup": "billboard/fir",
+            "geometricErrorMeters": 2.6,
+            "triangles": 2,
+            "costUnits": 2,
+            "supportsNonUniformScale": true,
+            "batchKey": "impostor/billboard/fir"
+          }
+        ]
+      }
+    },
+    {
+      "id": "beech_cluster",
+      "meshRef": "asset://forest/source/beech-cluster-high.glb#mesh/beech",
+      "bounds": {
+        "center": [0, 13.2, 0],
+        "halfExtents": [5.8, 13.2, 5.3],
+        "radius": 15.2
+      },
+      "materialClass": "alpha-foliage",
+      "material": {
+        "opacity": "alpha-tested",
+        "depthWrite": true,
+        "sortPolicy": "per-cell-stable-order"
+      },
+      "animation": {
+        "skinned": false,
+        "vertexAnimated": false
+      },
+      "errorMetrics": {
+        "representations": [
+          {
+            "id": "meshHigh",
+            "kind": "mesh",
+            "meshLod": "high",
+            "meshRef": "asset://forest/source/beech-cluster-high.glb#mesh/beech",
+            "geometricErrorMeters": 0.06,
+            "triangles": 22680,
+            "costUnits": 110,
+            "batchKey": "mesh/beech/high"
+          },
+          {
+            "id": "meshMid",
+            "kind": "mesh",
+            "meshLod": "mid",
+            "meshRef": "asset://forest/source/beech-cluster-medium.glb#mesh/beech",
+            "geometricErrorMeters": 0.42,
+            "triangles": 7480,
+            "costUnits": 46,
+            "batchKey": "mesh/beech/mid"
+          },
+          {
+            "id": "octahedral",
+            "kind": "octahedral",
+            "atlasId": "forest_oct_auto_v1",
+            "pageGroup": "oct/beech",
+            "geometricErrorMeters": 1.18,
+            "triangles": 2,
+            "costUnits": 7,
+            "supportsNonUniformScale": false,
+            "batchKey": "impostor/oct/beech"
+          },
+          {
+            "id": "billboard",
+            "kind": "billboard",
+            "atlasId": "forest_billboard_auto_v1",
+            "pageGroup": "billboard/beech",
+            "geometricErrorMeters": 2.45,
+            "triangles": 2,
+            "costUnits": 2,
+            "supportsNonUniformScale": true,
+            "batchKey": "impostor/billboard/beech"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dead_pine",
+      "meshRef": "asset://forest/source/dead-pine-high.glb#mesh/snag",
+      "bounds": {
+        "center": [0, 10.8, 0],
+        "halfExtents": [1.7, 10.8, 1.4],
+        "radius": 11.1
+      },
+      "materialClass": "opaque-branch",
+      "material": {
+        "opacity": "opaque",
+        "depthWrite": true,
+        "sortPolicy": "opaque-front-to-back"
+      },
+      "animation": {
+        "skinned": false,
+        "vertexAnimated": false
+      },
+      "errorMetrics": {
+        "representations": [
+          {
+            "id": "meshHigh",
+            "kind": "mesh",
+            "meshLod": "high",
+            "meshRef": "asset://forest/source/dead-pine-high.glb#mesh/snag",
+            "geometricErrorMeters": 0.04,
+            "triangles": 4380,
+            "costUnits": 48,
+            "batchKey": "mesh/dead-pine/high"
+          },
+          {
+            "id": "meshMid",
+            "kind": "mesh",
+            "meshLod": "mid",
+            "meshRef": "asset://forest/source/dead-pine-medium.glb#mesh/snag",
+            "geometricErrorMeters": 0.24,
+            "triangles": 1260,
+            "costUnits": 22,
+            "batchKey": "mesh/dead-pine/mid"
+          },
+          {
+            "id": "octahedral",
+            "kind": "octahedral",
+            "atlasId": "forest_oct_auto_v1",
+            "pageGroup": "oct/dead-pine",
+            "geometricErrorMeters": 0.95,
+            "triangles": 2,
+            "costUnits": 6,
+            "supportsNonUniformScale": false,
+            "batchKey": "impostor/oct/dead-pine"
+          },
+          {
+            "id": "billboard",
+            "kind": "billboard",
+            "atlasId": "forest_billboard_auto_v1",
+            "pageGroup": "billboard/dead-pine",
+            "geometricErrorMeters": 2.1,
+            "triangles": 2,
+            "costUnits": 2,
+            "supportsNonUniformScale": true,
+            "batchKey": "impostor/billboard/dead-pine"
+          }
+        ]
+      }
+    },
+    {
+      "id": "skinned_willow",
+      "meshRef": "asset://forest/source/skinned-willow-high.glb#mesh/willow",
+      "bounds": {
+        "center": [0, 9.0, 0],
+        "halfExtents": [3.4, 9.0, 3.2],
+        "radius": 10.1
+      },
+      "materialClass": "alpha-foliage",
+      "material": {
+        "opacity": "alpha-tested",
+        "depthWrite": true,
+        "sortPolicy": "per-cell-stable-order"
+      },
+      "animation": {
+        "skinned": true,
+        "vertexAnimated": true,
+        "impostorSupport": "unsupported-static-atlas"
+      },
+      "errorMetrics": {
+        "representations": [
+          {
+            "id": "meshHigh",
+            "kind": "mesh",
+            "meshLod": "high",
+            "meshRef": "asset://forest/source/skinned-willow-high.glb#mesh/willow",
+            "geometricErrorMeters": 0.05,
+            "triangles": 12400,
+            "costUnits": 82,
+            "batchKey": "mesh/skinned-willow/high"
+          },
+          {
+            "id": "meshMid",
+            "kind": "mesh",
+            "meshLod": "mid",
+            "meshRef": "asset://forest/source/skinned-willow-medium.glb#mesh/willow",
+            "geometricErrorMeters": 0.52,
+            "triangles": 3900,
+            "costUnits": 38,
+            "batchKey": "mesh/skinned-willow/mid"
+          },
+          {
+            "id": "octahedral",
+            "kind": "octahedral",
+            "atlasId": "forest_oct_auto_v1",
+            "pageGroup": "oct/willow",
+            "geometricErrorMeters": 1.4,
+            "triangles": 2,
+            "costUnits": 7,
+            "supportsNonUniformScale": false,
+            "batchKey": "impostor/oct/willow"
+          },
+          {
+            "id": "billboard",
+            "kind": "billboard",
+            "atlasId": "forest_billboard_auto_v1",
+            "pageGroup": "billboard/willow",
+            "geometricErrorMeters": 2.7,
+            "triangles": 2,
+            "costUnits": 2,
+            "supportsNonUniformScale": true,
+            "batchKey": "impostor/billboard/willow"
+          }
+        ]
+      }
+    }
+  ],
+  "impostorAtlases": [
+    {
+      "id": "forest_oct_auto_v1",
+      "kind": "octahedral",
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/auto-oct-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/auto-oct-normal-roughness.ktx2",
+        "depth": "asset://forest/impostors/auto-oct-depth.ktx2"
+      },
+      "directionCount": 48,
+      "maxBlendDirections": 3,
+      "alphaDepthPolicy": "alpha-tested-depth-plus-linear-depth-page",
+      "pageGroups": [
+        "oct/fir",
+        "oct/beech",
+        "oct/dead-pine",
+        "oct/willow"
+      ]
+    },
+    {
+      "id": "forest_billboard_auto_v1",
+      "kind": "axis_billboard",
+      "textureRefs": {
+        "albedoAlpha": "asset://forest/impostors/auto-billboard-albedo-alpha.ktx2",
+        "normalRoughness": "asset://forest/impostors/auto-billboard-normal-roughness.ktx2"
+      },
+      "directionCount": 8,
+      "maxBlendDirections": 1,
+      "alphaDepthPolicy": "alpha-tested-cell-sort",
+      "pageGroups": [
+        "billboard/fir",
+        "billboard/beech",
+        "billboard/dead-pine",
+        "billboard/willow"
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "objectId": "fir-threshold-jitter",
+      "sourceMeshId": "fir_cluster",
+      "center": [0, 17.5, 306],
+      "scale": [1, 1, 1],
+      "yawDegrees": 15
+    },
+    {
+      "objectId": "fir-nonuniform-scale",
+      "sourceMeshId": "fir_cluster",
+      "center": [70, 17.5, 430],
+      "scale": [1.3, 0.85, 1.1],
+      "yawDegrees": 120
+    },
+    {
+      "objectId": "beech-memory-a",
+      "sourceMeshId": "beech_cluster",
+      "center": [-135, 13.2, 650],
+      "scale": [1.05, 1.05, 1.05],
+      "yawDegrees": 215
+    },
+    {
+      "objectId": "beech-memory-b",
+      "sourceMeshId": "beech_cluster",
+      "center": [145, 13.2, 690],
+      "scale": [0.95, 0.95, 0.95],
+      "yawDegrees": 300
+    },
+    {
+      "objectId": "pine-uncertain-occluder",
+      "sourceMeshId": "dead_pine",
+      "center": [20, 10.8, 760],
+      "scale": [1.1, 1.1, 1.1],
+      "yawDegrees": 75
+    },
+    {
+      "objectId": "willow-skinned-degrade",
+      "sourceMeshId": "skinned_willow",
+      "center": [-50, 9, 520],
+      "scale": [1, 1, 1],
+      "yawDegrees": 180
+    },
+    {
+      "objectId": "pine-far-cull",
+      "sourceMeshId": "dead_pine",
+      "center": [250, 10.8, 1040],
+      "scale": [0.9, 0.9, 0.9],
+      "yawDegrees": 30
+    }
+  ],
+  "visibilityPackets": [
+    {
+      "frame": 0,
+      "camera": {
+        "position": [0, 12, 12],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 1,
+      "camera": {
+        "position": [0, 12, -6],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 2,
+      "camera": {
+        "position": [0, 12, 14],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 3,
+      "camera": {
+        "position": [0, 12, -8],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 4,
+      "camera": {
+        "position": [0, 12, 16],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 5,
+      "camera": {
+        "position": [0, 12, -10],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 6,
+      "camera": {
+        "position": [0, 12, -70],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 7,
+      "camera": {
+        "position": [0, 12, -110],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    },
+    {
+      "frame": 8,
+      "camera": {
+        "position": [0, 12, -150],
+        "forward": [0, 0, 1],
+        "verticalFovDegrees": 60,
+        "viewportHeightPx": 1080
+      },
+      "rows": [
+        {"objectId": "fir-threshold-jitter", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "fir-nonuniform-scale", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-a", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "beech-memory-b", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-uncertain-occluder", "visibility": "visible", "occlusion": "terrain-uncertain"},
+        {"objectId": "willow-skinned-degrade", "visibility": "visible", "occlusion": "none"},
+        {"objectId": "pine-far-cull", "visibility": "outside-frustum", "occlusion": "none"}
+      ]
+    }
+  ],
+  "validation": {
+    "maxChurnRate": 0.06,
+    "maxSwitchesPerObject": 2,
+    "minCrossFadeFrames": 4,
+    "requireFallbackQualityLabels": true,
+    "requireAlphaDepthOrdering": true,
+    "requireConservativeUncertainOcclusion": true,
+    "requireSkinnedDegrade": true,
+    "requireNonUniformScaleDiagnostics": true,
+    "requireWebGL2PortablePath": true
+  }
+}

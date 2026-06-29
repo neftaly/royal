@@ -13,6 +13,7 @@ import {
   textureAsset,
   unlitMaterial,
   type GltfAssetRef,
+  type GltfOptions,
   type RenderNode,
   type TextureRef
 } from './index';
@@ -119,5 +120,34 @@ describe('renderer descriptor authoring API', () => {
       }
     });
     expectTypeOf(node.asset).toEqualTypeOf<GltfAssetRef>();
+  });
+
+  it('normalizes glTF src options into asset references', () => {
+    const bounds = {
+      max: [1, 2, 3],
+      min: [-1, -2, -3]
+    } satisfies GltfAssetRef['bounds'];
+    const node = gltf({
+      bounds,
+      id: 'helmet',
+      revision: 2,
+      src: '/DamagedHelmet/DamagedHelmet.gltf'
+    });
+    const fallbackIdNode = gltf({ src: '/PlainCube/PlainCube.gltf' });
+
+    expect(node.asset).toEqual({
+      bounds,
+      id: 'helmet',
+      revision: 2,
+      uri: '/DamagedHelmet/DamagedHelmet.gltf'
+    });
+    expect(fallbackIdNode.asset).toEqual({
+      id: '/PlainCube/PlainCube.gltf',
+      uri: '/PlainCube/PlainCube.gltf'
+    });
+    expectTypeOf<{
+      readonly asset: GltfAssetRef;
+      readonly src: string;
+    }>().not.toMatchTypeOf<GltfOptions>();
   });
 });

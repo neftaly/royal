@@ -166,8 +166,47 @@ export type RoyalInteractionInput = {
   readonly role: string;
 };
 
-export type RoyalGltfInput = {
+export type RoyalAssetBoundsInput = {
+  readonly max: readonly [number, number, number];
+  readonly min: readonly [number, number, number];
+};
+
+export type RoyalAssetRevisionInput = number | string;
+
+export type RoyalAssetRefInput = {
+  readonly bounds?: RoyalAssetBoundsInput;
+  readonly id: string;
+  readonly revision?: RoyalAssetRevisionInput;
+  readonly uri: string;
+};
+
+export type RoyalGltfAssetInput = RoyalAssetRefInput & {
+  readonly asset?: never;
+  readonly src?: never;
+};
+
+export type RoyalGltfExplicitAssetInput = {
+  readonly asset: RoyalAssetRefInput;
+  readonly bounds?: never;
+  readonly id?: never;
+  readonly revision?: never;
+  readonly src?: never;
+  readonly uri?: never;
+};
+
+export type RoyalGltfSrcInput = {
+  readonly asset?: never;
+  readonly bounds?: RoyalAssetBoundsInput;
+  readonly id?: string;
+  readonly revision?: RoyalAssetRevisionInput;
   readonly src: string;
+  readonly uri?: never;
+};
+
+export type RoyalGltfInput = RoyalGltfSrcInput | RoyalGltfAssetInput | RoyalGltfExplicitAssetInput;
+
+type ResolvedRoyalAssetRef = RoyalAssetRefInput & {
+  readonly exposeMetadata: boolean;
 };
 
 export type RoyalLayoutSpecInput = {
@@ -401,6 +440,8 @@ export type RoyalAssetRow = {
   readonly src: string;
   readonly kind: string;
   readonly ownerNodeId: string;
+  readonly revision?: string;
+  readonly uri?: string;
 };
 
 export type RoyalAssetDiagnosticRow = {
@@ -592,7 +633,9 @@ export const royalLensSchema = defineSchema({
       assetId: idField('royalAsset'),
       src: stringField(),
       kind: stringField(),
-      ownerNodeId: refField('layoutNodes.nodeId')
+      ownerNodeId: refField('layoutNodes.nodeId'),
+      revision: optional(stringField()),
+      uri: optional(stringField())
     }
   }),
   assetDiagnostics: relation<RoyalAssetDiagnosticRow>({
@@ -1112,22 +1155,34 @@ export function deriveLayoutNodeRows(
 export function deriveAssetRows(root: RoyalLayoutSpecInput, scopeId: string): readonly RoyalAssetRow[] {
   const rows: RoyalAssetRow[] = [];
 
-  for (const node of deriveLayoutNodeRows(root, scopeId)) {
-    if (node.assetId === undefined) {
-      continue;
-    }
+  deriveAssetRowsAt(root, scopeId, ['root'], rows);
 
-    const src = node.assetId.startsWith('asset:gltf:') ? node.assetId.slice('asset:gltf:'.length) : node.assetId;
+  return rows;
+}
+
+function deriveAssetRowsAt(
+  spec: RoyalLayoutSpecInput,
+  scopeId: string,
+  path: readonly unknown[],
+  rows: RoyalAssetRow[]
+): void {
+  if (spec.gltf !== undefined) {
+    const asset = assetRefForGltf(spec.gltf);
+
     rows.push({
       scopeId,
-      assetId: node.assetId,
-      src,
+      assetId: asset.id,
+      src: asset.uri,
       kind: 'gltf',
-      ownerNodeId: node.nodeId
+      ownerNodeId: identityForSpec(scopeId, spec, path),
+      ...(!asset.exposeMetadata || asset.revision === undefined ? {} : { revision: String(asset.revision) }),
+      ...(asset.exposeMetadata ? { uri: asset.uri } : {})
     });
   }
 
-  return rows;
+  for (const [index, child] of (spec.children ?? []).entries()) {
+    deriveAssetRowsAt(child, scopeId, [...path, 'children', childPathSegment(child, index)], rows);
+  }
 }
 
 export function stableContainmentId(scopeId: string, path: readonly unknown[]): string {
@@ -1136,6 +1191,24 @@ export function stableContainmentId(scopeId: string, path: readonly unknown[]): 
 
 export function assetIdForSrc(src: string): string {
   return `asset:gltf:${src}`;
+}
+
+function assetRefForGltf(input: RoyalGltfInput): ResolvedRoyalAssetRef {
+  if (input.asset !== undefined) {
+    return { ...input.asset, exposeMetadata: true };
+  }
+
+  if (input.uri !== undefined) {
+    return { ...input, exposeMetadata: true };
+  }
+
+  return {
+    ...(input.bounds === undefined ? {} : { bounds: input.bounds }),
+    id: input.id ?? assetIdForSrc(input.src),
+    ...(input.revision === undefined ? {} : { revision: input.revision }),
+    uri: input.src,
+    exposeMetadata: input.id !== undefined || input.revision !== undefined || input.bounds !== undefined
+  };
 }
 
 export function prototypeRoyalActivationPatchRoute(store: WritableStore<RoyalInteractionState>): AnyStorePatchRoute {
@@ -1237,7 +1310,7 @@ function deriveLayoutBoxRows(state: RoyalLayoutRuntimeState): readonly RoyalLayo
     tone: layoutBox.tone,
     hasInteraction: layoutBox.interaction !== undefined,
     ...(layoutBox.text === undefined ? {} : { text: layoutBox.text }),
-    ...(layoutBox.gltf === undefined ? {} : { assetId: assetIdForSrc(layoutBox.gltf.src) })
+    ...(layoutBox.gltf === undefined ? {} : { assetId: assetRefForGltf(layoutBox.gltf).id })
   }));
 }
 
@@ -1352,7 +1425,7 @@ function deriveLayoutNodeRowsAt(
     tone: spec.tone,
     ...(spec.interaction?.role === undefined ? {} : { role: spec.interaction.role }),
     ...(spec.interaction?.group === undefined ? {} : { group: spec.interaction.group }),
-    ...(spec.gltf === undefined ? {} : { assetId: assetIdForSrc(spec.gltf.src) })
+    ...(spec.gltf === undefined ? {} : { assetId: assetRefForGltf(spec.gltf).id })
   };
 
   return [

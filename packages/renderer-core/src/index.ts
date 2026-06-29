@@ -83,6 +83,30 @@ export {
   textMesh
 } from './text';
 export type {
+  EditableTextCaretEndpoint,
+  EditableTextCaretPlacement,
+  EditableTextHitPoint,
+  EditableTextLayout,
+  EditableTextLayoutOptions,
+  EditableTextLine,
+  EditableTextRange,
+  EditableTextSelection,
+  EditableTextSelectionRect,
+  EditableTextWrapOptions
+} from './editable-text';
+export {
+  clampTextIndex,
+  editableTextCaretPlacement,
+  editableTextSelectionRects,
+  layoutEditableText,
+  nearestEditableTextCaret,
+  nextTextIndex,
+  previousTextIndex,
+  sameEditableTextSelection,
+  sortedEditableTextRange,
+  wrapEditableText
+} from './editable-text';
+export type {
   SvgGatewayBoundaryMode,
   SvgGatewayBounds,
   SvgGatewayContour,

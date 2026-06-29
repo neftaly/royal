@@ -68,6 +68,37 @@ export function TodoList() {
 }
 ```
 
+## Extraction Readiness
+
+`@tarstate/core` is kept extraction-ready inside this monorepo. That means the
+core package remains a standalone query/data library, while Royal-specific
+control-plane schemas stay outside it.
+
+Consumers should import only package exports:
+
+- `@tarstate/core`
+- `@tarstate/core/diagnostics`
+- `@tarstate/core/evaluate`
+- `@tarstate/core/query`
+- `@tarstate/core/schema`
+- `@tarstate/core/source`
+- `@tarstate/core/write`
+
+Do not import `packages/tarstate-core/src/*`, `@tarstate/core/src/*`, or any
+other source-path package internals. Boundary tests enforce that consumers use
+the export map and that this package does not import `@royal/*`, app packages,
+renderer packages, or `@royal/tarstate-lens`.
+
+This is not a publishing lane yet. Keep the package private and in this
+monorepo until all split criteria are true:
+
+1. The public API has stabilized around the root and taxonomy subpath exports.
+2. Independent non-Royal consumers need the package without renderer or app code.
+3. Tarstate needs a release cadence that is meaningfully separate from Royal.
+4. Package export smoke tests cover every public import path.
+5. `@royal/tarstate-lens` remains Royal-owned unless its schema and control
+   abstractions become generic enough to serve non-Royal use cases.
+
 ## Acknowledgements
 
 Tarstate borrows its shape from [Relic](https://github.com/wotbrew/relic),

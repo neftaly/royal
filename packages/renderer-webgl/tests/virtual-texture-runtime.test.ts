@@ -4,7 +4,7 @@ import {
   VirtualTextureRuntime,
   virtualTexturePageId,
   virtualTextureParentPage,
-} from "../src/virtual-texture-runtime";
+} from "../src/virtual-texture-testing";
 
 describe("VirtualTextureRuntime", () => {
   it("creates stable page ids and parent addresses", () => {
@@ -189,6 +189,64 @@ describe("VirtualTextureRuntime", () => {
     expect(runtime.lookupSlot(parent.page.slot).uploadSerial).not.toBe(queuedEntry?.uploadSerial);
   });
 
+  it("bounds eviction downgrades to page-table entries that reference the evicted resident page", () => {
+    const runtime = new VirtualTextureRuntime({
+      pageSize: 64,
+      physicalSlots: 3,
+      virtualSize: [4096, 4096],
+    });
+    const rootMip = runtime.mipCount - 1;
+
+    runtime.makeResident({ mip: rootMip, x: 0, y: 0 }, 10_000);
+    for (let y = 0; y < 64; y += 1) {
+      for (let x = 0; x < 64; x += 1) {
+        runtime.resolve({ mip: 0, x, y }, 10_000 + y * 64 + x);
+      }
+    }
+    runtime.makeResident({ mip: 0, x: 0, y: 0 }, 1);
+    runtime.makeResident({ mip: 0, x: 1, y: 0 }, 2);
+    runtime.drainDirtyEntries();
+
+    const originalValues = Map.prototype.values;
+    let iteratedMapValues = 0;
+    let inserted: ReturnType<VirtualTextureRuntime["makeResident"]> | null = null;
+    Map.prototype.values = function patchedValues(this: Map<unknown, unknown>) {
+      const iterator = originalValues.call(this);
+      return {
+        [Symbol.iterator]() {
+          return this;
+        },
+        next() {
+          const result = iterator.next();
+          if (!result.done) iteratedMapValues += 1;
+          return result;
+        },
+      };
+    } as typeof Map.prototype.values;
+    try {
+      inserted = runtime.makeResident({ mip: 0, x: 2, y: 0 }, 3);
+    } finally {
+      Map.prototype.values = originalValues;
+    }
+
+    const dirty = runtime.drainDirtyEntries(4);
+
+    expect(inserted?.evicted?.id).toBe("m0/0/0");
+    expect(iteratedMapValues).toBe(3);
+    expect(dirty.map((entry) => [entry.op, entry.tableCoord])).toEqual([
+      ["upload", { mip: 0, x: 2, y: 0 }],
+      ["resolve", { mip: 0, x: 0, y: 0 }],
+    ]);
+    expect(runtime.lookupPageTableEntry({ mip: 0, x: 0, y: 0 })).toMatchObject({
+      flags: ["resident", "fallback"],
+      residentPageId: `m${rootMip}/0/0`,
+    });
+    expect(runtime.pageTableCounts()).toMatchObject({
+      mapped: 4097,
+      staleResidentReferences: 0,
+    });
+  });
+
   it("reports cheap runtime stats without sorted page-table entry copies", () => {
     const runtime = new VirtualTextureRuntime({
       pageSize: 128,
@@ -216,6 +274,7 @@ describe("VirtualTextureRuntime", () => {
       pageTableEntry = runtime.lookupPageTableEntry({ mip: 0, x: 2, y: 3 });
       residentPage = runtime.lookupResidentPage("m1/1/1");
       residentPageIds = runtime.residentPageIds();
+      expect(runtime.hasResidentPages()).toBe(true);
       slot = runtime.lookupSlot(0);
     } finally {
       Array.prototype.sort = originalSort;

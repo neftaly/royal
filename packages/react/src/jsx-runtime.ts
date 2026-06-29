@@ -23,17 +23,18 @@ import type { ReactNode } from 'react';
 
 type RendererJsxElement = RenderElement | Camera;
 type ComponentOutput = ReactNode | RendererJsxElement;
-type RendererJsxChild = ComponentOutput | readonly RendererJsxChild[];
+type EmptyJsxChild = null | undefined | false;
+type RendererJsxChild = ComponentOutput | EmptyJsxChild | readonly RendererJsxChild[];
 type Component = (props: Record<string, unknown>) => ComponentOutput;
 type ElementType = keyof JSX.IntrinsicElements | Component;
 
 type SceneProps = {
-  readonly children: RendererJsxChild;
+  readonly children?: RendererJsxChild;
 };
 
 type PassProps = Omit<RenderPassOptions, 'camera' | 'children'> & {
   readonly camera?: Camera;
-  readonly children: RendererJsxChild;
+  readonly children?: RendererJsxChild;
 };
 
 const isRendererJsxChildArray = (
@@ -43,6 +44,10 @@ const isRendererJsxChildArray = (
 const toArray = (value: RendererJsxChild): readonly ComponentOutput[] => {
   if (isRendererJsxChildArray(value)) {
     return value.flatMap((child) => toArray(child));
+  }
+
+  if (value === null || value === undefined || value === false) {
+    return [];
   }
 
   return [value];
@@ -112,6 +117,15 @@ const toPass = (props: PassProps): RenderPass => {
   );
 };
 
+const toGltf = (options: GltfOptions): RenderNode => {
+  // Narrow the union before calling the overloaded factory.
+  if (options.asset === undefined) {
+    return gltf(options);
+  }
+
+  return gltf(options);
+};
+
 const assertNever = (type: never): never => {
   throw new Error(`Unsupported JSX element: ${String(type)}`);
 };
@@ -137,7 +151,7 @@ const createElement = (type: ElementType, props: Record<string, unknown>): Compo
     case 'mesh':
       return mesh(props as unknown as MeshOptions);
     case 'gltf':
-      return gltf(props as unknown as GltfOptions);
+      return toGltf(props as unknown as GltfOptions);
     case 'text':
       return text(props as unknown as TextOptions);
     default:
@@ -146,7 +160,7 @@ const createElement = (type: ElementType, props: Record<string, unknown>): Compo
 };
 
 export const Fragment = (_props: {
-  readonly children: RendererJsxChild;
+  readonly children?: RendererJsxChild;
 }): RendererJsxChild => _props.children;
 
 export const jsx = createElement;

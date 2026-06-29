@@ -203,6 +203,7 @@ export class VirtualTextureRuntime {
   readonly #freeSlots: number[];
   readonly #pages = new Map<VirtualTexturePageId, VirtualTextureResidentPage>();
   readonly #pageTable = new Map<VirtualTexturePageId, VirtualTexturePageTableEntry>();
+  readonly #pageTableEntriesByResident = new Map<VirtualTexturePageId, Set<VirtualTexturePageId>>();
   readonly #dirtyEntries: VirtualTextureDirtyPageTableEntry[] = [];
   readonly #slots: MutableSlot[];
   #uploadSerial = 0;
@@ -328,6 +329,10 @@ export class VirtualTextureRuntime {
     return [...this.#pages.keys()];
   }
 
+  hasResidentPages(): boolean {
+    return this.#pages.size > 0;
+  }
+
   lookupPageTableEntry(page: VirtualTexturePageAddress): VirtualTexturePageTableEntry | null {
     return this.#pageTable.get(virtualTexturePageId(this.#validatePage(page))) ?? null;
   }
@@ -445,9 +450,12 @@ export class VirtualTextureRuntime {
   }
 
   #downgradeEntriesUsing(evicted: VirtualTextureResidentPage, frame: number): void {
-    const entries = Array.from(this.#pageTable.values());
-    for (const entry of entries) {
-      if (entry.residentPageId !== evicted.id) continue;
+    const entryIds = this.#pageTableEntriesByResident.get(evicted.id);
+    if (entryIds === undefined || entryIds.size === 0) return;
+
+    for (const id of entryIds) {
+      const entry = this.#pageTable.get(id);
+      if (entry === undefined || entry.residentPageId !== evicted.id) continue;
       const resident = this.#residentParent(entry.virtualPage);
       this.#writeEntry({
         frame,
@@ -457,6 +465,7 @@ export class VirtualTextureRuntime {
         resident,
       });
     }
+    this.#pageTableEntriesByResident.delete(evicted.id);
   }
 
   #evictionCandidate(): VirtualTextureResidentPage {
@@ -510,10 +519,12 @@ export class VirtualTextureRuntime {
 
     this.#version += 1;
     const versioned = { ...entry, version: this.#version, encodedRgba8: encodePageTableEntry(entry, this.#version) };
+    if (existing !== undefined) this.#untrackPageTableEntry(id, existing);
     if (versioned.physicalSlot === null) {
       this.#pageTable.delete(id);
     } else {
       this.#pageTable.set(id, versioned);
+      this.#trackPageTableEntry(id, versioned);
     }
     this.#dirtyEntries.push({
       entry: versioned,
@@ -523,6 +534,24 @@ export class VirtualTextureRuntime {
       tableCoord: write.page,
     });
     return versioned;
+  }
+
+  #trackPageTableEntry(id: VirtualTexturePageId, entry: VirtualTexturePageTableEntry): void {
+    if (entry.residentPageId === null) return;
+    let entries = this.#pageTableEntriesByResident.get(entry.residentPageId);
+    if (entries === undefined) {
+      entries = new Set();
+      this.#pageTableEntriesByResident.set(entry.residentPageId, entries);
+    }
+    entries.add(id);
+  }
+
+  #untrackPageTableEntry(id: VirtualTexturePageId, entry: VirtualTexturePageTableEntry): void {
+    if (entry.residentPageId === null) return;
+    const entries = this.#pageTableEntriesByResident.get(entry.residentPageId);
+    if (entries === undefined) return;
+    entries.delete(id);
+    if (entries.size === 0) this.#pageTableEntriesByResident.delete(entry.residentPageId);
   }
 }
 

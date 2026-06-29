@@ -2,6 +2,7 @@
 
 import { performance } from "node:perf_hooks";
 
+const checkMode = process.argv.includes("--check");
 const seed = 0x5eedcafe;
 const objectCount = 10_000;
 const lightCount = 128;
@@ -26,7 +27,8 @@ const started = performance.now();
 const results = preparedFrames.map((frame, index) => runFrame(index, frame, objects, lights));
 const totalMs = performance.now() - started;
 
-console.log(JSON.stringify({
+const report = {
+  benchmarkRole: "synthetic structural pressure only; use virtual-texturing-smoothness.mjs for browser hitch gates",
   seed,
   objectCount,
   lightCount,
@@ -34,6 +36,21 @@ console.log(JSON.stringify({
   totalMs: round(totalMs),
   averages: averageResults(results),
   frames: results,
+  decomplection: {
+    measured: {
+      visibilityCullMs: "CPU camera/visibility packet filtering",
+      lightClusterMs: "CPU clustered light assignment",
+      textureDemandAndLodSelectionMs: "visible-packet texture demand plus LOD choice"
+    },
+    notMeasured: [
+      "browser input handler time",
+      "runtime VT page request planning time",
+      "worker page generation latency",
+      "WebGL texture upload burst time",
+      "browser rAF/render-frame hitches"
+    ]
+  },
+  structuralChecks: buildStructuralChecks(results),
   targetHints: {
     cpuFrustumMs: "< 1.0 ms for 10k packets",
     cpuClusterBuildMs: "< 1.0 ms for 128 lights / 16x9x24 clusters",
@@ -41,7 +58,17 @@ console.log(JSON.stringify({
     texturePageUploads: "<= 8 new pages per frame after warm cache",
     lodChurnRatio: "< 0.05 for small camera steps"
   }
-}, null, 2));
+};
+
+console.log(JSON.stringify(report, null, 2));
+
+if (checkMode) {
+  const failed = report.structuralChecks.filter((check) => !check.pass);
+  if (failed.length > 0) {
+    console.error(`rendering budget structural check failed: ${failed.map((check) => check.name).join(", ")}`);
+    process.exitCode = 1;
+  }
+}
 
 function runFrame(index, frame, sceneObjects, sceneLights) {
   const t0 = performance.now();
@@ -234,6 +261,56 @@ function averageResults(results) {
   return Object.fromEntries(
     Object.entries(sums).map(([key, value]) => [key, round(value / results.length)])
   );
+}
+
+function buildStructuralChecks(results) {
+  const highestVisiblePackets = Math.max(...results.map((result) => result.visiblePackets));
+  const highestMipRequests = Math.max(...results.map((result) => result.highestMipRequests));
+  const highestLightCount = Math.max(...results.map((result) => result.maxLightsPerCluster));
+  const highestClusterOverflow = Math.max(...results.map((result) => result.clusterOverflowCount));
+  const lodAccountingMismatch = results.find((result) => {
+    const sum = Object.values(result.lodCounts).reduce((total, count) => total + count, 0);
+    return sum !== result.visiblePackets;
+  });
+
+  return [
+    {
+      name: "frame count",
+      value: results.length,
+      threshold: frames.length,
+      pass: results.length === frames.length,
+    },
+    {
+      name: "visible packet budget",
+      value: highestVisiblePackets,
+      threshold: 2_000,
+      pass: highestVisiblePackets <= 2_000,
+    },
+    {
+      name: "cluster overflow",
+      value: highestClusterOverflow,
+      threshold: 0,
+      pass: highestClusterOverflow === 0,
+    },
+    {
+      name: "cluster light cap",
+      value: highestLightCount,
+      threshold: 32,
+      pass: highestLightCount <= 32,
+    },
+    {
+      name: "highest mip demand",
+      value: highestMipRequests,
+      threshold: 200,
+      pass: highestMipRequests <= 200,
+    },
+    {
+      name: "lod accounting",
+      value: lodAccountingMismatch === undefined ? "ok" : `frame ${lodAccountingMismatch.frame}`,
+      threshold: "sum(lodCounts) === visiblePackets",
+      pass: lodAccountingMismatch === undefined,
+    },
+  ];
 }
 
 function distance3(a, b) {

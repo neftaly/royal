@@ -7,7 +7,8 @@ import {
   perspectiveCamera,
   solidTexture,
   standardMaterial,
-  type RenderPass
+  type RenderPass,
+  type RenderRoot
 } from '@royal/renderer-core';
 import { jsx } from '@royal/react/jsx-runtime';
 import { describe, expect, it } from 'vitest';
@@ -99,6 +100,29 @@ describe('render pass clearColor', () => {
 
     expect(renderPass.children).toHaveLength(1);
     expect(renderPass.children[0]?.kind).toBe('text');
+  });
+
+  it('ignores empty JSX conditional children under passes', () => {
+    const meshChild = jsx('mesh', {
+      geometry: cube,
+      material: red
+    });
+
+    const renderPass = jsx('pass', {
+      camera,
+      children: [null, undefined, false, meshChild]
+    }) as RenderPass;
+
+    expect(renderPass.children).toEqual([meshChild]);
+  });
+
+  it('ignores empty JSX conditional children under scenes', () => {
+    const renderPass = pass({ camera, children: [] });
+    const root = jsx('scene', {
+      children: [null, undefined, false, renderPass]
+    }) as RenderRoot;
+
+    expect(root.children).toEqual([renderPass]);
   });
 
   it('rejects missing JSX cameras', () => {
