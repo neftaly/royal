@@ -1,0 +1,31 @@
+{
+  "name": "@royal/expo-hello",
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "main": "index.ts",
+  "dependencies": {
+    "@tarstate/core": "workspace:*",
+    "expo": "~56.0.12",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-web": "~0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "build": "expo export --platform web --output-dir dist",
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "ios:go": "expo start --go --lan",
+    "web": "expo start --web",
+    "test": "pnpm run typecheck",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true
+}

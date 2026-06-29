@@ -28,14 +28,15 @@ const rendererPackageRoots = ['packages/renderer-core', 'packages/renderer-webgl
 const tarstateControlPlanePackageNames = new Set(['@tarstate/core', '@royal/tarstate-lens']);
 const tarstateControlPlanePackageRoots = ['packages/tarstate-core', 'packages/royal-tarstate-lens'] as const;
 const expectedPackages = [
-  { name: '@royal/examples-react', root: 'apps/examples-react' },
-  { name: '@royal/tarstate-demo', root: 'apps/tarstate-demo' },
-  { name: '@royal/react', root: 'packages/react' },
-  { name: '@royal/renderer-core', root: 'packages/renderer-core' },
-  { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl' },
-  { name: '@royal/renderer-webgpu', root: 'packages/renderer-webgpu' },
-  { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens' },
-  { name: '@tarstate/core', root: 'packages/tarstate-core' }
+  { name: '@royal/examples-react', root: 'apps/examples-react', type: 'module' },
+  { name: '@royal/expo-hello', root: 'apps/expo-hello', type: undefined },
+  { name: '@royal/tarstate-demo', root: 'apps/tarstate-demo', type: 'module' },
+  { name: '@royal/react', root: 'packages/react', type: 'module' },
+  { name: '@royal/renderer-core', root: 'packages/renderer-core', type: 'module' },
+  { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl', type: 'module' },
+  { name: '@royal/renderer-webgpu', root: 'packages/renderer-webgpu', type: 'module' },
+  { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens', type: 'module' },
+  { name: '@tarstate/core', root: 'packages/tarstate-core', type: 'module' }
 ] as const;
 
 function readManifest(manifestPath: string): PackageManifest {
@@ -137,7 +138,7 @@ describe('package boundaries', () => {
       name: entry.name,
       private: true,
       root: entry.root,
-      type: 'module'
+      type: entry.type
     })));
   });
 
