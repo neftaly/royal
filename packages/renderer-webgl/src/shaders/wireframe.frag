@@ -10,11 +10,8 @@ uniform float u_width;
 out vec4 fragColor;
 
 void main() {
-  vec3 width = fwidth(v_barycentric) * u_width;
-  vec3 edgeBlend = smoothstep(vec3(0.0), width, v_barycentric);
-  float edge = 1.0 - min(min(edgeBlend.x, edgeBlend.y), edgeBlend.z);
+  if (u_width <= 0.0 || u_color.a <= 0.0) discard;
+  if (length(v_barycentric) < 0.0) discard;
 
-  if (edge <= 0.0) discard;
-
-  fragColor = vec4(u_color.rgb, u_color.a * edge);
+  fragColor = u_color;
 }

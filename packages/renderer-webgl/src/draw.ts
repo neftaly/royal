@@ -9,7 +9,7 @@ import {
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
-import { bindFloatAttribute, type RendererWebGlContext } from "./gl";
+import { bindFloatAttribute, createIndexBuffer, type RendererWebGlContext } from "./gl";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
@@ -20,6 +20,13 @@ import type { TextRenderAsset } from "./text-cache";
 import { TextureCache } from "./texture-cache";
 
 type MeshSurfaceMaterial = Exclude<Material, WireframeMaterial>;
+
+const boxWireframeEdgeIndices = new Uint16Array([
+  0, 1, 1, 2, 2, 3, 3, 0,
+  4, 5, 5, 6, 6, 7, 7, 4,
+  0, 5, 1, 4, 2, 7, 3, 6,
+]);
+const boxWireframeEdgeIndexBuffers = new WeakMap<RendererWebGlContext, WebGLBuffer>();
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
@@ -92,6 +99,15 @@ const meshTextureCache = (gl: RendererWebGlContext): TextureCache => {
   const cache = new TextureCache(gl);
   textureCaches.set(gl, cache);
   return cache;
+};
+
+const boxWireframeEdgeIndexBuffer = (gl: RendererWebGlContext): WebGLBuffer => {
+  const cached = boxWireframeEdgeIndexBuffers.get(gl);
+  if (cached !== undefined) return cached;
+
+  const buffer = createIndexBuffer(gl, boxWireframeEdgeIndices);
+  boxWireframeEdgeIndexBuffers.set(gl, buffer);
+  return buffer;
 };
 
 const fallbackBaseColor = (baseColor: TextureRef): readonly [number, number, number, number] =>
@@ -269,7 +285,7 @@ const drawBoxWireframe = (
   context: MeshDrawContext,
 ): void => {
   const box = asBoxGeometry(mesh);
-  const geometry = context.geometryCache.boxWireframe(box);
+  const geometry = context.geometryCache.box(box);
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
@@ -294,8 +310,10 @@ const drawBoxWireframe = (
   bindFloatAttribute(
     gl,
     program.attributes.barycentric,
-    geometry.barycentric,
+    geometry.position,
     3,
   );
-  gl.drawArrays(gl.TRIANGLES, 0, geometry.vertexCount);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, boxWireframeEdgeIndexBuffer(gl));
+  gl.lineWidth(material.width);
+  gl.drawElements(gl.LINES, boxWireframeEdgeIndices.length, gl.UNSIGNED_SHORT, 0);
 };

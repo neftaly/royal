@@ -17,6 +17,13 @@ type DrawArraysCall = {
   readonly mode: number;
 };
 
+type DrawElementsCall = {
+  readonly count: number;
+  readonly mode: number;
+  readonly offset: number;
+  readonly type: number;
+};
+
 type UniformCall = {
   readonly name: string;
   readonly value: number | readonly number[];
@@ -63,31 +70,46 @@ const wireframeProgram = (): WireframeProgram => ({
 
 const fakeGl = (): {
   readonly drawArraysCalls: readonly DrawArraysCall[];
+  readonly drawElementsCalls: readonly DrawElementsCall[];
   readonly gl: RendererWebGlContext;
+  readonly indexBufferData: readonly (readonly number[])[];
+  readonly lineWidths: readonly number[];
   readonly uniformCalls: readonly UniformCall[];
-  readonly counts: {
-    readonly drawElements: number;
-  };
 } => {
-  let drawElements = 0;
   const drawArraysCalls: DrawArraysCall[] = [];
+  const drawElementsCalls: DrawElementsCall[] = [];
+  const indexBufferData: (readonly number[])[] = [];
+  const lineWidths: number[] = [];
   const uniformCalls: UniformCall[] = [];
+  let boundTarget = 0;
 
   const gl = {
     ARRAY_BUFFER: 0x8892,
+    ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    LINES: 0x0001,
     STATIC_DRAW: 0x88E4,
     TRIANGLES: 0x0004,
-    bindBuffer() {},
-    bufferData() {},
+    UNSIGNED_SHORT: 0x1403,
+    bindBuffer(target: number) {
+      boundTarget = target;
+    },
+    bufferData(_target: number, values: BufferSource) {
+      if (boundTarget === gl.ELEMENT_ARRAY_BUFFER && values instanceof Uint16Array) {
+        indexBufferData.push(Array.from(values));
+      }
+    },
     createBuffer: () => ({} as WebGLBuffer),
     drawArrays(mode: number, first: number, count: number) {
       drawArraysCalls.push({ count, first, mode });
     },
-    drawElements() {
-      drawElements += 1;
+    drawElements(mode: number, count: number, type: number, offset: number) {
+      drawElementsCalls.push({ count, mode, offset, type });
     },
     enableVertexAttribArray() {},
+    lineWidth(width: number) {
+      lineWidths.push(width);
+    },
     uniform1f(location: WebGLUniformLocation, value: number) {
       uniformCalls.push({ name: uniformName(location), value });
     },
@@ -101,19 +123,18 @@ const fakeGl = (): {
 
   return {
     drawArraysCalls,
+    drawElementsCalls,
     gl,
+    indexBufferData,
+    lineWidths,
     uniformCalls,
-    counts: {
-      get drawElements() {
-        return drawElements;
-      },
-    },
   };
 };
 
 describe("drawMesh WebGL wireframe material", () => {
-  it("renders box wireframes through barycentric triangle draw arrays", () => {
-    const { counts, drawArraysCalls, gl, uniformCalls } = fakeGl();
+  it("renders box wireframes as line-only edge indices", () => {
+    const { drawArraysCalls, drawElementsCalls, gl, indexBufferData, lineWidths, uniformCalls } =
+      fakeGl();
 
     drawMesh(
       gl,
@@ -131,8 +152,19 @@ describe("drawMesh WebGL wireframe material", () => {
       },
     );
 
-    expect(counts.drawElements).toBe(0);
-    expect(drawArraysCalls).toEqual([{ count: 36, first: 0, mode: gl.TRIANGLES }]);
+    expect(drawArraysCalls).toEqual([]);
+    expect(drawElementsCalls).toEqual([
+      { count: 24, mode: gl.LINES, offset: 0, type: gl.UNSIGNED_SHORT },
+    ]);
+    expect(indexBufferData).toContainEqual([
+      0, 1, 1, 2, 2, 3, 3, 0,
+      4, 5, 5, 6, 6, 7, 7, 4,
+      0, 5, 1, 4, 2, 7, 3, 6,
+    ]);
+    expect(indexBufferData).not.toContainEqual([
+      0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7,
+    ]);
+    expect(lineWidths).toContain(1.25);
     expect(uniformCalls).toContainEqual({
       name: "wireframeColor",
       value: [0.38, 0.85, 0.95, 1],
