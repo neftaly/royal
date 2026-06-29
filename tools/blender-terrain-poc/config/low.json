@@ -1,0 +1,64 @@
+{
+  "manifestVersion": 1,
+  "world": {
+    "id": "royal-blender-terrain-poc",
+    "units": "meters",
+    "seed": "royal:blender-terrain-poc:low:001",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z"
+    }
+  },
+  "tile": {
+    "id": "tile:royal-blender-terrain-poc:x0:z0",
+    "pageId": "page:royal-blender-terrain-poc:x0:z0:terrain-main",
+    "grid": {
+      "x": 0,
+      "z": 0,
+      "level": 0
+    },
+    "sizeMeters": 48,
+    "heightRangeMeters": [
+      -2,
+      7
+    ]
+  },
+  "recipe": {
+    "id": "blender-terrain-poc@0.1.0",
+    "quality": "preview",
+    "segments": 24,
+    "textureSize": 64,
+    "previewSize": 256,
+    "screenSpaceError": 18
+  },
+  "assets": [
+    {
+      "id": "asset:tree:northwest",
+      "kind": "tree",
+      "position": [
+        -12,
+        -10
+      ],
+      "scale": 1
+    },
+    {
+      "id": "asset:rocks:ridge",
+      "kind": "rocks",
+      "position": [
+        9,
+        8
+      ],
+      "scale": 0.9
+    },
+    {
+      "id": "asset:marker:southeast",
+      "kind": "marker",
+      "position": [
+        14,
+        -15
+      ],
+      "scale": 1
+    }
+  ]
+}

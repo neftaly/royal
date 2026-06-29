@@ -1,0 +1,250 @@
+{
+  "manifestVersion": 1,
+  "world": {
+    "id": "royal-blender-terrain-poc",
+    "units": "meters",
+    "seed": "royal:blender-terrain-poc:low:001",
+    "coordinateSystem": {
+      "handedness": "right-handed",
+      "up": "+Y",
+      "forward": "-Z"
+    }
+  },
+  "tile": {
+    "id": "tile:royal-blender-terrain-poc:x0:z0",
+    "pageId": "page:royal-blender-terrain-poc:x0:z0:terrain-main",
+    "grid": {
+      "x": 0,
+      "z": 0,
+      "level": 0
+    },
+    "sizeMeters": 48,
+    "heightRangeMeters": [
+      -2,
+      7
+    ],
+    "bounds": {
+      "min": [
+        -24,
+        -2,
+        -24
+      ],
+      "max": [
+        24,
+        7,
+        24
+      ],
+      "center": [
+        0,
+        2.5,
+        0
+      ],
+      "size": [
+        48,
+        9,
+        48
+      ]
+    },
+    "quality": "preview",
+    "revision": "blender-terrain-poc@0.1.0"
+  },
+  "lod": {
+    "identityPolicy": "stable-world-tile-page",
+    "levels": [
+      {
+        "id": "lod0-preview",
+        "level": 0,
+        "screenSpaceError": 18,
+        "mesh": "mesh.terrain.glb",
+        "textures": [
+          "texture.albedo",
+          "texture.normal",
+          "texture.material-mask"
+        ],
+        "preview": "preview.tile",
+        "quality": "preview"
+      }
+    ]
+  },
+  "meshes": [
+    {
+      "id": "mesh.terrain.glb",
+      "uri": "meshes/terrain-tile.glb",
+      "mediaType": "model/gltf-binary",
+      "format": "glb2",
+      "bytes": 1,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bounds": {
+        "min": [
+          -24,
+          -2,
+          -24
+        ],
+        "max": [
+          24,
+          7,
+          24
+        ],
+        "center": [
+          0,
+          2.5,
+          0
+        ],
+        "size": [
+          48,
+          9,
+          48
+        ]
+      },
+      "vertexCount": 625,
+      "indexCount": 3456,
+      "sourceStage": "blender-heightfield-poc"
+    }
+  ],
+  "materialTextures": [
+    {
+      "id": "texture.albedo",
+      "uri": "textures/albedo-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 1,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "slot": "albedo",
+      "dimensions": [
+        64,
+        64
+      ],
+      "colorSpace": "srgb"
+    },
+    {
+      "id": "texture.normal",
+      "uri": "textures/normal-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 1,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "slot": "normal",
+      "dimensions": [
+        64,
+        64
+      ],
+      "colorSpace": "linear"
+    },
+    {
+      "id": "texture.material-mask",
+      "uri": "textures/material-mask-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 1,
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "slot": "material-mask",
+      "dimensions": [
+        64,
+        64
+      ],
+      "colorSpace": "linear"
+    }
+  ],
+  "previews": [
+    {
+      "id": "preview.tile",
+      "uri": "previews/tile-preview.png",
+      "mediaType": "image/png",
+      "format": "png-rgba8",
+      "bytes": 1,
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "role": "thumbnail",
+      "dimensions": [
+        256,
+        256
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "id": "report.build",
+      "uri": "reports/build-report.json",
+      "mediaType": "application/json",
+      "format": "json",
+      "bytes": 1,
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ],
+  "assets": [
+    {
+      "id": "asset:tree:northwest",
+      "kind": "tree",
+      "position": [
+        -12,
+        0,
+        -10
+      ],
+      "bounds": {
+        "min": [
+          -13.25,
+          0,
+          -11.25
+        ],
+        "max": [
+          -10.75,
+          5.8,
+          -8.75
+        ]
+      },
+      "objectNames": [
+        "asset:tree:northwest:trunk",
+        "asset:tree:northwest:canopy"
+      ],
+      "sourceStage": "blender-primitive-poc",
+      "inputsHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ],
+  "bounds": {
+    "min": [
+      -24,
+      -2,
+      -24
+    ],
+    "max": [
+      24,
+      7,
+      24
+    ],
+    "center": [
+      0,
+      2.5,
+      0
+    ],
+    "size": [
+      48,
+      9,
+      48
+    ]
+  },
+  "provenance": {
+    "recipe": {
+      "id": "blender-terrain-poc@0.1.0",
+      "quality": "preview",
+      "segments": 24,
+      "textureSize": 64,
+      "previewSize": 256,
+      "screenSpaceError": 18
+    },
+    "generator": {
+      "name": "tools/blender-terrain-poc/export_terrain.py",
+      "version": "blender-terrain-poc@0.1.0",
+      "command": "node tools/blender-terrain-poc/run.mjs"
+    },
+    "source": {
+      "kind": "procedural-blender-primitives",
+      "config": "tools/blender-terrain-poc/config/low.json",
+      "infinigen": "not used in low-quality POC; normalize Infinigen scenes through this manifest later"
+    },
+    "inputsHash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "createdAt": "2026-06-29T00:00:00.000Z",
+    "machine": {
+      "blenderVersion": "fixture",
+      "pythonVersion": "fixture"
+    }
+  }
+}

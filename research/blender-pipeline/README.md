@@ -5,6 +5,15 @@ depend on Infinigen yet; the goal is to prove the shape of a Blender-backed
 generator that can publish small web-usable artifacts and enough metadata for a
 Royal runtime or asset service to choose them later.
 
+## Runnable Handoff POC
+
+The current low-quality handoff tool lives in `tools/blender-terrain-poc/`. It
+wraps Blender with a clear missing-Blender failure path, reads a small JSON
+recipe, exports a GLB terrain tile plus primitive proxy assets, writes PNG
+texture/preview artifacts, and validates the manifest shape Royal VT/LOD work can
+consume later. Keep generated output out of app examples unless it is promoted as
+an actual verified demo asset.
+
 ## Run
 
 ```sh
