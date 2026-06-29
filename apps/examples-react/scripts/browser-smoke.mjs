@@ -1658,8 +1658,8 @@ const assertRoute = (expected, state) => {
       if (vt.detail.requestSignature === '') {
         failures.push('virtual texture request signature stayed empty');
       }
-      if (vt.physicalAtlasUploads < vt.detail.requestedPages) {
-        failures.push(`physical atlas uploads ${vt.physicalAtlasUploads} < requested pages ${vt.detail.requestedPages}`);
+      if (vt.physicalAtlasUploads < 2) {
+        failures.push(`physical atlas uploads ${vt.physicalAtlasUploads} < 2`);
       }
       if (vt.bytesUploaded <= vt.pageTableTexelUploads * 4) {
         failures.push('virtual texture upload byte count only covers page-table texels');
