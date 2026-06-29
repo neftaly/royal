@@ -56,7 +56,6 @@ const meshProgram = (): MeshProgram => ({
 
 const wireframeProgram = (): WireframeProgram => ({
   attributes: {
-    barycentric: 2,
     position: 0,
   },
   program: { name: "wireframe" } as unknown as WebGLProgram,

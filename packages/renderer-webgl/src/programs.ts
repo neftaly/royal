@@ -57,7 +57,6 @@ export interface TextProgram {
 
 export interface WireframeProgram {
   readonly attributes: {
-    readonly barycentric: number;
     readonly position: number;
   };
   readonly program: WebGLProgram;
@@ -134,7 +133,6 @@ export const createWireframeProgram = (gl: RendererWebGlContext): WireframeProgr
   return {
     program,
     attributes: {
-      barycentric: attributeLocation(gl, program, "a_barycentric"),
       position: attributeLocation(gl, program, "a_position"),
     },
     uniforms: {

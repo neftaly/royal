@@ -307,12 +307,6 @@ const drawBoxWireframe = (
     geometry.position,
     3,
   );
-  bindFloatAttribute(
-    gl,
-    program.attributes.barycentric,
-    geometry.position,
-    3,
-  );
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, boxWireframeEdgeIndexBuffer(gl));
   gl.lineWidth(material.width);
   gl.drawElements(gl.LINES, boxWireframeEdgeIndices.length, gl.UNSIGNED_SHORT, 0);
