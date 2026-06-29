@@ -33,6 +33,7 @@ const expectedPackages = [
   { name: '@royal/react', root: 'packages/react' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core' },
   { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl' },
+  { name: '@royal/renderer-webgpu', root: 'packages/renderer-webgpu' },
   { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens' },
   { name: '@tarstate/core', root: 'packages/tarstate-core' }
 ] as const;
