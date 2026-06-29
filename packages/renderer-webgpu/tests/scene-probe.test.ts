@@ -16,7 +16,8 @@ import { describe, expect, it } from "vitest";
 import {
   createBoxMeshBufferShape,
   createMaterialBindingShape,
-  createWebGpuSceneProbe
+  createWebGpuSceneProbe,
+  type WebGpuSceneProbeDiagnostic
 } from "../src/scene-probe";
 import type { RendererProbeSnapshot, RoyalRendererFeature } from "../src/capabilities";
 
@@ -128,7 +129,7 @@ describe("WebGPU scene probe", () => {
         uri: "/textures/albedo.png"
       })
     });
-    const diagnostics = [];
+    const diagnostics: WebGpuSceneProbeDiagnostic[] = [];
     const shape = createMaterialBindingShape(material, "material:asset", {}, diagnostics);
 
     expect(shape).toEqual({

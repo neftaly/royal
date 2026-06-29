@@ -349,25 +349,38 @@ const readCanvas = (
   width: number,
   height: number,
 ): CanvasReadback => {
-  const sampleWidth = Math.max(1, Math.min(96, width));
-  const sampleHeight = Math.max(1, Math.min(96, height));
+  const sampleColumns = Math.max(1, Math.min(4, width));
+  const sampleRows = Math.max(1, Math.min(4, height));
+  const sampleWidth = Math.max(1, Math.min(24, Math.floor(width / sampleColumns)));
+  const sampleHeight = Math.max(1, Math.min(24, Math.floor(height / sampleRows)));
+  const maxX = width - sampleWidth;
+  const maxY = height - sampleHeight;
   const pixels = new Uint8Array(sampleWidth * sampleHeight * 4);
-  gl.readPixels(0, 0, sampleWidth, sampleHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
 
   const buckets = new Set<string>();
   let painted = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    const red = pixels[index] ?? 0;
-    const green = pixels[index + 1] ?? 0;
-    const blue = pixels[index + 2] ?? 0;
-    const alpha = pixels[index + 3] ?? 0;
-    if (alpha !== 0 && (red > 8 || green > 8 || blue > 8)) painted += 1;
-    buckets.add(`${red >> 5}:${green >> 5}:${blue >> 5}:${alpha >> 6}`);
+  let texels = 0;
+  for (let row = 0; row < sampleRows; row += 1) {
+    const y = sampleRows === 1 ? 0 : Math.round((maxY * row) / (sampleRows - 1));
+    for (let column = 0; column < sampleColumns; column += 1) {
+      const x = sampleColumns === 1 ? 0 : Math.round((maxX * column) / (sampleColumns - 1));
+      gl.readPixels(x, y, sampleWidth, sampleHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      texels += sampleWidth * sampleHeight;
+
+      for (let index = 0; index < pixels.length; index += 4) {
+        const red = pixels[index] ?? 0;
+        const green = pixels[index + 1] ?? 0;
+        const blue = pixels[index + 2] ?? 0;
+        const alpha = pixels[index + 3] ?? 0;
+        if (alpha !== 0 && (red > 8 || green > 8 || blue > 8)) painted += 1;
+        buckets.add(`${red >> 5}:${green >> 5}:${blue >> 5}:${alpha >> 6}`);
+      }
+    }
   }
 
   return {
     colorBuckets: buckets.size,
-    paintedRatio: painted / (sampleWidth * sampleHeight),
+    paintedRatio: painted / texels,
   };
 };
 
@@ -490,8 +503,11 @@ const drawVirtualTexture = (
   probe.canvasReadback = readCanvas(gl, width, height);
 };
 
+const createWebGl2Context = (canvas: HTMLCanvasElement): WebGL2RenderingContext | null =>
+  canvas.getContext('webgl2', rootOptions) as WebGL2RenderingContext | null;
+
 const startVirtualTextureDemo = (canvas: HTMLCanvasElement, probe: VirtualTextureProbe): (() => void) => {
-  const gl = canvas.getContext('webgl2', rootOptions);
+  const gl = createWebGl2Context(canvas);
   if (gl === null) {
     probe.error = 'WebGL2 is unavailable';
     return () => undefined;
