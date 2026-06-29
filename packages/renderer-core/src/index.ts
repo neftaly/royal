@@ -83,6 +83,36 @@ export {
   textMesh
 } from './text';
 export type {
+  SvgGatewayBoundaryMode,
+  SvgGatewayBounds,
+  SvgGatewayContour,
+  SvgGatewayContourInput,
+  SvgGatewayContourRole,
+  SvgGatewayContoursInput,
+  SvgGatewayFillRule,
+  SvgGatewayGeometry,
+  SvgGatewayInput,
+  SvgGatewayMesh,
+  SvgGatewayMeshContourRange,
+  SvgGatewayOptions,
+  SvgGatewayPathInput,
+  SvgGatewayPickRegion,
+  SvgGatewayPoint,
+  SvgGatewayPointLike,
+  SvgGatewayPolygonInput,
+  SvgGatewayRectInput,
+  SvgGatewaySvgInput,
+  SvgRasterTextureSource
+} from './svg-gateway';
+export {
+  createSvgGatewayGeometry,
+  createSvgGatewayPickRegion,
+  createSvgRasterTextureSource,
+  roundedRectToContour,
+  svgPathToContours,
+  triangulateSvgGatewayContours
+} from './svg-gateway';
+export type {
   Axis,
   AxisDirection,
   AxisSign,
