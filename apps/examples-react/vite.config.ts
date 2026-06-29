@@ -4,9 +4,9 @@ import rootConfig from '../../vite.config';
 
 const appRoot = path.dirname(new URL(import.meta.url).pathname);
 
-export default async (env: ConfigEnv): Promise<UserConfig> => {
+export default (env: ConfigEnv): UserConfig => {
   const baseConfig =
-    typeof rootConfig === 'function' ? await rootConfig(env) : rootConfig;
+    typeof rootConfig === 'function' ? rootConfig(env) : rootConfig;
 
   return mergeConfig(baseConfig, {
     publicDir: path.join(appRoot, 'public'),
