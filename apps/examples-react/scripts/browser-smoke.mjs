@@ -216,6 +216,34 @@ const smokeExpression = `
       paintedRatio: paintedPixels / (width * height),
     };
   };
+  const sampleRightEdge = (canvas, stripRatio = 0.03) => {
+    const width = Math.max(1, Math.min(12, Math.ceil(canvas.width * stripRatio)));
+    const height = Math.max(1, Math.min(180, canvas.height));
+    const sample = document.createElement('canvas');
+    sample.width = width;
+    sample.height = height;
+    const context = sample.getContext('2d', { willReadFrequently: true });
+    if (context === null) return undefined;
+    context.drawImage(canvas, canvas.width - width, 0, width, canvas.height, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    let brightPixels = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3];
+      if (alpha === 0) continue;
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      if (red > 40 || green > 40 || blue > 40) brightPixels += 1;
+    }
+
+    return {
+      brightPixels,
+      brightRatio: brightPixels / (width * height),
+      height,
+      width,
+    };
+  };
   const helmetClearColor = [Math.round(0.04 * 255), Math.round(0.05 * 255), Math.round(0.06 * 255)];
   const helmetProbePoints = [
     { label: 'corner-nw', x: 0.08, y: 0.08 },
@@ -432,10 +460,16 @@ const smokeExpression = `
         label: canvas.getAttribute('aria-label') ?? '',
         backingHeight: canvas.height,
         backingWidth: canvas.width,
+        edge: routeId === 'text' ? sampleRightEdge(canvas) : undefined,
         minColorBuckets: smoke?.minColorBuckets ?? 0,
         minPaintedRatio: smoke?.minPaintedRatio ?? 0,
         sample: sampleCanvas(canvas),
       },
+      textControls: routeId === 'text' ? {
+        rangeInputs: document.querySelectorAll('.text-example input[type="range"]').length,
+        textInputs: document.querySelectorAll('.text-example input[type="text"]').length,
+        textValue: document.querySelector('.text-example input[type="text"]')?.value ?? '',
+      } : undefined,
       activeNav: activeLink === null ? undefined : {
         id: activeLink.getAttribute('data-example-id') ?? '',
         path: activeLink.getAttribute('data-example-route') ?? '',
@@ -471,6 +505,21 @@ const smokeExpression = `
         ...state,
         helmetPicking: await runHelmetPickingSmoke(canvas),
       };
+    }
+  }
+
+  if (state.route.id === 'text') {
+    const deadline = performance.now() + 8000;
+    while (
+      performance.now() < deadline &&
+      (
+        state.textControls?.textInputs !== 1 ||
+        state.textControls?.rangeInputs !== 1 ||
+        state.canvas?.edge === undefined
+      )
+    ) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      state = read();
     }
   }
 
@@ -632,6 +681,24 @@ const assertRoute = (expected, state) => {
       failures.push(
         `canvas painted ratio ${sample.paintedRatio.toFixed(4)} < ${state.canvas.minPaintedRatio}`,
       );
+    }
+  }
+
+  if (expected.id === 'text') {
+    if (state.textControls?.textInputs !== 1) {
+      failures.push(`text route rendered ${state.textControls?.textInputs ?? 0} text input(s)`);
+    }
+    if (state.textControls?.rangeInputs !== 1) {
+      failures.push(`text route rendered ${state.textControls?.rangeInputs ?? 0} range input(s)`);
+    }
+    if (state.textControls?.textValue !== 'Moloch, whose factories dream and croak in the fog') {
+      failures.push('text route default editable sentence changed unexpectedly');
+    }
+    const edgeRatio = state.canvas?.edge?.brightRatio;
+    if (edgeRatio === undefined) {
+      failures.push('text route missed right-edge canvas sample');
+    } else if (edgeRatio > 0.001) {
+      failures.push(`text canvas has bright right-edge pixels ${edgeRatio.toFixed(4)}`);
     }
   }
 

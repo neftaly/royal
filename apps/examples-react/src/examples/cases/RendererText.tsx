@@ -1,6 +1,7 @@
 /** @jsxImportSource @royal/react */
 import {
   createTextFontFace,
+  layoutText,
   type RenderNode,
   type RenderRoot,
   type Rgba,
@@ -14,9 +15,17 @@ import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?ur
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
-const headingSampleText = 'Voilà, naïve façade: “Royal” — type in motion';
+const cameraBounds = {
+  bottom: -3.2,
+  left: -5.6,
+  right: 5.6,
+  top: 3.2,
+} as const;
+const sceneOrigin: Vec3 = [-4.72, 2.42, 0];
+const contentWidth = cameraBounds.right - sceneOrigin[0] - 0.48;
+const headingSampleText = 'Voilà, naïve façade: “Royal”';
 const defaultSampleText = 'Moloch, whose factories dream and croak in the fog';
-const defaultFontSize = 0.9;
+const defaultFontSize = 0.72;
 
 type CanvasTextBox = {
   readonly height: number;
@@ -46,22 +55,66 @@ type FontState =
 
 const linesIn = (text: string): number => text.split('\n').length;
 
-const wrapCanvasLine = (text: string, limit: number): string => {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let line = '';
+const measureCanvasText = (
+  font: TextFontFace,
+  text: string,
+  fontSize: number,
+  lineHeight: number,
+): number => layoutText({ font, fontSize, lineHeight, text }).metrics.width;
 
-  for (const word of words) {
-    const next = line === '' ? word : `${line} ${word}`;
-    if (next.length > limit && line !== '') {
-      lines.push(line);
-      line = word;
+const wrapCanvasWord = (
+  font: TextFontFace,
+  word: string,
+  fontSize: number,
+  lineHeight: number,
+  maxWidth: number,
+): readonly string[] => {
+  const chunks: string[] = [];
+  let chunk = '';
+
+  for (const character of Array.from(word)) {
+    const next = chunk + character;
+    if (chunk !== '' && measureCanvasText(font, next, fontSize, lineHeight) > maxWidth) {
+      chunks.push(chunk);
+      chunk = character;
       continue;
     }
-    line = next;
+    chunk = next;
   }
 
-  if (line !== '') lines.push(line);
+  if (chunk !== '') chunks.push(chunk);
+  return chunks;
+};
+
+const wrapCanvasText = (
+  font: TextFontFace,
+  text: string,
+  fontSize: number,
+  lineHeight: number,
+  maxWidth: number,
+): string => {
+  const lines: string[] = [];
+
+  for (const paragraph of text.split('\n')) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let line = '';
+
+    for (const word of words) {
+      const next = line === '' ? word : `${line} ${word}`;
+      if (measureCanvasText(font, next, fontSize, lineHeight) <= maxWidth) {
+        line = next;
+        continue;
+      }
+
+      if (line !== '') lines.push(line);
+      const chunks = wrapCanvasWord(font, word, fontSize, lineHeight, maxWidth);
+      lines.push(...chunks.slice(0, -1));
+      line = chunks.at(-1) ?? '';
+    }
+
+    lines.push(line);
+  }
+
   return lines.join('\n');
 };
 
@@ -82,15 +135,18 @@ const textBox = ({ color, font, fontSize, lineHeight, text, width }: TextBoxOpti
   width,
 });
 
-const h1 = (font: TextFontFace, text: string): CanvasTextBox =>
-  textBox({
+const h1 = (font: TextFontFace, text: string): CanvasTextBox => {
+  const fontSize = 0.56;
+  const lineHeight = 0.68;
+  return textBox({
     color: [0.98, 0.94, 0.55, 1],
     font,
-    fontSize: 0.88,
-    lineHeight: 1.02,
-    text,
-    width: 5.3,
+    fontSize,
+    lineHeight,
+    text: wrapCanvasText(font, text, fontSize, lineHeight, contentWidth),
+    width: contentWidth,
   });
+};
 
 const h2 = (font: TextFontFace, text: string): CanvasTextBox =>
   textBox({
@@ -107,14 +163,15 @@ const editableSentence = (
   text: string,
   fontSize: number,
 ): CanvasTextBox => {
-  const wrappedText = wrapCanvasLine(text, Math.max(18, Math.round(34 / fontSize)));
+  const lineHeight = fontSize * 1.18;
+  const wrappedText = wrapCanvasText(font, text, fontSize, lineHeight, contentWidth);
   return textBox({
     color: [0.28, 0.95, 0.48, 1],
     font,
     fontSize,
-    lineHeight: fontSize * 1.2,
+    lineHeight,
     text: wrappedText,
-    width: 8.9,
+    width: contentWidth,
   });
 };
 
@@ -176,14 +233,14 @@ const textScene = (font: TextFontFace, sampleText: string, fontSize: number): Re
     <scene>
       <pass clearColor={[0.025, 0.032, 0.038, 1]}>
         <orthographicCamera
-          bottom={-3.2}
+          bottom={cameraBounds.bottom}
           far={100}
-          left={-5.6}
+          left={cameraBounds.left}
           near={0.1}
           position={[0, 0, 10]}
-          right={5.6}
+          right={cameraBounds.right}
           rotation={[0, 0, 0]}
-          top={3.2}
+          top={cameraBounds.top}
         />
         {column({
           children: [
@@ -198,8 +255,8 @@ const textScene = (font: TextFontFace, sampleText: string, fontSize: number): Re
               gap: 0.42,
             }),
           ],
-          gap: 0.2,
-          origin: [-4.7, 2.15, 0],
+          gap: 0.16,
+          origin: sceneOrigin,
         })}
       </pass>
     </scene>
@@ -244,7 +301,7 @@ export const RendererText = (): ReactNode => {
         createElement('span', null, `Font size ${fontSize.toFixed(2)}`),
         createElement('input', {
           max: 1.2,
-          min: 0.68,
+          min: 0.56,
           onChange: handleFontSizeChange,
           step: 0.04,
           type: 'range',
