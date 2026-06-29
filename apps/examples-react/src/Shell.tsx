@@ -2,14 +2,6 @@ import { Link, Outlet } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { examples } from './examples';
 
-const secondaryRoutes = [
-  {
-    id: 'artifacts',
-    path: '/artifacts',
-    title: 'Artifacts',
-  },
-] as const;
-
 const Sidebar = (): ReactNode => (
   <aside className="examples-sidebar">
     <Link className="examples-brand" to="/">
@@ -28,24 +20,6 @@ const Sidebar = (): ReactNode => (
               data-example-route={example.path}
             >
               {example.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
-    <nav className="examples-nav examples-nav-secondary" aria-label="Research">
-      <p>Research</p>
-      <ul>
-        {secondaryRoutes.map((route) => (
-          <li key={route.id}>
-            <Link
-              to={route.path}
-              activeProps={{ className: 'examples-link examples-link-subtle active' }}
-              className="examples-link examples-link-subtle"
-              data-artifacts-nav-link=""
-              data-example-route={route.path}
-            >
-              {route.title}
             </Link>
           </li>
         ))}

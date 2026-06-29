@@ -750,8 +750,8 @@ const assertArtifactsPage = (state) => {
   if (state.title !== 'Research Artifacts') {
     failures.push(`expected research artifacts title, received "${state.title}"`);
   }
-  if (state.artifactsNavCount !== 1) {
-    failures.push(`research artifacts nav count was ${state.artifactsNavCount}`);
+  if (state.artifactsNavCount !== 0) {
+    failures.push(`research artifacts nav is exposed ${state.artifactsNavCount} time(s)`);
   }
   const artifactIds = new Set(state.artifactCards.map((artifact) => artifact.id));
   for (const expectedId of [
