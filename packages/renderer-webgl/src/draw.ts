@@ -4,12 +4,12 @@ import {
   type Material,
   type MeshNode,
   type TextNode,
-  type TextureRef,
   type WireframeMaterial,
 } from "@royal/renderer-core";
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
 import { bindFloatAttribute, createIndexBuffer, type RendererWebGlContext } from "./gl";
+import { lowerMaterialBaseColorBinding } from "./material-texture-binding";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
@@ -74,22 +74,6 @@ export const drawMesh = (
   );
 };
 
-type MeshBaseColor =
-  | {
-    readonly color: readonly [number, number, number, number];
-    readonly kind: "solid";
-  }
-  | {
-    readonly color: readonly [number, number, number, number];
-    readonly kind: "texture-fallback";
-    readonly reason: "error" | "loading";
-  }
-  | {
-    readonly kind: "texture";
-    readonly texture: WebGLTexture;
-  };
-
-const defaultAssetFallback = [1, 1, 1, 1] as const;
 const textureCaches = new WeakMap<RendererWebGlContext, TextureCache>();
 
 const meshTextureCache = (gl: RendererWebGlContext): TextureCache => {
@@ -108,28 +92,6 @@ const boxWireframeEdgeIndexBuffer = (gl: RendererWebGlContext): WebGLBuffer => {
   const buffer = createIndexBuffer(gl, boxWireframeEdgeIndices);
   boxWireframeEdgeIndexBuffers.set(gl, buffer);
   return buffer;
-};
-
-const fallbackBaseColor = (baseColor: TextureRef): readonly [number, number, number, number] =>
-  baseColor.kind === "asset" && baseColor.fallback !== undefined
-    ? baseColor.fallback.color
-    : defaultAssetFallback;
-
-const meshBaseColor = (
-  gl: RendererWebGlContext,
-  baseColor: TextureRef,
-  context: MeshDrawContext,
-): MeshBaseColor => {
-  if (baseColor.kind === "solid") return { kind: "solid", color: baseColor.color };
-
-  const cache = context.textureCache ?? meshTextureCache(gl);
-  const texture = cache.loadTextureAssetBaseColor(baseColor, context.onTextureSettled);
-  if (texture.kind === "ready") return { kind: "texture", texture: texture.texture };
-  return {
-    kind: "texture-fallback",
-    color: fallbackBaseColor(baseColor),
-    reason: texture.kind,
-  };
 };
 
 const solidWireframeColor = (
@@ -234,7 +196,10 @@ const drawBoxMesh = (
     throw new Error("StandardMaterial box mesh requires a directionalLight");
   const box = asBoxGeometry(mesh);
   const geometry = context.geometryCache.box(box);
-  const baseColor = meshBaseColor(gl, material.baseColor, context);
+  const baseColor = lowerMaterialBaseColorBinding(material.baseColor, {
+    onTextureSettled: context.onTextureSettled,
+    textureCache: context.textureCache ?? meshTextureCache(gl),
+  });
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
@@ -248,13 +213,16 @@ const drawBoxMesh = (
     context.viewProjectionMatrix,
   );
   gl.uniform3fv(program.uniforms.boxSize, box.size);
-  if (baseColor.kind === "texture") {
+  if (baseColor.kind === "asset" && baseColor.load.kind === "ready") {
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, baseColor.texture);
+    gl.bindTexture(gl.TEXTURE_2D, baseColor.load.texture);
     gl.uniform1i(program.uniforms.baseColor, 0);
     gl.uniform1i(program.uniforms.useBaseColorTexture, 1);
   } else {
-    gl.uniform4fv(program.uniforms.color, baseColor.color);
+    gl.uniform4fv(
+      program.uniforms.color,
+      baseColor.kind === "solid" ? baseColor.color : baseColor.fallbackColor,
+    );
     gl.uniform1i(program.uniforms.useBaseColorTexture, 0);
   }
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);

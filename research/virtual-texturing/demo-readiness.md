@@ -35,6 +35,11 @@ The browser demo should not land until these are true:
 - [ ] Capability fallback renders a fixed low-mip material when virtual
   texturing is unavailable; WebGL1 is reported as unsupported, not reduced.
 - [ ] Debug overlay can be toggled without changing the author-facing scene.
+- [ ] Worker transport starts with protocol-compatible transferable buffers and
+  records transfer, allocation, queue-depth, stale-drop, and in-flight-byte
+  rows before considering SAB.
+- [ ] SAB path stays opt-in until `crossOriginIsolated` checks pass and
+  benchmarks show bounded memory or churn reduction worth the added protocol.
 
 Readiness targets for the first real route:
 
@@ -44,6 +49,51 @@ Readiness targets for the first real route:
 - Page-table updates stay proportional to uploads plus evictions.
 - Zero generated-border mismatches for checked pages.
 - Seam stress mode makes resident-mip mismatches visible and counted.
+
+## Benchmark Gates
+
+Use two explicit browser benchmark tiers so portable CI can keep exercising the
+route while rollout still has a default-on performance bar.
+
+Smoke/permissive gate:
+
+- Purpose: CI portability and browser availability. This catches route crashes,
+  missing canvas output, runtime exceptions, no wheel dispatch, and severe rAF
+  stalls without requiring every research-grade probe counter.
+- Command: `pnpm --filter @royal/examples-react bench:vt`.
+- Equivalent direct command after a build:
+  `node apps/examples-react/scripts/virtual-texturing-smoothness.mjs --smoke`.
+- Defaults: `VT_SMOOTHNESS_GATE=smoke`, missing probe allowed only for this
+  tier, rAF p95 <= 160 ms, rAF p99 <= 320 ms, long-frame ratio <= 0.45,
+  sampled/final pending pages <= 96, and texture upload max <= 50 ms.
+
+Default-on/perf gate:
+
+- Purpose: rollout gate for enabling virtual texturing by default on the route.
+  This tier requires `window.__royalVirtualTextureProbe`, performance rows, and
+  the research-grade quality counters to be present.
+- Command after a build:
+  `VT_SMOOTHNESS_GATE=default-on node apps/examples-react/scripts/virtual-texturing-smoothness.mjs`.
+- Full package command:
+  `VT_SMOOTHNESS_GATE=default-on pnpm --filter @royal/examples-react bench:vt`.
+- Defaults: exact hit ratio >= 0.95, repeated reload ratio <= 0.02, recent
+  eviction re-request ratio <= 0.03, rAF p95 <= 20 ms, rAF p99 <= 33 ms,
+  long-frame ratio <= 0.02 over 50 ms, probe frame p95 <= 20 ms, max frame <=
+  66 ms, slow frames <= 8, final pending pages = 0, sampled pending pages <=
+  16, texture upload max <= 2 ms, and no full page-table rebuilds after init or
+  WebGL context restore.
+
+Budget overrides stay under `VT_SMOOTHNESS_*`, including:
+
+- `VT_SMOOTHNESS_MIN_EXACT_HIT_RATIO`
+- `VT_SMOOTHNESS_MAX_REPEATED_RELOAD_RATIO`
+- `VT_SMOOTHNESS_MAX_RECENT_EVICTION_RE_REQUEST_RATIO`
+- `VT_SMOOTHNESS_RAF_P95_MS`
+- `VT_SMOOTHNESS_RAF_P99_MS`
+- `VT_SMOOTHNESS_MAX_LONG_FRAME_RATIO`
+- `VT_SMOOTHNESS_MAX_PROBE_PENDING_PAGES`
+- `VT_SMOOTHNESS_MAX_PROBE_FINAL_PENDING_PAGES`
+- `VT_SMOOTHNESS_MAX_PROBE_TEXTURE_UPLOAD_MS`
 
 ## Exact Royal Example Route
 
@@ -118,8 +168,25 @@ The overlay must show:
 - Renderer-internal tests cover page-table entry encoding, resident fallback
   lookup, cache eviction invalidation, upload budget capping, and low-mip
   fallback selection for unsupported capabilities.
+- Worker-protocol tests cover demand rows, upload/evict/page-table commands,
+  stale request dropping, transfer-buffer pooling, SAB disabled reasons, and
+  SAB version checks when the SAB prototype is enabled.
 - Research report check remains runnable while the full demo asset scale is
   still generated outside package APIs.
+
+## Next Prototype Checklist
+
+- [ ] Define package-private demand and command structs shared by transfer and
+  SAB transports.
+- [ ] Keep WebGL texture uploads, page-table texture updates, and material
+  binding on the render thread.
+- [ ] Add a dedicated Worker path with pooled transferable buffers and runtime
+  rows for allocations, detached buffers, queue depth, drain time, generation
+  time, and peak in-flight bytes.
+- [ ] Benchmark cache-thrash and slow-pan paths against the existing hit-ratio,
+  upload, estimated upload-time, dirty-entry, and seam-candidate gates.
+- [ ] Add an opt-in SAB ring-buffer prototype only after those measurements, or
+  for controlled deployments that require a deterministic memory ceiling.
 
 ## Research Report Artifact
 

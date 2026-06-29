@@ -3,7 +3,11 @@ import { mat4 } from "gl-matrix";
 import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 import { composeTransform, type Mat4 } from "./matrix";
 import { markGltf, measureGltf } from "./performance";
-import { TextureCache } from "./texture-cache";
+import {
+  TextureCache,
+  type GltfBaseColorTexture,
+  type GltfBaseColorTextureSource,
+} from "./texture-cache";
 
 type GltfAccessorType = "SCALAR" | "VEC2" | "VEC3";
 
@@ -86,11 +90,24 @@ type GltfJson = {
 export type GltfPrimitive = {
   readonly index: WebGLBuffer;
   readonly indexCount: number;
+  readonly material: GltfPrimitiveMaterial;
   readonly model: Mat4;
   readonly normal: WebGLBuffer;
   readonly position: WebGLBuffer;
   readonly texCoord: WebGLBuffer;
   texture: WebGLTexture;
+};
+
+export type GltfPrimitiveBaseColorTexture = {
+  readonly identity: string;
+  readonly source: GltfBaseColorTextureSource;
+  state: "fallback" | "ready";
+  texture: WebGLTexture;
+};
+
+export type GltfPrimitiveMaterial = {
+  readonly baseColorTexture: GltfPrimitiveBaseColorTexture;
+  readonly index: number;
 };
 
 export type GltfAssetBounds = {
@@ -389,8 +406,13 @@ export class GltfCache {
     markGltf("document:end");
     measureGltf("document", "document:start", "document:end");
 
-    const loadTexture = async (textureIndex: number): Promise<WebGLTexture> => {
-      return await this.#textureCache.loadGltfBaseColorTexture({ json, src: uri, textureIndex });
+    const loadTexture = async (textureIndex: number): Promise<GltfBaseColorTexture> => {
+      return await this.#textureCache.loadGltfBaseColorTexture({
+        documentId: cacheKey,
+        json,
+        src: uri,
+        textureIndex,
+      });
     };
     const warmedTextures = Promise.all(baseColorTextureIndices(json).map(loadTexture));
     void warmedTextures.catch(() => undefined);
@@ -418,24 +440,44 @@ export class GltfCache {
         const normal = copyFloatAccessor(json, buffers, required(attributes.NORMAL, "NORMAL accessor"), "VEC3");
         const texCoord = copyFloatAccessor(json, buffers, required(attributes.TEXCOORD_0, "TEXCOORD_0 accessor"), "VEC2");
         const indices = copyIndexAccessor(json, buffers, required(primitive.indices, "indices accessor"));
-        const material = required(json.materials?.[required(primitive.material, "primitive material")], "primitive material");
+        const materialIndex = required(primitive.material, "primitive material");
+        const material = required(json.materials?.[materialIndex], "primitive material");
         const textureIndex = required(material.pbrMetallicRoughness?.baseColorTexture?.index, "base color texture");
+        const textureSource = this.#textureCache.getGltfBaseColorTextureSource({
+          documentId: cacheKey,
+          json,
+          src: uri,
+          textureIndex,
+        });
         const localBounds = accessorAabb(json, positionAccessor) ?? positionAabb(position);
         if (localBounds !== undefined) bounds = unionAabb(bounds, transformAabb(localBounds, model));
 
+        const fallbackTexture = this.#textureCache.getFallbackTexture();
+        const baseColorTexture: GltfPrimitiveBaseColorTexture = {
+          identity: textureSource.id,
+          source: textureSource,
+          state: "fallback",
+          texture: fallbackTexture,
+        };
         const renderedPrimitive: GltfPrimitive = {
           index: this.#track(createIndexBuffer(this.#gl, indices)),
           indexCount: indices.length,
+          material: {
+            baseColorTexture,
+            index: materialIndex,
+          },
           model,
           normal: this.#track(createFloatBuffer(this.#gl, normal)),
           position: this.#track(createFloatBuffer(this.#gl, position)),
           texCoord: this.#track(createFloatBuffer(this.#gl, texCoord)),
-          texture: this.#textureCache.getFallbackTexture(),
+          texture: fallbackTexture,
         };
         primitives.push(renderedPrimitive);
         textureLoads.push(loadTexture(textureIndex).then((texture) => {
           if (this.#disposed) return;
-          renderedPrimitive.texture = texture;
+          baseColorTexture.state = "ready";
+          baseColorTexture.texture = texture.texture;
+          renderedPrimitive.texture = texture.texture;
           this.#onReady();
         }));
       }

@@ -9,16 +9,23 @@ import {
   type VirtualTexturePageAddress,
   type VirtualTexturePageId,
   type VirtualTexturePageTableTexture,
+  type VirtualTexturePageTableTexelUpload,
   type VirtualTexturePhysicalAtlasPageUpload,
-  type VirtualTextureUploadPlan,
 } from '../../../../../packages/renderer-webgl/src/virtual-texturing';
 import { createElement, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import {
+  createWorkerBackedTerrainPageGenerator,
+  type PreparedTerrainPageUpload,
+  type WorkerBackedTerrainPageGenerator,
+} from './virtual-texturing/worker-page-adapter';
 
 type PhysicalAtlasTexture = {
   readonly slotColumns: number;
   readonly slotRows: number;
   readonly texture: WebGLTexture;
 };
+
+type VirtualTextureRuntimeStats = ReturnType<VirtualTextureRuntime['stats']>;
 
 type PageTableReadback = {
   readonly nonZeroTexels: number;
@@ -33,8 +40,12 @@ type CanvasReadback = {
 
 type CameraProbe = {
   readonly distance: number;
+  readonly inputEvents: number;
+  readonly interactionActive: boolean;
+  readonly lastInteractionAgoMs: number;
   readonly moved: boolean;
   readonly pitch: number;
+  readonly revision: number;
   readonly targetX: number;
   readonly targetZ: number;
   readonly yaw: number;
@@ -51,6 +62,76 @@ type VirtualTextureDetailProbe = {
   readonly requestedMip: number;
   readonly requestedPageIds: readonly VirtualTexturePageId[];
   readonly requestedPages: number;
+};
+
+type VirtualTexturePerformanceProbe = {
+  advanceCount: number;
+  buffersAllocated: number;
+  buffersReused: number;
+  cacheChurnCount: number;
+  cacheChurnRatio: number;
+  cacheThrashCount: number;
+  evictionCount: number;
+  exactHitRatio: number;
+  frameTimeP95Ms: number;
+  frameTimeSamples: number[];
+  fullPageTableRebuildsAfterInit: number;
+  inFlightBytes: number;
+  lastAdvanceMs: number;
+  lastAllocationMs: number;
+  lastAtlasUploadCount: number;
+  lastFillMs: number;
+  lastFrameMs: number;
+  lastPageGenerationMs: number;
+  lastPlanMs: number;
+  lastReadbackMs: number;
+  lastPageTableUploadCount: number;
+  lastPageTableUploadMs: number;
+  lastResolvedBasePages: number;
+  lastSchedulerDelayMs: number;
+  lastWorkChunkMs: number;
+  lastTextureUploadMs: number;
+  lastWorkerGenerationLatencyMs: number;
+  maxAdvanceMs: number;
+  maxAllocationMs: number;
+  maxFillMs: number;
+  maxFrameMs: number;
+  maxPageGenerationMs: number;
+  maxPlanMs: number;
+  maxReadbackMs: number;
+  maxPageTableUploadMs: number;
+  maxSchedulerDelayMs: number;
+  maxWorkChunkMs: number;
+  maxTextureUploadMs: number;
+  maxWorkerGenerationLatencyMs: number;
+  oldestQueuedWorkFrames: number;
+  pendingPages: number;
+  pendingReadbacks: number;
+  protectedPageEvictions: number;
+  protectedPages: number;
+  queueDepth: number;
+  readbackCount: number;
+  recentEvictionReRequestRatio: number;
+  repeatedDropCount: number;
+  repeatedReloadRatio: number;
+  repeatedRequestCount: number;
+  schedulerChunkCount: number;
+  schedulerStrategy: VirtualTextureWorkSchedulerStrategy;
+  slowFrameBudgetMs: number;
+  slowFrameCount: number;
+  staleDrops: number;
+  staleAtlasUploadDrops: number;
+  stalePageTableUploadDrops: number;
+  staleQueuedDrops: number;
+  uploadChurnCount: number;
+  uploadChurnRatio: number;
+  uploadThrashCount: number;
+  workerAvailable: boolean;
+  workerCount: number;
+  workerFallbackPages: number;
+  workerGeneratedPages: number;
+  workerLastError: string;
+  workChunkBudgetMs: number;
 };
 
 type VirtualTextureProbe = {
@@ -71,6 +152,7 @@ type VirtualTextureProbe = {
   pageTablePreviewReadback: CanvasReadback;
   pageTableReadback: PageTableReadback;
   pageTableTexelUploads: number;
+  performance: VirtualTexturePerformanceProbe;
   physicalAtlasUploads: number;
   previewDrawCalls: number;
   ready: boolean;
@@ -116,9 +198,13 @@ type PreviewProgram = {
 
 type CameraState = {
   distance: number;
+  inputEvents: number;
+  interactionActive: boolean;
   lastTime: number;
+  lastInteractionTime: number;
   moved: boolean;
   pitch: number;
+  revision: number;
   targetX: number;
   targetZ: number;
   yaw: number;
@@ -142,6 +228,80 @@ type PreviewRects = {
   readonly pageTable: Rect;
 };
 
+type PhysicalAtlasUploadStats = {
+  readonly allocationMs: number;
+  readonly bytesUploaded: number;
+  readonly fillMs: number;
+  readonly generationMs: number;
+  readonly pagesUploaded: number;
+  readonly uploadMs: number;
+  readonly workerLatencyMs: number;
+};
+
+type PhysicalPagePixels = {
+  readonly allocationMs: number;
+  readonly fillMs: number;
+  readonly pixels: Uint8Array;
+};
+
+type QueuedWorkPriority = 'background' | 'fallback' | 'visible';
+
+type HeldFocusPage = {
+  readonly mip: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+type QueuedPageTableUpload = {
+  readonly priority: QueuedWorkPriority;
+  readonly queuedFrame: number;
+  readonly requestSignature: string;
+  readonly upload: VirtualTexturePageTableTexelUpload;
+  readonly uploadSerial: number | null;
+};
+
+type QueuedPhysicalAtlasUpload = {
+  readonly priority: QueuedWorkPriority;
+  readonly queuedFrame: number;
+  readonly requestSignature: string;
+  readonly upload: VirtualTexturePhysicalAtlasPageUpload;
+};
+
+type ProtectedVirtualTexturePage = {
+  readonly page: VirtualTexturePageAddress;
+  lastRequestedFrame: number;
+};
+
+type VirtualTextureReadbackRequest = {
+  readonly height: number;
+  readonly rects: PreviewRects;
+  readonly width: number;
+};
+
+type PendingVirtualTextureWork = {
+  evictedPageIds: Set<VirtualTexturePageId>;
+  fallbackPageTableUploads: QueuedPageTableUpload[];
+  heldDetail: number | null;
+  heldFocus: HeldFocusPage | null;
+  initialBaseResolveCursor: number;
+  lastCameraRevision: number;
+  lastMaxResidentDetail: number;
+  lastRequestSignature: string;
+  pageTableUploads: QueuedPageTableUpload[];
+  pendingReadback: VirtualTextureReadbackRequest | null;
+  pendingAtlasResidentIds: Set<VirtualTexturePageId>;
+  pendingAtlasUploadKeys: Set<string>;
+  physicalAtlasUploads: QueuedPhysicalAtlasUpload[];
+  protectedPages: Map<VirtualTexturePageId, ProtectedVirtualTexturePage>;
+  priorityBaseResolveIds: Set<VirtualTexturePageId>;
+  priorityBaseResolves: VirtualTexturePageAddress[];
+  priorityPageTableUploads: QueuedPageTableUpload[];
+  requestSignatureCounts: Map<string, number>;
+  uploadedAtlasUploadKeys: Set<string>;
+  uploadedResidentIds: Set<VirtualTexturePageId>;
+  visiblePages: VirtualTexturePageAddress[];
+};
+
 type VirtualTextureDemoSettings = {
   readonly maxResidentDetail: number;
 };
@@ -149,21 +309,46 @@ type VirtualTextureDemoSettings = {
 type VirtualTextureMaterialRequestContext = {
   readonly camera: CameraState;
   readonly frame: number;
+  readonly heldDetail: number | null;
+  readonly heldFocus: HeldFocusPage | null;
   readonly maxResidentDetail: number;
 };
 
 type VirtualTextureMaterialRequestPlan = {
   readonly basePagesToResolve: readonly VirtualTexturePageAddress[];
   readonly detail: VirtualTextureDetailProbe;
+  readonly fallbackPagesToMakeResident: readonly VirtualTexturePageAddress[];
+  readonly heldDetail: number;
+  readonly heldFocus: HeldFocusPage;
   readonly pagesToMakeResident: readonly VirtualTexturePageAddress[];
+  readonly visiblePagesToMakeResident: readonly VirtualTexturePageAddress[];
 };
 
 type VirtualTextureMaterialAdapter = {
-  readonly createPagePixels: (upload: VirtualTexturePhysicalAtlasPageUpload) => Uint8Array;
+  readonly createPagePixels: (upload: VirtualTexturePhysicalAtlasPageUpload) => PhysicalPagePixels;
+  readonly pageGenerator: WorkerBackedTerrainPageGenerator;
   readonly planRequests: (context: VirtualTextureMaterialRequestContext) => VirtualTextureMaterialRequestPlan;
 };
 
 type Vec3 = readonly [number, number, number];
+
+type BrowserTaskScheduler = {
+  readonly postTask?: (
+    callback: () => void,
+    options?: { readonly priority?: 'background' | 'user-blocking' | 'user-visible' },
+  ) => Promise<unknown>;
+};
+
+type IdleSchedulerWindow = Window & {
+  readonly cancelIdleCallback?: (handle: number) => void;
+  readonly requestIdleCallback?: (
+    callback: (deadline: { readonly didTimeout: boolean; readonly timeRemaining: () => number }) => void,
+    options?: { readonly timeout?: number },
+  ) => number;
+  readonly scheduler?: BrowserTaskScheduler;
+};
+
+type VirtualTextureWorkSchedulerStrategy = 'idle-callback' | 'post-task' | 'set-timeout';
 
 declare global {
   interface Window {
@@ -176,15 +361,33 @@ const pageSize = 64;
 const basePageColumns = virtualSize[0] / pageSize;
 const basePageRows = virtualSize[1] / pageSize;
 const maxVirtualMip = Math.round(Math.log2(Math.max(basePageColumns, basePageRows)));
-const defaultMaxResidentDetail = 2;
-const physicalSlots = 16;
+const defaultMaxResidentDetail = maxVirtualMip;
+const physicalSlots = 64;
 const terrainSegments = 96;
 const terrainWorldSize = 8.5;
 const terrainPanLimit = 2.4;
 const terrainVertexStride = 8;
-const minCameraDistance = 2.4;
+const minCameraDistance = 0.85;
+const fullDetailCameraDistance = 2.4;
 const maxCameraDistance = 12;
 const detailRequestRadius = 1;
+const frameTimeSampleLimit = 180;
+const maxBaseResolvesPerChunk = 256;
+const maxBackgroundPageTableBacklog = 96;
+const maxInteractiveWorkBeforeBackground = 32;
+const maxPageTableTexelUploadsPerChunk = 96;
+const maxPhysicalAtlasUploadsPerChunk = 1;
+const maxWorkerQueuedAtlasUploads = 12;
+const probeReadbackIntervalMs = 500;
+const textureWorkChunkBudgetMs = 2.5;
+const interactiveTextureWorkChunkBudgetMs = 1.25;
+const textureWorkIdleTimeoutMs = 120;
+const interactionReadbackQuietMs = 240;
+const slowFrameBudgetMs = 34;
+const zoomDetailDeadband = 0.58;
+const focusPageDeadband = 0.62;
+const protectedPageHoldFrames = 90;
+const maxProtectedPages = physicalSlots;
 const rootPage: VirtualTexturePageAddress = { mip: maxVirtualMip, x: 0, y: 0 };
 const basePages = Array.from({ length: basePageColumns * basePageRows }, (_, index): VirtualTexturePageAddress => ({
   mip: 0,
@@ -228,17 +431,50 @@ in vec3 v_worldPosition;
 in vec2 v_uv;
 out vec4 outColor;
 
-vec3 sampleVirtualTexture(vec2 uv, out float pageLine, out float exactBlend) {
-  vec2 virtualPage = min(floor(uv * u_pageTableSize), u_pageTableSize - vec2(1.0));
-  vec2 pageUv = fract(uv * u_pageTableSize);
-  vec4 entry = texelFetch(u_pageTable, ivec2(virtualPage), 0);
+float lineMask(float coordinate, float spacing, float width) {
+  float phase = fract(coordinate / spacing);
+  float distance = min(phase, 1.0 - phase) * spacing;
+
+  return 1.0 - smoothstep(width * 0.45, width, distance);
+}
+
+float surveyMarker(vec2 pageUv, vec2 virtualPage) {
+  float insideBand = step(0.055, pageUv.x) * step(pageUv.x, 0.42) * step(0.06, pageUv.y) * step(pageUv.y, 0.2);
+  vec2 markerCell = floor((pageUv - vec2(0.055, 0.06)) * vec2(34.0, 28.0));
+  float encoded = mod(
+    virtualPage.x * 7.0 + virtualPage.y * 13.0 + markerCell.x * 3.0 + markerCell.y * 5.0,
+    11.0
+  );
+
+  return insideBand * step(encoded, 4.5);
+}
+
+float fallbackChecker(vec2 uv, float mipDelta) {
+  vec2 coarseCell = floor(uv * u_pageTableSize / max(mipDelta, 1.0));
+  return mod(coarseCell.x + coarseCell.y, 2.0);
+}
+
+vec3 sampleVirtualTexture(
+  vec2 uv,
+  out float pageLine,
+  out float exactBlend,
+  out float mipDelta,
+  out vec2 sampledVirtualPage,
+  out vec2 sampledPageUv
+) {
+  sampledVirtualPage = min(floor(uv * u_pageTableSize), u_pageTableSize - vec2(1.0));
+  sampledPageUv = fract(uv * u_pageTableSize);
+  vec4 entry = texelFetch(u_pageTable, ivec2(sampledVirtualPage), 0);
   float valid = step(0.5 / 255.0, entry.a);
   vec2 slot = floor(entry.rg * 255.0 + 0.5);
-  float mipDelta = max(1.0, exp2(floor(entry.b * 255.0 + 0.5)));
-  vec2 fallbackOffset = mod(virtualPage, mipDelta) / mipDelta;
-  vec2 atlasUv = (slot + fallbackOffset + pageUv / mipDelta) / u_atlasSlots;
+  mipDelta = max(1.0, exp2(floor(entry.b * 255.0 + 0.5)));
+  vec2 fallbackOffset = mod(sampledVirtualPage, mipDelta) / mipDelta;
+  vec2 atlasUv = (slot + fallbackOffset + sampledPageUv / mipDelta) / u_atlasSlots;
   vec3 atlasColor = texture(u_physicalAtlas, atlasUv).rgb;
-  float edgeDistance = min(min(pageUv.x, pageUv.y), min(1.0 - pageUv.x, 1.0 - pageUv.y));
+  float edgeDistance = min(
+    min(sampledPageUv.x, sampledPageUv.y),
+    min(1.0 - sampledPageUv.x, 1.0 - sampledPageUv.y)
+  );
 
   pageLine = 1.0 - smoothstep(0.0, 0.018, edgeDistance);
   exactBlend = 1.0 - step(1.5 / 255.0, entry.b);
@@ -248,13 +484,42 @@ vec3 sampleVirtualTexture(vec2 uv, out float pageLine, out float exactBlend) {
 void main() {
   float pageLine = 0.0;
   float exactBlend = 0.0;
-  vec3 textureColor = sampleVirtualTexture(clamp(v_uv, vec2(0.0), vec2(1.0)), pageLine, exactBlend);
+  float mipDelta = 1.0;
+  vec2 sampledVirtualPage = vec2(0.0);
+  vec2 sampledPageUv = vec2(0.0);
+  vec2 vtUv = clamp(v_uv, vec2(0.0), vec2(1.0));
+  vec3 textureColor = sampleVirtualTexture(
+    vtUv,
+    pageLine,
+    exactBlend,
+    mipDelta,
+    sampledVirtualPage,
+    sampledPageUv
+  );
+  vec2 virtualTexel = vtUv * 4096.0;
+  float fallbackAmount = clamp(log2(mipDelta) / 6.0, 0.0, 1.0);
+  float residentSharpness = 1.0 - fallbackAmount;
+  float minorGrid = max(lineMask(virtualTexel.x, 64.0, 1.25), lineMask(virtualTexel.y, 64.0, 1.25));
+  float microGrid = max(lineMask(virtualTexel.x, 16.0, 0.64), lineMask(virtualTexel.y, 16.0, 0.64));
+  float contourSignal = dot(textureColor, vec3(0.29, 0.48, 0.23)) + v_worldPosition.y * 0.18;
+  float contourPhase = abs(fract(contourSignal * 13.0) - 0.5) * 2.0;
+  float contour = 1.0 - smoothstep(0.045, 0.105, contourPhase);
+  float marker = surveyMarker(sampledPageUv, sampledVirtualPage);
+  float fallbackBlock = fallbackChecker(vtUv, mipDelta) * fallbackAmount;
+  vec3 crispOverlay = vec3(0.78, 1.0, 0.95) * minorGrid * 0.18 +
+    vec3(0.08, 0.13, 0.16) * microGrid * 0.14 +
+    vec3(1.0, 0.76, 0.24) * marker * 0.62 +
+    vec3(0.02, 0.035, 0.045) * contour * 0.38;
+  vec3 fallbackOverlay = mix(vec3(0.12, 0.06, 0.2), vec3(0.28, 0.16, 0.42), fallbackBlock) * fallbackAmount;
+
+  textureColor = mix(textureColor, textureColor + crispOverlay, residentSharpness);
+  textureColor = mix(textureColor, fallbackOverlay, fallbackAmount * 0.5);
   vec3 normal = normalize(v_normal);
   float light = clamp(dot(normal, normalize(u_lightDirection)), 0.0, 1.0);
   float slopeShade = smoothstep(0.52, 0.12, normal.y) * 0.12;
   vec3 fallbackTint = mix(vec3(0.72, 0.78, 0.86), vec3(1.0), exactBlend);
   vec3 shaded = textureColor * fallbackTint * (0.34 + light * 0.68 + slopeShade);
-  shaded = mix(shaded, vec3(0.92, 0.97, 1.0), pageLine * 0.28);
+  shaded = mix(shaded, vec3(0.92, 0.97, 1.0), pageLine * (0.22 + fallbackAmount * 0.42));
   float horizonFog = smoothstep(5.5, 12.5, length(v_worldPosition.xz));
   vec3 fogColor = vec3(0.33, 0.43, 0.51);
 
@@ -313,8 +578,12 @@ const emptyReadback = (): CanvasReadback => ({ colorBuckets: 0, paintedRatio: 0 
 
 const emptyCameraProbe = (): CameraProbe => ({
   distance: 0,
+  inputEvents: 0,
+  interactionActive: false,
+  lastInteractionAgoMs: 0,
   moved: false,
   pitch: 0,
+  revision: 0,
   targetX: 0,
   targetZ: 0,
   yaw: 0,
@@ -331,6 +600,76 @@ const emptyDetailProbe = (): VirtualTextureDetailProbe => ({
   requestedMip: rootPage.mip,
   requestedPageIds: [],
   requestedPages: 0,
+});
+
+const emptyPerformanceProbe = (): VirtualTexturePerformanceProbe => ({
+  advanceCount: 0,
+  buffersAllocated: 0,
+  buffersReused: 0,
+  cacheChurnCount: 0,
+  cacheChurnRatio: 0,
+  cacheThrashCount: 0,
+  evictionCount: 0,
+  exactHitRatio: 1,
+  frameTimeP95Ms: 0,
+  frameTimeSamples: [],
+  fullPageTableRebuildsAfterInit: 0,
+  inFlightBytes: 0,
+  lastAdvanceMs: 0,
+  lastAllocationMs: 0,
+  lastAtlasUploadCount: 0,
+  lastFillMs: 0,
+  lastFrameMs: 0,
+  lastPageGenerationMs: 0,
+  lastPlanMs: 0,
+  lastReadbackMs: 0,
+  lastPageTableUploadCount: 0,
+  lastPageTableUploadMs: 0,
+  lastResolvedBasePages: 0,
+  lastSchedulerDelayMs: 0,
+  lastWorkChunkMs: 0,
+  lastTextureUploadMs: 0,
+  lastWorkerGenerationLatencyMs: 0,
+  maxAdvanceMs: 0,
+  maxAllocationMs: 0,
+  maxFillMs: 0,
+  maxFrameMs: 0,
+  maxPageGenerationMs: 0,
+  maxPlanMs: 0,
+  maxReadbackMs: 0,
+  maxPageTableUploadMs: 0,
+  maxSchedulerDelayMs: 0,
+  maxWorkChunkMs: 0,
+  maxTextureUploadMs: 0,
+  maxWorkerGenerationLatencyMs: 0,
+  oldestQueuedWorkFrames: 0,
+  pendingPages: 0,
+  pendingReadbacks: 0,
+  protectedPageEvictions: 0,
+  protectedPages: 0,
+  queueDepth: 0,
+  readbackCount: 0,
+  recentEvictionReRequestRatio: 0,
+  repeatedDropCount: 0,
+  repeatedReloadRatio: 0,
+  repeatedRequestCount: 0,
+  schedulerChunkCount: 0,
+  schedulerStrategy: 'set-timeout',
+  slowFrameBudgetMs,
+  slowFrameCount: 0,
+  staleDrops: 0,
+  staleAtlasUploadDrops: 0,
+  stalePageTableUploadDrops: 0,
+  staleQueuedDrops: 0,
+  uploadChurnCount: 0,
+  uploadChurnRatio: 0,
+  uploadThrashCount: 0,
+  workerAvailable: false,
+  workerCount: 0,
+  workerFallbackPages: 0,
+  workerGeneratedPages: 0,
+  workerLastError: '',
+  workChunkBudgetMs: textureWorkChunkBudgetMs,
 });
 
 const emptyProbe = (): VirtualTextureProbe => ({
@@ -351,6 +690,7 @@ const emptyProbe = (): VirtualTextureProbe => ({
   pageTablePreviewReadback: emptyReadback(),
   pageTableReadback: { nonZeroTexels: 0, texels: 0, uniqueEntries: 0 },
   pageTableTexelUploads: 0,
+  performance: emptyPerformanceProbe(),
   physicalAtlasUploads: 0,
   previewDrawCalls: 0,
   ready: false,
@@ -533,7 +873,12 @@ const terrainColorAt = (
   const majorGrid = Math.max(gridLine(virtualX, 256, 2.2), gridLine(virtualY, 256, 2.2));
   const minorGrid = Math.max(gridLine(virtualX, 64, 1.35), gridLine(virtualY, 64, 1.35));
   const microGrid = Math.max(gridLine(virtualX, 16, 0.72), gridLine(virtualY, 16, 0.72));
+  const basePageGrid = Math.max(gridLine(virtualX, pageSize, 2.4), gridLine(virtualY, pageSize, 2.4));
   const diagonal = gridLine((virtualX + virtualY) * 0.7071, 32, 0.8);
+  const pageX = Math.floor(virtualX / pageSize);
+  const pageY = Math.floor(virtualY / pageSize);
+  const pageU = fract(virtualX / pageSize);
+  const pageV = fract(virtualY / pageSize);
   const tileX = Math.floor(virtualX / 256);
   const tileY = Math.floor(virtualY / 256);
   const tileU = fract(virtualX / 256);
@@ -543,13 +888,26 @@ const terrainColorAt = (
   const markerBand = tileU > 0.055 && tileU < 0.34 && tileV > 0.06 && tileV < 0.19;
   const markerBit = markerBand &&
     ((tileX * 13 + tileY * 29 + markerColumn * 5 + markerRow * 7) % 11 < 5);
+  const pageMarkerColumn = Math.floor((pageU - 0.08) / 0.052);
+  const pageMarkerRow = Math.floor((pageV - 0.1) / 0.068);
+  const pageMarkerBand = pageU > 0.08 && pageU < 0.58 && pageV > 0.1 && pageV < 0.28;
+  const pageMarkerBit = pageMarkerBand &&
+    ((pageX * 7 + pageY * 11 + pageMarkerColumn * 3 + pageMarkerRow * 5) % 9 < 4);
+  const pageCrosshair = Math.max(gridLine(pageU, 0.5, 0.018), gridLine(pageV, 0.5, 0.018)) *
+    smoothStep(0.24, 0.38, Math.min(Math.abs(pageU - 0.5), Math.abs(pageV - 0.5)));
   const grain = 0.92 + noise * 0.12 + detail * 0.04;
   const contourColor = mixColor(ink, surveyAmber, smoothStep(0.62, 1.02, height));
   const gridColor = mixColor(surveyCyan, ink, smoothStep(0.0, 0.8, height));
   const marked = markerBit ? mixColor(dampMix, surveyAmber, 0.78) : dampMix;
-  const withMinorGrid = mixColor(marked, gridColor, minorGrid * 0.34 + microGrid * 0.2 + diagonal * 0.14);
-  const withMajorGrid = mixColor(withMinorGrid, surveyCyan, majorGrid * 0.72);
-  const withContour = mixColor(withMajorGrid, contourColor, contour * 0.64);
+  const pageMarked = pageMarkerBit ? mixColor(marked, surveyAmber, 0.72) : marked;
+  const withMinorGrid = mixColor(
+    pageMarked,
+    gridColor,
+    minorGrid * 0.36 + microGrid * 0.24 + diagonal * 0.16 + pageCrosshair * 0.28,
+  );
+  const withPageGrid = mixColor(withMinorGrid, ink, basePageGrid * 0.52);
+  const withMajorGrid = mixColor(withPageGrid, surveyCyan, majorGrid * 0.76);
+  const withContour = mixColor(withMajorGrid, contourColor, contour * 0.68);
 
   return [
     clampByte(withContour[0] * grain),
@@ -807,8 +1165,11 @@ const pageVirtualUv = (
 
 const createTerrainPhysicalPagePixels = (
   upload: VirtualTexturePhysicalAtlasPageUpload,
-): Uint8Array => {
+): PhysicalPagePixels => {
+  const allocationStart = performance.now();
   const pixels = new Uint8Array(upload.width * upload.height * 4);
+  const allocationMs = performance.now() - allocationStart;
+  const fillStart = performance.now();
 
   for (let y = 0; y < upload.height; y += 1) {
     for (let x = 0; x < upload.width; x += 1) {
@@ -826,7 +1187,11 @@ const createTerrainPhysicalPagePixels = (
     }
   }
 
-  return pixels;
+  return {
+    allocationMs,
+    fillMs: performance.now() - fillStart,
+    pixels,
+  };
 };
 
 const cameraFocusUv = (camera: CameraState): readonly [number, number] => [
@@ -834,27 +1199,59 @@ const cameraFocusUv = (camera: CameraState): readonly [number, number] => [
   clamp(camera.targetZ / terrainWorldSize + 0.5, 0, 1),
 ];
 
-const detailFromCameraZoom = (camera: CameraState): number => {
-  const zoomedIn = 1 - (camera.distance - minCameraDistance) / (maxCameraDistance - minCameraDistance);
-  return clamp(Math.round(2 + clamp(zoomedIn, 0, 1) * (maxVirtualMip - 2)), 0, maxVirtualMip);
+const rawDetailFromCameraZoom = (camera: CameraState): number => {
+  const zoomedIn = 1 - (camera.distance - fullDetailCameraDistance) / (maxCameraDistance - fullDetailCameraDistance);
+  return clamp(2 + clamp(zoomedIn, 0, 1) * (maxVirtualMip - 2), 0, maxVirtualMip);
+};
+
+const heldDetailFromCameraZoom = (
+  camera: CameraState,
+  cappedDetail: number,
+  heldDetail: number | null,
+): number => {
+  const rawDetail = Math.min(rawDetailFromCameraZoom(camera), cappedDetail);
+  let detail = heldDetail === null ? Math.round(rawDetail) : clamp(heldDetail, 0, cappedDetail);
+
+  while (detail < cappedDetail && rawDetail >= detail + zoomDetailDeadband) detail += 1;
+  while (detail > 0 && rawDetail <= detail - zoomDetailDeadband) detail -= 1;
+  return clamp(detail, 0, cappedDetail);
 };
 
 const detailToMip = (detail: number): number => maxVirtualMip - clamp(Math.round(detail), 0, maxVirtualMip);
 
-const focusPagesForMip = (
+const focusPageForMip = (
   mip: number,
   focusU: number,
   focusV: number,
-): readonly VirtualTexturePageAddress[] => {
+  heldFocus: HeldFocusPage | null,
+): HeldFocusPage => {
   const [columns, rows] = pagesAtVirtualMip(mip);
-  const centerX = clamp(Math.floor(focusU * columns), 0, columns - 1);
-  const centerY = clamp(Math.floor(focusV * rows), 0, rows - 1);
+  const targetX = clamp(focusU * columns - 0.5, 0, columns - 1);
+  const targetY = clamp(focusV * rows - 0.5, 0, rows - 1);
+  let x = heldFocus?.mip === mip ? heldFocus.x : Math.round(targetX);
+  let y = heldFocus?.mip === mip ? heldFocus.y : Math.round(targetY);
+
+  while (x < columns - 1 && targetX > x + focusPageDeadband) x += 1;
+  while (x > 0 && targetX < x - focusPageDeadband) x -= 1;
+  while (y < rows - 1 && targetY > y + focusPageDeadband) y += 1;
+  while (y > 0 && targetY < y - focusPageDeadband) y -= 1;
+  return {
+    mip,
+    x: clamp(x, 0, columns - 1),
+    y: clamp(y, 0, rows - 1),
+  };
+};
+
+const focusPagesAround = (
+  focus: HeldFocusPage,
+): readonly VirtualTexturePageAddress[] => {
+  const [columns, rows] = pagesAtVirtualMip(focus.mip);
   const pages: VirtualTexturePageAddress[] = [];
 
-  for (let y = centerY - detailRequestRadius; y <= centerY + detailRequestRadius; y += 1) {
-    for (let x = centerX - detailRequestRadius; x <= centerX + detailRequestRadius; x += 1) {
+  for (let y = focus.y - detailRequestRadius; y <= focus.y + detailRequestRadius; y += 1) {
+    for (let x = focus.x - detailRequestRadius; x <= focus.x + detailRequestRadius; x += 1) {
       if (x < 0 || y < 0 || x >= columns || y >= rows) continue;
-      pages.push({ mip, x, y });
+      pages.push({ mip: focus.mip, x, y });
     }
   }
 
@@ -867,23 +1264,95 @@ const uniquePages = (pages: readonly VirtualTexturePageAddress[]): readonly Virt
   return [...byId.values()];
 };
 
-const createTerrainVirtualTextureMaterialAdapter = (): VirtualTextureMaterialAdapter => ({
+const parentPagesFor = (page: VirtualTexturePageAddress): readonly VirtualTexturePageAddress[] => {
+  const pages: VirtualTexturePageAddress[] = [];
+  for (let mip = maxVirtualMip; mip > page.mip; mip -= 1) {
+    const scale = 2 ** (mip - page.mip);
+    pages.push({
+      mip,
+      x: Math.floor(page.x / scale),
+      y: Math.floor(page.y / scale),
+    });
+  }
+
+  return pages;
+};
+
+const fallbackPagesFor = (pages: readonly VirtualTexturePageAddress[]): readonly VirtualTexturePageAddress[] =>
+  uniquePages([rootPage, ...pages.flatMap(parentPagesFor)]);
+
+const percentile = (values: readonly number[], ratio: number): number => {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = clamp(Math.ceil(sorted.length * ratio) - 1, 0, sorted.length - 1);
+
+  return sorted[index] ?? 0;
+};
+
+const roundTiming = (value: number): number => Number(value.toFixed(2));
+
+const recordFrameTime = (probe: VirtualTextureProbe, deltaMs: number): void => {
+  if (!probe.ready) return;
+  if (deltaMs <= 0) return;
+  const timing = probe.performance;
+  const rounded = roundTiming(deltaMs);
+  timing.frameTimeSamples.push(rounded);
+  if (timing.frameTimeSamples.length > frameTimeSampleLimit) {
+    timing.frameTimeSamples.splice(0, timing.frameTimeSamples.length - frameTimeSampleLimit);
+  }
+  timing.lastFrameMs = rounded;
+  timing.maxFrameMs = Math.max(0, ...timing.frameTimeSamples);
+  timing.frameTimeP95Ms = roundTiming(percentile(timing.frameTimeSamples, 0.95));
+  if (deltaMs > timing.slowFrameBudgetMs) timing.slowFrameCount += 1;
+};
+
+const emptyPendingVirtualTextureWork = (): PendingVirtualTextureWork => ({
+  evictedPageIds: new Set<VirtualTexturePageId>(),
+  fallbackPageTableUploads: [],
+  heldDetail: null,
+  heldFocus: null,
+  initialBaseResolveCursor: 0,
+  lastCameraRevision: -1,
+  lastMaxResidentDetail: -1,
+  lastRequestSignature: '',
+  pageTableUploads: [],
+  pendingReadback: null,
+  pendingAtlasResidentIds: new Set<VirtualTexturePageId>(),
+  pendingAtlasUploadKeys: new Set<string>(),
+  physicalAtlasUploads: [],
+  protectedPages: new Map<VirtualTexturePageId, ProtectedVirtualTexturePage>(),
+  priorityBaseResolveIds: new Set<VirtualTexturePageId>(),
+  priorityBaseResolves: [],
+  priorityPageTableUploads: [],
+  requestSignatureCounts: new Map<string, number>(),
+  uploadedAtlasUploadKeys: new Set<string>(),
+  uploadedResidentIds: new Set<VirtualTexturePageId>(),
+  visiblePages: [],
+});
+
+const createTerrainVirtualTextureMaterialAdapter = (
+  pageGenerator: WorkerBackedTerrainPageGenerator,
+): VirtualTextureMaterialAdapter => ({
   createPagePixels: createTerrainPhysicalPagePixels,
-  planRequests: ({ camera, maxResidentDetail }) => {
+  pageGenerator,
+  planRequests: ({ camera, heldDetail, heldFocus, maxResidentDetail }) => {
     const [focusU, focusV] = cameraFocusUv(camera);
     const cappedDetail = clamp(Math.round(maxResidentDetail), 0, maxVirtualMip);
-    const requestedDetail = Math.min(detailFromCameraZoom(camera), cappedDetail);
+    const requestedDetail = heldDetailFromCameraZoom(camera, cappedDetail, heldDetail);
     const requestedMip = detailToMip(requestedDetail);
+    const focusPage = focusPageForMip(requestedMip, focusU, focusV, heldFocus);
+    const focusPages = focusPagesAround(focusPage);
+    const fallbackPages = fallbackPagesFor(focusPages);
     const pagesToMakeResident = uniquePages([
-      rootPage,
-      ...focusPagesForMip(requestedMip, focusU, focusV),
+      ...fallbackPages,
+      ...focusPages,
     ]);
     const requestedPageIds = pagesToMakeResident.map(virtualTexturePageId);
 
     return {
-      basePagesToResolve: basePages,
+      basePagesToResolve: focusPages,
       detail: {
-        baseResolveCount: basePages.length,
+        baseResolveCount: 0,
         effectiveVirtualResolution: pageSize * 2 ** requestedDetail,
         focusU: Number(focusU.toFixed(3)),
         focusV: Number(focusV.toFixed(3)),
@@ -894,7 +1363,11 @@ const createTerrainVirtualTextureMaterialAdapter = (): VirtualTextureMaterialAda
         requestedPageIds,
         requestedPages: pagesToMakeResident.length,
       },
+      fallbackPagesToMakeResident: fallbackPages,
+      heldDetail: requestedDetail,
+      heldFocus: focusPage,
       pagesToMakeResident,
+      visiblePagesToMakeResident: focusPages,
     };
   },
 });
@@ -925,9 +1398,11 @@ const readTextureLevel = (
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pageTable.texture, 0);
   if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.readPixels(0, 0, mip.width, mip.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.readBuffer(gl.BACK);
 
   const entries = new Set<string>();
   let nonZeroTexels = 0;
@@ -963,6 +1438,7 @@ const readCanvasRegion = (
   const maxY = bottom + regionHeight - sampleHeight;
   const pixels = new Uint8Array(sampleWidth * sampleHeight * 4);
 
+  gl.readBuffer(gl.BACK);
   const buckets = new Set<string>();
   let painted = 0;
   let texels = 0;
@@ -978,7 +1454,7 @@ const readCanvasRegion = (
         const green = pixels[index + 1] ?? 0;
         const blue = pixels[index + 2] ?? 0;
         const alpha = pixels[index + 3] ?? 0;
-        if (alpha !== 0 && (red > 8 || green > 8 || blue > 8)) painted += 1;
+        if (alpha !== 0) painted += 1;
         buckets.add(`${red >> 5}:${green >> 5}:${blue >> 5}:${alpha >> 6}`);
       }
     }
@@ -996,28 +1472,30 @@ const readCanvas = (
   height: number,
 ): CanvasReadback => readCanvasRegion(gl, 0, 0, width, height);
 
-const residentPageIds = (snapshot: VirtualTextureDebugSnapshot): readonly VirtualTexturePageId[] =>
-  snapshot.slots
-    .map((slot) => slot.pageId)
-    .filter((pageId): pageId is VirtualTexturePageId => pageId !== null);
-
 const cameraProbe = (state: CameraState): CameraProbe => ({
   distance: Number(state.distance.toFixed(3)),
+  inputEvents: state.inputEvents,
+  interactionActive: state.interactionActive,
+  lastInteractionAgoMs: state.lastInteractionTime === 0
+    ? 0
+    : Math.max(0, Math.round(performance.now() - state.lastInteractionTime)),
   moved: state.moved,
   pitch: Number(state.pitch.toFixed(3)),
+  revision: state.revision,
   targetX: Number(state.targetX.toFixed(3)),
   targetZ: Number(state.targetZ.toFixed(3)),
   yaw: Number(state.yaw.toFixed(3)),
 });
 
-const updateProbeFromSnapshot = (
+const updateProbeFromRuntimeStats = (
   probe: VirtualTextureProbe,
-  snapshot: VirtualTextureDebugSnapshot,
+  stats: VirtualTextureRuntimeStats,
+  residentIds: readonly VirtualTexturePageId[],
   pageTableReadback: PageTableReadback,
   canvasReadback: CanvasReadback,
 ): void => {
-  const exactPageCount = snapshot.pageTableEntries.filter((entry) => entry.mipDelta === 0).length;
-  const fallbackPageCount = snapshot.pageTableEntries.filter((entry) => (entry.mipDelta ?? 0) > 0).length;
+  const exactPageCount = stats.pageTable.exact;
+  const fallbackPageCount = stats.pageTable.fallback;
   const terrainReady = probe.terrainDrawCalls > 0 &&
     probe.terrainReadback.colorBuckets >= 6 &&
     probe.terrainReadback.paintedRatio >= 0.2;
@@ -1029,34 +1507,289 @@ const updateProbeFromSnapshot = (
   const detailReady = probe.detail.baseResolveCount >= basePages.length &&
     probe.detail.effectiveVirtualResolution >= pageSize &&
     probe.detail.requestedPages >= 1;
+  const uploadReady = probe.pageTableTexelUploads >= basePages.length &&
+    probe.physicalAtlasUploads >= 2;
+  const readbackReady = pageTableReadback.nonZeroTexels >= basePages.length &&
+    canvasReadback.colorBuckets >= 6 &&
+    terrainReady &&
+    previewReady;
+  const drainedReady = probe.performance.pendingPages === 0 &&
+    probe.drawCalls >= 6 &&
+    probe.terrainDrawCalls >= 2 &&
+    probe.previewDrawCalls >= 4;
 
   probe.canvasReadback = canvasReadback;
   probe.exactPageCount = exactPageCount;
   probe.fallbackPageCount = fallbackPageCount;
   probe.pageTableReadback = pageTableReadback;
-  probe.ready = probe.supported &&
+  probe.ready = probe.ready || (
+    probe.supported &&
     probe.frameCount >= 2 &&
-    probe.pageTableTexelUploads >= basePages.length &&
-    probe.physicalAtlasUploads >= 2 &&
-    pageTableReadback.nonZeroTexels >= basePages.length &&
-    canvasReadback.colorBuckets >= 6 &&
+    uploadReady &&
     fallbackPageCount > 0 &&
     detailReady &&
-    terrainReady &&
-    previewReady;
-  probe.residentPageIds = residentPageIds(snapshot);
+    (readbackReady || drainedReady)
+  );
+  probe.residentPageIds = residentIds;
 };
 
-const uploadPhysicalAtlasPages = (
+const atlasUploadKey = (upload: VirtualTexturePhysicalAtlasPageUpload): string =>
+  `${upload.residentPageId}:${upload.uploadSerial}`;
+
+const pageKey = (page: VirtualTexturePageAddress): VirtualTexturePageId => virtualTexturePageId(page);
+
+const rgba8Equals = (
+  left: readonly [number, number, number, number],
+  right: readonly [number, number, number, number],
+): boolean =>
+  left[0] === right[0] &&
+  left[1] === right[1] &&
+  left[2] === right[2] &&
+  left[3] === right[3];
+
+const isZeroRgba8 = (rgba8: readonly [number, number, number, number]): boolean =>
+  rgba8[0] === 0 && rgba8[1] === 0 && rgba8[2] === 0 && rgba8[3] === 0;
+
+const queuePageTableUploads = (
+  dirtyEntries: ReturnType<VirtualTextureRuntime['drainDirtyEntries']>,
+  uploads: readonly VirtualTexturePageTableTexelUpload[],
+  frame: number,
+  priority: QueuedWorkPriority,
+  requestSignature: string,
+): readonly QueuedPageTableUpload[] => {
+  const uploadSerialsByDirtyEntry = new Map<string, number | null>();
+  for (const dirty of dirtyEntries) {
+    uploadSerialsByDirtyEntry.set(
+      `${dirty.sequence}:${pageKey(dirty.tableCoord)}`,
+      dirty.entry.uploadSerial,
+    );
+  }
+
+  return uploads.map((upload) => ({
+    priority,
+    queuedFrame: frame,
+    requestSignature,
+    upload,
+    uploadSerial: uploadSerialsByDirtyEntry.get(`${upload.dirtySequence}:${pageKey(upload.tableCoord)}`) ?? null,
+  }));
+};
+
+const isPhysicalAtlasUploadCurrent = (
+  runtime: VirtualTextureRuntime,
+  upload: VirtualTexturePhysicalAtlasPageUpload,
+): boolean => {
+  const resident = runtime.lookupResidentPage(upload.residentPageId);
+  if (resident === null) return false;
+
+  const slot = runtime.lookupSlot(upload.slot.slot);
+
+  return resident.slot === upload.slot.slot &&
+    resident.mip === upload.sourcePage.mip &&
+    resident.x === upload.sourcePage.x &&
+    resident.y === upload.sourcePage.y &&
+    resident.uploadSerial === upload.uploadSerial &&
+    slot.pageId === upload.residentPageId &&
+    slot.uploadSerial === upload.uploadSerial &&
+    slot.status === 'resident';
+};
+
+const isPageTableUploadCurrent = (
+  runtime: VirtualTextureRuntime,
+  queued: QueuedPageTableUpload,
+): boolean => {
+  const { upload } = queued;
+  const currentEntry = runtime.lookupPageTableEntry(upload.tableCoord);
+  if (currentEntry === null) return upload.residentPageId === null && isZeroRgba8(upload.rgba8);
+  if (currentEntry.residentPageId !== upload.residentPageId) return false;
+  if (currentEntry.uploadSerial !== queued.uploadSerial) return false;
+  if (!rgba8Equals(currentEntry.encodedRgba8, upload.rgba8)) return false;
+  if (currentEntry.physicalSlot === null) return upload.residentPageId === null;
+  if (currentEntry.residentPageId === null) return false;
+
+  const resident = runtime.lookupResidentPage(currentEntry.residentPageId);
+  if (resident === null) return false;
+  if (resident.slot !== currentEntry.physicalSlot.slot) return false;
+  if (resident.uploadSerial !== currentEntry.uploadSerial) return false;
+
+  const slot = runtime.lookupSlot(currentEntry.physicalSlot.slot);
+  return slot.pageId === currentEntry.residentPageId &&
+    slot.uploadSerial === currentEntry.uploadSerial &&
+    slot.status === 'resident';
+};
+
+const rebuildPendingAtlasUploadIndexes = (work: PendingVirtualTextureWork): void => {
+  work.pendingAtlasResidentIds.clear();
+  work.pendingAtlasUploadKeys.clear();
+  for (const { upload } of work.physicalAtlasUploads) {
+    work.pendingAtlasResidentIds.add(upload.residentPageId);
+    work.pendingAtlasUploadKeys.add(atlasUploadKey(upload));
+  }
+};
+
+const recordStaleDrops = (
+  probe: VirtualTextureProbe,
+  atlasDrops: number,
+  pageTableDrops: number,
+): void => {
+  if (atlasDrops === 0 && pageTableDrops === 0) return;
+  const timing = probe.performance;
+  timing.staleAtlasUploadDrops += atlasDrops;
+  timing.stalePageTableUploadDrops += pageTableDrops;
+  timing.staleQueuedDrops += atlasDrops + pageTableDrops;
+  timing.repeatedDropCount += atlasDrops + pageTableDrops;
+};
+
+const pruneStaleQueuedUploads = (
+  runtime: VirtualTextureRuntime,
+  work: PendingVirtualTextureWork,
+  probe: VirtualTextureProbe,
+): void => {
+  const previousAtlasUploads = work.physicalAtlasUploads.length;
+  work.physicalAtlasUploads = work.physicalAtlasUploads.filter((queued) =>
+    isPhysicalAtlasUploadCurrent(runtime, queued.upload)
+  );
+  rebuildPendingAtlasUploadIndexes(work);
+  const previousPriorityUploads = work.priorityPageTableUploads.length;
+  const previousFallbackUploads = work.fallbackPageTableUploads.length;
+  const previousBackgroundUploads = work.pageTableUploads.length;
+  work.priorityPageTableUploads = work.priorityPageTableUploads.filter((queued) =>
+    isPageTableUploadCurrent(runtime, queued)
+  );
+  work.fallbackPageTableUploads = work.fallbackPageTableUploads.filter((queued) =>
+    isPageTableUploadCurrent(runtime, queued)
+  );
+  work.pageTableUploads = work.pageTableUploads.filter((queued) =>
+    isPageTableUploadCurrent(runtime, queued)
+  );
+  recordStaleDrops(
+    probe,
+    previousAtlasUploads - work.physicalAtlasUploads.length,
+    previousPriorityUploads +
+      previousFallbackUploads +
+      previousBackgroundUploads -
+      work.priorityPageTableUploads.length -
+      work.fallbackPageTableUploads.length -
+      work.pageTableUploads.length,
+  );
+};
+
+const queuedInteractiveWorkPages = (work: PendingVirtualTextureWork): number =>
+  work.priorityBaseResolves.length +
+  work.physicalAtlasUploads.length +
+  work.priorityPageTableUploads.length +
+  work.fallbackPageTableUploads.length;
+
+const canResolveBackgroundBasePages = (work: PendingVirtualTextureWork): boolean =>
+  queuedInteractiveWorkPages(work) <= maxInteractiveWorkBeforeBackground &&
+  work.pageTableUploads.length < maxBackgroundPageTableBacklog;
+
+const enqueuePageTableUploads = (
+  work: PendingVirtualTextureWork,
+  uploads: readonly QueuedPageTableUpload[],
+  priority: QueuedWorkPriority,
+): void => {
+  if (uploads.length === 0) return;
+  if (priority === 'visible') work.priorityPageTableUploads.push(...uploads);
+  else if (priority === 'fallback') work.fallbackPageTableUploads.push(...uploads);
+  else work.pageTableUploads.push(...uploads);
+};
+
+const enqueuePhysicalAtlasUploads = (
+  work: PendingVirtualTextureWork,
+  uploads: readonly VirtualTexturePhysicalAtlasPageUpload[],
+  frame: number,
+  priority: QueuedWorkPriority,
+  requestSignature: string,
+  probe: VirtualTextureProbe,
+): void => {
+  for (const upload of uploads) {
+    const key = atlasUploadKey(upload);
+    if (work.uploadedAtlasUploadKeys.has(key) || work.pendingAtlasUploadKeys.has(key)) continue;
+    if (work.uploadedResidentIds.has(upload.residentPageId)) {
+      probe.performance.uploadChurnCount += 1;
+      probe.performance.uploadThrashCount = probe.performance.uploadChurnCount;
+    }
+    work.pendingAtlasUploadKeys.add(key);
+    work.pendingAtlasResidentIds.add(upload.residentPageId);
+    work.physicalAtlasUploads.push({
+      priority,
+      queuedFrame: frame,
+      requestSignature,
+      upload,
+    });
+  }
+};
+
+const enqueueRuntimeUploads = (
+  runtime: VirtualTextureRuntime,
+  frame: number,
+  work: PendingVirtualTextureWork,
+  priority: QueuedWorkPriority,
+  requestSignature: string,
+  probe: VirtualTextureProbe,
+): void => {
+  const dirtyEntries = runtime.drainDirtyEntries(frame);
+  if (dirtyEntries.length === 0) return;
+  const plan = planVirtualTextureUploads(dirtyEntries, { pageSize });
+  enqueuePageTableUploads(
+    work,
+    queuePageTableUploads(dirtyEntries, plan.pageTableUploads, frame, priority, requestSignature),
+    priority,
+  );
+  enqueuePhysicalAtlasUploads(work, plan.physicalAtlasUploads, frame, priority, requestSignature, probe);
+};
+
+const physicalAtlasUploadPriority = (queued: QueuedPhysicalAtlasUpload): number => {
+  if (pageKey(queued.upload.sourcePage) === pageKey(rootPage)) return 0;
+  if (queued.priority === 'visible') return 1;
+  if (queued.priority === 'fallback') return 2;
+  return 3;
+};
+
+const compareQueuedPhysicalAtlasUploads = (
+  left: QueuedPhysicalAtlasUpload,
+  right: QueuedPhysicalAtlasUpload,
+): number =>
+  physicalAtlasUploadPriority(left) - physicalAtlasUploadPriority(right) ||
+  left.upload.sourcePage.mip - right.upload.sourcePage.mip ||
+  left.queuedFrame - right.queuedFrame ||
+  left.upload.uploadSerial - right.upload.uploadSerial;
+
+const enqueuePriorityBaseResolves = (
+  work: PendingVirtualTextureWork,
+  pages: readonly VirtualTexturePageAddress[],
+): void => {
+  for (const page of pages) {
+    const id = virtualTexturePageId(page);
+    if (work.priorityBaseResolveIds.has(id)) continue;
+    work.priorityBaseResolveIds.add(id);
+    work.priorityBaseResolves.push(page);
+  }
+};
+
+const uploadPhysicalAtlasPageBatch = (
   gl: WebGL2RenderingContext,
   atlas: PhysicalAtlasTexture,
-  plan: VirtualTextureUploadPlan,
+  uploads: readonly PreparedTerrainPageUpload[],
   probe: VirtualTextureProbe,
   material: VirtualTextureMaterialAdapter,
-): void => {
+): PhysicalAtlasUploadStats => {
+  let allocationMs = 0;
+  let bytesUploaded = 0;
+  let fillMs = 0;
+  let generationMs = 0;
+  let uploadMs = 0;
+  let workerLatencyMs = 0;
+
   gl.bindTexture(gl.TEXTURE_2D, atlas.texture);
-  for (const upload of plan.physicalAtlasUploads) {
-    const pixels = material.createPagePixels(upload);
+  for (const prepared of uploads) {
+    const { upload } = prepared;
+    generationMs += prepared.generationMs;
+    allocationMs += prepared.allocationMs;
+    fillMs += prepared.fillMs;
+    workerLatencyMs += prepared.workerLatencyMs;
+
+    const uploadStart = performance.now();
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       upload.level,
@@ -1066,59 +1799,631 @@ const uploadPhysicalAtlasPages = (
       upload.height,
       gl.RGBA,
       gl.UNSIGNED_BYTE,
-      pixels,
+      prepared.pixels,
     );
+    material.pageGenerator.release(prepared);
+    uploadMs += performance.now() - uploadStart;
+    bytesUploaded += upload.byteLength;
     probe.bytesUploaded += upload.byteLength;
     probe.lastPhysicalAtlasUpload = upload.residentPageId;
     probe.physicalAtlasUploads += 1;
   }
+
+  return {
+    allocationMs: roundTiming(allocationMs),
+    bytesUploaded,
+    fillMs: roundTiming(fillMs),
+    generationMs: roundTiming(generationMs),
+    pagesUploaded: uploads.length,
+    uploadMs: roundTiming(uploadMs),
+    workerLatencyMs: roundTiming(workerLatencyMs),
+  };
 };
 
-const advanceVirtualTexture = (
+const takePhysicalAtlasUploadBatch = (
+  work: PendingVirtualTextureWork,
+): readonly VirtualTexturePhysicalAtlasPageUpload[] =>
+  work.physicalAtlasUploads.splice(0, maxPhysicalAtlasUploadsPerChunk).map((queued) => queued.upload);
+
+const prepareSynchronousAtlasUpload = (
+  material: VirtualTextureMaterialAdapter,
+  upload: VirtualTexturePhysicalAtlasPageUpload,
+): PreparedTerrainPageUpload => {
+  const generationStart = performance.now();
+  const pagePixels = material.createPagePixels(upload);
+
+  return {
+    allocationMs: pagePixels.allocationMs,
+    fillMs: pagePixels.fillMs,
+    generationMs: performance.now() - generationStart,
+    pixels: pagePixels.pixels,
+    upload,
+    workerLatencyMs: 0,
+  };
+};
+
+const removePreparedAtlasUploads = (
+  work: PendingVirtualTextureWork,
+  preparedUploads: readonly PreparedTerrainPageUpload[],
+): void => {
+  if (preparedUploads.length === 0) return;
+  const uploadedKeys = new Set(preparedUploads.map((prepared) => atlasUploadKey(prepared.upload)));
+  work.physicalAtlasUploads = work.physicalAtlasUploads.filter((queued) =>
+    !uploadedKeys.has(atlasUploadKey(queued.upload))
+  );
+};
+
+const preparePhysicalAtlasUploadBatch = (
+  runtime: VirtualTextureRuntime,
+  work: PendingVirtualTextureWork,
+  material: VirtualTextureMaterialAdapter,
+): readonly PreparedTerrainPageUpload[] => {
+  const workerMetrics = material.pageGenerator.metrics();
+  work.physicalAtlasUploads.sort(compareQueuedPhysicalAtlasUploads);
+  if (!workerMetrics.available) {
+    return takePhysicalAtlasUploadBatch(work).map((upload) => prepareSynchronousAtlasUpload(material, upload));
+  }
+
+  const isCurrent = (upload: VirtualTexturePhysicalAtlasPageUpload): boolean =>
+    isPhysicalAtlasUploadCurrent(runtime, upload);
+  material.pageGenerator.dropStale(isCurrent);
+  let requestedUploads = 0;
+  for (const queued of work.physicalAtlasUploads) {
+    if (workerMetrics.queueDepth + requestedUploads >= maxWorkerQueuedAtlasUploads) break;
+    if (!material.pageGenerator.request(queued.upload)) break;
+    requestedUploads += 1;
+  }
+
+  const preparedUploads = material.pageGenerator.takeReady(
+    work.physicalAtlasUploads.map((queued) => queued.upload),
+    maxPhysicalAtlasUploadsPerChunk,
+    isCurrent,
+  );
+  removePreparedAtlasUploads(work, preparedUploads);
+  return preparedUploads;
+};
+
+const clearPendingAtlasUpload = (
+  work: PendingVirtualTextureWork,
+  upload: VirtualTexturePhysicalAtlasPageUpload,
+): void => {
+  work.pendingAtlasUploadKeys.delete(atlasUploadKey(upload));
+  work.uploadedAtlasUploadKeys.add(atlasUploadKey(upload));
+  work.uploadedResidentIds.add(upload.residentPageId);
+  const hasPendingForResident = work.physicalAtlasUploads.some(
+    (pending) => pending.upload.residentPageId === upload.residentPageId,
+  );
+  if (!hasPendingForResident) work.pendingAtlasResidentIds.delete(upload.residentPageId);
+};
+
+const takePageTableUploadBatch = (
+  work: PendingVirtualTextureWork,
+): readonly VirtualTexturePageTableTexelUpload[] => {
+  const batch: QueuedPageTableUpload[] = [];
+  const takeFrom = (queue: QueuedPageTableUpload[]): void => {
+    if (batch.length >= maxPageTableTexelUploadsPerChunk) return;
+    const remaining: QueuedPageTableUpload[] = [];
+    for (const queued of queue) {
+      const blocked = queued.upload.residentPageId !== null &&
+        work.pendingAtlasResidentIds.has(queued.upload.residentPageId);
+      if (!blocked && batch.length < maxPageTableTexelUploadsPerChunk) batch.push(queued);
+      else remaining.push(queued);
+    }
+    queue.length = 0;
+    queue.push(...remaining);
+  };
+
+  takeFrom(work.priorityPageTableUploads);
+  takeFrom(work.fallbackPageTableUploads);
+  takeFrom(work.pageTableUploads);
+  return batch.map((queued) => queued.upload);
+};
+
+const pendingWorkPages = (work: PendingVirtualTextureWork): number =>
+  work.priorityBaseResolves.length +
+  work.physicalAtlasUploads.length +
+  work.priorityPageTableUploads.length +
+  work.fallbackPageTableUploads.length +
+  work.pageTableUploads.length;
+
+const oldestQueuedWorkFrames = (work: PendingVirtualTextureWork, frame: number): number => {
+  let oldest = 0;
+  const visitPageTableQueue = (queue: readonly QueuedPageTableUpload[]): void => {
+    for (const queued of queue) oldest = Math.max(oldest, frame - queued.queuedFrame);
+  };
+
+  for (const queued of work.physicalAtlasUploads) oldest = Math.max(oldest, frame - queued.queuedFrame);
+  visitPageTableQueue(work.priorityPageTableUploads);
+  visitPageTableQueue(work.fallbackPageTableUploads);
+  visitPageTableQueue(work.pageTableUploads);
+  return oldest;
+};
+
+const hasPendingVirtualTextureWork = (work: PendingVirtualTextureWork): boolean =>
+  pendingWorkPages(work) > 0 ||
+  work.initialBaseResolveCursor < basePages.length ||
+  work.pendingReadback !== null;
+
+const queueProbeReadback = (
+  work: PendingVirtualTextureWork,
+  request: VirtualTextureReadbackRequest,
+): void => {
+  work.pendingReadback = request;
+};
+
+const resetLastPerformanceTick = (probe: VirtualTextureProbe): void => {
+  const timing = probe.performance;
+  timing.lastAdvanceMs = 0;
+  timing.lastAllocationMs = 0;
+  timing.lastAtlasUploadCount = 0;
+  timing.lastFillMs = 0;
+  timing.lastPageGenerationMs = 0;
+  timing.lastPlanMs = 0;
+  timing.lastPageTableUploadCount = 0;
+  timing.lastPageTableUploadMs = 0;
+  timing.lastResolvedBasePages = 0;
+  timing.lastTextureUploadMs = 0;
+  timing.lastWorkerGenerationLatencyMs = 0;
+  timing.pendingPages = 0;
+};
+
+const recordAdvancePerformance = (
+  probe: VirtualTextureProbe,
+  elapsedMs: number,
+  atlasStats: PhysicalAtlasUploadStats,
+  material: VirtualTextureMaterialAdapter,
+  planMs: number,
+  pageTableUploadCount: number,
+  pageTableUploadMs: number,
+  resolvedBasePages: number,
+  work: PendingVirtualTextureWork,
+): void => {
+  const timing = probe.performance;
+  const roundedAdvance = roundTiming(elapsedMs);
+  timing.advanceCount += 1;
+  timing.lastAdvanceMs = roundedAdvance;
+  timing.lastAllocationMs = atlasStats.allocationMs;
+  timing.lastAtlasUploadCount = atlasStats.pagesUploaded;
+  timing.lastFillMs = atlasStats.fillMs;
+  timing.lastPageGenerationMs = atlasStats.generationMs;
+  timing.lastPlanMs = roundTiming(planMs);
+  timing.lastPageTableUploadCount = pageTableUploadCount;
+  timing.lastPageTableUploadMs = roundTiming(pageTableUploadMs);
+  timing.lastResolvedBasePages = resolvedBasePages;
+  timing.lastTextureUploadMs = atlasStats.uploadMs;
+  timing.lastWorkerGenerationLatencyMs = atlasStats.workerLatencyMs;
+  timing.maxAdvanceMs = Math.max(timing.maxAdvanceMs, roundedAdvance);
+  timing.maxAllocationMs = Math.max(timing.maxAllocationMs, atlasStats.allocationMs);
+  timing.maxFillMs = Math.max(timing.maxFillMs, atlasStats.fillMs);
+  timing.maxPageGenerationMs = Math.max(timing.maxPageGenerationMs, atlasStats.generationMs);
+  timing.maxPlanMs = Math.max(timing.maxPlanMs, timing.lastPlanMs);
+  timing.maxPageTableUploadMs = Math.max(timing.maxPageTableUploadMs, timing.lastPageTableUploadMs);
+  timing.maxTextureUploadMs = Math.max(timing.maxTextureUploadMs, atlasStats.uploadMs);
+  timing.maxWorkerGenerationLatencyMs = Math.max(
+    timing.maxWorkerGenerationLatencyMs,
+    timing.lastWorkerGenerationLatencyMs,
+  );
+  timing.cacheChurnCount = timing.evictionCount;
+  timing.cacheThrashCount = timing.cacheChurnCount;
+  timing.cacheChurnRatio = roundTiming(timing.evictionCount / Math.max(1, timing.advanceCount));
+  timing.oldestQueuedWorkFrames = oldestQueuedWorkFrames(work, probe.frameCount);
+  timing.pendingPages = pendingWorkPages(work);
+  timing.pendingReadbacks = work.pendingReadback === null ? 0 : 1;
+  timing.protectedPages = work.protectedPages.size;
+  timing.uploadChurnRatio = roundTiming(timing.uploadChurnCount / Math.max(1, probe.physicalAtlasUploads));
+
+  const workerMetrics = material.pageGenerator.metrics();
+  timing.buffersAllocated = workerMetrics.buffersAllocated;
+  timing.buffersReused = workerMetrics.buffersReused;
+  timing.inFlightBytes = workerMetrics.inFlightBytes;
+  timing.queueDepth = workerMetrics.queueDepth;
+  timing.staleDrops = workerMetrics.staleDrops;
+  timing.workerAvailable = workerMetrics.available;
+  timing.workerCount = workerMetrics.workerCount;
+  timing.workerFallbackPages = workerMetrics.fallbackPages;
+  timing.workerGeneratedPages = workerMetrics.completedPages;
+  timing.workerLastError = workerMetrics.lastError;
+  timing.maxWorkerGenerationLatencyMs = Math.max(
+    timing.maxWorkerGenerationLatencyMs,
+    workerMetrics.maxWorkerGenerationLatencyMs,
+  );
+};
+
+const recordEviction = (
+  probe: VirtualTextureProbe,
+  work: PendingVirtualTextureWork,
+  evictedId: VirtualTexturePageId,
+): void => {
+  work.evictedPageIds.add(evictedId);
+  probe.performance.evictionCount += 1;
+  if (work.protectedPages.has(evictedId)) probe.performance.protectedPageEvictions += 1;
+};
+
+const rememberProtectedPages = (
+  work: PendingVirtualTextureWork,
+  pages: readonly VirtualTexturePageAddress[],
+  frame: number,
+): void => {
+  for (const page of pages) {
+    const id = virtualTexturePageId(page);
+    const protectedPage = work.protectedPages.get(id);
+    if (protectedPage === undefined) {
+      work.protectedPages.set(id, { page, lastRequestedFrame: frame });
+    } else {
+      protectedPage.lastRequestedFrame = frame;
+    }
+  }
+
+  for (const [id, protectedPage] of work.protectedPages) {
+    if (frame - protectedPage.lastRequestedFrame > protectedPageHoldFrames) work.protectedPages.delete(id);
+  }
+
+  if (work.protectedPages.size <= maxProtectedPages) return;
+  const oldest = [...work.protectedPages.entries()]
+    .sort((a, b) => a[1].lastRequestedFrame - b[1].lastRequestedFrame)
+    .slice(0, work.protectedPages.size - maxProtectedPages);
+  for (const [id] of oldest) work.protectedPages.delete(id);
+};
+
+const touchProtectedResidentPages = (
+  runtime: VirtualTextureRuntime,
+  work: PendingVirtualTextureWork,
+  frame: number,
+): void => {
+  for (const [id, protectedPage] of work.protectedPages) {
+    if (runtime.lookupResidentPage(id) !== null) runtime.makeResident(protectedPage.page, frame);
+  }
+};
+
+const requestPlanPageIds = (requestPlan: VirtualTextureMaterialRequestPlan): ReadonlySet<VirtualTexturePageId> =>
+  new Set(requestPlan.pagesToMakeResident.map(virtualTexturePageId));
+
+const dropQueuedWorkForSignatureChange = (
+  work: PendingVirtualTextureWork,
+  requestPlan: VirtualTextureMaterialRequestPlan,
+  previousSignature: string,
+  probe: VirtualTextureProbe,
+): void => {
+  if (previousSignature === '' || previousSignature === requestPlan.detail.requestSignature) return;
+  const requestedIds = requestPlanPageIds(requestPlan);
+  const keepResidentId = (id: VirtualTexturePageId | null): boolean =>
+    id !== null && (requestedIds.has(id) || work.protectedPages.has(id));
+  const keepPageTableUpload = (queued: QueuedPageTableUpload): boolean =>
+    queued.requestSignature === requestPlan.detail.requestSignature ||
+    keepResidentId(queued.upload.residentPageId);
+  const keepAtlasUpload = (queued: QueuedPhysicalAtlasUpload): boolean =>
+    queued.requestSignature === requestPlan.detail.requestSignature ||
+    requestedIds.has(queued.upload.residentPageId) ||
+    work.protectedPages.has(queued.upload.residentPageId);
+  const atlasBefore = work.physicalAtlasUploads.length;
+  const priorityBefore = work.priorityPageTableUploads.length;
+  const fallbackBefore = work.fallbackPageTableUploads.length;
+  const backgroundBefore = work.pageTableUploads.length;
+
+  work.physicalAtlasUploads = work.physicalAtlasUploads.filter(keepAtlasUpload);
+  work.priorityPageTableUploads = work.priorityPageTableUploads.filter(keepPageTableUpload);
+  work.fallbackPageTableUploads = work.fallbackPageTableUploads.filter(keepPageTableUpload);
+  work.pageTableUploads = work.pageTableUploads.filter(keepPageTableUpload);
+  rebuildPendingAtlasUploadIndexes(work);
+  recordStaleDrops(
+    probe,
+    atlasBefore - work.physicalAtlasUploads.length,
+    priorityBefore +
+      fallbackBefore +
+      backgroundBefore -
+      work.priorityPageTableUploads.length -
+      work.fallbackPageTableUploads.length -
+      work.pageTableUploads.length,
+  );
+
+  const baseBefore = work.priorityBaseResolves.length;
+  work.priorityBaseResolves = work.priorityBaseResolves.filter((page) =>
+    requestPlan.basePagesToResolve.some((nextPage) => pageKey(nextPage) === pageKey(page))
+  );
+  work.priorityBaseResolveIds.clear();
+  for (const page of work.priorityBaseResolves) work.priorityBaseResolveIds.add(pageKey(page));
+  probe.performance.staleQueuedDrops += baseBefore - work.priorityBaseResolves.length;
+};
+
+const updateQualityProbe = (
+  runtime: VirtualTextureRuntime,
+  probe: VirtualTextureProbe,
+  work: PendingVirtualTextureWork,
+): void => {
+  let exactHits = 0;
+  for (const page of work.visiblePages) {
+    const entry = runtime.lookupPageTableEntry(page);
+    if (entry?.mipDelta === 0 && entry.residentPageId === pageKey(page)) exactHits += 1;
+  }
+
+  const timing = probe.performance;
+  timing.exactHitRatio = work.visiblePages.length === 0
+    ? 1
+    : roundTiming(exactHits / work.visiblePages.length);
+  timing.fullPageTableRebuildsAfterInit = 0;
+  timing.recentEvictionReRequestRatio = timing.cacheChurnRatio;
+  timing.repeatedReloadRatio = roundTiming(timing.uploadChurnCount / Math.max(1, probe.physicalAtlasUploads));
+};
+
+const serviceVirtualTextureRuntime = (
   runtime: VirtualTextureRuntime,
   gl: WebGL2RenderingContext,
   pageTable: VirtualTexturePageTableTexture,
   atlas: PhysicalAtlasTexture,
-  framebuffer: WebGLFramebuffer,
   material: VirtualTextureMaterialAdapter,
   settings: VirtualTextureDemoSettings,
   camera: CameraState,
   probe: VirtualTextureProbe,
-): void => {
+  work: PendingVirtualTextureWork,
+  chunkBudgetMs: number,
+): boolean => {
+  const started = performance.now();
+  const hasBudget = (): boolean => performance.now() - started < chunkBudgetMs;
   const frame = probe.frameCount;
-  const requestPlan = material.planRequests({
-    camera,
-    frame,
-    maxResidentDetail: settings.maxResidentDetail,
-  });
-  const evicted = new Set<VirtualTexturePageId>(probe.evictedPageIds);
+  let planMs = 0;
+  let resolvedBasePages = 0;
+  resetLastPerformanceTick(probe);
 
-  for (const page of requestPlan.pagesToMakeResident) {
-    const result = runtime.makeResident(page, frame);
-    if (result.evicted !== null) evicted.add(result.evicted.id);
+  const shouldPlanRequest = work.lastRequestSignature === '' ||
+    work.lastCameraRevision !== camera.revision ||
+    work.lastMaxResidentDetail !== settings.maxResidentDetail;
+  if (shouldPlanRequest) {
+    const planStart = performance.now();
+    const requestPlan = material.planRequests({
+      camera,
+      frame,
+      heldDetail: work.heldDetail,
+      heldFocus: work.heldFocus,
+      maxResidentDetail: settings.maxResidentDetail,
+    });
+    const previousSignature = work.lastRequestSignature;
+    const requestSignature = requestPlan.detail.requestSignature;
+    const signatureSeen = work.requestSignatureCounts.get(requestSignature) ?? 0;
+    if (previousSignature === requestSignature || signatureSeen > 0) probe.performance.repeatedRequestCount += 1;
+
+    dropQueuedWorkForSignatureChange(work, requestPlan, previousSignature, probe);
+    rememberProtectedPages(work, requestPlan.pagesToMakeResident, frame);
+    touchProtectedResidentPages(runtime, work, frame);
+
+    for (const page of requestPlan.fallbackPagesToMakeResident) {
+      const result = runtime.makeResident(page, frame);
+      if (result.evicted !== null) recordEviction(probe, work, result.evicted.id);
+    }
+    enqueueRuntimeUploads(runtime, frame, work, 'fallback', requestSignature, probe);
+
+    for (const page of requestPlan.visiblePagesToMakeResident) {
+      const result = runtime.makeResident(page, frame);
+      if (result.evicted !== null) recordEviction(probe, work, result.evicted.id);
+    }
+    enqueueRuntimeUploads(runtime, frame, work, 'visible', requestSignature, probe);
+
+    enqueuePriorityBaseResolves(work, requestPlan.basePagesToResolve);
+
+    work.heldDetail = requestPlan.heldDetail;
+    work.heldFocus = requestPlan.heldFocus;
+    work.lastCameraRevision = camera.revision;
+    work.lastMaxResidentDetail = settings.maxResidentDetail;
+    work.lastRequestSignature = requestSignature;
+    work.requestSignatureCounts.set(requestSignature, signatureSeen + 1);
+    work.visiblePages = [...requestPlan.visiblePagesToMakeResident];
+    probe.detail = {
+      ...requestPlan.detail,
+      baseResolveCount: work.initialBaseResolveCursor,
+    };
+    planMs = performance.now() - planStart;
   }
-  for (const page of requestPlan.basePagesToResolve) runtime.resolve(page, frame);
 
-  const dirtyEntries = runtime.drainDirtyEntries(frame);
-  const plan = planVirtualTextureUploads(dirtyEntries, { pageSize });
-  const pageTableResult = uploadVirtualTexturePageTableTexels(gl, pageTable, plan.pageTableUploads);
-  uploadPhysicalAtlasPages(gl, atlas, plan, probe, material);
+  let resolveBudget = maxBaseResolvesPerChunk;
+  while (hasBudget() && resolveBudget > 0 && work.priorityBaseResolves.length > 0) {
+    const page = work.priorityBaseResolves.shift();
+    if (page === undefined) break;
+    work.priorityBaseResolveIds.delete(virtualTexturePageId(page));
+    runtime.resolve(page, frame);
+    resolveBudget -= 1;
+    resolvedBasePages += 1;
+  }
+  enqueueRuntimeUploads(runtime, frame, work, 'visible', work.lastRequestSignature, probe);
+
+  while (
+    hasBudget() &&
+    resolveBudget > 0 &&
+    work.initialBaseResolveCursor < basePages.length &&
+    canResolveBackgroundBasePages(work)
+  ) {
+    const page = basePages[work.initialBaseResolveCursor];
+    work.initialBaseResolveCursor += 1;
+    if (page === undefined) continue;
+    runtime.resolve(page, frame);
+    resolveBudget -= 1;
+    resolvedBasePages += 1;
+    if (resolvedBasePages > 0 && resolvedBasePages % maxBackgroundPageTableBacklog === 0) {
+      enqueueRuntimeUploads(runtime, frame, work, 'background', work.lastRequestSignature, probe);
+    }
+  }
+  enqueueRuntimeUploads(runtime, frame, work, 'background', work.lastRequestSignature, probe);
+
+  pruneStaleQueuedUploads(runtime, work, probe);
+
+  const atlasUploadBatch = hasBudget() ? preparePhysicalAtlasUploadBatch(runtime, work, material) : [];
+  const atlasStats = uploadPhysicalAtlasPageBatch(gl, atlas, atlasUploadBatch, probe, material);
+  for (const prepared of atlasUploadBatch) clearPendingAtlasUpload(work, prepared.upload);
+
+  const pageTableUploadBatch = hasBudget() ? takePageTableUploadBatch(work) : [];
+  const pageTableUploadStart = performance.now();
+  const pageTableResult = uploadVirtualTexturePageTableTexels(gl, pageTable, pageTableUploadBatch);
+  const pageTableUploadMs = performance.now() - pageTableUploadStart;
 
   probe.bytesUploaded += pageTableResult.bytesUploaded;
-  probe.detail = requestPlan.detail;
-  probe.evictedPageIds = [...evicted];
-  probe.frameCount += 1;
-  probe.lastPageTableUploadSample = plan.pageTableUploads.slice(0, 8).flatMap((upload) => upload.rgba8);
+  probe.detail = {
+    ...probe.detail,
+    baseResolveCount: work.initialBaseResolveCursor,
+  };
+  probe.evictedPageIds = [...work.evictedPageIds];
+  if (pageTableUploadBatch.length > 0) {
+    probe.lastPageTableUploadSample = pageTableUploadBatch.slice(0, 8).flatMap((upload) => upload.rgba8);
+  }
   probe.pageTableTexelUploads += pageTableResult.texelsUploaded;
+  recordAdvancePerformance(
+    probe,
+    performance.now() - started,
+    atlasStats,
+    material,
+    planMs,
+    pageTableResult.texelsUploaded,
+    pageTableUploadMs,
+    resolvedBasePages,
+    work,
+  );
+  updateQualityProbe(runtime, probe, work);
+  return hasPendingVirtualTextureWork(work);
+};
+
+const recordReadbackPerformance = (probe: VirtualTextureProbe, elapsedMs: number): void => {
+  const timing = probe.performance;
+  const rounded = roundTiming(elapsedMs);
+  timing.lastReadbackMs = rounded;
+  timing.maxReadbackMs = Math.max(timing.maxReadbackMs, rounded);
+  timing.readbackCount += 1;
+};
+
+const serviceVirtualTextureReadback = (
+  runtime: VirtualTextureRuntime,
+  gl: WebGL2RenderingContext,
+  framebuffer: WebGLFramebuffer,
+  pageTable: VirtualTexturePageTableTexture,
+  probe: VirtualTextureProbe,
+  work: PendingVirtualTextureWork,
+): void => {
+  const request = work.pendingReadback;
+  if (request === null) return;
+
+  const started = performance.now();
+  const sceneReadback = readCanvas(gl, request.width, request.height);
+  probe.canvasReadback = sceneReadback;
+  probe.terrainReadback = sceneReadback;
+  probe.atlasPreviewReadback = readCanvasRegion(
+    gl,
+    request.rects.atlas.x,
+    request.rects.atlas.y,
+    request.rects.atlas.width,
+    request.rects.atlas.height,
+  );
+  probe.pageTablePreviewReadback = readCanvasRegion(
+    gl,
+    request.rects.pageTable.x,
+    request.rects.pageTable.y,
+    request.rects.pageTable.width,
+    request.rects.pageTable.height,
+  );
   probe.pageTableReadback = readTextureLevel(gl, framebuffer, pageTable);
+  updateProbeFromRuntimeStats(
+    probe,
+    runtime.stats(),
+    runtime.residentPageIds(),
+    probe.pageTableReadback,
+    probe.canvasReadback,
+  );
+  work.pendingReadback = null;
+  probe.performance.pendingReadbacks = 0;
+  recordReadbackPerformance(probe, performance.now() - started);
+};
+
+const cameraAllowsProbeReadback = (camera: CameraState, now = performance.now()): boolean =>
+  !camera.interactionActive &&
+  (camera.lastInteractionTime === 0 || now - camera.lastInteractionTime >= interactionReadbackQuietMs);
+
+const chooseVirtualTextureSchedulerStrategy = (): VirtualTextureWorkSchedulerStrategy => {
+  return 'set-timeout';
+};
+
+const recordSchedulerChunk = (
+  probe: VirtualTextureProbe,
+  strategy: VirtualTextureWorkSchedulerStrategy,
+  budgetMs: number,
+  delayMs: number,
+  elapsedMs: number,
+): void => {
+  const timing = probe.performance;
+  const roundedDelay = roundTiming(delayMs);
+  const roundedElapsed = roundTiming(elapsedMs);
+  timing.lastSchedulerDelayMs = roundedDelay;
+  timing.lastWorkChunkMs = roundedElapsed;
+  timing.maxSchedulerDelayMs = Math.max(timing.maxSchedulerDelayMs, roundedDelay);
+  timing.maxWorkChunkMs = Math.max(timing.maxWorkChunkMs, roundedElapsed);
+  timing.schedulerChunkCount += 1;
+  timing.schedulerStrategy = strategy;
+  timing.workChunkBudgetMs = budgetMs;
+};
+
+const createVirtualTextureWorkScheduler = (
+  probe: VirtualTextureProbe,
+  getChunkBudgetMs: () => number,
+  drain: (budgetMs: number) => boolean,
+): { readonly dispose: () => void; readonly request: () => void } => {
+  const schedulerWindow = window as IdleSchedulerWindow;
+  const strategy = chooseVirtualTextureSchedulerStrategy();
+  let disposed = false;
+  let idleHandle: number | null = null;
+  let scheduled = false;
+  let scheduledAt = 0;
+
+  const run = (idleDeadline?: { readonly didTimeout: boolean; readonly timeRemaining: () => number }): void => {
+    if (disposed) return;
+    scheduled = false;
+    idleHandle = null;
+
+    const started = performance.now();
+    const targetBudgetMs = getChunkBudgetMs();
+    const idleBudgetMs = idleDeadline === undefined || idleDeadline.didTimeout
+      ? targetBudgetMs
+      : Math.min(targetBudgetMs, idleDeadline.timeRemaining());
+    const budgetMs = Math.max(0.5, idleBudgetMs);
+    const hasMore = drain(budgetMs);
+    recordSchedulerChunk(probe, strategy, budgetMs, started - scheduledAt, performance.now() - started);
+    if (hasMore) request();
+  };
+
+  const request = (): void => {
+    if (disposed || scheduled) return;
+    scheduled = true;
+    scheduledAt = performance.now();
+
+    if (strategy === 'idle-callback' && schedulerWindow.requestIdleCallback !== undefined) {
+      idleHandle = schedulerWindow.requestIdleCallback(run, { timeout: textureWorkIdleTimeoutMs });
+      return;
+    }
+
+    if (strategy === 'post-task' && schedulerWindow.scheduler?.postTask !== undefined) {
+      void schedulerWindow.scheduler.postTask(run, { priority: 'background' }).catch(() => {
+        if (!disposed) window.setTimeout(run, 0);
+      });
+      return;
+    }
+
+    window.setTimeout(run, 0);
+  };
+
+  return {
+    dispose: () => {
+      disposed = true;
+      if (idleHandle !== null && schedulerWindow.cancelIdleCallback !== undefined) {
+        schedulerWindow.cancelIdleCallback(idleHandle);
+      }
+    },
+    request,
+  };
 };
 
 const createCameraController = (canvas: HTMLCanvasElement): CameraController => {
   const state: CameraState = {
     distance: 7.2,
+    inputEvents: 0,
+    interactionActive: false,
     lastTime: 0,
+    lastInteractionTime: 0,
     moved: false,
     pitch: 0.62,
+    revision: 0,
     targetX: 0,
     targetZ: 0,
     yaw: -0.72,
@@ -1130,13 +2435,21 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
     lastY: 0,
   };
 
-  const markMoved = (): void => {
+  const markInteraction = (now = performance.now()): void => {
+    state.inputEvents += 1;
+    state.interactionActive = true;
+    state.lastInteractionTime = now;
+  };
+  const markMoved = (now = performance.now()): void => {
+    markInteraction(now);
     state.moved = true;
+    state.revision += 1;
   };
   const onPointerDown = (event: PointerEvent): void => {
     pointer.active = true;
     pointer.lastX = event.clientX;
     pointer.lastY = event.clientY;
+    markInteraction();
     canvas.setPointerCapture(event.pointerId);
     canvas.focus();
     event.preventDefault();
@@ -1153,6 +2466,7 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
   };
   const onPointerUp = (event: PointerEvent): void => {
     pointer.active = false;
+    markInteraction();
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   };
   const onWheel = (event: WheelEvent): void => {
@@ -1173,9 +2487,13 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
   const update = (now: number): void => {
     const deltaSeconds = state.lastTime === 0 ? 0 : Math.min(0.05, (now - state.lastTime) / 1000);
     state.lastTime = now;
+    state.interactionActive = pointer.active ||
+      (state.lastInteractionTime > 0 && now - state.lastInteractionTime < interactionReadbackQuietMs);
     if (keys.size === 0 || deltaSeconds === 0) return;
 
     const speed = deltaSeconds * state.distance * 0.62;
+    const previousTargetX = state.targetX;
+    const previousTargetZ = state.targetZ;
     const forwardX = -Math.sin(state.yaw);
     const forwardZ = -Math.cos(state.yaw);
     const rightX = Math.cos(state.yaw);
@@ -1200,6 +2518,7 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
 
     state.targetX = clamp(state.targetX, -terrainPanLimit, terrainPanLimit);
     state.targetZ = clamp(state.targetZ, -terrainPanLimit, terrainPanLimit);
+    if (state.targetX !== previousTargetX || state.targetZ !== previousTargetZ) markMoved(now);
   };
   const dispose = (): void => {
     canvas.removeEventListener('pointerdown', onPointerDown);
@@ -1360,7 +2679,7 @@ const drawVirtualTexture = (
   atlas: PhysicalAtlasTexture,
   camera: CameraState,
   probe: VirtualTextureProbe,
-): void => {
+): VirtualTextureReadbackRequest => {
   const [width, height] = resizeCanvas(canvas);
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1380,28 +2699,8 @@ const drawVirtualTexture = (
   probe.terrainDrawCalls += 1;
   probe.previewDrawCalls += 2;
   probe.camera = cameraProbe(camera);
-  probe.canvasReadback = readCanvas(gl, width, height);
-  probe.terrainReadback = readCanvasRegion(
-    gl,
-    Math.round(width * 0.1),
-    Math.round(height * 0.12),
-    Math.round(width * 0.58),
-    Math.round(height * 0.55),
-  );
-  probe.atlasPreviewReadback = readCanvasRegion(
-    gl,
-    rects.atlas.x,
-    rects.atlas.y,
-    rects.atlas.width,
-    rects.atlas.height,
-  );
-  probe.pageTablePreviewReadback = readCanvasRegion(
-    gl,
-    rects.pageTable.x,
-    rects.pageTable.y,
-    rects.pageTable.width,
-    rects.pageTable.height,
-  );
+
+  return { height, rects, width };
 };
 
 const createWebGl2Context = (canvas: HTMLCanvasElement): WebGL2RenderingContext | null =>
@@ -1483,31 +2782,60 @@ const startVirtualTextureDemo = (
   const terrainMesh = createTerrainMesh(gl, terrainProgram.program);
   const previewQuad = createFullscreenVertexArray(gl, previewProgram.program);
   const camera = createCameraController(canvas);
-  const material = createTerrainVirtualTextureMaterialAdapter();
+  const pageGenerator = createWorkerBackedTerrainPageGenerator();
+  const material = createTerrainVirtualTextureMaterialAdapter(pageGenerator);
+  const work = emptyPendingVirtualTextureWork();
   if (framebuffer === null) throw new Error('Failed to create virtual-texture readback framebuffer');
-
-  let animationFrame = 0;
-  let lastAdvance = 0;
-  let disposed = false;
-
-  const tick = (now: number): void => {
-    if (disposed) return;
-    camera.update(now);
-    if (probe.frameCount < 2 || now - lastAdvance >= 240) {
-      advanceVirtualTexture(
+  const workScheduler = createVirtualTextureWorkScheduler(
+    probe,
+    () => camera.state.interactionActive ? interactiveTextureWorkChunkBudgetMs : textureWorkChunkBudgetMs,
+    (budgetMs) => {
+      serviceVirtualTextureRuntime(
         runtime,
         gl,
         pageTable,
         atlas,
-        framebuffer,
         material,
         settings.current,
         camera.state,
         probe,
+        work,
+        budgetMs,
       );
-      lastAdvance = now;
+      const allowReadback = cameraAllowsProbeReadback(camera.state);
+      if (!allowReadback && work.pendingReadback !== null) {
+        work.pendingReadback = null;
+        probe.performance.pendingReadbacks = 0;
+      }
+      if (
+        allowReadback &&
+        work.pendingReadback !== null &&
+        (probe.ready || (pendingWorkPages(work) === 0 && work.initialBaseResolveCursor >= basePages.length))
+      ) {
+        serviceVirtualTextureReadback(runtime, gl, framebuffer, pageTable, probe, work);
+      }
+
+      return hasPendingVirtualTextureWork(work);
+    });
+
+  let animationFrame = 0;
+  let lastFrameTime = 0;
+  let lastProbeReadback = -probeReadbackIntervalMs;
+  let disposed = false;
+
+  const tick = (now: number): void => {
+    if (disposed) return;
+    if (lastFrameTime > 0) recordFrameTime(probe, now - lastFrameTime);
+    lastFrameTime = now;
+    camera.update(now);
+    const allowReadback = cameraAllowsProbeReadback(camera.state, now);
+    if (!allowReadback && work.pendingReadback !== null) {
+      work.pendingReadback = null;
+      probe.performance.pendingReadbacks = 0;
     }
-    drawVirtualTexture(
+    const shouldReadProbe = allowReadback &&
+      (probe.frameCount < 2 || now - lastProbeReadback >= probeReadbackIntervalMs);
+    const readbackRequest = drawVirtualTexture(
       canvas,
       gl,
       terrainProgram,
@@ -1519,7 +2847,13 @@ const startVirtualTextureDemo = (
       camera.state,
       probe,
     );
-    updateProbeFromSnapshot(probe, runtime.debugSnapshot(), probe.pageTableReadback, probe.canvasReadback);
+    if (shouldReadProbe) {
+      queueProbeReadback(work, readbackRequest);
+      probe.performance.pendingReadbacks = 1;
+      lastProbeReadback = now;
+    }
+    workScheduler.request();
+    probe.frameCount += 1;
     animationFrame = requestAnimationFrame(tick);
   };
 
@@ -1528,6 +2862,8 @@ const startVirtualTextureDemo = (
   return () => {
     disposed = true;
     cancelAnimationFrame(animationFrame);
+    workScheduler.dispose();
+    pageGenerator.dispose();
     camera.dispose();
     gl.deleteBuffer(previewQuad.buffer);
     gl.deleteBuffer(terrainMesh.indexBuffer);

@@ -62,6 +62,16 @@ export type VirtualTextureUploadPlanOptions = {
   readonly pageSize: number;
 };
 
+export type VirtualTextureUploadPlanBudget = {
+  readonly pageTableUploads: number;
+  readonly physicalAtlasUploads: number;
+};
+
+export type VirtualTextureUploadPlanSplit = {
+  readonly remainder: VirtualTextureUploadPlan;
+  readonly slice: VirtualTextureUploadPlan;
+};
+
 const rgba8Format: VirtualTextureWebGl2UploadFormat = {
   format: "RGBA",
   internalFormat: "RGBA8",
@@ -90,6 +100,27 @@ export const planVirtualTextureUploads = (
     pageTableUploads,
     physicalAtlasUploads,
     uploadCount: pageTableUploads.length + physicalAtlasUploads.length,
+  };
+};
+
+export const splitVirtualTextureUploadPlan = (
+  plan: VirtualTextureUploadPlan,
+  budget: VirtualTextureUploadPlanBudget,
+): VirtualTextureUploadPlanSplit => {
+  const pageTableBudget = validateUploadBudget(budget.pageTableUploads, "pageTableUploads");
+  const physicalAtlasBudget = validateUploadBudget(budget.physicalAtlasUploads, "physicalAtlasUploads");
+  const physicalAtlasSplit = splitUploadList(plan.physicalAtlasUploads, physicalAtlasBudget);
+  const pageTableCount = cappedPageTableUploadCount(
+    plan.pageTableUploads,
+    plan.physicalAtlasUploads,
+    physicalAtlasSplit.slice,
+    pageTableBudget,
+  );
+  const pageTableSplit = splitUploadList(plan.pageTableUploads, pageTableCount);
+
+  return {
+    remainder: createUploadPlan(pageTableSplit.remainder, physicalAtlasSplit.remainder),
+    slice: createUploadPlan(pageTableSplit.slice, physicalAtlasSplit.slice),
   };
 };
 
@@ -149,12 +180,72 @@ const copyPage = (page: VirtualTexturePageAddress): VirtualTexturePageAddress =>
   y: page.y,
 });
 
+const createUploadPlan = (
+  pageTableUploads: readonly VirtualTexturePageTableTexelUpload[],
+  physicalAtlasUploads: readonly VirtualTexturePhysicalAtlasPageUpload[],
+): VirtualTextureUploadPlan => ({
+  pageTableUploads,
+  physicalAtlasUploads,
+  uploadCount: pageTableUploads.length + physicalAtlasUploads.length,
+});
+
+const splitUploadList = <Upload>(
+  uploads: readonly Upload[],
+  count: number,
+): { readonly remainder: readonly Upload[]; readonly slice: readonly Upload[] } => ({
+  remainder: uploads.slice(count),
+  slice: uploads.slice(0, count),
+});
+
+const cappedPageTableUploadCount = (
+  pageTableUploads: readonly VirtualTexturePageTableTexelUpload[],
+  physicalAtlasUploads: readonly VirtualTexturePhysicalAtlasPageUpload[],
+  physicalAtlasSlice: readonly VirtualTexturePhysicalAtlasPageUpload[],
+  pageTableBudget: number,
+): number => {
+  const pendingAtlasUploads = atlasUploadKeys(physicalAtlasUploads);
+  const slicedAtlasUploads = atlasUploadKeys(physicalAtlasSlice);
+  let count = 0;
+  const cappedCount = Math.min(pageTableBudget, pageTableUploads.length);
+
+  while (count < cappedCount) {
+    const upload = pageTableUploads[count]!;
+    const atlasKey = pageTableAtlasDependencyKey(upload);
+    if (atlasKey !== null && pendingAtlasUploads.has(atlasKey) && !slicedAtlasUploads.has(atlasKey)) break;
+    count += 1;
+  }
+
+  return count;
+};
+
+const atlasUploadKeys = (
+  physicalAtlasUploads: readonly VirtualTexturePhysicalAtlasPageUpload[],
+): ReadonlySet<string> => new Set(physicalAtlasUploads.map(physicalAtlasUploadKey));
+
+const pageTableAtlasDependencyKey = (upload: VirtualTexturePageTableTexelUpload): string | null => {
+  if (upload.op !== "upload" || upload.residentPageId === null) return null;
+  return atlasUploadKey(upload.dirtySequence, upload.residentPageId);
+};
+
+const physicalAtlasUploadKey = (upload: VirtualTexturePhysicalAtlasPageUpload): string =>
+  atlasUploadKey(upload.dirtySequence, upload.residentPageId);
+
+const atlasUploadKey = (dirtySequence: number, residentPageId: VirtualTexturePageId): string =>
+  `${dirtySequence}:${residentPageId}`;
+
 const copyRgba8 = (rgba8: readonly [number, number, number, number]): readonly [number, number, number, number] => [
   rgba8[0],
   rgba8[1],
   rgba8[2],
   rgba8[3],
 ];
+
+const validateUploadBudget = (value: number, label: string): number => {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Virtual texture upload plan ${label} budget must be a non-negative integer`);
+  }
+  return value;
+};
 
 const validateNonNegativeInteger = (value: number, label: string): number => {
   if (!Number.isInteger(value) || value < 0) {

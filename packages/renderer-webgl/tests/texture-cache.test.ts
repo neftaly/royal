@@ -74,7 +74,7 @@ describe("TextureCache", () => {
     const { gl, mipmaps, texParameters } = fakeTextureGl();
     const cache = new TextureCache(gl);
 
-    await cache.loadGltfBaseColorTexture({
+    const texture = await cache.loadGltfBaseColorTexture({
       json: {
         images: [{ uri: "textures/base.png" }],
         textures: [{ source: 0 }],
@@ -84,6 +84,17 @@ describe("TextureCache", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith("https://example.test/models/textures/base.png");
+    expect(texture.source).toMatchObject({
+      documentId: "https://example.test/models/triangle.gltf",
+      id: "https://example.test/models/triangle.gltf\u00000",
+      image: {
+        index: 0,
+        resolvedUri: "https://example.test/models/textures/base.png",
+        uri: "textures/base.png",
+      },
+      src: "https://example.test/models/triangle.gltf",
+      textureIndex: 0,
+    });
     expect(texParameters).toEqual([
       { param: gl.LINEAR_MIPMAP_LINEAR, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
       { param: gl.LINEAR, pname: gl.TEXTURE_MAG_FILTER, target: gl.TEXTURE_2D },

@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { RendererWebGlContext } from "../src/gl";
 import { VirtualTextureRuntime } from "../src/virtual-texture-runtime";
 import {
+  coalesceVirtualTexturePageTableTexelUploads,
   createVirtualTexturePageTableTexture,
   uploadVirtualTexturePageTableTexels,
   virtualTexturePageTableMipDimensions,
 } from "../src/virtual-texture-page-table-texture";
-import { planVirtualTextureUploads } from "../src/virtual-texture-upload-plan";
+import {
+  planVirtualTextureUploads,
+  type VirtualTexturePageTableTexelUpload,
+} from "../src/virtual-texture-upload-plan";
 
 type TexImage2DCall = {
   readonly border: number;
@@ -35,6 +39,14 @@ type TexSubImage2DCall = {
   readonly target: number;
   readonly type: number;
   readonly width: number;
+  readonly xOffset: number;
+  readonly yOffset: number;
+};
+
+type PageTableTexelUploadOptions = {
+  readonly dirtySequence?: number;
+  readonly level?: number;
+  readonly rgba8: readonly [number, number, number, number];
   readonly xOffset: number;
   readonly yOffset: number;
 };
@@ -114,6 +126,39 @@ const fakePageTableGl = (): {
     texSubImages,
   };
 };
+
+const pageTableTexelUpload = ({
+  dirtySequence = 0,
+  level = 0,
+  rgba8,
+  xOffset,
+  yOffset,
+}: PageTableTexelUploadOptions): VirtualTexturePageTableTexelUpload => ({
+  batchIndex: null,
+  dirtySequence,
+  drainedFrame: null,
+  format: {
+    format: "RGBA",
+    internalFormat: "RGBA8",
+    target: "TEXTURE_2D",
+    type: "UNSIGNED_BYTE",
+  },
+  height: 1,
+  kind: "page-table-texel",
+  level,
+  op: "upload",
+  reason: null,
+  residentPageId: null,
+  rgba8,
+  tableCoord: {
+    mip: level,
+    x: xOffset,
+    y: yOffset,
+  },
+  width: 1,
+  xOffset,
+  yOffset,
+});
 
 describe("virtual texture page-table texture", () => {
   it("computes page-table mip dimensions from virtual page geometry", () => {
@@ -234,6 +279,119 @@ describe("virtual texture page-table texture", () => {
         xOffset: 0,
         yOffset: 0,
       },
+    ]);
+  });
+
+  it("coalesces contiguous page-table texels into row-range uploads", () => {
+    const { gl, texSubImages } = fakePageTableGl();
+    const pageTable = createVirtualTexturePageTableTexture(gl, [{ height: 2, width: 5 }]);
+    const uploads = [
+      pageTableTexelUpload({ dirtySequence: 0, rgba8: [1, 2, 3, 4], xOffset: 0, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 1, rgba8: [5, 6, 7, 8], xOffset: 1, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 2, rgba8: [9, 10, 11, 12], xOffset: 2, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 3, rgba8: [13, 14, 15, 16], xOffset: 4, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 4, rgba8: [17, 18, 19, 20], xOffset: 0, yOffset: 1 }),
+    ];
+
+    const ranges = coalesceVirtualTexturePageTableTexelUploads(pageTable, uploads);
+    const result = uploadVirtualTexturePageTableTexels(gl, pageTable, uploads);
+
+    expect(result).toEqual({ bytesUploaded: 20, texelsUploaded: 5 });
+    expect(ranges.map((range) => ({
+      data: [...range.data],
+      height: range.height,
+      level: range.level,
+      texelCount: range.texelCount,
+      width: range.width,
+      xOffset: range.xOffset,
+      yOffset: range.yOffset,
+    }))).toEqual([
+      {
+        data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        height: 1,
+        level: 0,
+        texelCount: 3,
+        width: 3,
+        xOffset: 0,
+        yOffset: 0,
+      },
+      {
+        data: [13, 14, 15, 16],
+        height: 1,
+        level: 0,
+        texelCount: 1,
+        width: 1,
+        xOffset: 4,
+        yOffset: 0,
+      },
+      {
+        data: [17, 18, 19, 20],
+        height: 1,
+        level: 0,
+        texelCount: 1,
+        width: 1,
+        xOffset: 0,
+        yOffset: 1,
+      },
+    ]);
+    expect(texSubImages).toEqual([
+      {
+        data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        format: gl.RGBA,
+        height: 1,
+        level: 0,
+        target: gl.TEXTURE_2D,
+        type: gl.UNSIGNED_BYTE,
+        width: 3,
+        xOffset: 0,
+        yOffset: 0,
+      },
+      {
+        data: [13, 14, 15, 16],
+        format: gl.RGBA,
+        height: 1,
+        level: 0,
+        target: gl.TEXTURE_2D,
+        type: gl.UNSIGNED_BYTE,
+        width: 1,
+        xOffset: 4,
+        yOffset: 0,
+      },
+      {
+        data: [17, 18, 19, 20],
+        format: gl.RGBA,
+        height: 1,
+        level: 0,
+        target: gl.TEXTURE_2D,
+        type: gl.UNSIGNED_BYTE,
+        width: 1,
+        xOffset: 0,
+        yOffset: 1,
+      },
+    ]);
+  });
+
+  it("keeps duplicate page-table texel writes as ordered single-texel uploads", () => {
+    const { gl, texSubImages } = fakePageTableGl();
+    const pageTable = createVirtualTexturePageTableTexture(gl, [{ height: 1, width: 3 }]);
+
+    const result = uploadVirtualTexturePageTableTexels(gl, pageTable, [
+      pageTableTexelUpload({ dirtySequence: 0, rgba8: [1, 1, 1, 1], xOffset: 0, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 1, rgba8: [2, 2, 2, 2], xOffset: 1, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 2, rgba8: [3, 3, 3, 3], xOffset: 1, yOffset: 0 }),
+    ]);
+
+    expect(result).toEqual({ bytesUploaded: 12, texelsUploaded: 3 });
+    expect(texSubImages).toHaveLength(3);
+    expect(texSubImages.map((call) => ({
+      data: call.data,
+      width: call.width,
+      xOffset: call.xOffset,
+      yOffset: call.yOffset,
+    }))).toEqual([
+      { data: [1, 1, 1, 1], width: 1, xOffset: 0, yOffset: 0 },
+      { data: [2, 2, 2, 2], width: 1, xOffset: 1, yOffset: 0 },
+      { data: [3, 3, 3, 3], width: 1, xOffset: 1, yOffset: 0 },
     ]);
   });
 

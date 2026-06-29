@@ -21,16 +21,27 @@ const config = {
 };
 
 const expectedCheckSha256 = "cb9821041e65472407ca42f8a0112e52c45fab603a0d75148d5c589a5d1c79ee";
+const defaultThrashMetricOptions = {
+  recentWindowFrames: 16,
+  maxRecentEvictionReRequestRatio: 0.03,
+  maxRepeatedReloadRatio: 0.02,
+  maxWorkingSetPressureP95: 0.9,
+  maxQueuedPagesP95: 16,
+  maxOldestQueuedFrames: 3,
+  minExactHitRatio: 0.95
+};
 const paddedTileSize = config.usableTileSize + config.borderTexels * 2;
 const bytesPerPage = paddedTileSize * paddedTileSize * config.bytesPerTexel;
 const mipCount = Math.log2(config.virtualSize / config.usableTileSize) + 1;
 let cache;
 let scheduler;
 let pageTable;
+let thrashMetrics;
 
 function runFrame(index, camera) {
   const t0 = performance.now();
   const demand = collectDemand(camera);
+  thrashMetrics?.beginFrame(index, demand, { cache, scheduler });
   const demandMs = performance.now() - t0;
 
   let exactHits = 0;
@@ -51,16 +62,16 @@ function runFrame(index, camera) {
         fallbackSamples += request.samples;
         cache.touch(resident.page.key, index);
       }
-      scheduler.enqueue(request);
+      scheduler.enqueue(request, { frame: index, source: "visible" });
     }
   }
 
   for (const parent of demand.parentPages.values()) {
-    if (!cache.has(parent.key)) scheduler.enqueue(parent);
+    if (!cache.has(parent.key)) scheduler.enqueue(parent, { frame: index, source: "parent" });
   }
 
   for (const prefetch of demand.prefetchPages.values()) {
-    if (!cache.has(prefetch.key)) scheduler.enqueue(prefetch);
+    if (!cache.has(prefetch.key)) scheduler.enqueue(prefetch, { frame: index, source: "prefetch" });
   }
 
   const t1 = performance.now();
@@ -79,7 +90,7 @@ function runFrame(index, camera) {
   const pageTableUpdates = dirtyEntries.length;
   const totalSamples = exactHits + misses;
 
-  return {
+  const row = {
     frame: index,
     camera: {
       x: round(camera.x),
@@ -114,6 +125,18 @@ function runFrame(index, camera) {
     residency: cache.debugSummary(),
     pageTable: pageTable.debugSummary()
   };
+  const thrash = thrashMetrics?.endFrame(index, {
+    uploadBatch,
+    dirtyEntries,
+    cache,
+    scheduler,
+    exactHits,
+    misses,
+    fallbackSamples,
+    totalSamples
+  });
+  if (thrash) row.thrash = thrash;
+  return row;
 }
 
 function collectDemand(camera) {
@@ -371,6 +394,133 @@ function summarize(rows) {
   };
 }
 
+function workingSetSummary(demand, cacheCapacity) {
+  const keys = new Set();
+  for (const page of demand.pages.values()) keys.add(page.key);
+  for (const page of demand.parentPages.values()) keys.add(page.key);
+  for (const page of demand.prefetchPages.values()) keys.add(page.key);
+  return {
+    visiblePages: demand.pages.size,
+    parentPages: demand.parentPages.size,
+    prefetchPages: demand.prefetchPages.size,
+    totalPages: keys.size,
+    overCapacityPages: Math.max(0, keys.size - cacheCapacity),
+    visiblePressureRatio: ratio(demand.pages.size, cacheCapacity),
+    totalPressureRatio: ratio(keys.size, cacheCapacity)
+  };
+}
+
+function recentReRequestsForPages(pages, recentEvictions, frame, recentWindowFrames) {
+  let count = 0;
+  let samples = 0;
+  for (const page of pages) {
+    const eviction = recentEvictions.get(page.key);
+    if (!eviction) continue;
+    const framesSinceEviction = frame - eviction.frame;
+    if (framesSinceEviction <= 0 || framesSinceEviction > recentWindowFrames) continue;
+    count += 1;
+    samples += page.samples ?? 0;
+  }
+  return { pages: count, samples };
+}
+
+function countSampleMipChanges(sampleCells, previousSampleMips) {
+  let changed = 0;
+  let total = 0;
+  for (let y = 0; y < sampleCells.length; y += 1) {
+    for (let x = 0; x < sampleCells[y].length; x += 1) {
+      total += 1;
+      if (previousSampleMips?.[y]?.[x] === undefined) continue;
+      if (mipFromKey(sampleCells[y][x]) !== previousSampleMips[y][x]) changed += 1;
+    }
+  }
+  return { changed, total };
+}
+
+function mipFromKey(key) {
+  return Number.parseInt(key.split(":")[0], 10);
+}
+
+function buildThrashGates(summary, options) {
+  return {
+    recentEvictionReRequestRatio: {
+      target: `<= ${options.maxRecentEvictionReRequestRatio}`,
+      actual: summary.recentEvictionReRequestRatio,
+      pass: summary.recentEvictionReRequestRatio <= options.maxRecentEvictionReRequestRatio
+    },
+    repeatedPageReloadRatio: {
+      target: `<= ${options.maxRepeatedReloadRatio}`,
+      actual: summary.repeatedPageReloadRatio,
+      pass: summary.repeatedPageReloadRatio <= options.maxRepeatedReloadRatio
+    },
+    p95WorkingSetPressure: {
+      target: `<= ${options.maxWorkingSetPressureP95}`,
+      actual: summary.p95WorkingSetPressure,
+      pass: summary.p95WorkingSetPressure <= options.maxWorkingSetPressureP95
+    },
+    p95QueuedPages: {
+      target: `<= ${options.maxQueuedPagesP95}`,
+      actual: summary.p95QueuedPages,
+      pass: summary.p95QueuedPages <= options.maxQueuedPagesP95
+    },
+    maxOldestQueuedFrames: {
+      target: `<= ${options.maxOldestQueuedFrames}`,
+      actual: summary.maxOldestQueuedFrames,
+      pass: summary.maxOldestQueuedFrames <= options.maxOldestQueuedFrames
+    },
+    exactHitRatioAfterWarmup: {
+      target: `>= ${options.minExactHitRatio}`,
+      actual: summary.averageExactHitRatio,
+      pass: summary.averageExactHitRatio >= options.minExactHitRatio
+    }
+  };
+}
+
+function buildHysteresisRecommendations(summary, gates, options) {
+  const reasons = [];
+  if (!gates.recentEvictionReRequestRatio.pass) reasons.push("recently evicted pages are being requested again inside the churn window");
+  if (!gates.repeatedPageReloadRatio.pass) reasons.push("pages are being uploaded more than once after warmup");
+  if (!gates.p95WorkingSetPressure.pass) reasons.push("the visible, fallback, and prefetch working set is too close to cache capacity");
+  if (!gates.p95QueuedPages.pass || !gates.maxOldestQueuedFrames.pass) reasons.push("the upload queue is not draining within the recommended latency");
+  if (summary.p95MipInstabilityRatio > 0.08) reasons.push("sample mip selection changes frequently across adjacent frames");
+
+  return {
+    enableMipHysteresis: reasons.length > 0 || summary.p95MipInstabilityRatio > 0.04,
+    minMipHoldFrames: summary.p95MipInstabilityRatio > 0.08 ? 3 : 2,
+    mipSwitchDeadband: summary.p95MipInstabilityRatio > 0.08 ? 0.35 : 0.25,
+    keepRecentlyEvictedFrames: options.recentWindowFrames,
+    protectVisiblePagesFrames: Math.max(2, Math.ceil(options.recentWindowFrames / 4)),
+    prefetchBackoffWhenQueuedPagesExceed: options.maxQueuedPagesP95,
+    growPhysicalCacheWhenP95WorkingSetExceeds: options.maxWorkingSetPressureP95,
+    reasons
+  };
+}
+
+function sampleFrames(rows) {
+  if (rows.length === 0) return [];
+  return [
+    rows[0],
+    rows[Math.min(config.warmupFrames, rows.length - 1)],
+    rows[Math.floor(rows.length / 2)],
+    rows[rows.length - 1]
+  ];
+}
+
+function sum(rows, accessor) {
+  return rows.reduce((total, row) => total + accessor(row), 0);
+}
+
+function average(rows, accessor) {
+  return rows.length === 0 ? 0 : round(sum(rows, accessor) / rows.length);
+}
+
+function percentile(values, percentileValue) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(sorted.length * percentileValue) - 1;
+  return round(sorted[clamp(index, 0, sorted.length - 1)]);
+}
+
 function pagesPerAxisAtMip(mip) {
   return config.virtualSize / config.usableTileSize / (1 << mip);
 }
@@ -388,14 +538,25 @@ class UploadScheduler {
     return this.requests.size;
   }
 
-  enqueue(page) {
+  enqueue(page, context = {}) {
+    thrashMetrics?.recordEnqueue(page, context);
     const existing = this.requests.get(page.key);
     if (existing) {
       existing.priority = Math.max(existing.priority, page.priority);
       existing.samples += page.samples ?? 0;
+      existing.lastQueuedFrame = context.frame ?? existing.lastQueuedFrame;
+      existing.enqueueCount += 1;
+      if (context.source) existing.sources[context.source] = (existing.sources[context.source] ?? 0) + 1;
       return;
     }
-    this.requests.set(page.key, { ...page, samples: page.samples ?? 0 });
+    this.requests.set(page.key, {
+      ...page,
+      samples: page.samples ?? 0,
+      firstQueuedFrame: context.frame ?? null,
+      lastQueuedFrame: context.frame ?? null,
+      enqueueCount: 1,
+      sources: context.source ? { [context.source]: 1 } : {}
+    });
   }
 
   drain({ maxUploads, maxBytes, frame, cache, pageTable }) {
@@ -412,6 +573,7 @@ class UploadScheduler {
         continue;
       }
       const result = cache.insert(page, frame);
+      thrashMetrics?.recordUpload(page, { frame });
       const entry = pageTable.setResident(page, {
         slot: result.slot,
         frame,
@@ -427,6 +589,7 @@ class UploadScheduler {
           y: result.evicted.y,
           lastUsedFrame: result.evicted.lastUsedFrame
         });
+        thrashMetrics?.recordEviction(result.evicted, { frame });
         pageTable.invalidate(result.evicted, { frame, reason: "slot-reused" });
       }
       this.requests.delete(page.key);
@@ -444,6 +607,232 @@ class UploadScheduler {
     }
 
     return { uploaded, evicted };
+  }
+
+  debugBacklog(frame) {
+    let oldestQueuedFrames = 0;
+    const bySource = {};
+    for (const request of this.requests.values()) {
+      if (request.firstQueuedFrame !== null) {
+        oldestQueuedFrames = Math.max(oldestQueuedFrames, frame - request.firstQueuedFrame + 1);
+      }
+      for (const [source, count] of Object.entries(request.sources)) {
+        bySource[source] = (bySource[source] ?? 0) + count;
+      }
+    }
+    return {
+      queuedPages: this.requests.size,
+      queuedBytes: this.requests.size * bytesPerPage,
+      oldestQueuedFrames,
+      bySource
+    };
+  }
+}
+
+class ThrashMetricsCollector {
+  constructor(options) {
+    this.options = options;
+    this.frameRows = [];
+    this.currentFrame = null;
+    this.recentEvictions = new Map();
+    this.uploadCounts = new Map();
+    this.evictionCounts = new Map();
+    this.recentEvictionReRequests = [];
+    this.recentEvictionReloads = [];
+    this.repeatedReloads = [];
+    this.previousSampleMips = null;
+  }
+
+  beginFrame(frame, demand, { cache, scheduler }) {
+    this.pruneRecentEvictions(frame);
+    const workingSet = workingSetSummary(demand, cache.capacity);
+    const visibleRecentReRequests = recentReRequestsForPages(demand.pages.values(), this.recentEvictions, frame, this.options.recentWindowFrames);
+    const parentRecentReRequests = recentReRequestsForPages(demand.parentPages.values(), this.recentEvictions, frame, this.options.recentWindowFrames);
+    const prefetchRecentReRequests = recentReRequestsForPages(demand.prefetchPages.values(), this.recentEvictions, frame, this.options.recentWindowFrames);
+    const mipInstability = countSampleMipChanges(demand.sampleCells, this.previousSampleMips);
+    this.previousSampleMips = demand.sampleCells.map((row) => row.map((key) => mipFromKey(key)));
+
+    this.currentFrame = {
+      frame,
+      workingSet,
+      queuedPagesBeforeBudget: scheduler.size,
+      residentOccupancyRatio: ratio(cache.size, cache.capacity),
+      visibleRecentReRequests,
+      parentRecentReRequests,
+      prefetchRecentReRequests,
+      enqueueReRequests: 0,
+      enqueueReRequestSamples: [],
+      mipInstabilityRatio: ratio(mipInstability.changed, mipInstability.total),
+      mipInstabilityCells: mipInstability.changed
+    };
+  }
+
+  recordEnqueue(page, { frame, source } = {}) {
+    if (!this.currentFrame || frame === undefined) return;
+    const recent = this.recentEvictions.get(page.key);
+    if (!recent) return;
+    const framesSinceEviction = frame - recent.frame;
+    if (framesSinceEviction <= 0 || framesSinceEviction > this.options.recentWindowFrames) return;
+    this.currentFrame.enqueueReRequests += 1;
+    if (this.currentFrame.enqueueReRequestSamples.length < 8) {
+      this.currentFrame.enqueueReRequestSamples.push({
+        key: page.key,
+        source: source ?? "unknown",
+        framesSinceEviction,
+        evictedFrame: recent.frame
+      });
+    }
+    this.recentEvictionReRequests.push({
+      frame,
+      key: page.key,
+      source: source ?? "unknown",
+      framesSinceEviction,
+      evictedFrame: recent.frame
+    });
+  }
+
+  recordUpload(page, { frame }) {
+    const previousUploads = this.uploadCounts.get(page.key) ?? 0;
+    this.uploadCounts.set(page.key, previousUploads + 1);
+    if (previousUploads > 0) {
+      this.repeatedReloads.push({
+        frame,
+        key: page.key,
+        reloadCount: previousUploads,
+        mip: page.mip,
+        x: page.x,
+        y: page.y
+      });
+    }
+
+    const recent = this.recentEvictions.get(page.key);
+    if (recent && frame - recent.frame > 0 && frame - recent.frame <= this.options.recentWindowFrames) {
+      this.recentEvictionReloads.push({
+        frame,
+        key: page.key,
+        framesSinceEviction: frame - recent.frame,
+        evictedFrame: recent.frame
+      });
+    }
+  }
+
+  recordEviction(page, { frame }) {
+    this.recentEvictions.set(page.key, {
+      frame,
+      key: page.key,
+      mip: page.mip,
+      x: page.x,
+      y: page.y,
+      lastUsedFrame: page.lastUsedFrame
+    });
+    this.evictionCounts.set(page.key, (this.evictionCounts.get(page.key) ?? 0) + 1);
+  }
+
+  endFrame(frame, { uploadBatch, dirtyEntries, cache, scheduler, exactHits, misses, fallbackSamples, totalSamples }) {
+    const backlog = scheduler.debugBacklog(frame);
+    const row = {
+      workingSet: this.currentFrame.workingSet,
+      residentOccupancyRatio: this.currentFrame.residentOccupancyRatio,
+      recentEvictionReRequests: {
+        visiblePages: this.currentFrame.visibleRecentReRequests.pages,
+        visibleSamples: this.currentFrame.visibleRecentReRequests.samples,
+        parentPages: this.currentFrame.parentRecentReRequests.pages,
+        prefetchPages: this.currentFrame.prefetchRecentReRequests.pages,
+        enqueuedPages: this.currentFrame.enqueueReRequests,
+        samples: this.currentFrame.enqueueReRequestSamples
+      },
+      repeatedPageReloads: this.repeatedReloads.filter((event) => event.frame === frame).length,
+      recentEvictionReloads: this.recentEvictionReloads.filter((event) => event.frame === frame).length,
+      queueBacklog: {
+        queuedPagesBeforeBudget: this.currentFrame.queuedPagesBeforeBudget,
+        queuedPagesAfterBudget: backlog.queuedPages,
+        queuedBytesAfterBudget: backlog.queuedBytes,
+        oldestQueuedFrames: backlog.oldestQueuedFrames,
+        bySource: backlog.bySource,
+        uploadPageBudgetUtilization: ratio(uploadBatch.uploaded.length, config.maxUploadsPerFrame),
+        uploadByteBudgetUtilization: ratio(uploadBatch.uploaded.length * bytesPerPage, config.maxUploadBytesPerFrame)
+      },
+      mipInstabilityRatio: this.currentFrame.mipInstabilityRatio,
+      mipInstabilityCells: this.currentFrame.mipInstabilityCells,
+      exactHitRatio: ratio(exactHits, totalSamples),
+      fallbackRatio: ratio(fallbackSamples, totalSamples),
+      evictedPages: uploadBatch.evicted.length,
+      uploadedPages: uploadBatch.uploaded.length,
+      dirtyEntries: dirtyEntries.length,
+      residentPages: cache.size
+    };
+    this.frameRows.push({ frame, ...row });
+    this.currentFrame = null;
+    return row;
+  }
+
+  buildReport({ warmupFrames }) {
+    const rows = this.frameRows.filter((row) => row.frame >= warmupFrames);
+    const allRows = rows.length > 0 ? rows : this.frameRows;
+    const totalUploaded = sum(allRows, (row) => row.uploadedPages);
+    const totalVisibleRequests = sum(allRows, (row) => row.workingSet.visiblePages);
+    const totalEnqueuedReRequests = sum(allRows, (row) => row.recentEvictionReRequests.enqueuedPages);
+    const totalVisibleReRequests = sum(allRows, (row) => row.recentEvictionReRequests.visiblePages);
+    const totalRepeatedReloads = this.repeatedReloads.filter((event) => event.frame >= warmupFrames).length;
+    const pagesReloadedMoreThanOnce = new Set(this.repeatedReloads.filter((event) => event.frame >= warmupFrames).map((event) => event.key)).size;
+    const maxReloadsForSinglePage = Math.max(0, ...[...this.uploadCounts.values()].map((count) => count - 1));
+    const pagesEvictedMoreThanOnce = [...this.evictionCounts.values()].filter((count) => count > 1).length;
+    const maxEvictionsForSinglePage = Math.max(0, ...this.evictionCounts.values());
+    const summary = {
+      windowFrames: this.options.recentWindowFrames,
+      recentEvictionReRequests: totalEnqueuedReRequests,
+      recentEvictionReRequestRatio: ratio(totalEnqueuedReRequests, sum(allRows, (row) => row.workingSet.totalPages)),
+      visibleRecentEvictionReRequests: totalVisibleReRequests,
+      visibleRecentEvictionReRequestRatio: ratio(totalVisibleReRequests, totalVisibleRequests),
+      recentEvictionReloads: this.recentEvictionReloads.filter((event) => event.frame >= warmupFrames).length,
+      repeatedPageReloads: totalRepeatedReloads,
+      repeatedPageReloadRatio: ratio(totalRepeatedReloads, totalUploaded),
+      pagesReloadedMoreThanOnce,
+      maxReloadsForSinglePage,
+      pagesEvictedMoreThanOnce,
+      maxEvictionsForSinglePage,
+      evictionRatePerFrame: round(sum(allRows, (row) => row.evictedPages) / Math.max(1, allRows.length)),
+      averageWorkingSetPressure: average(allRows, (row) => row.workingSet.totalPressureRatio),
+      p95WorkingSetPressure: percentile(allRows.map((row) => row.workingSet.totalPressureRatio), 0.95),
+      maxWorkingSetPressure: Math.max(0, ...allRows.map((row) => row.workingSet.totalPressureRatio)),
+      averageVisibleWorkingSetPressure: average(allRows, (row) => row.workingSet.visiblePressureRatio),
+      framesWorkingSetOverCapacity: allRows.filter((row) => row.workingSet.totalPages > config.cacheSlots).length,
+      averageQueuedPages: average(allRows, (row) => row.queueBacklog.queuedPagesAfterBudget),
+      p95QueuedPages: percentile(allRows.map((row) => row.queueBacklog.queuedPagesAfterBudget), 0.95),
+      maxQueuedPages: Math.max(0, ...allRows.map((row) => row.queueBacklog.queuedPagesAfterBudget)),
+      framesWithQueueBacklog: allRows.filter((row) => row.queueBacklog.queuedPagesAfterBudget > 0).length,
+      maxOldestQueuedFrames: Math.max(0, ...allRows.map((row) => row.queueBacklog.oldestQueuedFrames)),
+      averageExactHitRatio: average(allRows, (row) => row.exactHitRatio),
+      averageMipInstabilityRatio: average(allRows, (row) => row.mipInstabilityRatio),
+      p95MipInstabilityRatio: percentile(allRows.map((row) => row.mipInstabilityRatio), 0.95)
+    };
+    const gates = buildThrashGates(summary, this.options);
+    return {
+      options: this.options,
+      summary,
+      gates,
+      recommendations: buildHysteresisRecommendations(summary, gates, this.options),
+      frameSamples: sampleFrames(this.frameRows).map((row) => ({
+        frame: row.frame,
+        workingSet: row.workingSet,
+        recentEvictionReRequests: row.recentEvictionReRequests,
+        queueBacklog: row.queueBacklog,
+        mipInstabilityRatio: row.mipInstabilityRatio,
+        repeatedPageReloads: row.repeatedPageReloads,
+        recentEvictionReloads: row.recentEvictionReloads
+      })),
+      recentEvents: {
+        evictionReRequests: this.recentEvictionReRequests.slice(-24),
+        evictionReloads: this.recentEvictionReloads.slice(-24),
+        repeatedReloads: this.repeatedReloads.slice(-24)
+      }
+    };
+  }
+
+  pruneRecentEvictions(frame) {
+    for (const [key, eviction] of this.recentEvictions) {
+      if (frame - eviction.frame > this.options.recentWindowFrames) this.recentEvictions.delete(key);
+    }
   }
 }
 
@@ -877,7 +1266,7 @@ function stableReportSha256(report) {
 }
 
 function stableReport(report) {
-  return {
+  const stable = {
     config: report.config,
     summary: report.summary,
     gates: report.gates,
@@ -888,6 +1277,8 @@ function stableReport(report) {
     })),
     liveDataStructures: report.liveDataStructures
   };
+  if (report.thrashMetrics) stable.thrashMetrics = report.thrashMetrics;
+  return stable;
 }
 
 function runChecks(report) {
@@ -902,20 +1293,75 @@ function runChecks(report) {
   if (report.liveDataStructures.physicalCacheSlots.length !== config.cacheSlots) failures.push("physical slot count mismatch");
 
   const sha256 = stableReportSha256(report);
-  if (expectedCheckSha256 && sha256 !== expectedCheckSha256) {
+  if (expectedCheckSha256 && !report.thrashMetrics && sha256 !== expectedCheckSha256) {
     failures.push(`deterministic report sha256 mismatch: expected ${expectedCheckSha256}, got ${sha256}`);
   }
 
   return { failures, sha256 };
 }
 
+function parseArgs(argv) {
+  const args = {
+    includeFrames: false,
+    check: false,
+    includeThrashMetrics: false,
+    gateThrashMetrics: false,
+    thrashOptions: { ...defaultThrashMetricOptions }
+  };
+
+  for (const arg of argv) {
+    if (arg === "--frames") {
+      args.includeFrames = true;
+    } else if (arg === "--check") {
+      args.check = true;
+    } else if (arg === "--thrash-metrics" || arg === "--churn-metrics" || arg === "--vt-gate-metrics") {
+      args.includeThrashMetrics = true;
+    } else if (arg === "--thrash-gates" || arg === "--churn-gates") {
+      args.includeThrashMetrics = true;
+      args.gateThrashMetrics = true;
+    } else if (arg.startsWith("--thrash-window-frames=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.recentWindowFrames = parsePositiveIntegerFlag(arg, "--thrash-window-frames=");
+    } else if (arg.startsWith("--max-churn-ratio=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.maxRecentEvictionReRequestRatio = parseNonNegativeNumberFlag(arg, "--max-churn-ratio=");
+    } else if (arg.startsWith("--max-reload-ratio=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.maxRepeatedReloadRatio = parseNonNegativeNumberFlag(arg, "--max-reload-ratio=");
+    } else if (arg.startsWith("--max-working-set-pressure-p95=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.maxWorkingSetPressureP95 = parseNonNegativeNumberFlag(arg, "--max-working-set-pressure-p95=");
+    } else if (arg.startsWith("--max-queued-pages-p95=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.maxQueuedPagesP95 = parseNonNegativeNumberFlag(arg, "--max-queued-pages-p95=");
+    } else if (arg.startsWith("--max-oldest-queued-frames=")) {
+      args.includeThrashMetrics = true;
+      args.thrashOptions.maxOldestQueuedFrames = parsePositiveIntegerFlag(arg, "--max-oldest-queued-frames=");
+    }
+  }
+
+  return args;
+}
+
+function parsePositiveIntegerFlag(arg, prefix) {
+  const value = Number.parseInt(arg.slice(prefix.length), 10);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`invalid ${prefix}${arg.slice(prefix.length)}`);
+  return value;
+}
+
+function parseNonNegativeNumberFlag(arg, prefix) {
+  const value = Number.parseFloat(arg.slice(prefix.length));
+  if (!Number.isFinite(value) || value < 0) throw new Error(`invalid ${prefix}${arg.slice(prefix.length)}`);
+  return value;
+}
+
 function main() {
-  const includeFrames = process.argv.includes("--frames");
-  const check = process.argv.includes("--check");
+  const args = parseArgs(process.argv.slice(2));
   const rng = mulberry32(config.seed);
   cache = new PhysicalPageCache(config.cacheSlots);
   scheduler = new UploadScheduler();
   pageTable = new PageTable({ slotColumns: cache.slotColumns });
+  thrashMetrics = args.includeThrashMetrics ? new ThrashMetricsCollector(args.thrashOptions) : null;
 
   const frames = cameraPath(config.frames);
   const sampleManifest = buildManifestSample(rng);
@@ -993,8 +1439,17 @@ function main() {
     liveDataStructures: buildLiveDataStructures({ results })
   };
 
-  if (includeFrames) report.frames = results;
-  if (check) {
+  if (args.includeThrashMetrics) {
+    report.thrashMetrics = thrashMetrics.buildReport({ warmupFrames: config.warmupFrames });
+    if (args.gateThrashMetrics) {
+      for (const [name, gate] of Object.entries(report.thrashMetrics.gates)) {
+        report.gates[`thrash.${name}`] = gate;
+      }
+    }
+  }
+
+  if (args.includeFrames) report.frames = results;
+  if (args.check) {
     const { failures, sha256 } = runChecks(report);
     if (failures.length > 0) {
       throw new Error(`virtual texturing cache sim check failed:\n${failures.map((failure) => `- ${failure}`).join("\n")}`);

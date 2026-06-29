@@ -25,7 +25,7 @@ const smokeExpectations = {
   },
   text: {
     surface: 'canvas',
-    canvasLabel: 'Renderer text',
+    canvasLabel: 'Renderer text editor',
     minColorBuckets: 3,
     minPaintedRatio: 0.003,
   },
@@ -396,6 +396,75 @@ const smokeExpression = `
       reportType: report === null ? 'null' : typeof report,
     };
   };
+  const readTextEditorProbe = () => {
+    const probe = window.__royalTextEditorProbe;
+    if (probe === undefined || probe === null) return undefined;
+    const selection = probe.selection ?? {};
+    const normalizePlacement = (placement) => ({
+      index: Number(placement?.index ?? 0),
+      line: Number(placement?.line ?? 0),
+      x: Number(placement?.x ?? 0),
+    });
+    const normalizeRect = (rect) => ({
+      end: Number(rect?.end ?? 0),
+      height: Number(rect?.height ?? 0),
+      line: Number(rect?.line ?? 0),
+      start: Number(rect?.start ?? 0),
+      width: Number(rect?.width ?? 0),
+      x: Number(rect?.x ?? 0),
+      y: Number(rect?.y ?? 0),
+    });
+    const fontSizeSweep = typeof probe.measureFontSizes === 'function'
+      ? probe.measureFontSizes([0.48, 0.72, 1.04]).map((entry) => ({
+        fontSize: Number(entry?.fontSize ?? 0),
+        lineCount: Number(entry?.lineCount ?? 0),
+        maxSelectionHeight: Number(entry?.maxSelectionHeight ?? 0),
+        minSelectionHeight: Number(entry?.minSelectionHeight ?? 0),
+        selectionHeight: Number(entry?.selectionHeight ?? 0),
+      }))
+      : [];
+
+    return {
+      caret: {
+        height: Number(probe.caret?.height ?? 0),
+        index: Number(probe.caret?.index ?? 0),
+        line: Number(probe.caret?.line ?? 0),
+        x: Number(probe.caret?.x ?? 0),
+        y: Number(probe.caret?.y ?? 0),
+      },
+      fontSize: Number(probe.fontSize ?? 0),
+      fontSizeSweep,
+      hitTest: {
+        count: Number(probe.hitTest?.count ?? 0),
+        lastClientX: Number(probe.hitTest?.lastClientX ?? 0),
+        lastClientY: Number(probe.hitTest?.lastClientY ?? 0),
+        lastIndex: Number(probe.hitTest?.lastIndex ?? -1),
+        lastLine: Number(probe.hitTest?.lastLine ?? -1),
+        lastMs: Number(probe.hitTest?.lastMs ?? 0),
+        maxMs: Number(probe.hitTest?.maxMs ?? 0),
+      },
+      layout: {
+        lineCount: Number(probe.layout?.lineCount ?? 0),
+        maxWidth: Number(probe.layout?.maxWidth ?? 0),
+        selectionHeight: Number(probe.layout?.selectionHeight ?? 0),
+        selectionYOffset: Number(probe.layout?.selectionYOffset ?? 0),
+      },
+      lineHeight: Number(probe.lineHeight ?? 0),
+      origin: {
+        x: Number(probe.origin?.x ?? 0),
+        y: Number(probe.origin?.y ?? 0),
+      },
+      placements: Array.isArray(probe.placements) ? probe.placements.map(normalizePlacement) : [],
+      selection: {
+        anchor: Number(selection.anchor ?? 0),
+        anchorLine: selection.anchorLine === undefined ? undefined : Number(selection.anchorLine),
+        focus: Number(selection.focus ?? 0),
+        focusLine: selection.focusLine === undefined ? undefined : Number(selection.focusLine),
+      },
+      selectionRects: Array.isArray(probe.selectionRects) ? probe.selectionRects.map(normalizeRect) : [],
+      textLength: Number(probe.textLength ?? 0),
+    };
+  };
   const runHelmetPickingSmoke = async (canvas) => {
     const samples = readHelmetSamples(canvas);
     dispatchHelmetPointerSpam(canvas, samples);
@@ -516,6 +585,10 @@ const smokeExpression = `
         sample: sampleCanvas(canvas),
       },
       textControls: routeId === 'text' ? {
+        editorAriaValue: document.querySelector('.text-example canvas')?.getAttribute('aria-valuetext') ?? '',
+        editorRole: document.querySelector('.text-example canvas')?.getAttribute('role') ?? '',
+        editorTabIndex: document.querySelector('.text-example canvas')?.tabIndex ?? -1,
+        probe: readTextEditorProbe(),
         rangeInputs: document.querySelectorAll('.text-example input[type="range"]').length,
         rangeInputIds: Array.from(document.querySelectorAll('.text-example input[type="range"]')).map((input) => input.id),
         rangeInputNames: Array.from(document.querySelectorAll('.text-example input[type="range"]')).map((input) => input.name),
@@ -636,17 +709,133 @@ const smokeExpression = `
     while (
       performance.now() < deadline &&
       (
-        state.textControls?.textInputs !== 1 ||
-        state.textControls?.rangeInputs !== 1 ||
-        state.canvas?.edge === undefined
+        state.textControls?.textInputs !== 0 ||
+        state.textControls?.rangeInputs !== 0 ||
+        state.textControls?.editorRole !== 'textbox' ||
+        state.canvas?.edge === undefined ||
+        state.textControls?.probe === undefined
       )
     ) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       state = read();
     }
+    state = read();
   }
 
   return state;
+})()
+`;
+
+const textProbeExpression = `
+(() => {
+  const probe = window.__royalTextEditorProbe;
+  if (probe === undefined || probe === null) return undefined;
+  const selection = probe.selection ?? {};
+  const normalizePlacement = (placement) => ({
+    index: Number(placement?.index ?? 0),
+    line: Number(placement?.line ?? 0),
+    x: Number(placement?.x ?? 0),
+  });
+  const normalizeRect = (rect) => ({
+    end: Number(rect?.end ?? 0),
+    height: Number(rect?.height ?? 0),
+    line: Number(rect?.line ?? 0),
+    start: Number(rect?.start ?? 0),
+    width: Number(rect?.width ?? 0),
+    x: Number(rect?.x ?? 0),
+    y: Number(rect?.y ?? 0),
+  });
+
+  return {
+    caret: {
+      height: Number(probe.caret?.height ?? 0),
+      index: Number(probe.caret?.index ?? 0),
+      line: Number(probe.caret?.line ?? 0),
+      x: Number(probe.caret?.x ?? 0),
+      y: Number(probe.caret?.y ?? 0),
+    },
+    fontSize: Number(probe.fontSize ?? 0),
+    hitTest: {
+      count: Number(probe.hitTest?.count ?? 0),
+      lastClientX: Number(probe.hitTest?.lastClientX ?? 0),
+      lastClientY: Number(probe.hitTest?.lastClientY ?? 0),
+      lastIndex: Number(probe.hitTest?.lastIndex ?? -1),
+      lastLine: Number(probe.hitTest?.lastLine ?? -1),
+      lastMs: Number(probe.hitTest?.lastMs ?? 0),
+      maxMs: Number(probe.hitTest?.maxMs ?? 0),
+    },
+    layout: {
+      lineCount: Number(probe.layout?.lineCount ?? 0),
+      maxWidth: Number(probe.layout?.maxWidth ?? 0),
+      selectionHeight: Number(probe.layout?.selectionHeight ?? 0),
+      selectionYOffset: Number(probe.layout?.selectionYOffset ?? 0),
+    },
+    lineHeight: Number(probe.lineHeight ?? 0),
+    origin: {
+      x: Number(probe.origin?.x ?? 0),
+      y: Number(probe.origin?.y ?? 0),
+    },
+    placements: Array.isArray(probe.placements) ? probe.placements.map(normalizePlacement) : [],
+    selection: {
+      anchor: Number(selection.anchor ?? 0),
+      anchorLine: selection.anchorLine === undefined ? undefined : Number(selection.anchorLine),
+      focus: Number(selection.focus ?? 0),
+      focusLine: selection.focusLine === undefined ? undefined : Number(selection.focusLine),
+    },
+    selectionRects: Array.isArray(probe.selectionRects) ? probe.selectionRects.map(normalizeRect) : [],
+    textLength: Number(probe.textLength ?? 0),
+  };
+})()
+`;
+
+const textInteractionPlanExpression = `
+(() => {
+  const probe = window.__royalTextEditorProbe;
+  const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
+    candidate.getAttribute('aria-label') === 'Renderer text editor'
+  );
+  if (probe === undefined || probe === null || canvas === undefined || probe.placements.length < 2) {
+    return { error: 'missing text canvas or caret placements' };
+  }
+
+  const bounds = { bottom: -3.2, left: -5.6, right: 5.6, top: 3.2 };
+  const textWorldToClient = (x, y) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: rect.left + ((x - bounds.left) / (bounds.right - bounds.left)) * rect.width,
+      y: rect.top + ((bounds.top - y) / (bounds.top - bounds.bottom)) * rect.height,
+    };
+  };
+  const pointFor = (placement) =>
+    textWorldToClient(
+      Number(probe.origin.x) + Number(placement.x),
+      Number(probe.origin.y) -
+        Number(placement.line) * Number(probe.lineHeight) +
+        Number(probe.layout.selectionYOffset),
+    );
+  const normalizePlacement = (placement) => placement === undefined ? undefined : ({
+    index: Number(placement.index ?? 0),
+    line: Number(placement.line ?? 0),
+    x: Number(placement.x ?? 0),
+  });
+
+  const clickTarget = normalizePlacement(probe.placements[Math.max(1, Math.floor(probe.placements.length * 0.45))]);
+  const startTarget = normalizePlacement(probe.placements[0]);
+  const endTarget = normalizePlacement(probe.placements[probe.placements.length - 1]);
+  const clickPoint = pointFor(clickTarget);
+  const dragStart = pointFor(startTarget);
+  const dragEnd = pointFor(endTarget);
+  const clickHit = normalizePlacement(probe.hitTestClientPoint?.(clickPoint.x, clickPoint.y));
+
+  return {
+    clickHit,
+    clickPoint,
+    clickTarget,
+    dragEnd,
+    dragStart,
+    endTarget,
+    startTarget,
+  };
 })()
 `;
 
@@ -808,25 +997,31 @@ const assertRoute = (expected, state) => {
   }
 
   if (expected.id === 'text') {
-    if (state.textControls?.textInputs !== 1) {
+    if (state.textControls?.textInputs !== 0) {
       failures.push(`text route rendered ${state.textControls?.textInputs ?? 0} text input(s)`);
     }
-    if (state.textControls?.rangeInputs !== 1) {
+    if (state.textControls?.rangeInputs !== 0) {
       failures.push(`text route rendered ${state.textControls?.rangeInputs ?? 0} range input(s)`);
     }
-    if (state.textControls?.textInputIds?.[0] !== 'renderer-text-sample') {
-      failures.push('text route editable sentence input id is missing');
+    if ((state.textControls?.textInputIds?.length ?? 0) > 0) {
+      failures.push(`text route still rendered text input id(s): ${state.textControls.textInputIds.join(', ')}`);
     }
-    if (state.textControls?.textInputNames?.[0] !== 'renderer-text-sample') {
-      failures.push('text route editable sentence input name is missing');
+    if ((state.textControls?.textInputNames?.length ?? 0) > 0) {
+      failures.push(`text route still rendered text input name(s): ${state.textControls.textInputNames.join(', ')}`);
     }
-    if (state.textControls?.rangeInputIds?.[0] !== 'renderer-text-font-size') {
-      failures.push('text route font size input id is missing');
+    if ((state.textControls?.rangeInputIds?.length ?? 0) > 0) {
+      failures.push(`text route still rendered range input id(s): ${state.textControls.rangeInputIds.join(', ')}`);
     }
-    if (state.textControls?.rangeInputNames?.[0] !== 'renderer-text-font-size') {
-      failures.push('text route font size input name is missing');
+    if ((state.textControls?.rangeInputNames?.length ?? 0) > 0) {
+      failures.push(`text route still rendered range input name(s): ${state.textControls.rangeInputNames.join(', ')}`);
     }
-    if (state.textControls?.textValue !== 'Moloch, whose factories dream and croak in the fog') {
+    if (state.textControls?.editorRole !== 'textbox') {
+      failures.push(`text route canvas role was "${state.textControls?.editorRole ?? 'missing'}"`);
+    }
+    if (state.textControls?.editorTabIndex !== 0) {
+      failures.push(`text route canvas tabIndex was ${state.textControls?.editorTabIndex ?? 'missing'}`);
+    }
+    if (state.textControls?.editorAriaValue !== 'Moloch, whose factories dream and croak in the fog') {
       failures.push('text route default editable sentence changed unexpectedly');
     }
     const edgeRatio = state.canvas?.edge?.brightRatio;
@@ -835,13 +1030,91 @@ const assertRoute = (expected, state) => {
     } else if (edgeRatio > 0.001) {
       failures.push(`text canvas has bright right-edge pixels ${edgeRatio.toFixed(4)}`);
     }
+    const probe = state.textControls?.probe;
+    if (probe === undefined) {
+      failures.push('text route missed editor geometry probe');
+    } else {
+      if (probe.layout.lineCount <= 0 || probe.placements.length < 2) {
+        failures.push(`text probe placements were lineCount=${probe.layout.lineCount} placements=${probe.placements.length}`);
+      }
+      if (probe.layout.selectionHeight <= 0 || probe.lineHeight <= 0) {
+        failures.push(
+          `text probe invalid metrics selectionHeight=${probe.layout.selectionHeight} lineHeight=${probe.lineHeight}`,
+        );
+      }
+      if (probe.fontSizeSweep.length !== 3) {
+        failures.push(`text probe font-size sweep returned ${probe.fontSizeSweep.length} entries`);
+      } else {
+        const invalidSweep = probe.fontSizeSweep.filter((entry) =>
+          entry.lineCount <= 0 ||
+          entry.selectionHeight <= 0 ||
+          entry.minSelectionHeight <= 0 ||
+          entry.maxSelectionHeight < entry.minSelectionHeight
+        );
+        if (invalidSweep.length > 0) {
+          failures.push('text probe font-size sweep produced invalid geometry');
+        }
+        for (let index = 1; index < probe.fontSizeSweep.length; index += 1) {
+          if (probe.fontSizeSweep[index].selectionHeight <= probe.fontSizeSweep[index - 1].selectionHeight) {
+            failures.push('text probe selection height did not scale with font size');
+            break;
+          }
+        }
+      }
+    }
+    const interaction = state.textInteraction;
+    if (interaction === undefined) {
+      failures.push('text route missed interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`text route interaction smoke failed: ${interaction.error}`);
+    } else {
+      const clicked = interaction.clicked;
+      const clickHit = interaction.clickHit;
+      const clickPoint = interaction.clickPoint;
+      const clickTarget = interaction.clickTarget;
+      const after = interaction.after;
+      if (clicked?.selection?.focus !== clickTarget?.index || clicked?.selection?.focusLine !== clickTarget?.line) {
+        failures.push(
+          `text click landed at ${clicked?.selection?.focus}:${clicked?.selection?.focusLine}, expected ${
+            clickTarget?.index
+          }:${clickTarget?.line}, pre-hit ${
+            clickHit === undefined ? 'missing' : `${clickHit.index}:${clickHit.line}`
+          }, handler-hit ${clicked?.hitTest?.lastIndex}:${clicked?.hitTest?.lastLine} count ${
+            clicked?.hitTest?.count ?? 'missing'
+          } client ${clicked?.hitTest?.lastClientX ?? 'missing'},${clicked?.hitTest?.lastClientY ?? 'missing'} sent ${
+            clickPoint === undefined ? 'missing' : `${clickPoint.x},${clickPoint.y}`
+          }`,
+        );
+      }
+      if (interaction.clickToProbeMs > 250) {
+        failures.push(`text click-to-probe took ${interaction.clickToProbeMs.toFixed(1)}ms`);
+      }
+      if ((after?.selectionRects.length ?? 0) <= 0) {
+        failures.push('text drag selection produced no selection rectangles');
+      }
+      if ((after?.hitTest.maxMs ?? 0) > 8) {
+        failures.push(`text hit testing max ${after.hitTest.maxMs.toFixed(2)}ms > 8ms`);
+      }
+      const rectOverflow = after?.selectionRects.find((rect) =>
+        rect.width <= 0 ||
+        rect.height <= 0 ||
+        rect.x < after.origin.x - 0.01 ||
+        rect.x + rect.width > after.origin.x + after.layout.maxWidth + 0.01
+      );
+      if (rectOverflow !== undefined) {
+        failures.push(
+          `text selection rect overflow line=${rectOverflow.line} x=${rectOverflow.x.toFixed(3)} width=${
+            rectOverflow.width.toFixed(3)
+          }`,
+        );
+      }
+    }
   }
 
   if (expected.id === 'virtual-texturing-terrain') {
     const vt = state.virtualTexturing;
     const initialVt = state.virtualTexturingBeforeDetail;
     const controls = state.virtualTextureControls;
-    const initialControls = state.virtualTextureControlsBefore;
 
     if (controls?.controlGroups !== 1) {
       failures.push(`virtual texture rendered ${controls?.controlGroups ?? 0} control group(s)`);
@@ -857,9 +1130,6 @@ const assertRoute = (expected, state) => {
     }
     if (controls?.min !== 0 || (controls?.max ?? 0) < 6) {
       failures.push(`virtual texture slider range was ${controls?.min ?? 'missing'}-${controls?.max ?? 'missing'}`);
-    }
-    if ((initialControls?.value ?? -1) >= (controls?.max ?? 0)) {
-      failures.push('virtual texture default detail was not intentionally below the max cap');
     }
     if (controls?.value !== controls?.max) {
       failures.push(`virtual texture detail slider value was ${controls?.value ?? 'missing'}, expected ${controls?.max}`);
@@ -948,11 +1218,9 @@ const assertRoute = (expected, state) => {
       if (vt.camera.distance <= 0) {
         failures.push('virtual texture camera probe did not initialize');
       }
-      if (vt.exactPageCount <= 0 || vt.fallbackPageCount <= 0 || (initialVt?.fallbackPageCount ?? 0) <= 0) {
+      if (vt.exactPageCount <= 0 || vt.fallbackPageCount <= 0) {
         failures.push(
-          `virtual texture exact/fallback counts were final=${vt.exactPageCount}/${vt.fallbackPageCount} initial=${
-            initialVt?.exactPageCount ?? 'missing'
-          }/${initialVt?.fallbackPageCount ?? 'missing'}`,
+          `virtual texture exact/fallback counts were final=${vt.exactPageCount}/${vt.fallbackPageCount}`,
         );
       }
       if (vt.lastPageTableUploadSample.length < 4) {
@@ -1100,6 +1368,79 @@ const stop = async (child) => {
   }
 };
 
+const dispatchMouse = async (session, type, point, buttons = 0) => {
+  await session.call('Input.dispatchMouseEvent', {
+    button: 'left',
+    buttons,
+    clickCount: type === 'mousePressed' ? 1 : 0,
+    type,
+    x: point.x,
+    y: point.y,
+  });
+};
+
+const waitForTextProbeState = async (session, predicate, timeoutMs = 800) => {
+  const deadline = Date.now() + timeoutMs;
+  let probe = await evaluate(session, textProbeExpression);
+
+  while (Date.now() < deadline && !predicate(probe)) {
+    await sleep(16);
+    probe = await evaluate(session, textProbeExpression);
+  }
+
+  return probe;
+};
+
+const runTextInteractionCdpSmoke = async (session) => {
+  const before = await evaluate(session, textProbeExpression);
+  const plan = await evaluate(session, textInteractionPlanExpression);
+  if (plan?.error !== undefined) return { before, error: plan.error };
+
+  const startedClickAt = performance.now();
+  await dispatchMouse(session, 'mouseMoved', plan.clickPoint, 0);
+  await dispatchMouse(session, 'mousePressed', plan.clickPoint, 1);
+  await sleep(16);
+  await dispatchMouse(session, 'mouseReleased', plan.clickPoint, 0);
+  const clicked = await waitForTextProbeState(
+    session,
+    (probe) =>
+      probe?.selection.focus === plan.clickTarget.index &&
+      probe.selection.focusLine === plan.clickTarget.line,
+  );
+  const clickToProbeMs = performance.now() - startedClickAt;
+  const startedDragAt = performance.now();
+  await dispatchMouse(session, 'mouseMoved', plan.dragStart, 0);
+  await dispatchMouse(session, 'mousePressed', plan.dragStart, 1);
+  for (let step = 1; step <= 5; step += 1) {
+    const ratio = step / 5;
+    await dispatchMouse(session, 'mouseMoved', {
+      x: plan.dragStart.x + (plan.dragEnd.x - plan.dragStart.x) * ratio,
+      y: plan.dragStart.y + (plan.dragEnd.y - plan.dragStart.y) * ratio,
+    }, 1);
+    await sleep(16);
+  }
+  await dispatchMouse(session, 'mouseReleased', plan.dragEnd, 0);
+  const after = await waitForTextProbeState(
+    session,
+    (probe) =>
+      (probe?.selectionRects.length ?? 0) > 0 &&
+      Math.abs((probe?.selection.focus ?? -1) - plan.endTarget.index) <= 1,
+  );
+
+  return {
+    after,
+    before,
+    clickHit: plan.clickHit,
+    clickPoint: plan.clickPoint,
+    clickTarget: plan.clickTarget,
+    clickToProbeMs,
+    clicked,
+    dragToProbeMs: performance.now() - startedDragAt,
+    endTarget: plan.endTarget,
+    startTarget: plan.startTarget,
+  };
+};
+
 const main = async () => {
   const profileDir = await mkdtemp(path.join(tmpdir(), 'royal-examples-smoke-'));
   const preview = spawnLogged('pnpm', [
@@ -1148,7 +1489,13 @@ const main = async () => {
       const routeLoaded = session.once('Page.loadEventFired');
       await session.call('Page.navigate', { url: baseUrl + route.path });
       await routeLoaded;
-      const state = await evaluate(session, smokeExpression);
+      let state = await evaluate(session, smokeExpression);
+      if (route.id === 'text') {
+        state = {
+          ...state,
+          textInteraction: await runTextInteractionCdpSmoke(session),
+        };
+      }
       assertRoute(route, state);
       if (route.id === 'gltf-helmet') assertHelmetPickingSmoke(state);
       const canvasSummary = state.canvas?.sample === undefined

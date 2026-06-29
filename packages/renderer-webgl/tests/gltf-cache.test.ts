@@ -100,6 +100,52 @@ describe("GltfCache bounds", () => {
 });
 
 describe("GltfCache textures", () => {
+  it("keeps stable base-color texture identity while the WebGL texture loads", async () => {
+    let resolveImage!: (image: ImageBitmap) => void;
+    const imagePromise = new Promise<ImageBitmap>((resolve) => {
+      resolveImage = resolve;
+    });
+    installFixture(undefined, () => imagePromise);
+    const { gl } = fakeGl();
+    const cache = new GltfCache(gl, () => undefined);
+    const node = gltf({ asset: triangleAsset() });
+
+    expect(cache.get(node)).toBeUndefined();
+    await waitFor(() => cache.get(node) !== undefined);
+
+    const asset = cache.get(node);
+    expect(asset).toBeDefined();
+    const primitive = asset!.primitives[0]!;
+    const baseColorTexture = primitive.material.baseColorTexture;
+    const textureIdentity = "triangle\u0000https://example.test/triangle.gltf\u00000";
+    expect(primitive.material.index).toBe(0);
+    expect(baseColorTexture).toMatchObject({
+      identity: textureIdentity,
+      source: {
+        documentId: "triangle\u0000https://example.test/triangle.gltf",
+        id: textureIdentity,
+        image: {
+          index: 0,
+          resolvedUri: "https://example.test/triangle.png",
+          uri: "triangle.png",
+        },
+        src: "https://example.test/triangle.gltf",
+        textureIndex: 0,
+      },
+      state: "fallback",
+    });
+    expect(primitive.texture).toBe(baseColorTexture.texture);
+
+    const fallbackTexture = baseColorTexture.texture;
+    resolveImage({} as ImageBitmap);
+    await waitFor(() => baseColorTexture.state === "ready");
+
+    expect(primitive.material.baseColorTexture).toBe(baseColorTexture);
+    expect(baseColorTexture.texture).not.toBe(fallbackTexture);
+    expect(primitive.texture).toBe(baseColorTexture.texture);
+    cache.dispose();
+  });
+
   it("deletes fallback and late-loaded textures when disposed", async () => {
     let resolveImage!: (image: ImageBitmap) => void;
     const imagePromise = new Promise<ImageBitmap>((resolve) => {

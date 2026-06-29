@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { VirtualTextureRuntime } from "../src/virtual-texture-runtime";
-import { planVirtualTextureUploads } from "../src/virtual-texture-upload-plan";
+import { planVirtualTextureUploads, splitVirtualTextureUploadPlan } from "../src/virtual-texture-upload-plan";
 
 describe("planVirtualTextureUploads", () => {
   it("plans page-table texel uploads in drained dirty-entry order", () => {
@@ -138,3 +138,101 @@ describe("planVirtualTextureUploads", () => {
     );
   });
 });
+
+describe("splitVirtualTextureUploadPlan", () => {
+  it("splits physical atlas uploads and page-table texel uploads with separate budgets", () => {
+    const plan = planResidentUploads([
+      { mip: 0, x: 0, y: 0 },
+      { mip: 0, x: 1, y: 0 },
+      { mip: 0, x: 2, y: 0 },
+    ]);
+
+    const split = splitVirtualTextureUploadPlan(plan, {
+      pageTableUploads: 1,
+      physicalAtlasUploads: 2,
+    });
+
+    expect(split.slice.pageTableUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0"]);
+    expect(split.slice.physicalAtlasUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0", "m0/1/0"]);
+    expect(split.slice.uploadCount).toBe(3);
+    expect(split.remainder.pageTableUploads.map((upload) => upload.residentPageId)).toEqual(["m0/1/0", "m0/2/0"]);
+    expect(split.remainder.physicalAtlasUploads.map((upload) => upload.residentPageId)).toEqual(["m0/2/0"]);
+    expect(split.remainder.uploadCount).toBe(3);
+  });
+
+  it("keeps page-table uploads in the remainder when their atlas upload is still pending", () => {
+    const plan = planResidentUploads([
+      { mip: 0, x: 0, y: 0 },
+      { mip: 0, x: 1, y: 0 },
+      { mip: 0, x: 2, y: 0 },
+    ]);
+
+    const split = splitVirtualTextureUploadPlan(plan, {
+      pageTableUploads: 3,
+      physicalAtlasUploads: 1,
+    });
+
+    expect(split.slice.pageTableUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0"]);
+    expect(split.slice.physicalAtlasUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0"]);
+    expect(split.remainder.pageTableUploads.map((upload) => upload.residentPageId)).toEqual(["m0/1/0", "m0/2/0"]);
+    expect(split.remainder.physicalAtlasUploads.map((upload) => upload.residentPageId)).toEqual([
+      "m0/1/0",
+      "m0/2/0",
+    ]);
+  });
+
+  it("allows a later slice to publish page-table uploads for atlas pages staged earlier", () => {
+    const plan = planResidentUploads([
+      { mip: 0, x: 0, y: 0 },
+      { mip: 0, x: 1, y: 0 },
+    ]);
+
+    const firstSplit = splitVirtualTextureUploadPlan(plan, {
+      pageTableUploads: 0,
+      physicalAtlasUploads: 2,
+    });
+    const secondSplit = splitVirtualTextureUploadPlan(firstSplit.remainder, {
+      pageTableUploads: 2,
+      physicalAtlasUploads: 0,
+    });
+
+    expect(firstSplit.slice.pageTableUploads).toEqual([]);
+    expect(firstSplit.slice.physicalAtlasUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0", "m0/1/0"]);
+    expect(secondSplit.slice.pageTableUploads.map((upload) => upload.residentPageId)).toEqual(["m0/0/0", "m0/1/0"]);
+    expect(secondSplit.slice.physicalAtlasUploads).toEqual([]);
+    expect(secondSplit.remainder.uploadCount).toBe(0);
+  });
+
+  it("validates upload budgets before splitting", () => {
+    const plan = planVirtualTextureUploads([], { pageSize: 128 });
+
+    expect(() =>
+      splitVirtualTextureUploadPlan(plan, {
+        pageTableUploads: -1,
+        physicalAtlasUploads: 0,
+      }),
+    ).toThrow("Virtual texture upload plan pageTableUploads budget must be a non-negative integer");
+    expect(() =>
+      splitVirtualTextureUploadPlan(plan, {
+        pageTableUploads: 0,
+        physicalAtlasUploads: 1.5,
+      }),
+    ).toThrow("Virtual texture upload plan physicalAtlasUploads budget must be a non-negative integer");
+  });
+});
+
+const planResidentUploads = (
+  pages: readonly { readonly mip: number; readonly x: number; readonly y: number }[],
+) => {
+  const runtime = new VirtualTextureRuntime({
+    pageSize: 128,
+    physicalSlots: pages.length,
+    virtualSize: [512, 512],
+  });
+
+  pages.forEach((page, frame) => {
+    runtime.makeResident(page, frame);
+  });
+
+  return planVirtualTextureUploads(runtime.drainDirtyEntries(10), { pageSize: 128 });
+};

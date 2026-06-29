@@ -123,4 +123,130 @@ describe("VirtualTextureRuntime", () => {
     expect(snapshot.staleResidentReferences).toBe(0);
     expect(snapshot.pageTableEntries.map((entry) => entry.residentPageId)).not.toContain("m2/0/0");
   });
+
+  it("looks up resident pages and slot ownership to reject stale atlas uploads after slot reuse", () => {
+    const runtime = new VirtualTextureRuntime({
+      pageSize: 128,
+      physicalSlots: 1,
+      virtualSize: [256, 128],
+    });
+
+    const queued = runtime.makeResident({ mip: 0, x: 0, y: 0 }, 1);
+    const queuedUpload = {
+      page: { mip: queued.page.mip, x: queued.page.x, y: queued.page.y },
+      pageId: queued.page.id,
+      slot: queued.page.slot,
+      uploadSerial: queued.page.uploadSerial,
+    };
+
+    const replacement = runtime.makeResident({ mip: 0, x: 1, y: 0 }, 2);
+
+    expect(replacement.evicted?.id).toBe(queuedUpload.pageId);
+    expect(runtime.lookupResidentPage(queuedUpload.pageId)).toBeNull();
+    expect(runtime.lookupResidentPage(queuedUpload.page)).toBeNull();
+    expect(runtime.lookupPageTableEntry(queuedUpload.page)).toBeNull();
+    expect(runtime.lookupResidentPage(replacement.page.id)).toEqual(replacement.page);
+    expect(runtime.lookupPageTableEntry({ mip: 0, x: 1, y: 0 })).toMatchObject({
+      residentPageId: replacement.page.id,
+      uploadSerial: replacement.page.uploadSerial,
+    });
+    expect(runtime.lookupSlot(queuedUpload.slot)).toMatchObject({
+      pageId: replacement.page.id,
+      status: "resident",
+      uploadSerial: replacement.page.uploadSerial,
+    });
+    expect(runtime.lookupSlot(queuedUpload.slot).uploadSerial).not.toBe(queuedUpload.uploadSerial);
+  });
+
+  it("looks up page-table entries and slot ownership to reject stale fallback uploads", () => {
+    const runtime = new VirtualTextureRuntime({
+      pageSize: 128,
+      physicalSlots: 2,
+      virtualSize: [512, 512],
+    });
+
+    const parent = runtime.makeResident({ mip: 1, x: 0, y: 0 }, 1);
+    const fallback = runtime.resolve({ mip: 0, x: 1, y: 1 }, 2);
+    const queuedEntry = runtime.lookupPageTableEntry({ mip: 0, x: 1, y: 1 });
+
+    expect(fallback.kind).toBe("fallback");
+    expect(queuedEntry).toMatchObject({
+      residentPageId: parent.page.id,
+      uploadSerial: parent.page.uploadSerial,
+    });
+
+    runtime.makeResident({ mip: 0, x: 0, y: 0 }, 3);
+    const replacement = runtime.makeResident({ mip: 0, x: 2, y: 0 }, 4);
+
+    expect(replacement.evicted?.id).toBe(parent.page.id);
+    expect(runtime.lookupResidentPage(parent.page.id)).toBeNull();
+    expect(runtime.lookupPageTableEntry({ mip: 0, x: 1, y: 1 })).toBeNull();
+    expect(runtime.lookupSlot(parent.page.slot)).toMatchObject({
+      pageId: replacement.page.id,
+      status: "resident",
+      uploadSerial: replacement.page.uploadSerial,
+    });
+    expect(runtime.lookupSlot(parent.page.slot).uploadSerial).not.toBe(queuedEntry?.uploadSerial);
+  });
+
+  it("reports cheap runtime stats without sorted page-table entry copies", () => {
+    const runtime = new VirtualTextureRuntime({
+      pageSize: 128,
+      physicalSlots: 4,
+      virtualSize: [512, 512],
+    });
+
+    runtime.makeResident({ mip: 1, x: 1, y: 1 }, 1);
+    runtime.resolve({ mip: 0, x: 2, y: 3 }, 2);
+    runtime.resolve({ mip: 0, x: 0, y: 0 }, 3);
+
+    const originalSort = Array.prototype.sort;
+    let stats: ReturnType<VirtualTextureRuntime["stats"]> | null = null;
+    let counts: ReturnType<VirtualTextureRuntime["pageTableCounts"]> | null = null;
+    let pageTableEntry: ReturnType<VirtualTextureRuntime["lookupPageTableEntry"]> | null = null;
+    let residentPage: ReturnType<VirtualTextureRuntime["lookupResidentPage"]> | null = null;
+    let residentPageIds: readonly string[] | null = null;
+    let slot: ReturnType<VirtualTextureRuntime["lookupSlot"]> | null = null;
+    Array.prototype.sort = (() => {
+      throw new Error("cheap VT stats should not sort page-table entries");
+    }) as typeof Array.prototype.sort;
+    try {
+      stats = runtime.stats();
+      counts = runtime.pageTableCounts();
+      pageTableEntry = runtime.lookupPageTableEntry({ mip: 0, x: 2, y: 3 });
+      residentPage = runtime.lookupResidentPage("m1/1/1");
+      residentPageIds = runtime.residentPageIds();
+      slot = runtime.lookupSlot(0);
+    } finally {
+      Array.prototype.sort = originalSort;
+    }
+
+    expect(stats).toMatchObject({
+      cache: {
+        byMip: { mip1: 1 },
+        capacity: 4,
+        freeSlots: 3,
+        residentPages: 1,
+        slotColumns: 2,
+        slotRows: 2,
+      },
+      dirtyEntriesPending: 3,
+      pageTable: {
+        entries: 2,
+        exact: 1,
+        fallback: 1,
+        mapped: 2,
+        resident: 2,
+        staleResidentReferences: 0,
+        totalVirtualPages: 21,
+        unmapped: 19,
+      },
+      version: 3,
+    });
+    expect(counts).toEqual(stats?.pageTable);
+    expect(pageTableEntry).toMatchObject({ residentPageId: "m1/1/1" });
+    expect(residentPage).toMatchObject({ id: "m1/1/1" });
+    expect(residentPageIds).toEqual(["m1/1/1"]);
+    expect(slot).toMatchObject({ pageId: "m1/1/1" });
+  });
 });

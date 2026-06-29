@@ -95,6 +95,13 @@ physical atlas ownership, outlines shader indirection and demand rows, and
 standardizes benchmark counter names. It also keeps the public API boundary
 explicit: there is no public `VirtualTextureNode` yet.
 
+`shared-array-buffer-worker-research.md` adds the worker transport decision:
+start with a worker-ready command protocol and transferable `ArrayBuffer`s,
+then prototype `SharedArrayBuffer` only when benchmarks show transfer,
+allocation, or GC churn, or when a controlled deployment needs bounded memory.
+SAB is viable for HTTPS/localhost deployments with cross-origin isolation
+headers, but the default path remains gated by frame-time and memory results.
+
 ## Design
 
 ### Page Table / Indirection Texture
@@ -280,6 +287,20 @@ public `VirtualTextureNode`.
 - Debug overlay: a renderer-owned overlay consuming those probe rows. It should
   render the cache slots and table state before the material is tuned, so cache
   churn and seam pressure are visible during review.
+
+### Worker Transport
+
+Keep worker transport package-private and protocol-compatible across
+implementations. The first integration should move demand rows and renderer
+commands across a boundary while main-thread WebGL still owns texture uploads,
+page-table texture updates, and material binding.
+
+Default to transferable `ArrayBuffer`s until benchmark rows prove the added SAB
+protocol is worth it. For controlled deployments, SAB can become the preferred
+transport when `crossOriginIsolated` is true and measured transfer/allocation
+churn or peak in-flight bytes threaten the demo gates. OffscreenCanvas remains
+out of the first prototype unless a canvas-specific page-generation experiment
+wins on measurements.
 
 ## Prototype
 

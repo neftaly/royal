@@ -128,6 +128,31 @@ export type VirtualTextureDebugSnapshot = {
   readonly version: number;
 };
 
+export type VirtualTexturePageTableCounts = {
+  readonly entries: number;
+  readonly exact: number;
+  readonly fallback: number;
+  readonly mapped: number;
+  readonly resident: number;
+  readonly staleResidentReferences: number;
+  readonly totalVirtualPages: number;
+  readonly unmapped: number;
+};
+
+export type VirtualTextureRuntimeStats = {
+  readonly cache: {
+    readonly byMip: Readonly<Record<string, number>>;
+    readonly capacity: number;
+    readonly freeSlots: number;
+    readonly residentPages: number;
+    readonly slotColumns: number;
+    readonly slotRows: number;
+  };
+  readonly dirtyEntriesPending: number;
+  readonly pageTable: VirtualTexturePageTableCounts;
+  readonly version: number;
+};
+
 type MutableSlot = {
   loadedFrame: number | null;
   mip: number | null;
@@ -174,6 +199,7 @@ export class VirtualTextureRuntime {
   readonly #slotColumns: number;
   readonly #slotRows: number;
   readonly #virtualSize: readonly [number, number];
+  readonly #virtualPageCount: number;
   readonly #freeSlots: number[];
   readonly #pages = new Map<VirtualTexturePageId, VirtualTextureResidentPage>();
   readonly #pageTable = new Map<VirtualTexturePageId, VirtualTexturePageTableEntry>();
@@ -191,6 +217,7 @@ export class VirtualTextureRuntime {
     this.#mipCount = options.mipCount === undefined
       ? computeMipCount(this.#virtualSize, this.#pageSize)
       : validatePositiveInteger(options.mipCount, "mipCount");
+    this.#virtualPageCount = computeVirtualPageCount(this.#virtualSize, this.#pageSize, this.#mipCount);
     this.#slotColumns = Math.ceil(Math.sqrt(this.#physicalSlots));
     this.#slotRows = Math.ceil(this.#physicalSlots / this.#slotColumns);
     if (this.#slotColumns > 256 || this.#slotRows > 256) {
@@ -264,6 +291,55 @@ export class VirtualTextureRuntime {
 
   parentPage(page: VirtualTexturePageAddress): VirtualTexturePageAddress | null {
     return virtualTextureParentPage(this.#validatePage(page), this.#mipCount);
+  }
+
+  pageTableCounts(): VirtualTexturePageTableCounts {
+    let exact = 0;
+    let fallback = 0;
+    let resident = 0;
+    let staleResidentReferences = 0;
+
+    for (const entry of this.#pageTable.values()) {
+      if (entry.residentPageId !== null && !this.#pages.has(entry.residentPageId)) staleResidentReferences += 1;
+      if (entry.physicalSlot === null) continue;
+
+      resident += 1;
+      if (entry.mipDelta === 0) {
+        exact += 1;
+      } else if (entry.mipDelta !== null && entry.mipDelta > 0) {
+        fallback += 1;
+      }
+    }
+
+    const mapped = resident;
+    return {
+      entries: this.#pageTable.size,
+      exact,
+      fallback,
+      mapped,
+      resident,
+      staleResidentReferences,
+      totalVirtualPages: this.#virtualPageCount,
+      unmapped: Math.max(0, this.#virtualPageCount - mapped),
+    };
+  }
+
+  residentPageIds(): readonly VirtualTexturePageId[] {
+    return [...this.#pages.keys()];
+  }
+
+  lookupPageTableEntry(page: VirtualTexturePageAddress): VirtualTexturePageTableEntry | null {
+    return this.#pageTable.get(virtualTexturePageId(this.#validatePage(page))) ?? null;
+  }
+
+  lookupResidentPage(page: VirtualTexturePageAddress | VirtualTexturePageId): VirtualTextureResidentPage | null {
+    const id = typeof page === "string" ? page : virtualTexturePageId(this.#validatePage(page));
+    const resident = this.#pages.get(id);
+    return resident === undefined ? null : copyResidentPage(resident);
+  }
+
+  lookupSlot(slot: number): VirtualTextureSlotSnapshot {
+    return copySlot(this.#slots[validateSlot(slot, this.#physicalSlots)]!);
   }
 
   resolve(page: VirtualTexturePageAddress, frame = 0): VirtualTextureResolveResult {
@@ -346,8 +422,31 @@ export class VirtualTextureRuntime {
     };
   }
 
+  stats(): VirtualTextureRuntimeStats {
+    const byMip: Record<string, number> = {};
+    for (const page of this.#pages.values()) {
+      const key = `mip${page.mip}`;
+      byMip[key] = (byMip[key] ?? 0) + 1;
+    }
+
+    return {
+      cache: {
+        byMip,
+        capacity: this.#physicalSlots,
+        freeSlots: this.#freeSlots.length,
+        residentPages: this.#pages.size,
+        slotColumns: this.#slotColumns,
+        slotRows: this.#slotRows,
+      },
+      dirtyEntriesPending: this.#dirtyEntries.length,
+      pageTable: this.pageTableCounts(),
+      version: this.#version,
+    };
+  }
+
   #downgradeEntriesUsing(evicted: VirtualTextureResidentPage, frame: number): void {
-    for (const entry of [...this.#pageTable.values()]) {
+    const entries = Array.from(this.#pageTable.values());
+    for (const entry of entries) {
       if (entry.residentPageId !== evicted.id) continue;
       const resident = this.#residentParent(entry.virtualPage);
       this.#writeEntry({
@@ -446,7 +545,22 @@ const computeMipCount = (virtualSize: readonly [number, number], pageSize: numbe
   return count;
 };
 
+const computeVirtualPageCount = (
+  virtualSize: readonly [number, number],
+  pageSize: number,
+  mipCount: number,
+): number => {
+  let count = 0;
+  for (let mip = 0; mip < mipCount; mip += 1) {
+    const pages = pagesAtMip(virtualSize, pageSize, mip);
+    count += pages[0] * pages[1];
+  }
+  return count;
+};
+
 const copySlot = (slot: MutableSlot): VirtualTextureSlotSnapshot => ({ ...slot });
+
+const copyResidentPage = (page: VirtualTextureResidentPage): VirtualTextureResidentPage => ({ ...page });
 
 const createPageTableEntry = (
   write: ResidentWrite,

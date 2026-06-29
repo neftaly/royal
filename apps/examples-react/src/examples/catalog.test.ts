@@ -107,8 +107,10 @@ describe('examples list', () => {
     expect(textExample?.source).toContain('createTextFontFace');
     expect(textExample?.source).toContain("font={font}");
     expect(textExample?.source).toContain('<text');
-    expect(textInputCount).toBe(1);
-    expect(fontSizeSliderCount).toBe(1);
+    expect(textExample?.source).toContain("role: 'textbox'");
+    expect(textExample?.source).toContain('onKeyDown: handleCanvasKeyDown');
+    expect(textInputCount).toBe(0);
+    expect(fontSizeSliderCount).toBe(0);
     expect(textExample?.source).toContain(
       "import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url'",
     );
@@ -127,12 +129,11 @@ describe('examples list', () => {
     expect(helmet?.source).toContain('perspectiveCamera');
   });
 
-  it('keeps the texture materials route on real material and texture APIs', () => {
+  it('keeps the texture materials route on the textured material API', () => {
     const materials = examples.find((example) => example.id === 'texture-materials');
 
     expect(materials?.path).toBe('/texture-materials');
     expect(materials?.source).toContain('standardMaterial');
-    expect(materials?.source).toContain('unlitMaterial');
     expect(materials?.source).toContain('solidTexture');
     expect(materials?.source).toContain('textureAsset');
     expect(materials?.source).toContain("fallback: fallbackTexture");

@@ -24,11 +24,30 @@ type GltfTextureDocument = {
   readonly textures?: readonly GltfTexture[];
 };
 
-type WebGlTextureSampler = {
+export type WebGlTextureSampler = {
   readonly magFilter: number;
   readonly minFilter: number;
   readonly wrapS: number;
   readonly wrapT: number;
+};
+
+export type GltfBaseColorTextureSource = {
+  readonly documentId: string;
+  readonly id: string;
+  readonly image: {
+    readonly index: number;
+    readonly resolvedUri: string;
+    readonly uri: string;
+  };
+  readonly sampler: WebGlTextureSampler;
+  readonly samplerIndex?: number;
+  readonly src: string;
+  readonly textureIndex: number;
+};
+
+export type GltfBaseColorTexture = {
+  readonly source: GltfBaseColorTextureSource;
+  readonly texture: WebGLTexture;
 };
 
 export type TextureAssetLoadResult =
@@ -210,7 +229,7 @@ export class TextureCache {
   readonly #gl: RendererWebGlContext;
   readonly #assetTextureLoads = new Map<string, TextureAssetLoad>();
   readonly #textures = new Set<WebGLTexture>();
-  readonly #textureLoads = new Map<string, Promise<WebGLTexture>>();
+  readonly #textureLoads = new Map<string, Promise<GltfBaseColorTexture>>();
   #disposed = false;
   #fallbackTexture: WebGLTexture | undefined;
 
@@ -224,17 +243,45 @@ export class TextureCache {
   }
 
   loadGltfBaseColorTexture(options: {
+    readonly documentId?: string;
     readonly json: GltfTextureDocument;
     readonly src: string;
     readonly textureIndex: number;
-  }): Promise<WebGLTexture> {
-    const cacheKey = `${options.src}\u0000${options.textureIndex}`;
+  }): Promise<GltfBaseColorTexture> {
+    const source = this.getGltfBaseColorTextureSource(options);
+    const cacheKey = source.id;
     const existing = this.#textureLoads.get(cacheKey);
     if (existing !== undefined) return existing;
 
-    const promise = this.#loadGltfBaseColorTexture(options);
+    const promise = this.#loadGltfBaseColorTexture(source);
     this.#textureLoads.set(cacheKey, promise);
     return promise;
+  }
+
+  getGltfBaseColorTextureSource(options: {
+    readonly documentId?: string;
+    readonly json: GltfTextureDocument;
+    readonly src: string;
+    readonly textureIndex: number;
+  }): GltfBaseColorTextureSource {
+    const texture = required(options.json.textures?.[options.textureIndex], `texture ${options.textureIndex}`);
+    const imageIndex = required(texture.source, `texture ${options.textureIndex} source`);
+    const image = required(options.json.images?.[imageIndex], `image ${imageIndex}`);
+    const uri = required(image.uri, `image ${imageIndex} uri`);
+    const documentId = options.documentId ?? options.src;
+    return {
+      documentId,
+      id: gltfTextureCacheKey(documentId, options.textureIndex),
+      image: {
+        index: imageIndex,
+        resolvedUri: resolveUri(options.src, uri),
+        uri,
+      },
+      sampler: textureSampler(this.#gl, options.json, texture),
+      ...(texture.sampler === undefined ? {} : { samplerIndex: texture.sampler }),
+      src: options.src,
+      textureIndex: options.textureIndex,
+    };
   }
 
   loadTextureAssetBaseColor(
@@ -275,27 +322,20 @@ export class TextureCache {
     this.#textureLoads.clear();
   }
 
-  async #loadGltfBaseColorTexture(options: {
-    readonly json: GltfTextureDocument;
-    readonly src: string;
-    readonly textureIndex: number;
-  }): Promise<WebGLTexture> {
-    markGltf(`texture:${options.textureIndex}:start`);
-    const texture = required(options.json.textures?.[options.textureIndex], `texture ${options.textureIndex}`);
-    const imageIndex = required(texture.source, `texture ${options.textureIndex} source`);
-    const image = required(options.json.images?.[imageIndex], `image ${imageIndex}`);
+  async #loadGltfBaseColorTexture(source: GltfBaseColorTextureSource): Promise<GltfBaseColorTexture> {
+    markGltf(`texture:${source.textureIndex}:start`);
     const loadedTexture = this.#track(createTexture(
       this.#gl,
-      await loadImage(options.src, required(image.uri, `image ${imageIndex} uri`), "glTF image"),
-      textureSampler(this.#gl, options.json, texture),
+      await loadImage(source.src, source.image.uri, "glTF image"),
+      source.sampler,
     ));
-    markGltf(`texture:${options.textureIndex}:end`);
+    markGltf(`texture:${source.textureIndex}:end`);
     measureGltf(
-      `texture:${options.textureIndex}`,
-      `texture:${options.textureIndex}:start`,
-      `texture:${options.textureIndex}:end`,
+      `texture:${source.textureIndex}`,
+      `texture:${source.textureIndex}:start`,
+      `texture:${source.textureIndex}:end`,
     );
-    return loadedTexture;
+    return { source, texture: loadedTexture };
   }
 
   async #loadTextureAssetBaseColor(asset: TextureAssetRef): Promise<WebGLTexture> {
@@ -320,6 +360,9 @@ export class TextureCache {
 
 const textureAssetCacheKey = (asset: TextureAssetRef): string =>
   `${asset.id}\u0000${asset.revision ?? ""}\u0000${asset.uri}`;
+
+const gltfTextureCacheKey = (src: string, textureIndex: number): string =>
+  `${src}\u0000${textureIndex}`;
 
 const textureAssetResult = (load: TextureAssetLoad): TextureAssetLoadResult => {
   switch (load.kind) {
