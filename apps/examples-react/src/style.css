@@ -66,22 +66,14 @@ input:focus-visible {
 }
 
 .examples-brand {
-  border-bottom: 1px solid var(--line);
   color: inherit;
   display: flex;
-  flex-direction: column;
   font-weight: 750;
-  gap: 0.15rem;
   letter-spacing: 0;
   margin-bottom: 1rem;
-  padding: 0.25rem 0 1rem;
+  padding: 0.25rem 0;
   text-decoration: none;
-}
-
-.examples-brand span:last-child {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 600;
+  white-space: nowrap;
 }
 
 .examples-nav ul {

@@ -5,8 +5,7 @@ import { examples } from './examples';
 const Sidebar = (): ReactNode => (
   <aside className="examples-sidebar">
     <Link className="examples-brand" to="/">
-      <span>Royal</span>
-      <span>Examples</span>
+      Royal 👑 examples
     </Link>
     <nav className="examples-nav" aria-label="Examples">
       <ul>
