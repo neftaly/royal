@@ -216,6 +216,182 @@ const smokeExpression = `
       paintedRatio: paintedPixels / (width * height),
     };
   };
+  const helmetClearColor = [Math.round(0.04 * 255), Math.round(0.05 * 255), Math.round(0.06 * 255)];
+  const helmetProbePoints = [
+    { label: 'corner-nw', x: 0.08, y: 0.08 },
+    { label: 'corner-ne', x: 0.92, y: 0.08 },
+    { label: 'corner-sw', x: 0.08, y: 0.92 },
+    { label: 'corner-se', x: 0.92, y: 0.92 },
+    { label: 'edge-n', x: 0.5, y: 0.08 },
+    { label: 'edge-s', x: 0.5, y: 0.92 },
+    { label: 'helmet-center', x: 0.5, y: 0.5 },
+    { label: 'helmet-left', x: 0.42, y: 0.5 },
+    { label: 'helmet-right', x: 0.58, y: 0.5 },
+    { label: 'helmet-upper', x: 0.5, y: 0.42 },
+    { label: 'helmet-lower', x: 0.5, y: 0.62 },
+    { label: 'helmet-upper-left', x: 0.4, y: 0.44 },
+    { label: 'helmet-upper-right', x: 0.6, y: 0.44 },
+  ];
+  const colorDistance = (color, target) => Math.hypot(
+    color[0] - target[0],
+    color[1] - target[1],
+    color[2] - target[2],
+  );
+  const classifyHelmetPixel = (rgba) => {
+    const distance = colorDistance(rgba, helmetClearColor);
+    if (rgba[3] === 0) return { classification: 'invisible', distance };
+    if (distance <= 20) return { classification: 'background', distance };
+    if (distance >= 34) return { classification: 'helmet', distance };
+    return { classification: 'edge', distance };
+  };
+  const readHelmetSamples = (canvas) => {
+    const contextCanvas = document.createElement('canvas');
+    contextCanvas.width = 1;
+    contextCanvas.height = 1;
+    const context = contextCanvas.getContext('2d', { willReadFrequently: true });
+    if (context === null || canvas.width <= 0 || canvas.height <= 0) return [];
+    const rect = canvas.getBoundingClientRect();
+
+    return helmetProbePoints.map((point) => {
+      const canvasX = Math.max(0, Math.min(canvas.width - 1, Math.round(point.x * (canvas.width - 1))));
+      const canvasY = Math.max(0, Math.min(canvas.height - 1, Math.round(point.y * (canvas.height - 1))));
+      context.clearRect(0, 0, 1, 1);
+      context.drawImage(canvas, canvasX, canvasY, 1, 1, 0, 0, 1, 1);
+      const rgba = Array.from(context.getImageData(0, 0, 1, 1).data);
+      const classified = classifyHelmetPixel(rgba);
+
+      return {
+        ...point,
+        background: classified.classification === 'background' || classified.classification === 'invisible',
+        canvasX,
+        canvasY,
+        classification: classified.classification,
+        clientX: rect.left + point.x * rect.width,
+        clientY: rect.top + point.y * rect.height,
+        covered: classified.classification === 'helmet',
+        distance: Number(classified.distance.toFixed(2)),
+        rgba,
+      };
+    });
+  };
+  const dispatchHelmetPointerSpam = (canvas, samples) => {
+    const EventCtor = window.PointerEvent ?? window.MouseEvent;
+    for (const sample of samples) {
+      canvas.dispatchEvent(new EventCtor('pointermove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: sample.clientX,
+        clientY: sample.clientY,
+        isPrimary: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        screenX: sample.clientX,
+        screenY: sample.clientY,
+      }));
+    }
+    for (const sample of samples.filter((_, index) => index % 5 === 0)) {
+      for (const type of ['pointerdown', 'pointerup', 'click']) {
+        canvas.dispatchEvent(new EventCtor(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: sample.clientX,
+          clientY: sample.clientY,
+          isPrimary: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          screenX: sample.clientX,
+          screenY: sample.clientY,
+        }));
+      }
+    }
+  };
+  const probeHitId = (report) => {
+    if (typeof report === 'string') return report;
+    if (report === null || typeof report !== 'object') return undefined;
+    for (const key of ['id', 'hitId', 'assetId', 'objectId', 'targetId', 'pickedId']) {
+      if (typeof report[key] === 'string') return report[key];
+    }
+    for (const key of ['hit', 'asset', 'object', 'target', 'picked']) {
+      const value = report[key];
+      if (value !== null && typeof value === 'object' && typeof value.id === 'string') return value.id;
+    }
+    return undefined;
+  };
+  const probeGeometryFailure = (report) => {
+    if (report === null || typeof report !== 'object') return false;
+    for (const key of ['geometryFailure', 'geometryFailed', 'geometryInvalid', 'boundsFailure']) {
+      if (report[key] === true || typeof report[key] === 'string') return true;
+    }
+    for (const key of ['geometryFailures', 'geometryErrors']) {
+      if (Array.isArray(report[key]) && report[key].length > 0) return true;
+    }
+    const reason = String(report.reason ?? report.error ?? report.message ?? '');
+    return report.ok === false && /geometry|bounds/i.test(reason);
+  };
+  const readPickingProbe = async (sample) => {
+    const probe = window.__royalPickingProbe;
+    if (probe === undefined || probe === null) return undefined;
+
+    const input = {
+      canvasX: sample.canvasX,
+      canvasY: sample.canvasY,
+      clientX: sample.clientX,
+      clientY: sample.clientY,
+      label: sample.label,
+      normalizedX: sample.x,
+      normalizedY: sample.y,
+      x: sample.canvasX,
+      y: sample.canvasY,
+    };
+    let report;
+    if (typeof probe === 'function') {
+      report = await probe(input);
+    } else if (typeof probe.pick === 'function') {
+      report = await probe.pick(input);
+    } else if (typeof probe.sample === 'function') {
+      report = await probe.sample(input);
+    } else if (typeof probe.read === 'function') {
+      report = await probe.read(input);
+    } else {
+      report = probe;
+    }
+
+    return {
+      geometryFailure: probeGeometryFailure(report),
+      hitId: probeHitId(report),
+      reportType: report === null ? 'null' : typeof report,
+    };
+  };
+  const runHelmetPickingSmoke = async (canvas) => {
+    const samples = readHelmetSamples(canvas);
+    dispatchHelmetPointerSpam(canvas, samples);
+    const probePresent = window.__royalPickingProbe !== undefined && window.__royalPickingProbe !== null;
+    const probeReports = [];
+
+    if (probePresent) {
+      for (const sample of samples) {
+        try {
+          probeReports.push({ label: sample.label, ...(await readPickingProbe(sample)) });
+        } catch (error) {
+          probeReports.push({
+            error: error instanceof Error ? error.message : String(error),
+            geometryFailure: false,
+            hitId: undefined,
+            label: sample.label,
+          });
+        }
+      }
+    }
+
+    return {
+      backgroundCount: samples.filter((sample) => sample.background).length,
+      clearColor: helmetClearColor,
+      coveredCount: samples.filter((sample) => sample.covered).length,
+      probePresent,
+      probeReports,
+      samples,
+    };
+  };
   const read = () => {
     const page = document.querySelector('.example-page');
     const bodyText = document.body.textContent ?? '';
@@ -284,6 +460,18 @@ const smokeExpression = `
   while (performance.now() < deadline && !isReady()) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     state = read();
+  }
+
+  if (state.route.id === 'gltf-helmet') {
+    const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
+      candidate.getAttribute('aria-label') === 'glTF DamagedHelmet'
+    );
+    if (canvas !== undefined) {
+      state = {
+        ...state,
+        helmetPicking: await runHelmetPickingSmoke(canvas),
+      };
+    }
   }
 
   return state;
@@ -452,6 +640,43 @@ const assertRoute = (expected, state) => {
   }
 };
 
+const assertHelmetPickingSmoke = (state) => {
+  const failures = [];
+  const picking = state.helmetPicking;
+  if (picking === undefined) {
+    failures.push('missing helmet picking smoke result');
+  } else {
+    if (picking.coveredCount <= 0) failures.push('helmet pixel oracle found no covered samples');
+    if (picking.backgroundCount <= 0) failures.push('helmet pixel oracle found no background samples');
+
+    const samplesByLabel = new Map(picking.samples.map((sample) => [sample.label, sample]));
+    const geometryFailures = picking.probeReports.filter((report) => report.geometryFailure);
+    if (geometryFailures.length > 0) {
+      failures.push(
+        `helmet picking probe reported geometry failures at ${
+          geometryFailures.map((report) => report.label).join(', ')
+        }`,
+      );
+    }
+
+    const falseHelmetHits = picking.probeReports.filter((report) => {
+      const sample = samplesByLabel.get(report.label);
+      return report.hitId === 'damaged-helmet' && sample?.background === true;
+    });
+    if (falseHelmetHits.length > 0) {
+      failures.push(
+        `helmet picking probe hit damaged-helmet over background at ${
+          falseHelmetHits.map((report) => report.label).join(', ')
+        }`,
+      );
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`glTF Helmet picking smoke: ${failures.join('; ')}`);
+  }
+};
+
 const assertArtifactsPage = (state) => {
   const failures = [];
   if (!state.hasPage) failures.push('missing research artifacts page marker');
@@ -593,6 +818,7 @@ const main = async () => {
       await routeLoaded;
       const state = await evaluate(session, smokeExpression);
       assertRoute(route, state);
+      if (route.id === 'gltf-helmet') assertHelmetPickingSmoke(state);
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)}`;
