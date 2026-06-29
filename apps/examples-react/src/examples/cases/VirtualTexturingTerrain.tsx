@@ -3,6 +3,7 @@ import {
   createVirtualTexturePageTableTexture,
   planVirtualTextureUploads,
   uploadVirtualTexturePageTableTexels,
+  virtualTexturePageId,
   virtualTexturePageTableMipDimensions,
   type VirtualTextureDebugSnapshot,
   type VirtualTexturePageAddress,
@@ -11,7 +12,7 @@ import {
   type VirtualTexturePhysicalAtlasPageUpload,
   type VirtualTextureUploadPlan,
 } from '../../../../../packages/renderer-webgl/src/virtual-texturing';
-import { createElement, useEffect, useRef, type ReactNode } from 'react';
+import { createElement, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
 
 type PhysicalAtlasTexture = {
   readonly slotColumns: number;
@@ -39,11 +40,25 @@ type CameraProbe = {
   readonly yaw: number;
 };
 
+type VirtualTextureDetailProbe = {
+  readonly baseResolveCount: number;
+  readonly effectiveVirtualResolution: number;
+  readonly focusU: number;
+  readonly focusV: number;
+  readonly maxResidentDetail: number;
+  readonly maxResidentMip: number;
+  readonly requestSignature: string;
+  readonly requestedMip: number;
+  readonly requestedPageIds: readonly VirtualTexturePageId[];
+  readonly requestedPages: number;
+};
+
 type VirtualTextureProbe = {
   atlasPreviewReadback: CanvasReadback;
   bytesUploaded: number;
   camera: CameraProbe;
   canvasReadback: CanvasReadback;
+  detail: VirtualTextureDetailProbe;
   drawCalls: number;
   error: string;
   evictedPageIds: readonly VirtualTexturePageId[];
@@ -127,6 +142,27 @@ type PreviewRects = {
   readonly pageTable: Rect;
 };
 
+type VirtualTextureDemoSettings = {
+  readonly maxResidentDetail: number;
+};
+
+type VirtualTextureMaterialRequestContext = {
+  readonly camera: CameraState;
+  readonly frame: number;
+  readonly maxResidentDetail: number;
+};
+
+type VirtualTextureMaterialRequestPlan = {
+  readonly basePagesToResolve: readonly VirtualTexturePageAddress[];
+  readonly detail: VirtualTextureDetailProbe;
+  readonly pagesToMakeResident: readonly VirtualTexturePageAddress[];
+};
+
+type VirtualTextureMaterialAdapter = {
+  readonly createPagePixels: (upload: VirtualTexturePhysicalAtlasPageUpload) => Uint8Array;
+  readonly planRequests: (context: VirtualTextureMaterialRequestContext) => VirtualTextureMaterialRequestPlan;
+};
+
 type Vec3 = readonly [number, number, number];
 
 declare global {
@@ -135,42 +171,26 @@ declare global {
   }
 }
 
-const virtualSize = [256, 256] as const;
+const virtualSize = [4096, 4096] as const;
 const pageSize = 64;
 const basePageColumns = virtualSize[0] / pageSize;
 const basePageRows = virtualSize[1] / pageSize;
-const physicalSlots = 6;
+const maxVirtualMip = Math.round(Math.log2(Math.max(basePageColumns, basePageRows)));
+const defaultMaxResidentDetail = 2;
+const physicalSlots = 16;
 const terrainSegments = 96;
 const terrainWorldSize = 8.5;
 const terrainPanLimit = 2.4;
 const terrainVertexStride = 8;
-const rootPage = { mip: 2, x: 0, y: 0 } as const satisfies VirtualTexturePageAddress;
-const basePages = Array.from({ length: 16 }, (_, index): VirtualTexturePageAddress => ({
+const minCameraDistance = 2.4;
+const maxCameraDistance = 12;
+const detailRequestRadius = 1;
+const rootPage: VirtualTexturePageAddress = { mip: maxVirtualMip, x: 0, y: 0 };
+const basePages = Array.from({ length: basePageColumns * basePageRows }, (_, index): VirtualTexturePageAddress => ({
   mip: 0,
-  x: index % 4,
-  y: Math.floor(index / 4),
+  x: index % basePageColumns,
+  y: Math.floor(index / basePageColumns),
 }));
-const focusPagesByStep: readonly (readonly VirtualTexturePageAddress[])[] = [
-  [],
-  [
-    { mip: 0, x: 0, y: 0 },
-    { mip: 0, x: 1, y: 0 },
-    { mip: 0, x: 0, y: 1 },
-    { mip: 0, x: 1, y: 1 },
-  ],
-  [
-    { mip: 0, x: 1, y: 1 },
-    { mip: 0, x: 2, y: 1 },
-    { mip: 0, x: 1, y: 2 },
-    { mip: 0, x: 2, y: 2 },
-  ],
-  [
-    { mip: 0, x: 2, y: 2 },
-    { mip: 0, x: 3, y: 2 },
-    { mip: 0, x: 2, y: 3 },
-    { mip: 0, x: 3, y: 3 },
-  ],
-] as const;
 const rootOptions = {
   alpha: false,
   antialias: true,
@@ -300,11 +320,25 @@ const emptyCameraProbe = (): CameraProbe => ({
   yaw: 0,
 });
 
+const emptyDetailProbe = (): VirtualTextureDetailProbe => ({
+  baseResolveCount: 0,
+  effectiveVirtualResolution: 0,
+  focusU: 0,
+  focusV: 0,
+  maxResidentDetail: defaultMaxResidentDetail,
+  maxResidentMip: rootPage.mip,
+  requestSignature: '',
+  requestedMip: rootPage.mip,
+  requestedPageIds: [],
+  requestedPages: 0,
+});
+
 const emptyProbe = (): VirtualTextureProbe => ({
   atlasPreviewReadback: emptyReadback(),
   bytesUploaded: 0,
   camera: emptyCameraProbe(),
   canvasReadback: emptyReadback(),
+  detail: emptyDetailProbe(),
   drawCalls: 0,
   error: '',
   evictedPageIds: [],
@@ -347,6 +381,20 @@ const mixColor = (
   mix(a[1], b[1], t),
   mix(a[2], b[2], t),
 ];
+
+const fract = (value: number): number => value - Math.floor(value);
+
+const hash2 = (x: number, y: number): number => {
+  const dot = x * 127.1 + y * 311.7;
+  return fract(Math.sin(dot) * 43_758.5453);
+};
+
+const gridLine = (coordinate: number, spacing: number, width: number): number => {
+  const phase = fract(coordinate / spacing);
+  const distance = Math.min(phase, 1 - phase) * spacing;
+
+  return 1 - smoothStep(width * 0.45, width, distance);
+};
 
 const normalizeVec3 = (value: Vec3): Vec3 => {
   const length = Math.hypot(value[0], value[1], value[2]) || 1;
@@ -457,28 +505,56 @@ const terrainNormal = (u: number, v: number): Vec3 => {
 const terrainColorAt = (
   u: number,
   v: number,
-  uploadSerial: number,
 ): readonly [number, number, number] => {
   const height = terrainElevation(u, v);
   const moisture = Math.sin((u * 5.3 + v * 2.1) * Math.PI) * 0.5 + 0.5;
-  const detail = Math.sin((u * 37 + v * 19 + uploadSerial * 0.29) * Math.PI) * 0.5 + 0.5;
+  const virtualX = clamp(u, 0, 1) * (virtualSize[0] - 1);
+  const virtualY = clamp(v, 0, 1) * (virtualSize[1] - 1);
+  const texelX = Math.floor(virtualX);
+  const texelY = Math.floor(virtualY);
+  const noise = hash2(texelX, texelY);
+  const detail = Math.sin((u * 193 + v * 89) * Math.PI) * 0.5 + 0.5;
   const lowland = [84, 122, 78] as const;
   const grass = [106, 156, 88] as const;
   const scrub = [142, 136, 86] as const;
   const rock = [128, 127, 122] as const;
   const snow = [228, 233, 226] as const;
   const wet = [58, 94, 92] as const;
+  const ink = [32, 42, 48] as const;
+  const surveyCyan = [96, 226, 216] as const;
+  const surveyAmber = [240, 202, 96] as const;
   const grassMix = mixColor(lowland, grass, smoothStep(-0.18, 0.32, height));
   const scrubMix = mixColor(grassMix, scrub, smoothStep(0.16, 0.5, height) * (1 - moisture * 0.3));
   const rockMix = mixColor(scrubMix, rock, smoothStep(0.48, 0.86, height + detail * 0.08));
   const snowMix = mixColor(rockMix, snow, smoothStep(0.9, 1.12, height + detail * 0.05));
   const dampMix = mixColor(wet, snowMix, smoothStep(-0.32, -0.06, height + moisture * 0.08));
-  const contour = Math.abs(((height + 1.6) * 9) % 1 - 0.5) < 0.035 ? 0.86 : 1;
+  const contourPhase = Math.abs(fract((height + 1.45) * 18) - 0.5) * 2;
+  const contour = 1 - smoothStep(0.06, 0.12, contourPhase);
+  const majorGrid = Math.max(gridLine(virtualX, 256, 2.2), gridLine(virtualY, 256, 2.2));
+  const minorGrid = Math.max(gridLine(virtualX, 64, 1.35), gridLine(virtualY, 64, 1.35));
+  const microGrid = Math.max(gridLine(virtualX, 16, 0.72), gridLine(virtualY, 16, 0.72));
+  const diagonal = gridLine((virtualX + virtualY) * 0.7071, 32, 0.8);
+  const tileX = Math.floor(virtualX / 256);
+  const tileY = Math.floor(virtualY / 256);
+  const tileU = fract(virtualX / 256);
+  const tileV = fract(virtualY / 256);
+  const markerColumn = Math.floor((tileU - 0.055) / 0.027);
+  const markerRow = Math.floor((tileV - 0.06) / 0.035);
+  const markerBand = tileU > 0.055 && tileU < 0.34 && tileV > 0.06 && tileV < 0.19;
+  const markerBit = markerBand &&
+    ((tileX * 13 + tileY * 29 + markerColumn * 5 + markerRow * 7) % 11 < 5);
+  const grain = 0.92 + noise * 0.12 + detail * 0.04;
+  const contourColor = mixColor(ink, surveyAmber, smoothStep(0.62, 1.02, height));
+  const gridColor = mixColor(surveyCyan, ink, smoothStep(0.0, 0.8, height));
+  const marked = markerBit ? mixColor(dampMix, surveyAmber, 0.78) : dampMix;
+  const withMinorGrid = mixColor(marked, gridColor, minorGrid * 0.34 + microGrid * 0.2 + diagonal * 0.14);
+  const withMajorGrid = mixColor(withMinorGrid, surveyCyan, majorGrid * 0.72);
+  const withContour = mixColor(withMajorGrid, contourColor, contour * 0.64);
 
   return [
-    clampByte(dampMix[0] * (0.88 + detail * 0.16) * contour),
-    clampByte(dampMix[1] * (0.9 + moisture * 0.12) * contour),
-    clampByte(dampMix[2] * (0.9 + detail * 0.12) * contour),
+    clampByte(withContour[0] * grain),
+    clampByte(withContour[1] * (0.94 + moisture * 0.1)),
+    clampByte(withContour[2] * (0.94 + detail * 0.08)),
   ];
 };
 
@@ -699,8 +775,8 @@ const createPhysicalAtlasTexture = (
 
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -711,13 +787,17 @@ const createPhysicalAtlasTexture = (
   };
 };
 
+const pagesAtVirtualMip = (mip: number): readonly [number, number] => [
+  Math.max(1, Math.ceil(basePageColumns / 2 ** mip)),
+  Math.max(1, Math.ceil(basePageRows / 2 ** mip)),
+];
+
 const pageVirtualUv = (
   page: VirtualTexturePageAddress,
   localU: number,
   localV: number,
 ): readonly [number, number] => {
-  const mipColumns = Math.max(1, basePageColumns / 2 ** page.mip);
-  const mipRows = Math.max(1, basePageRows / 2 ** page.mip);
+  const [mipColumns, mipRows] = pagesAtVirtualMip(page.mip);
 
   return [
     clamp((page.x + localU) / mipColumns, 0, 1),
@@ -725,11 +805,10 @@ const pageVirtualUv = (
   ];
 };
 
-const createPhysicalPagePixels = (
+const createTerrainPhysicalPagePixels = (
   upload: VirtualTexturePhysicalAtlasPageUpload,
 ): Uint8Array => {
   const pixels = new Uint8Array(upload.width * upload.height * 4);
-  const serialTint = (upload.uploadSerial % 5) * 4;
 
   for (let y = 0; y < upload.height; y += 1) {
     for (let x = 0; x < upload.width; x += 1) {
@@ -737,18 +816,88 @@ const createPhysicalPagePixels = (
       const localU = upload.width <= 1 ? 0 : x / (upload.width - 1);
       const localV = upload.height <= 1 ? 0 : y / (upload.height - 1);
       const [virtualU, virtualV] = pageVirtualUv(upload.sourcePage, localU, localV);
-      const color = terrainColorAt(virtualU, virtualV, upload.uploadSerial);
+      const color = terrainColorAt(virtualU, virtualV);
       const edge = x < 2 || y < 2 || x >= upload.width - 2 || y >= upload.height - 2;
 
-      pixels[index] = edge ? 20 : clampByte(color[0] + serialTint);
-      pixels[index + 1] = edge ? 28 : clampByte(color[1] + serialTint);
-      pixels[index + 2] = edge ? 36 : clampByte(color[2] + serialTint);
+      pixels[index] = edge ? 20 : color[0];
+      pixels[index + 1] = edge ? 28 : color[1];
+      pixels[index + 2] = edge ? 36 : color[2];
       pixels[index + 3] = 255;
     }
   }
 
   return pixels;
 };
+
+const cameraFocusUv = (camera: CameraState): readonly [number, number] => [
+  clamp(camera.targetX / terrainWorldSize + 0.5, 0, 1),
+  clamp(camera.targetZ / terrainWorldSize + 0.5, 0, 1),
+];
+
+const detailFromCameraZoom = (camera: CameraState): number => {
+  const zoomedIn = 1 - (camera.distance - minCameraDistance) / (maxCameraDistance - minCameraDistance);
+  return clamp(Math.round(2 + clamp(zoomedIn, 0, 1) * (maxVirtualMip - 2)), 0, maxVirtualMip);
+};
+
+const detailToMip = (detail: number): number => maxVirtualMip - clamp(Math.round(detail), 0, maxVirtualMip);
+
+const focusPagesForMip = (
+  mip: number,
+  focusU: number,
+  focusV: number,
+): readonly VirtualTexturePageAddress[] => {
+  const [columns, rows] = pagesAtVirtualMip(mip);
+  const centerX = clamp(Math.floor(focusU * columns), 0, columns - 1);
+  const centerY = clamp(Math.floor(focusV * rows), 0, rows - 1);
+  const pages: VirtualTexturePageAddress[] = [];
+
+  for (let y = centerY - detailRequestRadius; y <= centerY + detailRequestRadius; y += 1) {
+    for (let x = centerX - detailRequestRadius; x <= centerX + detailRequestRadius; x += 1) {
+      if (x < 0 || y < 0 || x >= columns || y >= rows) continue;
+      pages.push({ mip, x, y });
+    }
+  }
+
+  return pages;
+};
+
+const uniquePages = (pages: readonly VirtualTexturePageAddress[]): readonly VirtualTexturePageAddress[] => {
+  const byId = new Map<VirtualTexturePageId, VirtualTexturePageAddress>();
+  for (const page of pages) byId.set(virtualTexturePageId(page), page);
+  return [...byId.values()];
+};
+
+const createTerrainVirtualTextureMaterialAdapter = (): VirtualTextureMaterialAdapter => ({
+  createPagePixels: createTerrainPhysicalPagePixels,
+  planRequests: ({ camera, maxResidentDetail }) => {
+    const [focusU, focusV] = cameraFocusUv(camera);
+    const cappedDetail = clamp(Math.round(maxResidentDetail), 0, maxVirtualMip);
+    const requestedDetail = Math.min(detailFromCameraZoom(camera), cappedDetail);
+    const requestedMip = detailToMip(requestedDetail);
+    const pagesToMakeResident = uniquePages([
+      rootPage,
+      ...focusPagesForMip(requestedMip, focusU, focusV),
+    ]);
+    const requestedPageIds = pagesToMakeResident.map(virtualTexturePageId);
+
+    return {
+      basePagesToResolve: basePages,
+      detail: {
+        baseResolveCount: basePages.length,
+        effectiveVirtualResolution: pageSize * 2 ** requestedDetail,
+        focusU: Number(focusU.toFixed(3)),
+        focusV: Number(focusV.toFixed(3)),
+        maxResidentDetail: cappedDetail,
+        maxResidentMip: detailToMip(cappedDetail),
+        requestSignature: requestedPageIds.join('|'),
+        requestedMip,
+        requestedPageIds,
+        requestedPages: pagesToMakeResident.length,
+      },
+      pagesToMakeResident,
+    };
+  },
+});
 
 const resizeCanvas = (canvas: HTMLCanvasElement): readonly [number, number] => {
   const rect = canvas.getBoundingClientRect();
@@ -877,17 +1026,22 @@ const updateProbeFromSnapshot = (
     probe.atlasPreviewReadback.paintedRatio >= 0.2 &&
     probe.pageTablePreviewReadback.colorBuckets >= 3 &&
     probe.pageTablePreviewReadback.paintedRatio >= 0.2;
+  const detailReady = probe.detail.baseResolveCount >= basePages.length &&
+    probe.detail.effectiveVirtualResolution >= pageSize &&
+    probe.detail.requestedPages >= 1;
 
   probe.canvasReadback = canvasReadback;
   probe.exactPageCount = exactPageCount;
   probe.fallbackPageCount = fallbackPageCount;
   probe.pageTableReadback = pageTableReadback;
   probe.ready = probe.supported &&
-    probe.frameCount >= focusPagesByStep.length &&
+    probe.frameCount >= 2 &&
     probe.pageTableTexelUploads >= basePages.length &&
-    probe.physicalAtlasUploads >= 5 &&
+    probe.physicalAtlasUploads >= 2 &&
     pageTableReadback.nonZeroTexels >= basePages.length &&
     canvasReadback.colorBuckets >= 6 &&
+    fallbackPageCount > 0 &&
+    detailReady &&
     terrainReady &&
     previewReady;
   probe.residentPageIds = residentPageIds(snapshot);
@@ -898,10 +1052,11 @@ const uploadPhysicalAtlasPages = (
   atlas: PhysicalAtlasTexture,
   plan: VirtualTextureUploadPlan,
   probe: VirtualTextureProbe,
+  material: VirtualTextureMaterialAdapter,
 ): void => {
   gl.bindTexture(gl.TEXTURE_2D, atlas.texture);
   for (const upload of plan.physicalAtlasUploads) {
-    const pixels = createPhysicalPagePixels(upload);
+    const pixels = material.createPagePixels(upload);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       upload.level,
@@ -925,25 +1080,32 @@ const advanceVirtualTexture = (
   pageTable: VirtualTexturePageTableTexture,
   atlas: PhysicalAtlasTexture,
   framebuffer: WebGLFramebuffer,
+  material: VirtualTextureMaterialAdapter,
+  settings: VirtualTextureDemoSettings,
+  camera: CameraState,
   probe: VirtualTextureProbe,
 ): void => {
   const frame = probe.frameCount;
-  const focusPages = focusPagesByStep[frame % focusPagesByStep.length] ?? [];
+  const requestPlan = material.planRequests({
+    camera,
+    frame,
+    maxResidentDetail: settings.maxResidentDetail,
+  });
   const evicted = new Set<VirtualTexturePageId>(probe.evictedPageIds);
 
-  if (frame === 0) runtime.makeResident(rootPage, frame);
-  for (const page of focusPages) {
+  for (const page of requestPlan.pagesToMakeResident) {
     const result = runtime.makeResident(page, frame);
     if (result.evicted !== null) evicted.add(result.evicted.id);
   }
-  for (const page of basePages) runtime.resolve(page, frame);
+  for (const page of requestPlan.basePagesToResolve) runtime.resolve(page, frame);
 
   const dirtyEntries = runtime.drainDirtyEntries(frame);
   const plan = planVirtualTextureUploads(dirtyEntries, { pageSize });
   const pageTableResult = uploadVirtualTexturePageTableTexels(gl, pageTable, plan.pageTableUploads);
-  uploadPhysicalAtlasPages(gl, atlas, plan, probe);
+  uploadPhysicalAtlasPages(gl, atlas, plan, probe, material);
 
   probe.bytesUploaded += pageTableResult.bytesUploaded;
+  probe.detail = requestPlan.detail;
   probe.evictedPageIds = [...evicted];
   probe.frameCount += 1;
   probe.lastPageTableUploadSample = plan.pageTableUploads.slice(0, 8).flatMap((upload) => upload.rgba8);
@@ -994,7 +1156,7 @@ const createCameraController = (canvas: HTMLCanvasElement): CameraController => 
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   };
   const onWheel = (event: WheelEvent): void => {
-    state.distance = clamp(state.distance * Math.exp(event.deltaY * 0.001), 4.5, 12);
+    state.distance = clamp(state.distance * Math.exp(event.deltaY * 0.001), minCameraDistance, maxCameraDistance);
     markMoved();
     event.preventDefault();
   };
@@ -1245,7 +1407,52 @@ const drawVirtualTexture = (
 const createWebGl2Context = (canvas: HTMLCanvasElement): WebGL2RenderingContext | null =>
   canvas.getContext('webgl2', rootOptions) as WebGL2RenderingContext | null;
 
-const startVirtualTextureDemo = (canvas: HTMLCanvasElement, probe: VirtualTextureProbe): (() => void) => {
+const virtualTextureExampleStyle = {
+  background: 'rgb(9 13 15)',
+  display: 'grid',
+  gridTemplateRows: 'auto minmax(0, 1fr)',
+  height: '100%',
+  minHeight: 0,
+} satisfies CSSProperties;
+
+const virtualTextureControlsStyle = {
+  alignItems: 'center',
+  background: 'var(--panel)',
+  borderBottom: '1px solid var(--line)',
+  display: 'grid',
+  gap: '0.65rem',
+  gridTemplateColumns: 'minmax(9rem, 13rem) minmax(10rem, 1fr) minmax(6rem, auto)',
+  padding: '0.68rem 0.78rem',
+} satisfies CSSProperties;
+
+const virtualTextureControlLabelStyle = {
+  color: 'var(--muted)',
+  fontSize: '0.72rem',
+  fontWeight: 750,
+  letterSpacing: 0,
+  textTransform: 'uppercase',
+} satisfies CSSProperties;
+
+const virtualTextureRangeStyle = {
+  accentColor: 'var(--accent)',
+  inlineSize: '100%',
+  minWidth: 0,
+} satisfies CSSProperties;
+
+const virtualTextureOutputStyle = {
+  color: 'var(--fg)',
+  fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  fontSize: '0.78rem',
+  fontWeight: 700,
+  textAlign: 'right',
+  whiteSpace: 'nowrap',
+} satisfies CSSProperties;
+
+const startVirtualTextureDemo = (
+  canvas: HTMLCanvasElement,
+  settings: { readonly current: VirtualTextureDemoSettings },
+  probe: VirtualTextureProbe,
+): (() => void) => {
   const gl = createWebGl2Context(canvas);
   if (gl === null) {
     probe.error = 'WebGL2 is unavailable';
@@ -1276,6 +1483,7 @@ const startVirtualTextureDemo = (canvas: HTMLCanvasElement, probe: VirtualTextur
   const terrainMesh = createTerrainMesh(gl, terrainProgram.program);
   const previewQuad = createFullscreenVertexArray(gl, previewProgram.program);
   const camera = createCameraController(canvas);
+  const material = createTerrainVirtualTextureMaterialAdapter();
   if (framebuffer === null) throw new Error('Failed to create virtual-texture readback framebuffer');
 
   let animationFrame = 0;
@@ -1285,8 +1493,18 @@ const startVirtualTextureDemo = (canvas: HTMLCanvasElement, probe: VirtualTextur
   const tick = (now: number): void => {
     if (disposed) return;
     camera.update(now);
-    if (probe.frameCount < focusPagesByStep.length || now - lastAdvance >= 520) {
-      advanceVirtualTexture(runtime, gl, pageTable, atlas, framebuffer, probe);
+    if (probe.frameCount < 2 || now - lastAdvance >= 240) {
+      advanceVirtualTexture(
+        runtime,
+        gl,
+        pageTable,
+        atlas,
+        framebuffer,
+        material,
+        settings.current,
+        camera.state,
+        probe,
+      );
       lastAdvance = now;
     }
     drawVirtualTexture(
@@ -1326,6 +1544,11 @@ const startVirtualTextureDemo = (canvas: HTMLCanvasElement, probe: VirtualTextur
 
 export const VirtualTexturingTerrain = (): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const settingsRef = useRef<VirtualTextureDemoSettings>({
+    maxResidentDetail: defaultMaxResidentDetail,
+  });
+  const [maxResidentDetail, setMaxResidentDetail] = useState(defaultMaxResidentDetail);
+  const effectiveResolution = pageSize * 2 ** maxResidentDetail;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1336,7 +1559,7 @@ export const VirtualTexturingTerrain = (): ReactNode => {
 
     let stop = (): void => undefined;
     try {
-      stop = startVirtualTextureDemo(canvas, probe);
+      stop = startVirtualTextureDemo(canvas, settingsRef, probe);
     } catch (error) {
       probe.error = error instanceof Error ? error.message : String(error);
     }
@@ -1349,9 +1572,60 @@ export const VirtualTexturingTerrain = (): ReactNode => {
     };
   }, []);
 
-  return createElement('canvas', {
-    'aria-label': 'Virtual texturing terrain',
-    ref: canvasRef,
-    tabIndex: 0,
-  });
+  const handleDetailChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    const next = clamp(Math.round(Number(event.currentTarget.value)), 0, maxVirtualMip);
+    settingsRef.current = { maxResidentDetail: next };
+    setMaxResidentDetail(next);
+  };
+
+  return createElement(
+    'div',
+    {
+      'data-virtual-texture-example': '',
+      style: virtualTextureExampleStyle,
+    },
+    createElement(
+      'div',
+      {
+        'data-virtual-texture-controls': '',
+        style: virtualTextureControlsStyle,
+      },
+      createElement(
+        'label',
+        {
+          htmlFor: 'virtual-texture-detail-budget',
+          style: virtualTextureControlLabelStyle,
+        },
+        `Resident detail ${maxResidentDetail}/${maxVirtualMip}`,
+      ),
+      createElement('input', {
+        'aria-label': 'Virtual texture resident detail',
+        'data-virtual-texture-detail-slider': '',
+        id: 'virtual-texture-detail-budget',
+        max: maxVirtualMip,
+        min: 0,
+        name: 'virtual-texture-detail-budget',
+        onChange: handleDetailChange,
+        step: 1,
+        style: virtualTextureRangeStyle,
+        type: 'range',
+        value: maxResidentDetail,
+      }),
+      createElement(
+        'output',
+        {
+          'data-virtual-texture-effective-resolution': effectiveResolution,
+          htmlFor: 'virtual-texture-detail-budget',
+          style: virtualTextureOutputStyle,
+        },
+        `${effectiveResolution}px cap`,
+      ),
+    ),
+    createElement('canvas', {
+      'aria-label': 'Virtual texturing terrain',
+      ref: canvasRef,
+      style: { minHeight: 0 },
+      tabIndex: 0,
+    }),
+  );
 };
