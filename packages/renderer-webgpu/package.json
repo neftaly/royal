@@ -1,0 +1,34 @@
+{
+  "name": "@royal/renderer-webgpu",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./render-probe": "./src/render-probe.ts",
+    "./scene-probe": "./src/scene-probe.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build --config vite.config.ts --logLevel warn && tsc -b tsconfig.build.json",
+    "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
+    "test": "vitest run tests/*.test.ts"
+  },
+  "dependencies": {
+    "@royal/renderer-core": "workspace:*"
+  },
+  "devDependencies": {
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}
