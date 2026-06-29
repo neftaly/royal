@@ -467,7 +467,11 @@ const smokeExpression = `
       },
       textControls: routeId === 'text' ? {
         rangeInputs: document.querySelectorAll('.text-example input[type="range"]').length,
+        rangeInputIds: Array.from(document.querySelectorAll('.text-example input[type="range"]')).map((input) => input.id),
+        rangeInputNames: Array.from(document.querySelectorAll('.text-example input[type="range"]')).map((input) => input.name),
         textInputs: document.querySelectorAll('.text-example input[type="text"]').length,
+        textInputIds: Array.from(document.querySelectorAll('.text-example input[type="text"]')).map((input) => input.id),
+        textInputNames: Array.from(document.querySelectorAll('.text-example input[type="text"]')).map((input) => input.name),
         textValue: document.querySelector('.text-example input[type="text"]')?.value ?? '',
       } : undefined,
       activeNav: activeLink === null ? undefined : {
@@ -690,6 +694,18 @@ const assertRoute = (expected, state) => {
     }
     if (state.textControls?.rangeInputs !== 1) {
       failures.push(`text route rendered ${state.textControls?.rangeInputs ?? 0} range input(s)`);
+    }
+    if (state.textControls?.textInputIds?.[0] !== 'renderer-text-sample') {
+      failures.push('text route editable sentence input id is missing');
+    }
+    if (state.textControls?.textInputNames?.[0] !== 'renderer-text-sample') {
+      failures.push('text route editable sentence input name is missing');
+    }
+    if (state.textControls?.rangeInputIds?.[0] !== 'renderer-text-font-size') {
+      failures.push('text route font size input id is missing');
+    }
+    if (state.textControls?.rangeInputNames?.[0] !== 'renderer-text-font-size') {
+      failures.push('text route font size input name is missing');
     }
     if (state.textControls?.textValue !== 'Moloch, whose factories dream and croak in the fog') {
       failures.push('text route default editable sentence changed unexpectedly');

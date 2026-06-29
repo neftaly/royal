@@ -290,6 +290,8 @@ export const RendererText = (): ReactNode => {
         { className: 'text-example-field' },
         createElement('span', null, 'Editable sentence'),
         createElement('input', {
+          id: 'renderer-text-sample',
+          name: 'renderer-text-sample',
           onChange: handleSampleTextChange,
           type: 'text',
           value: sampleText,
@@ -300,8 +302,10 @@ export const RendererText = (): ReactNode => {
         { className: 'text-example-field text-example-size-field' },
         createElement('span', null, `Font size ${fontSize.toFixed(2)}`),
         createElement('input', {
+          id: 'renderer-text-font-size',
           max: 1.2,
           min: 0.56,
+          name: 'renderer-text-font-size',
           onChange: handleFontSizeChange,
           step: 0.04,
           type: 'range',
