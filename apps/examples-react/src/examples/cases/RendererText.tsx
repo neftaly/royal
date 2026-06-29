@@ -16,7 +16,7 @@ const rootOptions = {
 } as const;
 const headingSampleText = 'Voilà, naïve façade: “Royal” — type in motion';
 const defaultSampleText = 'Moloch, whose factories dream and croak in the fog';
-const defaultFontSize = 1.15;
+const defaultFontSize = 0.9;
 
 type CanvasTextBox = {
   readonly height: number;
@@ -79,22 +79,22 @@ const textBox = ({ color, font, fontSize, lineHeight, text, width }: TextBoxOpti
 
 const h1 = (font: TextFontFace, text: string): CanvasTextBox =>
   textBox({
-    color: [0.98, 0.92, 0.35, 1],
+    color: [0.98, 0.94, 0.55, 1],
     font,
-    fontSize: 0.68,
-    lineHeight: 0.86,
+    fontSize: 0.88,
+    lineHeight: 1.02,
     text,
-    width: 10.5,
+    width: 5.3,
   });
 
 const h2 = (font: TextFontFace, text: string): CanvasTextBox =>
   textBox({
-    color: [0.42, 0.9, 0.82, 1],
+    color: [0.52, 0.9, 0.84, 1],
     font,
-    fontSize: 0.34,
-    lineHeight: 0.5,
+    fontSize: 0.32,
+    lineHeight: 0.43,
     text,
-    width: 5,
+    width: 3.25,
   });
 
 const editableSentence = (
@@ -102,14 +102,14 @@ const editableSentence = (
   text: string,
   fontSize: number,
 ): CanvasTextBox => {
-  const wrappedText = wrapCanvasLine(text, Math.max(16, Math.round(42 / fontSize)));
+  const wrappedText = wrapCanvasLine(text, Math.max(18, Math.round(34 / fontSize)));
   return textBox({
-    color: [0.24, 0.92, 0.42, 1],
+    color: [0.28, 0.95, 0.48, 1],
     font,
     fontSize,
-    lineHeight: fontSize * 1.22,
+    lineHeight: fontSize * 1.2,
     text: wrappedText,
-    width: 10.2,
+    width: 8.9,
   });
 };
 
@@ -167,30 +167,30 @@ const textScene = (font: TextFontFace, sampleText: string, fontSize: number): Re
     <scene>
       <pass clearColor={[0.025, 0.032, 0.038, 1]}>
         <orthographicCamera
-          bottom={-3}
+          bottom={-3.2}
           far={100}
-          left={-6}
+          left={-5.6}
           near={0.1}
           position={[0, 0, 10]}
-          right={6}
+          right={5.6}
           rotation={[0, 0, 0]}
-          top={3}
+          top={3.2}
         />
         {column({
           children: [
             h1(font, headingSampleText),
-            h2(font, 'custom h1/h2 canvas text primitives'),
+            h2(font, 'h1 / h2 canvas primitives'),
             editableSentence(font, sampleText, fontSize),
             row({
               children: [
-                h2(font, 'column() stacks boxes'),
-                h2(font, 'row() spaces inline labels'),
+                h2(font, 'column rhythm'),
+                h2(font, 'row spacing'),
               ],
-              gap: 0.35,
+              gap: 0.42,
             }),
           ],
-          gap: 0.22,
-          origin: [-5.18, 2.0, 0],
+          gap: 0.2,
+          origin: [-4.7, 2.15, 0],
         })}
       </pass>
     </scene>
@@ -219,7 +219,7 @@ export const RendererText = (): ReactNode => {
       createElement(
         'label',
         { className: 'text-example-field' },
-        createElement('span', null, 'Second line'),
+        createElement('span', null, 'Editable sentence'),
         createElement('input', {
           onChange: handleSampleTextChange,
           type: 'text',
@@ -231,10 +231,10 @@ export const RendererText = (): ReactNode => {
         { className: 'text-example-field text-example-size-field' },
         createElement('span', null, `Font size ${fontSize.toFixed(2)}`),
         createElement('input', {
-          max: 1.6,
-          min: 0.7,
+          max: 1.2,
+          min: 0.68,
           onChange: handleFontSizeChange,
-          step: 0.05,
+          step: 0.04,
           type: 'range',
           value: fontSize,
         }),
@@ -252,14 +252,14 @@ const textScenePlaceholder = (
   <scene>
     <pass clearColor={[0.025, 0.032, 0.038, 1]}>
       <orthographicCamera
-        bottom={-3}
+        bottom={-3.2}
         far={100}
-        left={-6}
+        left={-5.6}
         near={0.1}
         position={[0, 0, 10]}
-        right={6}
+        right={5.6}
         rotation={[0, 0, 0]}
-        top={3}
+        top={3.2}
       />
     </pass>
   </scene>

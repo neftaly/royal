@@ -99,11 +99,15 @@ describe('examples list', () => {
 
   it('keeps the text route on renderer-backed font APIs', () => {
     const textExample = examples.find((example) => example.id === 'text');
+    const textInputCount = textExample?.source.match(/type: 'text'/g)?.length ?? 0;
+    const fontSizeSliderCount = textExample?.source.match(/type: 'range'/g)?.length ?? 0;
 
     expect(textExample?.path).toBe('/text');
     expect(textExample?.source).toContain('createTextFontFace');
     expect(textExample?.source).toContain("font={font}");
     expect(textExample?.source).toContain('<text');
+    expect(textInputCount).toBe(1);
+    expect(fontSizeSliderCount).toBe(1);
     expect(textExample?.source).toContain(
       "import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url'",
     );
