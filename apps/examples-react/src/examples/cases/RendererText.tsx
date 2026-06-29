@@ -39,6 +39,11 @@ type StackOptions = {
   readonly origin: Vec3;
 };
 
+type FontState =
+  | { readonly status: 'loading' }
+  | { readonly font: TextFontFace; readonly status: 'ready' }
+  | { readonly status: 'failed' };
+
 const linesIn = (text: string): number => text.split('\n').length;
 
 const wrapCanvasLine = (text: string, limit: number): string => {
@@ -135,22 +140,26 @@ const column = ({ children, gap, origin }: StackOptions): readonly RenderNode[] 
   });
 };
 
-const useAtkinsonFont = (): TextFontFace | undefined => {
-  const [font, setFont] = useState<TextFontFace>();
+const useAtkinsonFont = (): FontState => {
+  const [state, setState] = useState<FontState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async (): Promise<void> => {
-      const response = await fetch(fontUrl);
-      if (!response.ok) throw new Error(`Font request failed: ${response.status}`);
-      const data = await response.arrayBuffer();
-      const face = createTextFontFace({
-        data,
-        family: 'Atkinson Hyperlegible',
-        source: fontUrl,
-      });
-      if (!cancelled) setFont(face);
+      try {
+        const response = await fetch(fontUrl);
+        if (!response.ok) throw new Error(`Font request failed: ${response.status}`);
+        const data = await response.arrayBuffer();
+        const face = createTextFontFace({
+          data,
+          family: 'Atkinson Hyperlegible',
+          source: fontUrl,
+        });
+        if (!cancelled) setState({ font: face, status: 'ready' });
+      } catch {
+        if (!cancelled) setState({ status: 'failed' });
+      }
     };
 
     void load();
@@ -159,7 +168,7 @@ const useAtkinsonFont = (): TextFontFace | undefined => {
     };
   }, []);
 
-  return font;
+  return state;
 };
 
 const textScene = (font: TextFontFace, sampleText: string, fontSize: number): RenderRoot =>
@@ -197,10 +206,13 @@ const textScene = (font: TextFontFace, sampleText: string, fontSize: number): Re
   ) as RenderRoot;
 
 export const RendererText = (): ReactNode => {
-  const font = useAtkinsonFont();
+  const fontState = useAtkinsonFont();
   const [sampleText, setSampleText] = useState(defaultSampleText);
   const [fontSize, setFontSize] = useState(defaultFontSize);
-  const scene = font === undefined ? textScenePlaceholder : textScene(font, sampleText, fontSize);
+  const scene =
+    fontState.status === 'ready'
+      ? textScene(fontState.font, sampleText, fontSize)
+      : textScenePlaceholder;
 
   const handleSampleTextChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setSampleText(event.currentTarget.value);
@@ -240,11 +252,13 @@ export const RendererText = (): ReactNode => {
         }),
       ),
     ),
-    createElement(Canvas, {
-      'aria-label': 'Renderer text',
-      children: scene,
-      rootOptions,
-    }),
+    fontState.status === 'failed'
+      ? createElement('div', { className: 'text-example-fallback', role: 'status' }, sampleText)
+      : createElement(Canvas, {
+          'aria-label': 'Renderer text',
+          children: scene,
+          rootOptions,
+        }),
   );
 };
 

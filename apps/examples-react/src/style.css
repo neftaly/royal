@@ -290,6 +290,24 @@ canvas {
   inline-size: 100%;
 }
 
+.text-example-fallback {
+  align-content: center;
+  background: rgb(6 8 10);
+  color: rgb(71 242 122);
+  display: grid;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: clamp(1.1rem, 2.5vw, 2rem);
+  font-weight: 800;
+  line-height: 1.25;
+  min-height: 0;
+  overflow-wrap: anywhere;
+  padding: 2rem;
+}
+
 .artifacts-page {
   display: grid;
   gap: 1rem;
