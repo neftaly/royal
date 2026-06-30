@@ -6,9 +6,16 @@ Royal links `@tarstate/core` from the sibling Tarstate repo for app and lens int
 
 ## Packages
 
+- `@royal/examples-react` - source-backed product examples and browser smoke surface.
 - `@royal/renderer-core` - DOM-free scene data and authoring helpers.
-- `@royal/react` - React JSX/runtime adapter and WebGL root implementation.
+- `@royal/renderer-webgl` - WebGL renderer implementation.
+- `@royal/renderer-webgpu` - WebGPU capability/probe package while backend semantics settle.
+- `@royal/react` - React JSX/runtime adapter.
 - `@royal/tarstate-lens` - Royal-specific Tarstate lens and v1 API.
+
+## Direction
+
+See [Royal Direction](docs/royal-direction.md) for the current product goals, boundaries, and cleanup priorities.
 
 ## Development
 
