@@ -1,6 +1,18 @@
 # Royal Direction
 
-Royal is a renderer toolkit for building rich canvas/WebGL experiences from small, typed, DOM-free primitives. It should make scene authoring pleasant, rendering predictable, and performance work measurable. The repo should stay focused on Royal-owned renderer APIs and examples; generic state libraries, standalone apps, and one-off research fixtures belong outside the main package path.
+Royal is a DOM-free renderer and interaction primitive toolkit for interfaces that need both game-style scenes and UI-library semantics. The useful question is not whether Royal is a 2D UI library or a 3D simulation/game engine. It is what primitives let those two worlds meet without either one becoming a pile of special cases.
+
+A 3D simulation or game owns world state, time, cameras, materials, physics, and spatial placement. A 2D UI library owns semantics: controls, text, forms, layout, focus, input, accessibility, and predictable user intent. Royal's direction is the layer where those meet: small typed primitives that can describe interactive surfaces in a flat canvas, on a touch screen, or in spatial XR without making the DOM, React, WebGL, WebGPU, or Tarstate the source of truth.
+
+Royal is not an OS, compositor, XR runtime, browser engine, accessibility platform, or game engine. The long-term framing is narrower: Royal should grow OS-grade primitives for renderable, inspectable, accessible interface scenes that can be backed by different renderers. The repo should stay focused on Royal-owned renderer and interaction APIs; generic state libraries, standalone apps, and one-off research fixtures belong outside the main package path.
+
+## 3D Scenes And 2D UI
+
+A 3D scene primitive answers: where is it, what shape is it, how is it lit, what camera sees it, and how expensive is it to render?
+
+A UI primitive answers: what does it mean, how does focus reach it, what input activates it, what text/editing model owns it, what accessibility state describes it, and what layout contract positions it?
+
+Royal should not collapse one into the other. Meshes, cameras, materials, textures, and spatial transforms belong beside buttons, text fields, focus scopes, pick targets, layout boxes, and accessibility metadata. The shared contract is a scene graph with stable identity, geometry, semantics, input routing, and renderer-neutral diagnostics.
 
 ## What Royal Should Be
 
@@ -12,6 +24,9 @@ Royal should be:
 - Product examples that use public APIs only.
 - A place where performance-sensitive features are benchmarked before they become defaults.
 - A canvas-first UI/text/rendering system, not a DOM facade.
+- A primitive layer for touch and spatial interfaces, not only a WebGL drawing API.
+- A scene graph that can carry both render geometry and UI semantics.
+- Renderer-neutral input, focus, picking, text, layout, and accessibility contracts.
 
 Royal should not be:
 
@@ -19,6 +34,31 @@ Royal should not be:
 - A collection of lab probes wired directly into public examples.
 - A renderer that needs Tarstate, React, browser DOM controls, or HTML menus to draw.
 - A place where compatibility fallbacks silently become product behavior.
+- A conventional DOM UI kit painted onto a WebGL canvas.
+- A game engine that forces every app to adopt a simulation loop as its source of truth.
+- A complete OS, compositor, browser DOM replacement, XR runtime, accessibility platform, or physics/gameplay engine.
+- A UI system whose semantics only exist in examples or hidden DOM controls.
+- A renderer backend whose private resources leak into author-facing primitives.
+
+## OS-Grade Primitive Direction
+
+Royal's useful endpoint is not "draw 3D" or "rebuild HTML in canvas". It is a primitive set for application surfaces that may be touched, clicked, keyboard-driven, inspected, or placed in space.
+
+Core primitive areas:
+
+- Scene graph: stable roots, passes, nodes, transforms, containment, bounds, and author ids.
+- UI semantics: roles, labels, disabled/read-only state, value state, selection state, and activation contracts.
+- Input: pointer/touch, keyboard, composition, clipboard commands, controller/ray input later, and deterministic reducer-style state changes.
+- Focus: focus scopes, tab/arrow traversal, active/hovered/pressed state, and focus commands independent of DOM focus internals.
+- Text/forms: shaping, layout, caret geometry, hit testing, selection rects, editing commands, IME, clipboard, and form-control state.
+- Picking: explicit hit regions, ray/screen-space samples, visible-shape oracles, and debug rows separate from render bounds.
+- Layout: 2D layout boxes, measured text, scroll/clip regions, and a path to spatial placement without assuming every node is a DOM rectangle.
+- Spatial placement: transforms, anchors, billboards/panels, world/screen/local coordinate spaces, and camera/pass relationships.
+- Control plane: bounded facts, diagnostics, probes, commands, and stable ids; never renderer hot-loop ownership.
+- Accessibility: renderer-neutral metadata that a host can project to platform accessibility, without promising Royal owns the platform API.
+- Render backend boundary: core describes intent; WebGL/WebGPU choose buffers, shaders, culling, upload policy, and capability fallbacks.
+
+This is why text and UI work matters as much as VT or WebGL performance. A spatial OS still needs caret placement, selection, copy/paste, labels, forms, accessible names, and predictable focus. A touch-screen canvas still benefits from cameras, transforms, depth, assets, and spatial picking. Royal should keep those concepts aligned.
 
 ## Layer Boundaries
 
@@ -91,12 +131,13 @@ Benchmarks should answer whether a path belongs in the hot renderer, a worker, a
 
 ## Current Priorities
 
-1. Finish extracting non-renderer apps and generic packages from Royal.
-2. Extract text/editing primitives into a focused module.
-3. Design the public VT descriptor and benchmark the automatic refinement path before making VT default.
-4. Harvest control-plane primitives from `@royal/tarstate-lens`, then delete duplicated lens code.
-5. Keep examples small, public-API-only, and canvas-first.
-6. Remove stale research routes, artifacts, and compatibility shims when their lesson has moved into core APIs.
+1. Keep `renderer-core` as the stable primitive vocabulary: scene graph, identity, materials, text/layout, input/focus/picking contracts, diagnostics, and backend-neutral events.
+2. Extract text/editing/form primitives before expanding canvas UI claims.
+3. Define picking and focus as first-class contracts, including explicit hit regions and bounded probe rows.
+4. Design the public VT descriptor and benchmark the automatic refinement path before making VT default.
+5. Harvest control-plane primitives from `@royal/tarstate-lens`, then delete duplicated lens code.
+6. Keep spatial/XR language directional until coordinate spaces, input rays, anchors, and accessibility projection are designed.
+7. Keep examples small, public-API-only, and canvas-first.
 
 ## Cleanup Queue
 
