@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  editableTextControlForId,
+  formControlsModel,
+  formControlsReducer,
+} from './cases/FormControls.model';
 import { examples, firstExample, type Example } from '../examples';
 
 const srcDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -371,7 +376,7 @@ describe('examples list', () => {
     expect(sceneSource).not.toMatch(/\bCanvas\b/);
     expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
 
-    expect(textureSource).toContain('export const createSurfaceMaterial = (): UnlitMaterial =>');
+    expect(textureSource).toContain('export const createSurfaceMaterial = (');
     expect(textureSource).toContain('createGeneratedTextureUri');
     expect(textureSource).toContain('virtualTextureAsset({');
     expect(textureSource).toContain('textureAsset({');
@@ -422,14 +427,16 @@ describe('examples list', () => {
     expect(formControls?.title).toBe('Form Controls');
     expect(formControls?.maturity).toBe('product');
     expect(hostSource).not.toContain('@jsxImportSource @royal/react');
-    expect(hostSource).toContain('<Canvas aria-label="Canvas-native form controls"');
+    expect(hostSource).toContain('aria-label="Canvas-native form controls"');
     expect(hostSource).toContain('useAtkinsonFont');
-    expect(hostSource).toContain('{formControlsScene(font)}');
+    expect(hostSource).toContain('{formControlsScene(model, font)}');
+    expect(hostSource).toContain('editableTextKeyboardIntent');
+    expect(hostSource).toContain('hitTestFormControls');
     expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
     expect(hostSource).not.toContain('@royal/renderer-core');
 
     expect(sceneSource).toContain('/** @jsxImportSource @royal/react */');
-    expect(sceneSource).toContain('export const formControlsScene = (font?: TextFontFace): RenderRoot =>');
+    expect(sceneSource).toContain('export const formControlsScene = (');
     expect(sceneSource).toContain('<scene>');
     expect(sceneSource).toContain('<orthographicCamera');
     expect(sceneSource).toContain('<mesh');
@@ -437,7 +444,7 @@ describe('examples list', () => {
     expect(sceneSource).toContain('createEditableTextFragment');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('unlitMaterial');
-    expect(sceneSource).not.toMatch(/\bCanvas\b/);
+    expect(sceneSource).not.toMatch(/\bCanvas\s*[({<]/);
     expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
 
     expect(modelSource).toContain("export type EditableTextMode = 'single-line' | 'multiline'");
@@ -450,16 +457,50 @@ describe('examples list', () => {
     expect(modelSource).toContain('readonly value: string');
     expect(modelSource).toContain('readonly selection: EditableTextSelection');
     expect(modelSource).toContain('uiNodeSemantics');
-    expect(modelSource).toContain('readonly semantics: Readonly<Record<string, UiNodeSemantics>>');
-    expect(modelSource).toContain("command: 'browser.filePicker.request'");
-    expect(sceneSource).toContain('control.mode === ');
+    expect(modelSource).toContain('readonly semantics: Readonly<Record<FormControlId, UiNodeSemantics>>');
+    expect(modelSource).toContain('formControlsReducer');
+    expect(modelSource).toContain('caretSelectionAtFormPoint');
+    expect(modelSource).toContain("mode === 'single-line'");
     expect(sceneSource).not.toContain('selectedRangeWidth');
+    expect(combinedSource).not.toContain("browser.filePicker.request");
+    expect(combinedSource).not.toContain('ColorSwatchControlModel');
+    expect(combinedSource).not.toContain('ListboxControlModel');
+    expect(combinedSource).not.toContain('RadioGroupControlModel');
+    expect(combinedSource).not.toContain('RangeControlModel');
     expect(combinedSource).not.toMatch(
       /<\s*(?:button|fieldset|form|input|output|select|textarea)\b|\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/i,
     );
     expect(combinedSource).not.toMatch(
       /\b(?:HTMLButtonElement|HTMLFieldSetElement|HTMLFormElement|HTMLInputElement|HTMLOutputElement|HTMLSelectElement|HTMLTextAreaElement|contentEditable|contenteditable|fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/,
     );
+  });
+
+  it('updates the FormControls model through pure reducer actions', () => {
+    const title = editableTextControlForId(formControlsModel, 'title');
+    const focused = formControlsReducer(formControlsModel, {
+      id: 'title',
+      selection: {
+        anchor: title.value.length,
+        anchorLine: undefined,
+        focus: title.value.length,
+        focusLine: undefined,
+      },
+      type: 'focus-text',
+    });
+    const edited = formControlsReducer(focused, {
+      command: { text: '!', type: 'insert-text' },
+      type: 'edit-active-text',
+    });
+    const nextTitle = editableTextControlForId(edited, 'title');
+    const toggled = formControlsReducer(edited, { type: 'toggle-checkbox' });
+    const pressed = formControlsReducer(toggled, { type: 'press-button' });
+
+    expect(nextTitle.value).toBe(`${title.value}!`);
+    expect(nextTitle.selection.focus).toBe(nextTitle.value.length);
+    expect(toggled.checkbox.checked).toBe(!edited.checkbox.checked);
+    expect(toggled.activeTextId).toBeUndefined();
+    expect(pressed.button.pressCount).toBe(1);
+    expect(pressed.focusedId).toBe('send');
   });
 
   it('keeps primary renderer examples on JSX scene authoring', () => {
@@ -585,10 +626,12 @@ describe('examples list', () => {
     expect(textExample?.source).toContain('event.clipboardData.setData');
     expect(textExample?.source).toContain('event.clipboardData.getData');
     expect(textExample?.source).toContain('await clipboard.writeText(text)');
-    expect(textExample?.source).toContain('await clipboard.readText()');
+    expect(textExample?.source).toContain("paste: false");
+    expect(textExample?.source).toContain('custom-menu-paste-requires-native-paste-event');
+    expect(textExample?.source).not.toContain('clipboard.readText');
     expect(textExample?.source).not.toContain("writeTextToSystemClipboard(selectedText, 'copy', 'native')");
     expect(textExample?.source).not.toContain("writeTextToSystemClipboard(cutText, 'cut', 'native')");
-    expect(textExample?.source).not.toContain("readTextFromNativeClipboard('native')");
+    expect(textExample?.source).not.toContain('readTextFromNativeClipboard');
     expect(textExample?.source).not.toMatch(
       /\b(?:HTMLInputElement|HTMLTextAreaElement|contentEditable|contenteditable|textarea|input|createHtmlElement)\b/,
     );
@@ -659,15 +702,20 @@ describe('examples list', () => {
     expect(hostSource).toContain('onContextMenu');
     expect(hostSource).toContain('onDoubleClick');
     expect(hostSource).toContain('clampRotation');
+    expect(hostSource).toContain('pageResolveDelayMs');
+    expect(hostSource).toContain('data-virtual-texture-detail');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('rotation: [view.rotation[0], view.rotation[1], 0]');
     expect(sceneSource).toContain('<mesh');
+    expect(textureSource).toContain("export type SurfaceTextureDetail = 'coarse' | 'resolved'");
     expect(textureSource).toContain('solidTexture');
     expect(textureSource).toContain('virtualTextureAsset');
     expect(textureSource).toContain('textureAsset');
     expect(textureSource).toContain('fallback: fallbackTexture');
     expect(textureSource).toContain('unlitMaterial');
     expect(textureSource).toContain('createGeneratedTextureUri');
+    expect(textureSource).toContain('COARSE MIP');
+    expect(textureSource).toContain('RESOLVED PAGES');
     expect(combinedSource).not.toContain('@royal/renderer-webgl');
     expect(combinedSource).not.toContain('__royalVirtualTextureProbe');
     expect(combinedSource).not.toContain('terrain');

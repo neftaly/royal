@@ -25,7 +25,14 @@ import {
   type Vec3,
   unlitMaterial,
 } from '@royal/renderer-core';
-import { Canvas } from '@royal/react';
+import {
+  Canvas,
+  canvasPointToWorld,
+  captureCanvasPointer,
+  releaseCanvasPointer,
+  worldPointToCanvasClient,
+  type CanvasWorldBounds,
+} from '@royal/react';
 import {
   createElement,
   useEffect,
@@ -50,7 +57,7 @@ const cameraBounds = {
   left: -5.6,
   right: 5.6,
   top: 3.2,
-} as const;
+} as const satisfies CanvasWorldBounds;
 const sceneOrigin: Vec3 = [-4.72, 2.42, 0];
 const contentWidth = cameraBounds.right - sceneOrigin[0] - 0.48;
 const headingSampleText = 'Voilà, naïve façade: “Royal”';
@@ -78,7 +85,7 @@ const contextMenuZ = 0.28;
 const contextMenuMargin = 0.12;
 const contextMenuFontSize = 0.18;
 const contextMenuLineHeight = 0.24;
-const customMenuPasteUnavailableReason = 'custom-menu-paste-requires-browser-prompt';
+const customMenuPasteUnavailableReason = 'custom-menu-paste-requires-native-paste-event';
 
 type ClipboardAction = 'copy' | 'cut' | 'paste';
 
@@ -251,7 +258,8 @@ type PendingContextMenuCommand = {
   readonly pointerId: number;
 };
 
-type PendingKeyboardPaste = {
+type PendingKeyboardClipboard = {
+  readonly action: ClipboardAction;
   readonly timeoutId: number;
 };
 
@@ -582,33 +590,6 @@ const editableOrigin = (font: TextFontFace): Vec3 => {
   ];
 };
 
-const canvasPointToWorld = (
-  canvas: HTMLCanvasElement,
-  clientX: number,
-  clientY: number,
-): readonly [x: number, y: number] => {
-  const rect = canvas.getBoundingClientRect();
-  const xRatio = rect.width <= 0 ? 0 : (clientX - rect.left) / rect.width;
-  const yRatio = rect.height <= 0 ? 0 : (clientY - rect.top) / rect.height;
-
-  return [
-    cameraBounds.left + xRatio * (cameraBounds.right - cameraBounds.left),
-    cameraBounds.top - yRatio * (cameraBounds.top - cameraBounds.bottom),
-  ];
-};
-
-const worldPointToCanvasClient = (
-  canvas: HTMLCanvasElement,
-  worldX: number,
-  worldY: number,
-): readonly [clientX: number, clientY: number] => {
-  const rect = canvas.getBoundingClientRect();
-  return [
-    rect.left + ((worldX - cameraBounds.left) / (cameraBounds.right - cameraBounds.left)) * rect.width,
-    rect.top + ((cameraBounds.top - worldY) / (cameraBounds.top - cameraBounds.bottom)) * rect.height,
-  ];
-};
-
 const contextMenuHeight = (): number =>
   contextMenuPadding * 2 + contextMenuItemHeight * 3 + contextMenuGap * 2;
 
@@ -673,7 +654,7 @@ const nearestCaretPlacement = (
   clientX: number,
   clientY: number,
 ): CaretPlacement => {
-  const [worldX, worldY] = canvasPointToWorld(canvas, clientX, clientY);
+  const [worldX, worldY] = canvasPointToWorld(canvas, cameraBounds, clientX, clientY);
   return nearestEditableTextCaret(layout, { x: worldX, y: worldY }, origin);
 };
 
@@ -726,22 +707,6 @@ const textScene = (
       </pass>
     </scene>
   ) as RenderRoot;
-};
-
-const capturePointer = (canvas: HTMLCanvasElement, pointerId: number): void => {
-  try {
-    canvas.setPointerCapture(pointerId);
-  } catch {
-    // Synthetic pointer events used by browser smoke tests do not always create an active pointer.
-  }
-};
-
-const releasePointer = (canvas: HTMLCanvasElement, pointerId: number): void => {
-  try {
-    if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
-  } catch {
-    // See capturePointer().
-  }
 };
 
 const rendererTextCanvas = (): HTMLCanvasElement | undefined => {
@@ -805,7 +770,7 @@ export const RendererText = (): ReactNode => {
   const [contextMenu, setContextMenu] = useState<TextContextMenuState>(closedTextContextMenu);
   const dragStateRef = useRef<TextDragState | undefined>(undefined);
   const pendingContextMenuCommandRef = useRef<PendingContextMenuCommand | undefined>(undefined);
-  const pendingKeyboardPasteRef = useRef<PendingKeyboardPaste | undefined>(undefined);
+  const pendingKeyboardClipboardRef = useRef<PendingKeyboardClipboard | undefined>(undefined);
   const hitTestMetricsRef = useRef({
     count: 0,
     lastClientX: 0,
@@ -836,11 +801,12 @@ export const RendererText = (): ReactNode => {
   const currentRange = sortedTextRange(selection);
   const selectedText = sampleText.slice(currentRange.start, currentRange.end);
   const hasSelection = currentRange.start !== currentRange.end;
-  const canReadNativeClipboard = typeof navigator.clipboard?.readText === 'function';
+  // Custom pointer menu commands do not receive ClipboardEvent.clipboardData;
+  // paste stays on browser-dispatched paste events to avoid async read prompts.
   const menuEnabled = {
     copy: hasSelection,
     cut: hasSelection,
-    paste: canReadNativeClipboard,
+    paste: false,
   } as const;
   const menuCommands = contextMenuCommands(contextMenu, menuEnabled);
   const scene =
@@ -899,7 +865,12 @@ export const RendererText = (): ReactNode => {
     const menuCommandProbe = menuCommands.map((command): TextContextMenuCommandProbe => {
       const [clientX, clientY] = canvas === undefined
         ? [0, 0]
-        : worldPointToCanvasClient(canvas, command.x + command.width / 2, command.y - command.height / 2);
+        : worldPointToCanvasClient(
+            canvas,
+            cameraBounds,
+            command.x + command.width / 2,
+            command.y - command.height / 2,
+          );
       return { ...command, clientX, clientY };
     });
     const probe: TextEditorProbe = {
@@ -1056,22 +1027,25 @@ export const RendererText = (): ReactNode => {
     }));
   };
 
-  const clearPendingKeyboardPaste = (): void => {
-    const pending = pendingKeyboardPasteRef.current;
+  const clearPendingKeyboardClipboard = (action?: ClipboardAction): void => {
+    const pending = pendingKeyboardClipboardRef.current;
     if (pending !== undefined) {
+      if (action !== undefined && pending.action !== action) return;
       window.clearTimeout(pending.timeoutId);
-      pendingKeyboardPasteRef.current = undefined;
+      pendingKeyboardClipboardRef.current = undefined;
     }
   };
 
-  const scheduleKeyboardPasteUnsupportedReport = (): void => {
-    clearPendingKeyboardPaste();
-    pendingKeyboardPasteRef.current = {
+  const scheduleKeyboardClipboardUnsupportedReport = (action: ClipboardAction): void => {
+    clearPendingKeyboardClipboard();
+    const pending: PendingKeyboardClipboard = {
+      action,
       timeoutId: window.setTimeout(() => {
-        pendingKeyboardPasteRef.current = undefined;
+        if (pendingKeyboardClipboardRef.current !== pending) return;
+        pendingKeyboardClipboardRef.current = undefined;
         recordClipboardResult({
-          action: 'paste',
-          message: 'Browser did not dispatch a paste event to the focused canvas and clipboard-read permission is not granted',
+          action,
+          message: `Browser did not dispatch a ${action} event to the focused canvas`,
           ok: false,
           reason: 'unavailable',
           source: 'native',
@@ -1079,13 +1053,12 @@ export const RendererText = (): ReactNode => {
         });
       }, 250),
     };
+    pendingKeyboardClipboardRef.current = pending;
   };
 
   const runKeyboardClipboardShortcut = (action: ClipboardAction): void => {
     recordKeyboardShortcut(action);
-    if (action === 'paste') {
-      scheduleKeyboardPasteUnsupportedReport();
-    }
+    scheduleKeyboardClipboardUnsupportedReport(action);
   };
 
   const writeTextToSystemClipboard = async (
@@ -1137,57 +1110,6 @@ export const RendererText = (): ReactNode => {
         reason: clipboardErrorReason(error),
         source,
         textLength: text.length,
-      });
-      return false;
-    }
-  };
-
-  const readTextFromNativeClipboard = async (source: ClipboardSource): Promise<boolean> => {
-    const clipboard = navigator.clipboard;
-    if (clipboard === undefined || typeof clipboard.readText !== 'function') {
-      recordClipboardResult({
-        action: 'paste',
-        message: 'navigator.clipboard.readText is unavailable',
-        ok: false,
-        reason: 'unavailable',
-        source,
-        textLength: 0,
-      });
-      return false;
-    }
-
-    try {
-      const pastedText = await clipboard.readText();
-      if (pastedText === '') {
-        recordClipboardResult({
-          action: 'paste',
-          message: 'Clipboard text was empty',
-          ok: false,
-          reason: 'empty-paste',
-          source,
-          textLength: 0,
-        });
-        return false;
-      }
-
-      replaceSelection(pastedText);
-      recordClipboardResult({
-        action: 'paste',
-        message: '',
-        ok: true,
-        reason: 'success',
-        source,
-        textLength: pastedText.length,
-      });
-      return true;
-    } catch (error) {
-      recordClipboardResult({
-        action: 'paste',
-        message: clipboardErrorMessage(error),
-        ok: false,
-        reason: clipboardErrorReason(error),
-        source,
-        textLength: 0,
       });
       return false;
     }
@@ -1348,6 +1270,7 @@ export const RendererText = (): ReactNode => {
     event: ClipboardEvent<HTMLCanvasElement>,
     action: 'copy' | 'cut',
   ): boolean => {
+    clearPendingKeyboardClipboard(action);
     if (selectedText === '') {
       event.preventDefault();
       recordClipboardResult({
@@ -1396,7 +1319,7 @@ export const RendererText = (): ReactNode => {
   };
 
   const handleCanvasPaste = (event: ClipboardEvent<HTMLCanvasElement>): void => {
-    clearPendingKeyboardPaste();
+    clearPendingKeyboardClipboard('paste');
     let pastedText: string;
     try {
       pastedText = event.clipboardData.getData('text/plain');
@@ -1459,7 +1382,14 @@ export const RendererText = (): ReactNode => {
   };
 
   const handleMenuPaste = (): void => {
-    void readTextFromNativeClipboard('menu');
+    recordClipboardResult({
+      action: 'paste',
+      message: 'Custom canvas menu paste requires a browser-dispatched paste event',
+      ok: false,
+      reason: 'unavailable',
+      source: 'menu',
+      textLength: 0,
+    });
     closeContextMenu();
     focusRendererTextCanvas();
   };
@@ -1480,7 +1410,12 @@ export const RendererText = (): ReactNode => {
     if (event.button !== 0) return;
 
     if (contextMenu.open) {
-      const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+      const [worldX, worldY] = canvasPointToWorld(
+        event.currentTarget,
+        cameraBounds,
+        event.clientX,
+        event.clientY,
+      );
       const command = contextMenuCommandAt(menuCommands, worldX, worldY);
       if (command !== undefined) {
         event.preventDefault();
@@ -1499,7 +1434,7 @@ export const RendererText = (): ReactNode => {
     setFocused(true);
     const anchor = event.shiftKey ? { index: selection.anchor, line: selection.anchorLine } : clicked;
     dragStateRef.current = anchor === undefined ? undefined : { anchor, moved: false };
-    capturePointer(event.currentTarget, event.pointerId);
+    captureCanvasPointer(event.currentTarget, event.pointerId);
   };
 
   const handleCanvasPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
@@ -1515,7 +1450,12 @@ export const RendererText = (): ReactNode => {
     if (pendingCommand?.pointerId === event.pointerId) {
       pendingContextMenuCommandRef.current = undefined;
       event.preventDefault();
-      const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+      const [worldX, worldY] = canvasPointToWorld(
+        event.currentTarget,
+        cameraBounds,
+        event.clientX,
+        event.clientY,
+      );
       const command = contextMenuCommandAt(menuCommands, worldX, worldY);
       if (command?.enabled === true && command.action === pendingCommand.action) {
         runContextMenuCommand(command.action);
@@ -1530,7 +1470,7 @@ export const RendererText = (): ReactNode => {
     }
     dragStateRef.current = undefined;
     pendingContextMenuCommandRef.current = undefined;
-    releasePointer(event.currentTarget, event.pointerId);
+    releaseCanvasPointer(event.currentTarget, event.pointerId);
   };
 
   const handleCanvasContextMenu = (event: ReactMouseEvent<HTMLCanvasElement>): void => {
@@ -1539,7 +1479,12 @@ export const RendererText = (): ReactNode => {
       closeContextMenu();
       return;
     }
-    const [worldX, worldY] = canvasPointToWorld(event.currentTarget, event.clientX, event.clientY);
+    const [worldX, worldY] = canvasPointToWorld(
+      event.currentTarget,
+      cameraBounds,
+      event.clientX,
+      event.clientY,
+    );
     event.currentTarget.focus({ preventScroll: true });
     setFocused(true);
     setContextMenu({

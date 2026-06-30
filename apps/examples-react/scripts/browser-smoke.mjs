@@ -1664,37 +1664,44 @@ const assertRoute = (expected, state) => {
           (contextMenu.afterMenuCopy?.textLength ?? 0)) {
           failures.push('text context-menu cut did not delete selected text');
         }
-        if (contextMenu.menuOpenedForPaste?.menu.enabled.paste !== true) {
-          failures.push('text context-menu paste was not enabled when native clipboard reads were available');
+        if (contextMenu.menuOpenedForPaste?.menu.enabled.paste !== false) {
+          failures.push('text context-menu paste was enabled despite lacking native ClipboardEvent data');
         }
-        if (contextMenu.menuOpenedForPaste?.menu.unavailableReason?.paste !== 'none') {
-          failures.push('text context-menu paste still exposed an unavailable reason');
+        if (contextMenu.menuOpenedForPaste?.menu.unavailableReason?.paste !==
+          'custom-menu-paste-requires-native-paste-event') {
+          failures.push(
+            `text context-menu paste exposed unexpected unavailable reason "${
+              contextMenu.menuOpenedForPaste?.menu.unavailableReason?.paste ?? 'missing'
+            }"`,
+          );
         }
-        if (interaction.menuPasteSetup?.ok !== true) {
-          failures.push(`text context-menu paste could not verify native clipboard seed: ${
-            interaction.menuPasteSetup?.reason ?? 'unknown'
-          }${interaction.menuPasteSetup?.message === undefined ? '' : ` (${interaction.menuPasteSetup.message})`}`);
+        if (contextMenu.menuPasteClick?.disabled !== true || contextMenu.menuPasteClick?.ok !== false) {
+          failures.push(`text context-menu paste was not disabled: ${
+            contextMenu.menuPasteClick?.reason ?? 'unknown'
+          }`);
         }
-        if (contextMenu.menuPasteClick?.ok !== true || contextMenu.menuPasteClick?.disabled === true) {
-          failures.push(`text context-menu paste click failed: ${contextMenu.menuPasteClick?.reason ?? 'disabled'}`);
-        }
-        if ((contextMenu.afterMenuPaste?.clipboard.counters.menuPaste ?? 0) <=
+        if ((contextMenu.afterMenuPaste?.clipboard.counters.menuPaste ?? 0) >
           (contextMenu.menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0)) {
-          failures.push('text context-menu paste did not update paste counters');
+          failures.push('text disabled context-menu paste still updated paste counters');
         }
-        if (contextMenu.afterMenuPaste?.clipboard.last.action !== 'paste' ||
-          contextMenu.afterMenuPaste?.clipboard.last.ok !== true ||
-          contextMenu.afterMenuPaste?.clipboard.last.source !== 'menu') {
-          failures.push(`text context-menu paste did not report native menu success: ${
-            contextMenu.afterMenuPaste?.clipboard.last.reason ?? 'missing'
-          } ${contextMenu.afterMenuPaste?.clipboard.last.message ?? ''}`.trim());
+        if ((contextMenu.afterMenuPaste?.text ?? '') !== (contextMenu.afterMenuPasteSelection?.text ?? '')) {
+          failures.push('text disabled context-menu paste changed editor text');
         }
-        if ((contextMenu.afterMenuPaste?.clipboard.last.textLength ?? 0) !==
-          (interaction.nativeMenuPasteText?.length ?? Number.NaN)) {
-          failures.push('text context-menu paste did not report seeded native clipboard text length');
-        }
-        if (!String(contextMenu.afterMenuPaste?.text ?? '').includes(interaction.nativeMenuPasteText ?? '')) {
-          failures.push('text context-menu paste did not insert seeded native clipboard text');
+        if (contextMenu.menuPasteReadTextTrap?.ok === true) {
+          if (contextMenu.afterMenuPasteReadTextTrap?.ok !== true) {
+            failures.push(`text context-menu paste readText trap read failed: ${
+              contextMenu.afterMenuPasteReadTextTrap?.reason ?? 'unknown'
+            }`);
+          } else if ((contextMenu.afterMenuPasteReadTextTrap?.calls ?? 0) !== 0) {
+            failures.push(`text disabled context-menu paste called navigator.clipboard.readText ${
+              contextMenu.afterMenuPasteReadTextTrap.calls
+            } time(s)`);
+          }
+          if (contextMenu.menuPasteReadTextTrapRestore?.ok !== true) {
+            failures.push(`text context-menu paste readText trap restore failed: ${
+              contextMenu.menuPasteReadTextTrapRestore?.reason ?? 'unknown'
+            }`);
+          }
         }
       }
     }
@@ -2538,7 +2545,7 @@ const readTextMenuDomState = async (session) => evaluate(session, `
 }))()
 `);
 
-const clickTextContextMenuAction = async (session, action) => evaluate(session, `
+const clickTextContextMenuAction = async (session, action, options = {}) => evaluate(session, `
 (() => {
   const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
     candidate.getAttribute('aria-label') === 'Renderer text editor'
@@ -2556,6 +2563,7 @@ const clickTextContextMenuAction = async (session, action) => evaluate(session, 
   const clientX = Number(command.clientX);
   const clientY = Number(command.clientY);
   const enabled = command.enabled === true;
+  const dispatchDisabled = ${options.dispatchDisabled === true ? 'true' : 'false'};
   const commandProbe = {
     action: String(command.action ?? ''),
     clientX,
@@ -2566,7 +2574,7 @@ const clickTextContextMenuAction = async (session, action) => evaluate(session, 
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return { command: commandProbe, disabled: !enabled, ok: false, reason: 'invalid menu command point' };
   }
-  if (!enabled) {
+  if (!enabled && !dispatchDisabled) {
     return { command: commandProbe, disabled: true, ok: false, reason: 'disabled' };
   }
 
@@ -2588,9 +2596,10 @@ const clickTextContextMenuAction = async (session, action) => evaluate(session, 
   return {
     command: commandProbe,
     defaultPrevented: down.defaultPrevented || up.defaultPrevented,
-    disabled: false,
+    disabled: !enabled,
     downDispatched,
-    ok: true,
+    ok: enabled,
+    reason: enabled ? '' : 'disabled',
     upDispatched,
   };
 })()
@@ -2785,23 +2794,17 @@ const runTextInteractionCdpSmoke = async (session) => {
     session,
     (probe) => (probe?.selectionRects.length ?? 0) > 0 && (probe?.selectedText.length ?? 0) > 0,
   );
-  const nativeMenuPasteText = `Smoke native menu paste ${Date.now().toString(36)}`;
-  const menuPasteSetup = await seedNativeTextClipboard(session, nativeMenuPasteText);
+  const menuPasteReadTextTrap = await installTextClipboardReadTextTrap(session);
   const menuOpenedForPaste = await openTextContextMenu(session, menuPoint);
   const menuDomAfterOpenForPaste = await readTextMenuDomState(session);
-  const menuPasteClick = await clickTextContextMenuAction(session, 'paste');
-  const afterMenuPaste = menuPasteSetup.ok === true && menuPasteClick.ok === true
-    ? await waitForTextProbeState(
-      session,
-      (probe) =>
-        (probe?.clipboard.counters.menuPaste ?? 0) > (menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0) &&
-        probe?.clipboard.last.action === 'paste' &&
-        probe.clipboard.last.ok === true &&
-        probe.clipboard.last.source === 'menu' &&
-        String(probe.text ?? '').includes(nativeMenuPasteText),
-      1200,
-    )
-    : await evaluate(session, textProbeExpression);
+  const menuPasteClick = await clickTextContextMenuAction(session, 'paste', { dispatchDisabled: true });
+  const afterMenuPaste = await evaluate(session, textProbeExpression);
+  const afterMenuPasteReadTextTrap = menuPasteReadTextTrap.ok === true
+    ? await readTextClipboardReadTextTrap(session)
+    : { calls: 0, ok: false, reason: 'readText trap was not installed' };
+  const menuPasteReadTextTrapRestore = menuPasteReadTextTrap.ok === true
+    ? await restoreTextClipboardReadTextTrap(session)
+    : { ok: false, reason: 'readText trap was not installed' };
   const selectionLatencySamples = [
     { durationMs: clickToProbeMs, phase: 'click' },
     { durationMs: dragToProbeMs, phase: 'drag-select' },
@@ -2822,6 +2825,7 @@ const runTextInteractionCdpSmoke = async (session) => {
       afterMenuPaste,
       afterMenuPasteSelection,
       afterMenuSelection,
+      afterMenuPasteReadTextTrap,
       menuDomAfterOpenForCopy,
       menuDomAfterOpenForCut,
       menuDomAfterOpenForPaste,
@@ -2831,6 +2835,8 @@ const runTextInteractionCdpSmoke = async (session) => {
       menuOpenedForCut,
       menuOpenedForPaste,
       menuPasteClick,
+      menuPasteReadTextTrap,
+      menuPasteReadTextTrapRestore,
     },
     dragToProbeMs,
     dragEvents: dragSelection.dragEvents,
@@ -2854,8 +2860,6 @@ const runTextInteractionCdpSmoke = async (session) => {
       keyboardPasteSetup,
       nativeKeyboardPasteText,
     },
-    nativeMenuPasteText,
-    menuPasteSetup,
     selectionLatency: {
       maxToProbeMs: Math.max(...selectionLatencySamples.map((sample) => sample.durationMs)),
       samples: selectionLatencySamples,
