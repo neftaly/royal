@@ -6,8 +6,6 @@ import {
   type UnlitMaterial,
 } from '@royal/renderer-core';
 
-export type SurfaceTextureDetail = 'coarse' | 'resolved';
-
 const fallbackTexture = solidTexture({
   color: [0.08, 0.1, 0.12, 1],
   id: 'generated-virtual-texturing-fallback',
@@ -21,7 +19,7 @@ const surfaceSampler = {
   wrapS: 'clamp-to-edge',
   wrapT: 'clamp-to-edge',
 } as const;
-const coarsePalette = [
+const descriptorPalette = [
   '#133243',
   '#225169',
   '#2f6a73',
@@ -29,7 +27,7 @@ const coarsePalette = [
   '#496044',
   '#65495d',
 ] as const;
-const detailPalette = [
+const accentPalette = [
   '#f8dc75',
   '#f4935a',
   '#e85f6f',
@@ -73,7 +71,7 @@ const drawLabel = (
   context.fillText(text, x, y);
 };
 
-const drawResolvedPage = (
+const drawDescriptorPage = (
   context: CanvasRenderingContext2D,
   column: number,
   row: number,
@@ -83,40 +81,41 @@ const drawResolvedPage = (
   const pageIndex = row * pageCount + column;
 
   context.save();
-  context.beginPath();
-  context.rect(left + 8, top + 8, pageSize - 16, pageSize - 16);
-  context.clip();
   context.globalAlpha = 0.22;
-  context.fillStyle = paletteColor(detailPalette, pageIndex * 3);
-  context.fillRect(left, top, pageSize, pageSize);
+  context.fillStyle = paletteColor(accentPalette, pageIndex * 3);
+  context.fillRect(left + 8, top + 8, pageSize - 16, pageSize - 16);
   context.globalAlpha = 1;
 
-  for (let y = 0; y < pageSize; y += 16) {
-    for (let x = 0; x < pageSize; x += 16) {
-      const selected = (x / 16 + y / 16 + pageIndex) % 3 === 0;
+  for (let y = 0; y < pageSize - 40; y += 28) {
+    for (let x = 0; x < pageSize - 40; x += 28) {
+      const selected = (x / 28 + y / 28 + pageIndex) % 4 === 0;
       context.fillStyle = selected
-        ? paletteColor(detailPalette, pageIndex + x + y)
-        : 'rgba(8, 15, 20, 0.72)';
-      context.fillRect(left + x + 3, top + y + 3, 10, 10);
+        ? paletteColor(accentPalette, pageIndex + x + y)
+        : 'rgba(8, 15, 20, 0.52)';
+      context.fillRect(left + x + 22, top + y + 60, 16, 16);
     }
   }
 
-  context.strokeStyle = 'rgba(255, 241, 185, 0.72)';
+  context.strokeStyle = 'rgba(255, 241, 185, 0.52)';
   context.lineWidth = 2;
-  for (let offset = -pageSize; offset <= pageSize * 2; offset += 28) {
+  for (let offset = -pageSize; offset <= pageSize * 2; offset += 36) {
     context.beginPath();
     context.moveTo(left + offset, top);
     context.lineTo(left + offset + pageSize, top + pageSize);
     context.stroke();
   }
 
-  drawLabel(context, `P${pageIndex.toString().padStart(2, '0')}`, left + 22, top + 24, 28);
+  drawLabel(
+    context,
+    `slot ${pageIndex.toString().padStart(2, '0')}`,
+    left + 22,
+    top + 22,
+    24,
+  );
   context.restore();
 };
 
-export const createGeneratedTextureUri = (
-  detail: SurfaceTextureDetail = 'resolved',
-): string => {
+export const createGeneratedTextureUri = (): string => {
   const canvas = document.createElementNS(
     'http://www.w3.org/1999/xhtml',
     'canvas',
@@ -139,30 +138,20 @@ export const createGeneratedTextureUri = (
       const left = column * pageSize;
       const top = row * pageSize;
 
-      context.globalAlpha = detail === 'coarse' ? 0.68 : 0.5;
-      context.fillStyle = paletteColor(coarsePalette, column * 5 + row * 2);
+      context.globalAlpha = 0.54;
+      context.fillStyle = paletteColor(descriptorPalette, column * 5 + row * 2);
       context.fillRect(left, top, pageSize, pageSize);
       context.globalAlpha = 1;
 
-      if (detail === 'resolved') {
-        drawResolvedPage(context, column, row);
-      }
+      drawDescriptorPage(context, column, row);
     }
   }
 
-  drawLabel(
-    context,
-    detail === 'coarse' ? 'COARSE MIP' : 'RESOLVED PAGES',
-    64,
-    64,
-    52,
-  );
+  drawLabel(context, 'VT DESCRIPTOR PREVIEW', 64, 64, 52);
+  drawLabel(context, 'RENDERER LOWERING PENDING', 64, 138, 38);
+  drawLabel(context, 'PREVIEW TEXTURE ONLY', 64, 196, 38);
   drawGrid(context, 256, 8, 'rgba(151, 226, 229, 0.62)');
-
-  if (detail === 'resolved') {
-    drawGrid(context, 64, 2, 'rgba(255, 232, 150, 0.36)');
-    drawGrid(context, 16, 1, 'rgba(255, 154, 69, 0.18)');
-  }
+  drawGrid(context, 64, 2, 'rgba(255, 232, 150, 0.28)');
 
   context.strokeStyle = '#050d13';
   context.lineWidth = 20;
@@ -171,10 +160,8 @@ export const createGeneratedTextureUri = (
   return canvas.toDataURL('image/png');
 };
 
-export const createSurfaceMaterial = (
-  detail: SurfaceTextureDetail = 'resolved',
-): UnlitMaterial => {
-  const revision = `generated-v3-${detail}`;
+export const createSurfaceMaterial = (): UnlitMaterial => {
+  const revision = 'generated-v4-descriptor-preview';
 
   return unlitMaterial({
     baseColor: virtualTextureAsset({
@@ -182,15 +169,15 @@ export const createSurfaceMaterial = (
       fallback: fallbackTexture,
       id: 'generated-virtual-texturing-surface',
       manifestUri: `${import.meta.env.BASE_URL}generated-virtual-texturing-surface.vt.json`,
-      // TODO(public-vt-descriptor): keep this preview until the renderer lowers
-      // the virtual texture descriptor.
+      // TODO(public-vt-descriptor): the renderer currently samples this preview
+      // texture; virtual texture descriptor lowering is pending.
       preview: textureAsset({
         colorSpace: 'srgb',
         fallback: fallbackTexture,
-        id: `generated-virtual-texturing-surface-preview-${detail}`,
+        id: 'generated-virtual-texturing-surface-preview-descriptor',
         revision,
         sampler: surfaceSampler,
-        uri: createGeneratedTextureUri(detail),
+        uri: createGeneratedTextureUri(),
       }),
       revision,
       sampler: surfaceSampler,

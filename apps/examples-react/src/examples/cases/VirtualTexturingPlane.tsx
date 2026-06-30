@@ -1,7 +1,6 @@
 import { Canvas } from '@royal/react';
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,10 +9,7 @@ import {
   type WheelEvent,
 } from 'react';
 import { virtualTexturingScene, type SurfaceView } from './VirtualTexturingPlane.scene';
-import {
-  createSurfaceMaterial,
-  type SurfaceTextureDetail,
-} from './VirtualTexturingPlane.texture';
+import { createSurfaceMaterial } from './VirtualTexturingPlane.texture';
 
 type DragMode = 'pan' | 'rotate';
 
@@ -37,7 +33,6 @@ const minPitch = -0.95;
 const maxPitch = 0.95;
 const minYaw = -1.1;
 const maxYaw = 1.1;
-const pageResolveDelayMs = 680;
 
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -66,47 +61,17 @@ const clampOffset = (
 
 export const VirtualTexturingPlane = (): ReactNode => {
   const [dragging, setDragging] = useState(false);
-  const [textureDetail, setTextureDetail] =
-    useState<SurfaceTextureDetail>('coarse');
   const [view, setView] = useState<SurfaceView>(defaultView);
   const dragRef = useRef<DragState | undefined>(undefined);
-  const pageResolveTimerRef = useRef<number | undefined>(undefined);
-  const surfaceMaterial = useMemo(
-    () => createSurfaceMaterial(textureDetail),
-    [textureDetail],
-  );
-  const queuePageResolve = useCallback(() => {
-    if (pageResolveTimerRef.current !== undefined) {
-      window.clearTimeout(pageResolveTimerRef.current);
-    }
-
-    setTextureDetail('coarse');
-    pageResolveTimerRef.current = window.setTimeout(() => {
-      pageResolveTimerRef.current = undefined;
-      setTextureDetail('resolved');
-    }, pageResolveDelayMs);
-  }, []);
-
-  useEffect(() => {
-    queuePageResolve();
-
-    return () => {
-      if (pageResolveTimerRef.current !== undefined) {
-        window.clearTimeout(pageResolveTimerRef.current);
-        pageResolveTimerRef.current = undefined;
-      }
-    };
-  }, [queuePageResolve]);
+  const surfaceMaterial = useMemo(() => createSurfaceMaterial(), []);
 
   const resetView = useCallback(() => {
-    queuePageResolve();
     setView(defaultView);
-  }, [queuePageResolve]);
+  }, []);
   const zoomView = useCallback((event: WheelEvent<HTMLCanvasElement>) => {
     const deltaY = event.deltaY;
 
     event.preventDefault();
-    queuePageResolve();
     setView((current) => {
       const zoom = clamp(
         current.zoom * Math.exp(deltaY * 0.0011),
@@ -120,10 +85,9 @@ export const VirtualTexturingPlane = (): ReactNode => {
         zoom,
       };
     });
-  }, [queuePageResolve]);
+  }, []);
   const startDrag = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
-    queuePageResolve();
     event.currentTarget.setPointerCapture(event.pointerId);
     const mode: DragMode = event.shiftKey || event.button !== 0 ? 'pan' : 'rotate';
     dragRef.current = {
@@ -135,13 +99,12 @@ export const VirtualTexturingPlane = (): ReactNode => {
       startY: event.clientY,
     };
     setDragging(true);
-  }, [queuePageResolve, view.offset, view.rotation]);
+  }, [view.offset, view.rotation]);
   const moveDrag = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (drag === undefined || drag.pointerId !== event.pointerId) return;
 
     event.preventDefault();
-    queuePageResolve();
     setView((current) => {
       const deltaX = event.clientX - drag.startX;
       const deltaY = event.clientY - drag.startY;
@@ -170,7 +133,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
         zoom: current.zoom,
       };
     });
-  }, [queuePageResolve]);
+  }, []);
   const endDrag = useCallback((event: PointerEvent<HTMLCanvasElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
 
@@ -194,7 +157,8 @@ export const VirtualTexturingPlane = (): ReactNode => {
       onPointerUp={endDrag}
       onWheel={zoomView}
       rootOptions={rootOptions}
-      data-virtual-texture-detail={textureDetail}
+      data-virtual-texture-preview="descriptor"
+      data-virtual-texture-probe-label="renderer-lowering-pending"
       style={{
         cursor: dragging ? 'grabbing' : 'grab',
         touchAction: 'none',

@@ -735,33 +735,43 @@ describe('examples list', () => {
     expect(hostSource).toContain('onContextMenu');
     expect(hostSource).toContain('onDoubleClick');
     expect(hostSource).toContain('clampRotation');
-    expect(hostSource).toContain('pageResolveDelayMs');
-    expect(hostSource).toContain('data-virtual-texture-detail');
+    expect(hostSource).toContain('data-virtual-texture-preview="descriptor"');
+    expect(hostSource).toContain(
+      'data-virtual-texture-probe-label="renderer-lowering-pending"',
+    );
+    expect(hostSource).not.toContain('pageResolveDelayMs');
+    expect(hostSource).not.toContain('setTimeout');
+    expect(hostSource).not.toContain('data-virtual-texture-detail');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('rotation: [view.rotation[0], view.rotation[1], 0]');
     expect(sceneSource).toContain('<mesh');
-    expect(textureSource).toContain("export type SurfaceTextureDetail = 'coarse' | 'resolved'");
     expect(textureSource).toContain('solidTexture');
     expect(textureSource).toContain('virtualTextureAsset');
     expect(textureSource).toContain('textureAsset');
     expect(textureSource).toContain('fallback: fallbackTexture');
     expect(textureSource).toContain('unlitMaterial');
     expect(textureSource).toContain('createGeneratedTextureUri');
-    expect(textureSource).toContain('COARSE MIP');
-    expect(textureSource).toContain('RESOLVED PAGES');
+    expect(textureSource).toContain('VT DESCRIPTOR PREVIEW');
+    expect(textureSource).toContain('RENDERER LOWERING PENDING');
+    expect(textureSource).toContain('PREVIEW TEXTURE ONLY');
+    expect(textureSource).not.toContain('SurfaceTextureDetail');
+    expect(textureSource).not.toContain('COARSE MIP');
+    expect(textureSource).not.toContain('RESOLVED PAGES');
     expect(combinedSource).not.toContain('@royal/renderer-webgl');
     expect(combinedSource).not.toContain('__royalVirtualTextureProbe');
+    expect(combinedSource).not.toMatch(/\b(?:resolved pages|streamed|streaming)\b/i);
     expect(combinedSource).not.toContain('terrain');
   });
 
-  it('documents the VT route as a public descriptor preview until the renderer lowers it', async () => {
+  it('documents the VT route as a public descriptor preview with renderer lowering pending', async () => {
     const { combinedSource, textureSource } = await readVirtualTexturingSourceParts();
 
     expect(textureSource).toContain('TODO(public-vt-descriptor)');
     expect(textureSource).toContain('virtualTextureAsset({');
     expect(textureSource).toContain('preview: textureAsset({');
     expect(textureSource).toContain('textureAsset({');
-    expect(textureSource).toContain('until the renderer lowers');
+    expect(textureSource).toContain('renderer currently samples this preview');
+    expect(textureSource).toContain('descriptor lowering is pending');
     expect(combinedSource).not.toMatch(/\bvirtualTexture\s*\(/);
     expect(combinedSource).not.toMatch(
       /\b(?:createVirtualTextureResource|VirtualTextureResource|VirtualTexturePageSource)\b/,
