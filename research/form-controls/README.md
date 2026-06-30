@@ -1,6 +1,10 @@
 # Renderer-backed form controls prototype
 
-This research artifact moves the "whole HTML form worth of components" idea toward an implementable renderer worker without changing the current text editor worker, examples, packages, CI, dependencies, or git state.
+This research artifact records the path toward a renderer-owned "whole HTML form
+worth of components" system. The current committed slice keeps the executable
+prototype, adds pure renderer-core primitives for editable text commands and
+canvas context-menu layout, and adds a canvas-only form-controls example that
+does not use native DOM controls as backing state.
 
 The executable prototype is:
 
@@ -33,7 +37,10 @@ Current renderer text APIs already provide most of the text geometry needed by f
 - `packages/renderer-core/src/editable-text.ts` has the browser-independent helpers a form control worker should reuse or mirror: `layoutEditableText`, `editableTextCaretPlacement`, `editableTextSelectionRects`, `nearestEditableTextCaret`, `previousTextIndex`, and `nextTextIndex`.
 - `apps/examples-react/src/examples/cases/RendererText.tsx` demonstrates the browser adapter shape: a focusable canvas with `role="textbox"`, `aria-multiline`, `aria-valuetext`, key handling, paste handling, IME commit handling, pointer capture, hit testing, caret rendering, and drag selection.
 
-One important integration detail: `editable-text.ts` is not exported from `packages/renderer-core/src/index.ts` today. This artifact deliberately does not change that. A future implementation can either export the helpers deliberately or keep an internal worker-side adapter with the same contract.
+The form-control path should reuse the exported editable text helpers rather
+than keep a separate text engine. Text `input` and `textarea` differ by options:
+single-line versus multiline, wrapping, newline handling, scroll/clipping, and
+accessibility projection.
 
 ## Prototype model
 
@@ -106,7 +113,7 @@ The future worker does not need to know React or DOM details. It can work agains
   kind: "input",
   bounds: { x: 16, y: 16, width: 260, height: 32 },
   value: "Ada",
-  selection: { anchor: 3, focus: 3 },
+  selection: { anchor: 3, anchorLine: undefined, focus: 3, focusLine: undefined },
   disabled: false,
   readOnly: false,
   aria: {
@@ -118,3 +125,36 @@ The future worker does not need to know React or DOM details. It can work agains
 ```
 
 The host/browser adapter owns native events and permission-sensitive APIs. The worker owns deterministic state transitions, geometry, hit packets, render packets, and ARIA metadata.
+
+## Native context menu and host ports
+
+Do not treat the browser native context menu as the editing surface for Royal
+canvas text. A focused canvas can receive keyboard `copy`, `cut`, and `paste`
+events, but it is not an editable host like `input`, `textarea`, or
+`contenteditable`, and it should not be expected to receive native right-click
+menu commands consistently across browsers.
+
+The baseline should be:
+
+- Keyboard clipboard uses native `copy`/`cut`/`paste` events on the focused
+  canvas and reads or writes `event.clipboardData`.
+- Right-click uses a Royal-rendered context menu, backed by explicit clipboard
+  host ports.
+- Menu copy/cut may call a host clipboard write port backed by
+  `navigator.clipboard.writeText()` when user activation and permissions allow.
+- Menu paste may call a host clipboard read port backed by
+  `navigator.clipboard.readText()`, with denied/unavailable state reported to
+  Royal.
+- Hidden `input`, `textarea`, or `contenteditable` bridges must not own Royal
+  state, selection, semantics, or clipboard behavior.
+- `EditContext` can become an optional text-input host port later, but it is not
+  the cross-browser baseline.
+- File selection is a host capability. A Royal file control should emit a
+  request such as `{ kind: "browser.filePicker.request", accept, multiple }`;
+  the host can use `showOpenFilePicker()` or an ephemeral platform fallback and
+  return file metadata or handles to Royal.
+
+`input type=text` and `textarea` should share the same editable text
+command/layout engine. Differences are options: single-line versus multiline,
+soft wrapping, newline handling, scroll window, clipping, submit-on-Enter,
+maximum rows/columns, and accessibility projection such as `aria-multiline`.

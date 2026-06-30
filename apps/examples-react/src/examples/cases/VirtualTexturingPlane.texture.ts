@@ -1,4 +1,10 @@
-import { solidTexture, textureAsset, unlitMaterial, type UnlitMaterial } from '@royal/renderer-core';
+import {
+  solidTexture,
+  textureAsset,
+  unlitMaterial,
+  virtualTextureAsset,
+  type UnlitMaterial,
+} from '@royal/renderer-core';
 
 const fallbackTexture = solidTexture({
   color: [0.1, 0.13, 0.16, 1],
@@ -184,12 +190,26 @@ export const createGeneratedTextureUri = (): string => {
 
 export const createSurfaceMaterial = (): UnlitMaterial =>
   unlitMaterial({
-    baseColor: textureAsset({
+    baseColor: virtualTextureAsset({
       colorSpace: 'srgb',
       fallback: fallbackTexture,
       id: 'generated-virtual-texturing-surface',
-      // TODO(public-vt-descriptor): replace this image asset with a renderer-core
-      // virtual texture descriptor when core exposes one.
+      manifestUri: `${import.meta.env.BASE_URL}generated-virtual-texturing-surface.vt.json`,
+      // TODO(public-vt-descriptor): keep this preview until the renderer lowers
+      // the virtual texture descriptor.
+      preview: textureAsset({
+        colorSpace: 'srgb',
+        fallback: fallbackTexture,
+        id: 'generated-virtual-texturing-surface-preview',
+        revision: 'generated-v2',
+        sampler: {
+          magFilter: 'linear',
+          minFilter: 'linear-mipmap-linear',
+          wrapS: 'clamp-to-edge',
+          wrapT: 'clamp-to-edge',
+        },
+        uri: createGeneratedTextureUri(),
+      }),
       revision: 'generated-v2',
       sampler: {
         magFilter: 'linear',
@@ -197,6 +217,5 @@ export const createSurfaceMaterial = (): UnlitMaterial =>
         wrapS: 'clamp-to-edge',
         wrapT: 'clamp-to-edge',
       },
-      uri: createGeneratedTextureUri(),
     }),
   });

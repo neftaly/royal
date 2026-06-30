@@ -77,6 +77,26 @@ export {
   uiNodeSemantics
 } from './ui';
 export type {
+  UiMenuAnchor,
+  UiMenuBounds,
+  UiMenuCommand,
+  UiMenuCommandAction,
+  UiMenuCommandId,
+  UiMenuCommandOptions,
+  UiMenuCommandRect,
+  UiMenuLayout,
+  UiMenuLayoutMetrics,
+  UiMenuLayoutOptions,
+  UiMenuPoint,
+  UiMenuPosition,
+  UiMenuViewport
+} from './ui-menu';
+export {
+  layoutUiMenuCommands,
+  uiMenuCommand,
+  uiMenuCommandAt
+} from './ui-menu';
+export type {
   CreateTextFontFaceOptions,
   LayoutTextOptions,
   ShapeTextOptions,
@@ -137,6 +157,20 @@ export {
   sortedEditableTextRange,
   wrapEditableText
 } from './editable-text';
+export type {
+  EditableTextCommand,
+  EditableTextCommandState,
+  EditableTextDeleteBackwardCommand,
+  EditableTextDeleteForwardCommand,
+  EditableTextInsertTextCommand,
+  EditableTextMoveEndCommand,
+  EditableTextMoveNextCommand,
+  EditableTextMovePreviousCommand,
+  EditableTextMoveStartCommand,
+  EditableTextReplaceSelectionCommand,
+  EditableTextSelectAllCommand
+} from './editable-text-command';
+export { applyEditableTextCommand } from './editable-text-command';
 export type {
   SvgGatewayBoundaryMode,
   SvgGatewayBounds,

@@ -10,6 +10,7 @@ import {
   pass,
   solidTexture,
   text,
+  textureAsset,
   unlitMaterial,
   virtualTextureAsset,
 } from "@royal/renderer-core";
@@ -280,6 +281,11 @@ describe("visibility packets", () => {
   it("tracks virtual texture assets by manifest identity and fallback color without requiring a uri", () => {
     const fallback = solidTexture({ color: [0.2, 0.3, 0.4, 1] });
     const changedFallback = solidTexture({ color: [0.4, 0.3, 0.2, 1] });
+    const preview = textureAsset({
+      fallback: solidTexture({ color: [0.1, 0.2, 0.3, 1] }),
+      id: "terrain-preview",
+      uri: "https://example.test/terrain-preview.png",
+    });
     const virtualMaterial = unlitMaterial({
       baseColor: virtualTextureAsset({
         fallback,
@@ -304,6 +310,27 @@ describe("visibility packets", () => {
         manifestUri: "https://example.test/terrain-v2.vt.json",
       }),
     });
+    const previewMaterial = unlitMaterial({
+      baseColor: virtualTextureAsset({
+        fallback,
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "https://example.test/terrain.vt.json",
+        preview,
+      }),
+    });
+    const previewRevision = unlitMaterial({
+      baseColor: virtualTextureAsset({
+        fallback,
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "https://example.test/terrain.vt.json",
+        preview: textureAsset({
+          ...preview,
+          revision: "preview-v2",
+        }),
+      }),
+    });
 
     const basePacket = buildVisibilityPackets(pass({
       camera,
@@ -317,6 +344,14 @@ describe("visibility packets", () => {
       camera,
       children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: manifestRevision })],
     }));
+    const previewPacket = buildVisibilityPackets(pass({
+      camera,
+      children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: previewMaterial })],
+    }));
+    const previewRevisionPacket = buildVisibilityPackets(pass({
+      camera,
+      children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: previewRevision })],
+    }));
 
     expect(basePacket.assetIdHi[0]).not.toBe(0);
     expect(basePacket.assetIdLo[0]).not.toBe(0);
@@ -326,5 +361,9 @@ describe("visibility packets", () => {
     expect(fallbackPacket.assetVersions[0]).not.toBe(basePacket.assetVersions[0]);
     expect(fallbackPacket.materialVersions[0]).not.toBe(basePacket.materialVersions[0]);
     expect(manifestPacket.assetIdLo[0]).not.toBe(basePacket.assetIdLo[0]);
+    expect(previewPacket.assetIdLo[0]).not.toBe(basePacket.assetIdLo[0]);
+    expect(previewRevisionPacket.assetIdHi[0]).toBe(previewPacket.assetIdHi[0]);
+    expect(previewRevisionPacket.assetIdLo[0]).toBe(previewPacket.assetIdLo[0]);
+    expect(previewRevisionPacket.assetVersions[0]).not.toBe(previewPacket.assetVersions[0]);
   });
 });

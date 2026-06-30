@@ -92,6 +92,8 @@ export type WebGpuMaterialBaseColorShape =
       readonly kind: "virtual-texture-asset";
       readonly manifestId?: string | undefined;
       readonly manifestUri: string;
+      readonly previewId?: string | undefined;
+      readonly previewUri?: string | undefined;
     };
 
 export type WebGpuMaterialBindingShape = {
@@ -354,11 +356,17 @@ const baseColorShape = (
 
     return {
       colorSpace: texture.colorSpace ?? "srgb",
-      fallbackColor: texture.fallback?.color ?? defaultTextureFallbackColor,
+      fallbackColor: texture.fallback?.color ?? texture.preview?.fallback?.color ?? defaultTextureFallbackColor,
       id: texture.id,
       kind: "virtual-texture-asset",
       ...(texture.manifestId === undefined ? {} : { manifestId: texture.manifestId }),
-      manifestUri: texture.manifestUri
+      manifestUri: texture.manifestUri,
+      ...(texture.preview === undefined
+        ? {}
+        : {
+          previewId: texture.preview.id,
+          previewUri: texture.preview.uri
+        })
     };
   }
 

@@ -5,6 +5,7 @@ import {
   type MeshNode,
   type RenderPass,
   type TextNode,
+  type TextureAssetRef,
   type TextureSampler,
 } from "@royal/renderer-core";
 import { composeTransform, type Mat4 } from "./matrix";
@@ -607,7 +608,7 @@ const texturePacketId = (texture: MeshNode["material"]["baseColor"]): PacketId =
   if (texture.kind === "virtual-asset") {
     return hashLabelId(
       "virtual-texture-asset",
-      `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${textureFallbackColorKey(texture)}`,
+      `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}:${textureFallbackColorKey(texture)}`,
     );
   }
   if (texture.id !== undefined) {
@@ -632,6 +633,7 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
       texture.manifestId ?? "",
       texture.colorSpace ?? "",
       samplerVersion(texture.sampler),
+      virtualTexturePreviewVersion(texture.preview),
       textureFallbackColorKey(texture),
       texture.fallback?.revision ?? "",
     );
@@ -651,7 +653,10 @@ const textureAssetPacketId = (texture: MeshNode["material"]["baseColor"]): Packe
   texture.kind === "asset"
     ? hashLabelId("texture-asset", `${texture.id}:${texture.uri}`)
     : texture.kind === "virtual-asset"
-      ? hashLabelId("virtual-texture-asset", `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}`)
+      ? hashLabelId(
+          "virtual-texture-asset",
+          `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}`,
+        )
       : NO_PACKET_ID;
 
 const textureAssetPacketVersion = (texture: MeshNode["material"]["baseColor"]): number =>
@@ -663,13 +668,28 @@ const textureAssetPacketVersion = (texture: MeshNode["material"]["baseColor"]): 
           texture.revision ?? texture.manifestUri,
           texture.manifestId ?? "",
           samplerVersion(texture.sampler),
+          virtualTexturePreviewVersion(texture.preview),
           textureFallbackColorKey(texture),
         )
       : NO_VERSION;
 
 const textureFallbackColorKey = (
   texture: Extract<MeshNode["material"]["baseColor"], { readonly kind: "virtual-asset" }>,
-): string => (texture.fallback?.color ?? defaultTextureFallbackColor).join(",");
+): string => (texture.fallback?.color ?? texture.preview?.fallback?.color ?? defaultTextureFallbackColor).join(",");
+
+const virtualTexturePreviewKey = (preview: TextureAssetRef | undefined): string =>
+  preview === undefined ? "" : `${preview.id}:${preview.uri}`;
+
+const virtualTexturePreviewVersion = (preview: TextureAssetRef | undefined): string =>
+  preview === undefined
+    ? ""
+    : [
+        preview.revision ?? preview.uri,
+        preview.colorSpace ?? "",
+        samplerVersion(preview.sampler),
+        preview.fallback?.revision ?? "",
+        preview.fallback?.color.join(",") ?? "",
+      ].join("|");
 
 const samplerVersion = (sampler: TextureSampler | undefined): string => {
   if (sampler === undefined) return "";

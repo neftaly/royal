@@ -37,6 +37,26 @@ const readVirtualTexturingSourceParts = async (): Promise<{
   };
 };
 
+const readFormControlsSourceParts = async (): Promise<{
+  readonly combinedSource: string;
+  readonly hostSource: string;
+  readonly modelSource: string;
+  readonly sceneSource: string;
+}> => {
+  const [hostSource, modelSource, sceneSource] = await Promise.all([
+    readCaseSource('FormControls.tsx'),
+    readCaseSource('FormControls.model.ts'),
+    readCaseSource('FormControls.scene.tsx'),
+  ]);
+
+  return {
+    combinedSource: [hostSource, modelSource, sceneSource].join('\n'),
+    hostSource,
+    modelSource,
+    sceneSource,
+  };
+};
+
 const readSimpleSceneParts = async (
   componentName: 'GltfHelmet' | 'TextureMaterials' | 'WireframeCube',
 ): Promise<{
@@ -110,15 +130,23 @@ type ExampleSourcePattern = {
   readonly pattern: RegExp;
 };
 
-const domControlTagPattern = /<\s*(input|textarea)\b[^>]*(?:\/>|>)/gi;
+const domControlTagPattern = /<\s*(input|textarea|select)\b[^>]*(?:\/>|>)/gi;
 const forbiddenCanvasOnlyDomPatterns = [
   {
     kind: 'contentEditable DOM editing surface',
     pattern: /\bcontentEditable\b\s*=|\bcontenteditable\b\s*=/gi,
   },
   {
-    kind: 'DOM input or textarea factory',
-    pattern: /\b(?:React\.)?createElement\s*\(\s*['"`](?:input|textarea)['"`]/gi,
+    kind: 'DOM form control factory',
+    pattern: /\b(?:React\.)?createElement\s*\(\s*['"`](?:input|textarea|select)['"`]/gi,
+  },
+  {
+    kind: 'DOM form control type',
+    pattern: /\b(?:HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement)\b/g,
+  },
+  {
+    kind: 'hidden file picker bridge',
+    pattern: /\b(?:fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/gi,
   },
   {
     kind: 'hidden clipboard bridge',
@@ -259,6 +287,7 @@ describe('examples list', () => {
       'Cube',
       'Wireframe',
       'Text',
+      'Form Controls',
       'Texture Materials',
       'Virtual Texturing',
       'glTF Helmet',
@@ -267,6 +296,7 @@ describe('examples list', () => {
       '/cube',
       '/wireframe',
       '/text',
+      '/form-controls',
       '/texture-materials',
       '/virtual-texturing',
       '/gltf-helmet',
@@ -342,6 +372,7 @@ describe('examples list', () => {
 
     expect(textureSource).toContain('export const createSurfaceMaterial = (): UnlitMaterial =>');
     expect(textureSource).toContain('createGeneratedTextureUri');
+    expect(textureSource).toContain('virtualTextureAsset({');
     expect(textureSource).toContain('textureAsset({');
   });
 
@@ -379,6 +410,52 @@ describe('examples list', () => {
       expect(sceneSource).not.toMatch(/\bCanvas\b/);
       expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
     }
+  });
+
+  it('keeps the FormControls route on canvas-native Royal primitives', async () => {
+    const formControls = examples.find((example) => example.id === 'form-controls');
+    const { combinedSource, hostSource, modelSource, sceneSource } =
+      await readFormControlsSourceParts();
+
+    expect(formControls?.path).toBe('/form-controls');
+    expect(formControls?.title).toBe('Form Controls');
+    expect(formControls?.maturity).toBe('product');
+    expect(hostSource).not.toContain('@jsxImportSource @royal/react');
+    expect(hostSource).toContain('<Canvas aria-label="Canvas-native form controls"');
+    expect(hostSource).toContain('{formControlsScene()}');
+    expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
+    expect(hostSource).not.toContain('@royal/renderer-core');
+
+    expect(sceneSource).toContain('/** @jsxImportSource @royal/react */');
+    expect(sceneSource).toContain('export const formControlsScene = (): RenderRoot =>');
+    expect(sceneSource).toContain('<scene>');
+    expect(sceneSource).toContain('<orthographicCamera');
+    expect(sceneSource).toContain('<mesh');
+    expect(sceneSource).toContain('<text');
+    expect(sceneSource).toContain('boxGeometry');
+    expect(sceneSource).toContain('unlitMaterial');
+    expect(sceneSource).not.toMatch(/\bCanvas\b/);
+    expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
+
+    expect(modelSource).toContain("export type EditableTextMode = 'single-line' | 'multiline'");
+    expect(modelSource).toContain('type EditableTextControlModel');
+    expect(modelSource).toContain('createEditableTextControl');
+    expect(modelSource).toContain('readonly mode: EditableTextMode');
+    expect(modelSource).toContain("mode: 'single-line'");
+    expect(modelSource).toContain("mode: 'multiline'");
+    expect(modelSource).toContain('readonly placeholder: string');
+    expect(modelSource).toContain('readonly value: string');
+    expect(modelSource).toContain('readonly selection: EditableTextSelection');
+    expect(modelSource).toContain('uiNodeSemantics');
+    expect(modelSource).toContain('readonly semantics: Readonly<Record<string, UiNodeSemantics>>');
+    expect(modelSource).toContain("command: 'browser.filePicker.request'");
+    expect(sceneSource).toContain('control.mode === ');
+    expect(combinedSource).not.toMatch(
+      /<\s*(?:input|textarea|select)\b|\b(?:React\.)?createElement\s*\(\s*['"`](?:input|textarea|select)['"`]/i,
+    );
+    expect(combinedSource).not.toMatch(
+      /\b(?:HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement|contentEditable|contenteditable|fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/,
+    );
   });
 
   it('keeps primary renderer examples on JSX scene authoring', () => {
@@ -440,7 +517,7 @@ describe('examples list', () => {
     expect(examples.map((example) => example.maturity)).toEqual(
       examples.map(() => 'product'),
     );
-    expect(examples).toHaveLength(6);
+    expect(examples).toHaveLength(7);
   });
 
   it('keeps fixture-only VT artifacts out of primary examples', () => {
@@ -583,6 +660,7 @@ describe('examples list', () => {
     expect(sceneSource).toContain('rotation: [view.rotation[0], view.rotation[1], 0]');
     expect(sceneSource).toContain('<mesh');
     expect(textureSource).toContain('solidTexture');
+    expect(textureSource).toContain('virtualTextureAsset');
     expect(textureSource).toContain('textureAsset');
     expect(textureSource).toContain('fallback: fallbackTexture');
     expect(textureSource).toContain('unlitMaterial');
@@ -592,11 +670,14 @@ describe('examples list', () => {
     expect(combinedSource).not.toContain('terrain');
   });
 
-  it('documents the VT route as a public descriptor placeholder until core exposes one', async () => {
+  it('documents the VT route as a public descriptor preview until the renderer lowers it', async () => {
     const { combinedSource, textureSource } = await readVirtualTexturingSourceParts();
 
     expect(textureSource).toContain('TODO(public-vt-descriptor)');
+    expect(textureSource).toContain('virtualTextureAsset({');
+    expect(textureSource).toContain('preview: textureAsset({');
     expect(textureSource).toContain('textureAsset({');
+    expect(textureSource).toContain('until the renderer lowers');
     expect(combinedSource).not.toMatch(/\bvirtualTexture\s*\(/);
     expect(combinedSource).not.toMatch(
       /\b(?:createVirtualTextureResource|VirtualTextureResource|VirtualTexturePageSource)\b/,

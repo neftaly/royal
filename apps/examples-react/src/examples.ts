@@ -1,4 +1,6 @@
 import type { ComponentType } from 'react';
+import { FormControls } from './examples/cases/FormControls';
+import formControlsSource from './examples/cases/FormControls.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
@@ -49,6 +51,15 @@ export const examples = [
     Component: RendererText,
     source: rendererTextSource,
     sourceFile: 'examples/cases/RendererText.tsx',
+  },
+  {
+    id: 'form-controls',
+    maturity: 'product',
+    path: '/form-controls',
+    title: 'Form Controls',
+    Component: FormControls,
+    source: formControlsSource,
+    sourceFile: 'examples/cases/FormControls.tsx',
   },
   {
     id: 'texture-materials',

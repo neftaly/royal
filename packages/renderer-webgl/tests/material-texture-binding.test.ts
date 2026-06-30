@@ -175,6 +175,68 @@ describe("lowerMaterialBaseColorBinding", () => {
     });
     expect(textureCache.loadTextureAssetBaseColor).not.toHaveBeenCalled();
   });
+
+  it("loads a virtual texture preview as temporary fallback rendering while preserving virtual source identity", () => {
+    const preview = textureAsset({
+      fallback: solidTexture({ color: [0.15, 0.25, 0.35, 1] }),
+      id: "terrain-preview",
+      uri: "https://example.test/terrain-preview.png",
+    });
+    const source = virtualTextureAsset({
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+      preview,
+    });
+    const load = {
+      kind: "ready",
+      texture: {} as WebGLTexture,
+    } satisfies TextureAssetLoadResult;
+    const onTextureSettled = vi.fn();
+    const textureCache = {
+      loadTextureAssetBaseColor: vi.fn(() => load),
+    };
+
+    const binding = lowerMaterialBaseColorBinding(source, {
+      onTextureSettled,
+      textureCache,
+    });
+
+    expect(binding).toEqual({
+      fallbackColor: [0.15, 0.25, 0.35, 1],
+      kind: "virtual-asset",
+      load,
+      source,
+    });
+    expect(textureCache.loadTextureAssetBaseColor).toHaveBeenCalledWith(
+      preview,
+      onTextureSettled,
+    );
+  });
+
+  it("uses a virtual texture fallback before the preview fallback while the preview is loading", () => {
+    const preview = textureAsset({
+      fallback: solidTexture({ color: [0.15, 0.25, 0.35, 1] }),
+      id: "terrain-preview",
+      uri: "https://example.test/terrain-preview.png",
+    });
+    const source = virtualTextureAsset({
+      fallback: solidTexture({ color: [0.7, 0.6, 0.5, 1] }),
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+      preview,
+    });
+    const textureCache = {
+      loadTextureAssetBaseColor: vi.fn(() => ({ kind: "loading" } as const)),
+    };
+
+    const binding = lowerMaterialBaseColorBinding(source, { textureCache });
+
+    expect(binding).toMatchObject({
+      fallbackColor: [0.7, 0.6, 0.5, 1],
+      kind: "virtual-asset",
+      source,
+    });
+  });
 });
 
 describe("bindMaterialBaseColor", () => {
@@ -255,6 +317,38 @@ describe("bindMaterialBaseColor", () => {
     expect(uniformCalls).toEqual([
       { name: "color", value: [0.6, 0.7, 0.8, 1] },
       { name: "useBaseColorTexture", value: 0 },
+    ]);
+  });
+
+  it("binds a ready virtual texture preview as temporary fallback rendering", () => {
+    const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
+    const texture = {} as WebGLTexture;
+    const source = virtualTextureAsset({
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+      preview: textureAsset({
+        id: "terrain-preview",
+        uri: "https://example.test/terrain-preview.png",
+      }),
+    });
+
+    bindMaterialBaseColor(
+      gl,
+      baseColorUniforms(),
+      {
+        fallbackColor: [0.2, 0.3, 0.4, 1],
+        kind: "virtual-asset",
+        load: { kind: "ready", texture },
+        source,
+      },
+      3,
+    );
+
+    expect(activeTextureUnits).toEqual([gl.TEXTURE0 + 3]);
+    expect(boundTextures).toEqual([texture]);
+    expect(uniformCalls).toEqual([
+      { name: "baseColor", value: 3 },
+      { name: "useBaseColorTexture", value: 1 },
     ]);
   });
 });

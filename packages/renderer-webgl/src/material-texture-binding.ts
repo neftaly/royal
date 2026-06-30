@@ -25,6 +25,7 @@ export type MaterialBaseColorBinding =
   | {
     readonly fallbackColor: SolidTextureRef["color"];
     readonly kind: "virtual-asset";
+    readonly load?: TextureAssetLoadResult | undefined;
     readonly source: VirtualTextureAssetRef;
   };
 
@@ -51,8 +52,19 @@ export const lowerMaterialBaseColorBinding = (
 
   if (baseColor.kind === "virtual-asset") {
     return {
-      fallbackColor: baseColor.fallback?.color ?? defaultTextureFallbackColor,
+      fallbackColor:
+        baseColor.fallback?.color ??
+        baseColor.preview?.fallback?.color ??
+        defaultTextureFallbackColor,
       kind: "virtual-asset",
+      ...(baseColor.preview === undefined
+        ? {}
+        : {
+          load: options.textureCache.loadTextureAssetBaseColor(
+            baseColor.preview,
+            options.onTextureSettled,
+          ),
+        }),
       source: baseColor,
     };
   }
@@ -74,9 +86,10 @@ export const bindMaterialBaseColor = (
   binding: MaterialBaseColorBinding,
   textureUnit = 0,
 ): void => {
-  if (binding.kind === "asset" && binding.load.kind === "ready") {
+  const load = binding.kind === "solid" ? undefined : binding.load;
+  if (load?.kind === "ready") {
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, binding.load.texture);
+    gl.bindTexture(gl.TEXTURE_2D, load.texture);
     gl.uniform1i(uniforms.baseColor, textureUnit);
     gl.uniform1i(uniforms.useBaseColorTexture, 1);
     return;

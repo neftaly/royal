@@ -179,7 +179,12 @@ describe("WebGPU scene probe", () => {
         fallback: solidTexture({ color: [0.35, 0.4, 0.45, 1] }),
         id: "terrain-vt",
         manifestId: "terrain-manifest",
-        manifestUri: "/textures/terrain.vt.json"
+        manifestUri: "/textures/terrain.vt.json",
+        preview: textureAsset({
+          fallback: solidTexture({ color: [0.15, 0.2, 0.25, 1] }),
+          id: "terrain-preview",
+          uri: "/textures/terrain-preview.png"
+        })
       })
     });
     const diagnostics: WebGpuSceneProbeDiagnostic[] = [];
@@ -192,7 +197,9 @@ describe("WebGPU scene probe", () => {
         id: "terrain-vt",
         kind: "virtual-texture-asset",
         manifestId: "terrain-manifest",
-        manifestUri: "/textures/terrain.vt.json"
+        manifestUri: "/textures/terrain.vt.json",
+        previewId: "terrain-preview",
+        previewUri: "/textures/terrain-preview.png"
       },
       bindings: [
         {

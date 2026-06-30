@@ -60,12 +60,19 @@ describe('texture descriptors', () => {
       color: [0.5, 0.5, 0.5, 1],
       id: 'vt-fallback'
     });
+    const preview = textureAsset({
+      fallback,
+      id: 'terrain-albedo-preview',
+      revision: 'preview-v1',
+      uri: '/textures/terrain-albedo-preview.png'
+    });
     const asset = virtualTextureAsset({
       colorSpace: 'srgb',
       fallback,
       id: 'terrain-albedo',
       manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json',
+      preview,
       revision: 3,
       sampler: {
         minFilter: 'linear-mipmap-linear',
@@ -81,6 +88,7 @@ describe('texture descriptors', () => {
       kind: 'virtual-asset',
       manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json',
+      preview,
       revision: 3,
       sampler: {
         minFilter: 'linear-mipmap-linear',

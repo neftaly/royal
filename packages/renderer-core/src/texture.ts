@@ -48,6 +48,7 @@ export interface VirtualTextureAssetRef {
   readonly id: string;
   readonly manifestId?: string;
   readonly manifestUri: string;
+  readonly preview?: TextureAssetRef;
   readonly revision?: TextureRevision;
   readonly sampler?: TextureSampler;
 }
@@ -90,6 +91,7 @@ export const virtualTextureAsset = (options: VirtualTextureAssetOptions): Virtua
   id: options.id,
   ...(options.manifestId === undefined ? {} : { manifestId: options.manifestId }),
   manifestUri: options.manifestUri,
+  ...(options.preview === undefined ? {} : { preview: options.preview }),
   ...(options.revision === undefined ? {} : { revision: options.revision }),
   ...(options.sampler === undefined ? {} : { sampler: options.sampler })
 });
