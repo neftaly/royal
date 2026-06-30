@@ -59,6 +59,12 @@ const smokeExpectations = {
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
   },
+  'svg-gateway': {
+    surface: 'canvas',
+    canvasLabel: 'SVG gateway',
+    minColorBuckets: 5,
+    minPaintedRatio: 0.01,
+  },
   'virtual-texturing': {
     surface: 'canvas',
     canvasLabel: 'Virtual texturing plane',
