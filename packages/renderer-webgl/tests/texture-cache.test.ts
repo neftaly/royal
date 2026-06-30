@@ -9,14 +9,28 @@ type TexParameterCall = {
   readonly target: number;
 };
 
+type TexImageUpload = {
+  readonly border: number;
+  readonly data: readonly number[];
+  readonly format: number;
+  readonly height: number;
+  readonly internalFormat: number;
+  readonly level: number;
+  readonly target: number;
+  readonly type: number;
+  readonly width: number;
+};
+
 const fakeTextureGl = (): {
   readonly counts: { readonly createTexture: number };
   readonly gl: RendererWebGlContext;
   readonly mipmaps: number[];
+  readonly texImageUploads: TexImageUpload[];
   readonly texParameters: TexParameterCall[];
 } => {
   const counts = { createTexture: 0 };
   const mipmaps: number[] = [];
+  const texImageUploads: TexImageUpload[] = [];
   const texParameters: TexParameterCall[] = [];
 
   return {
@@ -49,12 +63,48 @@ const fakeTextureGl = (): {
         mipmaps.push(target);
       },
       pixelStorei() {},
-      texImage2D() {},
+      texImage2D(...args: unknown[]) {
+        const [
+          target,
+          level,
+          internalFormat,
+          width,
+          height,
+          border,
+          format,
+          type,
+          data,
+        ] = args;
+        if (
+          typeof target === "number"
+          && typeof level === "number"
+          && typeof internalFormat === "number"
+          && typeof width === "number"
+          && typeof height === "number"
+          && typeof border === "number"
+          && typeof format === "number"
+          && typeof type === "number"
+          && data instanceof Uint8Array
+        ) {
+          texImageUploads.push({
+            border,
+            data: Array.from(data),
+            format,
+            height,
+            internalFormat,
+            level,
+            target,
+            type,
+            width,
+          });
+        }
+      },
       texParameteri(target: GLenum, pname: GLenum, param: GLint) {
         texParameters.push({ param, pname, target });
       },
     } as unknown as RendererWebGlContext,
     mipmaps,
+    texImageUploads,
     texParameters,
   };
 };
@@ -69,6 +119,27 @@ afterEach(() => {
 });
 
 describe("TextureCache", () => {
+  it("uploads the shared fallback texture as 50% grey", () => {
+    const { counts, gl, texImageUploads } = fakeTextureGl();
+    const cache = new TextureCache(gl);
+
+    const fallback = cache.getFallbackTexture();
+
+    expect(cache.getFallbackTexture()).toBe(fallback);
+    expect(counts.createTexture).toBe(1);
+    expect(texImageUploads).toEqual([{
+      border: 0,
+      data: [128, 128, 128, 255],
+      format: gl.RGBA,
+      height: 1,
+      internalFormat: gl.RGBA,
+      level: 0,
+      target: gl.TEXTURE_2D,
+      type: gl.UNSIGNED_BYTE,
+      width: 1,
+    }]);
+  });
+
   it("uses the default mipmapped sampler when a glTF sampler is absent", async () => {
     installImage({ height: 32, width: 64 });
     const { gl, mipmaps, texParameters } = fakeTextureGl();

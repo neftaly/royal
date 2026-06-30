@@ -1,4 +1,8 @@
-import type { TextureAssetRef, TextureSampler as CoreTextureSampler } from "@royal/renderer-core";
+import {
+  defaultTextureFallbackColor,
+  type TextureAssetRef,
+  type TextureSampler as CoreTextureSampler,
+} from "@royal/renderer-core";
 import type { RendererWebGlContext } from "./gl";
 import { markGltf, measureGltf } from "./performance";
 
@@ -204,6 +208,13 @@ const createTexture = (
   return texture;
 };
 
+const defaultFallbackTextureData = new Uint8Array([
+  Math.round(defaultTextureFallbackColor[0] * 255),
+  Math.round(defaultTextureFallbackColor[1] * 255),
+  Math.round(defaultTextureFallbackColor[2] * 255),
+  Math.round(defaultTextureFallbackColor[3] * 255),
+]);
+
 const createFallbackTexture = (gl: RendererWebGlContext): WebGLTexture => {
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
@@ -218,7 +229,7 @@ const createFallbackTexture = (gl: RendererWebGlContext): WebGLTexture => {
     0,
     gl.RGBA,
     gl.UNSIGNED_BYTE,
-    new Uint8Array([255, 255, 255, 255]),
+    defaultFallbackTextureData,
   );
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);

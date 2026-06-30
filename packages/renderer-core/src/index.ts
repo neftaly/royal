@@ -38,7 +38,7 @@ export type {
   TextureSamplerFilter,
   TextureSamplerWrap
 } from './texture';
-export { solidTexture, textureAsset } from './texture';
+export { defaultTextureFallbackColor, solidTexture, textureAsset } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';

@@ -21,6 +21,8 @@ export interface TextureSampler {
 
 export type TextureRevision = number | string;
 
+export const defaultTextureFallbackColor: Rgba = [0.5, 0.5, 0.5, 1];
+
 export interface SolidTextureRef {
   readonly kind: 'solid';
   readonly color: Rgba;

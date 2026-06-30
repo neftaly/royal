@@ -1,12 +1,11 @@
-import type {
-  SolidTextureRef,
-  TextureAssetRef,
-  TextureRef,
+import {
+  defaultTextureFallbackColor,
+  type SolidTextureRef,
+  type TextureAssetRef,
+  type TextureRef,
 } from "@royal/renderer-core";
 import type { RendererWebGlContext } from "./gl";
 import type { TextureAssetLoadResult, TextureCache } from "./texture-cache";
-
-const defaultAssetFallback = [1, 1, 1, 1] as const;
 
 type MaterialTextureLoadCache = Pick<TextureCache, "loadTextureAssetBaseColor">;
 
@@ -45,7 +44,7 @@ export const lowerMaterialBaseColorBinding = (
   }
 
   return {
-    fallbackColor: baseColor.fallback?.color ?? defaultAssetFallback,
+    fallbackColor: baseColor.fallback?.color ?? defaultTextureFallbackColor,
     kind: "asset",
     load: options.textureCache.loadTextureAssetBaseColor(
       baseColor,

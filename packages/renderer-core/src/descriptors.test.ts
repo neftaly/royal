@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   boxGeometry,
+  defaultTextureFallbackColor,
   directionalLight,
   gltf,
   mesh,
@@ -93,6 +94,12 @@ describe('renderer descriptor authoring API', () => {
     });
     expect(standardMaterial({ baseColor: asset }).baseColor).toBe(asset);
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
+
+    expect(defaultTextureFallbackColor).toEqual([0.5, 0.5, 0.5, 1]);
+    expect(textureAsset({
+      id: 'albedo-default',
+      uri: '/textures/albedo-default.png'
+    })).not.toHaveProperty('fallback');
   });
 
   it('uses explicit glTF asset identity on gltf nodes', () => {

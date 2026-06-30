@@ -484,12 +484,8 @@ export class GltfCache {
     }
 
     markGltf("geometry-ready");
-    void Promise.all([warmedTextures, ...textureLoads]).then(() => {
+    void Promise.allSettled([warmedTextures, ...textureLoads]).then(() => {
       markGltf("textures-ready");
-    }).catch((error: unknown) => {
-      if (this.#disposed) return;
-      this.#entries.set(cacheKey, { error, state: "error" });
-      this.#onReady();
     });
     return bounds === undefined ? { primitives } : { bounds, primitives };
   }

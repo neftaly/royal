@@ -146,6 +146,42 @@ describe("GltfCache textures", () => {
     cache.dispose();
   });
 
+  it("keeps the renderer fallback texture when a glTF texture is unavailable", async () => {
+    const decodeError = new Error("decode failed");
+    let rejectImage!: (error: unknown) => void;
+    const imagePromise = new Promise<ImageBitmap>((_resolve, reject) => {
+      rejectImage = reject;
+    });
+    installFixture(undefined, () => imagePromise);
+    const { gl } = fakeGl();
+    const onReady = vi.fn();
+    const cache = new GltfCache(gl, onReady);
+    const node = gltf({ asset: triangleAsset() });
+
+    expect(cache.get(node)).toBeUndefined();
+    await waitFor(() => cache.get(node) !== undefined);
+    expect(onReady).toHaveBeenCalledTimes(1);
+
+    const asset = cache.get(node);
+    expect(asset).toBeDefined();
+    const primitive = asset!.primitives[0]!;
+    const fallbackTexture = primitive.texture;
+
+    const imageSettled = imagePromise.catch(() => undefined);
+    rejectImage(decodeError);
+    await imageSettled;
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(cache.get(node)).toBe(asset);
+    expect(primitive.material.baseColorTexture.state).toBe("fallback");
+    expect(primitive.material.baseColorTexture.texture).toBe(fallbackTexture);
+    expect(primitive.texture).toBe(fallbackTexture);
+    cache.dispose();
+  });
+
   it("deletes fallback and late-loaded textures when disposed", async () => {
     let resolveImage!: (image: ImageBitmap) => void;
     const imagePromise = new Promise<ImageBitmap>((resolve) => {

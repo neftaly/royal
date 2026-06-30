@@ -118,7 +118,7 @@ describe("lowerMaterialBaseColorBinding", () => {
     );
   });
 
-  it("uses white as the asset fallback color when none is declared", () => {
+  it("uses the renderer default grey as the asset fallback color when none is declared", () => {
     const source = textureAsset({
       id: "albedo",
       uri: "https://example.test/albedo.png",
@@ -130,7 +130,7 @@ describe("lowerMaterialBaseColorBinding", () => {
     const binding = lowerMaterialBaseColorBinding(source, { textureCache });
 
     expect(binding).toMatchObject({
-      fallbackColor: [1, 1, 1, 1],
+      fallbackColor: [0.5, 0.5, 0.5, 1],
       kind: "asset",
       source,
     });
