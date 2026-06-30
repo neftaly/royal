@@ -1,6 +1,7 @@
 import {
   solidTexture,
   textureAsset,
+  virtualTextureAsset,
 } from "@royal/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import type { RendererWebGlContext } from "../src/gl";
@@ -135,6 +136,45 @@ describe("lowerMaterialBaseColorBinding", () => {
       source,
     });
   });
+
+  it("lowers virtual texture assets to fallback color without using the ordinary texture cache", () => {
+    const source = virtualTextureAsset({
+      fallback: solidTexture({ color: [0.25, 0.5, 0.75, 1] }),
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+    });
+    const textureCache = {
+      loadTextureAssetBaseColor: vi.fn(),
+    };
+
+    const binding = lowerMaterialBaseColorBinding(source, { textureCache });
+
+    expect(binding).toEqual({
+      fallbackColor: [0.25, 0.5, 0.75, 1],
+      kind: "virtual-asset",
+      source,
+    });
+    expect(textureCache.loadTextureAssetBaseColor).not.toHaveBeenCalled();
+  });
+
+  it("uses the renderer default grey as the virtual texture fallback color when none is declared", () => {
+    const source = virtualTextureAsset({
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+    });
+    const textureCache = {
+      loadTextureAssetBaseColor: vi.fn(),
+    };
+
+    const binding = lowerMaterialBaseColorBinding(source, { textureCache });
+
+    expect(binding).toEqual({
+      fallbackColor: [0.5, 0.5, 0.5, 1],
+      kind: "virtual-asset",
+      source,
+    });
+    expect(textureCache.loadTextureAssetBaseColor).not.toHaveBeenCalled();
+  });
 });
 
 describe("bindMaterialBaseColor", () => {
@@ -188,6 +228,32 @@ describe("bindMaterialBaseColor", () => {
     expect(boundTextures).toEqual([]);
     expect(uniformCalls).toEqual([
       { name: "color", value: [0.2, 0.4, 0.6, 1] },
+      { name: "useBaseColorTexture", value: 0 },
+    ]);
+  });
+
+  it("binds the fallback color for virtual texture assets", () => {
+    const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
+    const source = virtualTextureAsset({
+      fallback: solidTexture({ color: [0.6, 0.7, 0.8, 1] }),
+      id: "terrain-vt",
+      manifestUri: "https://example.test/terrain.vt.json",
+    });
+
+    bindMaterialBaseColor(
+      gl,
+      baseColorUniforms(),
+      {
+        fallbackColor: [0.6, 0.7, 0.8, 1],
+        kind: "virtual-asset",
+        source,
+      },
+    );
+
+    expect(activeTextureUnits).toEqual([]);
+    expect(boundTextures).toEqual([]);
+    expect(uniformCalls).toEqual([
+      { name: "color", value: [0.6, 0.7, 0.8, 1] },
       { name: "useBaseColorTexture", value: 0 },
     ]);
   });

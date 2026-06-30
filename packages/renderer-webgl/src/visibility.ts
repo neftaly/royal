@@ -1,4 +1,5 @@
 import {
+  defaultTextureFallbackColor,
   type BoxGeometry,
   type GltfNode,
   type MeshNode,
@@ -603,6 +604,12 @@ const texturePacketId = (texture: MeshNode["material"]["baseColor"]): PacketId =
   if (texture.kind === "asset") {
     return hashLabelId("texture-asset", `${texture.id}:${texture.uri}`);
   }
+  if (texture.kind === "virtual-asset") {
+    return hashLabelId(
+      "virtual-texture-asset",
+      `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${textureFallbackColorKey(texture)}`,
+    );
+  }
   if (texture.id !== undefined) {
     return hashLabelId("solid-texture", texture.id);
   }
@@ -618,6 +625,17 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
       samplerVersion(texture.sampler),
     );
   }
+  if (texture.kind === "virtual-asset") {
+    return hashVersion(
+      "virtual-texture-asset",
+      texture.revision ?? texture.manifestUri,
+      texture.manifestId ?? "",
+      texture.colorSpace ?? "",
+      samplerVersion(texture.sampler),
+      textureFallbackColorKey(texture),
+      texture.fallback?.revision ?? "",
+    );
+  }
   return hashVersion(
     "solid-texture",
     texture.color[0],
@@ -630,12 +648,28 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
 };
 
 const textureAssetPacketId = (texture: MeshNode["material"]["baseColor"]): PacketId =>
-  texture.kind === "asset" ? hashLabelId("texture-asset", `${texture.id}:${texture.uri}`) : NO_PACKET_ID;
+  texture.kind === "asset"
+    ? hashLabelId("texture-asset", `${texture.id}:${texture.uri}`)
+    : texture.kind === "virtual-asset"
+      ? hashLabelId("virtual-texture-asset", `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}`)
+      : NO_PACKET_ID;
 
 const textureAssetPacketVersion = (texture: MeshNode["material"]["baseColor"]): number =>
   texture.kind === "asset"
     ? hashVersion("texture-asset", texture.revision ?? texture.uri)
-    : NO_VERSION;
+    : texture.kind === "virtual-asset"
+      ? hashVersion(
+          "virtual-texture-asset",
+          texture.revision ?? texture.manifestUri,
+          texture.manifestId ?? "",
+          samplerVersion(texture.sampler),
+          textureFallbackColorKey(texture),
+        )
+      : NO_VERSION;
+
+const textureFallbackColorKey = (
+  texture: Extract<MeshNode["material"]["baseColor"], { readonly kind: "virtual-asset" }>,
+): string => (texture.fallback?.color ?? defaultTextureFallbackColor).join(",");
 
 const samplerVersion = (sampler: TextureSampler | undefined): string => {
   if (sampler === undefined) return "";

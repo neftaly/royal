@@ -36,15 +36,46 @@ export type {
   TextureRevision,
   TextureSampler,
   TextureSamplerFilter,
-  TextureSamplerWrap
+  TextureSamplerWrap,
+  VirtualTextureAssetOptions,
+  VirtualTextureAssetRef
 } from './texture';
-export { defaultTextureFallbackColor, solidTexture, textureAsset } from './texture';
+export { defaultTextureFallbackColor, solidTexture, textureAsset, virtualTextureAsset } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type { RenderPass, RenderPassOptions } from './render-graph';
 export { pass } from './render-graph';
+export type {
+  UiCheckedState,
+  UiControlState,
+  UiControlStateOptions,
+  UiControlValue,
+  UiFocusState,
+  UiFocusStateOptions,
+  UiHitBounds,
+  UiHitRegion,
+  UiHitRegionCoordinateSpace,
+  UiHitRegionKind,
+  UiHitRegionOptions,
+  UiId,
+  UiInputState,
+  UiInputStateOptions,
+  UiNodeSemantics,
+  UiNodeSemanticsOptions,
+  UiRole
+} from './ui';
+export {
+  isUiActivatable,
+  isUiFocusable,
+  uiControlState,
+  uiFocusState,
+  uiHitRegion,
+  uiId,
+  uiInputState,
+  uiNodeSemantics
+} from './ui';
 export type {
   CreateTextFontFaceOptions,
   LayoutTextOptions,

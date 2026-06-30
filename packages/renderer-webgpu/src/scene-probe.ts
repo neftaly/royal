@@ -1,11 +1,12 @@
-import type {
-  Material,
-  MeshNode,
-  RenderNode,
-  RenderRoot,
-  Rgba,
-  TextureRef,
-  Vec3
+import {
+  defaultTextureFallbackColor,
+  type Material,
+  type MeshNode,
+  type RenderNode,
+  type RenderRoot,
+  type Rgba,
+  type TextureRef,
+  type Vec3
 } from "@royal/renderer-core";
 import {
   chooseRendererBackend,
@@ -20,7 +21,8 @@ export type WebGpuSceneProbeDiagnosticCode =
   | "gltf_loader_required"
   | "material_pipeline_variant_required"
   | "text_lowering_required"
-  | "unsupported_geometry";
+  | "unsupported_geometry"
+  | "virtual_texture_lowering_required";
 
 export type WebGpuSceneProbeDiagnostic = {
   readonly code: WebGpuSceneProbeDiagnosticCode;
@@ -82,6 +84,14 @@ export type WebGpuMaterialBaseColorShape =
       readonly id: string;
       readonly kind: "texture-asset";
       readonly uri: string;
+    }
+  | {
+      readonly colorSpace: "linear" | "srgb";
+      readonly fallbackColor: Rgba;
+      readonly id: string;
+      readonly kind: "virtual-texture-asset";
+      readonly manifestId?: string | undefined;
+      readonly manifestUri: string;
     };
 
 export type WebGpuMaterialBindingShape = {
@@ -331,6 +341,24 @@ const baseColorShape = (
       color: texture.color,
       colorSpace: texture.colorSpace ?? "linear",
       kind: "inline-color"
+    };
+  }
+
+  if (texture.kind === "virtual-asset") {
+    diagnostics.push({
+      code: "virtual_texture_lowering_required",
+      message: "Virtual texture base color needs manifest/page-table lowering; the probe uses only its fallback color for now.",
+      ...source,
+      severity: "warning"
+    });
+
+    return {
+      colorSpace: texture.colorSpace ?? "srgb",
+      fallbackColor: texture.fallback?.color ?? defaultTextureFallbackColor,
+      id: texture.id,
+      kind: "virtual-texture-asset",
+      ...(texture.manifestId === undefined ? {} : { manifestId: texture.manifestId }),
+      manifestUri: texture.manifestUri
     };
   }
 

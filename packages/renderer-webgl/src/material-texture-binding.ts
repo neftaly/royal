@@ -3,6 +3,7 @@ import {
   type SolidTextureRef,
   type TextureAssetRef,
   type TextureRef,
+  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import type { RendererWebGlContext } from "./gl";
 import type { TextureAssetLoadResult, TextureCache } from "./texture-cache";
@@ -20,6 +21,11 @@ export type MaterialBaseColorBinding =
     readonly kind: "asset";
     readonly load: TextureAssetLoadResult;
     readonly source: TextureAssetRef;
+  }
+  | {
+    readonly fallbackColor: SolidTextureRef["color"];
+    readonly kind: "virtual-asset";
+    readonly source: VirtualTextureAssetRef;
   };
 
 export type MaterialBaseColorUniforms = {
@@ -39,6 +45,14 @@ export const lowerMaterialBaseColorBinding = (
     return {
       color: baseColor.color,
       kind: "solid",
+      source: baseColor,
+    };
+  }
+
+  if (baseColor.kind === "virtual-asset") {
+    return {
+      fallbackColor: baseColor.fallback?.color ?? defaultTextureFallbackColor,
+      kind: "virtual-asset",
       source: baseColor,
     };
   }

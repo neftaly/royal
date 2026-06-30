@@ -9,6 +9,7 @@ import {
   standardMaterial,
   textureAsset,
   unlitMaterial,
+  virtualTextureAsset,
   wireframeMaterial,
   type Geometry
 } from "@royal/renderer-core";
@@ -169,6 +170,68 @@ describe("WebGPU scene probe", () => {
     expect(diagnostics).toEqual([expect.objectContaining({
       code: "asset_texture_loader_required"
     })]);
+  });
+
+  it("reports virtual texture assets as fallback-only pending descriptors", () => {
+    const material = standardMaterial({
+      baseColor: virtualTextureAsset({
+        colorSpace: "srgb",
+        fallback: solidTexture({ color: [0.35, 0.4, 0.45, 1] }),
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "/textures/terrain.vt.json"
+      })
+    });
+    const diagnostics: WebGpuSceneProbeDiagnostic[] = [];
+    const shape = createMaterialBindingShape(material, "material:virtual-asset", {}, diagnostics);
+
+    expect(shape).toEqual({
+      baseColor: {
+        colorSpace: "srgb",
+        fallbackColor: [0.35, 0.4, 0.45, 1],
+        id: "terrain-vt",
+        kind: "virtual-texture-asset",
+        manifestId: "terrain-manifest",
+        manifestUri: "/textures/terrain.vt.json"
+      },
+      bindings: [
+        {
+          binding: 0,
+          group: 0,
+          label: "material-uniforms",
+          minBindingSize: 16,
+          resource: "uniform-buffer"
+        }
+      ],
+      id: "material:virtual-asset",
+      materialKind: "standard",
+      pipelineVariant: "standard",
+      requirements: []
+    });
+    expect(diagnostics).toEqual([expect.objectContaining({
+      code: "virtual_texture_lowering_required"
+    })]);
+  });
+
+  it("uses default grey for virtual texture assets without declared fallback", () => {
+    const material = standardMaterial({
+      baseColor: virtualTextureAsset({
+        id: "terrain-vt",
+        manifestUri: "/textures/terrain.vt.json"
+      })
+    });
+    const diagnostics: WebGpuSceneProbeDiagnostic[] = [];
+    const shape = createMaterialBindingShape(material, "material:virtual-asset", {}, diagnostics);
+
+    expect(shape.baseColor).toEqual({
+      colorSpace: "srgb",
+      fallbackColor: [0.5, 0.5, 0.5, 1],
+      id: "terrain-vt",
+      kind: "virtual-texture-asset",
+      manifestUri: "/textures/terrain.vt.json"
+    });
+    expect(shape.bindings).toHaveLength(1);
+    expect(shape.requirements).toEqual([]);
   });
 
   it("reports unsupported Royal descriptors instead of silently accepting them", () => {

@@ -11,6 +11,7 @@ import {
   solidTexture,
   text,
   unlitMaterial,
+  virtualTextureAsset,
 } from "@royal/renderer-core";
 import {
   invert,
@@ -274,5 +275,56 @@ describe("visibility packets", () => {
     expect(modelPacket.assetIdHi[0]).not.toBe(0);
     expect(modelPacket.assetIdLo[0]).not.toBe(0);
     expect(modelPacket.assetVersions[0]).not.toBe(0);
+  });
+
+  it("tracks virtual texture assets by manifest identity and fallback color without requiring a uri", () => {
+    const fallback = solidTexture({ color: [0.2, 0.3, 0.4, 1] });
+    const changedFallback = solidTexture({ color: [0.4, 0.3, 0.2, 1] });
+    const virtualMaterial = unlitMaterial({
+      baseColor: virtualTextureAsset({
+        fallback,
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "https://example.test/terrain.vt.json",
+      }),
+    });
+    const fallbackRevision = unlitMaterial({
+      baseColor: virtualTextureAsset({
+        fallback: changedFallback,
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "https://example.test/terrain.vt.json",
+      }),
+    });
+    const manifestRevision = unlitMaterial({
+      baseColor: virtualTextureAsset({
+        fallback,
+        id: "terrain-vt",
+        manifestId: "terrain-manifest",
+        manifestUri: "https://example.test/terrain-v2.vt.json",
+      }),
+    });
+
+    const basePacket = buildVisibilityPackets(pass({
+      camera,
+      children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: virtualMaterial })],
+    }));
+    const fallbackPacket = buildVisibilityPackets(pass({
+      camera,
+      children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: fallbackRevision })],
+    }));
+    const manifestPacket = buildVisibilityPackets(pass({
+      camera,
+      children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: manifestRevision })],
+    }));
+
+    expect(basePacket.assetIdHi[0]).not.toBe(0);
+    expect(basePacket.assetIdLo[0]).not.toBe(0);
+    expect(basePacket.assetVersions[0]).not.toBe(0);
+    expect(fallbackPacket.assetIdHi[0]).toBe(basePacket.assetIdHi[0]);
+    expect(fallbackPacket.assetIdLo[0]).toBe(basePacket.assetIdLo[0]);
+    expect(fallbackPacket.assetVersions[0]).not.toBe(basePacket.assetVersions[0]);
+    expect(fallbackPacket.materialVersions[0]).not.toBe(basePacket.materialVersions[0]);
+    expect(manifestPacket.assetIdLo[0]).not.toBe(basePacket.assetIdLo[0]);
   });
 });

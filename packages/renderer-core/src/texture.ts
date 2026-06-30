@@ -41,7 +41,18 @@ export interface TextureAssetRef {
   readonly uri: string;
 }
 
-export type TextureRef = SolidTextureRef | TextureAssetRef;
+export interface VirtualTextureAssetRef {
+  readonly kind: 'virtual-asset';
+  readonly colorSpace?: TextureColorSpace;
+  readonly fallback?: SolidTextureRef;
+  readonly id: string;
+  readonly manifestId?: string;
+  readonly manifestUri: string;
+  readonly revision?: TextureRevision;
+  readonly sampler?: TextureSampler;
+}
+
+export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAssetRef;
 
 export interface SolidTextureOptions {
   readonly color: Rgba;
@@ -51,6 +62,8 @@ export interface SolidTextureOptions {
 }
 
 export type TextureAssetOptions = Omit<TextureAssetRef, 'kind'>;
+
+export type VirtualTextureAssetOptions = Omit<VirtualTextureAssetRef, 'kind'>;
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => ({
   kind: 'solid',
@@ -68,4 +81,15 @@ export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => (
   ...(options.revision === undefined ? {} : { revision: options.revision }),
   ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
   uri: options.uri
+});
+
+export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => ({
+  kind: 'virtual-asset',
+  ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+  ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
+  id: options.id,
+  ...(options.manifestId === undefined ? {} : { manifestId: options.manifestId }),
+  manifestUri: options.manifestUri,
+  ...(options.revision === undefined ? {} : { revision: options.revision }),
+  ...(options.sampler === undefined ? {} : { sampler: options.sampler })
 });
