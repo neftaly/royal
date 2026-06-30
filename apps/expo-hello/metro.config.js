@@ -2,7 +2,7 @@ const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
-const tarstateCoreSourceRoot = path.resolve(__dirname, '../../packages/tarstate-core/src');
+const tarstateCoreSourceRoot = path.resolve(__dirname, '../../../tarstate/packages/core/src');
 
 function isInTarstateCoreSource(filePath) {
   const relativePath = path.relative(tarstateCoreSourceRoot, filePath);

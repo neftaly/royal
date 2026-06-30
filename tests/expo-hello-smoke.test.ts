@@ -105,7 +105,7 @@ describe('Expo hello smoke', () => {
       web: 'expo start --web',
     });
     expect(manifest.dependencies).toMatchObject({
-      '@tarstate/core': 'workspace:*',
+      '@tarstate/core': 'link:../../../tarstate/packages/core',
       expo: '~56.0.12',
       react: '19.2.3',
       'react-dom': '19.2.3',

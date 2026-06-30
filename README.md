@@ -1,10 +1,11 @@
 # Royal
 
-Royal is the clean package monorepo for the Royal renderer and Tarstate core. Patchpit remains the research, prototype, and commit-history repo; this repo starts from a clean export.
+Royal is the clean package monorepo for the Royal renderer and Royal-owned integrations. Patchpit remains the research, prototype, and commit-history repo; this repo starts from a clean export.
+
+Royal links `@tarstate/core` from the sibling Tarstate repo for app and lens integrations. The generic Tarstate core package and Tarstate demo app live outside this repository.
 
 ## Packages
 
-- `@tarstate/core` - relation schemas, query evaluation, diagnostics, and writes.
 - `@royal/renderer-core` - DOM-free scene data and authoring helpers.
 - `@royal/react` - React JSX/runtime adapter and WebGL root implementation.
 - `@royal/tarstate-lens` - Royal-specific Tarstate lens and v1 API.

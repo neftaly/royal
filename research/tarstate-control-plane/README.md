@@ -14,10 +14,10 @@ commands, probes, diagnostics, and user control state.
 
 ## Tarstate Extraction-Readiness Lane
 
-This lane keeps `@tarstate/core` detachable without splitting the repository or
-moving packages. The core package should remain a renderer-agnostic data/query
-library in `packages/tarstate-core`; Royal control-plane schemas and adapters
-belong in `@royal/tarstate-lens`.
+This lane keeps Royal as a consumer of the standalone `@tarstate/core` package.
+The core package lives in the sibling Tarstate repo as a renderer-agnostic
+data/query library; Royal control-plane schemas and adapters belong in
+`@royal/tarstate-lens`.
 
 Current boundary intent:
 
@@ -31,9 +31,9 @@ Current boundary intent:
 - `@royal/tarstate-lens` may depend on `@tarstate/core`, but it remains the
   Royal-owned integration layer.
 
-Do not add publishing setup, create a separate repo, split the monorepo, or move
-packages for this lane. A future extraction is justified only when all of these
-criteria are met:
+Do not reintroduce Tarstate core or the Tarstate demo app into Royal for this
+lane. A future external release is justified only when all of these criteria are
+met:
 
 1. Stable API: the root and taxonomy subpath exports have stopped changing in
    ordinary Royal work.

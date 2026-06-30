@@ -4,7 +4,7 @@
   "license": "AGPL-3.0-only",
   "main": "index.ts",
   "dependencies": {
-    "@tarstate/core": "workspace:*",
+    "@tarstate/core": "link:../../../tarstate/packages/core",
     "expo": "~56.0.12",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",

@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tarstate/core": "workspace:*"
+    "@tarstate/core": "link:../../../tarstate/packages/core"
   },
   "devDependencies": {
     "typescript": "catalog:",

@@ -47,7 +47,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
   }
 };
 
-const appPackageNames = new Set(['@royal/examples-react', '@royal/tarstate-demo']);
+const appPackageNames = new Set(['@royal/examples-react']);
 const reactAppPackageNames = new Set(['@royal/examples-react']);
 const fixtureAppPackageNames = new Set(['@royal/examples-react']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
@@ -56,13 +56,6 @@ const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(m
 const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
-  { find: '@tarstate/core/diagnostics', replacement: path.join(repoRoot, 'packages/tarstate-core/src/diagnostics.ts') },
-  { find: '@tarstate/core/evaluate', replacement: path.join(repoRoot, 'packages/tarstate-core/src/evaluate.ts') },
-  { find: '@tarstate/core/query', replacement: path.join(repoRoot, 'packages/tarstate-core/src/query.ts') },
-  { find: '@tarstate/core/schema', replacement: path.join(repoRoot, 'packages/tarstate-core/src/schema.ts') },
-  { find: '@tarstate/core/source', replacement: path.join(repoRoot, 'packages/tarstate-core/src/source.ts') },
-  { find: '@tarstate/core/write', replacement: path.join(repoRoot, 'packages/tarstate-core/src/write.ts') },
-  { find: '@tarstate/core', replacement: path.join(repoRoot, 'packages/tarstate-core/src/index.ts') },
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
   { find: '@royal/renderer-webgl/virtual-texturing/testing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texture-testing.ts') },
   { find: '@royal/renderer-webgl/virtual-texturing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texturing.ts') },

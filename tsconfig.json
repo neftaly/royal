@@ -11,9 +11,6 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
-      "@tarstate/core": [
-        "./packages/tarstate-core/src/index.ts"
-      ],
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],

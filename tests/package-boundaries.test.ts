@@ -59,21 +59,18 @@ const sourceExtensions = new Set(['.ts', '.tsx']);
 const generatedSourceDirectories = new Set(['dist', 'node_modules']);
 const rendererPackageRoots = ['packages/renderer-core', 'packages/renderer-webgl', 'packages/renderer-webgpu', 'packages/react'] as const;
 const tarstateControlPlanePackageNames = new Set(['@tarstate/core', '@royal/tarstate-lens']);
-const tarstateCorePackageRoot = 'packages/tarstate-core';
-const tarstateControlPlanePackageRoots = ['packages/tarstate-core', 'packages/royal-tarstate-lens'] as const;
+const tarstateControlPlanePackageRoots = ['packages/royal-tarstate-lens'] as const;
 const artifactDisplaySourceFiles = new Set(['apps/examples-react/src/ResearchArtifacts.tsx']);
 const artifactReferenceLinePattern = /apps\/examples-react\/public\/artifacts|['"`(]\s*\/?artifacts\/[^'"`\s)]/;
 const rendererTestingSubpathPattern = /^@royal\/renderer-[a-z0-9-]+(?:\/.*)?\/testing(?:\/.*)?$/;
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react', type: 'module' },
   { name: '@royal/expo-hello', root: 'apps/expo-hello', type: undefined },
-  { name: '@royal/tarstate-demo', root: 'apps/tarstate-demo', type: 'module' },
   { name: '@royal/react', root: 'packages/react', type: 'module' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core', type: 'module' },
   { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl', type: 'module' },
   { name: '@royal/renderer-webgpu', root: 'packages/renderer-webgpu', type: 'module' },
-  { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens', type: 'module' },
-  { name: '@tarstate/core', root: 'packages/tarstate-core', type: 'module' }
+  { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens', type: 'module' }
 ] as const;
 const temporaryTestingLabExports = [
   {
@@ -269,13 +266,6 @@ function resolvedRelativeRepoPath(filePath: string, moduleSpecifier: string): st
 
 function isPathInside(parentPath: string, candidatePath: string): boolean {
   return candidatePath === parentPath || candidatePath.startsWith(parentPath + path.sep);
-}
-
-function relativeImportTargetPackageRoot(filePath: string, moduleSpecifier: string, packageRoots: readonly string[]): string | undefined {
-  if (!moduleSpecifier.startsWith('.')) return undefined;
-
-  const resolvedPath = path.resolve(path.dirname(filePath), moduleSpecifier);
-  return packageRoots.find((packageRoot) => isPathInside(path.join(repoRoot, packageRoot), resolvedPath));
 }
 
 function relativeImportTargetSourcePackageRoot(filePath: string, moduleSpecifier: string, packageRoots: readonly string[]): string | undefined {
@@ -525,7 +515,7 @@ describe('package boundaries', () => {
     });
   });
 
-  it('keeps examples research-only imports behind explicit lab probe files', () => {
+  it('keeps examples research-only imports out of primary examples', () => {
     const researchBoundaryImports = listImplementationSourceFilesUnderRoot(examplesReactExampleSourceRoot)
       .flatMap((filePath) =>
         collectModuleSpecifiers(filePath).flatMap((specifier) => {
@@ -536,18 +526,7 @@ describe('package boundaries', () => {
         })
       );
 
-    expect(researchBoundaryImports).toEqual([
-      {
-        file: 'apps/examples-react/src/examples/cases/VirtualTexturingTerrain.tsx',
-        reason: 'renderer testing subpath',
-        specifier: '@royal/renderer-webgl/virtual-texturing/testing'
-      },
-      {
-        file: 'apps/examples-react/src/examples/cases/virtual-texturing/worker-page-adapter.ts',
-        reason: 'renderer testing subpath',
-        specifier: '@royal/renderer-webgl/virtual-texturing/testing'
-      }
-    ]);
+    expect(researchBoundaryImports).toEqual([]);
   });
 
   it('keeps public artifact URLs isolated to the research artifact display source', () => {
@@ -569,70 +548,9 @@ describe('package boundaries', () => {
 
   it('keeps @royal/tarstate-lens root export on the v1 facade', () => {
     const manifest = readManifest(path.join(repoRoot, 'packages/royal-tarstate-lens/package.json'));
-    expect(manifest.dependencies?.['@tarstate/core']).toBe('workspace:*');
+    expect(manifest.dependencies?.['@tarstate/core']).toBe('link:../../../tarstate/packages/core');
     expect(manifest.dependencies?.['@patchpit/tarstate']).toBeUndefined();
     expect(manifest.exports).toMatchObject({ '.': './src/v1.ts', './v1': './src/v1.ts' });
-  });
-
-  it('keeps @tarstate/core root and taxonomy subpath exports public', () => {
-    const manifest = readManifest(path.join(repoRoot, 'packages/tarstate-core/package.json'));
-
-    expect(manifest.exports).toEqual({
-      '.': './src/index.ts',
-      './diagnostics': './src/diagnostics.ts',
-      './evaluate': './src/evaluate.ts',
-      './query': './src/query.ts',
-      './schema': './src/schema.ts',
-      './source': './src/source.ts',
-      './write': './src/write.ts'
-    });
-  });
-
-  it('keeps @tarstate/core isolated from Royal, apps, renderers, and package internals', () => {
-    const workspaceManifests = workspacePackageManifests();
-    const packageRoots = workspaceManifests.map(({ root }) => root);
-    const packageNameByRoot = new Map(workspaceManifests.map(({ manifest, root }) => [root, manifest.name]));
-    const appPackageNames = new Set(workspaceManifests.filter(({ root }) => root.startsWith('apps/')).map(({ manifest }) => manifest.name));
-    const rendererPackageRootSet = new Set<string>(rendererPackageRoots);
-    const rendererPackageNames = new Set(rendererPackageRoots.map((root) => packageNameByRoot.get(root)));
-    const tarstateCoreManifest = readManifest(path.join(repoRoot, tarstateCorePackageRoot, 'package.json'));
-    const forbiddenPackageReason = (packageName: string | undefined): string | undefined => {
-      if (packageName === undefined) return undefined;
-      if (appPackageNames.has(packageName)) return 'app package';
-      if (rendererPackageNames.has(packageName)) return 'renderer package';
-      if (packageName.startsWith('@royal/')) return 'Royal package';
-      return undefined;
-    };
-    const dependencyViolations = manifestDependencyEntries(tarstateCoreManifest)
-      .flatMap(({ packageName, section }) => {
-        const reason = forbiddenPackageReason(packageName);
-        return reason === undefined ? [] : [{ section, packageName, reason }];
-      });
-    const importViolations = listSourceFiles(path.join(repoRoot, tarstateCorePackageRoot))
-      .flatMap((filePath) =>
-        collectModuleSpecifiers(filePath).flatMap((specifier) => {
-          const packageImport = externalPackageImport(specifier);
-          const targetPackageRoot = relativeImportTargetPackageRoot(filePath, specifier, packageRoots);
-          const targetPackageName = targetPackageRoot === undefined ? undefined : packageNameByRoot.get(targetPackageRoot);
-          const relativeTargetReason =
-            targetPackageRoot === undefined
-              ? undefined
-              : targetPackageRoot.startsWith('apps/')
-                ? 'app package'
-                : rendererPackageRootSet.has(targetPackageRoot)
-                  ? 'renderer package'
-                  : forbiddenPackageReason(targetPackageName);
-          const reasons = [
-            forbiddenPackageReason(packageImport?.packageName),
-            relativeTargetReason,
-            isPackageSourcePathImport(specifier) ? 'package source path' : undefined
-          ].filter((reason) => reason !== undefined);
-
-          return reasons.map((reason) => ({ file: path.relative(repoRoot, filePath), specifier, reason }));
-        })
-      );
-
-    expect({ dependencyViolations, importViolations }).toEqual({ dependencyViolations: [], importViolations: [] });
   });
 
   it('keeps Tarstate API consumers on package exports instead of source paths', () => {
@@ -652,7 +570,7 @@ describe('package boundaries', () => {
             if (apiPackage !== undefined && !hasPackageExport(apiPackage.manifest, packageImport.exportKey)) {
               return [{ file: path.relative(repoRoot, filePath), specifier, reason: 'not in package exports' }];
             }
-            if (apiPackage !== undefined && isPackageSourcePathImport(specifier)) {
+            if (tarstateControlPlanePackageNames.has(packageImport.packageName) && isPackageSourcePathImport(specifier)) {
               return [{ file: path.relative(repoRoot, filePath), specifier, reason: 'package source path' }];
             }
           }
