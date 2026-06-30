@@ -604,6 +604,196 @@ const smokeExpression = `
       samples,
     };
   };
+  const describeDomElement = (element) => {
+    if (!(element instanceof Element)) return undefined;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    const name = element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement ||
+      element instanceof HTMLTextAreaElement ||
+      element instanceof HTMLButtonElement ||
+      element instanceof HTMLFieldSetElement ||
+      element instanceof HTMLFormElement ||
+      element instanceof HTMLOutputElement
+      ? element.name
+      : element.getAttribute('name') ?? '';
+    const type = element instanceof HTMLInputElement || element instanceof HTMLButtonElement
+      ? element.type
+      : element.getAttribute('type') ?? '';
+
+    return {
+      ariaHidden: element.getAttribute('aria-hidden') ?? '',
+      ariaLabel: element.getAttribute('aria-label') ?? '',
+      className: String(element.getAttribute('class') ?? ''),
+      contentEditable: element.getAttribute('contenteditable') ?? '',
+      disabled: element instanceof HTMLInputElement ||
+        element instanceof HTMLSelectElement ||
+        element instanceof HTMLTextAreaElement ||
+        element instanceof HTMLButtonElement ||
+        element instanceof HTMLFieldSetElement
+        ? element.disabled
+        : false,
+      display: style.display,
+      height: Number(rect.height.toFixed(2)),
+      hidden: element instanceof HTMLElement ? element.hidden : false,
+      id: element.id,
+      name,
+      role: element.getAttribute('role') ?? '',
+      tabIndex: element instanceof HTMLElement ? element.tabIndex : null,
+      tag: element.tagName.toLowerCase(),
+      type,
+      visibility: style.visibility,
+      width: Number(rect.width.toFixed(2)),
+    };
+  };
+  const describeActiveElement = () => describeDomElement(document.activeElement);
+  const probeCanvasFocus = (canvas) => {
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return {
+        currentFocus: { ok: false, reason: 'missing canvas' },
+        focusableNow: false,
+        focusableWithTemporaryTabIndex: false,
+        hasCanvas: false,
+        temporaryFocus: undefined,
+      };
+    }
+
+    const currentAttributeTabIndex = canvas.getAttribute('tabindex');
+    const currentTabIndex = canvas.tabIndex;
+    const tryFocus = () => {
+      try {
+        canvas.focus({ preventScroll: true });
+      } catch (error) {
+        return {
+          activeElement: describeActiveElement(),
+          message: error instanceof Error ? error.message : String(error),
+          ok: false,
+          reason: 'focus threw',
+        };
+      }
+
+      return {
+        activeElement: describeActiveElement(),
+        ok: document.activeElement === canvas,
+        reason: document.activeElement === canvas ? 'focused' : 'active element did not change to canvas',
+      };
+    };
+
+    if (document.activeElement === canvas) {
+      canvas.blur();
+    }
+
+    const currentFocus = tryFocus();
+    let temporaryFocus;
+
+    if (currentFocus.ok !== true) {
+      canvas.setAttribute('tabindex', '0');
+      temporaryFocus = tryFocus();
+      if (currentAttributeTabIndex === null) {
+        canvas.removeAttribute('tabindex');
+      } else {
+        canvas.setAttribute('tabindex', currentAttributeTabIndex);
+      }
+    }
+
+    return {
+      attributeTabIndex: currentAttributeTabIndex,
+      currentFocus,
+      currentTabIndex,
+      focusableNow: currentFocus.ok === true,
+      focusableWithTemporaryTabIndex: temporaryFocus?.ok === true || currentFocus.ok === true,
+      hasCanvas: true,
+      restoredAttributeTabIndex: canvas.getAttribute('tabindex'),
+      sequentiallyFocusable: currentTabIndex >= 0,
+      temporaryFocus,
+    };
+  };
+  const readFormControlsRuntime = (canvas) => {
+    const allElements = Array.from(document.querySelectorAll('*'));
+    const domControls = Array.from(
+      document.querySelectorAll('button, fieldset, form, input, output, select, textarea'),
+    ).map(describeDomElement);
+    const contentEditableControls = allElements
+      .filter((element) =>
+        element instanceof HTMLElement &&
+        (element.getAttribute('contenteditable') !== null || element.isContentEditable)
+      )
+      .map(describeDomElement);
+    const knownHiddenBridgeSelectors = [
+      '[data-royal-text-clipboard-bridge]',
+      '.renderer-text-clipboard-bridge',
+      '[data-royal-text-context-menu]',
+      '.renderer-text-context-menu',
+      '[data-royal-text-menu-action]',
+      '[data-royal-form-bridge]',
+      '[data-royal-form-control-bridge]',
+      '[data-royal-file-input-bridge]',
+      '[data-royal-file-picker-bridge]',
+      '[data-royal-clipboard-bridge]',
+      '[data-input-file-bridge]',
+      '[data-file-input-bridge]',
+      '[data-hidden-file-input]',
+      '[data-hidden-file-picker]',
+      '[data-clipboard-bridge]',
+      '.royal-form-bridge',
+      '.royal-file-input-bridge',
+      '.royal-file-picker-bridge',
+      '.royal-clipboard-bridge',
+      '.file-input-bridge',
+      '.input-file-bridge',
+      '.hidden-file-input',
+      '.hidden-file-picker',
+      '.hidden-clipboard-textarea',
+      '.clipboard-bridge',
+    ];
+    const bridgeAttributePattern =
+      /(?:ClipboardFallback|clipboard-bridge|clipboardBridge|clipboardTextarea|hiddenClipboard|hiddenFile|hidden-file|fileInput|file-input|filePicker|file-picker|inputFileBridge|input-file-bridge|renderer-text-clipboard-bridge|renderer-text-context-menu|royal-form-bridge|royal-file-input-bridge|royal-file-picker-bridge|royal-clipboard-bridge)/i;
+    const bridgeNodes = new Map();
+    const addBridgeNode = (element, match) => {
+      const key = element;
+      const current = bridgeNodes.get(key) ?? { ...describeDomElement(element), matches: [] };
+      current.matches.push(match);
+      bridgeNodes.set(key, current);
+    };
+
+    for (const selector of knownHiddenBridgeSelectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        addBridgeNode(element, selector);
+      }
+    }
+
+    for (const element of allElements) {
+      const matchedAttributes = Array.from(element.attributes)
+        .filter((attribute) => bridgeAttributePattern.test(attribute.name) ||
+          bridgeAttributePattern.test(attribute.value))
+        .map((attribute) => \`\${attribute.name}=\${attribute.value}\`);
+      if (matchedAttributes.length > 0) {
+        addBridgeNode(element, matchedAttributes.join(', '));
+      }
+    }
+
+    const canvasFocus = probeCanvasFocus(canvas);
+    const focusMode = canvasFocus.focusableNow
+      ? 'current'
+      : canvasFocus.focusableWithTemporaryTabIndex
+        ? 'temporary-tabindex'
+        : 'none';
+    const knownHiddenBridgeNodes = Array.from(bridgeNodes.values());
+
+    return {
+      canvas: canvas === undefined ? undefined : describeDomElement(canvas),
+      canvasFocus,
+      contentEditableControls,
+      domControls,
+      knownHiddenBridgeNodes,
+      summary: {
+        contentEditableCount: contentEditableControls.length,
+        domControlCount: domControls.length,
+        focusMode,
+        knownHiddenBridgeCount: knownHiddenBridgeNodes.length,
+      },
+    };
+  };
   const read = () => {
     const page = document.querySelector('.example-page');
     const bodyText = document.body.textContent ?? '';
@@ -673,6 +863,7 @@ const smokeExpression = `
           textValue: document.querySelector('input[type="text"]')?.value ?? '',
         };
       })() : undefined,
+      formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas) : undefined,
       virtualTexturing: routeId === 'virtual-texturing' ? (() => {
         const sourceForbiddenPatterns = [
           /@royal\\/renderer-webgl(?:\\/[^'"\\s]*)?/g,
@@ -753,8 +944,8 @@ const smokeExpression = `
 })()
 `;
 
-const textProbeExpression = `
-(() => {
+const textProbeReaderExpression = `
+() => {
   const probe = window.__royalTextEditorProbe;
   if (probe === undefined || probe === null) return undefined;
   const selection = probe.selection ?? {};
@@ -896,7 +1087,11 @@ const textProbeExpression = `
     text: String(probe.text ?? ''),
     textLength: Number(probe.textLength ?? 0),
   };
-})()
+}
+`;
+
+const textProbeExpression = `
+(${textProbeReaderExpression})()
 `;
 
 const textInteractionPlanExpression = `
@@ -1505,6 +1700,62 @@ const assertRoute = (expected, state) => {
     }
   }
 
+  if (expected.id === 'form-controls') {
+    const form = state.formControls;
+    const summarizeNode = (node) => {
+      if (node === undefined || node === null) return 'unknown node';
+      const id = node.id === '' ? '' : `#${node.id}`;
+      const name = node.name === '' ? '' : `[name="${node.name}"]`;
+      const type = node.type === '' ? '' : `[type="${node.type}"]`;
+      const matches = Array.isArray(node.matches) && node.matches.length > 0
+        ? ` (${node.matches.join(', ')})`
+        : '';
+      return `${node.tag}${id}${type}${name}${matches}`;
+    };
+    const summarizeNodes = (nodes) => nodes.slice(0, 5).map(summarizeNode).join(', ');
+
+    if (form === undefined) {
+      failures.push('form controls route missed runtime DOM inspection');
+    } else {
+      if ((form.summary?.domControlCount ?? form.domControls?.length ?? 0) !== 0) {
+        failures.push(`form controls route rendered DOM control(s): ${summarizeNodes(form.domControls ?? [])}`);
+      }
+      if ((form.summary?.contentEditableCount ?? form.contentEditableControls?.length ?? 0) !== 0) {
+        failures.push(
+          `form controls route rendered contenteditable control(s): ${
+            summarizeNodes(form.contentEditableControls ?? [])
+          }`,
+        );
+      }
+      if ((form.summary?.knownHiddenBridgeCount ?? form.knownHiddenBridgeNodes?.length ?? 0) !== 0) {
+        failures.push(
+          `form controls route rendered hidden bridge node(s): ${
+            summarizeNodes(form.knownHiddenBridgeNodes ?? [])
+          }`,
+        );
+      }
+      if (form.canvas?.ariaLabel !== smoke?.canvasLabel) {
+        failures.push(`form controls canvas label was "${form.canvas?.ariaLabel ?? 'missing'}"`);
+      }
+
+      const focus = form.canvasFocus;
+      if (focus?.hasCanvas !== true) {
+        failures.push('form controls focus probe missed canvas');
+      } else {
+        if ((focus.currentTabIndex ?? -1) >= 0 && focus.currentFocus?.ok !== true) {
+          failures.push(`form controls canvas tabIndex=${focus.currentTabIndex} did not receive focus`);
+        }
+        if (focus.focusableNow !== true && focus.focusableWithTemporaryTabIndex !== true) {
+          failures.push(
+            `form controls canvas could not receive focus for future form host work: ${
+              focus.temporaryFocus?.reason ?? focus.currentFocus?.reason ?? 'unknown'
+            }`,
+          );
+        }
+      }
+    }
+  }
+
   if (expected.id === 'virtual-texturing') {
     const vtBoundary = state.virtualTexturing;
     if (vtBoundary === undefined) {
@@ -1727,26 +1978,74 @@ const dispatchKeyboardShortcut = async (session, key) => {
   await session.call('Input.dispatchKeyEvent', { ...event, type: 'keyUp' });
 };
 
-const dispatchTextPointer = async (session, type, point, buttons = 0) => evaluate(session, `
-(() => {
+const runTextPointerSequenceInPage = async (session, steps, predicateExpression, timeoutMs = 800) => evaluate(session, `
+(async () => {
+  const readProbe = ${textProbeReaderExpression};
+  const predicate = ${predicateExpression};
+  const steps = ${JSON.stringify(steps)};
   const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
     candidate.getAttribute('aria-label') === 'Renderer text editor'
   );
-  if (canvas === undefined) return { ok: false, reason: 'missing text canvas' };
-  if (typeof PointerEvent !== 'function') return { ok: false, reason: 'missing PointerEvent' };
+  if (canvas === undefined) {
+    return { after: readProbe(), durationMs: 0, events: [], ok: false, reason: 'missing text canvas' };
+  }
+  if (typeof PointerEvent !== 'function') {
+    return { after: readProbe(), durationMs: 0, events: [], ok: false, reason: 'missing PointerEvent' };
+  }
 
-  const event = new PointerEvent(${JSON.stringify(type)}, {
-    bubbles: true,
-    button: 0,
-    buttons: ${Number(buttons)},
-    cancelable: true,
-    clientX: ${Number(point.x)},
-    clientY: ${Number(point.y)},
-    isPrimary: true,
-    pointerId: 1,
-    pointerType: 'mouse',
-  });
-  return { defaultPrevented: event.defaultPrevented, dispatched: canvas.dispatchEvent(event), ok: true };
+  const animationFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const waitFrames = async (count) => {
+    for (let index = 0; index < count; index += 1) {
+      await animationFrame();
+    }
+  };
+  const dispatch = (step) => {
+    const point = step.point ?? { x: 0, y: 0 };
+    const event = new PointerEvent(String(step.type), {
+      bubbles: true,
+      button: 0,
+      buttons: Number(step.buttons ?? 0),
+      cancelable: true,
+      clientX: Number(point.x),
+      clientY: Number(point.y),
+      isPrimary: true,
+      pointerId: Number(step.pointerId ?? 1),
+      pointerType: 'mouse',
+    });
+    const startedAt = performance.now();
+    const dispatched = canvas.dispatchEvent(event);
+    return {
+      defaultPrevented: event.defaultPrevented,
+      dispatched,
+      durationMs: performance.now() - startedAt,
+      type: String(step.type),
+    };
+  };
+  const waitForProbe = async () => {
+    const deadline = performance.now() + ${Number(timeoutMs)};
+    let probe = readProbe();
+    while (performance.now() < deadline && !predicate(probe)) {
+      await animationFrame();
+      probe = readProbe();
+    }
+    return probe;
+  };
+
+  const startedAt = performance.now();
+  const events = [];
+  for (const step of steps) {
+    const frameCount = Math.max(0, Math.floor(Number(step.waitFrames ?? 0)));
+    if (frameCount > 0) await waitFrames(frameCount);
+    if (step.type !== undefined) events.push(dispatch(step));
+  }
+  const after = await waitForProbe();
+
+  return {
+    after,
+    durationMs: performance.now() - startedAt,
+    events,
+    ok: true,
+  };
 })()
 `);
 
@@ -2310,29 +2609,37 @@ const waitForTextProbeState = async (session, predicate, timeoutMs = 800) => {
 };
 
 const dragTextSelection = async (session, plan) => {
-  const startedDragAt = performance.now();
-  await dispatchTextPointer(session, 'pointermove', plan.dragStart, 0);
-  await dispatchTextPointer(session, 'pointerdown', plan.dragStart, 1);
+  const steps = [
+    { buttons: 0, point: plan.dragStart, type: 'pointermove' },
+    { buttons: 1, point: plan.dragStart, type: 'pointerdown' },
+  ];
   for (let step = 1; step <= 5; step += 1) {
     const ratio = step / 5;
-    await dispatchTextPointer(session, 'pointermove', {
-      x: plan.dragStart.x + (plan.dragEnd.x - plan.dragStart.x) * ratio,
-      y: plan.dragStart.y + (plan.dragEnd.y - plan.dragStart.y) * ratio,
-    }, 1);
-    await sleep(16);
+    steps.push({
+      buttons: 1,
+      point: {
+        x: plan.dragStart.x + (plan.dragEnd.x - plan.dragStart.x) * ratio,
+        y: plan.dragStart.y + (plan.dragEnd.y - plan.dragStart.y) * ratio,
+      },
+      type: 'pointermove',
+    });
+    steps.push({ waitFrames: 1 });
   }
-  await dispatchTextPointer(session, 'pointerup', plan.dragEnd, 0);
-  const after = await waitForTextProbeState(
+  steps.push({ buttons: 0, point: plan.dragEnd, type: 'pointerup' });
+
+  const result = await runTextPointerSequenceInPage(
     session,
-    (probe) =>
-      (probe?.selectionRects.length ?? 0) > 0 &&
-      (probe?.selectedText.length ?? 0) > 0 &&
-      Math.abs((probe?.selection.focus ?? -1) - plan.endTarget.index) <= 1,
+    steps,
+    `(probe) =>
+      (probe?.selectionRects?.length ?? 0) > 0 &&
+      (probe?.selectedText?.length ?? 0) > 0 &&
+      Math.abs((probe?.selection?.focus ?? -1) - ${Number(plan.endTarget.index)}) <= 1`,
   );
 
   return {
-    after,
-    dragToProbeMs: performance.now() - startedDragAt,
+    after: result.after,
+    dragEvents: result.events,
+    dragToProbeMs: result.durationMs,
   };
 };
 
@@ -2346,18 +2653,20 @@ const runTextInteractionCdpSmoke = async (session) => {
   const plan = await evaluate(session, textInteractionPlanExpression);
   if (plan?.error !== undefined) return { before, error: plan.error };
 
-  const startedClickAt = performance.now();
-  await dispatchTextPointer(session, 'pointermove', plan.clickPoint, 0);
-  await dispatchTextPointer(session, 'pointerdown', plan.clickPoint, 1);
-  await sleep(16);
-  await dispatchTextPointer(session, 'pointerup', plan.clickPoint, 0);
-  const clicked = await waitForTextProbeState(
+  const click = await runTextPointerSequenceInPage(
     session,
-    (probe) =>
-      probe?.selection.focus === plan.clickTarget.index &&
-      probe.selection.focusLine === plan.clickTarget.line,
+    [
+      { buttons: 0, point: plan.clickPoint, type: 'pointermove' },
+      { buttons: 1, point: plan.clickPoint, type: 'pointerdown' },
+      { waitFrames: 1 },
+      { buttons: 0, point: plan.clickPoint, type: 'pointerup' },
+    ],
+    `(probe) =>
+      probe?.selection?.focus === ${Number(plan.clickTarget.index)} &&
+      probe?.selection?.focusLine === ${Number(plan.clickTarget.line)}`,
   );
-  const clickToProbeMs = performance.now() - startedClickAt;
+  const clicked = click.after;
+  const clickToProbeMs = click.durationMs;
   const primarySelectionPlan = {
     ...plan,
     dragEnd: plan?.partialDragEnd ?? plan.dragEnd,
@@ -2503,6 +2812,7 @@ const runTextInteractionCdpSmoke = async (session) => {
     before,
     clickHit: plan.clickHit,
     clickPoint: plan.clickPoint,
+    clickEvents: click.events,
     clickTarget: plan.clickTarget,
     clickToProbeMs,
     clicked,
@@ -2523,6 +2833,7 @@ const runTextInteractionCdpSmoke = async (session) => {
       menuPasteClick,
     },
     dragToProbeMs,
+    dragEvents: dragSelection.dragEvents,
     endTarget: primarySelectionPlan.endTarget,
     keyboard: {
       afterCopyNativeClipboard,
@@ -2645,7 +2956,13 @@ const main = async () => {
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)}`;
-      console.log(`ok ${route.title}${canvasSummary}`);
+      const formSummary = route.id === 'form-controls' && state.formControls !== undefined
+        ? ` domControls=${state.formControls.summary.domControlCount}` +
+          ` contenteditable=${state.formControls.summary.contentEditableCount}` +
+          ` bridges=${state.formControls.summary.knownHiddenBridgeCount}` +
+          ` focus=${state.formControls.summary.focusMode}`
+        : '';
+      console.log(`ok ${route.title}${canvasSummary}${formSummary}`);
     }
 
     if (routeFilter === '') {

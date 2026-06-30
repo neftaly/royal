@@ -1,7 +1,6 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  createTextFontFace,
   clampTextIndex,
   editableTextCaretPlacement as caretPlacement,
   editableTextSelectionRects as selectionRects,
@@ -30,6 +29,7 @@ import { Canvas } from '@royal/react';
 import {
   createElement,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,7 +40,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url';
+import { useAtkinsonFont } from './text-font';
 
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -236,11 +236,6 @@ type StackOptions = {
   readonly gap: number;
   readonly origin: Vec3;
 };
-
-type FontState =
-  | { readonly status: 'loading' }
-  | { readonly font: TextFontFace; readonly status: 'ready' }
-  | { readonly status: 'failed' };
 
 type EditableTextBox = CanvasTextBox & {
   readonly caret: (origin: Vec3) => Vec3;
@@ -458,6 +453,7 @@ const h2 = (font: TextFontFace, text: string): CanvasTextBox =>
   });
 
 const editableSentence = (
+  font: TextFontFace,
   layout: EditableTextLayout,
   caretIndex: number,
   caretLine: number | undefined,
@@ -466,7 +462,7 @@ const editableSentence = (
   const placement = caretPlacement(layout, caretIndex, caretLine) ?? layout.caretPlacements.at(-1);
   const box = textBox({
     color: [0.28, 0.95, 0.48, 1],
-    font: layout.font,
+    font,
     fontSize: layout.fontSize,
     lineHeight: layout.lineHeight,
     text: layout.wrappedText,
@@ -512,37 +508,6 @@ const column = ({ children, gap, origin }: StackOptions): readonly RenderNode[] 
     cursorY -= child.height + gap;
     return nodes;
   });
-};
-
-const useAtkinsonFont = (): FontState => {
-  const [state, setState] = useState<FontState>({ status: 'loading' });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async (): Promise<void> => {
-      try {
-        const response = await fetch(fontUrl);
-        if (!response.ok) throw new Error(`Font request failed: ${response.status}`);
-        const data = await response.arrayBuffer();
-        const face = createTextFontFace({
-          data,
-          family: 'Atkinson Hyperlegible',
-          source: fontUrl,
-        });
-        if (!cancelled) setState({ font: face, status: 'ready' });
-      } catch {
-        if (!cancelled) setState({ status: 'failed' });
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return state;
 };
 
 const caretNode = (position: Vec3, height: number): RenderNode =>
@@ -703,11 +668,11 @@ const contextMenuCommandAt = (
 
 const nearestCaretPlacement = (
   layout: EditableTextLayout,
+  origin: Vec3,
   canvas: HTMLCanvasElement,
   clientX: number,
   clientY: number,
 ): CaretPlacement => {
-  const origin = editableOrigin(layout.font);
   const [worldX, worldY] = canvasPointToWorld(canvas, clientX, clientY);
   return nearestEditableTextCaret(layout, { x: worldX, y: worldY }, origin);
 };
@@ -716,6 +681,7 @@ const textScene = (
   font: TextFontFace,
   editableLayout: EditableTextLayout,
   selection: TextSelection,
+  editableWorldOrigin: Vec3,
   contextMenu: TextContextMenuState,
   menuCommands: readonly TextContextMenuCommandLayout[],
   showCaret: boolean,
@@ -723,8 +689,8 @@ const textScene = (
   const heading = h1(font, headingSampleText);
   const subheading = h2(font, 'h1 / h2 canvas primitives');
   const selectionRange = sortedTextRange(selection);
-  const editable = editableSentence(editableLayout, selection.focus, selection.focusLine, selectionRange);
-  const caretPosition = editable.caret(editableOrigin(font));
+  const editable = editableSentence(font, editableLayout, selection.focus, selection.focusLine, selectionRange);
+  const caretPosition = editable.caret(editableWorldOrigin);
 
   return (
     <scene>
@@ -850,6 +816,10 @@ export const RendererText = (): ReactNode => {
     maxMs: 0,
   });
   const font = fontState.status === 'ready' ? fontState.font : undefined;
+  const editableWorldOrigin = useMemo(
+    () => font === undefined ? undefined : editableOrigin(font),
+    [font],
+  );
   const editableLayout = useMemo(
     () =>
       font === undefined
@@ -874,8 +844,8 @@ export const RendererText = (): ReactNode => {
   } as const;
   const menuCommands = contextMenuCommands(contextMenu, menuEnabled);
   const scene =
-    font !== undefined && editableLayout !== undefined
-      ? textScene(font, editableLayout, selection, contextMenu, menuCommands, focused)
+    font !== undefined && editableLayout !== undefined && editableWorldOrigin !== undefined
+      ? textScene(font, editableLayout, selection, editableWorldOrigin, contextMenu, menuCommands, focused)
       : textScenePlaceholder;
 
   useEffect(() => {
@@ -913,13 +883,13 @@ export const RendererText = (): ReactNode => {
     };
   }, []);
 
-  useEffect(() => {
-    if (font === undefined || editableLayout === undefined) {
+  useLayoutEffect(() => {
+    if (font === undefined || editableLayout === undefined || editableWorldOrigin === undefined) {
       delete window.__royalTextEditorProbe;
       return;
     }
 
-    const origin = editableOrigin(font);
+    const origin = editableWorldOrigin;
     const range = sortedTextRange(selection);
     const placement = caretPlacement(editableLayout, selection.focus, selection.focusLine) ??
       editableLayout.caretPlacements.at(-1) ??
@@ -953,7 +923,7 @@ export const RendererText = (): ReactNode => {
       hitTestClientPoint: (clientX, clientY) => {
         const canvas = document.querySelector('canvas[aria-label="Renderer text editor"]');
         if (!(canvas instanceof HTMLCanvasElement)) return undefined;
-        return nearestCaretPlacement(editableLayout, canvas, clientX, clientY);
+        return nearestCaretPlacement(editableLayout, origin, canvas, clientX, clientY);
       },
       layout: {
         lineCount: editableLayout.lines.length,
@@ -1028,6 +998,7 @@ export const RendererText = (): ReactNode => {
     clipboardState,
     contextMenu,
     editableLayout,
+    editableWorldOrigin,
     font,
     menuCommands,
     menuEnabled,
@@ -1244,10 +1215,16 @@ export const RendererText = (): ReactNode => {
     extend: boolean,
     anchor?: TextCaretEndpoint,
   ): TextCaretEndpoint | undefined => {
-    if (editableLayout === undefined) return undefined;
+    if (editableLayout === undefined || editableWorldOrigin === undefined) return undefined;
 
     const startedAt = performance.now();
-    const placement = nearestCaretPlacement(editableLayout, event.currentTarget, event.clientX, event.clientY);
+    const placement = nearestCaretPlacement(
+      editableLayout,
+      editableWorldOrigin,
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+    );
     const elapsed = performance.now() - startedAt;
     hitTestMetricsRef.current = {
       count: hitTestMetricsRef.current.count + 1,

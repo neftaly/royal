@@ -172,6 +172,12 @@ export type {
 } from './editable-text-command';
 export { applyEditableTextCommand } from './editable-text-command';
 export type {
+  EditableTextFragment,
+  EditableTextFragmentMode,
+  EditableTextFragmentOptions
+} from './editable-text-view';
+export { createEditableTextFragment } from './editable-text-view';
+export type {
   SvgGatewayBoundaryMode,
   SvgGatewayBounds,
   SvgGatewayContour,

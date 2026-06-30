@@ -25,7 +25,7 @@ export type EditableTextLayout = {
   readonly ascender: number;
   readonly caretPlacements: readonly EditableTextCaretPlacement[];
   readonly descender: number;
-  readonly font: TextFontFace;
+  readonly font?: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly lines: readonly EditableTextLine[];
@@ -37,7 +37,7 @@ export type EditableTextLayout = {
 };
 
 export type EditableTextLayoutOptions = {
-  readonly font: TextFontFace;
+  readonly font?: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly maxWidth: number;
@@ -76,14 +76,19 @@ export type EditableTextHitPoint = {
 };
 
 const measureText = (
-  font: TextFontFace,
+  font: TextFontFace | undefined,
   text: string,
   fontSize: number,
   lineHeight: number,
-): number => layoutText({ font, fontSize, lineHeight, text }).metrics.width;
+): number => layoutText({
+  ...(font === undefined ? {} : { font }),
+  fontSize,
+  lineHeight,
+  text,
+}).metrics.width;
 
 const createTextMeasurer = (
-  font: TextFontFace,
+  font: TextFontFace | undefined,
   fontSize: number,
   lineHeight: number,
 ): ((text: string) => number) => {
@@ -201,7 +206,12 @@ export const layoutEditableText = ({
   text,
 }: EditableTextLayoutOptions): EditableTextLayout => {
   const measure = createTextMeasurer(font, fontSize, lineHeight);
-  const metrics = layoutText({ font, fontSize, lineHeight, text: '' }).font.metrics;
+  const metrics = layoutText({
+    ...(font === undefined ? {} : { font }),
+    fontSize,
+    lineHeight,
+    text: '',
+  }).font.metrics;
   const lines = editableTextLines(text, maxWidth, measure).map((line, index): EditableTextLine => {
     const indexedLine = { ...line, index };
     const placements = textBoundaryIndexesBetween(text, line.start, line.end).map((placementIndex) =>
@@ -220,7 +230,7 @@ export const layoutEditableText = ({
     ascender: metrics.ascender,
     caretPlacements,
     descender: metrics.descender,
-    font,
+    ...(font === undefined ? {} : { font }),
     fontSize,
     lineHeight,
     lines,

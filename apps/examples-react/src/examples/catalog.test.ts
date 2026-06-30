@@ -130,7 +130,7 @@ type ExampleSourcePattern = {
   readonly pattern: RegExp;
 };
 
-const domControlTagPattern = /<\s*(input|textarea|select)\b[^>]*(?:\/>|>)/gi;
+const domControlTagPattern = /<\s*(button|fieldset|form|input|output|select|textarea)\b[^>]*(?:\/>|>)/gi;
 const forbiddenCanvasOnlyDomPatterns = [
   {
     kind: 'contentEditable DOM editing surface',
@@ -138,11 +138,12 @@ const forbiddenCanvasOnlyDomPatterns = [
   },
   {
     kind: 'DOM form control factory',
-    pattern: /\b(?:React\.)?createElement\s*\(\s*['"`](?:input|textarea|select)['"`]/gi,
+    pattern: /\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/gi,
   },
   {
     kind: 'DOM form control type',
-    pattern: /\b(?:HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement)\b/g,
+    pattern:
+      /\b(?:HTMLButtonElement|HTMLFieldSetElement|HTMLFormElement|HTMLInputElement|HTMLOutputElement|HTMLSelectElement|HTMLTextAreaElement)\b/g,
   },
   {
     kind: 'hidden file picker bridge',
@@ -188,7 +189,7 @@ const alwaysForbiddenResearchOnlyExamplePatterns = [
   },
   {
     kind: 'form-control renderer descriptor',
-    pattern: /\b(?:FormControl|formControl)\b|(?<![\w$.])(?:input|textarea|select)\s*\(/g,
+    pattern: /\b(?:FormControl|formControl)\b|(?<![\w$.])(?:button|fieldset|form|input|output|select|textarea)\s*\(/g,
   },
 ] as const satisfies readonly ExampleSourcePattern[];
 const productOnlyResearchOnlyExamplePatterns = [
@@ -422,16 +423,18 @@ describe('examples list', () => {
     expect(formControls?.maturity).toBe('product');
     expect(hostSource).not.toContain('@jsxImportSource @royal/react');
     expect(hostSource).toContain('<Canvas aria-label="Canvas-native form controls"');
-    expect(hostSource).toContain('{formControlsScene()}');
+    expect(hostSource).toContain('useAtkinsonFont');
+    expect(hostSource).toContain('{formControlsScene(font)}');
     expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
     expect(hostSource).not.toContain('@royal/renderer-core');
 
     expect(sceneSource).toContain('/** @jsxImportSource @royal/react */');
-    expect(sceneSource).toContain('export const formControlsScene = (): RenderRoot =>');
+    expect(sceneSource).toContain('export const formControlsScene = (font?: TextFontFace): RenderRoot =>');
     expect(sceneSource).toContain('<scene>');
     expect(sceneSource).toContain('<orthographicCamera');
     expect(sceneSource).toContain('<mesh');
     expect(sceneSource).toContain('<text');
+    expect(sceneSource).toContain('createEditableTextFragment');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('unlitMaterial');
     expect(sceneSource).not.toMatch(/\bCanvas\b/);
@@ -450,11 +453,12 @@ describe('examples list', () => {
     expect(modelSource).toContain('readonly semantics: Readonly<Record<string, UiNodeSemantics>>');
     expect(modelSource).toContain("command: 'browser.filePicker.request'");
     expect(sceneSource).toContain('control.mode === ');
+    expect(sceneSource).not.toContain('selectedRangeWidth');
     expect(combinedSource).not.toMatch(
-      /<\s*(?:input|textarea|select)\b|\b(?:React\.)?createElement\s*\(\s*['"`](?:input|textarea|select)['"`]/i,
+      /<\s*(?:button|fieldset|form|input|output|select|textarea)\b|\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/i,
     );
     expect(combinedSource).not.toMatch(
-      /\b(?:HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement|contentEditable|contenteditable|fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/,
+      /\b(?:HTMLButtonElement|HTMLFieldSetElement|HTMLFormElement|HTMLInputElement|HTMLOutputElement|HTMLSelectElement|HTMLTextAreaElement|contentEditable|contenteditable|fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/,
     );
   });
 
@@ -564,7 +568,7 @@ describe('examples list', () => {
     const fontSizeSliderCount = textExample?.source.match(/type: 'range'/g)?.length ?? 0;
 
     expect(textExample?.path).toBe('/text');
-    expect(textExample?.source).toContain('createTextFontFace');
+    expect(textExample?.source).toContain('useAtkinsonFont');
     expect(textExample?.source).toContain("font={font}");
     expect(textExample?.source).toContain('<text');
     expect(textExample?.source).toContain("role: 'textbox'");
@@ -596,9 +600,8 @@ describe('examples list', () => {
     expect(textExample?.source).toContain('selectedText');
     expect(textExample?.source).toContain('clipboard: ClipboardState');
     expect(textExample?.source).toContain('menu: {');
-    expect(textExample?.source).toContain(
-      "import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url'",
-    );
+    expect(textExample?.source).toContain("import { useAtkinsonFont } from './text-font'");
+    expect(textExample?.source).not.toContain('atkinson-hyperlegible-latin-400-normal.woff?url');
     expect(textExample?.source).not.toMatch(/\bscene\s*\(\s*\{/);
     expect(textExample?.source).not.toMatch(/\bpass\s*\(\s*\{/);
   });

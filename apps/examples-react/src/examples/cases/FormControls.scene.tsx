@@ -1,10 +1,12 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
+  createEditableTextFragment,
   solidTexture,
   type RenderNode,
   type RenderRoot,
   type Rgba,
+  type TextFontFace,
   type Vec3,
   unlitMaterial,
 } from '@royal/renderer-core';
@@ -82,32 +84,36 @@ const hexToRgba = (hex: string): Rgba => {
   return [r, g, b, 1];
 };
 
-const selectedRangeWidth = ({ selection, value }: EditableTextControlModel, width: number): number => {
-  const selected = Math.abs(selection.focus - selection.anchor);
-  const ratio = value.length === 0 ? 0 : selected / value.length;
-
-  return Math.max(0.12, Math.min(width - 0.36, width * ratio));
-};
-
 const editableTextField = (
   control: EditableTextControlModel,
+  font: TextFontFace | undefined,
   x: number,
   y: number,
   width: number,
 ): readonly RenderNode[] => {
   const multiline = control.mode === 'multiline';
   const height = multiline ? 1.34 : 0.74;
-  const value = control.value || control.placeholder;
-  const valueColor = control.value ? palette.ink : palette.muted;
-  const selectionWidth = selectedRangeWidth(control, width * 0.52);
-  const selectionY = y - (multiline ? 0.52 : 0.18);
+  const textOrigin: Vec3 = [x + 0.18, y - 0.23, 0.11];
+  const fragment = createEditableTextFragment({
+    color: palette.ink,
+    ...(font === undefined ? {} : { font }),
+    fontSize: 0.22,
+    lineHeight: 0.31,
+    maxWidth: width - 0.36,
+    mode: control.mode,
+    origin: textOrigin,
+    placeholder: control.placeholder,
+    placeholderColor: palette.muted,
+    selection: control.selection,
+    selectionColor: palette.selection,
+    text: control.value,
+  });
 
   return [
     textNode(control.label, [x, y, 0.12], palette.muted, 0.17, 0.24),
     rect({ fill: palette.stroke, height: height + 0.05, width: width + 0.05 }, [x + width / 2, y - 0.42, 0]),
     rect({ fill: palette.field, height, width }, [x + width / 2, y - 0.42, 0.02]),
-    rect({ fill: palette.selection, height: 0.24, width: selectionWidth }, [x + 1.38, selectionY, 0.05]),
-    textNode(value, [x + 0.18, y - 0.23, 0.11], valueColor, 0.22, 0.31),
+    ...fragment.nodes,
     textNode(`${control.value.length}/${control.maxLength}`, [x + width - 0.86, y - height + 0.04, 0.11], palette.muted, 0.14, 0.2),
   ];
 };
@@ -229,7 +235,7 @@ const buttons = (
     ];
   });
 
-export const formControlsScene = (): RenderRoot => (
+export const formControlsScene = (font?: TextFontFace): RenderRoot => (
   <scene>
     <pass clearColor={palette.bg}>
       <orthographicCamera
@@ -244,10 +250,10 @@ export const formControlsScene = (): RenderRoot => (
       />
       {textNode('Form Controls', [-6.28, 3.78, 0.12], palette.ink, 0.44, 0.54)}
       {textNode('Checkout', [-6.26, 3.28, 0.12], palette.muted, 0.2, 0.28)}
-      {editableTextField(formControlsModel.textControls[0], -6.25, 2.62, 5.65)}
-      {editableTextField(formControlsModel.textControls[1], -6.25, 1.42, 5.65)}
-      {editableTextField(formControlsModel.date, -6.25, -0.68, 2.7)}
-      {editableTextField(formControlsModel.time, -3.25, -0.68, 2.12)}
+      {editableTextField(formControlsModel.textControls[0], font, -6.25, 2.62, 5.65)}
+      {editableTextField(formControlsModel.textControls[1], font, -6.25, 1.42, 5.65)}
+      {editableTextField(formControlsModel.date, font, -6.25, -0.68, 2.7)}
+      {editableTextField(formControlsModel.time, font, -3.25, -0.68, 2.12)}
       {checkboxControl(formControlsModel.checkbox, -6.25, -1.82)}
       {radioGroup(formControlsModel.radio, -6.25, -2.52)}
       {listboxControl(formControlsModel.listbox, 0.35, 2.62, 3.1)}
