@@ -3,7 +3,6 @@ import { unlitMaterial } from './material';
 import { mesh } from './mesh';
 import type { Rgba, Vec3 } from './primitives';
 import type { RenderNode } from './render-node';
-import { solidTexture } from './texture';
 import { text, type TextFontFace } from './text';
 import {
   clampTextIndex,
@@ -73,7 +72,7 @@ const selectionNodes = (
   color: Rgba,
   origin: Vec3,
 ): readonly RenderNode[] => {
-  const material = unlitMaterial({ baseColor: solidTexture({ color }) });
+  const material = unlitMaterial({ color });
 
   return rects.map((rect) =>
     mesh({
@@ -113,7 +112,7 @@ const caretNode = (
 ): RenderNode =>
   mesh({
     geometry: boxGeometry({ size: [width, height, 0.015] }),
-    material: unlitMaterial({ baseColor: solidTexture({ color }) }),
+    material: unlitMaterial({ color }),
     transform: {
       position,
       rotation: [0, 0, 0],

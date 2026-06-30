@@ -1,7 +1,6 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  solidTexture,
   standardMaterial,
   type RenderRoot,
 } from '@royal/renderer-core';
@@ -14,7 +13,7 @@ const rootOptions = {
 
 const cube = boxGeometry({ size: [1.5, 1.5, 1.5] });
 const cubeMaterial = standardMaterial({
-  baseColor: solidTexture({ color: [0.9, 0.2, 0.16, 1] }),
+  color: [0.9, 0.2, 0.16, 1],
 });
 
 export const HelloCube = (): ReactNode => {

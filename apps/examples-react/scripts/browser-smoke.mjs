@@ -409,6 +409,7 @@ const smokeExpression = `
 
     return {
       ariaHidden: element.getAttribute('aria-hidden') ?? '',
+      ariaBusy: element.getAttribute('aria-busy') ?? '',
       ariaLabel: element.getAttribute('aria-label') ?? '',
       className: String(element.getAttribute('class') ?? ''),
       contentEditable: element.getAttribute('contenteditable') ?? '',
@@ -634,7 +635,9 @@ const smokeExpression = `
       state.canvas.backingHeight > 0 &&
       state.canvas.sample !== undefined &&
       state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio;
-    return canvasReady;
+    const routeReady = state.route.id !== 'form-controls' ||
+      state.formControls?.canvas?.ariaBusy !== 'true';
+    return canvasReady && routeReady;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -1331,6 +1334,9 @@ const assertRoute = (expected, state) => {
             summarizeNodes(form.knownHiddenBridgeNodes ?? [])
           }`,
         );
+      }
+      if (form.canvas?.ariaBusy === 'true') {
+        failures.push('form controls font-backed canvas scene stayed busy');
       }
       const focus = form.canvasFocus;
       if (focus?.hasCanvas !== true) {

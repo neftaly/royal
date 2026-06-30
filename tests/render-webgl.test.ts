@@ -30,9 +30,8 @@ const camera = perspectiveCamera({
   far: 1000
 });
 const cube = boxGeometry({ size: [1, 1, 1] });
-const redTexture = solidTexture({ color: [1, 0, 0, 1] });
-const material = standardMaterial({ baseColor: redTexture });
-const unlit = unlitMaterial({ baseColor: redTexture });
+const material = standardMaterial({ color: [1, 0, 0, 1] });
+const unlit = unlitMaterial({ color: [1, 0, 0, 1] });
 const light = directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] });
 const triangleSrc = 'https://example.test/triangle.gltf';
 const renderScene = scene({
@@ -134,7 +133,7 @@ describe('WebGL resource lifetime', () => {
     const { counts, gl } = fakeGl();
     const root = createRoot(fakeCanvas(gl));
     const textured = unlitMaterial({
-      baseColor: textureAsset({
+      texture: textureAsset({
         fallback: solidTexture({ color: [0.2, 0.4, 0.6, 1] }),
         id: 'crate',
         uri: 'https://example.test/crate.png'
@@ -313,7 +312,7 @@ describe('WebGL resource lifetime', () => {
           ]
         })
       ]
-    }))).toThrow('StandardMaterial box mesh requires a directionalLight');
+    }))).toThrow('StandardMaterial mesh requires a directionalLight');
   });
 
   it('releases glTF buffers and textures on dispose', async () => {

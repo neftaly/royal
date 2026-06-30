@@ -276,7 +276,7 @@ export const royalControlPlaneSchema = defineSchema({
 /** @jsxImportSource @royal/react */
 import { createRoyalControlPlane, royalControlQueries } from '@royal/tarstate-lens/control-plane';
 import { createRoot } from '@royal/react';
-import { boxGeometry, solidTexture, standardMaterial } from '@royal/renderer-core';
+import { boxGeometry, standardMaterial } from '@royal/renderer-core';
 
 const control = createRoyalControlPlane({ rootId: 'main-canvas' });
 const royal = createRoot(canvas, {
@@ -284,7 +284,7 @@ const royal = createRoot(canvas, {
   controlSink: control.sink,
 });
 const heroMaterial = standardMaterial({
-  baseColor: solidTexture({ color: [1, 0, 0, 1] }),
+  color: [1, 0, 0, 1],
 });
 
 royal.render(

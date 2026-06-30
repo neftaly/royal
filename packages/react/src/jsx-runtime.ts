@@ -20,7 +20,8 @@ import {
   type RenderPass,
   type RenderPassOptions,
   type Rgba,
-  type TextOptions
+  type TextOptions,
+  type TextureRef
 } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 
@@ -39,15 +40,21 @@ type PassProps = Omit<RenderPassOptions, 'camera' | 'children'> & {
   readonly camera?: Camera;
   readonly children?: RendererJsxChild;
 };
-type MeshBaseColor = MeshOptions['material']['baseColor'] | Rgba;
 type MeshProps = Omit<MeshOptions, 'material'> & (
   | {
-    readonly baseColor?: never;
+    readonly color?: never;
     readonly material: Material;
+    readonly texture?: never;
   }
   | {
-    readonly baseColor: MeshBaseColor;
+    readonly color: Rgba;
     readonly material?: never;
+    readonly texture?: never;
+  }
+  | {
+    readonly color?: never;
+    readonly material?: never;
+    readonly texture: TextureRef;
   }
 );
 
@@ -141,23 +148,34 @@ const toGltf = (options: GltfOptions): RenderNode => {
 };
 
 const toMesh = (props: MeshProps): RenderNode => {
-  if (props.material !== undefined && props.baseColor !== undefined) {
-    throw new Error('mesh expects material or baseColor, not both');
+  if (
+    [props.material, props.color, props.texture].filter((value) => value !== undefined).length > 1
+  ) {
+    throw new Error('mesh expects exactly one of material, color, or texture');
   }
 
   if (props.material !== undefined) {
     return mesh(props);
   }
 
-  if (props.baseColor === undefined) {
-    throw new Error('mesh expects material or baseColor');
+  if (props.texture !== undefined) {
+    const { texture, ...options } = props;
+
+    return mesh({
+      ...options,
+      material: standardMaterial({ texture })
+    });
   }
 
-  const { baseColor, ...options } = props;
+  if (props.color === undefined) {
+    throw new Error('mesh expects material, color, or texture');
+  }
+
+  const { color, ...options } = props;
 
   return mesh({
     ...options,
-    material: standardMaterial({ baseColor })
+    material: standardMaterial({ color })
   });
 };
 

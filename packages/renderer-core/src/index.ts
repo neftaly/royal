@@ -10,15 +10,19 @@ export type {
   BoxGeometry,
   BoxGeometryOptions,
   Geometry,
-  GeometryKindValue
+  GeometryKindValue,
+  PlaneGeometry,
+  PlaneGeometryOptions
 } from './geometry';
-export { boxGeometry } from './geometry';
+export { boxGeometry, planeGeometry } from './geometry';
 export type { GltfAssetBounds, GltfAssetRef, GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
 export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {
   Material,
-  MaterialBaseColorInput,
+  MaterialColorInput,
+  MaterialSurfaceOptions,
+  MaterialTextureInput,
   StandardMaterial,
   StandardMaterialOptions,
   UnlitMaterial,

@@ -24,8 +24,11 @@ const rootOptions = {
 
 export const FormControls = (): ReactNode => {
   const fontState = useAtkinsonFont();
-  const font = fontState.status === 'ready' ? fontState.font : undefined;
   const [model, dispatch] = useReducer(formControlsReducer, formControlsModel);
+
+  if (fontState.status !== 'ready') return null;
+
+  const font = fontState.font;
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return;

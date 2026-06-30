@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const publicSurfaceRoots = ['README.md', 'packages', 'research'] as const;
+const publicExampleSourceRoots = ['apps/examples-react/src/examples'] as const;
 const publicPackageJsonPaths = [
   'packages/react/package.json',
   'packages/renderer-core/package.json',
@@ -20,7 +21,9 @@ const ignoredDirectories = new Set([
 ]);
 const markdownExtensions = new Set(['.md', '.mdx']);
 const publicSourceExtensions = new Set(['.ts', '.tsx']);
-const staleMaterialColorPattern = /(?<![\w$.])standardMaterial\s*\(\s*\{\s*color\s*:/;
+const staleMaterialBaseColorOptionPattern =
+  /^\s*baseColor\s*:\s*(?:solidTexture|textureAsset|imageTexture|virtualTextureAsset|\[)/;
+const staleMeshBaseColorJsxPropPattern = /\bbaseColor\s*=/;
 const nonCurrentResearchLabelPattern = /\b(?:future|non-current|not current|not public|not an api|pseudocode|pseudo-api|research-only|sketch)\b/i;
 const exactResearchOnlyPublicExportNames = new Set([
   'customShaderMaterial',
@@ -359,6 +362,28 @@ function publicSnippetViolations(
   });
 }
 
+function sourceSnippetViolations(
+  roots: readonly string[],
+  pattern: RegExp
+): readonly PublicSnippet[] {
+  return roots.flatMap((root) => {
+    const absoluteRoot = path.join(repoRoot, root);
+    if (!existsSync(absoluteRoot)) return [];
+
+    return listFiles(absoluteRoot)
+      .filter((filePath) => publicSourceExtensions.has(path.extname(filePath)))
+      .flatMap((filePath) => {
+        const relativePath = path.relative(repoRoot, filePath);
+        const source = readFileSync(filePath, 'utf8');
+        return matchingLines(source, pattern).map(({ line, text }) => ({
+          file: relativePath,
+          line,
+          text
+        }));
+      });
+  });
+}
+
 describe('render graph API style', () => {
   it('keeps consumer package export names free of research-only feature APIs', () => {
     const violations = publicPackageExportSymbols()
@@ -375,6 +400,14 @@ describe('render graph API style', () => {
   });
 
   it('keeps public snippets on current standard material options', () => {
-    expect(publicSnippetViolations(staleMaterialColorPattern, { allowLabeledResearchSketches: false })).toEqual([]);
+    expect(publicSnippetViolations(
+      staleMaterialBaseColorOptionPattern,
+      { allowLabeledResearchSketches: false }
+    )).toEqual([]);
+  });
+
+  it('keeps example source on current mesh material authoring props', () => {
+    expect(sourceSnippetViolations(publicExampleSourceRoots, staleMeshBaseColorJsxPropPattern)).toEqual([]);
+    expect(sourceSnippetViolations(publicExampleSourceRoots, staleMaterialBaseColorOptionPattern)).toEqual([]);
   });
 });

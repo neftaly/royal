@@ -2,7 +2,6 @@
 import {
   boxGeometry,
   createEditableTextFragment,
-  solidTexture,
   type RenderNode,
   type RenderRoot,
   type Rgba,
@@ -58,7 +57,7 @@ const rect = ({ fill, height, width }: BoxStyle, position: Vec3): RenderNode =>
   (
     <mesh
       geometry={boxGeometry({ size: [width, height, 0.02] })}
-      material={unlitMaterial({ baseColor: solidTexture({ color: fill }) })}
+      material={unlitMaterial({ color: fill })}
       transform={{ position, rotation: [0, 0, 0] }}
     />
   ) as RenderNode;
@@ -76,15 +75,17 @@ type RoyalNodeChild = RenderNode | readonly RoyalNodeChild[] | null | undefined 
 type FormProps = {
   readonly bounds: RectBounds;
   readonly children?: unknown;
+  readonly font: TextFontFace;
   readonly id: string;
   readonly title: string;
 };
 
-const Form = ({ bounds, children, title }: FormProps) => (
+const Form = ({ bounds, children, font, title }: FormProps) => (
   <>
     {rectFromTopLeft({ fill: palette.surface, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, -0.02)}
     <text
       color={palette.ink}
+      font={font}
       fontSize={0.38}
       lineHeight={0.48}
       origin={[layout.heading.x, layout.heading.y, 0.12]}
@@ -97,19 +98,21 @@ const Form = ({ bounds, children, title }: FormProps) => (
 type FieldChromeOptions = {
   readonly active: boolean;
   readonly bounds: TextFieldBounds;
+  readonly font: TextFontFace;
   readonly label: string;
 };
 
 const fieldChromeNodes = ({
   active,
   bounds,
+  font,
   label,
 }: FieldChromeOptions): readonly RenderNode[] => {
   const border = active ? palette.accent : palette.border;
 
   return [
     (
-      <text color={palette.muted} fontSize={0.17} lineHeight={0.24} origin={[bounds.x, bounds.y + 0.24, 0.12]} text={label} />
+      <text color={palette.muted} font={font} fontSize={0.17} lineHeight={0.24} origin={[bounds.x, bounds.y + 0.24, 0.12]} text={label} />
     ) as RenderNode,
     rectFromTopLeft({ fill: palette.shadow, height: bounds.height + 0.08, width: bounds.width + 0.08 }, bounds.x - 0.04, bounds.y + 0.02),
     rectFromTopLeft({ fill: border, height: bounds.height + 0.04, width: bounds.width + 0.04 }, bounds.x - 0.02, bounds.y + 0.02, 0.02),
@@ -122,9 +125,9 @@ type FieldProps = FieldChromeOptions & {
   readonly id: string;
 };
 
-const Field = ({ active, bounds, children, label }: FieldProps) => (
+const Field = ({ active, bounds, children, font, label }: FieldProps) => (
   <>
-    {fieldChromeNodes({ active, bounds, label })}
+    {fieldChromeNodes({ active, bounds, font, label })}
     {children as RoyalNodeChild}
   </>
 );
@@ -132,7 +135,7 @@ const Field = ({ active, bounds, children, label }: FieldProps) => (
 type EditableTextInputProps = {
   readonly active: boolean;
   readonly control: EditableTextControlModel;
-  readonly font: TextFontFace | undefined;
+  readonly font: TextFontFace;
 };
 
 const editableTextNodes = ({
@@ -144,7 +147,7 @@ const editableTextNodes = ({
 
   return createEditableTextFragment({
     color: palette.ink,
-    ...(font === undefined ? {} : { font }),
+    font,
     fontSize: formControlsTextMetrics.fontSize,
     lineHeight: formControlsTextMetrics.lineHeight,
     maxWidth: field.textMaxWidth,
@@ -176,6 +179,7 @@ const TextArea = (props: TextAreaProps) => (
 type CheckboxProps = {
   readonly bounds: RectBounds;
   readonly checked: boolean;
+  readonly font: TextFontFace;
   readonly focused: boolean;
   readonly id: 'updates';
   readonly label: string;
@@ -184,6 +188,7 @@ type CheckboxProps = {
 const Checkbox = ({
   bounds,
   checked,
+  font,
   focused,
   label,
 }: CheckboxProps) => {
@@ -195,14 +200,15 @@ const Checkbox = ({
     <>
       {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.border, height: 0.4, width: 0.4 }, boxX, boxY, 0.02)}
       {rectFromTopLeft({ fill, height: 0.28, width: 0.28 }, boxX + 0.06, boxY - 0.06, 0.06)}
-      <text color={palette.bg} fontSize={0.25} lineHeight={0.25} origin={[boxX + 0.13, boxY - 0.29, 0.12]} text={checked ? 'x' : ''} />
-      <text color={palette.ink} fontSize={0.2} lineHeight={0.28} origin={[boxX + 0.56, boxY - 0.28, 0.12]} text={label} />
+      <text color={palette.bg} font={font} fontSize={0.25} lineHeight={0.25} origin={[boxX + 0.13, boxY - 0.29, 0.12]} text={checked ? 'x' : ''} />
+      <text color={palette.ink} font={font} fontSize={0.2} lineHeight={0.28} origin={[boxX + 0.56, boxY - 0.28, 0.12]} text={label} />
     </>
   );
 };
 
 type ButtonProps = {
   readonly bounds: RectBounds;
+  readonly font: TextFontFace;
   readonly focused: boolean;
   readonly id: 'send';
   readonly label: string;
@@ -211,20 +217,21 @@ type ButtonProps = {
 
 const Button = ({
   bounds,
+  font,
   focused,
   label,
   status,
 }: ButtonProps) => (
   <>
     {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04)}
-    <text color={[1, 1, 1, 1]} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
-    <text color={palette.muted} fontSize={0.16} lineHeight={0.24} origin={[layout.status.x, layout.status.y, 0.12]} text={status} />
+    <text color={[1, 1, 1, 1]} font={font} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
+    <text color={palette.muted} font={font} fontSize={0.16} lineHeight={0.24} origin={[layout.status.x, layout.status.y, 0.12]} text={status} />
   </>
 );
 
 export const formControlsScene = (
   model: CanvasFormModel,
-  font?: TextFontFace,
+  font: TextFontFace,
 ): RenderRoot => {
   const [title, notes] = model.textControls;
 
@@ -241,12 +248,13 @@ export const formControlsScene = (
           rotation={[0, 0, 0]}
           top={formControlsCameraBounds.top}
         />
-        <Form id="contact-form" title="Message" bounds={layout.form}>
+        <Form id="contact-form" title="Message" bounds={layout.form} font={font}>
           <Field
             id="title"
             label={title.label}
             bounds={layout.fields.title}
             active={model.activeTextId === title.id}
+            font={font}
           >
             <TextInput
               active={model.activeTextId === title.id}
@@ -259,6 +267,7 @@ export const formControlsScene = (
             label={notes.label}
             bounds={layout.fields.notes}
             active={model.activeTextId === notes.id}
+            font={font}
           >
             <TextArea
               active={model.activeTextId === notes.id}
@@ -269,12 +278,14 @@ export const formControlsScene = (
           <Checkbox
             id="updates"
             checked={model.checkbox.checked}
+            font={font}
             focused={model.focusedId === model.checkbox.id}
             bounds={layout.checkbox}
             label={model.checkbox.label}
           />
           <Button
             id="send"
+            font={font}
             focused={model.focusedId === model.button.id}
             bounds={layout.button}
             label={model.button.label}

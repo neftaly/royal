@@ -188,8 +188,8 @@ describe('texture descriptors', () => {
       kind: 'virtual-asset',
       manifestUri: '/textures/terrain-normal.vt.json'
     });
-    expect(standardMaterial({ baseColor: asset }).baseColor).toBe(asset);
-    expect(standardMaterial({ baseColor: [0.2, 0.4, 0.6, 1] }).baseColor).toEqual({
+    expect(standardMaterial({ texture: asset }).baseColor).toBe(asset);
+    expect(standardMaterial({ color: [0.2, 0.4, 0.6, 1] }).baseColor).toEqual({
       color: [0.2, 0.4, 0.6, 1],
       kind: 'solid'
     });

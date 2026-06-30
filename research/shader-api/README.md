@@ -26,9 +26,9 @@ node research/shader-api/shader-api-prototype.mjs --json
 The current public material surface in `packages/renderer-core/src/material.ts`
 is a small discriminated union:
 
-- `standard`, with a `baseColor` texture reference.
-- `unlit`, with a `baseColor` texture reference.
-- `wireframe`, with a `baseColor` texture reference and `width`.
+- `standard`, authored with `color` or `texture` and normalized to a `baseColor` texture reference.
+- `unlit`, authored with `color` or `texture` and normalized to a `baseColor` texture reference.
+- `wireframe`, authored with a solid `color` and `width`.
 
 The WebGL renderer currently owns shader programs privately in
 `packages/renderer-webgl/src/programs.ts`. Each program has fixed attributes
@@ -63,7 +63,7 @@ const material = customShaderMaterial({
   id: "app:hologram-rim",
   revision: "2026-06-29",
   fallback: unlitMaterial({
-    baseColor: solidTexture({ color: [0.1, 0.35, 0.8, 1] })
+    color: [0.1, 0.35, 0.8, 1]
   }),
   geometryTargets: ["box"],
   gates: {

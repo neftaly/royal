@@ -31,7 +31,7 @@ import {
   VisibilityPacketKind,
 } from "../src/visibility";
 
-const material = unlitMaterial({ baseColor: solidTexture({ color: [1, 0, 0, 1] }) });
+const material = unlitMaterial({ color: [1, 0, 0, 1] });
 
 const modelAsset = {
   id: "model",
@@ -232,7 +232,7 @@ describe("visibility packets", () => {
       id: "matte-red",
       revision: 2,
     });
-    const sharedMaterial = unlitMaterial({ baseColor: baseTexture });
+    const sharedMaterial = unlitMaterial({ texture: baseTexture });
     const box = mesh({
       geometry: boxGeometry({ size: [1, 1, 1] }),
       material: sharedMaterial,
@@ -250,7 +250,7 @@ describe("visibility packets", () => {
       children: [
         mesh({
           geometry: boxGeometry({ size: [1, 1, 1] }),
-          material: unlitMaterial({ baseColor: updatedTexture }),
+          material: unlitMaterial({ texture: updatedTexture }),
         }),
       ],
     }));
@@ -288,7 +288,7 @@ describe("visibility packets", () => {
       uri: "https://example.test/terrain-preview.png",
     });
     const virtualMaterial = unlitMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         fallback,
         id: "terrain-vt",
         manifestId: "terrain-manifest",
@@ -296,7 +296,7 @@ describe("visibility packets", () => {
       }),
     });
     const fallbackRevision = unlitMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         fallback: changedFallback,
         id: "terrain-vt",
         manifestId: "terrain-manifest",
@@ -304,7 +304,7 @@ describe("visibility packets", () => {
       }),
     });
     const manifestRevision = unlitMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         fallback,
         id: "terrain-vt",
         manifestId: "terrain-manifest",
@@ -312,7 +312,7 @@ describe("visibility packets", () => {
       }),
     });
     const previewMaterial = unlitMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         fallback,
         id: "terrain-vt",
         manifestId: "terrain-manifest",
@@ -321,7 +321,7 @@ describe("visibility packets", () => {
       }),
     });
     const previewRevision = unlitMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         fallback,
         id: "terrain-vt",
         manifestId: "terrain-manifest",

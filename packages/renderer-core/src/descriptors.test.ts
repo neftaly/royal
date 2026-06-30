@@ -21,9 +21,9 @@ import {
 
 describe('renderer descriptor authoring API', () => {
   it('uses string discriminants for descriptor factories', () => {
-    const baseColor = solidTexture({ color: [0.3, 0.4, 0.5, 1] });
+    const color = [0.3, 0.4, 0.5, 1] as const;
     const geometry = boxGeometry({ size: [1, 2, 3] });
-    const material = standardMaterial({ baseColor });
+    const material = standardMaterial({ color });
     const node = mesh({ geometry, material });
     const camera = perspectiveCamera({
       far: 100,
@@ -58,7 +58,7 @@ describe('renderer descriptor authoring API', () => {
     expect(node.kind).toBe('mesh');
     expect(geometry.kind).toBe('box');
     expect(material.kind).toBe('standard');
-    expect(unlitMaterial({ baseColor }).kind).toBe('unlit');
+    expect(unlitMaterial({ color }).kind).toBe('unlit');
     expect(root.children[0]?.children[1]?.kind).toBe('directional-light');
     expectTypeOf(root.children[0]?.children[0]).toMatchTypeOf<RenderNode | undefined>();
   });
@@ -89,7 +89,7 @@ describe('renderer descriptor authoring API', () => {
       revision: 'v2',
       uri: '/textures/albedo.png'
     });
-    expect(standardMaterial({ baseColor: asset }).baseColor).toBe(asset);
+    expect(standardMaterial({ texture: asset }).baseColor).toBe(asset);
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
 
     expect(defaultTextureFallbackColor).toEqual([0.5, 0.5, 0.5, 1]);

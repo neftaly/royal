@@ -1,6 +1,6 @@
 export type CameraKind = 'orthographic-camera' | 'perspective-camera';
 
-export type GeometryKind = 'box';
+export type GeometryKind = 'box' | 'plane';
 
 export type MaterialKind = 'standard' | 'unlit' | 'wireframe';
 

@@ -19,13 +19,12 @@ import {
 } from '@royal/react';
 import {
   boxGeometry,
-  solidTexture,
   standardMaterial
 } from '@royal/renderer-core';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({
-  baseColor: solidTexture({ color: [1, 0, 0, 1] })
+  color: [1, 0, 0, 1]
 });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 

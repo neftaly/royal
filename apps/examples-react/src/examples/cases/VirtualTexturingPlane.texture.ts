@@ -164,7 +164,7 @@ export const createSurfaceMaterial = (): UnlitMaterial => {
   const revision = 'generated-v4-descriptor-preview';
 
   return unlitMaterial({
-    baseColor: virtualTextureAsset({
+    texture: virtualTextureAsset({
       colorSpace: 'srgb',
       fallback: fallbackTexture,
       id: 'generated-virtual-texturing-surface',

@@ -1,21 +1,32 @@
 import type { Rgba } from './primitives';
 import { solidTexture, type TextureRef } from './texture';
 
-export type MaterialBaseColorInput = TextureRef | Rgba;
+export type MaterialColorInput = Rgba;
+export type MaterialTextureInput = TextureRef;
 
-/** Lit material with a base color texture reference. */
+export type MaterialSurfaceOptions =
+  | {
+    readonly color: MaterialColorInput;
+    readonly texture?: never;
+  }
+  | {
+    readonly color?: never;
+    readonly texture: MaterialTextureInput;
+  };
+
+/** Normalized lit material descriptor. Create with `standardMaterial({ color })` or `standardMaterial({ texture })`. */
 export interface StandardMaterial {
   readonly kind: 'standard';
   readonly baseColor: TextureRef;
 }
 
-/** Base color material that ignores lights. */
+/** Normalized unlit material descriptor. Create with `unlitMaterial({ color })` or `unlitMaterial({ texture })`. */
 export interface UnlitMaterial {
   readonly kind: 'unlit';
   readonly baseColor: TextureRef;
 }
 
-/** Surface wireframe material. */
+/** Surface wireframe material. Authoring accepts a solid line color only. */
 export interface WireframeMaterial {
   readonly kind: 'wireframe';
   readonly baseColor: TextureRef;
@@ -24,41 +35,39 @@ export interface WireframeMaterial {
 
 export type Material = StandardMaterial | UnlitMaterial | WireframeMaterial;
 
-export interface StandardMaterialOptions {
-  readonly baseColor: MaterialBaseColorInput;
-}
+export type StandardMaterialOptions = MaterialSurfaceOptions;
 
 export type UnlitMaterialOptions = StandardMaterialOptions;
 
-export interface WireframeMaterialOptions extends StandardMaterialOptions {
+export interface WireframeMaterialOptions {
+  readonly color: MaterialColorInput;
   /** @defaultValue `1.25` */
   readonly width?: number;
 }
 
-const isRgba = (baseColor: MaterialBaseColorInput): baseColor is Rgba =>
-  Array.isArray(baseColor);
-
-const toBaseColorTexture = (baseColor: MaterialBaseColorInput): TextureRef =>
-  isRgba(baseColor) ? solidTexture({ color: baseColor }) : baseColor;
+const toBaseColorTexture = (options: MaterialSurfaceOptions): TextureRef => {
+  if (options.texture !== undefined) return options.texture;
+  return solidTexture({ color: options.color });
+};
 
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   return {
     kind: 'standard',
-    baseColor: toBaseColorTexture(options.baseColor)
+    baseColor: toBaseColorTexture(options)
   };
 };
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   return {
     kind: 'unlit',
-    baseColor: toBaseColorTexture(options.baseColor)
+    baseColor: toBaseColorTexture(options)
   };
 };
 
 export const wireframeMaterial = (options: WireframeMaterialOptions): WireframeMaterial => {
   return {
     kind: 'wireframe',
-    baseColor: toBaseColorTexture(options.baseColor),
+    baseColor: solidTexture({ color: options.color }),
     width: options.width ?? 1.25
   };
 };

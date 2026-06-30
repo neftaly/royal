@@ -27,8 +27,8 @@ export const TextureMaterials = (): ReactNode => {
         />
         <directionalLight color={[1.35, 1.28, 1.16, 1]} direction={[-0.24, -0.42, -1]} />
         <mesh
-          baseColor={helmetAlbedo}
           geometry={swatchGeometry}
+          texture={helmetAlbedo}
           transform={{
             position: [0, 0.02, 0],
             rotation: [0.24, 0.26, -0.04],

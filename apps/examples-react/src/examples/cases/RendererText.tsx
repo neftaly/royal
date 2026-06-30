@@ -14,7 +14,6 @@ import {
   layoutText,
   nearestEditableTextCaret,
   setEditableTextEditorSelection,
-  solidTexture,
   type EditableTextFragment,
   type RenderNode,
   type RenderRoot,
@@ -74,12 +73,8 @@ const defaultFontSize = 0.72;
 const editableLineHeight = defaultFontSize * 1.18;
 const caretWidth = 0.035;
 const editableTextColor: Rgba = [0.28, 0.95, 0.48, 1];
-const contextMenuMaterial = unlitMaterial({
-  baseColor: solidTexture({ color: [0.07, 0.09, 0.11, 0.96] }),
-});
-const contextMenuItemMaterial = unlitMaterial({
-  baseColor: solidTexture({ color: [0.12, 0.15, 0.18, 1] }),
-});
+const contextMenuMaterial = unlitMaterial({ color: [0.07, 0.09, 0.11, 0.96] });
+const contextMenuItemMaterial = unlitMaterial({ color: [0.12, 0.15, 0.18, 1] });
 const contextMenuWidth = 1.34;
 const contextMenuItemHeight = 0.36;
 const contextMenuPadding = 0.08;

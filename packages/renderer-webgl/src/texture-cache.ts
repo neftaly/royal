@@ -96,10 +96,67 @@ const required = <T>(value: T | undefined, label: string): T => {
 const resolveUri = (base: string, uri: string): string =>
   new URL(uri, new URL(base, globalThis.location?.href ?? "http://localhost/")).href;
 
-const loadImage = async (src: string, uri: string, label: string): Promise<ImageBitmap> => {
+type TextureImageSource = ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
+
+const makeRasterCanvas = (width: number, height: number): HTMLCanvasElement | OffscreenCanvas => {
+  if (globalThis.document !== undefined) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+
+  if (typeof OffscreenCanvas !== "undefined") {
+    return new OffscreenCanvas(width, height);
+  }
+
+  throw new Error("Canvas is unavailable for texture image rasterization");
+};
+
+const loadHtmlImageCanvas = async (blob: Blob): Promise<HTMLCanvasElement | OffscreenCanvas> => {
+  if (typeof Image === "undefined") {
+    throw new Error("HTMLImageElement is unavailable for texture loading");
+  }
+
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Failed to decode texture image"));
+      image.src = url;
+    });
+    const width = image.naturalWidth || image.width || 1;
+    const height = image.naturalHeight || image.height || 1;
+    const canvas = makeRasterCanvas(width, height);
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Expected 2D canvas context for texture image rasterization");
+    context.drawImage(image, 0, 0, width, height);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
+const decodeTextureImage = async (blob: Blob): Promise<TextureImageSource> => {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      // Some browsers reject SVG blobs here even though an HTMLImageElement can
+      // decode and WebGL can upload them.
+    }
+  }
+
+  return await loadHtmlImageCanvas(blob);
+};
+
+const loadImage = async (src: string, uri: string, label: string): Promise<TextureImageSource> => {
   const response = await fetch(resolveUri(src, uri));
   if (!response.ok) throw new Error(`Failed to load ${label}: ${uri}`);
-  return await createImageBitmap(await response.blob());
+  return await decodeTextureImage(await response.blob());
 };
 
 const usesMipmaps = (gl: RendererWebGlContext, filter: number): boolean =>
@@ -207,7 +264,7 @@ const textureAssetSampler = (
 
 const createTexture = (
   gl: RendererWebGlContext,
-  image: ImageBitmap,
+  image: TextureImageSource,
   uploadPolicy: TextureUploadPolicy,
   sampler: WebGlTextureSampler,
 ): WebGLTexture => {

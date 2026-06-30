@@ -17,7 +17,6 @@ import {
   pass,
   perspectiveCamera,
   scene,
-  solidTexture,
   standardMaterial,
   type RenderRoot,
   text,
@@ -80,7 +79,7 @@ describe('Royal public API smoke tests', () => {
             mesh({
               geometry: boxGeometry({ size: [1, 1, 1] }),
               material: standardMaterial({
-                baseColor: solidTexture({ color: [0.2, 0.4, 0.8, 1] })
+                color: [0.2, 0.4, 0.8, 1]
               })
             })
           ]
@@ -89,7 +88,7 @@ describe('Royal public API smoke tests', () => {
     });
     const albedo = imageTexture('/albedo.png');
     const jsxMesh = jsx('mesh', {
-      baseColor: albedo,
+      texture: albedo,
       geometry: boxGeometry({ size: [1, 1, 1] })
     });
     const terseRoot = scene({
@@ -99,7 +98,7 @@ describe('Royal public API smoke tests', () => {
           children: [
             mesh({
               geometry: boxGeometry({ size: [1, 1, 1] }),
-              material: standardMaterial({ baseColor: albedo })
+              material: standardMaterial({ texture: albedo })
             })
           ]
         })

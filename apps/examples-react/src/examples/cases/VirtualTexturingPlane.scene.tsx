@@ -1,5 +1,5 @@
 /** @jsxImportSource @royal/react */
-import { boxGeometry, type RenderRoot, type UnlitMaterial } from '@royal/renderer-core';
+import { planeGeometry, type RenderRoot, type UnlitMaterial } from '@royal/renderer-core';
 
 export type SurfaceView = {
   readonly offset: readonly [number, number];
@@ -7,7 +7,7 @@ export type SurfaceView = {
   readonly zoom: number;
 };
 
-const surfaceGeometry = boxGeometry({ size: [5.2, 3.4, 0.05] });
+const surfaceGeometry = planeGeometry({ size: [5.2, 3.4] });
 
 export const virtualTexturingScene = (
   surfaceMaterial: UnlitMaterial,

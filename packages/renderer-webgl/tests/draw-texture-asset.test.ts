@@ -148,7 +148,7 @@ const drawTexturedBox = (
     mesh({
       geometry: boxGeometry({ size: [2, 2, 2] }),
       material: unlitMaterial({
-        baseColor: textureAsset({
+        texture: textureAsset({
           fallback: solidTexture({ color: [0.2, 0.4, 0.6, 1] }),
           id: "crate",
           uri: "https://example.test/crate.png",
@@ -215,6 +215,63 @@ describe("drawMesh textureAsset baseColor", () => {
     await waitFor(() => onTextureSettled.mock.calls.length === 1);
     drawTexturedBox(gl, textureCache, onTextureSettled);
 
+    expect(counts.drawElements).toBe(2);
+    expect(boundTextures).toContainEqual({ id: 1 });
+    expect(uniformCalls).toContainEqual({ name: "baseColor", value: 0 });
+    expect(uniformCalls).toContainEqual({ name: "useBaseColorTexture", value: 1 });
+  });
+
+  it("falls back to HTMLImageElement decoding when createImageBitmap rejects SVG blobs", async () => {
+    class FakeImage {
+      decoding = "auto";
+      height = 16;
+      naturalHeight = 16;
+      naturalWidth = 16;
+      onerror: (() => void) | null = null;
+      onload: (() => void) | null = null;
+      width = 16;
+      #src = "";
+
+      get src(): string {
+        return this.#src;
+      }
+
+      set src(value: string) {
+        this.#src = value;
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+
+    const objectUrl = "blob:https://example.test/svg";
+    vi.stubGlobal("fetch", vi.fn(() =>
+      Promise.resolve(new Response(new Blob(["<svg />"], { type: "image/svg+xml" })))
+    ));
+    vi.stubGlobal("createImageBitmap", vi.fn(() =>
+      Promise.reject(new Error("SVG decode unsupported"))
+    ));
+    vi.stubGlobal("Image", FakeImage);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => ({
+        getContext: vi.fn(() => ({
+          drawImage: vi.fn(),
+        })),
+        height: 0,
+        width: 0,
+      })),
+    });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue(objectUrl);
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const onTextureSettled = vi.fn();
+    const { boundTextures, counts, gl, uniformCalls } = fakeGl();
+    const textureCache = new TextureCache(gl);
+
+    drawTexturedBox(gl, textureCache, onTextureSettled);
+    await waitFor(() => onTextureSettled.mock.calls.length === 1);
+    drawTexturedBox(gl, textureCache, onTextureSettled);
+
+    expect(createImageBitmap).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(objectUrl);
     expect(counts.drawElements).toBe(2);
     expect(boundTextures).toContainEqual({ id: 1 });
     expect(uniformCalls).toContainEqual({ name: "baseColor", value: 0 });

@@ -430,12 +430,12 @@ export const hitTestFormControls = (point: FormControlsWorldPoint): FormControls
 
 export const caretSelectionAtFormPoint = (
   control: EditableTextControlModel,
-  font: TextFontFace | undefined,
+  font: TextFontFace,
   point: FormControlsWorldPoint,
 ): EditableTextSelection => {
   const field = formControlsLayout.fields[control.id];
   const layout = layoutEditableText({
-    ...(font === undefined ? {} : { font }),
+    font,
     fontSize: formControlsTextMetrics.fontSize,
     lineHeight: formControlsTextMetrics.lineHeight,
     maxWidth: maxWidthForMode(field.textMaxWidth, control.mode),

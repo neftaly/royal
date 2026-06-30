@@ -1,8 +1,10 @@
 import {
+  type BoxGeometry,
   type DirectionalLightNode,
   type GltfNode,
   type Material,
   type MeshNode,
+  type PlaneGeometry,
   type TextNode,
   type WireframeMaterial,
 } from "@royal/renderer-core";
@@ -16,7 +18,6 @@ import {
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
-  asBoxGeometry,
   asMaterial,
 } from "./render-graph";
 import type { TextRenderAsset } from "./text-cache";
@@ -29,7 +30,11 @@ const boxWireframeEdgeIndices = new Uint16Array([
   4, 5, 5, 6, 6, 7, 7, 4,
   0, 5, 1, 4, 2, 7, 3, 6,
 ]);
+const planeWireframeEdgeIndices = new Uint16Array([
+  0, 1, 1, 2, 2, 3, 3, 0,
+]);
 const boxWireframeEdgeIndexBuffers = new WeakMap<RendererWebGlContext, WebGLBuffer>();
+const planeWireframeEdgeIndexBuffers = new WeakMap<RendererWebGlContext, WebGLBuffer>();
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
@@ -57,18 +62,18 @@ export const drawMesh = (
   mesh: MeshNode,
   context: MeshDrawContext,
 ): void => {
-  if (mesh.geometry.kind === "box") {
+  if (mesh.geometry.kind === "box" || mesh.geometry.kind === "plane") {
     const material = asMaterial(mesh);
     if (material.kind === "wireframe") {
       if (programs.wireframe === undefined) {
         throw new Error("WebGL wireframe mesh drawing requires a wireframe program");
       }
 
-      drawBoxWireframe(gl, programs.wireframe, mesh, material, context);
+      drawWireframeMesh(gl, programs.wireframe, mesh, material, context);
       return;
     }
 
-    drawBoxMesh(gl, programs.mesh, mesh, material, context);
+    drawSurfaceMesh(gl, programs.mesh, mesh, material, context);
     return;
   }
 
@@ -94,6 +99,15 @@ const boxWireframeEdgeIndexBuffer = (gl: RendererWebGlContext): WebGLBuffer => {
 
   const buffer = createIndexBuffer(gl, boxWireframeEdgeIndices);
   boxWireframeEdgeIndexBuffers.set(gl, buffer);
+  return buffer;
+};
+
+const planeWireframeEdgeIndexBuffer = (gl: RendererWebGlContext): WebGLBuffer => {
+  const cached = planeWireframeEdgeIndexBuffers.get(gl);
+  if (cached !== undefined) return cached;
+
+  const buffer = createIndexBuffer(gl, planeWireframeEdgeIndices);
+  planeWireframeEdgeIndexBuffers.set(gl, buffer);
   return buffer;
 };
 
@@ -186,7 +200,7 @@ export const drawVectorText = (
   gl.drawElements(gl.TRIANGLES, asset.indexCount, gl.UNSIGNED_SHORT, 0);
 };
 
-const drawBoxMesh = (
+const drawSurfaceMesh = (
   gl: RendererWebGlContext,
   program: MeshProgram,
   mesh: MeshNode,
@@ -196,9 +210,8 @@ const drawBoxMesh = (
   const light = context.directionalLight;
   const unlit = material.kind === "unlit";
   if (!unlit && light === undefined)
-    throw new Error("StandardMaterial box mesh requires a directionalLight");
-  const box = asBoxGeometry(mesh);
-  const geometry = context.geometryCache.box(box);
+    throw new Error("StandardMaterial mesh requires a directionalLight");
+  const geometry = indexedGeometryBuffers(mesh.geometry, context.geometryCache);
   const baseColor = lowerMaterialBaseColorBinding(material.baseColor, {
     onTextureSettled: context.onTextureSettled,
     textureCache: context.textureCache ?? meshTextureCache(gl),
@@ -215,7 +228,7 @@ const drawBoxMesh = (
     false,
     context.viewProjectionMatrix,
   );
-  gl.uniform3fv(program.uniforms.boxSize, box.size);
+  gl.uniform3fv(program.uniforms.boxSize, surfaceSize(mesh.geometry));
   bindMaterialBaseColor(gl, program.uniforms, baseColor);
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
   gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
@@ -237,15 +250,23 @@ const drawBoxMesh = (
   gl.drawElements(gl.TRIANGLES, geometry.indexCount, gl.UNSIGNED_SHORT, 0);
 };
 
-const drawBoxWireframe = (
+const drawWireframeMesh = (
   gl: RendererWebGlContext,
   program: WireframeProgram,
   mesh: MeshNode,
   material: WireframeMaterial,
   context: MeshDrawContext,
 ): void => {
-  const box = asBoxGeometry(mesh);
-  const geometry = context.geometryCache.box(box);
+  const geometry = indexedGeometryBuffers(mesh.geometry, context.geometryCache);
+  const wireframeIndices = mesh.geometry.kind === "box"
+    ? {
+      buffer: boxWireframeEdgeIndexBuffer(gl),
+      count: boxWireframeEdgeIndices.length,
+    }
+    : {
+      buffer: planeWireframeEdgeIndexBuffer(gl),
+      count: planeWireframeEdgeIndices.length,
+    };
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
@@ -267,7 +288,25 @@ const drawBoxWireframe = (
     geometry.position,
     3,
   );
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, boxWireframeEdgeIndexBuffer(gl));
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireframeIndices.buffer);
   gl.lineWidth(material.width);
-  gl.drawElements(gl.LINES, boxWireframeEdgeIndices.length, gl.UNSIGNED_SHORT, 0);
+  gl.drawElements(gl.LINES, wireframeIndices.count, gl.UNSIGNED_SHORT, 0);
+};
+
+const indexedGeometryBuffers = (
+  geometry: MeshNode["geometry"],
+  cache: GeometryCache,
+) => {
+  if (geometry.kind === "box") return cache.box(geometry as BoxGeometry);
+  if (geometry.kind === "plane") return cache.plane(geometry as PlaneGeometry);
+  throw new Error(`Unsupported mesh geometry kind: ${String(geometry.kind)}`);
+};
+
+const surfaceSize = (geometry: MeshNode["geometry"]): readonly [number, number, number] => {
+  if (geometry.kind === "box") return (geometry as BoxGeometry).size;
+  if (geometry.kind === "plane") {
+    const [width, height] = (geometry as PlaneGeometry).size;
+    return [width, height, 1];
+  }
+  throw new Error(`Unsupported mesh geometry kind: ${String(geometry.kind)}`);
 };

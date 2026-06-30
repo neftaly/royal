@@ -6,7 +6,6 @@ import {
   orthographicCamera,
   pass,
   perspectiveCamera,
-  solidTexture,
   standardMaterial,
   type RenderNode,
   type RenderPass,
@@ -24,7 +23,7 @@ const camera = perspectiveCamera({
 });
 
 const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ baseColor: solidTexture({ color: [1, 0, 0, 1] }) });
+const red = standardMaterial({ color: [1, 0, 0, 1] });
 
 describe('render pass clearColor', () => {
   it('defaults to transparent black', () => {
@@ -146,10 +145,10 @@ describe('render pass clearColor', () => {
     expect(renderPass.children).toEqual([meshChild]);
   });
 
-  it('lowers JSX mesh baseColor textures to a standard material', () => {
+  it('lowers JSX mesh texture props to a standard material', () => {
     const albedo = imageTexture('/textures/albedo.png');
     const meshChild = jsx('mesh', {
-      baseColor: albedo,
+      texture: albedo,
       geometry: cube
     }) as RenderNode;
 
@@ -162,9 +161,9 @@ describe('render pass clearColor', () => {
     });
   });
 
-  it('lowers JSX mesh baseColor rgba tuples to solid textures', () => {
+  it('lowers JSX mesh color props to solid textures', () => {
     const meshChild = jsx('mesh', {
-      baseColor: [0.1, 0.2, 0.3, 1],
+      color: [0.1, 0.2, 0.3, 1],
       geometry: cube
     }) as RenderNode;
 

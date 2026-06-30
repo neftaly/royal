@@ -18,7 +18,22 @@ export interface BoxGeometryOptions {
   readonly size: Vec3;
 }
 
+/** XY plane geometry sized in world units with UVs mapped from bottom-left to top-right. */
+export interface PlaneGeometry extends Geometry<'plane'> {
+  readonly size: readonly [width: number, height: number];
+}
+
+export interface PlaneGeometryOptions {
+  /** Plane dimensions in world units. */
+  readonly size: readonly [width: number, height: number];
+}
+
 export const boxGeometry = (options: BoxGeometryOptions): BoxGeometry => ({
   kind: 'box',
+  size: options.size
+});
+
+export const planeGeometry = (options: PlaneGeometryOptions): PlaneGeometry => ({
+  kind: 'plane',
   size: options.size
 });

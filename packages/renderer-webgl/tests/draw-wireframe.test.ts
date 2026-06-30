@@ -1,7 +1,6 @@
 import {
   boxGeometry,
   mesh,
-  solidTexture,
   wireframeMaterial,
 } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
@@ -141,7 +140,7 @@ describe("drawMesh WebGL wireframe material", () => {
       mesh({
         geometry: boxGeometry({ size: [2, 2, 2] }),
         material: wireframeMaterial({
-          baseColor: solidTexture({ color: [0.38, 0.85, 0.95, 1] }),
+          color: [0.38, 0.85, 0.95, 1],
         }),
       }),
       {

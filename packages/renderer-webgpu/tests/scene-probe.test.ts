@@ -75,7 +75,7 @@ describe("WebGPU scene probe", () => {
         camera,
         children: [mesh({
           geometry: boxGeometry({ size: [1, 2, 3] }),
-          material: unlitMaterial({ baseColor })
+          material: unlitMaterial({ texture: baseColor })
         })],
         clearColor: [0, 0, 0, 1]
       })]
@@ -123,7 +123,7 @@ describe("WebGPU scene probe", () => {
   it("keeps texture asset upload pressure visible on the material shape", () => {
     const fallback = solidTexture({ color: [1, 0, 1, 1], id: "fallback-magenta" });
     const material = standardMaterial({
-      baseColor: textureAsset({
+      texture: textureAsset({
         colorSpace: "srgb",
         fallback,
         id: "albedo",
@@ -174,7 +174,7 @@ describe("WebGPU scene probe", () => {
 
   it("reports virtual texture assets as fallback-only pending descriptors", () => {
     const material = standardMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         colorSpace: "srgb",
         fallback: solidTexture({ color: [0.35, 0.4, 0.45, 1] }),
         id: "terrain-vt",
@@ -222,7 +222,7 @@ describe("WebGPU scene probe", () => {
 
   it("uses default grey for virtual texture assets without declared fallback", () => {
     const material = standardMaterial({
-      baseColor: virtualTextureAsset({
+      texture: virtualTextureAsset({
         id: "terrain-vt",
         manifestUri: "/textures/terrain.vt.json"
       })
@@ -250,7 +250,7 @@ describe("WebGPU scene probe", () => {
           mesh({
             geometry: customGeometry,
             material: wireframeMaterial({
-              baseColor: solidTexture({ color: [1, 1, 1, 1] })
+              color: [1, 1, 1, 1]
             })
           }),
           gltf({

@@ -1,7 +1,9 @@
 import {
   type BoxGeometry,
+  type PlaneGeometry,
 } from "@royal/renderer-core";
 import { boxGeometryData } from "./geometry-data/box";
+import { planeGeometryData } from "./geometry-data/plane";
 import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 
 export interface BoxGeometryBuffers {
@@ -20,6 +22,7 @@ export interface WireframeBoxGeometryBuffers {
 export class GeometryCache {
   readonly #box = new WeakMap<BoxGeometry, BoxGeometryBuffers>();
   readonly #boxWireframe = new WeakMap<BoxGeometry, WireframeBoxGeometryBuffers>();
+  readonly #plane = new WeakMap<PlaneGeometry, BoxGeometryBuffers>();
   readonly #buffers = new Set<WebGLBuffer>();
   readonly #gl: RendererWebGlContext;
 
@@ -40,6 +43,22 @@ export class GeometryCache {
     };
 
     this.#box.set(geometry, buffers);
+    return buffers;
+  }
+
+  plane(geometry: PlaneGeometry): BoxGeometryBuffers {
+    const cached = this.#plane.get(geometry);
+    if (cached !== undefined) return cached;
+
+    const data = planeGeometryData(geometry);
+    const buffers = {
+      index: this.#track(createIndexBuffer(this.#gl, data.indices)),
+      indexCount: data.indices.length,
+      normal: this.#track(createFloatBuffer(this.#gl, data.normals)),
+      position: this.#track(createFloatBuffer(this.#gl, data.positions)),
+    };
+
+    this.#plane.set(geometry, buffers);
     return buffers;
   }
 

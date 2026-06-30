@@ -1,7 +1,6 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  solidTexture,
   type RenderRoot,
   wireframeMaterial,
 } from '@royal/renderer-core';
@@ -14,7 +13,7 @@ const rootOptions = {
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
-  baseColor: solidTexture({ color: [0.38, 0.85, 0.95, 1] }),
+  color: [0.38, 0.85, 0.95, 1],
 });
 
 export const WireframeCube = (): ReactNode => {
