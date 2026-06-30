@@ -65,7 +65,6 @@ const artifactReferenceLinePattern = /apps\/examples-react\/public\/artifacts|['
 const rendererTestingSubpathPattern = /^@royal\/renderer-[a-z0-9-]+(?:\/.*)?\/testing(?:\/.*)?$/;
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react', type: 'module' },
-  { name: '@royal/expo-hello', root: 'apps/expo-hello', type: undefined },
   { name: '@royal/react', root: 'packages/react', type: 'module' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core', type: 'module' },
   { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl', type: 'module' },
