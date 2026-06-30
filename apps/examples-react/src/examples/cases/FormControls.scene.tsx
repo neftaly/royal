@@ -71,13 +71,21 @@ const rectFromTopLeft = (
 ): RenderNode =>
   rect(style, [x + style.width / 2, y - style.height / 2, z]);
 
-const textNode = (
-  text: string,
-  origin: Vec3,
-  color: Rgba = palette.ink,
+type TextProps = {
+  readonly color?: Rgba;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly origin: Vec3;
+  readonly text: string;
+};
+
+const Text = ({
+  color = palette.ink,
   fontSize = 0.2,
   lineHeight = 0.28,
-): RenderNode =>
+  origin,
+  text,
+}: TextProps) =>
   (
     <text
       color={color}
@@ -86,59 +94,32 @@ const textNode = (
       origin={origin}
       text={text}
     />
-  ) as RenderNode;
-
-const isRenderNode = (value: unknown): value is RenderNode =>
-  typeof value === 'object' &&
-  value !== null &&
-  'kind' in value &&
-  (
-    value.kind === 'mesh' ||
-    value.kind === 'gltf' ||
-    value.kind === 'directional-light' ||
-    value.kind === 'text'
   );
 
-const renderNodesFromChildren = (children: unknown): readonly RenderNode[] => {
-  if (Array.isArray(children)) return children.flatMap(renderNodesFromChildren);
-  if (children === false || children === null || children === undefined) return [];
-  if (typeof children === 'string' && children.trim() === '') return [];
-  if (isRenderNode(children)) return [children];
-  throw new Error('Expected Royal render node child');
-};
-
-const textFromChildren = (children: unknown): string => {
-  if (Array.isArray(children)) return children.map(textFromChildren).join('');
-  if (typeof children === 'number' || typeof children === 'string') return String(children);
-  if (children === false || children === null || children === undefined) return '';
-  throw new Error('Expected text child');
-};
-
-const labelFromChildren = (children: unknown): string =>
-  textFromChildren(children).trim();
+type RoyalNodeChild = RenderNode | readonly RoyalNodeChild[] | null | undefined | false;
 
 type FormProps = {
   readonly bounds: RectBounds;
-  readonly children?: unknown;
+  readonly children?: RoyalNodeChild;
   readonly id: string;
 };
 
 const Form = ({ bounds, children }: FormProps) => (
   <>
     {rectFromTopLeft({ fill: palette.surface, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, -0.02)}
-    {renderNodesFromChildren(children)}
+    {children}
   </>
 );
 
 type HeadingProps = {
   readonly bounds: RectBounds;
-  readonly children?: unknown;
+  readonly text: string;
   readonly level: 1;
 };
 
-const Heading = ({ bounds, children }: HeadingProps) => (
+const Heading = ({ bounds, text }: HeadingProps) => (
   <>
-    {textNode(labelFromChildren(children), [bounds.x, bounds.y, 0.12], palette.ink, 0.38, 0.48)}
+    <Text color={palette.ink} fontSize={0.38} lineHeight={0.48} origin={[bounds.x, bounds.y, 0.12]} text={text} />
   </>
 );
 
@@ -156,7 +137,9 @@ const fieldChromeNodes = ({
   const border = active ? palette.accent : palette.border;
 
   return [
-    textNode(label, [bounds.x, bounds.y + 0.24, 0.12], palette.muted, 0.17, 0.24),
+    (
+      <Text color={palette.muted} fontSize={0.17} lineHeight={0.24} origin={[bounds.x, bounds.y + 0.24, 0.12]} text={label} />
+    ) as RenderNode,
     rectFromTopLeft({ fill: palette.shadow, height: bounds.height + 0.08, width: bounds.width + 0.08 }, bounds.x - 0.04, bounds.y + 0.02),
     rectFromTopLeft({ fill: border, height: bounds.height + 0.04, width: bounds.width + 0.04 }, bounds.x - 0.02, bounds.y + 0.02, 0.02),
     rectFromTopLeft({ fill: active ? palette.fieldActive : palette.field, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04),
@@ -164,14 +147,14 @@ const fieldChromeNodes = ({
 };
 
 type FieldProps = FieldChromeOptions & {
-  readonly children?: unknown;
+  readonly children?: RoyalNodeChild;
   readonly id: string;
 };
 
 const Field = ({ active, bounds, children, label }: FieldProps) => (
   <>
     {fieldChromeNodes({ active, bounds, label })}
-    {renderNodesFromChildren(children)}
+    {children}
   </>
 );
 
@@ -200,8 +183,6 @@ const editableTextNodes = ({
     maxWidth: field.textMaxWidth,
     mode: control.mode,
     origin: field.textOrigin,
-    placeholder: control.placeholder,
-    placeholderColor: palette.muted,
     selection: control.selection,
     selectionColor: palette.selection,
     showCaret: active,
@@ -236,16 +217,16 @@ const TextArea = ({
 type CheckboxProps = {
   readonly bounds: RectBounds;
   readonly checked: boolean;
-  readonly children?: unknown;
   readonly focused: boolean;
   readonly id: 'updates';
+  readonly label: string;
 };
 
 const Checkbox = ({
   bounds,
   checked,
-  children,
   focused,
+  label,
 }: CheckboxProps) => {
   const boxX = bounds.x;
   const boxY = bounds.y;
@@ -255,27 +236,27 @@ const Checkbox = ({
     <>
       {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.border, height: 0.4, width: 0.4 }, boxX, boxY, 0.02)}
       {rectFromTopLeft({ fill, height: 0.28, width: 0.28 }, boxX + 0.06, boxY - 0.06, 0.06)}
-      {textNode(checked ? 'x' : '', [boxX + 0.13, boxY - 0.29, 0.12], palette.bg, 0.25, 0.25)}
-      {textNode(labelFromChildren(children), [boxX + 0.56, boxY - 0.28, 0.12], palette.ink, 0.2, 0.28)}
+      <Text color={palette.bg} fontSize={0.25} lineHeight={0.25} origin={[boxX + 0.13, boxY - 0.29, 0.12]} text={checked ? 'x' : ''} />
+      <Text color={palette.ink} fontSize={0.2} lineHeight={0.28} origin={[boxX + 0.56, boxY - 0.28, 0.12]} text={label} />
     </>
   );
 };
 
 type ButtonProps = {
   readonly bounds: RectBounds;
-  readonly children?: unknown;
   readonly focused: boolean;
   readonly id: 'send';
+  readonly label: string;
 };
 
 const Button = ({
   bounds,
-  children,
   focused,
+  label,
 }: ButtonProps) => (
   <>
     {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04)}
-    {textNode(labelFromChildren(children), [bounds.x + 0.28, bounds.y - 0.36, 0.12], [1, 1, 1, 1], 0.2, 0.27)}
+    <Text color={[1, 1, 1, 1]} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
   </>
 );
 
@@ -299,45 +280,51 @@ export const formControlsScene = (
           top={formControlsCameraBounds.top}
         />
         <Form id="contact-form" bounds={layout.form}>
-          <Heading level={1} bounds={layout.heading}>
-            Message
-          </Heading>
-          <Field
-            id="title-field"
-            label="Title"
-            bounds={layout.fields.title}
-            active={model.activeTextId === title.id}
-          >
-            <TextInput
-              id="title"
+          {(<Heading level={1} bounds={layout.heading} text="Message" />) as RoyalNodeChild}
+          {(
+            <Field
+              id="title-field"
+              label="Title"
+              bounds={layout.fields.title}
               active={model.activeTextId === title.id}
-              control={title}
+            >
+              {(
+                <TextInput
+                  id="title"
+                  active={model.activeTextId === title.id}
+                  control={title}
+                  font={font}
+                />
+              ) as RoyalNodeChild}
+            </Field>
+          ) as RoyalNodeChild}
+          {(
+            <TextArea
+              id="notes"
+              label="Notes"
+              bounds={layout.fields.notes}
+              active={model.activeTextId === notes.id}
+              control={notes}
               font={font}
             />
-          </Field>
-          <TextArea
-            id="notes"
-            label="Notes"
-            bounds={layout.fields.notes}
-            active={model.activeTextId === notes.id}
-            control={notes}
-            font={font}
-          />
-          <Checkbox
-            id="updates"
-            checked={model.checkbox.checked}
-            focused={model.focusedId === model.checkbox.id}
-            bounds={layout.checkbox}
-          >
-            {model.checkbox.label}
-          </Checkbox>
-          <Button
-            id="send"
-            focused={model.focusedId === model.button.id}
-            bounds={layout.button}
-          >
-            Submit
-          </Button>
+          ) as RoyalNodeChild}
+          {(
+            <Checkbox
+              id="updates"
+              checked={model.checkbox.checked}
+              focused={model.focusedId === model.checkbox.id}
+              bounds={layout.checkbox}
+              label={model.checkbox.label}
+            />
+          ) as RoyalNodeChild}
+          {(
+            <Button
+              id="send"
+              focused={model.focusedId === model.button.id}
+              bounds={layout.button}
+              label={model.button.label}
+            />
+          ) as RoyalNodeChild}
         </Form>
       </pass>
     </scene>

@@ -4,6 +4,7 @@ import {
   clampTextIndex,
   editableTextCaretPlacement as caretPlacement,
   editableTextSelectionRects as selectionRects,
+  layoutUiMenuCommands,
   layoutText,
   layoutEditableText,
   nearestEditableTextCaret,
@@ -15,6 +16,9 @@ import {
   type RenderNode,
   type RenderRoot,
   type Rgba,
+  type UiMenuCommand,
+  type UiMenuCommandRect,
+  type UiMenuLayout,
   type EditableTextCaretEndpoint as TextCaretEndpoint,
   type EditableTextCaretPlacement as CaretPlacement,
   type EditableTextLayout,
@@ -23,6 +27,8 @@ import {
   type EditableTextSelectionRect as SelectionRect,
   type TextFontFace,
   type Vec3,
+  uiMenuCommand,
+  uiMenuCommandAt,
   unlitMaterial,
 } from '@royal/renderer-core';
 import {
@@ -85,6 +91,19 @@ const contextMenuZ = 0.28;
 const contextMenuMargin = 0.12;
 const contextMenuFontSize = 0.18;
 const contextMenuLineHeight = 0.24;
+const contextMenuMetrics = {
+  commandGap: contextMenuGap,
+  commandHeight: contextMenuItemHeight,
+  paddingX: contextMenuPadding,
+  paddingY: contextMenuPadding,
+  width: contextMenuWidth,
+} as const;
+const contextMenuLayoutBounds = {
+  height: cameraBounds.top - cameraBounds.bottom - contextMenuMargin * 2,
+  width: cameraBounds.right - cameraBounds.left - contextMenuMargin * 2,
+  x: cameraBounds.left + contextMenuMargin,
+  y: contextMenuMargin,
+} as const;
 const customMenuPasteUnavailableReason = 'custom-menu-paste-requires-native-paste-event';
 
 type ClipboardAction = 'copy' | 'cut' | 'paste';
@@ -160,19 +179,30 @@ type TextContextMenuEnabled = {
   readonly paste: boolean;
 };
 
-type TextContextMenuCommandLayout = {
+type TextContextMenuCommand = UiMenuCommand & {
   readonly action: ClipboardAction;
+  readonly id: ClipboardAction;
+};
+
+type TextContextMenuCommandLayout = UiMenuCommandRect & {
+  readonly action: ClipboardAction;
+  readonly id: ClipboardAction;
+};
+
+type TextContextMenuLayout = Omit<UiMenuLayout, 'commands'> & {
+  readonly commands: readonly TextContextMenuCommandLayout[];
+};
+
+type TextContextMenuCommandProbe = {
+  readonly action: ClipboardAction;
+  readonly clientX: number;
+  readonly clientY: number;
   readonly enabled: boolean;
   readonly height: number;
   readonly label: string;
   readonly width: number;
   readonly x: number;
   readonly y: number;
-};
-
-type TextContextMenuCommandProbe = TextContextMenuCommandLayout & {
-  readonly clientX: number;
-  readonly clientY: number;
 };
 
 const initialClipboardCounters: ClipboardCounters = {
@@ -532,12 +562,12 @@ const caretNode = (position: Vec3, height: number): RenderNode =>
 
 const contextMenuNodes = (
   font: TextFontFace,
-  menu: TextContextMenuState,
-  commands: readonly TextContextMenuCommandLayout[],
+  layout: TextContextMenuLayout | undefined,
 ): readonly RenderNode[] => {
-  if (!menu.open) return [];
-  const [x, y] = clampedContextMenuWorldPosition(menu.worldX, menu.worldY);
-  const height = contextMenuHeight();
+  if (layout === undefined) return [];
+  const x = layout.bounds.x;
+  const y = uiMenuYToWorldTop(layout.bounds.y);
+  const height = layout.bounds.height;
   const nodes: RenderNode[] = [
     (
       <mesh
@@ -551,14 +581,20 @@ const contextMenuNodes = (
     ) as RenderNode,
   ];
 
-  for (const command of commands) {
+  for (const command of layout.commands) {
+    const commandX = command.bounds.x;
+    const commandY = uiMenuYToWorldTop(command.bounds.y);
     nodes.push(
       (
         <mesh
-          geometry={boxGeometry({ size: [command.width, command.height, 0.02] })}
+          geometry={boxGeometry({ size: [command.bounds.width, command.bounds.height, 0.02] })}
           material={contextMenuItemMaterial}
           transform={{
-            position: [command.x + command.width / 2, command.y - command.height / 2, contextMenuZ + 0.01],
+            position: [
+              commandX + command.bounds.width / 2,
+              commandY - command.bounds.height / 2,
+              contextMenuZ + 0.01,
+            ],
             rotation: [0, 0, 0],
           }}
         />
@@ -569,7 +605,7 @@ const contextMenuNodes = (
           font={font}
           fontSize={contextMenuFontSize}
           lineHeight={contextMenuLineHeight}
-          origin={[command.x + 0.09, command.y - 0.095, contextMenuZ + 0.03]}
+          origin={[commandX + 0.09, commandY - 0.095, contextMenuZ + 0.03]}
           text={command.label}
         />
       ) as RenderNode,
@@ -590,49 +626,52 @@ const editableOrigin = (font: TextFontFace): Vec3 => {
   ];
 };
 
-const contextMenuHeight = (): number =>
-  contextMenuPadding * 2 + contextMenuItemHeight * 3 + contextMenuGap * 2;
-
-const clampedContextMenuWorldPosition = (
+const worldPointToUiMenuPoint = (
   worldX: number,
   worldY: number,
-): readonly [x: number, y: number] => {
-  const height = contextMenuHeight();
-  return [
-    Math.max(
-      cameraBounds.left + contextMenuMargin,
-      Math.min(worldX, cameraBounds.right - contextMenuWidth - contextMenuMargin),
-    ),
-    Math.max(
-      cameraBounds.bottom + height + contextMenuMargin,
-      Math.min(worldY, cameraBounds.top - contextMenuMargin),
-    ),
-  ];
-};
+): { readonly x: number; readonly y: number } => ({
+  x: worldX,
+  y: cameraBounds.top - worldY,
+});
 
-const contextMenuCommands = (
+const uiMenuYToWorldTop = (y: number): number => cameraBounds.top - y;
+
+const textContextMenuCommand = (
+  action: ClipboardAction,
+  label: string,
+  enabled: boolean,
+): TextContextMenuCommand =>
+  uiMenuCommand({
+    action,
+    enabled,
+    id: action,
+    label,
+  }) as TextContextMenuCommand;
+
+const contextMenuCommandOptions = (
+  enabled: TextContextMenuEnabled,
+): readonly TextContextMenuCommand[] => [
+  textContextMenuCommand('cut', 'Cut', enabled.cut),
+  textContextMenuCommand('copy', 'Copy', enabled.copy),
+  textContextMenuCommand('paste', 'Paste', enabled.paste),
+];
+
+const contextMenuLayout = (
   menu: TextContextMenuState,
   enabled: TextContextMenuEnabled,
-): readonly TextContextMenuCommandLayout[] => {
-  if (!menu.open) return [];
-  const [x, y] = clampedContextMenuWorldPosition(menu.worldX, menu.worldY);
-  const commands: readonly {
-    readonly action: ClipboardAction;
-    readonly enabled: boolean;
-    readonly label: string;
-  }[] = [
-    { action: 'cut', enabled: enabled.cut, label: 'Cut' },
-    { action: 'copy', enabled: enabled.copy, label: 'Copy' },
-    { action: 'paste', enabled: enabled.paste, label: 'Paste' },
-  ];
+): TextContextMenuLayout | undefined => {
+  if (!menu.open) return undefined;
+  const layout = layoutUiMenuCommands({
+    anchor: worldPointToUiMenuPoint(menu.worldX, menu.worldY),
+    bounds: contextMenuLayoutBounds,
+    commands: contextMenuCommandOptions(enabled),
+    metrics: contextMenuMetrics,
+  });
 
-  return commands.map((command, index) => ({
-    ...command,
-    height: contextMenuItemHeight,
-    width: contextMenuWidth - contextMenuPadding * 2,
-    x: x + contextMenuPadding,
-    y: y - contextMenuPadding - index * (contextMenuItemHeight + contextMenuGap),
-  }));
+  return {
+    ...layout,
+    commands: layout.commands as readonly TextContextMenuCommandLayout[],
+  };
 };
 
 const contextMenuCommandAt = (
@@ -640,12 +679,7 @@ const contextMenuCommandAt = (
   worldX: number,
   worldY: number,
 ): TextContextMenuCommandLayout | undefined =>
-  commands.find((command) =>
-    worldX >= command.x &&
-    worldX <= command.x + command.width &&
-    worldY <= command.y &&
-    worldY >= command.y - command.height
-  );
+  uiMenuCommandAt(commands, worldPointToUiMenuPoint(worldX, worldY)) as TextContextMenuCommandLayout | undefined;
 
 const nearestCaretPlacement = (
   layout: EditableTextLayout,
@@ -663,8 +697,7 @@ const textScene = (
   editableLayout: EditableTextLayout,
   selection: TextSelection,
   editableWorldOrigin: Vec3,
-  contextMenu: TextContextMenuState,
-  menuCommands: readonly TextContextMenuCommandLayout[],
+  menuLayout: TextContextMenuLayout | undefined,
   showCaret: boolean,
 ): RenderRoot => {
   const heading = h1(font, headingSampleText);
@@ -703,7 +736,7 @@ const textScene = (
           origin: sceneOrigin,
         })}
         {showCaret ? [caretNode(caretPosition, editableLayout.selectionHeight)] : []}
-        {contextMenuNodes(font, contextMenu, menuCommands)}
+        {contextMenuNodes(font, menuLayout)}
       </pass>
     </scene>
   ) as RenderRoot;
@@ -808,10 +841,11 @@ export const RendererText = (): ReactNode => {
     cut: hasSelection,
     paste: false,
   } as const;
-  const menuCommands = contextMenuCommands(contextMenu, menuEnabled);
+  const menuLayout = contextMenuLayout(contextMenu, menuEnabled);
+  const menuCommands = menuLayout?.commands ?? [];
   const scene =
     font !== undefined && editableLayout !== undefined && editableWorldOrigin !== undefined
-      ? textScene(font, editableLayout, selection, editableWorldOrigin, contextMenu, menuCommands, focused)
+      ? textScene(font, editableLayout, selection, editableWorldOrigin, menuLayout, focused)
       : textScenePlaceholder;
 
   useEffect(() => {
@@ -863,15 +897,27 @@ export const RendererText = (): ReactNode => {
     const hitTest = hitTestMetricsRef.current;
     const canvas = rendererTextCanvas();
     const menuCommandProbe = menuCommands.map((command): TextContextMenuCommandProbe => {
+      const commandX = command.bounds.x;
+      const commandY = uiMenuYToWorldTop(command.bounds.y);
       const [clientX, clientY] = canvas === undefined
         ? [0, 0]
         : worldPointToCanvasClient(
             canvas,
             cameraBounds,
-            command.x + command.width / 2,
-            command.y - command.height / 2,
+            commandX + command.bounds.width / 2,
+            commandY - command.bounds.height / 2,
           );
-      return { ...command, clientX, clientY };
+      return {
+        action: command.action,
+        clientX,
+        clientY,
+        enabled: command.enabled,
+        height: command.bounds.height,
+        label: command.label,
+        width: command.bounds.width,
+        x: commandX,
+        y: commandY,
+      };
     });
     const probe: TextEditorProbe = {
       caret: {
@@ -971,6 +1017,7 @@ export const RendererText = (): ReactNode => {
     editableLayout,
     editableWorldOrigin,
     font,
+    menuLayout,
     menuCommands,
     menuEnabled,
     sampleText,

@@ -10,6 +10,7 @@ import {
   caretSelectionAtFormPoint,
   editableTextControlForId,
   formControlsCameraBounds,
+  formControlsKeyboardAction,
   formControlsModel,
   formControlsReducer,
   hitTestFormControls,
@@ -61,6 +62,16 @@ export const FormControls = (): ReactNode => {
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLCanvasElement>): void => {
+    const modelAction = formControlsKeyboardAction(model, {
+      key: event.key,
+      shiftKey: event.shiftKey,
+    });
+    if (modelAction !== undefined) {
+      event.preventDefault();
+      dispatch(modelAction);
+      return;
+    }
+
     if (activeText === undefined) return;
 
     const intent = editableTextKeyboardIntent({
@@ -85,17 +96,12 @@ export const FormControls = (): ReactNode => {
     dispatch({ command: intent, type: 'edit-active-text' });
   };
 
-  const activeDescendant = model.focusedId === undefined
-    ? {}
-    : { 'aria-activedescendant': model.focusedId };
-  const valueText = activeText === undefined ? {} : { 'aria-valuetext': activeText.value };
-
   return (
     <Canvas
-      {...activeDescendant}
-      {...valueText}
       aria-label="Form controls"
+      aria-keyshortcuts="Tab Shift+Tab Space Enter"
       onBlur={() => dispatch({ type: 'blur' })}
+      onFocus={() => dispatch({ type: 'focus-initial-control' })}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       role="group"

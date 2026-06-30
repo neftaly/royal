@@ -1,5 +1,7 @@
 import {
   applyEditableTextCommand,
+  isUiActivatable,
+  isUiFocusable,
   layoutEditableText,
   nearestEditableTextCaret,
   type EditableTextCommand,
@@ -18,7 +20,6 @@ export type EditableTextControlModel = {
   readonly label: string;
   readonly maxLength: number;
   readonly mode: EditableTextMode;
-  readonly placeholder: string;
   readonly selection: EditableTextSelection;
   readonly value: string;
 };
@@ -54,12 +55,23 @@ export type FormControlsHit =
   | { readonly id: 'updates'; readonly type: 'checkbox' }
   | { readonly id: 'send'; readonly type: 'button' };
 
+export type FormControlsFocusDirection = 'backward' | 'forward';
+
+export type FormControlsKeyboardInput = {
+  readonly key: string;
+  readonly shiftKey?: boolean;
+};
+
 export type FormControlsAction =
   | {
     readonly id: EditableTextControlId;
     readonly selection: EditableTextSelection;
     readonly type: 'focus-text';
   }
+  | { readonly id: FormControlId; readonly type: 'focus-control' }
+  | { readonly direction: FormControlsFocusDirection; readonly type: 'focus-adjacent-control' }
+  | { readonly type: 'focus-initial-control' }
+  | { readonly type: 'activate-focused-control' }
   | { readonly command: EditableTextCommand; readonly type: 'edit-active-text' }
   | { readonly type: 'toggle-checkbox' }
   | { readonly type: 'press-button' }
@@ -144,7 +156,6 @@ const initialTextControls: readonly [EditableTextControlModel, EditableTextContr
     label: 'Title',
     maxLength: 64,
     mode: 'single-line',
-    placeholder: '',
     value: '',
   }),
   createEditableTextControl({
@@ -152,10 +163,11 @@ const initialTextControls: readonly [EditableTextControlModel, EditableTextContr
     label: 'Notes',
     maxLength: 240,
     mode: 'multiline',
-    placeholder: '',
     value: '',
   }),
 ];
+
+const formControlFocusOrder = ['title', 'notes', 'updates', 'send'] as const satisfies readonly FormControlId[];
 
 const createSemantics = (
   model: Omit<CanvasFormModel, 'semantics'>,
@@ -232,6 +244,108 @@ export const activeEditableTextControl = (
   model.activeTextId === undefined
     ? undefined
     : editableTextControlForId(model, model.activeTextId);
+
+const isEditableTextControlId = (id: FormControlId): id is EditableTextControlId =>
+  id === 'title' || id === 'notes';
+
+const focusControl = (
+  model: CanvasFormModel,
+  id: FormControlId,
+): CanvasFormModel => {
+  if (!isUiFocusable(model.semantics[id])) return model;
+
+  return withSemantics({
+    ...model,
+    activeTextId: isEditableTextControlId(id) ? id : undefined,
+    focusedId: id,
+  });
+};
+
+const focusAdjacentControl = (
+  model: CanvasFormModel,
+  direction: FormControlsFocusDirection,
+): CanvasFormModel => {
+  const focusableIds = formControlFocusOrder.filter((id) => isUiFocusable(model.semantics[id]));
+  if (focusableIds.length === 0) {
+    return withSemantics({
+      ...model,
+      activeTextId: undefined,
+      focusedId: undefined,
+    });
+  }
+
+  const currentIndex = model.focusedId === undefined
+    ? -1
+    : focusableIds.indexOf(model.focusedId);
+  const fallbackIndex = direction === 'forward' ? 0 : focusableIds.length - 1;
+  const nextIndex = currentIndex === -1
+    ? fallbackIndex
+    : (currentIndex + (direction === 'forward' ? 1 : -1) + focusableIds.length) % focusableIds.length;
+  const nextId = focusableIds[nextIndex];
+
+  return nextId === undefined ? model : focusControl(model, nextId);
+};
+
+const toggleCheckbox = (model: CanvasFormModel): CanvasFormModel =>
+  withSemantics({
+    ...model,
+    activeTextId: undefined,
+    checkbox: { ...model.checkbox, checked: !model.checkbox.checked },
+    focusedId: 'updates',
+  });
+
+const pressButton = (model: CanvasFormModel): CanvasFormModel =>
+  withSemantics({
+    ...model,
+    activeTextId: undefined,
+    button: { ...model.button, pressCount: model.button.pressCount + 1 },
+    focusedId: 'send',
+  });
+
+const activateControl = (
+  model: CanvasFormModel,
+  id: FormControlId,
+): CanvasFormModel => {
+  const focused = focusControl(model, id);
+  if (!isUiActivatable(model.semantics[id])) return focused;
+
+  switch (id) {
+    case 'updates':
+      return toggleCheckbox(focused);
+    case 'send':
+      return pressButton(focused);
+    case 'notes':
+    case 'title':
+      return focused;
+  }
+};
+
+const isSpaceKey = (key: string): boolean =>
+  key === ' ' || key === 'Spacebar';
+
+export const formControlsKeyboardAction = (
+  model: CanvasFormModel,
+  input: FormControlsKeyboardInput,
+): FormControlsAction | undefined => {
+  if (input.key === 'Tab') {
+    return {
+      direction: input.shiftKey === true ? 'backward' : 'forward',
+      type: 'focus-adjacent-control',
+    };
+  }
+
+  if (model.activeTextId !== undefined || model.focusedId === undefined) return undefined;
+
+  const focused = model.semantics[model.focusedId];
+  if (focused.role === 'button' && (input.key === 'Enter' || isSpaceKey(input.key))) {
+    return { type: 'activate-focused-control' };
+  }
+  if (focused.role === 'checkbox' && isSpaceKey(input.key)) {
+    return { type: 'activate-focused-control' };
+  }
+
+  return undefined;
+};
 
 const isInside = (
   point: FormControlsWorldPoint,
@@ -322,6 +436,7 @@ export const formControlsReducer = (
 ): CanvasFormModel => {
   switch (action.type) {
     case 'focus-text': {
+      if (!isUiFocusable(model.semantics[action.id])) return model;
       const control = editableTextControlForId(model, action.id);
       return withSemantics({
         ...model,
@@ -333,6 +448,18 @@ export const formControlsReducer = (
         }),
       });
     }
+    case 'focus-control':
+      return focusControl(model, action.id);
+    case 'focus-adjacent-control':
+      return focusAdjacentControl(model, action.direction);
+    case 'focus-initial-control':
+      return model.focusedId === undefined
+        ? focusAdjacentControl(model, 'forward')
+        : model;
+    case 'activate-focused-control':
+      return model.focusedId === undefined
+        ? model
+        : activateControl(model, model.focusedId);
     case 'edit-active-text': {
       const control = activeEditableTextControl(model);
       if (control === undefined) return model;
@@ -342,19 +469,9 @@ export const formControlsReducer = (
       });
     }
     case 'toggle-checkbox':
-      return withSemantics({
-        ...model,
-        activeTextId: undefined,
-        checkbox: { ...model.checkbox, checked: !model.checkbox.checked },
-        focusedId: 'updates',
-      });
+      return activateControl(model, 'updates');
     case 'press-button':
-      return withSemantics({
-        ...model,
-        activeTextId: undefined,
-        button: { ...model.button, pressCount: model.button.pressCount + 1 },
-        focusedId: 'send',
-      });
+      return activateControl(model, 'send');
     case 'blur':
       return withSemantics({
         ...model,

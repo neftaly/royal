@@ -7,6 +7,11 @@ and render graph primitives from `@royal/renderer-core`.
 
 ## Example
 
+The WebGL renderer currently supports a narrow glTF subset: JSON `.gltf`
+documents with external buffers, non-interleaved `FLOAT`
+`POSITION`/`NORMAL`/`TEXCOORD_0` accessors, `UNSIGNED_SHORT` indices, and a
+`pbrMetallicRoughness.baseColorTexture` image.
+
 ```tsx
 /** @jsxImportSource @royal/react */
 import {

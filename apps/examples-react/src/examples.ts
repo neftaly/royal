@@ -7,6 +7,8 @@ import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
+import { SvgGateway } from './examples/cases/SvgGateway';
+import svgGatewaySource from './examples/cases/SvgGateway.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
 import { VirtualTexturingPlane } from './examples/cases/VirtualTexturingPlane';
@@ -71,6 +73,15 @@ export const examples = [
     sourceFile: 'examples/cases/TextureMaterials.tsx',
   },
   {
+    id: 'svg-gateway',
+    maturity: 'product',
+    path: '/svg-gateway',
+    title: 'SVG Gateway',
+    Component: SvgGateway,
+    source: svgGatewaySource,
+    sourceFile: 'examples/cases/SvgGateway.tsx',
+  },
+  {
     id: 'virtual-texturing',
     maturity: 'product',
     path: '/virtual-texturing',
@@ -83,7 +94,7 @@ export const examples = [
     id: 'gltf-helmet',
     maturity: 'product',
     path: '/gltf-helmet',
-    title: 'glTF Helmet',
+    title: 'glTF Subset Helmet',
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',

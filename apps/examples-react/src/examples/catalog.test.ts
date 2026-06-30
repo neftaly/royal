@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   editableTextControlForId,
+  formControlsKeyboardAction,
   formControlsModel,
   formControlsReducer,
 } from './cases/FormControls.model';
@@ -63,7 +64,7 @@ const readFormControlsSourceParts = async (): Promise<{
 };
 
 const readSimpleSceneParts = async (
-  componentName: 'GltfHelmet' | 'TextureMaterials' | 'WireframeCube',
+  componentName: 'GltfHelmet' | 'SvgGateway' | 'TextureMaterials' | 'WireframeCube',
 ): Promise<{
   readonly hostSource: string;
   readonly sceneSource: string;
@@ -295,8 +296,9 @@ describe('examples list', () => {
       'Text',
       'Form Controls',
       'Texture Materials',
+      'SVG Gateway',
       'Virtual Texturing',
-      'glTF Helmet',
+      'glTF Subset Helmet',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
@@ -304,6 +306,7 @@ describe('examples list', () => {
       '/text',
       '/form-controls',
       '/texture-materials',
+      '/svg-gateway',
       '/virtual-texturing',
       '/gltf-helmet',
     ]);
@@ -399,6 +402,11 @@ describe('examples list', () => {
         hostCall: '{materialScene()}',
         sceneExport: 'export const materialScene = (): RenderRoot =>',
       },
+      {
+        componentName: 'SvgGateway',
+        hostCall: '{svgGatewayScene(activeId)}',
+        sceneExport: 'export const svgGatewayScene = (activeId?: SvgGatewayExampleId): RenderRoot =>',
+      },
     ] as const;
 
     for (const { componentName, hostCall, sceneExport } of cases) {
@@ -429,10 +437,14 @@ describe('examples list', () => {
     expect(formControls?.maturity).toBe('product');
     expect(hostSource).not.toContain('@jsxImportSource @royal/react');
     expect(hostSource).toContain('aria-label="Form controls"');
+    expect(hostSource).toContain('aria-keyshortcuts="Tab Shift+Tab Space Enter"');
     expect(hostSource).toContain('useAtkinsonFont');
     expect(hostSource).toContain('{formControlsScene(model, font)}');
     expect(hostSource).toContain('editableTextKeyboardIntent');
+    expect(hostSource).toContain('formControlsKeyboardAction');
     expect(hostSource).toContain('hitTestFormControls');
+    expect(hostSource).not.toContain('aria-activedescendant');
+    expect(hostSource).not.toContain('aria-valuetext');
     expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
     expect(hostSource).not.toContain('@royal/renderer-core');
 
@@ -452,12 +464,13 @@ describe('examples list', () => {
     expect(sceneSource).toContain('const TextArea = (');
     expect(sceneSource).toContain('const Checkbox = (');
     expect(sceneSource).toContain('const Button = (');
+    expect(sceneSource).toContain('readonly text: string');
     expect(compactSceneSource).toContain('<Form id="contact-form" bounds={layout.form}>');
-    expect(compactSceneSource).toContain('<Heading level={1} bounds={layout.heading}> Message </Heading>');
-    expect(compactSceneSource).toMatch(/<Field id="title-field" label="Title" bounds=\{layout\.fields\.title\} active=\{model\.activeTextId === title\.id\}\s*> <TextInput id="title" active=\{model\.activeTextId === title\.id\} control=\{title\} font=\{font\} \/> <\/Field>/);
+    expect(compactSceneSource).toContain('<Heading level={1} bounds={layout.heading} text="Message" />');
+    expect(compactSceneSource).toMatch(/<Field id="title-field" label="Title" bounds=\{layout\.fields\.title\} active=\{model\.activeTextId === title\.id\}\s*> \{\( <TextInput id="title" active=\{model\.activeTextId === title\.id\} control=\{title\} font=\{font\} \/> \) as RoyalNodeChild\} <\/Field>/);
     expect(compactSceneSource).toContain('<TextArea id="notes" label="Notes" bounds={layout.fields.notes} active={model.activeTextId === notes.id} control={notes} font={font} />');
-    expect(compactSceneSource).toMatch(/<Checkbox id="updates" checked=\{model\.checkbox\.checked\} focused=\{model\.focusedId === model\.checkbox\.id\} bounds=\{layout\.checkbox\}\s*> \{model\.checkbox\.label\} <\/Checkbox>/);
-    expect(compactSceneSource).toMatch(/<Button id="send" focused=\{model\.focusedId === model\.button\.id\} bounds=\{layout\.button\}\s*> Submit <\/Button>/);
+    expect(compactSceneSource).toContain('<Checkbox id="updates" checked={model.checkbox.checked} focused={model.focusedId === model.checkbox.id} bounds={layout.checkbox} label={model.checkbox.label} />');
+    expect(compactSceneSource).toContain('<Button id="send" focused={model.focusedId === model.button.id} bounds={layout.button} label={model.button.label} />');
     expect(sceneSource).not.toMatch(/\bconst\s+CanvasForm\b|<CanvasForm\b/);
     expect(sceneSource).not.toMatch(/\bconst\s+FormHeading\b|<FormHeading\b/);
     expect(sceneSource).not.toMatch(/\bconst\s+CheckboxInput\b|<CheckboxInput\b/);
@@ -466,6 +479,14 @@ describe('examples list', () => {
     expect(sceneSource).not.toContain('FormTextField');
     expect(sceneSource).not.toContain('FormCheckbox');
     expect(sceneSource).not.toContain('FormButton');
+    expect(sceneSource).not.toContain('labelFromChildren');
+    expect(sceneSource).not.toContain('textFromChildren');
+    expect(sceneSource).not.toContain('renderNodesFromChildren');
+    expect(sceneSource).not.toContain('text={children}');
+    expect(sceneSource).not.toContain('readonly children: string');
+    expect(sceneSource).not.toContain('placeholder');
+    expect(sceneSource).not.toMatch(/\btypeof\s+children\s*===\s*['"]string['"]/);
+    expect(sceneSource).not.toMatch(/<Text\b[^>]*>\s*\{[^}]+\}\s*<\/Text>/);
     expect(sceneSource).not.toMatch(/\bCanvas\s*[({<]/);
     expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
 
@@ -475,12 +496,12 @@ describe('examples list', () => {
     expect(modelSource).toContain('readonly mode: EditableTextMode');
     expect(modelSource).toContain("mode: 'single-line'");
     expect(modelSource).toContain("mode: 'multiline'");
-    expect(modelSource).toContain('readonly placeholder: string');
     expect(modelSource).toContain('readonly value: string');
     expect(modelSource).toContain('readonly selection: EditableTextSelection');
     expect(modelSource).toContain('uiNodeSemantics');
     expect(modelSource).toContain('readonly semantics: Readonly<Record<FormControlId, UiNodeSemantics>>');
     expect(modelSource).toContain('formControlsReducer');
+    expect(modelSource).toContain('formControlsKeyboardAction');
     expect(modelSource).toContain('caretSelectionAtFormPoint');
     expect(modelSource).toContain("mode === 'single-line'");
     expect(combinedSource).not.toMatch(
@@ -492,6 +513,7 @@ describe('examples list', () => {
     expect(combinedSource).not.toContain('ListboxControlModel');
     expect(combinedSource).not.toContain('RadioGroupControlModel');
     expect(combinedSource).not.toContain('RangeControlModel');
+    expect(combinedSource).not.toContain('placeholder');
     expect(combinedSource).not.toMatch(
       /<\s*(?:button|fieldset|form|input|output|select|textarea)(?=[\s>/])|\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/,
     );
@@ -504,9 +526,7 @@ describe('examples list', () => {
     const title = editableTextControlForId(formControlsModel, 'title');
     const notes = editableTextControlForId(formControlsModel, 'notes');
 
-    expect(title.placeholder).toBe('');
     expect(title.value).toBe('');
-    expect(notes.placeholder).toBe('');
     expect(notes.value).toBe('');
     expect(formControlsModel.button.label).toBe('Submit');
 
@@ -534,6 +554,57 @@ describe('examples list', () => {
     expect(toggled.activeTextId).toBeUndefined();
     expect(pressed.button.pressCount).toBe(1);
     expect(pressed.focusedId).toBe('send');
+  });
+
+  it('keeps FormControls focus traversal in the model', () => {
+    const firstAction = formControlsKeyboardAction(formControlsModel, { key: 'Tab' });
+    expect(firstAction).toEqual({ direction: 'forward', type: 'focus-adjacent-control' });
+
+    const titleFocused = formControlsReducer(formControlsModel, firstAction ?? { type: 'blur' });
+    const notesAction = formControlsKeyboardAction(titleFocused, { key: 'Tab' });
+    const notesFocused = formControlsReducer(titleFocused, notesAction ?? { type: 'blur' });
+    const titleAction = formControlsKeyboardAction(notesFocused, { key: 'Tab', shiftKey: true });
+    const titleRefocused = formControlsReducer(notesFocused, titleAction ?? { type: 'blur' });
+    const sendFocused = formControlsReducer(formControlsModel, {
+      direction: 'backward',
+      type: 'focus-adjacent-control',
+    });
+
+    expect(titleFocused.focusedId).toBe('title');
+    expect(titleFocused.activeTextId).toBe('title');
+    expect(notesFocused.focusedId).toBe('notes');
+    expect(notesFocused.activeTextId).toBe('notes');
+    expect(titleRefocused.focusedId).toBe('title');
+    expect(sendFocused.focusedId).toBe('send');
+    expect(sendFocused.activeTextId).toBeUndefined();
+  });
+
+  it('keeps FormControls keyboard activation deterministic by role', () => {
+    const checkboxFocused = formControlsReducer(formControlsModel, {
+      id: 'updates',
+      type: 'focus-control',
+    });
+    const checkboxSpace = formControlsKeyboardAction(checkboxFocused, { key: ' ' });
+    const checkboxToggled = formControlsReducer(checkboxFocused, checkboxSpace ?? { type: 'blur' });
+    const checkboxEnter = formControlsKeyboardAction(checkboxFocused, { key: 'Enter' });
+    const buttonFocused = formControlsReducer(formControlsModel, {
+      id: 'send',
+      type: 'focus-control',
+    });
+    const buttonEnter = formControlsKeyboardAction(buttonFocused, { key: 'Enter' });
+    const buttonPressed = formControlsReducer(buttonFocused, buttonEnter ?? { type: 'blur' });
+    const buttonSpace = formControlsKeyboardAction(buttonPressed, { key: 'Spacebar' });
+    const buttonPressedAgain = formControlsReducer(buttonPressed, buttonSpace ?? { type: 'blur' });
+
+    expect(checkboxSpace).toEqual({ type: 'activate-focused-control' });
+    expect(checkboxToggled.checkbox.checked).toBe(true);
+    expect(checkboxToggled.focusedId).toBe('updates');
+    expect(checkboxEnter).toBeUndefined();
+    expect(buttonEnter).toEqual({ type: 'activate-focused-control' });
+    expect(buttonPressed.button.pressCount).toBe(1);
+    expect(buttonPressed.focusedId).toBe('send');
+    expect(buttonSpace).toEqual({ type: 'activate-focused-control' });
+    expect(buttonPressedAgain.button.pressCount).toBe(2);
   });
 
   it('keeps primary renderer examples on JSX scene authoring', () => {
@@ -595,7 +666,7 @@ describe('examples list', () => {
     expect(examples.map((example) => example.maturity)).toEqual(
       examples.map(() => 'product'),
     );
-    expect(examples).toHaveLength(7);
+    expect(examples).toHaveLength(8);
   });
 
   it('keeps fixture-only VT artifacts out of primary examples', () => {
@@ -654,8 +725,9 @@ describe('examples list', () => {
     expect(textExample?.source).toContain('onPaste: handleCanvasPaste');
     expect(textExample?.source).toContain('onContextMenu: handleCanvasContextMenu');
     expect(textExample?.source).toContain('contextMenuNodes');
-    expect(textExample?.source).toContain('contextMenuCommands');
-    expect(textExample?.source).toContain('contextMenuCommandAt');
+    expect(textExample?.source).toContain('layoutUiMenuCommands');
+    expect(textExample?.source).toContain('uiMenuCommand({');
+    expect(textExample?.source).toContain('uiMenuCommandAt');
     expect(textExample?.source).toContain('event.clipboardData.setData');
     expect(textExample?.source).toContain('event.clipboardData.getData');
     expect(textExample?.source).toContain('await clipboard.writeText(text)');
@@ -686,6 +758,7 @@ describe('examples list', () => {
     const helmet = examples.find((example) => example.id === 'gltf-helmet');
     const { sceneSource } = await readSimpleSceneParts('GltfHelmet');
 
+    expect(helmet?.title).toBe('glTF Subset Helmet');
     expect(helmet?.path).toBe('/gltf-helmet');
     expect(sceneSource).toContain('<gltf');
     expect(sceneSource).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
@@ -707,6 +780,35 @@ describe('examples list', () => {
       "import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg'",
     );
     expect(sceneSource).toContain('<mesh');
+  });
+
+  it('demonstrates the public SVG gateway as a supported texture and picking route', async () => {
+    const svgGateway = examples.find((example) => example.id === 'svg-gateway');
+    const { hostSource, sceneSource } = await readSimpleSceneParts('SvgGateway');
+
+    expect(svgGateway?.maturity).toBe('product');
+    expect(svgGateway?.path).toBe('/svg-gateway');
+    expect(svgGateway?.title).toBe('SVG Gateway');
+    expect(hostSource).toContain('canvasPointToWorld');
+    expect(hostSource).toContain('svgGatewayHitTargetAt');
+    expect(hostSource).toContain('data-svg-gateway-active-id');
+    expect(hostSource).toContain('{svgGatewayScene(activeId)}');
+    expect(hostSource).not.toContain('@royal/renderer-core');
+
+    expect(sceneSource).toContain("from '@royal/renderer-core/svg'");
+    expect(sceneSource).toContain('createSvgGatewayGeometry');
+    expect(sceneSource).toContain('createSvgRasterTextureSource');
+    expect(sceneSource).toContain('svgPathToContours');
+    expect(sceneSource).toContain('geometry.hitRegion.contains');
+    expect(sceneSource).toContain('textureAsset');
+    expect(sceneSource).toContain('uri: svgToDataUri(shape.svg)');
+    expect(sceneSource).toContain('<mesh');
+    expect(sceneSource).toContain("label: 'Polygon pick'");
+    expect(sceneSource).toContain("label: 'Arc path pick'");
+    expect(sceneSource).toContain("label: 'Subpath hole'");
+    expect(sceneSource).toContain("role: 'hole'");
+    expect(sceneSource).not.toMatch(/\bsvgMesh\b|\bSvgMesh\b|kind:\s*['"]svg-gateway-geometry['"]/);
+    expect(sceneSource).not.toContain('@royal/renderer-webgl');
   });
 
   it('keeps the wireframe route on the backend WebGL wireframe path', async () => {

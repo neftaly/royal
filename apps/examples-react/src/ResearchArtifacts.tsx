@@ -126,7 +126,7 @@ export const researchArtifacts: readonly ResearchArtifact[] = [
 const relatedRoutes = [
   {
     href: `${import.meta.env.BASE_URL.replace(/\/$/, '')}/gltf-helmet`,
-    label: 'glTF Helmet real example route',
+    label: 'glTF subset helmet example route',
   },
 ] as const;
 
