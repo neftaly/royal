@@ -90,6 +90,12 @@ export const formControlsLayout = {
     x: -3.62,
     y: -1.62,
   },
+  form: {
+    height: 5.72,
+    width: 8.1,
+    x: -4.05,
+    y: 3.2,
+  },
   fields: {
     notes: {
       height: 1.64,
@@ -107,6 +113,12 @@ export const formControlsLayout = {
       x: -3.62,
       y: 2.66,
     },
+  },
+  heading: {
+    height: 0.48,
+    width: 7.24,
+    x: -3.62,
+    y: 3.1,
   },
 } as const;
 
@@ -132,16 +144,16 @@ const initialTextControls: readonly [EditableTextControlModel, EditableTextContr
     label: 'Title',
     maxLength: 64,
     mode: 'single-line',
-    placeholder: 'Untitled canvas note',
-    value: 'Canvas form slice',
+    placeholder: '',
+    value: '',
   }),
   createEditableTextControl({
     id: 'notes',
     label: 'Notes',
     maxLength: 240,
     mode: 'multiline',
-    placeholder: 'Add notes',
-    value: 'Pointer focus and keyboard edits are handled by the canvas host.',
+    placeholder: '',
+    value: '',
   }),
 ];
 
@@ -193,7 +205,7 @@ export const formControlsModel: CanvasFormModel = withSemantics({
   activeTextId: undefined,
   button: {
     id: 'send',
-    label: 'Send',
+    label: 'Submit',
     pressCount: 0,
   },
   checkbox: {

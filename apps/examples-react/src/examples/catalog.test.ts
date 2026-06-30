@@ -422,12 +422,13 @@ describe('examples list', () => {
     const formControls = examples.find((example) => example.id === 'form-controls');
     const { combinedSource, hostSource, modelSource, sceneSource } =
       await readFormControlsSourceParts();
+    const compactSceneSource = compactSourceMatch(sceneSource);
 
     expect(formControls?.path).toBe('/form-controls');
     expect(formControls?.title).toBe('Form Controls');
     expect(formControls?.maturity).toBe('product');
     expect(hostSource).not.toContain('@jsxImportSource @royal/react');
-    expect(hostSource).toContain('aria-label="Canvas-native form controls"');
+    expect(hostSource).toContain('aria-label="Form controls"');
     expect(hostSource).toContain('useAtkinsonFont');
     expect(hostSource).toContain('{formControlsScene(model, font)}');
     expect(hostSource).toContain('editableTextKeyboardIntent');
@@ -444,6 +445,27 @@ describe('examples list', () => {
     expect(sceneSource).toContain('createEditableTextFragment');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('unlitMaterial');
+    expect(sceneSource).toContain('const Form = (');
+    expect(sceneSource).toContain('const Heading = (');
+    expect(sceneSource).toContain('const Field = (');
+    expect(sceneSource).toContain('const TextInput = (');
+    expect(sceneSource).toContain('const TextArea = (');
+    expect(sceneSource).toContain('const Checkbox = (');
+    expect(sceneSource).toContain('const Button = (');
+    expect(compactSceneSource).toContain('<Form id="contact-form" bounds={layout.form}>');
+    expect(compactSceneSource).toContain('<Heading level={1} bounds={layout.heading}> Message </Heading>');
+    expect(compactSceneSource).toMatch(/<Field id="title-field" label="Title" bounds=\{layout\.fields\.title\} active=\{model\.activeTextId === title\.id\}\s*> <TextInput id="title" active=\{model\.activeTextId === title\.id\} control=\{title\} font=\{font\} \/> <\/Field>/);
+    expect(compactSceneSource).toContain('<TextArea id="notes" label="Notes" bounds={layout.fields.notes} active={model.activeTextId === notes.id} control={notes} font={font} />');
+    expect(compactSceneSource).toMatch(/<Checkbox id="updates" checked=\{model\.checkbox\.checked\} focused=\{model\.focusedId === model\.checkbox\.id\} bounds=\{layout\.checkbox\}\s*> \{model\.checkbox\.label\} <\/Checkbox>/);
+    expect(compactSceneSource).toMatch(/<Button id="send" focused=\{model\.focusedId === model\.button\.id\} bounds=\{layout\.button\}\s*> Submit <\/Button>/);
+    expect(sceneSource).not.toMatch(/\bconst\s+CanvasForm\b|<CanvasForm\b/);
+    expect(sceneSource).not.toMatch(/\bconst\s+FormHeading\b|<FormHeading\b/);
+    expect(sceneSource).not.toMatch(/\bconst\s+CheckboxInput\b|<CheckboxInput\b/);
+    expect(sceneSource).not.toMatch(/\bconst\s+SubmitButton\b|<SubmitButton\b/);
+    expect(sceneSource).not.toMatch(/Submitted \${|Sent \${/);
+    expect(sceneSource).not.toContain('FormTextField');
+    expect(sceneSource).not.toContain('FormCheckbox');
+    expect(sceneSource).not.toContain('FormButton');
     expect(sceneSource).not.toMatch(/\bCanvas\s*[({<]/);
     expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
 
@@ -461,6 +483,9 @@ describe('examples list', () => {
     expect(modelSource).toContain('formControlsReducer');
     expect(modelSource).toContain('caretSelectionAtFormPoint');
     expect(modelSource).toContain("mode === 'single-line'");
+    expect(combinedSource).not.toMatch(
+      /Canvas-native editable fields|Canvas-native form controls|Canvas form slice|Pointer focus|Untitled canvas note|Add notes/,
+    );
     expect(sceneSource).not.toContain('selectedRangeWidth');
     expect(combinedSource).not.toContain("browser.filePicker.request");
     expect(combinedSource).not.toContain('ColorSwatchControlModel');
@@ -468,7 +493,7 @@ describe('examples list', () => {
     expect(combinedSource).not.toContain('RadioGroupControlModel');
     expect(combinedSource).not.toContain('RangeControlModel');
     expect(combinedSource).not.toMatch(
-      /<\s*(?:button|fieldset|form|input|output|select|textarea)\b|\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/i,
+      /<\s*(?:button|fieldset|form|input|output|select|textarea)(?=[\s>/])|\b(?:React\.)?createElement\s*\(\s*['"`](?:button|fieldset|form|input|output|select|textarea)['"`]/,
     );
     expect(combinedSource).not.toMatch(
       /\b(?:HTMLButtonElement|HTMLFieldSetElement|HTMLFormElement|HTMLInputElement|HTMLOutputElement|HTMLSelectElement|HTMLTextAreaElement|contentEditable|contenteditable|fileInput|fileInputRef|hiddenFileInput|hiddenFilePicker|inputFileBridge)\b/,
@@ -477,6 +502,14 @@ describe('examples list', () => {
 
   it('updates the FormControls model through pure reducer actions', () => {
     const title = editableTextControlForId(formControlsModel, 'title');
+    const notes = editableTextControlForId(formControlsModel, 'notes');
+
+    expect(title.placeholder).toBe('');
+    expect(title.value).toBe('');
+    expect(notes.placeholder).toBe('');
+    expect(notes.value).toBe('');
+    expect(formControlsModel.button.label).toBe('Submit');
+
     const focused = formControlsReducer(formControlsModel, {
       id: 'title',
       selection: {

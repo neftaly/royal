@@ -15,6 +15,7 @@ import {
   formControlsLayout,
   formControlsTextMetrics,
   type CanvasFormModel,
+  type EditableTextControlId,
   type EditableTextControlModel,
 } from './FormControls.model';
 
@@ -22,6 +23,18 @@ type BoxStyle = {
   readonly fill: Rgba;
   readonly height: number;
   readonly width: number;
+};
+
+type RectBounds = {
+  readonly height: number;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+type TextFieldBounds = RectBounds & {
+  readonly textMaxWidth: number;
+  readonly textOrigin: Vec3;
 };
 
 const palette = {
@@ -38,6 +51,8 @@ const palette = {
   shadow: [0.02, 0.025, 0.028, 1],
   surface: [0.075, 0.088, 0.09, 1],
 } as const satisfies Readonly<Record<string, Rgba>>;
+
+const layout = formControlsLayout;
 
 const rect = ({ fill, height, width }: BoxStyle, position: Vec3): RenderNode =>
   (
@@ -73,13 +88,111 @@ const textNode = (
     />
   ) as RenderNode;
 
-const editableTextField = (
-  control: EditableTextControlModel,
-  active: boolean,
-  font: TextFontFace | undefined,
-): readonly RenderNode[] => {
-  const field = formControlsLayout.fields[control.id];
-  const fragment = createEditableTextFragment({
+const isRenderNode = (value: unknown): value is RenderNode =>
+  typeof value === 'object' &&
+  value !== null &&
+  'kind' in value &&
+  (
+    value.kind === 'mesh' ||
+    value.kind === 'gltf' ||
+    value.kind === 'directional-light' ||
+    value.kind === 'text'
+  );
+
+const renderNodesFromChildren = (children: unknown): readonly RenderNode[] => {
+  if (Array.isArray(children)) return children.flatMap(renderNodesFromChildren);
+  if (children === false || children === null || children === undefined) return [];
+  if (typeof children === 'string' && children.trim() === '') return [];
+  if (isRenderNode(children)) return [children];
+  throw new Error('Expected Royal render node child');
+};
+
+const textFromChildren = (children: unknown): string => {
+  if (Array.isArray(children)) return children.map(textFromChildren).join('');
+  if (typeof children === 'number' || typeof children === 'string') return String(children);
+  if (children === false || children === null || children === undefined) return '';
+  throw new Error('Expected text child');
+};
+
+const labelFromChildren = (children: unknown): string =>
+  textFromChildren(children).trim();
+
+type FormProps = {
+  readonly bounds: RectBounds;
+  readonly children?: unknown;
+  readonly id: string;
+};
+
+const Form = ({ bounds, children }: FormProps) => (
+  <>
+    {rectFromTopLeft({ fill: palette.surface, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, -0.02)}
+    {renderNodesFromChildren(children)}
+  </>
+);
+
+type HeadingProps = {
+  readonly bounds: RectBounds;
+  readonly children?: unknown;
+  readonly level: 1;
+};
+
+const Heading = ({ bounds, children }: HeadingProps) => (
+  <>
+    {textNode(labelFromChildren(children), [bounds.x, bounds.y, 0.12], palette.ink, 0.38, 0.48)}
+  </>
+);
+
+type FieldChromeOptions = {
+  readonly active: boolean;
+  readonly bounds: TextFieldBounds;
+  readonly label: string;
+};
+
+const fieldChromeNodes = ({
+  active,
+  bounds,
+  label,
+}: FieldChromeOptions): readonly RenderNode[] => {
+  const border = active ? palette.accent : palette.border;
+
+  return [
+    textNode(label, [bounds.x, bounds.y + 0.24, 0.12], palette.muted, 0.17, 0.24),
+    rectFromTopLeft({ fill: palette.shadow, height: bounds.height + 0.08, width: bounds.width + 0.08 }, bounds.x - 0.04, bounds.y + 0.02),
+    rectFromTopLeft({ fill: border, height: bounds.height + 0.04, width: bounds.width + 0.04 }, bounds.x - 0.02, bounds.y + 0.02, 0.02),
+    rectFromTopLeft({ fill: active ? palette.fieldActive : palette.field, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04),
+  ];
+};
+
+type FieldProps = FieldChromeOptions & {
+  readonly children?: unknown;
+  readonly id: string;
+};
+
+const Field = ({ active, bounds, children, label }: FieldProps) => (
+  <>
+    {fieldChromeNodes({ active, bounds, label })}
+    {renderNodesFromChildren(children)}
+  </>
+);
+
+type EditableTextInputProps = {
+  readonly active: boolean;
+  readonly control: EditableTextControlModel;
+  readonly font: TextFontFace | undefined;
+  readonly id: EditableTextControlId;
+};
+
+const editableTextNodes = ({
+  active,
+  control,
+  font,
+  id,
+}: EditableTextInputProps): readonly RenderNode[] => {
+  if (id !== control.id) throw new Error(`Mismatched text input id: ${id}`);
+
+  const field = layout.fields[id];
+
+  return createEditableTextFragment({
     color: palette.ink,
     ...(font === undefined ? {} : { font }),
     fontSize: formControlsTextMetrics.fontSize,
@@ -93,73 +206,140 @@ const editableTextField = (
     selectionColor: palette.selection,
     showCaret: active,
     text: control.value,
-  });
-  const border = active ? palette.accent : palette.border;
-
-  return [
-    textNode(control.label, [field.x, field.y + 0.24, 0.12], palette.muted, 0.17, 0.24),
-    rectFromTopLeft({ fill: palette.shadow, height: field.height + 0.08, width: field.width + 0.08 }, field.x - 0.04, field.y + 0.02),
-    rectFromTopLeft({ fill: border, height: field.height + 0.04, width: field.width + 0.04 }, field.x - 0.02, field.y + 0.02, 0.02),
-    rectFromTopLeft({ fill: active ? palette.fieldActive : palette.field, height: field.height, width: field.width }, field.x, field.y, 0.04),
-    ...fragment.nodes,
-  ];
+  }).nodes;
 };
 
-const checkboxControl = (
-  model: CanvasFormModel,
-): readonly RenderNode[] => {
-  const control = model.checkbox;
-  const bounds = formControlsLayout.checkbox;
-  const active = model.focusedId === control.id;
+type TextInputProps = EditableTextInputProps;
+
+const TextInput = (props: TextInputProps) => (
+  <>
+    {editableTextNodes(props)}
+  </>
+);
+
+type TextAreaProps = EditableTextInputProps & FieldChromeOptions;
+
+const TextArea = ({
+  active,
+  bounds,
+  control,
+  font,
+  id,
+  label,
+}: TextAreaProps) => (
+  <>
+    {fieldChromeNodes({ active, bounds, label })}
+    {editableTextNodes({ active, control, font, id })}
+  </>
+);
+
+type CheckboxProps = {
+  readonly bounds: RectBounds;
+  readonly checked: boolean;
+  readonly children?: unknown;
+  readonly focused: boolean;
+  readonly id: 'updates';
+};
+
+const Checkbox = ({
+  bounds,
+  checked,
+  children,
+  focused,
+}: CheckboxProps) => {
   const boxX = bounds.x;
   const boxY = bounds.y;
-  const fill = control.checked ? palette.accent : palette.field;
+  const fill = checked ? palette.accent : palette.field;
 
-  return [
-    rectFromTopLeft({ fill: active ? palette.accentStrong : palette.border, height: 0.4, width: 0.4 }, boxX, boxY, 0.02),
-    rectFromTopLeft({ fill, height: 0.28, width: 0.28 }, boxX + 0.06, boxY - 0.06, 0.06),
-    textNode(control.checked ? 'x' : '', [boxX + 0.13, boxY - 0.29, 0.12], palette.bg, 0.25, 0.25),
-    textNode(control.label, [boxX + 0.56, boxY - 0.28, 0.12], palette.ink, 0.2, 0.28),
-  ];
+  return (
+    <>
+      {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.border, height: 0.4, width: 0.4 }, boxX, boxY, 0.02)}
+      {rectFromTopLeft({ fill, height: 0.28, width: 0.28 }, boxX + 0.06, boxY - 0.06, 0.06)}
+      {textNode(checked ? 'x' : '', [boxX + 0.13, boxY - 0.29, 0.12], palette.bg, 0.25, 0.25)}
+      {textNode(labelFromChildren(children), [boxX + 0.56, boxY - 0.28, 0.12], palette.ink, 0.2, 0.28)}
+    </>
+  );
 };
 
-const actionButton = (
-  model: CanvasFormModel,
-): readonly RenderNode[] => {
-  const bounds = formControlsLayout.button;
-  const active = model.focusedId === model.button.id;
-  const label = model.button.pressCount === 0 ? model.button.label : `Sent ${model.button.pressCount}`;
-
-  return [
-    rectFromTopLeft({ fill: active ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04),
-    textNode(label, [bounds.x + 0.28, bounds.y - 0.36, 0.12], [1, 1, 1, 1], 0.2, 0.27),
-  ];
+type ButtonProps = {
+  readonly bounds: RectBounds;
+  readonly children?: unknown;
+  readonly focused: boolean;
+  readonly id: 'send';
 };
+
+const Button = ({
+  bounds,
+  children,
+  focused,
+}: ButtonProps) => (
+  <>
+    {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04)}
+    {textNode(labelFromChildren(children), [bounds.x + 0.28, bounds.y - 0.36, 0.12], [1, 1, 1, 1], 0.2, 0.27)}
+  </>
+);
 
 export const formControlsScene = (
   model: CanvasFormModel,
   font?: TextFontFace,
-): RenderRoot => (
-  <scene>
-    <pass clearColor={palette.bg}>
-      <orthographicCamera
-        bottom={formControlsCameraBounds.bottom}
-        far={100}
-        left={formControlsCameraBounds.left}
-        near={0.1}
-        position={[0, 0, 10]}
-        right={formControlsCameraBounds.right}
-        rotation={[0, 0, 0]}
-        top={formControlsCameraBounds.top}
-      />
-      {rect({ fill: palette.surface, height: 5.6, width: 8.1 }, [0, 0.1, -0.02])}
-      {textNode('Form Controls', [-3.84, 3.0, 0.12], palette.ink, 0.42, 0.52)}
-      {textNode('Canvas-native editable fields', [-3.82, 2.58, 0.12], palette.muted, 0.18, 0.25)}
-      {model.textControls.flatMap((control) =>
-        editableTextField(control, model.activeTextId === control.id, font)
-      )}
-      {checkboxControl(model)}
-      {actionButton(model)}
-    </pass>
-  </scene>
-) as RenderRoot;
+): RenderRoot => {
+  const [title, notes] = model.textControls;
+
+  return (
+    <scene>
+      <pass clearColor={palette.bg}>
+        <orthographicCamera
+          bottom={formControlsCameraBounds.bottom}
+          far={100}
+          left={formControlsCameraBounds.left}
+          near={0.1}
+          position={[0, 0, 10]}
+          right={formControlsCameraBounds.right}
+          rotation={[0, 0, 0]}
+          top={formControlsCameraBounds.top}
+        />
+        <Form id="contact-form" bounds={layout.form}>
+          <Heading level={1} bounds={layout.heading}>
+            Message
+          </Heading>
+          <Field
+            id="title-field"
+            label="Title"
+            bounds={layout.fields.title}
+            active={model.activeTextId === title.id}
+          >
+            <TextInput
+              id="title"
+              active={model.activeTextId === title.id}
+              control={title}
+              font={font}
+            />
+          </Field>
+          <TextArea
+            id="notes"
+            label="Notes"
+            bounds={layout.fields.notes}
+            active={model.activeTextId === notes.id}
+            control={notes}
+            font={font}
+          />
+          <Checkbox
+            id="updates"
+            checked={model.checkbox.checked}
+            focused={model.focusedId === model.checkbox.id}
+            bounds={layout.checkbox}
+          >
+            {model.checkbox.label}
+          </Checkbox>
+          <Button
+            id="send"
+            focused={model.focusedId === model.button.id}
+            bounds={layout.button}
+          >
+            Submit
+          </Button>
+        </Form>
+      </pass>
+    </scene>
+  ) as RenderRoot;
+};

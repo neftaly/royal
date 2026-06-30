@@ -94,7 +94,7 @@ export const FormControls = (): ReactNode => {
     <Canvas
       {...activeDescendant}
       {...valueText}
-      aria-label="Canvas-native form controls"
+      aria-label="Form controls"
       onBlur={() => dispatch({ type: 'blur' })}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}

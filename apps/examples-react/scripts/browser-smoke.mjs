@@ -49,7 +49,7 @@ const smokeExpectations = {
   },
   'form-controls': {
     surface: 'canvas',
-    canvasLabel: 'Canvas-native form controls',
+    canvasLabel: 'Form controls',
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
   },
