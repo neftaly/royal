@@ -172,6 +172,8 @@ describe("VirtualTextureResource", () => {
       lastFrame: 8,
       lastUploadCount: 2,
       pageTableBytesUploaded: 4,
+      pageTableFullRebuilds: 0,
+      pageTableTexSubImageCalls: 1,
       pageTableTexelsUploaded: 1,
       physicalAtlasBytesUploaded: 136 * 136 * 4,
       physicalAtlasPagesUploaded: 1,
@@ -237,11 +239,15 @@ describe("VirtualTextureResource", () => {
     expect(sourceRequests).toEqual(["m0/0/0", "m0/1/0"]);
     expect(firstUpload).toMatchObject({
       bytesUploaded: 68 * 68 * 4 + 4,
+      pageTableFullRebuilds: 0,
+      pageTableTexSubImageCalls: 1,
       pageTableUploads: 1,
       physicalAtlasUploads: 1,
     });
     expect(secondUpload).toMatchObject({
       bytesUploaded: 68 * 68 * 4 + 4,
+      pageTableFullRebuilds: 0,
+      pageTableTexSubImageCalls: 1,
       pageTableUploads: 1,
       physicalAtlasUploads: 1,
     });

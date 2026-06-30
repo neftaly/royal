@@ -369,8 +369,24 @@ export class TextureCache {
   }
 }
 
+const textureAssetSamplerCacheKey = (sampler: CoreTextureSampler | undefined): string =>
+  sampler === undefined
+    ? ""
+    : [
+        sampler.magFilter ?? "",
+        sampler.minFilter ?? "",
+        sampler.wrapS ?? "",
+        sampler.wrapT ?? "",
+      ].join("\u0000");
+
 const textureAssetCacheKey = (asset: TextureAssetRef): string =>
-  `${asset.id}\u0000${asset.revision ?? ""}\u0000${asset.uri}`;
+  [
+    asset.id,
+    asset.revision ?? "",
+    asset.uri,
+    asset.colorSpace ?? "",
+    textureAssetSamplerCacheKey(asset.sampler),
+  ].join("\u0000");
 
 const gltfTextureCacheKey = (src: string, textureIndex: number): string =>
   `${src}\u0000${textureIndex}`;

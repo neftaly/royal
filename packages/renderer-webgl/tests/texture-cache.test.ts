@@ -22,13 +22,13 @@ type TexImageUpload = {
 };
 
 const fakeTextureGl = (): {
-  readonly counts: { readonly createTexture: number };
+  readonly counts: { readonly createTexture: number; readonly texImage2D: number };
   readonly gl: RendererWebGlContext;
   readonly mipmaps: number[];
   readonly texImageUploads: TexImageUpload[];
   readonly texParameters: TexParameterCall[];
 } => {
-  const counts = { createTexture: 0 };
+  const counts = { createTexture: 0, texImage2D: 0 };
   const mipmaps: number[] = [];
   const texImageUploads: TexImageUpload[] = [];
   const texParameters: TexParameterCall[] = [];
@@ -64,6 +64,7 @@ const fakeTextureGl = (): {
       },
       pixelStorei() {},
       texImage2D(...args: unknown[]) {
+        counts.texImage2D += 1;
         const [
           target,
           level,
@@ -112,6 +113,14 @@ const fakeTextureGl = (): {
 const installImage = (image: Pick<ImageBitmap, "height" | "width">): void => {
   vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(new Blob(["image"])))));
   vi.stubGlobal("createImageBitmap", vi.fn(() => Promise.resolve(image as ImageBitmap)));
+};
+
+const waitFor = async (predicate: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("Timed out waiting for condition");
 };
 
 afterEach(() => {
@@ -229,5 +238,82 @@ describe("TextureCache", () => {
       { param: gl.MIRRORED_REPEAT, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
     ]);
     expect(mipmaps).toEqual([gl.TEXTURE_2D]);
+  });
+
+  it("keeps texture asset loads distinct when sampler state changes", async () => {
+    installImage({ height: 16, width: 16 });
+    const { counts, gl, texParameters } = fakeTextureGl();
+    const cache = new TextureCache(gl);
+    const onSettled = vi.fn();
+    const baseAsset = {
+      kind: "asset",
+      id: "crate",
+      revision: "same",
+      sampler: {
+        magFilter: "linear",
+        minFilter: "linear",
+        wrapS: "clamp-to-edge",
+        wrapT: "clamp-to-edge",
+      },
+      uri: "https://example.test/textures/crate.png",
+    } as const;
+    const changedSamplerAsset = {
+      ...baseAsset,
+      sampler: {
+        magFilter: "nearest",
+        minFilter: "nearest",
+        wrapS: "repeat",
+        wrapT: "mirrored-repeat",
+      },
+    } as const;
+
+    expect(cache.loadTextureAssetBaseColor(baseAsset, onSettled)).toEqual({ kind: "loading" });
+    await waitFor(() => onSettled.mock.calls.length === 1);
+    expect(cache.loadTextureAssetBaseColor(baseAsset)).toMatchObject({ kind: "ready" });
+
+    expect(cache.loadTextureAssetBaseColor(changedSamplerAsset, onSettled)).toEqual({ kind: "loading" });
+    await waitFor(() => onSettled.mock.calls.length === 2);
+    expect(cache.loadTextureAssetBaseColor(changedSamplerAsset)).toMatchObject({ kind: "ready" });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(counts.createTexture).toBe(2);
+    expect(counts.texImage2D).toBe(2);
+    expect(texParameters).toEqual([
+      { param: gl.LINEAR, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.LINEAR, pname: gl.TEXTURE_MAG_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_S, target: gl.TEXTURE_2D },
+      { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
+      { param: gl.NEAREST, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.NEAREST, pname: gl.TEXTURE_MAG_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.REPEAT, pname: gl.TEXTURE_WRAP_S, target: gl.TEXTURE_2D },
+      { param: gl.MIRRORED_REPEAT, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
+    ]);
+  });
+
+  it("keeps texture asset loads distinct when color space changes", async () => {
+    installImage({ height: 16, width: 16 });
+    const { counts, gl } = fakeTextureGl();
+    const cache = new TextureCache(gl);
+    const onSettled = vi.fn();
+    const srgbAsset = {
+      colorSpace: "srgb",
+      kind: "asset",
+      id: "crate",
+      revision: "same",
+      uri: "https://example.test/textures/crate.png",
+    } as const;
+    const linearAsset = {
+      ...srgbAsset,
+      colorSpace: "linear",
+    } as const;
+
+    expect(cache.loadTextureAssetBaseColor(srgbAsset, onSettled)).toEqual({ kind: "loading" });
+    await waitFor(() => onSettled.mock.calls.length === 1);
+    expect(cache.loadTextureAssetBaseColor(linearAsset, onSettled)).toEqual({ kind: "loading" });
+    await waitFor(() => onSettled.mock.calls.length === 2);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(counts.createTexture).toBe(2);
+    expect(counts.texImage2D).toBe(2);
   });
 });

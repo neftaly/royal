@@ -37,7 +37,9 @@ export type VirtualTexturePageTableTexture = {
 
 export type VirtualTexturePageTableUploadResult = {
   readonly bytesUploaded: number;
+  readonly fullRebuilds: number;
   readonly texelsUploaded: number;
+  readonly texSubImageCalls: number;
 };
 
 export type VirtualTexturePageTableTexelUploadRange = {
@@ -125,7 +127,9 @@ export const uploadVirtualTexturePageTableTexels = (
 
   return {
     bytesUploaded: uploads.length * 4,
+    fullRebuilds: isFullPageTableUpload(pageTable, uploads) ? 1 : 0,
     texelsUploaded: uploads.length,
+    texSubImageCalls: ranges.length,
   };
 };
 
@@ -261,6 +265,21 @@ const toPageTableTexelUploadRange = (
   xOffset: range.xOffset,
   yOffset: range.yOffset,
 });
+
+const isFullPageTableUpload = (
+  pageTable: VirtualTexturePageTableTexture,
+  uploads: readonly VirtualTexturePageTableTexelUpload[],
+): boolean => {
+  if (uploads.length === 0) return false;
+
+  let allocatedTexels = 0;
+  for (const mip of pageTable.mipDimensions) {
+    allocatedTexels += mip.width * mip.height;
+  }
+
+  const uploadedCoordinates = new Set(uploads.map((upload) => `${upload.level}:${upload.xOffset}:${upload.yOffset}`));
+  return uploadedCoordinates.size === allocatedTexels;
+};
 
 const validatePositiveInteger = (value: number, label: string): number => {
   if (!Number.isInteger(value) || value <= 0) {

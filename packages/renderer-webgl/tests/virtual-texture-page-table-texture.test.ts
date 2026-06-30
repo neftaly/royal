@@ -254,7 +254,12 @@ describe("virtual texture page-table texture", () => {
 
     const result = uploadVirtualTexturePageTableTexels(gl, pageTable, plan.pageTableUploads);
 
-    expect(result).toEqual({ bytesUploaded: 8, texelsUploaded: 2 });
+    expect(result).toEqual({
+      bytesUploaded: 8,
+      fullRebuilds: 0,
+      texelsUploaded: 2,
+      texSubImageCalls: 2,
+    });
     expect(texSubImages).toEqual([
       {
         data: [0, 0, 1, 5],
@@ -295,7 +300,12 @@ describe("virtual texture page-table texture", () => {
     const ranges = coalesceVirtualTexturePageTableTexelUploads(pageTable, uploads);
     const result = uploadVirtualTexturePageTableTexels(gl, pageTable, uploads);
 
-    expect(result).toEqual({ bytesUploaded: 20, texelsUploaded: 5 });
+    expect(result).toEqual({
+      bytesUploaded: 20,
+      fullRebuilds: 0,
+      texelsUploaded: 5,
+      texSubImageCalls: 3,
+    });
     expect(ranges.map((range) => ({
       data: [...range.data],
       height: range.height,
@@ -370,6 +380,25 @@ describe("virtual texture page-table texture", () => {
     ]);
   });
 
+  it("reports full page-table rebuild batches separately from dirty range uploads", () => {
+    const { gl } = fakePageTableGl();
+    const pageTable = createVirtualTexturePageTableTexture(gl, [{ height: 2, width: 2 }]);
+
+    const result = uploadVirtualTexturePageTableTexels(gl, pageTable, [
+      pageTableTexelUpload({ dirtySequence: 0, rgba8: [1, 1, 1, 1], xOffset: 0, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 1, rgba8: [2, 2, 2, 2], xOffset: 1, yOffset: 0 }),
+      pageTableTexelUpload({ dirtySequence: 2, rgba8: [3, 3, 3, 3], xOffset: 0, yOffset: 1 }),
+      pageTableTexelUpload({ dirtySequence: 3, rgba8: [4, 4, 4, 4], xOffset: 1, yOffset: 1 }),
+    ]);
+
+    expect(result).toEqual({
+      bytesUploaded: 16,
+      fullRebuilds: 1,
+      texelsUploaded: 4,
+      texSubImageCalls: 2,
+    });
+  });
+
   it("keeps duplicate page-table texel writes as ordered single-texel uploads", () => {
     const { gl, texSubImages } = fakePageTableGl();
     const pageTable = createVirtualTexturePageTableTexture(gl, [{ height: 1, width: 3 }]);
@@ -380,7 +409,12 @@ describe("virtual texture page-table texture", () => {
       pageTableTexelUpload({ dirtySequence: 2, rgba8: [3, 3, 3, 3], xOffset: 1, yOffset: 0 }),
     ]);
 
-    expect(result).toEqual({ bytesUploaded: 12, texelsUploaded: 3 });
+    expect(result).toEqual({
+      bytesUploaded: 12,
+      fullRebuilds: 0,
+      texelsUploaded: 3,
+      texSubImageCalls: 3,
+    });
     expect(texSubImages).toHaveLength(3);
     expect(texSubImages.map((call) => ({
       data: call.data,

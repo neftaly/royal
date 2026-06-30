@@ -10,6 +10,7 @@ import {
   virtualTexturePageTableMipDimensions,
   type VirtualTexturePageTableMip,
   type VirtualTexturePageTableTexture,
+  type VirtualTexturePageTableUploadResult,
 } from "./virtual-texture-page-table-texture";
 import {
   type VirtualTexturePageAddress,
@@ -117,6 +118,8 @@ export type VirtualTextureFrameUploadOptions = {
 export type VirtualTextureFrameUploadResult = {
   readonly bytesUploaded: number;
   readonly frame: number;
+  readonly pageTableFullRebuilds: number;
+  readonly pageTableTexSubImageCalls: number;
   readonly pageTableUploads: number;
   readonly pendingUploadCount: number;
   readonly physicalAtlasUploads: number;
@@ -194,6 +197,8 @@ export type VirtualTextureResourceUploadStats = {
   readonly lastFrame: number | null;
   readonly lastUploadCount: number;
   readonly pageTableBytesUploaded: number;
+  readonly pageTableFullRebuilds: number;
+  readonly pageTableTexSubImageCalls: number;
   readonly pageTableTexelsUploaded: number;
   readonly physicalAtlasBytesUploaded: number;
   readonly physicalAtlasPagesUploaded: number;
@@ -205,6 +210,8 @@ type MutableUploadStats = {
   lastFrame: number | null;
   lastUploadCount: number;
   pageTableBytesUploaded: number;
+  pageTableFullRebuilds: number;
+  pageTableTexSubImageCalls: number;
   pageTableTexelsUploaded: number;
   physicalAtlasBytesUploaded: number;
   physicalAtlasPagesUploaded: number;
@@ -245,6 +252,8 @@ export class VirtualTextureResource {
     lastFrame: null,
     lastUploadCount: 0,
     pageTableBytesUploaded: 0,
+    pageTableFullRebuilds: 0,
+    pageTableTexSubImageCalls: 0,
     pageTableTexelsUploaded: 0,
     physicalAtlasBytesUploaded: 0,
     physicalAtlasPagesUploaded: 0,
@@ -438,25 +447,30 @@ export class VirtualTextureResource {
     }
 
     const pageTableUploads = this.#currentPageTableUploads(split.slice.pageTableUploads);
-    this.uploadPageTable(createVirtualTextureUploadPlan(pageTableUploads, []));
+    const pageTableUploadResult = this.uploadPageTable(createVirtualTextureUploadPlan(pageTableUploads, []));
 
     this.#pendingUploadPlan = this.#currentUploadPlan(split.remainder);
 
     return {
       bytesUploaded: this.#stats.bytesUploaded - bytesBefore,
       frame,
+      pageTableFullRebuilds: pageTableUploadResult.fullRebuilds,
+      pageTableTexSubImageCalls: pageTableUploadResult.texSubImageCalls,
       pageTableUploads: pageTableUploads.length,
       pendingUploadCount: this.#pendingUploadPlan.uploadCount,
       physicalAtlasUploads: physicalAtlasUploads.length,
     };
   }
 
-  uploadPageTable(plan: VirtualTextureUploadPlan): void {
+  uploadPageTable(plan: VirtualTextureUploadPlan): VirtualTexturePageTableUploadResult {
     this.#assertLive();
     const result = uploadVirtualTexturePageTableTexels(this.#gl, this.pageTable, plan.pageTableUploads);
     this.#stats.bytesUploaded += result.bytesUploaded;
     this.#stats.pageTableBytesUploaded += result.bytesUploaded;
+    this.#stats.pageTableFullRebuilds += result.fullRebuilds;
+    this.#stats.pageTableTexSubImageCalls += result.texSubImageCalls;
     this.#stats.pageTableTexelsUploaded += result.texelsUploaded;
+    return result;
   }
 
   uploadPhysicalAtlasPage(upload: VirtualTexturePhysicalAtlasPageUpload, pixels: ArrayBufferView): void {
