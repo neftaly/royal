@@ -132,8 +132,16 @@ type GltfEntry =
 const FLOAT = 5126;
 const UNSIGNED_SHORT = 5123;
 
+const unsupportedSubset = (reason: string): Error =>
+  new Error(`Unsupported glTF subset: ${reason}`);
+
 const required = <T>(value: T | undefined, label: string): T => {
   if (value === undefined) throw new Error(`Unsupported glTF: missing ${label}`);
+  return value;
+};
+
+const requiredSubset = <T>(value: T | undefined, reason: string): T => {
+  if (value === undefined) throw unsupportedSubset(reason);
   return value;
 };
 
@@ -170,17 +178,18 @@ const copyFloatAccessor = (
   accessorIndex: number,
   expectedType: GltfAccessorType,
 ): Float32Array => {
-  const accessor = required(json.accessors?.[accessorIndex], `accessor ${accessorIndex}`);
+  const accessor = requiredSubset(json.accessors?.[accessorIndex], `accessor ${accessorIndex} is missing`);
   if (accessor.componentType !== FLOAT || accessor.type !== expectedType) {
-    throw new Error(`Unsupported glTF accessor ${accessorIndex}`);
+    throw unsupportedSubset(`accessor ${accessorIndex} must be FLOAT ${expectedType}`);
   }
 
-  const view = required(json.bufferViews?.[required(accessor.bufferView, `accessor ${accessorIndex} bufferView`)], `bufferView for accessor ${accessorIndex}`);
+  const viewIndex = requiredSubset(accessor.bufferView, `accessor ${accessorIndex} bufferView is required`);
+  const view = requiredSubset(json.bufferViews?.[viewIndex], `bufferView ${viewIndex} for accessor ${accessorIndex} is missing`);
   if (view.byteStride !== undefined) {
-    throw new Error("Unsupported glTF: interleaved accessors");
+    throw unsupportedSubset(`accessor ${accessorIndex} uses byteStride; interleaved accessors are not supported`);
   }
 
-  const buffer = required(buffers[view.buffer], `buffer ${view.buffer}`);
+  const buffer = requiredSubset(buffers[view.buffer], `buffer ${view.buffer} is missing`);
   const length = accessor.count * componentCount(accessor.type);
   const byteOffset = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
   return new Float32Array(buffer.slice(byteOffset, byteOffset + length * Float32Array.BYTES_PER_ELEMENT));
@@ -191,17 +200,18 @@ const copyIndexAccessor = (
   buffers: readonly ArrayBuffer[],
   accessorIndex: number,
 ): Uint16Array => {
-  const accessor = required(json.accessors?.[accessorIndex], `accessor ${accessorIndex}`);
+  const accessor = requiredSubset(json.accessors?.[accessorIndex], `accessor ${accessorIndex} is missing`);
   if (accessor.componentType !== UNSIGNED_SHORT || accessor.type !== "SCALAR") {
-    throw new Error(`Unsupported glTF index accessor ${accessorIndex}`);
+    throw unsupportedSubset(`index accessor ${accessorIndex} must be UNSIGNED_SHORT SCALAR`);
   }
 
-  const view = required(json.bufferViews?.[required(accessor.bufferView, `accessor ${accessorIndex} bufferView`)], `bufferView for accessor ${accessorIndex}`);
+  const viewIndex = requiredSubset(accessor.bufferView, `index accessor ${accessorIndex} bufferView is required`);
+  const view = requiredSubset(json.bufferViews?.[viewIndex], `bufferView ${viewIndex} for index accessor ${accessorIndex} is missing`);
   if (view.byteStride !== undefined) {
-    throw new Error("Unsupported glTF: interleaved indices");
+    throw unsupportedSubset(`index accessor ${accessorIndex} uses byteStride; interleaved indices are not supported`);
   }
 
-  const buffer = required(buffers[view.buffer], `buffer ${view.buffer}`);
+  const buffer = requiredSubset(buffers[view.buffer], `buffer ${view.buffer} is missing`);
   const byteOffset = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
   return new Uint16Array(buffer.slice(byteOffset, byteOffset + accessor.count * Uint16Array.BYTES_PER_ELEMENT));
 };
@@ -331,10 +341,27 @@ const resolveUri = (base: string, uri: string): string =>
 const gltfCacheKey = (asset: GltfAssetRef): string =>
   `${asset.id}\u0000${String(asset.revision ?? asset.uri)}`;
 
+const looksLikeGlb = (src: string): boolean =>
+  new URL(src, globalThis.location?.href ?? "http://localhost/").pathname.toLowerCase().endsWith(".glb");
+
 const loadJson = async (src: string): Promise<GltfJson> => {
+  if (looksLikeGlb(src)) {
+    throw unsupportedSubset("JSON .gltf documents are required; GLB binary containers are not supported");
+  }
   const response = await fetch(src);
   if (!response.ok) throw new Error(`Failed to load glTF: ${src}`);
-  return await response.json() as GltfJson;
+  if (response.headers.get("content-type")?.toLowerCase().includes("model/gltf-binary") === true) {
+    throw unsupportedSubset("JSON .gltf documents are required; GLB binary containers are not supported");
+  }
+
+  try {
+    return await response.json() as GltfJson;
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) {
+      throw unsupportedSubset("JSON .gltf documents are required; GLB and non-JSON responses are not supported");
+    }
+    throw error;
+  }
 };
 
 const loadBuffers = async (
@@ -342,7 +369,10 @@ const loadBuffers = async (
   buffers: readonly GltfBuffer[],
 ): Promise<readonly ArrayBuffer[]> =>
   await Promise.all(buffers.map(async (buffer, index) => {
-    const uri = required(buffer.uri, `buffer ${index} uri`);
+    const uri = requiredSubset(buffer.uri, `buffer ${index} must use an external buffer uri; GLB buffer chunks and embedded buffers are not supported`);
+    if (uri.toLowerCase().startsWith("data:")) {
+      throw unsupportedSubset(`buffer ${index} must use an external buffer uri; data URIs are not supported`);
+    }
     const response = await fetch(resolveUri(src, uri));
     if (!response.ok) throw new Error(`Failed to load glTF buffer: ${uri}`);
     return await response.arrayBuffer();
@@ -434,15 +464,15 @@ export class GltfCache {
       const model = nodeMatrix(node);
 
       for (const primitive of mesh.primitives ?? []) {
-        const attributes = required(primitive.attributes, "primitive attributes");
-        const positionAccessor = required(attributes.POSITION, "POSITION accessor");
+        const attributes = requiredSubset(primitive.attributes, "primitive attributes with POSITION, NORMAL, and TEXCOORD_0 are required");
+        const positionAccessor = requiredSubset(attributes.POSITION, "primitive POSITION accessor is required");
         const position = copyFloatAccessor(json, buffers, positionAccessor, "VEC3");
-        const normal = copyFloatAccessor(json, buffers, required(attributes.NORMAL, "NORMAL accessor"), "VEC3");
-        const texCoord = copyFloatAccessor(json, buffers, required(attributes.TEXCOORD_0, "TEXCOORD_0 accessor"), "VEC2");
-        const indices = copyIndexAccessor(json, buffers, required(primitive.indices, "indices accessor"));
-        const materialIndex = required(primitive.material, "primitive material");
-        const material = required(json.materials?.[materialIndex], "primitive material");
-        const textureIndex = required(material.pbrMetallicRoughness?.baseColorTexture?.index, "base color texture");
+        const normal = copyFloatAccessor(json, buffers, requiredSubset(attributes.NORMAL, "primitive NORMAL accessor is required"), "VEC3");
+        const texCoord = copyFloatAccessor(json, buffers, requiredSubset(attributes.TEXCOORD_0, "primitive TEXCOORD_0 accessor is required"), "VEC2");
+        const indices = copyIndexAccessor(json, buffers, requiredSubset(primitive.indices, "indexed primitives are required; unindexed primitives are not supported"));
+        const materialIndex = requiredSubset(primitive.material, "primitive material with pbrMetallicRoughness.baseColorTexture is required");
+        const material = requiredSubset(json.materials?.[materialIndex], `material ${materialIndex} is missing`);
+        const textureIndex = requiredSubset(material.pbrMetallicRoughness?.baseColorTexture?.index, `material ${materialIndex} pbrMetallicRoughness.baseColorTexture is required`);
         const textureSource = this.#textureCache.getGltfBaseColorTextureSource({
           documentId: cacheKey,
           json,

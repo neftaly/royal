@@ -21,15 +21,22 @@ type TexImageUpload = {
   readonly width: number;
 };
 
+type PixelStoreCall = {
+  readonly param: boolean | number;
+  readonly pname: number;
+};
+
 const fakeTextureGl = (): {
   readonly counts: { readonly createTexture: number; readonly texImage2D: number };
   readonly gl: RendererWebGlContext;
   readonly mipmaps: number[];
+  readonly pixelStoreCalls: PixelStoreCall[];
   readonly texImageUploads: TexImageUpload[];
   readonly texParameters: TexParameterCall[];
 } => {
   const counts = { createTexture: 0, texImage2D: 0 };
   const mipmaps: number[] = [];
+  const pixelStoreCalls: PixelStoreCall[] = [];
   const texImageUploads: TexImageUpload[] = [];
   const texParameters: TexParameterCall[] = [];
 
@@ -62,7 +69,9 @@ const fakeTextureGl = (): {
       generateMipmap(target: GLenum) {
         mipmaps.push(target);
       },
-      pixelStorei() {},
+      pixelStorei(pname: GLenum, param: GLint | boolean) {
+        pixelStoreCalls.push({ param, pname });
+      },
       texImage2D(...args: unknown[]) {
         counts.texImage2D += 1;
         const [
@@ -105,6 +114,7 @@ const fakeTextureGl = (): {
       },
     } as unknown as RendererWebGlContext,
     mipmaps,
+    pixelStoreCalls,
     texImageUploads,
     texParameters,
   };
@@ -315,5 +325,44 @@ describe("TextureCache", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(counts.createTexture).toBe(2);
     expect(counts.texImage2D).toBe(2);
+  });
+
+  it("keeps glTF and texture asset uploads distinct for the same image URI", async () => {
+    installImage({ height: 16, width: 16 });
+    const { counts, gl, pixelStoreCalls } = fakeTextureGl();
+    const cache = new TextureCache(gl);
+    const onSettled = vi.fn();
+    const asset = {
+      colorSpace: "linear",
+      kind: "asset",
+      id: "shared-base-color",
+      revision: "same",
+      uri: "https://example.test/models/shared.png",
+    } as const;
+
+    const gltfTexture = await cache.loadGltfBaseColorTexture({
+      json: {
+        images: [{ uri: "shared.png" }],
+        textures: [{ source: 0 }],
+      },
+      src: "https://example.test/models/scene.gltf",
+      textureIndex: 0,
+    });
+    expect(cache.loadTextureAssetBaseColor(asset, onSettled)).toEqual({ kind: "loading" });
+    await waitFor(() => onSettled.mock.calls.length === 1);
+    const assetTexture = cache.loadTextureAssetBaseColor(asset);
+
+    expect(assetTexture).toMatchObject({ kind: "ready" });
+    if (assetTexture.kind !== "ready") throw new Error("Expected texture asset to be ready");
+    expect(assetTexture.texture).not.toBe(gltfTexture.texture);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenNthCalledWith(1, "https://example.test/models/shared.png");
+    expect(fetch).toHaveBeenNthCalledWith(2, "https://example.test/models/shared.png");
+    expect(counts.createTexture).toBe(2);
+    expect(counts.texImage2D).toBe(2);
+    expect(pixelStoreCalls).toEqual([
+      { param: true, pname: gl.UNPACK_FLIP_Y_WEBGL },
+      { param: true, pname: gl.UNPACK_FLIP_Y_WEBGL },
+    ]);
   });
 });

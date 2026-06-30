@@ -5,7 +5,17 @@ import { makeTriangleFixture } from "../../../tests/gltf-fixture";
 import { fakeGl, waitFor } from "../../../tests/webgl-test-utils";
 
 type MutableFixtureJson = {
-  readonly accessors: Array<Record<string, unknown>>;
+  accessors: Array<Record<string, unknown>>;
+  buffers: Array<Record<string, unknown>>;
+  bufferViews: Array<Record<string, unknown>>;
+  materials: Array<Record<string, unknown>>;
+  meshes: Array<{
+    primitives: Array<{
+      attributes?: Record<string, unknown>;
+      indices?: unknown;
+      material?: unknown;
+    }>;
+  }>;
 };
 
 const installFixture = (
@@ -49,6 +59,35 @@ const triangleAsset = (
   uri: "https://example.test/triangle.gltf",
   ...overrides,
 });
+
+const loadError = async (
+  configure?: (json: MutableFixtureJson) => void,
+  assetOverrides: Partial<Parameters<typeof gltf>[0]["asset"]> = {},
+): Promise<Error> => {
+  installFixture(configure);
+  const { gl } = fakeGl();
+  const cache = new GltfCache(gl, () => undefined);
+  const node = gltf({ asset: triangleAsset(assetOverrides) });
+  let error: unknown;
+
+  cache.get(node);
+  try {
+    await waitFor(() => {
+      try {
+        cache.get(node);
+        return false;
+      } catch (caught: unknown) {
+        error = caught;
+        return true;
+      }
+    });
+  } finally {
+    cache.dispose();
+  }
+
+  expect(error).toBeInstanceOf(Error);
+  return error as Error;
+};
 
 describe("GltfCache bounds", () => {
   it("uses parsed accessor min/max when available", async () => {
@@ -96,6 +135,105 @@ describe("GltfCache bounds", () => {
     expect(bounds?.minZ).toBeCloseTo(0);
     expect(bounds?.maxZ).toBeCloseTo(0);
     cache.dispose();
+  });
+});
+
+describe("GltfCache subset diagnostics", () => {
+  it("rejects GLB assets as outside the JSON .gltf subset", async () => {
+    await expect(loadError(undefined, {
+      uri: "https://example.test/triangle.glb",
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: JSON .gltf documents are required; GLB binary containers are not supported",
+    });
+  });
+
+  it("requires external buffer URIs instead of embedded buffers", async () => {
+    await expect(loadError((json) => {
+      json.buffers[0] = {};
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: buffer 0 must use an external buffer uri; GLB buffer chunks and embedded buffers are not supported",
+    });
+  });
+
+  it("rejects data URI buffers as outside the external-buffer subset", async () => {
+    await expect(loadError((json) => {
+      json.buffers[0] = { uri: "data:application/octet-stream;base64,AAAA" };
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: buffer 0 must use an external buffer uri; data URIs are not supported",
+    });
+  });
+
+  it("reports interleaved accessors as a subset limitation", async () => {
+    await expect(loadError((json) => {
+      json.bufferViews[0] = {
+        ...json.bufferViews[0],
+        byteStride: 12,
+      };
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: accessor 0 uses byteStride; interleaved accessors are not supported",
+    });
+  });
+
+  it("requires float vertex accessors with the shader attribute shape", async () => {
+    await expect(loadError((json) => {
+      json.accessors[0] = {
+        ...json.accessors[0],
+        componentType: 5122,
+      };
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: accessor 0 must be FLOAT VEC3",
+    });
+  });
+
+  it("requires UNSIGNED_SHORT scalar index accessors", async () => {
+    await expect(loadError((json) => {
+      json.accessors[3] = {
+        ...json.accessors[3],
+        componentType: 5125,
+      };
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: index accessor 3 must be UNSIGNED_SHORT SCALAR",
+    });
+  });
+
+  it("requires indexed primitives", async () => {
+    await expect(loadError((json) => {
+      delete json.meshes[0]!.primitives[0]!.indices;
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: indexed primitives are required; unindexed primitives are not supported",
+    });
+  });
+
+  it("requires NORMAL attributes", async () => {
+    await expect(loadError((json) => {
+      delete json.meshes[0]!.primitives[0]!.attributes!.NORMAL;
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: primitive NORMAL accessor is required",
+    });
+  });
+
+  it("requires TEXCOORD_0 attributes", async () => {
+    await expect(loadError((json) => {
+      delete json.meshes[0]!.primitives[0]!.attributes!.TEXCOORD_0;
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: primitive TEXCOORD_0 accessor is required",
+    });
+  });
+
+  it("requires primitive materials with base-color textures", async () => {
+    await expect(loadError((json) => {
+      delete json.meshes[0]!.primitives[0]!.material;
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: primitive material with pbrMetallicRoughness.baseColorTexture is required",
+    });
+  });
+
+  it("requires pbrMetallicRoughness baseColorTexture on materials", async () => {
+    await expect(loadError((json) => {
+      json.materials[0] = {};
+    })).resolves.toMatchObject({
+      message: "Unsupported glTF subset: material 0 pbrMetallicRoughness.baseColorTexture is required",
+    });
   });
 });
 

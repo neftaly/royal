@@ -1,6 +1,7 @@
 import {
   defaultTextureFallbackColor,
   type TextureAssetRef,
+  type TextureColorSpace,
   type TextureSampler as CoreTextureSampler,
 } from "@royal/renderer-core";
 import type { RendererWebGlContext } from "./gl";
@@ -71,6 +72,21 @@ type TextureAssetLoad = TextureAssetLoadResult | {
   readonly kind: "loading";
   readonly promise: Promise<WebGLTexture>;
 };
+
+type TextureUploadPolicy = {
+  readonly colorSpace?: TextureColorSpace;
+  readonly flipY: boolean;
+};
+
+const gltfBaseColorUploadPolicy = {
+  colorSpace: "srgb",
+  flipY: true,
+} satisfies TextureUploadPolicy;
+
+const textureAssetUploadPolicy = (asset: TextureAssetRef): TextureUploadPolicy => ({
+  ...(asset.colorSpace === undefined ? {} : { colorSpace: asset.colorSpace }),
+  flipY: true,
+});
 
 const required = <T>(value: T | undefined, label: string): T => {
   if (value === undefined) throw new Error(`Unsupported glTF: missing ${label}`);
@@ -192,13 +208,14 @@ const textureAssetSampler = (
 const createTexture = (
   gl: RendererWebGlContext,
   image: ImageBitmap,
+  uploadPolicy: TextureUploadPolicy,
   sampler: WebGlTextureSampler,
 ): WebGLTexture => {
   const texture = gl.createTexture();
   if (texture === null) throw new Error("Failed to create WebGL texture");
 
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, uploadPolicy.flipY);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sampler.minFilter);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampler.magFilter);
@@ -260,7 +277,7 @@ export class TextureCache {
     readonly textureIndex: number;
   }): Promise<GltfBaseColorTexture> {
     const source = this.getGltfBaseColorTextureSource(options);
-    const cacheKey = source.id;
+    const cacheKey = gltfTextureUploadCacheKey(source);
     const existing = this.#textureLoads.get(cacheKey);
     if (existing !== undefined) return existing;
 
@@ -338,6 +355,7 @@ export class TextureCache {
     const loadedTexture = this.#track(createTexture(
       this.#gl,
       await loadImage(source.src, source.image.uri, "glTF image"),
+      gltfBaseColorUploadPolicy,
       source.sampler,
     ));
     markGltf(`texture:${source.textureIndex}:end`);
@@ -354,6 +372,7 @@ export class TextureCache {
     return this.#track(createTexture(
       this.#gl,
       await loadImage(base, asset.uri, "texture asset"),
+      textureAssetUploadPolicy(asset),
       textureAssetSampler(this.#gl, asset.sampler),
     ));
   }
@@ -379,17 +398,29 @@ const textureAssetSamplerCacheKey = (sampler: CoreTextureSampler | undefined): s
         sampler.wrapT ?? "",
       ].join("\u0000");
 
+const textureUploadPolicyCacheKey = (policy: TextureUploadPolicy): string =>
+  [
+    policy.colorSpace ?? "",
+    policy.flipY ? "flip-y" : "source-y",
+  ].join("\u0000");
+
 const textureAssetCacheKey = (asset: TextureAssetRef): string =>
   [
     asset.id,
     asset.revision ?? "",
     asset.uri,
-    asset.colorSpace ?? "",
+    textureUploadPolicyCacheKey(textureAssetUploadPolicy(asset)),
     textureAssetSamplerCacheKey(asset.sampler),
   ].join("\u0000");
 
 const gltfTextureCacheKey = (src: string, textureIndex: number): string =>
   `${src}\u0000${textureIndex}`;
+
+const gltfTextureUploadCacheKey = (source: GltfBaseColorTextureSource): string =>
+  [
+    source.id,
+    textureUploadPolicyCacheKey(gltfBaseColorUploadPolicy),
+  ].join("\u0000");
 
 const textureAssetResult = (load: TextureAssetLoad): TextureAssetLoadResult => {
   switch (load.kind) {
