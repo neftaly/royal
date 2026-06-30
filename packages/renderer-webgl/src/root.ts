@@ -3,7 +3,6 @@ import {
   type RenderPass,
   type RenderRoot,
 } from "@royal/renderer-core";
-import { drawGltf, drawMesh, drawVectorText } from "./draw";
 import { GeometryCache } from "./geometry-cache";
 import { GltfCache } from "./gltf-cache";
 import {
@@ -25,15 +24,9 @@ import {
   type TextProgram,
   type WireframeProgram,
 } from "./programs";
-import { markGltf } from "./performance";
-import { findDirectionalLight } from "./render-graph";
+import { renderWebGlPass } from "./render-pipeline";
 import { TextCache } from "./text-cache";
 import { TextureCache } from "./texture-cache";
-import {
-  buildVisibilityPackets,
-  cullVisibilityPackets,
-  extractFrustumPlanes,
-} from "./visibility";
 
 /** WebGL context options for the renderer root. */
 export interface WebGlRootOptions {
@@ -79,10 +72,6 @@ const viewProjection = (
     rotation(camera.rotation),
   );
   return multiply(projection, invert(cameraWorld));
-};
-
-const assertNever = (value: never): never => {
-  throw new Error(`Unsupported render node kind: ${String(value)}`);
 };
 
 export class WebGlRoot {
@@ -165,92 +154,19 @@ export class WebGlRoot {
     pass: RenderPass,
     viewport: { readonly height: number; readonly width: number },
   ): void {
-    const gl = this.#gl;
-    const clearColor = pass.clearColor;
-    const vp = viewProjection(pass.camera, viewport);
-    const directionalLight = findDirectionalLight(pass);
-    const packets = buildVisibilityPackets(pass, {
-      gltfBounds: (node) => this.#gltfCache.getBounds(node),
+    renderWebGlPass(pass, viewProjection(pass.camera, viewport), {
+      drawnGltfAssets: this.#drawnGltfAssets,
+      geometryCache: this.#geometryCache,
+      gl: this.#gl,
+      gltfCache: this.#gltfCache,
+      gltfProgram: this.#gltfProgram,
+      meshProgram: this.#meshProgram,
+      onTextureSettled: () => this.#renderWhenReady(),
+      textCache: this.#textCache,
+      textProgram: this.#textProgram,
+      textureCache: this.#textureCache,
+      wireframeProgram: this.#wireframeProgram,
     });
-    const visible = cullVisibilityPackets(packets, extractFrustumPlanes(vp));
-
-    gl.clearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-    gl.clearDepth(1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    for (const packetIndex of visible.visibleIndices) {
-      const nodeIndex = packets.nodeIndices[packetIndex];
-      if (nodeIndex === undefined) {
-        throw new Error(`Visibility result references missing packet: ${packetIndex}`);
-      }
-      const node = pass.children[nodeIndex];
-      if (node === undefined) {
-        throw new Error(`Visibility packet references missing render node: ${nodeIndex}`);
-      }
-
-      switch (node.kind) {
-        case "directional-light":
-          break;
-        case "mesh":
-          drawMesh(
-            gl,
-            { mesh: this.#meshProgram, wireframe: this.#wireframeProgram },
-            node,
-            {
-              directionalLight,
-              geometryCache: this.#geometryCache,
-              onTextureSettled: () => this.#renderWhenReady(),
-              textureCache: this.#textureCache,
-              viewProjectionMatrix: vp,
-            },
-          );
-          break;
-        case "gltf":
-          {
-            const asset = this.#gltfCache.get(node);
-            if (asset !== undefined) {
-              drawGltf(
-                gl,
-                { gltf: this.#gltfProgram },
-                node,
-                asset,
-                {
-                  directionalLight,
-                  viewProjectionMatrix: vp,
-                },
-              );
-              if (!this.#drawnGltfAssets.has(asset)) {
-                this.#drawnGltfAssets.add(asset);
-                markGltf("first-draw");
-              }
-            }
-          }
-          break;
-        case "text":
-          {
-            const textAsset = this.#textCache.get(node);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-            gl.disable(gl.CULL_FACE);
-            gl.depthMask(false);
-            drawVectorText(
-              gl,
-              { text: this.#textProgram },
-              node,
-              textAsset,
-              {
-                viewProjectionMatrix: vp,
-              },
-            );
-            gl.depthMask(true);
-            gl.enable(gl.CULL_FACE);
-            gl.disable(gl.BLEND);
-          }
-          break;
-        default:
-          assertNever(node);
-      }
-    }
   }
 
   #renderWhenReady(): void {

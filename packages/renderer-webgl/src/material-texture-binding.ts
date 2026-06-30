@@ -3,6 +3,7 @@ import type {
   TextureAssetRef,
   TextureRef,
 } from "@royal/renderer-core";
+import type { RendererWebGlContext } from "./gl";
 import type { TextureAssetLoadResult, TextureCache } from "./texture-cache";
 
 const defaultAssetFallback = [1, 1, 1, 1] as const;
@@ -21,6 +22,12 @@ export type MaterialBaseColorBinding =
     readonly load: TextureAssetLoadResult;
     readonly source: TextureAssetRef;
   };
+
+export type MaterialBaseColorUniforms = {
+  readonly baseColor: WebGLUniformLocation;
+  readonly color: WebGLUniformLocation;
+  readonly useBaseColorTexture: WebGLUniformLocation;
+};
 
 export const lowerMaterialBaseColorBinding = (
   baseColor: TextureRef,
@@ -46,4 +53,25 @@ export const lowerMaterialBaseColorBinding = (
     ),
     source: baseColor,
   };
+};
+
+export const bindMaterialBaseColor = (
+  gl: RendererWebGlContext,
+  uniforms: MaterialBaseColorUniforms,
+  binding: MaterialBaseColorBinding,
+  textureUnit = 0,
+): void => {
+  if (binding.kind === "asset" && binding.load.kind === "ready") {
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, binding.load.texture);
+    gl.uniform1i(uniforms.baseColor, textureUnit);
+    gl.uniform1i(uniforms.useBaseColorTexture, 1);
+    return;
+  }
+
+  gl.uniform4fv(
+    uniforms.color,
+    binding.kind === "solid" ? binding.color : binding.fallbackColor,
+  );
+  gl.uniform1i(uniforms.useBaseColorTexture, 0);
 };

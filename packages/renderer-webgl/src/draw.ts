@@ -9,7 +9,10 @@ import {
 import type { GeometryCache } from "./geometry-cache";
 import type { GltfAsset } from "./gltf-cache";
 import { bindFloatAttribute, createIndexBuffer, type RendererWebGlContext } from "./gl";
-import { lowerMaterialBaseColorBinding } from "./material-texture-binding";
+import {
+  bindMaterialBaseColor,
+  lowerMaterialBaseColorBinding,
+} from "./material-texture-binding";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
 import {
@@ -213,18 +216,7 @@ const drawBoxMesh = (
     context.viewProjectionMatrix,
   );
   gl.uniform3fv(program.uniforms.boxSize, box.size);
-  if (baseColor.kind === "asset" && baseColor.load.kind === "ready") {
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, baseColor.load.texture);
-    gl.uniform1i(program.uniforms.baseColor, 0);
-    gl.uniform1i(program.uniforms.useBaseColorTexture, 1);
-  } else {
-    gl.uniform4fv(
-      program.uniforms.color,
-      baseColor.kind === "solid" ? baseColor.color : baseColor.fallbackColor,
-    );
-    gl.uniform1i(program.uniforms.useBaseColorTexture, 0);
-  }
+  bindMaterialBaseColor(gl, program.uniforms, baseColor);
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
   gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
   gl.uniform3fv(program.uniforms.lightDirection, light?.direction ?? [0, 0, -1]);
