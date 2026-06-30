@@ -106,8 +106,8 @@ importers:
   apps/expo-hello:
     dependencies:
       '@tarstate/core':
-        specifier: link:../../../tarstate/packages/core
-        version: link:../../../tarstate/packages/core
+        specifier: github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core
+        version: https://codeload.github.com/neftaly/tarstate/tar.gz/9b664a8421ffbd18c94a2766a25b3581a4129c33#path:/packages/core
       expo:
         specifier: ~56.0.12
         version: 56.0.12(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
@@ -243,8 +243,8 @@ importers:
   packages/royal-tarstate-lens:
     dependencies:
       '@tarstate/core':
-        specifier: link:../../../tarstate/packages/core
-        version: link:../../../tarstate/packages/core
+        specifier: github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core
+        version: https://codeload.github.com/neftaly/tarstate/tar.gz/9b664a8421ffbd18c94a2766a25b3581a4129c33#path:/packages/core
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -1154,6 +1154,10 @@ packages:
 
   '@tanstack/store@0.9.3':
     resolution: {integrity: sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw==}
+
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/9b664a8421ffbd18c94a2766a25b3581a4129c33#path:/packages/core':
+    resolution: {path: /packages/core, tarball: https://codeload.github.com/neftaly/tarstate/tar.gz/9b664a8421ffbd18c94a2766a25b3581a4129c33}
+    version: 0.0.0
 
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
@@ -3983,6 +3987,8 @@ snapshots:
       seroval-plugins: 1.5.4(seroval@1.5.4)
 
   '@tanstack/store@0.9.3': {}
+
+  '@tarstate/core@https://codeload.github.com/neftaly/tarstate/tar.gz/9b664a8421ffbd18c94a2766a25b3581a4129c33#path:/packages/core': {}
 
   '@tybys/wasm-util@0.10.3':
     dependencies:

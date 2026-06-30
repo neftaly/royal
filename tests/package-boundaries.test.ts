@@ -548,7 +548,9 @@ describe('package boundaries', () => {
 
   it('keeps @royal/tarstate-lens root export on the v1 facade', () => {
     const manifest = readManifest(path.join(repoRoot, 'packages/royal-tarstate-lens/package.json'));
-    expect(manifest.dependencies?.['@tarstate/core']).toBe('link:../../../tarstate/packages/core');
+    expect(manifest.dependencies?.['@tarstate/core']).toBe(
+      'github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core'
+    );
     expect(manifest.dependencies?.['@patchpit/tarstate']).toBeUndefined();
     expect(manifest.exports).toMatchObject({ '.': './src/v1.ts', './v1': './src/v1.ts' });
   });

@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tarstate/core": "link:../../../tarstate/packages/core"
+    "@tarstate/core": "github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core"
   },
   "devDependencies": {
     "typescript": "catalog:",

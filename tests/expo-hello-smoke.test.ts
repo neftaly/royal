@@ -105,7 +105,7 @@ describe('Expo hello smoke', () => {
       web: 'expo start --web',
     });
     expect(manifest.dependencies).toMatchObject({
-      '@tarstate/core': 'link:../../../tarstate/packages/core',
+      '@tarstate/core': 'github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core',
       expo: '~56.0.12',
       react: '19.2.3',
       'react-dom': '19.2.3',
