@@ -47,20 +47,12 @@ export const researchArtifacts: readonly ResearchArtifact[] = [
     eyebrow: 'Manifest contract',
     summary:
       'Normalized fixture outputs for the unstable research asset contract, kept separate from primary demos.',
-    metrics: ['3 normalized fixtures', '21 referenced artifacts', '14 bounds records'],
+    metrics: ['2 normalized fixtures', '15 referenced artifacts', '10 bounds records'],
     assets: [
       {
         id: 'asset-contract-schema',
         label: 'Contract schema',
         href: publicHref('artifacts/asset-manifest-contract/asset-manifest-contract.schema.json'),
-        kind: 'json',
-      },
-      {
-        id: 'asset-contract-vt',
-        label: 'Virtual texturing fixture',
-        href: publicHref(
-          'artifacts/asset-manifest-contract/fixtures/virtual-texturing.normalized.json',
-        ),
         kind: 'json',
       },
       {
@@ -126,59 +118,6 @@ export const researchArtifacts: readonly ResearchArtifact[] = [
           'artifacts/dynamic-impostors/fixtures/sample-forest-impostor-manifest.json',
         ),
         kind: 'json',
-      },
-    ],
-  },
-  {
-    id: 'virtual-texturing-research',
-    title: 'Virtual texturing assets',
-    eyebrow: 'Streaming research',
-    summary:
-      'Checked-in demo-readiness assets for page manifests, cache statistics, debug overlays, and preview imagery.',
-    metrics: ['21 texture pages', '3 mip levels', '12 cache slots'],
-    preview: {
-      alt: 'Virtual texture terrain page overview',
-      href: publicHref('artifacts/virtual-texturing/demo-assets/preview/terrain-pages-overview.png'),
-      kind: 'image',
-    },
-    assets: [
-      {
-        id: 'vt-manifest',
-        label: 'Page manifest',
-        href: publicHref('artifacts/virtual-texturing/demo-assets/manifest.json'),
-        kind: 'json',
-      },
-      {
-        id: 'vt-example-fixture',
-        label: 'Example fixture',
-        href: publicHref('artifacts/virtual-texturing/demo-assets/example-fixture.json'),
-        kind: 'json',
-      },
-      {
-        id: 'vt-camera-stats',
-        label: 'Camera stream stats',
-        href: publicHref('artifacts/virtual-texturing/demo-assets/stats/camera-pan-stream.json'),
-        kind: 'json',
-      },
-      {
-        id: 'vt-overview',
-        label: 'Terrain page overview',
-        href: publicHref('artifacts/virtual-texturing/demo-assets/preview/terrain-pages-overview.png'),
-        kind: 'image',
-      },
-      {
-        id: 'vt-debug-overlay',
-        label: 'Cache debug overlay',
-        href: publicHref(
-          'artifacts/virtual-texturing/demo-assets/preview/page-cache-debug-overlay.svg',
-        ),
-        kind: 'svg',
-      },
-      {
-        id: 'vt-report',
-        label: 'Readiness report',
-        href: publicHref('artifacts/virtual-texturing/demo-assets/report/index.html'),
-        kind: 'html',
       },
     ],
   },

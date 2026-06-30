@@ -134,13 +134,17 @@ const productOnlyResearchOnlyExamplePatterns = [
     pattern: /@royal\/[^'"\s]*\/testing\b/g,
   },
   {
+    kind: 'virtual-texturing testing import',
+    pattern: /@royal\/renderer-webgl\/virtual-texturing\/testing\b/g,
+  },
+  {
     kind: 'research or fixture import',
     pattern: /\bfrom\s+['"`][^'"`]*(?:research|fixtures?|__fixtures__|\.test)[^'"`]*['"`]/g,
   },
   {
     kind: 'low-level virtual-texturing handle',
     pattern:
-      /\b(?:VirtualTextureRuntime|VirtualTexturePageTableTexture|VirtualTexturePageTableTexelUpload|createVirtualTexturePageTableTexture|uploadVirtualTexturePageTableTexels|virtualTexturePageTableMipDimensions|PageCache|pageCache|page-cache|PageTable|pageTable|page-table)\b/g,
+      /\b(?:VirtualTextureRuntime|VirtualTexturePageAddress|VirtualTexturePageId|VirtualTexturePhysicalAtlasPageUpload|VirtualTexturePageTableTexture|VirtualTexturePageTableTexelUpload|createVirtualTexturePageTableTexture|planVirtualTextureUploads|uploadVirtualTexturePageTableTexels|virtualTexturePageId|virtualTexturePageTableMipDimensions|PageCache|pageCache|page-cache|PageTable|pageTable|page-table|texSubImage2D)\b/g,
   },
 ] as const satisfies readonly ExampleSourcePattern[];
 
@@ -185,17 +189,6 @@ const exampleSourceViolations = (
     })),
   );
 
-const isTemporaryVirtualTexturingRangeControl = (
-  source: string,
-  violation: CanvasOnlyDomViolation,
-): boolean =>
-  violation.exampleId === 'virtual-texturing-terrain' &&
-  violation.kind === 'JSX <input> control' &&
-  source.includes('Temporary: this demo still depends on low-level VT mechanics') &&
-  /\bid\s*=\s*["']virtual-texture-detail-budget["']/.test(violation.match) &&
-  /\bdata-virtual-texture-detail-slider\b/.test(violation.match) &&
-  /\btype\s*=\s*["']range["']/.test(violation.match);
-
 const publicCanvasOnlyDomViolation = ({
   exampleId,
   kind,
@@ -232,16 +225,16 @@ describe('examples list', () => {
       'Wireframe',
       'Text',
       'Texture Materials',
+      'Virtual Texturing',
       'glTF Helmet',
-      'Virtual Texturing Lab Probe',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
       '/cube',
       '/wireframe',
       '/text',
       '/texture-materials',
+      '/virtual-texturing',
       '/gltf-helmet',
-      '/virtual-texturing-terrain',
     ]);
   });
 
@@ -313,9 +306,7 @@ describe('examples list', () => {
 
   it('keeps canvas-only example source free of DOM controls and fallback bridges', () => {
     const violations = examples.flatMap((example) =>
-      canvasOnlyDomViolations(example)
-        .filter((violation) => !isTemporaryVirtualTexturingRangeControl(example.source, violation))
-        .map(publicCanvasOnlyDomViolation),
+      canvasOnlyDomViolations(example).map(publicCanvasOnlyDomViolation),
     );
 
     expect(violations).toEqual([]);
@@ -353,14 +344,17 @@ describe('examples list', () => {
       false,
     );
     expect(examples.some((example) => example.title.toLowerCase().includes('wip'))).toBe(false);
-    expect(
-      examples.filter((example) => example.maturity === 'lab-probe').map((example) => example.id),
-    ).toEqual(['virtual-texturing-terrain']);
+    expect(examples.map((example) => example.maturity)).toEqual(
+      examples.map(() => 'product'),
+    );
     expect(examples).toHaveLength(6);
   });
 
-  it('keeps fixture-only VT out of primary examples', () => {
-    expect(examples.some((example) => String(example.path) === '/virtual-texturing')).toBe(false);
+  it('keeps fixture-only VT artifacts out of primary examples', () => {
+    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing');
+
+    expect(virtualTexturing?.path).toBe('/virtual-texturing');
+    expect(virtualTexturing?.maturity).toBe('product');
     expect(examples.some((example) => example.source.includes('page-cache-debug-overlay'))).toBe(
       false,
     );
@@ -377,25 +371,12 @@ describe('examples list', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps lab probe research boundary exemptions explicit', () => {
+  it('has no lab probe research boundary exemptions', () => {
     const labProbeHits = examples
       .filter((example) => example.maturity !== 'product')
-      .flatMap(exampleResearchBoundaryHits)
-      .map(({ exampleId, kind, sourceFile, text }) => ({
-        exampleId,
-        kind,
-        sourceFile,
-        text,
-      }));
+      .flatMap(exampleResearchBoundaryHits);
 
-    expect(labProbeHits).toEqual([
-      {
-        exampleId: 'virtual-texturing-terrain',
-        kind: 'renderer testing subpath',
-        sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',
-        text: '@royal/renderer-webgl/virtual-texturing/testing',
-      },
-    ]);
+    expect(labProbeHits).toEqual([]);
   });
 
   it('keeps fake and compatibility text demos out of primary examples', () => {
@@ -487,43 +468,59 @@ describe('examples list', () => {
     expect(wireframe?.source).not.toMatch(/\bMeshLine\b|\bmeshline\b/);
   });
 
-  it('marks the current virtual texturing route as a lab probe over low-level WebGL mechanics', () => {
-    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing-terrain');
+  it('keeps the virtual texturing route on a focused product texture example', () => {
+    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing');
 
-    expect(virtualTexturing?.maturity).toBe('lab-probe');
-    expect(virtualTexturing?.path).toBe('/virtual-texturing-terrain');
-    expect(virtualTexturing?.title).toBe('Virtual Texturing Lab Probe');
-    expect(virtualTexturing?.source).toContain('@royal/renderer-webgl/virtual-texturing');
-    expect(virtualTexturing?.source).toContain('@royal/renderer-webgl/virtual-texturing/testing');
-    expect(virtualTexturing?.source).toContain(
-      'Temporary: this demo still depends on low-level VT mechanics',
-    );
-    expect(virtualTexturing?.source).not.toContain('packages/renderer-webgl/src/virtual-texturing');
-    expect(virtualTexturing?.source).toContain('VirtualTextureRuntime');
-    expect(virtualTexturing?.source).toContain('createVirtualTexturePageTableTexture');
-    expect(virtualTexturing?.source).toContain('uploadVirtualTexturePageTableTexels');
-    expect(virtualTexturing?.source).toContain('texSubImage2D');
-    expect(virtualTexturing?.source).toContain('__royalVirtualTextureProbe');
-    expect(virtualTexturing?.source).not.toContain('VirtualTextureNode');
-    expect(virtualTexturing?.source).not.toContain('terrain-pages-overview');
-    expect(virtualTexturing?.source).not.toContain('page-cache-debug-overlay');
+    expect(virtualTexturing?.maturity).toBe('product');
+    expect(virtualTexturing?.path).toBe('/virtual-texturing');
+    expect(virtualTexturing?.title).toBe('Virtual Texturing');
+    expect(virtualTexturing?.sourceFile).toBe('examples/cases/VirtualTexturingPlane.tsx');
+    expect(virtualTexturing?.source).toContain('boxGeometry');
+    expect(virtualTexturing?.source).toContain('solidTexture');
+    expect(virtualTexturing?.source).toContain('textureAsset');
+    expect(virtualTexturing?.source).toContain('fallback: fallbackTexture');
+    expect(virtualTexturing?.source).toContain('unlitMaterial');
+    expect(virtualTexturing?.source).toContain('createGeneratedTextureUri');
+    expect(virtualTexturing?.source).toContain("type DragMode = 'pan' | 'rotate'");
+    expect(virtualTexturing?.source).toContain('onWheel');
+    expect(virtualTexturing?.source).toContain('onPointerDown');
+    expect(virtualTexturing?.source).toContain('onContextMenu');
+    expect(virtualTexturing?.source).toContain('clampRotation');
+    expect(virtualTexturing?.source).toContain('rotation: [view.rotation[0], view.rotation[1], 0]');
+    expect(virtualTexturing?.source).toContain('<mesh');
+    expect(virtualTexturing?.source).not.toContain('@royal/renderer-webgl');
+    expect(virtualTexturing?.source).not.toContain('__royalVirtualTextureProbe');
+    expect(virtualTexturing?.source).not.toContain('terrain');
   });
 
-  it('keeps VT testing imports confined to the terrain lab probe', () => {
+  it('documents the VT route as a public descriptor placeholder until core exposes one', () => {
+    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing');
+
+    expect(virtualTexturing?.source).toContain('TODO(public-vt-descriptor)');
+    expect(virtualTexturing?.source).toContain('textureAsset({');
+    expect(virtualTexturing?.source).not.toMatch(/\bvirtualTexture\s*\(/);
+    expect(virtualTexturing?.source).not.toMatch(
+      /\b(?:createVirtualTextureResource|VirtualTextureResource|VirtualTexturePageSource)\b/,
+    );
+    expect(virtualTexturing?.source).not.toContain('@royal/renderer-webgl/virtual-texturing');
+  });
+
+  it('keeps VT testing imports out of examples', () => {
     const vtTestingImporters = examples.filter((example) =>
       example.source.includes('@royal/renderer-webgl/virtual-texturing/testing'),
     );
 
-    expect(vtTestingImporters.map((example) => example.id)).toEqual([
-      'virtual-texturing-terrain',
-    ]);
-    expect(vtTestingImporters.every((example) => example.maturity === 'lab-probe')).toBe(true);
+    expect(vtTestingImporters).toEqual([]);
   });
 
   it('reserves product VT examples for public descriptor material lowering', () => {
     const productVirtualTexturingExamples = examples.filter(
       (example) => isVirtualTexturingExample(example) && example.maturity === 'product',
     );
+
+    expect(productVirtualTexturingExamples.map((example) => example.id)).toEqual([
+      'virtual-texturing',
+    ]);
 
     for (const example of productVirtualTexturingExamples) {
       expect(example.source).toContain('@royal/renderer-core');
@@ -533,7 +530,7 @@ describe('examples list', () => {
         /@royal\/renderer-webgl\/virtual-texturing(?:\/testing)?/,
       );
       expect(example.source).not.toMatch(
-        /\b(?:WebGLTexture|texSubImage2D|VirtualTextureRuntime|createVirtualTexturePageTableTexture|uploadVirtualTexturePageTableTexels)\b/,
+        /\b(?:WebGLTexture|texSubImage2D|VirtualTextureRuntime|VirtualTexturePageAddress|VirtualTexturePageId|createVirtualTexturePageTableTexture|planVirtualTextureUploads|uploadVirtualTexturePageTableTexels|virtualTexturePageId)\b/,
       );
       expect(example.source).not.toMatch(/\bcreateVirtualTexturePageTableTexture\b/);
       expect(example.source).not.toMatch(/\buploadVirtualTexturePageTableTexels\b/);

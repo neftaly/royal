@@ -7,8 +7,8 @@ import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
-import { VirtualTexturingTerrain } from './examples/cases/VirtualTexturingTerrain';
-import virtualTexturingTerrainSource from './examples/cases/VirtualTexturingTerrain.tsx?raw';
+import { VirtualTexturingPlane } from './examples/cases/VirtualTexturingPlane';
+import virtualTexturingPlaneSource from './examples/cases/VirtualTexturingPlane.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -60,6 +60,15 @@ export const examples = [
     sourceFile: 'examples/cases/TextureMaterials.tsx',
   },
   {
+    id: 'virtual-texturing',
+    maturity: 'product',
+    path: '/virtual-texturing',
+    title: 'Virtual Texturing',
+    Component: VirtualTexturingPlane,
+    source: virtualTexturingPlaneSource,
+    sourceFile: 'examples/cases/VirtualTexturingPlane.tsx',
+  },
+  {
     id: 'gltf-helmet',
     maturity: 'product',
     path: '/gltf-helmet',
@@ -67,15 +76,6 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
-  },
-  {
-    id: 'virtual-texturing-terrain',
-    maturity: 'lab-probe',
-    path: '/virtual-texturing-terrain',
-    title: 'Virtual Texturing Lab Probe',
-    Component: VirtualTexturingTerrain,
-    source: virtualTexturingTerrainSource,
-    sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',
   },
 ] as const satisfies readonly Example[];
 

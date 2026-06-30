@@ -48,17 +48,17 @@ const smokeExpectations = {
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
   },
+  'virtual-texturing': {
+    surface: 'canvas',
+    canvasLabel: 'Virtual texturing plane',
+    minColorBuckets: 6,
+    minPaintedRatio: 0.04,
+  },
   'gltf-helmet': {
     surface: 'canvas',
     canvasLabel: 'glTF DamagedHelmet',
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
-  },
-  'virtual-texturing-terrain': {
-    surface: 'canvas',
-    canvasLabel: 'Virtual texturing terrain',
-    minColorBuckets: 6,
-    minPaintedRatio: 0.5,
   },
 };
 
@@ -593,50 +593,6 @@ const smokeExpression = `
       samples,
     };
   };
-  const readVirtualTextureProbe = () => {
-    const probe = window.__royalVirtualTextureProbe;
-    if (probe === undefined || probe === null) return undefined;
-
-    return {
-      atlasPreviewReadback: probe.atlasPreviewReadback ?? { colorBuckets: 0, paintedRatio: 0 },
-      bytesUploaded: Number(probe.bytesUploaded ?? 0),
-      camera: probe.camera ?? { distance: 0, moved: false, pitch: 0, targetX: 0, targetZ: 0, yaw: 0 },
-      canvasReadback: probe.canvasReadback ?? { colorBuckets: 0, paintedRatio: 0 },
-      detail: {
-        baseResolveCount: Number(probe.detail?.baseResolveCount ?? 0),
-        effectiveVirtualResolution: Number(probe.detail?.effectiveVirtualResolution ?? 0),
-        focusU: Number(probe.detail?.focusU ?? 0),
-        focusV: Number(probe.detail?.focusV ?? 0),
-        maxResidentDetail: Number(probe.detail?.maxResidentDetail ?? 0),
-        maxResidentMip: Number(probe.detail?.maxResidentMip ?? 0),
-        requestSignature: String(probe.detail?.requestSignature ?? ''),
-        requestedMip: Number(probe.detail?.requestedMip ?? 0),
-        requestedPageIds: Array.isArray(probe.detail?.requestedPageIds) ? probe.detail.requestedPageIds : [],
-        requestedPages: Number(probe.detail?.requestedPages ?? 0),
-      },
-      drawCalls: Number(probe.drawCalls ?? 0),
-      error: String(probe.error ?? ''),
-      evictedPageIds: Array.isArray(probe.evictedPageIds) ? probe.evictedPageIds : [],
-      exactPageCount: Number(probe.exactPageCount ?? 0),
-      fallbackPageCount: Number(probe.fallbackPageCount ?? 0),
-      frameCount: Number(probe.frameCount ?? 0),
-      lastPageTableUploadSample: Array.isArray(probe.lastPageTableUploadSample)
-        ? probe.lastPageTableUploadSample
-        : [],
-      lastPhysicalAtlasUpload: String(probe.lastPhysicalAtlasUpload ?? ''),
-      mode: String(probe.mode ?? ''),
-      pageTablePreviewReadback: probe.pageTablePreviewReadback ?? { colorBuckets: 0, paintedRatio: 0 },
-      pageTableReadback: probe.pageTableReadback ?? { nonZeroTexels: 0, texels: 0, uniqueEntries: 0 },
-      pageTableTexelUploads: Number(probe.pageTableTexelUploads ?? 0),
-      physicalAtlasUploads: Number(probe.physicalAtlasUploads ?? 0),
-      previewDrawCalls: Number(probe.previewDrawCalls ?? 0),
-      ready: probe.ready === true,
-      residentPageIds: Array.isArray(probe.residentPageIds) ? probe.residentPageIds : [],
-      supported: probe.supported === true,
-      terrainDrawCalls: Number(probe.terrainDrawCalls ?? 0),
-      terrainReadback: probe.terrainReadback ?? { colorBuckets: 0, paintedRatio: 0 },
-    };
-  };
   const read = () => {
     const page = document.querySelector('.example-page');
     const bodyText = document.body.textContent ?? '';
@@ -706,22 +662,6 @@ const smokeExpression = `
           textValue: document.querySelector('input[type="text"]')?.value ?? '',
         };
       })() : undefined,
-      virtualTextureControls: routeId === 'virtual-texturing-terrain' ? (() => {
-        const slider = document.querySelector('[data-virtual-texture-detail-slider]');
-        const output = document.querySelector('[data-virtual-texture-effective-resolution]');
-
-        return {
-          controlGroups: document.querySelectorAll('[data-virtual-texture-controls]').length,
-          id: slider?.getAttribute('id') ?? '',
-          max: Number(slider?.getAttribute('max') ?? 0),
-          min: Number(slider?.getAttribute('min') ?? 0),
-          name: slider?.getAttribute('name') ?? '',
-          outputResolution: Number(output?.getAttribute('data-virtual-texture-effective-resolution') ?? 0),
-          rangeInputs: document.querySelectorAll('[data-virtual-texture-example] input[type="range"]').length,
-          value: Number(slider?.value ?? 0),
-        };
-      })() : undefined,
-      virtualTexturing: routeId === 'virtual-texturing-terrain' ? readVirtualTextureProbe() : undefined,
       activeNav: activeLink === null ? undefined : {
         id: activeLink.getAttribute('data-example-id') ?? '',
         path: activeLink.getAttribute('data-example-route') ?? '',
@@ -729,55 +669,6 @@ const smokeExpression = `
       },
     };
   };
-  const runVirtualTextureDetailSmoke = async () => {
-    const before = read();
-    const slider = document.querySelector('[data-virtual-texture-detail-slider]');
-    const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
-      candidate.getAttribute('aria-label') === 'Virtual texturing terrain'
-    );
-
-    if (slider !== null) {
-      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      valueSetter?.call(slider, slider.getAttribute('max') ?? slider.value);
-      slider.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-      slider.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-    }
-    if (canvas !== undefined) {
-      canvas.dispatchEvent(new WheelEvent('wheel', {
-        bubbles: true,
-        cancelable: true,
-        deltaMode: 0,
-        deltaY: -5000,
-      }));
-    }
-
-    const deadline = performance.now() + 8000;
-    let state = read();
-    const beforeResolution = before.virtualTexturing?.detail?.effectiveVirtualResolution ?? 0;
-    const maxControl = state.virtualTextureControls?.max ?? 0;
-    const isCranked = () => {
-      const vt = state.virtualTexturing;
-      return vt?.ready === true &&
-        vt.detail.maxResidentDetail === maxControl &&
-        vt.detail.effectiveVirtualResolution > beforeResolution &&
-        vt.detail.requestedMip === 0 &&
-        vt.exactPageCount > 0 &&
-        vt.canvasReadback.colorBuckets >= 6 &&
-        vt.terrainReadback.paintedRatio >= 0.2;
-    };
-
-    while (performance.now() < deadline && !isCranked()) {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      state = read();
-    }
-
-    return {
-      ...state,
-      virtualTextureControlsBefore: before.virtualTextureControls,
-      virtualTexturingBeforeDetail: before.virtualTexturing,
-    };
-  };
-
   const deadline = performance.now() + 8000;
   let state = read();
   const isReady = () => {
@@ -788,17 +679,12 @@ const smokeExpression = `
       state.canvas.backingHeight > 0 &&
       state.canvas.sample !== undefined &&
       state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets &&
-      state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio &&
-      (state.route.id !== 'virtual-texturing-terrain' || state.virtualTexturing?.ready === true);
+      state.canvas.sample.paintedRatio >= state.canvas.minPaintedRatio;
   };
 
   while (performance.now() < deadline && !isReady()) {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     state = read();
-  }
-
-  if (state.route.id === 'virtual-texturing-terrain') {
-    state = await runVirtualTextureDetailSmoke();
   }
 
   if (state.route.id === 'gltf-helmet') {
@@ -1058,9 +944,6 @@ const artifactsExpression = `
           json.fixtureId === 'notched-bounds-contract-smoke';
       case 'asset-contract-schema':
         return json.$schema !== undefined && json.properties !== undefined;
-      case 'asset-contract-vt':
-        return Array.isArray(json.artifacts) && json.artifacts.length >= 6 &&
-          Array.isArray(json.bounds) && json.bounds.length >= 4;
       case 'asset-contract-terrain':
         return Array.isArray(json.artifacts) && json.artifacts.length >= 9 &&
           Array.isArray(json.pages) && json.pages.length >= 1;
@@ -1077,14 +960,6 @@ const artifactsExpression = `
       case 'dynamic-impostors-manifest':
         return Array.isArray(json.sourceMeshes) && json.sourceMeshes.length >= 3 &&
           Array.isArray(json.impostorAtlases) && json.impostorAtlases.length >= 2;
-      case 'vt-manifest':
-        return Array.isArray(json.pages) && json.pages.length >= 21 &&
-          json.virtualTexture?.mipCount === 3 && json.demoBudget?.cacheSlots === 12;
-      case 'vt-example-fixture':
-        return json.virtualTexture?.mipCount === 3 &&
-          Array.isArray(json.assets?.previewAssets) && json.assets.previewAssets.length >= 2;
-      case 'vt-camera-stats':
-        return Array.isArray(json.frames) && json.frames.length >= 6;
       default:
         return false;
     }
@@ -1598,130 +1473,6 @@ const assertRoute = (expected, state) => {
     }
   }
 
-  if (expected.id === 'virtual-texturing-terrain') {
-    const vt = state.virtualTexturing;
-    const initialVt = state.virtualTexturingBeforeDetail;
-    const controls = state.virtualTextureControls;
-
-    if (controls?.controlGroups !== 1) {
-      failures.push(`virtual texture rendered ${controls?.controlGroups ?? 0} control group(s)`);
-    }
-    if (controls?.rangeInputs !== 1) {
-      failures.push(`virtual texture rendered ${controls?.rangeInputs ?? 0} detail slider(s)`);
-    }
-    if (controls?.id !== 'virtual-texture-detail-budget') {
-      failures.push('virtual texture detail slider id is missing');
-    }
-    if (controls?.name !== 'virtual-texture-detail-budget') {
-      failures.push('virtual texture detail slider name is missing');
-    }
-    if (controls?.min !== 0 || (controls?.max ?? 0) < 6) {
-      failures.push(`virtual texture slider range was ${controls?.min ?? 'missing'}-${controls?.max ?? 'missing'}`);
-    }
-    if (controls?.value !== controls?.max) {
-      failures.push(`virtual texture detail slider value was ${controls?.value ?? 'missing'}, expected ${controls?.max}`);
-    }
-    if ((initialVt?.detail?.effectiveVirtualResolution ?? 0) >= (vt?.detail?.effectiveVirtualResolution ?? 0)) {
-      failures.push('virtual texture cranked detail did not raise effective resolution');
-    }
-    if (vt === undefined) {
-      failures.push('missing virtual texturing probe');
-    } else {
-      if (!vt.supported) failures.push(`virtual texturing probe unsupported: ${vt.error}`);
-      if (vt.mode !== 'webgl2-virtual-texture') {
-        failures.push(`virtual texturing mode was "${vt.mode}"`);
-      }
-      if (!vt.ready) failures.push('virtual texturing probe did not become ready');
-      if (vt.detail.maxResidentDetail !== controls?.max) {
-        failures.push(`virtual texture max resident detail was ${vt.detail.maxResidentDetail}, expected ${controls?.max}`);
-      }
-      if (vt.detail.requestedMip !== 0) {
-        failures.push(`virtual texture zoomed request mip was ${vt.detail.requestedMip}, expected 0`);
-      }
-      if (vt.detail.effectiveVirtualResolution < 4096 || controls?.outputResolution !== vt.detail.effectiveVirtualResolution) {
-        failures.push(
-          `virtual texture effective resolution was ${vt.detail.effectiveVirtualResolution} with output ${
-            controls?.outputResolution ?? 'missing'
-          }`,
-        );
-      }
-      if (vt.detail.baseResolveCount < 4096 || vt.pageTableTexelUploads < vt.detail.baseResolveCount) {
-        failures.push(
-          `page-table coverage was base=${vt.detail.baseResolveCount} uploads=${vt.pageTableTexelUploads}`,
-        );
-      }
-      if (vt.detail.requestedPages < 2 || vt.detail.requestedPageIds.length !== vt.detail.requestedPages) {
-        failures.push(
-          `virtual texture requested pages were count=${vt.detail.requestedPages} ids=${vt.detail.requestedPageIds.length}`,
-        );
-      }
-      if (vt.detail.requestSignature === '') {
-        failures.push('virtual texture request signature stayed empty');
-      }
-      if (vt.physicalAtlasUploads < 2) {
-        failures.push(`physical atlas uploads ${vt.physicalAtlasUploads} < 2`);
-      }
-      if (vt.bytesUploaded <= vt.pageTableTexelUploads * 4) {
-        failures.push('virtual texture upload byte count only covers page-table texels');
-      }
-      if (vt.pageTableReadback.nonZeroTexels < vt.detail.baseResolveCount) {
-        failures.push(
-          `page-table readback nonzero texels ${vt.pageTableReadback.nonZeroTexels} < ${vt.detail.baseResolveCount}`,
-        );
-      }
-      if (vt.pageTableReadback.uniqueEntries < 3) {
-        failures.push(`page-table readback unique entries ${vt.pageTableReadback.uniqueEntries} < 3`);
-      }
-      if (vt.canvasReadback.colorBuckets < 6) {
-        failures.push(`virtual texture canvas buckets ${vt.canvasReadback.colorBuckets} < 6`);
-      }
-      if (vt.terrainDrawCalls <= 0) {
-        failures.push('virtual texture terrain draw count stayed empty');
-      }
-      if (vt.terrainReadback.colorBuckets < 6 || vt.terrainReadback.paintedRatio < 0.2) {
-        failures.push(
-          `virtual texture terrain readback was buckets=${vt.terrainReadback.colorBuckets} painted=${
-            vt.terrainReadback.paintedRatio.toFixed(4)
-          }`,
-        );
-      }
-      if (vt.previewDrawCalls < 2) {
-        failures.push(`virtual texture preview draw count ${vt.previewDrawCalls} < 2`);
-      }
-      if (vt.atlasPreviewReadback.colorBuckets < 4 || vt.atlasPreviewReadback.paintedRatio < 0.2) {
-        failures.push(
-          `virtual texture atlas preview readback was buckets=${vt.atlasPreviewReadback.colorBuckets} painted=${
-            vt.atlasPreviewReadback.paintedRatio.toFixed(4)
-          }`,
-        );
-      }
-      if (vt.pageTablePreviewReadback.colorBuckets < 3 || vt.pageTablePreviewReadback.paintedRatio < 0.2) {
-        failures.push(
-          `virtual texture page-table preview readback was buckets=${
-            vt.pageTablePreviewReadback.colorBuckets
-          } painted=${vt.pageTablePreviewReadback.paintedRatio.toFixed(4)}`,
-        );
-      }
-      if (vt.camera.distance <= 0) {
-        failures.push('virtual texture camera probe did not initialize');
-      }
-      if (vt.exactPageCount <= 0 || vt.fallbackPageCount <= 0) {
-        failures.push(
-          `virtual texture exact/fallback counts were final=${vt.exactPageCount}/${vt.fallbackPageCount}`,
-        );
-      }
-      if (vt.lastPageTableUploadSample.length < 4) {
-        failures.push('virtual texture page-table upload sample stayed empty');
-      }
-      if (vt.lastPhysicalAtlasUpload === '') {
-        failures.push('virtual texture physical atlas upload marker stayed empty');
-      }
-      if (vt.drawCalls <= 0 || vt.frameCount < 3) {
-        failures.push(`virtual texture draw/frame counts were ${vt.drawCalls}/${vt.frameCount}`);
-      }
-    }
-  }
-
   if (failures.length > 0) {
     throw new Error(`${expected.title}: ${failures.join('; ')}`);
   }
@@ -1779,7 +1530,6 @@ const assertArtifactsPage = (state) => {
     'asset-manifest-contract',
     'offline-terrain-pipeline',
     'dynamic-impostors',
-    'virtual-texturing-research',
   ]) {
     if (!artifactIds.has(expectedId)) failures.push(`missing ${expectedId} research artifact card`);
   }
@@ -1787,19 +1537,12 @@ const assertArtifactsPage = (state) => {
   for (const expectedId of [
     'picking-replay-json',
     'asset-contract-schema',
-    'asset-contract-vt',
     'asset-contract-terrain',
     'asset-contract-impostors',
     'offline-terrain-manifest',
     'offline-terrain-world-index',
     'offline-terrain-schema',
     'dynamic-impostors-manifest',
-    'vt-manifest',
-    'vt-example-fixture',
-    'vt-camera-stats',
-    'vt-overview',
-    'vt-debug-overlay',
-    'vt-report',
   ]) {
     if (!assetIds.has(expectedId)) failures.push(`missing ${expectedId} public artifact asset`);
   }
@@ -1819,7 +1562,6 @@ const assertArtifactsPage = (state) => {
       .join('; ');
     failures.push(`public artifact validation failed: ${broken}`);
   }
-  if (state.previews.length === 0) failures.push('research artifacts did not render a preview image');
   if (state.previews.some((preview) => preview.naturalWidth <= 0 || preview.naturalHeight <= 0)) {
     failures.push('research artifact preview image did not load');
   }
