@@ -58,7 +58,6 @@ const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
   { find: '@royal/renderer-webgl/virtual-texturing/testing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texture-testing.ts') },
-  { find: '@royal/renderer-webgl/virtual-texturing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texturing.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/svg', replacement: path.join(repoRoot, 'packages/renderer-core/src/svg-index.ts') },
   { find: '@royal/renderer-core/text', replacement: path.join(repoRoot, 'packages/renderer-core/src/text-index.ts') },

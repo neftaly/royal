@@ -38,14 +38,8 @@ import {
   collectRendererCapabilityRows,
   type RendererCapabilityProbeResult
 } from '@royal/renderer-webgl/capabilities';
-import {
-  createVirtualTextureResource,
-  type VirtualTexturePageAddress,
-  type VirtualTextureResource
-} from '@royal/renderer-webgl/virtual-texturing';
 import * as rendererCore from '@royal/renderer-core';
 import * as rendererWebgl from '@royal/renderer-webgl';
-import * as rendererWebglVirtualTexturing from '@royal/renderer-webgl/virtual-texturing';
 import * as tarstateLens from '@royal/tarstate-lens';
 import {
   assetIdForSrc,
@@ -122,10 +116,6 @@ describe('Royal public API smoke tests', () => {
       { module: reactRoyal, specifier: '@royal/react' },
       { module: rendererCore, specifier: '@royal/renderer-core' },
       { module: rendererWebgl, specifier: '@royal/renderer-webgl' },
-      {
-        module: rendererWebglVirtualTexturing,
-        specifier: '@royal/renderer-webgl/virtual-texturing'
-      },
       { module: tarstateLens, specifier: '@royal/tarstate-lens' }
     ] as const;
 
@@ -222,14 +212,6 @@ describe('Royal public API smoke tests', () => {
     expect(result.rows.some((row) => row.kind === 'context_version')).toBe(true);
     expect(result.rows.some((row) => row.kind === 'renderer_capability' && row.capability === 'webgl2')).toBe(true);
     expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();
-  });
-
-  it('exposes the renderer-webgl virtual-texturing facade', () => {
-    const page: VirtualTexturePageAddress = { mip: 0, x: 0, y: 0 };
-
-    expect(createVirtualTextureResource).toBeTypeOf('function');
-    expect(page).toEqual({ mip: 0, x: 0, y: 0 });
-    expectTypeOf<ReturnType<typeof createVirtualTextureResource>>().toEqualTypeOf<VirtualTextureResource>();
   });
 
   it('lets consumers query Royal store lenses without package-internal imports', async () => {

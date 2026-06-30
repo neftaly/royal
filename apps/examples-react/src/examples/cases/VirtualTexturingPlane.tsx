@@ -11,6 +11,8 @@ import {
 import { virtualTexturingScene, type SurfaceView } from './VirtualTexturingPlane.scene';
 import { createSurfaceMaterial } from './VirtualTexturingPlane.texture';
 
+// Lab probe only. This previews a public VT descriptor with a generated texture while
+// renderer lowering is pending; it is intentionally not exported in the product catalog.
 type DragMode = 'pan' | 'rotate';
 
 type DragState = {
@@ -146,7 +148,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
 
   return (
     <Canvas
-      aria-label="Virtual texturing plane"
+      aria-label="Virtual texturing descriptor lab probe"
       onContextMenu={(event) => {
         event.preventDefault();
       }}
@@ -157,6 +159,8 @@ export const VirtualTexturingPlane = (): ReactNode => {
       onPointerUp={endDrag}
       onWheel={zoomView}
       rootOptions={rootOptions}
+      data-example-maturity="lab-probe"
+      data-product-demo="false"
       data-virtual-texture-preview="descriptor"
       data-virtual-texture-probe-label="renderer-lowering-pending"
       style={{

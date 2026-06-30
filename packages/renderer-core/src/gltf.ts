@@ -17,7 +17,7 @@ export interface GltfAssetRef {
   readonly uri: string;
 }
 
-/** glTF asset node loaded from an explicit asset reference. */
+/** glTF asset node loaded from a src URL or explicit asset reference. */
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
@@ -37,6 +37,7 @@ export interface GltfExplicitAssetOptions {
 export interface GltfSrcOptions {
   readonly asset?: never;
   readonly bounds?: GltfAssetBounds;
+  /** Optional override for advanced callers; defaults to src. */
   readonly id?: string;
   readonly revision?: GltfAssetRef['revision'];
   readonly src: string;

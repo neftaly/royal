@@ -66,28 +66,25 @@ describe('renderer descriptor authoring API', () => {
   it('represents material base color as solid or asset texture references', () => {
     const solid = solidTexture({
       color: [1, 0, 0, 1],
-      id: 'debug-red',
       revision: 1
     });
     const asset = textureAsset({
       colorSpace: 'srgb',
       fallback: solid,
-      id: 'albedo',
       revision: 'v2',
       sampler: { minFilter: 'linear-mipmap-linear', wrapS: 'repeat', wrapT: 'repeat' },
-      uri: '/textures/albedo.png'
+      src: '/textures/albedo.png'
     });
 
     expect(solid).toEqual({
       color: [1, 0, 0, 1],
-      id: 'debug-red',
       kind: 'solid',
       revision: 1
     });
     expect(asset).toMatchObject({
       colorSpace: 'srgb',
       fallback: solid,
-      id: 'albedo',
+      id: '/textures/albedo.png',
       kind: 'asset',
       revision: 'v2',
       uri: '/textures/albedo.png'
@@ -97,8 +94,7 @@ describe('renderer descriptor authoring API', () => {
 
     expect(defaultTextureFallbackColor).toEqual([0.5, 0.5, 0.5, 1]);
     expect(textureAsset({
-      id: 'albedo-default',
-      uri: '/textures/albedo-default.png'
+      src: '/textures/albedo-default.png'
     })).not.toHaveProperty('fallback');
   });
 

@@ -27,10 +27,7 @@ const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({
   baseColor: solidTexture({ color: [1, 0, 0, 1] })
 });
-const helmet = {
-  id: 'damaged-helmet',
-  uri: '/DamagedHelmet/DamagedHelmet.gltf'
-} as const;
+const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 
 createRoot(canvas, {
   context: { alpha: true, antialias: true }
@@ -46,7 +43,7 @@ createRoot(canvas, {
       />
       <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
       <mesh geometry={cube} material={red} />
-      <gltf asset={helmet} />
+      <gltf src={helmetSrc} />
     </pass>
   </scene>
 );

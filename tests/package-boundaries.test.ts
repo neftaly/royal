@@ -78,13 +78,6 @@ const temporaryTestingLabExports = [
     rationale: 'Keeps renderer capability lab helpers reachable while diagnostics settle on stable package subpaths.',
     removalOwner: 'renderer platform',
     sourcePath: './src/testing.ts'
-  },
-  {
-    exportKey: './virtual-texturing/testing',
-    packageName: '@royal/renderer-webgl',
-    rationale: 'Keeps low-level virtual-texturing mechanics reachable for lab examples and migration tests.',
-    removalOwner: 'virtual texturing',
-    sourcePath: './src/virtual-texture-testing.ts'
   }
 ] as const satisfies readonly TemporaryTestingLabExport[];
 const webGpuProbeExportClassifications = [
@@ -380,8 +373,7 @@ describe('package boundaries', () => {
     expect(webglManifest.dependencies?.['gl-matrix']).toBe('^3.4.4');
     expect(stableManifestExports(webglManifest)).toEqual({
       '.': './src/index.ts',
-      './capabilities': './src/capabilities.ts',
-      './virtual-texturing': './src/virtual-texturing.ts'
+      './capabilities': './src/capabilities.ts'
     });
     expect(typeof Canvas).toBe('function');
     expect(createRoyalRoot).toBeTypeOf('function');

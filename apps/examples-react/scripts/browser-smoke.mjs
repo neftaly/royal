@@ -22,12 +22,6 @@ const textSelectionLatencyBudget = {
   maxDragToProbeMs: envNumber('EXAMPLES_TEXT_MAX_DRAG_TO_PROBE_MS', 750),
   maxHitTestMs: envNumber('EXAMPLES_TEXT_MAX_HIT_TEST_MS', 8),
 };
-const virtualTexturingInteractionBudget = {
-  maxPanToPaintMs: envNumber('EXAMPLES_VT_MAX_PAN_TO_PAINT_MS', 1300),
-  maxRotateToPaintMs: envNumber('EXAMPLES_VT_MAX_ROTATE_TO_PAINT_MS', 1300),
-  maxWheelToPaintMs: envNumber('EXAMPLES_VT_MAX_WHEEL_TO_PAINT_MS', 900),
-};
-
 const smokeExpectations = {
   cube: {
     surface: 'canvas',
@@ -64,12 +58,6 @@ const smokeExpectations = {
     canvasLabel: 'SVG gateway',
     minColorBuckets: 5,
     minPaintedRatio: 0.01,
-  },
-  'virtual-texturing': {
-    surface: 'canvas',
-    canvasLabel: 'Virtual texturing plane',
-    minColorBuckets: 6,
-    minPaintedRatio: 0.04,
   },
   'gltf-helmet': {
     surface: 'canvas',
@@ -870,27 +858,6 @@ const smokeExpression = `
         };
       })() : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas) : undefined,
-      virtualTexturing: routeId === 'virtual-texturing' ? (() => {
-        const sourceForbiddenPatterns = [
-          /@royal\\/renderer-webgl(?:\\/[^'"\\s]*)?/g,
-          /@royal\\/renderer-webgpu(?:\\/[^'"\\s]*)?/g,
-          /@royal\\/[^'"\\s]*\\/testing\\b/g,
-          /\\b(?:WebGLTexture|texSubImage2D|VirtualTextureRuntime|VirtualTexturePageAddress|VirtualTexturePageId|createVirtualTexturePageTableTexture|planVirtualTextureUploads|uploadVirtualTexturePageTableTexels|virtualTexturePageId)\\b/g,
-          /\\b__royalVirtualTextureProbe\\b/g,
-        ];
-        const sourceForbiddenReferences = sourceForbiddenPatterns.flatMap((pattern) =>
-          Array.from(sourceCode.matchAll(pattern)).map((match) => match[0] ?? '')
-        );
-        const probeGlobals = Object.keys(window).filter((key) =>
-          key === '__royalVirtualTextureProbe' ||
-          /^__royal.*(?:VirtualTexture|VirtualTexturing|VT)/i.test(key)
-        );
-
-        return {
-          probeGlobals,
-          sourceForbiddenReferences,
-        };
-      })() : undefined,
       activeNav: activeLink === null ? undefined : {
         id: activeLink.getAttribute('data-example-id') ?? '',
         path: activeLink.getAttribute('data-example-route') ?? '',
@@ -1769,88 +1736,6 @@ const assertRoute = (expected, state) => {
     }
   }
 
-  if (expected.id === 'virtual-texturing') {
-    const vtBoundary = state.virtualTexturing;
-    if (vtBoundary === undefined) {
-      failures.push('virtual texturing route missed descriptor boundary inspection');
-    } else {
-      if ((vtBoundary.sourceForbiddenReferences?.length ?? 0) > 0) {
-        failures.push(
-          `virtual texturing source exposed renderer internals: ${
-            vtBoundary.sourceForbiddenReferences.join(', ')
-          }`,
-        );
-      }
-      if ((vtBoundary.probeGlobals?.length ?? 0) > 0) {
-        failures.push(
-          `virtual texturing route exposed probe globals: ${vtBoundary.probeGlobals.join(', ')}`,
-        );
-      }
-    }
-
-    const interaction = state.virtualTexturingInteraction;
-    if (interaction === undefined) {
-      failures.push('virtual texturing route missed interaction smoke');
-    } else if (interaction.error !== undefined) {
-      failures.push(`virtual texturing interaction smoke failed: ${interaction.error}`);
-    } else {
-      const expectedPhases = ['wheel-zoom', 'pointer-rotate', 'shift-pan'];
-      const phasesByName = new Map((interaction.phases ?? []).map((phase) => [phase.phase, phase]));
-      for (const phaseName of expectedPhases) {
-        const phase = phasesByName.get(phaseName);
-        if (phase === undefined) {
-          failures.push(`virtual texturing interaction missed ${phaseName}`);
-          continue;
-        }
-
-        const afterSample = phase.after?.sample;
-        if (phase.after?.ok !== true || afterSample === undefined || afterSample.paintedPixels <= 0) {
-          failures.push(`virtual texturing ${phaseName} left the canvas blank`);
-        }
-        if (afterSample !== undefined && afterSample.paintedRatio < (state.canvas?.minPaintedRatio ?? 0)) {
-          failures.push(
-            `virtual texturing ${phaseName} painted ratio ${afterSample.paintedRatio.toFixed(4)} < ${
-              state.canvas?.minPaintedRatio ?? 0
-            }`,
-          );
-        }
-        if (phase.dispatch?.ok !== true) {
-          failures.push(
-            `virtual texturing ${phaseName} dispatch failed: ${phase.dispatch?.reason ?? 'unknown'}`,
-          );
-        }
-        if (phaseName !== 'wheel-zoom' && (phase.dispatch?.preventedCount ?? 0) < 2) {
-          failures.push(`virtual texturing ${phaseName} pointer drag was not handled by the canvas`);
-        }
-      }
-
-      const wheel = phasesByName.get('wheel-zoom');
-      const rotate = phasesByName.get('pointer-rotate');
-      const pan = phasesByName.get('shift-pan');
-      if ((wheel?.durationMs ?? 0) > virtualTexturingInteractionBudget.maxWheelToPaintMs) {
-        failures.push(
-          `virtual texturing wheel-zoom took ${wheel.durationMs.toFixed(1)}ms > ${
-            virtualTexturingInteractionBudget.maxWheelToPaintMs
-          }ms`,
-        );
-      }
-      if ((rotate?.durationMs ?? 0) > virtualTexturingInteractionBudget.maxRotateToPaintMs) {
-        failures.push(
-          `virtual texturing pointer-rotate took ${rotate.durationMs.toFixed(1)}ms > ${
-            virtualTexturingInteractionBudget.maxRotateToPaintMs
-          }ms`,
-        );
-      }
-      if ((pan?.durationMs ?? 0) > virtualTexturingInteractionBudget.maxPanToPaintMs) {
-        failures.push(
-          `virtual texturing shift-pan took ${pan.durationMs.toFixed(1)}ms > ${
-            virtualTexturingInteractionBudget.maxPanToPaintMs
-          }ms`,
-        );
-      }
-    }
-  }
-
   if (failures.length > 0) {
     throw new Error(`${expected.title}: ${failures.join('; ')}`);
   }
@@ -2084,194 +1969,6 @@ const dispatchTextContextMenu = async (session, point) => evaluate(session, `
 })()
 `);
 
-const waitForVirtualTexturingCanvasState = async (session, predicate, timeoutMs = 1200) => {
-  const deadline = Date.now() + timeoutMs;
-  let state = await evaluate(session, virtualTexturingCanvasProbeExpression);
-
-  while (Date.now() < deadline && !predicate(state)) {
-    await sleep(16);
-    state = await evaluate(session, virtualTexturingCanvasProbeExpression);
-  }
-
-  return state;
-};
-
-const waitForVirtualTexturingFrames = async (session, count = 2) => evaluate(session, `
-(async () => {
-  for (let index = 0; index < ${Number(count)}; index += 1) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-  return true;
-})()
-`);
-
-const dispatchVirtualTexturingWheel = async (session, point, deltaY) => evaluate(session, `
-(() => {
-  const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
-    candidate.getAttribute('aria-label') === 'Virtual texturing plane'
-  );
-  if (canvas === undefined) return { ok: false, reason: 'missing virtual texturing canvas' };
-
-  const event = new WheelEvent('wheel', {
-    bubbles: true,
-    cancelable: true,
-    clientX: ${Number(point.x)},
-    clientY: ${Number(point.y)},
-    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-    deltaY: ${Number(deltaY)},
-    view: window,
-  });
-  const dispatched = canvas.dispatchEvent(event);
-  return {
-    defaultPrevented: event.defaultPrevented,
-    dispatched,
-    ok: true,
-  };
-})()
-`);
-
-const runVirtualTexturingPointerDrag = async (session, from, to, options = {}) => evaluate(session, `
-(() => {
-  const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
-    candidate.getAttribute('aria-label') === 'Virtual texturing plane'
-  );
-  if (canvas === undefined) return { ok: false, reason: 'missing virtual texturing canvas' };
-  if (typeof PointerEvent !== 'function') return { ok: false, reason: 'missing PointerEvent' };
-
-  const originalSetPointerCapture = canvas.setPointerCapture;
-  const originalReleasePointerCapture = canvas.releasePointerCapture;
-  const originalHasPointerCapture = canvas.hasPointerCapture;
-  const events = [];
-  const dispatch = (type, point, buttons) => {
-    const event = new PointerEvent(type, {
-      bubbles: true,
-      button: 0,
-      buttons,
-      cancelable: true,
-      clientX: point.x,
-      clientY: point.y,
-      isPrimary: true,
-      pointerId: 7,
-      pointerType: 'mouse',
-      shiftKey: ${options.modifiers === 8 ? 'true' : 'false'},
-      view: window,
-    });
-    const dispatched = canvas.dispatchEvent(event);
-    events.push({
-      defaultPrevented: event.defaultPrevented,
-      dispatched,
-      type,
-    });
-  };
-
-  try {
-    canvas.setPointerCapture = () => {};
-    canvas.releasePointerCapture = () => {};
-    canvas.hasPointerCapture = () => true;
-    dispatch('pointermove', { x: ${Number(from.x)}, y: ${Number(from.y)} }, 0);
-    dispatch('pointerdown', { x: ${Number(from.x)}, y: ${Number(from.y)} }, 1);
-    for (let step = 1; step <= 6; step += 1) {
-      const ratio = step / 6;
-      dispatch('pointermove', {
-        x: ${Number(from.x)} + (${Number(to.x)} - ${Number(from.x)}) * ratio,
-        y: ${Number(from.y)} + (${Number(to.y)} - ${Number(from.y)}) * ratio,
-      }, 1);
-    }
-    dispatch('pointerup', { x: ${Number(to.x)}, y: ${Number(to.y)} }, 0);
-  } finally {
-    canvas.setPointerCapture = originalSetPointerCapture;
-    canvas.releasePointerCapture = originalReleasePointerCapture;
-    canvas.hasPointerCapture = originalHasPointerCapture;
-  }
-
-  return {
-    events,
-    ok: true,
-    preventedCount: events.filter((event) => event.defaultPrevented).length,
-  };
-})()
-`);
-
-const runVirtualTexturingInteractionPhase = async (session, phase, action, timeoutMs) => {
-  const before = await evaluate(session, virtualTexturingCanvasProbeExpression);
-  const startedAt = performance.now();
-  const dispatch = await action(before);
-  await waitForVirtualTexturingFrames(session, 2);
-  const after = await waitForVirtualTexturingCanvasState(
-    session,
-    (state) =>
-      state?.ok === true &&
-      (state.sample?.paintedPixels ?? 0) > 0,
-    timeoutMs,
-  );
-
-  return {
-    after,
-    before,
-    dispatch,
-    durationMs: performance.now() - startedAt,
-    phase,
-  };
-};
-
-const runVirtualTexturingInteractionCdpSmoke = async (session) => {
-  const before = await waitForVirtualTexturingCanvasState(
-    session,
-    (state) => state?.ok === true && (state.sample?.paintedPixels ?? 0) > 0,
-  );
-  if (before.ok !== true || before.sample === undefined) {
-    return { before, error: before.reason ?? 'virtual texturing canvas did not paint before interaction' };
-  }
-
-  const point = (state, xRatio, yRatio) => {
-    const rect = state?.rect ?? before.rect;
-    return {
-      x: rect.left + rect.width * xRatio,
-      y: rect.top + rect.height * yRatio,
-    };
-  };
-  const center = point(before, 0.5, 0.5);
-  const phases = [];
-
-  phases.push(await runVirtualTexturingInteractionPhase(
-    session,
-    'wheel-zoom',
-    async () => {
-      return dispatchVirtualTexturingWheel(session, center, -360);
-    },
-    virtualTexturingInteractionBudget.maxWheelToPaintMs,
-  ));
-
-  const afterWheel = phases[phases.length - 1].after;
-  const rotateFrom = point(afterWheel, 0.48, 0.52);
-  const rotateTo = point(afterWheel, 0.66, 0.35);
-  phases.push(await runVirtualTexturingInteractionPhase(
-    session,
-    'pointer-rotate',
-    async () => {
-      return runVirtualTexturingPointerDrag(session, rotateFrom, rotateTo);
-    },
-    virtualTexturingInteractionBudget.maxRotateToPaintMs,
-  ));
-
-  const afterRotate = phases[phases.length - 1].after;
-  const panFrom = point(afterRotate, 0.55, 0.48);
-  const panTo = point(afterRotate, 0.38, 0.62);
-  phases.push(await runVirtualTexturingInteractionPhase(
-    session,
-    'shift-pan',
-    async () => {
-      return runVirtualTexturingPointerDrag(session, panFrom, panTo, { modifiers: 8 });
-    },
-    virtualTexturingInteractionBudget.maxPanToPaintMs,
-  ));
-
-  return {
-    before,
-    phases,
-  };
-};
-
 const seedNativeTextClipboard = async (session, text) => evaluate(session, `
 (async () => {
   const clipboard = navigator.clipboard;
@@ -2404,64 +2101,6 @@ const readTextClipboardEventLog = async (session) => evaluate(session, `
   };
 })()
 `);
-
-const virtualTexturingCanvasProbeExpression = `
-(() => {
-  const sampleCanvas = (canvas, maxSize = 128) => {
-    const width = Math.max(1, Math.min(maxSize, canvas.width));
-    const height = Math.max(1, Math.min(maxSize, canvas.height));
-    const sample = document.createElement('canvas');
-    sample.width = width;
-    sample.height = height;
-    const context = sample.getContext('2d', { willReadFrequently: true });
-    if (context === null) return undefined;
-    context.drawImage(canvas, 0, 0, width, height);
-    const pixels = context.getImageData(0, 0, width, height).data;
-    const buckets = new Set();
-    let paintedPixels = 0;
-    let signature = 2166136261;
-
-    for (let index = 0; index < pixels.length; index += 4) {
-      const alpha = pixels[index + 3];
-      const red = pixels[index];
-      const green = pixels[index + 1];
-      const blue = pixels[index + 2];
-      if (alpha !== 0 && (red > 8 || green > 8 || blue > 8)) paintedPixels += 1;
-      buckets.add(\`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`);
-      signature ^= (red >> 3) | ((green >> 3) << 5) | ((blue >> 3) << 10) | ((alpha >> 6) << 15);
-      signature = Math.imul(signature, 16777619) >>> 0;
-    }
-
-    return {
-      colorBuckets: buckets.size,
-      paintedPixels,
-      paintedRatio: paintedPixels / (width * height),
-      signature,
-    };
-  };
-  const canvas = Array.from(document.querySelectorAll('canvas')).find((candidate) =>
-    candidate.getAttribute('aria-label') === 'Virtual texturing plane'
-  );
-  if (canvas === undefined) return { ok: false, reason: 'missing virtual texturing canvas' };
-
-  const rect = canvas.getBoundingClientRect();
-  const sample = sampleCanvas(canvas);
-  return {
-    backingHeight: canvas.height,
-    backingWidth: canvas.width,
-    ok: sample !== undefined && canvas.width > 0 && canvas.height > 0,
-    rect: {
-      bottom: rect.bottom,
-      height: rect.height,
-      left: rect.left,
-      right: rect.right,
-      top: rect.top,
-      width: rect.width,
-    },
-    sample,
-  };
-})()
-`;
 
 const installTextClipboardReadTextTrap = async (session) => evaluate(session, `
 (() => {
@@ -2953,12 +2592,6 @@ const main = async () => {
         state = {
           ...state,
           textInteraction: await runTextInteractionCdpSmoke(session),
-        };
-      }
-      if (route.id === 'virtual-texturing') {
-        state = {
-          ...state,
-          virtualTexturingInteraction: await runVirtualTexturingInteractionCdpSmoke(session),
         };
       }
       assertRoute(route, state);

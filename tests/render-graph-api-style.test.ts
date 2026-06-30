@@ -12,9 +12,7 @@ const publicPackageJsonPaths = [
   'packages/renderer-webgl/package.json',
   'packages/royal-tarstate-lens/package.json'
 ] as const;
-const testingOnlyPublicExportSpecifiers = new Set([
-  '@royal/renderer-webgl/virtual-texturing/testing'
-]);
+const testingOnlyPublicExportSpecifiers = new Set<string>();
 const ignoredDirectories = new Set([
   'coverage',
   'dist',

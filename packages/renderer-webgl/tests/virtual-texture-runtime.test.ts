@@ -207,7 +207,8 @@ describe("VirtualTextureRuntime", () => {
     runtime.makeResident({ mip: 0, x: 1, y: 0 }, 2);
     runtime.drainDirtyEntries();
 
-    const originalValues = Map.prototype.values;
+    const originalValues = Object.getOwnPropertyDescriptor(Map.prototype, "values")
+      ?.value as typeof Map.prototype.values;
     let iteratedMapValues = 0;
     let inserted: ReturnType<VirtualTextureRuntime["makeResident"]> | null = null;
     Map.prototype.values = function patchedValues(this: Map<unknown, unknown>) {

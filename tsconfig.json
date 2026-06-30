@@ -26,9 +26,6 @@
       "@royal/renderer-webgl/capabilities": [
         "./packages/renderer-webgl/src/capabilities.ts"
       ],
-      "@royal/renderer-webgl/virtual-texturing": [
-        "./packages/renderer-webgl/src/virtual-texturing.ts"
-      ],
       "@royal/renderer-webgl/virtual-texturing/testing": [
         "./packages/renderer-webgl/src/virtual-texture-testing.ts"
       ],

@@ -47,6 +47,14 @@ export interface TransformOptions {
 
 const identityScale: Vec3 = [1, 1, 1];
 
+export const defineCoordinateSystem = (system: CoordinateSystem): CoordinateSystem => {
+  if (system.up.axis === system.forward.axis) {
+    throw new Error('Coordinate system up and forward axes must differ');
+  }
+
+  return system;
+};
+
 export const zUpLeftHanded: CoordinateSystem = defineCoordinateSystem({
   forward: { axis: 'y', sign: 1 },
   handedness: 'left',
@@ -60,14 +68,6 @@ export const yUpRightHanded: CoordinateSystem = defineCoordinateSystem({
   unit: 'meter',
   up: { axis: 'y', sign: 1 }
 });
-
-export function defineCoordinateSystem(system: CoordinateSystem): CoordinateSystem {
-  if (system.up.axis === system.forward.axis) {
-    throw new Error('Coordinate system up and forward axes must differ');
-  }
-
-  return system;
-}
 
 export const sceneSource = (source: SceneSource): SceneSource => ({
   coordinateSystem: defineCoordinateSystem(source.coordinateSystem),

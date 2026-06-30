@@ -55,6 +55,54 @@ describe('texture descriptors', () => {
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
   });
 
+  it('normalizes texture asset src options into asset references', () => {
+    const fallback = solidTexture({ color: [0.1, 0.2, 0.3, 1] });
+    const asset = textureAsset({
+      colorSpace: 'srgb',
+      fallback,
+      revision: 'v2',
+      sampler: {
+        magFilter: 'linear',
+        minFilter: 'linear-mipmap-linear',
+        wrapS: 'repeat',
+        wrapT: 'repeat'
+      },
+      src: '/textures/albedo.png'
+    });
+
+    expect(asset).toEqual({
+      colorSpace: 'srgb',
+      fallback,
+      id: '/textures/albedo.png',
+      kind: 'asset',
+      revision: 'v2',
+      sampler: {
+        magFilter: 'linear',
+        minFilter: 'linear-mipmap-linear',
+        wrapS: 'repeat',
+        wrapT: 'repeat'
+      },
+      uri: '/textures/albedo.png'
+    });
+    expect(textureAsset({
+      uri: '/textures/roughness.png'
+    })).toEqual({
+      id: '/textures/roughness.png',
+      kind: 'asset',
+      uri: '/textures/roughness.png'
+    });
+    expect(textureAsset({
+      id: 'roughness',
+      src: '/textures/roughness.png'
+    })).toEqual({
+      id: 'roughness',
+      kind: 'asset',
+      uri: '/textures/roughness.png'
+    });
+    expectTypeOf(asset).toEqualTypeOf<TextureAssetRef>();
+    expectTypeOf(asset).toMatchTypeOf<TextureRef>();
+  });
+
   it('normalizes virtual texture asset descriptors without renderer runtime details', () => {
     const fallback = solidTexture({
       color: [0.5, 0.5, 0.5, 1],

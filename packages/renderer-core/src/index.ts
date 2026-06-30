@@ -158,6 +158,42 @@ export {
   wrapEditableText
 } from './editable-text';
 export type {
+  EditableTextCaretSelectionOptions,
+  EditableTextClipboardShortcut,
+  EditableTextClipboardShortcutIntent,
+  EditableTextEndpointSelectionOptions,
+  EditableTextEnterKeyIntent,
+  EditableTextInputMode,
+  EditableTextKeyInput,
+  EditableTextKeyIntent,
+  EditableTextKeyIntentOptions
+} from './editable-text-input';
+export {
+  clampEditableTextSelection,
+  editableTextAllSelection,
+  editableTextHasSelection,
+  editableTextKeyIntent,
+  editableTextSelectedRange,
+  editableTextSelectedText,
+  editableTextSelectionAtCaret,
+  editableTextSelectionFromEndpoint
+} from './editable-text-input';
+export type {
+  EditableTextClipboardMenuEnabled,
+  EditableTextMenuAction,
+  EditableTextMenuCommand,
+  EditableTextMenuCommandOptions,
+  EditableTextMenuCommandRect,
+  EditableTextMenuLayout,
+  EditableTextMenuLayoutOptions
+} from './editable-text-menu';
+export {
+  editableTextClipboardMenuCommands,
+  editableTextMenuCommand,
+  editableTextMenuCommandAt,
+  layoutEditableTextMenu
+} from './editable-text-menu';
+export type {
   EditableTextCommand,
   EditableTextCommandState,
   EditableTextDeleteBackwardCommand,

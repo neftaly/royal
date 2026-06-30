@@ -121,8 +121,7 @@ describe("lowerMaterialBaseColorBinding", () => {
 
   it("uses the renderer default grey as the asset fallback color when none is declared", () => {
     const source = textureAsset({
-      id: "albedo",
-      uri: "https://example.test/albedo.png",
+      src: "https://example.test/albedo.png",
     });
     const textureCache = {
       loadTextureAssetBaseColor: vi.fn(() => ({ kind: "loading" } as const)),
@@ -134,6 +133,10 @@ describe("lowerMaterialBaseColorBinding", () => {
       fallbackColor: [0.5, 0.5, 0.5, 1],
       kind: "asset",
       source,
+    });
+    expect(source).toMatchObject({
+      id: "https://example.test/albedo.png",
+      uri: "https://example.test/albedo.png",
     });
   });
 

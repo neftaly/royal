@@ -62,7 +62,25 @@ export interface SolidTextureOptions {
   readonly revision?: TextureRevision;
 }
 
-export type TextureAssetOptions = Omit<TextureAssetRef, 'kind'>;
+interface TextureAssetBaseOptions {
+  readonly colorSpace?: TextureColorSpace;
+  readonly fallback?: SolidTextureRef;
+  readonly id?: string;
+  readonly revision?: TextureRevision;
+  readonly sampler?: TextureSampler;
+}
+
+export interface TextureAssetSrcOptions extends TextureAssetBaseOptions {
+  readonly src: string;
+  readonly uri?: never;
+}
+
+export interface TextureAssetUriOptions extends TextureAssetBaseOptions {
+  readonly src?: never;
+  readonly uri: string;
+}
+
+export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOptions;
 
 export type VirtualTextureAssetOptions = Omit<VirtualTextureAssetRef, 'kind'>;
 
@@ -74,15 +92,21 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => (
   ...(options.revision === undefined ? {} : { revision: options.revision })
 });
 
-export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => ({
-  kind: 'asset',
-  ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-  ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
-  id: options.id,
-  ...(options.revision === undefined ? {} : { revision: options.revision }),
-  ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
-  uri: options.uri
-});
+export function textureAsset(options: TextureAssetSrcOptions): TextureAssetRef;
+export function textureAsset(options: TextureAssetUriOptions): TextureAssetRef;
+export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
+  const uri = options.src ?? options.uri;
+
+  return {
+    kind: 'asset',
+    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
+    id: options.id ?? uri,
+    ...(options.revision === undefined ? {} : { revision: options.revision }),
+    ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
+    uri
+  };
+}
 
 export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => ({
   kind: 'virtual-asset',

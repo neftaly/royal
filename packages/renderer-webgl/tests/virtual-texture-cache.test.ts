@@ -74,6 +74,13 @@ const jsonResponse = (value: unknown): Response =>
     headers: { "content-type": "application/json" },
   });
 
+const requestInputUri = (input: RequestInfo | URL): string => {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+
+  return input.url;
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -114,7 +121,7 @@ describe("VirtualTextureCache", () => {
   it("creates distinct entries when revision or manifest URI changes", async () => {
     const { counts, gl } = fakeVirtualTextureGl();
     const fetchManifest = vi.fn((input: RequestInfo | URL) => {
-      const uri = String(input);
+      const uri = requestInputUri(input);
       return Promise.resolve(jsonResponse(manifest(uri)));
     });
     vi.stubGlobal("fetch", fetchManifest);
@@ -169,7 +176,7 @@ describe("VirtualTextureCache", () => {
     const { gl } = fakeVirtualTextureGl();
     const pageRequests: string[] = [];
     const fetchAsset = vi.fn((input: RequestInfo | URL) => {
-      const uri = String(input);
+      const uri = requestInputUri(input);
       if (uri === "https://assets.example.test/vt/terrain.vt.json") {
         return Promise.resolve(jsonResponse(manifest("terrain")));
       }

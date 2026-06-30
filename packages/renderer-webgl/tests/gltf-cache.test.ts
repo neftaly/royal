@@ -52,11 +52,13 @@ const loadBounds = async (
   return cache.getBounds(node);
 };
 
+const triangleSrc = "https://example.test/triangle.gltf";
+
 const triangleAsset = (
   overrides: Partial<Parameters<typeof gltf>[0]["asset"]> = {},
 ): Parameters<typeof gltf>[0]["asset"] => ({
   id: "triangle",
-  uri: "https://example.test/triangle.gltf",
+  uri: triangleSrc,
   ...overrides,
 });
 
@@ -101,7 +103,7 @@ describe("GltfCache bounds", () => {
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
     const node = gltf({
-      asset: triangleAsset(),
+      src: triangleSrc,
       transform: {
         position: [10, 1, -2],
         rotation: [0, 0, 0],
@@ -124,7 +126,7 @@ describe("GltfCache bounds", () => {
     installFixture();
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ asset: triangleAsset() });
+    const node = gltf({ src: triangleSrc });
 
     const bounds = await loadBounds(cache, node);
 
@@ -246,7 +248,7 @@ describe("GltfCache textures", () => {
     installFixture(undefined, () => imagePromise);
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ asset: triangleAsset() });
+    const node = gltf({ src: triangleSrc });
 
     expect(cache.get(node)).toBeUndefined();
     await waitFor(() => cache.get(node) !== undefined);
@@ -255,12 +257,12 @@ describe("GltfCache textures", () => {
     expect(asset).toBeDefined();
     const primitive = asset!.primitives[0]!;
     const baseColorTexture = primitive.material.baseColorTexture;
-    const textureIdentity = "triangle\u0000https://example.test/triangle.gltf\u00000";
+    const textureIdentity = "https://example.test/triangle.gltf\u0000https://example.test/triangle.gltf\u00000";
     expect(primitive.material.index).toBe(0);
     expect(baseColorTexture).toMatchObject({
       identity: textureIdentity,
       source: {
-        documentId: "triangle\u0000https://example.test/triangle.gltf",
+        documentId: "https://example.test/triangle.gltf\u0000https://example.test/triangle.gltf",
         id: textureIdentity,
         image: {
           index: 0,
@@ -294,7 +296,7 @@ describe("GltfCache textures", () => {
     const { gl } = fakeGl();
     const onReady = vi.fn();
     const cache = new GltfCache(gl, onReady);
-    const node = gltf({ asset: triangleAsset() });
+    const node = gltf({ src: triangleSrc });
 
     expect(cache.get(node)).toBeUndefined();
     await waitFor(() => cache.get(node) !== undefined);
@@ -328,7 +330,7 @@ describe("GltfCache textures", () => {
     installFixture(undefined, () => imagePromise);
     const { counts, gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ asset: triangleAsset() });
+    const node = gltf({ src: triangleSrc });
 
     expect(cache.get(node)).toBeUndefined();
     await waitFor(() => cache.get(node) !== undefined);

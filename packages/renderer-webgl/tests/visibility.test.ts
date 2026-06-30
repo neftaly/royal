@@ -37,6 +37,7 @@ const modelAsset = {
   id: "model",
   uri: "https://example.test/model.gltf",
 };
+const modelSrc = "https://example.test/model.gltf";
 
 const camera = orthographicCamera({
   position: [0, 0, 5],
@@ -70,7 +71,7 @@ describe("visibility packets", () => {
       origin: [-1, 1, 0.25],
       text: "a",
     });
-    const model = gltf({ asset: modelAsset });
+    const model = gltf({ src: modelSrc });
     const packets = buildVisibilityPackets(pass({
       camera,
       children: [box, label, model],

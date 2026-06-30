@@ -34,10 +34,7 @@ const redTexture = solidTexture({ color: [1, 0, 0, 1] });
 const material = standardMaterial({ baseColor: redTexture });
 const unlit = unlitMaterial({ baseColor: redTexture });
 const light = directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] });
-const triangleAsset = {
-  id: 'triangle',
-  uri: 'https://example.test/triangle.gltf'
-};
+const triangleSrc = 'https://example.test/triangle.gltf';
 const renderScene = scene({
   children: [
     pass({
@@ -329,7 +326,7 @@ describe('WebGL resource lifetime', () => {
           camera,
           children: [
             light,
-            gltf({ asset: triangleAsset })
+            gltf({ src: triangleSrc })
           ]
         })
       ]
@@ -361,7 +358,7 @@ describe('WebGL resource lifetime', () => {
           children: [
             light,
             gltf({
-              asset: triangleAsset,
+              src: triangleSrc,
               transform: {
                 position: [1000, 0, 0],
                 rotation: [0, 0, 0]
@@ -396,7 +393,7 @@ describe('WebGL resource lifetime', () => {
           camera,
           children: [
             light,
-            gltf({ asset: triangleAsset })
+            gltf({ src: triangleSrc })
           ]
         })
       ]

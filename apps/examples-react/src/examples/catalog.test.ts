@@ -18,9 +18,15 @@ const createElementTargets = (source: string): readonly string[] =>
 const isVirtualTexturingExample = (example: Example): boolean =>
   example.id.includes('virtual-texturing') ||
   example.title.toLowerCase().includes('virtual textur');
+const hasVirtualTexturingCatalogIdentity = (example: Example): boolean =>
+  String(example.id) === 'virtual-texturing' ||
+  String(example.path) === '/virtual-texturing' ||
+  String(example.sourceFile) === 'examples/cases/VirtualTexturingPlane.tsx';
 const lineNumberAtOffset = (source: string, offset: number): number =>
   source.slice(0, offset).split('\n').length;
 const compactSourceMatch = (source: string): string => source.replace(/\s+/g, ' ').trim();
+const explicitTextPrimitiveCount = (source: string): number =>
+  source.match(/<text\b/g)?.length ?? 0;
 const readCaseSource = (sourceFile: string): Promise<string> =>
   readFile(path.join(srcDir, 'examples/cases', sourceFile), 'utf8');
 const readVirtualTexturingSourceParts = async (): Promise<{
@@ -61,20 +67,6 @@ const readFormControlsSourceParts = async (): Promise<{
     modelSource,
     sceneSource,
   };
-};
-
-const readSimpleSceneParts = async (
-  componentName: 'GltfHelmet' | 'SvgGateway' | 'TextureMaterials' | 'WireframeCube',
-): Promise<{
-  readonly hostSource: string;
-  readonly sceneSource: string;
-}> => {
-  const [hostSource, sceneSource] = await Promise.all([
-    readCaseSource(`${componentName}.tsx`),
-    readCaseSource(`${componentName}.scene.tsx`),
-  ]);
-
-  return { hostSource, sceneSource };
 };
 
 type ExampleResearchBoundaryHit = {
@@ -297,7 +289,6 @@ describe('examples list', () => {
       'Form Controls',
       'Texture Materials',
       'SVG Gateway',
-      'Virtual Texturing',
       'glTF Subset Helmet',
     ]);
     expect(examples.map((example) => example.path)).toEqual([
@@ -307,7 +298,6 @@ describe('examples list', () => {
       '/form-controls',
       '/texture-materials',
       '/svg-gateway',
-      '/virtual-texturing',
       '/gltf-helmet',
     ]);
   });
@@ -343,23 +333,18 @@ describe('examples list', () => {
     );
   });
 
-  it('keeps the HelloCube Royal JSX scene separate from its React host component', async () => {
-    const [hostSource, sceneSource] = await Promise.all([
-      readFile(path.join(srcDir, 'examples/cases/HelloCube.tsx'), 'utf8'),
-      readFile(path.join(srcDir, 'examples/cases/HelloCube.scene.tsx'), 'utf8'),
-    ]);
+  it('keeps the HelloCube Royal JSX visible in its route component', async () => {
+    const source = await readCaseSource('HelloCube.tsx');
 
-    expect(hostSource).not.toContain('@jsxImportSource @royal/react');
-    expect(hostSource).toContain('<Canvas aria-label="Lit cube" rootOptions={rootOptions}>');
-    expect(hostSource).toContain('{helloCubeScene()}');
-    expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
-
-    expect(sceneSource).toContain('/** @jsxImportSource @royal/react */');
-    expect(sceneSource).toContain('export const helloCubeScene = (): RenderRoot =>');
-    expect(sceneSource).toContain('<scene>');
-    expect(sceneSource).toContain('<mesh');
-    expect(sceneSource).not.toMatch(/\bCanvas\b/);
-    expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
+    expect(source).toContain('/** @jsxImportSource @royal/react */');
+    expect(source).toContain('createElement(Canvas, {');
+    expect(source).toContain("'aria-label': 'Lit cube'");
+    expect(source).toContain('children: scene');
+    expect(source).toContain('<scene>');
+    expect(source).toContain('<mesh');
+    expect(source).toContain('standardMaterial');
+    expect(source).not.toContain('helloCubeScene');
+    expect(source).not.toMatch(/\bfrom\s+['"]\.\/HelloCube\.scene['"]/);
   });
 
   it('keeps the VirtualTexturingPlane Royal JSX scene separate from its React host component', async () => {
@@ -385,44 +370,68 @@ describe('examples list', () => {
     expect(textureSource).toContain('textureAsset({');
   });
 
-  it('keeps simple Royal JSX scenes separate from their React host components', async () => {
+  it('keeps SVG Gateway and glTF Helmet Royal JSX visible in their route components', async () => {
     const cases = [
       {
-        componentName: 'WireframeCube',
-        hostCall: '{wireframeScene(frame)}',
-        sceneExport: 'export const wireframeScene = (frame: number): RenderRoot =>',
-      },
-      {
         componentName: 'GltfHelmet',
-        hostCall: '{helmetScene()}',
-        sceneExport: 'export const helmetScene = (): RenderRoot =>',
-      },
-      {
-        componentName: 'TextureMaterials',
-        hostCall: '{materialScene()}',
-        sceneExport: 'export const materialScene = (): RenderRoot =>',
+        ariaLabel: "'aria-label': 'glTF DamagedHelmet'",
+        apiText: '<gltf',
+        removedSceneCall: 'helmetScene',
+        removedSceneImport: /\bfrom\s+['"]\.\/GltfHelmet\.scene['"]/,
       },
       {
         componentName: 'SvgGateway',
-        hostCall: '{svgGatewayScene(activeId)}',
-        sceneExport: 'export const svgGatewayScene = (activeId?: SvgGatewayExampleId): RenderRoot =>',
+        ariaLabel: "'aria-label': 'SVG gateway'",
+        apiText: 'createSvgGatewayGeometry',
+        removedSceneCall: 'svgGatewayScene',
+        removedSceneImport: /\bfrom\s+['"]\.\/SvgGateway\.scene['"]/,
       },
     ] as const;
 
-    for (const { componentName, hostCall, sceneExport } of cases) {
-      const { hostSource, sceneSource } = await readSimpleSceneParts(componentName);
+    for (const { componentName, ariaLabel, apiText, removedSceneCall, removedSceneImport } of cases) {
+      const source = await readCaseSource(`${componentName}.tsx`);
 
-      expect(hostSource).not.toContain('@jsxImportSource @royal/react');
-      expect(hostSource).toContain('<Canvas');
-      expect(hostSource).toContain(hostCall);
-      expect(hostSource).not.toMatch(/\b(?:React\.)?createElement\s*\(\s*Canvas\b/);
-      expect(hostSource).not.toContain('@royal/renderer-core');
+      expect(source).toContain('/** @jsxImportSource @royal/react */');
+      expect(source).toContain('createElement(Canvas, {');
+      expect(source).toContain(ariaLabel);
+      expect(source).toContain('children: scene');
+      expect(source).toContain('<scene>');
+      expect(source).toContain(apiText);
+      expect(source).not.toContain(removedSceneCall);
+      expect(source).not.toMatch(removedSceneImport);
+    }
+  });
 
-      expect(sceneSource).toContain('/** @jsxImportSource @royal/react */');
-      expect(sceneSource).toContain(sceneExport);
-      expect(sceneSource).toContain('<scene>');
-      expect(sceneSource).not.toMatch(/\bCanvas\b/);
-      expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
+  it('keeps simple Royal JSX scenes visible in their route components', async () => {
+    const cases = [
+      {
+        sourceFile: 'WireframeCube.tsx',
+        ariaLabel: "'aria-label': 'Wireframe cube'",
+        materialApi: 'wireframeMaterial',
+        removedSceneCall: 'wireframeScene',
+        removedSceneImport: /\bfrom\s+['"]\.\/WireframeCube\.scene['"]/,
+      },
+      {
+        sourceFile: 'TextureMaterials.tsx',
+        ariaLabel: "'aria-label': 'Texture materials'",
+        materialApi: 'textureAsset',
+        removedSceneCall: 'materialScene',
+        removedSceneImport: /\bfrom\s+['"]\.\/TextureMaterials\.scene['"]/,
+      },
+    ] as const;
+
+    for (const { sourceFile, ariaLabel, materialApi, removedSceneCall, removedSceneImport } of cases) {
+      const source = await readCaseSource(sourceFile);
+
+      expect(source).toContain('/** @jsxImportSource @royal/react */');
+      expect(source).toContain('createElement(Canvas, {');
+      expect(source).toContain(ariaLabel);
+      expect(source).toContain('children: scene');
+      expect(source).toContain('<scene>');
+      expect(source).toContain('<mesh');
+      expect(source).toContain(materialApi);
+      expect(source).not.toContain(removedSceneCall);
+      expect(source).not.toMatch(removedSceneImport);
     }
   });
 
@@ -454,24 +463,26 @@ describe('examples list', () => {
     expect(sceneSource).toContain('<orthographicCamera');
     expect(sceneSource).toContain('<mesh');
     expect(sceneSource).toContain('<text');
+    expect(explicitTextPrimitiveCount(sceneSource)).toBeGreaterThanOrEqual(5);
     expect(sceneSource).toContain('createEditableTextFragment');
     expect(sceneSource).toContain('boxGeometry');
     expect(sceneSource).toContain('unlitMaterial');
     expect(sceneSource).toContain('const Form = (');
-    expect(sceneSource).toContain('const Heading = (');
     expect(sceneSource).toContain('const Field = (');
     expect(sceneSource).toContain('const TextInput = (');
     expect(sceneSource).toContain('const TextArea = (');
     expect(sceneSource).toContain('const Checkbox = (');
     expect(sceneSource).toContain('const Button = (');
-    expect(sceneSource).toContain('readonly text: string');
     expect(compactSceneSource).toContain('<Form id="contact-form" bounds={layout.form}>');
-    expect(compactSceneSource).toContain('<Heading level={1} bounds={layout.heading} text="Message" />');
+    expect(compactSceneSource).toContain(
+      '<text color={palette.ink} fontSize={0.38} lineHeight={0.48} origin={[layout.heading.x, layout.heading.y, 0.12]} text="Message" />',
+    );
     expect(compactSceneSource).toMatch(/<Field id="title-field" label="Title" bounds=\{layout\.fields\.title\} active=\{model\.activeTextId === title\.id\}\s*> \{\( <TextInput id="title" active=\{model\.activeTextId === title\.id\} control=\{title\} font=\{font\} \/> \) as RoyalNodeChild\} <\/Field>/);
     expect(compactSceneSource).toContain('<TextArea id="notes" label="Notes" bounds={layout.fields.notes} active={model.activeTextId === notes.id} control={notes} font={font} />');
     expect(compactSceneSource).toContain('<Checkbox id="updates" checked={model.checkbox.checked} focused={model.focusedId === model.checkbox.id} bounds={layout.checkbox} label={model.checkbox.label} />');
     expect(compactSceneSource).toContain('<Button id="send" focused={model.focusedId === model.button.id} bounds={layout.button} label={model.button.label} />');
     expect(sceneSource).not.toMatch(/\bconst\s+CanvasForm\b|<CanvasForm\b/);
+    expect(sceneSource).not.toMatch(/\bconst\s+Heading\b|type\s+HeadingProps\b|<Heading\b/);
     expect(sceneSource).not.toMatch(/\bconst\s+FormHeading\b|<FormHeading\b/);
     expect(sceneSource).not.toMatch(/\bconst\s+CheckboxInput\b|<CheckboxInput\b/);
     expect(sceneSource).not.toMatch(/\bconst\s+SubmitButton\b|<SubmitButton\b/);
@@ -486,6 +497,7 @@ describe('examples list', () => {
     expect(sceneSource).not.toContain('readonly children: string');
     expect(sceneSource).not.toContain('placeholder');
     expect(sceneSource).not.toMatch(/\btypeof\s+children\s*===\s*['"]string['"]/);
+    expect(sceneSource).not.toMatch(/\bconst\s+Text\b|type\s+TextProps\b|<Text\b|textNode/);
     expect(sceneSource).not.toMatch(/<Text\b[^>]*>\s*\{[^}]+\}\s*<\/Text>/);
     expect(sceneSource).not.toMatch(/\bCanvas\s*[({<]/);
     expect(sceneSource).not.toMatch(/\bfrom\s+['"]react['"]/);
@@ -666,14 +678,12 @@ describe('examples list', () => {
     expect(examples.map((example) => example.maturity)).toEqual(
       examples.map(() => 'product'),
     );
-    expect(examples).toHaveLength(8);
+    expect(examples).toHaveLength(7);
   });
 
-  it('keeps fixture-only VT artifacts out of primary examples', () => {
-    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing');
-
-    expect(virtualTexturing?.path).toBe('/virtual-texturing');
-    expect(virtualTexturing?.maturity).toBe('product');
+  it('keeps the descriptor-only VT probe out of primary examples', () => {
+    expect(examples.some(hasVirtualTexturingCatalogIdentity)).toBe(false);
+    expect(examples.some(isVirtualTexturingExample)).toBe(false);
     expect(examples.some((example) => example.source.includes('page-cache-debug-overlay'))).toBe(
       false,
     );
@@ -756,81 +766,85 @@ describe('examples list', () => {
 
   it('keeps the DamagedHelmet route on the public glTF API subset', async () => {
     const helmet = examples.find((example) => example.id === 'gltf-helmet');
-    const { sceneSource } = await readSimpleSceneParts('GltfHelmet');
+    const source = await readCaseSource('GltfHelmet.tsx');
 
     expect(helmet?.title).toBe('glTF Subset Helmet');
     expect(helmet?.path).toBe('/gltf-helmet');
-    expect(sceneSource).toContain('<gltf');
-    expect(sceneSource).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
-    expect(sceneSource).toContain('asset={helmetAsset}');
-    expect(sceneSource).toContain('directionalLight');
-    expect(sceneSource).toContain('perspectiveCamera');
+    expect(source).toContain('<gltf');
+    expect(source).toContain("import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf'");
+    expect(source).toContain('src={helmetSrc}');
+    expect(source).not.toContain('const helmetAsset = {');
+    expect(source).not.toContain('asset={helmetAsset}');
+    expect(source).toContain('directionalLight');
+    expect(source).toContain('perspectiveCamera');
   });
 
   it('keeps the texture materials route on the textured material API', async () => {
     const materials = examples.find((example) => example.id === 'texture-materials');
-    const { sceneSource } = await readSimpleSceneParts('TextureMaterials');
+    const source = await readCaseSource('TextureMaterials.tsx');
 
     expect(materials?.path).toBe('/texture-materials');
-    expect(sceneSource).toContain('standardMaterial');
-    expect(sceneSource).toContain('solidTexture');
-    expect(sceneSource).toContain('textureAsset');
-    expect(sceneSource).toContain("fallback: fallbackTexture");
-    expect(sceneSource).toContain(
+    expect(source).toContain('standardMaterial');
+    expect(source).toContain('solidTexture');
+    expect(source).toContain('textureAsset');
+    expect(source).toContain("fallback: fallbackTexture");
+    expect(source).toContain(
       "import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg'",
     );
-    expect(sceneSource).toContain('<mesh');
+    expect(source).toContain('<mesh');
   });
 
-  it('demonstrates the public SVG gateway as a supported texture and picking route', async () => {
+  it('demonstrates the public SVG gateway as a supported rendering route', async () => {
     const svgGateway = examples.find((example) => example.id === 'svg-gateway');
-    const { hostSource, sceneSource } = await readSimpleSceneParts('SvgGateway');
+    const source = await readCaseSource('SvgGateway.tsx');
 
     expect(svgGateway?.maturity).toBe('product');
     expect(svgGateway?.path).toBe('/svg-gateway');
     expect(svgGateway?.title).toBe('SVG Gateway');
-    expect(hostSource).toContain('canvasPointToWorld');
-    expect(hostSource).toContain('svgGatewayHitTargetAt');
-    expect(hostSource).toContain('data-svg-gateway-active-id');
-    expect(hostSource).toContain('{svgGatewayScene(activeId)}');
-    expect(hostSource).not.toContain('@royal/renderer-core');
-
-    expect(sceneSource).toContain("from '@royal/renderer-core/svg'");
-    expect(sceneSource).toContain('createSvgGatewayGeometry');
-    expect(sceneSource).toContain('createSvgRasterTextureSource');
-    expect(sceneSource).toContain('svgPathToContours');
-    expect(sceneSource).toContain('geometry.hitRegion.contains');
-    expect(sceneSource).toContain('textureAsset');
-    expect(sceneSource).toContain('uri: svgToDataUri(shape.svg)');
-    expect(sceneSource).toContain('<mesh');
-    expect(sceneSource).toContain("label: 'Polygon pick'");
-    expect(sceneSource).toContain("label: 'Arc path pick'");
-    expect(sceneSource).toContain("label: 'Subpath hole'");
-    expect(sceneSource).toContain("role: 'hole'");
-    expect(sceneSource).not.toMatch(/\bsvgMesh\b|\bSvgMesh\b|kind:\s*['"]svg-gateway-geometry['"]/);
-    expect(sceneSource).not.toContain('@royal/renderer-webgl');
+    expect(source).toContain("from '@royal/renderer-core/svg'");
+    expect(source).toContain('createSvgGatewayGeometry');
+    expect(source).toContain('createSvgRasterTextureSource');
+    expect(source).toContain('textureAsset');
+    expect(source).toContain('src: svgToDataUri(badgeSvg)');
+    expect(source).toContain('<mesh');
+    expect(source).toContain('<text');
+    expect(explicitTextPrimitiveCount(source)).toBeGreaterThanOrEqual(4);
+    expect(source).toContain('text="SVG gateway"');
+    expect(source).toContain('text="createSvgGatewayGeometry"');
+    expect(source).toContain('text="createSvgRasterTextureSource"');
+    expect(source).toContain('text="textureAsset"');
+    expect(source).not.toContain('canvasPointToWorld');
+    expect(source).not.toContain('data-svg-gateway-active-id');
+    expect(source).not.toContain('hitRegion.contains');
+    expect(source).not.toMatch(/\btextNode\b|\bconst\s+Text\b|type\s+TextProps\b|<Text\b/);
+    expect(source).not.toContain('labelFromChildren');
+    expect(source).not.toContain('textFromChildren');
+    expect(source).not.toMatch(/\bsvgMesh\b|\bSvgMesh\b|kind:\s*['"]svg-gateway-geometry['"]/);
+    expect(source).not.toContain('@royal/renderer-webgl');
   });
 
   it('keeps the wireframe route on the backend WebGL wireframe path', async () => {
     const wireframe = examples.find((example) => example.id === 'wireframe');
-    const { sceneSource } = await readSimpleSceneParts('WireframeCube');
+    const source = await readCaseSource('WireframeCube.tsx');
 
     expect(wireframe?.path).toBe('/wireframe');
-    expect(sceneSource).toContain('wireframeMaterial');
-    expect(sceneSource).toContain('<mesh');
-    expect(sceneSource).not.toContain('barGeometry');
-    expect(sceneSource).not.toMatch(/\bMeshLine\b|\bmeshline\b/);
+    expect(source).toContain('wireframeMaterial');
+    expect(source).toContain('<mesh');
+    expect(source).not.toContain('barGeometry');
+    expect(source).not.toMatch(/\bMeshLine\b|\bmeshline\b/);
   });
 
-  it('keeps the virtual texturing route on a focused product texture example', async () => {
-    const virtualTexturing = examples.find((example) => example.id === 'virtual-texturing');
+  it('keeps the quarantined virtual texturing probe visibly non-product', async () => {
     const { combinedSource, hostSource, sceneSource, textureSource } =
       await readVirtualTexturingSourceParts();
 
-    expect(virtualTexturing?.maturity).toBe('product');
-    expect(virtualTexturing?.path).toBe('/virtual-texturing');
-    expect(virtualTexturing?.title).toBe('Virtual Texturing');
-    expect(virtualTexturing?.sourceFile).toBe('examples/cases/VirtualTexturingPlane.tsx');
+    expect(examples.some(hasVirtualTexturingCatalogIdentity)).toBe(false);
+    expect(examples.some(isVirtualTexturingExample)).toBe(false);
+    expect(hostSource).toContain('Lab probe only');
+    expect(hostSource).toContain('not exported in the product catalog');
+    expect(hostSource).toContain('aria-label="Virtual texturing descriptor lab probe"');
+    expect(hostSource).toContain('data-example-maturity="lab-probe"');
+    expect(hostSource).toContain('data-product-demo="false"');
     expect(hostSource).toContain("type DragMode = 'pan' | 'rotate'");
     expect(hostSource).toContain('onWheel');
     expect(hostSource).toContain('onPointerDown');
@@ -865,7 +879,7 @@ describe('examples list', () => {
     expect(combinedSource).not.toContain('terrain');
   });
 
-  it('documents the VT route as a public descriptor preview with renderer lowering pending', async () => {
+  it('documents the quarantined VT source as a descriptor preview with renderer lowering pending', async () => {
     const { combinedSource, textureSource } = await readVirtualTexturingSourceParts();
 
     expect(textureSource).toContain('TODO(public-vt-descriptor)');
@@ -889,18 +903,18 @@ describe('examples list', () => {
     expect(vtTestingImporters).toEqual([]);
   });
 
-  it('reserves product VT examples for public descriptor material lowering', async () => {
+  it('reserves product VT examples for real renderer-backed material lowering', async () => {
     const productVirtualTexturingExamples = examples.filter(
       (example) => isVirtualTexturingExample(example) && example.maturity === 'product',
     );
     const { combinedSource } = await readVirtualTexturingSourceParts();
 
-    expect(productVirtualTexturingExamples.map((example) => example.id)).toEqual([
-      'virtual-texturing',
-    ]);
+    expect(productVirtualTexturingExamples).toEqual([]);
+    expect(combinedSource).toContain('renderer lowering is pending');
+    expect(combinedSource).toContain('PREVIEW TEXTURE ONLY');
 
     for (const example of productVirtualTexturingExamples) {
-      const source = example.id === 'virtual-texturing' ? combinedSource : example.source;
+      const source = example.source;
 
       expect(source).toContain('@royal/renderer-core');
       expect(source).toContain('@royal/react');

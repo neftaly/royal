@@ -2,8 +2,14 @@
 import {
   boxGeometry,
   clampTextIndex,
+  editableTextAllSelection,
   editableTextCaretPlacement as caretPlacement,
+  editableTextKeyIntent,
+  editableTextSelectedRange,
+  editableTextSelectedText,
   editableTextSelectionRects as selectionRects,
+  editableTextSelectionAtCaret,
+  editableTextSelectionFromEndpoint,
   layoutUiMenuCommands,
   layoutText,
   layoutEditableText,
@@ -831,8 +837,8 @@ export const RendererText = (): ReactNode => {
           }),
     [font, sampleText],
   );
-  const currentRange = sortedTextRange(selection);
-  const selectedText = sampleText.slice(currentRange.start, currentRange.end);
+  const currentRange = editableTextSelectedRange(sampleText, selection);
+  const selectedText = editableTextSelectedText(sampleText, selection);
   const hasSelection = currentRange.start !== currentRange.end;
   // Custom pointer menu commands do not receive ClipboardEvent.clipboardData;
   // paste stays on browser-dispatched paste events to avoid async read prompts.
@@ -1037,7 +1043,7 @@ export const RendererText = (): ReactNode => {
   };
 
   const replaceSelection = (insertText: string): void => {
-    const range = sortedTextRange(selection);
+    const range = editableTextSelectedRange(sampleText, selection);
     const nextText = `${sampleText.slice(0, range.start)}${insertText}${sampleText.slice(range.end)}`;
     replaceText(nextText, range.start + insertText.length);
   };
@@ -1163,17 +1169,14 @@ export const RendererText = (): ReactNode => {
   };
 
   const setCaret = (index: number, extend: boolean): void => {
-    const nextIndex = clampTextIndex(sampleText, index);
     setSelection((current) => {
-      const placement = editableLayout === undefined
-        ? undefined
-        : caretPlacement(editableLayout, nextIndex, current.focusLine);
-      const next = {
-        anchor: extend ? current.anchor : nextIndex,
-        anchorLine: extend ? current.anchorLine : placement?.line,
-        focus: nextIndex,
-        focusLine: placement?.line,
-      };
+      const next = editableTextSelectionAtCaret({
+        current,
+        extend,
+        index,
+        ...(editableLayout === undefined ? {} : { layout: editableLayout }),
+        text: sampleText,
+      });
 
       return sameSelection(current, next) ? current : next;
     });
@@ -1205,12 +1208,12 @@ export const RendererText = (): ReactNode => {
       maxMs: Math.max(hitTestMetricsRef.current.maxMs, elapsed),
     };
     setSelection((current) => {
-      const next = {
-        anchor: anchor?.index ?? (extend ? current.anchor : placement.index),
-        anchorLine: anchor?.line ?? (extend ? current.anchorLine : placement.line),
-        focus: placement.index,
-        focusLine: placement.line,
-      };
+      const next = editableTextSelectionFromEndpoint({
+        ...(anchor === undefined ? {} : { anchor }),
+        current,
+        extend,
+        focus: { index: placement.index, line: placement.line },
+      });
 
       return sameSelection(current, next) ? current : next;
     });
@@ -1219,36 +1222,30 @@ export const RendererText = (): ReactNode => {
   };
 
   const handleCanvasKeyDown = (event: KeyboardEvent<HTMLCanvasElement>): void => {
-    if (event.nativeEvent.isComposing) return;
-    const range = sortedTextRange(selection);
-    const hasSelection = range.start !== range.end;
+    const intent = editableTextKeyIntent({
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      isComposing: event.nativeEvent.isComposing,
+      key: event.key,
+      keyCode: event.keyCode,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    }, { mode: 'multiline' });
+    if (intent === undefined) return;
 
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-      event.preventDefault();
-      setSelection({
-        anchor: 0,
-        anchorLine: editableLayout === undefined ? undefined : caretPlacement(editableLayout, 0)?.line,
-        focus: sampleText.length,
-        focusLine: editableLayout === undefined
-          ? undefined
-          : caretPlacement(editableLayout, sampleText.length)?.line,
-      });
+    if (intent.type === 'clipboard-shortcut') {
+      runKeyboardClipboardShortcut(intent.shortcut);
       return;
     }
 
-    if ((event.metaKey || event.ctrlKey) && !event.altKey) {
-      const shortcutKey = event.key.toLowerCase();
-      if (shortcutKey === 'c' || shortcutKey === 'x' || shortcutKey === 'v') {
-        const action = shortcutKey === 'c' ? 'copy' : shortcutKey === 'x' ? 'cut' : 'paste';
-        runKeyboardClipboardShortcut(action);
-        return;
-      }
+    event.preventDefault();
+
+    if (intent.type === 'select-all') {
+      setSelection(editableTextAllSelection(sampleText, editableLayout));
+      return;
     }
 
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-    if (event.key === 'Backspace') {
-      event.preventDefault();
+    if (intent.type === 'delete-backward') {
       if (hasSelection) {
         replaceSelection('');
         return;
@@ -1259,8 +1256,7 @@ export const RendererText = (): ReactNode => {
       return;
     }
 
-    if (event.key === 'Delete') {
-      event.preventDefault();
+    if (intent.type === 'delete-forward') {
       if (hasSelection) {
         replaceSelection('');
         return;
@@ -1271,45 +1267,34 @@ export const RendererText = (): ReactNode => {
       return;
     }
 
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
+    if (intent.type === 'move-previous') {
       setCaret(
-        !event.shiftKey && hasSelection ? range.start : previousTextIndex(sampleText, selection.focus),
-        event.shiftKey,
+        intent.extend !== true && hasSelection ? currentRange.start : previousTextIndex(sampleText, selection.focus),
+        intent.extend === true,
       );
       return;
     }
 
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
+    if (intent.type === 'move-next') {
       setCaret(
-        !event.shiftKey && hasSelection ? range.end : nextTextIndex(sampleText, selection.focus),
-        event.shiftKey,
+        intent.extend !== true && hasSelection ? currentRange.end : nextTextIndex(sampleText, selection.focus),
+        intent.extend === true,
       );
       return;
     }
 
-    if (event.key === 'Home') {
-      event.preventDefault();
-      setCaret(0, event.shiftKey);
+    if (intent.type === 'move-start') {
+      setCaret(0, intent.extend === true);
       return;
     }
 
-    if (event.key === 'End') {
-      event.preventDefault();
-      setCaret(sampleText.length, event.shiftKey);
+    if (intent.type === 'move-end') {
+      setCaret(sampleText.length, intent.extend === true);
       return;
     }
 
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      replaceSelection('\n');
-      return;
-    }
-
-    if (event.key.length === 1) {
-      event.preventDefault();
-      replaceSelection(event.key);
+    if (intent.type === 'insert-text' || intent.type === 'replace-selection') {
+      replaceSelection(intent.text);
     }
   };
 

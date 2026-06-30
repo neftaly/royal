@@ -71,31 +71,6 @@ const rectFromTopLeft = (
 ): RenderNode =>
   rect(style, [x + style.width / 2, y - style.height / 2, z]);
 
-type TextProps = {
-  readonly color?: Rgba;
-  readonly fontSize?: number;
-  readonly lineHeight?: number;
-  readonly origin: Vec3;
-  readonly text: string;
-};
-
-const Text = ({
-  color = palette.ink,
-  fontSize = 0.2,
-  lineHeight = 0.28,
-  origin,
-  text,
-}: TextProps) =>
-  (
-    <text
-      color={color}
-      fontSize={fontSize}
-      lineHeight={lineHeight}
-      origin={origin}
-      text={text}
-    />
-  );
-
 type RoyalNodeChild = RenderNode | readonly RoyalNodeChild[] | null | undefined | false;
 
 type FormProps = {
@@ -108,18 +83,6 @@ const Form = ({ bounds, children }: FormProps) => (
   <>
     {rectFromTopLeft({ fill: palette.surface, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, -0.02)}
     {children}
-  </>
-);
-
-type HeadingProps = {
-  readonly bounds: RectBounds;
-  readonly text: string;
-  readonly level: 1;
-};
-
-const Heading = ({ bounds, text }: HeadingProps) => (
-  <>
-    <Text color={palette.ink} fontSize={0.38} lineHeight={0.48} origin={[bounds.x, bounds.y, 0.12]} text={text} />
   </>
 );
 
@@ -138,7 +101,7 @@ const fieldChromeNodes = ({
 
   return [
     (
-      <Text color={palette.muted} fontSize={0.17} lineHeight={0.24} origin={[bounds.x, bounds.y + 0.24, 0.12]} text={label} />
+      <text color={palette.muted} fontSize={0.17} lineHeight={0.24} origin={[bounds.x, bounds.y + 0.24, 0.12]} text={label} />
     ) as RenderNode,
     rectFromTopLeft({ fill: palette.shadow, height: bounds.height + 0.08, width: bounds.width + 0.08 }, bounds.x - 0.04, bounds.y + 0.02),
     rectFromTopLeft({ fill: border, height: bounds.height + 0.04, width: bounds.width + 0.04 }, bounds.x - 0.02, bounds.y + 0.02, 0.02),
@@ -236,8 +199,8 @@ const Checkbox = ({
     <>
       {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.border, height: 0.4, width: 0.4 }, boxX, boxY, 0.02)}
       {rectFromTopLeft({ fill, height: 0.28, width: 0.28 }, boxX + 0.06, boxY - 0.06, 0.06)}
-      <Text color={palette.bg} fontSize={0.25} lineHeight={0.25} origin={[boxX + 0.13, boxY - 0.29, 0.12]} text={checked ? 'x' : ''} />
-      <Text color={palette.ink} fontSize={0.2} lineHeight={0.28} origin={[boxX + 0.56, boxY - 0.28, 0.12]} text={label} />
+      <text color={palette.bg} fontSize={0.25} lineHeight={0.25} origin={[boxX + 0.13, boxY - 0.29, 0.12]} text={checked ? 'x' : ''} />
+      <text color={palette.ink} fontSize={0.2} lineHeight={0.28} origin={[boxX + 0.56, boxY - 0.28, 0.12]} text={label} />
     </>
   );
 };
@@ -256,7 +219,7 @@ const Button = ({
 }: ButtonProps) => (
   <>
     {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04)}
-    <Text color={[1, 1, 1, 1]} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
+    <text color={[1, 1, 1, 1]} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
   </>
 );
 
@@ -280,7 +243,15 @@ export const formControlsScene = (
           top={formControlsCameraBounds.top}
         />
         <Form id="contact-form" bounds={layout.form}>
-          {(<Heading level={1} bounds={layout.heading} text="Message" />) as RoyalNodeChild}
+          {(
+            <text
+              color={palette.ink}
+              fontSize={0.38}
+              lineHeight={0.48}
+              origin={[layout.heading.x, layout.heading.y, 0.12]}
+              text="Message"
+            />
+          ) as RoyalNodeChild}
           {(
             <Field
               id="title-field"

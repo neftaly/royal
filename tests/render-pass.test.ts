@@ -7,6 +7,7 @@ import {
   perspectiveCamera,
   solidTexture,
   standardMaterial,
+  type RenderNode,
   type RenderPass,
   type RenderRoot
 } from '@royal/renderer-core';
@@ -102,6 +103,34 @@ describe('render pass clearColor', () => {
     expect(renderPass.children[0]?.kind).toBe('text');
   });
 
+  it('accepts JSX glTF src as a render node child', () => {
+    const gltfChild = jsx('gltf', {
+      src: '/DamagedHelmet/DamagedHelmet.gltf',
+      transform: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1.5, 1.5, 1.5]
+      }
+    }) as RenderNode;
+
+    const renderPass = jsx('pass', {
+      camera,
+      children: gltfChild
+    }) as RenderPass;
+
+    expect(renderPass.children).toHaveLength(1);
+    expect(renderPass.children[0]).toMatchObject({
+      asset: {
+        id: '/DamagedHelmet/DamagedHelmet.gltf',
+        uri: '/DamagedHelmet/DamagedHelmet.gltf'
+      },
+      kind: 'gltf',
+      transform: {
+        scale: [1.5, 1.5, 1.5]
+      }
+    });
+  });
+
   it('ignores empty JSX conditional children under passes', () => {
     const meshChild = jsx('mesh', {
       geometry: cube,
@@ -174,10 +203,7 @@ describe('transform inputs', () => {
 
   it('keeps explicit glTF scale', () => {
     expect(gltf({
-      asset: {
-        id: 'damaged-helmet',
-        uri: '/DamagedHelmet/DamagedHelmet.gltf'
-      },
+      src: '/DamagedHelmet/DamagedHelmet.gltf',
       transform: {
         position: [0, 0, 0],
         rotation: [0, 0, 0],

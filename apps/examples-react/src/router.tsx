@@ -8,7 +8,6 @@ import type { ReactNode } from 'react';
 import { ResearchArtifacts } from './ResearchArtifacts';
 import { Shell } from './Shell';
 import { examples, firstExample, type Example } from './examples';
-import { TextareaTextHostPolyfill } from './examples/cases/TextareaTextHostPolyfill';
 
 const ExampleScreen = ({ example }: { readonly example: Example }): ReactNode => {
   const Demo = example.Component;
@@ -70,17 +69,10 @@ const artifactsRoute = createRoute({
   component: ResearchArtifacts
 });
 
-const textareaTextHostPolyfillRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/labs/textarea-text-host-polyfill',
-  component: TextareaTextHostPolyfill
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
   ...exampleRoutes,
   artifactsRoute,
-  textareaTextHostPolyfillRoute,
 ]);
 const basepath = import.meta.env.BASE_URL.replace(/\/$/, '') || '/';
 

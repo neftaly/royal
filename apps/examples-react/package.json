@@ -10,8 +10,7 @@
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1",
     "test": "pnpm exec vitest run --config vite.config.ts src/**/*.test.ts",
-    "test:browser": "pnpm run build && node scripts/browser-smoke.mjs",
-    "test:text-host-polyfill": "pnpm exec vitest run --config vite.config.ts src/examples/cases/TextareaTextHostPolyfill.test.ts && pnpm run build && node scripts/text-host-polyfill-smoke.mjs"
+    "test:browser": "pnpm run build && node scripts/browser-smoke.mjs"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.170.16",
