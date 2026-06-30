@@ -1,8 +1,10 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as reactRoyal from '@royal/react';
+import { jsx } from '@royal/react/jsx-runtime';
 import {
   Canvas,
   createRoot,
+  useFrame,
   type CanvasProps,
   type RoyalRoot,
   type RoyalRootOptions
@@ -10,6 +12,7 @@ import {
 import {
   boxGeometry,
   createSvgGatewayGeometry,
+  imageTexture,
   mesh,
   pass,
   perspectiveCamera,
@@ -84,15 +87,40 @@ describe('Royal public API smoke tests', () => {
         })
       ]
     });
+    const albedo = imageTexture('/albedo.png');
+    const jsxMesh = jsx('mesh', {
+      baseColor: albedo,
+      geometry: boxGeometry({ size: [1, 1, 1] })
+    });
+    const terseRoot = scene({
+      children: [
+        pass({
+          camera,
+          children: [
+            mesh({
+              geometry: boxGeometry({ size: [1, 1, 1] }),
+              material: standardMaterial({ baseColor: albedo })
+            })
+          ]
+        })
+      ]
+    });
     const textNode = text({
       color: [1, 1, 1, 1],
       text: 'api'
     });
 
     expect(typeof Canvas).toBe('function');
+    expect(typeof useFrame).toBe('function');
     expect(reactRoyal).not.toHaveProperty('boxGeometry');
     expect(reactRoyal).not.toHaveProperty('text');
     expect(root.children[0]?.children).toHaveLength(1);
+    expect(terseRoot.children[0]?.children[0]).toMatchObject({
+      material: { baseColor: albedo, kind: 'standard' }
+    });
+    expect(jsxMesh).toMatchObject({
+      material: { baseColor: albedo, kind: 'standard' }
+    });
     expect(textNode.layout.source).toBe('api');
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly children: unknown }>();
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly rootOptions?: RoyalRootOptions }>();
@@ -234,10 +262,8 @@ describe('Royal public API smoke tests', () => {
     expect(snapshot.probe.rowCount(royalLensSchema.layoutBoxes)).toBe(1);
     expect(snapshot.probe.rows(royalLensSchema.layoutBoxes)[0]?.boxId).toBe('card');
     expect(snapshot.probe.rows(royalLensSchema.assets)[0]).toMatchObject({
-      assetId: 'asset:gltf:status-card',
-      src: '/status.gltf',
-      revision: 'api-rev-1',
-      uri: '/status.gltf'
+      assetId: 'asset:gltf:/status.gltf',
+      src: '/status.gltf'
     });
     expect(renderRows.diagnostics).toEqual([]);
     expect(renderRows.rows).toEqual([
@@ -289,11 +315,7 @@ function createApiStores(): RoyalLensStores {
           primitive: 'panel',
           tone: 'surface',
           gltf: {
-            asset: {
-              id: 'asset:gltf:status-card',
-              revision: 'api-rev-1',
-              uri: '/status.gltf'
-            }
+            src: '/status.gltf'
           }
         }
       ]
@@ -314,11 +336,7 @@ function createApiStores(): RoyalLensStores {
         primitive: 'panel',
         tone: 'surface',
         gltf: {
-          asset: {
-            id: 'asset:gltf:status-card',
-            revision: 'api-rev-1',
-            uri: '/status.gltf'
-          }
+          src: '/status.gltf'
         }
       }
     ],

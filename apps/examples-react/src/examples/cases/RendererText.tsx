@@ -1,24 +1,21 @@
 /** @jsxImportSource @royal/react */
 import {
+  applyEditableTextEditorCommand,
+  applyEditableTextEditorKeyInput,
   boxGeometry,
-  clampTextIndex,
-  editableTextAllSelection,
+  createEditableTextEditorState,
+  createEditableTextFragment,
   editableTextCaretPlacement as caretPlacement,
-  editableTextKeyIntent,
-  editableTextSelectedRange,
-  editableTextSelectedText,
-  editableTextSelectionRects as selectionRects,
-  editableTextSelectionAtCaret,
-  editableTextSelectionFromEndpoint,
+  editableTextEditorCaretSelection,
+  editableTextEditorPointerSelection,
+  editableTextEditorSelectedRange,
+  editableTextEditorSelectedText,
   layoutUiMenuCommands,
   layoutText,
-  layoutEditableText,
   nearestEditableTextCaret,
-  nextTextIndex,
-  previousTextIndex,
-  sameEditableTextSelection as sameSelection,
+  setEditableTextEditorSelection,
   solidTexture,
-  sortedEditableTextRange as sortedTextRange,
+  type EditableTextFragment,
   type RenderNode,
   type RenderRoot,
   type Rgba,
@@ -28,7 +25,6 @@ import {
   type EditableTextCaretEndpoint as TextCaretEndpoint,
   type EditableTextCaretPlacement as CaretPlacement,
   type EditableTextLayout,
-  type EditableTextRange as TextRange,
   type EditableTextSelection as TextSelection,
   type EditableTextSelectionRect as SelectionRect,
   type TextFontFace,
@@ -77,12 +73,7 @@ const defaultSampleText = 'Moloch, whose factories dream and croak in the fog';
 const defaultFontSize = 0.72;
 const editableLineHeight = defaultFontSize * 1.18;
 const caretWidth = 0.035;
-const caretMaterial = unlitMaterial({
-  baseColor: solidTexture({ color: [0.98, 0.94, 0.55, 1] }),
-});
-const selectionMaterial = unlitMaterial({
-  baseColor: solidTexture({ color: [0.08, 0.28, 0.42, 1] }),
-});
+const editableTextColor: Rgba = [0.28, 0.95, 0.48, 1];
 const contextMenuMaterial = unlitMaterial({
   baseColor: solidTexture({ color: [0.07, 0.09, 0.11, 0.96] }),
 });
@@ -280,10 +271,6 @@ type StackOptions = {
   readonly origin: Vec3;
 };
 
-type EditableTextBox = CanvasTextBox & {
-  readonly caret: (origin: Vec3) => Vec3;
-};
-
 type TextDragState = {
   readonly anchor: TextCaretEndpoint;
   readonly moved: boolean;
@@ -433,29 +420,6 @@ const wrapCanvasText = (
   return lines.join('\n');
 };
 
-const selectionNodes = (
-  layout: EditableTextLayout,
-  range: TextRange,
-  origin: Vec3,
-): readonly RenderNode[] => {
-  return selectionRects(layout, range, origin).map((rect) =>
-    (
-      <mesh
-        geometry={boxGeometry({ size: [rect.width, rect.height, 0.01] })}
-        material={selectionMaterial}
-        transform={{
-          position: [
-            rect.x + rect.width / 2,
-            rect.y,
-            origin[2] - 0.02,
-          ],
-          rotation: [0, 0, 0],
-        }}
-      />
-    ) as RenderNode
-  );
-};
-
 const textBox = ({ color, font, fontSize, lineHeight, text, width }: TextBoxOptions): CanvasTextBox => ({
   height: Math.max(1, linesIn(text)) * lineHeight,
   render: (origin) => [
@@ -496,42 +460,6 @@ const h2 = (font: TextFontFace, text: string): CanvasTextBox =>
     width: 3.25,
   });
 
-const editableSentence = (
-  font: TextFontFace,
-  layout: EditableTextLayout,
-  caretIndex: number,
-  caretLine: number | undefined,
-  selectionRange: TextRange,
-): EditableTextBox => {
-  const placement = caretPlacement(layout, caretIndex, caretLine) ?? layout.caretPlacements.at(-1);
-  const box = textBox({
-    color: [0.28, 0.95, 0.48, 1],
-    font,
-    fontSize: layout.fontSize,
-    lineHeight: layout.lineHeight,
-    text: layout.wrappedText,
-    width: layout.maxWidth,
-  });
-
-  return {
-    ...box,
-    render: (origin) => [
-      ...selectionNodes(layout, selectionRange, origin),
-      ...box.render(origin),
-    ],
-    caret: (origin) => {
-      const line = placement?.line ?? 0;
-      const x = origin[0] + (placement?.x ?? 0);
-
-      return [
-        x + caretWidth / 2,
-        origin[1] - line * layout.lineHeight + layout.selectionYOffset,
-        origin[2] + 0.02,
-      ];
-    },
-  };
-};
-
 const row = ({ children, gap }: Omit<StackOptions, 'origin'>): CanvasTextBox => ({
   height: Math.max(...children.map((child) => child.height)),
   render: (origin) => {
@@ -553,18 +481,6 @@ const column = ({ children, gap, origin }: StackOptions): readonly RenderNode[] 
     return nodes;
   });
 };
-
-const caretNode = (position: Vec3, height: number): RenderNode =>
-  (
-    <mesh
-      geometry={boxGeometry({ size: [caretWidth, height, 0.015] })}
-      material={caretMaterial}
-      transform={{
-        position,
-        rotation: [0, 0, 0],
-      }}
-    />
-  ) as RenderNode;
 
 const contextMenuNodes = (
   font: TextFontFace,
@@ -700,17 +616,20 @@ const nearestCaretPlacement = (
 
 const textScene = (
   font: TextFontFace,
-  editableLayout: EditableTextLayout,
-  selection: TextSelection,
+  editableFragment: EditableTextFragment,
   editableWorldOrigin: Vec3,
   menuLayout: TextContextMenuLayout | undefined,
-  showCaret: boolean,
 ): RenderRoot => {
   const heading = h1(font, headingSampleText);
   const subheading = h2(font, 'h1 / h2 canvas primitives');
-  const selectionRange = sortedTextRange(selection);
-  const editable = editableSentence(font, editableLayout, selection.focus, selection.focusLine, selectionRange);
-  const caretPosition = editable.caret(editableWorldOrigin);
+  const editableHeight = Math.max(1, editableFragment.layout.lines.length) * editableFragment.layout.lineHeight;
+  const footer = row({
+    children: [
+      h2(font, 'column rhythm'),
+      h2(font, 'row spacing'),
+    ],
+    gap: 0.42,
+  });
 
   return (
     <scene>
@@ -729,19 +648,16 @@ const textScene = (
           children: [
             heading,
             subheading,
-            editable,
-            row({
-              children: [
-                h2(font, 'column rhythm'),
-                h2(font, 'row spacing'),
-              ],
-              gap: 0.42,
-            }),
           ],
           gap: 0.16,
           origin: sceneOrigin,
         })}
-        {showCaret ? [caretNode(caretPosition, editableLayout.selectionHeight)] : []}
+        {editableFragment.nodes}
+        {footer.render([
+          editableWorldOrigin[0],
+          editableWorldOrigin[1] - editableHeight - 0.16,
+          editableWorldOrigin[2],
+        ])}
         {contextMenuNodes(font, menuLayout)}
       </pass>
     </scene>
@@ -796,13 +712,9 @@ const incrementKeyboardShortcutCounter = (
 
 export const RendererText = (): ReactNode => {
   const fontState = useAtkinsonFont();
-  const [sampleText, setSampleText] = useState(defaultSampleText);
-  const [selection, setSelection] = useState<TextSelection>({
-    anchor: defaultSampleText.length,
-    anchorLine: undefined,
-    focus: defaultSampleText.length,
-    focusLine: undefined,
-  });
+  const [editorState, setEditorState] = useState(() => createEditableTextEditorState({
+    text: defaultSampleText,
+  }));
   const [focused, setFocused] = useState(false);
   const [clipboardState, setClipboardState] = useState<ClipboardState>(initialClipboardState);
   const [clipboardReadPermission, setClipboardReadPermission] = useState<ClipboardReadPermission>('unknown');
@@ -820,25 +732,33 @@ export const RendererText = (): ReactNode => {
     maxMs: 0,
   });
   const font = fontState.status === 'ready' ? fontState.font : undefined;
+  const sampleText = editorState.text;
+  const selection = editorState.selection;
   const editableWorldOrigin = useMemo(
     () => font === undefined ? undefined : editableOrigin(font),
     [font],
   );
-  const editableLayout = useMemo(
+  const editableFragment = useMemo(
     () =>
-      font === undefined
+      font === undefined || editableWorldOrigin === undefined
         ? undefined
-        : layoutEditableText({
+        : createEditableTextFragment({
+            caretWidth,
+            color: editableTextColor,
             font,
             fontSize: defaultFontSize,
             lineHeight: editableLineHeight,
             maxWidth: contentWidth,
+            origin: editableWorldOrigin,
+            selection,
+            showCaret: focused,
             text: sampleText,
           }),
-    [font, sampleText],
+    [editableWorldOrigin, focused, font, sampleText, selection],
   );
-  const currentRange = editableTextSelectedRange(sampleText, selection);
-  const selectedText = editableTextSelectedText(sampleText, selection);
+  const editableLayout = editableFragment?.layout;
+  const currentRange = editableTextEditorSelectedRange(editorState);
+  const selectedText = editableTextEditorSelectedText(editorState);
   const hasSelection = currentRange.start !== currentRange.end;
   // Custom pointer menu commands do not receive ClipboardEvent.clipboardData;
   // paste stays on browser-dispatched paste events to avoid async read prompts.
@@ -850,8 +770,8 @@ export const RendererText = (): ReactNode => {
   const menuLayout = contextMenuLayout(contextMenu, menuEnabled);
   const menuCommands = menuLayout?.commands ?? [];
   const scene =
-    font !== undefined && editableLayout !== undefined && editableWorldOrigin !== undefined
-      ? textScene(font, editableLayout, selection, editableWorldOrigin, menuLayout, focused)
+    font !== undefined && editableFragment !== undefined && editableWorldOrigin !== undefined
+      ? textScene(font, editableFragment, editableWorldOrigin, menuLayout)
       : textScenePlaceholder;
 
   useEffect(() => {
@@ -890,14 +810,15 @@ export const RendererText = (): ReactNode => {
   }, []);
 
   useLayoutEffect(() => {
-    if (font === undefined || editableLayout === undefined || editableWorldOrigin === undefined) {
+    if (font === undefined || editableFragment === undefined || editableWorldOrigin === undefined) {
       delete window.__royalTextEditorProbe;
       return;
     }
 
+    const editableLayout = editableFragment.layout;
     const origin = editableWorldOrigin;
-    const range = sortedTextRange(selection);
-    const placement = caretPlacement(editableLayout, selection.focus, selection.focusLine) ??
+    const fragmentSelection = editableFragment.selection;
+    const placement = caretPlacement(editableLayout, fragmentSelection.focus, fragmentSelection.focusLine) ??
       editableLayout.caretPlacements.at(-1) ??
       { index: 0, line: 0, x: 0 };
     const hitTest = hitTestMetricsRef.current;
@@ -961,27 +882,30 @@ export const RendererText = (): ReactNode => {
             ? requestedFontSize
             : defaultFontSize;
           const lineHeight = fontSize * 1.18;
-          const layout = layoutEditableText({
+          const fragment = createEditableTextFragment({
+            color: editableTextColor,
             font,
             fontSize,
             lineHeight,
             maxWidth: contentWidth,
+            origin,
+            selection: {
+              anchor: 0,
+              anchorLine: undefined,
+              focus: sampleText.length,
+              focusLine: undefined,
+            },
             text: sampleText,
           });
-          const rects = selectionRects(layout, {
-            end: sampleText.length,
-            endLine: undefined,
-            start: 0,
-            startLine: undefined,
-          }, origin);
+          const rects = fragment.selectionRects;
           const heights = rects.map((rect) => rect.height);
 
           return {
             fontSize,
-            lineCount: layout.lines.length,
-            maxSelectionHeight: Math.max(layout.selectionHeight, ...heights),
-            minSelectionHeight: Math.min(layout.selectionHeight, ...heights),
-            selectionHeight: layout.selectionHeight,
+            lineCount: fragment.layout.lines.length,
+            maxSelectionHeight: Math.max(fragment.layout.selectionHeight, ...heights),
+            minSelectionHeight: Math.min(fragment.layout.selectionHeight, ...heights),
+            selectionHeight: fragment.layout.selectionHeight,
           };
         }),
       origin: {
@@ -989,8 +913,8 @@ export const RendererText = (): ReactNode => {
         y: origin[1],
       },
       placements: editableLayout.caretPlacements,
-      selection,
-      selectionRects: selectionRects(editableLayout, range, origin),
+      selection: fragmentSelection,
+      selectionRects: editableFragment.selectionRects,
       selectedText,
       clipboard: clipboardState,
       clipboardReadPermission,
@@ -1020,6 +944,7 @@ export const RendererText = (): ReactNode => {
     clipboardReadPermission,
     clipboardState,
     contextMenu,
+    editableFragment,
     editableLayout,
     editableWorldOrigin,
     font,
@@ -1028,24 +953,13 @@ export const RendererText = (): ReactNode => {
     menuEnabled,
     sampleText,
     selectedText,
-    selection,
   ]);
 
-  const replaceText = (nextText: string, nextCaretIndex: number): void => {
-    const clampedCaret = clampTextIndex(nextText, nextCaretIndex);
-    setSampleText(nextText);
-    setSelection({
-      anchor: clampedCaret,
-      anchorLine: undefined,
-      focus: clampedCaret,
-      focusLine: undefined,
-    });
-  };
-
   const replaceSelection = (insertText: string): void => {
-    const range = editableTextSelectedRange(sampleText, selection);
-    const nextText = `${sampleText.slice(0, range.start)}${insertText}${sampleText.slice(range.end)}`;
-    replaceText(nextText, range.start + insertText.length);
+    setEditorState(applyEditableTextEditorCommand(editorState, {
+      text: insertText,
+      type: 'replace-selection',
+    }));
   };
 
   const recordClipboardResult = (result: ClipboardOperationResult): void => {
@@ -1168,20 +1082,6 @@ export const RendererText = (): ReactNode => {
     }
   };
 
-  const setCaret = (index: number, extend: boolean): void => {
-    setSelection((current) => {
-      const next = editableTextSelectionAtCaret({
-        current,
-        extend,
-        index,
-        ...(editableLayout === undefined ? {} : { layout: editableLayout }),
-        text: sampleText,
-      });
-
-      return sameSelection(current, next) ? current : next;
-    });
-  };
-
   const setCaretFromCanvasPoint = (
     event: ReactPointerEvent<HTMLCanvasElement>,
     extend: boolean,
@@ -1190,39 +1090,46 @@ export const RendererText = (): ReactNode => {
     if (editableLayout === undefined || editableWorldOrigin === undefined) return undefined;
 
     const startedAt = performance.now();
-    const placement = nearestCaretPlacement(
-      editableLayout,
-      editableWorldOrigin,
+    const [worldX, worldY] = canvasPointToWorld(
       event.currentTarget,
+      cameraBounds,
       event.clientX,
       event.clientY,
     );
+    const anchoredState = anchor === undefined
+      ? editorState
+      : {
+          ...editorState,
+          selection: {
+            ...editorState.selection,
+            anchor: anchor.index,
+            anchorLine: anchor.line,
+          },
+        };
+    const nextSelection = editableTextEditorPointerSelection({
+      extend,
+      layout: editableLayout,
+      origin: editableWorldOrigin,
+      point: { x: worldX, y: worldY },
+      state: anchoredState,
+    });
     const elapsed = performance.now() - startedAt;
     hitTestMetricsRef.current = {
       count: hitTestMetricsRef.current.count + 1,
       lastClientX: event.clientX,
       lastClientY: event.clientY,
-      lastIndex: placement.index,
-      lastLine: placement.line,
+      lastIndex: nextSelection.focus,
+      lastLine: nextSelection.focusLine ?? -1,
       lastMs: elapsed,
       maxMs: Math.max(hitTestMetricsRef.current.maxMs, elapsed),
     };
-    setSelection((current) => {
-      const next = editableTextSelectionFromEndpoint({
-        ...(anchor === undefined ? {} : { anchor }),
-        current,
-        extend,
-        focus: { index: placement.index, line: placement.line },
-      });
+    setEditorState(setEditableTextEditorSelection(editorState, nextSelection));
 
-      return sameSelection(current, next) ? current : next;
-    });
-
-    return { index: placement.index, line: placement.line };
+    return { index: nextSelection.focus, line: nextSelection.focusLine };
   };
 
   const handleCanvasKeyDown = (event: KeyboardEvent<HTMLCanvasElement>): void => {
-    const intent = editableTextKeyIntent({
+    const keyState = {
       altKey: event.altKey,
       ctrlKey: event.ctrlKey,
       isComposing: event.nativeEvent.isComposing,
@@ -1230,7 +1137,8 @@ export const RendererText = (): ReactNode => {
       keyCode: event.keyCode,
       metaKey: event.metaKey,
       shiftKey: event.shiftKey,
-    }, { mode: 'multiline' });
+    };
+    const { intent, state } = applyEditableTextEditorKeyInput(editorState, keyState, { mode: 'multiline' });
     if (intent === undefined) return;
 
     if (intent.type === 'clipboard-shortcut') {
@@ -1240,62 +1148,25 @@ export const RendererText = (): ReactNode => {
 
     event.preventDefault();
 
-    if (intent.type === 'select-all') {
-      setSelection(editableTextAllSelection(sampleText, editableLayout));
+    if (
+      editableLayout !== undefined &&
+      (
+        intent.type === 'move-previous' ||
+        intent.type === 'move-next' ||
+        intent.type === 'move-start' ||
+        intent.type === 'move-end'
+      )
+    ) {
+      setEditorState(setEditableTextEditorSelection(state, editableTextEditorCaretSelection({
+        ...(intent.extend === undefined ? {} : { extend: intent.extend }),
+        index: state.selection.focus,
+        layout: editableLayout,
+        state: editorState,
+      })));
       return;
     }
 
-    if (intent.type === 'delete-backward') {
-      if (hasSelection) {
-        replaceSelection('');
-        return;
-      }
-
-      const start = previousTextIndex(sampleText, selection.focus);
-      replaceText(`${sampleText.slice(0, start)}${sampleText.slice(selection.focus)}`, start);
-      return;
-    }
-
-    if (intent.type === 'delete-forward') {
-      if (hasSelection) {
-        replaceSelection('');
-        return;
-      }
-
-      const end = nextTextIndex(sampleText, selection.focus);
-      replaceText(`${sampleText.slice(0, selection.focus)}${sampleText.slice(end)}`, selection.focus);
-      return;
-    }
-
-    if (intent.type === 'move-previous') {
-      setCaret(
-        intent.extend !== true && hasSelection ? currentRange.start : previousTextIndex(sampleText, selection.focus),
-        intent.extend === true,
-      );
-      return;
-    }
-
-    if (intent.type === 'move-next') {
-      setCaret(
-        intent.extend !== true && hasSelection ? currentRange.end : nextTextIndex(sampleText, selection.focus),
-        intent.extend === true,
-      );
-      return;
-    }
-
-    if (intent.type === 'move-start') {
-      setCaret(0, intent.extend === true);
-      return;
-    }
-
-    if (intent.type === 'move-end') {
-      setCaret(sampleText.length, intent.extend === true);
-      return;
-    }
-
-    if (intent.type === 'insert-text' || intent.type === 'replace-selection') {
-      replaceSelection(intent.text);
-    }
+    setEditorState(state);
   };
 
   const writeTextToClipboardEvent = (

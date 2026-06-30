@@ -1,15 +1,10 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  solidTexture,
-  textureAsset,
+  imageTexture,
   type RenderRoot,
   unlitMaterial,
 } from '@royal/renderer-core';
-import {
-  createSvgGatewayGeometry,
-  createSvgRasterTextureSource,
-} from '@royal/renderer-core/svg';
 import { Canvas } from '@royal/react';
 import { createElement, type ReactNode } from 'react';
 
@@ -34,109 +29,30 @@ const badgeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize
 const svgToDataUri = (svg: string): string =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-const badgeGeometry = createSvgGatewayGeometry({
-  d: badgePath,
-  id: 'speech-badge-path',
-  kind: 'path',
-});
-
-const badgeRaster = createSvgRasterTextureSource({
-  height: svgSize,
-  id: 'speech-badge-raster',
-  svg: badgeSvg,
-  width: svgSize,
-});
-
-const fallbackTexture = solidTexture({
-  color: [0.08, 0.1, 0.12, 1],
-});
-
 const badgeMaterial = unlitMaterial({
-  baseColor: textureAsset({
-    colorSpace: 'srgb',
-    fallback: fallbackTexture,
-    sampler: {
-      magFilter: 'linear',
-      minFilter: 'linear',
-      wrapS: 'clamp-to-edge',
-      wrapT: 'clamp-to-edge',
-    },
-    src: svgToDataUri(badgeSvg),
-  }),
+  baseColor: imageTexture(svgToDataUri(badgeSvg)),
 });
 
-const backdropMaterial = unlitMaterial({
-  baseColor: solidTexture({ color: [0.12, 0.16, 0.18, 1] }),
-});
-
-const panelGeometry = boxGeometry({ size: [2.6, 2.6, 0.04] });
-const backdropGeometry = boxGeometry({ size: [2.9, 2.9, 0.04] });
+const badgePlane = boxGeometry({ size: [2.4, 2.4, 0.04] });
 
 export const SvgGateway = (): ReactNode => {
   const scene = (
     <scene>
       <pass clearColor={[0.04, 0.048, 0.052, 1]}>
         <orthographicCamera
-          bottom={-1.75}
+          bottom={-1.45}
           far={100}
-          left={-3.3}
+          left={-1.45}
           near={0.1}
           position={[0, 0, 10]}
-          right={3.3}
+          right={1.45}
           rotation={[0, 0, 0]}
-          top={1.75}
+          top={1.45}
         />
         <mesh
-          geometry={backdropGeometry}
-          material={backdropMaterial}
-          transform={{ position: [-1.2, 0, -0.05], rotation: [0, 0, 0] }}
-        />
-        <mesh
-          geometry={panelGeometry}
+          geometry={badgePlane}
           material={badgeMaterial}
-          transform={{ position: [-1.2, 0, 0], rotation: [0, 0, 0] }}
-        />
-        <text
-          color={[0.93, 0.97, 0.96, 1]}
-          fontSize={0.22}
-          lineHeight={0.264}
-          origin={[0.65, 0.95, 0.1]}
-          text="SVG gateway"
-        />
-        <text
-          color={[0.67, 0.75, 0.76, 1]}
-          fontSize={0.12}
-          lineHeight={0.154}
-          origin={[0.65, 0.55, 0.1]}
-          text="createSvgGatewayGeometry"
-        />
-        <text
-          color={[0.67, 0.75, 0.76, 1]}
-          fontSize={0.12}
-          lineHeight={0.154}
-          origin={[0.65, 0.31, 0.1]}
-          text="createSvgRasterTextureSource"
-        />
-        <text
-          color={[0.67, 0.75, 0.76, 1]}
-          fontSize={0.12}
-          lineHeight={0.154}
-          origin={[0.65, 0.07, 0.1]}
-          text="textureAsset"
-        />
-        <text
-          color={[0.86, 0.91, 0.88, 1]}
-          fontSize={0.11}
-          lineHeight={0.132}
-          origin={[0.65, -0.42, 0.1]}
-          text={`path mesh: ${badgeGeometry.mesh.indices.length / 3} triangles`}
-        />
-        <text
-          color={[0.58, 0.66, 0.67, 1]}
-          fontSize={0.095}
-          lineHeight={0.114}
-          origin={[0.65, -0.66, 0.1]}
-          text={`raster: ${badgeRaster.width} x ${badgeRaster.height}`}
+          transform={{ position: [0, 0, 0], rotation: [0, 0, 0] }}
         />
       </pass>
     </scene>

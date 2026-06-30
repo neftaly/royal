@@ -82,7 +82,16 @@ export interface TextureAssetUriOptions extends TextureAssetBaseOptions {
 
 export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOptions;
 
+export type ImageTextureOptions = TextureAssetOptions;
+
 export type VirtualTextureAssetOptions = Omit<VirtualTextureAssetRef, 'kind'>;
+
+export const defaultImageTextureSampler: TextureSampler = {
+  magFilter: 'linear',
+  minFilter: 'linear-mipmap-linear',
+  wrapS: 'clamp-to-edge',
+  wrapT: 'clamp-to-edge'
+};
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => ({
   kind: 'solid',
@@ -106,6 +115,26 @@ export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
     uri
   };
+}
+
+export function imageTexture(src: string): TextureAssetRef;
+export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
+export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {
+  const options: ImageTextureOptions =
+    typeof srcOrOptions === 'string' ? { src: srcOrOptions } : srcOrOptions;
+  const uri = options.src ?? options.uri;
+
+  return textureAsset({
+    colorSpace: options.colorSpace ?? 'srgb',
+    ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
+    ...(options.id === undefined ? {} : { id: options.id }),
+    ...(options.revision === undefined ? {} : { revision: options.revision }),
+    sampler: {
+      ...defaultImageTextureSampler,
+      ...options.sampler
+    },
+    src: uri
+  });
 }
 
 export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => ({

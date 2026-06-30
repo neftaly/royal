@@ -1,4 +1,7 @@
-import type { TextureRef } from './texture';
+import type { Rgba } from './primitives';
+import { solidTexture, type TextureRef } from './texture';
+
+export type MaterialBaseColorInput = TextureRef | Rgba;
 
 /** Lit material with a base color texture reference. */
 export interface StandardMaterial {
@@ -22,7 +25,7 @@ export interface WireframeMaterial {
 export type Material = StandardMaterial | UnlitMaterial | WireframeMaterial;
 
 export interface StandardMaterialOptions {
-  readonly baseColor: TextureRef;
+  readonly baseColor: MaterialBaseColorInput;
 }
 
 export type UnlitMaterialOptions = StandardMaterialOptions;
@@ -32,24 +35,30 @@ export interface WireframeMaterialOptions extends StandardMaterialOptions {
   readonly width?: number;
 }
 
+const isRgba = (baseColor: MaterialBaseColorInput): baseColor is Rgba =>
+  Array.isArray(baseColor);
+
+const toBaseColorTexture = (baseColor: MaterialBaseColorInput): TextureRef =>
+  isRgba(baseColor) ? solidTexture({ color: baseColor }) : baseColor;
+
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   return {
     kind: 'standard',
-    baseColor: options.baseColor
+    baseColor: toBaseColorTexture(options.baseColor)
   };
 };
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
   return {
     kind: 'unlit',
-    baseColor: options.baseColor
+    baseColor: toBaseColorTexture(options.baseColor)
   };
 };
 
 export const wireframeMaterial = (options: WireframeMaterialOptions): WireframeMaterial => {
   return {
     kind: 'wireframe',
-    baseColor: options.baseColor,
+    baseColor: toBaseColorTexture(options.baseColor),
     width: options.width ?? 1.25
   };
 };

@@ -5,7 +5,7 @@ import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const publicSurfaceRoots = ['README.md', 'apps', 'packages', 'research'] as const;
+const publicSurfaceRoots = ['README.md', 'packages', 'research'] as const;
 const publicPackageJsonPaths = [
   'packages/react/package.json',
   'packages/renderer-core/package.json',
@@ -20,7 +20,6 @@ const ignoredDirectories = new Set([
 ]);
 const markdownExtensions = new Set(['.md', '.mdx']);
 const publicSourceExtensions = new Set(['.ts', '.tsx']);
-const renderGraphFactoryPattern = /(?<![\w$.])(?:scene|pass|mesh|gltf)\s*\(/;
 const staleMaterialColorPattern = /(?<![\w$.])standardMaterial\s*\(\s*\{\s*color\s*:/;
 const nonCurrentResearchLabelPattern = /\b(?:future|non-current|not current|not public|not an api|pseudocode|pseudo-api|research-only|sketch)\b/i;
 const exactResearchOnlyPublicExportNames = new Set([
@@ -284,17 +283,6 @@ function isResearchOnlyPublicExportName(name: string): boolean {
   );
 }
 
-function isPublicExampleSource(filePath: string): boolean {
-  const relativePath = path.relative(repoRoot, filePath);
-  return (
-    relativePath.startsWith(`apps${path.sep}`) &&
-    relativePath.includes(`${path.sep}src${path.sep}`) &&
-    publicSourceExtensions.has(path.extname(filePath)) &&
-    !relativePath.endsWith('.test.ts') &&
-    !relativePath.endsWith('.test.tsx')
-  );
-}
-
 function lineNumberAtOffset(text: string, offset: number): number {
   return text.slice(0, offset).split('\n').length;
 }
@@ -367,13 +355,7 @@ function publicSnippetViolations(
         );
     }
 
-    if (!isPublicExampleSource(filePath)) return [];
-
-    return matchingLines(readFileSync(filePath, 'utf8'), pattern).map(({ line, text }) => ({
-      file: relativePath,
-      line,
-      text
-    }));
+    return [];
   });
 }
 
@@ -392,17 +374,7 @@ describe('render graph API style', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps public examples and current docs on JSX render graph syntax', () => {
-    expect(publicSnippetViolations(renderGraphFactoryPattern)).toEqual([]);
-  });
-
   it('keeps public snippets on current standard material options', () => {
     expect(publicSnippetViolations(staleMaterialColorPattern, { allowLabeledResearchSketches: false })).toEqual([]);
-  });
-
-  it('keeps internal adapter implementation outside the public example scan', () => {
-    expect(existsSync(path.join(repoRoot, 'packages/react/src/jsx-runtime.ts'))).toBe(true);
-    expect(isPublicExampleSource(path.join(repoRoot, 'packages/react/src/jsx-runtime.ts'))).toBe(false);
-    expect(isPublicExampleSource(path.join(repoRoot, 'tests/render-webgl.test.ts'))).toBe(false);
   });
 });

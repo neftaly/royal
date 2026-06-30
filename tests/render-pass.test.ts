@@ -1,6 +1,7 @@
 import {
   boxGeometry,
   gltf,
+  imageTexture,
   mesh,
   orthographicCamera,
   pass,
@@ -143,6 +144,40 @@ describe('render pass clearColor', () => {
     }) as RenderPass;
 
     expect(renderPass.children).toEqual([meshChild]);
+  });
+
+  it('lowers JSX mesh baseColor textures to a standard material', () => {
+    const albedo = imageTexture('/textures/albedo.png');
+    const meshChild = jsx('mesh', {
+      baseColor: albedo,
+      geometry: cube
+    }) as RenderNode;
+
+    expect(meshChild).toMatchObject({
+      kind: 'mesh',
+      material: {
+        baseColor: albedo,
+        kind: 'standard'
+      }
+    });
+  });
+
+  it('lowers JSX mesh baseColor rgba tuples to solid textures', () => {
+    const meshChild = jsx('mesh', {
+      baseColor: [0.1, 0.2, 0.3, 1],
+      geometry: cube
+    }) as RenderNode;
+
+    expect(meshChild).toMatchObject({
+      kind: 'mesh',
+      material: {
+        baseColor: {
+          color: [0.1, 0.2, 0.3, 1],
+          kind: 'solid'
+        },
+        kind: 'standard'
+      }
+    });
   });
 
   it('ignores empty JSX conditional children under scenes', () => {

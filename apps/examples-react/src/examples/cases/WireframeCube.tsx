@@ -5,8 +5,8 @@ import {
   type RenderRoot,
   wireframeMaterial,
 } from '@royal/renderer-core';
-import { Canvas } from '@royal/react';
-import { createElement, useEffect, useState, type ReactNode } from 'react';
+import { Canvas, useFrame } from '@royal/react';
+import { createElement, type ReactNode } from 'react';
 
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -17,30 +17,8 @@ const cubeMaterial = wireframeMaterial({
   baseColor: solidTexture({ color: [0.38, 0.85, 0.95, 1] }),
 });
 
-const useAnimationFrame = (): number => {
-  const [frame, setFrame] = useState(0);
-
-  useEffect(() => {
-    let animationFrame = 0;
-    let mounted = true;
-    const renderFrame = (): void => {
-      if (!mounted) return;
-      setFrame((current) => current + 1);
-      animationFrame = requestAnimationFrame(renderFrame);
-    };
-
-    animationFrame = requestAnimationFrame(renderFrame);
-    return () => {
-      mounted = false;
-      cancelAnimationFrame(animationFrame);
-    };
-  }, []);
-
-  return frame;
-};
-
 export const WireframeCube = (): ReactNode => {
-  const frame = useAnimationFrame();
+  const frame = useFrame();
   const spin = frame * 0.012;
   const scene = (
     <scene>

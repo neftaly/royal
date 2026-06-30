@@ -14,8 +14,8 @@ import {
   formControlsCameraBounds,
   formControlsLayout,
   formControlsTextMetrics,
+  formSubmitStatusText,
   type CanvasFormModel,
-  type EditableTextControlId,
   type EditableTextControlModel,
 } from './FormControls.model';
 
@@ -75,14 +75,22 @@ type RoyalNodeChild = RenderNode | readonly RoyalNodeChild[] | null | undefined 
 
 type FormProps = {
   readonly bounds: RectBounds;
-  readonly children?: RoyalNodeChild;
+  readonly children?: unknown;
   readonly id: string;
+  readonly title: string;
 };
 
-const Form = ({ bounds, children }: FormProps) => (
+const Form = ({ bounds, children, title }: FormProps) => (
   <>
     {rectFromTopLeft({ fill: palette.surface, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, -0.02)}
-    {children}
+    <text
+      color={palette.ink}
+      fontSize={0.38}
+      lineHeight={0.48}
+      origin={[layout.heading.x, layout.heading.y, 0.12]}
+      text={title}
+    />
+    {children as RoyalNodeChild}
   </>
 );
 
@@ -110,14 +118,14 @@ const fieldChromeNodes = ({
 };
 
 type FieldProps = FieldChromeOptions & {
-  readonly children?: RoyalNodeChild;
+  readonly children?: unknown;
   readonly id: string;
 };
 
 const Field = ({ active, bounds, children, label }: FieldProps) => (
   <>
     {fieldChromeNodes({ active, bounds, label })}
-    {children}
+    {children as RoyalNodeChild}
   </>
 );
 
@@ -125,18 +133,14 @@ type EditableTextInputProps = {
   readonly active: boolean;
   readonly control: EditableTextControlModel;
   readonly font: TextFontFace | undefined;
-  readonly id: EditableTextControlId;
 };
 
 const editableTextNodes = ({
   active,
   control,
   font,
-  id,
 }: EditableTextInputProps): readonly RenderNode[] => {
-  if (id !== control.id) throw new Error(`Mismatched text input id: ${id}`);
-
-  const field = layout.fields[id];
+  const field = layout.fields[control.id];
 
   return createEditableTextFragment({
     color: palette.ink,
@@ -146,10 +150,10 @@ const editableTextNodes = ({
     maxWidth: field.textMaxWidth,
     mode: control.mode,
     origin: field.textOrigin,
-    selection: control.selection,
+    selection: control.editor.selection,
     selectionColor: palette.selection,
     showCaret: active,
-    text: control.value,
+    text: control.editor.text,
   }).nodes;
 };
 
@@ -161,19 +165,11 @@ const TextInput = (props: TextInputProps) => (
   </>
 );
 
-type TextAreaProps = EditableTextInputProps & FieldChromeOptions;
+type TextAreaProps = EditableTextInputProps;
 
-const TextArea = ({
-  active,
-  bounds,
-  control,
-  font,
-  id,
-  label,
-}: TextAreaProps) => (
+const TextArea = (props: TextAreaProps) => (
   <>
-    {fieldChromeNodes({ active, bounds, label })}
-    {editableTextNodes({ active, control, font, id })}
+    {editableTextNodes(props)}
   </>
 );
 
@@ -210,16 +206,19 @@ type ButtonProps = {
   readonly focused: boolean;
   readonly id: 'send';
   readonly label: string;
+  readonly status: string;
 };
 
 const Button = ({
   bounds,
   focused,
   label,
+  status,
 }: ButtonProps) => (
   <>
     {rectFromTopLeft({ fill: focused ? palette.accentStrong : palette.button, height: bounds.height, width: bounds.width }, bounds.x, bounds.y, 0.04)}
     <text color={[1, 1, 1, 1]} fontSize={0.2} lineHeight={0.27} origin={[bounds.x + 0.28, bounds.y - 0.36, 0.12]} text={label} />
+    <text color={palette.muted} fontSize={0.16} lineHeight={0.24} origin={[layout.status.x, layout.status.y, 0.12]} text={status} />
   </>
 );
 
@@ -242,60 +241,45 @@ export const formControlsScene = (
           rotation={[0, 0, 0]}
           top={formControlsCameraBounds.top}
         />
-        <Form id="contact-form" bounds={layout.form}>
-          {(
-            <text
-              color={palette.ink}
-              fontSize={0.38}
-              lineHeight={0.48}
-              origin={[layout.heading.x, layout.heading.y, 0.12]}
-              text="Message"
-            />
-          ) as RoyalNodeChild}
-          {(
-            <Field
-              id="title-field"
-              label="Title"
-              bounds={layout.fields.title}
+        <Form id="contact-form" title="Message" bounds={layout.form}>
+          <Field
+            id="title"
+            label={title.label}
+            bounds={layout.fields.title}
+            active={model.activeTextId === title.id}
+          >
+            <TextInput
               active={model.activeTextId === title.id}
-            >
-              {(
-                <TextInput
-                  id="title"
-                  active={model.activeTextId === title.id}
-                  control={title}
-                  font={font}
-                />
-              ) as RoyalNodeChild}
-            </Field>
-          ) as RoyalNodeChild}
-          {(
+              control={title}
+              font={font}
+            />
+          </Field>
+          <Field
+            id="notes"
+            label={notes.label}
+            bounds={layout.fields.notes}
+            active={model.activeTextId === notes.id}
+          >
             <TextArea
-              id="notes"
-              label="Notes"
-              bounds={layout.fields.notes}
               active={model.activeTextId === notes.id}
               control={notes}
               font={font}
             />
-          ) as RoyalNodeChild}
-          {(
-            <Checkbox
-              id="updates"
-              checked={model.checkbox.checked}
-              focused={model.focusedId === model.checkbox.id}
-              bounds={layout.checkbox}
-              label={model.checkbox.label}
-            />
-          ) as RoyalNodeChild}
-          {(
-            <Button
-              id="send"
-              focused={model.focusedId === model.button.id}
-              bounds={layout.button}
-              label={model.button.label}
-            />
-          ) as RoyalNodeChild}
+          </Field>
+          <Checkbox
+            id="updates"
+            checked={model.checkbox.checked}
+            focused={model.focusedId === model.checkbox.id}
+            bounds={layout.checkbox}
+            label={model.checkbox.label}
+          />
+          <Button
+            id="send"
+            focused={model.focusedId === model.button.id}
+            bounds={layout.button}
+            label={model.button.label}
+            status={formSubmitStatusText(model.button)}
+          />
         </Form>
       </pass>
     </scene>

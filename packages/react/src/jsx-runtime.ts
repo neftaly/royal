@@ -6,10 +6,12 @@ import {
   pass,
   perspectiveCamera,
   scene,
+  standardMaterial,
   text,
   type Camera,
   type DirectionalLightOptions,
   type GltfOptions,
+  type Material,
   type MeshOptions,
   type OrthographicCameraOptions,
   type PerspectiveCameraOptions,
@@ -17,6 +19,7 @@ import {
   type RenderNode,
   type RenderPass,
   type RenderPassOptions,
+  type Rgba,
   type TextOptions
 } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
@@ -36,6 +39,17 @@ type PassProps = Omit<RenderPassOptions, 'camera' | 'children'> & {
   readonly camera?: Camera;
   readonly children?: RendererJsxChild;
 };
+type MeshBaseColor = MeshOptions['material']['baseColor'] | Rgba;
+type MeshProps = Omit<MeshOptions, 'material'> & (
+  | {
+    readonly baseColor?: never;
+    readonly material: Material;
+  }
+  | {
+    readonly baseColor: MeshBaseColor;
+    readonly material?: never;
+  }
+);
 
 const isRendererJsxChildArray = (
   value: RendererJsxChild
@@ -126,6 +140,27 @@ const toGltf = (options: GltfOptions): RenderNode => {
   return gltf(options);
 };
 
+const toMesh = (props: MeshProps): RenderNode => {
+  if (props.material !== undefined && props.baseColor !== undefined) {
+    throw new Error('mesh expects material or baseColor, not both');
+  }
+
+  if (props.material !== undefined) {
+    return mesh(props);
+  }
+
+  if (props.baseColor === undefined) {
+    throw new Error('mesh expects material or baseColor');
+  }
+
+  const { baseColor, ...options } = props;
+
+  return mesh({
+    ...options,
+    material: standardMaterial({ baseColor })
+  });
+};
+
 const assertNever = (type: never): never => {
   throw new Error(`Unsupported JSX element: ${String(type)}`);
 };
@@ -149,7 +184,7 @@ const createElement = (type: ElementType, props: Record<string, unknown>): Compo
     case 'directionalLight':
       return directionalLight(props as unknown as DirectionalLightOptions);
     case 'mesh':
-      return mesh(props as unknown as MeshOptions);
+      return toMesh(props as unknown as MeshProps);
     case 'gltf':
       return toGltf(props as unknown as GltfOptions);
     case 'text':
@@ -179,7 +214,7 @@ export namespace JSX {
     perspectiveCamera: PerspectiveCameraOptions;
     orthographicCamera: OrthographicCameraOptions;
     directionalLight: DirectionalLightOptions;
-    mesh: MeshOptions;
+    mesh: MeshProps;
     gltf: GltfOptions;
     text: TextOptions;
   }

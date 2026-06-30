@@ -1,9 +1,7 @@
 /** @jsxImportSource @royal/react */
 import {
   boxGeometry,
-  solidTexture,
-  standardMaterial,
-  textureAsset,
+  imageTexture,
   type RenderRoot,
 } from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
@@ -14,23 +12,7 @@ const rootOptions = {
 } as const;
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
-const fallbackTexture = solidTexture({
-  color: [0.08, 0.1, 0.12, 1],
-});
-const helmetAlbedo = textureAsset({
-  colorSpace: 'srgb',
-  fallback: fallbackTexture,
-  sampler: {
-    magFilter: 'linear',
-    minFilter: 'linear-mipmap-linear',
-    wrapS: 'clamp-to-edge',
-    wrapT: 'clamp-to-edge',
-  },
-  src: import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg',
-});
-const texturedSwatch = standardMaterial({
-  baseColor: helmetAlbedo,
-});
+const helmetAlbedo = imageTexture(import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg');
 
 export const TextureMaterials = (): ReactNode => {
   const scene = (
@@ -45,8 +27,8 @@ export const TextureMaterials = (): ReactNode => {
         />
         <directionalLight color={[1.35, 1.28, 1.16, 1]} direction={[-0.24, -0.42, -1]} />
         <mesh
+          baseColor={helmetAlbedo}
           geometry={swatchGeometry}
-          material={texturedSwatch}
           transform={{
             position: [0, 0.02, 0],
             rotation: [0.24, 0.26, -0.04],

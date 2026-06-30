@@ -3,6 +3,7 @@ export { Canvas } from './canvas';
 export { captureCanvasPointer, releaseCanvasPointer } from './canvas-pointer';
 export { editableTextKeyboardIntent } from './editable-text-keyboard';
 export { createRoot } from './root';
+export { useFrame } from './frame';
 
 export type { CanvasProps } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';

@@ -1,5 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  defaultImageTextureSampler,
+  imageTexture,
   solidTexture,
   standardMaterial,
   textureAsset,
@@ -10,6 +12,40 @@ import {
 } from './index';
 
 describe('texture descriptors', () => {
+  it('creates image textures with color and sampler defaults', () => {
+    expect(imageTexture('/textures/albedo.png')).toEqual({
+      colorSpace: 'srgb',
+      id: '/textures/albedo.png',
+      kind: 'asset',
+      sampler: defaultImageTextureSampler,
+      uri: '/textures/albedo.png'
+    });
+
+    expect(imageTexture({
+      colorSpace: 'linear',
+      id: 'albedo',
+      sampler: {
+        minFilter: 'nearest',
+        wrapS: 'repeat'
+      },
+      src: '/textures/albedo.png'
+    })).toEqual({
+      colorSpace: 'linear',
+      id: 'albedo',
+      kind: 'asset',
+      sampler: {
+        magFilter: 'linear',
+        minFilter: 'nearest',
+        wrapS: 'repeat',
+        wrapT: 'clamp-to-edge'
+      },
+      uri: '/textures/albedo.png'
+    });
+
+    expectTypeOf(imageTexture('/textures/albedo.png')).toEqualTypeOf<TextureAssetRef>();
+    expectTypeOf(imageTexture('/textures/albedo.png')).toMatchTypeOf<TextureRef>();
+  });
+
   it('keeps normal texture asset descriptors unchanged', () => {
     const fallback = solidTexture({
       color: [0.1, 0.2, 0.3, 1],
@@ -153,6 +189,10 @@ describe('texture descriptors', () => {
       manifestUri: '/textures/terrain-normal.vt.json'
     });
     expect(standardMaterial({ baseColor: asset }).baseColor).toBe(asset);
+    expect(standardMaterial({ baseColor: [0.2, 0.4, 0.6, 1] }).baseColor).toEqual({
+      color: [0.2, 0.4, 0.6, 1],
+      kind: 'solid'
+    });
     expectTypeOf(asset).toEqualTypeOf<VirtualTextureAssetRef>();
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
   });

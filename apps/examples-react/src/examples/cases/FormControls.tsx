@@ -1,4 +1,4 @@
-import { Canvas, canvasPointToWorld, editableTextKeyboardIntent } from '@royal/react';
+import { Canvas, canvasPointToWorld } from '@royal/react';
 import {
   useReducer,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  activeEditableTextControl,
   caretSelectionAtFormPoint,
   editableTextControlForId,
   formControlsCameraBounds,
@@ -14,6 +13,7 @@ import {
   formControlsModel,
   formControlsReducer,
   hitTestFormControls,
+  type FormControlsKeyboardInput,
 } from './FormControls.model';
 import { formControlsScene } from './FormControls.scene';
 import { useAtkinsonFont } from './text-font';
@@ -26,7 +26,6 @@ export const FormControls = (): ReactNode => {
   const fontState = useAtkinsonFont();
   const font = fontState.status === 'ready' ? fontState.font : undefined;
   const [model, dispatch] = useReducer(formControlsReducer, formControlsModel);
-  const activeText = activeEditableTextControl(model);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return;
@@ -58,23 +57,11 @@ export const FormControls = (): ReactNode => {
       return;
     }
 
-    dispatch({ type: hit.type === 'checkbox' ? 'toggle-checkbox' : 'press-button' });
+    dispatch({ type: hit.type === 'checkbox' ? 'toggle-checkbox' : 'submit-form' });
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLCanvasElement>): void => {
-    const modelAction = formControlsKeyboardAction(model, {
-      key: event.key,
-      shiftKey: event.shiftKey,
-    });
-    if (modelAction !== undefined) {
-      event.preventDefault();
-      dispatch(modelAction);
-      return;
-    }
-
-    if (activeText === undefined) return;
-
-    const intent = editableTextKeyboardIntent({
+    const input: FormControlsKeyboardInput = {
       altKey: event.altKey,
       ctrlKey: event.ctrlKey,
       isComposing: event.nativeEvent.isComposing,
@@ -82,18 +69,13 @@ export const FormControls = (): ReactNode => {
       keyCode: event.keyCode,
       metaKey: event.metaKey,
       shiftKey: event.shiftKey,
-    }, { mode: activeText.mode });
+    };
+    const modelAction = formControlsKeyboardAction(model, input);
 
-    if (intent === undefined || intent.type === 'clipboard-shortcut') return;
-
-    event.preventDefault();
-
-    if (intent.type === 'enter-key') {
-      dispatch({ type: 'press-button' });
-      return;
+    if (modelAction !== undefined) {
+      event.preventDefault();
+      dispatch(modelAction);
     }
-
-    dispatch({ command: intent, type: 'edit-active-text' });
   };
 
   return (

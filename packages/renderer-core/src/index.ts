@@ -18,6 +18,7 @@ export { gltf } from './gltf';
 export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {
   Material,
+  MaterialBaseColorInput,
   StandardMaterial,
   StandardMaterialOptions,
   UnlitMaterial,
@@ -27,6 +28,7 @@ export type {
 } from './material';
 export { standardMaterial, unlitMaterial, wireframeMaterial } from './material';
 export type {
+  ImageTextureOptions,
   SolidTextureOptions,
   SolidTextureRef,
   TextureAssetOptions,
@@ -40,7 +42,14 @@ export type {
   VirtualTextureAssetOptions,
   VirtualTextureAssetRef
 } from './texture';
-export { defaultTextureFallbackColor, solidTexture, textureAsset, virtualTextureAsset } from './texture';
+export {
+  defaultImageTextureSampler,
+  defaultTextureFallbackColor,
+  imageTexture,
+  solidTexture,
+  textureAsset,
+  virtualTextureAsset
+} from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
@@ -207,6 +216,24 @@ export type {
   EditableTextSelectAllCommand
 } from './editable-text-command';
 export { applyEditableTextCommand } from './editable-text-command';
+export type {
+  EditableTextEditorCaretSelectionOptions,
+  EditableTextEditorKeyInputResult,
+  EditableTextEditorPointerSelectionOptions,
+  EditableTextEditorState,
+  EditableTextEditorStateOptions
+} from './editable-text-editor';
+export {
+  applyEditableTextEditorCommand,
+  applyEditableTextEditorKeyInput,
+  collapseEditableTextEditorSelection,
+  createEditableTextEditorState,
+  editableTextEditorCaretSelection,
+  editableTextEditorPointerSelection,
+  editableTextEditorSelectedRange,
+  editableTextEditorSelectedText,
+  setEditableTextEditorSelection
+} from './editable-text-editor';
 export type {
   EditableTextFragment,
   EditableTextFragmentMode,

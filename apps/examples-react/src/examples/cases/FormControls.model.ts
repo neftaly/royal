@@ -1,10 +1,13 @@
 import {
-  applyEditableTextCommand,
+  applyEditableTextEditorKeyInput,
+  createEditableTextEditorState,
+  editableTextEditorPointerSelection,
   isUiActivatable,
   isUiFocusable,
   layoutEditableText,
-  nearestEditableTextCaret,
-  type EditableTextCommand,
+  setEditableTextEditorSelection,
+  type EditableTextEditorState,
+  type EditableTextKeyInput,
   type EditableTextSelection,
   type TextFontFace,
   type UiNodeSemantics,
@@ -16,12 +19,11 @@ export type EditableTextControlId = 'title' | 'notes';
 export type FormControlId = EditableTextControlId | 'updates' | 'send';
 
 export type EditableTextControlModel = {
+  readonly editor: EditableTextEditorState;
   readonly id: EditableTextControlId;
   readonly label: string;
   readonly maxLength: number;
   readonly mode: EditableTextMode;
-  readonly selection: EditableTextSelection;
-  readonly value: string;
 };
 
 export type ToggleControlModel = {
@@ -33,7 +35,7 @@ export type ToggleControlModel = {
 export type ActionButtonControlModel = {
   readonly id: 'send';
   readonly label: string;
-  readonly pressCount: number;
+  readonly submissionCount: number;
 };
 
 export type CanvasFormModel = {
@@ -57,10 +59,7 @@ export type FormControlsHit =
 
 export type FormControlsFocusDirection = 'backward' | 'forward';
 
-export type FormControlsKeyboardInput = {
-  readonly key: string;
-  readonly shiftKey?: boolean;
-};
+export type FormControlsKeyboardInput = EditableTextKeyInput;
 
 export type FormControlsAction =
   | {
@@ -72,9 +71,13 @@ export type FormControlsAction =
   | { readonly direction: FormControlsFocusDirection; readonly type: 'focus-adjacent-control' }
   | { readonly type: 'focus-initial-control' }
   | { readonly type: 'activate-focused-control' }
-  | { readonly command: EditableTextCommand; readonly type: 'edit-active-text' }
+  | {
+    readonly editor: EditableTextEditorState;
+    readonly id: EditableTextControlId;
+    readonly type: 'set-text-editor';
+  }
   | { readonly type: 'toggle-checkbox' }
-  | { readonly type: 'press-button' }
+  | { readonly type: 'submit-form' }
   | { readonly type: 'blur' };
 
 export const formControlsCameraBounds = {
@@ -132,6 +135,12 @@ export const formControlsLayout = {
     x: -3.62,
     y: 3.1,
   },
+  status: {
+    height: 0.28,
+    width: 4,
+    x: -0.08,
+    y: -2.26,
+  },
 } as const;
 
 const collapsedSelection = (index: number, line?: number): EditableTextSelection => ({
@@ -142,13 +151,24 @@ const collapsedSelection = (index: number, line?: number): EditableTextSelection
 });
 
 export const createEditableTextControl = (
-  options: Omit<EditableTextControlModel, 'selection'> & {
+  options: Omit<EditableTextControlModel, 'editor'> & {
     readonly selection?: EditableTextSelection;
+    readonly value?: string;
   },
-): EditableTextControlModel => ({
-  ...options,
-  selection: options.selection ?? collapsedSelection(options.value.length),
-});
+): EditableTextControlModel => {
+  const value = options.value ?? '';
+
+  return {
+    id: options.id,
+    label: options.label,
+    maxLength: options.maxLength,
+    mode: options.mode,
+    editor: createEditableTextEditorState({
+      selection: options.selection ?? collapsedSelection(value.length),
+      text: value,
+    }),
+  };
+};
 
 const initialTextControls: readonly [EditableTextControlModel, EditableTextControlModel] = [
   createEditableTextControl({
@@ -156,14 +176,12 @@ const initialTextControls: readonly [EditableTextControlModel, EditableTextContr
     label: 'Title',
     maxLength: 64,
     mode: 'single-line',
-    value: '',
   }),
   createEditableTextControl({
     id: 'notes',
     label: 'Notes',
     maxLength: 240,
     mode: 'multiline',
-    value: '',
   }),
 ];
 
@@ -176,21 +194,21 @@ const createSemantics = (
 
   return {
     notes: uiNodeSemantics({
-      controlState: { value: notes.value },
+      controlState: { value: notes.editor.text },
       focusState: { focusable: true, focused: model.focusedId === 'notes', tabIndex: 0 },
       id: 'notes',
       label: notes.label,
       role: 'textbox',
     }),
     send: uiNodeSemantics({
-      controlState: { value: model.button.pressCount },
+      controlState: { value: model.button.submissionCount },
       focusState: { focusable: true, focused: model.focusedId === 'send', tabIndex: 0 },
       id: 'send',
       label: model.button.label,
       role: 'button',
     }),
     title: uiNodeSemantics({
-      controlState: { value: title.value },
+      controlState: { value: title.editor.text },
       focusState: { focusable: true, focused: model.focusedId === 'title', tabIndex: 0 },
       id: 'title',
       label: title.label,
@@ -218,7 +236,7 @@ export const formControlsModel: CanvasFormModel = withSemantics({
   button: {
     id: 'send',
     label: 'Submit',
-    pressCount: 0,
+    submissionCount: 0,
   },
   checkbox: {
     checked: false,
@@ -244,6 +262,14 @@ export const activeEditableTextControl = (
   model.activeTextId === undefined
     ? undefined
     : editableTextControlForId(model, model.activeTextId);
+
+export const formSubmitStatusText = (
+  button: ActionButtonControlModel,
+): string => {
+  if (button.submissionCount === 0) return 'Ready to submit';
+  if (button.submissionCount === 1) return 'Submitted once';
+  return `Submitted ${button.submissionCount} times`;
+};
 
 const isEditableTextControlId = (id: FormControlId): id is EditableTextControlId =>
   id === 'title' || id === 'notes';
@@ -294,11 +320,11 @@ const toggleCheckbox = (model: CanvasFormModel): CanvasFormModel =>
     focusedId: 'updates',
   });
 
-const pressButton = (model: CanvasFormModel): CanvasFormModel =>
+const submitForm = (model: CanvasFormModel): CanvasFormModel =>
   withSemantics({
     ...model,
     activeTextId: undefined,
-    button: { ...model.button, pressCount: model.button.pressCount + 1 },
+    button: { ...model.button, submissionCount: model.button.submissionCount + 1 },
     focusedId: 'send',
   });
 
@@ -313,7 +339,7 @@ const activateControl = (
     case 'updates':
       return toggleCheckbox(focused);
     case 'send':
-      return pressButton(focused);
+      return submitForm(focused);
     case 'notes':
     case 'title':
       return focused;
@@ -322,6 +348,42 @@ const activateControl = (
 
 const isSpaceKey = (key: string): boolean =>
   key === ' ' || key === 'Spacebar';
+
+const displayTextForMode = (value: string, mode: EditableTextMode): string =>
+  mode === 'single-line' ? value.replace(/[\r\n]/g, ' ') : value.replace(/\r\n?/g, '\n');
+
+const maxWidthForMode = (maxWidth: number, mode: EditableTextMode): number =>
+  mode === 'single-line' ? Number.POSITIVE_INFINITY : maxWidth;
+
+const limitText = (value: string, maxLength: number): string =>
+  Array.from(value).slice(0, maxLength).join('');
+
+const textEditorForControl = (
+  control: EditableTextControlModel,
+  editor: EditableTextEditorState,
+): EditableTextEditorState =>
+  createEditableTextEditorState({
+    selection: editor.selection,
+    text: limitText(displayTextForMode(editor.text, control.mode), control.maxLength),
+  });
+
+const activeTextKeyboardAction = (
+  model: CanvasFormModel,
+  input: FormControlsKeyboardInput,
+): FormControlsAction | undefined => {
+  const control = activeEditableTextControl(model);
+  if (control === undefined) return undefined;
+
+  const result = applyEditableTextEditorKeyInput(control.editor, input, { mode: control.mode });
+  if (result.intent === undefined || result.intent.type === 'clipboard-shortcut') return undefined;
+  if (result.intent.type === 'enter-key') return { type: 'submit-form' };
+
+  return {
+    editor: textEditorForControl(control, result.state),
+    id: control.id,
+    type: 'set-text-editor',
+  };
+};
 
 export const formControlsKeyboardAction = (
   model: CanvasFormModel,
@@ -334,6 +396,8 @@ export const formControlsKeyboardAction = (
     };
   }
 
+  const textAction = activeTextKeyboardAction(model, input);
+  if (textAction !== undefined) return textAction;
   if (model.activeTextId !== undefined || model.focusedId === undefined) return undefined;
 
   const focused = model.semantics[model.focusedId];
@@ -364,29 +428,6 @@ export const hitTestFormControls = (point: FormControlsWorldPoint): FormControls
   return undefined;
 };
 
-const displayTextForMode = (value: string, mode: EditableTextMode): string =>
-  mode === 'single-line' ? value.replace(/[\r\n]/g, ' ') : value.replace(/\r\n?/g, '\n');
-
-const maxWidthForMode = (maxWidth: number, mode: EditableTextMode): number =>
-  mode === 'single-line' ? Number.POSITIVE_INFINITY : maxWidth;
-
-const limitText = (value: string, maxLength: number): string =>
-  Array.from(value).slice(0, maxLength).join('');
-
-const normalizeSelection = (
-  value: string,
-  selection: EditableTextSelection,
-): EditableTextSelection => {
-  const clamp = (index: number): number => Math.max(0, Math.min(value.length, index));
-
-  return {
-    anchor: clamp(selection.anchor),
-    anchorLine: selection.anchorLine,
-    focus: clamp(selection.focus),
-    focusLine: selection.focusLine,
-  };
-};
-
 export const caretSelectionAtFormPoint = (
   control: EditableTextControlModel,
   font: TextFontFace | undefined,
@@ -398,11 +439,15 @@ export const caretSelectionAtFormPoint = (
     fontSize: formControlsTextMetrics.fontSize,
     lineHeight: formControlsTextMetrics.lineHeight,
     maxWidth: maxWidthForMode(field.textMaxWidth, control.mode),
-    text: displayTextForMode(control.value, control.mode),
+    text: displayTextForMode(control.editor.text, control.mode),
   });
-  const placement = nearestEditableTextCaret(layout, point, field.textOrigin);
 
-  return collapsedSelection(placement.index, placement.line);
+  return editableTextEditorPointerSelection({
+    layout,
+    origin: field.textOrigin,
+    point,
+    state: control.editor,
+  });
 };
 
 const replaceTextControl = (
@@ -411,23 +456,6 @@ const replaceTextControl = (
 ): readonly [EditableTextControlModel, EditableTextControlModel] => {
   const [first, second] = controls;
   return first.id === nextControl.id ? [nextControl, second] : [first, nextControl];
-};
-
-const editTextControl = (
-  control: EditableTextControlModel,
-  command: EditableTextCommand,
-): EditableTextControlModel => {
-  const next = applyEditableTextCommand({
-    selection: control.selection,
-    text: control.value,
-  }, command);
-  const value = limitText(displayTextForMode(next.text, control.mode), control.maxLength);
-
-  return {
-    ...control,
-    selection: normalizeSelection(value, next.selection),
-    value,
-  };
 };
 
 export const formControlsReducer = (
@@ -444,7 +472,7 @@ export const formControlsReducer = (
         focusedId: action.id,
         textControls: replaceTextControl(model.textControls, {
           ...control,
-          selection: normalizeSelection(control.value, action.selection),
+          editor: setEditableTextEditorSelection(control.editor, action.selection),
         }),
       });
     }
@@ -460,17 +488,19 @@ export const formControlsReducer = (
       return model.focusedId === undefined
         ? model
         : activateControl(model, model.focusedId);
-    case 'edit-active-text': {
-      const control = activeEditableTextControl(model);
-      if (control === undefined) return model;
+    case 'set-text-editor': {
+      const control = editableTextControlForId(model, action.id);
       return withSemantics({
         ...model,
-        textControls: replaceTextControl(model.textControls, editTextControl(control, action.command)),
+        textControls: replaceTextControl(model.textControls, {
+          ...control,
+          editor: textEditorForControl(control, action.editor),
+        }),
       });
     }
     case 'toggle-checkbox':
       return activateControl(model, 'updates');
-    case 'press-button':
+    case 'submit-form':
       return activateControl(model, 'send');
     case 'blur':
       return withSemantics({
