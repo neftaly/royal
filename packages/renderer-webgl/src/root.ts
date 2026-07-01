@@ -89,14 +89,34 @@ type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
 };
 
 type LoadedGltfPrimitive = {
-  readonly baseColorImageUri?: string;
   readonly indices: Uint16Array | Uint32Array | Uint8Array;
-  readonly image?: HTMLImageElement | ImageBitmap;
+  readonly key: string;
+  readonly material: LoadedGltfMaterial;
+  readonly materialLod?: GltfMaterialPrimitiveLod;
   readonly model: Mat4;
+  readonly nodeLod?: GltfNodePrimitiveLod;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
-  readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
+};
+
+type LoadedGltfMaterial = {
+  readonly baseColorImageUri?: string;
+  readonly color?: Rgba;
+  readonly image?: HTMLImageElement | ImageBitmap;
+  readonly sampler?: TextureSampler;
+};
+
+type GltfNodePrimitiveLod = {
+  readonly group: string;
+  readonly level: number;
+  readonly levelCount: number;
+  readonly thresholds: readonly number[];
+};
+
+type GltfMaterialPrimitiveLod = {
+  readonly levels: readonly LoadedGltfMaterial[];
+  readonly thresholds: readonly number[];
 };
 
 type GltfState = {
@@ -150,7 +170,12 @@ type GltfSampler = {
 };
 
 type GltfMaterial = {
+  readonly extensions?: {
+    readonly MSFT_lod?: GltfLodExtension;
+  };
+  readonly extras?: GltfLodExtras;
   readonly pbrMetallicRoughness?: {
+    readonly baseColorFactor?: readonly number[];
     readonly baseColorTexture?: {
       readonly index?: number;
     };
@@ -173,11 +198,23 @@ type GltfMeshPrimitive = {
 };
 
 type GltfSceneNode = {
+  readonly extensions?: {
+    readonly MSFT_lod?: GltfLodExtension;
+  };
+  readonly extras?: GltfLodExtras;
   readonly matrix?: readonly number[];
   readonly mesh?: number;
   readonly rotation?: readonly number[];
   readonly scale?: readonly number[];
   readonly translation?: readonly number[];
+};
+
+type GltfLodExtension = {
+  readonly ids?: readonly number[];
+};
+
+type GltfLodExtras = {
+  readonly MSFT_screencoverage?: readonly number[];
 };
 
 type GltfScene = {
@@ -625,6 +662,92 @@ const componentCount = (type: GltfAccessor["type"]): number => {
   }
 };
 
+const gltfColor = (values: readonly number[] | undefined): Rgba | undefined => {
+  if (values === undefined || values.length < 3) return undefined;
+
+  return [
+    values[0] ?? 1,
+    values[1] ?? 1,
+    values[2] ?? 1,
+    values[3] ?? 1,
+  ];
+};
+
+const clamp01 = (value: number): number =>
+  Math.max(0, Math.min(1, value));
+
+const fallbackLodThreshold = (level: number, levelCount: number): number =>
+  level >= levelCount - 1 ? 0 : 0.2 / (4 ** level);
+
+const gltfLodThresholds = (
+  extras: GltfLodExtras | undefined,
+  levelCount: number,
+): readonly number[] => {
+  const thresholds: number[] = [];
+  let previous = 1;
+  for (let level = 0; level < levelCount; level += 1) {
+    const value = extras?.MSFT_screencoverage?.[level];
+    const threshold = Number.isFinite(value)
+      ? clamp01(value as number)
+      : fallbackLodThreshold(level, levelCount);
+    const ordered = Math.min(previous, threshold);
+    thresholds.push(ordered);
+    previous = ordered;
+  }
+
+  return thresholds;
+};
+
+const selectedLodLevel = (
+  coverage: number,
+  levelCount: number,
+  thresholds: readonly number[],
+): number | undefined => {
+  for (let level = 0; level < levelCount; level += 1) {
+    if (coverage >= (thresholds[level] ?? fallbackLodThreshold(level, levelCount))) return level;
+  }
+
+  return undefined;
+};
+
+const projectedScreenCoverage = (
+  positions: Float32Array,
+  model: Mat4,
+  projection: Mat4,
+  view: Mat4,
+): number => {
+  if (positions.length === 0) return 0;
+
+  const mvp = multiplyMat4(projection, multiplyMat4(view, model));
+  let minX = 1;
+  let minY = 1;
+  let maxX = -1;
+  let maxY = -1;
+  let projected = false;
+
+  for (let index = 0; index < positions.length; index += 3) {
+    const x = positions[index]!;
+    const y = positions[index + 1]!;
+    const z = positions[index + 2]!;
+    const clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+    const clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+    const clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+    if (clipW === 0) continue;
+
+    const ndcX = clamp01((clipX / clipW + 1) / 2);
+    const ndcY = clamp01((clipY / clipW + 1) / 2);
+    minX = Math.min(minX, ndcX);
+    minY = Math.min(minY, ndcY);
+    maxX = Math.max(maxX, ndcX);
+    maxY = Math.max(maxY, ndcY);
+    projected = true;
+  }
+
+  if (!projected) return 0;
+
+  return clamp01((maxX - minX) * (maxY - minY));
+};
+
 /**
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
  * by the contracts while keeping all GPU ownership inside this root.
@@ -873,38 +996,95 @@ export class WebGlRoot {
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
 
-    let index = 0;
+    const rootModel = transformMat4(node.transform);
+    const selectedNodeLevels = this.#selectedGltfNodeLodLevels(state.primitives, rootModel, projection, view);
     for (const primitive of state.primitives) {
-      let material: StandardMaterial = { baseColor: { color: DEFAULT_COLOR, kind: "solid" }, kind: "standard" };
-      if (primitive.image !== undefined) {
+      const nodeLod = primitive.nodeLod;
+      if (nodeLod !== undefined) {
+        const selectedLevel = selectedNodeLevels.get(nodeLod.group);
+        if (selectedLevel === undefined || selectedLevel !== nodeLod.level) continue;
+      }
+
+      const model = multiplyMat4(rootModel, primitive.model);
+      const loadedMaterial = this.#selectedGltfMaterial(primitive, model, projection, view);
+      if (loadedMaterial === undefined) continue;
+
+      let material: StandardMaterial = {
+        baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+        kind: "standard",
+      };
+      if (loadedMaterial.image !== undefined) {
         const baseColor: TextureAssetUploadRef = {
           colorSpace: "srgb",
           flipY: false,
           kind: "asset",
-          ...(primitive.sampler === undefined ? {} : { sampler: primitive.sampler }),
-          uri: `${state.key}:image:${index}`,
+          ...(loadedMaterial.sampler === undefined ? {} : { sampler: loadedMaterial.sampler }),
+          uri: `${state.key}:image:${loadedMaterial.baseColorImageUri ?? primitive.key}`,
         };
-        this.#ensureImmediateTexture(baseColor, primitive.image);
+        this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         material = { baseColor, kind: "standard" };
       }
       const cpu: CpuGeometry = {
         indices: primitive.indices,
-        key: `${state.key}:primitive:${index}`,
+        key: `${state.key}:primitive:${primitive.key}`,
         mode: "triangles",
         ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
         positions: primitive.positions,
         ...(primitive.texCoords === undefined ? {} : { texCoords: primitive.texCoords }),
       };
-      const model = multiplyMat4(transformMat4(node.transform), primitive.model);
       if (!this.#isVisible(cpu.positions, model, projection, view)) {
-        index += 1;
         continue;
       }
       const gpu = this.#geometryResource(cpu);
       usedGeometry.add(gpu.key);
       this.#drawGeometry(gpu, material, model, projection, view, light);
-      index += 1;
     }
+  }
+
+  #selectedGltfNodeLodLevels(
+    primitives: readonly LoadedGltfPrimitive[],
+    rootModel: Mat4,
+    projection: Mat4,
+    view: Mat4,
+  ): Map<string, number | undefined> {
+    const coverages = new Map<string, number>();
+    const lods = new Map<string, GltfNodePrimitiveLod>();
+
+    for (const primitive of primitives) {
+      const lod = primitive.nodeLod;
+      if (lod === undefined) continue;
+      lods.set(lod.group, lod);
+      if (lod.level !== 0) continue;
+
+      const model = multiplyMat4(rootModel, primitive.model);
+      const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+      coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
+    }
+
+    const selected = new Map<string, number | undefined>();
+    for (const [group, lod] of lods) {
+      selected.set(group, selectedLodLevel(
+        coverages.get(group) ?? 0,
+        lod.levelCount,
+        lod.thresholds,
+      ));
+    }
+
+    return selected;
+  }
+
+  #selectedGltfMaterial(
+    primitive: LoadedGltfPrimitive,
+    model: Mat4,
+    projection: Mat4,
+    view: Mat4,
+  ): LoadedGltfMaterial | undefined {
+    const lod = primitive.materialLod;
+    if (lod === undefined) return primitive.material;
+
+    const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+    const level = selectedLodLevel(coverage, lod.levels.length, lod.thresholds);
+    return level === undefined ? undefined : lod.levels[level];
   }
 
   #drawGeometry(
@@ -1587,37 +1767,119 @@ void main() {
   ): readonly LoadedGltfPrimitive[] {
     const primitives: LoadedGltfPrimitive[] = [];
     const scene = document.scenes?.[document.scene ?? 0];
+    const referencedLodNodes = new Set<number>();
+    for (const node of document.nodes ?? []) {
+      for (const id of node.extensions?.MSFT_lod?.ids ?? []) {
+        if (Number.isInteger(id) && id >= 0) referencedLodNodes.add(id);
+      }
+    }
+
     for (const nodeIndex of scene?.nodes ?? []) {
-      const sceneNode = document.nodes?.[nodeIndex];
-      const nodeModel = gltfNodeMat4(sceneNode);
-      const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
-      for (const primitive of mesh?.primitives ?? []) {
-        const positionAccessor = primitive.attributes?.POSITION;
-        const normalAccessor = primitive.attributes?.NORMAL;
-        const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
-        const indexAccessor = primitive.indices;
-        if (positionAccessor === undefined || indexAccessor === undefined) continue;
-        const material = primitive.material === undefined ? undefined : document.materials?.[primitive.material];
-        const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
-        const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-        const imageIndex = texture?.source;
-        const imageUri = imageIndex === undefined ? undefined : document.images?.[imageIndex]?.uri;
-        const sampler = texture === undefined
-          ? undefined
-          : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
-        primitives.push({
-          ...(imageUri === undefined ? {} : { baseColorImageUri: resolveUrl(src, imageUri) }),
-          indices: this.#readGltfIndices(document, buffers, indexAccessor),
-          model: nodeModel,
-          ...(normalAccessor === undefined ? {} : { normals: this.#readGltfNormals(document, buffers, normalAccessor) }),
-          positions: this.#readGltfPositions(document, buffers, positionAccessor),
-          ...(sampler === undefined ? {} : { sampler }),
-          ...(texCoordAccessor === undefined ? {} : { texCoords: this.#readGltfTexCoords(document, buffers, texCoordAccessor) }),
+      if (referencedLodNodes.has(nodeIndex)) continue;
+      const node = document.nodes?.[nodeIndex];
+      const lodIds = (node?.extensions?.MSFT_lod?.ids ?? [])
+        .filter((id) => Number.isInteger(id) && id >= 0 && document.nodes?.[id] !== undefined);
+      if (lodIds.length === 0) {
+        this.#appendGltfNodePrimitives(document, buffers, src, primitives, nodeIndex);
+        continue;
+      }
+
+      const levelCount = lodIds.length + 1;
+      const thresholds = gltfLodThresholds(node?.extras, levelCount);
+      const group = `node:${nodeIndex}`;
+      this.#appendGltfNodePrimitives(document, buffers, src, primitives, nodeIndex, {
+        group,
+        level: 0,
+        levelCount,
+        thresholds,
+      });
+      for (const [lodIndex, lodNodeIndex] of lodIds.entries()) {
+        this.#appendGltfNodePrimitives(document, buffers, src, primitives, lodNodeIndex, {
+          group,
+          level: lodIndex + 1,
+          levelCount,
+          thresholds,
         });
       }
     }
 
     return primitives;
+  }
+
+  #appendGltfNodePrimitives(
+    document: GltfDocument,
+    buffers: readonly ArrayBuffer[],
+    src: string,
+    primitives: LoadedGltfPrimitive[],
+    nodeIndex: number,
+    nodeLod?: GltfNodePrimitiveLod,
+  ): void {
+    const sceneNode = document.nodes?.[nodeIndex];
+    const nodeModel = gltfNodeMat4(sceneNode);
+    const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
+    for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
+      const positionAccessor = primitive.attributes?.POSITION;
+      const normalAccessor = primitive.attributes?.NORMAL;
+      const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
+      const indexAccessor = primitive.indices;
+      if (positionAccessor === undefined || indexAccessor === undefined) continue;
+      const material = this.#readGltfMaterial(document, src, primitive.material);
+      const materialLod = this.#readGltfMaterialLod(document, src, primitive.material);
+      primitives.push({
+        indices: this.#readGltfIndices(document, buffers, indexAccessor),
+        key: `node:${nodeIndex}:primitive:${primitiveIndex}`,
+        material,
+        ...(materialLod === undefined ? {} : { materialLod }),
+        model: nodeModel,
+        ...(nodeLod === undefined ? {} : { nodeLod }),
+        ...(normalAccessor === undefined ? {} : { normals: this.#readGltfNormals(document, buffers, normalAccessor) }),
+        positions: this.#readGltfPositions(document, buffers, positionAccessor),
+        ...(texCoordAccessor === undefined ? {} : { texCoords: this.#readGltfTexCoords(document, buffers, texCoordAccessor) }),
+      });
+    }
+  }
+
+  #readGltfMaterial(
+    document: GltfDocument,
+    src: string,
+    materialIndex: number | undefined,
+  ): LoadedGltfMaterial {
+    const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
+    const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
+    const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
+    const imageIndex = texture?.source;
+    const imageUri = imageIndex === undefined ? undefined : document.images?.[imageIndex]?.uri;
+    const sampler = texture === undefined
+      ? undefined
+      : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
+    const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
+
+    return {
+      ...(imageUri === undefined ? {} : { baseColorImageUri: resolveUrl(src, imageUri) }),
+      ...(color === undefined ? {} : { color }),
+      ...(sampler === undefined ? {} : { sampler }),
+    };
+  }
+
+  #readGltfMaterialLod(
+    document: GltfDocument,
+    src: string,
+    materialIndex: number | undefined,
+  ): GltfMaterialPrimitiveLod | undefined {
+    const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
+    const lodIds = (material?.extensions?.MSFT_lod?.ids ?? [])
+      .filter((id) => Number.isInteger(id) && id >= 0 && document.materials?.[id] !== undefined);
+    if (materialIndex === undefined || lodIds.length === 0) return undefined;
+
+    const levels = [
+      this.#readGltfMaterial(document, src, materialIndex),
+      ...lodIds.map((id) => this.#readGltfMaterial(document, src, id)),
+    ];
+
+    return {
+      levels,
+      thresholds: gltfLodThresholds(material?.extras, levels.length),
+    };
   }
 
   #loadGltfImages(src: string, document: GltfDocument, state: GltfState): void {
@@ -1626,16 +1888,33 @@ void main() {
       const uri = resolveUrl(src, image.uri);
       loadImage(uri).then((loadedImage) => {
         if (this.#disposed || state.status !== "ready") return;
-        state.primitives = state.primitives.map((primitive) =>
-          primitive.baseColorImageUri === uri
-            ? { ...primitive, image: loadedImage }
-            : primitive);
+        state.primitives = state.primitives.map((primitive) => ({
+          ...primitive,
+          material: this.#settleGltfMaterialImage(primitive.material, uri, loadedImage),
+          ...(primitive.materialLod === undefined
+            ? {}
+            : {
+              materialLod: {
+                ...primitive.materialLod,
+                levels: primitive.materialLod.levels.map((material) =>
+                  this.#settleGltfMaterialImage(material, uri, loadedImage)),
+              },
+            }),
+        }));
         this.#scheduleRender();
       }, (error: unknown) => {
         if (this.#disposed) return;
         this.#recordDiagnostic(`glTF base-color image load failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
+  }
+
+  #settleGltfMaterialImage(
+    material: LoadedGltfMaterial,
+    uri: string,
+    image: HTMLImageElement | ImageBitmap,
+  ): LoadedGltfMaterial {
+    return material.baseColorImageUri === uri ? { ...material, image } : material;
   }
 
   #readGltfPositions(document: GltfDocument, buffers: readonly ArrayBuffer[], accessorIndex: number): Float32Array {

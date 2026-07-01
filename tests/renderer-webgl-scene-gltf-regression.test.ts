@@ -50,6 +50,9 @@ const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
 const triangleBinByteLength = 104;
+const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
+const lodBinUri = "lod.bin";
+const lodBinByteLength = 102;
 
 const fakeCanvas = (
   gl: WebGL2RenderingContext,
@@ -519,6 +522,25 @@ const uniform3fvPayloads = (calls: readonly GlCall[]): readonly (readonly number
       return values.slice(offset, offset + length).slice(0, 3);
     });
 
+const uniformLocationName = (value: unknown): string | undefined =>
+  typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
+    ? value.name
+    : undefined;
+
+const uniform4fvPayloads = (
+  calls: readonly GlCall[],
+  name: string,
+): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "uniform4fv" && uniformLocationName(call.args[0]) === name)
+    .map((call) => {
+      const values = numericArray(call.args[1]);
+      const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
+      const length = typeof call.args[3] === "number" ? call.args[3] : 4;
+
+      return values.slice(offset, offset + length).slice(0, 4);
+    });
+
 const matrixUniformPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
   calls
     .filter((call) => call.name === "uniformMatrix4fv")
@@ -558,6 +580,213 @@ const triangleBin = (): ArrayBuffer => {
 
   return buffer;
 };
+
+const lodBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(lodBinByteLength);
+
+  new Float32Array(buffer, 0, 12).set([
+    -0.75, -0.75, 0,
+    0.75, -0.75, 0,
+    0.75, 0.75, 0,
+    -0.75, 0.75, 0,
+  ]);
+  new Uint16Array(buffer, 48, 6).set([0, 1, 2, 0, 2, 3]);
+  new Float32Array(buffer, 60, 9).set([
+    0, 0.75, 0,
+    -0.75, -0.75, 0,
+    0.75, -0.75, 0,
+  ]);
+  new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const lodAccessors = () => [
+  {
+    bufferView: 0,
+    componentType: 5126,
+    count: 4,
+    max: [0.75, 0.75, 0],
+    min: [-0.75, -0.75, 0],
+    type: "VEC3",
+  },
+  {
+    bufferView: 1,
+    componentType: 5123,
+    count: 6,
+    type: "SCALAR",
+  },
+  {
+    bufferView: 2,
+    componentType: 5126,
+    count: 3,
+    max: [0.75, 0.75, 0],
+    min: [-0.75, -0.75, 0],
+    type: "VEC3",
+  },
+  {
+    bufferView: 3,
+    componentType: 5123,
+    count: 3,
+    type: "SCALAR",
+  },
+];
+
+const lodBufferViews = () => [
+  {
+    buffer: 0,
+    byteLength: 48,
+    byteOffset: 0,
+    target: 34962,
+  },
+  {
+    buffer: 0,
+    byteLength: 12,
+    byteOffset: 48,
+    target: 34963,
+  },
+  {
+    buffer: 0,
+    byteLength: 36,
+    byteOffset: 60,
+    target: 34962,
+  },
+  {
+    buffer: 0,
+    byteLength: 6,
+    byteOffset: 96,
+    target: 34963,
+  },
+];
+
+const nodeLodDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  materials: [
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [1, 0, 0, 1],
+      },
+    },
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [0, 0, 1, 1],
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 2,
+          },
+          indices: 3,
+          material: 1,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      extensions: {
+        MSFT_lod: {
+          ids: [1],
+        },
+      },
+      extras: {
+        MSFT_screencoverage: [0.2, 0],
+      },
+      mesh: 0,
+    },
+    {
+      mesh: 1,
+    },
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0, 1],
+    },
+  ],
+});
+
+const materialLodDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  materials: [
+    {
+      extensions: {
+        MSFT_lod: {
+          ids: [1],
+        },
+      },
+      extras: {
+        MSFT_screencoverage: [0.2, 0],
+      },
+      pbrMetallicRoughness: {
+        baseColorFactor: [1, 0, 0, 1],
+      },
+    },
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [0, 0, 1, 1],
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+});
 
 const triangleDocument = () => ({
   accessors: [
@@ -760,6 +989,18 @@ const settleDocumentAndBuffer = async (
   await flushMicrotasks();
 };
 
+const settleLodDocumentAndBuffer = async (
+  loader: ReturnType<typeof installStagedGltfLoader>,
+  document: unknown,
+): Promise<void> => {
+  expect(loader.resolvePendingFetch(/lod\.gltf(?:$|[?#])/, (url) =>
+    responseWithJson(url, document))).toBe(true);
+  await flushMicrotasks();
+  expect(loader.resolvePendingFetch(/lod\.bin(?:$|[?#])/, (url) =>
+    responseWithBuffer(url, lodBin()))).toBe(true);
+  await flushMicrotasks();
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -958,5 +1199,75 @@ describe("WebGL renderer scene and glTF regressions", () => {
       args: [gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT],
       name: "texParameteri",
     });
+  });
+
+  it("selects one node-level MSFT_lod member from screen coverage and suppresses lower roots", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = (scale: number) => renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version: "node-lod",
+      }),
+    ]);
+
+    root.render(renderGraph(1));
+    await settleLodDocumentAndBuffer(loader, nodeLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const highDraws = drawCalls(calls);
+    expect(highDraws.at(-1)?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(highDraws.at(-1)!), "high coverage should select the six-index LOD0 quad").toBe(6);
+
+    const drawsBeforeLow = drawCalls(calls).length;
+    root.render(renderGraph(0.2));
+
+    const lowDraws = drawCalls(calls).slice(drawsBeforeLow);
+    expect(lowDraws, "only one node in the LOD chain should draw per render").toHaveLength(1);
+    expect(drawCount(lowDraws[0]!), "low coverage should select the referenced three-index LOD1 triangle").toBe(3);
+  });
+
+  it("selects material-level MSFT_lod variants from screen coverage", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const high = fakeGl();
+    const highRoot = createWebGlRoot(fakeCanvas(high.gl));
+    const low = fakeGl();
+    const lowRoot = createWebGlRoot(fakeCanvas(low.gl));
+    const renderGraph = (version: string, scale: number) => renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version,
+      }),
+    ]);
+
+    highRoot.render(renderGraph("material-lod-high", 1));
+    await settleLodDocumentAndBuffer(loader, materialLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const highColors = uniform4fvPayloads(high.calls, "u_color").map(roundVector);
+    expect(highColors).toContainEqual([1, 0, 0, 1]);
+
+    const lowLoader = installStagedGltfLoader();
+    lowRoot.render(renderGraph("material-lod-low", 0.2));
+    await settleLodDocumentAndBuffer(lowLoader, materialLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const lowColors = uniform4fvPayloads(low.calls, "u_color").map(roundVector);
+    expect(lowColors).toContainEqual([0, 0, 1, 1]);
   });
 });
