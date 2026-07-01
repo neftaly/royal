@@ -16,6 +16,7 @@ import type {
   UnlitMaterial,
   Vec3,
 } from "@royal/renderer-core";
+import { textMesh } from "@royal/renderer-core/text";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -81,6 +82,7 @@ type TextureLoadState = TextureResource & {
 };
 
 type LoadedGltfPrimitive = {
+  readonly baseColorImageUri?: string;
   readonly indices: Uint16Array | Uint32Array | Uint8Array;
   readonly image?: HTMLImageElement | ImageBitmap;
   readonly positions: Float32Array;
@@ -304,10 +306,35 @@ const projectionMat4 = (camera: Camera, width: number, height: number): Mat4 => 
 };
 
 const textureKey = (texture: TextureRef): string => {
-  if (texture.kind === "solid") return `solid:${texture.color.join(",")}:${texture.version ?? ""}`;
-  if (texture.kind === "asset") return `asset:${texture.uri}:${texture.version ?? ""}`;
+  if (texture.kind === "solid") {
+    return `solid:${texture.color.join(",")}:${texture.colorSpace ?? ""}:${texture.version ?? ""}`;
+  }
+  if (texture.kind === "asset") {
+    const sampler = texture.sampler;
+    return [
+      "asset",
+      texture.uri,
+      texture.version ?? "",
+      texture.colorSpace ?? "",
+      sampler?.magFilter ?? "",
+      sampler?.minFilter ?? "",
+      sampler?.wrapS ?? "",
+      sampler?.wrapT ?? "",
+    ].join(":");
+  }
 
-  return `virtual:${texture.manifestUri}:${texture.version ?? ""}`;
+  const sampler = texture.sampler;
+  return [
+    "virtual",
+    texture.manifestUri,
+    texture.version ?? "",
+    texture.colorSpace ?? "",
+    sampler?.magFilter ?? "",
+    sampler?.minFilter ?? "",
+    sampler?.wrapS ?? "",
+    sampler?.wrapT ?? "",
+    texture.preview === undefined ? "" : textureKey(texture.preview),
+  ].join(":");
 };
 
 const materialColor = (material: Material): Rgba => {
@@ -336,16 +363,28 @@ const samplerConstant = (
       return gl.LINEAR;
     case "linear-mipmap-linear":
       return gl.LINEAR_MIPMAP_LINEAR;
+    case "linear-mipmap-nearest":
+      return gl.LINEAR_MIPMAP_NEAREST;
     case "mirrored-repeat":
       return gl.MIRRORED_REPEAT;
     case "nearest":
       return gl.NEAREST;
+    case "nearest-mipmap-linear":
+      return gl.NEAREST_MIPMAP_LINEAR;
+    case "nearest-mipmap-nearest":
+      return gl.NEAREST_MIPMAP_NEAREST;
     case "repeat":
       return gl.REPEAT;
     default:
       return fallback;
   }
 };
+
+const usesMipmaps = (value: string | undefined): boolean =>
+  value === "linear-mipmap-linear"
+  || value === "linear-mipmap-nearest"
+  || value === "nearest-mipmap-linear"
+  || value === "nearest-mipmap-nearest";
 
 const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
@@ -420,11 +459,16 @@ export class WebGlRoot {
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
+  #dprMediaQuery: MediaQueryList | undefined;
   #diagnostics: string[] = [];
   #disposed = false;
   #frame = 0;
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
+  #resizeObserver: ResizeObserver | undefined;
+  readonly #viewportInvalidationListener = (): void => {
+    this.#scheduleRender();
+  };
 
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
     this.#canvas = canvas;
@@ -434,6 +478,7 @@ export class WebGlRoot {
       throw new Error("Royal WebGL renderer requires a WebGL2 context");
     }
     this.#gl = gl;
+    this.#watchViewport();
   }
 
   get canvas(): HTMLCanvasElement {
@@ -514,6 +559,11 @@ export class WebGlRoot {
     this.#geometry.clear();
     this.#textures.clear();
     this.#gltf.clear();
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = undefined;
+    this.#dprMediaQuery?.removeEventListener?.("change", this.#viewportInvalidationListener);
+    this.#dprMediaQuery?.removeListener?.(this.#viewportInvalidationListener);
+    this.#dprMediaQuery = undefined;
   }
 
   snapshot(): WebGlRootSnapshot {
@@ -537,6 +587,21 @@ export class WebGlRoot {
     if (this.#canvas.height !== height) this.#canvas.height = height;
 
     return { height, width };
+  }
+
+  #watchViewport(): void {
+    const ResizeObserverConstructor = globalThis.ResizeObserver;
+    if (typeof ResizeObserverConstructor === "function") {
+      this.#resizeObserver = new ResizeObserverConstructor(this.#viewportInvalidationListener);
+      this.#resizeObserver.observe(this.#canvas);
+    }
+
+    const matchMedia = globalThis.matchMedia;
+    if (typeof matchMedia === "function") {
+      this.#dprMediaQuery = matchMedia(`(resolution: ${globalThis.devicePixelRatio ?? 1}dppx)`);
+      this.#dprMediaQuery.addEventListener?.("change", this.#viewportInvalidationListener);
+      this.#dprMediaQuery.addListener?.(this.#viewportInvalidationListener);
+    }
   }
 
   #drawNode(
@@ -569,9 +634,14 @@ export class WebGlRoot {
     usedGeometry: Set<string>,
   ): void {
     const cpu = this.#meshGeometry(node.geometry, node.material);
+    const model = transformMat4(node.transform);
+    if (!this.#isVisible(cpu.positions, model, projection, view)) return;
+    if (node.material.kind === "standard" && light === undefined) {
+      throw new Error("standardMaterial meshes require a directionalLight in the render pass");
+    }
     const gpu = this.#geometryResource(cpu);
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, node.material, transformMat4(node.transform), projection, view, light);
+    this.#drawGeometry(gpu, node.material, model, projection, view, light);
   }
 
   #drawText(
@@ -580,27 +650,27 @@ export class WebGlRoot {
     view: Mat4,
     usedGeometry: Set<string>,
   ): void {
-    const bounds = node.layout.bounds;
-    if (bounds.xMax <= bounds.xMin || bounds.yMax <= bounds.yMin) return;
+    const mesh = textMesh(node);
+    if (mesh.vertices.length === 0 || mesh.indices.length === 0) return;
 
-    const z = node.layout.lines[0]?.origin[2] ?? 0;
-    const positions = new Float32Array([
-      bounds.xMin, bounds.yMax, z,
-      bounds.xMax, bounds.yMax, z,
-      bounds.xMax, bounds.yMin, z,
-      bounds.xMin, bounds.yMin, z,
-    ]);
+    const positions = new Float32Array(mesh.vertices.length * 3);
+    const texCoords = new Float32Array(mesh.vertices.length * 2);
+    for (const [index, vertex] of mesh.vertices.entries()) {
+      positions[index * 3] = vertex.position[0];
+      positions[index * 3 + 1] = vertex.position[1];
+      positions[index * 3 + 2] = vertex.position[2];
+      texCoords[index * 2] = vertex.glyphCoord[0];
+      texCoords[index * 2 + 1] = vertex.glyphCoord[1];
+    }
+    const indices = mesh.vertices.length > 65535
+      ? new Uint32Array(mesh.indices)
+      : new Uint16Array(mesh.indices);
     const cpu: CpuGeometry = {
-      indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
-      key: `text:${node.layout.source}:${node.layout.font.metrics.size}:${bounds.xMin},${bounds.yMin},${bounds.xMax},${bounds.yMax}`,
+      indices,
+      key: `text:${node.layout.source}:${node.layout.font.metrics.size}:${mesh.vertices.length}:${mesh.indices.length}`,
       mode: "triangles",
       positions,
-      texCoords: new Float32Array([
-        0, 1,
-        1, 1,
-        1, 0,
-        0, 0,
-      ]),
+      texCoords,
     };
     const gpu = this.#geometryResource(cpu);
     const material: UnlitMaterial = {
@@ -639,9 +709,14 @@ export class WebGlRoot {
         positions: primitive.positions,
         ...(primitive.texCoords === undefined ? {} : { texCoords: primitive.texCoords }),
       };
+      const model = transformMat4(node.transform);
+      if (!this.#isVisible(cpu.positions, model, projection, view)) {
+        index += 1;
+        continue;
+      }
       const gpu = this.#geometryResource(cpu);
       usedGeometry.add(gpu.key);
-      this.#drawGeometry(gpu, material, transformMat4(node.transform), projection, view, undefined);
+      this.#drawGeometry(gpu, material, model, projection, view, undefined);
       index += 1;
     }
   }
@@ -677,12 +752,14 @@ export class WebGlRoot {
       gl.enableVertexAttribArray(positionLocation);
       gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
     }
-    if (geometry.texCoordBuffer !== undefined) {
-      const uvLocation = gl.getAttribLocation(program, "a_uv");
-      if (uvLocation >= 0) {
+    const uvLocation = gl.getAttribLocation(program, "a_uv");
+    if (uvLocation >= 0) {
+      if (geometry.texCoordBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.texCoordBuffer);
         gl.enableVertexAttribArray(uvLocation);
         gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 0, 0);
+      } else {
+        gl.disableVertexAttribArray?.(uvLocation);
       }
     }
     if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
@@ -700,8 +777,10 @@ export class WebGlRoot {
   }
 
   #bindMaterialTexture(program: WebGLProgram, material: Material): boolean {
-    const texture = material.baseColor;
-    if (texture.kind === "solid" || texture.kind === "virtual-asset") return false;
+    const texture = material.baseColor.kind === "virtual-asset"
+      ? material.baseColor.preview
+      : material.baseColor;
+    if (texture === undefined || texture.kind === "solid") return false;
     const resource = this.#texture(texture);
     if (!resource.uploaded) return false;
     const gl = this.#gl;
@@ -862,16 +941,29 @@ void main() {
       };
     }
     if (geometry.kind === "box") {
-      const filled = this.#boxGeometry(geometry as BoxGeometry);
+      const box = geometry as BoxGeometry;
+      const [width, height, depth] = box.size;
+      const x = width / 2;
+      const y = height / 2;
+      const z = depth / 2;
       return {
         indices: new Uint16Array([
           0, 1, 1, 2, 2, 3, 3, 0,
           4, 5, 5, 6, 6, 7, 7, 4,
           0, 4, 1, 5, 2, 6, 3, 7,
         ]),
-        key: `wire:${filled.key}`,
+        key: `wire:box:${width},${height},${depth}`,
         mode: "lines",
-        positions: filled.positions,
+        positions: new Float32Array([
+          -x, -y, z,
+          x, -y, z,
+          x, y, z,
+          -x, y, z,
+          -x, -y, -z,
+          x, -y, -z,
+          x, y, -z,
+          -x, y, -z,
+        ]),
       };
     }
 
@@ -909,11 +1001,11 @@ void main() {
     return {
       indices: new Uint16Array([
         0, 1, 2, 0, 2, 3,
-        4, 6, 5, 4, 7, 6,
-        0, 4, 5, 0, 5, 1,
-        3, 2, 6, 3, 6, 7,
-        1, 5, 6, 1, 6, 2,
-        0, 3, 7, 0, 7, 4,
+        4, 5, 6, 4, 6, 7,
+        8, 9, 10, 8, 10, 11,
+        12, 13, 14, 12, 14, 15,
+        16, 17, 18, 16, 18, 19,
+        20, 21, 22, 20, 22, 23,
       ]),
       key: `box:${width},${height},${depth}`,
       mode: "triangles",
@@ -922,10 +1014,26 @@ void main() {
         x, -y, z,
         x, y, z,
         -x, y, z,
+        x, -y, -z,
         -x, -y, -z,
+        -x, y, -z,
+        x, y, -z,
+        -x, -y, -z,
+        -x, -y, z,
+        -x, y, z,
+        -x, y, -z,
+        x, -y, z,
         x, -y, -z,
         x, y, -z,
+        x, y, z,
+        -x, y, z,
+        x, y, z,
+        x, y, -z,
         -x, y, -z,
+        -x, -y, -z,
+        x, -y, -z,
+        x, -y, z,
+        -x, -y, z,
       ]),
       texCoords: new Float32Array([
         0, 0,
@@ -936,8 +1044,53 @@ void main() {
         1, 0,
         1, 1,
         0, 1,
+        0, 0,
+        1, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 0,
+        1, 1,
+        0, 1,
+        0, 0,
+        1, 0,
+        1, 1,
+        0, 1,
       ]),
     };
+  }
+
+  #isVisible(
+    positions: Float32Array,
+    model: Mat4,
+    projection: Mat4,
+    view: Mat4,
+  ): boolean {
+    if (positions.length === 0) return false;
+
+    const mvp = multiplyMat4(projection, multiplyMat4(view, model));
+    const outside = [true, true, true, true, true, true];
+    for (let index = 0; index < positions.length; index += 3) {
+      const x = positions[index]!;
+      const y = positions[index + 1]!;
+      const z = positions[index + 2]!;
+      const clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+      const clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+      const clipZ = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
+      const clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+      outside[0] &&= clipX < -clipW;
+      outside[1] &&= clipX > clipW;
+      outside[2] &&= clipY < -clipW;
+      outside[3] &&= clipY > clipW;
+      outside[4] &&= clipZ < -clipW;
+      outside[5] &&= clipZ > clipW;
+    }
+
+    return !outside.some(Boolean);
   }
 
   #geometryResource(cpu: CpuGeometry): GeometryResource {
@@ -1052,6 +1205,7 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, samplerConstant(gl, sampler?.minFilter, gl.LINEAR));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, samplerConstant(gl, sampler?.wrapS, gl.CLAMP_TO_EDGE));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, samplerConstant(gl, sampler?.wrapT, gl.CLAMP_TO_EDGE));
+    if (usesMipmaps(sampler?.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
     resource.uploaded = true;
   }
 
@@ -1085,13 +1239,10 @@ void main() {
         return bufferResponse.arrayBuffer();
       }));
       if (this.#disposed) return;
-      const images = await Promise.all((document.images ?? []).map((image) =>
-        image.uri === undefined ? Promise.resolve(undefined) : loadImage(resolveUrl(src, image.uri))));
-      if (this.#disposed) return;
-
-      state.primitives = this.#readGltfPrimitives(document, buffers, images);
+      state.primitives = this.#readGltfPrimitives(document, buffers, src);
       state.status = "ready";
       this.#scheduleRender();
+      this.#loadGltfImages(src, document, state);
     } catch (error) {
       if (this.#disposed) return;
       state.status = "error";
@@ -1103,7 +1254,7 @@ void main() {
   #readGltfPrimitives(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
-    images: readonly (HTMLImageElement | undefined)[],
+    src: string,
   ): readonly LoadedGltfPrimitive[] {
     const primitives: LoadedGltfPrimitive[] = [];
     const scene = document.scenes?.[document.scene ?? 0];
@@ -1118,8 +1269,9 @@ void main() {
         const material = primitive.material === undefined ? undefined : document.materials?.[primitive.material];
         const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
         const imageIndex = textureIndex === undefined ? undefined : document.textures?.[textureIndex]?.source;
+        const imageUri = imageIndex === undefined ? undefined : document.images?.[imageIndex]?.uri;
         primitives.push({
-          ...(imageIndex === undefined || images[imageIndex] === undefined ? {} : { image: images[imageIndex] }),
+          ...(imageUri === undefined ? {} : { baseColorImageUri: resolveUrl(src, imageUri) }),
           indices: this.#readGltfIndices(document, buffers, indexAccessor),
           positions: this.#readGltfPositions(document, buffers, positionAccessor),
           ...(texCoordAccessor === undefined ? {} : { texCoords: this.#readGltfTexCoords(document, buffers, texCoordAccessor) }),
@@ -1128,6 +1280,24 @@ void main() {
     }
 
     return primitives;
+  }
+
+  #loadGltfImages(src: string, document: GltfDocument, state: GltfState): void {
+    for (const image of document.images ?? []) {
+      if (image.uri === undefined) continue;
+      const uri = resolveUrl(src, image.uri);
+      loadImage(uri).then((loadedImage) => {
+        if (this.#disposed || state.status !== "ready") return;
+        state.primitives = state.primitives.map((primitive) =>
+          primitive.baseColorImageUri === uri
+            ? { ...primitive, image: loadedImage }
+            : primitive);
+        this.#scheduleRender();
+      }, (error: unknown) => {
+        if (this.#disposed) return;
+        this.#recordDiagnostic(`glTF base-color image load failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
   }
 
   #readGltfPositions(document: GltfDocument, buffers: readonly ArrayBuffer[], accessorIndex: number): Float32Array {

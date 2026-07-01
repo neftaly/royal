@@ -1,0 +1,813 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  boxGeometry,
+  directionalLight,
+  gltf,
+  mesh,
+  orthographicCamera,
+  pass,
+  planeGeometry,
+  scene,
+  standardMaterial,
+  unlitMaterial,
+  type RenderNode,
+  type RenderRoot,
+} from "@royal/renderer-core";
+import { createWebGlRoot } from "@royal/renderer-webgl";
+
+type CanvasSize = {
+  readonly height: number;
+  readonly width: number;
+};
+
+type FakeCanvas = HTMLCanvasElement & {
+  getContext: ReturnType<typeof vi.fn>;
+};
+
+type GlCall = {
+  readonly args: readonly unknown[];
+  readonly name: string;
+};
+
+type FakeGl = {
+  readonly calls: readonly GlCall[];
+  readonly gl: WebGL2RenderingContext;
+};
+
+type FetchRequest = {
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (response: Response) => void;
+  readonly url: string;
+};
+
+type BitmapRequest = {
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (bitmap: ImageBitmap) => void;
+};
+
+const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
+const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
+const triangleBinUri = "staged-triangle.bin";
+const triangleImageUri = "staged-triangle.png";
+const triangleBinByteLength = 104;
+
+const fakeCanvas = (
+  gl: WebGL2RenderingContext,
+  size: CanvasSize = defaultCanvasSize,
+): FakeCanvas => {
+  const canvas = {
+    get clientHeight() {
+      return size.height;
+    },
+    get clientWidth() {
+      return size.width;
+    },
+    getBoundingClientRect: vi.fn(() => ({
+      bottom: size.height,
+      height: size.height,
+      left: 0,
+      right: size.width,
+      top: 0,
+      width: size.width,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })),
+    getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    height: 0,
+    width: 0,
+  };
+
+  (gl as unknown as { canvas: HTMLCanvasElement }).canvas = canvas as unknown as HTMLCanvasElement;
+
+  return canvas as unknown as FakeCanvas;
+};
+
+const fakeGl = (): FakeGl => {
+  const calls: GlCall[] = [];
+  let nextHandleId = 1;
+  const uniforms = new Map<string, WebGLUniformLocation>();
+  const constants = {
+    ACTIVE_ATTRIBUTES: 0x8B89,
+    ACTIVE_TEXTURE: 0x84E0,
+    ACTIVE_UNIFORMS: 0x8B86,
+    ARRAY_BUFFER: 0x8892,
+    BACK: 0x0405,
+    BLEND: 0x0BE2,
+    CLAMP_TO_EDGE: 0x812F,
+    COLOR_BUFFER_BIT: 0x4000,
+    COMPILE_STATUS: 0x8B81,
+    CULL_FACE: 0x0B44,
+    DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_TEST: 0x0B71,
+    ELEMENT_ARRAY_BUFFER: 0x8893,
+    FLOAT: 0x1406,
+    FRAGMENT_SHADER: 0x8B30,
+    LEQUAL: 0x0203,
+    LINEAR: 0x2601,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
+    LINES: 0x0001,
+    LINK_STATUS: 0x8B82,
+    MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
+    MAX_TEXTURE_IMAGE_UNITS: 0x8872,
+    MAX_TEXTURE_SIZE: 0x0D33,
+    MIRRORED_REPEAT: 0x8370,
+    NEAREST: 0x2600,
+    NO_ERROR: 0,
+    ONE: 1,
+    ONE_MINUS_SRC_ALPHA: 0x0303,
+    REPEAT: 0x2901,
+    RGBA: 0x1908,
+    STATIC_DRAW: 0x88E4,
+    TEXTURE0: 0x84C0,
+    TEXTURE_2D: 0x0DE1,
+    TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_WRAP_S: 0x2802,
+    TEXTURE_WRAP_T: 0x2803,
+    TRIANGLES: 0x0004,
+    UNPACK_FLIP_Y_WEBGL: 0x9240,
+    UNSIGNED_BYTE: 0x1401,
+    UNSIGNED_INT: 0x1405,
+    UNSIGNED_SHORT: 0x1403,
+    VERTEX_SHADER: 0x8B31,
+  } as const;
+
+  const handle = <Handle>(kind: string): Handle =>
+    ({ id: nextHandleId++, kind }) as Handle;
+
+  const uniform = (name: string): WebGLUniformLocation => {
+    const existing = uniforms.get(name);
+    if (existing !== undefined) return existing;
+
+    const location = { kind: "uniform", name } as unknown as WebGLUniformLocation;
+    uniforms.set(name, location);
+
+    return location;
+  };
+
+  const record = <Arguments extends readonly unknown[]>(
+    name: string,
+    implementation?: (...args: Arguments) => unknown,
+  ) => vi.fn((...args: Arguments) => {
+    calls.push({ args, name });
+
+    return implementation?.(...args);
+  });
+
+  const glTarget = {
+    ...constants,
+    drawingBufferHeight: defaultCanvasSize.height,
+    drawingBufferWidth: defaultCanvasSize.width,
+    activeTexture: record("activeTexture"),
+    attachShader: record("attachShader"),
+    bindAttribLocation: record("bindAttribLocation"),
+    bindBuffer: record("bindBuffer"),
+    bindTexture: record("bindTexture"),
+    blendFunc: record("blendFunc"),
+    bufferData: record("bufferData"),
+    bufferSubData: record("bufferSubData"),
+    clear: record("clear"),
+    clearColor: record("clearColor"),
+    clearDepth: record("clearDepth"),
+    compileShader: record("compileShader"),
+    createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
+    createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
+    createShader: record("createShader", () => handle<WebGLShader>("shader")),
+    createTexture: record("createTexture", () => handle<WebGLTexture>("texture")),
+    createVertexArray: record("createVertexArray", () => handle<WebGLVertexArrayObject>("vertex-array")),
+    cullFace: record("cullFace"),
+    deleteBuffer: record("deleteBuffer"),
+    deleteProgram: record("deleteProgram"),
+    deleteShader: record("deleteShader"),
+    deleteTexture: record("deleteTexture"),
+    deleteVertexArray: record("deleteVertexArray"),
+    depthFunc: record("depthFunc"),
+    depthMask: record("depthMask"),
+    detachShader: record("detachShader"),
+    disable: record("disable"),
+    drawArrays: record("drawArrays"),
+    drawElements: record("drawElements"),
+    enable: record("enable"),
+    enableVertexAttribArray: record("enableVertexAttribArray"),
+    generateMipmap: record("generateMipmap"),
+    getActiveAttrib: record("getActiveAttrib", () => null),
+    getActiveUniform: record("getActiveUniform", () => null),
+    getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
+      if (name.toLowerCase().includes("uv")) return 1;
+
+      return 0;
+    }),
+    getContextAttributes: record("getContextAttributes", () => ({
+      alpha: true,
+      antialias: true,
+      depth: true,
+      desynchronized: false,
+      failIfMajorPerformanceCaveat: false,
+      powerPreference: "default",
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      stencil: false,
+    })),
+    getError: record("getError", () => constants.NO_ERROR),
+    getExtension: record("getExtension", () => null),
+    getParameter: record<[number]>("getParameter", (parameter) => {
+      if (
+        parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS
+        || parameter === constants.MAX_TEXTURE_IMAGE_UNITS
+      ) return 8;
+      if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
+
+      return 0;
+    }),
+    getProgramInfoLog: record("getProgramInfoLog", () => ""),
+    getProgramParameter: record<[WebGLProgram, number]>("getProgramParameter", (_program, parameter) => {
+      if (parameter === constants.ACTIVE_ATTRIBUTES || parameter === constants.ACTIVE_UNIFORMS) return 0;
+      if (parameter === constants.LINK_STATUS) return true;
+
+      return true;
+    }),
+    getShaderInfoLog: record("getShaderInfoLog", () => ""),
+    getShaderParameter: record<[WebGLShader, number]>("getShaderParameter", (_shader, parameter) =>
+      parameter === constants.COMPILE_STATUS ? true : true),
+    getSupportedExtensions: record("getSupportedExtensions", () => []),
+    getUniformLocation: record<[WebGLProgram, string]>("getUniformLocation", (_program, name) => uniform(name)),
+    isContextLost: record("isContextLost", () => false),
+    lineWidth: record("lineWidth"),
+    linkProgram: record("linkProgram"),
+    pixelStorei: record("pixelStorei"),
+    shaderSource: record("shaderSource"),
+    texImage2D: record("texImage2D"),
+    texParameteri: record("texParameteri"),
+    uniform1i: record("uniform1i"),
+    uniform3f: record("uniform3f"),
+    uniform3fv: record("uniform3fv"),
+    uniform4f: record("uniform4f"),
+    uniform4fv: record("uniform4fv"),
+    uniformMatrix4fv: record("uniformMatrix4fv"),
+    useProgram: record("useProgram"),
+    validateProgram: record("validateProgram"),
+    vertexAttribPointer: record("vertexAttribPointer"),
+    viewport: record("viewport"),
+  };
+
+  const gl = new Proxy(glTarget, {
+    get(target, property, receiver) {
+      if (property in target) return Reflect.get(target, property, receiver);
+      if (typeof property !== "string") return undefined;
+
+      const fallback = record(property);
+      Object.defineProperty(target, property, {
+        configurable: true,
+        value: fallback,
+      });
+
+      return fallback;
+    },
+  }) as unknown as WebGL2RenderingContext;
+
+  return { calls, gl };
+};
+
+class ControlledImage {
+  static readonly instances: ControlledImage[] = [];
+
+  complete = false;
+  crossOrigin: string | null = null;
+  height = 4;
+  naturalHeight = 4;
+  naturalWidth = 4;
+  onerror: OnErrorEventHandler = null;
+  onload: ((this: HTMLImageElement, event: Event) => unknown) | null = null;
+  width = 4;
+  #decodeRejectors: Array<(reason?: unknown) => void> = [];
+  #decodeResolvers: Array<() => void> = [];
+  #listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  #src = "";
+
+  constructor() {
+    ControlledImage.instances.push(this);
+  }
+
+  get src(): string {
+    return this.#src;
+  }
+
+  set src(value: string) {
+    this.#src = value;
+  }
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    const listeners = this.#listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  decode(): Promise<void> {
+    if (this.complete) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      this.#decodeResolvers.push(resolve);
+      this.#decodeRejectors.push(reject);
+    });
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  rejectLoad(reason = new Error("staged glTF image failed")): void {
+    for (const reject of this.#decodeRejectors.splice(0)) reject(reason);
+    this.#decodeResolvers.splice(0);
+    this.dispatch("error");
+  }
+
+  private dispatch(type: "error" | "load"): void {
+    const event = new Event(type);
+    if (type === "load") this.onload?.call(this as unknown as HTMLImageElement, event);
+    if (type === "error") this.onerror?.call(this as unknown as HTMLImageElement, event, "", 0, 0, undefined);
+
+    for (const listener of this.#listeners.get(type) ?? []) {
+      if (typeof listener === "function") {
+        listener.call(this, event);
+      } else {
+        listener.handleEvent(event);
+      }
+    }
+  }
+}
+
+class ControlledResizeObserver implements ResizeObserver {
+  static readonly instances: ControlledResizeObserver[] = [];
+
+  readonly #callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.#callback = callback;
+    ControlledResizeObserver.instances.push(this);
+  }
+
+  disconnect(): void {
+    return undefined;
+  }
+
+  observe(_target: Element): void {
+    return undefined;
+  }
+
+  takeRecords(): ResizeObserverEntry[] {
+    return [];
+  }
+
+  trigger(target: Element): void {
+    this.#callback([{
+      borderBoxSize: [],
+      contentBoxSize: [],
+      contentRect: target.getBoundingClientRect(),
+      devicePixelContentBoxSize: [],
+      target,
+    } as unknown as ResizeObserverEntry], this);
+  }
+
+  unobserve(_target: Element): void {
+    return undefined;
+  }
+}
+
+const makeMediaQueryList = (query: string): MediaQueryList => {
+  const listeners = new Set<EventListenerOrEventListenerObject>();
+  const legacyListeners = new Set<(this: MediaQueryList, event: MediaQueryListEvent) => void>();
+  const mediaQueryList = {
+    matches: true,
+    media: query,
+    onchange: null as MediaQueryList["onchange"],
+    addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      listeners.add(listener);
+    },
+    addListener: (listener: (this: MediaQueryList, event: MediaQueryListEvent) => void) => {
+      legacyListeners.add(listener);
+    },
+    dispatchEvent: (event: Event) => {
+      for (const listener of listeners) {
+        if (typeof listener === "function") {
+          listener.call(mediaQueryList, event);
+        } else {
+          listener.handleEvent(event);
+        }
+      }
+      for (const listener of legacyListeners) listener.call(mediaQueryList, event as MediaQueryListEvent);
+      mediaQueryList.onchange?.call(mediaQueryList, event as MediaQueryListEvent);
+
+      return true;
+    },
+    removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+      listeners.delete(listener);
+    },
+    removeListener: (listener: (this: MediaQueryList, event: MediaQueryListEvent) => void) => {
+      legacyListeners.delete(listener);
+    },
+  } satisfies MediaQueryList;
+
+  return mediaQueryList;
+};
+
+const installViewportInvalidationStubs = () => {
+  const animationFrames: FrameRequestCallback[] = [];
+  const mediaQueries: MediaQueryList[] = [];
+
+  vi.stubGlobal("devicePixelRatio", 1);
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+    animationFrames.push(callback);
+
+    return animationFrames.length;
+  }));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
+  vi.stubGlobal("matchMedia", vi.fn((query: string) => {
+    const mediaQueryList = makeMediaQueryList(query);
+    mediaQueries.push(mediaQueryList);
+
+    return mediaQueryList;
+  }));
+
+  return {
+    animationFrames,
+    triggerViewportChange: (target: Element) => {
+      vi.stubGlobal("devicePixelRatio", 2);
+      for (const mediaQueryList of mediaQueries) mediaQueryList.dispatchEvent(new Event("change"));
+      for (const observer of ControlledResizeObserver.instances) observer.trigger(target);
+    },
+  };
+};
+
+const flushMicrotasks = async (): Promise<void> => {
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+};
+
+const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<void> => {
+  const queued = callbacks.splice(0);
+  for (const [index, callback] of queued.entries()) callback(16 + index);
+  await flushMicrotasks();
+};
+
+const camera = () => orthographicCamera({
+  bottom: -1,
+  far: 20,
+  left: -1,
+  near: 0.1,
+  position: [0, 0, 4],
+  right: 1,
+  rotation: [0, 0, 0],
+  top: 1,
+});
+
+const renderScene = (children: readonly RenderNode[]): RenderRoot =>
+  scene({
+    children: [
+      pass({
+        camera: camera(),
+        children,
+        clearColor: [0, 0, 0, 0],
+      }),
+    ],
+  });
+
+const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
+  calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
+
+const drawCount = (call: GlCall): number =>
+  call.name === "drawArrays" ? Number(call.args[2]) : Number(call.args[1]);
+
+const triangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(triangleBinByteLength);
+
+  new Float32Array(buffer, 0, 9).set([
+    0, 0.5, 0,
+    -0.5, -0.5, 0,
+    0.5, -0.5, 0,
+  ]);
+  new Float32Array(buffer, 36, 9).set([
+    0, 0, 1,
+    0, 0, 1,
+    0, 0, 1,
+  ]);
+  new Float32Array(buffer, 72, 6).set([
+    0.5, 1,
+    0, 0,
+    1, 0,
+  ]);
+  new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const triangleDocument = () => ({
+  accessors: [
+    {
+      bufferView: 0,
+      componentType: 5126,
+      count: 3,
+      max: [0.5, 0.5, 0],
+      min: [-0.5, -0.5, 0],
+      type: "VEC3",
+    },
+    {
+      bufferView: 1,
+      componentType: 5126,
+      count: 3,
+      type: "VEC3",
+    },
+    {
+      bufferView: 2,
+      componentType: 5126,
+      count: 3,
+      type: "VEC2",
+    },
+    {
+      bufferView: 3,
+      componentType: 5123,
+      count: 3,
+      type: "SCALAR",
+    },
+  ],
+  asset: { version: "2.0" },
+  bufferViews: [
+    {
+      buffer: 0,
+      byteLength: 36,
+      byteOffset: 0,
+      target: 34962,
+    },
+    {
+      buffer: 0,
+      byteLength: 36,
+      byteOffset: 36,
+      target: 34962,
+    },
+    {
+      buffer: 0,
+      byteLength: 24,
+      byteOffset: 72,
+      target: 34962,
+    },
+    {
+      buffer: 0,
+      byteLength: 6,
+      byteOffset: 96,
+      target: 34963,
+    },
+  ],
+  buffers: [
+    {
+      byteLength: triangleBinByteLength,
+      uri: triangleBinUri,
+    },
+  ],
+  images: [
+    {
+      mimeType: "image/png",
+      uri: triangleImageUri,
+    },
+  ],
+  materials: [
+    {
+      pbrMetallicRoughness: {
+        baseColorTexture: {
+          index: 0,
+        },
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            NORMAL: 1,
+            POSITION: 0,
+            TEXCOORD_0: 2,
+          },
+          indices: 3,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+  textures: [
+    {
+      source: 0,
+    },
+  ],
+});
+
+const responseWithJson = (url: string, json: unknown): Response => {
+  const text = JSON.stringify(json);
+
+  return {
+    arrayBuffer: vi.fn(() => Promise.resolve(new TextEncoder().encode(text).buffer)),
+    blob: vi.fn(() => Promise.resolve(new Blob([text], { type: "model/gltf+json" }))),
+    json: vi.fn(() => Promise.resolve(json)),
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    text: vi.fn(() => Promise.resolve(text)),
+    url,
+  } as unknown as Response;
+};
+
+const responseWithBuffer = (url: string, buffer: ArrayBuffer): Response => ({
+  arrayBuffer: vi.fn(() => Promise.resolve(buffer)),
+  blob: vi.fn(() => Promise.resolve(new Blob([buffer], { type: "application/octet-stream" }))),
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  url,
+}) as unknown as Response;
+
+const requestUrl = (input: RequestInfo | URL): string => {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  if ("url" in input && typeof input.url === "string") return input.url;
+
+  return String(input);
+};
+
+const installStagedGltfLoader = () => {
+  const bitmapRequests: BitmapRequest[] = [];
+  const fetchRequests: FetchRequest[] = [];
+  const settledFetches = new Set<FetchRequest>();
+
+  vi.stubGlobal("Image", ControlledImage);
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>
+    new Promise<Response>((resolve, reject) => {
+      fetchRequests.push({
+        reject,
+        resolve,
+        url: requestUrl(input),
+      });
+    })));
+  vi.stubGlobal("createImageBitmap", vi.fn(() =>
+    new Promise<ImageBitmap>((resolve, reject) => {
+      bitmapRequests.push({ reject, resolve });
+    })));
+
+  return {
+    bitmapRequests,
+    fetchRequests,
+    rejectPendingFetch: (pattern: RegExp, reason: unknown): boolean => {
+      const request = fetchRequests.find((entry) => !settledFetches.has(entry) && pattern.test(entry.url));
+      if (request === undefined) return false;
+
+      settledFetches.add(request);
+      request.reject(reason);
+
+      return true;
+    },
+    resolvePendingFetch: (pattern: RegExp, response: (url: string) => Response): boolean => {
+      const request = fetchRequests.find((entry) => !settledFetches.has(entry) && pattern.test(entry.url));
+      if (request === undefined) return false;
+
+      settledFetches.add(request);
+      request.resolve(response(request.url));
+
+      return true;
+    },
+  };
+};
+
+const settleDocumentAndBuffer = async (
+  loader: ReturnType<typeof installStagedGltfLoader>,
+): Promise<void> => {
+  expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+    responseWithJson(url, triangleDocument()))).toBe(true);
+  await flushMicrotasks();
+  expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+    responseWithBuffer(url, triangleBin()))).toBe(true);
+  await flushMicrotasks();
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  ControlledImage.instances.splice(0);
+  ControlledResizeObserver.instances.splice(0);
+});
+
+describe("WebGL renderer scene and glTF regressions", () => {
+  it("schedules a follow-up render when only DPR changes", async () => {
+    const viewport = installViewportInvalidationStubs();
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+
+    root.render(renderScene([
+      mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ color: [0.2, 0.4, 0.8, 1] }),
+      }),
+    ]));
+
+    const drawCountBeforeChange = drawCalls(calls).length;
+    const scheduledBeforeChange = viewport.animationFrames.length;
+
+    viewport.triggerViewportChange(canvas);
+    await flushMicrotasks();
+
+    expect(
+      viewport.animationFrames.length > scheduledBeforeChange || drawCalls(calls).length > drawCountBeforeChange,
+      "DPR-only viewport invalidation should schedule or perform a follow-up render",
+    ).toBe(true);
+  });
+
+  it("culls clearly offscreen meshes against an orthographic camera", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      mesh({
+        geometry: boxGeometry(0.5),
+        material: unlitMaterial({ color: [0.9, 0.2, 0.1, 1] }),
+      }),
+      mesh({
+        geometry: boxGeometry(0.5),
+        material: unlitMaterial({ color: [0.1, 0.2, 0.9, 1] }),
+        transform: {
+          position: [100, 0, 0],
+          rotation: [0, 0, 0],
+        },
+      }),
+    ]));
+
+    expect(drawCalls(calls), "only the visible mesh should draw").toHaveLength(1);
+  });
+
+  it("requires a directionalLight when drawing standardMaterial meshes", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    expect(() => {
+      root.render(renderScene([
+        mesh({
+          geometry: planeGeometry(1),
+          material: standardMaterial({ color: [1, 1, 1, 1] }),
+        }),
+      ]));
+    }).toThrow(/directionalLight/i);
+  });
+
+  it("draws glTF fallback geometry after buffers settle while base-color image is pending or failed", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "staged-fallback",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(drawCalls(calls)).toHaveLength(0);
+
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+      "glTF should draw fallback geometry before its base-color image settles",
+    ).toBe(true);
+
+    const drawsBeforeFailure = drawCalls(calls).length;
+    const failedImage = new Error("staged base-color decode failed");
+    for (const image of ControlledImage.instances) image.rejectLoad(failedImage);
+    for (const bitmapRequest of loader.bitmapRequests.splice(0)) bitmapRequest.reject(failedImage);
+    loader.rejectPendingFetch(/staged-triangle\.png(?:$|[?#])/, failedImage);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    root.render(renderGraph);
+
+    expect(drawCalls(calls).length, "failed base-color image should not make the glTF disappear")
+      .toBeGreaterThan(drawsBeforeFailure);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /base-?color|image|texture/i.test(message))).toBe(true);
+  });
+});

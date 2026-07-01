@@ -256,8 +256,16 @@ const contextVersion = (
   const label = readStringParameter(gl, gl.VERSION);
   if (label?.includes("WebGL 2")) return 2;
   if (label?.includes("WebGL 1") || label?.includes("WebGL 1.0")) return 1;
+  if (hasWebGl2CoreSurface(gl)) return 2;
   return "unknown";
 };
+
+const hasWebGl2CoreSurface = (gl: WebGlLikeContext): boolean =>
+  gl.READ_BUFFER !== undefined ||
+  gl.TEXTURE_3D !== undefined ||
+  typeof gl.beginQuery === "function" ||
+  typeof gl.drawBuffers === "function" ||
+  typeof gl.texStorage2D === "function";
 
 const supportedExtensionSet = (gl: WebGlLikeContext): Set<string> => {
   const supported = new Set(
@@ -284,13 +292,26 @@ const capabilityRow = (
   supported: boolean,
   source: RendererCapabilitySource,
   extension?: string,
+  detail?: string,
 ): RendererCapabilityRow => ({
   capability,
+  detail,
   extension,
   kind: "renderer_capability",
   source,
   supported,
 });
+
+const missingCapabilityDetail = (
+  capability: RendererCapabilityName,
+  extensionNames: readonly string[] | undefined,
+): string => {
+  if (extensionNames === undefined || extensionNames.length === 0) {
+    return `${capability} is not available from the probed renderer.`;
+  }
+
+  return `${capability} is not available; none of ${extensionNames.join(", ")} are supported by the probed renderer.`;
+};
 
 const collectWebGlRows = (
   gl: WebGlLikeContext,
@@ -315,8 +336,22 @@ const collectWebGlRows = (
     versionLabel,
   }];
 
-  rows.push(capabilityRow("webgl2", version === 2, version === 2 ? "webgl2-core" : "missing"));
-  rows.push(capabilityRow("webgpu", options.webgpu?.status === "available", "webgpu-probe", undefined));
+  rows.push(capabilityRow(
+    "webgl2",
+    version === 2,
+    version === 2 ? "webgl2-core" : "missing",
+    undefined,
+    version === 2 ? undefined : "webgl2 is not available from the probed renderer.",
+  ));
+  rows.push(capabilityRow(
+    "webgpu",
+    options.webgpu?.status === "available",
+    "webgpu-probe",
+    undefined,
+    options.webgpu?.status === "available"
+      ? undefined
+      : options.webgpu?.reason ?? "webgpu is not available from the current environment probe.",
+  ));
 
   const drawBuffersExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.draw_buffers);
   rows.push(capabilityRow(
@@ -324,6 +359,9 @@ const collectWebGlRows = (
     version === 2 || drawBuffersExtension !== undefined || typeof gl.drawBuffers === "function",
     version === 2 || typeof gl.drawBuffers === "function" ? "webgl2-core" : drawBuffersExtension ? "webgl-extension" : "missing",
     drawBuffersExtension,
+    version === 2 || drawBuffersExtension !== undefined || typeof gl.drawBuffers === "function"
+      ? undefined
+      : missingCapabilityDetail("draw_buffers", extensionCapabilities.draw_buffers),
   ));
 
   const depthTextureExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.depth_texture);
@@ -332,6 +370,9 @@ const collectWebGlRows = (
     version === 2 || depthTextureExtension !== undefined || gl.TEXTURE_3D !== undefined,
     version === 2 || gl.TEXTURE_3D !== undefined ? "webgl2-core" : depthTextureExtension ? "webgl-extension" : "missing",
     depthTextureExtension,
+    version === 2 || depthTextureExtension !== undefined || gl.TEXTURE_3D !== undefined
+      ? undefined
+      : missingCapabilityDetail("depth_texture", extensionCapabilities.depth_texture),
   ));
 
   const instancingExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.instancing);
@@ -342,6 +383,9 @@ const collectWebGlRows = (
       ? "webgl2-core"
       : instancingExtension ? "webgl-extension" : "missing",
     instancingExtension,
+    version === 2 || instancingExtension !== undefined || typeof gl.vertexAttribDivisor === "function"
+      ? undefined
+      : missingCapabilityDetail("instancing", extensionCapabilities.instancing),
   ));
 
   for (const capability of ["gpu_timer_query", "anisotropy", "float_texture", "half_float_texture", "compressed_texture", "lose_context"] as const) {
@@ -351,6 +395,7 @@ const collectWebGlRows = (
       extension !== undefined,
       extension === undefined ? "missing" : "webgl-extension",
       extension,
+      extension === undefined ? missingCapabilityDetail(capability, extensionCapabilities[capability]) : undefined,
     ));
   }
 
