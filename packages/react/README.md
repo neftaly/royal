@@ -48,6 +48,11 @@ createRoot(canvas, {
 );
 ```
 
+The imperative `createRoot(canvas)` path is for already-lowered Royal scenes:
+descriptor objects from `@royal/renderer-core`, Royal intrinsic JSX such as
+`<scene>`, or components marked with `markRendererComponent`. Arbitrary React
+components and DOM overlays belong under `<Canvas>` in a React DOM tree.
+
 ## Workflows
 
 From the repository root:

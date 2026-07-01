@@ -112,10 +112,17 @@ export const createFrameLoop = (): FrameLoop => {
 
 export const FrameLoopContext = createContext<FrameLoop | null>(null);
 
-const fallbackFrameLoop = createFrameLoop();
+const useCanvasFrameLoop = (): FrameLoop => {
+  const frameLoop = useContext(FrameLoopContext);
+  if (frameLoop === null) {
+    throw new Error("Royal frame hooks must be used inside Canvas");
+  }
+
+  return frameLoop;
+};
 
 export const useFrame = (callback: FrameCallback, priority = 0): void => {
-  const frameLoop = useContext(FrameLoopContext) ?? fallbackFrameLoop;
+  const frameLoop = useCanvasFrameLoop();
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
@@ -125,7 +132,7 @@ export const useFrame = (callback: FrameCallback, priority = 0): void => {
 };
 
 export const useFrameIndex = (): number => {
-  const frameLoop = useContext(FrameLoopContext) ?? fallbackFrameLoop;
+  const frameLoop = useCanvasFrameLoop();
   const [index, setIndex] = useState(() => frameLoop.frameIndex());
 
   useFrame((frame) => {

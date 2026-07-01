@@ -2,7 +2,6 @@ import type { RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlRootOptions,
-  type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 import type { ReactNode } from "react";
 
@@ -24,20 +23,29 @@ export interface RoyalRootOptions {
   readonly context?: RoyalRootContextOptions;
 }
 
+export type RoyalRootContextSnapshot = Required<RoyalRootContextOptions>;
+
+export interface RoyalRootSnapshot {
+  readonly context: RoyalRootContextSnapshot;
+  readonly disposed: boolean;
+  readonly frame: number;
+  readonly latestScene: RenderRoot | undefined;
+}
+
 export type RoyalRootRenderInput = ReactNode | RenderRoot;
 
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRoot {
   readonly canvas: HTMLCanvasElement;
+  readonly context: RoyalRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: WebGlRootOptions;
   /** Renders a complete scene into the canvas. */
   render(scene: RoyalRootRenderInput): void;
   /** Canonical resource cleanup hook. */
   dispose(): void;
-  snapshot(): WebGlRootSnapshot;
+  snapshot(): RoyalRootSnapshot;
 }
 
 const assertSupportedBackend = (backend: string | undefined): void => {
@@ -72,11 +80,37 @@ export const createRoot = (
   options?: RoyalRootOptions,
 ): RoyalRoot => {
   const root = createWebGlRoot(canvas, toWebGlRootOptions(options));
-  const render = root.render.bind(root);
 
-  root.render = (scene: RoyalRootRenderInput): void => {
-    render(toRenderRoot(scene));
+  return {
+    get canvas() {
+      return root.canvas;
+    },
+    get context() {
+      return root.options as RoyalRootContextSnapshot;
+    },
+    get disposed() {
+      return root.disposed;
+    },
+    get frame() {
+      return root.frame;
+    },
+    get latestScene() {
+      return root.latestScene;
+    },
+    dispose: () => {
+      root.dispose();
+    },
+    render: (scene: RoyalRootRenderInput) => {
+      root.render(toRenderRoot(scene));
+    },
+    snapshot: () => {
+      const snapshot = root.snapshot();
+      return {
+        context: snapshot.options as RoyalRootContextSnapshot,
+        disposed: snapshot.disposed,
+        frame: snapshot.frame,
+        latestScene: snapshot.latestScene,
+      };
+    },
   };
-
-  return root;
 };

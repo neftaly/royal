@@ -23,11 +23,22 @@ describe("React root JSX public API", () => {
     );
 
     expect(root.snapshot()).toMatchObject({
+      context: {
+        alpha: true,
+        antialias: true,
+        preserveDrawingBuffer: false,
+      },
       disposed: false,
       frame: 1,
       latestScene: {
         kind: "scene",
       },
     });
+  });
+
+  it("rejects non-scene React content at the imperative root boundary", () => {
+    const root = createRoot(canvas());
+
+    expect(() => root.render("plain text")).toThrow("renderer scene");
   });
 });
