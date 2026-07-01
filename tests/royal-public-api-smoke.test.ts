@@ -28,14 +28,16 @@ import {
   type RenderRoot,
   text,
   type TextNode,
+  type TextOptions
+} from '@royal/renderer-core';
+import {
   layoutText,
   shapeText,
   textMesh,
   type ShapeTextResult,
   type TextLayout,
-  type TextMesh,
-  type TextOptions
-} from '@royal/renderer-core';
+  type TextMesh
+} from '@royal/renderer-core/text';
 import {
   createSvgGatewayGeometry,
   svgPathToContours,
@@ -186,9 +188,15 @@ describe('Royal public API smoke tests', () => {
     expect(rendererCore).not.toHaveProperty('vectorTextGlyphRects');
     expect(rendererCore).not.toHaveProperty('vectorTextSupportedCharacters');
     expect(rendererCore).not.toHaveProperty('textMeshFromLayout');
+    expect(rendererCore).not.toHaveProperty('layoutText');
+    expect(rendererCore).not.toHaveProperty('shapeText');
+    expect(rendererCore).not.toHaveProperty('textMesh');
     expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorText');
     expectTypeOf<typeof rendererCore>().not.toHaveProperty('vectorTextMesh');
     expectTypeOf<typeof rendererCore>().not.toHaveProperty('textMeshFromLayout');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('layoutText');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('shapeText');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('textMesh');
     expectTypeOf(shaped).toEqualTypeOf<ShapeTextResult>();
     expectTypeOf(layout).toEqualTypeOf<TextLayout>();
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();

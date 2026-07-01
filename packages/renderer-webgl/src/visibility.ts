@@ -611,9 +611,6 @@ const texturePacketId = (texture: MeshNode["material"]["baseColor"]): PacketId =
       `${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}:${textureFallbackColorKey(texture)}`,
     );
   }
-  if (texture.id !== undefined) {
-    return hashLabelId("solid-texture", texture.id);
-  }
   return hashLabelId("solid-texture", texture.color.join(","));
 };
 
@@ -621,7 +618,7 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
   if (texture.kind === "asset") {
     return hashVersion(
       "texture-asset",
-      texture.revision ?? texture.uri,
+      texture.version ?? texture.uri,
       texture.colorSpace ?? "",
       samplerVersion(texture.sampler),
     );
@@ -629,12 +626,12 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
   if (texture.kind === "virtual-asset") {
     return hashVersion(
       "virtual-texture-asset",
-      texture.revision ?? texture.manifestUri,
+      texture.version ?? texture.manifestUri,
       texture.colorSpace ?? "",
       samplerVersion(texture.sampler),
       virtualTexturePreviewVersion(texture.preview),
       textureFallbackColorKey(texture),
-      texture.fallback?.revision ?? "",
+      texture.fallback?.version ?? "",
     );
   }
   return hashVersion(
@@ -644,7 +641,7 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
     texture.color[2],
     texture.color[3],
     texture.colorSpace ?? "",
-    texture.revision ?? "",
+    texture.version ?? "",
   );
 };
 
@@ -660,11 +657,11 @@ const textureAssetPacketId = (texture: MeshNode["material"]["baseColor"]): Packe
 
 const textureAssetPacketVersion = (texture: MeshNode["material"]["baseColor"]): number =>
   texture.kind === "asset"
-    ? hashVersion("texture-asset", texture.revision ?? texture.uri)
+    ? hashVersion("texture-asset", texture.version ?? texture.uri)
     : texture.kind === "virtual-asset"
       ? hashVersion(
           "virtual-texture-asset",
-          texture.revision ?? texture.manifestUri,
+          texture.version ?? texture.manifestUri,
           samplerVersion(texture.sampler),
           virtualTexturePreviewVersion(texture.preview),
           textureFallbackColorKey(texture),
@@ -682,10 +679,10 @@ const virtualTexturePreviewVersion = (preview: TextureAssetRef | undefined): str
   preview === undefined
     ? ""
     : [
-        preview.revision ?? preview.uri,
+        preview.version ?? preview.uri,
         preview.colorSpace ?? "",
         samplerVersion(preview.sampler),
-        preview.fallback?.revision ?? "",
+        preview.fallback?.version ?? "",
         preview.fallback?.color.join(",") ?? "",
       ].join("|");
 
@@ -711,7 +708,7 @@ const gltfAssetPacketId = (asset: GltfNode["asset"]): PacketId =>
 const gltfAssetPacketVersion = (asset: GltfNode["asset"]): number =>
   hashVersion(
     "gltf-asset",
-    asset.revision ?? asset.uri,
+    asset.version ?? asset.uri,
     asset.bounds?.min.join(",") ?? "",
     asset.bounds?.max.join(",") ?? "",
   );

@@ -41,7 +41,7 @@ export type {
   TextureAssetRef,
   TextureColorSpace,
   TextureRef,
-  TextureRevision,
+  TextureVersion,
   TextureSampler,
   TextureSamplerFilter,
   TextureSamplerWrap,
@@ -119,141 +119,8 @@ export {
   uiMenuCommand,
   uiMenuCommandAt
 } from './ui-menu';
-export type {
-  CreateTextFontFaceOptions,
-  LayoutTextOptions,
-  ShapeTextOptions,
-  ShapeTextResult,
-  ShapedTextGlyph,
-  ShapedTextRun,
-  TextBlockMetrics,
-  TextBounds,
-  TextDiagnosticCode,
-  TextFontData,
-  TextFontDescriptor,
-  TextFontFace,
-  TextFontMetrics,
-  TextGlyphId,
-  TextGlyphLayout,
-  TextGlyphOffset,
-  TextKerningMetadata,
-  TextLayout,
-  TextLigatureMetadata,
-  TextLineLayout,
-  TextMesh,
-  TextMeshContour,
-  TextMeshContourRole,
-  TextMeshVertex,
-  TextNode,
-  TextOptions,
-  TextRunMetrics,
-  TextShapingDiagnostic
-} from './text';
-export {
-  createTextFontFace,
-  layoutText,
-  shapeText,
-  text,
-  textMesh
-} from './text';
-export type {
-  EditableTextCaretEndpoint,
-  EditableTextCaretPlacement,
-  EditableTextHitPoint,
-  EditableTextLayout,
-  EditableTextLayoutOptions,
-  EditableTextLine,
-  EditableTextRange,
-  EditableTextSelection,
-  EditableTextSelectionRect,
-  EditableTextWrapOptions
-} from './editable-text';
-export {
-  clampTextIndex,
-  editableTextCaretPlacement,
-  editableTextSelectionRects,
-  layoutEditableText,
-  nearestEditableTextCaret,
-  nextTextIndex,
-  previousTextIndex,
-  sameEditableTextSelection,
-  sortedEditableTextRange,
-  wrapEditableText
-} from './editable-text';
-export type {
-  EditableTextCaretSelectionOptions,
-  EditableTextClipboardShortcut,
-  EditableTextClipboardShortcutIntent,
-  EditableTextEndpointSelectionOptions,
-  EditableTextEnterKeyIntent,
-  EditableTextInputMode,
-  EditableTextKeyInput,
-  EditableTextKeyIntent,
-  EditableTextKeyIntentOptions
-} from './editable-text-input';
-export {
-  clampEditableTextSelection,
-  editableTextAllSelection,
-  editableTextHasSelection,
-  editableTextKeyIntent,
-  editableTextSelectedRange,
-  editableTextSelectedText,
-  editableTextSelectionAtCaret,
-  editableTextSelectionFromEndpoint
-} from './editable-text-input';
-export type {
-  EditableTextClipboardMenuEnabled,
-  EditableTextMenuAction,
-  EditableTextMenuCommand,
-  EditableTextMenuCommandOptions,
-  EditableTextMenuCommandRect,
-  EditableTextMenuLayout,
-  EditableTextMenuLayoutOptions
-} from './editable-text-menu';
-export {
-  editableTextClipboardMenuCommands,
-  editableTextMenuCommand,
-  editableTextMenuCommandAt,
-  layoutEditableTextMenu
-} from './editable-text-menu';
-export type {
-  EditableTextCommand,
-  EditableTextCommandState,
-  EditableTextDeleteBackwardCommand,
-  EditableTextDeleteForwardCommand,
-  EditableTextInsertTextCommand,
-  EditableTextMoveEndCommand,
-  EditableTextMoveNextCommand,
-  EditableTextMovePreviousCommand,
-  EditableTextMoveStartCommand,
-  EditableTextReplaceSelectionCommand,
-  EditableTextSelectAllCommand
-} from './editable-text-command';
-export { applyEditableTextCommand } from './editable-text-command';
-export type {
-  EditableTextEditorCaretSelectionOptions,
-  EditableTextEditorKeyInputResult,
-  EditableTextEditorPointerSelectionOptions,
-  EditableTextEditorState,
-  EditableTextEditorStateOptions
-} from './editable-text-editor';
-export {
-  applyEditableTextEditorCommand,
-  applyEditableTextEditorKeyInput,
-  collapseEditableTextEditorSelection,
-  createEditableTextEditorState,
-  editableTextEditorCaretSelection,
-  editableTextEditorPointerSelection,
-  editableTextEditorSelectedRange,
-  editableTextEditorSelectedText,
-  setEditableTextEditorSelection
-} from './editable-text-editor';
-export type {
-  EditableTextFragment,
-  EditableTextFragmentMode,
-  EditableTextFragmentOptions
-} from './editable-text-view';
-export { createEditableTextFragment } from './editable-text-view';
+export type { TextNode, TextOptions } from './text';
+export { text } from './text';
 export type {
   Axis,
   AxisDirection,

@@ -1,8 +1,14 @@
 /** @jsxImportSource @royal/react */
 import {
+  boxGeometry,
+  type RenderNode,
+  type Rgba,
+  type Vec3,
+  unlitMaterial,
+} from '@royal/renderer-core';
+import {
   applyEditableTextEditorCommand,
   applyEditableTextEditorKeyInput,
-  boxGeometry,
   createEditableTextEditorState,
   createEditableTextFragment,
   editableTextEditorPointerSelection,
@@ -13,12 +19,8 @@ import {
   type EditableTextEditorState,
   type EditableTextKeyInput,
   type EditableTextSelection,
-  type RenderNode,
-  type Rgba,
   type TextFontFace,
-  type Vec3,
-  unlitMaterial,
-} from '@royal/renderer-core';
+} from '@royal/renderer-core/text';
 import {
   canvasPointToWorld,
   captureCanvasPointer,

@@ -1,5 +1,5 @@
 /** @jsxImportSource @royal/react */
-import { type TextFontFace } from '@royal/renderer-core';
+import { type TextFontFace } from '@royal/renderer-core/text';
 import { Canvas } from '@royal/react';
 import { type ReactNode } from 'react';
 import {

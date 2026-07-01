@@ -1,4 +1,5 @@
-import { textMesh, type TextMesh, type TextNode } from "@royal/renderer-core";
+import type { TextNode } from "@royal/renderer-core";
+import { textMesh, type TextMesh } from "@royal/renderer-core/text";
 import { createFloatBuffer, createIndexBuffer, type RendererWebGlContext } from "./gl";
 
 export interface TextRenderAsset {

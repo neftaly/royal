@@ -220,12 +220,10 @@ describe("visibility packets", () => {
   it("tracks stable object, material, asset, and version lanes for future LOD decisions", () => {
     const baseTexture = solidTexture({
       color: [0.1, 0.2, 0.3, 1],
-      id: "matte-red",
       version: 1,
     });
     const updatedTexture = solidTexture({
       color: [0.1, 0.2, 0.3, 1],
-      id: "matte-red",
       version: 2,
     });
     const sharedMaterial = unlitMaterial({ texture: baseTexture });

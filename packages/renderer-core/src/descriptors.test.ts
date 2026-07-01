@@ -113,14 +113,14 @@ describe('renderer descriptor authoring API', () => {
     expect(solid).toEqual({
       color: [1, 0, 0, 1],
       kind: 'solid',
-      revision: 1
+      version: 1
     });
     expect(asset).toMatchObject({
       colorSpace: 'srgb',
       fallback: solid,
       kind: 'asset',
-      revision: 'v2',
-      uri: '/textures/albedo.png'
+      uri: '/textures/albedo.png',
+      version: 'v2'
     });
     expect(standardMaterial({ texture: asset }).baseColor).toBe(asset);
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
@@ -146,8 +146,8 @@ describe('renderer descriptor authoring API', () => {
 
     expect(node.asset).toEqual({
       bounds,
-      revision: 2,
-      uri: '/DamagedHelmet/DamagedHelmet.gltf'
+      uri: '/DamagedHelmet/DamagedHelmet.gltf',
+      version: 2
     });
     expect(node.src).toBe('/DamagedHelmet/DamagedHelmet.gltf');
     expect(srcNode.asset).toEqual({

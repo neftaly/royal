@@ -11,6 +11,7 @@ import {
   type OrbitCameraView,
 } from '@royal/react';
 import {
+  useEffect,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -41,9 +42,23 @@ const cubeMaterial = wireframeMaterial({
   color: [0.38, 0.85, 0.95, 1],
 });
 
+const ScopedFrameIndex = ({
+  onFrame,
+}: {
+  readonly onFrame: (frame: number) => void;
+}): null => {
+  const frame = useFrameIndex();
+
+  useEffect(() => {
+    onFrame(frame);
+  }, [frame, onFrame]);
+
+  return null;
+};
+
 export const WireframeCube = (): ReactNode => {
   const [cameraView, setCameraView] = useState<OrbitCameraView>(defaultCameraView);
-  const frame = useFrameIndex();
+  const [frame, setFrame] = useState(0);
   const camera = orbitPerspectiveCamera({
     far: 100,
     fovY: Math.PI / 4,
@@ -75,6 +90,7 @@ export const WireframeCube = (): ReactNode => {
         defaultView={defaultCameraView}
         onChange={setCameraView}
       />
+      <ScopedFrameIndex onFrame={setFrame} />
     </Canvas>
   );
 };

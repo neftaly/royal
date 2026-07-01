@@ -126,7 +126,7 @@ describe("VirtualTextureCache", () => {
     const cache = new VirtualTextureCache(gl);
     const descriptor = {
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
-      revision: "r1",
+      version: "r1",
     };
 
     const first = cache.loadVirtualTexture(descriptor);
@@ -150,7 +150,7 @@ describe("VirtualTextureCache", () => {
     expect(cache.stats()).toEqual({ entries: 1, error: 0, loading: 0, ready: 1 });
   });
 
-  it("creates distinct entries when revision or manifest URI changes", async () => {
+  it("creates distinct entries when version or manifest URI changes", async () => {
     const { counts, gl } = fakeVirtualTextureGl();
     const fetchManifest = vi.fn((input: RequestInfo | URL) => {
       const uri = requestInputUri(input);
@@ -161,15 +161,15 @@ describe("VirtualTextureCache", () => {
 
     cache.loadVirtualTexture({
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
-      revision: "r1",
+      version: "r1",
     });
     cache.loadVirtualTexture({
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
-      revision: "r2",
+      version: "r2",
     });
     cache.loadVirtualTexture({
       manifestUri: "https://cdn.example.test/vt/terrain.vt.json",
-      revision: "r1",
+      version: "r1",
     });
 
     expect(cache.stats()).toEqual({ entries: 3, error: 0, loading: 3, ready: 0 });

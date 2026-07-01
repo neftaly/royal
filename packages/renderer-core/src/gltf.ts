@@ -12,8 +12,8 @@ export interface GltfAssetBounds {
 
 export interface GltfAssetRef {
   readonly bounds?: GltfAssetBounds;
-  readonly revision?: number | string;
   readonly uri: string;
+  readonly version?: number | string;
 }
 
 /** glTF asset node loaded from a source URL. */
@@ -30,7 +30,7 @@ export interface GltfSrcOptions {
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
   /** Preferred asset version override for cache keys. */
-  readonly version?: GltfAssetRef['revision'];
+  readonly version?: GltfAssetRef['version'];
 }
 
 export type GltfOptions = GltfSrcOptions;
@@ -42,8 +42,8 @@ const gltfOptions = (input: GltfInput): GltfOptions =>
 
 const resolveAsset = (options: GltfOptions): GltfAssetRef => ({
   ...(options.bounds === undefined ? {} : { bounds: options.bounds }),
-  ...(options.version === undefined ? {} : { revision: options.version }),
-  uri: options.src
+  uri: options.src,
+  ...(options.version === undefined ? {} : { version: options.version })
 });
 
 export function gltf(src: string): GltfNode;

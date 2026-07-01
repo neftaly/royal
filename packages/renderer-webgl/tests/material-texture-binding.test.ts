@@ -155,7 +155,6 @@ describe("lowerMaterialBaseColorBinding", () => {
     const source = solidTexture({
       color: [0.2, 0.3, 0.4, 1],
       colorSpace: "linear",
-      id: "paint",
       version: 2,
     });
     const textureCache = {
@@ -885,11 +884,6 @@ describe("bindMaterialBaseColor", () => {
         },
       },
       selectedMip: 0,
-      source: {
-        kind: "virtual-asset",
-        manifestUri: "https://example.test/terrain.vt.json",
-        revision: "r2",
-      },
       uploadFrame: {
         bytesUploaded: 96,
         frame: 42,

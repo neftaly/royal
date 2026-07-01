@@ -19,7 +19,7 @@ export interface TextureSampler {
   readonly wrapT?: TextureSamplerWrap;
 }
 
-export type TextureRevision = number | string;
+export type TextureVersion = number | string;
 
 export const defaultTextureFallbackColor: Rgba = [0.5, 0.5, 0.5, 1];
 
@@ -27,17 +27,16 @@ export interface SolidTextureRef {
   readonly kind: 'solid';
   readonly color: Rgba;
   readonly colorSpace?: TextureColorSpace;
-  readonly id?: string;
-  readonly revision?: TextureRevision;
+  readonly version?: TextureVersion;
 }
 
 export interface TextureAssetRef {
   readonly kind: 'asset';
   readonly colorSpace?: TextureColorSpace;
   readonly fallback?: SolidTextureRef;
-  readonly revision?: TextureRevision;
   readonly sampler?: TextureSampler;
   readonly uri: string;
+  readonly version?: TextureVersion;
 }
 
 export interface VirtualTextureAssetRef {
@@ -46,8 +45,8 @@ export interface VirtualTextureAssetRef {
   readonly fallback?: SolidTextureRef;
   readonly manifestUri: string;
   readonly preview?: TextureAssetRef;
-  readonly revision?: TextureRevision;
   readonly sampler?: TextureSampler;
+  readonly version?: TextureVersion;
 }
 
 export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAssetRef;
@@ -55,8 +54,7 @@ export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAsset
 export interface SolidTextureOptions {
   readonly color: Rgba;
   readonly colorSpace?: TextureColorSpace;
-  readonly id?: string;
-  readonly version?: TextureRevision;
+  readonly version?: TextureVersion;
 }
 
 interface TextureAssetBaseOptions {
@@ -65,7 +63,7 @@ interface TextureAssetBaseOptions {
   readonly fallbackColor?: Rgba;
   readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
-  readonly version?: TextureRevision;
+  readonly version?: TextureVersion;
 }
 
 export interface TextureAssetSrcOptions extends TextureAssetBaseOptions {
@@ -82,10 +80,10 @@ export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOption
 
 export type ImageTextureOptions = TextureAssetOptions;
 
-interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'kind' | 'manifestUri' | 'revision'> {
+interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'kind' | 'manifestUri' | 'version'> {
   readonly fallbackColor?: Rgba;
   /** Preferred asset version override for cache keys. */
-  readonly version?: TextureRevision;
+  readonly version?: TextureVersion;
 }
 
 export interface VirtualTextureAssetSrcOptions extends VirtualTextureAssetBaseOptions {
@@ -113,8 +111,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
     kind: 'solid',
     color: options.color,
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-    ...(options.id === undefined ? {} : { id: options.id }),
-    ...(options.version === undefined ? {} : { revision: options.version })
+    ...(options.version === undefined ? {} : { version: options.version })
   };
 };
 
@@ -138,9 +135,9 @@ export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(fallback === undefined ? {} : { fallback }),
-    ...(options.version === undefined ? {} : { revision: options.version }),
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
-    uri
+    uri,
+    ...(options.version === undefined ? {} : { version: options.version })
   };
 }
 
@@ -174,8 +171,8 @@ export const virtualTextureAsset = (options: VirtualTextureAssetOptions): Virtua
     ...(fallback === undefined ? {} : { fallback }),
     manifestUri,
     ...(options.preview === undefined ? {} : { preview: options.preview }),
-    ...(options.version === undefined ? {} : { revision: options.version }),
-    ...(options.sampler === undefined ? {} : { sampler: options.sampler })
+    ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
+    ...(options.version === undefined ? {} : { version: options.version })
   };
 };
 

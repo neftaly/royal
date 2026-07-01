@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@royal/renderer-core", async () => await import("../../renderer-core/src/index"));
+vi.mock("@royal/renderer-core/text", async () => await import("../../renderer-core/src/text-index"));
 
-import {
-  text,
-  textMesh,
-  type TextMesh,
-} from "@royal/renderer-core";
+import { text } from "@royal/renderer-core";
+import { textMesh, type TextMesh } from "@royal/renderer-core/text";
 import type { RendererWebGlContext } from "../src/gl";
 import { TextCache, textBufferDataFromMesh } from "../src/text-cache";
 

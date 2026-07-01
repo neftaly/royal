@@ -1,4 +1,4 @@
-import type { EditableTextCommand } from '@royal/renderer-core';
+import type { EditableTextCommand } from '@royal/renderer-core/text';
 
 export type EditableTextKeyboardMode = 'single-line' | 'multiline';
 

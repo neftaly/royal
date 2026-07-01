@@ -131,11 +131,6 @@ const runtimeStats = (): MaterialVirtualTextureRuntimeStats => ({
     },
   },
   selectedMip: 1,
-  source: {
-    kind: "virtual-asset",
-    manifestUri: "https://example.test/terrain.vt.json",
-    revision: "r2",
-  },
   uploadFrame: {
     bytesUploaded: 28,
     frame: 7,

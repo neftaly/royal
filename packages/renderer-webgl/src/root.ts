@@ -326,7 +326,6 @@ const copyMaterialVirtualTextureRuntimeStats = (
     uploads: { ...stats.resource.uploads },
   },
   selectedMip: stats.selectedMip,
-  ...(stats.source === undefined ? {} : { source: { ...stats.source } }),
   uploadFrame: { ...stats.uploadFrame },
 });
 

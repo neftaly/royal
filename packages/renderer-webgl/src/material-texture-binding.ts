@@ -63,19 +63,12 @@ export type MaterialBaseColorBindOptions = {
   readonly virtualTextureDemand?: VirtualTextureDemand | undefined;
 };
 
-export type MaterialVirtualTextureSourceIdentity = {
-  readonly kind: "virtual-asset";
-  readonly manifestUri: string;
-  readonly revision?: VirtualTextureAssetRef["revision"] | undefined;
-};
-
 export type MaterialVirtualTextureRuntimeStats = {
   readonly frame: number;
   readonly pageTableSize: readonly [number, number];
   readonly requestPages: VirtualTexturePageRequestResult;
   readonly resource: VirtualTextureResourceStats;
   readonly selectedMip: number;
-  readonly source?: MaterialVirtualTextureSourceIdentity | undefined;
   readonly uploadFrame: VirtualTextureFrameUploadResult;
 };
 
@@ -206,7 +199,7 @@ const bindVirtualMaterialBaseColor = (
 ): boolean => {
   if (binding.virtualLoad?.kind !== "ready") return false;
 
-  const prepared = prepareVirtualTextureResource(binding.virtualLoad.resource, binding.source, options);
+  const prepared = prepareVirtualTextureResource(binding.virtualLoad.resource, options);
   if (prepared === null) return false;
 
   const { bindings, mip, pageTableSize } = prepared;
@@ -232,7 +225,6 @@ const bindVirtualMaterialBaseColor = (
 
 const prepareVirtualTextureResource = (
   resource: VirtualTextureResource,
-  source: VirtualTextureAssetRef | undefined,
   options: MaterialBaseColorBindOptions,
 ): PreparedVirtualTextureResource | null => {
   const bindings = resource.getTextureBindings();
@@ -264,7 +256,6 @@ const prepareVirtualTextureResource = (
     requestPages: requested,
     resource: stats,
     selectedMip: demand.mip,
-    source,
     uploadFrame: uploaded,
   });
   if (!isVirtualTextureReadyToBind(stats)) return null;
@@ -401,7 +392,6 @@ const emitVirtualTextureRuntimeStats = (
     readonly requestPages: VirtualTexturePageRequestResult;
     readonly resource: VirtualTextureResourceStats;
     readonly selectedMip: number;
-    readonly source: VirtualTextureAssetRef | undefined;
     readonly uploadFrame: VirtualTextureFrameUploadResult;
   },
 ): void => {
@@ -414,36 +404,20 @@ const virtualTextureRuntimeStats = (stats: {
   readonly requestPages: VirtualTexturePageRequestResult;
   readonly resource: VirtualTextureResourceStats;
   readonly selectedMip: number;
-  readonly source: VirtualTextureAssetRef | undefined;
   readonly uploadFrame: VirtualTextureFrameUploadResult;
 }): MaterialVirtualTextureRuntimeStats => {
-  const sourceIdentity = virtualTextureSourceIdentity(stats.source);
-
   return {
     frame: stats.frame,
     pageTableSize: stats.pageTableSize,
     requestPages: stats.requestPages,
     resource: stats.resource,
     selectedMip: stats.selectedMip,
-    ...(sourceIdentity === undefined ? {} : { source: sourceIdentity }),
     uploadFrame: stats.uploadFrame,
   };
 };
 
 const isVirtualTextureReadyToBind = (stats: VirtualTextureResourceStats): boolean =>
   stats.cache.residentPages !== 0 && stats.mappings.mappedPages !== 0;
-
-const virtualTextureSourceIdentity = (
-  source: VirtualTextureAssetRef | undefined,
-): MaterialVirtualTextureSourceIdentity | undefined => {
-  if (source === undefined) return undefined;
-
-  return {
-    kind: source.kind,
-    manifestUri: source.manifestUri,
-    ...(source.revision === undefined ? {} : { revision: source.revision }),
-  };
-};
 
 const scheduleVirtualTextureRequestSettled = (
   resource: VirtualTextureResource,
