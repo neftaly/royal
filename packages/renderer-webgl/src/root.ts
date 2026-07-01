@@ -165,6 +165,10 @@ type GltfTexture = {
   readonly source?: number;
 };
 
+type MinimalVirtualTextureManifest = {
+  readonly pages?: unknown;
+};
+
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
@@ -425,10 +429,58 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
   if (image.complete) onLoad();
 });
 
+const loadFetchedImage = async (src: string): Promise<HTMLImageElement | ImageBitmap> => {
+  const response = await fetch(src);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+  if (typeof globalThis.createImageBitmap === "function" && typeof response.blob === "function") {
+    return await globalThis.createImageBitmap(await response.blob());
+  }
+
+  return await loadImage(src);
+};
+
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
     ? node.kind
     : "unknown";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const firstManifestEntryUri = (entries: unknown): string | undefined => {
+  if (Array.isArray(entries)) {
+    for (const entry of entries) {
+      if (!isRecord(entry)) continue;
+      if (typeof entry.uri === "string" && entry.uri.length > 0) return entry.uri;
+    }
+    return undefined;
+  }
+
+  if (!isRecord(entries)) return undefined;
+  for (const uri of Object.values(entries)) {
+    if (typeof uri === "string" && uri.length > 0) return uri;
+  }
+  return undefined;
+};
+
+const templateManifestPageUri = (template: string): string =>
+  template
+    .replaceAll("{page}", "m0/0/0")
+    .replaceAll("{mip}", "0")
+    .replaceAll("{x}", "0")
+    .replaceAll("{y}", "0");
+
+const firstVirtualTexturePageUri = (manifest: MinimalVirtualTextureManifest): string | undefined => {
+  if (Array.isArray(manifest.pages)) return firstManifestEntryUri(manifest.pages);
+  if (!isRecord(manifest.pages)) return undefined;
+
+  const explicit = firstManifestEntryUri(manifest.pages.entries);
+  if (explicit !== undefined) return explicit;
+  return typeof manifest.pages.uriTemplate === "string" && manifest.pages.uriTemplate.length > 0
+    ? templateManifestPageUri(manifest.pages.uriTemplate)
+    : undefined;
+};
 
 const componentCount = (type: GltfAccessor["type"]): number => {
   switch (type) {
@@ -777,11 +829,21 @@ export class WebGlRoot {
   }
 
   #bindMaterialTexture(program: WebGLProgram, material: Material): boolean {
-    const texture = material.baseColor.kind === "virtual-asset"
-      ? material.baseColor.preview
-      : material.baseColor;
-    if (texture === undefined || texture.kind === "solid") return false;
-    const resource = this.#texture(texture);
+    if (material.baseColor.kind === "solid") return false;
+    let resource: TextureResource | TextureLoadState;
+    if (material.baseColor.kind === "virtual-asset") {
+      if (material.baseColor.preview === undefined) {
+        resource = this.#virtualTexture(material.baseColor);
+      } else {
+        const preview = this.#texture(material.baseColor.preview);
+        const previewError = "error" in preview && preview.error !== undefined;
+        resource = preview.uploaded || !previewError
+          ? preview
+          : this.#virtualTexture(material.baseColor);
+      }
+    } else {
+      resource = this.#texture(material.baseColor);
+    }
     if (!resource.uploaded) return false;
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE0);
@@ -1170,6 +1232,56 @@ void main() {
     });
 
     return state;
+  }
+
+  #virtualTexture(texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>): TextureResource | TextureLoadState {
+    const key = textureKey(texture);
+    const cached = this.#textures.get(key);
+    if (cached !== undefined) return cached;
+
+    const glTexture = this.#createTexture();
+    const state: TextureLoadState = {
+      key,
+      loading: true,
+      texture: glTexture,
+      uploaded: false,
+    };
+    this.#textures.set(key, state);
+
+    this.#loadVirtualTexturePage(texture).then((image) => {
+      if (this.#disposed) return;
+      state.loading = false;
+      const uploadTexture: Extract<TextureRef, { readonly kind: "asset" }> = {
+        kind: "asset",
+        uri: texture.manifestUri,
+        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+        ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
+        ...(texture.version === undefined ? {} : { version: texture.version }),
+      };
+      this.#uploadTexture(state, image, uploadTexture);
+      this.#scheduleRender();
+    }, (error: unknown) => {
+      if (this.#disposed) return;
+      state.loading = false;
+      state.error = `Virtual texture load failed for ${texture.manifestUri}: ${error instanceof Error ? error.message : String(error)}`;
+      this.#recordDiagnostic(state.error);
+    });
+
+    return state;
+  }
+
+  async #loadVirtualTexturePage(
+    texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>,
+  ): Promise<HTMLImageElement | ImageBitmap> {
+    const response = await fetch(texture.manifestUri);
+    if (!response.ok) throw new Error(`manifest ${response.status} ${response.statusText}`);
+    const manifest = await response.json() as MinimalVirtualTextureManifest;
+    const pageUri = firstVirtualTexturePageUri(manifest);
+    if (pageUri === undefined) {
+      throw new Error("manifest does not reference any page image");
+    }
+
+    return await loadFetchedImage(resolveUrl(texture.manifestUri, pageUri));
   }
 
   #ensureImmediateTexture(texture: Extract<TextureRef, { readonly kind: "asset" }>, image: HTMLImageElement | ImageBitmap): TextureResource {
