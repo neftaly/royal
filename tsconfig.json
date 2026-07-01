@@ -34,6 +34,12 @@
       ],
       "@royal/react/jsx-runtime": [
         "./packages/react/src/jsx-runtime.ts"
+      ],
+      "@royal/react/renderer/jsx-dev-runtime": [
+        "./packages/react/src/renderer-jsx-dev-runtime.ts"
+      ],
+      "@royal/react/renderer/jsx-runtime": [
+        "./packages/react/src/renderer-jsx-runtime.ts"
       ]
     },
     "isolatedModules": true,

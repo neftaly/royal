@@ -13,11 +13,11 @@ import {
   type ReactNode,
 } from "react";
 import { createFrameLoop, FrameLoopContext } from "./frame";
-import type { RoyalRendererJsxElement } from "./jsx-runtime";
+import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime";
 import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
 
 type CanvasChild = ReactNode | RoyalRendererJsxElement;
-type CanvasChildren = CanvasChild | readonly unknown[];
+type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
 
@@ -39,12 +39,16 @@ const isRenderRoot = (value: unknown): value is RenderRoot =>
   "kind" in value &&
   value.kind === "scene";
 
+const isCanvasChildrenArray = (
+  value: CanvasChildren,
+): value is readonly CanvasChildren[] => Array.isArray(value);
+
 const toCanvasChildArray = (value: CanvasChildren): readonly CanvasChild[] => {
-  if (Array.isArray(value)) {
-    return value.flatMap((child) => toCanvasChildArray(child as CanvasChildren));
+  if (isCanvasChildrenArray(value)) {
+    return value.flatMap(toCanvasChildArray);
   }
 
-  return [value as CanvasChild];
+  return [value];
 };
 
 const isEmptyCanvasChild = (value: unknown): boolean =>
@@ -52,11 +56,6 @@ const isEmptyCanvasChild = (value: unknown): boolean =>
   value === undefined ||
   typeof value === "boolean" ||
   (typeof value === "string" && value.trim() === "");
-
-const isRoyalRendererJsxElement = (value: unknown): value is RoyalRendererJsxElement =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value;
 
 const describeCanvasChild = (value: unknown): string => {
   if (isRoyalRendererJsxElement(value)) {
@@ -90,7 +89,7 @@ const splitCanvasChildren = (
     }
 
     if (!isEmptyCanvasChild(child)) {
-      controls.push(child as ReactNode);
+      controls.push(child);
     }
   }
 

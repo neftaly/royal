@@ -38,7 +38,13 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/react': {
     external: ['@royal/renderer-core', '@royal/renderer-webgl', 'react'],
     lib: {
-      entry: { index: 'src/index.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts' },
+      entry: {
+        index: 'src/index.ts',
+        'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
+        'jsx-runtime': 'src/jsx-runtime.ts',
+        'renderer-jsx-dev-runtime': 'src/renderer-jsx-dev-runtime.ts',
+        'renderer-jsx-runtime': 'src/renderer-jsx-runtime.ts'
+      },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
@@ -60,6 +66,8 @@ export const sourceAliases = [
   { find: '@royal/renderer-core/text', replacement: path.join(repoRoot, 'packages/renderer-core/src/text-index.ts') },
   { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-dev-runtime.ts') },
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
+  { find: '@royal/react/renderer/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-dev-runtime.ts') },
+  { find: '@royal/react/renderer/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-runtime.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') }
 ];

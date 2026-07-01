@@ -9,7 +9,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
-    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts"
+    "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
+    "./renderer/jsx-runtime": "./src/renderer-jsx-runtime.ts",
+    "./renderer/jsx-dev-runtime": "./src/renderer-jsx-dev-runtime.ts"
   },
   "files": [
     "src",

@@ -3,7 +3,7 @@ import {
   createWebGlRoot,
   type WebGlRootOptions,
 } from "@royal/renderer-webgl";
-import type { ReactNode } from "react";
+import type { RoyalRendererJsxElement } from "./jsx-runtime";
 
 /** WebGL context options for the Royal React root. */
 export interface RoyalRootContextOptions {
@@ -32,7 +32,7 @@ export interface RoyalRootSnapshot {
   readonly latestScene: RenderRoot | undefined;
 }
 
-export type RoyalRootRenderInput = ReactNode | RenderRoot;
+export type RoyalRootRenderInput = RoyalRendererJsxElement;
 
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRoot {

@@ -44,7 +44,6 @@ type EmptyJsxChild = boolean | null | undefined;
 type RendererJsxChild = ComponentOutput | EmptyJsxChild | readonly RendererJsxChild[];
 type Component = (props: Record<string, unknown>) => ComponentOutput;
 type ElementType = keyof JSX.IntrinsicElements | Component;
-type JsxProps = Record<string, unknown>;
 type ReactJsxFactory = typeof reactJsx;
 
 type SceneProps = {
@@ -71,6 +70,19 @@ type MeshChildren = {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
 };
+type JsxProps = Partial<
+  SceneProps &
+  PassProps &
+  MeshProps &
+  TextProps &
+  PerspectiveCameraOptions &
+  OrthographicCameraOptions &
+  DirectionalLightOptions &
+  GltfOptions &
+  BoxGeometryOptions &
+  PlaneGeometryOptions &
+  WireframeMaterialOptions
+> & Record<string, unknown>;
 
 const reactComponentMarker = Symbol.for('@royal/react.react-component');
 const rendererComponentMarker = Symbol.for('@royal/react.renderer-component');
@@ -98,6 +110,11 @@ export const markRendererComponent = <Component extends object>(component: Compo
 const isMarkedRendererComponent = (type: ElementType): boolean =>
   typeof type === 'function' &&
   (type as { readonly [rendererComponentMarker]?: true })[rendererComponentMarker] === true;
+
+export const isRoyalRendererJsxElement = (value: unknown): value is RoyalRendererJsxElement =>
+  typeof value === 'object' &&
+  value !== null &&
+  'kind' in value;
 
 const isRendererJsxChildArray = (
   value: RendererJsxChild
@@ -359,6 +376,64 @@ const assertNever = (type: never): never => {
   );
 };
 
+const createIntrinsicRendererElement = (
+  type: keyof JSX.IntrinsicElements,
+  props: JsxProps | null
+): RoyalRendererJsxElement => {
+  const elementProps = props ?? {};
+
+  switch (type) {
+    case 'scene':
+      return scene({
+        children: toRenderPasses((elementProps as SceneProps).children)
+      });
+    case 'pass':
+      return toPass(elementProps as PassProps);
+    case 'perspectiveCamera':
+      return perspectiveCamera(elementProps as PerspectiveCameraOptions);
+    case 'orthographicCamera':
+      return orthographicCamera(elementProps as OrthographicCameraOptions);
+    case 'directionalLight':
+      return directionalLight(elementProps as DirectionalLightOptions);
+    case 'mesh':
+      return toMesh(elementProps as MeshProps);
+    case 'gltf':
+      return toGltfNode(elementProps as GltfOptions);
+    case 'text':
+      return toText(elementProps as TextProps);
+    case 'boxGeometry':
+      return boxGeometry(elementProps as BoxGeometryOptions);
+    case 'planeGeometry':
+      return planeGeometry(elementProps as PlaneGeometryOptions);
+    case 'standardMaterial':
+      return standardMaterial(elementProps as StandardMaterialOptions);
+    case 'unlitMaterial':
+      return unlitMaterial(elementProps as UnlitMaterialOptions);
+    case 'wireframeMaterial':
+      return wireframeMaterial(elementProps as WireframeMaterialOptions);
+    default:
+      return assertNever(type);
+  }
+};
+
+export const createRendererElement = (
+  type: ElementType,
+  props: JsxProps | null
+): RoyalRendererJsxElement => {
+  if (typeof type === 'function') {
+    if (!isMarkedRendererComponent(type)) {
+      throw new Error('Royal renderer JSX components must be marked with markRendererComponent');
+    }
+
+    const output = type(props ?? {});
+    if (isRoyalRendererJsxElement(output)) return output;
+
+    throw new Error('Royal renderer JSX components must return one renderer descriptor');
+  }
+
+  return createIntrinsicRendererElement(type, props);
+};
+
 const createElement = (
   type: ElementType,
   props: JsxProps | null,
@@ -375,38 +450,7 @@ const createElement = (
     return type(elementProps);
   }
 
-  switch (type) {
-    case 'scene':
-      return scene({
-        children: toRenderPasses((elementProps as SceneProps).children)
-      });
-    case 'pass':
-      return toPass(elementProps as PassProps);
-    case 'perspectiveCamera':
-      return perspectiveCamera(elementProps as unknown as PerspectiveCameraOptions);
-    case 'orthographicCamera':
-      return orthographicCamera(elementProps as unknown as OrthographicCameraOptions);
-    case 'directionalLight':
-      return directionalLight(elementProps as unknown as DirectionalLightOptions);
-    case 'mesh':
-      return toMesh(elementProps as unknown as MeshProps);
-    case 'gltf':
-      return toGltfNode(elementProps as unknown as GltfOptions);
-    case 'text':
-      return toText(elementProps as unknown as TextProps);
-    case 'boxGeometry':
-      return boxGeometry(elementProps as unknown as BoxGeometryOptions);
-    case 'planeGeometry':
-      return planeGeometry(elementProps as unknown as PlaneGeometryOptions);
-    case 'standardMaterial':
-      return standardMaterial(elementProps as unknown as StandardMaterialOptions);
-    case 'unlitMaterial':
-      return unlitMaterial(elementProps as unknown as UnlitMaterialOptions);
-    case 'wireframeMaterial':
-      return wireframeMaterial(elementProps as unknown as WireframeMaterialOptions);
-    default:
-      return assertNever(type);
-  }
+  return createIntrinsicRendererElement(type, elementProps);
 };
 
 export const Fragment = markRendererComponent((_props: {

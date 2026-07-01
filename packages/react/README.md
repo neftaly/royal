@@ -13,7 +13,7 @@ documents with external buffers, non-interleaved `FLOAT`
 `pbrMetallicRoughness.baseColorTexture` image.
 
 ```tsx
-/** @jsxImportSource @royal/react */
+/** @jsxImportSource @royal/react/renderer */
 import {
   createRoot,
 } from '@royal/react';
@@ -48,10 +48,11 @@ createRoot(canvas, {
 );
 ```
 
-The imperative `createRoot(canvas)` path is for already-lowered Royal scenes:
-descriptor objects from `@royal/renderer-core`, Royal intrinsic JSX such as
-`<scene>`, or components marked with `markRendererComponent`. Arbitrary React
-components and DOM overlays belong under `<Canvas>` in a React DOM tree.
+The imperative `createRoot(canvas)` path uses `@royal/react/renderer` as its
+JSX import source. It is for already-lowered Royal scenes: descriptor objects
+from `@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or
+components marked with `markRendererComponent`. Arbitrary React components and
+DOM overlays belong under `<Canvas>` in a React DOM tree.
 
 ## Workflows
 
