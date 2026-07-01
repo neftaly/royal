@@ -38,10 +38,10 @@ Build the first runtime worker from the current research pieces:
   LRU replacement, dirty page-table entries, upload budgets, seam candidates,
   and benchmark rows.
 - `demo-assets/stats/camera-pan-stream.json` is fixture evidence only. It is
-  useful as a regression baseline, but the real route must replace it with
-  runtime rows produced by the package-private worker.
-- `example-plan.md` stays a static examples-app handoff until renderer hooks
-  exist.
+  useful as a regression baseline, but the renderer-backed demo must replace it
+  with runtime rows produced by the package-private worker.
+- No static examples-app handoff remains. New browser-facing demo work should
+  wait for renderer hooks and use asset/material resources.
 - `packages/renderer-webgl/src/virtual-texture-runtime.ts` is the current
   package-private runtime worker seed. It already defines stable page ids,
   parent-page lookup, resident pages, RGBA8 page-table entries, dirty
@@ -301,7 +301,8 @@ texturing, and stats must label it as `fixed-low-mip`.
 3. Add private WebGL2 page-table and physical-atlas resource allocation.
 4. Drain worker upload/page-table commands on the render thread.
 5. Add shader indirection for one virtual albedo material slot.
-6. Replace fixture stats in the real route with runtime-produced stats.
+6. Replace fixture stats in the renderer-backed demo with runtime-produced
+   stats.
 7. Add overlay rows before tuning visuals.
 8. Consider KTX2 variants only after `RGBA8` residency, fallback, and debug
    stats are stable.

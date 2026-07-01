@@ -6,7 +6,7 @@
     "kind": "virtual-texture",
     "revision": "virtual-terrain-pages@0.1.0",
     "quality": "research-demo",
-    "label": "Virtual Texturing Terrain Demo Material"
+    "label": "Virtual Texturing Material Demo Fixture"
   },
   "world": {
     "id": "royal.generated-terrain-material.vt-demo",
@@ -219,10 +219,6 @@
       {
         "kind": "source-manifest",
         "uri": "research/virtual-texturing/demo-assets/manifest.json"
-      },
-      {
-        "kind": "source-fixture",
-        "uri": "research/virtual-texturing/demo-assets/example-fixture.json"
       }
     ],
     "recipe": "virtual-terrain-pages@0.1.0",

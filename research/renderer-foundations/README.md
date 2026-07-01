@@ -208,7 +208,7 @@ Deliverables:
 - Residency scheduler that consumes visible packet material demand.
 - Parent fallback lookup, one-ring prefetch, upload page/byte budgets, and
   seam-candidate diagnostics.
-- WebGL2 virtual-texture route; fixed low-mip fallback when capability rows
+- WebGL2 virtual-texture path; fixed low-mip fallback when capability rows
   require it.
 
 Why sixth:
@@ -593,8 +593,8 @@ Tiger:
 
 Virtual texturing:
 
-- `/labs/virtual-texturing` uses material asset references lowered privately to
-  page-table/cache resources.
+- A renderer-backed glTF/material demo uses material asset references lowered
+  privately to page-table/cache resources.
 - Overlay shows physical slots, page ids, resident/free state, page-table dirty
   entries, requested/queued pages, hits, misses, fallback samples, uploads,
   evictions, upload bytes, upload time, seam candidates, and selected mode.
@@ -625,7 +625,7 @@ Recommended implementation slices after this plan:
 5. Material texture resource cache and fallback texture ownership.
 6. Virtual texture page table/cache skeleton with stats and fixed low-mip
    fallback.
-7. Browser virtual-texturing route after private resource hooks pass tests.
+7. Browser virtual-texturing demo after private resource hooks pass tests.
 8. Terrain chunk LOD adapter using indexed geometry and virtual texture demand.
 
 Handoff decomplection:

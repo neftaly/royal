@@ -3,9 +3,10 @@
 Date: 2026-06-28
 
 This file is the handoff contract for moving the virtual-texturing research
-fixture into a Royal example after renderer hooks exist. It keeps the current
-work research-only and preserves the public product shape: authors describe
-virtual texture assets and material resources, not a `VirtualTextureNode`.
+fixture into a renderer-backed glTF/material demo after renderer hooks exist. It
+keeps the current work research-only and preserves the public product shape:
+authors describe virtual texture assets and material resources, not a
+`VirtualTextureNode`.
 
 ## Current Research Fixture
 
@@ -41,7 +42,7 @@ The browser demo should not land until these are true:
 - [ ] SAB path stays opt-in until `crossOriginIsolated` checks pass and
   benchmarks show bounded memory or churn reduction worth the added protocol.
 
-Readiness targets for the first real route:
+Readiness targets for the first renderer-backed demo:
 
 - At least 95% exact page-hit ratio after warmup during slow pan.
 - No more than 8 uploads per frame.
@@ -53,29 +54,24 @@ Readiness targets for the first real route:
 ## Benchmark Gates
 
 Use two explicit browser benchmark tiers so portable CI can keep exercising the
-route while rollout still has a default-on performance bar.
+demo while rollout still has a default-on performance bar. Wire these gates to
+the concrete renderer benchmark harness when that surface exists; this document
+does not reserve an examples route or command.
 
 Smoke/permissive gate:
 
-- Purpose: CI portability and browser availability. This catches route crashes,
+- Purpose: CI portability and browser availability. This catches demo crashes,
   missing canvas output, runtime exceptions, no wheel dispatch, and severe rAF
   stalls without requiring every research-grade probe counter.
-- Command: `pnpm --filter @royal/examples-react bench:vt`.
-- Equivalent direct command after a build:
-  `node apps/examples-react/scripts/virtual-texturing-smoothness.mjs --smoke`.
 - Defaults: `VT_SMOOTHNESS_GATE=smoke`, missing probe allowed only for this
   tier, rAF p95 <= 260 ms, rAF p99 <= 420 ms, long-frame ratio <= 0.50,
   sampled/final pending pages <= 96, and texture upload max <= 50 ms.
 
 Default-on/perf gate:
 
-- Purpose: rollout gate for enabling virtual texturing by default on the route.
+- Purpose: rollout gate for enabling virtual texturing by default in the demo.
   This tier requires `window.__royalVirtualTextureProbe`, performance rows, and
   the research-grade quality counters to be present.
-- Command after a build:
-  `VT_SMOOTHNESS_GATE=default-on node apps/examples-react/scripts/virtual-texturing-smoothness.mjs`.
-- Full package command:
-  `VT_SMOOTHNESS_GATE=default-on pnpm --filter @royal/examples-react bench:vt`.
 - Defaults: exact hit ratio >= 0.95, repeated reload ratio <= 0.02, recent
   eviction re-request ratio <= 0.03, rAF p95 <= 24 ms, rAF p99 <= 48 ms,
   long-frame ratio <= 0.03 over 50 ms, probe frame p95 <= 20 ms, max frame <=
@@ -95,16 +91,13 @@ Budget overrides stay under `VT_SMOOTHNESS_*`, including:
 - `VT_SMOOTHNESS_MAX_PROBE_FINAL_PENDING_PAGES`
 - `VT_SMOOTHNESS_MAX_PROBE_TEXTURE_UPLOAD_MS`
 
-## Exact Royal Example Route
+## Future Renderer-Backed Demo
 
-Add the example after renderer hooks exist:
+No route, catalog id, component name, or examples-app public asset path is
+reserved by this research. Choose the product surface when renderer hooks exist;
+the first browser-facing demo should be a renderer-backed glTF/material scene
+that consumes virtual texture asset and material resources.
 
-- Route: `/labs/virtual-texturing`.
-- Catalog id: `virtual-texturing-terrain`.
-- Title: `Virtual Texturing Terrain`.
-- Component: `apps/examples-react/src/examples/cases/VirtualTexturingTerrain.tsx`.
-- Source export: `VirtualTexturingTerrain`.
-- Section: `labs-prototypes`.
 - Visual smoke surface: `canvas`.
 
 ### Scene
@@ -123,7 +116,7 @@ Use author-facing resources shaped like:
 const terrainAlbedo = {
   kind: "virtual-texture-asset",
   id: "royal.generated-terrain-material.vt-demo",
-  manifestUri: "/virtual-texturing/manifest.json",
+  manifestUri: "research/virtual-texturing/demo-assets/manifest.json",
 };
 
 const terrainMaterial = {
@@ -161,9 +154,9 @@ The overlay must show:
 
 ### Tests
 
-- Catalog test includes `virtual-texturing-terrain` and route
-  `/labs/virtual-texturing`.
-- Browser smoke confirms a nonblank canvas, the route title, and source text.
+- Demo registration tests assert the selected route or catalog id only after a
+  concrete product surface is chosen.
+- Browser smoke confirms a nonblank canvas, visible title, and source text.
 - Visual smoke captures the overlay enabled and disabled.
 - Renderer-internal tests cover page-table entry encoding, resident fallback
   lookup, cache eviction invalidation, upload budget capping, and low-mip

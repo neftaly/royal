@@ -109,8 +109,8 @@ function buildSvg(manifest, stream) {
   <rect x="580" y="602" width="500" height="116" class="panel"/>
   <text x="602" y="636" class="label">Demo Gate</text>
   <text x="602" y="662" class="caption">Fixture is ready for renderer integration when hooks exist.</text>
-  <text x="602" y="690" class="small">Next route: /labs/virtual-texturing in apps/examples-react.</text>
-  <text x="602" y="710" class="small">First renderer work remains private: page table, physical cache, material binding.</text>
+  <text x="602" y="690" class="small">Next demo: renderer-backed glTF/material surface.</text>
+  <text x="602" y="710" class="small">Renderer work remains private: page table, physical cache, material binding.</text>
 </svg>
 `;
 }
@@ -267,8 +267,8 @@ function buildHtml(manifest, stream) {
     </section>
 
     <section class="panel" style="margin-top: 18px">
-      <h2>Royal Example Route Contract</h2>
-      <p>When renderer hooks exist, add <code>VirtualTexturingTerrain</code> to <code>apps/examples-react/src/examples/cases</code>, register it at <code>/labs/virtual-texturing</code>, and bind the scene through virtual texture asset and material resources.</p>
+      <h2>Renderer Demo Contract</h2>
+      <p>When renderer hooks exist, build a renderer-backed glTF/material demo that binds virtual texture asset and material resources while keeping page-table, cache, upload, and shader details private.</p>
     </section>
   </main>
 </body>

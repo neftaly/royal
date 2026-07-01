@@ -9,8 +9,8 @@ package extraction settles. It does not add public renderer APIs, examples,
 package config, or backend code.
 
 Target the first demo at WebGL2. WebGPU can make page-table formats, compute
-visibility, and asynchronous copies cleaner later, but WebGL1 is unsupported
-and should not get a fallback or reduced virtual-texturing route.
+visibility, and asynchronous copies cleaner later, but WebGL1 is unsupported and
+should not get a fallback or reduced virtual-texturing path.
 
 ## First Demo
 
@@ -56,7 +56,6 @@ Run:
 ```sh
 node research/virtual-texturing/generate-demo-assets.mjs --check
 node research/virtual-texturing/generate-demo-report.mjs --check
-node research/virtual-texturing/generate-example-fixture.mjs --check
 ```
 
 The checker regenerates the expected bytes in memory, compares every committed
@@ -70,11 +69,11 @@ artifact, and verifies that adjacent tile borders match. Current fixture:
 This fixture is intentionally tiny. It proves the asset contract and visual
 debug story without freezing renderer APIs or checking in a heavy tile set.
 
-`demo-readiness.md` defines the exact Royal route to add after renderer hooks
-exist: `/labs/virtual-texturing` in the examples app, backed by asset/material
-resources and a private renderer implementation. It also lists the controls,
-debug overlay rows, stats, tests, and gates for moving from this fixture to the
-browser demo.
+`demo-readiness.md` defines the gates for a future renderer-backed glTF/material
+demo after renderer hooks exist. It intentionally does not reserve an examples
+route, catalog id, component name, or public asset destination. It lists the
+controls, debug overlay rows, stats, tests, and gates for moving from this
+fixture to the browser demo.
 
 `generate-demo-report.mjs` writes `demo-assets/report/index.html` and
 `demo-assets/report/virtual-texturing-demo-readiness.svg` from the committed
@@ -82,11 +81,9 @@ manifest, page metadata, overview image, cache overlay, and camera-pan stats.
 Its `--check` mode validates manifest hashes for pages, previews, and stats,
 then compares the committed report bytes.
 
-`example-plan.md` defines the simplified examples-app prototype route that can
-land before renderer virtual-texturing hooks exist. `generate-example-fixture.mjs`
-writes `demo-assets/example-fixture.json`, a compact import/copy payload with
-route metadata, preview assets, fixture stats, visual acceptance, and migration
-notes for the future real renderer-backed example.
+The old examples-app preview handoff has been retired. New demo work should
+wait for renderer-backed material resources, then bind this fixture through
+private virtual-texturing internals without adding a public algorithm node.
 
 `webgl2-runtime-design.md` is the research-only design note for the real WebGL2
 runtime path. It separates fixture previews from live renderer implementation,
@@ -219,8 +216,8 @@ Initial targets:
 
 The first demo should choose from capability rows:
 
-- WebGL2 plus adequate max texture size: full virtual-texture route.
-- WebGL1: unsupported, with no reduced virtual-texturing route.
+- WebGL2 plus adequate max texture size: full virtual-texture path.
+- WebGL1: unsupported, with no reduced virtual-texturing path.
 - WebGL2 with too-small max texture size, missing required texture update
   support, missing compressed texture target, or context pressure: fixed
   low-mip atlas/material.

@@ -110,6 +110,6 @@
   <rect x="580" y="602" width="500" height="116" class="panel"/>
   <text x="602" y="636" class="label">Demo Gate</text>
   <text x="602" y="662" class="caption">Fixture is ready for renderer integration when hooks exist.</text>
-  <text x="602" y="690" class="small">Next route: /labs/virtual-texturing in apps/examples-react.</text>
-  <text x="602" y="710" class="small">First renderer work remains private: page table, physical cache, material binding.</text>
+  <text x="602" y="690" class="small">Next demo: renderer-backed glTF/material surface.</text>
+  <text x="602" y="710" class="small">Renderer work remains private: page table, physical cache, material binding.</text>
 </svg>

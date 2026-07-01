@@ -91,15 +91,16 @@
       "dependencies": ["visibility-packets", "asset-manifest-adapter", "material-texture-resources"],
       "readinessAssets": [
         "research/virtual-texturing/demo-assets/manifest.json",
-        "research/virtual-texturing/demo-assets/example-fixture.json",
+        "research/virtual-texturing/demo-readiness.md",
         "research/virtual-texturing/virtual-texturing-cache-sim.mjs"
       ],
       "validationCommands": [
-        "node research/virtual-texturing/generate-example-fixture.mjs --check",
+        "node research/virtual-texturing/generate-demo-assets.mjs --check",
+        "node research/virtual-texturing/generate-demo-report.mjs --check",
         "node research/virtual-texturing/virtual-texturing-cache-sim.mjs --check"
       ],
       "blocker": "There is no WebGL-private page loader, page-table texture, physical cache atlas, or material binding path yet.",
-      "nextPrototypeStep": "Consume visible packet material demand and manifest page ids in a private residency scheduler before exposing any route."
+      "nextPrototypeStep": "Consume visible packet material demand and manifest page ids in a private residency scheduler before exposing any browser surface."
     },
     {
       "id": "svg-tiger-demo",
