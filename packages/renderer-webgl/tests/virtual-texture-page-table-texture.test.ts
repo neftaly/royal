@@ -67,6 +67,7 @@ const fakePageTableGl = (): {
     gl: {
       CLAMP_TO_EDGE: 0x812F,
       NEAREST: 0x2600,
+      NEAREST_MIPMAP_NEAREST: 0x2700,
       RGBA: 0x1908,
       RGBA8: 0x8058,
       TEXTURE_2D: 0x0DE1,
@@ -223,11 +224,28 @@ describe("virtual texture page-table texture", () => {
       },
     ]);
     expect(texParameters).toEqual([
-      { param: gl.NEAREST, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
+      { param: gl.NEAREST_MIPMAP_NEAREST, pname: gl.TEXTURE_MIN_FILTER, target: gl.TEXTURE_2D },
       { param: gl.NEAREST, pname: gl.TEXTURE_MAG_FILTER, target: gl.TEXTURE_2D },
       { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_S, target: gl.TEXTURE_2D },
       { param: gl.CLAMP_TO_EDGE, pname: gl.TEXTURE_WRAP_T, target: gl.TEXTURE_2D },
     ]);
+  });
+
+  it("returns zero without binding for empty page-table upload batches", () => {
+    const { boundTextures, gl, texSubImages } = fakePageTableGl();
+    const pageTable = createVirtualTexturePageTableTexture(gl, [{ height: 1, width: 1 }]);
+    const bindCountBeforeUpload = boundTextures.length;
+
+    const result = uploadVirtualTexturePageTableTexels(gl, pageTable, []);
+
+    expect(result).toEqual({
+      bytesUploaded: 0,
+      fullRebuilds: 0,
+      texelsUploaded: 0,
+      texSubImageCalls: 0,
+    });
+    expect(boundTextures).toHaveLength(bindCountBeforeUpload);
+    expect(texSubImages).toEqual([]);
   });
 
   it("uploads dirty page-table texels with deterministic offsets and bytes", () => {

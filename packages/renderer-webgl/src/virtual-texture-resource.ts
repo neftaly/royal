@@ -231,10 +231,19 @@ type PendingPageLoad = {
   readonly promise: Promise<void>;
 };
 
+type FailedPageLoad = {
+  readonly attempts: number;
+  readonly retryAfterFrame: number;
+};
+
 type ReadyPage = {
   readonly page: VirtualTexturePageAddress;
   readonly pixels: ArrayBufferView;
 };
+
+const failedPageInitialRetryDelayFrames = 30;
+const failedPageMaxRetryDelayFrames = 480;
+const maxPageSourceLoadsScheduledPerRequest = 8;
 
 export class VirtualTextureResource {
   readonly #gl: VirtualTextureResourceGl;
@@ -259,6 +268,7 @@ export class VirtualTextureResource {
     physicalAtlasPagesUploaded: 0,
   };
   readonly #atlasPixels = new Map<string, ArrayBufferView>();
+  readonly #failedPageLoads = new Map<VirtualTexturePageId, FailedPageLoad>();
   readonly #missingResolvedPageIds = new Set<VirtualTexturePageId>();
   readonly #pendingPageLoads = new Map<VirtualTexturePageId, PendingPageLoad>();
   readonly #readyPages = new Map<VirtualTexturePageId, ReadyPage>();
@@ -299,6 +309,7 @@ export class VirtualTextureResource {
     this.#gl.deleteTexture(this.pageTable.texture);
     this.#gl.deleteTexture(this.physicalAtlas.texture);
     this.#atlasPixels.clear();
+    this.#failedPageLoads.clear();
     this.#missingResolvedPageIds.clear();
     this.#pendingPageLoads.clear();
     this.#readyPages.clear();
@@ -338,7 +349,9 @@ export class VirtualTextureResource {
 
   makeResident(page: VirtualTexturePageAddress, frame = 0): ReturnType<VirtualTextureRuntime["makeResident"]> {
     this.#assertLive();
-    return this.runtime.makeResident(page, frame);
+    const resident = this.runtime.makeResident(page, frame);
+    this.#failedPageLoads.delete(resident.page.id);
+    return resident;
   }
 
   requestPages(footprint: VirtualTextureUvFootprint, frame = 0): VirtualTexturePageRequestResult {
@@ -357,25 +370,33 @@ export class VirtualTextureResource {
 
     for (const page of pages) {
       const id = virtualTexturePageId(page);
-      if (this.runtime.lookupResidentPage(page) !== null) {
-        this.runtime.resolve(page, frame);
-        resident += 1;
-        continue;
+      if (hasResidentPages) {
+        if (!this.#missingResolvedPageIds.has(id)) {
+          const resolved = this.runtime.resolve(page, frame);
+          if (resolved.kind === "exact") {
+            this.#failedPageLoads.delete(id);
+            resident += 1;
+            continue;
+          }
+          if (resolved.kind === "missing") this.#missingResolvedPageIds.add(id);
+        } else if (this.runtime.lookupResidentPage(page) !== null) {
+          this.#failedPageLoads.delete(id);
+          this.runtime.resolve(page, frame);
+          resident += 1;
+          continue;
+        }
       }
 
       const pendingLoad = this.#pendingPageLoads.has(id);
       const readyPage = this.#readyPages.has(id);
+      const failedPage = this.#failedPageLoads.get(id);
+      const retryBlocked = failedPage !== undefined && frame < failedPage.retryAfterFrame;
       if (pendingLoad) pending += 1;
       if (readyPage) ready += 1;
 
-      if (!pendingLoad && !readyPage) {
-        this.#schedulePageLoad(page);
+      if (!pendingLoad && !readyPage && !retryBlocked && scheduled < maxPageSourceLoadsScheduledPerRequest) {
+        this.#schedulePageLoad(page, frame);
         scheduled += 1;
-      }
-
-      if (hasResidentPages && !this.#missingResolvedPageIds.has(id)) {
-        const resolved = this.runtime.resolve(page, frame);
-        if (resolved.kind === "missing") this.#missingResolvedPageIds.add(id);
       }
     }
 
@@ -409,7 +430,7 @@ export class VirtualTextureResource {
         unmappedPages: runtimeStats.pageTable.unmapped,
         version: runtimeStats.version,
       },
-      pendingUploadCount: this.#pendingUploadPlan.uploadCount,
+      pendingUploadCount: this.#pendingUploadCount(),
       requests: {
         ...this.#requestStats,
         pendingPages: this.#pendingPageLoads.size,
@@ -430,10 +451,20 @@ export class VirtualTextureResource {
       ),
     };
     const bytesBefore = this.#stats.bytesUploaded;
-    this.#promoteReadyPages(frame, Math.max(0, budget.physicalAtlasUploads - this.#pendingUploadPlan.physicalAtlasUploads.length));
+    const hadReadyPages = this.#readyPages.size > 0;
+    const pendingPlan = this.#pendingUploadPlan;
+    this.#promoteReadyPages(frame, Math.max(0, budget.physicalAtlasUploads - pendingPlan.physicalAtlasUploads.length));
+    const drainedPlan = this.drainUploadPlan(frame).plan;
+    if (!hadReadyPages && pendingPlan.uploadCount === 0 && drainedPlan.uploadCount === 0) {
+      return emptyVirtualTextureFrameUploadResult(frame);
+    }
+
     this.#pendingUploadPlan = this.#currentUploadPlan(
-      appendVirtualTextureUploadPlans(this.#pendingUploadPlan, this.drainUploadPlan(frame).plan),
+      appendVirtualTextureUploadPlans(pendingPlan, drainedPlan),
     );
+    if (!hadReadyPages && this.#pendingUploadPlan.uploadCount === 0) {
+      return emptyVirtualTextureFrameUploadResult(frame);
+    }
 
     const split = splitVirtualTextureUploadPlan(this.#pendingUploadPlan, budget);
     const physicalAtlasUploads = this.#currentPhysicalAtlasUploads(split.slice.physicalAtlasUploads);
@@ -457,7 +488,7 @@ export class VirtualTextureResource {
       pageTableFullRebuilds: pageTableUploadResult.fullRebuilds,
       pageTableTexSubImageCalls: pageTableUploadResult.texSubImageCalls,
       pageTableUploads: pageTableUploads.length,
-      pendingUploadCount: this.#pendingUploadPlan.uploadCount,
+      pendingUploadCount: this.#pendingUploadCount(),
       physicalAtlasUploads: physicalAtlasUploads.length,
     };
   }
@@ -534,6 +565,10 @@ export class VirtualTextureResource {
     );
   }
 
+  #pendingUploadCount(): number {
+    return this.#pendingUploadPlan.uploadCount + this.#readyPages.size;
+  }
+
   #promoteReadyPages(frame: number, maxPages: number): void {
     let promoted = 0;
     for (const [id, ready] of this.#readyPages) {
@@ -546,7 +581,7 @@ export class VirtualTextureResource {
     }
   }
 
-  #schedulePageLoad(page: VirtualTexturePageAddress): void {
+  #schedulePageLoad(page: VirtualTexturePageAddress, frame: number): void {
     if (this.#pageSource === null) return;
     const request = createPageSourceRequest(this.manifest, page);
     this.#requestStats.sourceRequests += 1;
@@ -556,12 +591,14 @@ export class VirtualTextureResource {
         if (this.#disposed) return;
         const validated = validatePageSourcePixels(request, pixels);
         this.#pendingPageLoads.delete(request.pageId);
+        this.#failedPageLoads.delete(request.pageId);
         this.#readyPages.set(request.pageId, { page: request.page, pixels: validated });
         this.#requestStats.pagesLoaded += 1;
       })
       .catch((error: unknown) => {
         if (this.#disposed) return;
         this.#pendingPageLoads.delete(request.pageId);
+        this.#failedPageLoads.set(request.pageId, nextFailedPageLoad(this.#failedPageLoads.get(request.pageId), frame));
         this.#requestStats.lastError = error instanceof Error ? error.message : String(error);
         this.#requestStats.pagesFailed += 1;
       });
@@ -650,6 +687,30 @@ const createVirtualTextureUploadPlan = (
 });
 
 const emptyVirtualTextureUploadPlan = (): VirtualTextureUploadPlan => createVirtualTextureUploadPlan([], []);
+
+const emptyVirtualTextureFrameUploadResult = (frame: number): VirtualTextureFrameUploadResult => ({
+  bytesUploaded: 0,
+  frame,
+  pageTableFullRebuilds: 0,
+  pageTableTexSubImageCalls: 0,
+  pageTableUploads: 0,
+  pendingUploadCount: 0,
+  physicalAtlasUploads: 0,
+});
+
+const nextFailedPageLoad = (previous: FailedPageLoad | undefined, frame: number): FailedPageLoad => {
+  const attempts = (previous?.attempts ?? 0) + 1;
+  return {
+    attempts,
+    retryAfterFrame: frame + failedPageRetryDelayFrames(attempts),
+  };
+};
+
+const failedPageRetryDelayFrames = (attempts: number): number =>
+  Math.min(
+    failedPageInitialRetryDelayFrames * 2 ** Math.max(0, attempts - 1),
+    failedPageMaxRetryDelayFrames,
+  );
 
 const normalizePageSource = (source: VirtualTexturePageSourceInput | undefined): PageSourceLoad | null => {
   if (source === undefined) return null;

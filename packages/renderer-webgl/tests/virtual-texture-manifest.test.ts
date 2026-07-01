@@ -41,6 +41,7 @@ describe("parseVirtualTextureManifest", () => {
       },
       virtualSize: [640, 512],
     });
+    expect(manifest.pageSource.kind).toBe("uri");
     expect(resolveVirtualTextureManifestPageUri(manifest, { mip: 0, x: 0, y: 0 })).toBe(
       "https://assets.example.test/vt/seed/root.rgba",
     );
@@ -67,6 +68,25 @@ describe("parseVirtualTextureManifest", () => {
     expect(resolveVirtualTextureManifestPageUri(manifest, { mip: 1, x: 0, y: 0 })).toBeNull();
   });
 
+  it("accepts private generated debug RGBA page sources", () => {
+    const manifest = parseVirtualTextureManifest({
+      id: "terrain:debug-generated",
+      pageSize: 64,
+      pages: {
+        generator: "debug-rgba",
+        kind: "generated",
+      },
+      physicalSlots: 4,
+      virtualSize: [128, 64],
+    });
+
+    expect(manifest.pageSource).toEqual({
+      generator: "debug-rgba",
+      kind: "generated",
+    });
+    expect(resolveVirtualTextureManifestPageUri(manifest, { mip: 0, x: 1, y: 0 })).toBeNull();
+  });
+
   it("rejects invalid geometry and page ids", () => {
     expect(() => parseVirtualTextureManifest({})).toThrow(
       "Virtual texture manifest id must be a non-empty string",
@@ -88,6 +108,15 @@ describe("parseVirtualTextureManifest", () => {
         virtualSize: [512, 512],
       })
     ).toThrow("Virtual texture manifest pages.entries key 0/0/0 must be a page id");
+    expect(() =>
+      parseVirtualTextureManifest({
+        id: "terrain:bad",
+        pageSize: 128,
+        pages: { generator: "noise", kind: "generated" },
+        physicalSlots: 4,
+        virtualSize: [512, 512],
+      })
+    ).toThrow("Virtual texture manifest pages.generator must be debug-rgba");
   });
 
   it("rejects URI resolution outside manifest bounds", () => {

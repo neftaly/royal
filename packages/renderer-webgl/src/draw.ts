@@ -14,6 +14,9 @@ import { bindFloatAttribute, createIndexBuffer, type RendererWebGlContext } from
 import {
   bindMaterialBaseColor,
   lowerMaterialBaseColorBinding,
+  type MaterialBaseColorBindOptions,
+  type MaterialVirtualTextureRuntimeStats,
+  type VirtualTextureDemand,
 } from "./material-texture-binding";
 import { composeTransform, multiply, type Mat4 } from "./matrix";
 import type { GltfProgram, MeshProgram, TextProgram, WireframeProgram } from "./programs";
@@ -22,8 +25,27 @@ import {
 } from "./render-graph";
 import type { TextRenderAsset } from "./text-cache";
 import { TextureCache } from "./texture-cache";
+import { VirtualTextureCache } from "./virtual-texture-cache";
 
 type MeshSurfaceMaterial = Exclude<Material, WireframeMaterial>;
+type PlaneUvFootprint = {
+  readonly uMax: number;
+  readonly uMin: number;
+  readonly vMax: number;
+  readonly vMin: number;
+};
+type DrawVirtualTextureDemand = VirtualTextureDemand & {
+  readonly uvFootprint?: PlaneUvFootprint | undefined;
+};
+type PlaneClipVertex = PlaneUvPoint & {
+  readonly clipW: number;
+  readonly clipX: number;
+  readonly clipY: number;
+};
+type PlaneUvPoint = {
+  readonly u: number;
+  readonly v: number;
+};
 
 const boxWireframeEdgeIndices = new Uint16Array([
   0, 1, 1, 2, 2, 3, 3, 0,
@@ -38,9 +60,13 @@ const planeWireframeEdgeIndexBuffers = new WeakMap<RendererWebGlContext, WebGLBu
 
 export interface MeshDrawContext {
   readonly directionalLight: DirectionalLightNode | undefined;
+  readonly frame?: number;
   readonly geometryCache: GeometryCache;
   readonly onTextureSettled?: () => void;
+  readonly onVirtualTextureRuntimeStats?: ((stats: MaterialVirtualTextureRuntimeStats) => void) | undefined;
   readonly textureCache?: TextureCache;
+  readonly viewport?: { readonly height: number; readonly width: number };
+  readonly virtualTextureCache?: VirtualTextureCache;
   readonly viewProjectionMatrix: Mat4;
 }
 
@@ -83,6 +109,7 @@ export const drawMesh = (
 };
 
 const textureCaches = new WeakMap<RendererWebGlContext, TextureCache>();
+const virtualTextureCaches = new WeakMap<RendererWebGlContext, VirtualTextureCache>();
 
 const meshTextureCache = (gl: RendererWebGlContext): TextureCache => {
   const cached = textureCaches.get(gl);
@@ -90,6 +117,15 @@ const meshTextureCache = (gl: RendererWebGlContext): TextureCache => {
 
   const cache = new TextureCache(gl);
   textureCaches.set(gl, cache);
+  return cache;
+};
+
+const meshVirtualTextureCache = (gl: RendererWebGlContext): VirtualTextureCache => {
+  const cached = virtualTextureCaches.get(gl);
+  if (cached !== undefined) return cached;
+
+  const cache = new VirtualTextureCache(gl);
+  virtualTextureCaches.set(gl, cache);
   return cache;
 };
 
@@ -212,24 +248,46 @@ const drawSurfaceMesh = (
   if (!unlit && light === undefined)
     throw new Error("StandardMaterial mesh requires a directionalLight");
   const geometry = indexedGeometryBuffers(mesh.geometry, context.geometryCache);
+  const modelMatrix = composeTransform(mesh.transform);
+  const size = surfaceSize(mesh.geometry);
   const baseColor = lowerMaterialBaseColorBinding(material.baseColor, {
     onTextureSettled: context.onTextureSettled,
     textureCache: context.textureCache ?? meshTextureCache(gl),
+    virtualTextureCache: context.virtualTextureCache ?? meshVirtualTextureCache(gl),
   });
+  const virtualTextureDemand = material.baseColor.kind === "virtual-asset"
+    ? virtualTextureDemandForSurface(
+      mesh.geometry,
+      modelMatrix,
+      context.viewProjectionMatrix,
+      context.viewport,
+      size,
+    )
+    : undefined;
 
   gl.useProgram(program.program);
   gl.uniformMatrix4fv(
     program.uniforms.model,
     false,
-    composeTransform(mesh.transform),
+    modelMatrix,
   );
   gl.uniformMatrix4fv(
     program.uniforms.viewProjection,
     false,
     context.viewProjectionMatrix,
   );
-  gl.uniform3fv(program.uniforms.boxSize, surfaceSize(mesh.geometry));
-  bindMaterialBaseColor(gl, program.uniforms, baseColor);
+  gl.uniform3fv(program.uniforms.boxSize, size);
+  const baseColorOptions: MaterialBaseColorBindOptions = {
+    ...(context.frame === undefined ? {} : { frame: context.frame }),
+    ...(context.onVirtualTextureRuntimeStats === undefined
+      ? {}
+      : { onVirtualTextureRuntimeStats: context.onVirtualTextureRuntimeStats }),
+    ...(context.onTextureSettled === undefined
+      ? {}
+      : { onVirtualTextureSettled: context.onTextureSettled }),
+    ...(virtualTextureDemand === undefined ? {} : { virtualTextureDemand }),
+  };
+  bindMaterialBaseColor(gl, program.uniforms, baseColor, 0, baseColorOptions);
   gl.uniform1i(program.uniforms.unlit, unlit ? 1 : 0);
   gl.uniform4fv(program.uniforms.lightColor, light?.color ?? [0, 0, 0, 0]);
   gl.uniform3fv(program.uniforms.lightDirection, light?.direction ?? [0, 0, -1]);
@@ -310,3 +368,253 @@ const surfaceSize = (geometry: MeshNode["geometry"]): readonly [number, number, 
   }
   throw new Error(`Unsupported mesh geometry kind: ${String(geometry.kind)}`);
 };
+
+const virtualTextureDemandForSurface = (
+  geometry: MeshNode["geometry"],
+  modelMatrix: Mat4,
+  viewProjectionMatrix: Mat4,
+  viewport: MeshDrawContext["viewport"],
+  size: readonly [number, number, number],
+): DrawVirtualTextureDemand | undefined => {
+  if (viewport === undefined) return undefined;
+
+  const footprint = projectedSurfaceFootprintPx(
+    geometry.kind === "plane" ? [size[0], size[1], 0] : size,
+    modelMatrix,
+    viewProjectionMatrix,
+    viewport,
+  );
+  if (footprint === undefined) return undefined;
+
+  const uvFootprint = geometry.kind === "plane"
+    ? projectedPlaneUvFootprint(size, modelMatrix, viewProjectionMatrix)
+    : undefined;
+  return uvFootprint === undefined
+    ? { screenFootprintPx: footprint }
+    : { screenFootprintPx: footprint, uvFootprint };
+};
+
+const projectedSurfaceFootprintPx = (
+  size: readonly [number, number, number],
+  modelMatrix: Mat4,
+  viewProjectionMatrix: Mat4,
+  viewport: { readonly height: number; readonly width: number },
+): readonly [number, number] | undefined => {
+  if (
+    !Number.isFinite(viewport.width) ||
+    !Number.isFinite(viewport.height) ||
+    viewport.width <= 0 ||
+    viewport.height <= 0 ||
+    size.some((value) => !Number.isFinite(value) || value < 0)
+  ) {
+    return undefined;
+  }
+
+  const modelViewProjection = multiply(viewProjectionMatrix, modelMatrix);
+  const halfX = size[0] / 2;
+  const halfY = size[1] / 2;
+  const halfZ = size[2] / 2;
+  const zValues = size[2] === 0 ? [0] : [-halfZ, halfZ];
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const x of [-halfX, halfX]) {
+    for (const y of [-halfY, halfY]) {
+      for (const z of zValues) {
+        const projected = projectSurfaceCorner(modelViewProjection, x, y, z);
+        if (projected === undefined) return undefined;
+        minX = Math.min(minX, projected.x);
+        maxX = Math.max(maxX, projected.x);
+        minY = Math.min(minY, projected.y);
+        maxY = Math.max(maxY, projected.y);
+      }
+    }
+  }
+
+  const width = (clampNdc(maxX) - clampNdc(minX)) * viewport.width * 0.5;
+  const height = (clampNdc(maxY) - clampNdc(minY)) * viewport.height * 0.5;
+  return Number.isFinite(width) && Number.isFinite(height) && width >= 0 && height >= 0
+    ? [width, height]
+    : undefined;
+};
+
+const clampNdc = (value: number): number =>
+  Math.min(1, Math.max(-1, value));
+
+const projectSurfaceCorner = (
+  matrix: Mat4,
+  x: number,
+  y: number,
+  z: number,
+): { readonly x: number; readonly y: number } | undefined => {
+  const clipX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+  const clipY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+  const clipW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+  if (!Number.isFinite(clipX) || !Number.isFinite(clipY) || !Number.isFinite(clipW) || clipW <= 0) {
+    return undefined;
+  }
+
+  const xNdc = clipX / clipW;
+  const yNdc = clipY / clipW;
+  return Number.isFinite(xNdc) && Number.isFinite(yNdc)
+    ? { x: xNdc, y: yNdc }
+    : undefined;
+};
+
+const projectedPlaneUvFootprint = (
+  size: readonly [number, number, number],
+  modelMatrix: Mat4,
+  viewProjectionMatrix: Mat4,
+): PlaneUvFootprint | undefined => {
+  const [width, height] = size;
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+
+  const modelViewProjection = multiply(viewProjectionMatrix, modelMatrix);
+  const halfX = width / 2;
+  const halfY = height / 2;
+  const corners = [
+    planeClipVertex(modelViewProjection, -halfX, -halfY, { u: 0, v: 0 }),
+    planeClipVertex(modelViewProjection, halfX, -halfY, { u: 1, v: 0 }),
+    planeClipVertex(modelViewProjection, halfX, halfY, { u: 1, v: 1 }),
+    planeClipVertex(modelViewProjection, -halfX, halfY, { u: 0, v: 1 }),
+  ];
+  const polygon: PlaneClipVertex[] = [];
+  for (const corner of corners) {
+    if (corner === undefined) return undefined;
+    polygon.push(corner);
+  }
+
+  for (const distance of planeViewportClipDistances) {
+    const clipped = clipPlanePolygon(polygon, distance);
+    if (clipped === undefined || clipped.length === 0) return undefined;
+    polygon.splice(0, polygon.length, ...clipped);
+  }
+
+  let uMin = Number.POSITIVE_INFINITY;
+  let uMax = Number.NEGATIVE_INFINITY;
+  let vMin = Number.POSITIVE_INFINITY;
+  let vMax = Number.NEGATIVE_INFINITY;
+  for (const vertex of polygon) {
+    uMin = Math.min(uMin, vertex.u);
+    uMax = Math.max(uMax, vertex.u);
+    vMin = Math.min(vMin, vertex.v);
+    vMax = Math.max(vMax, vertex.v);
+  }
+
+  if (
+    !Number.isFinite(uMin) ||
+    !Number.isFinite(uMax) ||
+    !Number.isFinite(vMin) ||
+    !Number.isFinite(vMax) ||
+    uMin > uMax ||
+    vMin > vMax
+  ) {
+    return undefined;
+  }
+
+  const padding = 1e-6;
+  return {
+    uMax: clamp01(uMax + padding),
+    uMin: clamp01(uMin - padding),
+    vMax: clamp01(vMax + padding),
+    vMin: clamp01(vMin - padding),
+  };
+};
+
+const planeViewportClipDistances = [
+  (vertex: PlaneClipVertex): number => vertex.clipX + vertex.clipW,
+  (vertex: PlaneClipVertex): number => vertex.clipW - vertex.clipX,
+  (vertex: PlaneClipVertex): number => vertex.clipY + vertex.clipW,
+  (vertex: PlaneClipVertex): number => vertex.clipW - vertex.clipY,
+] as const;
+
+const planeClipVertex = (
+  matrix: Mat4,
+  x: number,
+  y: number,
+  uv: PlaneUvPoint,
+): PlaneClipVertex | undefined => {
+  const clipX = matrix[0] * x + matrix[4] * y + matrix[12];
+  const clipY = matrix[1] * x + matrix[5] * y + matrix[13];
+  const clipW = matrix[3] * x + matrix[7] * y + matrix[15];
+  if (
+    !Number.isFinite(clipX) ||
+    !Number.isFinite(clipY) ||
+    !Number.isFinite(clipW) ||
+    clipW <= 0
+  ) {
+    return undefined;
+  }
+
+  return { clipW, clipX, clipY, ...uv };
+};
+
+const clipPlanePolygon = (
+  polygon: readonly PlaneClipVertex[],
+  distance: (vertex: PlaneClipVertex) => number,
+): PlaneClipVertex[] | undefined => {
+  const clipped: PlaneClipVertex[] = [];
+  let previous = polygon.at(-1);
+  if (previous === undefined) return clipped;
+  let previousDistance = distance(previous);
+  if (!Number.isFinite(previousDistance)) return undefined;
+
+  for (const current of polygon) {
+    const currentDistance = distance(current);
+    if (!Number.isFinite(currentDistance)) return undefined;
+    const previousInside = previousDistance >= 0;
+    const currentInside = currentDistance >= 0;
+
+    if (previousInside !== currentInside) {
+      const intersection = interpolatePlaneClipVertex(
+        previous,
+        current,
+        previousDistance,
+        currentDistance,
+      );
+      if (intersection === undefined) return undefined;
+      clipped.push(intersection);
+    }
+    if (currentInside) clipped.push(current);
+
+    previous = current;
+    previousDistance = currentDistance;
+  }
+
+  return clipped;
+};
+
+const interpolatePlaneClipVertex = (
+  from: PlaneClipVertex,
+  to: PlaneClipVertex,
+  fromDistance: number,
+  toDistance: number,
+): PlaneClipVertex | undefined => {
+  const denominator = fromDistance - toDistance;
+  if (!Number.isFinite(denominator) || denominator === 0) return undefined;
+  const t = fromDistance / denominator;
+  if (!Number.isFinite(t) || t < 0 || t > 1) return undefined;
+
+  return {
+    clipW: lerp(from.clipW, to.clipW, t),
+    clipX: lerp(from.clipX, to.clipX, t),
+    clipY: lerp(from.clipY, to.clipY, t),
+    u: lerp(from.u, to.u, t),
+    v: lerp(from.v, to.v, t),
+  };
+};
+
+const lerp = (from: number, to: number, t: number): number =>
+  from + (to - from) * t;
+
+const clamp01 = (value: number): number =>
+  Math.min(1, Math.max(0, value));

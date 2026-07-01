@@ -1,0 +1,17 @@
+{
+  "id": "generated-virtual-texturing-surface",
+  "virtualSize": [
+    1024,
+    1024
+  ],
+  "pageSize": 128,
+  "physicalSlots": 17,
+  "mipCount": 3,
+  "format": "rgba8",
+  "bytesPerTexel": 4,
+  "borderTexels": 0,
+  "pages": {
+    "kind": "generated",
+    "generator": "debug-rgba"
+  }
+}

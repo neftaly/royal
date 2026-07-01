@@ -17,7 +17,9 @@ type PageTableTextureGl = Pick<
   | "texImage2D"
   | "texParameteri"
   | "texSubImage2D"
->;
+> & {
+  readonly NEAREST_MIPMAP_NEAREST?: WebGL2RenderingContext["NEAREST_MIPMAP_NEAREST"];
+};
 
 export type VirtualTexturePageTableMip = {
   readonly height: number;
@@ -95,7 +97,7 @@ export const createVirtualTexturePageTableTexture = (
       null,
     );
   }
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST ?? 0x2700);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -108,6 +110,15 @@ export const uploadVirtualTexturePageTableTexels = (
   pageTable: VirtualTexturePageTableTexture,
   uploads: readonly VirtualTexturePageTableTexelUpload[],
 ): VirtualTexturePageTableUploadResult => {
+  if (uploads.length === 0) {
+    return {
+      bytesUploaded: 0,
+      fullRebuilds: 0,
+      texelsUploaded: 0,
+      texSubImageCalls: 0,
+    };
+  }
+
   gl.bindTexture(gl.TEXTURE_2D, pageTable.texture);
 
   const ranges = coalesceVirtualTexturePageTableTexelUploads(pageTable, uploads);

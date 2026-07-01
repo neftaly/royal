@@ -47,6 +47,11 @@ export interface GltfSrcOptions {
 
 export type GltfOptions = GltfExplicitAssetOptions | GltfSrcOptions;
 
+export type GltfInput = GltfOptions | GltfSrcOptions['src'];
+
+const gltfOptions = (input: GltfInput): GltfOptions =>
+  typeof input === 'string' ? { src: input } : input;
+
 const resolveAsset = (options: GltfOptions): GltfAssetRef => {
   if (options.asset !== undefined) return options.asset;
 
@@ -58,9 +63,11 @@ const resolveAsset = (options: GltfOptions): GltfAssetRef => {
   };
 };
 
+export function gltf(src: string): GltfNode;
 export function gltf(options: GltfSrcOptions): GltfNode;
 export function gltf(options: GltfExplicitAssetOptions): GltfNode;
-export function gltf(options: GltfOptions): GltfNode {
+export function gltf(input: GltfInput): GltfNode {
+  const options = gltfOptions(input);
   const node = {
     kind: 'gltf',
     asset: resolveAsset(options)

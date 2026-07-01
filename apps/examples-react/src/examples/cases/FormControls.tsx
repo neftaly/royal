@@ -1,99 +1,107 @@
-import { Canvas, canvasPointToWorld } from '@royal/react';
+/** @jsxImportSource @royal/react */
 import {
-  useReducer,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from 'react';
+  type RenderRoot,
+  type TextFontFace,
+} from '@royal/renderer-core';
+import { Canvas } from '@royal/react';
+import { type ReactNode } from 'react';
 import {
-  caretSelectionAtFormPoint,
-  editableTextControlForId,
-  formControlsCameraBounds,
-  formControlsKeyboardAction,
-  formControlsModel,
-  formControlsReducer,
-  hitTestFormControls,
-  type FormControlsKeyboardInput,
-} from './FormControls.model';
-import { formControlsScene } from './FormControls.scene';
+  Button,
+  Checkbox,
+  compactRoyalFormCameraBounds,
+  compactRoyalFormLayout,
+  defaultRoyalFormTheme,
+  Field,
+  Form,
+  FormStatus,
+  Input,
+  Label,
+  Textarea,
+  useRoyalForm,
+  type RoyalFormTextControls,
+} from './form-kit';
 import { useAtkinsonFont } from './text-font';
 
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
-export const FormControls = (): ReactNode => {
-  const fontState = useAtkinsonFont();
-  const [model, dispatch] = useReducer(formControlsReducer, formControlsModel);
+const focusOrder = ['name', 'message', 'updates', 'submit'] as const;
 
-  if (fontState.status !== 'ready') return null;
+const textControls = {
+  message: {
+    maxLength: 240,
+    mode: 'multiline',
+  },
+  name: {
+    maxLength: 64,
+    mode: 'single-line',
+  },
+} as const satisfies RoyalFormTextControls;
 
-  const font = fontState.font;
+const submitStatus = (count: number): string => {
+  if (count === 0) return 'Ready to submit';
+  if (count === 1) return 'Submitted once';
+  return `Submitted ${count} times`;
+};
 
-  const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    if (event.button !== 0) return;
-
-    const [x, y] = canvasPointToWorld(
-      event.currentTarget,
-      formControlsCameraBounds,
-      event.clientX,
-      event.clientY,
-    );
-    const point = { x, y };
-    const hit = hitTestFormControls(point);
-
-    if (hit === undefined) {
-      dispatch({ type: 'blur' });
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.focus({ preventScroll: true });
-
-    if (hit.type === 'editable-text') {
-      const control = editableTextControlForId(model, hit.id);
-      dispatch({
-        id: hit.id,
-        selection: caretSelectionAtFormPoint(control, font, point),
-        type: 'focus-text',
-      });
-      return;
-    }
-
-    dispatch({ type: hit.type === 'checkbox' ? 'toggle-checkbox' : 'submit-form' });
-  };
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLCanvasElement>): void => {
-    const input: FormControlsKeyboardInput = {
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      isComposing: event.nativeEvent.isComposing,
-      key: event.key,
-      keyCode: event.keyCode,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-    };
-    const modelAction = formControlsKeyboardAction(model, input);
-
-    if (modelAction !== undefined) {
-      event.preventDefault();
-      dispatch(modelAction);
-    }
-  };
+const MessageForm = ({
+  font,
+}: {
+  readonly font: TextFontFace;
+}): ReactNode => {
+  const form = useRoyalForm({
+    cameraBounds: compactRoyalFormCameraBounds,
+    focusOrder,
+    font,
+    layout: compactRoyalFormLayout,
+    submitButton: 'submit',
+    textControls,
+  });
 
   return (
     <Canvas
-      aria-label="Form controls"
-      aria-keyshortcuts="Tab Shift+Tab Space Enter"
-      onBlur={() => dispatch({ type: 'blur' })}
-      onFocus={() => dispatch({ type: 'focus-initial-control' })}
-      onKeyDown={handleKeyDown}
-      onPointerDown={handlePointerDown}
-      role="group"
+      {...form.canvasProps}
+      aria-label="Message form"
       rootOptions={rootOptions}
-      tabIndex={0}
     >
-      {formControlsScene(model, font)}
+      {(
+        <scene>
+          <pass clearColor={defaultRoyalFormTheme.background}>
+            <orthographicCamera
+              bottom={compactRoyalFormCameraBounds.bottom}
+              far={100}
+              left={compactRoyalFormCameraBounds.left}
+              near={0.1}
+              position={[0, 0, 10]}
+              right={compactRoyalFormCameraBounds.right}
+              rotation={[0, 0, 0]}
+              top={compactRoyalFormCameraBounds.top}
+            />
+            <Form id="message-form" kit={form} title="Message">
+              <Field kit={form} name="name">
+                <Label control="name" kit={form}>Your name</Label>
+                <Input kit={form} name="name" type="text" />
+              </Field>
+              <Field kit={form} name="message">
+                <Label control="message" kit={form}>Message</Label>
+                <Textarea kit={form} name="message" />
+              </Field>
+              <Checkbox kit={form} name="updates">Send me updates</Checkbox>
+              <Button kit={form} name="submit" type="submit">Submit</Button>
+              <FormStatus kit={form}>{submitStatus(form.activationCount('submit'))}</FormStatus>
+            </Form>
+          </pass>
+        </scene>
+      ) as RenderRoot}
     </Canvas>
-  );
+  ) as ReactNode;
+};
+
+export const FormControls = (): ReactNode => {
+  const fontState = useAtkinsonFont();
+
+  if (fontState.status !== 'ready') return null;
+
+  return (<MessageForm font={fontState.font} />) as ReactNode;
 };

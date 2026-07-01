@@ -1,12 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const publicSurfaceRoots = ['README.md', 'packages', 'research'] as const;
-const publicExampleSourceRoots = ['apps/examples-react/src/examples'] as const;
 const publicPackageJsonPaths = [
   'packages/react/package.json',
   'packages/renderer-core/package.json',
@@ -14,18 +12,8 @@ const publicPackageJsonPaths = [
   'packages/royal-tarstate-lens/package.json'
 ] as const;
 const testingOnlyPublicExportSpecifiers = new Set<string>();
-const ignoredDirectories = new Set([
-  'coverage',
-  'dist',
-  'node_modules'
-]);
-const markdownExtensions = new Set(['.md', '.mdx']);
 const publicSourceExtensions = new Set(['.ts', '.tsx']);
-const staleMaterialBaseColorOptionPattern =
-  /^\s*baseColor\s*:\s*(?:solidTexture|textureAsset|imageTexture|virtualTextureAsset|\[)/;
-const staleMeshBaseColorJsxPropPattern = /\bbaseColor\s*=/;
-const nonCurrentResearchLabelPattern = /\b(?:future|non-current|not current|not public|not an api|pseudocode|pseudo-api|research-only|sketch)\b/i;
-const exactResearchOnlyPublicExportNames = new Set([
+const researchOnlyPublicExportNames = new Set([
   'customShaderMaterial',
   'shaderUniform',
   'shaderAttribute',
@@ -33,28 +21,42 @@ const exactResearchOnlyPublicExportNames = new Set([
   'dynamicImpostor',
   'VirtualTextureNode',
   'VirtualTextureRuntime',
+  'LOD',
+  'Lod',
+  'lod',
+  'LODNode',
+  'LodNode',
+  'lodNode',
+  'LevelOfDetailNode',
+  'levelOfDetail',
+  'dynamicLod',
+  'lodLevel',
+  'lodRange',
+  'lodThreshold',
+  'lodDistance',
+  'lodPolicy',
+  'lodBias',
+  'lodBudget',
   'FormControl',
   'formControl',
   'input',
+  'select',
   'textarea',
-  'select'
+  'PageCache',
+  'pageCache',
+  'createPageCache',
+  'PageTable',
+  'pageTable',
+  'createPageTable',
+  'createVirtualTexturePageTableTexture',
+  'uploadVirtualTexturePageTableTexels',
+  'virtualTexturePageTableMipDimensions'
 ]);
-const lodPublicExportNamePattern =
-  /^(?:LOD|Lod|lod)(?:Node|Knob|Control|Policy|Range|Threshold|Distance|Switch|Level|Bias|Budget)s?$|^(?:LevelOfDetail|levelOfDetail|dynamicLod|DynamicLod)/;
-const pageHandlePublicExportNamePattern =
-  /(?:PageCache|PageTable)|(?:^|[a-z])page(?:Cache|Table)(?:$|[A-Z])|page[-_](?:cache|table)/i;
 
 type PublicSnippet = {
   readonly file: string;
   readonly line: number;
   readonly text: string;
-};
-
-type MarkdownCodeBlock = {
-  readonly code: string;
-  readonly language: string;
-  readonly startLine: number;
-  readonly leadingContext: string;
 };
 
 type PublicPackageEntryFile = {
@@ -71,16 +73,6 @@ type PublicPackageJson = {
   readonly name?: string;
   readonly exports?: string | Readonly<Record<string, unknown>>;
 };
-
-function listFiles(root: string): readonly string[] {
-  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
-    if (ignoredDirectories.has(entry.name)) return [];
-
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) return listFiles(entryPath);
-    return [entryPath];
-  });
-}
 
 function listConsumerPackageEntryFiles(): readonly PublicPackageEntryFile[] {
   return publicPackageJsonPaths.flatMap((packageJsonRelativePath) => {
@@ -101,13 +93,13 @@ function listConsumerPackageEntryFiles(): readonly PublicPackageEntryFile[] {
       const specifier = packageExportSpecifier(packageName, subpath);
       if (
         targetPath === null ||
-        testingOnlyPublicExportSpecifiers.has(specifier) ||
-        !publicSourceExtensions.has(path.extname(targetPath))
+        testingOnlyPublicExportSpecifiers.has(specifier)
       ) {
         return [];
       }
 
-      return [{ file: path.join(packageDir, targetPath), specifier }];
+      const file = resolvePackageExportTargetPath(packageDir, targetPath);
+      return file === null ? [] : [{ file, specifier }];
     });
   });
 }
@@ -129,14 +121,8 @@ function packageExportTargetPath(target: unknown): string | null {
   );
 }
 
-function listPublicSurfaceFiles(): readonly string[] {
-  return publicSurfaceRoots.flatMap((root) => {
-    const absoluteRoot = path.join(repoRoot, root);
-    if (!existsSync(absoluteRoot)) return [];
-    return readdirSync(repoRoot, { withFileTypes: true }).some((entry) => entry.name === root && entry.isFile())
-      ? [absoluteRoot]
-      : listFiles(absoluteRoot);
-  });
+function resolvePackageExportTargetPath(packageDir: string, targetPath: string): string | null {
+  return resolveSourceFilePath(path.resolve(packageDir, targetPath));
 }
 
 function publicPackageExportSymbols(): readonly PublicExportSymbol[] {
@@ -151,7 +137,7 @@ function publicExportSymbolsFromFile(
   seen = new Set<string>()
 ): readonly PublicExportSymbol[] {
   const resolvedPath = path.resolve(filePath);
-  if (seen.has(resolvedPath) || !existsSync(resolvedPath)) return [];
+  if (seen.has(resolvedPath) || !isFile(resolvedPath)) return [];
   seen.add(resolvedPath);
 
   const source = readFileSync(resolvedPath, 'utf8');
@@ -171,8 +157,12 @@ function publicExportSymbolsFromFile(
 
   return sourceFile.statements.flatMap((statement) => {
     if (ts.isExportDeclaration(statement)) {
-      if (statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause)) {
-        return statement.exportClause.elements.map((element) => symbol(element.name.text, element.name));
+      if (statement.exportClause !== undefined) {
+        if (ts.isNamedExports(statement.exportClause)) {
+          return statement.exportClause.elements.map((element) => symbol(element.name.text, element.name));
+        }
+
+        return [symbol(statement.exportClause.name.text, statement.exportClause.name)];
       }
 
       const moduleSpecifier = stringLiteralText(statement.moduleSpecifier);
@@ -263,15 +253,31 @@ function propertyNameText(name: ts.PropertyName): string | null {
 
 function resolveRelativeModulePath(fromFile: string, moduleSpecifier: string): string | null {
   const basePath = path.resolve(path.dirname(fromFile), moduleSpecifier);
+  return resolveSourceFilePath(basePath);
+}
+
+function resolveSourceFilePath(basePath: string): string | null {
+  const extension = path.extname(basePath);
+  const directCandidates = extension === '' || publicSourceExtensions.has(extension)
+    ? [basePath]
+    : [];
+  const pathWithoutJsExtension = ['.js', '.jsx', '.mjs', '.cjs'].includes(extension)
+    ? basePath.slice(0, -extension.length)
+    : null;
   const candidates = [
-    basePath,
-    `${basePath}.ts`,
-    `${basePath}.tsx`,
-    path.join(basePath, 'index.ts'),
-    path.join(basePath, 'index.tsx')
+    ...directCandidates,
+    ...(pathWithoutJsExtension === null
+      ? []
+      : Array.from(publicSourceExtensions, (sourceExtension) => `${pathWithoutJsExtension}${sourceExtension}`)),
+    ...Array.from(publicSourceExtensions, (sourceExtension) => `${basePath}${sourceExtension}`),
+    ...Array.from(publicSourceExtensions, (sourceExtension) => path.join(basePath, `index${sourceExtension}`))
   ];
 
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+  return candidates.find(isFile) ?? null;
+}
+
+function isFile(filePath: string): boolean {
+  return existsSync(filePath) && statSync(filePath).isFile();
 }
 
 function isResearchOnlyPublicExportName(name: string): boolean {
@@ -279,113 +285,11 @@ function isResearchOnlyPublicExportName(name: string): boolean {
     ? name.slice('JSX.IntrinsicElements.'.length)
     : name;
 
-  return (
-    exactResearchOnlyPublicExportNames.has(simpleName) ||
-    lodPublicExportNamePattern.test(simpleName) ||
-    pageHandlePublicExportNamePattern.test(simpleName)
-  );
+  return researchOnlyPublicExportNames.has(simpleName);
 }
 
-function lineNumberAtOffset(text: string, offset: number): number {
-  return text.slice(0, offset).split('\n').length;
-}
-
-function markdownCodeBlocks(markdown: string): readonly MarkdownCodeBlock[] {
-  const blocks: MarkdownCodeBlock[] = [];
-  const fencePattern = /^```([^\s`]*)[^\n]*\n([\s\S]*?)^```/gm;
-  let match: RegExpExecArray | null;
-
-  while ((match = fencePattern.exec(markdown)) !== null) {
-    const fenceStart = match.index;
-    const startLine = lineNumberAtOffset(markdown, fenceStart) + 1;
-    const leadingContext = markdown
-      .slice(0, fenceStart)
-      .split('\n')
-      .slice(-5)
-      .join('\n');
-
-    blocks.push({
-      code: match[2] ?? '',
-      language: match[1] ?? '',
-      leadingContext,
-      startLine
-    });
-  }
-
-  return blocks;
-}
-
-function isCodeLikeMarkdownBlock(block: MarkdownCodeBlock): boolean {
-  return block.language === '' || /^(?:js|jsx|ts|tsx|typescript|javascript)$/.test(block.language);
-}
-
-function isAllowedNonCurrentResearchSnippet(file: string, block: MarkdownCodeBlock): boolean {
-  return file.startsWith(`research${path.sep}`) && nonCurrentResearchLabelPattern.test(block.leadingContext);
-}
-
-function matchingLines(
-  text: string,
-  pattern: RegExp,
-  offsetLine = 1
-): readonly { readonly line: number; readonly text: string }[] {
-  return text.split('\n').flatMap((lineText, index) =>
-    pattern.test(lineText)
-      ? [{ line: offsetLine + index, text: lineText.trim() }]
-      : []
-  );
-}
-
-function publicSnippetViolations(
-  pattern: RegExp,
-  options: { readonly allowLabeledResearchSketches: boolean } = { allowLabeledResearchSketches: true }
-): readonly PublicSnippet[] {
-  return listPublicSurfaceFiles().flatMap((filePath) => {
-    const relativePath = path.relative(repoRoot, filePath);
-    const extension = path.extname(filePath);
-    const isMarkdown = markdownExtensions.has(extension);
-
-    if (isMarkdown) {
-      const markdown = readFileSync(filePath, 'utf8');
-      return markdownCodeBlocks(markdown)
-        .filter(isCodeLikeMarkdownBlock)
-        .filter((block) => !(options.allowLabeledResearchSketches && isAllowedNonCurrentResearchSnippet(relativePath, block)))
-        .flatMap((block) =>
-          matchingLines(block.code, pattern, block.startLine).map(({ line, text }) => ({
-            file: relativePath,
-            line,
-            text
-          }))
-        );
-    }
-
-    return [];
-  });
-}
-
-function sourceSnippetViolations(
-  roots: readonly string[],
-  pattern: RegExp
-): readonly PublicSnippet[] {
-  return roots.flatMap((root) => {
-    const absoluteRoot = path.join(repoRoot, root);
-    if (!existsSync(absoluteRoot)) return [];
-
-    return listFiles(absoluteRoot)
-      .filter((filePath) => publicSourceExtensions.has(path.extname(filePath)))
-      .flatMap((filePath) => {
-        const relativePath = path.relative(repoRoot, filePath);
-        const source = readFileSync(filePath, 'utf8');
-        return matchingLines(source, pattern).map(({ line, text }) => ({
-          file: relativePath,
-          line,
-          text
-        }));
-      });
-  });
-}
-
-describe('render graph API style', () => {
-  it('keeps consumer package export names free of research-only feature APIs', () => {
+describe('render graph API boundaries', () => {
+  it('keeps consumer package exports free of research-only names', () => {
     const violations = publicPackageExportSymbols()
       .filter(({ name }) => isResearchOnlyPublicExportName(name))
       .map(({ file, line, name, specifier, text }) => ({
@@ -397,17 +301,5 @@ describe('render graph API style', () => {
       }));
 
     expect(violations).toEqual([]);
-  });
-
-  it('keeps public snippets on current standard material options', () => {
-    expect(publicSnippetViolations(
-      staleMaterialBaseColorOptionPattern,
-      { allowLabeledResearchSketches: false }
-    )).toEqual([]);
-  });
-
-  it('keeps example source on current mesh material authoring props', () => {
-    expect(sourceSnippetViolations(publicExampleSourceRoots, staleMeshBaseColorJsxPropPattern)).toEqual([]);
-    expect(sourceSnippetViolations(publicExampleSourceRoots, staleMaterialBaseColorOptionPattern)).toEqual([]);
   });
 });

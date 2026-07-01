@@ -4,6 +4,7 @@ import {
   isUiFocusable,
   uiControlState,
   uiHitRegion,
+  uiId,
   uiNodeSemantics,
   type UiHitRegion,
   type UiNodeSemantics
@@ -13,7 +14,7 @@ describe('UI primitive semantics', () => {
   it('normalizes node semantics with role-based focus defaults', () => {
     const semantics = uiNodeSemantics({
       description: '  Writes changes  ',
-      id: 'save-button',
+      id: '  save-button  ',
       label: '  Save  ',
       role: 'button'
     });
@@ -108,8 +109,8 @@ describe('UI primitive semantics', () => {
   it('preserves explicit hit region identity on node semantics', () => {
     const region = uiHitRegion({
       bounds: { height: 24, width: 80, x: 4, y: 8 },
-      id: 'save-hit',
-      targetId: 'save-button'
+      id: '  save-hit  ',
+      targetId: '  save-button  '
     });
     const semantics = uiNodeSemantics({
       hitRegion: region,
@@ -132,11 +133,29 @@ describe('UI primitive semantics', () => {
     expectTypeOf(region).toMatchTypeOf<UiHitRegion>();
   });
 
-  it('validates required identity and hit region bounds', () => {
+  it('normalizes malformed hit bounds to inert interaction descriptors', () => {
+    const region = uiHitRegion({
+      bounds: {
+        height: -4,
+        width: Number.NaN,
+        x: Number.POSITIVE_INFINITY,
+        y: -12
+      },
+      id: 'hit'
+    });
+
+    expect(region.bounds).toEqual({
+      height: 0,
+      width: 0,
+      x: 0,
+      y: 0
+    });
+    expect(Object.isFrozen(region.bounds)).toBe(true);
+  });
+
+  it('keeps required identity and role invariants strict', () => {
+    expect(uiId('  save-button  ')).toBe('save-button');
     expect(() => uiNodeSemantics({ id: '   ', role: 'button' })).toThrow('UI id must be a non-empty string');
-    expect(() => uiHitRegion({
-      bounds: { height: 0, width: 20, x: 0, y: 0 },
-      id: 'bad-hit'
-    })).toThrow('UI hit bounds height must be a positive finite number');
+    expect(() => uiNodeSemantics({ id: 'node', role: 'dialog' as never })).toThrow('Unknown UI role: dialog');
   });
 });

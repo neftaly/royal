@@ -9,6 +9,11 @@ export default (env: ConfigEnv): UserConfig => {
     typeof rootConfig === 'function' ? rootConfig(env) : rootConfig;
 
   return mergeConfig(baseConfig, {
+    build: {
+      rollupOptions: {
+        checks: { pluginTimings: false },
+      },
+    },
     publicDir: path.join(appRoot, 'public'),
   });
 };

@@ -8,13 +8,17 @@ import {
   orthographicCamera,
   pass,
   perspectiveCamera,
+  planeGeometry,
   scene,
   solidTexture,
   standardMaterial,
   textureAsset,
   unlitMaterial,
+  type BoxGeometry,
   type GltfAssetRef,
+  type GltfNode,
   type GltfOptions,
+  type PlaneGeometry,
   type RenderNode,
   type TextureRef
 } from './index';
@@ -61,6 +65,36 @@ describe('renderer descriptor authoring API', () => {
     expect(unlitMaterial({ color }).kind).toBe('unlit');
     expect(root.children[0]?.children[1]?.kind).toBe('directional-light');
     expectTypeOf(root.children[0]?.children[0]).toMatchTypeOf<RenderNode | undefined>();
+  });
+
+  it('normalizes geometry convenience inputs into descriptor sizes', () => {
+    expect(boxGeometry(1)).toEqual({
+      kind: 'box',
+      size: [1, 1, 1]
+    });
+    expect(boxGeometry([1, 2, 3])).toEqual({
+      kind: 'box',
+      size: [1, 2, 3]
+    });
+    expect(boxGeometry({ size: 2 })).toEqual({
+      kind: 'box',
+      size: [2, 2, 2]
+    });
+    expect(planeGeometry([4, 5])).toEqual({
+      kind: 'plane',
+      size: [4, 5]
+    });
+    expect(planeGeometry(3)).toEqual({
+      kind: 'plane',
+      size: [3, 3]
+    });
+    expect(planeGeometry({ size: 6 })).toEqual({
+      kind: 'plane',
+      size: [6, 6]
+    });
+
+    expectTypeOf(boxGeometry(1)).toEqualTypeOf<BoxGeometry>();
+    expectTypeOf(planeGeometry([1, 2])).toEqualTypeOf<PlaneGeometry>();
   });
 
   it('represents material base color as solid or asset texture references', () => {
@@ -136,6 +170,7 @@ describe('renderer descriptor authoring API', () => {
       revision: 2,
       src: '/DamagedHelmet/DamagedHelmet.gltf'
     });
+    const srcNode = gltf('/PlainCube/PlainCube.gltf');
     const fallbackIdNode = gltf({ src: '/PlainCube/PlainCube.gltf' });
 
     expect(node.asset).toEqual({
@@ -144,10 +179,15 @@ describe('renderer descriptor authoring API', () => {
       revision: 2,
       uri: '/DamagedHelmet/DamagedHelmet.gltf'
     });
+    expect(srcNode.asset).toEqual({
+      id: '/PlainCube/PlainCube.gltf',
+      uri: '/PlainCube/PlainCube.gltf'
+    });
     expect(fallbackIdNode.asset).toEqual({
       id: '/PlainCube/PlainCube.gltf',
       uri: '/PlainCube/PlainCube.gltf'
     });
+    expectTypeOf(srcNode).toEqualTypeOf<GltfNode>();
     expectTypeOf<{
       readonly asset: GltfAssetRef;
       readonly src: string;

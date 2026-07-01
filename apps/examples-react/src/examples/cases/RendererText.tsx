@@ -41,7 +41,6 @@ import {
   type CanvasWorldBounds,
 } from '@royal/react';
 import {
-  createElement,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -659,13 +658,13 @@ const textScene = (
   ) as RenderRoot;
 };
 
-const rendererTextCanvas = (): HTMLCanvasElement | undefined => {
+const rendererTextEditorCanvas = (): HTMLCanvasElement | undefined => {
   const canvas = document.querySelector('canvas[aria-label="Renderer text editor"]');
   return canvas instanceof HTMLCanvasElement ? canvas : undefined;
 };
 
-const focusRendererTextCanvas = (): void => {
-  rendererTextCanvas()?.focus({ preventScroll: true });
+const focusRendererTextEditor = (): void => {
+  rendererTextEditorCanvas()?.focus({ preventScroll: true });
 };
 
 const clipboardErrorReason = (error: unknown): ClipboardReason =>
@@ -764,11 +763,6 @@ export const RendererText = (): ReactNode => {
   } as const;
   const menuLayout = contextMenuLayout(contextMenu, menuEnabled);
   const menuCommands = menuLayout?.commands ?? [];
-  const scene =
-    font !== undefined && editableFragment !== undefined && editableWorldOrigin !== undefined
-      ? textScene(font, editableFragment, editableWorldOrigin, menuLayout)
-      : textScenePlaceholder;
-
   useEffect(() => {
     const permissions = navigator.permissions;
     if (permissions === undefined || typeof permissions.query !== 'function') {
@@ -817,7 +811,7 @@ export const RendererText = (): ReactNode => {
       editableLayout.caretPlacements.at(-1) ??
       { index: 0, line: 0, x: 0 };
     const hitTest = hitTestMetricsRef.current;
-    const canvas = rendererTextCanvas();
+    const canvas = rendererTextEditorCanvas();
     const menuCommandProbe = menuCommands.map((command): TextContextMenuCommandProbe => {
       const commandX = command.bounds.x;
       const commandY = uiMenuYToWorldTop(command.bounds.y);
@@ -1267,7 +1261,7 @@ export const RendererText = (): ReactNode => {
   const handleMenuCopy = (): void => {
     void writeTextToSystemClipboard(selectedText, 'copy', 'menu');
     closeContextMenu();
-    focusRendererTextCanvas();
+    focusRendererTextEditor();
   };
 
   const handleMenuCut = (): void => {
@@ -1276,7 +1270,7 @@ export const RendererText = (): ReactNode => {
       if (ok) replaceSelection('');
     });
     closeContextMenu();
-    focusRendererTextCanvas();
+    focusRendererTextEditor();
   };
 
   const handleMenuPaste = (): void => {
@@ -1289,7 +1283,7 @@ export const RendererText = (): ReactNode => {
       textLength: 0,
     });
     closeContextMenu();
-    focusRendererTextCanvas();
+    focusRendererTextEditor();
   };
 
   const runContextMenuCommand = (action: ClipboardAction): void => {
@@ -1394,28 +1388,33 @@ export const RendererText = (): ReactNode => {
     });
   };
 
-  return createElement(Canvas, {
-    'aria-label': 'Renderer text editor',
-    'aria-multiline': true,
-    'aria-roledescription': 'editable canvas text',
-    'aria-valuetext': sampleText,
-    children: scene,
-    onBlur: () => setFocused(false),
-    onCompositionEnd: handleCanvasCompositionEnd,
-    onContextMenu: handleCanvasContextMenu,
-    onCopy: handleCanvasCopy,
-    onCut: handleCanvasCut,
-    onFocus: () => setFocused(true),
-    onKeyDown: handleCanvasKeyDown,
-    onPaste: handleCanvasPaste,
-    onPointerCancel: handleCanvasPointerEnd,
-    onPointerDown: handleCanvasPointerDown,
-    onPointerMove: handleCanvasPointerMove,
-    onPointerUp: handleCanvasPointerEnd,
-    role: 'textbox',
-    rootOptions,
-    tabIndex: 0,
-  });
+  return (
+    <Canvas
+      aria-label="Renderer text editor"
+      aria-multiline
+      aria-roledescription="editable canvas text"
+      aria-valuetext={sampleText}
+      onBlur={() => setFocused(false)}
+      onCompositionEnd={handleCanvasCompositionEnd}
+      onContextMenu={handleCanvasContextMenu}
+      onCopy={handleCanvasCopy}
+      onCut={handleCanvasCut}
+      onFocus={() => setFocused(true)}
+      onKeyDown={handleCanvasKeyDown}
+      onPaste={handleCanvasPaste}
+      onPointerCancel={handleCanvasPointerEnd}
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerEnd}
+      role="textbox"
+      rootOptions={rootOptions}
+      tabIndex={0}
+    >
+      {font !== undefined && editableFragment !== undefined && editableWorldOrigin !== undefined
+        ? textScene(font, editableFragment, editableWorldOrigin, menuLayout)
+        : textScenePlaceholder}
+    </Canvas>
+  ) as ReactNode;
 };
 
 const textScenePlaceholder = (

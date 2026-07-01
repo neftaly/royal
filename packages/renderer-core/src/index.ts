@@ -8,14 +8,16 @@ export type {
 export { orthographicCamera, perspectiveCamera } from './camera';
 export type {
   BoxGeometry,
+  BoxGeometryInput,
   BoxGeometryOptions,
   Geometry,
   GeometryKindValue,
   PlaneGeometry,
+  PlaneGeometryInput,
   PlaneGeometryOptions
 } from './geometry';
 export { boxGeometry, planeGeometry } from './geometry';
-export type { GltfAssetBounds, GltfAssetRef, GltfNode, GltfOptions } from './gltf';
+export type { GltfAssetBounds, GltfAssetRef, GltfInput, GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
 export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {
@@ -52,14 +54,22 @@ export {
   imageTexture,
   solidTexture,
   textureAsset,
+  virtualTexture,
   virtualTextureAsset
 } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
-export type { RenderPass, RenderPassOptions } from './render-graph';
-export { pass } from './render-graph';
+export type {
+  RenderElement,
+  RenderPass,
+  RenderPassOptions,
+  RenderRoot,
+  Scene,
+  SceneOptions
+} from './render-graph';
+export { pass, scene } from './render-graph';
 export type {
   UiCheckedState,
   UiControlState,
@@ -292,5 +302,3 @@ export type {
 } from './primitives';
 export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
 export type { RenderNode } from './render-node';
-export type { RenderElement, RenderRoot, Scene, SceneOptions } from './render-graph';
-export { scene } from './render-graph';

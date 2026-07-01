@@ -26,8 +26,8 @@ const viewport = {
 describe('UI menu geometry primitives', () => {
   it('normalizes command descriptors', () => {
     const command = uiMenuCommand({
-      action: 'copy-selection',
-      id: 'copy',
+      action: '  copy-selection  ',
+      id: '  copy  ',
       label: '  Copy  '
     });
 
@@ -40,6 +40,29 @@ describe('UI menu geometry primitives', () => {
     });
     expect(Object.isFrozen(command)).toBe(true);
     expectTypeOf(command).toEqualTypeOf<UiMenuCommand>();
+  });
+
+  it('omits blank optional actions and falls back to command ids for blank labels', () => {
+    expect(uiMenuCommand({
+      action: '   ',
+      id: 'copy',
+      label: 'Copy'
+    })).toEqual({
+      enabled: true,
+      id: 'copy',
+      label: 'Copy',
+      visible: true
+    });
+
+    expect(uiMenuCommand({
+      id: '  paste  ',
+      label: '   '
+    })).toEqual({
+      enabled: true,
+      id: 'paste',
+      label: 'paste',
+      visible: true
+    });
   });
 
   it('clamps menu bounds near viewport edges', () => {
@@ -94,6 +117,68 @@ describe('UI menu geometry primitives', () => {
     expect(layout.commands.map((command) => command.bounds.y)).toEqual([24, 46, 68]);
   });
 
+  it('returns inert layouts for zero and malformed viewport bounds', () => {
+    const layout = layoutUiMenuCommands({
+      anchor: { x: Number.POSITIVE_INFINITY, y: Number.NaN },
+      bounds: {
+        height: 0,
+        width: Number.NaN,
+        x: Number.NEGATIVE_INFINITY,
+        y: Number.POSITIVE_INFINITY
+      },
+      commands: [{ id: 'copy', label: 'Copy' }],
+      metrics
+    });
+
+    expect(layout.anchor).toEqual({ x: 0, y: 0 });
+    expect(layout.position).toEqual({ x: 0, y: 0 });
+    expect(layout.bounds).toEqual({
+      height: 0,
+      width: 0,
+      x: 0,
+      y: 0
+    });
+    expect(layout.commands).toEqual([]);
+    expect(uiMenuCommandAt(layout.commands, { x: 0, y: 0 })).toBeUndefined();
+
+    const zeroLayout = layoutUiMenuCommands({
+      anchor: { x: 12, y: 16 },
+      bounds: {
+        height: 0,
+        width: 160,
+        x: 4,
+        y: 8
+      },
+      commands: [{ id: 'copy', label: 'Copy' }],
+      metrics
+    });
+
+    expect(zeroLayout.position).toEqual({ x: 12, y: 16 });
+    expect(zeroLayout.bounds).toEqual({
+      height: 0,
+      width: 0,
+      x: 12,
+      y: 16
+    });
+    expect(zeroLayout.commands).toEqual([]);
+
+    const invalidAnchorLayout = layoutUiMenuCommands({
+      anchor: { x: Number.NaN, y: 24 },
+      bounds: viewport,
+      commands: [{ id: 'copy', label: 'Copy' }],
+      metrics
+    });
+
+    expect(invalidAnchorLayout.position).toEqual({ x: 0, y: 24 });
+    expect(invalidAnchorLayout.bounds).toEqual({
+      height: 0,
+      width: 0,
+      x: 0,
+      y: 24
+    });
+    expect(invalidAnchorLayout.commands).toEqual([]);
+  });
+
   it('does not hit disabled commands', () => {
     const layout = layoutUiMenuCommands({
       anchor: { x: 10, y: 10 },
@@ -131,12 +216,51 @@ describe('UI menu geometry primitives', () => {
     expect(uiMenuCommandAt([rect], { x: 10, y: 29.999 })).toBeUndefined();
   });
 
+  it('returns undefined for malformed hit-test points and command bounds', () => {
+    const rect: UiMenuCommandRect = {
+      bounds: { height: 20, width: 80, x: 10, y: 30 },
+      enabled: true,
+      id: 'copy',
+      label: 'Copy',
+      visible: true
+    };
+    const invalidOriginRect: UiMenuCommandRect = {
+      bounds: {
+        height: 20,
+        width: 80,
+        x: Number.POSITIVE_INFINITY,
+        y: 30
+      },
+      enabled: true,
+      id: 'paste',
+      label: 'Paste',
+      visible: true
+    };
+    const zeroWidthRect: UiMenuCommandRect = {
+      bounds: { height: 20, width: 0, x: 0, y: 30 },
+      enabled: true,
+      id: 'delete',
+      label: 'Delete',
+      visible: true
+    };
+    const nonFiniteSizeRect: UiMenuCommandRect = {
+      bounds: { height: Number.NaN, width: 80, x: 0, y: 30 },
+      enabled: true,
+      id: 'rename',
+      label: 'Rename',
+      visible: true
+    };
+
+    expect(uiMenuCommandAt([rect], { x: Number.NaN, y: 30 })).toBeUndefined();
+    expect(uiMenuCommandAt([rect], { x: 10, y: Number.POSITIVE_INFINITY })).toBeUndefined();
+    expect(uiMenuCommandAt([invalidOriginRect], { x: 0, y: 30 })).toBeUndefined();
+    expect(uiMenuCommandAt([zeroWidthRect], { x: 0, y: 30 })).toBeUndefined();
+    expect(uiMenuCommandAt([nonFiniteSizeRect], { x: 0, y: 30 })).toBeUndefined();
+  });
+
   it('validates geometry inputs', () => {
     expect(() => uiMenuCommand({ id: '   ', label: 'Copy' })).toThrow(
       'UI menu command id must be a non-empty string'
-    );
-    expect(() => uiMenuCommand({ id: 'copy', label: '   ' })).toThrow(
-      'UI menu command label must be a non-empty string'
     );
     expect(() => layoutUiMenuCommands({
       anchor: { x: 0, y: 0 },

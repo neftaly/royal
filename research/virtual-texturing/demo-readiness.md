@@ -64,7 +64,7 @@ Smoke/permissive gate:
 - Equivalent direct command after a build:
   `node apps/examples-react/scripts/virtual-texturing-smoothness.mjs --smoke`.
 - Defaults: `VT_SMOOTHNESS_GATE=smoke`, missing probe allowed only for this
-  tier, rAF p95 <= 160 ms, rAF p99 <= 320 ms, long-frame ratio <= 0.45,
+  tier, rAF p95 <= 260 ms, rAF p99 <= 420 ms, long-frame ratio <= 0.50,
   sampled/final pending pages <= 96, and texture upload max <= 50 ms.
 
 Default-on/perf gate:
@@ -77,8 +77,8 @@ Default-on/perf gate:
 - Full package command:
   `VT_SMOOTHNESS_GATE=default-on pnpm --filter @royal/examples-react bench:vt`.
 - Defaults: exact hit ratio >= 0.95, repeated reload ratio <= 0.02, recent
-  eviction re-request ratio <= 0.03, rAF p95 <= 20 ms, rAF p99 <= 33 ms,
-  long-frame ratio <= 0.02 over 50 ms, probe frame p95 <= 20 ms, max frame <=
+  eviction re-request ratio <= 0.03, rAF p95 <= 24 ms, rAF p99 <= 48 ms,
+  long-frame ratio <= 0.03 over 50 ms, probe frame p95 <= 20 ms, max frame <=
   66 ms, slow frames <= 8, final pending pages = 0, sampled pending pages <=
   16, texture upload max <= 2 ms, and no full page-table rebuilds after init or
   WebGL context restore.

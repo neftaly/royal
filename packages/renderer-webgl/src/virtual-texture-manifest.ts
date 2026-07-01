@@ -7,11 +7,23 @@ import {
 
 export type VirtualTextureManifestFormat = "rgba8";
 
-export type VirtualTextureManifestPageSource = {
+export type VirtualTextureManifestGeneratedPageSourceKind = "debug-rgba";
+
+export type VirtualTextureManifestGeneratedPageSource = {
+  readonly generator: VirtualTextureManifestGeneratedPageSourceKind;
+  readonly kind: "generated";
+};
+
+export type VirtualTextureManifestUriPageSource = {
   readonly baseUri: string | null;
   readonly entries: Readonly<Record<VirtualTexturePageId, string>>;
+  readonly kind: "uri";
   readonly uriTemplate: string | null;
 };
+
+export type VirtualTextureManifestPageSource =
+  | VirtualTextureManifestGeneratedPageSource
+  | VirtualTextureManifestUriPageSource;
 
 export type VirtualTextureManifest = {
   readonly borderTexels: number;
@@ -64,6 +76,8 @@ export const resolveVirtualTextureManifestPageUri = (
   page: VirtualTexturePageAddress,
 ): string | null => {
   const normalized = validateManifestPage(manifest, page);
+  if (manifest.pageSource.kind !== "uri") return null;
+
   const id = virtualTexturePageId(normalized);
   const explicit = manifest.pageSource.entries[id];
   const uri = explicit ?? templatePageUri(manifest.pageSource.uriTemplate, id, normalized);
@@ -136,17 +150,34 @@ const parseFormat = (value: unknown): VirtualTextureManifestFormat => {
 
 const parsePageSource = (value: unknown): VirtualTextureManifestPageSource => {
   if (value === undefined) {
-    return { baseUri: null, entries: {}, uriTemplate: null };
+    return { baseUri: null, entries: {}, kind: "uri", uriTemplate: null };
   }
 
   const pages = requireRecord(value, "pages");
+  const kind = optionalNonEmptyString(pages.kind, "pages.kind", "uri");
+  if (kind === "generated") {
+    return {
+      generator: parseGeneratedPageSourceKind(pages.generator),
+      kind,
+    };
+  }
+  if (kind !== "uri") {
+    throw new Error("Virtual texture manifest pages.kind must be uri or generated");
+  }
+
   const baseUri = optionalNonEmptyString(pages.baseUri, "pages.baseUri", null);
   const uriTemplate = optionalNonEmptyString(pages.uriTemplate, "pages.uriTemplate", null);
   return {
     baseUri,
     entries: parseEntries(pages.entries),
+    kind,
     uriTemplate,
   };
+};
+
+const parseGeneratedPageSourceKind = (value: unknown): VirtualTextureManifestGeneratedPageSourceKind => {
+  if (value === "debug-rgba") return value;
+  throw new Error("Virtual texture manifest pages.generator must be debug-rgba");
 };
 
 const parseVirtualSize = (value: unknown): readonly [number, number] => {

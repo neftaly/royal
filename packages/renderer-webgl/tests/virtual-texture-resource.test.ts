@@ -31,6 +31,7 @@ type TexSubImage2DCall = {
 };
 
 const fakeVirtualTextureGl = (): {
+  readonly boundTextures: readonly (WebGLTexture | null)[];
   readonly deletedTextures: readonly WebGLTexture[];
   readonly gl: RendererWebGlContext;
   readonly texImages: readonly TexImage2DCall[];
@@ -38,11 +39,13 @@ const fakeVirtualTextureGl = (): {
 } => {
   let nextTextureId = 0;
   let boundTexture: WebGLTexture | null = null;
+  const boundTextures: (WebGLTexture | null)[] = [];
   const deletedTextures: WebGLTexture[] = [];
   const texImages: TexImage2DCall[] = [];
   const texSubImages: TexSubImage2DCall[] = [];
 
   return {
+    boundTextures,
     deletedTextures,
     gl: {
       CLAMP_TO_EDGE: 0x812F,
@@ -57,6 +60,7 @@ const fakeVirtualTextureGl = (): {
       UNSIGNED_BYTE: 0x1401,
       bindTexture(_target: GLenum, value: WebGLTexture | null) {
         boundTexture = value;
+        boundTextures.push(value);
       },
       createTexture: () => {
         nextTextureId += 1;
@@ -184,6 +188,72 @@ describe("VirtualTextureResource", () => {
     ]);
   });
 
+  it("returns zero from uploadFrame without page-table work when no uploads are pending", () => {
+    const { boundTextures, gl } = fakeVirtualTextureGl();
+    const manifest = parseVirtualTextureManifest({
+      id: "terrain:no-op",
+      pageSize: 64,
+      physicalSlots: 2,
+      virtualSize: [64, 64],
+    });
+    const resource = new VirtualTextureResource(gl, manifest);
+    const bindCountBeforeUpload = boundTextures.length;
+    const uploadPageTable = resource.uploadPageTable;
+    resource.uploadPageTable = (() => {
+      throw new Error("uploadPageTable should not run for no-op upload frames");
+    }) as typeof uploadPageTable;
+
+    const upload = resource.uploadFrame({ frame: 4, pageTableUploads: 8, physicalAtlasUploads: 1 });
+
+    expect(upload).toEqual({
+      bytesUploaded: 0,
+      frame: 4,
+      pageTableFullRebuilds: 0,
+      pageTableTexSubImageCalls: 0,
+      pageTableUploads: 0,
+      pendingUploadCount: 0,
+      physicalAtlasUploads: 0,
+    });
+    expect(boundTextures).toHaveLength(bindCountBeforeUpload);
+    expect(resource.uploadStats).toMatchObject({
+      bytesUploaded: 0,
+      dirtyBatches: 1,
+      lastFrame: 4,
+      lastUploadCount: 0,
+    });
+  });
+
+  it("resolves exact resident page requests without a separate resident-page lookup", () => {
+    const { gl } = fakeVirtualTextureGl();
+    const manifest = parseVirtualTextureManifest({
+      id: "terrain:resident-fast-path",
+      pageSize: 64,
+      physicalSlots: 2,
+      virtualSize: [64, 64],
+    });
+    const resource = new VirtualTextureResource(gl, manifest, {
+      pageSource: () => new Uint8Array(64 * 64 * 4),
+    });
+    resource.makeResident({ mip: 0, x: 0, y: 0 }, 1);
+    resource.runtime.lookupResidentPage = (() => {
+      throw new Error("lookupResidentPage should not run for exact resident requests");
+    }) as typeof resource.runtime.lookupResidentPage;
+
+    const requested = resource.requestPages({ mip: 0, uMax: 1, uMin: 0, vMax: 1, vMin: 0 }, 2);
+
+    expect(requested).toEqual({
+      pages: [{ mip: 0, x: 0, y: 0 }],
+      pending: 0,
+      ready: 0,
+      resident: 1,
+      scheduled: 0,
+    });
+    expect(resource.stats().requests).toMatchObject({
+      pagesRequested: 1,
+      sourceRequests: 0,
+    });
+  });
+
   it("rejects physical atlas payloads with unexpected byte length and disposes textures", () => {
     const { deletedTextures, gl } = fakeVirtualTextureGl();
     const manifest = parseVirtualTextureManifest({
@@ -242,6 +312,7 @@ describe("VirtualTextureResource", () => {
       pageTableFullRebuilds: 0,
       pageTableTexSubImageCalls: 1,
       pageTableUploads: 1,
+      pendingUploadCount: 1,
       physicalAtlasUploads: 1,
     });
     expect(secondUpload).toMatchObject({
@@ -249,6 +320,7 @@ describe("VirtualTextureResource", () => {
       pageTableFullRebuilds: 0,
       pageTableTexSubImageCalls: 1,
       pageTableUploads: 1,
+      pendingUploadCount: 0,
       physicalAtlasUploads: 1,
     });
     expect(resource.stats()).toMatchObject({
@@ -416,6 +488,90 @@ describe("VirtualTextureResource", () => {
     expect(() => resource.getTextureBindings()).toThrow("Virtual texture resource has been disposed");
   });
 
+  it("bounds large footprint scheduling while counting pending, ready, and resident pages", async () => {
+    const { gl } = fakeVirtualTextureGl();
+    const sourceRequests: string[] = [];
+    const deferredPage: {
+      request?: VirtualTexturePageSourceRequest;
+      resolve?: (pixels: Uint8Array) => void;
+    } = {};
+    const manifest = parseVirtualTextureManifest({
+      id: "terrain:bounded-requests",
+      pageSize: 64,
+      physicalSlots: 8,
+      virtualSize: [512, 512],
+    });
+    const resource = new VirtualTextureResource(gl, manifest, {
+      pageSource(request) {
+        sourceRequests.push(request.pageId);
+        if (request.pageId === "m0/1/0") {
+          deferredPage.request = request;
+          return new Promise<Uint8Array>((resolve) => {
+            deferredPage.resolve = resolve;
+          });
+        }
+        return new Uint8Array(request.byteLength);
+      },
+    });
+    const pageFootprint = (x: number, y: number) => ({
+      mip: 0,
+      uMax: (x + 1) / 8,
+      uMin: x / 8,
+      vMax: (y + 1) / 8,
+      vMin: y / 8,
+    });
+
+    resource.requestPages(pageFootprint(0, 0), 1);
+    await resource.waitForPendingRequests();
+    resource.requestPages(pageFootprint(1, 0), 2);
+    await Promise.resolve();
+    resource.makeResident({ mip: 0, x: 2, y: 0 }, 2);
+
+    const first = resource.requestPages({ mip: 0, uMax: 1, uMin: 0, vMax: 1, vMin: 0 }, 3);
+    const second = resource.requestPages({ mip: 0, uMax: 1, uMin: 0, vMax: 1, vMin: 0 }, 4);
+    const deferredRequest = deferredPage.request;
+    const resolveDeferredPage = deferredPage.resolve;
+    if (deferredRequest === undefined || resolveDeferredPage === undefined) {
+      throw new Error("expected deferred page request");
+    }
+    resolveDeferredPage(new Uint8Array(deferredRequest.byteLength));
+    await resource.waitForPendingRequests();
+
+    expect(first.pages).toHaveLength(64);
+    expect(first.pages.slice(0, 8)).toEqual([
+      { mip: 0, x: 0, y: 0 },
+      { mip: 0, x: 1, y: 0 },
+      { mip: 0, x: 2, y: 0 },
+      { mip: 0, x: 3, y: 0 },
+      { mip: 0, x: 4, y: 0 },
+      { mip: 0, x: 5, y: 0 },
+      { mip: 0, x: 6, y: 0 },
+      { mip: 0, x: 7, y: 0 },
+    ]);
+    expect(first).toMatchObject({
+      pending: 1,
+      ready: 1,
+      resident: 1,
+      scheduled: 8,
+    });
+    expect(second).toMatchObject({
+      pending: 9,
+      ready: 1,
+      resident: 1,
+      scheduled: 8,
+    });
+    expect(sourceRequests).toHaveLength(18);
+    expect(new Set(sourceRequests).size).toBe(18);
+    expect(sourceRequests).not.toContain("m0/2/0");
+    expect(resource.stats().requests).toMatchObject({
+      pagesLoaded: 18,
+      pagesRequested: 130,
+      pendingPages: 0,
+      readyPages: 18,
+      sourceRequests: 18,
+    });
+  });
+
   it("deduplicates repeated page requests while a source load is pending", async () => {
     const { gl } = fakeVirtualTextureGl();
     const sourceRequests: VirtualTexturePageSourceRequest[] = [];
@@ -486,5 +642,71 @@ describe("VirtualTextureResource", () => {
       },
     });
     expect(texSubImages).toEqual([]);
+  });
+
+  it("backs off failed page source requests instead of retrying every render", async () => {
+    const { gl } = fakeVirtualTextureGl();
+    const sourceRequests: string[] = [];
+    const resource = createVirtualTextureResource(gl, {
+      id: "terrain:missing-page",
+      pageSize: 64,
+      physicalSlots: 2,
+      source(request) {
+        sourceRequests.push(request.pageId);
+        throw new Error("missing page");
+      },
+      virtualSize: [64, 64],
+    });
+    const footprint = { mip: 0, uMax: 1, uMin: 0, vMax: 1, vMin: 0 };
+
+    const first = resource.requestPages(footprint, 1);
+    await resource.waitForPendingRequests();
+    const immediate = resource.requestPages(footprint, 2);
+    const stillBackedOff = resource.requestPages(footprint, 30);
+
+    expect(first).toMatchObject({
+      pending: 0,
+      ready: 0,
+      resident: 0,
+      scheduled: 1,
+    });
+    expect(immediate).toMatchObject({
+      pending: 0,
+      ready: 0,
+      resident: 0,
+      scheduled: 0,
+    });
+    expect(stillBackedOff.scheduled).toBe(0);
+    expect(sourceRequests).toEqual(["m0/0/0"]);
+    expect(resource.stats().requests).toMatchObject({
+      lastError: "missing page",
+      pagesFailed: 1,
+      pendingPages: 0,
+      sourceRequests: 1,
+    });
+
+    const retry = resource.requestPages(footprint, 31);
+    await resource.waitForPendingRequests();
+    const secondBackoff = resource.requestPages(footprint, 90);
+
+    expect(retry.scheduled).toBe(1);
+    expect(secondBackoff.scheduled).toBe(0);
+    expect(sourceRequests).toEqual(["m0/0/0", "m0/0/0"]);
+    expect(resource.stats().requests).toMatchObject({
+      pagesFailed: 2,
+      pendingPages: 0,
+      sourceRequests: 2,
+    });
+
+    const secondRetry = resource.requestPages(footprint, 91);
+    await resource.waitForPendingRequests();
+
+    expect(secondRetry.scheduled).toBe(1);
+    expect(sourceRequests).toEqual(["m0/0/0", "m0/0/0", "m0/0/0"]);
+    expect(resource.stats().requests).toMatchObject({
+      pagesFailed: 3,
+      pendingPages: 0,
+      sourceRequests: 3,
+    });
   });
 });

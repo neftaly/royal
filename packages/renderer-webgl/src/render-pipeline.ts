@@ -19,8 +19,10 @@ import type {
   WireframeProgram,
 } from "./programs";
 import { findDirectionalLight } from "./render-graph";
+import type { MaterialVirtualTextureRuntimeStats } from "./material-texture-binding";
 import type { TextCache, TextRenderAsset } from "./text-cache";
 import type { TextureCache } from "./texture-cache";
+import type { VirtualTextureCache } from "./virtual-texture-cache";
 import {
   buildVisibilityPackets,
   cullVisibilityPackets,
@@ -31,15 +33,19 @@ import {
 
 interface WebGlRenderPipelineResources {
   readonly drawnGltfAssets: WeakSet<object>;
+  readonly frame: number;
   readonly geometryCache: GeometryCache;
   readonly gl: RendererWebGlContext;
   readonly gltfCache: GltfCache;
   readonly gltfProgram: GltfProgram;
   readonly meshProgram: MeshProgram;
   readonly onTextureSettled: () => void;
+  readonly onVirtualTextureRuntimeStats: (stats: MaterialVirtualTextureRuntimeStats) => void;
   readonly textCache: TextCache;
   readonly textProgram: TextProgram;
   readonly textureCache: TextureCache;
+  readonly viewport: { readonly height: number; readonly width: number };
+  readonly virtualTextureCache: VirtualTextureCache;
   readonly wireframeProgram: WireframeProgram;
 }
 
@@ -184,9 +190,13 @@ const drawResolvedRenderPacket = (
         packet.node,
         {
           directionalLight,
+          frame: resources.frame,
           geometryCache: resources.geometryCache,
+          onVirtualTextureRuntimeStats: resources.onVirtualTextureRuntimeStats,
           onTextureSettled: resources.onTextureSettled,
           textureCache: resources.textureCache,
+          viewport: resources.viewport,
+          virtualTextureCache: resources.virtualTextureCache,
           viewProjectionMatrix,
         },
       );

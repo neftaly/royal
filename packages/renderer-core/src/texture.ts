@@ -84,7 +84,22 @@ export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOption
 
 export type ImageTextureOptions = TextureAssetOptions;
 
-export type VirtualTextureAssetOptions = Omit<VirtualTextureAssetRef, 'kind'>;
+interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'id' | 'kind' | 'manifestUri'> {
+  readonly id?: string;
+}
+
+export interface VirtualTextureAssetSrcOptions extends VirtualTextureAssetBaseOptions {
+  readonly manifestUri?: never;
+  readonly src: string;
+}
+
+export interface VirtualTextureAssetManifestOptions extends VirtualTextureAssetBaseOptions {
+  readonly manifestUri: string;
+  readonly src?: never;
+}
+
+export type VirtualTextureAssetOptions = VirtualTextureAssetSrcOptions | VirtualTextureAssetManifestOptions;
+export type VirtualTextureInput = string | VirtualTextureAssetOptions;
 
 export const defaultImageTextureSampler: TextureSampler = {
   magFilter: 'linear',
@@ -137,14 +152,24 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
   });
 }
 
-export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => ({
-  kind: 'virtual-asset',
-  ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-  ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
-  id: options.id,
-  ...(options.manifestId === undefined ? {} : { manifestId: options.manifestId }),
-  manifestUri: options.manifestUri,
-  ...(options.preview === undefined ? {} : { preview: options.preview }),
-  ...(options.revision === undefined ? {} : { revision: options.revision }),
-  ...(options.sampler === undefined ? {} : { sampler: options.sampler })
-});
+export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
+  const manifestUri = options.src ?? options.manifestUri;
+
+  return {
+    kind: 'virtual-asset',
+    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
+    id: options.id ?? options.manifestId ?? manifestUri,
+    ...(options.manifestId === undefined ? {} : { manifestId: options.manifestId }),
+    manifestUri,
+    ...(options.preview === undefined ? {} : { preview: options.preview }),
+    ...(options.revision === undefined ? {} : { revision: options.revision }),
+    ...(options.sampler === undefined ? {} : { sampler: options.sampler })
+  };
+};
+
+export function virtualTexture(src: string): VirtualTextureAssetRef;
+export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
+export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {
+  return virtualTextureAsset(typeof input === 'string' ? { src: input } : input);
+}

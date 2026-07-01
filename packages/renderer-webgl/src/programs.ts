@@ -22,8 +22,17 @@ export interface MeshProgram {
     readonly lightDirection: WebGLUniformLocation;
     readonly model: WebGLUniformLocation;
     readonly unlit: WebGLUniformLocation;
+    readonly useVirtualTexture: WebGLUniformLocation;
     readonly useBaseColorTexture: WebGLUniformLocation;
     readonly viewProjection: WebGLUniformLocation;
+    readonly virtualAtlas: WebGLUniformLocation;
+    readonly virtualBorderTexels: WebGLUniformLocation;
+    readonly virtualMip: WebGLUniformLocation;
+    readonly virtualPaddedPageSize: WebGLUniformLocation;
+    readonly virtualPageSize: WebGLUniformLocation;
+    readonly virtualPageTable: WebGLUniformLocation;
+    readonly virtualPageTableSize: WebGLUniformLocation;
+    readonly virtualPhysicalAtlasSize: WebGLUniformLocation;
   };
 }
 
@@ -85,8 +94,17 @@ export const createMeshProgram = (gl: RendererWebGlContext): MeshProgram => {
       lightDirection: uniformLocation(gl, program, "u_lightDirection"),
       model: uniformLocation(gl, program, "u_model"),
       unlit: uniformLocation(gl, program, "u_unlit"),
+      useVirtualTexture: uniformLocation(gl, program, "u_useVirtualTexture"),
       useBaseColorTexture: uniformLocation(gl, program, "u_useBaseColorTexture"),
       viewProjection: uniformLocation(gl, program, "u_viewProjection"),
+      virtualAtlas: uniformLocation(gl, program, "u_virtualAtlas"),
+      virtualBorderTexels: uniformLocation(gl, program, "u_virtualBorderTexels"),
+      virtualMip: uniformLocation(gl, program, "u_virtualMip"),
+      virtualPaddedPageSize: uniformLocation(gl, program, "u_virtualPaddedPageSize"),
+      virtualPageSize: uniformLocation(gl, program, "u_virtualPageSize"),
+      virtualPageTable: uniformLocation(gl, program, "u_virtualPageTable"),
+      virtualPageTableSize: uniformLocation(gl, program, "u_virtualPageTableSize"),
+      virtualPhysicalAtlasSize: uniformLocation(gl, program, "u_virtualPhysicalAtlasSize"),
     },
   };
 };

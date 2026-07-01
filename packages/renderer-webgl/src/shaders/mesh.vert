@@ -1,12 +1,14 @@
-attribute vec3 a_normal;
-attribute vec3 a_position;
+#version 300 es
+
+in vec3 a_normal;
+in vec3 a_position;
 
 uniform vec3 u_boxSize;
 uniform mat4 u_model;
 uniform mat4 u_viewProjection;
 
-varying vec3 v_normal;
-varying vec2 v_texCoord;
+out vec3 v_normal;
+out vec2 v_texCoord;
 
 vec2 boxTexCoord(vec3 position, vec3 normal) {
   vec3 axis = abs(normal);

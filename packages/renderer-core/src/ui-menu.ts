@@ -68,17 +68,16 @@ export interface UiMenuLayout {
 }
 
 export const uiMenuCommand = (options: UiMenuCommandOptions): UiMenuCommand => {
-  const label = options.label.trim();
-  if (label.length === 0) {
-    throw new Error('UI menu command label must be a non-empty string');
-  }
+  const action = normalizeOptionalUiMenuCommandAction(options.action);
+  const id = uiMenuCommandId(options.id);
+  const label = uiMenuCommandLabel(options.label, id, action);
 
   const command: UiMenuCommand = {
     enabled: options.enabled ?? true,
-    id: uiMenuCommandId(options.id),
+    id,
     label,
     visible: options.visible ?? true,
-    ...(options.action !== undefined ? { action: uiMenuCommandAction(options.action) } : {})
+    ...(action !== undefined ? { action } : {})
   };
 
   return Object.freeze(command);
@@ -90,10 +89,12 @@ export const layoutUiMenuCommands = ({
   commands,
   metrics
 }: UiMenuLayoutOptions): UiMenuLayout => {
-  const normalizedAnchor = normalizePoint(anchor, 'UI menu anchor');
-  const normalizedBounds = normalizeBounds(bounds, 'UI menu bounds');
+  const normalizedAnchor = normalizePoint(anchor);
   const normalizedMetrics = normalizeMetrics(metrics);
   const normalizedCommands = commands.map(uiMenuCommand);
+  const normalizedBounds = normalizeLayoutBounds(bounds);
+  if (normalizedBounds === undefined || !isFinitePoint(anchor)) return inertMenuLayout(normalizedAnchor);
+
   const visibleCommands = normalizedCommands.filter((command) => command.visible);
   const menuHeight = menuContentHeight(visibleCommands.length, normalizedMetrics);
   const menuWidth = normalizedMetrics.width;
@@ -129,37 +130,68 @@ export const uiMenuCommandAt = (
   commands: readonly UiMenuCommandRect[],
   point: UiMenuPoint
 ): UiMenuCommandRect | undefined => {
-  const normalizedPoint = normalizePoint(point, 'UI menu hit point');
+  const normalizedPoint = normalizeHitPoint(point);
+  if (normalizedPoint === undefined) return undefined;
+
   return commands.find((command) => command.enabled && command.visible && containsPoint(command.bounds, normalizedPoint));
 };
 
 const uiMenuCommandId = (id: UiMenuCommandId): UiMenuCommandId => {
-  if (id.trim().length === 0) {
+  const normalized = id.trim();
+  if (normalized.length === 0) {
     throw new Error('UI menu command id must be a non-empty string');
   }
 
-  return id;
+  return normalized;
 };
 
-const uiMenuCommandAction = (action: UiMenuCommandAction): UiMenuCommandAction => {
-  if (action.trim().length === 0) {
-    throw new Error('UI menu command action must be a non-empty string');
+const uiMenuCommandLabel = (
+  label: string,
+  id: UiMenuCommandId,
+  action: UiMenuCommandAction | undefined
+): string => {
+  const normalized = optionalNonBlankText(label) ?? optionalNonBlankText(id) ?? action;
+  if (normalized === undefined) {
+    throw new Error('UI menu command label must be a non-empty string');
   }
 
-  return action;
+  return normalized;
 };
 
-const normalizePoint = (point: UiMenuPoint, label: string): UiMenuPoint => Object.freeze({
-  x: finiteNumber(point.x, `${label} x`),
-  y: finiteNumber(point.y, `${label} y`)
+const normalizeOptionalUiMenuCommandAction = (
+  action: UiMenuCommandAction | undefined
+): UiMenuCommandAction | undefined => optionalNonBlankText(action);
+
+const optionalNonBlankText = (text: string | undefined): string | undefined => {
+  const normalized = text?.trim();
+  return normalized === '' ? undefined : normalized;
+};
+
+const normalizePoint = (point: UiMenuPoint): UiMenuPoint => Object.freeze({
+  x: finiteNumberOrDefault(point.x, 0),
+  y: finiteNumberOrDefault(point.y, 0)
 });
 
-const normalizeBounds = (bounds: UiMenuBounds, label: string): UiMenuBounds => Object.freeze({
-  height: finitePositiveNumber(bounds.height, `${label} height`),
-  width: finitePositiveNumber(bounds.width, `${label} width`),
-  x: finiteNumber(bounds.x, `${label} x`),
-  y: finiteNumber(bounds.y, `${label} y`)
-});
+const normalizeHitPoint = (point: UiMenuPoint): UiMenuPoint | undefined => {
+  if (!isFinitePoint(point)) return undefined;
+  return Object.freeze({ x: point.x, y: point.y });
+};
+
+const normalizeLayoutBounds = (bounds: UiMenuBounds): UiMenuBounds | undefined => {
+  if (!isFinitePositiveNumber(bounds.height) ||
+    !isFinitePositiveNumber(bounds.width) ||
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y)) {
+    return undefined;
+  }
+
+  return Object.freeze({
+    height: bounds.height,
+    width: bounds.width,
+    x: bounds.x,
+    y: bounds.y
+  });
+};
 
 const normalizeMetrics = (metrics: UiMenuLayoutMetrics): UiMenuLayoutMetrics => Object.freeze({
   commandGap: finiteNonNegativeNumber(metrics.commandGap, 'UI menu command gap'),
@@ -177,10 +209,44 @@ const menuContentHeight = (commandCount: number, metrics: UiMenuLayoutMetrics): 
 };
 
 const containsPoint = (bounds: UiMenuBounds, point: UiMenuPoint): boolean => {
-  return point.x >= bounds.x &&
-    point.x < bounds.x + bounds.width &&
-    point.y >= bounds.y &&
-    point.y < bounds.y + bounds.height;
+  const normalizedBounds = normalizeHitBounds(bounds);
+  return normalizedBounds !== undefined &&
+    point.x >= normalizedBounds.x &&
+    point.x < normalizedBounds.x + normalizedBounds.width &&
+    point.y >= normalizedBounds.y &&
+    point.y < normalizedBounds.y + normalizedBounds.height;
+};
+
+const normalizeHitBounds = (bounds: UiMenuBounds): UiMenuBounds | undefined => {
+  if (!isFinitePositiveNumber(bounds.height) ||
+    !isFinitePositiveNumber(bounds.width) ||
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y)) {
+    return undefined;
+  }
+
+  return bounds;
+};
+
+const isFinitePoint = (point: UiMenuPoint): boolean => Number.isFinite(point.x) && Number.isFinite(point.y);
+
+const inertMenuLayout = (anchor: UiMenuAnchor): UiMenuLayout => {
+  const position = Object.freeze({
+    x: anchor.x,
+    y: anchor.y
+  });
+
+  return Object.freeze({
+    anchor,
+    bounds: Object.freeze({
+      height: 0,
+      width: 0,
+      x: position.x,
+      y: position.y
+    }),
+    commands: Object.freeze([]),
+    position
+  });
 };
 
 const clamp = (value: number, min: number, max: number): number => {
@@ -189,7 +255,7 @@ const clamp = (value: number, min: number, max: number): number => {
 };
 
 const finitePositiveNumber = (value: number, label: string): number => {
-  if (!Number.isFinite(value) || value <= 0) {
+  if (!isFinitePositiveNumber(value)) {
     throw new Error(`${label} must be a positive finite number`);
   }
 
@@ -204,13 +270,11 @@ const finiteNonNegativeNumber = (value: number, label: string): number => {
   return value;
 };
 
-const finiteNumber = (value: number, label: string): number => {
-  if (!Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite number`);
-  }
-
-  return value;
+const finiteNumberOrDefault = (value: number, fallback: number): number => {
+  return Number.isFinite(value) ? value : fallback;
 };
+
+const isFinitePositiveNumber = (value: number): boolean => Number.isFinite(value) && value > 0;
 
 const menuWidth = (width: number, paddingX: number): number => {
   const normalizedWidth = finitePositiveNumber(width, 'UI menu width');

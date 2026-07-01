@@ -176,11 +176,12 @@ const hitRegionKinds: ReadonlySet<UiHitRegionKind> = new Set(['bounds', 'custom'
 const hitRegionCoordinateSpaces: ReadonlySet<UiHitRegionCoordinateSpace> = new Set(['local', 'screen', 'world']);
 
 export const uiId = (id: string): UiId => {
-  if (id.trim().length === 0) {
+  const normalized = id.trim();
+  if (normalized.length === 0) {
     throw new Error('UI id must be a non-empty string');
   }
 
-  return id;
+  return normalized;
 };
 
 export const uiControlState = (options: UiControlStateOptions = {}): UiControlState => {
@@ -290,12 +291,22 @@ const freezeControlValue = (value: UiControlValue): UiControlValue => {
 };
 
 const normalizeHitBounds = (bounds: UiHitBounds): UiHitBounds => {
-  const normalized = {
-    height: finitePositiveNumber(bounds.height, 'UI hit bounds height'),
-    width: finitePositiveNumber(bounds.width, 'UI hit bounds width'),
-    x: finiteNumber(bounds.x, 'UI hit bounds x'),
-    y: finiteNumber(bounds.y, 'UI hit bounds y')
-  };
+  const normalized = isFinitePositiveNumber(bounds.height) &&
+    isFinitePositiveNumber(bounds.width) &&
+    Number.isFinite(bounds.x) &&
+    Number.isFinite(bounds.y)
+    ? {
+      height: bounds.height,
+      width: bounds.width,
+      x: bounds.x,
+      y: bounds.y
+    }
+    : {
+      height: 0,
+      width: 0,
+      x: 0,
+      y: 0
+    };
 
   return Object.freeze(normalized);
 };
@@ -308,14 +319,6 @@ const integer = (value: number, label: string): number => {
   return value;
 };
 
-const finitePositiveNumber = (value: number, label: string): number => {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${label} must be a positive finite number`);
-  }
-
-  return value;
-};
-
 const finiteNumber = (value: number, label: string): number => {
   if (!Number.isFinite(value)) {
     throw new Error(`${label} must be a finite number`);
@@ -323,3 +326,5 @@ const finiteNumber = (value: number, label: string): number => {
 
   return value;
 };
+
+const isFinitePositiveNumber = (value: number): boolean => Number.isFinite(value) && value > 0;

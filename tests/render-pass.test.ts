@@ -103,6 +103,25 @@ describe('render pass clearColor', () => {
     expect(renderPass.children[0]?.kind).toBe('text');
   });
 
+  it('reads JSX text children and defaults missing text to empty text', () => {
+    const textFromChildren = jsx('text', {
+      color: [1, 1, 1, 1],
+      children: ['Open', ' ', 'fullscreen']
+    }) as RenderNode;
+    const emptyText = jsx('text', {
+      color: [1, 1, 1, 1]
+    }) as RenderNode;
+
+    expect(textFromChildren).toMatchObject({
+      kind: 'text',
+      layout: { source: 'Open fullscreen' }
+    });
+    expect(emptyText).toMatchObject({
+      kind: 'text',
+      layout: { source: '' }
+    });
+  });
+
   it('accepts JSX glTF src as a render node child', () => {
     const gltfChild = jsx('gltf', {
       src: '/DamagedHelmet/DamagedHelmet.gltf',
@@ -139,7 +158,7 @@ describe('render pass clearColor', () => {
 
     const renderPass = jsx('pass', {
       camera,
-      children: [null, undefined, false, meshChild]
+      children: [null, undefined, false, true, '\n  ', meshChild]
     }) as RenderPass;
 
     expect(renderPass.children).toEqual([meshChild]);
@@ -179,10 +198,37 @@ describe('render pass clearColor', () => {
     });
   });
 
+  it('uses material, texture, color precedence for JSX mesh sugar', () => {
+    const albedo = imageTexture('/textures/albedo.png');
+    const materialMesh = jsx('mesh', {
+      color: [0.1, 0.2, 0.3, 1],
+      geometry: cube,
+      material: red,
+      texture: albedo
+    }) as RenderNode;
+    const textureMesh = jsx('mesh', {
+      color: [0.1, 0.2, 0.3, 1],
+      geometry: cube,
+      texture: albedo
+    }) as RenderNode;
+
+    expect(materialMesh).toMatchObject({
+      kind: 'mesh',
+      material: red
+    });
+    expect(textureMesh).toMatchObject({
+      kind: 'mesh',
+      material: {
+        baseColor: albedo,
+        kind: 'standard'
+      }
+    });
+  });
+
   it('ignores empty JSX conditional children under scenes', () => {
     const renderPass = pass({ camera, children: [] });
     const root = jsx('scene', {
-      children: [null, undefined, false, renderPass]
+      children: [null, undefined, false, true, '\n  ', renderPass]
     }) as RenderRoot;
 
     expect(root.children).toEqual([renderPass]);

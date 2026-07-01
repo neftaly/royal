@@ -11,15 +11,27 @@ type TexImage2DCall = {
   readonly width: number;
 };
 
+type TexSubImage2DCall = {
+  readonly byteLength: number;
+  readonly height: number;
+  readonly level: number;
+  readonly texture: WebGLTexture | null;
+  readonly width: number;
+  readonly xOffset: number;
+  readonly yOffset: number;
+};
+
 const fakeVirtualTextureGl = (): {
   readonly counts: { readonly createTexture: number };
   readonly gl: RendererWebGlContext;
   readonly texImages: readonly TexImage2DCall[];
+  readonly texSubImages: readonly TexSubImage2DCall[];
 } => {
   let nextTextureId = 0;
   let boundTexture: WebGLTexture | null = null;
   const counts = { createTexture: 0 };
   const texImages: TexImage2DCall[] = [];
+  const texSubImages: TexSubImage2DCall[] = [];
 
   return {
     counts,
@@ -53,9 +65,30 @@ const fakeVirtualTextureGl = (): {
         texImages.push({ height, internalFormat, level, texture: boundTexture, width });
       },
       texParameteri() {},
-      texSubImage2D() {},
+      texSubImage2D(
+        _target: GLenum,
+        level: GLint,
+        xOffset: GLint,
+        yOffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        _format: GLenum,
+        _type: GLenum,
+        pixels: ArrayBufferView,
+      ) {
+        texSubImages.push({
+          byteLength: pixels.byteLength,
+          height,
+          level,
+          texture: boundTexture,
+          width,
+          xOffset,
+          yOffset,
+        });
+      },
     } as unknown as RendererWebGlContext,
     texImages,
+    texSubImages,
   };
 };
 
@@ -207,6 +240,75 @@ describe("VirtualTextureCache", () => {
     await result.resource.waitForPendingRequests();
 
     expect(pageRequests).toEqual(["https://assets.example.test/vt/pages/0/1/0.rgba"]);
+    expect(result.resource.stats().requests).toMatchObject({
+      lastError: null,
+      pagesFailed: 0,
+      pagesLoaded: 1,
+      sourceRequests: 1,
+    });
+  });
+
+  it("loads generated manifest pages without fetching page URIs and uploads them through the VT path", async () => {
+    const { gl, texSubImages } = fakeVirtualTextureGl();
+    const fetchAsset = vi.fn((input: RequestInfo | URL) => {
+      const uri = requestInputUri(input);
+      if (uri === "https://assets.example.test/vt/generated.vt.json") {
+        return Promise.resolve(jsonResponse({
+          borderTexels: 1,
+          id: "terrain:generated-debug",
+          pageSize: 64,
+          pages: {
+            generator: "debug-rgba",
+            kind: "generated",
+          },
+          physicalSlots: 2,
+          virtualSize: [128, 64],
+        }));
+      }
+
+      return Promise.resolve(new Response("unexpected page fetch", { status: 500 }));
+    });
+    vi.stubGlobal("fetch", fetchAsset);
+    const cache = new VirtualTextureCache(gl);
+    const descriptor = {
+      id: "terrain:generated-debug",
+      manifestUri: "https://assets.example.test/vt/generated.vt.json",
+    };
+
+    cache.loadVirtualTexture(descriptor);
+    await cache.waitForPendingLoads();
+    const result = cache.loadVirtualTexture(descriptor);
+    expect(result.kind).toBe("ready");
+    if (result.kind !== "ready") throw new Error("Expected ready cache entry");
+
+    const requested = result.resource.requestPages({
+      mip: 0,
+      uMax: 0.99,
+      uMin: 0.51,
+      vMax: 0.99,
+      vMin: 0.01,
+    }, 1);
+    await result.resource.waitForPendingRequests();
+    const upload = result.resource.uploadFrame({
+      frame: 2,
+      pageTableUploads: 10,
+      physicalAtlasUploads: 10,
+    });
+
+    expect(fetchAsset).toHaveBeenCalledTimes(1);
+    expect(requested).toMatchObject({
+      pages: [{ mip: 0, x: 1, y: 0 }],
+      scheduled: 1,
+    });
+    expect(upload).toMatchObject({
+      bytesUploaded: 66 * 66 * 4 + 4,
+      pageTableUploads: 1,
+      physicalAtlasUploads: 1,
+    });
+    expect(texSubImages.map((call) => [call.width, call.height, call.byteLength])).toEqual([
+      [66, 66, 66 * 66 * 4],
+      [1, 1, 4],
+    ]);
     expect(result.resource.stats().requests).toMatchObject({
       lastError: null,
       pagesFailed: 0,

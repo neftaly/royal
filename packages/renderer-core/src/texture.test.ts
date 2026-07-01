@@ -5,9 +5,11 @@ import {
   solidTexture,
   standardMaterial,
   textureAsset,
+  virtualTexture,
   virtualTextureAsset,
   type TextureAssetRef,
   type TextureRef,
+  type VirtualTextureAssetOptions,
   type VirtualTextureAssetRef
 } from './index';
 
@@ -195,5 +197,64 @@ describe('texture descriptors', () => {
     });
     expectTypeOf(asset).toEqualTypeOf<VirtualTextureAssetRef>();
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
+  });
+
+  it('defaults virtual texture asset ids from manifest identity', () => {
+    expect(virtualTextureAsset({
+      manifestId: 'terrain-albedo-manifest',
+      manifestUri: '/textures/terrain-albedo.vt.json'
+    })).toEqual({
+      id: 'terrain-albedo-manifest',
+      kind: 'virtual-asset',
+      manifestId: 'terrain-albedo-manifest',
+      manifestUri: '/textures/terrain-albedo.vt.json'
+    });
+    expect(virtualTextureAsset({
+      manifestUri: '/textures/terrain-normal.vt.json'
+    })).toEqual({
+      id: '/textures/terrain-normal.vt.json',
+      kind: 'virtual-asset',
+      manifestUri: '/textures/terrain-normal.vt.json'
+    });
+
+    expectTypeOf(virtualTextureAsset({
+      manifestUri: '/textures/terrain-normal.vt.json'
+    })).toEqualTypeOf<VirtualTextureAssetRef>();
+    expectTypeOf<{
+      readonly manifestUri: string;
+    }>().toMatchTypeOf<VirtualTextureAssetOptions>();
+  });
+
+  it('normalizes virtual texture src options into manifest references', () => {
+    expect(virtualTexture('/textures/terrain-albedo.vt.json')).toEqual({
+      id: '/textures/terrain-albedo.vt.json',
+      kind: 'virtual-asset',
+      manifestUri: '/textures/terrain-albedo.vt.json'
+    });
+    expect(virtualTextureAsset({
+      src: '/textures/terrain-albedo.vt.json'
+    })).toEqual({
+      id: '/textures/terrain-albedo.vt.json',
+      kind: 'virtual-asset',
+      manifestUri: '/textures/terrain-albedo.vt.json'
+    });
+    expect(virtualTextureAsset({
+      id: 'terrain-albedo',
+      manifestId: 'terrain-albedo-manifest',
+      src: '/textures/terrain-albedo.vt.json'
+    })).toEqual({
+      id: 'terrain-albedo',
+      kind: 'virtual-asset',
+      manifestId: 'terrain-albedo-manifest',
+      manifestUri: '/textures/terrain-albedo.vt.json'
+    });
+
+    expectTypeOf(virtualTextureAsset({
+      src: '/textures/terrain-normal.vt.json'
+    })).toEqualTypeOf<VirtualTextureAssetRef>();
+    expectTypeOf(virtualTexture('/textures/terrain-normal.vt.json')).toEqualTypeOf<VirtualTextureAssetRef>();
+    expectTypeOf<{
+      readonly src: string;
+    }>().toMatchTypeOf<VirtualTextureAssetOptions>();
   });
 });

@@ -39,8 +39,17 @@ const meshProgram = (): MeshProgram => ({
     lightDirection: uniform("lightDirection"),
     model: uniform("model"),
     unlit: uniform("unlit"),
+    useVirtualTexture: uniform("useVirtualTexture"),
     useBaseColorTexture: uniform("useBaseColorTexture"),
     viewProjection: uniform("viewProjection"),
+    virtualAtlas: uniform("virtualAtlas"),
+    virtualBorderTexels: uniform("virtualBorderTexels"),
+    virtualMip: uniform("virtualMip"),
+    virtualPaddedPageSize: uniform("virtualPaddedPageSize"),
+    virtualPageSize: uniform("virtualPageSize"),
+    virtualPageTable: uniform("virtualPageTable"),
+    virtualPageTableSize: uniform("virtualPageTableSize"),
+    virtualPhysicalAtlasSize: uniform("virtualPhysicalAtlasSize"),
   },
 });
 

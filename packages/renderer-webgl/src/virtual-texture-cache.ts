@@ -1,5 +1,6 @@
 import type { VirtualTextureAssetRef } from "@royal/renderer-core";
 import type { RendererWebGlContext } from "./gl";
+import { createGeneratedVirtualTexturePageSource } from "./virtual-texture-generated-page-source";
 import {
   parseVirtualTextureManifest,
   resolveVirtualTextureManifestPageUri,
@@ -7,6 +8,7 @@ import {
 } from "./virtual-texture-manifest";
 import {
   VirtualTextureResource,
+  type VirtualTexturePageSource,
   type VirtualTextureResourceStats,
 } from "./virtual-texture-resource";
 
@@ -183,18 +185,7 @@ export class VirtualTextureCache {
       manifestUri,
     );
     return new VirtualTextureResource(this.#gl, manifest, {
-      pageSource: async (request) => {
-        const pageUri = resolveVirtualTextureManifestPageUri(manifest, request.page);
-        if (pageUri === null) {
-          throw new Error(`Virtual texture manifest ${manifestUri} has no page source for ${request.pageId}`);
-        }
-
-        const pageResponse = await fetch(pageUri);
-        if (!pageResponse.ok) {
-          throw new Error(`Failed to load virtual texture page ${request.pageId} ${pageUri}: ${pageResponse.status}`);
-        }
-        return new Uint8Array(await pageResponse.arrayBuffer());
-      },
+      pageSource: createManifestPageSource(manifest, manifestUri),
     });
   }
 }
@@ -239,10 +230,37 @@ const virtualTextureCacheLoadResult = (entry: VirtualTextureCacheEntry): Virtual
 const withManifestPageBaseUri = (
   manifest: VirtualTextureManifest,
   manifestUri: string,
-): VirtualTextureManifest => ({
-  ...manifest,
-  pageSource: {
-    ...manifest.pageSource,
-    baseUri: new URL(manifest.pageSource.baseUri ?? "", manifestUri).href,
-  },
-});
+): VirtualTextureManifest => {
+  if (manifest.pageSource.kind !== "uri") return manifest;
+  return {
+    ...manifest,
+    pageSource: {
+      ...manifest.pageSource,
+      baseUri: new URL(manifest.pageSource.baseUri ?? "", manifestUri).href,
+    },
+  };
+};
+
+const createManifestPageSource = (
+  manifest: VirtualTextureManifest,
+  manifestUri: string,
+): VirtualTexturePageSource => {
+  if (manifest.pageSource.kind === "generated") {
+    return createGeneratedVirtualTexturePageSource(manifest.pageSource);
+  }
+
+  return {
+    async loadPage(request) {
+      const pageUri = resolveVirtualTextureManifestPageUri(manifest, request.page);
+      if (pageUri === null) {
+        throw new Error(`Virtual texture manifest ${manifestUri} has no page source for ${request.pageId}`);
+      }
+
+      const pageResponse = await fetch(pageUri);
+      if (!pageResponse.ok) {
+        throw new Error(`Failed to load virtual texture page ${request.pageId} ${pageUri}: ${pageResponse.status}`);
+      }
+      return new Uint8Array(await pageResponse.arrayBuffer());
+    },
+  };
+};

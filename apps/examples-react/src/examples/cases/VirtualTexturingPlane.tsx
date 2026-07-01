@@ -1,3 +1,8 @@
+/** @jsxImportSource @royal/react */
+import {
+  planeGeometry,
+  type RenderRoot,
+} from '@royal/renderer-core';
 import { Canvas } from '@royal/react';
 import {
   useCallback,
@@ -8,11 +13,17 @@ import {
   type ReactNode,
   type WheelEvent,
 } from 'react';
-import { virtualTexturingScene, type SurfaceView } from './VirtualTexturingPlane.scene';
-import { createSurfaceMaterial } from './VirtualTexturingPlane.texture';
+import {
+  createSurfaceMaterial,
+  surfaceVirtualTextureProbe,
+} from './VirtualTexturingPlane.texture';
 
-// Lab probe only. This previews a public VT descriptor with a generated texture while
-// renderer lowering is pending; it is intentionally not exported in the product catalog.
+type SurfaceView = {
+  readonly offset: readonly [number, number];
+  readonly rotation: readonly [number, number];
+  readonly zoom: number;
+};
+
 type DragMode = 'pan' | 'rotate';
 
 type DragState = {
@@ -39,6 +50,7 @@ const maxYaw = 1.1;
 const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
+const surfaceGeometry = planeGeometry({ size: [5.2, 3.4] });
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -161,14 +173,43 @@ export const VirtualTexturingPlane = (): ReactNode => {
       rootOptions={rootOptions}
       data-example-maturity="lab-probe"
       data-product-demo="false"
-      data-virtual-texture-preview="descriptor"
-      data-virtual-texture-probe-label="renderer-lowering-pending"
+      data-virtual-texture-active-grid={surfaceVirtualTextureProbe.activeGrid}
+      data-virtual-texture-active-mip={surfaceVirtualTextureProbe.activeMip}
+      data-virtual-texture-active-pages={surfaceVirtualTextureProbe.activePages}
+      data-virtual-texture-format={surfaceVirtualTextureProbe.format}
+      data-virtual-texture-generator={surfaceVirtualTextureProbe.generator}
+      data-virtual-texture-manifest={surfaceVirtualTextureProbe.manifestUri}
+      data-virtual-texture-page-source-kind={surfaceVirtualTextureProbe.pageSourceKind}
+      data-virtual-texture-page-size={surfaceVirtualTextureProbe.pageSize}
+      data-virtual-texture-physical-slots={surfaceVirtualTextureProbe.physicalSlots}
+      data-virtual-texture-probe={surfaceVirtualTextureProbe.probe}
+      data-virtual-texture-virtual-size={surfaceVirtualTextureProbe.virtualSize}
       style={{
         cursor: dragging ? 'grabbing' : 'grab',
         touchAction: 'none',
       }}
     >
-      {virtualTexturingScene(surfaceMaterial, view)}
+      {(
+        <scene>
+          <pass clearColor={[0.035, 0.045, 0.052, 1]}>
+            <perspectiveCamera
+              far={100}
+              fovY={Math.PI / 5}
+              near={0.1}
+              position={[view.offset[0], view.offset[1], view.zoom]}
+              rotation={[0, 0, 0]}
+            />
+            <mesh
+              geometry={surfaceGeometry}
+              material={surfaceMaterial}
+              transform={{
+                position: [0, 0, 0],
+                rotation: [view.rotation[0], view.rotation[1], 0],
+              }}
+            />
+          </pass>
+        </scene>
+      ) as RenderRoot}
     </Canvas>
-  );
+  ) as ReactNode;
 };

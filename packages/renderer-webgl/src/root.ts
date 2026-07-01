@@ -14,6 +14,7 @@ import {
   rotation,
   translation,
 } from "./matrix";
+import type { MaterialVirtualTextureRuntimeStats } from "./material-texture-binding";
 import {
   createGltfProgram,
   createMeshProgram,
@@ -27,6 +28,14 @@ import {
 import { renderWebGlPass } from "./render-pipeline";
 import { TextCache } from "./text-cache";
 import { TextureCache } from "./texture-cache";
+import { VirtualTextureCache } from "./virtual-texture-cache";
+
+type PrivateVirtualTextureStatsSnapshot = {
+  readonly cache: ReturnType<VirtualTextureCache["stats"]>;
+  readonly frame: number;
+  readonly lastMaterial: MaterialVirtualTextureRuntimeStats | null;
+  readonly version: 1;
+};
 
 /** WebGL context options for the renderer root. */
 export interface WebGlRootOptions {
@@ -59,6 +68,14 @@ const currentDevicePixelRatio = (): number => {
     : 1;
 };
 
+const privateVirtualTextureStatsSymbol = Symbol.for(
+  "royal.renderer-webgl.private.virtualTextureStats.v1",
+);
+
+const privateVirtualTextureStatsEnabled = (): boolean =>
+  (globalThis as { readonly __ROYAL_ENABLE_PRIVATE_VT_STATS__?: unknown })
+    .__ROYAL_ENABLE_PRIVATE_VT_STATS__ === true;
+
 const viewProjection = (
   camera: Camera,
   viewport: { readonly height: number; readonly width: number },
@@ -86,8 +103,12 @@ export class WebGlRoot {
   readonly #textCache: TextCache;
   readonly #textProgram: TextProgram;
   readonly #textureCache: TextureCache;
+  readonly #virtualTextureCache: VirtualTextureCache;
   readonly #wireframeProgram: WireframeProgram;
+  #frame = 0;
+  #latestVirtualTextureRuntimeStats: MaterialVirtualTextureRuntimeStats | null = null;
   #mounted = true;
+  #privateVirtualTextureStatsInstalled = false;
   #renderScheduled = false;
   #scene: RenderRoot | undefined;
 
@@ -107,11 +128,13 @@ export class WebGlRoot {
     this.#gltfCache = new GltfCache(gl, () => this.#renderWhenReady());
     this.#textCache = new TextCache(gl);
     this.#textureCache = new TextureCache(gl);
+    this.#virtualTextureCache = new VirtualTextureCache(gl);
     this.#gltfProgram = createGltfProgram(gl);
     this.#meshProgram = createMeshProgram(gl);
     this.#textProgram = createTextProgram(gl);
     this.#wireframeProgram = createWireframeProgram(gl);
     this.#disposeResizeScheduling = this.#scheduleResizeInvalidation();
+    this.#installPrivateVirtualTextureStatsReader();
   }
 
   render(scene: RenderRoot): void {
@@ -124,6 +147,7 @@ export class WebGlRoot {
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
+    this.#frame += 1;
     this.#textCache.beginFrame();
     let completed = false;
     try {
@@ -139,11 +163,14 @@ export class WebGlRoot {
 
   dispose(): void {
     this.#mounted = false;
+    this.#latestVirtualTextureRuntimeStats = null;
+    this.#removePrivateVirtualTextureStatsReader();
     this.#disposeResizeScheduling();
     this.#gltfCache.dispose();
     this.#geometryCache.dispose();
     this.#textCache.dispose();
     this.#textureCache.dispose();
+    this.#virtualTextureCache.dispose();
     this.#gl.deleteProgram(this.#gltfProgram.program);
     this.#gl.deleteProgram(this.#meshProgram.program);
     this.#gl.deleteProgram(this.#textProgram.program);
@@ -156,17 +183,53 @@ export class WebGlRoot {
   ): void {
     renderWebGlPass(pass, viewProjection(pass.camera, viewport), {
       drawnGltfAssets: this.#drawnGltfAssets,
+      frame: this.#frame,
       geometryCache: this.#geometryCache,
       gl: this.#gl,
       gltfCache: this.#gltfCache,
       gltfProgram: this.#gltfProgram,
       meshProgram: this.#meshProgram,
       onTextureSettled: () => this.#renderWhenReady(),
+      onVirtualTextureRuntimeStats: (stats) => this.#recordVirtualTextureRuntimeStats(stats),
       textCache: this.#textCache,
       textProgram: this.#textProgram,
       textureCache: this.#textureCache,
+      viewport,
+      virtualTextureCache: this.#virtualTextureCache,
       wireframeProgram: this.#wireframeProgram,
     });
+  }
+
+  #installPrivateVirtualTextureStatsReader(): void {
+    if (!privateVirtualTextureStatsEnabled()) return;
+
+    Object.defineProperty(this.#canvas, privateVirtualTextureStatsSymbol, {
+      configurable: true,
+      enumerable: false,
+      value: (): PrivateVirtualTextureStatsSnapshot => this.#readPrivateVirtualTextureStats(),
+    });
+    this.#privateVirtualTextureStatsInstalled = true;
+  }
+
+  #removePrivateVirtualTextureStatsReader(): void {
+    if (!this.#privateVirtualTextureStatsInstalled) return;
+    Reflect.deleteProperty(this.#canvas, privateVirtualTextureStatsSymbol);
+    this.#privateVirtualTextureStatsInstalled = false;
+  }
+
+  #recordVirtualTextureRuntimeStats(stats: MaterialVirtualTextureRuntimeStats): void {
+    this.#latestVirtualTextureRuntimeStats = copyMaterialVirtualTextureRuntimeStats(stats);
+  }
+
+  #readPrivateVirtualTextureStats(): PrivateVirtualTextureStatsSnapshot {
+    return {
+      cache: this.#virtualTextureCache.stats(),
+      frame: this.#frame,
+      lastMaterial: this.#latestVirtualTextureRuntimeStats === null
+        ? null
+        : copyMaterialVirtualTextureRuntimeStats(this.#latestVirtualTextureRuntimeStats),
+      version: 1,
+    };
   }
 
   #renderWhenReady(): void {
@@ -235,6 +298,37 @@ export class WebGlRoot {
     };
   }
 }
+
+const copyMaterialVirtualTextureRuntimeStats = (
+  stats: MaterialVirtualTextureRuntimeStats,
+): MaterialVirtualTextureRuntimeStats => ({
+  frame: stats.frame,
+  pageTableSize: [stats.pageTableSize[0] ?? 0, stats.pageTableSize[1] ?? 0],
+  requestPages: {
+    pages: stats.requestPages.pages.map((page) => ({
+      mip: page.mip,
+      x: page.x,
+      y: page.y,
+    })),
+    pending: stats.requestPages.pending,
+    ready: stats.requestPages.ready,
+    resident: stats.requestPages.resident,
+    scheduled: stats.requestPages.scheduled,
+  },
+  resource: {
+    cache: {
+      ...stats.resource.cache,
+      byMip: { ...stats.resource.cache.byMip },
+    },
+    mappings: { ...stats.resource.mappings },
+    pendingUploadCount: stats.resource.pendingUploadCount,
+    requests: { ...stats.resource.requests },
+    uploads: { ...stats.resource.uploads },
+  },
+  selectedMip: stats.selectedMip,
+  ...(stats.source === undefined ? {} : { source: { ...stats.source } }),
+  uploadFrame: { ...stats.uploadFrame },
+});
 
 /** Creates an imperative WebGL renderer root. */
 export const createWebGlRoot = (
