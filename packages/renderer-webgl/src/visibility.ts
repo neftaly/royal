@@ -25,8 +25,8 @@ export enum VisibilityBoundsSource {
 }
 
 export interface VisibilityPacketScratch {
-  readonly assetIdHi: Uint32Array;
-  readonly assetIdLo: Uint32Array;
+  readonly assetKeyHi: Uint32Array;
+  readonly assetKeyLo: Uint32Array;
   readonly assetVersions: Uint32Array;
   readonly boundsSources: Uint16Array;
   readonly capacity: number;
@@ -105,7 +105,7 @@ interface Sphere {
 }
 
 interface PacketHeader {
-  readonly assetId: PacketId;
+  readonly assetKey: PacketId;
   readonly assetVersion: number;
   readonly id: PacketId;
   readonly materialId: PacketId;
@@ -283,8 +283,8 @@ export const cullVisibilityPackets = (
 export const createVisibilityPacketScratch = (capacity: number): VisibilityPacketScratch => {
   const safeCapacity = Math.max(0, Math.ceil(capacity));
   return {
-    assetIdHi: new Uint32Array(safeCapacity),
-    assetIdLo: new Uint32Array(safeCapacity),
+    assetKeyHi: new Uint32Array(safeCapacity),
+    assetKeyLo: new Uint32Array(safeCapacity),
     assetVersions: new Uint32Array(safeCapacity),
     boundsSources: new Uint16Array(safeCapacity),
     capacity: safeCapacity,
@@ -475,8 +475,8 @@ const writePacketHeader = (
   packets.materialIdHi[packetIndex] = header.materialId[0];
   packets.materialIdLo[packetIndex] = header.materialId[1];
   packets.materialVersions[packetIndex] = header.materialVersion;
-  packets.assetIdHi[packetIndex] = header.assetId[0];
-  packets.assetIdLo[packetIndex] = header.assetId[1];
+  packets.assetKeyHi[packetIndex] = header.assetKey[0];
+  packets.assetKeyLo[packetIndex] = header.assetKey[1];
   packets.assetVersions[packetIndex] = header.assetVersion;
   packets.packetVersions[packetIndex] = packetVersionWithBounds(
     header.packetVersion,
@@ -488,7 +488,7 @@ const writePacketHeader = (
 const meshPacketHeader = (mesh: MeshNode): PacketHeader => {
   const objectId = objectPacketId(mesh);
   const materialId = materialPacketId(mesh.material);
-  const assetId = textureAssetPacketId(mesh.material.baseColor);
+  const assetKey = textureAssetPacketId(mesh.material.baseColor);
   const objectVersion = meshObjectVersion(mesh);
   const materialVersion = materialPacketVersion(mesh.material);
   const assetVersion = textureAssetPacketVersion(mesh.material.baseColor);
@@ -498,14 +498,14 @@ const meshPacketHeader = (mesh: MeshNode): PacketHeader => {
     objectVersion,
     materialId,
     materialVersion,
-    assetId,
+    assetKey,
     assetVersion,
   );
 };
 
 const gltfPacketHeader = (node: GltfNode): PacketHeader => {
   const objectId = objectPacketId(node);
-  const assetId = gltfAssetPacketId(node.asset);
+  const assetKey = gltfAssetPacketId(node.asset);
   const objectVersion = transformVersion(node.transform);
   const assetVersion = gltfAssetPacketVersion(node.asset);
   return packetHeader(
@@ -514,7 +514,7 @@ const gltfPacketHeader = (node: GltfNode): PacketHeader => {
     objectVersion,
     NO_PACKET_ID,
     NO_VERSION,
-    assetId,
+    assetKey,
     assetVersion,
   );
 };
@@ -541,12 +541,12 @@ const packetHeader = (
   objectVersion: number,
   materialId: PacketId,
   materialVersion: number,
-  assetId: PacketId,
+  assetKey: PacketId,
   assetVersion: number,
 ): PacketHeader => ({
-  assetId,
+  assetKey,
   assetVersion,
-  id: hashPacketId(kind, objectId, materialId, assetId),
+  id: hashPacketId(kind, objectId, materialId, assetKey),
   materialId,
   materialVersion,
   objectId,
@@ -603,12 +603,12 @@ const materialPacketVersion = (material: MeshNode["material"]): number => {
 
 const texturePacketId = (texture: MeshNode["material"]["baseColor"]): PacketId => {
   if (texture.kind === "asset") {
-    return hashLabelId("texture-asset", `${texture.id}:${texture.uri}`);
+    return hashLabelId("texture-asset", texture.uri);
   }
   if (texture.kind === "virtual-asset") {
     return hashLabelId(
       "virtual-texture-asset",
-      `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}:${textureFallbackColorKey(texture)}`,
+      `${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}:${textureFallbackColorKey(texture)}`,
     );
   }
   if (texture.id !== undefined) {
@@ -630,7 +630,6 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
     return hashVersion(
       "virtual-texture-asset",
       texture.revision ?? texture.manifestUri,
-      texture.manifestId ?? "",
       texture.colorSpace ?? "",
       samplerVersion(texture.sampler),
       virtualTexturePreviewVersion(texture.preview),
@@ -651,11 +650,11 @@ const texturePacketVersion = (texture: MeshNode["material"]["baseColor"]): numbe
 
 const textureAssetPacketId = (texture: MeshNode["material"]["baseColor"]): PacketId =>
   texture.kind === "asset"
-    ? hashLabelId("texture-asset", `${texture.id}:${texture.uri}`)
+    ? hashLabelId("texture-asset", texture.uri)
     : texture.kind === "virtual-asset"
       ? hashLabelId(
           "virtual-texture-asset",
-          `${texture.id}:${texture.manifestId ?? ""}:${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}`,
+          `${texture.manifestUri}:${virtualTexturePreviewKey(texture.preview)}`,
         )
       : NO_PACKET_ID;
 
@@ -666,7 +665,6 @@ const textureAssetPacketVersion = (texture: MeshNode["material"]["baseColor"]): 
       ? hashVersion(
           "virtual-texture-asset",
           texture.revision ?? texture.manifestUri,
-          texture.manifestId ?? "",
           samplerVersion(texture.sampler),
           virtualTexturePreviewVersion(texture.preview),
           textureFallbackColorKey(texture),
@@ -678,7 +676,7 @@ const textureFallbackColorKey = (
 ): string => (texture.fallback?.color ?? texture.preview?.fallback?.color ?? defaultTextureFallbackColor).join(",");
 
 const virtualTexturePreviewKey = (preview: TextureAssetRef | undefined): string =>
-  preview === undefined ? "" : `${preview.id}:${preview.uri}`;
+  preview === undefined ? "" : preview.uri;
 
 const virtualTexturePreviewVersion = (preview: TextureAssetRef | undefined): string =>
   preview === undefined
@@ -708,7 +706,7 @@ const samplerVersion = (sampler: TextureSampler | undefined): string => {
 };
 
 const gltfAssetPacketId = (asset: GltfNode["asset"]): PacketId =>
-  hashLabelId("gltf-asset", `${asset.id}:${asset.uri}`);
+  hashLabelId("gltf-asset", asset.uri);
 
 const gltfAssetPacketVersion = (asset: GltfNode["asset"]): number =>
   hashVersion(
@@ -918,13 +916,13 @@ const hashPacketId = (
   kind: VisibilityPacketKind,
   objectId: PacketId,
   materialId: PacketId,
-  assetId: PacketId,
+  assetKey: PacketId,
 ): PacketId => {
   const hi = hashString32(`packet:${kind}:${objectId[0]}:${objectId[1]}`);
   return [
     hi,
     hashString32(
-      `${materialId[0]}:${materialId[1]}:${assetId[0]}:${assetId[1]}`,
+      `${materialId[0]}:${materialId[1]}:${assetKey[0]}:${assetKey[1]}`,
       hi,
     ),
   ];

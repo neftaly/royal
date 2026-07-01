@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
+import type { SvgGatewayInput } from './svg-gateway';
 import {
   createSvgGatewayGeometry,
   createSvgRasterTextureSource,
@@ -75,6 +76,19 @@ describe('SVG gateway geometry and picking', () => {
     expect(geometry.hitRegion.contains([60, 136])).toBe(false);
   });
 
+  it('reports stable SVG extraction diagnostics exactly', () => {
+    const svg = `<svg viewBox="0 0 20 20">
+      <path id="shifted" transform="translate(4 4)" d="M0 0 L10 0 L0 10 Z" />
+      <polyline id="guide" points="0,0 10,10 20,0" fill="#111" />
+    </svg>`;
+    const geometry = createSvgGatewayGeometry({ kind: 'svg', svg });
+
+    expect(geometry.diagnostics).toEqual([
+      'path#shifted has transform; SVG gateway uses untransformed geometry.',
+      'polyline#guide skipped: open strokes are not SVG gateway fill geometry.'
+    ]);
+  });
+
   it('supports holes for picking and triangulation', () => {
     const geometry = createSvgGatewayGeometry({
       fillRule: 'nonzero',
@@ -104,6 +118,25 @@ describe('SVG gateway geometry and picking', () => {
     expect(rounded.points.length).toBeGreaterThan(4);
     expect(mesh.positions.length).toBeGreaterThan(0);
     expect(texture.cacheKey).toBe('svg-raster-texture:star-texture:256x256');
+  });
+
+  it('rejects open contour input instead of ignoring the closed flag', () => {
+    const input = {
+      kind: 'contours',
+      contours: [
+        { closed: false, id: 'open', points: [[0, 0], [10, 0], [0, 10]] }
+      ]
+    } as unknown as SvgGatewayInput;
+
+    expect(() => createSvgGatewayGeometry(input)).toThrow('SVG gateway contours must be closed fill geometry.');
+  });
+
+  it('rejects non-finite contour coordinates', () => {
+    expect(() => createSvgGatewayGeometry({
+      kind: 'polygon',
+      id: 'bad-point',
+      points: [[0, 0], [Number.POSITIVE_INFINITY, 0], [0, 10]]
+    })).toThrow('contour bad-point point 1 must contain finite x and y coordinates.');
   });
 
   it('keeps repeated point-in-shape checks in the microsecond-per-pointer range', () => {

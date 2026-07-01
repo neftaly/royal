@@ -198,10 +198,9 @@ describe("VirtualTextureResource", () => {
     });
     const resource = new VirtualTextureResource(gl, manifest);
     const bindCountBeforeUpload = boundTextures.length;
-    const uploadPageTable = resource.uploadPageTable;
     resource.uploadPageTable = (() => {
       throw new Error("uploadPageTable should not run for no-op upload frames");
-    }) as typeof uploadPageTable;
+    }) as VirtualTextureResource["uploadPageTable"];
 
     const upload = resource.uploadFrame({ frame: 4, pageTableUploads: 8, physicalAtlasUploads: 1 });
 

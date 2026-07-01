@@ -33,10 +33,6 @@ import {
 
 const material = unlitMaterial({ color: [1, 0, 0, 1] });
 
-const modelAsset = {
-  id: "model",
-  uri: "https://example.test/model.gltf",
-};
 const modelSrc = "https://example.test/model.gltf";
 
 const camera = orthographicCamera({
@@ -142,7 +138,7 @@ describe("visibility packets", () => {
       camera,
       children: [
         gltf({
-          asset: modelAsset,
+          src: modelSrc,
           transform: {
             position: [1000, 0, 0],
             rotation: [0, 0, 0],
@@ -158,7 +154,7 @@ describe("visibility packets", () => {
 
   it("culls glTF packets when private asset bounds are available", () => {
     const model = gltf({
-      asset: modelAsset,
+      src: modelSrc,
       transform: {
         position: [1000, 0, 0],
         rotation: [0, 0, 0],
@@ -225,12 +221,12 @@ describe("visibility packets", () => {
     const baseTexture = solidTexture({
       color: [0.1, 0.2, 0.3, 1],
       id: "matte-red",
-      revision: 1,
+      version: 1,
     });
     const updatedTexture = solidTexture({
       color: [0.1, 0.2, 0.3, 1],
       id: "matte-red",
-      revision: 2,
+      version: 2,
     });
     const sharedMaterial = unlitMaterial({ texture: baseTexture });
     const box = mesh({
@@ -255,11 +251,8 @@ describe("visibility packets", () => {
       ],
     }));
     const model = gltf({
-      asset: {
-        id: "ship",
-        revision: "r1",
-        uri: "https://example.test/ship.gltf",
-      },
+      src: "https://example.test/ship.gltf",
+      version: "r1",
     });
     const modelPacket = buildVisibilityPackets(pass({
       camera,
@@ -272,10 +265,10 @@ describe("visibility packets", () => {
     expect(sameObjectAgain.materialIdHi[0]).toBe(materialRevision.materialIdHi[0]);
     expect(sameObjectAgain.materialIdLo[0]).toBe(materialRevision.materialIdLo[0]);
     expect(sameObjectAgain.materialVersions[0]).not.toBe(materialRevision.materialVersions[0]);
-    expect(sameObjectAgain.assetIdHi[0]).toBe(0);
-    expect(sameObjectAgain.assetIdLo[0]).toBe(0);
-    expect(modelPacket.assetIdHi[0]).not.toBe(0);
-    expect(modelPacket.assetIdLo[0]).not.toBe(0);
+    expect(sameObjectAgain.assetKeyHi[0]).toBe(0);
+    expect(sameObjectAgain.assetKeyLo[0]).toBe(0);
+    expect(modelPacket.assetKeyHi[0]).not.toBe(0);
+    expect(modelPacket.assetKeyLo[0]).not.toBe(0);
     expect(modelPacket.assetVersions[0]).not.toBe(0);
   });
 
@@ -284,38 +277,29 @@ describe("visibility packets", () => {
     const changedFallback = solidTexture({ color: [0.4, 0.3, 0.2, 1] });
     const preview = textureAsset({
       fallback: solidTexture({ color: [0.1, 0.2, 0.3, 1] }),
-      id: "terrain-preview",
       uri: "https://example.test/terrain-preview.png",
     });
     const virtualMaterial = unlitMaterial({
       texture: virtualTextureAsset({
         fallback,
-        id: "terrain-vt",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain.vt.json",
       }),
     });
     const fallbackRevision = unlitMaterial({
       texture: virtualTextureAsset({
         fallback: changedFallback,
-        id: "terrain-vt",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain.vt.json",
       }),
     });
     const manifestRevision = unlitMaterial({
       texture: virtualTextureAsset({
         fallback,
-        id: "terrain-vt",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain-v2.vt.json",
       }),
     });
     const previewMaterial = unlitMaterial({
       texture: virtualTextureAsset({
         fallback,
-        id: "terrain-vt",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain.vt.json",
         preview,
       }),
@@ -323,12 +307,11 @@ describe("visibility packets", () => {
     const previewRevision = unlitMaterial({
       texture: virtualTextureAsset({
         fallback,
-        id: "terrain-vt",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain.vt.json",
         preview: textureAsset({
-          ...preview,
-          revision: "preview-v2",
+          fallback,
+          uri: preview.uri,
+          version: "preview-v2",
         }),
       }),
     });
@@ -354,17 +337,17 @@ describe("visibility packets", () => {
       children: [mesh({ geometry: boxGeometry({ size: [1, 1, 1] }), material: previewRevision })],
     }));
 
-    expect(basePacket.assetIdHi[0]).not.toBe(0);
-    expect(basePacket.assetIdLo[0]).not.toBe(0);
+    expect(basePacket.assetKeyHi[0]).not.toBe(0);
+    expect(basePacket.assetKeyLo[0]).not.toBe(0);
     expect(basePacket.assetVersions[0]).not.toBe(0);
-    expect(fallbackPacket.assetIdHi[0]).toBe(basePacket.assetIdHi[0]);
-    expect(fallbackPacket.assetIdLo[0]).toBe(basePacket.assetIdLo[0]);
+    expect(fallbackPacket.assetKeyHi[0]).toBe(basePacket.assetKeyHi[0]);
+    expect(fallbackPacket.assetKeyLo[0]).toBe(basePacket.assetKeyLo[0]);
     expect(fallbackPacket.assetVersions[0]).not.toBe(basePacket.assetVersions[0]);
     expect(fallbackPacket.materialVersions[0]).not.toBe(basePacket.materialVersions[0]);
-    expect(manifestPacket.assetIdLo[0]).not.toBe(basePacket.assetIdLo[0]);
-    expect(previewPacket.assetIdLo[0]).not.toBe(basePacket.assetIdLo[0]);
-    expect(previewRevisionPacket.assetIdHi[0]).toBe(previewPacket.assetIdHi[0]);
-    expect(previewRevisionPacket.assetIdLo[0]).toBe(previewPacket.assetIdLo[0]);
+    expect(manifestPacket.assetKeyLo[0]).not.toBe(basePacket.assetKeyLo[0]);
+    expect(previewPacket.assetKeyLo[0]).not.toBe(basePacket.assetKeyLo[0]);
+    expect(previewRevisionPacket.assetKeyHi[0]).toBe(previewPacket.assetKeyHi[0]);
+    expect(previewRevisionPacket.assetKeyLo[0]).toBe(previewPacket.assetKeyLo[0]);
     expect(previewRevisionPacket.assetVersions[0]).not.toBe(previewPacket.assetVersions[0]);
   });
 });

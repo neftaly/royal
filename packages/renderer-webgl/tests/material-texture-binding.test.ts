@@ -156,7 +156,7 @@ describe("lowerMaterialBaseColorBinding", () => {
       color: [0.2, 0.3, 0.4, 1],
       colorSpace: "linear",
       id: "paint",
-      revision: 2,
+      version: 2,
     });
     const textureCache = {
       loadTextureAssetBaseColor: vi.fn(),
@@ -176,8 +176,6 @@ describe("lowerMaterialBaseColorBinding", () => {
     const source = textureAsset({
       colorSpace: "srgb",
       fallback: solidTexture({ color: [0.1, 0.2, 0.3, 1] }),
-      id: "crate-base-color",
-      revision: "b",
       sampler: {
         magFilter: "nearest",
         minFilter: "linear-mipmap-linear",
@@ -185,6 +183,7 @@ describe("lowerMaterialBaseColorBinding", () => {
         wrapT: "clamp-to-edge",
       },
       uri: "https://example.test/crate.png",
+      version: "b",
     });
     const load = {
       kind: "ready",
@@ -228,7 +227,6 @@ describe("lowerMaterialBaseColorBinding", () => {
       source,
     });
     expect(source).toMatchObject({
-      id: "https://example.test/albedo.png",
       uri: "https://example.test/albedo.png",
     });
   });
@@ -236,7 +234,6 @@ describe("lowerMaterialBaseColorBinding", () => {
   it("lowers virtual texture assets to fallback color without using the ordinary texture cache", () => {
     const source = virtualTextureAsset({
       fallback: solidTexture({ color: [0.25, 0.5, 0.75, 1] }),
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
     const textureCache = {
@@ -255,7 +252,6 @@ describe("lowerMaterialBaseColorBinding", () => {
 
   it("uses the renderer default grey as the virtual texture fallback color when none is declared", () => {
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
     const textureCache = {
@@ -275,11 +271,9 @@ describe("lowerMaterialBaseColorBinding", () => {
   it("loads a virtual texture preview and VT resource while preserving virtual source identity", () => {
     const preview = textureAsset({
       fallback: solidTexture({ color: [0.15, 0.25, 0.35, 1] }),
-      id: "terrain-preview",
       uri: "https://example.test/terrain-preview.png",
     });
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
       preview,
     });
@@ -295,8 +289,6 @@ describe("lowerMaterialBaseColorBinding", () => {
       kind: "loading",
       stats: {
         error: null,
-        id: "terrain-vt",
-        key: "terrain-vt",
         manifestUri: "https://example.test/terrain.vt.json",
         resource: null,
         status: "loading",
@@ -332,12 +324,10 @@ describe("lowerMaterialBaseColorBinding", () => {
   it("uses a virtual texture fallback before the preview fallback while the preview is loading", () => {
     const preview = textureAsset({
       fallback: solidTexture({ color: [0.15, 0.25, 0.35, 1] }),
-      id: "terrain-preview",
       uri: "https://example.test/terrain-preview.png",
     });
     const source = virtualTextureAsset({
       fallback: solidTexture({ color: [0.7, 0.6, 0.5, 1] }),
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
       preview,
     });
@@ -428,7 +418,6 @@ describe("bindMaterialBaseColor", () => {
     const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
     const texture = {} as WebGLTexture;
     const source = textureAsset({
-      id: "crate",
       uri: "https://example.test/crate.png",
     });
 
@@ -456,7 +445,6 @@ describe("bindMaterialBaseColor", () => {
   it("binds the fallback color while an asset texture is unavailable", () => {
     const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
     const source = textureAsset({
-      id: "crate",
       uri: "https://example.test/crate.png",
     });
 
@@ -484,7 +472,6 @@ describe("bindMaterialBaseColor", () => {
     const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
     const source = virtualTextureAsset({
       fallback: solidTexture({ color: [0.6, 0.7, 0.8, 1] }),
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 
@@ -511,10 +498,8 @@ describe("bindMaterialBaseColor", () => {
     const { activeTextureUnits, boundTextures, gl, uniformCalls } = fakeGl();
     const texture = {} as WebGLTexture;
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
       preview: textureAsset({
-        id: "terrain-preview",
         uri: "https://example.test/terrain-preview.png",
       }),
     });
@@ -546,10 +531,8 @@ describe("bindMaterialBaseColor", () => {
     const physicalAtlasTexture = { id: "physical-atlas" } as unknown as WebGLTexture;
     const previewTexture = { id: "preview" } as unknown as WebGLTexture;
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
       preview: textureAsset({
-        id: "terrain-preview",
         uri: "https://example.test/terrain-preview.png",
       }),
     });
@@ -648,7 +631,6 @@ describe("bindMaterialBaseColor", () => {
       },
     });
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
     const binding = {
@@ -704,7 +686,6 @@ describe("bindMaterialBaseColor", () => {
       },
     });
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 
@@ -728,7 +709,6 @@ describe("bindMaterialBaseColor", () => {
     const { gl, uniformCalls } = fakeGl();
     const { requestPages, resource } = fakeReadyVirtualTextureResource();
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 
@@ -766,7 +746,6 @@ describe("bindMaterialBaseColor", () => {
       ],
     });
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 
@@ -809,7 +788,6 @@ describe("bindMaterialBaseColor", () => {
     const { gl } = fakeGl();
     const { requestPages, resource } = fakeReadyVirtualTextureResource();
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 
@@ -870,10 +848,8 @@ describe("bindMaterialBaseColor", () => {
       uploadResult,
     });
     const source = virtualTextureAsset({
-      id: "terrain-vt",
-      manifestId: "terrain-manifest",
       manifestUri: "https://example.test/terrain.vt.json",
-      revision: "r2",
+      version: "r2",
     });
     const onVirtualTextureRuntimeStats = vi.fn();
 
@@ -910,9 +886,7 @@ describe("bindMaterialBaseColor", () => {
       },
       selectedMip: 0,
       source: {
-        id: "terrain-vt",
         kind: "virtual-asset",
-        manifestId: "terrain-manifest",
         manifestUri: "https://example.test/terrain.vt.json",
         revision: "r2",
       },
@@ -932,7 +906,6 @@ describe("bindMaterialBaseColor", () => {
     const { gl, uniformCalls } = fakeGl();
     const { requestPages, resource } = fakeReadyVirtualTextureResource();
     const source = virtualTextureAsset({
-      id: "terrain-vt",
       manifestUri: "https://example.test/terrain.vt.json",
     });
 

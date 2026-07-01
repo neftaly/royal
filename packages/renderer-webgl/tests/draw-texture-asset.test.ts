@@ -159,7 +159,6 @@ const drawTexturedBox = (
       material: unlitMaterial({
         texture: textureAsset({
           fallback: solidTexture({ color: [0.2, 0.4, 0.6, 1] }),
-          id: "crate",
           uri: "https://example.test/crate.png",
         }),
       }),
@@ -268,8 +267,8 @@ describe("drawMesh textureAsset baseColor", () => {
         width: 0,
       })),
     });
-    vi.spyOn(URL, "createObjectURL").mockReturnValue(objectUrl);
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const createObjectUrlSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue(objectUrl);
+    const revokeObjectUrlSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const onTextureSettled = vi.fn();
     const { boundTextures, counts, gl, uniformCalls } = fakeGl();
     const textureCache = new TextureCache(gl);
@@ -279,8 +278,8 @@ describe("drawMesh textureAsset baseColor", () => {
     drawTexturedBox(gl, textureCache, onTextureSettled);
 
     expect(createImageBitmap).toHaveBeenCalledTimes(1);
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith(objectUrl);
+    expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrlSpy).toHaveBeenCalledWith(objectUrl);
     expect(counts.drawElements).toBe(2);
     expect(boundTextures).toContainEqual({ id: 1 });
     expect(uniformCalls).toContainEqual({ name: "baseColor", value: 0 });

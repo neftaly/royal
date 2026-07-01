@@ -1,4 +1,4 @@
-import { useFrame } from '@royal/react';
+import { useFrameIndex } from '@royal/react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 export type UseRapierSimulationOptions<Simulation, FrameState> = {
@@ -26,7 +26,7 @@ export const useRapierSimulation = <Simulation, FrameState>({
 }: UseRapierSimulationOptions<Simulation, FrameState>): UseRapierSimulationResult<Simulation, FrameState> => {
   const simulationRef = useRef<Simulation | undefined>(undefined);
   const [frameState, setFrameState] = useState<FrameState>(initialFrame);
-  const frame = useFrame();
+  const frame = useFrameIndex();
 
   useEffect(() => {
     let mounted = true;

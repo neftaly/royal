@@ -1,14 +1,19 @@
 import {
+  boxGeometry,
   directionalLight,
   gltf,
   imageTexture,
   mesh,
   orthographicCamera,
   pass,
+  planeGeometry,
   perspectiveCamera,
   scene,
   standardMaterial,
   text,
+  unlitMaterial,
+  wireframeMaterial,
+  type BoxGeometryOptions,
   type Camera,
   type DirectionalLightOptions,
   type Geometry,
@@ -17,20 +22,24 @@ import {
   type Material,
   type MeshOptions,
   type OrthographicCameraOptions,
+  type PlaneGeometryOptions,
   type PerspectiveCameraOptions,
   type RenderElement,
   type RenderNode,
   type RenderPass,
   type RenderPassOptions,
   type Rgba,
+  type StandardMaterialOptions,
   type TextOptions,
-  type TextureRef
+  type TextureRef,
+  type UnlitMaterialOptions,
+  type WireframeMaterialOptions
 } from '@royal/renderer-core';
 import type { ReactNode } from 'react';
 import { jsx as reactJsx, jsxs as reactJsxs } from 'react/jsx-runtime';
 
-type RendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
-type ComponentOutput = ReactNode | RendererJsxElement;
+export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
+type ComponentOutput = ReactNode | RoyalRendererJsxElement;
 type EmptyJsxChild = boolean | null | undefined;
 type RendererJsxChild = ComponentOutput | EmptyJsxChild | readonly RendererJsxChild[];
 type Component = (props: Record<string, unknown>) => ComponentOutput;
@@ -53,14 +62,18 @@ type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
   readonly texture?: MeshTextureInput;
-  readonly textureSrc?: string;
 };
 type TextProps = Omit<TextOptions, 'text'> & {
   readonly children?: RendererJsxChild;
   readonly text?: string;
 };
+type MeshChildren = {
+  readonly geometry?: Geometry<GeometryKindValue>;
+  readonly material?: Material;
+};
 
 const reactComponentMarker = Symbol.for('@royal/react.react-component');
+const rendererComponentMarker = Symbol.for('@royal/react.renderer-component');
 
 export const markReactComponent = <Component extends object>(component: Component): Component => {
   Object.defineProperty(component, reactComponentMarker, {
@@ -72,9 +85,19 @@ export const markReactComponent = <Component extends object>(component: Componen
   return component;
 };
 
-const isMarkedReactComponent = (type: ElementType): boolean =>
+export const markRendererComponent = <Component extends object>(component: Component): Component => {
+  Object.defineProperty(component, rendererComponentMarker, {
+    configurable: false,
+    enumerable: false,
+    value: true
+  });
+
+  return component;
+};
+
+const isMarkedRendererComponent = (type: ElementType): boolean =>
   typeof type === 'function' &&
-  (type as { readonly [reactComponentMarker]?: true })[reactComponentMarker] === true;
+  (type as { readonly [rendererComponentMarker]?: true })[rendererComponentMarker] === true;
 
 const isRendererJsxChildArray = (
   value: RendererJsxChild
@@ -153,9 +176,7 @@ const isGeometry = (element: ComponentOutput): element is Geometry<GeometryKindV
   typeof element === 'object' &&
   element !== null &&
   'kind' in element &&
-  !isCamera(element) &&
-  !isRenderNode(element) &&
-  !isMaterial(element);
+  (element.kind === 'box' || element.kind === 'plane');
 
 const isRenderPass = (element: ComponentOutput): element is RenderPass =>
   typeof element === 'object' &&
@@ -212,38 +233,41 @@ const toPass = (props: PassProps): RenderPass => {
   );
 };
 
-const toGltf = (options: GltfOptions): RenderNode => {
-  // Narrow the union before calling the overloaded factory.
-  if (options.asset === undefined) {
-    return gltf(options);
-  }
-
-  return gltf(options);
-};
-
 const toMesh = (props: MeshProps): RenderNode => {
+  const children = toMeshChildren(props);
+  const hasTextureMaterial = props.texture !== undefined;
+  const materialSourceCount =
+    (props.material === undefined ? 0 : 1) +
+    (children.material === undefined ? 0 : 1) +
+    (hasTextureMaterial ? 1 : 0) +
+    (props.color === undefined ? 0 : 1);
+
+  if (materialSourceCount > 1) {
+    throw new Error('mesh expects only one material source: material, material child, color, or texture');
+  }
+
   if (props.material !== undefined) {
-    return mesh(toMeshOptions(props, props.material));
+    return mesh(toMeshOptions(props, props.material, children.geometry));
   }
 
-  if (props.texture !== undefined && props.textureSrc !== undefined) {
-    throw new Error('mesh expects either texture or textureSrc, not both');
+  if (children.material !== undefined) {
+    return mesh(toMeshOptions(props, children.material, children.geometry));
   }
 
-  if (props.texture !== undefined || props.textureSrc !== undefined) {
+  if (hasTextureMaterial) {
     return mesh(toMeshOptions(props, standardMaterial({
-      texture: props.textureSrc === undefined
-        ? toMeshTexture(props.texture)
-        : imageTexture(props.textureSrc)
-    })));
+      texture: toMeshTexture(props.texture)
+    }), children.geometry));
   }
 
   if (props.color === undefined) {
     throw new Error('mesh expects material, color, or texture');
   }
 
-  return mesh(toMeshOptions(props, standardMaterial({ color: props.color })));
+  return mesh(toMeshOptions(props, standardMaterial({ color: props.color }), children.geometry));
 };
+
+const toGltfNode = (options: GltfOptions): RenderNode => gltf(options);
 
 const toMeshTexture = (texture: MeshTextureInput | undefined): TextureRef => {
   if (texture === undefined) {
@@ -253,33 +277,59 @@ const toMeshTexture = (texture: MeshTextureInput | undefined): TextureRef => {
   return typeof texture === 'string' ? imageTexture(texture) : texture;
 };
 
-const toMeshGeometry = (props: MeshProps): Geometry<GeometryKindValue> => {
+const toMeshChildren = (props: MeshProps): MeshChildren => {
   const structuralChildren = toStructuralArray(props.children);
-  const geometryChildren = structuralChildren.filter(isGeometry);
+  const children: {
+    geometry?: Geometry<GeometryKindValue>;
+    material?: Material;
+  } = {};
 
-  if (geometryChildren.length !== structuralChildren.length) {
-    const invalidChild = structuralChildren.find((child) => !isGeometry(child));
-    throw new Error(`mesh children must be geometry descriptors; received ${describeJsxChild(invalidChild)}`);
+  for (const child of structuralChildren) {
+    if (isGeometry(child)) {
+      if (children.geometry !== undefined) {
+        throw new Error('mesh expects at most one geometry child');
+      }
+
+      children.geometry = child;
+      continue;
+    }
+
+    if (isMaterial(child)) {
+      if (children.material !== undefined) {
+        throw new Error('mesh expects at most one material child');
+      }
+
+      children.material = child;
+      continue;
+    }
+
+    throw new Error(`mesh children must be geometry or material descriptors; received ${describeJsxChild(child)}`);
   }
 
-  if (geometryChildren.length > 1) {
-    throw new Error('mesh expects at most one geometry child');
-  }
+  return children;
+};
 
-  if (props.geometry !== undefined && geometryChildren.length > 0) {
+const toMeshGeometry = (
+  props: MeshProps,
+  childGeometry: Geometry<GeometryKindValue> | undefined
+): Geometry<GeometryKindValue> => {
+  if (props.geometry !== undefined && childGeometry !== undefined) {
     throw new Error('mesh expects geometry as a prop or child, not both');
   }
 
-  const childGeometry = geometryChildren[0];
   if (props.geometry !== undefined) return props.geometry;
   if (childGeometry !== undefined) return childGeometry;
 
   throw new Error('mesh expects geometry as a prop or child');
 };
 
-const toMeshOptions = (props: MeshProps, material: Material): MeshOptions => {
+const toMeshOptions = (
+  props: MeshProps,
+  material: Material,
+  childGeometry: Geometry<GeometryKindValue> | undefined
+): MeshOptions => {
   const options = {
-    geometry: toMeshGeometry(props),
+    geometry: toMeshGeometry(props, childGeometry),
     material
   } satisfies Omit<MeshOptions, 'transform'>;
 
@@ -314,14 +364,14 @@ const createElement = (
   props: JsxProps | null,
   key?: string
 ): ComponentOutput => {
-  if (isMarkedReactComponent(type)) {
-    const factory: ReactJsxFactory = props?.children === undefined ? reactJsx : reactJsxs;
-    return factory(type as Parameters<ReactJsxFactory>[0], props, key);
-  }
-
   const elementProps = props ?? {};
 
   if (typeof type === 'function') {
+    if (!isMarkedRendererComponent(type)) {
+      const factory: ReactJsxFactory = props?.children === undefined ? reactJsx : reactJsxs;
+      return factory(type as Parameters<ReactJsxFactory>[0], props, key);
+    }
+
     return type(elementProps);
   }
 
@@ -341,23 +391,33 @@ const createElement = (
     case 'mesh':
       return toMesh(elementProps as unknown as MeshProps);
     case 'gltf':
-      return toGltf(elementProps as unknown as GltfOptions);
+      return toGltfNode(elementProps as unknown as GltfOptions);
     case 'text':
       return toText(elementProps as unknown as TextProps);
+    case 'boxGeometry':
+      return boxGeometry(elementProps as unknown as BoxGeometryOptions);
+    case 'planeGeometry':
+      return planeGeometry(elementProps as unknown as PlaneGeometryOptions);
+    case 'standardMaterial':
+      return standardMaterial(elementProps as unknown as StandardMaterialOptions);
+    case 'unlitMaterial':
+      return unlitMaterial(elementProps as unknown as UnlitMaterialOptions);
+    case 'wireframeMaterial':
+      return wireframeMaterial(elementProps as unknown as WireframeMaterialOptions);
     default:
       return assertNever(type);
   }
 };
 
-export const Fragment = (_props: {
+export const Fragment = markRendererComponent((_props: {
   readonly children?: RendererJsxChild;
-}): RendererJsxChild => _props.children;
+}): RendererJsxChild => _props.children);
 
 export const jsx = createElement;
 export const jsxs = createElement;
 
 export namespace JSX {
-  export type Element = ComponentOutput;
+  export type Element = ReactNode;
 
   export interface ElementChildrenAttribute {
     children: {};
@@ -372,5 +432,10 @@ export namespace JSX {
     mesh: MeshProps;
     gltf: GltfOptions;
     text: TextProps;
+    boxGeometry: BoxGeometryOptions;
+    planeGeometry: PlaneGeometryOptions;
+    standardMaterial: StandardMaterialOptions;
+    unlitMaterial: UnlitMaterialOptions;
+    wireframeMaterial: WireframeMaterialOptions;
   }
 }

@@ -1,0 +1,12 @@
+{
+  "format": "rgba8",
+  "id": "generated-virtual-texture-surface",
+  "mipCount": 3,
+  "pageSize": 128,
+  "pages": {
+    "generator": "debug-rgba",
+    "kind": "generated"
+  },
+  "physicalSlots": 9,
+  "virtualSize": [512, 512]
+}

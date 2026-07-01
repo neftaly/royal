@@ -6,14 +6,16 @@ export { canvasPointToWorld, worldPointToCanvasClient } from './canvas-coordinat
 export { useCanvasElement } from './canvas';
 export { captureCanvasPointer, releaseCanvasPointer } from './canvas-pointer';
 export { editableTextKeyboardIntent } from './editable-text-keyboard';
-export { createOrbitControls, orbitCameraTransform } from './orbit-controls';
+export { createOrbitControls, orbitCameraTransform, orbitPerspectiveCamera } from './orbit-controls';
 export { createRoot } from './root';
-export { useFrame } from './frame';
+export { useFrame, useFrameIndex } from './frame';
+export { markRendererComponent } from './jsx-runtime';
+export type { FrameCallback, FrameSnapshot } from './frame';
 
 export const Canvas = markReactComponent(CanvasComponent);
 export const OrbitControls = markReactComponent(OrbitControlsComponent);
 
-export type { CanvasProps } from './canvas';
+export type { CanvasProps, CanvasRendererOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
 export type {
   EditableTextClipboardShortcut,
@@ -25,11 +27,13 @@ export type {
   EditableTextKeyboardOptions
 } from './editable-text-keyboard';
 export type {
+  OrbitControlsBehaviorOptions,
   OrbitCameraTransform,
   OrbitCameraView,
   OrbitControlsHandle,
   OrbitControlsOptions,
   OrbitControlsProps,
+  OrbitPerspectiveCameraOptions,
   OrbitVector3
 } from './orbit-controls';
-export type { RoyalRoot, RoyalRootContextOptions, RoyalRootOptions } from './root';
+export type { RoyalRendererBackend, RoyalRoot, RoyalRootContextOptions, RoyalRootOptions } from './root';

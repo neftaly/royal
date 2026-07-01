@@ -15,7 +15,6 @@ import {
   type RoyalDocumentState,
   type RoyalInteractionState,
   type RoyalLayoutRuntimeState,
-  type RoyalLensInput,
   type RoyalLensStores,
   type RoyalWritableStore
 } from './v1.js';
@@ -156,7 +155,7 @@ describe('@royal/tarstate-lens/v1', () => {
     expectTypeOf<typeof v1>().not.toHaveProperty('experimentalTerrainQueries');
     expectTypeOf<typeof v1>().not.toHaveProperty('writeExperimentalTerrainAvailability');
     expectTypeOf<typeof royalLensSchema>().not.toHaveProperty('terrainManifests');
-    expectTypeOf<RoyalLensInput>().not.toHaveProperty('terrainStore');
+    expectTypeOf<RoyalLensStores>().not.toHaveProperty('terrainStore');
   });
 
   it('keeps v1 wired to the stable internal core instead of the experimental prototype module', () => {

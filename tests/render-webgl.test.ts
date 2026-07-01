@@ -135,7 +135,6 @@ describe('WebGL resource lifetime', () => {
     const textured = unlitMaterial({
       texture: textureAsset({
         fallback: solidTexture({ color: [0.2, 0.4, 0.6, 1] }),
-        id: 'crate',
         uri: 'https://example.test/crate.png'
       })
     });

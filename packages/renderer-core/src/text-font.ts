@@ -32,7 +32,7 @@ export interface CreateTextFontFaceOptions {
   readonly source?: string;
 }
 
-const builtinTextFamily = 'royal-ascii-prototype';
+const builtinTextFamily = 'royal-ascii-default';
 const minimumTextUnit = 0.0001;
 const fontFaceFonts = new WeakMap<TextFontFace, OpenTypeFont>();
 

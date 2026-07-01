@@ -35,7 +35,6 @@ export interface TextureAssetRef {
   readonly kind: 'asset';
   readonly colorSpace?: TextureColorSpace;
   readonly fallback?: SolidTextureRef;
-  readonly id: string;
   readonly revision?: TextureRevision;
   readonly sampler?: TextureSampler;
   readonly uri: string;
@@ -45,8 +44,6 @@ export interface VirtualTextureAssetRef {
   readonly kind: 'virtual-asset';
   readonly colorSpace?: TextureColorSpace;
   readonly fallback?: SolidTextureRef;
-  readonly id: string;
-  readonly manifestId?: string;
   readonly manifestUri: string;
   readonly preview?: TextureAssetRef;
   readonly revision?: TextureRevision;
@@ -59,21 +56,13 @@ export interface SolidTextureOptions {
   readonly color: Rgba;
   readonly colorSpace?: TextureColorSpace;
   readonly id?: string;
-  /** @deprecated Use version. */
-  readonly revision?: TextureRevision;
   readonly version?: TextureRevision;
 }
 
 interface TextureAssetBaseOptions {
-  /** Preferred asset identity override for cache keys; defaults to src/uri. */
-  readonly assetId?: string;
   readonly colorSpace?: TextureColorSpace;
   readonly fallback?: SolidTextureRef;
   readonly fallbackColor?: Rgba;
-  /** @deprecated Use assetId. */
-  readonly id?: string;
-  /** @deprecated Use version. */
-  readonly revision?: TextureRevision;
   readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureRevision;
@@ -93,12 +82,8 @@ export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOption
 
 export type ImageTextureOptions = TextureAssetOptions;
 
-interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'id' | 'kind' | 'manifestUri'> {
-  /** Preferred asset identity override for cache keys; defaults to manifestId or src/manifestUri. */
-  readonly assetId?: string;
+interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'kind' | 'manifestUri' | 'revision'> {
   readonly fallbackColor?: Rgba;
-  /** @deprecated Use assetId. */
-  readonly id?: string;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureRevision;
 }
@@ -124,14 +109,12 @@ export const defaultImageTextureSampler: TextureSampler = {
 };
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
-  const revision = options.version ?? options.revision;
-
   return {
     kind: 'solid',
     color: options.color,
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.id === undefined ? {} : { id: options.id }),
-    ...(revision === undefined ? {} : { revision })
+    ...(options.version === undefined ? {} : { revision: options.version })
   };
 };
 
@@ -150,14 +133,12 @@ export function textureAsset(options: TextureAssetUriOptions): TextureAssetRef;
 export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
   const uri = options.src ?? options.uri;
   const fallback = resolveTextureFallback(options);
-  const revision = options.version ?? options.revision;
 
   return {
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(fallback === undefined ? {} : { fallback }),
-    id: options.assetId ?? options.id ?? uri,
-    ...(revision === undefined ? {} : { revision }),
+    ...(options.version === undefined ? {} : { revision: options.version }),
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
     uri
   };
@@ -171,12 +152,9 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
   const uri = options.src ?? options.uri;
 
   return textureAsset({
-    ...(options.assetId === undefined ? {} : { assetId: options.assetId }),
     colorSpace: options.colorSpace ?? 'srgb',
     ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
     ...(options.fallbackColor === undefined ? {} : { fallbackColor: options.fallbackColor }),
-    ...(options.id === undefined ? {} : { id: options.id }),
-    ...(options.revision === undefined ? {} : { revision: options.revision }),
     sampler: {
       ...defaultImageTextureSampler,
       ...options.sampler
@@ -189,17 +167,14 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
   const manifestUri = options.src ?? options.manifestUri;
   const fallback = resolveTextureFallback(options);
-  const revision = options.version ?? options.revision;
 
   return {
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(fallback === undefined ? {} : { fallback }),
-    id: options.assetId ?? options.id ?? options.manifestId ?? manifestUri,
-    ...(options.manifestId === undefined ? {} : { manifestId: options.manifestId }),
     manifestUri,
     ...(options.preview === undefined ? {} : { preview: options.preview }),
-    ...(revision === undefined ? {} : { revision }),
+    ...(options.version === undefined ? {} : { revision: options.version }),
     ...(options.sampler === undefined ? {} : { sampler: options.sampler })
   };
 };

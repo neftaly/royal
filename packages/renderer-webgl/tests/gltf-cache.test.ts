@@ -54,22 +54,14 @@ const loadBounds = async (
 
 const triangleSrc = "https://example.test/triangle.gltf";
 
-const triangleAsset = (
-  overrides: Partial<Parameters<typeof gltf>[0]["asset"]> = {},
-): Parameters<typeof gltf>[0]["asset"] => ({
-  id: "triangle",
-  uri: triangleSrc,
-  ...overrides,
-});
-
 const loadError = async (
   configure?: (json: MutableFixtureJson) => void,
-  assetOverrides: Partial<Parameters<typeof gltf>[0]["asset"]> = {},
+  options: Partial<Parameters<typeof gltf>[0]> = {},
 ): Promise<Error> => {
   installFixture(configure);
   const { gl } = fakeGl();
   const cache = new GltfCache(gl, () => undefined);
-  const node = gltf({ asset: triangleAsset(assetOverrides) });
+  const node = gltf({ src: triangleSrc, ...options });
   let error: unknown;
 
   cache.get(node);
@@ -143,7 +135,7 @@ describe("GltfCache bounds", () => {
 describe("GltfCache subset diagnostics", () => {
   it("rejects GLB assets as outside the JSON .gltf subset", async () => {
     await expect(loadError(undefined, {
-      uri: "https://example.test/triangle.glb",
+      src: "https://example.test/triangle.glb",
     })).resolves.toMatchObject({
       message: "Unsupported glTF subset: JSON .gltf documents are required; GLB binary containers are not supported",
     });
@@ -346,23 +338,22 @@ describe("GltfCache textures", () => {
     expect(counts.createTexture).toBe(2);
   });
 
-  it("reuses loaded assets by id and revision", async () => {
+  it("reuses loaded assets by URI and version", async () => {
     installFixture();
     const { gl } = fakeGl();
     const cache = new GltfCache(gl, () => undefined);
-    const node = gltf({ asset: triangleAsset({ revision: 1 }) });
+    const node = gltf({ src: triangleSrc, version: 1 });
     const sameRevision = gltf({
-      asset: triangleAsset({
-        revision: 1,
-        uri: "https://example.test/alternate-triangle.gltf",
-      }),
+      src: triangleSrc,
+      version: 1,
     });
 
     expect(cache.get(node)).toBeUndefined();
     await waitFor(() => cache.get(node) !== undefined);
+    const fetchCalls = vi.mocked(fetch).mock.calls.length;
 
     expect(cache.get(sameRevision)).toBe(cache.get(node));
-    expect(fetch).not.toHaveBeenCalledWith("https://example.test/alternate-triangle.gltf");
+    expect(fetch).toHaveBeenCalledTimes(fetchCalls);
     cache.dispose();
   });
 });

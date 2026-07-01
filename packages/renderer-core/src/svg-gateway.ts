@@ -28,7 +28,6 @@ export type SvgGatewayContour = {
 };
 
 export type SvgGatewayContourInput = {
-  readonly closed?: boolean;
   readonly id?: string;
   readonly points: readonly SvgGatewayPointLike[];
   readonly role?: SvgGatewayContourRole;
@@ -416,9 +415,9 @@ const extractContoursFromSvg = (svg: string, options: SvgGatewayOptions): Extrac
 
     const attributes = parseAttributes(attributeText);
     if (attributes.transform !== undefined) {
-      diagnostics.push(`${tagName}${formatId(attributes)} has transform; this prototype ignores SVG transforms.`);
+      diagnostics.push(`${tagName}${formatId(attributes)} has transform; SVG gateway uses untransformed geometry.`);
     }
-    if (!isVisibleFill(attributes, tagName)) continue;
+    if (!isVisibleFill(attributes)) continue;
 
     const tagFillRule = parseFillRule(attributes['fill-rule']);
     fillRule ??= tagFillRule;
@@ -450,7 +449,7 @@ const extractContoursFromSvg = (svg: string, options: SvgGatewayOptions): Extrac
         contours.push(rectToContourInput(rect, options.flattenTolerance ?? defaultFlattenTolerance));
       }
     } else {
-      diagnostics.push(`polyline${formatId(attributes)} skipped: open strokes are not fill geometry in this prototype.`);
+      diagnostics.push(`polyline${formatId(attributes)} skipped: open strokes are not SVG gateway fill geometry.`);
     }
 
     index += 1;
@@ -644,6 +643,10 @@ const normalizeContours = (
 ): readonly SvgGatewayContour[] => contours.map((contour, index) => normalizeContour(contour, index));
 
 const normalizeContour = (contour: SvgGatewayContourInput | SvgGatewayContour, index: number): SvgGatewayContour => {
+  if ((contour as { readonly closed?: unknown }).closed === false) {
+    throw new Error('SVG gateway contours must be closed fill geometry.');
+  }
+
   const normalizedPoints = contour.points.map((point, pointIndex) => normalizePoint(point, `contour ${contour.id ?? index} point ${pointIndex}`));
   const first = normalizedPoints[0];
   const last = normalizedPoints.at(-1);
@@ -1068,9 +1071,8 @@ const rectInputFromAttributes = (
   };
 };
 
-const isVisibleFill = (attributes: TagAttributes, tagName: string): boolean => {
+const isVisibleFill = (attributes: TagAttributes): boolean => {
   if (attributes.display === 'none' || attributes.visibility === 'hidden') return false;
-  if (tagName === 'polyline') return false;
   const styleFill = attributes.style?.match(/(?:^|;)\s*fill\s*:\s*([^;]+)/i)?.[1]?.trim().toLowerCase();
   const fill = (attributes.fill ?? styleFill)?.trim().toLowerCase();
   return fill !== 'none';

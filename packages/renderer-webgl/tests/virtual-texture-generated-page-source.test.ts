@@ -70,7 +70,8 @@ describe("createGeneratedVirtualTexturePageSource", () => {
       requestFor({ mip: 1, x: 0, y: 0 }),
     ];
 
-    const pages = await Promise.all(requests.map((request) => source.loadPage(request)));
+    const pages: ArrayBufferView[] = [];
+    for (const request of requests) pages.push(await source.loadPage(request));
     const checksums = pages.map(checksum);
 
     expect(new Set(checksums).size).toBe(requests.length);

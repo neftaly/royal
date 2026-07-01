@@ -7,6 +7,7 @@ import {
   textureAsset,
   virtualTexture,
   virtualTextureAsset,
+  type ImageTextureOptions,
   type TextureAssetRef,
   type TextureRef,
   type VirtualTextureAssetOptions,
@@ -17,7 +18,6 @@ describe('texture descriptors', () => {
   it('creates image textures with color and sampler defaults', () => {
     expect(imageTexture('/textures/albedo.png')).toEqual({
       colorSpace: 'srgb',
-      id: '/textures/albedo.png',
       kind: 'asset',
       sampler: defaultImageTextureSampler,
       uri: '/textures/albedo.png'
@@ -25,7 +25,6 @@ describe('texture descriptors', () => {
 
     expect(imageTexture({
       colorSpace: 'linear',
-      id: 'albedo',
       sampler: {
         minFilter: 'nearest',
         wrapS: 'repeat'
@@ -33,7 +32,6 @@ describe('texture descriptors', () => {
       src: '/textures/albedo.png'
     })).toEqual({
       colorSpace: 'linear',
-      id: 'albedo',
       kind: 'asset',
       sampler: {
         magFilter: 'linear',
@@ -56,21 +54,19 @@ describe('texture descriptors', () => {
     const asset = textureAsset({
       colorSpace: 'srgb',
       fallback,
-      id: 'albedo',
-      revision: 'v2',
       sampler: {
         magFilter: 'linear',
         minFilter: 'linear-mipmap-linear',
         wrapS: 'repeat',
         wrapT: 'repeat'
       },
-      uri: '/textures/albedo.png'
+      uri: '/textures/albedo.png',
+      version: 'v2'
     });
 
     expect(asset).toEqual({
       colorSpace: 'srgb',
       fallback,
-      id: 'albedo',
       kind: 'asset',
       revision: 'v2',
       sampler: {
@@ -82,10 +78,8 @@ describe('texture descriptors', () => {
       uri: '/textures/albedo.png'
     });
     expect(textureAsset({
-      id: 'roughness',
       uri: '/textures/roughness.png'
     })).toEqual({
-      id: 'roughness',
       kind: 'asset',
       uri: '/textures/roughness.png'
     });
@@ -98,20 +92,19 @@ describe('texture descriptors', () => {
     const asset = textureAsset({
       colorSpace: 'srgb',
       fallback,
-      revision: 'v2',
       sampler: {
         magFilter: 'linear',
         minFilter: 'linear-mipmap-linear',
         wrapS: 'repeat',
         wrapT: 'repeat'
       },
-      src: '/textures/albedo.png'
+      src: '/textures/albedo.png',
+      version: 'v2'
     });
 
     expect(asset).toEqual({
       colorSpace: 'srgb',
       fallback,
-      id: '/textures/albedo.png',
       kind: 'asset',
       revision: 'v2',
       sampler: {
@@ -125,15 +118,12 @@ describe('texture descriptors', () => {
     expect(textureAsset({
       uri: '/textures/roughness.png'
     })).toEqual({
-      id: '/textures/roughness.png',
       kind: 'asset',
       uri: '/textures/roughness.png'
     });
     expect(textureAsset({
-      id: 'roughness',
       src: '/textures/roughness.png'
     })).toEqual({
-      id: 'roughness',
       kind: 'asset',
       uri: '/textures/roughness.png'
     });
@@ -141,12 +131,9 @@ describe('texture descriptors', () => {
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
   });
 
-  it('normalizes preferred texture asset identity aliases', () => {
+  it('normalizes texture asset version options', () => {
     expect(textureAsset({
-      assetId: 'preferred-albedo',
       fallbackColor: [0.5, 0.5, 0.5, 1],
-      id: 'legacy-albedo',
-      revision: 1,
       src: '/textures/albedo.png',
       version: 2
     })).toEqual({
@@ -154,14 +141,12 @@ describe('texture descriptors', () => {
         color: [0.5, 0.5, 0.5, 1],
         kind: 'solid'
       },
-      id: 'preferred-albedo',
       kind: 'asset',
       revision: 2,
       uri: '/textures/albedo.png'
     });
 
     expect(imageTexture({
-      assetId: 'preferred-normal',
       fallbackColor: [0.25, 0.25, 0.25, 1],
       src: '/textures/normal.png',
       version: 'v3'
@@ -171,12 +156,15 @@ describe('texture descriptors', () => {
         color: [0.25, 0.25, 0.25, 1],
         kind: 'solid'
       },
-      id: 'preferred-normal',
       kind: 'asset',
       revision: 'v3',
       sampler: defaultImageTextureSampler,
       uri: '/textures/normal.png'
     });
+    expectTypeOf<ImageTextureOptions>().not.toHaveProperty('id');
+    expectTypeOf<ImageTextureOptions>().not.toHaveProperty('revision');
+    expectTypeOf<ImageTextureOptions>().not.toHaveProperty('assetId');
+    expectTypeOf<TextureAssetRef>().not.toHaveProperty('id');
   });
 
   it('normalizes virtual texture asset descriptors without renderer runtime details', () => {
@@ -186,31 +174,26 @@ describe('texture descriptors', () => {
     });
     const preview = textureAsset({
       fallback,
-      id: 'terrain-albedo-preview',
-      revision: 'preview-v1',
-      uri: '/textures/terrain-albedo-preview.png'
+      uri: '/textures/terrain-albedo-preview.png',
+      version: 'preview-v1'
     });
     const asset = virtualTextureAsset({
       colorSpace: 'srgb',
       fallback,
-      id: 'terrain-albedo',
-      manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json',
       preview,
-      revision: 3,
       sampler: {
         minFilter: 'linear-mipmap-linear',
         wrapS: 'repeat',
         wrapT: 'repeat'
-      }
+      },
+      version: 3
     });
 
     expect(asset).toEqual({
       colorSpace: 'srgb',
       fallback,
-      id: 'terrain-albedo',
       kind: 'virtual-asset',
-      manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json',
       preview,
       revision: 3,
@@ -221,10 +204,8 @@ describe('texture descriptors', () => {
       }
     });
     expect(virtualTextureAsset({
-      id: 'terrain-normal',
       manifestUri: '/textures/terrain-normal.vt.json'
     })).toEqual({
-      id: 'terrain-normal',
       kind: 'virtual-asset',
       manifestUri: '/textures/terrain-normal.vt.json'
     });
@@ -237,20 +218,16 @@ describe('texture descriptors', () => {
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
   });
 
-  it('defaults virtual texture asset ids from manifest identity', () => {
+  it('keeps virtual texture asset identity on the manifest URI', () => {
     expect(virtualTextureAsset({
-      manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json'
     })).toEqual({
-      id: 'terrain-albedo-manifest',
       kind: 'virtual-asset',
-      manifestId: 'terrain-albedo-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json'
     });
     expect(virtualTextureAsset({
       manifestUri: '/textures/terrain-normal.vt.json'
     })).toEqual({
-      id: '/textures/terrain-normal.vt.json',
       kind: 'virtual-asset',
       manifestUri: '/textures/terrain-normal.vt.json'
     });
@@ -265,28 +242,15 @@ describe('texture descriptors', () => {
 
   it('normalizes virtual texture src options into manifest references', () => {
     expect(virtualTexture('/textures/terrain-albedo.vt.json')).toEqual({
-      id: '/textures/terrain-albedo.vt.json',
       kind: 'virtual-asset',
       manifestUri: '/textures/terrain-albedo.vt.json'
     });
     expect(virtualTextureAsset({
       src: '/textures/terrain-albedo.vt.json'
     })).toEqual({
-      id: '/textures/terrain-albedo.vt.json',
       kind: 'virtual-asset',
       manifestUri: '/textures/terrain-albedo.vt.json'
     });
-    expect(virtualTextureAsset({
-      id: 'terrain-albedo',
-      manifestId: 'terrain-albedo-manifest',
-      src: '/textures/terrain-albedo.vt.json'
-    })).toEqual({
-      id: 'terrain-albedo',
-      kind: 'virtual-asset',
-      manifestId: 'terrain-albedo-manifest',
-      manifestUri: '/textures/terrain-albedo.vt.json'
-    });
-
     expectTypeOf(virtualTextureAsset({
       src: '/textures/terrain-normal.vt.json'
     })).toEqualTypeOf<VirtualTextureAssetRef>();
@@ -296,13 +260,9 @@ describe('texture descriptors', () => {
     }>().toMatchTypeOf<VirtualTextureAssetOptions>();
   });
 
-  it('normalizes preferred virtual texture identity aliases', () => {
+  it('normalizes virtual texture version options', () => {
     expect(virtualTexture({
-      assetId: 'preferred-terrain',
       fallbackColor: [0.5, 0.5, 0.5, 1],
-      id: 'legacy-terrain',
-      manifestId: 'terrain-manifest',
-      revision: 1,
       src: '/textures/terrain-albedo.vt.json',
       version: 2
     })).toEqual({
@@ -310,11 +270,14 @@ describe('texture descriptors', () => {
         color: [0.5, 0.5, 0.5, 1],
         kind: 'solid'
       },
-      id: 'preferred-terrain',
       kind: 'virtual-asset',
-      manifestId: 'terrain-manifest',
       manifestUri: '/textures/terrain-albedo.vt.json',
       revision: 2
     });
+    expectTypeOf<VirtualTextureAssetOptions>().not.toHaveProperty('id');
+    expectTypeOf<VirtualTextureAssetOptions>().not.toHaveProperty('revision');
+    expectTypeOf<VirtualTextureAssetOptions>().not.toHaveProperty('assetId');
+    expectTypeOf<VirtualTextureAssetOptions>().not.toHaveProperty('manifestId');
+    expectTypeOf<VirtualTextureAssetRef>().not.toHaveProperty('id');
   });
 });

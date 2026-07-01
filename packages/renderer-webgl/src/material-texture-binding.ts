@@ -64,9 +64,7 @@ export type MaterialBaseColorBindOptions = {
 };
 
 export type MaterialVirtualTextureSourceIdentity = {
-  readonly id: string;
   readonly kind: "virtual-asset";
-  readonly manifestId?: string | undefined;
   readonly manifestUri: string;
   readonly revision?: VirtualTextureAssetRef["revision"] | undefined;
 };
@@ -441,9 +439,7 @@ const virtualTextureSourceIdentity = (
   if (source === undefined) return undefined;
 
   return {
-    id: source.id,
     kind: source.kind,
-    ...(source.manifestId === undefined ? {} : { manifestId: source.manifestId }),
     manifestUri: source.manifestUri,
     ...(source.revision === undefined ? {} : { revision: source.revision }),
   };

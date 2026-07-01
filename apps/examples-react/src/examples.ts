@@ -5,16 +5,12 @@ import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
-import { RapierPhysics } from './examples/cases/RapierPhysics';
-import rapierPhysicsSource from './examples/cases/RapierPhysics.tsx?raw';
 import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
-import { SvgGateway } from './examples/cases/SvgGateway';
-import svgGatewaySource from './examples/cases/SvgGateway.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
-import { VirtualTexturingPlane } from './examples/cases/VirtualTexturingPlane';
-import virtualTexturingPlaneSource from './examples/cases/VirtualTexturingPlane.tsx?raw';
+import { VirtualTextureSurface } from './examples/cases/VirtualTextureSurface';
+import virtualTextureSurfaceSource from './examples/cases/VirtualTextureSurface.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -75,13 +71,13 @@ export const examples = [
     sourceFile: 'examples/cases/TextureMaterials.tsx',
   },
   {
-    id: 'svg-gateway',
+    id: 'virtual-texture',
     maturity: 'product',
-    path: '/svg-gateway',
-    title: 'SVG Gateway',
-    Component: SvgGateway,
-    source: svgGatewaySource,
-    sourceFile: 'examples/cases/SvgGateway.tsx',
+    path: '/virtual-texture',
+    title: 'Virtual Texture',
+    Component: VirtualTextureSurface,
+    source: virtualTextureSurfaceSource,
+    sourceFile: 'examples/cases/VirtualTextureSurface.tsx',
   },
   {
     id: 'gltf-helmet',
@@ -91,24 +87,6 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
-  },
-  {
-    id: 'rapier-physics',
-    maturity: 'lab-probe',
-    path: '/rapier-physics',
-    title: 'Rapier Physics',
-    Component: RapierPhysics,
-    source: rapierPhysicsSource,
-    sourceFile: 'examples/cases/RapierPhysics.tsx',
-  },
-  {
-    id: 'virtual-texturing-plane',
-    maturity: 'lab-probe',
-    path: '/virtual-texturing-plane',
-    title: 'Virtual Texturing Debug Pages',
-    Component: VirtualTexturingPlane,
-    source: virtualTexturingPlaneSource,
-    sourceFile: 'examples/cases/VirtualTexturingPlane.tsx',
   },
 ] as const satisfies readonly Example[];
 

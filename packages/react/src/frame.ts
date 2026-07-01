@@ -1,32 +1,136 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
-export const useFrame = (): number => {
-  const [frame, setFrame] = useState(0);
+export interface FrameSnapshot {
+  readonly delta: number;
+  readonly index: number;
+  readonly timestamp: number;
+}
 
-  useEffect(() => {
-    if (
-      typeof requestAnimationFrame !== 'function' ||
-      typeof cancelAnimationFrame !== 'function'
-    ) {
+export type FrameCallback = (frame: FrameSnapshot) => void;
+
+type FrameSubscriber = {
+  readonly callback: FrameCallback;
+  readonly order: number;
+  readonly priority: number;
+};
+
+export type FrameLoop = {
+  dispose(): void;
+  frameIndex(): number;
+  subscribe(callback: FrameCallback, priority: number): () => void;
+};
+
+const canUseFrameLoop = (): boolean =>
+  typeof requestAnimationFrame === 'function' &&
+  typeof cancelAnimationFrame === 'function';
+
+export const createFrameLoop = (): FrameLoop => {
+  const subscribers: FrameSubscriber[] = [];
+  let animationFrame: number | undefined;
+  let frameIndex = 0;
+  let lastTimestamp: number | undefined;
+  let nextSubscriberOrder = 0;
+
+  const sortSubscribers = (): void => {
+    subscribers.sort((left, right) =>
+      left.priority - right.priority || left.order - right.order
+    );
+  };
+
+  const stop = (): void => {
+    if (animationFrame !== undefined && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(animationFrame);
+    }
+
+    animationFrame = undefined;
+    lastTimestamp = undefined;
+  };
+
+  const schedule = (): void => {
+    if (animationFrame !== undefined || !canUseFrameLoop()) return;
+
+    animationFrame = requestAnimationFrame(runFrame);
+  };
+
+  const runFrame = (timestamp: number): void => {
+    animationFrame = undefined;
+
+    if (subscribers.length === 0) {
+      lastTimestamp = undefined;
       return;
     }
 
-    let animationFrame = 0;
-    let active = true;
+    frameIndex += 1;
+    const frame = {
+      delta: lastTimestamp === undefined ? 0 : timestamp - lastTimestamp,
+      index: frameIndex,
+      timestamp
+    } satisfies FrameSnapshot;
+    lastTimestamp = timestamp;
 
-    const renderFrame = (): void => {
-      if (!active) return;
+    const frameSubscribers = Array.from(subscribers);
+    for (const subscriber of frameSubscribers) {
+      if (subscribers.includes(subscriber)) {
+        subscriber.callback(frame);
+      }
+    }
 
-      setFrame((current) => current + 1);
-      animationFrame = requestAnimationFrame(renderFrame);
-    };
+    schedule();
+  };
 
-    animationFrame = requestAnimationFrame(renderFrame);
-    return () => {
-      active = false;
-      cancelAnimationFrame(animationFrame);
-    };
-  }, []);
+  return {
+    dispose: () => {
+      subscribers.length = 0;
+      stop();
+    },
+    frameIndex: () => frameIndex,
+    subscribe: (callback, priority) => {
+      const subscriber = {
+        callback,
+        order: nextSubscriberOrder,
+        priority
+      } satisfies FrameSubscriber;
+      nextSubscriberOrder += 1;
 
-  return frame;
+      subscribers.push(subscriber);
+      sortSubscribers();
+      schedule();
+
+      return () => {
+        const index = subscribers.indexOf(subscriber);
+        if (index === -1) return;
+
+        subscribers.splice(index, 1);
+
+        if (subscribers.length === 0) {
+          stop();
+        }
+      };
+    }
+  };
+};
+
+export const FrameLoopContext = createContext<FrameLoop | null>(null);
+
+const fallbackFrameLoop = createFrameLoop();
+
+export const useFrame = (callback: FrameCallback, priority = 0): void => {
+  const frameLoop = useContext(FrameLoopContext) ?? fallbackFrameLoop;
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffect(() => frameLoop.subscribe((frame) => {
+    callbackRef.current(frame);
+  }, priority), [frameLoop, priority]);
+};
+
+export const useFrameIndex = (): number => {
+  const frameLoop = useContext(FrameLoopContext) ?? fallbackFrameLoop;
+  const [index, setIndex] = useState(() => frameLoop.frameIndex());
+
+  useFrame((frame) => {
+    setIndex(frame.index);
+  });
+
+  return index;
 };

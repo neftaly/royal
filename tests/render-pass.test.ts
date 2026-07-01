@@ -140,7 +140,6 @@ describe('render pass clearColor', () => {
     expect(renderPass.children).toHaveLength(1);
     expect(renderPass.children[0]).toMatchObject({
       asset: {
-        id: '/DamagedHelmet/DamagedHelmet.gltf',
         uri: '/DamagedHelmet/DamagedHelmet.gltf'
       },
       kind: 'gltf',
@@ -198,31 +197,19 @@ describe('render pass clearColor', () => {
     });
   });
 
-  it('uses material, texture, color precedence for JSX mesh sugar', () => {
+  it('rejects competing JSX mesh material sugar', () => {
     const albedo = imageTexture('/textures/albedo.png');
-    const materialMesh = jsx('mesh', {
+    expect(() => jsx('mesh', {
       color: [0.1, 0.2, 0.3, 1],
       geometry: cube,
       material: red,
       texture: albedo
-    }) as RenderNode;
-    const textureMesh = jsx('mesh', {
+    })).toThrow('mesh expects only one material source');
+    expect(() => jsx('mesh', {
       color: [0.1, 0.2, 0.3, 1],
       geometry: cube,
       texture: albedo
-    }) as RenderNode;
-
-    expect(materialMesh).toMatchObject({
-      kind: 'mesh',
-      material: red
-    });
-    expect(textureMesh).toMatchObject({
-      kind: 'mesh',
-      material: {
-        baseColor: albedo,
-        kind: 'standard'
-      }
-    });
+    })).toThrow('mesh expects only one material source');
   });
 
   it('ignores empty JSX conditional children under scenes', () => {

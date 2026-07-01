@@ -4,14 +4,21 @@ import { jsx } from '@royal/react/jsx-runtime';
 import {
   Canvas,
   createRoot,
+  markRendererComponent,
+  orbitPerspectiveCamera,
   useFrame,
+  useFrameIndex,
+  type CanvasRendererOptions,
   type CanvasProps,
+  type FrameCallback,
+  type FrameSnapshot,
+  type RoyalRendererBackend,
   type RoyalRoot,
+  type RoyalRootContextOptions,
   type RoyalRootOptions
 } from '@royal/react';
 import {
   boxGeometry,
-  createSvgGatewayGeometry,
   imageTexture,
   mesh,
   pass,
@@ -29,8 +36,12 @@ import {
   type TextMesh,
   type TextOptions
 } from '@royal/renderer-core';
+import {
+  createSvgGatewayGeometry,
+  svgPathToContours,
+  type SvgGatewayGeometry as RendererCoreSvgGeometry
+} from '@royal/renderer-core/svg';
 import * as rendererCoreSvg from '@royal/renderer-core/svg';
-import type { SvgGatewayGeometry as RendererCoreSvgGeometry } from '@royal/renderer-core/svg';
 import * as rendererCoreText from '@royal/renderer-core/text';
 import type {
   TextLayout as RendererCoreTextLayout,
@@ -41,26 +52,6 @@ import {
   type RendererCapabilityProbeResult
 } from '@royal/renderer-webgl/capabilities';
 import * as rendererCore from '@royal/renderer-core';
-import * as rendererWebgl from '@royal/renderer-webgl';
-import * as tarstateLens from '@royal/tarstate-lens';
-import {
-  assetIdForSrc,
-  createRoyalAppBoundary,
-  createRoyalLensSnapshot,
-  royalCapabilityBoundaryContract,
-  royalLensSchema,
-  royalQueries,
-  stableContainmentId,
-  type RoyalReadableStore,
-  type RoyalDocumentState,
-  type RoyalInteractionState,
-  type RoyalLayoutRuntimeState,
-  type RoyalLensStores,
-  type RoyalRenderRow
-} from '@royal/tarstate-lens';
-
-const researchOnlyRuntimeExportNamePattern =
-  /^(?:customShaderMaterial|shaderUniform|shaderAttribute|DynamicImpostorNode|dynamicImpostor|VirtualTextureNode|VirtualTextureRuntime|LOD|Lod|lod|LODNode|LodNode|lodNode|LevelOfDetailNode|levelOfDetail|dynamicLod|lodLevel|lodRange|lodThreshold|lodDistance|lodPolicy|lodBias|lodBudget|FormControl|formControl|input|textarea|select|PageCache|pageCache|createPageCache|PageTable|pageTable|createPageTable|createVirtualTexturePageTableTexture|uploadVirtualTexturePageTableTexels|virtualTexturePageTableMipDimensions)$/;
 
 describe('Royal public API smoke tests', () => {
   it('lets consumers build a render root through the React adapter and renderer-core primitives', () => {
@@ -110,7 +101,10 @@ describe('Royal public API smoke tests', () => {
     });
 
     expect(typeof Canvas).toBe('function');
+    expect(typeof markRendererComponent).toBe('function');
+    expect(typeof orbitPerspectiveCamera).toBe('function');
     expect(typeof useFrame).toBe('function');
+    expect(typeof useFrameIndex).toBe('function');
     expect(reactRoyal).not.toHaveProperty('boxGeometry');
     expect(reactRoyal).not.toHaveProperty('text');
     expect(root.children[0]?.children).toHaveLength(1);
@@ -122,37 +116,45 @@ describe('Royal public API smoke tests', () => {
     });
     expect(textNode.layout.source).toBe('api');
     expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly children: unknown }>();
-    expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly rootOptions?: RoyalRootOptions }>();
+    expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly fallback?: unknown }>();
+    expectTypeOf<CanvasProps>().toMatchTypeOf<{
+      readonly ref?: ((canvas: HTMLCanvasElement | null) => void) | { current: HTMLCanvasElement | null } | null;
+    }>();
+    expectTypeOf<CanvasProps>().toMatchTypeOf<{ readonly renderer?: CanvasRendererOptions }>();
+    expectTypeOf<CanvasProps>().not.toHaveProperty('rootOptions');
+    expectTypeOf<CanvasRendererOptions>().toMatchTypeOf<{
+      readonly backend?: RoyalRendererBackend;
+      readonly context?: RoyalRootContextOptions;
+    }>();
+    expectTypeOf<CanvasRendererOptions>().not.toHaveProperty('fallback');
+    expectTypeOf<RoyalRendererBackend>().toEqualTypeOf<'auto' | 'webgl2'>();
     expectTypeOf<RoyalRootOptions>().toMatchTypeOf<{
+      readonly backend?: RoyalRendererBackend;
       readonly context?: { readonly antialias?: boolean };
     }>();
     expectTypeOf<RoyalRootOptions>().not.toHaveProperty('alpha');
+    expectTypeOf<RoyalRootContextOptions>().toMatchTypeOf<{
+      readonly alpha?: boolean;
+      readonly antialias?: boolean;
+      readonly preserveDrawingBuffer?: boolean;
+    }>();
     expectTypeOf(createRoot).toEqualTypeOf<(
       canvas: HTMLCanvasElement,
       options?: RoyalRootOptions
     ) => RoyalRoot>();
+    expectTypeOf(useFrame).toEqualTypeOf<(callback: FrameCallback, priority?: number) => void>();
+    expectTypeOf(useFrameIndex).toEqualTypeOf<() => number>();
+    expectTypeOf<FrameCallback>().toEqualTypeOf<(frame: FrameSnapshot) => void>();
+    expectTypeOf<FrameSnapshot>().toEqualTypeOf<{
+      readonly delta: number;
+      readonly index: number;
+      readonly timestamp: number;
+    }>();
     expectTypeOf<RoyalRoot>().toMatchTypeOf<{
       readonly dispose: () => void;
     }>();
     expectTypeOf(root).toEqualTypeOf<RenderRoot>();
     expectTypeOf(textNode).toEqualTypeOf<TextNode>();
-  });
-
-  it('keeps research-only feature names out of consumer runtime package exports', () => {
-    const publicRuntimeModules = [
-      { module: reactRoyal, specifier: '@royal/react' },
-      { module: rendererCore, specifier: '@royal/renderer-core' },
-      { module: rendererWebgl, specifier: '@royal/renderer-webgl' },
-      { module: tarstateLens, specifier: '@royal/tarstate-lens' }
-    ] as const;
-
-    const leakedExports = publicRuntimeModules.flatMap(({ module, specifier }) =>
-      Object.keys(module)
-        .filter((name) => researchOnlyRuntimeExportNamePattern.test(name))
-        .map((name) => `${specifier}.${name}`)
-    );
-
-    expect(leakedExports).toEqual([]);
   });
 
   it('exposes renderer-core text shaping, layout, and mesh helpers from the renderer package', () => {
@@ -204,18 +206,27 @@ describe('Royal public API smoke tests', () => {
       text: 'subpath'
     });
     const meshFromLayout = rendererCoreText.textMesh(layout);
-    const geometry = rendererCoreSvg.createSvgGatewayGeometry({
+    const geometry = createSvgGatewayGeometry({
       height: 1,
       kind: 'rect',
       width: 2
     });
-    const pathContours = rendererCoreSvg.svgPathToContours('M 0 0 L 2 0 L 2 1 Z');
+    const pathContours = svgPathToContours('M 0 0 L 2 0 L 2 1 Z');
 
     expect(rendererCoreText.shapeText).toBe(shapeText);
     expect(rendererCoreText.layoutText).toBe(layoutText);
     expect(rendererCoreText.textMesh).toBe(textMesh);
     expect(rendererCoreText).toHaveProperty('layoutEditableText');
     expect(rendererCoreSvg.createSvgGatewayGeometry).toBe(createSvgGatewayGeometry);
+    expect(rendererCoreSvg.svgPathToContours).toBe(svgPathToContours);
+    expect(rendererCore).not.toHaveProperty('createSvgGatewayGeometry');
+    expect(rendererCore).not.toHaveProperty('createSvgGatewayPickRegion');
+    expect(rendererCore).not.toHaveProperty('createSvgRasterTextureSource');
+    expect(rendererCore).not.toHaveProperty('roundedRectToContour');
+    expect(rendererCore).not.toHaveProperty('svgPathToContours');
+    expect(rendererCore).not.toHaveProperty('triangulateSvgGatewayContours');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('createSvgGatewayGeometry');
+    expectTypeOf<typeof rendererCore>().not.toHaveProperty('svgPathToContours');
     expect(shaped.run.glyphs).toHaveLength(2);
     expect(layout.source).toBe('subpath');
     expect(meshFromLayout.vertices.length).toBeGreaterThan(0);
@@ -241,150 +252,4 @@ describe('Royal public API smoke tests', () => {
     expectTypeOf(result).toEqualTypeOf<RendererCapabilityProbeResult>();
   });
 
-  it('lets consumers query Royal store lenses without package-internal imports', async () => {
-    const stores = createApiStores();
-    const snapshot = createRoyalLensSnapshot(stores);
-    const boundary = createRoyalAppBoundary(stores);
-    const renderRows = await boundary.query(royalQueries.renderRows);
-
-    expect(snapshot.probe.relationNames).toEqual(
-      expect.arrayContaining([
-        'scopes',
-        'layoutBoxes',
-        'pickTargets',
-        'activationStates',
-        'renderFlags',
-        'layoutNodes',
-        'assets'
-      ])
-    );
-    expect(snapshot.probe.rowCount(royalLensSchema.layoutBoxes)).toBe(1);
-    expect(snapshot.probe.rows(royalLensSchema.layoutBoxes)[0]?.boxId).toBe('card');
-    expect(snapshot.probe.rows(royalLensSchema.assets)[0]).toMatchObject({
-      assetId: 'asset:gltf:/status.gltf',
-      src: '/status.gltf'
-    });
-    expect(renderRows.diagnostics).toEqual([]);
-    expect(renderRows.rows).toEqual([
-      {
-        scopeId: 'api',
-        boxId: 'card',
-        label: 'Status card',
-        primitive: 'panel',
-        tone: 'surface',
-        x: 1,
-        y: 1,
-        width: 6,
-        height: 3,
-        active: true,
-        focused: true,
-        hovered: true
-      }
-    ]);
-    expect(stableContainmentId('api', ['root', 'children', 0])).toBe('api:root/children/0');
-    expect(assetIdForSrc('/status.gltf')).toBe('asset:gltf:/status.gltf');
-    expect(royalCapabilityBoundaryContract.appMayUseRendererHandles).toBe(false);
-    expectTypeOf(renderRows.rows).toEqualTypeOf<readonly RoyalRenderRow[]>();
-  });
-
-  it('keeps public Tarstate lens v1 free of experimental terrain APIs', () => {
-    expect(tarstateLens).not.toHaveProperty('experimentalTerrainQueries');
-    expect(tarstateLens).not.toHaveProperty('writeExperimentalTerrainAvailability');
-    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainManifests');
-    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainTiles');
-    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainAssets');
-    expect(tarstateLens.royalLensSchema).not.toHaveProperty('terrainAssetAvailability');
-    expectTypeOf<typeof tarstateLens>().not.toHaveProperty('experimentalTerrainQueries');
-    expectTypeOf<typeof tarstateLens>().not.toHaveProperty('writeExperimentalTerrainAvailability');
-    expectTypeOf<typeof tarstateLens.royalLensSchema>().not.toHaveProperty('terrainManifests');
-    expectTypeOf<RoyalLensStores>().not.toHaveProperty('terrainStore');
-  });
 });
-
-function createApiStores(): RoyalLensStores {
-  const documentState: RoyalDocumentState = {
-    scopeId: 'api',
-    root: {
-      label: 'root',
-      tone: 'surface',
-      children: [
-        {
-          id: 'card',
-          label: 'Status card',
-          primitive: 'panel',
-          tone: 'surface',
-          gltf: {
-            src: '/status.gltf'
-          }
-        }
-      ]
-    }
-  };
-  const layoutState: RoyalLayoutRuntimeState = {
-    scopeId: 'api',
-    compact: false,
-    grid: { columns: 12, rows: 8 },
-    boxes: [
-      {
-        id: 'card',
-        x: 1,
-        y: 1,
-        width: 6,
-        height: 3,
-        label: 'Status card',
-        primitive: 'panel',
-        tone: 'surface',
-        gltf: {
-          src: '/status.gltf'
-        }
-      }
-    ],
-    pickTargets: [
-      {
-        id: 'card',
-        bounds: {
-          rect: { x: 1, y: 1, width: 6, height: 3 },
-          space: 'grid'
-        },
-        interaction: {
-          label: 'Status card',
-          role: 'button'
-        },
-        kind: 'box',
-        label: 'Status card',
-        layer: 1
-      }
-    ]
-  };
-  const interactionState: RoyalInteractionState = {
-    scopeId: 'api',
-    activeId: 'card',
-    activationCount: 1,
-    focusedId: undefined,
-    hoveredId: 'card',
-    geometryFailures: [],
-    geometryStatus: 'ready',
-    pointerSamples: [
-      {
-        sampleId: 'pointer-card',
-        sequence: 1,
-        kind: 'move',
-        x: 2,
-        y: 2,
-        targetId: 'card'
-      }
-    ]
-  };
-
-  return {
-    documentStore: readableStore(documentState),
-    layoutStore: readableStore(layoutState),
-    interactionStore: readableStore(interactionState)
-  };
-}
-
-function readableStore<State>(state: State): RoyalReadableStore<State> {
-  return {
-    getState: () => state
-  };
-}

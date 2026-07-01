@@ -11,8 +11,11 @@ export interface RoyalRootContextOptions {
   readonly preserveDrawingBuffer?: boolean;
 }
 
+export type RoyalRendererBackend = "auto" | "webgl2";
+
 /** Options for the Royal React root. */
 export interface RoyalRootOptions {
+  readonly backend?: RoyalRendererBackend;
   readonly context?: RoyalRootContextOptions;
 }
 
@@ -24,10 +27,19 @@ export interface RoyalRoot {
   dispose(): void;
 }
 
+const assertSupportedBackend = (backend: string | undefined): void => {
+  if (backend === undefined || backend === "auto" || backend === "webgl2") return;
+
+  throw new Error("Royal React roots currently support the webgl2 backend only");
+};
+
 const toWebGlRootOptions = (
   options: RoyalRootOptions | undefined,
-): WebGlRootOptions | undefined =>
-  options === undefined ? undefined : options.context ?? {};
+): WebGlRootOptions | undefined => {
+  assertSupportedBackend(options?.backend);
+
+  return options === undefined ? undefined : options.context ?? {};
+};
 
 /** Creates an imperative renderer root. */
 export const createRoot = (

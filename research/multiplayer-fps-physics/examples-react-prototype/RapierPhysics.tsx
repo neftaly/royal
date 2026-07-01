@@ -33,7 +33,7 @@ import {
   type RemoteActorRenderState,
 } from './RapierPhysics.scene';
 
-const rootOptions = {
+const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
@@ -279,13 +279,13 @@ export const RapierPhysics = (): ReactNode => {
       data-rapier-network-smoothing-offset={String(sceneState.network.smoothingOffset)}
       data-rapier-network-smoothing-ticks-remaining={String(sceneState.network.smoothingTicksRemaining)}
       data-rapier-network-snap-correction-distance={String(sceneState.network.snapCorrectionDistance)}
-      rootOptions={rootOptions}
+      renderer={renderer}
       style={orbitCanvasStyle}
     >
       {scene}
       <OrbitControls
         {...orbitOptions}
-        initialView={defaultCameraView}
+        defaultView={defaultCameraView}
         onChange={setCameraView}
       />
     </Canvas>

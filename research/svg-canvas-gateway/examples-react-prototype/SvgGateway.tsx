@@ -1064,7 +1064,7 @@ export const SvgGateway = (): ReactNode => {
           renderer = createTigerRenderer(canvas, gl, defaultTigerCameraView, textureSource);
           controls = createOrbitControls(canvas, {
             ...tigerOrbitOptions,
-            initialView: defaultTigerCameraView,
+            defaultView: defaultTigerCameraView,
             onChange: (view) => renderer?.setCameraView(view),
           });
           renderer.uploadTexture(textureSource);

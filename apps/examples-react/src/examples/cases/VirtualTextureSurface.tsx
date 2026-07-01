@@ -1,13 +1,14 @@
 /** @jsxImportSource @royal/react */
 import {
-  boxGeometry,
-  wireframeMaterial,
+  defaultTextureFallbackColor,
+  planeGeometry,
+  unlitMaterial,
+  virtualTexture,
 } from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
   orbitPerspectiveCamera,
-  useFrameIndex,
   type OrbitCameraView,
 } from '@royal/react';
 import {
@@ -26,8 +27,8 @@ const orbitCanvasStyle = {
 } satisfies CSSProperties;
 
 const defaultCameraView = {
-  distance: 6,
-  pitch: 0.02,
+  distance: 4.6,
+  pitch: 0.08,
   target: [0, 0, 0],
   yaw: 0,
 } satisfies OrbitCameraView;
@@ -36,36 +37,45 @@ const orbitOptions = {
   zoomSpeed: 0.0018,
 } as const;
 
-const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
-const cubeMaterial = wireframeMaterial({
-  color: [0.38, 0.85, 0.95, 1],
+const surfaceGeometry = planeGeometry({ size: [3.6, 2.6] });
+const virtualTextureMaterial = unlitMaterial({
+  texture: virtualTexture({
+    colorSpace: 'srgb',
+    fallbackColor: defaultTextureFallbackColor,
+    sampler: {
+      magFilter: 'linear',
+      minFilter: 'linear',
+      wrapS: 'clamp-to-edge',
+      wrapT: 'clamp-to-edge',
+    },
+    src: import.meta.env.BASE_URL + 'generated-virtual-texture-surface.vt.json',
+    version: 'debug-rgba-v1',
+  }),
 });
 
-export const WireframeCube = (): ReactNode => {
+export const VirtualTextureSurface = (): ReactNode => {
   const [cameraView, setCameraView] = useState<OrbitCameraView>(defaultCameraView);
-  const frame = useFrameIndex();
   const camera = orbitPerspectiveCamera({
     far: 100,
-    fovY: Math.PI / 4,
+    fovY: Math.PI / 5,
     near: 0.1,
     view: cameraView,
   });
-  const spin = frame * 0.012;
 
   return (
     <Canvas
-      aria-label="Wireframe cube"
+      aria-label="Virtual texture surface"
       renderer={renderer}
       style={orbitCanvasStyle}
     >
       <scene>
-        <pass camera={camera} clearColor={[0.04, 0.06, 0.08, 1]}>
+        <pass camera={camera} clearColor={[0.035, 0.045, 0.052, 1]}>
           <mesh
-            geometry={cubeGeometry}
-            material={cubeMaterial}
+            geometry={surfaceGeometry}
+            material={virtualTextureMaterial}
             transform={{
               position: [0, 0, 0],
-              rotation: [0.42 + spin * 0.28, 0.7 + spin, 0.12],
+              rotation: [0.62, -0.38, 0],
             }}
           />
         </pass>

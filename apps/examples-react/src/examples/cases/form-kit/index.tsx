@@ -22,6 +22,7 @@ import {
 import {
   canvasPointToWorld,
   captureCanvasPointer,
+  markRendererComponent,
   releaseCanvasPointer,
   type CanvasWorldBounds,
 } from '@royal/react';
@@ -30,6 +31,7 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 
 export type RoyalFormBounds = {
@@ -140,7 +142,7 @@ export type RoyalFormKit = {
   readonly theme: RoyalFormTheme;
 };
 
-type RoyalNodeChild = RenderNode | readonly RoyalNodeChild[] | null | undefined | false;
+type RoyalNodeChild = ReactNode | RenderNode | readonly RoyalNodeChild[];
 
 export const compactRoyalFormCameraBounds = {
   bottom: -3.4,
@@ -239,17 +241,16 @@ const rect = (
   bounds: RoyalFormBounds,
   fill: Rgba,
   z: number,
-): RenderNode =>
-  (
-    <mesh
-      geometry={boxGeometry([bounds.width, bounds.height, 0.02])}
-      material={unlitMaterial({ color: fill })}
-      transform={{
-        position: [bounds.x + bounds.width / 2, bounds.y - bounds.height / 2, z],
-        rotation: [0, 0, 0],
-      }}
-    />
-  ) as RenderNode;
+): ReactNode => (
+  <mesh
+    geometry={boxGeometry([bounds.width, bounds.height, 0.02])}
+    material={unlitMaterial({ color: fill })}
+    transform={{
+      position: [bounds.x + bounds.width / 2, bounds.y - bounds.height / 2, z],
+      rotation: [0, 0, 0],
+    }}
+  />
+);
 
 const textNode = (
   children: unknown,
@@ -260,18 +261,17 @@ const textNode = (
     readonly lineHeight: number;
     readonly origin: Vec3;
   },
-): RenderNode =>
-  (
-    <text
-      color={options.color}
-      font={options.font}
-      fontSize={options.fontSize}
-      lineHeight={options.lineHeight}
-      origin={options.origin}
-    >
-      {textFromChildren(children)}
-    </text>
-  ) as RenderNode;
+): ReactNode => (
+  <text
+    color={options.color}
+    font={options.font}
+    fontSize={options.fontSize}
+    lineHeight={options.lineHeight}
+    origin={options.origin}
+  >
+    {textFromChildren(children)}
+  </text>
+);
 
 const hasOwn = (
   record: Readonly<Record<string, unknown>>,
@@ -775,7 +775,7 @@ const fieldChrome = (
   bounds: RoyalFormBounds,
   focused: boolean,
   theme: RoyalFormTheme,
-): readonly RenderNode[] => [
+): readonly ReactNode[] => [
   rect({
     height: bounds.height + 0.08,
     width: bounds.width + 0.08,
@@ -791,7 +791,7 @@ const fieldChrome = (
   rect(bounds, focused ? theme.fieldFocused : theme.field, 0.04),
 ];
 
-export const Form = ({
+export const Form = markRendererComponent(({
   children,
   id: _id,
   kit,
@@ -801,7 +801,7 @@ export const Form = ({
   readonly id: string;
   readonly kit: RoyalFormKit;
   readonly title?: string;
-}) => (
+}): ReactNode => (
   <>
     {rect(kit.layout.form, kit.theme.panel, -0.04)}
     {title === undefined
@@ -815,9 +815,9 @@ export const Form = ({
       })}
     {children as RoyalNodeChild}
   </>
-);
+));
 
-export const Field = ({
+export const Field = markRendererComponent(({
   children,
   kit,
   name,
@@ -825,7 +825,7 @@ export const Field = ({
   readonly children?: unknown;
   readonly kit: RoyalFormKit;
   readonly name: string;
-}) => {
+}): ReactNode => {
   const bounds = kit.layout.fields[name];
   if (bounds === undefined) throw new Error(`Unknown form field: ${name}`);
 
@@ -835,9 +835,9 @@ export const Field = ({
       {children as RoyalNodeChild}
     </>
   );
-};
+});
 
-export const Label = ({
+export const Label = markRendererComponent(({
   children,
   control,
   kit,
@@ -845,7 +845,7 @@ export const Label = ({
   readonly children?: unknown;
   readonly control: string;
   readonly kit: RoyalFormKit;
-}): RenderNode => {
+}): ReactNode => {
   const origin = kit.layout.labels[control];
   if (origin === undefined) throw new Error(`Unknown form label target: ${control}`);
 
@@ -856,7 +856,7 @@ export const Label = ({
     lineHeight: 0.24,
     origin,
   });
-};
+});
 
 const renderTextControlNodes = (
   kit: RoyalFormKit,
@@ -886,7 +886,7 @@ const renderTextControlNodes = (
   return fragment.nodes;
 };
 
-export const Input = ({
+export const Input = markRendererComponent(({
   kit,
   name,
   type,
@@ -894,28 +894,28 @@ export const Input = ({
   readonly kit: RoyalFormKit;
   readonly name: string;
   readonly type: 'text';
-}) => {
+}): ReactNode => {
   void type;
   return (
     <>
       {renderTextControlNodes(kit, name)}
     </>
   );
-};
+});
 
-export const Textarea = ({
+export const Textarea = markRendererComponent(({
   kit,
   name,
 }: {
   readonly kit: RoyalFormKit;
   readonly name: string;
-}) => (
+}): ReactNode => (
   <>
     {renderTextControlNodes(kit, name)}
   </>
-);
+));
 
-export const Checkbox = ({
+export const Checkbox = markRendererComponent(({
   children,
   kit,
   name,
@@ -923,7 +923,7 @@ export const Checkbox = ({
   readonly children?: unknown;
   readonly kit: RoyalFormKit;
   readonly name: string;
-}) => {
+}): ReactNode => {
   const bounds = kit.layout.checkboxes[name];
   if (bounds === undefined) throw new Error(`Unknown checkbox form control: ${name}`);
 
@@ -963,9 +963,9 @@ export const Checkbox = ({
       })}
     </>
   );
-};
+});
 
-export const Button = ({
+export const Button = markRendererComponent(({
   children,
   kit,
   name,
@@ -975,7 +975,7 @@ export const Button = ({
   readonly kit: RoyalFormKit;
   readonly name: string;
   readonly type: 'submit';
-}) => {
+}): ReactNode => {
   const bounds = kit.layout.buttons[name];
   if (bounds === undefined) throw new Error(`Unknown button form control: ${name}`);
 
@@ -995,19 +995,19 @@ export const Button = ({
       })}
     </>
   );
-};
+});
 
-export const FormStatus = ({
+export const FormStatus = markRendererComponent(({
   children,
   kit,
 }: {
   readonly children?: unknown;
   readonly kit: RoyalFormKit;
-}): RenderNode =>
+}): ReactNode =>
   textNode(children, {
     color: kit.theme.muted,
     font: kit.font,
     fontSize: 0.16,
     lineHeight: 0.24,
     origin: kit.layout.status.origin,
-  });
+  }));

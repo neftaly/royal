@@ -15,8 +15,6 @@ import {
   nearestEditableTextCaret,
   setEditableTextEditorSelection,
   type EditableTextFragment,
-  type RenderNode,
-  type RenderRoot,
   type Rgba,
   type UiMenuCommand,
   type UiMenuCommandRect,
@@ -55,7 +53,7 @@ import {
 } from 'react';
 import { useAtkinsonFont } from './text-font';
 
-const rootOptions = {
+const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 const cameraBounds = {
@@ -246,7 +244,7 @@ const closedTextContextMenu: TextContextMenuState = {
 
 type CanvasTextBox = {
   readonly height: number;
-  readonly render: (origin: Vec3) => readonly RenderNode[];
+  readonly render: (origin: Vec3) => readonly ReactNode[];
   readonly width: number;
 };
 
@@ -426,7 +424,7 @@ const textBox = ({ color, font, fontSize, lineHeight, text, width }: TextBoxOpti
         origin={origin}
         text={text}
       />
-    ) as RenderNode,
+    ),
   ],
   width,
 });
@@ -467,7 +465,7 @@ const row = ({ children, gap }: Omit<StackOptions, 'origin'>): CanvasTextBox => 
   width: children.reduce((width, child) => width + child.width, 0) + gap * Math.max(0, children.length - 1),
 });
 
-const column = ({ children, gap, origin }: StackOptions): readonly RenderNode[] => {
+const column = ({ children, gap, origin }: StackOptions): readonly ReactNode[] => {
   let cursorY = origin[1];
   return children.flatMap((child) => {
     const nodes = child.render([origin[0], cursorY, origin[2]]);
@@ -479,12 +477,12 @@ const column = ({ children, gap, origin }: StackOptions): readonly RenderNode[] 
 const contextMenuNodes = (
   font: TextFontFace,
   layout: TextContextMenuLayout | undefined,
-): readonly RenderNode[] => {
+): readonly ReactNode[] => {
   if (layout === undefined) return [];
   const x = layout.bounds.x;
   const y = uiMenuYToWorldTop(layout.bounds.y);
   const height = layout.bounds.height;
-  const nodes: RenderNode[] = [
+  const nodes: ReactNode[] = [
     (
       <mesh
         geometry={boxGeometry({ size: [contextMenuWidth, height, 0.02] })}
@@ -494,7 +492,7 @@ const contextMenuNodes = (
           rotation: [0, 0, 0],
         }}
       />
-    ) as RenderNode,
+    ),
   ];
 
   for (const command of layout.commands) {
@@ -514,7 +512,7 @@ const contextMenuNodes = (
             rotation: [0, 0, 0],
           }}
         />
-      ) as RenderNode,
+      ),
       (
         <text
           color={command.enabled ? [0.92, 0.96, 0.98, 1] : [0.42, 0.47, 0.5, 1]}
@@ -524,7 +522,7 @@ const contextMenuNodes = (
           origin={[commandX + 0.09, commandY - 0.095, contextMenuZ + 0.03]}
           text={command.label}
         />
-      ) as RenderNode,
+      ),
     );
   }
 
@@ -613,7 +611,7 @@ const textScene = (
   editableFragment: EditableTextFragment,
   editableWorldOrigin: Vec3,
   menuLayout: TextContextMenuLayout | undefined,
-): RenderRoot => {
+): ReactNode => {
   const heading = h1(font, headingSampleText);
   const subheading = h2(font, 'h1 / h2 canvas primitives');
   const editableHeight = Math.max(1, editableFragment.layout.lines.length) * editableFragment.layout.lineHeight;
@@ -655,7 +653,7 @@ const textScene = (
         {contextMenuNodes(font, menuLayout)}
       </pass>
     </scene>
-  ) as RenderRoot;
+  );
 };
 
 const rendererTextEditorCanvas = (): HTMLCanvasElement | undefined => {
@@ -1407,14 +1405,14 @@ export const RendererText = (): ReactNode => {
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerEnd}
       role="textbox"
-      rootOptions={rootOptions}
+      renderer={renderer}
       tabIndex={0}
     >
       {font !== undefined && editableFragment !== undefined && editableWorldOrigin !== undefined
         ? textScene(font, editableFragment, editableWorldOrigin, menuLayout)
         : textScenePlaceholder}
     </Canvas>
-  ) as ReactNode;
+  );
 };
 
 const textScenePlaceholder = (
@@ -1432,4 +1430,4 @@ const textScenePlaceholder = (
       />
     </pass>
   </scene>
-) as RenderRoot;
+);

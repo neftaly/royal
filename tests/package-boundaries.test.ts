@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -34,20 +34,24 @@ type PackageSourceExport = {
   readonly specifier: string;
 };
 
-type TemporaryTestingLabExport = {
+type PackageExportEntry = {
   readonly exportKey: string;
   readonly packageName: string;
-  readonly rationale: string;
-  readonly removalOwner: string;
   readonly sourcePath: string;
+  readonly specifier: string;
 };
 
-type ClassifiedPackageExport = {
-  readonly classification: 'diagnostic' | 'prototype';
-  readonly exportKey: string;
-  readonly packageName: string;
-  readonly rationale: string;
-  readonly sourcePath: string;
+type PublicPackageEntryFile = {
+  readonly file: string;
+  readonly specifier: string;
+};
+
+type PublicExportSymbol = {
+  readonly file: string;
+  readonly line: number;
+  readonly name: string;
+  readonly specifier: string;
+  readonly text: string;
 };
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -57,52 +61,63 @@ const examplesReactSourceRoot = 'apps/examples-react/src';
 const examplesReactExampleSourceRoot = 'apps/examples-react/src/examples';
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const generatedSourceDirectories = new Set(['dist', 'node_modules']);
-const rendererPackageRoots = ['packages/renderer-core', 'packages/renderer-webgl', 'packages/renderer-webgpu', 'packages/react'] as const;
-const tarstateControlPlanePackageNames = new Set(['@tarstate/core', '@royal/tarstate-lens']);
-const tarstateControlPlanePackageRoots = ['packages/royal-tarstate-lens'] as const;
+const rendererPackageRoots = ['packages/renderer-core', 'packages/renderer-webgl', 'packages/react'] as const;
+const consumerRuntimePackageNames = new Set([
+  '@royal/react',
+  '@royal/renderer-core',
+  '@royal/renderer-webgl'
+]);
+const tarstateControlPlanePackageNames = new Set(['@tarstate/core']);
+const tarstateControlPlanePackageRoots = [] as const;
 const artifactDisplaySourceFiles = new Set(['apps/examples-react/src/ResearchArtifacts.tsx']);
 const artifactReferenceLinePattern = /apps\/examples-react\/public\/artifacts|['"`(]\s*\/?artifacts\/[^'"`\s)]/;
+const researchExamplePrototypePathPattern = /(?:^|\/)research\/[^/]+\/examples-react-prototype(?:\/|$)/;
 const rendererTestingSubpathPattern = /^@royal\/renderer-[a-z0-9-]+(?:\/.*)?\/testing(?:\/.*)?$/;
 const expectedPackages = [
   { name: '@royal/examples-react', root: 'apps/examples-react', type: 'module' },
   { name: '@royal/react', root: 'packages/react', type: 'module' },
   { name: '@royal/renderer-core', root: 'packages/renderer-core', type: 'module' },
-  { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl', type: 'module' },
-  { name: '@royal/renderer-webgpu', root: 'packages/renderer-webgpu', type: 'module' },
-  { name: '@royal/tarstate-lens', root: 'packages/royal-tarstate-lens', type: 'module' }
+  { name: '@royal/renderer-webgl', root: 'packages/renderer-webgl', type: 'module' }
 ] as const;
-const temporaryTestingLabExports = [
-  {
-    exportKey: './testing',
-    packageName: '@royal/react',
-    rationale: 'Keeps renderer capability lab helpers reachable while diagnostics settle on stable package subpaths.',
-    removalOwner: 'renderer platform',
-    sourcePath: './src/testing.ts'
-  }
-] as const satisfies readonly TemporaryTestingLabExport[];
-const webGpuProbeExportClassifications = [
-  {
-    classification: 'diagnostic',
-    exportKey: './capabilities',
-    packageName: '@royal/renderer-webgpu',
-    rationale: 'Backend selection and capability probes are diagnostic signals, not renderer runtime primitives.',
-    sourcePath: './src/capabilities.ts'
-  },
-  {
-    classification: 'prototype',
-    exportKey: './render-probe',
-    packageName: '@royal/renderer-webgpu',
-    rationale: 'The triangle renderer is a WebGPU bring-up probe for validating backend viability.',
-    sourcePath: './src/render-probe.ts'
-  },
-  {
-    classification: 'prototype',
-    exportKey: './scene-probe',
-    packageName: '@royal/renderer-webgpu',
-    rationale: 'The scene probe describes proposed WebGPU lowering shape before a committed runtime exists.',
-    sourcePath: './src/scene-probe.ts'
-  }
-] as const satisfies readonly ClassifiedPackageExport[];
+const researchOnlyPublicExportNames = new Set([
+  'customShaderMaterial',
+  'shaderUniform',
+  'shaderAttribute',
+  'DynamicImpostorNode',
+  'dynamicImpostor',
+  'VirtualTextureNode',
+  'VirtualTextureRuntime',
+  'LOD',
+  'Lod',
+  'lod',
+  'LODNode',
+  'LodNode',
+  'lodNode',
+  'LevelOfDetailNode',
+  'levelOfDetail',
+  'dynamicLod',
+  'lodLevel',
+  'lodRange',
+  'lodThreshold',
+  'lodDistance',
+  'lodPolicy',
+  'lodBias',
+  'lodBudget',
+  'FormControl',
+  'formControl',
+  'input',
+  'select',
+  'textarea',
+  'PageCache',
+  'pageCache',
+  'createPageCache',
+  'PageTable',
+  'pageTable',
+  'createPageTable',
+  'createVirtualTexturePageTableTexture',
+  'uploadVirtualTexturePageTableTexels',
+  'virtualTexturePageTableMipDimensions'
+]);
 
 function readManifest(manifestPath: string): PackageManifest {
   return JSON.parse(readFileSync(manifestPath, 'utf8')) as PackageManifest;
@@ -171,24 +186,236 @@ function packageExportSpecifier(packageName: string, exportKey: string): string 
   return exportKey === '.' ? packageName : packageName + exportKey.slice(1);
 }
 
+function packageExportTargetPath(target: unknown): string | null {
+  if (typeof target === 'string') return target;
+  if (typeof target !== 'object' || target === null || Array.isArray(target)) return null;
+
+  const record = target as Readonly<Record<string, unknown>>;
+  return packageExportTargetPath(
+    record.import ??
+      record.default ??
+      record.types ??
+      Object.values(record)[0]
+  );
+}
+
+function workspacePackageExportEntries(): readonly PackageExportEntry[] {
+  return workspacePackageManifests()
+    .flatMap(({ manifest }) => {
+      const packageName = manifest.name;
+      if (packageName === undefined) return [];
+
+      return Object.entries(manifest.exports ?? {}).flatMap(([exportKey, exportTarget]) => {
+        const sourcePath = packageExportTargetPath(exportTarget);
+        return sourcePath === null
+          ? []
+          : [{
+              exportKey,
+              packageName,
+              sourcePath,
+              specifier: packageExportSpecifier(packageName, exportKey)
+            }];
+      });
+    })
+    .sort((left, right) => left.specifier.localeCompare(right.specifier));
+}
+
 function packageSourceExports(packageNames: ReadonlySet<string>): readonly PackageSourceExport[] {
   return workspacePackageManifests()
     .flatMap(({ manifest, root }) => {
       const packageName = manifest.name;
       if (packageName === undefined || !packageNames.has(packageName)) return [];
 
-      return Object.entries(manifest.exports ?? {}).flatMap(([exportKey, exportTarget]) =>
-        typeof exportTarget === 'string'
-          ? [{
-            exportKey,
-            packageName,
-            sourcePath: toRepoPath(path.join(root, exportTarget)),
-            specifier: packageExportSpecifier(packageName, exportKey)
-          }]
-          : []
-      );
+      return Object.entries(manifest.exports ?? {}).flatMap(([exportKey, exportTarget]) => {
+        const sourcePath = packageExportTargetPath(exportTarget);
+        return sourcePath === null
+          ? []
+          : [{
+              exportKey,
+              packageName,
+              sourcePath: toRepoPath(path.join(root, sourcePath)),
+              specifier: packageExportSpecifier(packageName, exportKey)
+            }];
+      });
     })
     .sort((left, right) => left.specifier.localeCompare(right.specifier));
+}
+
+function listConsumerPackageEntryFiles(): readonly PublicPackageEntryFile[] {
+  return workspacePackageManifests().flatMap(({ manifest, root }) => {
+    const packageName = manifest.name;
+    if (packageName === undefined || !consumerRuntimePackageNames.has(packageName)) return [];
+
+    return Object.entries(manifest.exports ?? {}).flatMap(([exportKey, target]) => {
+      if (isTestingExportKey(exportKey)) return [];
+
+      const targetPath = packageExportTargetPath(target);
+      const specifier = packageExportSpecifier(packageName, exportKey);
+      if (targetPath === null) return [];
+
+      const file = resolvePackageExportTargetPath(path.join(repoRoot, root), targetPath);
+      return file === null ? [] : [{ file, specifier }];
+    });
+  });
+}
+
+function resolvePackageExportTargetPath(packageDir: string, targetPath: string): string | null {
+  return resolveSourceFilePath(path.resolve(packageDir, targetPath));
+}
+
+function publicPackageExportSymbols(): readonly PublicExportSymbol[] {
+  return listConsumerPackageEntryFiles().flatMap(({ file, specifier }) =>
+    publicExportSymbolsFromFile(file, specifier)
+  );
+}
+
+function publicExportSymbolsFromFile(
+  filePath: string,
+  specifier: string,
+  seen = new Set<string>()
+): readonly PublicExportSymbol[] {
+  const resolvedPath = path.resolve(filePath);
+  if (seen.has(resolvedPath) || !isFile(resolvedPath)) return [];
+  seen.add(resolvedPath);
+
+  const source = readFileSync(resolvedPath, 'utf8');
+  const sourceFile = ts.createSourceFile(resolvedPath, source, ts.ScriptTarget.Latest, true);
+  const lines = source.split('\n');
+  const relativePath = path.relative(repoRoot, resolvedPath);
+  const symbol = (name: string, node: ts.Node): PublicExportSymbol => {
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    return {
+      file: relativePath,
+      line,
+      name,
+      specifier,
+      text: lines[line - 1]?.trim() ?? name
+    };
+  };
+
+  return sourceFile.statements.flatMap((statement) => {
+    if (ts.isExportDeclaration(statement)) {
+      if (statement.exportClause !== undefined) {
+        if (ts.isNamedExports(statement.exportClause)) {
+          return statement.exportClause.elements.map((element) => symbol(element.name.text, element.name));
+        }
+
+        return [symbol(statement.exportClause.name.text, statement.exportClause.name)];
+      }
+
+      const moduleSpecifier = stringLiteralText(statement.moduleSpecifier);
+      const reexportPath = moduleSpecifier?.startsWith('.')
+        ? resolveRelativeModulePath(resolvedPath, moduleSpecifier)
+        : null;
+
+      return reexportPath === null ? [] : publicExportSymbolsFromFile(reexportPath, specifier, seen);
+    }
+
+    if (!hasExportModifier(statement)) return [];
+
+    if (
+      ts.isClassDeclaration(statement) ||
+      ts.isEnumDeclaration(statement) ||
+      ts.isFunctionDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement)
+    ) {
+      return statement.name === undefined ? [] : [symbol(statement.name.text, statement.name)];
+    }
+
+    if (ts.isModuleDeclaration(statement)) {
+      return [
+        ...(ts.isIdentifier(statement.name) ? [symbol(statement.name.text, statement.name)] : []),
+        ...jsxIntrinsicElementSymbols(statement, sourceFile, lines, relativePath, specifier)
+      ];
+    }
+
+    if (ts.isVariableStatement(statement)) {
+      return statement.declarationList.declarations.flatMap((declaration) =>
+        ts.isIdentifier(declaration.name) ? [symbol(declaration.name.text, declaration.name)] : []
+      );
+    }
+
+    return [];
+  });
+}
+
+function jsxIntrinsicElementSymbols(
+  statement: ts.ModuleDeclaration,
+  sourceFile: ts.SourceFile,
+  lines: readonly string[],
+  relativePath: string,
+  specifier: string
+): readonly PublicExportSymbol[] {
+  if (!ts.isIdentifier(statement.name) || statement.name.text !== 'JSX') return [];
+  if (statement.body === undefined || !ts.isModuleBlock(statement.body)) return [];
+
+  return statement.body.statements.flatMap((namespaceStatement) => {
+    if (!ts.isInterfaceDeclaration(namespaceStatement) || namespaceStatement.name.text !== 'IntrinsicElements') {
+      return [];
+    }
+
+    return namespaceStatement.members.flatMap((member) => {
+      const memberNameNode = member.name;
+      if (memberNameNode === undefined) return [];
+
+      const memberName = propertyNameText(memberNameNode);
+      if (memberName === null) return [];
+
+      const line = sourceFile.getLineAndCharacterOfPosition(memberNameNode.getStart(sourceFile)).line + 1;
+      return [{
+        file: relativePath,
+        line,
+        name: `JSX.IntrinsicElements.${memberName}`,
+        specifier,
+        text: lines[line - 1]?.trim() ?? memberName
+      }];
+    });
+  });
+}
+
+function hasExportModifier(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) =>
+    modifier.kind === ts.SyntaxKind.ExportKeyword
+  ) ?? false);
+}
+
+function stringLiteralText(node: ts.Node | undefined): string | null {
+  return node !== undefined && ts.isStringLiteral(node) ? node.text : null;
+}
+
+function propertyNameText(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  return null;
+}
+
+function resolveRelativeModulePath(fromFile: string, moduleSpecifier: string): string | null {
+  const basePath = path.resolve(path.dirname(fromFile), moduleSpecifier);
+  return resolveSourceFilePath(basePath);
+}
+
+function resolveSourceFilePath(basePath: string): string | null {
+  const extension = path.extname(basePath);
+  const directCandidates = extension === '' || sourceExtensions.has(extension)
+    ? [basePath]
+    : [];
+  const pathWithoutJsExtension = ['.js', '.jsx', '.mjs', '.cjs'].includes(extension)
+    ? basePath.slice(0, -extension.length)
+    : null;
+  const candidates = [
+    ...directCandidates,
+    ...(pathWithoutJsExtension === null
+      ? []
+      : Array.from(sourceExtensions, (sourceExtension) => `${pathWithoutJsExtension}${sourceExtension}`)),
+    ...Array.from(sourceExtensions, (sourceExtension) => `${basePath}${sourceExtension}`),
+    ...Array.from(sourceExtensions, (sourceExtension) => path.join(basePath, `index${sourceExtension}`))
+  ];
+
+  return candidates.find(isFile) ?? null;
+}
+
+function isFile(filePath: string): boolean {
+  return existsSync(filePath) && statSync(filePath).isFile();
 }
 
 function packageBuildEntrySourcePaths(packageRoot: string, entry: string | Record<string, string>): readonly string[] {
@@ -244,6 +471,27 @@ function isTestingExportKey(exportKey: string): boolean {
 
 function stableManifestExports(manifest: PackageManifest): Record<string, unknown> {
   return Object.fromEntries(Object.entries(manifest.exports ?? {}).filter(([exportKey]) => !isTestingExportKey(exportKey)));
+}
+
+function isResearchOnlyPublicExportName(name: string): boolean {
+  const simpleName = name.startsWith('JSX.IntrinsicElements.')
+    ? name.slice('JSX.IntrinsicElements.'.length)
+    : name;
+
+  return researchOnlyPublicExportNames.has(simpleName);
+}
+
+function isRendererCoreSvgExportName(name: string): boolean {
+  return (
+    name.startsWith('SvgGateway') ||
+    name === 'SvgRasterTextureSource' ||
+    name === 'createSvgGatewayGeometry' ||
+    name === 'createSvgGatewayPickRegion' ||
+    name === 'createSvgRasterTextureSource' ||
+    name === 'roundedRectToContour' ||
+    name === 'svgPathToContours' ||
+    name === 'triangulateSvgGatewayContours'
+  );
 }
 
 function isPackageSourcePathImport(moduleSpecifier: string): boolean {
@@ -312,6 +560,14 @@ function isResearchFixtureSpecifier(filePath: string, moduleSpecifier: string): 
   return candidates.some((candidate) => /(?:^|\/)research\/.*\/fixtures(?:\/|$)/.test(candidate));
 }
 
+function isResearchPrototypeSpecifier(filePath: string, moduleSpecifier: string): boolean {
+  const candidates = [moduleSpecifier, resolvedRelativeRepoPath(filePath, moduleSpecifier)]
+    .filter((candidate): candidate is string => candidate !== undefined)
+    .map((candidate) => candidate.split(path.sep).join('/'));
+
+  return candidates.some((candidate) => researchExamplePrototypePathPattern.test(candidate));
+}
+
 function isPublicArtifactSpecifier(filePath: string, moduleSpecifier: string): boolean {
   const candidates = [moduleSpecifier, resolvedRelativeRepoPath(filePath, moduleSpecifier)]
     .filter((candidate): candidate is string => candidate !== undefined)
@@ -327,11 +583,9 @@ function isPublicArtifactSpecifier(filePath: string, moduleSpecifier: string): b
 }
 
 function examplesResearchBoundaryImportReason(filePath: string, moduleSpecifier: string): string | undefined {
-  if (moduleSpecifier === '@royal/renderer-webgpu' || moduleSpecifier.startsWith('@royal/renderer-webgpu/')) {
-    return 'renderer WebGPU package';
-  }
   if (rendererTestingSubpathPattern.test(moduleSpecifier)) return 'renderer testing subpath';
   if (isResearchFixtureSpecifier(filePath, moduleSpecifier)) return 'research fixture path';
+  if (isResearchPrototypeSpecifier(filePath, moduleSpecifier)) return 'research prototype path';
   if (isPublicArtifactSpecifier(filePath, moduleSpecifier)) return 'public artifact path';
   return undefined;
 }
@@ -388,68 +642,61 @@ describe('package boundaries', () => {
       './svg': './src/svg-index.ts',
       './text': './src/text-index.ts'
     });
+
+    const rendererCoreSvgSymbols = publicPackageExportSymbols()
+      .filter(({ name, specifier }) => specifier.startsWith('@royal/renderer-core') && isRendererCoreSvgExportName(name))
+      .map(({ file, line, name, specifier, text }) => ({
+        file,
+        line,
+        name,
+        specifier,
+        text
+      }));
+    const rootSvgSymbolViolations = rendererCoreSvgSymbols
+      .filter(({ specifier }) => specifier === '@royal/renderer-core');
+    const svgSubpathSymbolNames = rendererCoreSvgSymbols
+      .filter(({ specifier }) => specifier === '@royal/renderer-core/svg')
+      .map(({ name }) => name)
+      .sort();
+
+    expect(rootSvgSymbolViolations).toEqual([]);
+    expect(svgSubpathSymbolNames).toEqual(expect.arrayContaining([
+      'SvgGatewayGeometry',
+      'createSvgGatewayGeometry',
+      'createSvgRasterTextureSource',
+      'svgPathToContours',
+      'triangulateSvgGatewayContours'
+    ]));
   });
 
-  it('allows testing/lab exports only through the temporary testing allowlist', () => {
-    const manifestsByName = new Map(workspacePackageManifests().flatMap(({ manifest, root }) =>
-      manifest.name === undefined ? [] : [[manifest.name, { manifest, root }] as const]
-    ));
-    const actualTestingExports = workspacePackageManifests()
-      .flatMap(({ manifest }) => {
-        const packageName = manifest.name;
-        if (packageName === undefined) return [];
+  it('keeps testing package exports explicit and source-backed', () => {
+    const testingLikeExports = workspacePackageExportEntries()
+      .filter(({ exportKey, sourcePath }) => exportKey.includes('testing') || sourcePath.includes('testing'));
+    const namingViolations = testingLikeExports
+      .filter(({ exportKey }) => !isTestingExportKey(exportKey))
+      .map(({ exportKey, packageName, sourcePath }) => ({ exportKey, packageName, sourcePath }));
+    const sourceViolations = testingLikeExports
+      .filter(({ sourcePath }) => !sourcePath.startsWith('./src/') || !sourceExtensions.has(path.extname(sourcePath)))
+      .map(({ exportKey, packageName, sourcePath }) => ({ exportKey, packageName, sourcePath }));
 
-        return Object.entries(manifest.exports ?? {})
-          .filter(([exportKey]) => isTestingExportKey(exportKey))
-          .map(([exportKey, sourcePath]) => ({ exportKey, packageName, sourcePath }));
-      })
-      .sort((left, right) => `${left.packageName}${left.exportKey}`.localeCompare(`${right.packageName}${right.exportKey}`));
-    const expectedTestingExports = temporaryTestingLabExports
-      .map(({ exportKey, packageName, sourcePath }) => ({ exportKey, packageName, sourcePath }))
-      .sort((left, right) => `${left.packageName}${left.exportKey}`.localeCompare(`${right.packageName}${right.exportKey}`));
-    const metadataViolations = temporaryTestingLabExports.flatMap((entry) => [
-      ...(isTestingExportKey(entry.exportKey) ? [] : [{ ...entry, reason: 'export key must end in /testing' }]),
-      ...(entry.rationale.trim().length > 0 ? [] : [{ ...entry, reason: 'rationale required' }]),
-      ...(entry.removalOwner.trim().length > 0 ? [] : [{ ...entry, reason: 'removal owner required' }])
-    ]);
-    const missingAllowlistedExports = temporaryTestingLabExports.flatMap((entry) => {
-      const manifest = manifestsByName.get(entry.packageName)?.manifest;
-      const actualSourcePath = manifest?.exports?.[entry.exportKey];
-      return actualSourcePath === entry.sourcePath
-        ? []
-        : [{ ...entry, actualSourcePath }];
+    expect({ namingViolations, sourceViolations }).toEqual({
+      namingViolations: [],
+      sourceViolations: []
     });
-
-    expect(actualTestingExports).toEqual(expectedTestingExports);
-    expect(metadataViolations).toEqual([]);
-    expect(missingAllowlistedExports).toEqual([]);
   });
 
-  it('classifies WebGPU probe exports as diagnostic or prototype surfaces', () => {
-    const manifestsByName = new Map(workspacePackageManifests().flatMap(({ manifest }) =>
-      manifest.name === undefined ? [] : [[manifest.name, manifest] as const]
-    ));
-    const missingClassifiedExports = webGpuProbeExportClassifications.flatMap((entry) => {
-      const actualSourcePath = manifestsByName.get(entry.packageName)?.exports?.[entry.exportKey];
-      return actualSourcePath === entry.sourcePath
-        ? []
-        : [{ ...entry, actualSourcePath }];
-    });
-    const metadataViolations = webGpuProbeExportClassifications.flatMap((entry) =>
-      entry.rationale.trim().length > 0 ? [] : [{ ...entry, reason: 'rationale required' }]
-    );
+  it('keeps consumer package exports free of research-only names', () => {
+    const violations = publicPackageExportSymbols()
+      .filter(({ name }) => isResearchOnlyPublicExportName(name))
+      .map(({ file, line, name, specifier, text }) => ({
+        file,
+        line,
+        name,
+        specifier,
+        text
+      }));
 
-    expect(webGpuProbeExportClassifications.map(({ classification, exportKey, packageName }) => ({
-      classification,
-      exportKey,
-      packageName
-    }))).toEqual([
-      { classification: 'diagnostic', exportKey: './capabilities', packageName: '@royal/renderer-webgpu' },
-      { classification: 'prototype', exportKey: './render-probe', packageName: '@royal/renderer-webgpu' },
-      { classification: 'prototype', exportKey: './scene-probe', packageName: '@royal/renderer-webgpu' }
-    ]);
-    expect(missingClassifiedExports).toEqual([]);
-    expect(metadataViolations).toEqual([]);
+    expect(violations).toEqual([]);
   });
 
   it('keeps shared Vite package exports covered by TS paths, aliases, and build entries', () => {
@@ -535,15 +782,6 @@ describe('package boundaries', () => {
 
     expect(violations).toEqual([]);
     expect(new Set(artifactReferenceHits.map(({ file }) => file))).toEqual(artifactDisplaySourceFiles);
-  });
-
-  it('keeps @royal/tarstate-lens root export on the v1 facade', () => {
-    const manifest = readManifest(path.join(repoRoot, 'packages/royal-tarstate-lens/package.json'));
-    expect(manifest.dependencies?.['@tarstate/core']).toBe(
-      'github:neftaly/tarstate#9b664a8421ffbd18c94a2766a25b3581a4129c33&path:/packages/core'
-    );
-    expect(manifest.dependencies?.['@patchpit/tarstate']).toBeUndefined();
-    expect(manifest.exports).toMatchObject({ '.': './src/v1.ts', './v1': './src/v1.ts' });
   });
 
   it('keeps Tarstate API consumers on package exports instead of source paths', () => {

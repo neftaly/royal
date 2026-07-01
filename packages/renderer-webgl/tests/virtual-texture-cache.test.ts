@@ -125,7 +125,6 @@ describe("VirtualTextureCache", () => {
     vi.stubGlobal("fetch", fetchManifest);
     const cache = new VirtualTextureCache(gl);
     const descriptor = {
-      id: "terrain",
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
       revision: "r1",
     };
@@ -135,7 +134,7 @@ describe("VirtualTextureCache", () => {
 
     expect(first.kind).toBe("loading");
     expect(second.kind).toBe("loading");
-    expect(first.stats.key).toBe(second.stats.key);
+    expect(second.stats.manifestUri).toBe(first.stats.manifestUri);
     expect(cache.stats()).toEqual({ entries: 1, error: 0, loading: 1, ready: 0 });
 
     await cache.waitForPendingLoads();
@@ -161,17 +160,14 @@ describe("VirtualTextureCache", () => {
     const cache = new VirtualTextureCache(gl);
 
     cache.loadVirtualTexture({
-      id: "terrain",
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
       revision: "r1",
     });
     cache.loadVirtualTexture({
-      id: "terrain",
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
       revision: "r2",
     });
     cache.loadVirtualTexture({
-      id: "terrain",
       manifestUri: "https://cdn.example.test/vt/terrain.vt.json",
       revision: "r1",
     });
@@ -189,7 +185,6 @@ describe("VirtualTextureCache", () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("missing", { status: 404 }))));
     const cache = new VirtualTextureCache(gl);
     const descriptor = {
-      id: "terrain",
       manifestUri: "https://assets.example.test/vt/missing.vt.json",
     };
 
@@ -220,7 +215,6 @@ describe("VirtualTextureCache", () => {
     vi.stubGlobal("fetch", fetchAsset);
     const cache = new VirtualTextureCache(gl);
     const descriptor = {
-      id: "terrain",
       manifestUri: "https://assets.example.test/vt/terrain.vt.json",
     };
 
@@ -271,7 +265,6 @@ describe("VirtualTextureCache", () => {
     vi.stubGlobal("fetch", fetchAsset);
     const cache = new VirtualTextureCache(gl);
     const descriptor = {
-      id: "terrain:generated-debug",
       manifestUri: "https://assets.example.test/vt/generated.vt.json",
     };
 

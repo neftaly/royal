@@ -12,12 +12,11 @@ export interface GltfAssetBounds {
 
 export interface GltfAssetRef {
   readonly bounds?: GltfAssetBounds;
-  readonly id: string;
   readonly revision?: number | string;
   readonly uri: string;
 }
 
-/** glTF asset node loaded from a src URL or explicit asset reference. */
+/** glTF asset node loaded from a source URL. */
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
@@ -25,27 +24,8 @@ export interface GltfNode {
   readonly transform?: Transform;
 }
 
-export interface GltfExplicitAssetOptions {
-  readonly asset: GltfAssetRef;
-  readonly assetId?: never;
-  readonly bounds?: never;
-  readonly id?: never;
-  readonly revision?: never;
-  readonly src?: never;
-  /** Omit for an identity transform. */
-  readonly transform?: TransformOptions;
-  readonly version?: never;
-}
-
 export interface GltfSrcOptions {
-  readonly asset?: never;
-  /** Preferred asset identity override for cache keys; defaults to src. */
-  readonly assetId?: string;
   readonly bounds?: GltfAssetBounds;
-  /** @deprecated Use assetId. */
-  readonly id?: string;
-  /** @deprecated Use version. */
-  readonly revision?: GltfAssetRef['revision'];
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
@@ -53,29 +33,21 @@ export interface GltfSrcOptions {
   readonly version?: GltfAssetRef['revision'];
 }
 
-export type GltfOptions = GltfExplicitAssetOptions | GltfSrcOptions;
+export type GltfOptions = GltfSrcOptions;
 
 export type GltfInput = GltfOptions | GltfSrcOptions['src'];
 
 const gltfOptions = (input: GltfInput): GltfOptions =>
   typeof input === 'string' ? { src: input } : input;
 
-const resolveAsset = (options: GltfOptions): GltfAssetRef => {
-  if (options.asset !== undefined) return options.asset;
-
-  const revision = options.version ?? options.revision;
-
-  return {
-    ...(options.bounds === undefined ? {} : { bounds: options.bounds }),
-    id: options.assetId ?? options.id ?? options.src,
-    ...(revision === undefined ? {} : { revision }),
-    uri: options.src
-  };
-};
+const resolveAsset = (options: GltfOptions): GltfAssetRef => ({
+  ...(options.bounds === undefined ? {} : { bounds: options.bounds }),
+  ...(options.version === undefined ? {} : { revision: options.version }),
+  uri: options.src
+});
 
 export function gltf(src: string): GltfNode;
 export function gltf(options: GltfSrcOptions): GltfNode;
-export function gltf(options: GltfExplicitAssetOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
   const asset = resolveAsset(options);

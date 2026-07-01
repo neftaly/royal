@@ -62,13 +62,12 @@ export type {
 
 export type RoyalReadableStore<State> = ReadableStore<State>;
 export type RoyalWritableStore<State> = WritableStore<State>;
-export type RoyalLensInput = {
+export type RoyalLensStores = {
   readonly capabilityStore?: ReadableStore<CapabilityRuntimeState>;
   readonly documentStore?: ReadableStore<RoyalDocumentState>;
   readonly interactionStore: ReadableStore<RoyalInteractionState>;
   readonly layoutStore: ReadableStore<RoyalLayoutRuntimeState>;
 };
-export type RoyalLensStores = RoyalLensInput;
 export type RoyalPatchRoute = {
   readonly relation: RelationRef;
   readonly apply: (patch: WritePatch) => StorePatchRouteResult;
@@ -101,18 +100,16 @@ export const royalQueries = {
   capabilityResultRows: stableRoyalQueries.capabilityResultRows satisfies Query<RoyalCapabilityResultRow>
 } as const;
 
-export function createRoyalLensSnapshot(input: RoyalLensInput): LensSnapshot {
+export function createRoyalLensSnapshot(input: RoyalLensStores): LensSnapshot {
   return createStableRoyalLensSnapshot(stableRoyalLensStores(input));
 }
 
-export function createRoyalAppBoundary(input: RoyalLensInput): RoyalAppBoundary {
+export function createRoyalAppBoundary(input: RoyalLensStores): RoyalAppBoundary {
   return createStableRoyalAppBoundary(stableRoyalLensStores(input));
 }
 
-export const createRoyalBoundary = createRoyalAppBoundary;
-
 export async function evaluateRoyalLens<Row>(
-  input: RoyalLensInput,
+  input: RoyalLensStores,
   query: Query<Row>
 ): Promise<QueryResult<Row>> {
   return evaluate(createRoyalLensSnapshot(input).source, query);
@@ -143,7 +140,7 @@ function isRoyalPatchRouteArray(input: RoyalPatchDispatcherInput): input is read
   return Array.isArray(input);
 }
 
-function stableRoyalLensStores(input: RoyalLensInput): StableRoyalLensStores {
+function stableRoyalLensStores(input: RoyalLensStores): StableRoyalLensStores {
   return {
     ...(input.capabilityStore === undefined ? {} : { capabilityStore: input.capabilityStore }),
     ...(input.documentStore === undefined ? {} : { documentStore: input.documentStore }),

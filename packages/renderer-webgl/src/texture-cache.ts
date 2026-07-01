@@ -463,9 +463,8 @@ const textureUploadPolicyCacheKey = (policy: TextureUploadPolicy): string =>
 
 const textureAssetCacheKey = (asset: TextureAssetRef): string =>
   [
-    asset.id,
-    asset.revision ?? "",
     asset.uri,
+    asset.revision ?? "",
     textureUploadPolicyCacheKey(textureAssetUploadPolicy(asset)),
     textureAssetSamplerCacheKey(asset.sampler),
   ].join("\u0000");

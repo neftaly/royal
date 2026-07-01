@@ -257,7 +257,6 @@ describe("TextureCache", () => {
     const onSettled = vi.fn();
     const baseAsset = {
       kind: "asset",
-      id: "crate",
       revision: "same",
       sampler: {
         magFilter: "linear",
@@ -308,7 +307,6 @@ describe("TextureCache", () => {
     const srgbAsset = {
       colorSpace: "srgb",
       kind: "asset",
-      id: "crate",
       revision: "same",
       uri: "https://example.test/textures/crate.png",
     } as const;
@@ -335,7 +333,6 @@ describe("TextureCache", () => {
     const asset = {
       colorSpace: "linear",
       kind: "asset",
-      id: "shared-base-color",
       revision: "same",
       uri: "https://example.test/models/shared.png",
     } as const;

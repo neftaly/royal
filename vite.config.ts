@@ -29,18 +29,16 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        capabilities: 'src/capabilities.ts',
-        'virtual-texturing': 'src/virtual-texturing.ts',
-        'virtual-texture-testing': 'src/virtual-texture-testing.ts'
+        capabilities: 'src/capabilities.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
   },
   '@royal/react': {
-    external: ['@royal/renderer-core', '@royal/renderer-webgl', '@royal/renderer-webgl/capabilities', 'react'],
+    external: ['@royal/renderer-core', '@royal/renderer-webgl', 'react'],
     lib: {
-      entry: { index: 'src/index.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts', testing: 'src/testing.ts' },
+      entry: { index: 'src/index.ts', 'jsx-dev-runtime': 'src/jsx-dev-runtime.ts', 'jsx-runtime': 'src/jsx-runtime.ts' },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
     }
@@ -57,17 +55,13 @@ const repoRoot = path.dirname(new URL(import.meta.url).pathname);
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
-  { find: '@royal/renderer-webgl/virtual-texturing/testing', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/virtual-texture-testing.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/svg', replacement: path.join(repoRoot, 'packages/renderer-core/src/svg-index.ts') },
   { find: '@royal/renderer-core/text', replacement: path.join(repoRoot, 'packages/renderer-core/src/text-index.ts') },
   { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-dev-runtime.ts') },
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
-  { find: '@royal/react/testing', replacement: path.join(repoRoot, 'packages/react/src/testing.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
-  { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') },
-  { find: '@royal/tarstate-lens/v1', replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts') },
-  { find: '@royal/tarstate-lens', replacement: path.join(repoRoot, 'packages/royal-tarstate-lens/src/v1.ts') }
+  { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') }
 ];
 
 const failOnRollupWarning = (warning: string | { readonly message?: string }): never => {

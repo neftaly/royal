@@ -26,9 +26,6 @@
       "@royal/renderer-webgl/capabilities": [
         "./packages/renderer-webgl/src/capabilities.ts"
       ],
-      "@royal/renderer-webgl/virtual-texturing/testing": [
-        "./packages/renderer-webgl/src/virtual-texture-testing.ts"
-      ],
       "@royal/react": [
         "./packages/react/src/index.ts"
       ],
@@ -37,15 +34,6 @@
       ],
       "@royal/react/jsx-runtime": [
         "./packages/react/src/jsx-runtime.ts"
-      ],
-      "@royal/react/testing": [
-        "./packages/react/src/testing.ts"
-      ],
-      "@royal/tarstate-lens": [
-        "./packages/royal-tarstate-lens/src/v1.ts"
-      ],
-      "@royal/tarstate-lens/v1": [
-        "./packages/royal-tarstate-lens/src/v1.ts"
       ]
     },
     "isolatedModules": true,

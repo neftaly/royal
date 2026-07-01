@@ -15,7 +15,7 @@ import {
   textureAsset,
   unlitMaterial,
   type BoxGeometry,
-  type GltfAssetRef,
+  type GltfAssetBounds,
   type GltfNode,
   type GltfOptions,
   type PlaneGeometry,
@@ -100,14 +100,14 @@ describe('renderer descriptor authoring API', () => {
   it('represents material base color as solid or asset texture references', () => {
     const solid = solidTexture({
       color: [1, 0, 0, 1],
-      revision: 1
+      version: 1
     });
     const asset = textureAsset({
       colorSpace: 'srgb',
       fallback: solid,
-      revision: 'v2',
       sampler: { minFilter: 'linear-mipmap-linear', wrapS: 'repeat', wrapT: 'repeat' },
-      src: '/textures/albedo.png'
+      src: '/textures/albedo.png',
+      version: 'v2'
     });
 
     expect(solid).toEqual({
@@ -118,7 +118,6 @@ describe('renderer descriptor authoring API', () => {
     expect(asset).toMatchObject({
       colorSpace: 'srgb',
       fallback: solid,
-      id: '/textures/albedo.png',
       kind: 'asset',
       revision: 'v2',
       uri: '/textures/albedo.png'
@@ -132,40 +131,12 @@ describe('renderer descriptor authoring API', () => {
     })).not.toHaveProperty('fallback');
   });
 
-  it('uses explicit glTF asset identity on gltf nodes', () => {
-    const asset: GltfAssetRef = {
-      bounds: {
-        max: [1, 2, 3],
-        min: [-1, -2, -3]
-      },
-      id: 'damaged-helmet',
-      revision: '2026-06-28',
-      uri: '/DamagedHelmet/DamagedHelmet.gltf'
-    };
-    const node = gltf({
-      asset,
-      transform: { position: [1, 2, 3], rotation: [0, 0, 0] }
-    });
-
-    expect(node).toMatchObject({
-      asset,
-      kind: 'gltf',
-      transform: {
-        position: [1, 2, 3],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1]
-      }
-    });
-    expectTypeOf(node.asset).toEqualTypeOf<GltfAssetRef>();
-  });
-
   it('normalizes glTF src options into asset references', () => {
     const bounds = {
       max: [1, 2, 3],
       min: [-1, -2, -3]
-    } satisfies GltfAssetRef['bounds'];
+    } satisfies GltfAssetBounds;
     const node = gltf({
-      assetId: 'helmet',
       bounds,
       src: '/DamagedHelmet/DamagedHelmet.gltf',
       version: 2
@@ -175,39 +146,20 @@ describe('renderer descriptor authoring API', () => {
 
     expect(node.asset).toEqual({
       bounds,
-      id: 'helmet',
       revision: 2,
       uri: '/DamagedHelmet/DamagedHelmet.gltf'
     });
     expect(node.src).toBe('/DamagedHelmet/DamagedHelmet.gltf');
     expect(srcNode.asset).toEqual({
-      id: '/PlainCube/PlainCube.gltf',
       uri: '/PlainCube/PlainCube.gltf'
     });
     expect(fallbackIdNode.asset).toEqual({
-      id: '/PlainCube/PlainCube.gltf',
       uri: '/PlainCube/PlainCube.gltf'
     });
     expectTypeOf(srcNode).toEqualTypeOf<GltfNode>();
-    expectTypeOf<{
-      readonly asset: GltfAssetRef;
-      readonly src: string;
-    }>().not.toMatchTypeOf<GltfOptions>();
-  });
-
-  it('keeps old glTF identity names as compatibility aliases', () => {
-    const node = gltf({
-      assetId: 'preferred-helmet',
-      id: 'legacy-helmet',
-      revision: 1,
-      src: '/DamagedHelmet/DamagedHelmet.gltf',
-      version: 2
-    });
-
-    expect(node.asset).toEqual({
-      id: 'preferred-helmet',
-      revision: 2,
-      uri: '/DamagedHelmet/DamagedHelmet.gltf'
-    });
+    expectTypeOf<GltfOptions>().not.toHaveProperty('asset');
+    expectTypeOf<GltfOptions>().not.toHaveProperty('id');
+    expectTypeOf<GltfOptions>().not.toHaveProperty('revision');
+    expectTypeOf<GltfOptions>().not.toHaveProperty('assetId');
   });
 });

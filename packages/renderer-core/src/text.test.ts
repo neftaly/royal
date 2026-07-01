@@ -127,7 +127,7 @@ describe('text shaping and mesh generation', () => {
     });
     const mesh = textMesh(node);
 
-    expect(node.layout.font.family).toBe('royal-ascii-prototype');
+    expect(node.layout.font.family).toBe('royal-ascii-default');
     expect(mesh.contours.map((contour) => contour.role)).toEqual(['outline', 'outline', 'outline', 'outline']);
     expect(mesh.vertices).toHaveLength(16);
     expect(mesh.indices).toHaveLength(24);

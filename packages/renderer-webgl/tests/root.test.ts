@@ -22,6 +22,10 @@ vi.mock("../src/render-pipeline", () => ({
 
 import { createWebGlRoot } from "../src/root";
 
+type FakeCanvas = HTMLCanvasElement & {
+  readonly getContext: ReturnType<typeof vi.fn>;
+};
+
 const privateVirtualTextureStatsSymbol = Symbol.for(
   "royal.renderer-webgl.private.virtualTextureStats.v1",
 );
@@ -37,7 +41,7 @@ const fakeGl = (): WebGL2RenderingContext => ({
   viewport: vi.fn(),
 } as unknown as WebGL2RenderingContext);
 
-const fakeCanvas = (gl: WebGL2RenderingContext | null): HTMLCanvasElement => ({
+const fakeCanvas = (gl: WebGL2RenderingContext | null): FakeCanvas => ({
   getBoundingClientRect: vi.fn(() => ({
     bottom: 360,
     height: 360,
@@ -49,7 +53,7 @@ const fakeCanvas = (gl: WebGL2RenderingContext | null): HTMLCanvasElement => ({
   getContext: vi.fn(() => gl),
   height: 0,
   width: 0,
-} as unknown as HTMLCanvasElement);
+} as unknown as FakeCanvas);
 
 const scene = (): RenderRoot => ({
   children: [
@@ -128,9 +132,7 @@ const runtimeStats = (): MaterialVirtualTextureRuntimeStats => ({
   },
   selectedMip: 1,
   source: {
-    id: "terrain-vt",
     kind: "virtual-asset",
-    manifestId: "terrain-manifest",
     manifestUri: "https://example.test/terrain.vt.json",
     revision: "r2",
   },
@@ -156,9 +158,9 @@ describe("createWebGlRoot", () => {
     const canvas = fakeCanvas(null);
 
     expect(() => createWebGlRoot(canvas)).toThrow("WebGL2 is not available");
-    expect(canvas.getContext).toHaveBeenCalledWith("webgl2", {
+    expect(canvas.getContext.mock.calls).toContainEqual(["webgl2", {
       alpha: true,
-    });
+    }]);
   });
 
   it("does not expose private virtual texture stats unless explicitly enabled", () => {

@@ -1,17 +1,14 @@
 /** @jsxImportSource @royal/react */
-import {
-  type GltfOptions,
-  type RenderRoot,
-} from '@royal/renderer-core';
+import { type GltfOptions } from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
-  orbitCameraTransform,
+  orbitPerspectiveCamera,
   type OrbitCameraView,
 } from '@royal/react';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 
-const rootOptions = {
+const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
@@ -40,39 +37,33 @@ const helmetTransform = {
 
 export const GltfHelmet = (): ReactNode => {
   const [cameraView, setCameraView] = useState<OrbitCameraView>(helmetCameraView);
-  const camera = orbitCameraTransform(cameraView);
+  const camera = orbitPerspectiveCamera({
+    far: 100,
+    fovY: Math.PI / 4,
+    near: 0.1,
+    view: cameraView,
+  });
 
   return (
     <Canvas
       aria-label="glTF DamagedHelmet"
-      rootOptions={rootOptions}
+      renderer={renderer}
       style={orbitCanvasStyle}
     >
-      {(
-        <scene>
-          <pass clearColor={[0.04, 0.05, 0.06, 1]}>
-            <perspectiveCamera
-              far={100}
-              fovY={Math.PI / 4}
-              near={0.1}
-              position={camera.position}
-              rotation={camera.rotation}
-            />
-            <directionalLight color={[1, 0.96, 0.9, 1]} direction={[0.4, -0.75, -1]} />
-            <gltf
-              src={helmetSrc}
-              transform={helmetTransform}
-            />
-          </pass>
-        </scene>
-      ) as RenderRoot}
-      {(
-        <OrbitControls
-          {...orbitOptions}
-          initialView={helmetCameraView}
-          onChange={setCameraView}
-        />
-      ) as ReactNode}
+      <scene>
+        <pass camera={camera} clearColor={[0.04, 0.05, 0.06, 1]}>
+          <directionalLight color={[1, 0.96, 0.9, 1]} direction={[0.4, -0.75, -1]} />
+          <gltf
+            src={helmetSrc}
+            transform={helmetTransform}
+          />
+        </pass>
+      </scene>
+      <OrbitControls
+        {...orbitOptions}
+        defaultView={helmetCameraView}
+        onChange={setCameraView}
+      />
     </Canvas>
-  ) as ReactNode;
+  );
 };

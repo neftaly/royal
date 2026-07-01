@@ -14,14 +14,12 @@ import {
 
 export type VirtualTextureCacheDescriptor = Pick<
   VirtualTextureAssetRef,
-  "id" | "manifestUri" | "revision"
+  "manifestUri" | "revision"
 >;
 
 export type VirtualTextureCacheEntryStatus = "error" | "loading" | "ready";
 
 export type VirtualTextureCacheEntryStats = {
-  readonly id: string;
-  readonly key: string;
   readonly manifestUri: string;
   readonly status: VirtualTextureCacheEntryStatus;
   readonly error: string | null;
@@ -201,8 +199,6 @@ const resolveVirtualTextureUri = (uri: string): string =>
 
 const virtualTextureCacheEntryStats = (entry: VirtualTextureCacheEntry): VirtualTextureCacheEntryStats => ({
   error: entry.kind === "error" ? errorMessage(entry.error) : null,
-  id: entry.descriptor.id,
-  key: entry.key,
   manifestUri: entry.descriptor.manifestUri,
   resource: entry.kind === "ready" ? entry.resource.stats() : null,
   ...(entry.descriptor.revision === undefined ? {} : { revision: entry.descriptor.revision }),
@@ -210,9 +206,8 @@ const virtualTextureCacheEntryStats = (entry: VirtualTextureCacheEntry): Virtual
 });
 
 const virtualTextureCacheKey = (descriptor: VirtualTextureCacheDescriptor): string => [
-  descriptor.id,
-  descriptor.revision ?? "",
   descriptor.manifestUri,
+  descriptor.revision ?? "",
 ].join("\u0000");
 
 const virtualTextureCacheLoadResult = (entry: VirtualTextureCacheEntry): VirtualTextureCacheLoadResult => {

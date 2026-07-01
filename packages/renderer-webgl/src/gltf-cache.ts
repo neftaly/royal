@@ -339,7 +339,7 @@ const resolveUri = (base: string, uri: string): string =>
   new URL(uri, new URL(base, globalThis.location?.href ?? "http://localhost/")).href;
 
 const gltfCacheKey = (asset: GltfAssetRef): string =>
-  `${asset.id}\u0000${String(asset.revision ?? asset.uri)}`;
+  `${asset.uri}\u0000${String(asset.revision ?? asset.uri)}`;
 
 const looksLikeGlb = (src: string): boolean =>
   new URL(src, globalThis.location?.href ?? "http://localhost/").pathname.toLowerCase().endsWith(".glb");

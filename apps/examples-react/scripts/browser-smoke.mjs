@@ -37,33 +37,19 @@ const smokeExpectations = {
   },
   'form-controls': {
     path: '/form-controls',
+    allowDomSurface: true,
     minPaintedRatio: 0.01,
   },
   'texture-materials': {
     path: '/texture-materials',
     minPaintedRatio: 0.01,
   },
+  'virtual-texture': {
+    path: '/virtual-texture',
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     path: '/gltf-helmet',
-    minPaintedRatio: 0.01,
-  },
-  'virtual-texturing-plane': {
-    path: '/virtual-texturing-plane',
-    activeVirtualTextureGrid: '4x4',
-    activeVirtualTextureMip: 1,
-    activeVirtualTexturePages: 16,
-    expectedVirtualTextureGenerator: 'debug-rgba',
-    expectedVirtualTexturePageSourceKind: 'generated',
-    expectedVirtualTextureProbe: 'generated-debug-rgba-pages',
-    minColorBuckets: 4,
-    minPaintedRatio: 0.01,
-  },
-  'svg-gateway': {
-    path: '/svg-gateway',
-    minPaintedRatio: 0.01,
-  },
-  'rapier-physics': {
-    path: '/rapier-physics',
     minPaintedRatio: 0.01,
   },
 };
@@ -254,141 +240,6 @@ const smokeExpression = `
       brightRatio: brightPixels / (width * height),
       height,
       width,
-    };
-  };
-  const sampleSvgGatewayPixels = (pixels, width, height, maxPixels = 48_400) => {
-    const stride = Math.max(1, Math.ceil(Math.sqrt((width * height) / maxPixels)));
-    const buckets = new Set();
-    let darkPixels = 0;
-    let outlinePixels = 0;
-    let redFallbackPixels = 0;
-    let sampledPixels = 0;
-    let warmPixels = 0;
-    let whitePixels = 0;
-
-    for (let y = 0; y < height; y += stride) {
-      for (let x = 0; x < width; x += stride) {
-        const index = (y * width + x) * 4;
-        const alpha = pixels[index + 3];
-        if (alpha === 0) continue;
-        const red = pixels[index];
-        const green = pixels[index + 1];
-        const blue = pixels[index + 2];
-        sampledPixels += 1;
-        buckets.add(\`\${red >> 4}:\${green >> 4}:\${blue >> 4}:\${alpha >> 6}\`);
-        if (red < 45 && green < 45 && blue < 45) darkPixels += 1;
-        if (red < 120 && green > 145 && blue > 145 && green > red + 55 && blue > red + 55) {
-          outlinePixels += 1;
-        }
-        if (red > 220 && green < 24 && blue < 24) redFallbackPixels += 1;
-        if (red > 120 && green > 45 && green < 190 && blue < 110) warmPixels += 1;
-        if (red > 190 && green > 190 && blue > 180) whitePixels += 1;
-      }
-    }
-
-    const denominator = Math.max(1, sampledPixels);
-    return {
-      colorBuckets: buckets.size,
-      darkPixels,
-      darkRatio: darkPixels / denominator,
-      height,
-      outlinePixels,
-      outlineRatio: outlinePixels / denominator,
-      redFallbackPixels,
-      redFallbackRatio: redFallbackPixels / denominator,
-      sampledPixels,
-      stride,
-      warmPixels,
-      warmRatio: warmPixels / denominator,
-      whitePixels,
-      whiteRatio: whitePixels / denominator,
-      width,
-    };
-  };
-  const sampleSvgGatewayCanvas = (canvas) => {
-    if (!(canvas instanceof HTMLCanvasElement)) return undefined;
-
-    const gl =
-      canvas.getContext('webgl') ??
-      canvas.getContext('webgl2') ??
-      canvas.getContext('experimental-webgl');
-    if (gl !== null) {
-      if (typeof gl.isContextLost === 'function' && gl.isContextLost()) {
-        return { error: 'webgl context lost', height: canvas.height, width: canvas.width };
-      }
-
-      const width = Math.max(1, canvas.width);
-      const height = Math.max(1, canvas.height);
-      const pixels = new Uint8Array(width * height * 4);
-      try {
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-      } catch (error) {
-        return {
-          error: error instanceof Error ? error.message : String(error),
-          height,
-          width,
-        };
-      }
-      return sampleSvgGatewayPixels(pixels, width, height);
-    }
-
-    const width = Math.max(1, Math.min(220, canvas.width));
-    const height = Math.max(1, Math.min(220, canvas.height));
-    const sample = document.createElement('canvas');
-    sample.width = width;
-    sample.height = height;
-    const context = sample.getContext('2d', { willReadFrequently: true });
-    if (context === null) return { error: 'missing 2d context' };
-    context.drawImage(canvas, 0, 0, width, height);
-
-    let pixels;
-    try {
-      pixels = context.getImageData(0, 0, width, height).data;
-    } catch (error) {
-      return {
-        error: error instanceof Error ? error.message : String(error),
-        height,
-        width,
-      };
-    }
-
-    return sampleSvgGatewayPixels(pixels, width, height);
-  };
-  const readSvgGatewayFallbackSquare = () => {
-    const square = document.querySelector('[data-svg-gateway-fallback-square]');
-    if (!(square instanceof HTMLElement)) return undefined;
-
-    const rect = square.getBoundingClientRect();
-    const style = window.getComputedStyle(square);
-    return {
-      backgroundColor: style.backgroundColor,
-      display: style.display,
-      height: Number(rect.height.toFixed(2)),
-      opacity: style.opacity,
-      visibility: style.visibility,
-      visible: rect.width >= 24 &&
-        rect.height >= 24 &&
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        Number(style.opacity || 1) > 0,
-      width: Number(rect.width.toFixed(2)),
-    };
-  };
-  const readSvgGatewayRuntime = (canvas, options = {}) => {
-    const root = document.querySelector('[data-svg-gateway-readiness]');
-    if (!(root instanceof HTMLElement)) return undefined;
-    const readiness = root.dataset.svgGatewayReadiness ?? root.dataset.svgGatewayState ?? '';
-
-    return {
-      error: root.dataset.svgGatewayError ?? '',
-      failed: root.dataset.svgGatewayFailed === 'true',
-      fallbackSquare: readSvgGatewayFallbackSquare(),
-      readiness,
-      ready: root.dataset.svgGatewayReady === 'true',
-      sample: options.sample === true ? sampleSvgGatewayCanvas(canvas) : undefined,
-      source: root.dataset.svgGatewaySource ?? '',
-      state: root.dataset.svgGatewayState ?? '',
-      statusText: document.querySelector('[role="status"]')?.textContent ?? '',
     };
   };
   const readTextEditorProbe = () => {
@@ -735,138 +586,6 @@ const smokeExpression = `
       },
     };
   };
-  let virtualTexturingManifestPromise;
-  const loadVirtualTexturingManifest = (manifestUri) => {
-    if (virtualTexturingManifestPromise === undefined) {
-      virtualTexturingManifestPromise = fetch(manifestUri)
-        .then(async (response) => {
-          if (!response.ok) {
-            return { error: 'manifest fetch returned ' + response.status };
-          }
-
-          const manifest = await response.json();
-          const entries = Array.isArray(manifest?.pages?.entries)
-            ? manifest.pages.entries.map((entry) => ({
-              mip: Number(entry?.mip ?? -1),
-              uri: String(entry?.uri ?? ''),
-              x: Number(entry?.x ?? -1),
-              y: Number(entry?.y ?? -1),
-            }))
-            : [];
-          const entriesByMip = {};
-          for (const entry of entries) {
-            const key = 'mip' + entry.mip;
-            entriesByMip[key] = (entriesByMip[key] ?? 0) + 1;
-          }
-
-          return {
-            borderTexels: Number(manifest?.borderTexels ?? 0),
-            bytesPerTexel: Number(manifest?.bytesPerTexel ?? 0),
-            entries,
-            entriesByMip,
-            format: String(manifest?.format ?? ''),
-            generator: String(manifest?.pages?.generator ?? ''),
-            id: String(manifest?.id ?? ''),
-            mipCount: Number(manifest?.mipCount ?? 0),
-            pageSourceKind: String(manifest?.pages?.kind ?? 'uri'),
-            pageSize: Number(manifest?.pageSize ?? 0),
-            physicalSlots: Number(manifest?.physicalSlots ?? 0),
-            virtualSize: Array.isArray(manifest?.virtualSize)
-              ? manifest.virtualSize.map((value) => Number(value))
-              : [],
-          };
-        })
-        .catch((error) => ({
-          error: error instanceof Error ? error.message : String(error),
-        }));
-    }
-
-    return virtualTexturingManifestPromise;
-  };
-  const readVirtualTexturingProbe = async (canvas) => {
-    if (!(canvas instanceof HTMLCanvasElement)) return undefined;
-
-    const activeMip = Number(canvas.dataset.virtualTextureActiveMip ?? Number.NaN);
-    const activePages = Number(canvas.dataset.virtualTextureActivePages ?? Number.NaN);
-    const manifestUri = canvas.dataset.virtualTextureManifest ?? '';
-    const manifest = manifestUri === ''
-      ? { error: 'missing virtual texture manifest dataset' }
-      : await loadVirtualTexturingManifest(manifestUri);
-
-    return {
-      activeGrid: canvas.dataset.virtualTextureActiveGrid ?? '',
-      activeMip,
-      activePages,
-      format: canvas.dataset.virtualTextureFormat ?? '',
-      generator: canvas.dataset.virtualTextureGenerator ?? '',
-      manifest,
-      manifestUri,
-      pageSourceKind: canvas.dataset.virtualTexturePageSourceKind ?? '',
-      pageSize: Number(canvas.dataset.virtualTexturePageSize ?? Number.NaN),
-      physicalSlots: Number(canvas.dataset.virtualTexturePhysicalSlots ?? Number.NaN),
-      probe: canvas.dataset.virtualTextureProbe ?? '',
-      virtualSize: canvas.dataset.virtualTextureVirtualSize ?? '',
-    };
-  };
-  const readRapierPhysicsNetwork = (canvas) => {
-    if (!(canvas instanceof HTMLCanvasElement)) return undefined;
-
-    return {
-      clientTick: Number(canvas.dataset.rapierNetworkClientTick ?? Number.NaN),
-      droppedInputs: Number(canvas.dataset.rapierNetworkDroppedInputs ?? Number.NaN),
-      droppedShots: Number(canvas.dataset.rapierNetworkDroppedShots ?? Number.NaN),
-      droppedSnapshots: Number(canvas.dataset.rapierNetworkDroppedSnapshots ?? Number.NaN),
-      fireLossEvery: Number(canvas.dataset.rapierNetworkFireLossEvery ?? Number.NaN),
-      hitscanAdjudications: Number(canvas.dataset.rapierHitscanAdjudications ?? Number.NaN),
-      hitscanClientFireTick: Number(canvas.dataset.rapierHitscanClientFireTick ?? Number.NaN),
-      hitscanHit: canvas.dataset.rapierHitscanHit === 'true',
-      hitscanHitDistance: Number(canvas.dataset.rapierHitscanHitDistance ?? Number.NaN),
-      hitscanHitId: canvas.dataset.rapierHitscanHitId ?? '',
-      hitscanHitKind: canvas.dataset.rapierHitscanHitKind ?? '',
-      hitscanHistoryFrames: Number(canvas.dataset.rapierHitscanHistoryFrames ?? Number.NaN),
-      hitscanMaxDistance: Number(canvas.dataset.rapierHitscanMaxDistance ?? Number.NaN),
-      hitscanMode: canvas.dataset.rapierHitscanMode ?? '',
-      hitscanOriginError: Number(canvas.dataset.rapierHitscanOriginError ?? Number.NaN),
-      hitscanReceivedServerTick: Number(canvas.dataset.rapierHitscanReceivedServerTick ?? Number.NaN),
-      hitscanRewindAgeTicks: Number(canvas.dataset.rapierHitscanRewindAgeTicks ?? Number.NaN),
-      hitscanRewindServerTick: Number(canvas.dataset.rapierHitscanRewindServerTick ?? Number.NaN),
-      hitscanSequence: Number(canvas.dataset.rapierHitscanSequence ?? Number.NaN),
-      interpolation: canvas.dataset.rapierNetworkInterpolation ?? '',
-      interpolationBufferFrames: Number(canvas.dataset.rapierNetworkInterpolationBufferFrames ?? Number.NaN),
-      interpolationDelayTicks: Number(canvas.dataset.rapierNetworkInterpolationDelayTicks ?? Number.NaN),
-      interpolationTargetServerTick: Number(canvas.dataset.rapierNetworkInterpolationTargetServerTick ?? Number.NaN),
-      interpolationUnderflows: Number(canvas.dataset.rapierNetworkInterpolationUnderflows ?? Number.NaN),
-      interestColdActors: Number(canvas.dataset.rapierNetworkInterestColdActors ?? Number.NaN),
-      interestCombatActors: Number(canvas.dataset.rapierNetworkInterestCombatActors ?? Number.NaN),
-      interestDormantActors: Number(canvas.dataset.rapierNetworkInterestDormantActors ?? Number.NaN),
-      interestGhostProxies: Number(canvas.dataset.rapierNetworkInterestGhostProxies ?? Number.NaN),
-      interestHotActors: Number(canvas.dataset.rapierNetworkInterestHotActors ?? Number.NaN),
-      interestMode: canvas.dataset.rapierNetworkInterestMode ?? '',
-      interestPolicyProfiles: canvas.dataset.rapierNetworkInterestPolicyProfiles ?? '',
-      interestBlockingProxies: Number(canvas.dataset.rapierNetworkInterestBlockingProxies ?? Number.NaN),
-      interestReplicatedActors: Number(canvas.dataset.rapierNetworkInterestReplicatedActors ?? Number.NaN),
-      interestTotalActors: Number(canvas.dataset.rapierNetworkInterestTotalActors ?? Number.NaN),
-      interestTransformActors: Number(canvas.dataset.rapierNetworkInterestTransformActors ?? Number.NaN),
-      interestWarmActors: Number(canvas.dataset.rapierNetworkInterestWarmActors ?? Number.NaN),
-      lastReceivedServerTick: Number(canvas.dataset.rapierNetworkLastReceivedServerTick ?? Number.NaN),
-      lastPredictionError: Number(canvas.dataset.rapierNetworkLastPredictionError ?? Number.NaN),
-      lastReconciledServerTick: Number(canvas.dataset.rapierNetworkLastReconciledServerTick ?? Number.NaN),
-      mode: canvas.dataset.rapierNetworkMode ?? '',
-      pendingInputs: Number(canvas.dataset.rapierNetworkPendingInputs ?? Number.NaN),
-      pendingPredictedInputs: Number(canvas.dataset.rapierNetworkPendingPredictedInputs ?? Number.NaN),
-      pendingShots: Number(canvas.dataset.rapierNetworkPendingShots ?? Number.NaN),
-      pendingSnapshots: Number(canvas.dataset.rapierNetworkPendingSnapshots ?? Number.NaN),
-      predictedTick: Number(canvas.dataset.rapierNetworkPredictedTick ?? Number.NaN),
-      prediction: canvas.dataset.rapierNetworkPrediction ?? '',
-      reconciliations: Number(canvas.dataset.rapierNetworkReconciliations ?? Number.NaN),
-      serverLeadTicks: Number(canvas.dataset.rapierNetworkServerLeadTicks ?? Number.NaN),
-      serverTick: Number(canvas.dataset.rapierNetworkServerTick ?? Number.NaN),
-      smoothing: canvas.dataset.rapierNetworkSmoothing ?? '',
-      smoothingOffset: Number(canvas.dataset.rapierNetworkSmoothingOffset ?? Number.NaN),
-      smoothingTicksRemaining: Number(canvas.dataset.rapierNetworkSmoothingTicksRemaining ?? Number.NaN),
-      snapCorrectionDistance: Number(canvas.dataset.rapierNetworkSnapCorrectionDistance ?? Number.NaN),
-    };
-  };
   const read = async () => {
     const routePath = window.location.pathname.replace(/\\/$/, '') || '/';
     const routeEntry = Object.entries(smokeExpectations).find(([, expectation]) =>
@@ -875,13 +594,6 @@ const smokeExpression = `
     const routeId = routeEntry?.[0] ?? '';
     const smoke = routeEntry?.[1];
     const canvas = document.querySelector('canvas');
-    const svgGatewayRoot = routeId === 'svg-gateway'
-      ? document.querySelector('[data-svg-gateway-readiness]')
-      : null;
-    const svgGatewayReadiness = svgGatewayRoot instanceof HTMLElement
-      ? svgGatewayRoot.dataset.svgGatewayReadiness ?? svgGatewayRoot.dataset.svgGatewayState ?? ''
-      : '';
-    const shouldSampleSvgGateway = svgGatewayReadiness === 'ready' || svgGatewayReadiness === 'failed';
     return {
       route: {
         id: routeId,
@@ -893,7 +605,7 @@ const smokeExpression = `
         edge: routeId === 'text' ? sampleRightEdge(canvas) : undefined,
         minColorBuckets: smoke?.minColorBuckets,
         minPaintedRatio: smoke?.minPaintedRatio ?? 0,
-        sample: routeId === 'svg-gateway' ? undefined : sampleCanvas(canvas),
+        sample: sampleCanvas(canvas),
       },
       textControls: routeId === 'text' ? (() => {
         const editor = canvas;
@@ -917,29 +629,13 @@ const smokeExpression = `
           textInputNames: Array.from(document.querySelectorAll('input[type="text"]')).map((input) => input.name),
         };
       })() : undefined,
-      svgGateway: routeId === 'svg-gateway'
-        ? readSvgGatewayRuntime(canvas ?? undefined, { sample: shouldSampleSvgGateway })
-        : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
-      rapierPhysics: routeId === 'rapier-physics'
-        ? readRapierPhysicsNetwork(canvas ?? undefined)
-        : undefined,
-      virtualTexturing: routeId === 'virtual-texturing-plane'
-        ? await readVirtualTexturingProbe(canvas ?? undefined)
-        : undefined,
     };
   };
   const deadline = performance.now() + 8000;
   let state = await read();
   const isReady = () => {
     if (state.route.id === '') return false;
-    if (state.route.id === 'svg-gateway') {
-      return state.canvas !== undefined &&
-        state.canvas.backingWidth > 0 &&
-        state.canvas.backingHeight > 0 &&
-        (state.svgGateway?.readiness === 'ready' || state.svgGateway?.readiness === 'failed');
-    }
-
     const canvasReady = state.canvas !== undefined &&
       state.canvas.backingWidth > 0 &&
       state.canvas.backingHeight > 0 &&
@@ -949,22 +645,19 @@ const smokeExpression = `
         state.canvas.minColorBuckets === undefined ||
         state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets
       );
-    const routeReady = state.route.id !== 'form-controls' ||
-      state.formControls?.canvas?.ariaBusy !== 'true';
-    const rapierPhysicsReady = state.route.id !== 'rapier-physics' ||
-      (
-        state.rapierPhysics?.mode === 'server-authoritative' &&
-        state.rapierPhysics?.prediction === 'client-player-replay' &&
-        state.rapierPhysics.serverTick >= 12 &&
-        state.rapierPhysics.hitscanAdjudications >= 1
-      );
-    const virtualTexturingReady = state.route.id !== 'virtual-texturing-plane' ||
-      (
-        state.virtualTexturing?.manifest?.error === undefined &&
-        state.virtualTexturing?.manifest?.pageSourceKind === 'generated' &&
-        state.virtualTexturing?.manifest?.generator === 'debug-rgba'
-      );
-    return canvasReady && routeReady && rapierPhysicsReady && virtualTexturingReady;
+    if (state.route.id === 'form-controls') {
+      return state.formControls !== undefined &&
+        state.formControls?.canvas?.ariaBusy !== 'true' &&
+        (
+          canvasReady ||
+          (
+            state.formControls.summary.domControlCount > 0 &&
+            state.formControls.summary.contentEditableCount === 0 &&
+            state.formControls.summary.knownHiddenBridgeCount === 0
+          )
+        );
+    }
+    return canvasReady;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -1234,15 +927,11 @@ const assertRoute = (expected, state) => {
   }
 
   const sample = state.canvas?.sample;
-  if (state.canvas === undefined) {
+  if (state.canvas === undefined && expected.allowDomSurface !== true) {
     failures.push('missing canvas');
-  } else if (expected.id === 'svg-gateway') {
-    if (state.canvas.backingWidth <= 0 || state.canvas.backingHeight <= 0) {
-      failures.push('svg gateway canvas had no backing store');
-    }
-  } else if (expected.id !== 'svg-gateway' && (sample === undefined || sample.paintedPixels <= 0)) {
+  } else if (state.canvas !== undefined && (sample === undefined || sample.paintedPixels <= 0)) {
     failures.push('canvas pixels stayed blank');
-  } else if (expected.id !== 'svg-gateway') {
+  } else if (state.canvas !== undefined && sample !== undefined) {
     if (sample.paintedRatio < state.canvas.minPaintedRatio) {
       failures.push(
         `canvas painted ratio ${sample.paintedRatio.toFixed(4)} < ${state.canvas.minPaintedRatio}`,
@@ -1252,351 +941,6 @@ const assertRoute = (expected, state) => {
       failures.push(
         `canvas color buckets ${sample.colorBuckets} < ${expected.minColorBuckets}`,
       );
-    }
-  }
-
-  if (expected.id === 'virtual-texturing-plane') {
-    const vt = state.virtualTexturing;
-    if (vt === undefined) {
-      failures.push('virtual texturing route missed manifest/page probe');
-    } else {
-      if (vt.probe !== expected.expectedVirtualTextureProbe) {
-        failures.push(`virtual texturing probe was "${vt.probe || 'missing'}"`);
-      }
-      if (vt.activeGrid !== expected.activeVirtualTextureGrid) {
-        failures.push(`virtual texturing active grid ${vt.activeGrid || 'missing'} != ${expected.activeVirtualTextureGrid}`);
-      }
-      if (vt.activeMip !== expected.activeVirtualTextureMip) {
-        failures.push(`virtual texturing active mip ${vt.activeMip} != ${expected.activeVirtualTextureMip}`);
-      }
-      if (vt.activePages !== expected.activeVirtualTexturePages) {
-        failures.push(`virtual texturing active page count ${vt.activePages} != ${expected.activeVirtualTexturePages}`);
-      }
-      if (vt.format !== 'rgba8') {
-        failures.push(`virtual texturing canvas format was "${vt.format || 'missing'}"`);
-      }
-      if (vt.pageSourceKind !== expected.expectedVirtualTexturePageSourceKind) {
-        failures.push(
-          `virtual texturing page source kind ${vt.pageSourceKind || 'missing'} != ${expected.expectedVirtualTexturePageSourceKind}`,
-        );
-      }
-      if (vt.generator !== expected.expectedVirtualTextureGenerator) {
-        failures.push(
-          `virtual texturing generator ${vt.generator || 'missing'} != ${expected.expectedVirtualTextureGenerator}`,
-        );
-      }
-
-      const manifest = vt.manifest;
-      if (manifest?.error !== undefined) {
-        failures.push(`virtual texturing manifest probe failed: ${manifest.error}`);
-      } else {
-        if (manifest.id !== 'generated-virtual-texturing-surface') {
-          failures.push(`virtual texturing manifest id was "${manifest.id || 'missing'}"`);
-        }
-        if (manifest.format !== vt.format) {
-          failures.push(`virtual texturing manifest format ${manifest.format || 'missing'} != ${vt.format || 'missing'}`);
-        }
-        if (manifest.pageSourceKind !== expected.expectedVirtualTexturePageSourceKind) {
-          failures.push(
-            `virtual texturing manifest page source kind ${manifest.pageSourceKind || 'missing'} != ${expected.expectedVirtualTexturePageSourceKind}`,
-          );
-        }
-        if (manifest.generator !== expected.expectedVirtualTextureGenerator) {
-          failures.push(
-            `virtual texturing manifest generator ${manifest.generator || 'missing'} != ${expected.expectedVirtualTextureGenerator}`,
-          );
-        }
-        if (manifest.mipCount <= vt.activeMip) {
-          failures.push(`virtual texturing manifest mipCount ${manifest.mipCount} did not include active mip ${vt.activeMip}`);
-        }
-        if (manifest.pageSize !== vt.pageSize) {
-          failures.push(`virtual texturing pageSize dataset ${vt.pageSize} != manifest ${manifest.pageSize}`);
-        }
-        if (manifest.physicalSlots !== vt.physicalSlots) {
-          failures.push(`virtual texturing physicalSlots dataset ${vt.physicalSlots} != manifest ${manifest.physicalSlots}`);
-        }
-        if (manifest.virtualSize?.[0] !== 1024 || manifest.virtualSize?.[1] !== 1024) {
-          failures.push(`virtual texturing manifest virtualSize was ${manifest.virtualSize?.join('x') || 'missing'}`);
-        }
-        if (manifest.entries.length !== 0) {
-          failures.push(
-            `virtual texturing generated manifest listed ${manifest.entries.length} static page entrie(s)`,
-          );
-        }
-      }
-    }
-  }
-
-  if (expected.id === 'rapier-physics') {
-    const network = state.rapierPhysics;
-    if (network === undefined) {
-      failures.push('rapier physics missed network probe');
-    } else {
-      if (network.mode !== 'server-authoritative') {
-        failures.push(`rapier network mode was "${network.mode || 'missing'}"`);
-      }
-      if (network.prediction !== 'client-player-replay') {
-        failures.push(`rapier prediction mode was "${network.prediction || 'missing'}"`);
-      }
-      if (network.smoothing !== 'visual-correction-offset') {
-        failures.push(`rapier smoothing mode was "${network.smoothing || 'missing'}"`);
-      }
-      if (network.interpolation !== 'remote-snapshot-buffer') {
-        failures.push(`rapier interpolation mode was "${network.interpolation || 'missing'}"`);
-      }
-      if (network.interestMode !== 'profile-stages') {
-        failures.push(`rapier interest mode was "${network.interestMode || 'missing'}"`);
-      }
-      if (
-        !network.interestPolicyProfiles.includes('walking-player') ||
-        !network.interestPolicyProfiles.includes('flying-player')
-      ) {
-        failures.push(`rapier interest profiles were "${network.interestPolicyProfiles || 'missing'}"`);
-      }
-      if (network.hitscanMode !== 'server-rewind-raycast') {
-        failures.push(`rapier hitscan mode was "${network.hitscanMode || 'missing'}"`);
-      }
-      if (!Number.isFinite(network.serverTick) || network.serverTick < 12) {
-        failures.push(`rapier server tick did not advance: ${network.serverTick}`);
-      }
-      if (!Number.isFinite(network.clientTick) || network.clientTick < network.serverTick) {
-        failures.push(`rapier client tick ${network.clientTick} lagged server tick ${network.serverTick}`);
-      }
-      if (!Number.isFinite(network.predictedTick) || network.predictedTick <= 0) {
-        failures.push(`rapier predicted tick did not advance: ${network.predictedTick}`);
-      }
-      if (network.predictedTick > network.clientTick + 1) {
-        failures.push(
-          `rapier predicted tick ${network.predictedTick} exceeded client tick ${network.clientTick}`,
-        );
-      }
-      if (!Number.isFinite(network.lastReceivedServerTick) || network.lastReceivedServerTick > network.serverTick) {
-        failures.push(
-          `rapier received server tick ${network.lastReceivedServerTick} exceeded server tick ${network.serverTick}`,
-        );
-      }
-      if (
-        !Number.isFinite(network.lastReconciledServerTick) ||
-        network.lastReconciledServerTick > network.serverTick
-      ) {
-        failures.push(
-          `rapier reconciled server tick ${network.lastReconciledServerTick} exceeded server tick ${network.serverTick}`,
-        );
-      }
-      if (!Number.isFinite(network.serverLeadTicks) || network.serverLeadTicks < 0) {
-        failures.push(`rapier server lead was invalid: ${network.serverLeadTicks}`);
-      }
-      if (!Number.isFinite(network.pendingShots) || network.pendingShots < 0) {
-        failures.push(`rapier pending shots were invalid: ${network.pendingShots}`);
-      }
-      if (!Number.isFinite(network.droppedShots) || network.droppedShots < 0) {
-        failures.push(`rapier dropped shots were invalid: ${network.droppedShots}`);
-      }
-      if (!Number.isFinite(network.fireLossEvery) || network.fireLossEvery <= 0) {
-        failures.push(`rapier fire loss cadence was invalid: ${network.fireLossEvery}`);
-      }
-      if (!Number.isFinite(network.interpolationBufferFrames) || network.interpolationBufferFrames < 1) {
-        failures.push(`rapier interpolation buffer size was invalid: ${network.interpolationBufferFrames}`);
-      }
-      if (!Number.isFinite(network.interpolationDelayTicks) || network.interpolationDelayTicks <= 0) {
-        failures.push(`rapier interpolation delay was invalid: ${network.interpolationDelayTicks}`);
-      }
-      if (
-        !Number.isFinite(network.interpolationTargetServerTick) ||
-        network.interpolationTargetServerTick > network.lastReceivedServerTick
-      ) {
-        failures.push(
-          `rapier interpolation target ${network.interpolationTargetServerTick} exceeded received tick ` +
-            `${network.lastReceivedServerTick}`,
-        );
-      }
-      if (!Number.isFinite(network.interpolationUnderflows) || network.interpolationUnderflows < 0) {
-        failures.push(`rapier interpolation underflows were invalid: ${network.interpolationUnderflows}`);
-      }
-      const interestCount =
-        network.interestHotActors +
-        network.interestWarmActors +
-        network.interestColdActors +
-        network.interestDormantActors;
-      if (!Number.isFinite(network.interestTotalActors) || network.interestTotalActors !== 4) {
-        failures.push(`rapier interest total was invalid: ${network.interestTotalActors}`);
-      }
-      if (interestCount !== network.interestTotalActors) {
-        failures.push(
-          `rapier interest bands totaled ${interestCount}, expected ${network.interestTotalActors}`,
-        );
-      }
-      if (!Number.isFinite(network.interestReplicatedActors) || network.interestReplicatedActors < 1) {
-        failures.push(`rapier replicated actor count was invalid: ${network.interestReplicatedActors}`);
-      }
-      if (!Number.isFinite(network.interestTransformActors) || network.interestTransformActors < 1) {
-        failures.push(`rapier transform lane actor count was invalid: ${network.interestTransformActors}`);
-      }
-      if (!Number.isFinite(network.interestCombatActors) || network.interestCombatActors < 0) {
-        failures.push(`rapier combat lane actor count was invalid: ${network.interestCombatActors}`);
-      }
-      if (!Number.isFinite(network.interestBlockingProxies) || network.interestBlockingProxies < 0) {
-        failures.push(`rapier blocking proxy count was invalid: ${network.interestBlockingProxies}`);
-      }
-      if (!Number.isFinite(network.interestGhostProxies) || network.interestGhostProxies < 0) {
-        failures.push(`rapier ghost proxy count was invalid: ${network.interestGhostProxies}`);
-      }
-      if (network.interestBlockingProxies + network.interestGhostProxies > network.interestTotalActors) {
-        failures.push(
-          `rapier proxy counts exceeded actor total: ` +
-            `${network.interestBlockingProxies}+${network.interestGhostProxies} > ${network.interestTotalActors}`,
-        );
-      }
-      if (
-        !Number.isFinite(network.interestDormantActors) ||
-        network.interestDormantActors < 0 ||
-        network.interestDormantActors > network.interestTotalActors
-      ) {
-        failures.push(`rapier dormant actor count was invalid: ${network.interestDormantActors}`);
-      }
-      if (!Number.isFinite(network.lastPredictionError) || network.lastPredictionError < 0) {
-        failures.push(`rapier prediction error was invalid: ${network.lastPredictionError}`);
-      }
-      if (!Number.isFinite(network.reconciliations) || network.reconciliations < 0) {
-        failures.push(`rapier reconciliation count was invalid: ${network.reconciliations}`);
-      }
-      if (!Number.isFinite(network.smoothingOffset) || network.smoothingOffset < 0) {
-        failures.push(`rapier smoothing offset was invalid: ${network.smoothingOffset}`);
-      }
-      if (!Number.isFinite(network.smoothingTicksRemaining) || network.smoothingTicksRemaining < 0) {
-        failures.push(`rapier smoothing ticks were invalid: ${network.smoothingTicksRemaining}`);
-      }
-      if (!Number.isFinite(network.snapCorrectionDistance) || network.snapCorrectionDistance <= 0) {
-        failures.push(`rapier snap correction distance was invalid: ${network.snapCorrectionDistance}`);
-      }
-      if (!Number.isFinite(network.hitscanAdjudications) || network.hitscanAdjudications < 1) {
-        failures.push(`rapier hitscan adjudications did not advance: ${network.hitscanAdjudications}`);
-      }
-      if (!Number.isFinite(network.hitscanSequence) || network.hitscanSequence < 0) {
-        failures.push(`rapier hitscan sequence was invalid: ${network.hitscanSequence}`);
-      }
-      if (!Number.isFinite(network.hitscanClientFireTick) || network.hitscanClientFireTick < 0) {
-        failures.push(`rapier hitscan client tick was invalid: ${network.hitscanClientFireTick}`);
-      }
-      if (
-        !Number.isFinite(network.hitscanReceivedServerTick) ||
-        network.hitscanReceivedServerTick > network.serverTick
-      ) {
-        failures.push(
-          `rapier hitscan received tick ${network.hitscanReceivedServerTick} exceeded server tick ${network.serverTick}`,
-        );
-      }
-      if (
-        !Number.isFinite(network.hitscanRewindServerTick) ||
-        network.hitscanRewindServerTick > network.hitscanReceivedServerTick
-      ) {
-        failures.push(
-          `rapier hitscan rewind tick ${network.hitscanRewindServerTick} exceeded receipt tick ` +
-            `${network.hitscanReceivedServerTick}`,
-        );
-      }
-      if (
-        !Number.isFinite(network.hitscanRewindAgeTicks) ||
-        network.hitscanRewindAgeTicks < 0
-      ) {
-        failures.push(`rapier hitscan rewind age was invalid: ${network.hitscanRewindAgeTicks}`);
-      }
-      if (!Number.isFinite(network.hitscanHistoryFrames) || network.hitscanHistoryFrames < 2) {
-        failures.push(`rapier hitscan history frame count was invalid: ${network.hitscanHistoryFrames}`);
-      }
-      if (!Number.isFinite(network.hitscanMaxDistance) || network.hitscanMaxDistance <= 0) {
-        failures.push(`rapier hitscan max distance was invalid: ${network.hitscanMaxDistance}`);
-      }
-      if (
-        !Number.isFinite(network.hitscanHitDistance) ||
-        network.hitscanHitDistance < 0 ||
-        network.hitscanHitDistance > network.hitscanMaxDistance
-      ) {
-        failures.push(
-          `rapier hitscan distance ${network.hitscanHitDistance} was outside max ${network.hitscanMaxDistance}`,
-        );
-      }
-      if (!Number.isFinite(network.hitscanOriginError) || network.hitscanOriginError < 0) {
-        failures.push(`rapier hitscan origin error was invalid: ${network.hitscanOriginError}`);
-      }
-      if (!['dynamic', 'miss', 'static'].includes(network.hitscanHitKind)) {
-        failures.push(`rapier hitscan hit kind was "${network.hitscanHitKind || 'missing'}"`);
-      }
-      if (network.hitscanHit && network.hitscanHitId === 'none') {
-        failures.push('rapier hitscan reported hit with no hit id');
-      }
-      if (!network.hitscanHit && network.hitscanHitId !== 'none') {
-        failures.push(`rapier hitscan reported miss with hit id ${network.hitscanHitId}`);
-      }
-    }
-  }
-
-  if (expected.id === 'svg-gateway') {
-    const svg = state.svgGateway;
-    const expectedSource = 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Ghostscript_Tiger.svg';
-    if (svg === undefined) {
-      failures.push('svg gateway missed runtime readiness probe');
-    } else {
-      if (svg.source !== expectedSource) {
-        failures.push(`svg gateway source was "${svg.source || 'missing'}"`);
-      }
-      if (svg.state === 'failed' || svg.readiness === 'failed' || svg.failed === true) {
-        if (svg.fallbackSquare?.visible !== true) {
-          failures.push('svg gateway failed without a visible red fallback square');
-        }
-        failures.push(
-          `svg gateway state was failed` +
-            (svg.error === '' ? '' : `: ${svg.error}`),
-        );
-      } else if (svg.state !== 'ready' || svg.readiness !== 'ready' || svg.ready !== true) {
-        failures.push(
-          `svg gateway readiness was "${svg.readiness || svg.state || 'missing'}"` +
-            (svg.error === '' ? '' : `: ${svg.error}`),
-        );
-      }
-      if (svg.statusText !== '' && svg.state === 'ready') {
-        failures.push(`svg gateway showed failure status while ready: ${svg.statusText}`);
-      }
-
-      const svgSample = svg.sample;
-      if (svg.state !== 'ready' || svg.readiness !== 'ready') {
-        // Failed and still-loading routes are reported above; tiger pixel checks only apply after ready.
-      } else if (svgSample === undefined) {
-        failures.push('svg gateway missed texture canvas sample');
-      } else if (svgSample.error !== undefined) {
-        failures.push(`svg gateway texture canvas sample failed: ${svgSample.error}`);
-      } else {
-        if (svgSample.colorBuckets < 10) {
-          failures.push(`svg gateway texture sample had only ${svgSample.colorBuckets} color bucket(s)`);
-        }
-        if (svgSample.warmPixels < 50) {
-          failures.push(
-            `svg gateway texture sample missed warm tiger pixels: ` +
-              `${svgSample.warmPixels}/${svgSample.width * svgSample.height}`,
-          );
-        }
-        if (svgSample.darkPixels < 50) {
-          failures.push(
-            `svg gateway texture sample missed dark tiger pixels: ` +
-              `${svgSample.darkPixels}/${svgSample.width * svgSample.height}`,
-          );
-        }
-        if (svgSample.outlinePixels < 25) {
-          failures.push(
-            `svg gateway texture sample missed visible cyan outline pixels: ` +
-              `${svgSample.outlinePixels}/${svgSample.sampledPixels}`,
-          );
-        }
-        if (svgSample.whitePixels < 10) {
-          failures.push(
-            `svg gateway texture sample missed light tiger pixels: ` +
-              `${svgSample.whitePixels}/${svgSample.width * svgSample.height}`,
-          );
-        }
-        if (svgSample.redFallbackPixels > 0 && svgSample.colorBuckets <= 3) {
-          failures.push('svg gateway texture sample looked like the red fallback square');
-        }
-      }
     }
   }
 
@@ -2014,9 +1358,7 @@ const assertRoute = (expected, state) => {
     if (form === undefined) {
       failures.push('form controls route missed runtime DOM inspection');
     } else {
-      if ((form.summary?.domControlCount ?? form.domControls?.length ?? 0) !== 0) {
-        failures.push(`form controls route rendered DOM control(s): ${summarizeNodes(form.domControls ?? [])}`);
-      }
+      const domControlCount = form.summary?.domControlCount ?? form.domControls?.length ?? 0;
       if ((form.summary?.contentEditableCount ?? form.contentEditableControls?.length ?? 0) !== 0) {
         failures.push(
           `form controls route rendered contenteditable control(s): ${
@@ -2036,7 +1378,9 @@ const assertRoute = (expected, state) => {
       }
       const focus = form.canvasFocus;
       if (focus?.hasCanvas !== true) {
-        failures.push('form controls focus probe missed canvas');
+        if (domControlCount <= 0) {
+          failures.push('form controls route rendered neither canvas nor DOM controls');
+        }
       } else {
         if ((focus.currentTabIndex ?? -1) >= 0 && focus.currentFocus?.ok !== true) {
           failures.push(`form controls canvas tabIndex=${focus.currentTabIndex} did not receive focus`);
@@ -2805,24 +2149,7 @@ const main = async () => {
           ` bridges=${state.formControls.summary.knownHiddenBridgeCount}` +
           ` focus=${state.formControls.summary.focusMode}`
         : '';
-      const vtSummary = route.id === 'virtual-texturing-plane' && state.virtualTexturing !== undefined
-        ? ` vtMip=${state.virtualTexturing.activeMip}` +
-          ` vtSource=${state.virtualTexturing.pageSourceKind}` +
-          ` vtGenerator=${state.virtualTexturing.generator}` +
-          ` vtGrid=${state.virtualTexturing.activeGrid}` +
-          ` vtSlots=${state.virtualTexturing.physicalSlots}`
-        : '';
-      const svgSample = state.svgGateway?.sample;
-      const svgSummary = route.id === 'svg-gateway' && svgSample !== undefined && svgSample.error === undefined
-        ? ` svgState=${state.svgGateway.state}` +
-          ` readiness=${state.svgGateway.readiness}` +
-          ` tigerBuckets=${svgSample.colorBuckets}` +
-          ` warm=${svgSample.warmPixels}` +
-          ` dark=${svgSample.darkPixels}` +
-          ` outline=${svgSample.outlinePixels}` +
-          ` light=${svgSample.whitePixels}`
-        : '';
-      console.log(`ok ${route.id}${canvasSummary}${formSummary}${vtSummary}${svgSummary}`);
+      console.log(`ok ${route.id}${canvasSummary}${formSummary}`);
     }
 
     if (exceptions.length > 0) {
