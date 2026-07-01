@@ -1,58 +1,160 @@
 import { describe, expect, it } from "vitest";
 import {
   collectRendererCapabilityRows,
+  type WebGlLikeContext,
 } from "@royal/renderer-webgl/capabilities";
-import {
-  createWebGlRoot,
-} from "@royal/renderer-webgl";
 
-describe("renderer-webgl stub public API", () => {
-  it("stores rendered scenes without touching WebGL", () => {
-    const canvas = {} as HTMLCanvasElement;
-    const root = createWebGlRoot(canvas, { alpha: false });
-    const scene = {
-      children: [],
-      kind: "scene",
-    } as const;
+type FakeCapabilityContext = {
+  readonly gl: WebGlLikeContext;
+  readonly parameterQueries: readonly number[];
+};
 
-    root.render(scene);
+const fakeCapabilityContext = (
+  versionLabel: string = "WebGL 2.0 Royal capability test",
+): FakeCapabilityContext => {
+  const parameterQueries: number[] = [];
+  const extensions = new Set([
+    "EXT_color_buffer_float",
+    "EXT_texture_filter_anisotropic",
+    "WEBGL_lose_context",
+  ]);
+  const gl: WebGlLikeContext = {
+    COMPRESSED_TEXTURE_FORMATS: 0x86A3,
+    MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
+    MAX_TEXTURE_IMAGE_UNITS: 0x8872,
+    MAX_TEXTURE_SIZE: 0x0D33,
+    READ_BUFFER: 0x0C02,
+    RENDERER: 0x1F01,
+    SHADING_LANGUAGE_VERSION: 0x8B8C,
+    TEXTURE_3D: 0x806F,
+    VENDOR: 0x1F00,
+    VERSION: 0x1F02,
+    beginQuery: () => undefined,
+    drawBuffers: () => undefined,
+    getExtension: (name: string) => extensions.has(name) ? { name } : null,
+    getParameter: (name: number) => {
+      parameterQueries.push(name);
+      switch (name) {
+        case gl.COMPRESSED_TEXTURE_FORMATS:
+          return new Uint32Array([0x83F0, 0x83F3]);
+        case gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS:
+          return 16;
+        case gl.MAX_TEXTURE_IMAGE_UNITS:
+          return 8;
+        case gl.MAX_TEXTURE_SIZE:
+          return 4096;
+        case gl.RENDERER:
+          return "Royal fake renderer";
+        case gl.SHADING_LANGUAGE_VERSION:
+          return "WebGL GLSL ES 3.00 Royal";
+        case gl.VENDOR:
+          return "Royal tests";
+        case gl.VERSION:
+          return versionLabel;
+        default:
+          return undefined;
+      }
+    },
+    getSupportedExtensions: () => [...extensions],
+    texStorage2D: () => undefined,
+    vertexAttribDivisor: () => undefined,
+  };
 
-    expect(root.canvas).toBe(canvas);
-    expect(root.snapshot()).toEqual({
-      disposed: false,
-      frame: 1,
-      latestScene: scene,
-      options: {
-        alpha: false,
-        antialias: true,
-        preserveDrawingBuffer: false,
-      },
-    });
-  });
+  return { gl, parameterQueries };
+};
 
-  it("keeps capability probing deterministic while the backend is stubbed", () => {
-    const result = collectRendererCapabilityRows();
+describe("renderer-webgl capabilities public API", () => {
+  it("reports probed capabilities from a fake WebGL2-like context", () => {
+    const { gl, parameterQueries } = fakeCapabilityContext();
+    const result = collectRendererCapabilityRows(gl);
 
-    expect(result.rows).toContainEqual({
-      api: "stub",
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      api: "webgl",
       kind: "context_version",
-      version: "unknown",
-      versionLabel: "Royal stub renderer",
-    });
+      renderer: "Royal fake renderer",
+      shadingLanguageVersion: "WebGL GLSL ES 3.00 Royal",
+      vendor: "Royal tests",
+      version: 2,
+      versionLabel: "WebGL 2.0 Royal capability test",
+    }));
     expect(result.rows).toContainEqual(expect.objectContaining({
       capability: "webgl2",
       kind: "renderer_capability",
-      source: "unprobed",
-      supported: false,
+      source: "webgl2-core",
+      supported: true,
     }));
-    expect(result.diagnostics).toEqual([
-      {
-        code: "renderer_capability_stubbed",
-        key: "stub",
-        message: "Renderer capabilities are stubbed and do not reflect device support.",
-        relation: "renderer_capability",
-        severity: "info",
-      },
-    ]);
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "anisotropy",
+      extension: "EXT_texture_filter_anisotropic",
+      kind: "renderer_capability",
+      source: "webgl-extension",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "float_texture",
+      extension: "EXT_color_buffer_float",
+      kind: "renderer_capability",
+      source: "webgl-extension",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "lose_context",
+      extension: "WEBGL_lose_context",
+      kind: "renderer_capability",
+      source: "webgl-extension",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "webgl_extension",
+      name: "EXT_color_buffer_float",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "webgl_extension",
+      name: "EXT_texture_filter_anisotropic",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "webgl_extension",
+      name: "WEBGL_lose_context",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "max_texture_size",
+      value: 4096,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "max_texture_units",
+      scope: "fragment",
+      value: 8,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "max_texture_units",
+      scope: "combined",
+      value: 16,
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "renderer_capability_stubbed",
+    }));
+    expect(parameterQueries).toContain(gl.VERSION);
+    expect(parameterQueries).toContain(gl.RENDERER);
+    expect(parameterQueries).toContain(gl.SHADING_LANGUAGE_VERSION);
+    expect(parameterQueries).toContain(gl.VENDOR);
+    expect(parameterQueries).toContain(gl.MAX_TEXTURE_SIZE);
+    expect(parameterQueries).toContain(gl.MAX_TEXTURE_IMAGE_UNITS);
+    expect(parameterQueries).toContain(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+  });
+
+  it("keeps diagnostics suppression deterministic when no GL context is supplied", () => {
+    const result = collectRendererCapabilityRows({}, {
+      contextVersion: 1,
+      includeMissingDiagnostics: false,
+    });
+
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      kind: "context_version",
+      version: 1,
+    }));
+    expect(result.diagnostics).toEqual([]);
   });
 });

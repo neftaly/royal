@@ -1,0 +1,553 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  boxGeometry,
+  mesh,
+  orthographicCamera,
+  pass,
+  perspectiveCamera,
+  scene,
+  unlitMaterial,
+  type Geometry,
+  type Rgba,
+} from "@royal/renderer-core";
+import { createWebGlRoot } from "@royal/renderer-webgl";
+
+type CanvasSize = {
+  readonly width: number;
+  readonly height: number;
+};
+
+type FakeCanvas = HTMLCanvasElement & {
+  getContext: ReturnType<typeof vi.fn>;
+};
+
+type GlCall = {
+  readonly name: string;
+  readonly args: readonly unknown[];
+};
+
+type FakeGl = {
+  readonly gl: WebGL2RenderingContext;
+  readonly calls: readonly GlCall[];
+};
+
+type BufferUpload = {
+  readonly target: unknown;
+  readonly length: number;
+};
+
+const drawCallNames = new Set(["drawArrays", "drawElements"]);
+
+const defaultCanvasSize: CanvasSize = { width: 200, height: 100 };
+
+const roundNumber = (value: number): number => {
+  const rounded = Number(value.toFixed(6));
+
+  return Object.is(rounded, -0) ? 0 : rounded;
+};
+
+const roundVector = (values: readonly number[]): readonly number[] =>
+  values.map(roundNumber);
+
+const isNumericArrayLike = (value: unknown): value is ArrayLike<number> =>
+  ArrayBuffer.isView(value)
+    && !(value instanceof DataView)
+    && typeof (value as { readonly length?: unknown }).length === "number";
+
+const numericArray = (value: unknown): readonly number[] => {
+  if (Array.isArray(value)) return value.map(Number);
+  if (isNumericArrayLike(value)) return Array.from(value, Number);
+
+  throw new Error("Expected a numeric WebGL uniform payload");
+};
+
+const dataLength = (value: unknown): number => {
+  if (typeof value === "number") return value;
+  if (value instanceof ArrayBuffer) return value.byteLength;
+  if (isNumericArrayLike(value)) return value.length;
+
+  return 0;
+};
+
+const fakeCanvas = (
+  gl: WebGL2RenderingContext | null,
+  size: CanvasSize = defaultCanvasSize,
+): FakeCanvas => {
+  const canvas = {
+    get clientHeight() {
+      return size.height;
+    },
+    get clientWidth() {
+      return size.width;
+    },
+    getBoundingClientRect: vi.fn(() => ({
+      bottom: size.height,
+      height: size.height,
+      left: 0,
+      right: size.width,
+      top: 0,
+      width: size.width,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })),
+    getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    height: 0,
+    width: 0,
+  };
+
+  if (gl !== null) {
+    (gl as unknown as { canvas: HTMLCanvasElement }).canvas = canvas as unknown as HTMLCanvasElement;
+  }
+
+  return canvas as unknown as FakeCanvas;
+};
+
+const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
+  const calls: GlCall[] = [];
+  let nextHandleId = 1;
+  const uniformLocations = new Map<string, WebGLUniformLocation>();
+  const constants = {
+    ACTIVE_ATTRIBUTES: 0x8B89,
+    ACTIVE_TEXTURE: 0x84E0,
+    ACTIVE_UNIFORMS: 0x8B86,
+    ARRAY_BUFFER: 0x8892,
+    BACK: 0x0405,
+    BLEND: 0x0BE2,
+    COLOR_BUFFER_BIT: 0x4000,
+    COMPILE_STATUS: 0x8B81,
+    CULL_FACE: 0x0B44,
+    DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_TEST: 0x0B71,
+    ELEMENT_ARRAY_BUFFER: 0x8893,
+    FLOAT: 0x1406,
+    FRAGMENT_SHADER: 0x8B30,
+    LEQUAL: 0x0203,
+    LESS: 0x0201,
+    LINK_STATUS: 0x8B82,
+    MAX_TEXTURE_IMAGE_UNITS: 0x8872,
+    MAX_TEXTURE_SIZE: 0x0D33,
+    ONE: 1,
+    ONE_MINUS_SRC_ALPHA: 0x0303,
+    RGBA: 0x1908,
+    STATIC_DRAW: 0x88E4,
+    TEXTURE0: 0x84C0,
+    TEXTURE_2D: 0x0DE1,
+    TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_WRAP_S: 0x2802,
+    TEXTURE_WRAP_T: 0x2803,
+    TRIANGLES: 0x0004,
+    UNSIGNED_BYTE: 0x1401,
+    UNSIGNED_INT: 0x1405,
+    UNSIGNED_SHORT: 0x1403,
+    VERTEX_SHADER: 0x8B31,
+  } as const;
+
+  const handle = <Handle>(kind: string): Handle =>
+    ({ id: nextHandleId++, kind }) as Handle;
+
+  const uniformHandle = (name: string): WebGLUniformLocation => {
+    const existing = uniformLocations.get(name);
+    if (existing !== undefined) return existing;
+
+    const location = { kind: "uniform", name } as unknown as WebGLUniformLocation;
+    uniformLocations.set(name, location);
+
+    return location;
+  };
+
+  const record = <Arguments extends readonly unknown[]>(
+    name: string,
+    implementation?: (...args: Arguments) => unknown,
+  ) => vi.fn((...args: Arguments) => {
+    calls.push({ name, args });
+    return implementation?.(...args);
+  });
+
+  const glTarget = {
+    ...constants,
+    drawingBufferHeight: drawingBufferSize.height,
+    drawingBufferWidth: drawingBufferSize.width,
+    activeTexture: record("activeTexture"),
+    attachShader: record("attachShader"),
+    bindAttribLocation: record("bindAttribLocation"),
+    bindBuffer: record("bindBuffer"),
+    bindTexture: record("bindTexture"),
+    bindVertexArray: record("bindVertexArray"),
+    blendFunc: record("blendFunc"),
+    bufferData: record("bufferData"),
+    bufferSubData: record("bufferSubData"),
+    clear: record("clear"),
+    clearColor: record("clearColor"),
+    clearDepth: record("clearDepth"),
+    colorMask: record("colorMask"),
+    compileShader: record("compileShader"),
+    createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
+    createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
+    createShader: record("createShader", () => handle<WebGLShader>("shader")),
+    createTexture: record("createTexture", () => handle<WebGLTexture>("texture")),
+    createVertexArray: record("createVertexArray", () => handle<WebGLVertexArrayObject>("vertex-array")),
+    cullFace: record("cullFace"),
+    deleteBuffer: record("deleteBuffer"),
+    deleteProgram: record("deleteProgram"),
+    deleteShader: record("deleteShader"),
+    deleteTexture: record("deleteTexture"),
+    deleteVertexArray: record("deleteVertexArray"),
+    depthFunc: record("depthFunc"),
+    depthMask: record("depthMask"),
+    disable: record("disable"),
+    drawArrays: record("drawArrays"),
+    drawElements: record("drawElements"),
+    enable: record("enable"),
+    enableVertexAttribArray: record("enableVertexAttribArray"),
+    frontFace: record("frontFace"),
+    getActiveAttrib: record("getActiveAttrib", () => null),
+    getActiveUniform: record("getActiveUniform", () => null),
+    getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
+      const normalized = name.toLowerCase();
+      if (normalized.includes("position")) return 0;
+      if (normalized.includes("normal")) return 1;
+      if (normalized.includes("uv") || normalized.includes("texcoord")) return 2;
+      return 0;
+    }),
+    getContextAttributes: record("getContextAttributes", () => ({
+      alpha: true,
+      antialias: true,
+      depth: true,
+      desynchronized: false,
+      failIfMajorPerformanceCaveat: false,
+      powerPreference: "default",
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: false,
+      stencil: false,
+    })),
+    getError: record("getError", () => 0),
+    getExtension: record("getExtension", () => null),
+    getParameter: record<[number]>("getParameter", (parameter) => {
+      if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS) return 8;
+      if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
+      return 0;
+    }),
+    getProgramInfoLog: record("getProgramInfoLog", () => ""),
+    getProgramParameter: record<[WebGLProgram, number]>("getProgramParameter", (_program, parameter) => {
+      if (parameter === constants.LINK_STATUS) return true;
+      if (parameter === constants.ACTIVE_ATTRIBUTES) return 0;
+      if (parameter === constants.ACTIVE_UNIFORMS) return 0;
+      return 0;
+    }),
+    getShaderInfoLog: record("getShaderInfoLog", () => ""),
+    getShaderParameter: record<[WebGLShader, number]>("getShaderParameter", (_shader, parameter) => {
+      if (parameter === constants.COMPILE_STATUS) return true;
+      return 0;
+    }),
+    getSupportedExtensions: record("getSupportedExtensions", () => []),
+    getUniformLocation: record<[WebGLProgram, string]>("getUniformLocation", (_program, name) => uniformHandle(name)),
+    lineWidth: record("lineWidth"),
+    linkProgram: record("linkProgram"),
+    pixelStorei: record("pixelStorei"),
+    polygonOffset: record("polygonOffset"),
+    scissor: record("scissor"),
+    shaderSource: record("shaderSource"),
+    texImage2D: record("texImage2D"),
+    texParameteri: record("texParameteri"),
+    uniform1f: record("uniform1f"),
+    uniform1i: record("uniform1i"),
+    uniform2fv: record("uniform2fv"),
+    uniform3fv: record("uniform3fv"),
+    uniform4fv: record("uniform4fv"),
+    uniformMatrix3fv: record("uniformMatrix3fv"),
+    uniformMatrix4fv: record("uniformMatrix4fv"),
+    useProgram: record("useProgram"),
+    vertexAttribPointer: record("vertexAttribPointer"),
+    viewport: record("viewport"),
+  };
+
+  const gl = new Proxy(glTarget, {
+    get(target, property, receiver) {
+      if (property in target) return Reflect.get(target, property, receiver);
+      if (typeof property !== "string") return undefined;
+
+      const fallback = record(property);
+      Object.defineProperty(target, property, {
+        configurable: true,
+        value: fallback,
+      });
+
+      return fallback;
+    },
+  }) as unknown as WebGL2RenderingContext;
+
+  return { calls, gl };
+};
+
+const matrixUniformPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "uniformMatrix4fv")
+    .map((call) => {
+      expect(call.args[1]).toBe(false);
+
+      const values = numericArray(call.args[2]);
+      const offset = typeof call.args[3] === "number" ? call.args[3] : 0;
+      const length = typeof call.args[4] === "number" ? call.args[4] : 16;
+
+      return values.slice(offset, offset + length).slice(0, 16);
+    });
+
+const expectMatrixUniform = (
+  calls: readonly GlCall[],
+  expected: readonly number[],
+): void => {
+  const actual = matrixUniformPayloads(calls).map(roundVector);
+
+  expect(actual).toContainEqual(roundVector(expected));
+};
+
+const uniform4fvPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "uniform4fv")
+    .map((call) => {
+      const values = numericArray(call.args[1]);
+      const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
+      const length = typeof call.args[3] === "number" ? call.args[3] : 4;
+
+      return values.slice(offset, offset + length).slice(0, 4);
+    });
+
+const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
+  calls
+    .filter((call) => call.name === "bufferData" || call.name === "bufferSubData")
+    .map((call) => {
+      const payload = call.name === "bufferSubData" ? call.args[2] : call.args[1];
+
+      return {
+        target: call.args[0],
+        length: dataLength(payload),
+      };
+    });
+
+const isValidElementIndexType = (
+  gl: WebGL2RenderingContext,
+  value: unknown,
+): boolean =>
+  value === gl.UNSIGNED_BYTE
+  || value === gl.UNSIGNED_SHORT
+  || value === gl.UNSIGNED_INT;
+
+const isPositiveTriangleCount = (value: unknown): boolean =>
+  typeof value === "number" && value > 0 && value % 3 === 0;
+
+const isValidTriangleDraw = (
+  gl: WebGL2RenderingContext,
+  call: GlCall,
+): boolean => {
+  if (call.args[0] !== gl.TRIANGLES) return false;
+
+  if (call.name === "drawArrays") {
+    return typeof call.args[1] === "number" && isPositiveTriangleCount(call.args[2]);
+  }
+
+  if (call.name === "drawElements") {
+    return isPositiveTriangleCount(call.args[1])
+      && isValidElementIndexType(gl, call.args[2])
+      && typeof call.args[3] === "number";
+  }
+
+  return false;
+};
+
+const unlitBox = (color: Rgba = [1, 1, 1, 1]) =>
+  mesh({
+    geometry: boxGeometry(1),
+    material: unlitMaterial({ color }),
+  });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe("WebGL renderer pipeline contracts", () => {
+  it("sets stable model/view/projection matrices for an orthographic scene", () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10.5,
+            left: -2,
+            near: 0.5,
+            position: [0, 0, 4],
+            right: 2,
+            rotation: [0, 0, 0],
+            top: 3,
+          }),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: unlitMaterial({ color: [1, 1, 1, 1] }),
+              transform: {
+                position: [1, 2, -3],
+                rotation: [0, 0, 0],
+                scale: [2, 3, 4],
+              },
+            }),
+          ],
+        }),
+      ],
+    }));
+
+    expectMatrixUniform(calls, [
+      0.5, 0, 0, 0,
+      0, 0.5, 0, 0,
+      0, 0, -0.2, 0,
+      0, -0.5, -1.1, 1,
+    ]);
+    expectMatrixUniform(calls, [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, -4, 1,
+    ]);
+    expectMatrixUniform(calls, [
+      2, 0, 0, 0,
+      0, 3, 0, 0,
+      0, 0, 4, 0,
+      1, 2, -3, 1,
+    ]);
+  });
+
+  it("sets stable projection and view matrices for a perspective scene", () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: perspectiveCamera({
+            far: 101,
+            fovY: Math.PI / 2,
+            near: 1,
+            position: [0, 0, 5],
+            rotation: [0, 0, 0],
+          }),
+          children: [unlitBox()],
+        }),
+      ],
+    }));
+
+    expectMatrixUniform(calls, [
+      0.5, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, -1.02, -1,
+      0, 0, -2.02, 0,
+    ]);
+    expectMatrixUniform(calls, [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, -5, 1,
+    ]);
+  });
+
+  it("sends an unlit solid color through uniform4fv", () => {
+    const color: Rgba = [0.125, 0.5, 0.875, 0.75];
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [unlitBox(color)],
+        }),
+      ],
+    }));
+
+    expect(uniform4fvPayloads(calls).map(roundVector)).toContainEqual(color);
+  });
+
+  it("uploads box vertex data before issuing a triangle draw", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [unlitBox()],
+        }),
+      ],
+    }));
+
+    const uploads = bufferUploads(calls);
+    const bindTargets = calls
+      .filter((call) => call.name === "bindBuffer")
+      .map((call) => call.args[0]);
+    const drawCalls = calls.filter((call) => drawCallNames.has(call.name));
+    const indexedDraws = drawCalls.filter((call) => call.name === "drawElements");
+
+    expect(calls.filter((call) => call.name === "createBuffer").length).toBeGreaterThanOrEqual(1);
+    expect(bindTargets).toContain(gl.ARRAY_BUFFER);
+    expect(uploads.some((upload) => upload.target === gl.ARRAY_BUFFER && upload.length >= 24)).toBe(true);
+    expect(calls.some((call) => call.name === "vertexAttribPointer")).toBe(true);
+    expect(drawCalls.some((call) => isValidTriangleDraw(gl, call))).toBe(true);
+
+    if (indexedDraws.length > 0) {
+      expect(bindTargets).toContain(gl.ELEMENT_ARRAY_BUFFER);
+      expect(uploads.some((upload) => upload.target === gl.ELEMENT_ARRAY_BUFFER && upload.length > 0)).toBe(true);
+    }
+  });
+
+  it("throws a deterministic error for unknown geometry kinds", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const unsupportedGeometry = { kind: "custom-pyramid" } satisfies Geometry<"custom-pyramid">;
+
+    expect(() => root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [
+            mesh({
+              geometry: unsupportedGeometry,
+              material: unlitMaterial({ color: [1, 1, 1, 1] }),
+            }),
+          ],
+        }),
+      ],
+    }))).toThrow('Unsupported geometry kind "custom-pyramid"');
+  });
+});
