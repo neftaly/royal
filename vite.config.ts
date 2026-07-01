@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import glsl from 'vite-plugin-glsl';
 
@@ -57,7 +58,7 @@ const fixtureAppPackageNames = new Set(['@royal/examples-react']);
 const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
-const repoRoot = path.dirname(new URL(import.meta.url).pathname);
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },

@@ -1,8 +1,9 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mergeConfig, type ConfigEnv, type UserConfig } from 'vite';
 import rootConfig from '../../vite.config';
 
-const appRoot = path.dirname(new URL(import.meta.url).pathname);
+const appRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default (env: ConfigEnv): UserConfig => {
   const baseConfig =
