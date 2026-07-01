@@ -102,8 +102,10 @@ type LoadedGltfPrimitive = {
 
 type LoadedGltfMaterial = {
   readonly baseColorImageUri?: string;
+  readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
   readonly image?: HTMLImageElement | ImageBitmap;
+  readonly imageFailed?: boolean;
   readonly sampler?: TextureSampler;
 };
 
@@ -117,6 +119,10 @@ type GltfNodePrimitiveLod = {
 type GltfMaterialPrimitiveLod = {
   readonly levels: readonly LoadedGltfMaterial[];
   readonly thresholds: readonly number[];
+};
+
+type GltfLodSelectionState = {
+  readonly level: number;
 };
 
 type GltfState = {
@@ -159,6 +165,8 @@ type GltfBuffer = {
 };
 
 type GltfImage = {
+  readonly bufferView?: number;
+  readonly mimeType?: string;
   readonly uri?: string;
 };
 
@@ -233,6 +241,7 @@ type MinimalVirtualTextureManifest = {
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
+const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
@@ -551,6 +560,21 @@ const gltfTextureSampler = (sampler: GltfSampler | undefined): TextureSampler =>
   wrapT: gltfSamplerWrap(sampler?.wrapT),
 });
 
+const gltfTextureIdentity = (
+  assetKey: string,
+  src: string,
+  textureIndex: number,
+  imageIndex: number | undefined,
+  image: GltfImage,
+): string => {
+  if (image.uri !== undefined) return `${assetKey}:image-uri:${resolveUrl(src, image.uri)}`;
+  if (image.bufferView !== undefined) {
+    return `${assetKey}:image-buffer-view:${image.bufferView}:${image.mimeType ?? ""}`;
+  }
+
+  return `${assetKey}:texture-index:${textureIndex}:image-index:${imageIndex ?? ""}`;
+};
+
 const usesMipmaps = (value: string | undefined): boolean =>
   value === "linear-mipmap-linear"
   || value === "linear-mipmap-nearest"
@@ -710,6 +734,43 @@ const selectedLodLevel = (
   return undefined;
 };
 
+const hystereticLodLevel = (
+  coverage: number,
+  levelCount: number,
+  thresholds: readonly number[],
+  previousLevel: number | undefined,
+): number => {
+  const stateless = selectedLodLevel(coverage, levelCount, thresholds) ?? levelCount - 1;
+  if (
+    previousLevel === undefined
+    || previousLevel < 0
+    || previousLevel >= levelCount
+  ) {
+    return stateless;
+  }
+
+  let level = previousLevel;
+  while (level > 0) {
+    const threshold = thresholds[level - 1] ?? fallbackLodThreshold(level - 1, levelCount);
+    if (coverage < Math.min(1, threshold * (1 + GLTF_LOD_HYSTERESIS_RATIO))) break;
+    level -= 1;
+  }
+  while (level < levelCount - 1) {
+    const threshold = thresholds[level] ?? fallbackLodThreshold(level, levelCount);
+    if (coverage >= threshold * (1 - GLTF_LOD_HYSTERESIS_RATIO)) break;
+    level += 1;
+  }
+
+  return level;
+};
+
+const adjacentLodLevels = (level: number, levelCount: number): readonly number[] => {
+  const levels: number[] = [];
+  if (level > 0) levels.push(level - 1);
+  if (level + 1 < levelCount) levels.push(level + 1);
+  return levels;
+};
+
 const projectedScreenCoverage = (
   positions: Float32Array,
   model: Mat4,
@@ -760,14 +821,17 @@ export class WebGlRoot {
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #gltf = new Map<string, GltfState>();
+  readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
   readonly #ownedBuffers = new Set<WebGLBuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
+  #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   #diagnostics: string[] = [];
   #disposed = false;
   #frame = 0;
+  #gltfRenderOrdinal = 0;
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
@@ -812,6 +876,8 @@ export class WebGlRoot {
     }
 
     this.#latestScene = scene;
+    this.#activeGltfLodSelectionKeys = new Set();
+    this.#gltfRenderOrdinal = 0;
     const { height, width } = this.#resize();
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -838,6 +904,7 @@ export class WebGlRoot {
     }
 
     this.#releaseUnusedGeometry(usedGeometry);
+    this.#pruneGltfLodSelections();
     this.#frame += 1;
   }
 
@@ -864,6 +931,8 @@ export class WebGlRoot {
     this.#geometry.clear();
     this.#textures.clear();
     this.#gltf.clear();
+    this.#gltfLodSelections.clear();
+    this.#activeGltfLodSelectionKeys.clear();
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = undefined;
     this.#dprMediaQuery?.removeEventListener?.("change", this.#viewportInvalidationListener);
@@ -993,34 +1062,45 @@ export class WebGlRoot {
     light: DirectionalLightNode | undefined,
     usedGeometry: Set<string>,
   ): void {
+    const renderInstanceKey = `instance:${this.#gltfRenderOrdinal}`;
+    this.#gltfRenderOrdinal += 1;
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
 
     const rootModel = transformMat4(node.transform);
-    const selectedNodeLevels = this.#selectedGltfNodeLodLevels(state.primitives, rootModel, projection, view);
+    const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
+      state,
+      renderInstanceKey,
+      rootModel,
+      projection,
+      view,
+    );
+    this.#preloadAdjacentGltfNodeLodTextures(state.primitives, selectedNodeLevels);
     for (const primitive of state.primitives) {
       const nodeLod = primitive.nodeLod;
       if (nodeLod !== undefined) {
         const selectedLevel = selectedNodeLevels.get(nodeLod.group);
-        if (selectedLevel === undefined || selectedLevel !== nodeLod.level) continue;
+        if (selectedLevel !== nodeLod.level) continue;
       }
 
       const model = multiplyMat4(rootModel, primitive.model);
-      const loadedMaterial = this.#selectedGltfMaterial(primitive, model, projection, view);
-      if (loadedMaterial === undefined) continue;
+      const materialSelection = this.#selectedGltfMaterial(
+        state,
+        renderInstanceKey,
+        primitive,
+        model,
+        projection,
+        view,
+      );
+      const loadedMaterial = materialSelection.material;
+      this.#preloadAdjacentGltfMaterialLodTextures(primitive.materialLod, materialSelection.level);
 
       let material: StandardMaterial = {
         baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
         kind: "standard",
       };
-      if (loadedMaterial.image !== undefined) {
-        const baseColor: TextureAssetUploadRef = {
-          colorSpace: "srgb",
-          flipY: false,
-          kind: "asset",
-          ...(loadedMaterial.sampler === undefined ? {} : { sampler: loadedMaterial.sampler }),
-          uri: `${state.key}:image:${loadedMaterial.baseColorImageUri ?? primitive.key}`,
-        };
+      const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
+      if (loadedMaterial.image !== undefined && baseColor !== undefined) {
         this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         material = { baseColor, kind: "standard" };
       }
@@ -1042,18 +1122,22 @@ export class WebGlRoot {
   }
 
   #selectedGltfNodeLodLevels(
-    primitives: readonly LoadedGltfPrimitive[],
+    state: GltfState,
+    renderInstanceKey: string,
     rootModel: Mat4,
     projection: Mat4,
     view: Mat4,
-  ): Map<string, number | undefined> {
+  ): Map<string, number> {
     const coverages = new Map<string, number>();
     const lods = new Map<string, GltfNodePrimitiveLod>();
+    const levelPrimitives = new Map<string, LoadedGltfPrimitive[]>();
 
-    for (const primitive of primitives) {
+    for (const primitive of state.primitives) {
       const lod = primitive.nodeLod;
       if (lod === undefined) continue;
       lods.set(lod.group, lod);
+      const levelKey = `${lod.group}:${lod.level}`;
+      levelPrimitives.set(levelKey, [...(levelPrimitives.get(levelKey) ?? []), primitive]);
       if (lod.level !== 0) continue;
 
       const model = multiplyMat4(rootModel, primitive.model);
@@ -1061,30 +1145,161 @@ export class WebGlRoot {
       coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
     }
 
-    const selected = new Map<string, number | undefined>();
+    const selected = new Map<string, number>();
     for (const [group, lod] of lods) {
-      selected.set(group, selectedLodLevel(
+      const selectionKey = `${state.key}:${renderInstanceKey}:node:${group}`;
+      const level = this.#selectGltfLodLevel(
+        selectionKey,
         coverages.get(group) ?? 0,
         lod.levelCount,
         lod.thresholds,
-      ));
+        (level) => {
+          const primitives = levelPrimitives.get(`${group}:${level}`) ?? [];
+          return primitives.length > 0
+            && primitives.every((primitive) => this.#isGltfPrimitiveReadyForLod(primitive));
+        },
+        (level) => (levelPrimitives.get(`${group}:${level}`) ?? []).length > 0,
+      );
+      selected.set(group, level);
     }
 
     return selected;
   }
 
   #selectedGltfMaterial(
+    state: GltfState,
+    renderInstanceKey: string,
     primitive: LoadedGltfPrimitive,
     model: Mat4,
     projection: Mat4,
     view: Mat4,
-  ): LoadedGltfMaterial | undefined {
+  ): { readonly level: number; readonly material: LoadedGltfMaterial } {
     const lod = primitive.materialLod;
-    if (lod === undefined) return primitive.material;
+    if (lod === undefined) return { level: 0, material: primitive.material };
 
     const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
-    const level = selectedLodLevel(coverage, lod.levels.length, lod.thresholds);
-    return level === undefined ? undefined : lod.levels[level];
+    const level = this.#selectGltfLodLevel(
+      `${state.key}:${renderInstanceKey}:material:${primitive.key}`,
+      coverage,
+      lod.levels.length,
+      lod.thresholds,
+      (level) => {
+        const material = lod.levels[level];
+        return material !== undefined && this.#isGltfMaterialReadyForLod(material);
+      },
+      (level) => lod.levels[level] !== undefined,
+    );
+    return { level, material: lod.levels[level] ?? primitive.material };
+  }
+
+  #selectGltfLodLevel(
+    selectionKey: string,
+    coverage: number,
+    levelCount: number,
+    thresholds: readonly number[],
+    isReady: (level: number) => boolean,
+    isDrawable: (level: number) => boolean,
+  ): number {
+    const previous = this.#gltfLodSelections.get(selectionKey)?.level;
+    const target = hystereticLodLevel(coverage, levelCount, thresholds, previous);
+    const selected = this.#drawableGltfLodLevel(target, previous, levelCount, isReady, isDrawable);
+    this.#activeGltfLodSelectionKeys.add(selectionKey);
+    this.#gltfLodSelections.set(selectionKey, {
+      level: selected,
+    });
+    return selected;
+  }
+
+  #drawableGltfLodLevel(
+    target: number,
+    previous: number | undefined,
+    levelCount: number,
+    isReady: (level: number) => boolean,
+    isDrawable: (level: number) => boolean,
+  ): number {
+    if (isReady(target)) return target;
+    if (previous !== undefined && previous >= 0 && previous < levelCount && isDrawable(previous)) {
+      return previous;
+    }
+    for (let level = 0; level < levelCount; level += 1) {
+      if (isReady(level)) return level;
+    }
+    if (isDrawable(target)) return target;
+    for (let level = 0; level < levelCount; level += 1) {
+      if (isDrawable(level)) return level;
+    }
+    return target;
+  }
+
+  #pruneGltfLodSelections(): void {
+    for (const key of this.#gltfLodSelections.keys()) {
+      if (!this.#activeGltfLodSelectionKeys.has(key)) this.#gltfLodSelections.delete(key);
+    }
+  }
+
+  #isGltfPrimitiveReadyForLod(primitive: LoadedGltfPrimitive): boolean {
+    const materials = primitive.materialLod?.levels ?? [primitive.material];
+    return materials.some((material) => this.#isGltfMaterialReadyForLod(material));
+  }
+
+  #isGltfMaterialReadyForLod(material: LoadedGltfMaterial): boolean {
+    if (material.baseColorTextureUri === undefined) return true;
+    if (material.image !== undefined) return true;
+    const texture = this.#gltfMaterialTextureRef(material);
+    if (texture === undefined) return true;
+    return this.#textures.get(textureKey(texture))?.uploaded === true;
+  }
+
+  #gltfMaterialTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
+    if (material.baseColorTextureUri === undefined) return undefined;
+    return {
+      colorSpace: "srgb",
+      flipY: false,
+      kind: "asset",
+      ...(material.sampler === undefined ? {} : { sampler: material.sampler }),
+      uri: material.baseColorTextureUri,
+    };
+  }
+
+  #preloadAdjacentGltfNodeLodTextures(
+    primitives: readonly LoadedGltfPrimitive[],
+    selectedLevels: ReadonlyMap<string, number>,
+  ): void {
+    for (const [group, level] of selectedLevels) {
+      const lod = primitives.find((primitive) => primitive.nodeLod?.group === group)?.nodeLod;
+      if (lod === undefined) continue;
+      for (const adjacentLevel of adjacentLodLevels(level, lod.levelCount)) {
+        for (const primitive of primitives) {
+          if (primitive.nodeLod?.group === group && primitive.nodeLod.level === adjacentLevel) {
+            this.#preloadGltfPrimitiveTextures(primitive);
+          }
+        }
+      }
+    }
+  }
+
+  #preloadAdjacentGltfMaterialLodTextures(
+    lod: GltfMaterialPrimitiveLod | undefined,
+    selectedLevel: number,
+  ): void {
+    if (lod === undefined) return;
+    for (const level of adjacentLodLevels(selectedLevel, lod.levels.length)) {
+      const material = lod.levels[level];
+      if (material !== undefined) this.#preloadGltfMaterialTexture(material);
+    }
+  }
+
+  #preloadGltfPrimitiveTextures(primitive: LoadedGltfPrimitive): void {
+    this.#preloadGltfMaterialTexture(primitive.material);
+    for (const material of primitive.materialLod?.levels ?? []) {
+      this.#preloadGltfMaterialTexture(material);
+    }
+  }
+
+  #preloadGltfMaterialTexture(material: LoadedGltfMaterial): void {
+    const texture = this.#gltfMaterialTextureRef(material);
+    if (texture === undefined || material.image === undefined) return;
+    this.#ensureImmediateTexture(texture, material.image);
   }
 
   #drawGeometry(
@@ -1748,7 +1963,7 @@ void main() {
         return bufferResponse.arrayBuffer();
       }));
       if (this.#disposed) return;
-      state.primitives = this.#readGltfPrimitives(document, buffers, src);
+      state.primitives = this.#readGltfPrimitives(document, buffers, src, state.key);
       state.status = "ready";
       this.#scheduleRender();
       this.#loadGltfImages(src, document, state);
@@ -1764,6 +1979,7 @@ void main() {
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
     src: string,
+    assetKey: string,
   ): readonly LoadedGltfPrimitive[] {
     const primitives: LoadedGltfPrimitive[] = [];
     const scene = document.scenes?.[document.scene ?? 0];
@@ -1780,21 +1996,21 @@ void main() {
       const lodIds = (node?.extensions?.MSFT_lod?.ids ?? [])
         .filter((id) => Number.isInteger(id) && id >= 0 && document.nodes?.[id] !== undefined);
       if (lodIds.length === 0) {
-        this.#appendGltfNodePrimitives(document, buffers, src, primitives, nodeIndex);
+        this.#appendGltfNodePrimitives(document, buffers, src, assetKey, primitives, nodeIndex);
         continue;
       }
 
       const levelCount = lodIds.length + 1;
       const thresholds = gltfLodThresholds(node?.extras, levelCount);
       const group = `node:${nodeIndex}`;
-      this.#appendGltfNodePrimitives(document, buffers, src, primitives, nodeIndex, {
+      this.#appendGltfNodePrimitives(document, buffers, src, assetKey, primitives, nodeIndex, {
         group,
         level: 0,
         levelCount,
         thresholds,
       });
       for (const [lodIndex, lodNodeIndex] of lodIds.entries()) {
-        this.#appendGltfNodePrimitives(document, buffers, src, primitives, lodNodeIndex, {
+        this.#appendGltfNodePrimitives(document, buffers, src, assetKey, primitives, lodNodeIndex, {
           group,
           level: lodIndex + 1,
           levelCount,
@@ -1810,6 +2026,7 @@ void main() {
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
     src: string,
+    assetKey: string,
     primitives: LoadedGltfPrimitive[],
     nodeIndex: number,
     nodeLod?: GltfNodePrimitiveLod,
@@ -1823,8 +2040,8 @@ void main() {
       const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
       const indexAccessor = primitive.indices;
       if (positionAccessor === undefined || indexAccessor === undefined) continue;
-      const material = this.#readGltfMaterial(document, src, primitive.material);
-      const materialLod = this.#readGltfMaterialLod(document, src, primitive.material);
+      const material = this.#readGltfMaterial(document, src, assetKey, primitive.material);
+      const materialLod = this.#readGltfMaterialLod(document, src, assetKey, primitive.material);
       primitives.push({
         indices: this.#readGltfIndices(document, buffers, indexAccessor),
         key: `node:${nodeIndex}:primitive:${primitiveIndex}`,
@@ -1842,20 +2059,34 @@ void main() {
   #readGltfMaterial(
     document: GltfDocument,
     src: string,
+    assetKey: string,
     materialIndex: number | undefined,
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
     const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
     const imageIndex = texture?.source;
-    const imageUri = imageIndex === undefined ? undefined : document.images?.[imageIndex]?.uri;
+    const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
+    const imageUri = image?.uri;
+    const resolvedImageUri = imageUri === undefined ? undefined : resolveUrl(src, imageUri);
     const sampler = texture === undefined
       ? undefined
       : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
 
     return {
-      ...(imageUri === undefined ? {} : { baseColorImageUri: resolveUrl(src, imageUri) }),
+      ...(resolvedImageUri === undefined ? {} : { baseColorImageUri: resolvedImageUri }),
+      ...(textureIndex === undefined || image === undefined
+        ? {}
+        : {
+          baseColorTextureUri: gltfTextureIdentity(
+            assetKey,
+            src,
+            textureIndex,
+            imageIndex,
+            image,
+          ),
+        }),
       ...(color === undefined ? {} : { color }),
       ...(sampler === undefined ? {} : { sampler }),
     };
@@ -1864,6 +2095,7 @@ void main() {
   #readGltfMaterialLod(
     document: GltfDocument,
     src: string,
+    assetKey: string,
     materialIndex: number | undefined,
   ): GltfMaterialPrimitiveLod | undefined {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
@@ -1872,8 +2104,8 @@ void main() {
     if (materialIndex === undefined || lodIds.length === 0) return undefined;
 
     const levels = [
-      this.#readGltfMaterial(document, src, materialIndex),
-      ...lodIds.map((id) => this.#readGltfMaterial(document, src, id)),
+      this.#readGltfMaterial(document, src, assetKey, materialIndex),
+      ...lodIds.map((id) => this.#readGltfMaterial(document, src, assetKey, id)),
     ];
 
     return {
@@ -1904,6 +2136,22 @@ void main() {
         this.#scheduleRender();
       }, (error: unknown) => {
         if (this.#disposed) return;
+        if (state.status === "ready") {
+          state.primitives = state.primitives.map((primitive) => ({
+            ...primitive,
+            material: this.#failGltfMaterialImage(primitive.material, uri),
+            ...(primitive.materialLod === undefined
+              ? {}
+              : {
+                materialLod: {
+                  ...primitive.materialLod,
+                  levels: primitive.materialLod.levels.map((material) =>
+                    this.#failGltfMaterialImage(material, uri)),
+                },
+              }),
+          }));
+          this.#scheduleRender();
+        }
         this.#recordDiagnostic(`glTF base-color image load failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`);
       });
     }
@@ -1915,6 +2163,13 @@ void main() {
     image: HTMLImageElement | ImageBitmap,
   ): LoadedGltfMaterial {
     return material.baseColorImageUri === uri ? { ...material, image } : material;
+  }
+
+  #failGltfMaterialImage(
+    material: LoadedGltfMaterial,
+    uri: string,
+  ): LoadedGltfMaterial {
+    return material.baseColorImageUri === uri ? { ...material, imageFailed: true } : material;
   }
 
   #readGltfPositions(document: GltfDocument, buffers: readonly ArrayBuffer[], accessorIndex: number): Float32Array {

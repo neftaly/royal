@@ -52,6 +52,7 @@ const triangleImageUri = "staged-triangle.png";
 const triangleBinByteLength = 104;
 const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
+const lodImageUri = "lod-shared.png";
 const lodBinByteLength = 102;
 
 const fakeCanvas = (
@@ -490,6 +491,12 @@ const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
 const drawCount = (call: GlCall): number =>
   call.name === "drawArrays" ? Number(call.args[2]) : Number(call.args[1]);
 
+const callCount = (calls: readonly GlCall[], name: string): number =>
+  calls.filter((call) => call.name === name).length;
+
+const lodScaleForCoverage = (coverage: number): number =>
+  Math.sqrt(coverage / 0.5625);
+
 const isNumericArrayLike = (value: unknown): value is ArrayLike<number> =>
   ArrayBuffer.isView(value)
     && !(value instanceof DataView)
@@ -784,6 +791,154 @@ const materialLodDocument = () => ({
   scenes: [
     {
       nodes: [0],
+    },
+  ],
+});
+
+const materialTexturePendingLodDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  images: [
+    {
+      uri: lodImageUri,
+    },
+  ],
+  materials: [
+    {
+      extensions: {
+        MSFT_lod: {
+          ids: [1],
+        },
+      },
+      extras: {
+        MSFT_screencoverage: [0.2, 0],
+      },
+      pbrMetallicRoughness: {
+        baseColorFactor: [1, 0, 0, 1],
+      },
+    },
+    {
+      pbrMetallicRoughness: {
+        baseColorTexture: {
+          index: 0,
+        },
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  samplers: [
+    {},
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+  textures: [
+    {
+      sampler: 0,
+      source: 0,
+    },
+  ],
+});
+
+const materialSharedTextureLodDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  images: [
+    {
+      uri: lodImageUri,
+    },
+  ],
+  materials: [
+    {
+      extensions: {
+        MSFT_lod: {
+          ids: [1],
+        },
+      },
+      extras: {
+        MSFT_screencoverage: [0.2, 0],
+      },
+      pbrMetallicRoughness: {
+        baseColorTexture: {
+          index: 0,
+        },
+      },
+    },
+    {
+      pbrMetallicRoughness: {
+        baseColorTexture: {
+          index: 0,
+        },
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  samplers: [
+    {},
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+  textures: [
+    {
+      sampler: 0,
+      source: 0,
     },
   ],
 });
@@ -1269,5 +1424,144 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     const lowColors = uniform4fvPayloads(low.calls, "u_color").map(roundVector);
     expect(lowColors).toContainEqual([0, 0, 1, 1]);
+  });
+
+  it("keeps node-level MSFT_lod selection stable inside a threshold hysteresis band", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = (coverage: number) => {
+      const scale = lodScaleForCoverage(coverage);
+
+      return renderScene([
+        gltf({
+          src: lodGltfSrc,
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [scale, scale, 1],
+          },
+          version: "node-lod-hysteresis",
+        }),
+      ]);
+    };
+    const renderSelectedCount = (coverage: number): number => {
+      const drawsBeforeRender = drawCalls(calls).length;
+      root.render(renderGraph(coverage));
+      const draws = drawCalls(calls).slice(drawsBeforeRender);
+      expect(draws, `coverage ${coverage} should draw exactly one LOD member`).toHaveLength(1);
+
+      return drawCount(draws[0]!);
+    };
+
+    root.render(renderGraph(0.205));
+    await settleLodDocumentAndBuffer(loader, nodeLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const firstDraw = drawCalls(calls).at(-1);
+    expect(firstDraw, "initial high-coverage frame should draw").toBeDefined();
+    expect(firstDraw?.args[0]).toBe(gl.TRIANGLES);
+
+    const selectedCounts = [
+      drawCount(firstDraw!),
+      renderSelectedCount(0.198),
+      renderSelectedCount(0.14),
+      renderSelectedCount(0.202),
+    ];
+
+    expect(
+      selectedCounts,
+      "selection should not flap for small coverage jitter around the 0.2 threshold",
+    ).toEqual([6, 6, 3, 3]);
+  });
+
+  it("keeps the loaded material LOD visible while the preferred lower texture LOD is unavailable", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = (scale: number) => renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version: "material-lod-pending-texture",
+      }),
+    ]);
+
+    root.render(renderGraph(1));
+    await settleLodDocumentAndBuffer(loader, materialTexturePendingLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
+    expect(ControlledImage.instances, "lower LOD texture should be staged but not settled").toHaveLength(1);
+
+    const pendingCallsStart = calls.length;
+    root.render(renderGraph(0.2));
+    const pendingCalls = calls.slice(pendingCallsStart);
+    expect(drawCalls(pendingCalls), "pending lower texture LOD should not blank the glTF").toHaveLength(1);
+    expect(
+      uniform4fvPayloads(pendingCalls, "u_color").map(roundVector),
+      "renderer should keep the loaded high material until the lower material texture is usable",
+    ).toContainEqual([1, 0, 0, 1]);
+
+    const failedImage = new Error("lower material LOD texture failed");
+    for (const image of ControlledImage.instances) image.rejectLoad(failedImage);
+    await flushMicrotasks();
+
+    const failedCallsStart = calls.length;
+    root.render(renderGraph(0.2));
+    const failedCalls = calls.slice(failedCallsStart);
+    expect(drawCalls(failedCalls), "failed lower texture LOD should not blank the glTF").toHaveLength(1);
+    expect(
+      uniform4fvPayloads(failedCalls, "u_color").map(roundVector),
+      "renderer should keep the loaded high material after the preferred lower texture fails",
+    ).toContainEqual([1, 0, 0, 1]);
+    expect(root.snapshot().diagnostics.some((message) => /lod-shared\.png|texture|image/i.test(message))).toBe(true);
+  });
+
+  it("uploads a shared glTF texture once across material MSFT_lod levels", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = (scale: number) => renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version: "material-lod-shared-texture",
+      }),
+    ]);
+
+    root.render(renderGraph(1));
+    await settleLodDocumentAndBuffer(loader, materialSharedTextureLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(ControlledImage.instances, "shared LOD texture should be loaded once by URI").toHaveLength(1);
+
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
+    expect(callCount(calls, "texImage2D"), "high LOD should upload the shared glTF texture once").toBe(1);
+
+    root.render(renderGraph(0.2));
+
+    expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
+    expect(
+      callCount(calls, "texImage2D"),
+      "switching to a lower material LOD that references the same texture index must reuse the upload",
+    ).toBe(1);
   });
 });
