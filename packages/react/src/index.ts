@@ -2,8 +2,9 @@ import { Canvas as CanvasComponent } from './canvas';
 import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
 import { markReactComponent } from './jsx-runtime';
 
+export type { PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
 export { canvasPointToWorld, worldPointToCanvasClient } from './canvas-coordinate';
-export { useCanvasElement } from './canvas';
+export { useCanvasElement, useCanvasPick, useCanvasRoot } from './canvas';
 export { captureCanvasPointer, releaseCanvasPointer } from './canvas-pointer';
 export { editableTextKeyboardIntent } from './editable-text-keyboard';
 export { createOrbitControls, orbitCameraTransform, orbitPerspectiveCamera } from './orbit-controls';

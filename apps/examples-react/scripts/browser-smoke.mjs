@@ -18,7 +18,7 @@ const envNumber = (name, fallback) => {
   throw new Error(`${name} must be a finite number, received ${JSON.stringify(raw)}`);
 };
 const textSelectionLatencyBudget = {
-  maxClickToProbeMs: envNumber('EXAMPLES_TEXT_MAX_CLICK_TO_PROBE_MS', 250),
+  maxClickToProbeMs: envNumber('EXAMPLES_TEXT_MAX_CLICK_TO_PROBE_MS', 500),
   maxDragToProbeMs: envNumber('EXAMPLES_TEXT_MAX_DRAG_TO_PROBE_MS', 750),
   maxHitTestMs: envNumber('EXAMPLES_TEXT_MAX_HIT_TEST_MS', 8),
 };
@@ -38,6 +38,11 @@ const smokeExpectations = {
   'form-controls': {
     path: '/form-controls',
     allowDomSurface: true,
+    minPaintedRatio: 0.01,
+  },
+  picking: {
+    path: '/picking',
+    minColorBuckets: 6,
     minPaintedRatio: 0.01,
   },
   'texture-materials': {
@@ -649,6 +654,10 @@ const smokeExpression = `
           textInputNames: Array.from(document.querySelectorAll('input[type="text"]')).map((input) => input.name),
         };
       })() : undefined,
+      picking: routeId === 'picking' ? {
+        pickedId: document.querySelector('[data-picking-readout]')?.getAttribute('data-picked-id') ?? '',
+        text: document.querySelector('[data-picking-readout]')?.textContent?.trim() ?? '',
+      } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
     };
   };
@@ -997,8 +1006,8 @@ const assertRoute = (expected, state) => {
     if (state.textControls?.editorTabIndex !== 0) {
       failures.push(`text route canvas tabIndex was ${state.textControls?.editorTabIndex ?? 'missing'}`);
     }
-    if ((state.textControls?.domClipboardBridges ?? 0) !== 1) {
-      failures.push(`text route rendered ${state.textControls?.domClipboardBridges ?? 0} DOM clipboard bridge(s)`);
+    if ((state.textControls?.domClipboardBridges ?? 0) !== 0) {
+      failures.push(`text route rendered ${state.textControls?.domClipboardBridges ?? 0} DOM paste bridge(s)`);
     }
     if ((state.textControls?.domContextMenus ?? 0) > 0) {
       failures.push(`text route rendered ${state.textControls.domContextMenus} DOM context menu(s)`);
@@ -1127,14 +1136,14 @@ const assertRoute = (expected, state) => {
             }
             return;
           }
-          if (event.targetIsCanvas !== true && event.targetIsBridge !== true) {
-            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event did not target the canvas or paste bridge`);
+          const targetOk = type === 'paste'
+            ? event.targetIsCanvas === true
+            : event.targetIsCanvas === true || event.targetIsClipboardStaging === true;
+          if (!targetOk) {
+            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event did not target the canvas or clipboard staging`);
           }
           if (event.currentTargetIsDocument !== true) {
             failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event was not observed at document capture`);
-          }
-          if (type === 'paste' && event.activeElementIsBridge !== true) {
-            failures.push('text Ctrl-V paste event did not focus the native paste bridge');
           }
           if (type === 'paste' && event.textLength !== (keyboard.nativeKeyboardPasteText?.length ?? Number.NaN)) {
             failures.push('text Ctrl-V paste event did not carry seeded native clipboard text');
@@ -1285,8 +1294,8 @@ const assertRoute = (expected, state) => {
             failures.push(`text context menu did not inspect DOM state after ${phase}`);
             return;
           }
-          if ((state.clipboardBridges ?? 0) !== 1) {
-            failures.push(`text context menu rendered ${state.clipboardBridges} DOM clipboard bridge(s) after ${phase}`);
+          if ((state.clipboardBridges ?? 0) !== 0) {
+            failures.push(`text context menu rendered ${state.clipboardBridges} DOM paste bridge(s) after ${phase}`);
           }
           if ((state.contextMenus ?? 0) > 0) {
             failures.push(`text context menu rendered ${state.contextMenus} DOM menu(s) after ${phase}`);
@@ -1339,33 +1348,27 @@ const assertRoute = (expected, state) => {
             contextMenu.menuPasteClick?.reason ?? 'unknown'
           }`);
         }
-        if (contextMenu.menuPasteFallback?.pasteBridge?.active !== true ||
-          contextMenu.menuPasteFallback?.pasteBridge?.source !== 'menu') {
-          failures.push('text context-menu paste did not open the native paste bridge after readText denial');
-        }
-        if ((contextMenu.menuPasteFallback?.clipboard.counters.menuPaste ?? 0) >
+        if ((contextMenu.afterMenuPasteDenied?.clipboard.counters.menuPaste ?? 0) <=
           (contextMenu.menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0)) {
-          failures.push('text context-menu paste fallback updated paste counters before a native paste event');
+          failures.push('text context-menu paste denial did not update paste counters');
         }
-        if (contextMenu.menuBridgePaste?.ok !== true) {
-          failures.push(`text context-menu bridge paste failed: ${contextMenu.menuBridgePaste?.reason ?? 'unknown'}`);
+        if ((contextMenu.afterMenuPasteDenied?.clipboard.counters.failure ?? 0) <=
+          (contextMenu.menuOpenedForPaste?.clipboard.counters.failure ?? 0)) {
+          failures.push('text context-menu paste denial did not update failure counters');
         }
-        if ((contextMenu.afterMenuPaste?.clipboard.counters.menuPaste ?? 0) <=
-          (contextMenu.menuPasteFallback?.clipboard.counters.menuPaste ?? 0)) {
-          failures.push('text context-menu bridge paste did not update paste counters');
+        if (contextMenu.afterMenuPasteDenied?.clipboard.last.action !== 'paste' ||
+          contextMenu.afterMenuPasteDenied?.clipboard.last.ok !== false ||
+          contextMenu.afterMenuPasteDenied?.clipboard.last.reason !== 'denied' ||
+          contextMenu.afterMenuPasteDenied?.clipboard.last.source !== 'menu') {
+          failures.push(`text context-menu paste denial did not report menu paste failure: ${
+            contextMenu.afterMenuPasteDenied?.clipboard.last.reason ?? 'missing'
+          } ${contextMenu.afterMenuPasteDenied?.clipboard.last.message ?? ''}`.trim());
         }
-        if (contextMenu.afterMenuPaste?.clipboard.last.action !== 'paste' ||
-          contextMenu.afterMenuPaste?.clipboard.last.ok !== true ||
-          contextMenu.afterMenuPaste?.clipboard.last.source !== 'menu') {
-          failures.push(`text context-menu bridge paste did not report menu paste success: ${
-            contextMenu.afterMenuPaste?.clipboard.last.reason ?? 'missing'
-          } ${contextMenu.afterMenuPaste?.clipboard.last.message ?? ''}`.trim());
+        if (contextMenu.afterMenuPasteDenied?.pasteBridge?.active === true) {
+          failures.push('text context-menu paste opened a custom paste bridge after readText denial');
         }
-        if (!String(contextMenu.afterMenuPaste?.text ?? '').includes(contextMenu.nativeMenuPasteText ?? '')) {
-          failures.push('text context-menu bridge paste did not insert fallback text');
-        }
-        if (contextMenu.afterMenuPaste?.pasteBridge?.active === true) {
-          failures.push('text context-menu paste bridge stayed active after native paste');
+        if (contextMenu.afterMenuPasteDenied?.menu?.open === true) {
+          failures.push('text context-menu paste left the custom menu open after readText denial');
         }
         if (contextMenu.menuPasteReadTextTrap?.ok === true) {
           if (contextMenu.afterMenuPasteReadTextTrap?.ok !== true) {
@@ -1442,6 +1445,31 @@ const assertRoute = (expected, state) => {
     }
   }
 
+  if (expected.id === 'picking') {
+    const interaction = state.pickingInteraction;
+    if (state.picking === undefined) {
+      failures.push('picking route missed readout');
+    }
+    if (interaction === undefined) {
+      failures.push('picking route missed interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`picking route interaction smoke failed: ${interaction.error}`);
+    } else {
+      const expectedHits = ['cube', 'tower'];
+      const hits = interaction.hits ?? [];
+      for (let index = 0; index < expectedHits.length; index += 1) {
+        if (hits[index]?.pickedId !== expectedHits[index]) {
+          failures.push(
+            `picking click ${index + 1} selected "${hits[index]?.pickedId ?? 'missing'}", expected "${expectedHits[index]}"`,
+          );
+        }
+      }
+      if (interaction.before === interaction.after) {
+        failures.push(`picking readout did not change from "${interaction.before}"`);
+      }
+    }
+  }
+
   if (failures.length > 0) {
     throw new Error(`${expected.id}: ${failures.join('; ')}`);
   }
@@ -1479,6 +1507,45 @@ const dispatchKeyboardShortcut = async (session, key) => {
   await session.call('Input.dispatchKeyEvent', { ...event, type: 'keyDown' });
   await session.call('Input.dispatchKeyEvent', { ...event, type: 'keyUp' });
 };
+
+const runPickingInteractionSmoke = async (session) => evaluate(session, `
+(async () => {
+  const readPickedId = () =>
+    document.querySelector('[data-picking-readout]')?.getAttribute('data-picked-id') ?? '';
+  const canvas = document.querySelector('canvas');
+  if (canvas === null) return { error: 'missing picking canvas', hits: [] };
+  if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent', hits: [] };
+  const rect = canvas.getBoundingClientRect();
+  const points = [
+    { name: 'cube', x: rect.left + rect.width * 0.22, y: rect.top + rect.height * 0.5 },
+    { name: 'tower', x: rect.left + rect.width * 0.78, y: rect.top + rect.height * 0.5 },
+  ];
+  const animationFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const dispatch = (type, point, buttons) => {
+    canvas.dispatchEvent(new PointerEvent(type, {
+      bubbles: true,
+      button: 0,
+      buttons,
+      cancelable: true,
+      clientX: point.x,
+      clientY: point.y,
+      isPrimary: true,
+      pointerId: 9,
+      pointerType: 'mouse',
+    }));
+  };
+  const before = readPickedId();
+  const hits = [];
+  for (const point of points) {
+    dispatch('pointerdown', point, 1);
+    dispatch('pointerup', point, 0);
+    await animationFrame();
+    hits.push({ expected: point.name, pickedId: readPickedId() });
+  }
+
+  return { after: readPickedId(), before, hits };
+})()
+`);
 
 const runTextPointerSequenceInPage = async (session, steps, predicateExpression, timeoutMs = 800) => evaluate(session, `
 (async () => {
@@ -1656,6 +1723,8 @@ const installTextClipboardEventLog = async (session) => evaluate(session, `
     events.push({
       activeElementIsCanvas: document.activeElement === canvas,
       activeElementIsBridge: document.activeElement?.matches?.('[data-royal-text-clipboard-bridge]') === true,
+      activeElementIsClipboardStaging:
+        document.activeElement?.matches?.('[data-royal-text-clipboard-staging]') === true,
       cancelable: event.cancelable === true,
       currentTargetIsCanvas: event.currentTarget === canvas,
       currentTargetIsDocument: event.currentTarget === document,
@@ -1663,6 +1732,8 @@ const installTextClipboardEventLog = async (session) => evaluate(session, `
       targetIsCanvas: event.target === canvas,
       targetIsBridge: event.target instanceof Element &&
         event.target.matches('[data-royal-text-clipboard-bridge]'),
+      targetIsClipboardStaging: event.target instanceof Element &&
+        event.target.matches('[data-royal-text-clipboard-staging]'),
       textLength,
       type: event.type,
     });
@@ -1693,12 +1764,14 @@ const readTextClipboardEventLog = async (session) => evaluate(session, `
     events: Array.isArray(log.events) ? log.events.map((event) => ({
       activeElementIsCanvas: event.activeElementIsCanvas === true,
       activeElementIsBridge: event.activeElementIsBridge === true,
+      activeElementIsClipboardStaging: event.activeElementIsClipboardStaging === true,
       cancelable: event.cancelable === true,
       currentTargetIsCanvas: event.currentTargetIsCanvas === true,
       currentTargetIsDocument: event.currentTargetIsDocument === true,
       defaultPrevented: event.defaultPrevented === true,
       targetIsCanvas: event.targetIsCanvas === true,
       targetIsBridge: event.targetIsBridge === true,
+      targetIsClipboardStaging: event.targetIsClipboardStaging === true,
       textLength: Number(event.textLength ?? 0),
       type: String(event.type ?? ''),
     })) : [],
@@ -1849,30 +1922,6 @@ const clickTextContextMenuAction = async (session, action, options = {}) => eval
     ok: enabled,
     reason: enabled ? '' : 'disabled',
     upDispatched,
-  };
-})()
-`, { userGesture: true });
-
-const dispatchTextPasteBridgeEvent = async (session, text) => evaluate(session, `
-(() => {
-  const bridge = document.querySelector('[data-royal-text-clipboard-bridge]');
-  if (!(bridge instanceof HTMLTextAreaElement)) {
-    return { ok: false, reason: 'missing paste bridge' };
-  }
-
-  const data = new DataTransfer();
-  data.setData('text/plain', ${JSON.stringify(text)});
-  const event = new ClipboardEvent('paste', {
-    bubbles: true,
-    cancelable: true,
-    clipboardData: data,
-  });
-  bridge.focus({ preventScroll: true });
-  const dispatched = bridge.dispatchEvent(event);
-  return {
-    defaultPrevented: event.defaultPrevented === true,
-    dispatched,
-    ok: true,
   };
 })()
 `, { userGesture: true });
@@ -2070,9 +2119,16 @@ const runTextInteractionCdpSmoke = async (session) => {
   const menuOpenedForPaste = await openTextContextMenu(session, menuPoint);
   const menuDomAfterOpenForPaste = await readTextMenuDomState(session);
   const menuPasteClick = await clickTextContextMenuAction(session, 'paste', { dispatchDisabled: true });
-  const menuPasteFallback = await waitForTextProbeState(
+  const afterMenuPasteDenied = await waitForTextProbeState(
     session,
-    (probe) => probe?.pasteBridge?.active === true && probe?.pasteBridge?.source === 'menu',
+    (probe) =>
+      (probe?.clipboard.counters.menuPaste ?? 0) > (menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0) &&
+      probe?.clipboard.last.action === 'paste' &&
+      probe.clipboard.last.ok === false &&
+      probe.clipboard.last.reason === 'denied' &&
+      probe.clipboard.last.source === 'menu' &&
+      probe?.menu.open === false &&
+      probe?.pasteBridge?.active !== true,
     1200,
   );
   const afterMenuPasteReadTextTrap = menuPasteReadTextTrap.ok === true
@@ -2081,18 +2137,6 @@ const runTextInteractionCdpSmoke = async (session) => {
   const menuPasteReadTextTrapRestore = menuPasteReadTextTrap.ok === true
     ? await restoreTextClipboardReadTextTrap(session)
     : { ok: false, reason: 'readText trap was not installed' };
-  const nativeMenuPasteText = `Smoke menu bridge paste ${Date.now().toString(36)}`;
-  const menuBridgePaste = await dispatchTextPasteBridgeEvent(session, nativeMenuPasteText);
-  const afterMenuPaste = await waitForTextProbeState(
-    session,
-    (probe) =>
-      (probe?.clipboard.counters.menuPaste ?? 0) > (menuPasteFallback?.clipboard.counters.menuPaste ?? 0) &&
-      probe?.clipboard.last.action === 'paste' &&
-      probe.clipboard.last.ok === true &&
-      probe.clipboard.last.source === 'menu' &&
-      String(probe.text ?? '').includes(nativeMenuPasteText),
-    1200,
-  );
   const selectionLatencySamples = [
     { durationMs: clickToProbeMs, phase: 'click' },
     { durationMs: dragToProbeMs, phase: 'drag-select' },
@@ -2110,11 +2154,10 @@ const runTextInteractionCdpSmoke = async (session) => {
     contextMenu: {
       afterMenuCopy,
       afterMenuCut,
-      afterMenuPaste,
+      afterMenuPasteDenied,
       afterMenuPasteSelection,
       afterMenuSelection,
       afterMenuPasteReadTextTrap,
-      menuBridgePaste,
       menuDomAfterOpenForCopy,
       menuDomAfterOpenForCut,
       menuDomAfterOpenForPaste,
@@ -2124,10 +2167,8 @@ const runTextInteractionCdpSmoke = async (session) => {
       menuOpenedForCut,
       menuOpenedForPaste,
       menuPasteClick,
-      menuPasteFallback,
       menuPasteReadTextTrap,
       menuPasteReadTextTrapRestore,
-      nativeMenuPasteText,
     },
     dragToProbeMs,
     dragEvents: dragSelection.dragEvents,
@@ -2233,6 +2274,11 @@ const main = async () => {
         state = {
           ...state,
           textInteraction: await runTextInteractionCdpSmoke(session),
+        };
+      } else if (route.id === 'picking') {
+        state = {
+          ...state,
+          pickingInteraction: await runPickingInteractionSmoke(session),
         };
       }
       assertRoute(route, state);

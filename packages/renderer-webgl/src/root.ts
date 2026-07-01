@@ -8,6 +8,9 @@ import type {
   Material,
   MeshNode,
   PlaneGeometry,
+  PickInput,
+  PickResult,
+  PickTarget,
   RenderNode,
   RenderRoot,
   Rgba,
@@ -20,6 +23,10 @@ import type {
   Vec3,
 } from "@royal/renderer-core";
 import { textMesh } from "@royal/renderer-core/text";
+import {
+  firstVirtualTexturePageUri,
+  parseVirtualTextureManifest,
+} from "./virtual-texturing";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -50,6 +57,23 @@ type Mat4 = readonly [
 ];
 
 type ProgramKind = "surface" | "wireframe";
+
+type Vec4 = readonly [x: number, y: number, z: number, w: number];
+
+type Ray = {
+  readonly direction: Vec3;
+  readonly origin: Vec3;
+};
+
+type Bounds3 = {
+  readonly max: Vec3;
+  readonly min: Vec3;
+};
+
+type PickCandidate = PickResult & {
+  readonly drawOrdinal: number;
+  readonly passOrdinal: number;
+};
 
 type ProgramResource = {
   readonly fragmentShader: WebGLShader;
@@ -266,10 +290,6 @@ type GltfTexture = {
   readonly source?: number;
 };
 
-type MinimalVirtualTextureManifest = {
-  readonly pages?: unknown;
-};
-
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
@@ -320,6 +340,159 @@ const multiplyMat4 = (left: Mat4, right: Mat4): Mat4 => {
 
   return out;
 };
+
+const inverseMat4 = (matrix: Mat4): Mat4 | undefined => {
+  const [
+    a00, a01, a02, a03,
+    a10, a11, a12, a13,
+    a20, a21, a22, a23,
+    a30, a31, a32, a33,
+  ] = matrix;
+
+  const b00 = a00 * a11 - a01 * a10;
+  const b01 = a00 * a12 - a02 * a10;
+  const b02 = a00 * a13 - a03 * a10;
+  const b03 = a01 * a12 - a02 * a11;
+  const b04 = a01 * a13 - a03 * a11;
+  const b05 = a02 * a13 - a03 * a12;
+  const b06 = a20 * a31 - a21 * a30;
+  const b07 = a20 * a32 - a22 * a30;
+  const b08 = a20 * a33 - a23 * a30;
+  const b09 = a21 * a32 - a22 * a31;
+  const b10 = a21 * a33 - a23 * a31;
+  const b11 = a22 * a33 - a23 * a32;
+
+  const determinant = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (Math.abs(determinant) < 1e-12) return undefined;
+  const invDeterminant = 1 / determinant;
+
+  return [
+    (a11 * b11 - a12 * b10 + a13 * b09) * invDeterminant,
+    (a02 * b10 - a01 * b11 - a03 * b09) * invDeterminant,
+    (a31 * b05 - a32 * b04 + a33 * b03) * invDeterminant,
+    (a22 * b04 - a21 * b05 - a23 * b03) * invDeterminant,
+    (a12 * b08 - a10 * b11 - a13 * b07) * invDeterminant,
+    (a00 * b11 - a02 * b08 + a03 * b07) * invDeterminant,
+    (a32 * b02 - a30 * b05 - a33 * b01) * invDeterminant,
+    (a20 * b05 - a22 * b02 + a23 * b01) * invDeterminant,
+    (a10 * b10 - a11 * b08 + a13 * b06) * invDeterminant,
+    (a01 * b08 - a00 * b10 - a03 * b06) * invDeterminant,
+    (a30 * b04 - a31 * b02 + a33 * b00) * invDeterminant,
+    (a21 * b02 - a20 * b04 - a23 * b00) * invDeterminant,
+    (a11 * b07 - a10 * b09 - a12 * b06) * invDeterminant,
+    (a00 * b09 - a01 * b07 + a02 * b06) * invDeterminant,
+    (a31 * b01 - a30 * b03 - a32 * b00) * invDeterminant,
+    (a20 * b03 - a21 * b01 + a22 * b00) * invDeterminant,
+  ];
+};
+
+const transformVec4 = (matrix: Mat4, [x, y, z, w]: Vec4): Vec4 => [
+  matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
+  matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
+  matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,
+  matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w,
+];
+
+const transformPoint = (matrix: Mat4, point: Vec3): Vec3 => {
+  const [x, y, z, w] = transformVec4(matrix, [point[0], point[1], point[2], 1]);
+  const divisor = w === 0 ? 1 : w;
+  return [x / divisor, y / divisor, z / divisor];
+};
+
+const normalizeVec3 = ([x, y, z]: Vec3): Vec3 => {
+  const length = Math.hypot(x, y, z);
+  if (length === 0) return [0, 0, -1];
+
+  return [x / length, y / length, z / length];
+};
+
+const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | undefined => {
+  if (positions.length < 3) return undefined;
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+
+  for (let index = 0; index < positions.length; index += 3) {
+    const [x, y, z] = transformPoint(model, [
+      positions[index]!,
+      positions[index + 1]!,
+      positions[index + 2]!,
+    ]);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+
+  return {
+    max: [maxX, maxY, maxZ],
+    min: [minX, minY, minZ],
+  };
+};
+
+const transformedBounds = (bounds: Bounds3, model: Mat4): Bounds3 => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+
+  for (const x of [bounds.min[0], bounds.max[0]]) {
+    for (const y of [bounds.min[1], bounds.max[1]]) {
+      for (const z of [bounds.min[2], bounds.max[2]]) {
+        const [worldX, worldY, worldZ] = transformPoint(model, [x, y, z]);
+        minX = Math.min(minX, worldX);
+        minY = Math.min(minY, worldY);
+        minZ = Math.min(minZ, worldZ);
+        maxX = Math.max(maxX, worldX);
+        maxY = Math.max(maxY, worldY);
+        maxZ = Math.max(maxZ, worldZ);
+      }
+    }
+  }
+
+  return {
+    max: [maxX, maxY, maxZ],
+    min: [minX, minY, minZ],
+  };
+};
+
+const rayAabbDistance = (ray: Ray, bounds: Bounds3): number | undefined => {
+  let near = 0;
+  let far = Infinity;
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    const origin = ray.origin[axis]!;
+    const direction = ray.direction[axis]!;
+    const min = bounds.min[axis]!;
+    const max = bounds.max[axis]!;
+
+    if (Math.abs(direction) < 1e-8) {
+      if (origin < min || origin > max) return undefined;
+      continue;
+    }
+
+    const t1 = (min - origin) / direction;
+    const t2 = (max - origin) / direction;
+    near = Math.max(near, Math.min(t1, t2));
+    far = Math.min(far, Math.max(t1, t2));
+    if (near > far) return undefined;
+  }
+
+  return near;
+};
+
+const pointOnRay = (ray: Ray, distance: number): Vec3 => [
+  ray.origin[0] + ray.direction[0] * distance,
+  ray.origin[1] + ray.direction[1] * distance,
+  ray.origin[2] + ray.direction[2] * distance,
+];
 
 const translationMat4 = ([x, y, z]: Vec3): Mat4 => [
   1, 0, 0, 0,
@@ -671,43 +844,6 @@ const getNodeKind = (node: RenderNode): string =>
     ? node.kind
     : "unknown";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const firstManifestEntryUri = (entries: unknown): string | undefined => {
-  if (Array.isArray(entries)) {
-    for (const entry of entries) {
-      if (!isRecord(entry)) continue;
-      if (typeof entry.uri === "string" && entry.uri.length > 0) return entry.uri;
-    }
-    return undefined;
-  }
-
-  if (!isRecord(entries)) return undefined;
-  for (const uri of Object.values(entries)) {
-    if (typeof uri === "string" && uri.length > 0) return uri;
-  }
-  return undefined;
-};
-
-const templateManifestPageUri = (template: string): string =>
-  template
-    .replaceAll("{page}", "m0/0/0")
-    .replaceAll("{mip}", "0")
-    .replaceAll("{x}", "0")
-    .replaceAll("{y}", "0");
-
-const firstVirtualTexturePageUri = (manifest: MinimalVirtualTextureManifest): string | undefined => {
-  if (Array.isArray(manifest.pages)) return firstManifestEntryUri(manifest.pages);
-  if (!isRecord(manifest.pages)) return undefined;
-
-  const explicit = firstManifestEntryUri(manifest.pages.entries);
-  if (explicit !== undefined) return explicit;
-  return typeof manifest.pages.uriTemplate === "string" && manifest.pages.uriTemplate.length > 0
-    ? templateManifestPageUri(manifest.pages.uriTemplate)
-    : undefined;
-};
-
 const componentCount = (type: GltfAccessor["type"]): number => {
   switch (type) {
     case "SCALAR":
@@ -982,6 +1118,39 @@ export class WebGlRoot {
     this.#frame += 1;
   }
 
+  pick(input: PickInput): PickResult | undefined {
+    if (this.#disposed) {
+      throw new Error("Cannot pick with a disposed Royal renderer root");
+    }
+    const scene = this.#latestScene;
+    if (scene === undefined) return undefined;
+
+    const { height, width } = this.#resize();
+    let best: PickCandidate | undefined;
+    for (const [passOrdinal, renderPass] of scene.children.entries()) {
+      const projection = projectionMat4(renderPass.camera, width, height);
+      const view = viewMat4(renderPass.camera);
+      const ray = this.#pickRay(input, projection, view);
+      if (ray === undefined) continue;
+
+      let drawOrdinal = 0;
+      for (const child of renderPass.children) {
+        const result = this.#pickNode(child, ray, projection, view, input, passOrdinal, drawOrdinal);
+        drawOrdinal = result.nextDrawOrdinal;
+        if (result.hit !== undefined && this.#isBetterPick(result.hit, best)) best = result.hit;
+      }
+    }
+
+    if (best === undefined) return undefined;
+    return {
+      clientX: best.clientX,
+      clientY: best.clientY,
+      distance: best.distance,
+      point: best.point,
+      target: best.target,
+    };
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
@@ -1022,6 +1191,185 @@ export class WebGlRoot {
       latestScene: this.#latestScene,
       options: { ...this.#options },
     };
+  }
+
+  #pickRay(input: PickInput, projection: Mat4, view: Mat4): Ray | undefined {
+    const rect = this.#canvas.getBoundingClientRect?.();
+    const width = rect?.width ?? this.#canvas.clientWidth;
+    const height = rect?.height ?? this.#canvas.clientHeight;
+    if (width <= 0 || height <= 0) return undefined;
+
+    const ndcX = ((input.clientX - (rect?.left ?? 0)) / width) * 2 - 1;
+    const ndcY = 1 - ((input.clientY - (rect?.top ?? 0)) / height) * 2;
+    const inverse = inverseMat4(multiplyMat4(projection, view));
+    if (inverse === undefined) return undefined;
+
+    const near = transformVec4(inverse, [ndcX, ndcY, -1, 1]);
+    const far = transformVec4(inverse, [ndcX, ndcY, 1, 1]);
+    if (near[3] === 0 || far[3] === 0) return undefined;
+
+    const origin: Vec3 = [near[0] / near[3], near[1] / near[3], near[2] / near[3]];
+    const farPoint: Vec3 = [far[0] / far[3], far[1] / far[3], far[2] / far[3]];
+    const direction = normalizeVec3([
+      farPoint[0] - origin[0],
+      farPoint[1] - origin[1],
+      farPoint[2] - origin[2],
+    ]);
+
+    return { direction, origin };
+  }
+
+  #pickNode(
+    node: RenderNode,
+    ray: Ray,
+    projection: Mat4,
+    view: Mat4,
+    input: PickInput,
+    passOrdinal: number,
+    drawOrdinal: number,
+  ): { readonly hit: PickCandidate | undefined; readonly nextDrawOrdinal: number } {
+    switch (node.kind) {
+      case "auto-lod": {
+        let best: PickCandidate | undefined;
+        let nextDrawOrdinal = drawOrdinal;
+        for (const child of node.children) {
+          const result = this.#pickNode(child, ray, projection, view, input, passOrdinal, nextDrawOrdinal);
+          nextDrawOrdinal = result.nextDrawOrdinal;
+          if (result.hit !== undefined && this.#isBetterPick(result.hit, best)) best = result.hit;
+        }
+        return { hit: best, nextDrawOrdinal };
+      }
+      case "mesh": {
+        const hit = this.#pickMesh(node, ray, projection, view, input, passOrdinal, drawOrdinal);
+        const nextDrawOrdinal = drawOrdinal + 1;
+        return { hit, nextDrawOrdinal };
+      }
+      case "gltf": {
+        const hit = this.#pickGltf(node, ray, projection, view, input, passOrdinal, drawOrdinal);
+        const nextDrawOrdinal = drawOrdinal + 1;
+        return { hit, nextDrawOrdinal };
+      }
+      case "directional-light":
+      case "text":
+        return { hit: undefined, nextDrawOrdinal: drawOrdinal };
+      default:
+        return { hit: undefined, nextDrawOrdinal: drawOrdinal };
+    }
+  }
+
+  #pickMesh(
+    node: MeshNode,
+    ray: Ray,
+    projection: Mat4,
+    view: Mat4,
+    input: PickInput,
+    passOrdinal: number,
+    drawOrdinal: number,
+  ): PickCandidate | undefined {
+    const cpu = this.#meshGeometry(node.geometry, node.material);
+    const model = transformMat4(node.transform);
+    if (!this.#isVisible(cpu.positions, model, projection, view)) return undefined;
+
+    return this.#pickGeometry({
+      bounds: worldBounds(cpu.positions, model),
+      drawOrdinal,
+      input,
+      passOrdinal,
+      ray,
+      target: {
+        ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+        kind: "mesh",
+        node,
+      },
+    });
+  }
+
+  #pickGltf(
+    node: GltfNode,
+    ray: Ray,
+    projection: Mat4,
+    view: Mat4,
+    input: PickInput,
+    passOrdinal: number,
+    drawOrdinal: number,
+  ): PickCandidate | undefined {
+    const rootModel = transformMat4(node.transform);
+    const state = this.#gltf.get(`gltf:${node.asset.uri}:${node.asset.version ?? ""}`);
+    if (state?.status === "ready") {
+      let best: PickCandidate | undefined;
+      for (const primitive of state.primitives) {
+        const model = multiplyMat4(rootModel, primitive.model);
+        if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
+        const hit = this.#pickGeometry({
+          bounds: worldBounds(primitive.positions, model),
+          drawOrdinal,
+          input,
+          passOrdinal,
+          ray,
+          target: {
+            ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+            kind: "gltf",
+            node,
+            primitiveKey: primitive.key,
+          },
+        });
+        if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+      }
+
+      return best;
+    }
+
+    if (node.asset.bounds === undefined) return undefined;
+    return this.#pickGeometry({
+      bounds: transformedBounds(node.asset.bounds, rootModel),
+      drawOrdinal,
+      input,
+      passOrdinal,
+      ray,
+      target: {
+        ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+        kind: "gltf",
+        node,
+      },
+    });
+  }
+
+  #pickGeometry({
+    bounds,
+    drawOrdinal,
+    input,
+    passOrdinal,
+    ray,
+    target,
+  }: {
+    readonly bounds: Bounds3 | undefined;
+    readonly drawOrdinal: number;
+    readonly input: PickInput;
+    readonly passOrdinal: number;
+    readonly ray: Ray;
+    readonly target: PickTarget;
+  }): PickCandidate | undefined {
+    if (bounds === undefined) return undefined;
+    const distance = rayAabbDistance(ray, bounds);
+    if (distance === undefined) return undefined;
+
+    return {
+      clientX: input.clientX,
+      clientY: input.clientY,
+      distance,
+      drawOrdinal,
+      passOrdinal,
+      point: pointOnRay(ray, distance),
+      target,
+    };
+  }
+
+  #isBetterPick(candidate: PickCandidate, current: PickCandidate | undefined): boolean {
+    if (current === undefined) return true;
+    if (candidate.passOrdinal !== current.passOrdinal) return candidate.passOrdinal > current.passOrdinal;
+    if (candidate.distance !== current.distance) return candidate.distance < current.distance;
+
+    return candidate.drawOrdinal > current.drawOrdinal;
   }
 
   #resize(): { readonly height: number; readonly width: number } {
@@ -2082,8 +2430,16 @@ void main() {
   ): Promise<HTMLImageElement | ImageBitmap> {
     const response = await fetch(texture.manifestUri);
     if (!response.ok) throw new Error(`manifest ${response.status} ${response.statusText}`);
-    const manifest = await response.json() as MinimalVirtualTextureManifest;
-    const pageUri = firstVirtualTexturePageUri(manifest);
+    const parsed = parseVirtualTextureManifest(await response.json());
+    for (const diagnostic of parsed.diagnostics) {
+      if (diagnostic.severity !== "warning") {
+        this.#recordDiagnostic(`Virtual texture manifest ${texture.manifestUri}: ${diagnostic.message}`);
+      }
+    }
+    if (parsed.manifest === undefined) {
+      throw new Error(parsed.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
+    }
+    const pageUri = firstVirtualTexturePageUri(parsed.manifest);
     if (pageUri === undefined) {
       throw new Error("manifest does not reference any page image");
     }

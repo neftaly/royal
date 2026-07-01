@@ -1,4 +1,4 @@
-import type { RenderRoot } from "@royal/renderer-core";
+import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlRootOptions,
@@ -41,6 +41,8 @@ export interface RoyalRoot {
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
+  /** Returns the front-most render target under a DOM client coordinate. */
+  pick(input: PickInput): PickResult | undefined;
   /** Renders a complete scene into the canvas. */
   render(scene: RoyalRootRenderInput): void;
   /** Canonical resource cleanup hook. */
@@ -100,6 +102,7 @@ export const createRoot = (
     dispose: () => {
       root.dispose();
     },
+    pick: (input: PickInput) => root.pick(input),
     render: (scene: RoyalRootRenderInput) => {
       root.render(toRenderRoot(scene));
     },

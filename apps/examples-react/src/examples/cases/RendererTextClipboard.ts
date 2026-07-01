@@ -13,7 +13,6 @@ export type RendererTextClipboardReadResult =
     readonly text: string;
   }
   | {
-    readonly fallback: boolean;
     readonly message: string;
     readonly ok: false;
     readonly reason: Exclude<RendererTextClipboardReason, 'empty-selection' | 'success'>;
@@ -32,7 +31,6 @@ export const readRendererTextClipboardText = async (
 ): Promise<RendererTextClipboardReadResult> => {
   if (clipboardApi === undefined || typeof clipboardApi.readText !== 'function') {
     return {
-      fallback: true,
       message: 'navigator.clipboard.readText is unavailable',
       ok: false,
       reason: 'unavailable',
@@ -43,7 +41,6 @@ export const readRendererTextClipboardText = async (
     const text = await clipboardApi.readText();
     return text === ''
       ? {
-        fallback: false,
         message: 'Clipboard text was empty',
         ok: false,
         reason: 'empty-paste',
@@ -51,7 +48,6 @@ export const readRendererTextClipboardText = async (
       : { ok: true, text };
   } catch (error) {
     return {
-      fallback: true,
       message: rendererTextClipboardErrorMessage(error),
       ok: false,
       reason: rendererTextClipboardErrorReason(error),

@@ -61,6 +61,7 @@ export type { DirectionalLightNode, DirectionalLightOptions } from './directiona
 export { directionalLight } from './directional-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
+export type { PickInput, PickingId, PickResult, PickTarget } from './picking';
 export type {
   RenderElement,
   RenderPass,

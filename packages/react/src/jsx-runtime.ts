@@ -372,7 +372,8 @@ const toMeshOptions = (
 ): MeshOptions => {
   const options = {
     geometry: toMeshGeometry(props, childGeometry),
-    material
+    material,
+    ...(props.pickingId === undefined ? {} : { pickingId: props.pickingId })
   } satisfies Omit<MeshOptions, 'transform'>;
 
   return props.transform === undefined

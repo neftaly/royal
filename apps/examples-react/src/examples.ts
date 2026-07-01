@@ -9,6 +9,8 @@ import { GeneratedAutoLod } from './examples/cases/GeneratedAutoLod';
 import generatedAutoLodSource from './examples/cases/GeneratedAutoLod.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
+import { Picking } from './examples/cases/Picking';
+import pickingSource from './examples/cases/Picking.tsx?raw';
 import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { StandardLighting } from './examples/cases/StandardLighting';
@@ -64,6 +66,15 @@ export const examples = [
     Component: FormControls,
     source: formControlsSource,
     sourceFile: 'examples/cases/FormControls.tsx',
+  },
+  {
+    id: 'picking',
+    maturity: 'product',
+    path: '/picking',
+    title: 'Picking',
+    Component: Picking,
+    source: pickingSource,
+    sourceFile: 'examples/cases/Picking.tsx',
   },
   {
     id: 'texture-materials',

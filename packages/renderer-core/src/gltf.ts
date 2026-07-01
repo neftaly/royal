@@ -4,6 +4,7 @@ import {
   type TransformOptions
 } from './primitives';
 import type { Vec3 } from './primitives';
+import type { PickingId } from './picking';
 
 export interface GltfAssetBounds {
   readonly max: Vec3;
@@ -20,12 +21,15 @@ export interface GltfAssetRef {
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
+  readonly pickingId?: PickingId;
   readonly src: string;
   readonly transform?: Transform;
 }
 
 export interface GltfSrcOptions {
   readonly bounds?: GltfAssetBounds;
+  /** Stable application id returned from renderer picking. */
+  readonly pickingId?: PickingId;
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
@@ -54,6 +58,7 @@ export function gltf(input: GltfInput): GltfNode {
   const node = {
     kind: 'gltf',
     asset,
+    ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     src: asset.uri
   } satisfies Omit<GltfNode, 'transform'>;
 

@@ -1,4 +1,5 @@
 import type { RenderRoot } from "@royal/renderer-core";
+import type { PickInput, PickResult } from "@royal/renderer-core";
 import {
   createContext,
   createElement,
@@ -20,6 +21,7 @@ type CanvasChild = ReactNode | RoyalRendererJsxElement;
 type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
+const CanvasRootContext = createContext<RoyalRoot | null>(null);
 
 export type CanvasRendererOptions = RoyalRootOptions;
 
@@ -108,6 +110,16 @@ const splitCanvasChildren = (
 export const useCanvasElement = (): HTMLCanvasElement | null =>
   useContext(CanvasElementContext);
 
+export const useCanvasRoot = (): RoyalRoot | null =>
+  useContext(CanvasRootContext);
+
+export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
+  const root = useCanvasRoot();
+
+  return useCallback((input: PickInput): PickResult | undefined =>
+    root?.pick(input), [root]);
+};
+
 const toCanvasRootOptions = ({
   backend,
   context,
@@ -143,6 +155,7 @@ export const Canvas = ({
   const rootCreationErrorRef = useRef<unknown>(null);
   const frameLoop = useMemo(() => createFrameLoop(), []);
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const [canvasRoot, setCanvasRoot] = useState<RoyalRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
   const { controls, sceneChild } = splitCanvasChildren(children);
   const rendererBackend = renderer?.backend;
@@ -200,14 +213,17 @@ export const Canvas = ({
     } catch (error) {
       rootCreationErrorRef.current = error;
       rootRef.current = undefined;
+      setCanvasRoot(null);
       setRootError(error);
       return undefined;
     }
     rootRef.current = root;
+    setCanvasRoot(root);
 
     return () => {
       root.dispose();
       rootRef.current = undefined;
+      setCanvasRoot(null);
     };
   }, [memoizedRootOptions]);
 
@@ -227,8 +243,12 @@ export const Canvas = ({
         createElement(
           CanvasElementContext.Provider,
           { value: canvasElement },
-          fallback,
-          canvasElementNode,
+          createElement(
+            CanvasRootContext.Provider,
+            { value: canvasRoot },
+            fallback,
+            canvasElementNode,
+          ),
         ),
       );
     }
@@ -242,8 +262,12 @@ export const Canvas = ({
     createElement(
       CanvasElementContext.Provider,
       { value: canvasElement },
-      canvasElementNode,
-      ...controls,
+      createElement(
+        CanvasRootContext.Provider,
+        { value: canvasRoot },
+        canvasElementNode,
+        ...controls,
+      ),
     ),
   );
 };

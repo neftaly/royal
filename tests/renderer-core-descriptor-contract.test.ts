@@ -56,6 +56,31 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
+  it("preserves picking ids on pickable mesh and glTF descriptors", () => {
+    expect(mesh({
+      geometry: boxGeometry(1),
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      pickingId: "box-a",
+    })).toEqual({
+      geometry: boxGeometry(1),
+      kind: "mesh",
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      pickingId: "box-a",
+    });
+
+    expect(gltf({
+      pickingId: "helmet",
+      src: "/models/helmet.gltf",
+    })).toEqual({
+      asset: {
+        uri: "/models/helmet.gltf",
+      },
+      kind: "gltf",
+      pickingId: "helmet",
+      src: "/models/helmet.gltf",
+    });
+  });
+
   it("normalizes texture identity fields and fallback colors", () => {
     expect(imageTexture({
       fallbackColor: [1, 0, 1, 1],

@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { readRendererTextClipboardText } from './RendererTextClipboard';
 
 describe('RendererText clipboard helper', () => {
-  it('uses a native paste bridge when readText is unavailable', async () => {
+  it('reports unavailable readText without requesting a custom paste fallback', async () => {
     await expect(readRendererTextClipboardText(undefined)).resolves.toEqual({
-      fallback: true,
       message: 'navigator.clipboard.readText is unavailable',
       ok: false,
       reason: 'unavailable',
     });
   });
 
-  it('uses a native paste bridge when Firefox denies async clipboard reads', async () => {
+  it('reports Firefox async clipboard read denial without requesting a custom paste fallback', async () => {
     const clipboard = {
       readText: async () => {
         throw new DOMException('Read permission denied', 'NotAllowedError');
@@ -19,20 +18,18 @@ describe('RendererText clipboard helper', () => {
     };
 
     await expect(readRendererTextClipboardText(clipboard)).resolves.toEqual({
-      fallback: true,
       message: 'Read permission denied',
       ok: false,
       reason: 'denied',
     });
   });
 
-  it('reports empty reads without opening the paste bridge', async () => {
+  it('reports empty reads without requesting a custom paste fallback', async () => {
     const clipboard = {
       readText: async () => '',
     };
 
     await expect(readRendererTextClipboardText(clipboard)).resolves.toEqual({
-      fallback: false,
       message: 'Clipboard text was empty',
       ok: false,
       reason: 'empty-paste',

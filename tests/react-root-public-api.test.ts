@@ -152,6 +152,7 @@ describe("React root public API", () => {
       frame: 0,
       latestScene: undefined,
     });
+    expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
 
     root.render(renderRoot);
 

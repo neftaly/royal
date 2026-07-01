@@ -242,6 +242,41 @@ canvas {
   inline-size: 100%;
 }
 
+.picking-demo {
+  background: #0b1012;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100%;
+}
+
+.picking-stage {
+  min-height: 0;
+}
+
+.picking-readout {
+  align-items: center;
+  background: light-dark(#f4f8f7, #12181a);
+  border-top: 1px solid light-dark(#d7e1df, #283336);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.75rem 1rem;
+}
+
+.picking-readout span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.picking-readout strong {
+  color: var(--fg);
+  font-size: 1rem;
+}
+
 .artifacts-page {
   display: grid;
   gap: 1rem;
