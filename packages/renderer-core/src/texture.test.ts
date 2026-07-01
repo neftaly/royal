@@ -141,6 +141,44 @@ describe('texture descriptors', () => {
     expectTypeOf(asset).toMatchTypeOf<TextureRef>();
   });
 
+  it('normalizes preferred texture asset identity aliases', () => {
+    expect(textureAsset({
+      assetId: 'preferred-albedo',
+      fallbackColor: [0.5, 0.5, 0.5, 1],
+      id: 'legacy-albedo',
+      revision: 1,
+      src: '/textures/albedo.png',
+      version: 2
+    })).toEqual({
+      fallback: {
+        color: [0.5, 0.5, 0.5, 1],
+        kind: 'solid'
+      },
+      id: 'preferred-albedo',
+      kind: 'asset',
+      revision: 2,
+      uri: '/textures/albedo.png'
+    });
+
+    expect(imageTexture({
+      assetId: 'preferred-normal',
+      fallbackColor: [0.25, 0.25, 0.25, 1],
+      src: '/textures/normal.png',
+      version: 'v3'
+    })).toEqual({
+      colorSpace: 'srgb',
+      fallback: {
+        color: [0.25, 0.25, 0.25, 1],
+        kind: 'solid'
+      },
+      id: 'preferred-normal',
+      kind: 'asset',
+      revision: 'v3',
+      sampler: defaultImageTextureSampler,
+      uri: '/textures/normal.png'
+    });
+  });
+
   it('normalizes virtual texture asset descriptors without renderer runtime details', () => {
     const fallback = solidTexture({
       color: [0.5, 0.5, 0.5, 1],
@@ -256,5 +294,27 @@ describe('texture descriptors', () => {
     expectTypeOf<{
       readonly src: string;
     }>().toMatchTypeOf<VirtualTextureAssetOptions>();
+  });
+
+  it('normalizes preferred virtual texture identity aliases', () => {
+    expect(virtualTexture({
+      assetId: 'preferred-terrain',
+      fallbackColor: [0.5, 0.5, 0.5, 1],
+      id: 'legacy-terrain',
+      manifestId: 'terrain-manifest',
+      revision: 1,
+      src: '/textures/terrain-albedo.vt.json',
+      version: 2
+    })).toEqual({
+      fallback: {
+        color: [0.5, 0.5, 0.5, 1],
+        kind: 'solid'
+      },
+      id: 'preferred-terrain',
+      kind: 'virtual-asset',
+      manifestId: 'terrain-manifest',
+      manifestUri: '/textures/terrain-albedo.vt.json',
+      revision: 2
+    });
   });
 });

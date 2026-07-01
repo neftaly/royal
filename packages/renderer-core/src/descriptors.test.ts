@@ -165,10 +165,10 @@ describe('renderer descriptor authoring API', () => {
       min: [-1, -2, -3]
     } satisfies GltfAssetRef['bounds'];
     const node = gltf({
+      assetId: 'helmet',
       bounds,
-      id: 'helmet',
-      revision: 2,
-      src: '/DamagedHelmet/DamagedHelmet.gltf'
+      src: '/DamagedHelmet/DamagedHelmet.gltf',
+      version: 2
     });
     const srcNode = gltf('/PlainCube/PlainCube.gltf');
     const fallbackIdNode = gltf({ src: '/PlainCube/PlainCube.gltf' });
@@ -179,6 +179,7 @@ describe('renderer descriptor authoring API', () => {
       revision: 2,
       uri: '/DamagedHelmet/DamagedHelmet.gltf'
     });
+    expect(node.src).toBe('/DamagedHelmet/DamagedHelmet.gltf');
     expect(srcNode.asset).toEqual({
       id: '/PlainCube/PlainCube.gltf',
       uri: '/PlainCube/PlainCube.gltf'
@@ -192,5 +193,21 @@ describe('renderer descriptor authoring API', () => {
       readonly asset: GltfAssetRef;
       readonly src: string;
     }>().not.toMatchTypeOf<GltfOptions>();
+  });
+
+  it('keeps old glTF identity names as compatibility aliases', () => {
+    const node = gltf({
+      assetId: 'preferred-helmet',
+      id: 'legacy-helmet',
+      revision: 1,
+      src: '/DamagedHelmet/DamagedHelmet.gltf',
+      version: 2
+    });
+
+    expect(node.asset).toEqual({
+      id: 'preferred-helmet',
+      revision: 2,
+      uri: '/DamagedHelmet/DamagedHelmet.gltf'
+    });
   });
 });

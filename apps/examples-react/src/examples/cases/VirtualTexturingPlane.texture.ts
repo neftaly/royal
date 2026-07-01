@@ -1,14 +1,9 @@
 import {
-  solidTexture,
+  defaultTextureFallbackColor,
   unlitMaterial,
   virtualTexture,
   type UnlitMaterial,
 } from '@royal/renderer-core';
-
-const fallbackTexture = solidTexture({
-  color: [0.08, 0.1, 0.12, 1],
-  id: 'generated-virtual-texturing-fallback',
-});
 
 const surfaceSampler = {
   magFilter: 'linear',
@@ -37,10 +32,10 @@ export const createSurfaceMaterial = (): UnlitMaterial =>
   unlitMaterial({
     texture: virtualTexture({
       colorSpace: 'srgb',
-      fallback: fallbackTexture,
-      id: surfaceVirtualTextureProbe.id,
-      revision: surfaceVirtualTextureProbe.revision,
+      assetId: surfaceVirtualTextureProbe.id,
+      fallbackColor: defaultTextureFallbackColor,
       sampler: surfaceSampler,
       src: surfaceVirtualTextureProbe.manifestUri,
+      version: surfaceVirtualTextureProbe.revision,
     }),
   });

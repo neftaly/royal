@@ -21,28 +21,36 @@ export interface GltfAssetRef {
 export interface GltfNode {
   readonly kind: 'gltf';
   readonly asset: GltfAssetRef;
+  readonly src: string;
   readonly transform?: Transform;
 }
 
 export interface GltfExplicitAssetOptions {
   readonly asset: GltfAssetRef;
+  readonly assetId?: never;
   readonly bounds?: never;
   readonly id?: never;
   readonly revision?: never;
   readonly src?: never;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
+  readonly version?: never;
 }
 
 export interface GltfSrcOptions {
   readonly asset?: never;
+  /** Preferred asset identity override for cache keys; defaults to src. */
+  readonly assetId?: string;
   readonly bounds?: GltfAssetBounds;
-  /** Optional override for advanced callers; defaults to src. */
+  /** @deprecated Use assetId. */
   readonly id?: string;
+  /** @deprecated Use version. */
   readonly revision?: GltfAssetRef['revision'];
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
+  /** Preferred asset version override for cache keys. */
+  readonly version?: GltfAssetRef['revision'];
 }
 
 export type GltfOptions = GltfExplicitAssetOptions | GltfSrcOptions;
@@ -55,10 +63,12 @@ const gltfOptions = (input: GltfInput): GltfOptions =>
 const resolveAsset = (options: GltfOptions): GltfAssetRef => {
   if (options.asset !== undefined) return options.asset;
 
+  const revision = options.version ?? options.revision;
+
   return {
     ...(options.bounds === undefined ? {} : { bounds: options.bounds }),
-    id: options.id ?? options.src,
-    ...(options.revision === undefined ? {} : { revision: options.revision }),
+    id: options.assetId ?? options.id ?? options.src,
+    ...(revision === undefined ? {} : { revision }),
     uri: options.src
   };
 };
@@ -68,9 +78,11 @@ export function gltf(options: GltfSrcOptions): GltfNode;
 export function gltf(options: GltfExplicitAssetOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
+  const asset = resolveAsset(options);
   const node = {
     kind: 'gltf',
-    asset: resolveAsset(options)
+    asset,
+    src: asset.uri
   } satisfies Omit<GltfNode, 'transform'>;
 
   return options.transform === undefined
