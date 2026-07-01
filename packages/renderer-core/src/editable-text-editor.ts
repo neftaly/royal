@@ -52,6 +52,13 @@ export interface EditableTextEditorPointerSelectionOptions {
   readonly state: EditableTextEditorState;
 }
 
+export interface EditableTextEditorContextMenuSelectionOptions {
+  readonly layout: EditableTextLayout;
+  readonly origin: Vec3;
+  readonly point: EditableTextHitPoint;
+  readonly state: EditableTextEditorState;
+}
+
 const selection = (
   anchor: number,
   focus = anchor,
@@ -119,6 +126,12 @@ export const applyEditableTextEditorCommand = (
   command: EditableTextCommand,
 ): EditableTextEditorState => applyEditableTextCommand(state, command);
 
+export const pasteEditableTextEditorText = (
+  state: EditableTextEditorState,
+  text: string,
+): EditableTextEditorState =>
+  applyEditableTextEditorCommand(state, { text, type: 'replace-selection' });
+
 export const applyEditableTextEditorKeyInput = (
   state: EditableTextEditorState,
   input: EditableTextKeyInput,
@@ -162,6 +175,26 @@ export const editableTextEditorPointerSelection = ({
     ...(anchor === undefined ? {} : { anchor }),
     current: state.selection,
     ...(extend === undefined ? {} : { extend }),
+    focus,
+  }));
+};
+
+export const editableTextEditorContextMenuSelection = ({
+  layout,
+  origin,
+  point,
+  state,
+}: EditableTextEditorContextMenuSelectionOptions): EditableTextSelection => {
+  const focus = nearestEditableTextCaret(layout, point, origin);
+  const range = editableTextSelectedRange(state.text, state.selection);
+  const hasSelection = range.start !== range.end;
+
+  if (hasSelection && focus.index >= range.start && focus.index <= range.end) {
+    return state.selection;
+  }
+
+  return clampEditableTextSelection(state.text, editableTextSelectionFromEndpoint({
+    current: state.selection,
     focus,
   }));
 };

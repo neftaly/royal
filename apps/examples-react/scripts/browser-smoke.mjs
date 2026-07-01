@@ -44,12 +44,9 @@ const smokeExpectations = {
     path: '/texture-materials',
     minPaintedRatio: 0.01,
   },
-  'virtual-texture': {
-    path: '/virtual-texture',
-    minPaintedRatio: 0.01,
-  },
   'gltf-helmet': {
     path: '/gltf-helmet',
+    minColorBuckets: 32,
     minPaintedRatio: 0.01,
   },
 };

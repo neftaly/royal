@@ -11,6 +11,7 @@ import type {
   Rgba,
   StandardMaterial,
   TextNode,
+  TextureSampler,
   TextureRef,
   Transform,
   UnlitMaterial,
@@ -59,6 +60,7 @@ type GeometryResource = {
   readonly indexType?: number;
   readonly key: string;
   readonly mode: "lines" | "triangles";
+  readonly normalBuffer?: WebGLBuffer;
   readonly texCoordBuffer?: WebGLBuffer;
 };
 
@@ -66,6 +68,7 @@ type CpuGeometry = {
   readonly indices?: Uint16Array | Uint32Array | Uint8Array;
   readonly key: string;
   readonly mode: "lines" | "triangles";
+  readonly normals?: Float32Array;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array;
 };
@@ -81,11 +84,18 @@ type TextureLoadState = TextureResource & {
   loading: boolean;
 };
 
+type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
+  readonly flipY?: boolean;
+};
+
 type LoadedGltfPrimitive = {
   readonly baseColorImageUri?: string;
   readonly indices: Uint16Array | Uint32Array | Uint8Array;
   readonly image?: HTMLImageElement | ImageBitmap;
+  readonly model: Mat4;
+  readonly normals?: Float32Array;
   readonly positions: Float32Array;
+  readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
 };
 
@@ -104,6 +114,7 @@ type GltfDocument = {
   readonly materials?: readonly GltfMaterial[];
   readonly meshes?: readonly GltfMesh[];
   readonly nodes?: readonly GltfSceneNode[];
+  readonly samplers?: readonly GltfSampler[];
   readonly scene?: number;
   readonly scenes?: readonly GltfScene[];
   readonly textures?: readonly GltfTexture[];
@@ -131,6 +142,13 @@ type GltfImage = {
   readonly uri?: string;
 };
 
+type GltfSampler = {
+  readonly magFilter?: number;
+  readonly minFilter?: number;
+  readonly wrapS?: number;
+  readonly wrapT?: number;
+};
+
 type GltfMaterial = {
   readonly pbrMetallicRoughness?: {
     readonly baseColorTexture?: {
@@ -145,6 +163,7 @@ type GltfMesh = {
 
 type GltfMeshPrimitive = {
   readonly attributes?: {
+    readonly NORMAL?: number;
     readonly POSITION?: number;
     readonly TEXCOORD_0?: number;
   };
@@ -154,7 +173,11 @@ type GltfMeshPrimitive = {
 };
 
 type GltfSceneNode = {
+  readonly matrix?: readonly number[];
   readonly mesh?: number;
+  readonly rotation?: readonly number[];
+  readonly scale?: readonly number[];
+  readonly translation?: readonly number[];
 };
 
 type GltfScene = {
@@ -162,6 +185,7 @@ type GltfScene = {
 };
 
 type GltfTexture = {
+  readonly sampler?: number;
   readonly source?: number;
 };
 
@@ -277,6 +301,63 @@ const transformMat4 = (transform: Transform | undefined): Mat4 => {
   );
 };
 
+const quaternionMat4 = (rotation: readonly number[] | undefined): Mat4 => {
+  const x = rotation?.[0] ?? 0;
+  const y = rotation?.[1] ?? 0;
+  const z = rotation?.[2] ?? 0;
+  const w = rotation?.[3] ?? 1;
+  const length = Math.hypot(x, y, z, w) || 1;
+  const nx = x / length;
+  const ny = y / length;
+  const nz = z / length;
+  const nw = w / length;
+  const xx = nx * nx;
+  const xy = nx * ny;
+  const xz = nx * nz;
+  const xw = nx * nw;
+  const yy = ny * ny;
+  const yz = ny * nz;
+  const yw = ny * nw;
+  const zz = nz * nz;
+  const zw = nz * nw;
+
+  return [
+    1 - 2 * (yy + zz), 2 * (xy + zw), 2 * (xz - yw), 0,
+    2 * (xy - zw), 1 - 2 * (xx + zz), 2 * (yz + xw), 0,
+    2 * (xz + yw), 2 * (yz - xw), 1 - 2 * (xx + yy), 0,
+    0, 0, 0, 1,
+  ];
+};
+
+const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
+  if (node?.matrix !== undefined && node.matrix.length === 16) {
+    return [
+      node.matrix[0]!, node.matrix[1]!, node.matrix[2]!, node.matrix[3]!,
+      node.matrix[4]!, node.matrix[5]!, node.matrix[6]!, node.matrix[7]!,
+      node.matrix[8]!, node.matrix[9]!, node.matrix[10]!, node.matrix[11]!,
+      node.matrix[12]!, node.matrix[13]!, node.matrix[14]!, node.matrix[15]!,
+    ];
+  }
+
+  const translation = node?.translation;
+  const scale = node?.scale;
+  return multiplyMat4(
+    translationMat4([
+      translation?.[0] ?? 0,
+      translation?.[1] ?? 0,
+      translation?.[2] ?? 0,
+    ]),
+    multiplyMat4(
+      quaternionMat4(node?.rotation),
+      scaleMat4([
+        scale?.[0] ?? 1,
+        scale?.[1] ?? 1,
+        scale?.[2] ?? 1,
+      ]),
+    ),
+  );
+};
+
 const viewMat4 = (camera: Camera): Mat4 => multiplyMat4(
   multiplyMat4(
     multiplyMat4(
@@ -315,6 +396,7 @@ const textureKey = (texture: TextureRef): string => {
   }
   if (texture.kind === "asset") {
     const sampler = texture.sampler;
+    const upload = texture as TextureAssetUploadRef;
     return [
       "asset",
       texture.uri,
@@ -324,6 +406,7 @@ const textureKey = (texture: TextureRef): string => {
       sampler?.minFilter ?? "",
       sampler?.wrapS ?? "",
       sampler?.wrapT ?? "",
+      upload.flipY === false ? "flipY:false" : "",
     ].join(":");
   }
 
@@ -383,6 +466,53 @@ const samplerConstant = (
       return fallback;
   }
 };
+
+const gltfSamplerMagFilter = (value: number | undefined): NonNullable<TextureSampler["magFilter"]> => {
+  switch (value) {
+    case 9728:
+      return "nearest";
+    case 9729:
+    default:
+      return "linear";
+  }
+};
+
+const gltfSamplerMinFilter = (value: number | undefined): NonNullable<TextureSampler["minFilter"]> => {
+  switch (value) {
+    case 9728:
+      return "nearest";
+    case 9729:
+      return "linear";
+    case 9984:
+      return "nearest-mipmap-nearest";
+    case 9985:
+      return "linear-mipmap-nearest";
+    case 9986:
+      return "nearest-mipmap-linear";
+    case 9987:
+    default:
+      return "linear-mipmap-linear";
+  }
+};
+
+const gltfSamplerWrap = (value: number | undefined): NonNullable<TextureSampler["wrapS"]> => {
+  switch (value) {
+    case 33071:
+      return "clamp-to-edge";
+    case 33648:
+      return "mirrored-repeat";
+    case 10497:
+    default:
+      return "repeat";
+  }
+};
+
+const gltfTextureSampler = (sampler: GltfSampler | undefined): TextureSampler => ({
+  magFilter: gltfSamplerMagFilter(sampler?.magFilter),
+  minFilter: gltfSamplerMinFilter(sampler?.minFilter),
+  wrapS: gltfSamplerWrap(sampler?.wrapS),
+  wrapT: gltfSamplerWrap(sampler?.wrapT),
+});
 
 const usesMipmaps = (value: string | undefined): boolean =>
   value === "linear-mipmap-linear"
@@ -671,7 +801,7 @@ export class WebGlRoot {
         this.#drawText(node, projection, view, usedGeometry);
         return;
       case "gltf":
-        this.#drawGltf(node, projection, view, usedGeometry);
+        this.#drawGltf(node, projection, view, light, usedGeometry);
         return;
       default:
         this.#recordDiagnostic(`Unsupported render node kind "${getNodeKind(node)}"`);
@@ -737,6 +867,7 @@ export class WebGlRoot {
     node: GltfNode,
     projection: Mat4,
     view: Mat4,
+    light: DirectionalLightNode | undefined,
     usedGeometry: Set<string>,
   ): void {
     const state = this.#gltfState(node);
@@ -746,9 +877,11 @@ export class WebGlRoot {
     for (const primitive of state.primitives) {
       let material: StandardMaterial = { baseColor: { color: DEFAULT_COLOR, kind: "solid" }, kind: "standard" };
       if (primitive.image !== undefined) {
-        const baseColor: Extract<TextureRef, { readonly kind: "asset" }> = {
+        const baseColor: TextureAssetUploadRef = {
           colorSpace: "srgb",
+          flipY: false,
           kind: "asset",
+          ...(primitive.sampler === undefined ? {} : { sampler: primitive.sampler }),
           uri: `${state.key}:image:${index}`,
         };
         this.#ensureImmediateTexture(baseColor, primitive.image);
@@ -758,17 +891,18 @@ export class WebGlRoot {
         indices: primitive.indices,
         key: `${state.key}:primitive:${index}`,
         mode: "triangles",
+        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
         positions: primitive.positions,
         ...(primitive.texCoords === undefined ? {} : { texCoords: primitive.texCoords }),
       };
-      const model = transformMat4(node.transform);
+      const model = multiplyMat4(transformMat4(node.transform), primitive.model);
       if (!this.#isVisible(cpu.positions, model, projection, view)) {
         index += 1;
         continue;
       }
       const gpu = this.#geometryResource(cpu);
       usedGeometry.add(gpu.key);
-      this.#drawGeometry(gpu, material, model, projection, view, undefined);
+      this.#drawGeometry(gpu, material, model, projection, view, light);
       index += 1;
     }
   }
@@ -790,6 +924,7 @@ export class WebGlRoot {
     this.#uniformMatrix(program, "u_view", view);
     this.#uniformMatrix(program, "u_model", model);
     this.#uniformColor(program, "u_color", materialColor(material));
+    this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (material.kind === "standard") {
       this.#uniformColor(program, "u_lightColor", light?.color ?? DEFAULT_LIGHT_COLOR);
       this.#uniformVec3(program, "u_lightDirection", light?.direction ?? DEFAULT_LIGHT_DIRECTION);
@@ -812,6 +947,16 @@ export class WebGlRoot {
         gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray?.(uvLocation);
+      }
+    }
+    const normalLocation = gl.getAttribLocation(program, "a_normal");
+    if (normalLocation >= 0) {
+      if (geometry.normalBuffer !== undefined) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
+        gl.enableVertexAttribArray(normalLocation);
+        gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, 0, 0);
+      } else {
+        gl.disableVertexAttribArray?.(normalLocation);
       }
     }
     if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
@@ -902,6 +1047,8 @@ export class WebGlRoot {
       gl.attachShader(program, vertexShader);
       gl.attachShader(program, fragmentShader);
       gl.bindAttribLocation?.(program, 0, "a_position");
+      gl.bindAttribLocation?.(program, 1, "a_normal");
+      gl.bindAttribLocation?.(program, 2, "a_uv");
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         throw new Error(`WebGL program link failed: ${gl.getProgramInfoLog(program) ?? "unknown link error"}`);
@@ -932,36 +1079,65 @@ export class WebGlRoot {
     return shader;
   }
 
-  #vertexShaderSource(_kind: ProgramKind): string {
+  #vertexShaderSource(kind: ProgramKind): string {
+    if (kind === "wireframe") {
+      return `#version 300 es
+in vec3 a_position;
+uniform mat4 u_projection;
+uniform mat4 u_view;
+uniform mat4 u_model;
+void main() {
+  gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+}`;
+    }
+
     return `#version 300 es
 in vec3 a_position;
+in vec3 a_normal;
 in vec2 a_uv;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_model;
+out vec3 v_normal;
 out vec2 v_uv;
 void main() {
+  v_normal = mat3(u_model) * a_normal;
   v_uv = a_uv;
   gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
 }`;
   }
 
   #fragmentShaderSource(kind: ProgramKind): string {
-    const lighting = kind === "surface"
-      ? "vec4 color = baseColor * u_lightColor;"
-      : "vec4 color = baseColor;";
+    if (kind === "wireframe") {
+      return `#version 300 es
+precision mediump float;
+uniform vec4 u_color;
+out vec4 outColor;
+void main() {
+  outColor = u_color;
+}`;
+    }
+
     return `#version 300 es
 precision mediump float;
+in vec3 v_normal;
 in vec2 v_uv;
 uniform bool u_useTexture;
+uniform bool u_unlit;
 uniform vec4 u_color;
 uniform vec4 u_lightColor;
+uniform vec3 u_lightDirection;
 uniform sampler2D u_texture;
 out vec4 outColor;
 void main() {
   vec4 baseColor = u_useTexture ? texture(u_texture, v_uv) : u_color;
-  ${lighting}
-  outColor = color;
+  if (u_unlit) {
+    outColor = baseColor;
+    return;
+  }
+  float lambert = max(dot(normalize(v_normal), normalize(-u_lightDirection)), 0.0);
+  vec3 lit = baseColor.rgb * (0.18 + lambert * u_lightColor.rgb);
+  outColor = vec4(lit, baseColor.a);
 }`;
   }
 
@@ -1040,9 +1216,15 @@ void main() {
         indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
         key: `plane:${width},${height}`,
         mode: "triangles",
+        normals: new Float32Array([
+          0, 0, 1,
+          0, 0, 1,
+          0, 0, 1,
+          0, 0, 1,
+        ]),
         positions: new Float32Array([
-        -x, -y, 0,
-        x, -y, 0,
+          -x, -y, 0,
+          x, -y, 0,
           x, y, 0,
           -x, y, 0,
         ]),
@@ -1071,6 +1253,32 @@ void main() {
       ]),
       key: `box:${width},${height},${depth}`,
       mode: "triangles",
+      normals: new Float32Array([
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, 1,
+        0, 0, -1,
+        0, 0, -1,
+        0, 0, -1,
+        0, 0, -1,
+        -1, 0, 0,
+        -1, 0, 0,
+        -1, 0, 0,
+        -1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        1, 0, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, 1, 0,
+        0, -1, 0,
+        0, -1, 0,
+        0, -1, 0,
+        0, -1, 0,
+      ]),
       positions: new Float32Array([
         -x, -y, z,
         x, -y, z,
@@ -1164,6 +1372,13 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, cpu.positions, gl.STATIC_DRAW);
 
+    let normalBuffer: WebGLBuffer | undefined;
+    if (cpu.normals !== undefined) {
+      normalBuffer = this.#createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, cpu.normals, gl.STATIC_DRAW);
+    }
+
     let texCoordBuffer: WebGLBuffer | undefined;
     if (cpu.texCoords !== undefined) {
       texCoordBuffer = this.#createBuffer();
@@ -1189,6 +1404,7 @@ void main() {
       ...(indexType === undefined ? {} : { indexType }),
       key: cpu.key,
       mode: cpu.mode,
+      ...(normalBuffer === undefined ? {} : { normalBuffer }),
       ...(texCoordBuffer === undefined ? {} : { texCoordBuffer }),
     };
     this.#geometry.set(cpu.key, resource);
@@ -1199,13 +1415,14 @@ void main() {
     for (const [key, resource] of this.#geometry) {
       if (used.has(key)) continue;
       this.#deleteBuffer(resource.arrayBuffer);
+      if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
       if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
       if (resource.indexBuffer !== undefined) this.#deleteBuffer(resource.indexBuffer);
       this.#geometry.delete(key);
     }
   }
 
-  #texture(texture: Extract<TextureRef, { readonly kind: "asset" }>): TextureResource | TextureLoadState {
+  #texture(texture: TextureAssetUploadRef): TextureResource | TextureLoadState {
     const key = textureKey(texture);
     const cached = this.#textures.get(key);
     if (cached !== undefined) return cached;
@@ -1251,7 +1468,7 @@ void main() {
     this.#loadVirtualTexturePage(texture).then((image) => {
       if (this.#disposed) return;
       state.loading = false;
-      const uploadTexture: Extract<TextureRef, { readonly kind: "asset" }> = {
+      const uploadTexture: TextureAssetUploadRef = {
         kind: "asset",
         uri: texture.manifestUri,
         ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
@@ -1284,7 +1501,7 @@ void main() {
     return await loadFetchedImage(resolveUrl(texture.manifestUri, pageUri));
   }
 
-  #ensureImmediateTexture(texture: Extract<TextureRef, { readonly kind: "asset" }>, image: HTMLImageElement | ImageBitmap): TextureResource {
+  #ensureImmediateTexture(texture: TextureAssetUploadRef, image: HTMLImageElement | ImageBitmap): TextureResource {
     const key = textureKey(texture);
     const cached = this.#textures.get(key);
     if (cached !== undefined && cached.uploaded) return cached;
@@ -1302,14 +1519,14 @@ void main() {
   #uploadTexture(
     resource: TextureResource,
     source: HTMLImageElement | ImageBitmap,
-    texture: Extract<TextureRef, { readonly kind: "asset" }>,
+    texture: TextureAssetUploadRef,
   ): void {
     if (this.#disposed || !this.#ownedTextures.has(resource.texture)) return;
 
     const gl = this.#gl;
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
     if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     const sampler = texture.sampler;
@@ -1372,20 +1589,29 @@ void main() {
     const scene = document.scenes?.[document.scene ?? 0];
     for (const nodeIndex of scene?.nodes ?? []) {
       const sceneNode = document.nodes?.[nodeIndex];
+      const nodeModel = gltfNodeMat4(sceneNode);
       const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
       for (const primitive of mesh?.primitives ?? []) {
         const positionAccessor = primitive.attributes?.POSITION;
+        const normalAccessor = primitive.attributes?.NORMAL;
         const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
         const indexAccessor = primitive.indices;
         if (positionAccessor === undefined || indexAccessor === undefined) continue;
         const material = primitive.material === undefined ? undefined : document.materials?.[primitive.material];
         const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
-        const imageIndex = textureIndex === undefined ? undefined : document.textures?.[textureIndex]?.source;
+        const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
+        const imageIndex = texture?.source;
         const imageUri = imageIndex === undefined ? undefined : document.images?.[imageIndex]?.uri;
+        const sampler = texture === undefined
+          ? undefined
+          : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
         primitives.push({
           ...(imageUri === undefined ? {} : { baseColorImageUri: resolveUrl(src, imageUri) }),
           indices: this.#readGltfIndices(document, buffers, indexAccessor),
+          model: nodeModel,
+          ...(normalAccessor === undefined ? {} : { normals: this.#readGltfNormals(document, buffers, normalAccessor) }),
           positions: this.#readGltfPositions(document, buffers, positionAccessor),
+          ...(sampler === undefined ? {} : { sampler }),
           ...(texCoordAccessor === undefined ? {} : { texCoords: this.#readGltfTexCoords(document, buffers, texCoordAccessor) }),
         });
       }
@@ -1413,6 +1639,10 @@ void main() {
   }
 
   #readGltfPositions(document: GltfDocument, buffers: readonly ArrayBuffer[], accessorIndex: number): Float32Array {
+    return this.#readGltfFloatAccessor(document, buffers, accessorIndex);
+  }
+
+  #readGltfNormals(document: GltfDocument, buffers: readonly ArrayBuffer[], accessorIndex: number): Float32Array {
     return this.#readGltfFloatAccessor(document, buffers, accessorIndex);
   }
 

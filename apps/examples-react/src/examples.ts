@@ -9,8 +9,6 @@ import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
-import { VirtualTextureSurface } from './examples/cases/VirtualTextureSurface';
-import virtualTextureSurfaceSource from './examples/cases/VirtualTextureSurface.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -69,15 +67,6 @@ export const examples = [
     Component: TextureMaterials,
     source: textureMaterialsSource,
     sourceFile: 'examples/cases/TextureMaterials.tsx',
-  },
-  {
-    id: 'virtual-texture',
-    maturity: 'product',
-    path: '/virtual-texture',
-    title: 'Virtual Texture',
-    Component: VirtualTextureSurface,
-    source: virtualTextureSurfaceSource,
-    sourceFile: 'examples/cases/VirtualTextureSurface.tsx',
   },
   {
     id: 'gltf-helmet',

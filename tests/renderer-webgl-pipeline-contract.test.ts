@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boxGeometry,
+  directionalLight,
   mesh,
   orthographicCamera,
   pass,
   perspectiveCamera,
   scene,
+  standardMaterial,
   unlitMaterial,
   type Geometry,
   type Rgba,
@@ -326,6 +328,11 @@ const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
       };
     });
 
+const shaderSources = (calls: readonly GlCall[]): readonly string[] =>
+  calls
+    .filter((call) => call.name === "shaderSource")
+    .map((call) => String(call.args[1]));
+
 const isValidElementIndexType = (
   gl: WebGL2RenderingContext,
   value: unknown,
@@ -520,6 +527,53 @@ describe("WebGL renderer pipeline contracts", () => {
       expect(bindTargets).toContain(gl.ELEMENT_ARRAY_BUFFER);
       expect(uploads.some((upload) => upload.target === gl.ELEMENT_ARRAY_BUFFER && upload.length > 0)).toBe(true);
     }
+  });
+
+  it("binds box normals and shades standard meshes from light direction", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [
+            directionalLight({
+              color: [0.8, 0.9, 1, 1],
+              direction: [0.25, -0.5, -1],
+            }),
+            mesh({
+              geometry: boxGeometry(1),
+              material: standardMaterial({ color: [1, 1, 1, 1] }),
+            }),
+          ],
+        }),
+      ],
+    }));
+
+    expect(calls.some((call) => call.name === "getAttribLocation" && call.args[1] === "a_normal")).toBe(true);
+    expect(calls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 1
+      && call.args[1] === 3
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(bufferUploads(calls).filter((upload) => upload.target === gl.ARRAY_BUFFER && upload.length === 72).length)
+      .toBeGreaterThanOrEqual(2);
+
+    const sources = shaderSources(calls).join("\n");
+    expect(sources).toMatch(/\ba_normal\b/);
+    expect(sources).toMatch(/\bu_lightDirection\b/);
+    expect(sources).toMatch(/dot\s*\(\s*normalize/);
+    expect(sources).not.toContain("baseColor * u_lightColor");
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {

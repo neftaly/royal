@@ -194,7 +194,9 @@ const fakeGl = (): FakeGl => {
     getActiveAttrib: record("getActiveAttrib", () => null),
     getActiveUniform: record("getActiveUniform", () => null),
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
-      if (name.toLowerCase().includes("uv")) return 1;
+      const normalized = name.toLowerCase();
+      if (normalized.includes("normal")) return 1;
+      if (normalized.includes("uv") || normalized.includes("texcoord")) return 2;
 
       return 0;
     }),
@@ -320,6 +322,13 @@ class ControlledImage {
     for (const reject of this.#decodeRejectors.splice(0)) reject(reason);
     this.#decodeResolvers.splice(0);
     this.dispatch("error");
+  }
+
+  settleLoad(): void {
+    this.complete = true;
+    this.dispatch("load");
+    for (const resolve of this.#decodeResolvers.splice(0)) resolve();
+    this.#decodeRejectors.splice(0);
   }
 
   private dispatch(type: "error" | "load"): void {
@@ -478,6 +487,55 @@ const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
 const drawCount = (call: GlCall): number =>
   call.name === "drawArrays" ? Number(call.args[2]) : Number(call.args[1]);
 
+const isNumericArrayLike = (value: unknown): value is ArrayLike<number> =>
+  ArrayBuffer.isView(value)
+    && !(value instanceof DataView)
+    && typeof (value as { readonly length?: unknown }).length === "number";
+
+const numericArray = (value: unknown): readonly number[] => {
+  if (Array.isArray(value)) return value.map(Number);
+  if (isNumericArrayLike(value)) return Array.from(value, Number);
+
+  return [];
+};
+
+const roundNumber = (value: number): number => {
+  const rounded = Number(value.toFixed(6));
+
+  return Object.is(rounded, -0) ? 0 : rounded;
+};
+
+const roundVector = (values: readonly number[]): readonly number[] =>
+  values.map(roundNumber);
+
+const uniform3fvPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "uniform3fv")
+    .map((call) => {
+      const values = numericArray(call.args[1]);
+      const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
+      const length = typeof call.args[3] === "number" ? call.args[3] : 3;
+
+      return values.slice(offset, offset + length).slice(0, 3);
+    });
+
+const matrixUniformPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "uniformMatrix4fv")
+    .map((call) => {
+      const values = numericArray(call.args[2]);
+      const offset = typeof call.args[3] === "number" ? call.args[3] : 0;
+      const length = typeof call.args[4] === "number" ? call.args[4] : 16;
+
+      return values.slice(offset, offset + length).slice(0, 16);
+    });
+
+const textureParameterCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
+  calls.filter((call) => call.name === "texParameteri");
+
+const texturePixelStoreCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
+  calls.filter((call) => call.name === "pixelStorei");
+
 const triangleBin = (): ArrayBuffer => {
   const buffer = new ArrayBuffer(triangleBinByteLength);
 
@@ -492,9 +550,9 @@ const triangleBin = (): ArrayBuffer => {
     0, 0, 1,
   ]);
   new Float32Array(buffer, 72, 6).set([
-    0.5, 1,
-    0, 0,
-    1, 0,
+    0.5, 1.5,
+    0, 1,
+    1, 1,
   ]);
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
 
@@ -607,8 +665,12 @@ const triangleDocument = () => ({
   ],
   textures: [
     {
+      sampler: 0,
       source: 0,
     },
+  ],
+  samplers: [
+    {},
   ],
 });
 
@@ -809,5 +871,92 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toBeGreaterThan(drawsBeforeFailure);
     expect(root.snapshot().diagnostics.some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
+  });
+
+  it("binds glTF normals and texcoords, applies node transform, and uses the pass light", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const lightDirection = [0.25, -0.5, -1] as const;
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [0.8, 0.9, 1, 1],
+        direction: lightDirection,
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: {
+          position: [0.2, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [2, 1, 1],
+        },
+        version: "staged-shading",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(calls.some((call) => call.name === "getAttribLocation" && call.args[1] === "a_normal")).toBe(true);
+    expect(calls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 1
+      && call.args[1] === 3
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(calls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 2
+      && call.args[1] === 2
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(uniform3fvPayloads(calls).map(roundVector)).toContainEqual(roundVector(lightDirection));
+    expect(matrixUniformPayloads(calls).map(roundVector)).toContainEqual(roundVector([
+      2, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.2, 0, 0, 1,
+    ]));
+  });
+
+  it("uploads glTF base-color textures with glTF sampler defaults and image orientation", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "staged-gltf-sampler",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(texturePixelStoreCalls(calls)).toContainEqual({
+      args: [gl.UNPACK_FLIP_Y_WEBGL, false],
+      name: "pixelStorei",
+    });
+    expect(textureParameterCalls(calls)).toContainEqual({
+      args: [gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT],
+      name: "texParameteri",
+    });
+    expect(textureParameterCalls(calls)).toContainEqual({
+      args: [gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT],
+      name: "texParameteri",
+    });
   });
 });
