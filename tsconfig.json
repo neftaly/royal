@@ -50,6 +50,7 @@
     "packages/*/tests",
     "scripts/*.ts",
     "tests/*.ts",
+    "tests/*.tsx",
     "vite.config.ts",
     "types/*.d.ts"
   ]

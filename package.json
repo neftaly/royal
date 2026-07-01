@@ -12,7 +12,7 @@
     "build": "pnpm -r --if-present build",
     "check:gpu": "node scripts/gpu.ts check",
     "dev": "pnpm --filter @royal/examples-react dev",
-    "test": "vitest run tests/*.test.ts",
+    "test": "vitest run tests/*.test.ts tests/*.test.tsx",
     "typecheck": "tsc"
   },
   "devDependencies": {

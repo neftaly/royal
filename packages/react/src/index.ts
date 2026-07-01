@@ -36,4 +36,4 @@ export type {
   OrbitPerspectiveCameraOptions,
   OrbitVector3
 } from './orbit-controls';
-export type { RoyalRendererBackend, RoyalRoot, RoyalRootContextOptions, RoyalRootOptions } from './root';
+export type { RoyalRendererBackend, RoyalRoot, RoyalRootContextOptions, RoyalRootOptions, RoyalRootRenderInput } from './root';

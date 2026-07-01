@@ -141,6 +141,7 @@ export const Canvas = ({
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<RoyalRoot | undefined>(undefined);
+  const rootCreationErrorRef = useRef<unknown>(null);
   const frameLoop = useMemo(() => createFrameLoop(), []);
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
@@ -195,8 +196,11 @@ export const Canvas = ({
     let root: RoyalRoot;
     try {
       root = createRoot(canvas, memoizedRootOptions);
+      rootCreationErrorRef.current = null;
       setRootError(null);
     } catch (error) {
+      rootCreationErrorRef.current = error;
+      rootRef.current = undefined;
       setRootError(error);
       return undefined;
     }
@@ -209,7 +213,7 @@ export const Canvas = ({
   }, [memoizedRootOptions]);
 
   useLayoutEffect(() => {
-    if (rootError !== null) return;
+    if (rootError !== null || rootCreationErrorRef.current !== null) return;
     const root = rootRef.current;
     if (root === undefined) throw new Error("Canvas root was not created");
 
