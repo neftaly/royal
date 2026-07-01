@@ -311,7 +311,7 @@ export const updateInterestTracker = <
       interestBandRank[heldStage.band] > interestBandRank[rawStage.band];
     const hysteresis = downgrade ? heldStage.hysteresis : undefined;
 
-    if (hysteresis !== undefined) {
+    if (downgrade && heldStage !== undefined && hysteresis !== undefined) {
       const outsideExitDistance = distance > hysteresis.exitDistance;
       const exitGraceTicks = outsideExitDistance
         ? (memory?.exitGraceTicks ?? 0) + 1
