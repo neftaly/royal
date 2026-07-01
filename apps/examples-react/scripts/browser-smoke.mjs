@@ -279,16 +279,14 @@ const smokeExpression = `
     });
     const normalizeClipboard = (clipboard) => {
       const counters = clipboard?.counters ?? {};
-      const failure = clipboard?.failure ?? clipboard?.fallback ?? {};
-      const fallback = clipboard?.fallback ?? clipboard?.failure ?? {};
+      const failure = clipboard?.failure ?? {};
       const last = clipboard?.last ?? {};
 
       return {
         counters: {
           copy: Number(counters.copy ?? 0),
           cut: Number(counters.cut ?? 0),
-          failure: Number(counters.failure ?? counters.fallback ?? 0),
-          fallback: Number(counters.fallback ?? counters.failure ?? 0),
+          failure: Number(counters.failure ?? 0),
           keyboardCopy: Number(counters.keyboardCopy ?? 0),
           keyboardCut: Number(counters.keyboardCut ?? 0),
           keyboardPaste: Number(counters.keyboardPaste ?? 0),
@@ -300,13 +298,6 @@ const smokeExpression = `
           nativePaste: Number(counters.nativePaste ?? 0),
           paste: Number(counters.paste ?? 0),
         },
-        fallback: {
-          action: String(fallback.action ?? 'none'),
-          active: fallback.active === true,
-          message: String(fallback.message ?? ''),
-          reason: String(fallback.reason ?? 'none'),
-          source: String(fallback.source ?? 'none'),
-        },
         failure: {
           action: String(failure.action ?? 'none'),
           active: failure.active === true,
@@ -317,7 +308,6 @@ const smokeExpression = `
         last: {
           action: String(last.action ?? 'none'),
           at: Number(last.at ?? 0),
-          fallback: last.fallback === true,
           message: String(last.message ?? ''),
           ok: last.ok === true,
           reason: String(last.reason ?? 'none'),
@@ -346,8 +336,8 @@ const smokeExpression = `
           cut: menu?.enabled?.cut === true,
           paste: menu?.enabled?.paste === true,
         },
-        fallback: menu?.fallback === true,
-        fallbackReason: String(menu?.fallbackReason ?? 'none'),
+        failure: menu?.failure === true,
+        failureReason: String(menu?.failureReason ?? 'none'),
         open: menu?.open === true,
         unavailableReason: {
           paste: String(menu?.unavailableReason?.paste ?? 'none'),
@@ -655,7 +645,7 @@ const smokeExpression = `
         };
       })() : undefined,
       picking: routeId === 'picking' ? {
-        pickedId: document.querySelector('[data-picking-readout]')?.getAttribute('data-picked-id') ?? '',
+        hoveredId: document.querySelector('[data-picking-readout]')?.getAttribute('data-hovered-id') ?? '',
         text: document.querySelector('[data-picking-readout]')?.textContent?.trim() ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
@@ -737,16 +727,14 @@ const textProbeReaderExpression = `
   });
   const normalizeClipboard = (clipboard) => {
     const counters = clipboard?.counters ?? {};
-    const failure = clipboard?.failure ?? clipboard?.fallback ?? {};
-    const fallback = clipboard?.fallback ?? clipboard?.failure ?? {};
+    const failure = clipboard?.failure ?? {};
     const last = clipboard?.last ?? {};
 
     return {
       counters: {
         copy: Number(counters.copy ?? 0),
         cut: Number(counters.cut ?? 0),
-        failure: Number(counters.failure ?? counters.fallback ?? 0),
-        fallback: Number(counters.fallback ?? counters.failure ?? 0),
+        failure: Number(counters.failure ?? 0),
         keyboardCopy: Number(counters.keyboardCopy ?? 0),
         keyboardCut: Number(counters.keyboardCut ?? 0),
         keyboardPaste: Number(counters.keyboardPaste ?? 0),
@@ -758,13 +746,6 @@ const textProbeReaderExpression = `
         nativePaste: Number(counters.nativePaste ?? 0),
         paste: Number(counters.paste ?? 0),
       },
-      fallback: {
-        action: String(fallback.action ?? 'none'),
-        active: fallback.active === true,
-        message: String(fallback.message ?? ''),
-        reason: String(fallback.reason ?? 'none'),
-        source: String(fallback.source ?? 'none'),
-      },
       failure: {
         action: String(failure.action ?? 'none'),
         active: failure.active === true,
@@ -775,7 +756,6 @@ const textProbeReaderExpression = `
       last: {
         action: String(last.action ?? 'none'),
         at: Number(last.at ?? 0),
-        fallback: last.fallback === true,
         message: String(last.message ?? ''),
         ok: last.ok === true,
         reason: String(last.reason ?? 'none'),
@@ -804,8 +784,8 @@ const textProbeReaderExpression = `
         cut: menu?.enabled?.cut === true,
         paste: menu?.enabled?.paste === true,
       },
-      fallback: menu?.fallback === true,
-      fallbackReason: String(menu?.fallbackReason ?? 'none'),
+      failure: menu?.failure === true,
+      failureReason: String(menu?.failureReason ?? 'none'),
       open: menu?.open === true,
       unavailableReason: {
         paste: String(menu?.unavailableReason?.paste ?? 'none'),
@@ -1455,17 +1435,17 @@ const assertRoute = (expected, state) => {
     } else if (interaction.error !== undefined) {
       failures.push(`picking route interaction smoke failed: ${interaction.error}`);
     } else {
-      const expectedHits = ['cube', 'tower'];
-      const hits = interaction.hits ?? [];
-      for (let index = 0; index < expectedHits.length; index += 1) {
-        if (hits[index]?.pickedId !== expectedHits[index]) {
-          failures.push(
-            `picking click ${index + 1} selected "${hits[index]?.pickedId ?? 'missing'}", expected "${expectedHits[index]}"`,
-          );
-        }
+      if (interaction.hoveredId !== 'helmet') {
+        failures.push(`picking hover selected "${interaction.hoveredId}", expected "helmet"`);
       }
-      if (interaction.before === interaction.after) {
-        failures.push(`picking readout did not change from "${interaction.before}"`);
+      if (interaction.clearedId !== 'none') {
+        failures.push(`picking no-hit hover cleared to "${interaction.clearedId}", expected "none"`);
+      }
+      if (interaction.leaveClearedId !== 'none') {
+        failures.push(`picking pointer leave cleared to "${interaction.leaveClearedId}", expected "none"`);
+      }
+      if (interaction.before === interaction.hoveredId) {
+        failures.push(`picking hover readout did not change from "${interaction.before}"`);
       }
     }
   }
@@ -1510,22 +1490,25 @@ const dispatchKeyboardShortcut = async (session, key) => {
 
 const runPickingInteractionSmoke = async (session) => evaluate(session, `
 (async () => {
-  const readPickedId = () =>
-    document.querySelector('[data-picking-readout]')?.getAttribute('data-picked-id') ?? '';
+  const readHoveredId = () =>
+    document.querySelector('[data-picking-readout]')?.getAttribute('data-hovered-id') ?? '';
   const canvas = document.querySelector('canvas');
-  if (canvas === null) return { error: 'missing picking canvas', hits: [] };
-  if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent', hits: [] };
+  if (canvas === null) return { error: 'missing picking canvas' };
+  if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent' };
   const rect = canvas.getBoundingClientRect();
-  const points = [
-    { name: 'cube', x: rect.left + rect.width * 0.22, y: rect.top + rect.height * 0.5 },
-    { name: 'tower', x: rect.left + rect.width * 0.78, y: rect.top + rect.height * 0.5 },
+  const hoverPoints = [
+    { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.5 },
+    { x: rect.left + rect.width * 0.5, y: rect.top + rect.height * 0.56 },
+    { x: rect.left + rect.width * 0.45, y: rect.top + rect.height * 0.5 },
+    { x: rect.left + rect.width * 0.55, y: rect.top + rect.height * 0.5 },
   ];
+  const emptyPoint = { x: rect.left + rect.width * 0.08, y: rect.top + rect.height * 0.12 };
   const animationFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
-  const dispatch = (type, point, buttons) => {
+  const dispatch = (type, point) => {
     canvas.dispatchEvent(new PointerEvent(type, {
       bubbles: true,
       button: 0,
-      buttons,
+      buttons: 0,
       cancelable: true,
       clientX: point.x,
       clientY: point.y,
@@ -1534,16 +1517,29 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
       pointerType: 'mouse',
     }));
   };
-  const before = readPickedId();
-  const hits = [];
-  for (const point of points) {
-    dispatch('pointerdown', point, 1);
-    dispatch('pointerup', point, 0);
+  const before = readHoveredId();
+  let hoveredId = before;
+  let hoveredPoint = null;
+  for (const point of hoverPoints) {
+    dispatch('pointermove', point);
     await animationFrame();
-    hits.push({ expected: point.name, pickedId: readPickedId() });
+    hoveredId = readHoveredId();
+    if (hoveredId === 'helmet') {
+      hoveredPoint = point;
+      break;
+    }
   }
+  dispatch('pointermove', emptyPoint);
+  await animationFrame();
+  const clearedId = readHoveredId();
+  if (hoveredPoint !== null) {
+    dispatch('pointermove', hoveredPoint);
+    await animationFrame();
+  }
+  dispatch('pointerleave', hoveredPoint ?? hoverPoints[0]);
+  await animationFrame();
 
-  return { after: readPickedId(), before, hits };
+  return { before, clearedId, hoveredId, hoveredPoint, leaveClearedId: readHoveredId() };
 })()
 `);
 

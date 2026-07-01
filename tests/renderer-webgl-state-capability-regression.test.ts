@@ -306,14 +306,6 @@ const fakeImageResponse = (url: string): Response => ({
   url,
 }) as unknown as Response;
 
-const fakeJsonResponse = (url: string, json: unknown): Response => ({
-  json: vi.fn(() => Promise.resolve(json)),
-  ok: true,
-  status: 200,
-  statusText: "OK",
-  url,
-}) as unknown as Response;
-
 const fakeImageBitmap = (): ImageBitmap => ({
   close: vi.fn(),
   height: 4,
@@ -379,19 +371,6 @@ const requestedUrls = (loader: ReturnType<typeof installTextureLoaders>): readon
   ...loader.fetchRequests.map((request) => request.url),
 ];
 
-const resolvePendingFetch = (
-  loader: ReturnType<typeof installTextureLoaders>,
-  pattern: RegExp,
-  response: (url: string) => Response,
-): boolean => {
-  const index = loader.fetchRequests.findIndex((request) => pattern.test(request.url));
-  if (index < 0) return false;
-
-  const [request] = loader.fetchRequests.splice(index, 1);
-  request?.resolve(response(request.url));
-  return true;
-};
-
 const camera = () => orthographicCamera({
   bottom: -1,
   far: 10,
@@ -451,16 +430,6 @@ const drawCallIndices = (calls: readonly GlCall[]): readonly number[] =>
 
 const texParameterTriples = (calls: readonly GlCall[]): readonly (readonly unknown[])[] =>
   callsNamed(calls, "texParameteri").map((call) => call.args.slice(0, 3));
-
-const hasTexturePixelUploadAfter = (calls: readonly GlCall[], start: number): boolean => {
-  const textureStorageIndex = calls.findIndex((call, index) => index >= start && call.name === "texStorage2D");
-
-  return calls.some((call, index) => {
-    if (index < start) return false;
-    if (call.name === "texImage2D") return true;
-    return call.name === "texSubImage2D" && textureStorageIndex >= start && textureStorageIndex < index;
-  });
-};
 
 const hasSafeUvCleanupBeforeDraw = (calls: readonly GlCall[], start: number, end: number): boolean => {
   const betweenDraws = calls.slice(start + 1, end);
@@ -568,12 +537,12 @@ describe("WebGL renderer state and capability regressions", () => {
     ).toBe(true);
   });
 
-  it("requests and uploads a virtual texture preview image before falling back to full paging", async () => {
+  it("does not request or upload virtual texture previews as normal texture bridges", () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    const frames = installAnimationFrameQueue();
     const loader = installTextureLoaders();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const previewUrl = "/textures/preview.png";
     const texture = virtualTexture({
       fallbackColor: [0.08, 0.12, 0.16, 1],
@@ -583,46 +552,33 @@ describe("WebGL renderer state and capability regressions", () => {
 
     root.render(singleMeshScene(unlitMaterial({ texture })));
 
-    expect(requestedUrls(loader).some((url) => url.includes(previewUrl))).toBe(true);
-
-    const beforeSettle = calls.length;
-    await settleTextureLoads(loader, frames);
-
+    expect(requestedUrls(loader).some((url) => url.includes(previewUrl))).toBe(false);
+    expect(requestedUrls(loader).some((url) => url.includes("/textures/terrain.vt.json"))).toBe(false);
     expect(
-      calls.slice(beforeSettle).some((call) => call.name === "texImage2D"),
-      "a loaded virtual texture preview should be uploaded as a normal texture bridge",
-    ).toBe(true);
+      calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
+      "virtual texture previews should not be uploaded as normal texture data",
+    ).toBe(false);
     expect(
-      calls.slice(beforeSettle).some((call) =>
+      calls.some((call) =>
         call.name === "bindTexture"
         && call.args[0] === gl.TEXTURE_2D
         && call.args[1] !== null
         && call.args[1] !== undefined),
-      "a loaded virtual texture preview should be bound for the material",
-    ).toBe(true);
+      "virtual texture previews should not be bound as material textures",
+    ).toBe(false);
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /Virtual texture \/textures\/terrain\.vt\.json is not rendered.*Preview and first-page fallback rendering are disabled/i,
+    ));
   });
 
-  it("requests a manifest-only virtual texture and uploads referenced page texture data", async () => {
+  it("does not request manifest-only virtual texture pages as ordinary textures", () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    const frames = installAnimationFrameQueue();
     const loader = installTextureLoaders();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const manifestUrl = "/textures/terrain.vt.json";
     const pageUrl = "/textures/pages/mip-0/x0-y0.png";
-    const manifest = {
-      format: "rgba8",
-      id: "terrain-manifest-only",
-      mipCount: 1,
-      pageSize: 4,
-      pages: {
-        entries: {
-          "m0/0/0": "pages/mip-0/x0-y0.png",
-        },
-      },
-      physicalSlots: 1,
-      virtualSize: [4, 4],
-    };
     const texture = virtualTexture({
       colorSpace: "srgb",
       fallbackColor: [0.08, 0.12, 0.16, 1],
@@ -638,38 +594,23 @@ describe("WebGL renderer state and capability regressions", () => {
 
     root.render(singleMeshScene(unlitMaterial({ texture })));
 
-    expect(requestedUrls(loader).some((url) => url.includes(manifestUrl))).toBe(true);
-    const beforeManifestSettleCallCount = calls.length;
-
-    expect(resolvePendingFetch(loader, /terrain\.vt\.json(?:$|[?#])/, (url) => fakeJsonResponse(url, manifest))).toBe(true);
-    await flushMicrotasks();
-
-    expect(requestedUrls(loader).some((url) => url.includes(pageUrl))).toBe(true);
-    resolvePendingFetch(loader, /pages\/mip-0\/x0-y0\.png(?:$|[?#])/, fakeImageResponse);
-    for (const image of ControlledImage.instances.filter((image) => image.src.includes(pageUrl))) {
-      image.settleLoad();
-    }
-    await flushMicrotasks();
-    for (const request of loader.bitmapRequests.splice(0)) request.resolve(fakeImageBitmap());
-    await flushMicrotasks();
-
-    const queued = frames.splice(0);
-    for (const [index, callback] of queued.entries()) callback(16 + index);
-    await flushMicrotasks();
-
-    const afterManifestSettleCalls = calls.slice(beforeManifestSettleCallCount);
+    expect(requestedUrls(loader).some((url) => url.includes(manifestUrl))).toBe(false);
+    expect(requestedUrls(loader).some((url) => url.includes(pageUrl))).toBe(false);
     expect(
-      hasTexturePixelUploadAfter(calls, beforeManifestSettleCallCount),
-      "manifest-only virtual textures should upload manifest-referenced image/page data after it settles",
-    ).toBe(true);
+      calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
+      "manifest-only virtual textures should not upload manifest-referenced image/page data",
+    ).toBe(false);
     expect(
-      afterManifestSettleCalls.some((call) =>
+      calls.some((call) =>
         call.name === "bindTexture"
         && call.args[0] === gl.TEXTURE_2D
         && call.args[1] !== null
         && call.args[1] !== undefined),
-      "manifest-only virtual textures should bind uploaded texture data instead of staying on fallback color only",
-    ).toBe(true);
+      "manifest-only virtual textures should not bind uploaded page data as material textures",
+    ).toBe(false);
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /Virtual texture \/textures\/terrain\.vt\.json is not rendered.*Preview and first-page fallback rendering are disabled/i,
+    ));
   });
 
   it("keeps probed capability diagnostics or details for missing optional WebGL capability gates", () => {

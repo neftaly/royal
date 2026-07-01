@@ -263,8 +263,6 @@ type TextEditorProbe = {
   readonly clipboard: ClipboardState;
   readonly clipboardReadPermission: ClipboardReadPermission;
   readonly menu: {
-    readonly fallback: boolean;
-    readonly fallbackReason: ClipboardReason | 'none';
     readonly commands: readonly TextContextMenuCommandProbe[];
     readonly enabled: {
       readonly copy: boolean;
@@ -780,8 +778,6 @@ export const RoyalTextEditor = ({
       menu: {
         commands: commandProbe,
         enabled: menuEnabled,
-        fallback: false,
-        fallbackReason: 'none',
         failure: clipboard.failure.active && clipboard.failure.source === 'menu',
         failureReason: clipboard.failure.source === 'menu' ? clipboard.failure.reason : 'none',
         open: menu.open,

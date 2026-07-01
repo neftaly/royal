@@ -23,10 +23,6 @@ import type {
   Vec3,
 } from "@royal/renderer-core";
 import { textMesh } from "@royal/renderer-core/text";
-import {
-  firstVirtualTexturePageUri,
-  parseVirtualTextureManifest,
-} from "./virtual-texturing";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -120,7 +116,7 @@ type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
 
 type LoadedGltfPrimitive = {
   readonly generatedLod?: GeneratedGltfPrimitiveLod;
-  readonly indices: Uint16Array | Uint32Array | Uint8Array;
+  readonly indices?: Uint16Array | Uint32Array | Uint8Array;
   readonly key: string;
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
@@ -293,6 +289,7 @@ type GltfTexture = {
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
+const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const GENERATED_GLTF_LOD_THRESHOLDS = [0.2, 0.05, 0] as const;
 const IDENTITY_TRANSFORM: Transform = {
@@ -435,34 +432,6 @@ const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | undefined 
   };
 };
 
-const transformedBounds = (bounds: Bounds3, model: Mat4): Bounds3 => {
-  let minX = Infinity;
-  let minY = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let maxZ = -Infinity;
-
-  for (const x of [bounds.min[0], bounds.max[0]]) {
-    for (const y of [bounds.min[1], bounds.max[1]]) {
-      for (const z of [bounds.min[2], bounds.max[2]]) {
-        const [worldX, worldY, worldZ] = transformPoint(model, [x, y, z]);
-        minX = Math.min(minX, worldX);
-        minY = Math.min(minY, worldY);
-        minZ = Math.min(minZ, worldZ);
-        maxX = Math.max(maxX, worldX);
-        maxY = Math.max(maxY, worldY);
-        maxZ = Math.max(maxZ, worldZ);
-      }
-    }
-  }
-
-  return {
-    max: [maxX, maxY, maxZ],
-    min: [minX, minY, minZ],
-  };
-};
-
 const rayAabbDistance = (ray: Ray, bounds: Bounds3): number | undefined => {
   let near = 0;
   let far = Infinity;
@@ -486,6 +455,94 @@ const rayAabbDistance = (ray: Ray, bounds: Bounds3): number | undefined => {
   }
 
   return near;
+};
+
+const subtractVec3 = (left: Vec3, right: Vec3): Vec3 => [
+  left[0] - right[0],
+  left[1] - right[1],
+  left[2] - right[2],
+];
+
+const crossVec3 = (left: Vec3, right: Vec3): Vec3 => [
+  left[1] * right[2] - left[2] * right[1],
+  left[2] * right[0] - left[0] * right[2],
+  left[0] * right[1] - left[1] * right[0],
+];
+
+const dotVec3 = (left: Vec3, right: Vec3): number =>
+  left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+
+const rayTriangleDistance = (
+  ray: Ray,
+  a: Vec3,
+  b: Vec3,
+  c: Vec3,
+): number | undefined => {
+  const edge1 = subtractVec3(b, a);
+  const edge2 = subtractVec3(c, a);
+  const h = crossVec3(ray.direction, edge2);
+  const determinant = dotVec3(edge1, h);
+  if (Math.abs(determinant) < 1e-8) return undefined;
+
+  const inverseDeterminant = 1 / determinant;
+  const s = subtractVec3(ray.origin, a);
+  const u = inverseDeterminant * dotVec3(s, h);
+  if (u < 0 || u > 1) return undefined;
+
+  const q = crossVec3(s, edge1);
+  const v = inverseDeterminant * dotVec3(ray.direction, q);
+  if (v < 0 || u + v > 1) return undefined;
+
+  const distance = inverseDeterminant * dotVec3(edge2, q);
+  return distance > 1e-8 ? distance : undefined;
+};
+
+const transformedVertex = (positions: Float32Array, vertexIndex: number, model: Mat4): Vec3 | undefined => {
+  const index = vertexIndex * 3;
+  if (index + 2 >= positions.length) return undefined;
+
+  return transformPoint(model, [
+    positions[index]!,
+    positions[index + 1]!,
+    positions[index + 2]!,
+  ]);
+};
+
+const rayGeometryDistance = ({
+  indices,
+  model,
+  positions,
+  ray,
+}: {
+  readonly indices?: Uint16Array | Uint32Array | Uint8Array;
+  readonly model: Mat4;
+  readonly positions: Float32Array;
+  readonly ray: Ray;
+}): number | undefined => {
+  let best: number | undefined;
+  const consider = (aIndex: number, bIndex: number, cIndex: number): void => {
+    const a = transformedVertex(positions, aIndex, model);
+    const b = transformedVertex(positions, bIndex, model);
+    const c = transformedVertex(positions, cIndex, model);
+    if (a === undefined || b === undefined || c === undefined) return;
+
+    const distance = rayTriangleDistance(ray, a, b, c);
+    if (distance !== undefined && (best === undefined || distance < best)) best = distance;
+  };
+
+  if (indices !== undefined) {
+    for (let index = 0; index + 2 < indices.length; index += 3) {
+      consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+    }
+    return best;
+  }
+
+  const vertexCount = Math.floor(positions.length / 3);
+  for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
+    consider(vertex, vertex + 1, vertex + 2);
+  }
+
+  return best;
 };
 
 const pointOnRay = (ray: Ray, distance: number): Vec3 => [
@@ -674,14 +731,13 @@ const textureKey = (texture: TextureRef): string => {
     sampler?.minFilter ?? "",
     sampler?.wrapS ?? "",
     sampler?.wrapT ?? "",
-    texture.preview === undefined ? "" : textureKey(texture.preview),
   ].join(":");
 };
 
 const materialColor = (material: Material): Rgba => {
   const texture = material.baseColor;
   if (texture.kind === "solid") return texture.color;
-  if (texture.kind === "virtual-asset") return texture.fallback?.color ?? texture.preview?.fallback?.color ?? [0.5, 0.5, 0.5, 1];
+  if (texture.kind === "virtual-asset") return UNSUPPORTED_VIRTUAL_TEXTURE_COLOR;
 
   return texture.fallback?.color ?? [0.5, 0.5, 0.5, 1];
 };
@@ -827,17 +883,6 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
 
   if (image.complete) onLoad();
 });
-
-const loadFetchedImage = async (src: string): Promise<HTMLImageElement | ImageBitmap> => {
-  const response = await fetch(src);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-
-  if (typeof globalThis.createImageBitmap === "function" && typeof response.blob === "function") {
-    return await globalThis.createImageBitmap(await response.blob());
-  }
-
-  return await loadImage(src);
-};
 
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
@@ -1036,6 +1081,7 @@ export class WebGlRoot {
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
+  readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
   #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   #diagnostics: string[] = [];
@@ -1273,7 +1319,9 @@ export class WebGlRoot {
     return this.#pickGeometry({
       bounds: worldBounds(cpu.positions, model),
       drawOrdinal,
+      geometry: cpu,
       input,
+      model,
       passOrdinal,
       ray,
       target: {
@@ -1303,7 +1351,9 @@ export class WebGlRoot {
         const hit = this.#pickGeometry({
           bounds: worldBounds(primitive.positions, model),
           drawOrdinal,
+          geometry: primitive,
           input,
+          model,
           passOrdinal,
           ray,
           target: {
@@ -1319,38 +1369,41 @@ export class WebGlRoot {
       return best;
     }
 
-    if (node.asset.bounds === undefined) return undefined;
-    return this.#pickGeometry({
-      bounds: transformedBounds(node.asset.bounds, rootModel),
-      drawOrdinal,
-      input,
-      passOrdinal,
-      ray,
-      target: {
-        ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-        kind: "gltf",
-        node,
-      },
-    });
+    return undefined;
   }
 
   #pickGeometry({
     bounds,
     drawOrdinal,
+    geometry,
     input,
+    model,
     passOrdinal,
     ray,
     target,
   }: {
     readonly bounds: Bounds3 | undefined;
     readonly drawOrdinal: number;
+    readonly geometry: {
+      readonly indices?: Uint16Array | Uint32Array | Uint8Array;
+      readonly mode?: "lines" | "triangles";
+      readonly positions: Float32Array;
+    };
     readonly input: PickInput;
+    readonly model: Mat4;
     readonly passOrdinal: number;
     readonly ray: Ray;
     readonly target: PickTarget;
   }): PickCandidate | undefined {
+    if (geometry.mode === "lines") return undefined;
     if (bounds === undefined) return undefined;
-    const distance = rayAabbDistance(ray, bounds);
+    if (rayAabbDistance(ray, bounds) === undefined) return undefined;
+    const distance = rayGeometryDistance({
+      ...(geometry.indices === undefined ? {} : { indices: geometry.indices }),
+      model,
+      positions: geometry.positions,
+      ray,
+    });
     if (distance === undefined) return undefined;
 
     return {
@@ -1572,8 +1625,9 @@ export class WebGlRoot {
         projection,
         view,
       );
+      const indices = generatedLod?.indices ?? primitive.indices;
       const cpu: CpuGeometry = {
-        indices: generatedLod?.indices ?? primitive.indices,
+        ...(indices === undefined ? {} : { indices }),
         key: generatedLod === undefined ? baseGeometryKey : `${baseGeometryKey}:generated-lod:${generatedLod.level}`,
         mode: "triangles",
         ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
@@ -1632,11 +1686,12 @@ export class WebGlRoot {
 
   #scheduleGeneratedGltfPrimitiveLod(state: GltfState, primitive: LoadedGltfPrimitive): void {
     const lod = primitive.generatedLod;
-    if (lod === undefined || lod.status !== "pending" || lod.scheduled) return;
+    const indices = primitive.indices;
+    if (lod === undefined || lod.status !== "pending" || lod.scheduled || indices === undefined) return;
     lod.scheduled = true;
     const run = (): void => {
       if (this.#disposed || state.status !== "ready" || lod.status !== "pending") return;
-      lod.levels = generatedGltfIndexLodLevels(primitive.indices);
+      lod.levels = generatedGltfIndexLodLevels(indices);
       lod.status = "ready";
       this.#recordDiagnostic(
         `experimental generated glTF LOD ready for ${state.key}:primitive:${primitive.key}; `
@@ -1903,15 +1958,8 @@ export class WebGlRoot {
     if (material.baseColor.kind === "solid") return false;
     let resource: TextureResource | TextureLoadState;
     if (material.baseColor.kind === "virtual-asset") {
-      if (material.baseColor.preview === undefined) {
-        resource = this.#virtualTexture(material.baseColor);
-      } else {
-        const preview = this.#texture(material.baseColor.preview);
-        const previewError = "error" in preview && preview.error !== undefined;
-        resource = preview.uploaded || !previewError
-          ? preview
-          : this.#virtualTexture(material.baseColor);
-      }
+      this.#recordUnsupportedVirtualTexture(material.baseColor);
+      return false;
     } else {
       resource = this.#texture(material.baseColor);
     }
@@ -2389,64 +2437,6 @@ void main() {
     return state;
   }
 
-  #virtualTexture(texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>): TextureResource | TextureLoadState {
-    const key = textureKey(texture);
-    const cached = this.#textures.get(key);
-    if (cached !== undefined) return cached;
-
-    const glTexture = this.#createTexture();
-    const state: TextureLoadState = {
-      key,
-      loading: true,
-      texture: glTexture,
-      uploaded: false,
-    };
-    this.#textures.set(key, state);
-
-    this.#loadVirtualTexturePage(texture).then((image) => {
-      if (this.#disposed) return;
-      state.loading = false;
-      const uploadTexture: TextureAssetUploadRef = {
-        kind: "asset",
-        uri: texture.manifestUri,
-        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
-        ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
-        ...(texture.version === undefined ? {} : { version: texture.version }),
-      };
-      this.#uploadTexture(state, image, uploadTexture);
-      this.#scheduleRender();
-    }, (error: unknown) => {
-      if (this.#disposed) return;
-      state.loading = false;
-      state.error = `Virtual texture load failed for ${texture.manifestUri}: ${error instanceof Error ? error.message : String(error)}`;
-      this.#recordDiagnostic(state.error);
-    });
-
-    return state;
-  }
-
-  async #loadVirtualTexturePage(
-    texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>,
-  ): Promise<HTMLImageElement | ImageBitmap> {
-    const response = await fetch(texture.manifestUri);
-    if (!response.ok) throw new Error(`manifest ${response.status} ${response.statusText}`);
-    const parsed = parseVirtualTextureManifest(await response.json());
-    for (const diagnostic of parsed.diagnostics) {
-      if (diagnostic.severity !== "warning") {
-        this.#recordDiagnostic(`Virtual texture manifest ${texture.manifestUri}: ${diagnostic.message}`);
-      }
-    }
-    if (parsed.manifest === undefined) {
-      throw new Error(parsed.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
-    }
-    const pageUri = firstVirtualTexturePageUri(parsed.manifest);
-    if (pageUri === undefined) {
-      throw new Error("manifest does not reference any page image");
-    }
-
-    return await loadFetchedImage(resolveUrl(texture.manifestUri, pageUri));
-  }
-
   #ensureImmediateTexture(texture: TextureAssetUploadRef, image: HTMLImageElement | ImageBitmap): TextureResource {
     const key = textureKey(texture);
     const cached = this.#textures.get(key);
@@ -2590,7 +2580,7 @@ void main() {
       const normalAccessor = primitive.attributes?.NORMAL;
       const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
       const indexAccessor = primitive.indices;
-      if (positionAccessor === undefined || indexAccessor === undefined) continue;
+      if (positionAccessor === undefined) continue;
       const material = this.#readGltfMaterial(document, src, assetKey, primitive.material);
       const materialLod = this.#readGltfMaterialLod(document, src, assetKey, primitive.material);
       const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
@@ -2603,7 +2593,7 @@ void main() {
       );
       primitives.push({
         ...(generatedLod === undefined ? {} : { generatedLod }),
-        indices: this.#readGltfIndices(document, buffers, indexAccessor),
+        ...(indexAccessor === undefined ? {} : { indices: this.#readGltfIndices(document, buffers, indexAccessor) }),
         key,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
@@ -2946,6 +2936,13 @@ void main() {
   #recordDiagnostic(message: string): void {
     this.#diagnostics = [...this.#diagnostics, message];
     console.warn(message);
+  }
+
+  #recordUnsupportedVirtualTexture(texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>): void {
+    const message = `Virtual texture ${texture.manifestUri} is not rendered: atlas/page-table shader support is not implemented. Preview and first-page fallback rendering are disabled.`;
+    if (this.#unsupportedVirtualTextureDiagnostics.has(message)) return;
+    this.#unsupportedVirtualTextureDiagnostics.add(message);
+    this.#recordDiagnostic(message);
   }
 }
 

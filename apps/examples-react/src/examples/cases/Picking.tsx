@@ -1,9 +1,9 @@
 /** @jsxImportSource @royal/react */
 import {
-  boxGeometry,
-  orthographicCamera,
+  perspectiveCamera,
   planeGeometry,
   unlitMaterial,
+  type GltfOptions,
 } from '@royal/renderer-core';
 import {
   Canvas,
@@ -18,7 +18,7 @@ import {
   type ReactNode,
 } from 'react';
 
-type PickedId = 'cube' | 'slab' | 'tower' | 'none';
+type HoveredId = 'helmet' | 'none';
 
 const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -29,52 +29,28 @@ const canvasStyle = {
   touchAction: 'none',
 } satisfies CSSProperties;
 
-const camera = orthographicCamera({
-  bottom: -1.35,
+const camera = perspectiveCamera({
   far: 20,
-  left: -2.2,
+  fovY: Math.PI / 4,
   near: 0.1,
-  position: [0, 0, 5],
-  right: 2.2,
+  position: [0, 0, 3.5],
   rotation: [0, 0, 0],
-  top: 1.35,
 });
 
 const backplateGeometry = planeGeometry([4.6, 2.75]);
-const cubeGeometry = boxGeometry([0.7, 0.7, 0.7]);
-const slabGeometry = boxGeometry([1.05, 0.42, 0.62]);
-const towerGeometry = boxGeometry([0.56, 1.16, 0.56]);
-
-const backplateMaterial = unlitMaterial({ color: [0.09, 0.12, 0.14, 1] });
-const shadowMaterial = unlitMaterial({ color: [0.02, 0.025, 0.03, 1] });
-const inactiveMaterials = {
-  cube: unlitMaterial({ color: [0.13, 0.72, 0.66, 1] }),
-  slab: unlitMaterial({ color: [0.92, 0.38, 0.24, 1] }),
-  tower: unlitMaterial({ color: [0.46, 0.5, 0.86, 1] }),
-} as const;
-const selectedMaterials = {
-  cube: unlitMaterial({ color: [0.3, 0.95, 0.83, 1] }),
-  slab: unlitMaterial({ color: [1, 0.62, 0.32, 1] }),
-  tower: unlitMaterial({ color: [0.68, 0.72, 1, 1] }),
-} as const;
-
-const readoutLabel = (picked: PickedId): string => {
-  switch (picked) {
-    case 'cube':
-      return 'Cube';
-    case 'slab':
-      return 'Slab';
-    case 'tower':
-      return 'Tower';
-    case 'none':
-      return 'None';
-  }
-};
+const backplateMaterial = unlitMaterial({ color: [0.08, 0.105, 0.12, 1] });
+const hoverPlateMaterial = unlitMaterial({ color: [0.12, 0.24, 0.23, 1] });
+const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const helmetTransform = (hovered: boolean): NonNullable<GltfOptions['transform']> => ({
+  position: [0, -0.08, hovered ? 0.06 : 0],
+  rotation: [0, hovered ? 0.48 : 0.34, 0],
+  scale: hovered ? [1.18, 1.18, 1.18] : [1.08, 1.08, 1.08],
+});
 
 const PickingPointerControls = ({
   onPick,
 }: {
-  readonly onPick: (picked: PickedId) => void;
+  readonly onPick: (picked: HoveredId) => void;
 }): null => {
   const canvas = useCanvasElement();
   const pick = useCanvasPick();
@@ -82,15 +58,20 @@ const PickingPointerControls = ({
   useEffect(() => {
     if (canvas === null) return undefined;
 
-    const handlePointerDown = (event: PointerEvent): void => {
+    const handlePointerMove = (event: PointerEvent): void => {
       const hit = pick(event);
       const id = hit?.target.id;
-      onPick(id === 'cube' || id === 'slab' || id === 'tower' ? id : 'none');
+      onPick(id === 'helmet' ? id : 'none');
+    };
+    const handlePointerLeave = (): void => {
+      onPick('none');
     };
 
-    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
     return () => {
-      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
     };
   }, [canvas, onPick, pick]);
 
@@ -98,11 +79,11 @@ const PickingPointerControls = ({
 };
 
 export const Picking = (): ReactNode => {
-  const [picked, setPicked] = useState<PickedId>('none');
+  const [hovered, setHovered] = useState<HoveredId>('none');
 
   return createElement(
     'div',
-    { className: 'picking-demo', 'data-picked-id': picked },
+    { className: 'picking-demo', 'data-hovered-id': hovered },
     createElement(
       'div',
       { className: 'picking-stage' },
@@ -114,68 +95,23 @@ export const Picking = (): ReactNode => {
         >
           <scene>
             <pass camera={camera} clearColor={[0.035, 0.045, 0.05, 1]}>
+              <directionalLight color={[1.28, 1.2, 1.05, 1]} direction={[0.36, -0.72, -1]} />
               <mesh
                 geometry={backplateGeometry}
-                material={backplateMaterial}
+                material={hovered === 'helmet' ? hoverPlateMaterial : backplateMaterial}
                 transform={{
                   position: [0, 0, -0.9],
                   rotation: [0, 0, 0],
                 }}
               />
-              <mesh
-                geometry={slabGeometry}
-                material={shadowMaterial}
-                transform={{
-                  position: [-1.24, -0.42, -0.35],
-                  rotation: [0, 0, 0],
-                }}
-              />
-              <mesh
-                geometry={slabGeometry}
-                material={shadowMaterial}
-                transform={{
-                  position: [0, -0.48, -0.35],
-                  rotation: [0, 0, 0],
-                }}
-              />
-              <mesh
-                geometry={slabGeometry}
-                material={shadowMaterial}
-                transform={{
-                  position: [1.24, -0.46, -0.35],
-                  rotation: [0, 0, 0],
-                }}
-              />
-              <mesh
-                geometry={cubeGeometry}
-                material={picked === 'cube' ? selectedMaterials.cube : inactiveMaterials.cube}
-                pickingId="cube"
-                transform={{
-                  position: [-1.24, 0, 0],
-                  rotation: [0.45, 0.55, 0.12],
-                }}
-              />
-              <mesh
-                geometry={slabGeometry}
-                material={picked === 'slab' ? selectedMaterials.slab : inactiveMaterials.slab}
-                pickingId="slab"
-                transform={{
-                  position: [0, -0.04, 0],
-                  rotation: [-0.12, 0.35, 0.08],
-                }}
-              />
-              <mesh
-                geometry={towerGeometry}
-                material={picked === 'tower' ? selectedMaterials.tower : inactiveMaterials.tower}
-                pickingId="tower"
-                transform={{
-                  position: [1.24, 0.08, 0],
-                  rotation: [0.16, -0.42, -0.08],
-                }}
+              <gltf
+                pickingId="helmet"
+                src={helmetSrc}
+                transform={helmetTransform(hovered === 'helmet')}
               />
             </pass>
           </scene>
-          <PickingPointerControls onPick={setPicked} />
+          <PickingPointerControls onPick={setHovered} />
         </Canvas>
       ),
     ),
@@ -183,11 +119,11 @@ export const Picking = (): ReactNode => {
       'div',
       {
         className: 'picking-readout',
-        'data-picked-id': picked,
+        'data-hovered-id': hovered,
         'data-picking-readout': true,
       },
-      createElement('span', null, 'Selected'),
-      createElement('strong', null, readoutLabel(picked)),
+      createElement('span', null, 'Hovered'),
+      createElement('strong', null, hovered === 'helmet' ? 'Damaged Helmet' : 'None'),
     ),
   );
 };
