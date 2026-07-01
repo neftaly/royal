@@ -14,6 +14,7 @@ export interface VirtualTexturePageEntry extends VirtualTexturePageId {
 }
 
 export interface VirtualTextureManifestModel {
+  readonly borderTexels?: number;
   readonly colorSpace?: TextureColorSpace;
   readonly fallbackColor?: Rgba;
   readonly height: number;
@@ -21,9 +22,30 @@ export interface VirtualTextureManifestModel {
   readonly mipCount?: number;
   readonly pageSize: number;
   readonly pages: readonly VirtualTexturePageEntry[];
+  readonly physicalByteBudget?: number;
   readonly physicalSlots?: number;
   readonly uriTemplate?: string;
   readonly width: number;
+}
+
+export interface VirtualTextureRuntimeManifestPage extends VirtualTexturePageEntry {
+  readonly key: string;
+  readonly uri?: string;
+}
+
+export interface VirtualTextureRuntimeManifest extends Omit<
+  VirtualTextureManifestModel,
+  "borderTexels" | "mipCount" | "pages" | "physicalSlots"
+> {
+  readonly baseUri?: string;
+  readonly borderTexels: number;
+  readonly manifestUri?: string;
+  readonly mipCount: number;
+  readonly paddedPageSize: number;
+  readonly pageByteSize: number;
+  readonly pages: readonly VirtualTextureRuntimeManifestPage[];
+  readonly pagesByKey: ReadonlyMap<string, VirtualTextureRuntimeManifestPage>;
+  readonly physicalSlots: number;
 }
 
 export interface VirtualTextureManifestDiagnostic {
@@ -53,9 +75,56 @@ export interface VirtualTextureResidentPage extends VirtualTextureAtlasAssignmen
 }
 
 export interface VirtualTexturePageTableUpdate {
+  readonly fallbackMipOffset?: number;
+  readonly fallbackPage?: VirtualTexturePageId;
+  readonly fallbackPageKey?: string;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
   readonly slot?: number;
+}
+
+export interface VirtualTextureDemandRow {
+  readonly frame: number;
+  readonly page: VirtualTexturePageId;
+  readonly priority: number;
+}
+
+export type VirtualTexturePageRuntimeStatus = "requested" | "loading" | "resident" | "failed";
+
+export interface VirtualTexturePageRuntimeRecord {
+  readonly lastDemandFrame: number;
+  readonly page: VirtualTexturePageId;
+  readonly pageKey: string;
+  readonly priority: number;
+  readonly status: VirtualTexturePageRuntimeStatus;
+}
+
+export interface VirtualTextureUploadPlanOptions {
+  readonly currentFrame: number;
+  readonly maxPageUploads: number;
+  readonly maxStaleFrames?: number;
+  readonly maxUploadBytes: number;
+}
+
+export interface VirtualTextureUploadCommand {
+  readonly byteSize: number;
+  readonly page: VirtualTexturePageId;
+  readonly pageKey: string;
+  readonly priority: number;
+  readonly uri: string;
+}
+
+export interface VirtualTextureUploadPlan {
+  readonly droppedStale: readonly string[];
+  readonly skippedMissing: readonly string[];
+  readonly uploads: readonly VirtualTextureUploadCommand[];
+}
+
+export interface VirtualTextureRuntimeStats {
+  readonly failedPages: number;
+  readonly loadingPages: number;
+  readonly requestedPages: number;
+  readonly residentPages: number;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -66,6 +135,9 @@ const isPositiveInteger = (value: unknown): value is number =>
 
 const isNonNegativeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+const readNonNegativeInteger = (value: unknown): number | undefined =>
+  isNonNegativeInteger(value) ? value : undefined;
 
 const readDimensions = (value: unknown): readonly [number, number] | undefined => {
   if (isPositiveInteger(value)) return [value, value];
@@ -119,6 +191,29 @@ export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTex
   x: Math.floor(page.x / 2),
   y: Math.floor(page.y / 2),
 });
+
+const pageCountForMip = (size: number, pageSize: number, mip: number): number =>
+  Math.max(1, Math.ceil(Math.max(1, Math.ceil(size / 2 ** mip)) / pageSize));
+
+const deriveMipCount = (width: number, height: number, pageSize: number): number => {
+  let mip = 0;
+  while (pageCountForMip(width, pageSize, mip) > 1 || pageCountForMip(height, pageSize, mip) > 1) {
+    mip += 1;
+  }
+  return mip + 1;
+};
+
+const joinUri = (baseUri: string | undefined, uri: string): string => {
+  if (/^(?:[a-z]+:)?\/\//i.test(uri) || uri.startsWith("data:") || uri.startsWith("/")) return uri;
+  if (baseUri === undefined || baseUri.length === 0) return uri;
+  return `${baseUri.replace(/\/+$/, "")}/${uri.replace(/^\/+/, "")}`;
+};
+
+const baseUriFromManifestUri = (manifestUri: string | undefined): string | undefined => {
+  if (manifestUri === undefined) return undefined;
+  const slash = manifestUri.lastIndexOf("/");
+  return slash < 0 ? "" : manifestUri.slice(0, slash);
+};
 
 const readPageEntry = (
   value: unknown,
@@ -224,6 +319,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     : isPositiveInteger(payload.usableTileSize)
       ? payload.usableTileSize
       : undefined;
+  const borderTexels = readNonNegativeInteger(payload.borderTexels ?? payload.border ?? payload.tileBorder);
   if (dimensions === undefined) {
     diagnostics.push({
       code: "vt.manifest.dimensions",
@@ -275,10 +371,16 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     : isRecord(root.demoBudget) && isPositiveInteger(root.demoBudget.cacheSlots)
       ? root.demoBudget.cacheSlots
       : undefined;
+  const physicalByteBudget = isPositiveInteger(root.physicalByteBudget)
+    ? root.physicalByteBudget
+    : isRecord(root.demoBudget) && isPositiveInteger(root.demoBudget.byteBudget)
+      ? root.demoBudget.byteBudget
+      : undefined;
 
   return {
     diagnostics,
     manifest: {
+      ...(borderTexels === undefined ? {} : { borderTexels }),
       ...(colorSpace === undefined ? {} : { colorSpace }),
       ...(fallbackColor === undefined ? {} : { fallbackColor }),
       height,
@@ -286,10 +388,57 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       ...(mipCount === undefined ? {} : { mipCount }),
       pageSize,
       pages: entries,
+      ...(physicalByteBudget === undefined ? {} : { physicalByteBudget }),
       ...(physicalSlots === undefined ? {} : { physicalSlots }),
       ...(uriTemplate === undefined ? {} : { uriTemplate }),
       width,
     },
+  };
+};
+
+export const createVirtualTextureRuntimeManifest = (
+  manifest: VirtualTextureManifestModel,
+  options: { readonly baseUri?: string; readonly manifestUri?: string } = {},
+): VirtualTextureRuntimeManifest => {
+  const manifestUriBase = baseUriFromManifestUri(options.manifestUri);
+  const baseUri = options.baseUri ?? manifestUriBase;
+  const borderTexels = manifest.borderTexels ?? 0;
+  const paddedPageSize = manifest.pageSize + borderTexels * 2;
+  const mipCount = manifest.mipCount ?? deriveMipCount(manifest.width, manifest.height, manifest.pageSize);
+  const pageByteSize = paddedPageSize * paddedPageSize * 4;
+  const physicalSlots = manifest.physicalSlots
+    ?? (manifest.physicalByteBudget === undefined
+      ? 64
+      : Math.max(1, Math.floor(manifest.physicalByteBudget / pageByteSize)));
+  const pages = manifest.pages.map((page): VirtualTextureRuntimeManifestPage => {
+    const key = virtualTexturePageKey(page);
+    const uri = virtualTexturePageUri(manifest, page);
+    return {
+      ...page,
+      key,
+      ...(uri === undefined ? {} : { uri: joinUri(baseUri, uri) }),
+    };
+  });
+  const pagesByKey = new Map(pages.map((page) => [page.key, page]));
+
+  return {
+    ...(baseUri === undefined ? {} : { baseUri }),
+    borderTexels,
+    ...(manifest.colorSpace === undefined ? {} : { colorSpace: manifest.colorSpace }),
+    ...(manifest.fallbackColor === undefined ? {} : { fallbackColor: manifest.fallbackColor }),
+    height: manifest.height,
+    ...(manifest.id === undefined ? {} : { id: manifest.id }),
+    ...(options.manifestUri === undefined ? {} : { manifestUri: options.manifestUri }),
+    mipCount,
+    pageByteSize,
+    pageSize: manifest.pageSize,
+    paddedPageSize,
+    pages,
+    pagesByKey,
+    ...(manifest.physicalByteBudget === undefined ? {} : { physicalByteBudget: manifest.physicalByteBudget }),
+    physicalSlots,
+    ...(manifest.uriTemplate === undefined ? {} : { uriTemplate: manifest.uriTemplate }),
+    width: manifest.width,
   };
 };
 
@@ -309,6 +458,16 @@ export const virtualTexturePageUri = (
     .replaceAll("{x}", String(page.x))
     .replaceAll("{y}", String(page.y))
     .replaceAll("{key}", key);
+};
+
+export const virtualTextureRuntimePageUri = (
+  manifest: VirtualTextureRuntimeManifest,
+  page: VirtualTexturePageId,
+): string | undefined => {
+  const entry = manifest.pagesByKey.get(virtualTexturePageKey(page));
+  if (entry?.uri !== undefined) return entry.uri;
+  const uri = virtualTexturePageUri(manifest, page);
+  return uri === undefined ? undefined : joinUri(manifest.baseUri, uri);
 };
 
 export const firstVirtualTexturePageUri = (
@@ -341,7 +500,10 @@ export class VirtualTextureAtlasPageTable {
     return this.#freeSlots.length + this.#recordsBySlot.size;
   }
 
-  ensureResident(page: VirtualTexturePageId): VirtualTextureAtlasAssignment {
+  ensureResident(
+    page: VirtualTexturePageId,
+    options: { readonly protectedPages?: ReadonlySet<string> } = {},
+  ): VirtualTextureAtlasAssignment {
     const pageKey = virtualTexturePageKey(page);
     const existing = this.#recordsByPage.get(pageKey);
     if (existing !== undefined) {
@@ -350,11 +512,11 @@ export class VirtualTextureAtlasPageTable {
       return touched;
     }
 
-    const { evicted, slot } = this.#allocateSlot();
+    const { evicted, slot } = this.#allocateSlot(options.protectedPages);
     if (evicted !== undefined) {
       this.#recordsByPage.delete(evicted.pageKey);
       this.#recordsBySlot.delete(evicted.slot);
-      this.#dirty.push({ page: evicted.page, pageKey: evicted.pageKey });
+      this.#dirty.push(this.#downgradeOrInvalidate(evicted));
     }
 
     const record: VirtualTextureResidentPage = {
@@ -398,16 +560,17 @@ export class VirtualTextureAtlasPageTable {
     return updates;
   }
 
-  #allocateSlot(): { readonly evicted?: VirtualTextureResidentPage; readonly slot: number } {
+  #allocateSlot(protectedPages: ReadonlySet<string> | undefined): { readonly evicted?: VirtualTextureResidentPage; readonly slot: number } {
     const freeSlot = this.#freeSlots.shift();
     if (freeSlot !== undefined) return { slot: freeSlot };
 
     const slotCount = this.slotCount;
-    for (let attempts = 0; attempts < slotCount * 2; attempts += 1) {
+    for (let attempts = 0; attempts < slotCount * 3; attempts += 1) {
       const slot = this.#clockHand;
       this.#clockHand = (this.#clockHand + 1) % slotCount;
       const record = this.#recordsBySlot.get(slot);
       if (record === undefined) return { slot };
+      if (protectedPages?.has(record.pageKey)) continue;
       if (record.referenceBit) {
         this.#setRecord({ ...record, referenceBit: false });
         continue;
@@ -418,6 +581,14 @@ export class VirtualTextureAtlasPageTable {
     const fallbackSlot = this.#clockHand;
     this.#clockHand = (this.#clockHand + 1) % slotCount;
     const evicted = this.#recordsBySlot.get(fallbackSlot);
+    if (evicted !== undefined && protectedPages?.has(evicted.pageKey)) {
+      for (let slot = 0; slot < slotCount; slot += 1) {
+        const record = this.#recordsBySlot.get(slot);
+        if (record !== undefined && !protectedPages.has(record.pageKey)) {
+          return { evicted: record, slot };
+        }
+      }
+    }
     return evicted === undefined ? { slot: fallbackSlot } : { evicted, slot: fallbackSlot };
   }
 
@@ -425,4 +596,135 @@ export class VirtualTextureAtlasPageTable {
     this.#recordsByPage.set(record.pageKey, record);
     this.#recordsBySlot.set(record.slot, record);
   }
+
+  #downgradeOrInvalidate(evicted: VirtualTextureResidentPage): VirtualTexturePageTableUpdate {
+    const fallback = this.resolveResidentFallback(parentVirtualTexturePage(evicted.page));
+    if (fallback === undefined) return { page: evicted.page, pageKey: evicted.pageKey };
+    return {
+      fallbackMipOffset: fallback.page.mip - evicted.page.mip,
+      fallbackPage: fallback.page,
+      fallbackPageKey: fallback.pageKey,
+      page: evicted.page,
+      pageKey: evicted.pageKey,
+      slot: fallback.slot,
+    };
+  }
 }
+
+export class VirtualTextureRuntimeResource {
+  readonly manifest: VirtualTextureRuntimeManifest;
+  readonly pageTable: VirtualTextureAtlasPageTable;
+  readonly #records = new Map<string, VirtualTexturePageRuntimeRecord>();
+
+  constructor(manifest: VirtualTextureRuntimeManifest) {
+    this.manifest = manifest;
+    this.pageTable = new VirtualTextureAtlasPageTable({ slotCount: manifest.physicalSlots });
+  }
+
+  demand(rows: readonly VirtualTextureDemandRow[]): void {
+    for (const row of rows) {
+      const pageKey = virtualTexturePageKey(row.page);
+      const existing = this.#records.get(pageKey);
+      const status = existing?.status === "resident" || existing?.status === "loading" || existing?.status === "failed"
+        ? existing.status
+        : "requested";
+      this.#records.set(pageKey, {
+        lastDemandFrame: Math.max(existing?.lastDemandFrame ?? row.frame, row.frame),
+        page: row.page,
+        pageKey,
+        priority: Math.max(existing?.priority ?? row.priority, row.priority),
+        status,
+      });
+    }
+  }
+
+  planUploads(options: VirtualTextureUploadPlanOptions): VirtualTextureUploadPlan {
+    const uploads: VirtualTextureUploadCommand[] = [];
+    const droppedStale: string[] = [];
+    const skippedMissing: string[] = [];
+    let bytes = 0;
+    const maxStaleFrames = options.maxStaleFrames ?? Number.POSITIVE_INFINITY;
+    const candidates = [...this.#records.values()]
+      .filter((record) => record.status === "requested")
+      .sort((left, right) =>
+        right.priority - left.priority
+        || right.lastDemandFrame - left.lastDemandFrame
+        || left.page.mip - right.page.mip
+        || left.pageKey.localeCompare(right.pageKey));
+
+    for (const record of candidates) {
+      if (options.currentFrame - record.lastDemandFrame > maxStaleFrames) {
+        this.#records.delete(record.pageKey);
+        droppedStale.push(record.pageKey);
+        continue;
+      }
+      if (uploads.length >= options.maxPageUploads || bytes + this.manifest.pageByteSize > options.maxUploadBytes) {
+        continue;
+      }
+      const uri = virtualTextureRuntimePageUri(this.manifest, record.page);
+      if (uri === undefined) {
+        skippedMissing.push(record.pageKey);
+        this.#records.set(record.pageKey, { ...record, status: "failed" });
+        continue;
+      }
+      uploads.push({
+        byteSize: this.manifest.pageByteSize,
+        page: record.page,
+        pageKey: record.pageKey,
+        priority: record.priority,
+        uri,
+      });
+      bytes += this.manifest.pageByteSize;
+      this.#records.set(record.pageKey, { ...record, status: "loading" });
+    }
+
+    return { droppedStale, skippedMissing, uploads };
+  }
+
+  markUploaded(page: VirtualTexturePageId): VirtualTextureAtlasAssignment {
+    const pageKey = virtualTexturePageKey(page);
+    const protectedPages = new Set<string>();
+    for (let parent = parentVirtualTexturePage(page); parent.mip < this.manifest.mipCount; parent = parentVirtualTexturePage(parent)) {
+      protectedPages.add(virtualTexturePageKey(parent));
+    }
+    const assignment = this.pageTable.ensureResident(page, { protectedPages });
+    this.#records.set(pageKey, {
+      lastDemandFrame: this.#records.get(pageKey)?.lastDemandFrame ?? 0,
+      page,
+      pageKey,
+      priority: this.#records.get(pageKey)?.priority ?? 0,
+      status: "resident",
+    });
+    if (assignment.evicted !== undefined) {
+      this.#records.delete(assignment.evicted.pageKey);
+    }
+    return assignment;
+  }
+
+  stats(): VirtualTextureRuntimeStats {
+    let failedPages = 0;
+    let loadingPages = 0;
+    let requestedPages = 0;
+    let residentPages = 0;
+    for (const record of this.#records.values()) {
+      if (record.status === "failed") failedPages += 1;
+      if (record.status === "loading") loadingPages += 1;
+      if (record.status === "requested") requestedPages += 1;
+      if (record.status === "resident") residentPages += 1;
+    }
+    return { failedPages, loadingPages, requestedPages, residentPages };
+  }
+}
+
+export const encodeVirtualTexturePageTableRgba8 = (
+  update: Pick<VirtualTexturePageTableUpdate, "fallbackMipOffset" | "slot">,
+): readonly [number, number, number, number] => {
+  if (update.slot === undefined) return [0, 0, 0, 0];
+  const encodedSlot = update.slot + 1;
+  return [
+    encodedSlot & 0xff,
+    (encodedSlot >> 8) & 0xff,
+    update.fallbackMipOffset ?? 0,
+    255,
+  ];
+};

@@ -930,9 +930,13 @@ describe("WebGL renderer product descriptor contracts", () => {
 
     expect(() => {
       root.render(renderScene([
+        directionalLight({
+          color: [1, 1, 1, 1],
+          direction: [0, 0, -1],
+        }),
         mesh({
           geometry: planeGeometry(1),
-          material: unlitMaterial({
+          material: standardMaterial({
             texture: virtualTexture({
               fallbackColor,
               src: "/textures/product-terrain.vt.json",

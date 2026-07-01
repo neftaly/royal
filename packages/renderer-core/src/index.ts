@@ -54,8 +54,7 @@ export {
   imageTexture,
   solidTexture,
   textureAsset,
-  virtualTexture,
-  virtualTextureAsset
+  virtualTexture
 } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';

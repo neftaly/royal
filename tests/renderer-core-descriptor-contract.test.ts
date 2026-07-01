@@ -10,8 +10,10 @@ import {
   perspectiveCamera,
   standardMaterial,
   textureAsset,
+  type TextureRef,
   unlitMaterial,
   virtualTexture,
+  type VirtualTextureAssetOptions,
   wireframeMaterial,
 } from "@royal/renderer-core";
 
@@ -118,10 +120,12 @@ describe("renderer-core descriptor contract", () => {
     });
 
     expect(virtualTexture({
+      debugName: "terrain-vt",
       fallbackColor: [0.08, 0.1, 0.12, 1],
       src: "/textures/terrain.vt.json",
       version: "terrain-v1",
     })).toEqual({
+      debugName: "terrain-vt",
       fallback: {
         color: [0.08, 0.1, 0.12, 1],
         kind: "solid",
@@ -130,6 +134,47 @@ describe("renderer-core descriptor contract", () => {
       manifestUri: "/textures/terrain.vt.json",
       version: "terrain-v1",
     });
+  });
+
+  it("keeps virtual textures as texture refs without public preview fallbacks", () => {
+    const options = {
+      debugName: "contract terrain",
+      fallbackColor: [0.08, 0.1, 0.12, 1],
+      manifestUri: "/textures/terrain.vt.json",
+    } satisfies VirtualTextureAssetOptions;
+    const texture: TextureRef = virtualTexture(options);
+
+    expect(standardMaterial({ texture }).baseColor).toBe(texture);
+    expect(unlitMaterial({ texture }).baseColor).toBe(texture);
+    expect(texture).toEqual({
+      debugName: "contract terrain",
+      fallback: {
+        color: [0.08, 0.1, 0.12, 1],
+        kind: "solid",
+      },
+      kind: "virtual-asset",
+      manifestUri: "/textures/terrain.vt.json",
+    });
+
+    const stringTexture: TextureRef = virtualTexture("/textures/terrain.vt.json");
+    expect(standardMaterial({ texture: stringTexture }).baseColor).toBe(stringTexture);
+
+    if (false) {
+      // @ts-expect-error preview is not a public render fallback for virtual textures.
+      virtualTexture({
+        preview: imageTexture("/textures/terrain-preview.png"),
+        src: "/textures/terrain.vt.json",
+      });
+
+      // @ts-expect-error virtual textures require exactly one public source field.
+      virtualTexture({});
+
+      // @ts-expect-error src and manifestUri are mutually exclusive.
+      virtualTexture({
+        manifestUri: "/textures/terrain-manifest.vt.json",
+        src: "/textures/terrain.vt.json",
+      });
+    }
   });
 
   it("normalizes material baseColor from color or texture inputs", () => {

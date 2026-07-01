@@ -1,4 +1,6 @@
 import type { ComponentType } from 'react';
+import { DonnybrookAwarenessPhysics } from './examples/cases/donnybrook/DonnybrookAwarenessPhysics';
+import donnybrookAwarenessPhysicsSource from './examples/cases/donnybrook/DonnybrookAwarenessPhysics.tsx?raw';
 import { FormControls } from './examples/cases/FormControls';
 import formControlsSource from './examples/cases/FormControls.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
@@ -17,6 +19,8 @@ import { StandardLighting } from './examples/cases/StandardLighting';
 import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
+import { VirtualTexturingTerrain } from './examples/cases/VirtualTexturingTerrain';
+import virtualTexturingTerrainSource from './examples/cases/VirtualTexturingTerrain.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -120,6 +124,24 @@ export const examples = [
     Component: GeneratedAutoLod,
     source: generatedAutoLodSource,
     sourceFile: 'examples/cases/GeneratedAutoLod.tsx',
+  },
+  {
+    id: 'virtual-texturing-terrain',
+    maturity: 'lab-probe',
+    path: '/virtual-texturing-terrain',
+    title: 'Virtual Texturing Terrain',
+    Component: VirtualTexturingTerrain,
+    source: virtualTexturingTerrainSource,
+    sourceFile: 'examples/cases/VirtualTexturingTerrain.tsx',
+  },
+  {
+    id: 'donnybrook-awareness-physics',
+    maturity: 'lab-probe',
+    path: '/donnybrook-awareness-physics',
+    title: 'Donnybrook Awareness Physics',
+    Component: DonnybrookAwarenessPhysics,
+    source: donnybrookAwarenessPhysicsSource,
+    sourceFile: 'examples/cases/donnybrook/DonnybrookAwarenessPhysics.tsx',
   },
 ] as const satisfies readonly Example[];
 

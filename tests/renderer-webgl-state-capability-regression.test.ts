@@ -537,26 +537,24 @@ describe("WebGL renderer state and capability regressions", () => {
     ).toBe(true);
   });
 
-  it("does not request or upload virtual texture previews as normal texture bridges", () => {
+  it("requests virtual texture manifests through the VT path instead of normal texture bridges", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const loader = installTextureLoaders();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const previewUrl = "/textures/preview.png";
     const texture = virtualTexture({
       fallbackColor: [0.08, 0.12, 0.16, 1],
-      preview: imageTexture(previewUrl),
       src: "/textures/terrain.vt.json",
     });
 
     root.render(singleMeshScene(unlitMaterial({ texture })));
 
-    expect(requestedUrls(loader).some((url) => url.includes(previewUrl))).toBe(false);
-    expect(requestedUrls(loader).some((url) => url.includes("/textures/terrain.vt.json"))).toBe(false);
+    expect(loader.fetchRequests.map((request) => request.url)).toEqual(["/textures/terrain.vt.json"]);
+    expect(ControlledImage.instances.map((image) => image.src)).not.toContain("/textures/terrain.vt.json");
     expect(
       calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
-      "virtual texture previews should not be uploaded as normal texture data",
+      "virtual texture manifests should not be uploaded as normal texture data before manifest parse",
     ).toBe(false);
     expect(
       calls.some((call) =>
@@ -564,14 +562,12 @@ describe("WebGL renderer state and capability regressions", () => {
         && call.args[0] === gl.TEXTURE_2D
         && call.args[1] !== null
         && call.args[1] !== undefined),
-      "virtual texture previews should not be bound as material textures",
+      "virtual texture manifests should not be bound as material textures",
     ).toBe(false);
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /Virtual texture \/textures\/terrain\.vt\.json is not rendered.*Preview and first-page fallback rendering are disabled/i,
-    ));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ manifestRequests: 1 }));
   });
 
-  it("does not request manifest-only virtual texture pages as ordinary textures", () => {
+  it("does not request manifest-only virtual texture pages as ordinary textures before manifest parse", () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const loader = installTextureLoaders();
     const { calls, gl } = fakeGl();
@@ -594,11 +590,11 @@ describe("WebGL renderer state and capability regressions", () => {
 
     root.render(singleMeshScene(unlitMaterial({ texture })));
 
-    expect(requestedUrls(loader).some((url) => url.includes(manifestUrl))).toBe(false);
+    expect(requestedUrls(loader).some((url) => url.includes(manifestUrl))).toBe(true);
     expect(requestedUrls(loader).some((url) => url.includes(pageUrl))).toBe(false);
     expect(
       calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
-      "manifest-only virtual textures should not upload manifest-referenced image/page data",
+      "manifest-only virtual textures should not upload manifest-referenced image/page data before manifest parse",
     ).toBe(false);
     expect(
       calls.some((call) =>
@@ -608,9 +604,7 @@ describe("WebGL renderer state and capability regressions", () => {
         && call.args[1] !== undefined),
       "manifest-only virtual textures should not bind uploaded page data as material textures",
     ).toBe(false);
-    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /Virtual texture \/textures\/terrain\.vt\.json is not rendered.*Preview and first-page fallback rendering are disabled/i,
-    ));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ manifestRequests: 1 }));
   });
 
   it("keeps probed capability diagnostics or details for missing optional WebGL capability gates", () => {

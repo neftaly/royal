@@ -9,13 +9,14 @@
     "dev": "vite --config vite.config.ts",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1",
-    "test": "pnpm exec vitest run --passWithNoTests --config vite.config.ts src/**/*.test.ts",
+    "test": "pnpm exec vitest run --passWithNoTests --config vite.config.ts",
     "test:browser": "pnpm run build && node scripts/browser-smoke.mjs"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "0.19.3",
+    "@royal/react": "workspace:*",
     "@royal/renderer-core": "workspace:*",
     "@royal/renderer-webgl": "workspace:*",
-    "@royal/react": "workspace:*",
     "@tanstack/react-router": "^1.170.16",
     "react": "catalog:",
     "react-dom": "catalog:"

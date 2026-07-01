@@ -211,4 +211,16 @@ describe("renderer JSX contract", () => {
       "Royal renderer JSX components must be marked with markRendererComponent",
     );
   });
+
+  it("does not expose virtual textures as JSX renderer nodes", () => {
+    if (false) {
+      // @ts-expect-error virtual textures are TextureRefs passed through texture props.
+      <virtualTexture src="/textures/terrain.vt.json" />;
+    }
+
+    expect(() => jsx(
+      "virtualTexture" as never,
+      { src: "/textures/terrain.vt.json" },
+    )).toThrow("Unsupported Royal JSX element");
+  });
 });

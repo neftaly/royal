@@ -277,6 +277,186 @@ canvas {
   font-size: 1rem;
 }
 
+.donnybrook-lab {
+  background: #0c1113;
+  color: #eef5f2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100%;
+}
+
+.donnybrook-lab-state {
+  align-items: center;
+  background: #0c1113;
+  color: #eef5f2;
+  display: flex;
+  font-weight: 750;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1rem;
+  text-align: center;
+}
+
+.donnybrook-stage {
+  min-height: 0;
+}
+
+.donnybrook-inspector {
+  background: #11181a;
+  border-top: 1px solid #263236;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.donnybrook-metrics {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.donnybrook-metric {
+  border-left: 3px solid #82909a;
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  padding-left: 0.55rem;
+}
+
+.donnybrook-metric.hot {
+  border-color: #72de5c;
+}
+
+.donnybrook-metric.warm {
+  border-color: #f5b64e;
+}
+
+.donnybrook-metric.cold {
+  border-color: #6c8fea;
+}
+
+.donnybrook-metric.dormant {
+  border-color: #8a949b;
+}
+
+.donnybrook-metric span,
+.donnybrook-panel h2,
+.donnybrook-lane span {
+  color: #aebabe;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.donnybrook-metric strong {
+  font-size: 1.28rem;
+  line-height: 1;
+}
+
+.donnybrook-metric small,
+.donnybrook-lane small {
+  color: #9aa8ad;
+  font-size: 0.72rem;
+}
+
+.donnybrook-panel-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+}
+
+.donnybrook-panel {
+  border-top: 1px solid #2b393d;
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  padding-top: 0.65rem;
+}
+
+.donnybrook-panel > strong {
+  color: #f5faf8;
+  overflow-wrap: anywhere;
+}
+
+.donnybrook-panel dl {
+  display: grid;
+  gap: 0.24rem;
+  margin: 0;
+}
+
+.donnybrook-panel dl div {
+  align-items: baseline;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 4rem minmax(0, 1fr);
+}
+
+.donnybrook-panel dt {
+  color: #91a0a5;
+  font-size: 0.72rem;
+}
+
+.donnybrook-panel dd {
+  font-size: 0.78rem;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.donnybrook-lanes {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.donnybrook-lane {
+  align-items: baseline;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(4.5rem, 1fr) auto auto;
+}
+
+.donnybrook-controls,
+.donnybrook-actor-strip {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.donnybrook-controls {
+  border-top: 1px solid #2b393d;
+  padding-top: 0.65rem;
+}
+
+.donnybrook-controls span {
+  color: #aebabe;
+  font-size: 0.76rem;
+  font-weight: 800;
+  margin-right: auto;
+  text-transform: uppercase;
+}
+
+.donnybrook-controls button,
+.donnybrook-actor-strip button {
+  background: #172124;
+  border: 1px solid #334348;
+  border-radius: 6px;
+  color: #eef5f2;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.38rem 0.52rem;
+}
+
+.donnybrook-controls button:hover,
+.donnybrook-actor-strip button:hover,
+.donnybrook-actor-strip button.active {
+  background: #203036;
+  border-color: #577078;
+}
+
 .artifacts-page {
   display: grid;
   gap: 1rem;
@@ -441,6 +621,10 @@ canvas {
   .demo-panel {
     min-height: 19rem;
   }
+
+  .donnybrook-panel-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 620px) {
@@ -466,6 +650,10 @@ canvas {
 
   .panel-title-row span {
     text-align: left;
+  }
+
+  .donnybrook-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .artifacts-page {

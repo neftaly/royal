@@ -42,9 +42,10 @@ export interface TextureAssetRef {
 export interface VirtualTextureAssetRef {
   readonly kind: 'virtual-asset';
   readonly colorSpace?: TextureColorSpace;
+  /** Diagnostics-only identity; renderers must not treat this as asset state. */
+  readonly debugName?: string;
   readonly fallback?: SolidTextureRef;
   readonly manifestUri: string;
-  readonly preview?: TextureAssetRef;
   readonly sampler?: TextureSampler;
   readonly version?: TextureVersion;
 }
@@ -80,8 +81,13 @@ export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOption
 
 export type ImageTextureOptions = TextureAssetOptions;
 
-interface VirtualTextureAssetBaseOptions extends Omit<VirtualTextureAssetRef, 'kind' | 'manifestUri' | 'version'> {
+interface VirtualTextureAssetBaseOptions {
+  readonly colorSpace?: TextureColorSpace;
+  /** Diagnostics-only identity; not a cache key, page-table key, or render fallback. */
+  readonly debugName?: string;
+  readonly fallback?: SolidTextureRef;
   readonly fallbackColor?: Rgba;
+  readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureVersion;
 }
@@ -161,23 +167,23 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
   });
 }
 
-export const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
+const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
   const manifestUri = options.src ?? options.manifestUri;
   const fallback = resolveTextureFallback(options);
 
   return {
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(options.debugName === undefined ? {} : { debugName: options.debugName }),
     ...(fallback === undefined ? {} : { fallback }),
     manifestUri,
-    ...(options.preview === undefined ? {} : { preview: options.preview }),
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
     ...(options.version === undefined ? {} : { version: options.version })
   };
 };
 
-export function virtualTexture(src: string): VirtualTextureAssetRef;
-export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
-export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {
+export function virtualTexture(src: string): TextureRef;
+export function virtualTexture(options: VirtualTextureAssetOptions): TextureRef;
+export function virtualTexture(input: VirtualTextureInput): TextureRef {
   return virtualTextureAsset(typeof input === 'string' ? { src: input } : input);
 }

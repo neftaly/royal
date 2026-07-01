@@ -23,6 +23,16 @@ import type {
   Vec3,
 } from "@royal/renderer-core";
 import { textMesh } from "@royal/renderer-core/text";
+import {
+  encodeVirtualTexturePageTableRgba8,
+  parseVirtualTextureManifest,
+  VirtualTextureAtlasPageTable,
+  virtualTexturePageKey,
+  virtualTexturePageUri,
+  type VirtualTextureManifestModel,
+  type VirtualTexturePageId,
+  type VirtualTexturePageTableUpdate,
+} from "./virtual-texturing";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -43,6 +53,23 @@ export interface WebGlRootSnapshot {
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
   readonly options: NormalizedWebGlRootOptions;
+  readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
+}
+
+export interface WebGlVirtualTexturingSnapshot {
+  readonly atlasTextures: number;
+  readonly fallbackDraws: number;
+  readonly manifestFailures: number;
+  readonly manifestRequests: number;
+  readonly manifestsReady: number;
+  readonly pageTableTextures: number;
+  readonly pageTableUpdates: number;
+  readonly pendingPages: number;
+  readonly requestedPages: number;
+  readonly residentPages: number;
+  readonly shaderBinds: number;
+  readonly unsupportedDraws: number;
+  readonly uploadedPages: number;
 }
 
 type Mat4 = readonly [
@@ -52,7 +79,7 @@ type Mat4 = readonly [
   number, number, number, number,
 ];
 
-type ProgramKind = "surface" | "wireframe";
+type ProgramKind = "surface" | "surface-vt-base-color" | "wireframe";
 
 type Vec4 = readonly [x: number, y: number, z: number, w: number];
 
@@ -112,6 +139,43 @@ type TextureLoadState = TextureResource & {
 
 type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
   readonly flipY?: boolean;
+};
+
+type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
+
+type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
+
+type VirtualTextureResourceSet = {
+  readonly atlasTexture: WebGLTexture;
+  readonly atlasGridColumns: number;
+  readonly atlasGridRows: number;
+  readonly pageTableTexture: WebGLTexture;
+  readonly pageTableHeight: number;
+  readonly pageTableWidth: number;
+};
+
+type VirtualTextureRuntimeStats = {
+  fallbackDraws: number;
+  manifestFailures: number;
+  manifestRequests: number;
+  pageTableUpdates: number;
+  shaderBinds: number;
+  unsupportedDraws: number;
+  uploadedPages: number;
+};
+
+type VirtualTextureRuntimeState = {
+  diagnostics: string[];
+  readonly key: string;
+  loadingPages: Set<string>;
+  manifest?: VirtualTextureManifestModel;
+  pageTable?: VirtualTextureAtlasPageTable;
+  readonly requestedPages: Set<string>;
+  resources?: VirtualTextureResourceSet;
+  stats: VirtualTextureRuntimeStats;
+  status: VirtualTextureRuntimeStatus;
+  readonly texture: VirtualTextureRef;
+  readonly uploadedPages: Set<string>;
 };
 
 type LoadedGltfPrimitive = {
@@ -292,6 +356,9 @@ const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const GENERATED_GLTF_LOD_THRESHOLDS = [0.2, 0.05, 0] as const;
+const VT_WRAP_CLAMP_TO_EDGE = 0;
+const VT_WRAP_REPEAT = 1;
+const VT_WRAP_MIRRORED_REPEAT = 2;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
@@ -1075,6 +1142,7 @@ export class WebGlRoot {
   readonly #programs = new Map<ProgramKind, ProgramResource>();
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
+  readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #gltf = new Map<string, GltfState>();
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
   readonly #ownedBuffers = new Set<WebGLBuffer>();
@@ -1091,6 +1159,7 @@ export class WebGlRoot {
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
+  #unsupportedVirtualTextureDraws = 0;
   readonly #viewportInvalidationListener = (): void => {
     this.#scheduleRender();
   };
@@ -1219,6 +1288,7 @@ export class WebGlRoot {
     this.#programs.clear();
     this.#geometry.clear();
     this.#textures.clear();
+    this.#virtualTextures.clear();
     this.#gltf.clear();
     this.#gltfLodSelections.clear();
     this.#activeGltfLodSelectionKeys.clear();
@@ -1236,6 +1306,7 @@ export class WebGlRoot {
       frame: this.#frame,
       latestScene: this.#latestScene,
       options: { ...this.#options },
+      virtualTexturing: this.#virtualTexturingSnapshot(),
     };
   }
 
@@ -1897,7 +1968,12 @@ export class WebGlRoot {
     light: DirectionalLightNode | undefined,
   ): void {
     const gl = this.#gl;
-    const programResource = this.#program(material.kind === "wireframe" ? "wireframe" : "surface");
+    const virtualTexture = this.#virtualTextureDrawState(geometry, material);
+    const useVirtualTexture = virtualTexture !== undefined && this.#isVirtualTextureDrawable(virtualTexture);
+    const programKind: ProgramKind = material.kind === "wireframe"
+      ? "wireframe"
+      : useVirtualTexture ? "surface-vt-base-color" : "surface";
+    const programResource = this.#program(programKind);
     const program = programResource.program;
     gl.useProgram(program);
 
@@ -1913,7 +1989,15 @@ export class WebGlRoot {
       this.#uniformColor(program, "u_lightColor", DEFAULT_LIGHT_COLOR);
     }
 
-    this.#uniform1i(program, "u_useTexture", this.#bindMaterialTexture(program, material) ? 1 : 0);
+    const useTexture = useVirtualTexture
+      ? this.#bindVirtualTexture(program, virtualTexture)
+      : material.baseColor.kind === "virtual-asset"
+        ? false
+        : this.#bindMaterialTexture(program, material);
+    if (material.baseColor.kind === "virtual-asset" && !useVirtualTexture && virtualTexture !== undefined) {
+      virtualTexture.stats.fallbackDraws += 1;
+    }
+    this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, geometry.arrayBuffer);
     const positionLocation = gl.getAttribLocation(program, "a_position");
     if (positionLocation >= 0) {
@@ -1958,7 +2042,7 @@ export class WebGlRoot {
     if (material.baseColor.kind === "solid") return false;
     let resource: TextureResource | TextureLoadState;
     if (material.baseColor.kind === "virtual-asset") {
-      this.#recordUnsupportedVirtualTexture(material.baseColor);
+      this.#recordUnsupportedVirtualTexture(material.baseColor, "only unlit base-color virtual textures on UV geometry are supported");
       return false;
     } else {
       resource = this.#texture(material.baseColor);
@@ -1970,6 +2054,481 @@ export class WebGlRoot {
     const location = gl.getUniformLocation(program, "u_texture");
     if (location !== null) gl.uniform1i(location, 0);
     return true;
+  }
+
+  #virtualTextureDrawState(
+    geometry: GeometryResource,
+    material: Material,
+  ): VirtualTextureRuntimeState | undefined {
+    if (material.baseColor.kind !== "virtual-asset") return undefined;
+    if (material.kind !== "unlit") {
+      this.#recordUnsupportedVirtualTexture(material.baseColor, "only unlit base-color virtual textures are supported");
+      return undefined;
+    }
+    if (geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
+      this.#recordUnsupportedVirtualTexture(material.baseColor, "virtual textures require triangle geometry with UVs");
+      return undefined;
+    }
+
+    const state = this.#virtualTexture(material.baseColor);
+    if (state.status === "ready" && state.loadingPages.size === 0) {
+      this.#demandVirtualTexturePages(state);
+    }
+    return state;
+  }
+
+  #virtualTexture(texture: VirtualTextureRef): VirtualTextureRuntimeState {
+    const key = textureKey(texture);
+    const cached = this.#virtualTextures.get(key);
+    if (cached !== undefined) return cached;
+
+    const state: VirtualTextureRuntimeState = {
+      diagnostics: [],
+      key,
+      loadingPages: new Set(),
+      requestedPages: new Set(),
+      stats: {
+        fallbackDraws: 0,
+        manifestFailures: 0,
+        manifestRequests: 1,
+        pageTableUpdates: 0,
+        shaderBinds: 0,
+        unsupportedDraws: 0,
+        uploadedPages: 0,
+      },
+      status: "loading",
+      texture,
+      uploadedPages: new Set(),
+    };
+    this.#virtualTextures.set(key, state);
+    void this.#loadVirtualTextureManifest(state);
+
+    return state;
+  }
+
+  async #loadVirtualTextureManifest(state: VirtualTextureRuntimeState): Promise<void> {
+    try {
+      const response = await fetch(state.texture.manifestUri);
+      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+      const payload = await response.json() as unknown;
+      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+
+      const parsed = parseVirtualTextureManifest(payload);
+      for (const diagnostic of parsed.diagnostics) {
+        const message = `Virtual texture ${state.texture.manifestUri}: ${diagnostic.message}`;
+        state.diagnostics.push(message);
+        this.#recordDiagnostic(message);
+      }
+      if (parsed.manifest === undefined) {
+        this.#failVirtualTexture(state, "manifest parse failed");
+        return;
+      }
+
+      state.manifest = parsed.manifest;
+      const unsupported = parsed.diagnostics.find((diagnostic) => diagnostic.severity === "unsupported")
+        ?? this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest);
+      if (unsupported !== undefined) {
+        this.#markVirtualTextureUnsupported(
+          state,
+          typeof unsupported === "string" ? unsupported : unsupported.message,
+        );
+        return;
+      }
+
+      this.#allocateVirtualTextureResources(state, parsed.manifest);
+      state.status = "ready";
+      this.#demandVirtualTexturePages(state);
+      this.#scheduleRender();
+    } catch (error) {
+      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      this.#failVirtualTexture(state, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  #unsupportedVirtualTextureRuntimeReason(manifest: VirtualTextureManifestModel): string | undefined {
+    const gl = this.#gl;
+    const textureUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
+    if (!Number.isFinite(textureUnits) || textureUnits < 2) {
+      return "requires at least two fragment texture units for atlas and page-table textures";
+    }
+
+    const pageTableWidth = Math.ceil(manifest.width / manifest.pageSize);
+    const pageTableHeight = Math.ceil(manifest.height / manifest.pageSize);
+    const physicalSlots = this.#virtualTexturePhysicalSlots(manifest);
+    const atlasColumns = Math.ceil(Math.sqrt(physicalSlots));
+    const atlasRows = Math.ceil(physicalSlots / atlasColumns);
+    const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    if (
+      !Number.isFinite(maxTextureSize)
+      || pageTableWidth > maxTextureSize
+      || pageTableHeight > maxTextureSize
+      || atlasColumns * manifest.pageSize > maxTextureSize
+      || atlasRows * manifest.pageSize > maxTextureSize
+    ) {
+      return "atlas or page-table dimensions exceed WebGL2 texture limits";
+    }
+
+    return undefined;
+  }
+
+  #virtualTexturePhysicalSlots(manifest: VirtualTextureManifestModel): number {
+    return Math.max(1, manifest.physicalSlots ?? 4);
+  }
+
+  #allocateVirtualTextureResources(
+    state: VirtualTextureRuntimeState,
+    manifest: VirtualTextureManifestModel,
+  ): void {
+    const gl = this.#gl;
+    const physicalSlots = this.#virtualTexturePhysicalSlots(manifest);
+    const atlasGridColumns = Math.ceil(Math.sqrt(physicalSlots));
+    const atlasGridRows = Math.ceil(physicalSlots / atlasGridColumns);
+    const pageTableWidth = Math.ceil(manifest.width / manifest.pageSize);
+    const pageTableHeight = Math.ceil(manifest.height / manifest.pageSize);
+    const atlasTexture = this.#createTexture();
+    const pageTableTexture = this.#createTexture();
+
+    gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      atlasGridColumns * manifest.pageSize,
+      atlasGridRows * manifest.pageSize,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null,
+    );
+    this.#setVirtualTextureSampler(
+      this.#virtualTextureAtlasMagFilter(state.texture.sampler),
+      this.#virtualTextureAtlasMinFilter(state.texture.sampler),
+      gl.CLAMP_TO_EDGE,
+      gl.CLAMP_TO_EDGE,
+    );
+
+    gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      pageTableWidth,
+      pageTableHeight,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array(pageTableWidth * pageTableHeight * 4),
+    );
+    this.#setVirtualTextureSampler(gl.NEAREST, gl.NEAREST, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE);
+
+    state.pageTable = new VirtualTextureAtlasPageTable({ slotCount: physicalSlots });
+    state.resources = {
+      atlasGridColumns,
+      atlasGridRows,
+      atlasTexture,
+      pageTableHeight,
+      pageTableTexture,
+      pageTableWidth,
+    };
+  }
+
+  #setVirtualTextureSampler(magFilter: number, minFilter: number, wrapS: number, wrapT: number): void {
+    const gl = this.#gl;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapS);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT);
+  }
+
+  #virtualTextureAtlasMagFilter(sampler: TextureSampler | undefined): number {
+    return sampler?.magFilter === "nearest" ? this.#gl.NEAREST : this.#gl.LINEAR;
+  }
+
+  #virtualTextureAtlasMinFilter(sampler: TextureSampler | undefined): number {
+    switch (sampler?.minFilter) {
+      case "nearest":
+      case "nearest-mipmap-linear":
+      case "nearest-mipmap-nearest":
+        return this.#gl.NEAREST;
+      case "linear":
+      case "linear-mipmap-linear":
+      case "linear-mipmap-nearest":
+      default:
+        return this.#gl.LINEAR;
+    }
+  }
+
+  #demandVirtualTexturePages(state: VirtualTextureRuntimeState): void {
+    const manifest = state.manifest;
+    if (manifest === undefined) return;
+
+    const budget = this.#virtualTexturePhysicalSlots(manifest);
+    let requested = 0;
+    for (const page of this.#virtualTextureDemandCandidates(manifest)) {
+      if (requested >= budget) break;
+      if (this.#requestVirtualTexturePage(state, page)) requested += 1;
+    }
+  }
+
+  #virtualTextureDemandCandidates(manifest: VirtualTextureManifestModel): readonly VirtualTexturePageId[] {
+    const candidates = new Map<string, VirtualTexturePageId>();
+    for (const page of manifest.pages) {
+      if (virtualTexturePageUri(manifest, page) !== undefined) {
+        candidates.set(virtualTexturePageKey(page), page);
+      }
+    }
+
+    if (manifest.uriTemplate !== undefined) {
+      const mipCount = this.#virtualTextureMipCount(manifest);
+      const baseWidth = Math.ceil(manifest.width / manifest.pageSize);
+      const baseHeight = Math.ceil(manifest.height / manifest.pageSize);
+      for (let mip = 0; mip < mipCount; mip += 1) {
+        const width = Math.max(1, Math.ceil(baseWidth / (2 ** mip)));
+        const height = Math.max(1, Math.ceil(baseHeight / (2 ** mip)));
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const page = { mip, x, y };
+            candidates.set(virtualTexturePageKey(page), page);
+          }
+        }
+      }
+    }
+
+    return [...candidates.values()].sort((left, right) =>
+      right.mip - left.mip
+      || left.y - right.y
+      || left.x - right.x);
+  }
+
+  #virtualTextureMipCount(manifest: VirtualTextureManifestModel): number {
+    if (manifest.mipCount !== undefined) return manifest.mipCount;
+    const baseWidth = Math.ceil(manifest.width / manifest.pageSize);
+    const baseHeight = Math.ceil(manifest.height / manifest.pageSize);
+    return Math.max(1, Math.floor(Math.log2(Math.max(baseWidth, baseHeight))) + 1);
+  }
+
+  #requestVirtualTexturePage(state: VirtualTextureRuntimeState, page: VirtualTexturePageId): boolean {
+    const manifest = state.manifest;
+    if (manifest === undefined || state.status !== "ready") return false;
+    const pageKey = virtualTexturePageKey(page);
+    if (
+      state.requestedPages.has(pageKey)
+      || state.loadingPages.has(pageKey)
+      || state.uploadedPages.has(pageKey)
+    ) {
+      return false;
+    }
+
+    const uri = virtualTexturePageUri(manifest, page);
+    if (uri === undefined) return false;
+
+    state.requestedPages.add(pageKey);
+    state.loadingPages.add(pageKey);
+    loadImage(resolveUrl(state.texture.manifestUri, uri)).then((image) => {
+      if (
+        this.#disposed
+        || this.#virtualTextures.get(state.key) !== state
+        || state.status !== "ready"
+      ) {
+        return;
+      }
+      state.loadingPages.delete(pageKey);
+      this.#uploadVirtualTexturePage(state, page, image);
+      this.#scheduleRender();
+    }, (error: unknown) => {
+      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      state.loadingPages.delete(pageKey);
+      const message = `Virtual texture page load failed for ${state.texture.manifestUri} ${pageKey}: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      state.diagnostics.push(message);
+      this.#recordDiagnostic(message);
+    });
+
+    return true;
+  }
+
+  #uploadVirtualTexturePage(
+    state: VirtualTextureRuntimeState,
+    page: VirtualTexturePageId,
+    image: HTMLImageElement | ImageBitmap,
+  ): void {
+    const manifest = state.manifest;
+    const resources = state.resources;
+    const pageTable = state.pageTable;
+    if (
+      manifest === undefined
+      || resources === undefined
+      || pageTable === undefined
+      || !this.#ownedTextures.has(resources.atlasTexture)
+      || !this.#ownedTextures.has(resources.pageTableTexture)
+    ) {
+      return;
+    }
+
+    const assignment = pageTable.ensureResident(page, {
+      protectedPages: this.#protectedVirtualTextureParentPages(manifest, page),
+    });
+    const slotX = assignment.slot % resources.atlasGridColumns;
+    const slotY = Math.floor(assignment.slot / resources.atlasGridColumns);
+    const gl = this.#gl;
+    gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
+    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    }
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      slotX * manifest.pageSize,
+      slotY * manifest.pageSize,
+      manifest.pageSize,
+      manifest.pageSize,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      image,
+    );
+    state.uploadedPages.add(virtualTexturePageKey(page));
+    state.stats.uploadedPages += 1;
+    this.#flushVirtualTexturePageTableUpdates(state);
+  }
+
+  #flushVirtualTexturePageTableUpdates(state: VirtualTextureRuntimeState): void {
+    const resources = state.resources;
+    const pageTable = state.pageTable;
+    if (resources === undefined || pageTable === undefined || !this.#ownedTextures.has(resources.pageTableTexture)) {
+      return;
+    }
+
+    const gl = this.#gl;
+    gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
+    for (const update of pageTable.takeDirtyPageTableUpdates()) {
+      for (const cell of this.#expandedVirtualTexturePageTableCells(resources, update)) {
+        const payload = new Uint8Array(encodeVirtualTexturePageTableRgba8({
+          fallbackMipOffset: cell.fallbackMipOffset,
+          ...(update.slot === undefined ? {} : { slot: update.slot }),
+        }));
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          cell.x,
+          cell.y,
+          1,
+          1,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          payload,
+        );
+        state.stats.pageTableUpdates += 1;
+      }
+    }
+  }
+
+  #protectedVirtualTextureParentPages(
+    manifest: VirtualTextureManifestModel,
+    page: VirtualTexturePageId,
+  ): ReadonlySet<string> {
+    const protectedPages = new Set<string>();
+    const mipCount = this.#virtualTextureMipCount(manifest);
+    let parent = {
+      mip: page.mip + 1,
+      x: Math.floor(page.x / 2),
+      y: Math.floor(page.y / 2),
+    };
+    while (parent.mip < mipCount) {
+      protectedPages.add(virtualTexturePageKey(parent));
+      parent = {
+        mip: parent.mip + 1,
+        x: Math.floor(parent.x / 2),
+        y: Math.floor(parent.y / 2),
+      };
+    }
+
+    return protectedPages;
+  }
+
+  #expandedVirtualTexturePageTableCells(
+    resources: VirtualTextureResourceSet,
+    update: VirtualTexturePageTableUpdate,
+  ): readonly { readonly fallbackMipOffset: number; readonly x: number; readonly y: number }[] {
+    const coverage = 2 ** update.page.mip;
+    const minX = update.page.x * coverage;
+    const minY = update.page.y * coverage;
+    const maxX = Math.min(resources.pageTableWidth, minX + coverage);
+    const maxY = Math.min(resources.pageTableHeight, minY + coverage);
+    const fallbackMipOffset = update.slot === undefined
+      ? 0
+      : update.fallbackMipOffset === undefined
+        ? update.page.mip
+        : update.page.mip + update.fallbackMipOffset;
+    const cells: { readonly fallbackMipOffset: number; readonly x: number; readonly y: number }[] = [];
+    for (let y = minY; y < maxY; y += 1) {
+      for (let x = minX; x < maxX; x += 1) {
+        cells.push({ fallbackMipOffset, x, y });
+      }
+    }
+
+    return cells;
+  }
+
+  #isVirtualTextureDrawable(state: VirtualTextureRuntimeState): boolean {
+    return state.status === "ready"
+      && state.resources !== undefined
+      && state.pageTable !== undefined
+      && state.uploadedPages.size > 0;
+  }
+
+  #bindVirtualTexture(program: WebGLProgram, state: VirtualTextureRuntimeState): boolean {
+    const resources = state.resources;
+    const manifest = state.manifest;
+    if (resources === undefined || manifest === undefined || !this.#isVirtualTextureDrawable(state)) return false;
+
+    this.#flushVirtualTexturePageTableUpdates(state);
+    const gl = this.#gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
+    this.#uniform1i(program, "u_vtAtlas", 0);
+    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
+    this.#uniform1i(program, "u_vtPageTable", 1);
+    this.#uniform2fv(program, "u_vtPageTableSize", [resources.pageTableWidth, resources.pageTableHeight]);
+    this.#uniform2fv(program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
+    this.#uniform1i(program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
+    this.#uniform1i(program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
+    this.#uniformColor(program, "u_color", state.texture.fallback?.color ?? manifest.fallbackColor ?? DEFAULT_COLOR);
+    state.stats.shaderBinds += 1;
+
+    return true;
+  }
+
+  #virtualTextureWrapMode(wrap: TextureSampler["wrapS"] | undefined): number {
+    switch (wrap) {
+      case "repeat":
+        return VT_WRAP_REPEAT;
+      case "mirrored-repeat":
+        return VT_WRAP_MIRRORED_REPEAT;
+      case "clamp-to-edge":
+      default:
+        return VT_WRAP_CLAMP_TO_EDGE;
+    }
+  }
+
+  #failVirtualTexture(state: VirtualTextureRuntimeState, reason: string): void {
+    state.status = "error";
+    state.stats.manifestFailures += 1;
+    const message = `Virtual texture ${state.texture.manifestUri} failed: ${reason}`;
+    state.diagnostics.push(message);
+    this.#recordDiagnostic(message);
+  }
+
+  #markVirtualTextureUnsupported(state: VirtualTextureRuntimeState, reason: string): void {
+    state.status = "unsupported";
+    state.stats.unsupportedDraws += 1;
+    const message = `Virtual texture ${state.texture.manifestUri} unsupported: ${reason}. Using fixed fallback color.`;
+    state.diagnostics.push(message);
+    this.#recordDiagnostic(message);
+    this.#scheduleRender();
   }
 
   #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
@@ -1995,6 +2554,11 @@ export class WebGlRoot {
   #uniform1i(program: WebGLProgram, name: string, value: number): void {
     const location = this.#gl.getUniformLocation(program, name);
     if (location !== null) this.#gl.uniform1i(location, value);
+  }
+
+  #uniform2fv(program: WebGLProgram, name: string, value: readonly [number, number]): void {
+    const location = this.#gl.getUniformLocation(program, name);
+    if (location !== null) this.#gl.uniform2fv(location, new Float32Array(value));
   }
 
   #program(kind: ProgramKind): ProgramResource {
@@ -2065,6 +2629,20 @@ void main() {
 }`;
     }
 
+    if (kind === "surface-vt-base-color") {
+      return `#version 300 es
+in vec3 a_position;
+in vec2 a_uv;
+uniform mat4 u_projection;
+uniform mat4 u_view;
+uniform mat4 u_model;
+out vec2 v_uv;
+void main() {
+  v_uv = a_uv;
+  gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+}`;
+    }
+
     return `#version 300 es
 in vec3 a_position;
 in vec3 a_normal;
@@ -2088,7 +2666,58 @@ precision mediump float;
 uniform vec4 u_color;
 out vec4 outColor;
 void main() {
-  outColor = u_color;
+      outColor = u_color;
+}`;
+    }
+
+    if (kind === "surface-vt-base-color") {
+      return `#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform vec4 u_color;
+uniform sampler2D u_vtAtlas;
+uniform sampler2D u_vtPageTable;
+uniform vec2 u_vtAtlasGrid;
+uniform vec2 u_vtPageTableSize;
+uniform int u_vtWrapS;
+uniform int u_vtWrapT;
+out vec4 outColor;
+float wrapVirtualTextureCoord(float coord, int mode) {
+  if (mode == 1) {
+    return fract(coord);
+  }
+  if (mode == 2) {
+    float mirrored = mod(coord, 2.0);
+    if (mirrored < 0.0) {
+      mirrored += 2.0;
+    }
+    return min(mirrored <= 1.0 ? mirrored : 2.0 - mirrored, 0.999999);
+  }
+  return clamp(coord, 0.0, 0.999999);
+}
+vec2 wrapVirtualTextureUv(vec2 uv) {
+  return vec2(
+    wrapVirtualTextureCoord(uv.x, u_vtWrapS),
+    wrapVirtualTextureCoord(uv.y, u_vtWrapT)
+  );
+}
+void main() {
+  vec2 uv = wrapVirtualTextureUv(v_uv);
+  vec2 page = floor(uv * u_vtPageTableSize);
+  vec4 tableEntry = texture(u_vtPageTable, (page + vec2(0.5)) / u_vtPageTableSize);
+  float encodedSlot = floor(tableEntry.r * 255.0 + 0.5)
+    + floor(tableEntry.g * 255.0 + 0.5) * 256.0;
+  float fallbackMipOffset = floor(tableEntry.b * 255.0 + 0.5);
+  if (encodedSlot < 1.0) {
+    outColor = u_color;
+    return;
+  }
+  float slot = encodedSlot - 1.0;
+  vec2 slotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
+  vec2 residentPageTableSize = max(vec2(1.0), floor(u_vtPageTableSize / exp2(fallbackMipOffset)));
+  vec2 localUv = fract(uv * residentPageTableSize);
+  vec2 atlasUv = (slotCoord + localUv) / u_vtAtlasGrid;
+  outColor = texture(u_vtAtlas, atlasUv) * u_color;
 }`;
     }
 
@@ -2938,8 +3567,59 @@ void main() {
     console.warn(message);
   }
 
-  #recordUnsupportedVirtualTexture(texture: Extract<TextureRef, { readonly kind: "virtual-asset" }>): void {
-    const message = `Virtual texture ${texture.manifestUri} is not rendered: atlas/page-table shader support is not implemented. Preview and first-page fallback rendering are disabled.`;
+  #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {
+    let atlasTextures = 0;
+    let fallbackDraws = 0;
+    let manifestFailures = 0;
+    let manifestRequests = 0;
+    let manifestsReady = 0;
+    let pageTableTextures = 0;
+    let pageTableUpdates = 0;
+    let pendingPages = 0;
+    let requestedPages = 0;
+    let residentPages = 0;
+    let shaderBinds = 0;
+    let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
+    let uploadedPages = 0;
+
+    for (const state of this.#virtualTextures.values()) {
+      if (state.resources !== undefined) {
+        atlasTextures += 1;
+        pageTableTextures += 1;
+      }
+      fallbackDraws += state.stats.fallbackDraws;
+      manifestFailures += state.stats.manifestFailures;
+      manifestRequests += state.stats.manifestRequests;
+      if (state.status === "ready") manifestsReady += 1;
+      pageTableUpdates += state.stats.pageTableUpdates;
+      pendingPages += state.loadingPages.size;
+      requestedPages += state.requestedPages.size;
+      residentPages += state.pageTable?.residentCount ?? 0;
+      shaderBinds += state.stats.shaderBinds;
+      unsupportedDraws += state.stats.unsupportedDraws;
+      uploadedPages += state.uploadedPages.size;
+    }
+
+    return {
+      atlasTextures,
+      fallbackDraws,
+      manifestFailures,
+      manifestRequests,
+      manifestsReady,
+      pageTableTextures,
+      pageTableUpdates,
+      pendingPages,
+      requestedPages,
+      residentPages,
+      shaderBinds,
+      unsupportedDraws,
+      uploadedPages,
+    };
+  }
+
+  #recordUnsupportedVirtualTexture(texture: VirtualTextureRef, reason: string): void {
+    this.#unsupportedVirtualTextureDraws += 1;
+    const message = `Virtual texture ${texture.manifestUri} is not rendered: ${reason}. Preview and first-page fallback rendering are disabled; using fixed fallback color.`;
     if (this.#unsupportedVirtualTextureDiagnostics.has(message)) return;
     this.#unsupportedVirtualTextureDiagnostics.add(message);
     this.#recordDiagnostic(message);

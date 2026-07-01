@@ -69,6 +69,16 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
   },
+  'virtual-texturing-terrain': {
+    path: '/virtual-texturing-terrain',
+    minColorBuckets: 4,
+    minPaintedRatio: 0.004,
+  },
+  'donnybrook-awareness-physics': {
+    path: '/donnybrook-awareness-physics',
+    minColorBuckets: 8,
+    minPaintedRatio: 0.006,
+  },
 };
 
 const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) => ({
@@ -649,6 +659,42 @@ const smokeExpression = `
         text: document.querySelector('[data-picking-readout]')?.textContent?.trim() ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
+      source: (() => {
+        const sourceFile = document.querySelector('.example-page[data-example-id="' + routeId + '"]')
+          ?.getAttribute('data-source-file') ?? '';
+        return sourceFile === ''
+          ? ''
+          : document.querySelector('[data-source-file="' + sourceFile + '"] code')?.textContent ?? '';
+      })(),
+      virtualTexturing: routeId === 'virtual-texturing-terrain' ? (() => {
+        const probe = window.__royalVirtualTexturingProbe;
+        const stats = probe?.stats;
+
+        return probe === undefined ? undefined : {
+          active: probe.active === true,
+          capabilityPath: String(probe.capabilityPath ?? ''),
+          diagnosticsVisible: probe.diagnosticsVisible === true,
+          frame: Number(probe.frame ?? 0),
+          manifestUri: String(probe.manifestUri ?? ''),
+          reason: String(probe.reason ?? ''),
+          routeRegistered: probe.routeRegistered === true,
+          stats: stats === undefined ? undefined : {
+            atlasTextures: Number(stats.atlasTextures ?? 0),
+            fallbackDraws: Number(stats.fallbackDraws ?? 0),
+            manifestFailures: Number(stats.manifestFailures ?? 0),
+            manifestRequests: Number(stats.manifestRequests ?? 0),
+            manifestsReady: Number(stats.manifestsReady ?? 0),
+            pageTableTextures: Number(stats.pageTableTextures ?? 0),
+            pageTableUpdates: Number(stats.pageTableUpdates ?? 0),
+            pendingPages: Number(stats.pendingPages ?? 0),
+            requestedPages: Number(stats.requestedPages ?? 0),
+            residentPages: Number(stats.residentPages ?? 0),
+            shaderBinds: Number(stats.shaderBinds ?? 0),
+            unsupportedDraws: Number(stats.unsupportedDraws ?? 0),
+            uploadedPages: Number(stats.uploadedPages ?? 0),
+          },
+        };
+      })() : undefined,
     };
   };
   const deadline = performance.now() + 8000;
@@ -674,6 +720,27 @@ const smokeExpression = `
             state.formControls.summary.contentEditableCount === 0 &&
             state.formControls.summary.knownHiddenBridgeCount === 0
           )
+        );
+    }
+    if (state.route.id === 'virtual-texturing-terrain') {
+      const vt = state.virtualTexturing;
+      const stats = vt?.stats;
+
+      return canvasReady &&
+        vt?.routeRegistered === true &&
+        vt.active === true &&
+        vt.diagnosticsVisible === false &&
+        vt.capabilityPath !== 'blocked' &&
+        stats !== undefined &&
+        stats.unsupportedDraws === 0 &&
+        stats.manifestFailures === 0 &&
+        stats.manifestsReady > 0 &&
+        stats.uploadedPages > 0 &&
+        stats.pageTableUpdates > 0 &&
+        stats.residentPages > 0 &&
+        (
+          vt.capabilityPath === 'fixed-low-mip' ||
+          (vt.capabilityPath === 'live' && stats.shaderBinds > 0)
         );
     }
     return canvasReady;
@@ -1366,6 +1433,57 @@ const assertRoute = (expected, state) => {
             }`);
           }
         }
+      }
+    }
+  }
+
+  if (expected.id === 'virtual-texturing-terrain') {
+    const source = state.source ?? '';
+    if (!source.includes('virtualTexture(')) {
+      failures.push('virtual texturing source did not contain virtualTexture(');
+    }
+    if (source.includes('VirtualTextureNode')) {
+      failures.push('virtual texturing source referenced VirtualTextureNode');
+    }
+
+    const vt = state.virtualTexturing;
+    const stats = vt?.stats;
+    if (vt === undefined) {
+      failures.push('virtual texturing route missed runtime probe');
+    } else {
+      if (vt.routeRegistered !== true) {
+        failures.push('virtual texturing probe did not mark registered route');
+      }
+      if (vt.active !== true || vt.capabilityPath === 'blocked') {
+        failures.push(`virtual texturing inactive capability path "${vt.capabilityPath}" reason="${vt.reason}"`);
+      }
+      if (vt.diagnosticsVisible === true) {
+        failures.push('virtual texturing route reported unsupported diagnostic');
+      }
+    }
+    if (stats === undefined) {
+      failures.push('virtual texturing route missed renderer stats');
+    } else {
+      if (stats.unsupportedDraws !== 0) {
+        failures.push(`virtual texturing unsupported draws ${stats.unsupportedDraws}`);
+      }
+      if (stats.manifestFailures !== 0) {
+        failures.push(`virtual texturing manifest failures ${stats.manifestFailures}`);
+      }
+      if (stats.manifestsReady <= 0) {
+        failures.push('virtual texturing manifest was not ready');
+      }
+      if (stats.uploadedPages <= 0) {
+        failures.push('virtual texturing uploaded no pages');
+      }
+      if (stats.pageTableUpdates <= 0) {
+        failures.push('virtual texturing made no page-table updates');
+      }
+      if (stats.residentPages <= 0) {
+        failures.push('virtual texturing has no resident pages');
+      }
+      if (vt?.capabilityPath === 'live' && stats.shaderBinds <= 0) {
+        failures.push('virtual texturing live path did not bind VT shader resources');
       }
     }
   }

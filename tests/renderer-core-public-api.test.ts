@@ -9,6 +9,7 @@ import {
   standardMaterial,
   text,
 } from "@royal/renderer-core";
+import * as rendererCore from "@royal/renderer-core";
 import * as reactRoyal from "@royal/react";
 import { jsx } from "@royal/react/jsx-runtime";
 
@@ -67,6 +68,15 @@ describe("renderer-core public API", () => {
     expect(reactRoyal).not.toHaveProperty("boxGeometry");
     expect(reactRoyal).not.toHaveProperty("mesh");
     expect(reactRoyal).not.toHaveProperty("text");
+  });
+
+  it("keeps internal texture helpers out of the renderer-core barrel", () => {
+    expect(rendererCore).not.toHaveProperty("virtualTextureAsset");
+
+    if (false) {
+      // @ts-expect-error virtualTextureAsset is an internal texture helper.
+      rendererCore.virtualTextureAsset;
+    }
   });
 
   it("lowers Royal JSX tags into renderer descriptors", () => {
