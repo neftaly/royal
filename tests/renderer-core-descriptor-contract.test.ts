@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoLod,
   boxGeometry,
   directionalLight,
   gltf,
@@ -174,6 +175,28 @@ describe("renderer-core descriptor contract", () => {
       color: [1, 0.95, 0.84, 1],
       direction: [0.2, -0.7, -1],
       kind: "directional-light",
+    });
+  });
+
+  it("normalizes AutoLod policy descriptors around render node children", () => {
+    const child = gltf({ src: "/models/terrain.gltf", version: "terrain-v1" });
+
+    expect(autoLod({ children: [child] })).toEqual({
+      children: [child],
+      generatedMeshes: "off",
+      kind: "auto-lod",
+      quality: "balanced",
+    });
+
+    expect(autoLod({
+      children: [child],
+      generatedMeshes: "experimental",
+      quality: "quality",
+    })).toEqual({
+      children: [child],
+      generatedMeshes: "experimental",
+      kind: "auto-lod",
+      quality: "quality",
     });
   });
 });

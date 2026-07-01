@@ -46,6 +46,7 @@ import {
   useMemo,
   useRef,
   useState,
+  createElement,
   type ClipboardEvent,
   type CompositionEvent,
   type KeyboardEvent,
@@ -53,6 +54,12 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import {
+  readRendererTextClipboardText,
+  rendererTextClipboardErrorMessage,
+  rendererTextClipboardErrorReason,
+  type RendererTextClipboardReason,
+} from './RendererTextClipboard';
 import { useAtkinsonFont } from './text-font';
 
 const renderer = {
@@ -76,6 +83,7 @@ const fontSize = 0.52;
 const lineHeight = fontSize * 1.2;
 const caretWidth = 0.035;
 const menuPasteUnavailableReason = 'custom-menu-paste-requires-native-paste-event';
+const pasteBridgeUnavailableReason = 'native-paste-event-required';
 
 const menuMaterial = unlitMaterial({ color: [0.07, 0.09, 0.11, 0.96] });
 const menuItemMaterial = unlitMaterial({ color: [0.12, 0.15, 0.18, 1] });
@@ -101,13 +109,7 @@ const menuLayoutBounds = {
 
 type ClipboardAction = EditableTextMenuAction;
 type ClipboardSource = 'menu' | 'native';
-type ClipboardReason =
-  | 'denied'
-  | 'empty-paste'
-  | 'empty-selection'
-  | 'error'
-  | 'success'
-  | 'unavailable';
+type ClipboardReason = RendererTextClipboardReason;
 type ClipboardReadPermission = 'denied' | 'granted' | 'prompt' | 'unavailable' | 'unknown';
 
 type ClipboardResult = {
@@ -154,6 +156,15 @@ type TextContextMenuState = {
   readonly open: boolean;
   readonly worldX: number;
   readonly worldY: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+type PasteBridgeState = {
+  readonly active: boolean;
+  readonly message: string;
+  readonly reason: ClipboardReason | typeof pasteBridgeUnavailableReason | 'none';
+  readonly source: ClipboardSource | 'none';
   readonly x: number;
   readonly y: number;
 };
@@ -229,6 +240,8 @@ type TextEditorProbe = {
   readonly clipboard: ClipboardState;
   readonly clipboardReadPermission: ClipboardReadPermission;
   readonly menu: {
+    readonly fallback: boolean;
+    readonly fallbackReason: ClipboardReason | typeof pasteBridgeUnavailableReason | 'none';
     readonly commands: readonly TextContextMenuCommandProbe[];
     readonly enabled: {
       readonly copy: boolean;
@@ -244,6 +257,7 @@ type TextEditorProbe = {
     readonly x: number;
     readonly y: number;
   };
+  readonly pasteBridge: PasteBridgeState;
   readonly text: string;
   readonly textLength: number;
 };
@@ -300,6 +314,15 @@ const closedMenu: TextContextMenuState = {
   y: 0,
 };
 
+const inactivePasteBridge: PasteBridgeState = {
+  active: false,
+  message: '',
+  reason: 'none',
+  source: 'none',
+  x: -10000,
+  y: 0,
+};
+
 const canvasElement = (): HTMLCanvasElement | undefined => {
   const canvas = document.querySelector('canvas[aria-label="Renderer text editor"]');
   return canvas instanceof HTMLCanvasElement ? canvas : undefined;
@@ -315,12 +338,6 @@ const worldToMenuPoint = (worldX: number, worldY: number): { readonly x: number;
 });
 
 const menuYToWorldTop = (y: number): number => cameraBounds.top - y;
-
-const clipboardErrorReason = (error: unknown): ClipboardReason =>
-  error instanceof DOMException && error.name === 'NotAllowedError' ? 'denied' : 'error';
-
-const clipboardErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 const incrementCounters = (
   counters: ClipboardCounters,
@@ -483,9 +500,11 @@ export const RendererText = (): ReactNode => {
   const [focused, setFocused] = useState(false);
   const [clipboard, setClipboard] = useState<ClipboardState>(initialClipboardState);
   const [menu, setMenu] = useState<TextContextMenuState>(closedMenu);
+  const [pasteBridge, setPasteBridge] = useState<PasteBridgeState>(inactivePasteBridge);
   const dragRef = useRef<DragState | undefined>(undefined);
   const pendingMenuCommandRef = useRef<PendingMenuCommand | undefined>(undefined);
   const pendingKeyboardClipboardRef = useRef<PendingKeyboardClipboard | undefined>(undefined);
+  const pasteBridgeRef = useRef<HTMLTextAreaElement | null>(null);
   const hitTestRef = useRef({
     count: 0,
     lastClientX: 0,
@@ -520,7 +539,7 @@ export const RendererText = (): ReactNode => {
   const menuEnabled = {
     copy: hasSelection,
     cut: hasSelection,
-    paste: false,
+    paste: true,
   } as const;
   const layoutMenu = menuLayoutFor(menu, menuEnabled);
   const menuCommands = layoutMenu?.commands ?? [];
@@ -558,7 +577,7 @@ export const RendererText = (): ReactNode => {
     pendingKeyboardClipboardRef.current = undefined;
   };
 
-  const scheduleKeyboardClipboardUnsupportedReport = (action: ClipboardAction): void => {
+  const scheduleKeyboardClipboardUnsupportedReport = (action: ClipboardAction, message?: string): void => {
     clearPendingKeyboardClipboard();
     const pending: PendingKeyboardClipboard = {
       action,
@@ -567,7 +586,7 @@ export const RendererText = (): ReactNode => {
         pendingKeyboardClipboardRef.current = undefined;
         recordClipboardResult({
           action,
-          message: `Browser did not dispatch a ${action} event to the focused canvas`,
+          message: message ?? `Browser did not dispatch a ${action} event to the focused canvas`,
           ok: false,
           reason: 'unavailable',
           source: 'native',
@@ -580,6 +599,93 @@ export const RendererText = (): ReactNode => {
 
   const replaceSelection = (text: string): void => {
     setState((current) => pasteEditableTextEditorText(current, text));
+  };
+
+  const pasteBridgeCaretPoint = (): { readonly x: number; readonly y: number } => {
+    if (fragment === undefined) return { x: 0, y: 0 };
+    const canvas = canvasElement();
+    if (canvas === undefined) return { x: 0, y: 0 };
+
+    const caret = editableTextCaretPlacement(fragment.layout, state.selection.focus, state.selection.focusLine) ??
+      fragment.layout.caretPlacements.at(-1);
+    if (caret === undefined) return { x: 0, y: 0 };
+
+    const [x, y] = worldPointToCanvasClient(
+      canvas,
+      cameraBounds,
+      origin[0] + caret.x,
+      origin[1] - caret.line * fragment.layout.lineHeight + fragment.layout.selectionYOffset,
+    );
+    return { x, y };
+  };
+
+  const closePasteBridge = (): void => {
+    setPasteBridge(inactivePasteBridge);
+    const bridge = pasteBridgeRef.current;
+    if (bridge !== null) {
+      bridge.readOnly = true;
+      bridge.value = '';
+    }
+  };
+
+  const focusPasteBridge = (): void => {
+    const currentBridge = pasteBridgeRef.current;
+    if (currentBridge !== null) {
+      currentBridge.readOnly = false;
+      currentBridge.value = '';
+      currentBridge.focus({ preventScroll: true });
+      currentBridge.select();
+    }
+
+    window.setTimeout(() => {
+      const bridge = pasteBridgeRef.current;
+      if (bridge === null) return;
+      bridge.readOnly = false;
+      bridge.value = '';
+      bridge.focus({ preventScroll: true });
+      bridge.select();
+    }, 0);
+  };
+
+  const openPasteBridge = (
+    source: ClipboardSource,
+    x: number,
+    y: number,
+    reason: PasteBridgeState['reason'] = pasteBridgeUnavailableReason,
+    message = '',
+  ): void => {
+    setPasteBridge({
+      active: true,
+      message,
+      reason,
+      source,
+      x,
+      y,
+    });
+    focusPasteBridge();
+  };
+
+  const copyTextWithBridge = (text: string): boolean => {
+    const bridge = pasteBridgeRef.current;
+    if (bridge === null || typeof document.execCommand !== 'function') return false;
+
+    const active = document.activeElement;
+    bridge.value = text;
+    bridge.focus({ preventScroll: true });
+    bridge.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } finally {
+      bridge.value = '';
+      if (active instanceof HTMLElement) {
+        active.focus({ preventScroll: true });
+      } else {
+        focusCanvas();
+      }
+    }
+
+    return ok;
   };
 
   useEffect(() => () => {
@@ -687,6 +793,8 @@ export const RendererText = (): ReactNode => {
       menu: {
         commands: commandProbe,
         enabled: menuEnabled,
+        fallback: pasteBridge.active && pasteBridge.source === 'menu',
+        fallbackReason: pasteBridge.active && pasteBridge.source === 'menu' ? pasteBridge.reason : 'none',
         failure: clipboard.failure.active && clipboard.failure.source === 'menu',
         failureReason: clipboard.failure.source === 'menu' ? clipboard.failure.reason : 'none',
         open: menu.open,
@@ -700,6 +808,7 @@ export const RendererText = (): ReactNode => {
         x: origin[0],
         y: origin[1],
       },
+      pasteBridge,
       placements: fragment.layout.caretPlacements,
       selectedText,
       selection: fragment.selection,
@@ -712,7 +821,7 @@ export const RendererText = (): ReactNode => {
     return () => {
       if (window.__royalTextEditorProbe === probe) delete window.__royalTextEditorProbe;
     };
-  }, [clipboard, font, fragment, menu, menuCommands, menuEnabled, selectedText, state.text]);
+  }, [clipboard, font, fragment, menu, menuCommands, menuEnabled, pasteBridge, selectedText, state.text]);
 
   const setCaretFromEvent = (
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -778,11 +887,45 @@ export const RendererText = (): ReactNode => {
 
     if (intent.type === 'clipboard-shortcut') {
       recordKeyboardShortcut(intent.shortcut);
-      scheduleKeyboardClipboardUnsupportedReport(intent.shortcut);
+      if (intent.shortcut === 'paste') {
+        const point = pasteBridgeCaretPoint();
+        openPasteBridge('native', point.x, point.y);
+        scheduleKeyboardClipboardUnsupportedReport(
+          intent.shortcut,
+          'Browser did not dispatch a paste event to the native paste bridge',
+        );
+        return;
+      }
+
+      event.preventDefault();
+      clearPendingKeyboardClipboard(intent.shortcut);
+      if (selectedText === '') {
+        recordClipboardResult({
+          action: intent.shortcut,
+          message: 'No selected text',
+          ok: false,
+          reason: 'empty-selection',
+          source: 'native',
+          textLength: 0,
+        });
+        return;
+      }
+
+      const ok = copyTextWithBridge(selectedText);
+      recordClipboardResult({
+        action: intent.shortcut,
+        message: ok ? '' : 'document.execCommand("copy") failed',
+        ok,
+        reason: ok ? 'success' : 'unavailable',
+        source: 'native',
+        textLength: selectedText.length,
+      });
+      if (ok && intent.shortcut === 'cut') replaceSelection('');
       return;
     }
 
     event.preventDefault();
+    closePasteBridge();
     if (
       layout !== undefined &&
       (
@@ -843,16 +986,20 @@ export const RendererText = (): ReactNode => {
     if (writeClipboardEvent(event, 'cut')) replaceSelection('');
   };
 
-  const handlePaste = (event: ClipboardEvent<HTMLCanvasElement>): void => {
+  const handlePaste = (
+    event: ClipboardEvent<HTMLCanvasElement | HTMLTextAreaElement>,
+    source: ClipboardSource,
+  ): void => {
     clearPendingKeyboardClipboard('paste');
     const pastedText = event.clipboardData.getData('text/plain');
     if (pastedText === '') {
+      event.preventDefault();
       recordClipboardResult({
         action: 'paste',
         message: 'Clipboard event text was empty',
         ok: false,
         reason: 'empty-paste',
-        source: 'native',
+        source,
         textLength: 0,
       });
       return;
@@ -860,14 +1007,29 @@ export const RendererText = (): ReactNode => {
 
     event.preventDefault();
     replaceSelection(pastedText);
+    closePasteBridge();
+    setMenu(closedMenu);
+    focusCanvas();
     recordClipboardResult({
       action: 'paste',
       message: '',
       ok: true,
       reason: 'success',
-      source: 'native',
+      source,
       textLength: pastedText.length,
     });
+  };
+
+  const handleBridgePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
+    handlePaste(event, pasteBridge.source === 'menu' ? 'menu' : 'native');
+  };
+
+  const handleBridgeKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePasteBridge();
+      focusCanvas();
+    }
   };
 
   const writeTextToSystemClipboard = async (
@@ -884,6 +1046,18 @@ export const RendererText = (): ReactNode => {
         textLength: 0,
       });
       return false;
+    }
+
+    if (copyTextWithBridge(text)) {
+      recordClipboardResult({
+        action,
+        message: '',
+        ok: true,
+        reason: 'success',
+        source: 'menu',
+        textLength: text.length,
+      });
+      return true;
     }
 
     const clipboardApi = navigator.clipboard;
@@ -913,9 +1087,9 @@ export const RendererText = (): ReactNode => {
     } catch (error) {
       recordClipboardResult({
         action,
-        message: clipboardErrorMessage(error),
+        message: rendererTextClipboardErrorMessage(error),
         ok: false,
-        reason: clipboardErrorReason(error),
+        reason: rendererTextClipboardErrorReason(error),
         source: 'menu',
         textLength: text.length,
       });
@@ -924,7 +1098,43 @@ export const RendererText = (): ReactNode => {
   };
 
   const runMenuCommand = (action: ClipboardAction): void => {
-    if (action === 'paste') return;
+    if (action === 'paste') {
+      void readRendererTextClipboardText(navigator.clipboard).then((result) => {
+        if (result.ok) {
+          replaceSelection(result.text);
+          recordClipboardResult({
+            action: 'paste',
+            message: '',
+            ok: true,
+            reason: 'success',
+            source: 'menu',
+            textLength: result.text.length,
+          });
+          setMenu(closedMenu);
+          closePasteBridge();
+          focusCanvas();
+          return;
+        }
+
+        if (result.fallback) {
+          setMenu(closedMenu);
+          openPasteBridge('menu', menu.x, menu.y, result.reason, result.message);
+          return;
+        }
+
+        recordClipboardResult({
+          action: 'paste',
+          message: result.message,
+          ok: false,
+          reason: result.reason,
+          source: 'menu',
+          textLength: 0,
+        });
+        setMenu(closedMenu);
+        focusCanvas();
+      });
+      return;
+    }
 
     const text = selectedText;
     void writeTextToSystemClipboard(action, text).then((ok) => {
@@ -1037,31 +1247,61 @@ export const RendererText = (): ReactNode => {
   };
 
   return (
-    <Canvas
-      aria-label="Renderer text editor"
-      aria-multiline
-      aria-roledescription="editable canvas text"
-      aria-valuetext={state.text}
-      onBlur={() => setFocused(false)}
-      onCompositionEnd={handleCompositionEnd}
-      onContextMenu={handleContextMenu}
-      onCopy={handleCopy}
-      onCut={handleCut}
-      onFocus={() => setFocused(true)}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-      onPointerCancel={handlePointerEnd}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerEnd}
-      role="textbox"
-      renderer={renderer}
-      tabIndex={0}
-    >
-      {font !== undefined && fragment !== undefined
-        ? textScene(font, fragment, layoutMenu)
-        : textScenePlaceholder}
-    </Canvas>
+    <>
+      <Canvas
+        aria-label="Renderer text editor"
+        aria-multiline
+        aria-roledescription="editable canvas text"
+        aria-valuetext={state.text}
+        onBlur={() => setFocused(false)}
+        onCompositionEnd={handleCompositionEnd}
+        onContextMenu={handleContextMenu}
+        onCopy={handleCopy}
+        onCut={handleCut}
+        onFocus={() => setFocused(true)}
+        onKeyDown={handleKeyDown}
+        onPaste={(event) => handlePaste(event, 'native')}
+        onPointerCancel={handlePointerEnd}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        role="textbox"
+        renderer={renderer}
+        tabIndex={0}
+      >
+        {font !== undefined && fragment !== undefined
+          ? textScene(font, fragment, layoutMenu)
+          : textScenePlaceholder}
+      </Canvas>
+      {createElement('textarea', {
+        'aria-label': 'Renderer text paste bridge',
+        'data-royal-text-clipboard-bridge': true,
+        onKeyDown: handleBridgeKeyDown,
+        onPaste: handleBridgePaste,
+        placeholder: 'Paste',
+        readOnly: !pasteBridge.active,
+        ref: pasteBridgeRef,
+        style: {
+          background: '#ffffff',
+          border: '1px solid #1f6feb',
+          borderRadius: 4,
+          boxShadow: '0 8px 20px rgb(0 0 0 / 28%)',
+          color: '#111827',
+          height: pasteBridge.active ? 42 : 1,
+          left: pasteBridge.active ? pasteBridge.x : -10000,
+          opacity: pasteBridge.active ? 1 : 0,
+          outline: 'none',
+          padding: 8,
+          pointerEvents: pasteBridge.active ? 'auto' : 'none',
+          position: 'fixed',
+          resize: 'none',
+          top: pasteBridge.active ? pasteBridge.y : 0,
+          width: pasteBridge.active ? 180 : 1,
+          zIndex: 20,
+        },
+        tabIndex: pasteBridge.active ? 0 : -1,
+      })}
+    </>
   );
 };
 

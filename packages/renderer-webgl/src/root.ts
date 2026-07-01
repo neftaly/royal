@@ -1,4 +1,6 @@
 import type {
+  AutoLodNode,
+  AutoLodQuality,
   BoxGeometry,
   Camera,
   DirectionalLightNode,
@@ -29,13 +31,15 @@ export interface WebGlRootOptions {
   readonly preserveDrawingBuffer?: boolean;
 }
 
+type NormalizedWebGlRootOptions = Required<WebGlRootOptions>;
+
 /** Snapshot of renderer state, intended for tests and host diagnostics. */
 export interface WebGlRootSnapshot {
   readonly diagnostics: readonly string[];
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: Required<WebGlRootOptions>;
+  readonly options: NormalizedWebGlRootOptions;
 }
 
 type Mat4 = readonly [
@@ -55,6 +59,7 @@ type ProgramResource = {
 
 type GeometryResource = {
   readonly arrayBuffer: WebGLBuffer;
+  readonly borrowedVertexBufferKey?: string;
   readonly drawCount: number;
   readonly indexBuffer?: WebGLBuffer;
   readonly indexType?: number;
@@ -71,6 +76,7 @@ type CpuGeometry = {
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array;
+  readonly vertexBufferKey?: string;
 };
 
 type TextureResource = {
@@ -89,6 +95,7 @@ type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
 };
 
 type LoadedGltfPrimitive = {
+  readonly generatedLod?: GeneratedGltfPrimitiveLod;
   readonly indices: Uint16Array | Uint32Array | Uint8Array;
   readonly key: string;
   readonly material: LoadedGltfMaterial;
@@ -98,6 +105,20 @@ type LoadedGltfPrimitive = {
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array;
+};
+
+type GeneratedGltfPrimitiveLod = {
+  readonly diagnostic?: string;
+  levels: readonly GeneratedGltfPrimitiveLodLevel[];
+  diagnosticRecorded: boolean;
+  scheduled: boolean;
+  status: "pending" | "ready" | "unsupported";
+};
+
+type GeneratedGltfPrimitiveLodLevel = {
+  readonly indices: Uint16Array | Uint32Array | Uint8Array;
+  readonly level: number;
+  readonly stride: number;
 };
 
 type LoadedGltfMaterial = {
@@ -132,6 +153,11 @@ type GltfState = {
   status: "loading" | "ready" | "error";
 };
 
+type AutoLodPolicy = {
+  readonly generatedMeshes: "off" | "experimental";
+  readonly quality: AutoLodQuality;
+};
+
 type GltfDocument = {
   readonly accessors?: readonly GltfAccessor[];
   readonly bufferViews?: readonly GltfBufferView[];
@@ -151,6 +177,7 @@ type GltfAccessor = {
   readonly byteOffset?: number;
   readonly componentType: number;
   readonly count: number;
+  readonly sparse?: unknown;
   readonly type: "SCALAR" | "VEC2" | "VEC3" | "VEC4";
 };
 
@@ -158,6 +185,7 @@ type GltfBufferView = {
   readonly buffer?: number;
   readonly byteLength: number;
   readonly byteOffset?: number;
+  readonly byteStride?: number;
 };
 
 type GltfBuffer = {
@@ -192,6 +220,7 @@ type GltfMaterial = {
 
 type GltfMesh = {
   readonly primitives?: readonly GltfMeshPrimitive[];
+  readonly weights?: readonly number[];
 };
 
 type GltfMeshPrimitive = {
@@ -199,10 +228,12 @@ type GltfMeshPrimitive = {
     readonly NORMAL?: number;
     readonly POSITION?: number;
     readonly TEXCOORD_0?: number;
+    readonly [semantic: string]: number | undefined;
   };
   readonly indices?: number;
   readonly material?: number;
   readonly mode?: number;
+  readonly targets?: readonly unknown[];
 };
 
 type GltfSceneNode = {
@@ -214,6 +245,7 @@ type GltfSceneNode = {
   readonly mesh?: number;
   readonly rotation?: readonly number[];
   readonly scale?: readonly number[];
+  readonly skin?: number;
   readonly translation?: readonly number[];
 };
 
@@ -242,17 +274,20 @@ const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
+const GENERATED_GLTF_LOD_THRESHOLDS = [0.2, 0.05, 0] as const;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
   scale: [1, 1, 1],
 };
 
-const normalizeOptions = (options: WebGlRootOptions = {}): Required<WebGlRootOptions> => ({
-  alpha: options.alpha ?? true,
-  antialias: options.antialias ?? true,
-  preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
-});
+const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
+  return {
+    alpha: options.alpha ?? true,
+    antialias: options.antialias ?? true,
+    preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
+  };
+};
 
 const identityMat4 = (): Mat4 => [
   1, 0, 0, 0,
@@ -771,6 +806,45 @@ const adjacentLodLevels = (level: number, levelCount: number): readonly number[]
   return levels;
 };
 
+const copyIndexArray = (
+  indices: Uint16Array | Uint32Array | Uint8Array,
+  values: readonly number[],
+): Uint16Array | Uint32Array | Uint8Array => {
+  if (indices instanceof Uint32Array) return new Uint32Array(values);
+  if (indices instanceof Uint8Array) return new Uint8Array(values);
+
+  return new Uint16Array(values);
+};
+
+const generatedGltfIndexLodLevel = (
+  indices: Uint16Array | Uint32Array | Uint8Array,
+  level: number,
+  stride: number,
+): GeneratedGltfPrimitiveLodLevel => {
+  const reduced: number[] = [];
+  const triangleCount = Math.floor(indices.length / 3);
+  for (let triangle = 0; triangle < triangleCount; triangle += stride) {
+    const offset = triangle * 3;
+    reduced.push(indices[offset]!, indices[offset + 1]!, indices[offset + 2]!);
+  }
+  if (reduced.length === 0 && indices.length >= 3) {
+    reduced.push(indices[0]!, indices[1]!, indices[2]!);
+  }
+
+  return {
+    indices: copyIndexArray(indices, reduced),
+    level,
+    stride,
+  };
+};
+
+const generatedGltfIndexLodLevels = (
+  indices: Uint16Array | Uint32Array | Uint8Array,
+): readonly GeneratedGltfPrimitiveLodLevel[] => [
+  generatedGltfIndexLodLevel(indices, 1, 2),
+  generatedGltfIndexLodLevel(indices, 2, 4),
+];
+
 const projectedScreenCoverage = (
   positions: Float32Array,
   model: Mat4,
@@ -816,7 +890,7 @@ const projectedScreenCoverage = (
 export class WebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
-  readonly #options: Required<WebGlRootOptions>;
+  readonly #options: NormalizedWebGlRootOptions;
   readonly #programs = new Map<ProgramKind, ProgramResource>();
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
@@ -866,7 +940,7 @@ export class WebGlRoot {
     return this.#latestScene;
   }
 
-  get options(): Required<WebGlRootOptions> {
+  get options(): NormalizedWebGlRootOptions {
     return this.#options;
   }
 
@@ -895,7 +969,7 @@ export class WebGlRoot {
 
       const projection = projectionMat4(renderPass.camera, width, height);
       const view = viewMat4(renderPass.camera);
-      const lights = renderPass.children.filter((child): child is DirectionalLightNode => child.kind === "directional-light");
+      const lights = this.#directionalLights(renderPass.children);
 
       for (const child of renderPass.children) {
         if (child.kind === "directional-light") continue;
@@ -984,8 +1058,14 @@ export class WebGlRoot {
     view: Mat4,
     light: DirectionalLightNode | undefined,
     usedGeometry: Set<string>,
+    autoLodPolicy?: AutoLodPolicy,
   ): void {
     switch (node.kind) {
+      case "auto-lod":
+        this.#drawAutoLod(node, projection, view, light, usedGeometry);
+        return;
+      case "directional-light":
+        return;
       case "mesh":
         this.#drawMesh(node, projection, view, light, usedGeometry);
         return;
@@ -993,10 +1073,39 @@ export class WebGlRoot {
         this.#drawText(node, projection, view, usedGeometry);
         return;
       case "gltf":
-        this.#drawGltf(node, projection, view, light, usedGeometry);
+        this.#drawGltf(node, projection, view, light, usedGeometry, autoLodPolicy);
         return;
       default:
         this.#recordDiagnostic(`Unsupported render node kind "${getNodeKind(node)}"`);
+    }
+  }
+
+  #directionalLights(nodes: readonly RenderNode[]): readonly DirectionalLightNode[] {
+    const lights: DirectionalLightNode[] = [];
+    for (const node of nodes) {
+      if (node.kind === "directional-light") {
+        lights.push(node);
+      } else if (node.kind === "auto-lod") {
+        lights.push(...this.#directionalLights(node.children));
+      }
+    }
+
+    return lights;
+  }
+
+  #drawAutoLod(
+    node: AutoLodNode,
+    projection: Mat4,
+    view: Mat4,
+    light: DirectionalLightNode | undefined,
+    usedGeometry: Set<string>,
+  ): void {
+    const policy: AutoLodPolicy = {
+      generatedMeshes: node.generatedMeshes,
+      quality: node.quality,
+    };
+    for (const child of node.children) {
+      this.#drawNode(child, projection, view, light, usedGeometry, policy);
     }
   }
 
@@ -1061,6 +1170,7 @@ export class WebGlRoot {
     view: Mat4,
     light: DirectionalLightNode | undefined,
     usedGeometry: Set<string>,
+    autoLodPolicy: AutoLodPolicy | undefined,
   ): void {
     const renderInstanceKey = `instance:${this.#gltfRenderOrdinal}`;
     this.#gltfRenderOrdinal += 1;
@@ -1104,20 +1214,93 @@ export class WebGlRoot {
         this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         material = { baseColor, kind: "standard" };
       }
+      const baseGeometryKey = `${state.key}:primitive:${primitive.key}`;
+      const generatedLod = this.#selectedGeneratedGltfPrimitiveLod(
+        autoLodPolicy,
+        state,
+        renderInstanceKey,
+        primitive,
+        model,
+        projection,
+        view,
+      );
       const cpu: CpuGeometry = {
-        indices: primitive.indices,
-        key: `${state.key}:primitive:${primitive.key}`,
+        indices: generatedLod?.indices ?? primitive.indices,
+        key: generatedLod === undefined ? baseGeometryKey : `${baseGeometryKey}:generated-lod:${generatedLod.level}`,
         mode: "triangles",
         ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
         positions: primitive.positions,
         ...(primitive.texCoords === undefined ? {} : { texCoords: primitive.texCoords }),
+        ...(generatedLod === undefined ? {} : { vertexBufferKey: baseGeometryKey }),
       };
       if (!this.#isVisible(cpu.positions, model, projection, view)) {
         continue;
       }
       const gpu = this.#geometryResource(cpu);
+      if (generatedLod !== undefined) usedGeometry.add(baseGeometryKey);
       usedGeometry.add(gpu.key);
       this.#drawGeometry(gpu, material, model, projection, view, light);
+    }
+  }
+
+  #selectedGeneratedGltfPrimitiveLod(
+    autoLodPolicy: AutoLodPolicy | undefined,
+    state: GltfState,
+    renderInstanceKey: string,
+    primitive: LoadedGltfPrimitive,
+    model: Mat4,
+    projection: Mat4,
+    view: Mat4,
+  ): GeneratedGltfPrimitiveLodLevel | undefined {
+    if (autoLodPolicy?.generatedMeshes !== "experimental") return undefined;
+    const lod = primitive.generatedLod;
+    if (lod === undefined) return undefined;
+    if (lod.status === "unsupported") {
+      if (lod.diagnostic !== undefined && !lod.diagnosticRecorded) {
+        lod.diagnosticRecorded = true;
+        this.#recordDiagnostic(lod.diagnostic);
+      }
+      return undefined;
+    }
+    if (lod.status === "pending") this.#scheduleGeneratedGltfPrimitiveLod(state, primitive);
+
+    const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+    const level = this.#selectGltfLodLevel(
+      `${state.key}:${renderInstanceKey}:generated:${primitive.key}`,
+      coverage,
+      GENERATED_GLTF_LOD_THRESHOLDS.length,
+      GENERATED_GLTF_LOD_THRESHOLDS,
+      (candidate) => candidate === 0 || (
+        lod.status === "ready"
+        && lod.levels.some((generatedLevel) => generatedLevel.level === candidate)
+      ),
+      (candidate) => candidate === 0 || lod.levels.some((generatedLevel) => generatedLevel.level === candidate),
+    );
+
+    return level === 0
+      ? undefined
+      : lod.levels.find((generatedLevel) => generatedLevel.level === level);
+  }
+
+  #scheduleGeneratedGltfPrimitiveLod(state: GltfState, primitive: LoadedGltfPrimitive): void {
+    const lod = primitive.generatedLod;
+    if (lod === undefined || lod.status !== "pending" || lod.scheduled) return;
+    lod.scheduled = true;
+    const run = (): void => {
+      if (this.#disposed || state.status !== "ready" || lod.status !== "pending") return;
+      lod.levels = generatedGltfIndexLodLevels(primitive.indices);
+      lod.status = "ready";
+      this.#recordDiagnostic(
+        `experimental generated glTF LOD ready for ${state.key}:primitive:${primitive.key}; `
+        + "using deterministic triangle-stride index reduction",
+      );
+      this.#scheduleRender();
+    };
+    const queue = globalThis.queueMicrotask;
+    if (typeof queue === "function") {
+      queue(run);
+    } else {
+      globalThis.setTimeout(run, 0);
     }
   }
 
@@ -1763,19 +1946,28 @@ void main() {
     if (cached !== undefined) return cached;
 
     const gl = this.#gl;
-    const arrayBuffer = this.#createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, cpu.positions, gl.STATIC_DRAW);
+    const borrowedVertexResource = cpu.vertexBufferKey === undefined
+      ? undefined
+      : this.#geometry.get(cpu.vertexBufferKey);
+    const arrayBuffer = borrowedVertexResource?.arrayBuffer ?? this.#createBuffer();
+    if (borrowedVertexResource === undefined) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, cpu.positions, gl.STATIC_DRAW);
+    }
 
     let normalBuffer: WebGLBuffer | undefined;
-    if (cpu.normals !== undefined) {
+    if (borrowedVertexResource !== undefined) {
+      normalBuffer = borrowedVertexResource.normalBuffer;
+    } else if (cpu.normals !== undefined) {
       normalBuffer = this.#createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, cpu.normals, gl.STATIC_DRAW);
     }
 
     let texCoordBuffer: WebGLBuffer | undefined;
-    if (cpu.texCoords !== undefined) {
+    if (borrowedVertexResource !== undefined) {
+      texCoordBuffer = borrowedVertexResource.texCoordBuffer;
+    } else if (cpu.texCoords !== undefined) {
       texCoordBuffer = this.#createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, cpu.texCoords, gl.STATIC_DRAW);
@@ -1794,6 +1986,7 @@ void main() {
 
     const resource: GeometryResource = {
       arrayBuffer,
+      ...(borrowedVertexResource === undefined ? {} : { borrowedVertexBufferKey: borrowedVertexResource.key }),
       drawCount: cpu.indices?.length ?? cpu.positions.length / 3,
       ...(indexBuffer === undefined ? {} : { indexBuffer }),
       ...(indexType === undefined ? {} : { indexType }),
@@ -1809,9 +2002,11 @@ void main() {
   #releaseUnusedGeometry(used: Set<string>): void {
     for (const [key, resource] of this.#geometry) {
       if (used.has(key)) continue;
-      this.#deleteBuffer(resource.arrayBuffer);
-      if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
-      if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
+      if (resource.borrowedVertexBufferKey === undefined) {
+        this.#deleteBuffer(resource.arrayBuffer);
+        if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
+        if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
+      }
       if (resource.indexBuffer !== undefined) this.#deleteBuffer(resource.indexBuffer);
       this.#geometry.delete(key);
     }
@@ -2042,9 +2237,18 @@ void main() {
       if (positionAccessor === undefined || indexAccessor === undefined) continue;
       const material = this.#readGltfMaterial(document, src, assetKey, primitive.material);
       const materialLod = this.#readGltfMaterialLod(document, src, assetKey, primitive.material);
+      const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
+      const generatedLod = this.#prepareGeneratedGltfPrimitiveLod(
+        document,
+        sceneNode,
+        mesh,
+        primitive,
+        key,
+      );
       primitives.push({
+        ...(generatedLod === undefined ? {} : { generatedLod }),
         indices: this.#readGltfIndices(document, buffers, indexAccessor),
-        key: `node:${nodeIndex}:primitive:${primitiveIndex}`,
+        key,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
         model: nodeModel,
@@ -2054,6 +2258,126 @@ void main() {
         ...(texCoordAccessor === undefined ? {} : { texCoords: this.#readGltfTexCoords(document, buffers, texCoordAccessor) }),
       });
     }
+  }
+
+  #prepareGeneratedGltfPrimitiveLod(
+    document: GltfDocument,
+    sceneNode: GltfSceneNode | undefined,
+    mesh: GltfMesh | undefined,
+    primitive: GltfMeshPrimitive,
+    primitiveKey: string,
+  ): GeneratedGltfPrimitiveLod | undefined {
+    const unsupported = this.#generatedGltfPrimitiveUnsupportedReason(document, sceneNode, mesh, primitive);
+    if (unsupported !== undefined) {
+      const diagnostic = `experimental generated glTF LOD skipped for ${primitiveKey}: ${unsupported}`;
+
+      return {
+        diagnostic,
+        diagnosticRecorded: false,
+        levels: [],
+        scheduled: false,
+        status: "unsupported",
+      };
+    }
+
+    return {
+      diagnosticRecorded: false,
+      levels: [],
+      scheduled: false,
+      status: "pending",
+    };
+  }
+
+  #generatedGltfPrimitiveUnsupportedReason(
+    document: GltfDocument,
+    sceneNode: GltfSceneNode | undefined,
+    mesh: GltfMesh | undefined,
+    primitive: GltfMeshPrimitive,
+  ): string | undefined {
+    if (primitive.mode !== undefined && primitive.mode !== 4) return "primitive mode is not TRIANGLES";
+    if (sceneNode?.skin !== undefined) return "skinning is not supported";
+    if ((primitive.targets?.length ?? 0) > 0 || (mesh?.weights?.length ?? 0) > 0) return "morph targets are not supported";
+
+    const attributes = primitive.attributes ?? {};
+    for (const semantic of Object.keys(attributes)) {
+      if (semantic !== "POSITION" && semantic !== "NORMAL" && semantic !== "TEXCOORD_0") {
+        return `custom attribute ${semantic} is not supported`;
+      }
+    }
+
+    const positionAccessor = primitive.attributes?.POSITION;
+    const indexAccessor = primitive.indices;
+    if (positionAccessor === undefined) return "POSITION is required";
+    if (indexAccessor === undefined) return "indices are required";
+
+    const positionReason = this.#unsupportedGeneratedGltfAccessorReason(
+      document,
+      positionAccessor,
+      "POSITION",
+      "VEC3",
+      [5126],
+    );
+    if (positionReason !== undefined) return positionReason;
+
+    const indexReason = this.#unsupportedGeneratedGltfAccessorReason(
+      document,
+      indexAccessor,
+      "indices",
+      "SCALAR",
+      [5121, 5123, 5125],
+    );
+    if (indexReason !== undefined) return indexReason;
+
+    const normalAccessor = primitive.attributes?.NORMAL;
+    if (normalAccessor !== undefined) {
+      const normalReason = this.#unsupportedGeneratedGltfAccessorReason(
+        document,
+        normalAccessor,
+        "NORMAL",
+        "VEC3",
+        [5126],
+      );
+      if (normalReason !== undefined) return normalReason;
+    }
+
+    const texCoordAccessor = primitive.attributes?.TEXCOORD_0;
+    if (texCoordAccessor !== undefined) {
+      const texCoordReason = this.#unsupportedGeneratedGltfAccessorReason(
+        document,
+        texCoordAccessor,
+        "TEXCOORD_0",
+        "VEC2",
+        [5126],
+      );
+      if (texCoordReason !== undefined) return texCoordReason;
+    }
+
+    const index = document.accessors?.[indexAccessor];
+    if (index === undefined || index.count < 3 || index.count % 3 !== 0) {
+      return "index accessor must contain complete triangles";
+    }
+
+    return undefined;
+  }
+
+  #unsupportedGeneratedGltfAccessorReason(
+    document: GltfDocument,
+    accessorIndex: number,
+    label: string,
+    type: GltfAccessor["type"],
+    componentTypes: readonly number[],
+  ): string | undefined {
+    const accessor = document.accessors?.[accessorIndex];
+    if (accessor === undefined || accessor.bufferView === undefined) return `${label} accessor is missing`;
+    if (accessor.type !== type) return `${label} accessor must be ${type}`;
+    if (!componentTypes.includes(accessor.componentType)) return `${label} component type is not supported`;
+    if (accessor.sparse !== undefined) return `${label} sparse accessor is not supported`;
+
+    const view = document.bufferViews?.[accessor.bufferView];
+    if (view === undefined) return `${label} bufferView is missing`;
+    if (view.byteStride !== undefined) return `${label} interleaved byteStride is not supported`;
+
+    return undefined;
   }
 
   #readGltfMaterial(

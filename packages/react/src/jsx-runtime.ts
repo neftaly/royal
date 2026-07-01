@@ -1,4 +1,5 @@
 import {
+  autoLod,
   boxGeometry,
   directionalLight,
   gltf,
@@ -13,6 +14,7 @@ import {
   text,
   unlitMaterial,
   wireframeMaterial,
+  type AutoLodOptions,
   type BoxGeometryOptions,
   type Camera,
   type DirectionalLightOptions,
@@ -39,9 +41,9 @@ import type { ReactNode } from 'react';
 import { jsx as reactJsx, jsxs as reactJsxs } from 'react/jsx-runtime';
 
 export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
+export type RoyalRendererJsxChild = ReactNode | RoyalRendererJsxElement | readonly RoyalRendererJsxChild[];
 type ComponentOutput = ReactNode | RoyalRendererJsxElement;
-type EmptyJsxChild = boolean | null | undefined;
-type RendererJsxChild = ComponentOutput | EmptyJsxChild | readonly RendererJsxChild[];
+type RendererJsxChild = RoyalRendererJsxChild;
 type Component = (props: Record<string, unknown>) => ComponentOutput;
 type ElementType = keyof JSX.IntrinsicElements | Component;
 type ReactJsxFactory = typeof reactJsx;
@@ -65,6 +67,9 @@ type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
 type TextProps = Omit<TextOptions, 'text'> & {
   readonly children?: RendererJsxChild;
   readonly text?: string;
+};
+export type AutoLodProps = Omit<AutoLodOptions, 'children'> & {
+  readonly children?: RoyalRendererJsxChild;
 };
 type MeshChildren = {
   readonly geometry?: Geometry<GeometryKindValue>;
@@ -176,6 +181,7 @@ const isRenderNode = (element: ComponentOutput): element is RenderNode =>
     element.kind === 'mesh' ||
     element.kind === 'gltf' ||
     element.kind === 'directional-light' ||
+    element.kind === 'auto-lod' ||
     element.kind === 'text'
   );
 
@@ -212,6 +218,24 @@ const toRenderPasses = (children: RendererJsxChild): readonly RenderPass[] =>
     return child;
   });
 
+const toRenderNodes = (
+  children: RendererJsxChild | undefined,
+  errorPrefix: string
+): readonly RenderNode[] => {
+  const nodes: RenderNode[] = [];
+
+  for (const child of toStructuralArray(children)) {
+    if (isRenderNode(child)) {
+      nodes.push(child);
+      continue;
+    }
+
+    throw new Error(`${errorPrefix}; received ${describeJsxChild(child)}`);
+  }
+
+  return nodes;
+};
+
 const toPass = (props: PassProps): RenderPass => {
   let camera = props.camera;
   const children: RenderNode[] = [];
@@ -226,12 +250,7 @@ const toPass = (props: PassProps): RenderPass => {
       continue;
     }
 
-    if (isRenderNode(child)) {
-      children.push(child);
-      continue;
-    }
-
-    throw new Error(`pass children must be one camera plus render nodes; received ${describeJsxChild(child)}`);
+    children.push(...toRenderNodes([child], 'pass children must be one camera plus render nodes'));
   }
 
   if (camera === undefined) {
@@ -285,6 +304,12 @@ const toMesh = (props: MeshProps): RenderNode => {
 };
 
 const toGltfNode = (options: GltfOptions): RenderNode => gltf(options);
+
+const toAutoLod = (props: AutoLodProps): RenderNode => autoLod({
+  children: toRenderNodes(props.children, 'AutoLod children must be render nodes'),
+  ...(props.generatedMeshes === undefined ? {} : { generatedMeshes: props.generatedMeshes }),
+  ...(props.quality === undefined ? {} : { quality: props.quality })
+});
 
 const toMeshTexture = (texture: MeshTextureInput | undefined): TextureRef => {
   if (texture === undefined) {
@@ -456,6 +481,8 @@ const createElement = (
 export const Fragment = markRendererComponent((_props: {
   readonly children?: RendererJsxChild;
 }): RendererJsxChild => _props.children);
+
+export const AutoLod = markRendererComponent((props: AutoLodProps): RenderNode => toAutoLod(props));
 
 export const jsx = createElement;
 export const jsxs = createElement;

@@ -138,4 +138,11 @@ export type {
   Vec4
 } from './primitives';
 export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
-export type { RenderNode } from './render-node';
+export type {
+  AutoLodGeneratedMeshes,
+  AutoLodNode,
+  AutoLodOptions,
+  AutoLodQuality,
+  RenderNode
+} from './render-node';
+export { autoLod } from './render-node';

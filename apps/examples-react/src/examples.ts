@@ -3,10 +3,16 @@ import { FormControls } from './examples/cases/FormControls';
 import formControlsSource from './examples/cases/FormControls.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
+import { GltfLod } from './examples/cases/GltfLod';
+import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
+import { GeneratedAutoLod } from './examples/cases/GeneratedAutoLod';
+import generatedAutoLodSource from './examples/cases/GeneratedAutoLod.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { RendererText } from './examples/cases/RendererText';
 import rendererTextSource from './examples/cases/RendererText.tsx?raw';
+import { StandardLighting } from './examples/cases/StandardLighting';
+import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
@@ -69,6 +75,15 @@ export const examples = [
     sourceFile: 'examples/cases/TextureMaterials.tsx',
   },
   {
+    id: 'standard-lighting',
+    maturity: 'product',
+    path: '/standard-lighting',
+    title: 'Standard Lighting',
+    Component: StandardLighting,
+    source: standardLightingSource,
+    sourceFile: 'examples/cases/StandardLighting.tsx',
+  },
+  {
     id: 'gltf-helmet',
     maturity: 'product',
     path: '/gltf-helmet',
@@ -76,6 +91,24 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
+  },
+  {
+    id: 'gltf-lod',
+    maturity: 'product',
+    path: '/gltf-lod',
+    title: 'glTF MSFT_lod',
+    Component: GltfLod,
+    source: gltfLodSource,
+    sourceFile: 'examples/cases/GltfLod.tsx',
+  },
+  {
+    id: 'generated-autolod',
+    maturity: 'lab-probe',
+    path: '/generated-autolod',
+    title: 'Experimental AutoLod',
+    Component: GeneratedAutoLod,
+    source: generatedAutoLodSource,
+    sourceFile: 'examples/cases/GeneratedAutoLod.tsx',
   },
 ] as const satisfies readonly Example[];
 

@@ -1,6 +1,6 @@
 /** @jsxImportSource @royal/react/renderer */
 import { describe, expect, it } from "vitest";
-import { markRendererComponent } from "@royal/react";
+import { AutoLod, markRendererComponent } from "@royal/react";
 import { jsx } from "@royal/react/renderer/jsx-runtime";
 import {
   boxGeometry,
@@ -110,6 +110,44 @@ describe("renderer JSX contract", () => {
         <orthographicCamera {...orthographicProps} />
       </pass>
     )).toThrow("pass expects exactly one camera");
+  });
+
+  it("nests AutoLod policy scopes inside a pass", () => {
+    const renderScene = (
+      <scene>
+        <pass>
+          <perspectiveCamera {...perspectiveProps} />
+          <AutoLod generatedMeshes="experimental" quality="balanced">
+            <gltf src="/models/terrain.gltf" version="terrain-v1" />
+          </AutoLod>
+        </pass>
+      </scene>
+    );
+
+    expect(renderScene).toMatchObject({
+      children: [
+        {
+          children: [
+            {
+              children: [
+                {
+                  asset: {
+                    uri: "/models/terrain.gltf",
+                    version: "terrain-v1",
+                  },
+                  kind: "gltf",
+                },
+              ],
+              generatedMeshes: "experimental",
+              kind: "auto-lod",
+              quality: "balanced",
+            },
+          ],
+          kind: "pass",
+        },
+      ],
+      kind: "scene",
+    });
   });
 
   it("accepts geometry and material children under mesh", () => {

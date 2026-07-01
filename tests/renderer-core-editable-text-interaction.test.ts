@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createEditableTextEditorState,
+  applyEditableTextEditorKeyInput,
   editableTextEditorContextMenuSelection,
   layoutEditableText,
   pasteEditableTextEditorText,
@@ -57,6 +58,27 @@ const pointAtCaret = (
 };
 
 describe("editable text interaction", () => {
+  it("reports clipboard keyboard shortcuts without mutating editor state", () => {
+    const state = createEditableTextEditorState({
+      selection: selection(1, 4),
+      text: "abcdef",
+    });
+
+    for (const [key, shortcut] of [
+      ["c", "copy"],
+      ["x", "cut"],
+      ["v", "paste"],
+    ] as const) {
+      const result = applyEditableTextEditorKeyInput(state, {
+        ctrlKey: true,
+        key,
+      });
+
+      expect(result.intent).toEqual({ shortcut, type: "clipboard-shortcut" });
+      expect(result.state).toBe(state);
+    }
+  });
+
   it("inserts a paste payload at the caret and updates selection", () => {
     const state = createEditableTextEditorState({
       selection: selection(5),

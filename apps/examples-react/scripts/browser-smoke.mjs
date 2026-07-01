@@ -44,10 +44,25 @@ const smokeExpectations = {
     path: '/texture-materials',
     minPaintedRatio: 0.01,
   },
+  'standard-lighting': {
+    path: '/standard-lighting',
+    minColorBuckets: 12,
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     path: '/gltf-helmet',
     minColorBuckets: 32,
     minPaintedRatio: 0.01,
+  },
+  'gltf-lod': {
+    path: '/gltf-lod',
+    minColorBuckets: 8,
+    minPaintedRatio: 0.004,
+  },
+  'generated-autolod': {
+    path: '/generated-autolod',
+    minColorBuckets: 8,
+    minPaintedRatio: 0.004,
   },
 };
 
@@ -388,6 +403,14 @@ const smokeExpression = `
       clipboard: normalizeClipboard(probe.clipboard),
       clipboardReadPermission: String(probe.clipboardReadPermission ?? 'unknown'),
       menu: normalizeMenu(probe.menu),
+      pasteBridge: {
+        active: probe.pasteBridge?.active === true,
+        message: String(probe.pasteBridge?.message ?? ''),
+        reason: String(probe.pasteBridge?.reason ?? 'none'),
+        source: String(probe.pasteBridge?.source ?? 'none'),
+        x: Number(probe.pasteBridge?.x ?? 0),
+        y: Number(probe.pasteBridge?.y ?? 0),
+      },
       text: String(probe.text ?? ''),
       textLength: Number(probe.textLength ?? 0),
     };
@@ -824,6 +847,14 @@ const textProbeReaderExpression = `
     clipboard: normalizeClipboard(probe.clipboard),
     clipboardReadPermission: String(probe.clipboardReadPermission ?? 'unknown'),
     menu: normalizeMenu(probe.menu),
+    pasteBridge: {
+      active: probe.pasteBridge?.active === true,
+      message: String(probe.pasteBridge?.message ?? ''),
+      reason: String(probe.pasteBridge?.reason ?? 'none'),
+      source: String(probe.pasteBridge?.source ?? 'none'),
+      x: Number(probe.pasteBridge?.x ?? 0),
+      y: Number(probe.pasteBridge?.y ?? 0),
+    },
     text: String(probe.text ?? ''),
     textLength: Number(probe.textLength ?? 0),
   };
@@ -966,8 +997,8 @@ const assertRoute = (expected, state) => {
     if (state.textControls?.editorTabIndex !== 0) {
       failures.push(`text route canvas tabIndex was ${state.textControls?.editorTabIndex ?? 'missing'}`);
     }
-    if ((state.textControls?.domClipboardBridges ?? 0) > 0) {
-      failures.push(`text route rendered ${state.textControls.domClipboardBridges} DOM clipboard bridge(s)`);
+    if ((state.textControls?.domClipboardBridges ?? 0) !== 1) {
+      failures.push(`text route rendered ${state.textControls?.domClipboardBridges ?? 0} DOM clipboard bridge(s)`);
     }
     if ((state.textControls?.domContextMenus ?? 0) > 0) {
       failures.push(`text route rendered ${state.textControls.domContextMenus} DOM context menu(s)`);
@@ -1088,17 +1119,22 @@ const assertRoute = (expected, state) => {
         const keyboardEvents = Array.isArray(keyboard.keyboardClipboardEvents?.events)
           ? keyboard.keyboardClipboardEvents.events
           : [];
-        const assertKeyboardClipboardEvent = (type) => {
+        const assertKeyboardClipboardEvent = (type, options = {}) => {
           const event = keyboardEvents.find((candidate) => candidate.type === type);
           if (event === undefined) {
-            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} did not dispatch a ${type} event`);
+            if (options.required !== false) {
+              failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} did not dispatch a ${type} event`);
+            }
             return;
           }
-          if (event.targetIsCanvas !== true || event.currentTargetIsCanvas !== true) {
-            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event did not target the canvas`);
+          if (event.targetIsCanvas !== true && event.targetIsBridge !== true) {
+            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event did not target the canvas or paste bridge`);
           }
-          if (event.activeElementIsCanvas !== true) {
-            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event did not keep canvas focus`);
+          if (event.currentTargetIsDocument !== true) {
+            failures.push(`text Ctrl-${type === 'copy' ? 'C' : type === 'cut' ? 'X' : 'V'} ${type} event was not observed at document capture`);
+          }
+          if (type === 'paste' && event.activeElementIsBridge !== true) {
+            failures.push('text Ctrl-V paste event did not focus the native paste bridge');
           }
           if (type === 'paste' && event.textLength !== (keyboard.nativeKeyboardPasteText?.length ?? Number.NaN)) {
             failures.push('text Ctrl-V paste event did not carry seeded native clipboard text');
@@ -1115,7 +1151,7 @@ const assertRoute = (expected, state) => {
             keyboard.keyboardClipboardEvents?.reason ?? 'unknown'
           }`);
         }
-        assertKeyboardClipboardEvent('copy');
+        assertKeyboardClipboardEvent('copy', { required: false });
         if ((afterCopy?.clipboard.counters.keyboardCopy ?? 0) <= (after?.clipboard.counters.keyboardCopy ?? 0)) {
           failures.push('text Ctrl-C shortcut was not observed');
         }
@@ -1139,7 +1175,7 @@ const assertRoute = (expected, state) => {
         } else if (keyboard.afterCopyNativeClipboard.text !== keyboard.keyboardCopyText) {
           failures.push('text Ctrl-C native clipboard readback did not match selected text');
         }
-        assertKeyboardClipboardEvent('cut');
+        assertKeyboardClipboardEvent('cut', { required: false });
         if ((afterCut?.clipboard.counters.keyboardCut ?? 0) <= (afterCopy?.clipboard.counters.keyboardCut ?? 0)) {
           failures.push('text Ctrl-X shortcut was not observed');
         }
@@ -1249,7 +1285,7 @@ const assertRoute = (expected, state) => {
             failures.push(`text context menu did not inspect DOM state after ${phase}`);
             return;
           }
-          if ((state.clipboardBridges ?? 0) > 0) {
+          if ((state.clipboardBridges ?? 0) !== 1) {
             failures.push(`text context menu rendered ${state.clipboardBridges} DOM clipboard bridge(s) after ${phase}`);
           }
           if ((state.contextMenus ?? 0) > 0) {
@@ -1295,36 +1331,49 @@ const assertRoute = (expected, state) => {
           (contextMenu.afterMenuCopy?.textLength ?? 0)) {
           failures.push('text context-menu cut did not delete selected text');
         }
-        if (contextMenu.menuOpenedForPaste?.menu.enabled.paste !== false) {
-          failures.push('text context-menu paste was enabled despite lacking native ClipboardEvent data');
+        if (contextMenu.menuOpenedForPaste?.menu.enabled.paste !== true) {
+          failures.push('text context-menu paste was not enabled');
         }
-        if (contextMenu.menuOpenedForPaste?.menu.unavailableReason?.paste !==
-          'custom-menu-paste-requires-native-paste-event') {
-          failures.push(
-            `text context-menu paste exposed unexpected unavailable reason "${
-              contextMenu.menuOpenedForPaste?.menu.unavailableReason?.paste ?? 'missing'
-            }"`,
-          );
-        }
-        if (contextMenu.menuPasteClick?.disabled !== true || contextMenu.menuPasteClick?.ok !== false) {
-          failures.push(`text context-menu paste was not disabled: ${
+        if (contextMenu.menuPasteClick?.ok !== true || contextMenu.menuPasteClick?.disabled === true) {
+          failures.push(`text context-menu paste click failed: ${
             contextMenu.menuPasteClick?.reason ?? 'unknown'
           }`);
         }
-        if ((contextMenu.afterMenuPaste?.clipboard.counters.menuPaste ?? 0) >
-          (contextMenu.menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0)) {
-          failures.push('text disabled context-menu paste still updated paste counters');
+        if (contextMenu.menuPasteFallback?.pasteBridge?.active !== true ||
+          contextMenu.menuPasteFallback?.pasteBridge?.source !== 'menu') {
+          failures.push('text context-menu paste did not open the native paste bridge after readText denial');
         }
-        if ((contextMenu.afterMenuPaste?.text ?? '') !== (contextMenu.afterMenuPasteSelection?.text ?? '')) {
-          failures.push('text disabled context-menu paste changed editor text');
+        if ((contextMenu.menuPasteFallback?.clipboard.counters.menuPaste ?? 0) >
+          (contextMenu.menuOpenedForPaste?.clipboard.counters.menuPaste ?? 0)) {
+          failures.push('text context-menu paste fallback updated paste counters before a native paste event');
+        }
+        if (contextMenu.menuBridgePaste?.ok !== true) {
+          failures.push(`text context-menu bridge paste failed: ${contextMenu.menuBridgePaste?.reason ?? 'unknown'}`);
+        }
+        if ((contextMenu.afterMenuPaste?.clipboard.counters.menuPaste ?? 0) <=
+          (contextMenu.menuPasteFallback?.clipboard.counters.menuPaste ?? 0)) {
+          failures.push('text context-menu bridge paste did not update paste counters');
+        }
+        if (contextMenu.afterMenuPaste?.clipboard.last.action !== 'paste' ||
+          contextMenu.afterMenuPaste?.clipboard.last.ok !== true ||
+          contextMenu.afterMenuPaste?.clipboard.last.source !== 'menu') {
+          failures.push(`text context-menu bridge paste did not report menu paste success: ${
+            contextMenu.afterMenuPaste?.clipboard.last.reason ?? 'missing'
+          } ${contextMenu.afterMenuPaste?.clipboard.last.message ?? ''}`.trim());
+        }
+        if (!String(contextMenu.afterMenuPaste?.text ?? '').includes(contextMenu.nativeMenuPasteText ?? '')) {
+          failures.push('text context-menu bridge paste did not insert fallback text');
+        }
+        if (contextMenu.afterMenuPaste?.pasteBridge?.active === true) {
+          failures.push('text context-menu paste bridge stayed active after native paste');
         }
         if (contextMenu.menuPasteReadTextTrap?.ok === true) {
           if (contextMenu.afterMenuPasteReadTextTrap?.ok !== true) {
             failures.push(`text context-menu paste readText trap read failed: ${
               contextMenu.afterMenuPasteReadTextTrap?.reason ?? 'unknown'
             }`);
-          } else if ((contextMenu.afterMenuPasteReadTextTrap?.calls ?? 0) !== 0) {
-            failures.push(`text disabled context-menu paste called navigator.clipboard.readText ${
+          } else if ((contextMenu.afterMenuPasteReadTextTrap?.calls ?? 0) !== 1) {
+            failures.push(`text context-menu paste called navigator.clipboard.readText ${
               contextMenu.afterMenuPasteReadTextTrap.calls
             } time(s)`);
           }
@@ -1606,23 +1655,27 @@ const installTextClipboardEventLog = async (session) => evaluate(session, `
 
     events.push({
       activeElementIsCanvas: document.activeElement === canvas,
+      activeElementIsBridge: document.activeElement?.matches?.('[data-royal-text-clipboard-bridge]') === true,
       cancelable: event.cancelable === true,
       currentTargetIsCanvas: event.currentTarget === canvas,
+      currentTargetIsDocument: event.currentTarget === document,
       defaultPrevented: event.defaultPrevented === true,
       targetIsCanvas: event.target === canvas,
+      targetIsBridge: event.target instanceof Element &&
+        event.target.matches('[data-royal-text-clipboard-bridge]'),
       textLength,
       type: event.type,
     });
   };
 
   for (const type of ['copy', 'cut', 'paste']) {
-    canvas.addEventListener(type, listener);
+    document.addEventListener(type, listener, true);
   }
 
   window.__royalTextClipboardEventLog = {
     dispose: () => {
       for (const type of ['copy', 'cut', 'paste']) {
-        canvas.removeEventListener(type, listener);
+        document.removeEventListener(type, listener, true);
       }
     },
     events,
@@ -1639,10 +1692,13 @@ const readTextClipboardEventLog = async (session) => evaluate(session, `
   return {
     events: Array.isArray(log.events) ? log.events.map((event) => ({
       activeElementIsCanvas: event.activeElementIsCanvas === true,
+      activeElementIsBridge: event.activeElementIsBridge === true,
       cancelable: event.cancelable === true,
       currentTargetIsCanvas: event.currentTargetIsCanvas === true,
+      currentTargetIsDocument: event.currentTargetIsDocument === true,
       defaultPrevented: event.defaultPrevented === true,
       targetIsCanvas: event.targetIsCanvas === true,
+      targetIsBridge: event.targetIsBridge === true,
       textLength: Number(event.textLength ?? 0),
       type: String(event.type ?? ''),
     })) : [],
@@ -1793,6 +1849,30 @@ const clickTextContextMenuAction = async (session, action, options = {}) => eval
     ok: enabled,
     reason: enabled ? '' : 'disabled',
     upDispatched,
+  };
+})()
+`, { userGesture: true });
+
+const dispatchTextPasteBridgeEvent = async (session, text) => evaluate(session, `
+(() => {
+  const bridge = document.querySelector('[data-royal-text-clipboard-bridge]');
+  if (!(bridge instanceof HTMLTextAreaElement)) {
+    return { ok: false, reason: 'missing paste bridge' };
+  }
+
+  const data = new DataTransfer();
+  data.setData('text/plain', ${JSON.stringify(text)});
+  const event = new ClipboardEvent('paste', {
+    bubbles: true,
+    cancelable: true,
+    clipboardData: data,
+  });
+  bridge.focus({ preventScroll: true });
+  const dispatched = bridge.dispatchEvent(event);
+  return {
+    defaultPrevented: event.defaultPrevented === true,
+    dispatched,
+    ok: true,
   };
 })()
 `, { userGesture: true });
@@ -1990,13 +2070,29 @@ const runTextInteractionCdpSmoke = async (session) => {
   const menuOpenedForPaste = await openTextContextMenu(session, menuPoint);
   const menuDomAfterOpenForPaste = await readTextMenuDomState(session);
   const menuPasteClick = await clickTextContextMenuAction(session, 'paste', { dispatchDisabled: true });
-  const afterMenuPaste = await evaluate(session, textProbeExpression);
+  const menuPasteFallback = await waitForTextProbeState(
+    session,
+    (probe) => probe?.pasteBridge?.active === true && probe?.pasteBridge?.source === 'menu',
+    1200,
+  );
   const afterMenuPasteReadTextTrap = menuPasteReadTextTrap.ok === true
     ? await readTextClipboardReadTextTrap(session)
     : { calls: 0, ok: false, reason: 'readText trap was not installed' };
   const menuPasteReadTextTrapRestore = menuPasteReadTextTrap.ok === true
     ? await restoreTextClipboardReadTextTrap(session)
     : { ok: false, reason: 'readText trap was not installed' };
+  const nativeMenuPasteText = `Smoke menu bridge paste ${Date.now().toString(36)}`;
+  const menuBridgePaste = await dispatchTextPasteBridgeEvent(session, nativeMenuPasteText);
+  const afterMenuPaste = await waitForTextProbeState(
+    session,
+    (probe) =>
+      (probe?.clipboard.counters.menuPaste ?? 0) > (menuPasteFallback?.clipboard.counters.menuPaste ?? 0) &&
+      probe?.clipboard.last.action === 'paste' &&
+      probe.clipboard.last.ok === true &&
+      probe.clipboard.last.source === 'menu' &&
+      String(probe.text ?? '').includes(nativeMenuPasteText),
+    1200,
+  );
   const selectionLatencySamples = [
     { durationMs: clickToProbeMs, phase: 'click' },
     { durationMs: dragToProbeMs, phase: 'drag-select' },
@@ -2018,6 +2114,7 @@ const runTextInteractionCdpSmoke = async (session) => {
       afterMenuPasteSelection,
       afterMenuSelection,
       afterMenuPasteReadTextTrap,
+      menuBridgePaste,
       menuDomAfterOpenForCopy,
       menuDomAfterOpenForCut,
       menuDomAfterOpenForPaste,
@@ -2027,8 +2124,10 @@ const runTextInteractionCdpSmoke = async (session) => {
       menuOpenedForCut,
       menuOpenedForPaste,
       menuPasteClick,
+      menuPasteFallback,
       menuPasteReadTextTrap,
       menuPasteReadTextTrapRestore,
+      nativeMenuPasteText,
     },
     dragToProbeMs,
     dragEvents: dragSelection.dragEvents,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  autoLod,
   boxGeometry,
   directionalLight,
   gltf,
@@ -943,6 +944,101 @@ const materialSharedTextureLodDocument = () => ({
   ],
 });
 
+const generatedStaticLodDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  materials: [
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.7, 0.8, 0.9, 1],
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+});
+
+const generatedLodIneligibleCustomAttributeDocument = () => ({
+  accessors: lodAccessors(),
+  asset: { version: "2.0" },
+  bufferViews: lodBufferViews(),
+  buffers: [
+    {
+      byteLength: lodBinByteLength,
+      uri: lodBinUri,
+    },
+  ],
+  materials: [
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.7, 0.8, 0.9, 1],
+      },
+    },
+  ],
+  meshes: [
+    {
+      primitives: [
+        {
+          attributes: {
+            COLOR_0: 0,
+            POSITION: 0,
+          },
+          indices: 1,
+          material: 0,
+          mode: 4,
+        },
+      ],
+    },
+  ],
+  nodes: [
+    {
+      mesh: 0,
+    },
+  ],
+  scene: 0,
+  scenes: [
+    {
+      nodes: [0],
+    },
+  ],
+});
+
+const flushOneAnimationFrameWithoutMicrotasks = (callbacks: FrameRequestCallback[]): void => {
+  const callback = callbacks.shift();
+  expect(callback, "expected a scheduled animation frame").toBeDefined();
+  callback?.(16);
+};
+
 const triangleDocument = () => ({
   accessors: [
     {
@@ -1354,6 +1450,160 @@ describe("WebGL renderer scene and glTF regressions", () => {
       args: [gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT],
       name: "texParameteri",
     });
+  });
+
+  it("keeps normal glTF draw counts outside AutoLod", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [lodScaleForCoverage(0.02), lodScaleForCoverage(0.02), 1],
+        },
+        version: "generated-lod-disabled",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, generatedStaticLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+    await flushMicrotasks();
+    root.render(renderGraph);
+
+    expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(drawCalls(calls).at(-1)!), "glTF outside AutoLod should keep the original six-index primitive")
+      .toBe(6);
+    expect(root.snapshot().diagnostics.some((message) => /generated glTF LOD/i.test(message))).toBe(false);
+  });
+
+  it("renders the original glTF primitive first, then generated LOD after async readiness", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      autoLod({
+        children: [
+          gltf({
+            src: lodGltfSrc,
+            transform: {
+              position: [0, 0, 0],
+              rotation: [0, 0, 0],
+              scale: [lodScaleForCoverage(0.02), lodScaleForCoverage(0.02), 1],
+            },
+            version: "generated-lod-ready",
+          }),
+        ],
+        generatedMeshes: "experimental",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, generatedStaticLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const firstReadyDraw = drawCalls(calls).at(-1);
+    expect(firstReadyDraw?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(firstReadyDraw!), "first ready frame must draw the original six-index primitive").toBe(6);
+
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const generatedDraw = drawCalls(calls).at(-1);
+    expect(generatedDraw?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(generatedDraw!), "small projected coverage should switch to the generated lower index buffer").toBe(3);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /deterministic triangle-stride index reduction/i.test(message))).toBe(true);
+  });
+
+  it("does not switch to generated LOD before async generation is ready", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      autoLod({
+        children: [
+          gltf({
+            src: lodGltfSrc,
+            transform: {
+              position: [0, 0, 0],
+              rotation: [0, 0, 0],
+              scale: [lodScaleForCoverage(0.02), lodScaleForCoverage(0.02), 1],
+            },
+            version: "generated-lod-pending",
+          }),
+        ],
+        generatedMeshes: "experimental",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, generatedStaticLodDocument());
+    flushOneAnimationFrameWithoutMicrotasks(viewport.animationFrames);
+
+    const firstReadyDraw = drawCalls(calls).at(-1);
+    expect(firstReadyDraw?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(firstReadyDraw!), "first ready frame should still use the original").toBe(6);
+
+    const drawsBeforePendingRender = drawCalls(calls).length;
+    root.render(renderGraph);
+    const pendingDraws = drawCalls(calls).slice(drawsBeforePendingRender);
+    expect(pendingDraws).toHaveLength(1);
+    expect(drawCount(pendingDraws[0]!), "manual render before the microtask should not use generated indices").toBe(6);
+
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const generatedDraw = drawCalls(calls).at(-1);
+    expect(generatedDraw?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(generatedDraw!), "generated indices should be used only after readiness").toBe(3);
+  });
+
+  it("draws ineligible generated LOD primitives as originals with stable diagnostics", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      autoLod({
+        children: [
+          gltf({
+            src: lodGltfSrc,
+            transform: {
+              position: [0, 0, 0],
+              rotation: [0, 0, 0],
+              scale: [lodScaleForCoverage(0.02), lodScaleForCoverage(0.02), 1],
+            },
+            version: "generated-lod-ineligible",
+          }),
+        ],
+        generatedMeshes: "experimental",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, generatedLodIneligibleCustomAttributeDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
+    expect(drawCount(drawCalls(calls).at(-1)!), "ineligible primitive should draw the original index buffer").toBe(6);
+
+    const diagnostics = root.snapshot().diagnostics.filter((message) => /generated glTF LOD skipped/i.test(message));
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatch(/custom attribute COLOR_0/i);
+
+    root.render(renderGraph);
+    expect(drawCount(drawCalls(calls).at(-1)!), "ineligible primitive should keep drawing the original").toBe(6);
+    expect(root.snapshot().diagnostics.filter((message) => /generated glTF LOD skipped/i.test(message))).toEqual(diagnostics);
   });
 
   it("selects one node-level MSFT_lod member from screen coverage and suppresses lower roots", async () => {

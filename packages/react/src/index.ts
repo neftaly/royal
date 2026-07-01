@@ -9,7 +9,8 @@ export { editableTextKeyboardIntent } from './editable-text-keyboard';
 export { createOrbitControls, orbitCameraTransform, orbitPerspectiveCamera } from './orbit-controls';
 export { createRoot } from './root';
 export { useFrame, useFrameIndex } from './frame';
-export { markRendererComponent } from './jsx-runtime';
+export { AutoLod, markRendererComponent } from './jsx-runtime';
+export type { AutoLodProps } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
 
 export const Canvas = markReactComponent(CanvasComponent);
