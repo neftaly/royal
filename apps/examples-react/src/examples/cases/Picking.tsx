@@ -6,7 +6,6 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import {
-  useLayoutEffect,
   useState,
   type ReactNode,
 } from 'react';
@@ -55,15 +54,6 @@ const helmetTransform = (active: boolean): NonNullable<GltfOptions['transform']>
   scale: active ? [1.16, 1.16, 1.16] : [1.08, 1.08, 1.08],
 });
 
-declare global {
-  interface Window {
-    __royalPickingProbe?: {
-      readonly hoveredId: 'helmet' | 'none';
-      readonly text: string;
-    };
-  }
-}
-
 export const Picking = (): ReactNode => {
   const [hovered, setHovered] = useState(false);
   const [clicks, setClicks] = useState(0);
@@ -77,22 +67,13 @@ export const Picking = (): ReactNode => {
     target: [0, -0.08, 0],
   });
 
-  useLayoutEffect(() => {
-    window.__royalPickingProbe = {
-      hoveredId,
-      text: `Target ${readoutText}`,
-    };
-
-    return () => {
-      delete window.__royalPickingProbe;
-    };
-  }, [hoveredId, readoutText]);
-
   if (fontState.status !== 'ready') return null;
 
   return (
     <Canvas
       aria-label="Pickable helmet"
+      data-royal-picking-hovered-id={hoveredId}
+      data-royal-picking-readout={`Target ${readoutText}`}
       renderer={exampleRenderer}
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >

@@ -646,8 +646,8 @@ const smokeExpression = `
         };
       })() : undefined,
       picking: routeId === 'picking' ? {
-        hoveredId: window.__royalPickingProbe?.hoveredId ?? '',
-        text: window.__royalPickingProbe?.text ?? '',
+        hoveredId: canvas?.dataset.royalPickingHoveredId ?? '',
+        text: canvas?.dataset.royalPickingReadout ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
       source: (() => {
@@ -1494,10 +1494,10 @@ const dispatchKeyboardShortcut = async (session, key) => {
 
 const runPickingInteractionSmoke = async (session) => evaluate(session, `
 (async () => {
-  const readHoveredId = () =>
-    window.__royalPickingProbe?.hoveredId ?? '';
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing picking canvas' };
+  const readHoveredId = () =>
+    canvas.dataset.royalPickingHoveredId ?? '';
   if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent' };
   const rect = canvas.getBoundingClientRect();
   const hoverPoints = [
