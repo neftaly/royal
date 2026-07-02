@@ -11,6 +11,43 @@ const expectBox = (box: FlexLayoutBox, expected: FlexLayoutBox): void => {
 };
 
 describe('layoutFlexTree', () => {
+  it('applies item width defaults to direct children', () => {
+    const boxes = layoutFlexTree<'defaulted' | 'override'>({
+      children: [
+        {
+          height: 1,
+          id: 'defaulted',
+        },
+        {
+          height: 1,
+          id: 'override',
+          width: 2,
+        },
+      ],
+      direction: 'column',
+      height: 10,
+      itemWidth: 4,
+      width: 10,
+    });
+
+    expectBox(boxes.defaulted, {
+      bottom: 1,
+      height: 1,
+      left: 0,
+      right: 4,
+      top: 0,
+      width: 4,
+    });
+    expectBox(boxes.override, {
+      bottom: 2,
+      height: 1,
+      left: 0,
+      right: 2,
+      top: 1,
+      width: 2,
+    });
+  });
+
   it('lays out keyed direct children with padding, gap, and margins', () => {
     const boxes = layoutFlexTree<'one' | 'two'>({
       children: [

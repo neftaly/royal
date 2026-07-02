@@ -71,22 +71,20 @@ const createTextExampleLayout = (): TextExampleLayout => {
         height: textStyle.lineHeight,
         id: 'copy',
         margin: { bottom: 0.38 },
-        width: textColumnBoxWidth,
       },
       {
         height: fieldHeight(titleRows),
         id: 'title',
-        width: textColumnBoxWidth,
       },
       {
         height: fieldHeight(notesRows),
         id: 'notes',
-        width: textColumnBoxWidth,
       },
     ],
     direction: 'column',
     gap: 0.26,
     height: bounds.top - bounds.bottom,
+    itemWidth: textColumnBoxWidth,
     padding: { left: 0.74, top: 1.38 },
     width: bounds.right - bounds.left,
   });

@@ -48,6 +48,7 @@ export type FlexLayoutNode<Key extends string = string> = {
   readonly gap?: number;
   readonly height?: number;
   readonly id?: Key;
+  readonly itemWidth?: number;
   readonly margin?: FlexLayoutEdges;
   readonly padding?: FlexLayoutEdges;
   readonly width?: number;
@@ -125,7 +126,10 @@ const createLayoutNode = <Key extends string>(
   applyLayoutNode(node, input, unitScale);
 
   for (const [index, child] of (input.children ?? []).entries()) {
-    node.insertChild(createLayoutNode(child, unitScale), index);
+    node.insertChild(createLayoutNode({
+      ...(input.itemWidth === undefined || child.width !== undefined ? {} : { width: input.itemWidth }),
+      ...child,
+    }, unitScale), index);
   }
 
   return node;
