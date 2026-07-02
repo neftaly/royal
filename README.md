@@ -14,6 +14,8 @@ Tarstate control-plane experiments live under `research/`; they are not part of 
 ## Direction
 
 See [Royal Direction](docs/royal-direction.md) for the current product goals, boundaries, and cleanup priorities.
+See [glTF Extension Priority](docs/gltf-extension-priority.md) for the current
+WebGL glTF support set, including required extension handling.
 
 ## Development
 

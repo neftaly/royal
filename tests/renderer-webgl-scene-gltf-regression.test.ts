@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const decodeBasisuMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../packages/renderer-webgl/src/gltf-basisu", () => ({
+  decodeGltfBasisuRgba: decodeBasisuMock,
+}));
+
 import {
   boxGeometry,
   directionalLight,
@@ -50,6 +57,7 @@ const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
+const triangleBasisuImageUri = "staged-triangle.ktx2";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const triangleBinByteLength = 104;
@@ -748,6 +756,15 @@ const triangleWithImageBytes = (): ArrayBuffer => {
   const buffer = new ArrayBuffer(base.byteLength + 4);
   new Uint8Array(buffer).set(new Uint8Array(base));
   new Uint8Array(buffer, base.byteLength).set([0x89, 0x50, 0x4E, 0x47]);
+
+  return buffer;
+};
+
+const triangleWithBasisuBytes = (): ArrayBuffer => {
+  const base = triangleBin();
+  const buffer = new ArrayBuffer(base.byteLength + 4);
+  new Uint8Array(buffer).set(new Uint8Array(base));
+  new Uint8Array(buffer, base.byteLength).set([0xAB, 0x4B, 0x54, 0x58]);
 
   return buffer;
 };
@@ -1617,6 +1634,7 @@ const settleLodDocumentAndBuffer = async (
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  decodeBasisuMock.mockReset();
   ControlledImage.instances.splice(0);
   ControlledResizeObserver.instances.splice(0);
 });
@@ -2444,6 +2462,101 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("loads required KHR_texture_basisu base-color texture URI sources through RGBA upload", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const basisuBytes = Uint8Array.from([0xAB, 0x4B, 0x54, 0x58]);
+    const decodedPixels = Uint8Array.from([255, 0, 0, 255, 0, 255, 0, 255]);
+    decodeBasisuMock.mockResolvedValue({
+      data: decodedPixels,
+      height: 1,
+      kind: "rgba-texture",
+      width: 2,
+    });
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "basisu-texture-uri" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_texture_basisu"],
+        extensionsUsed: ["KHR_texture_basisu"],
+        images: [{ uri: triangleImageUri }, { mimeType: "image/ktx2", uri: triangleBasisuImageUri }],
+        textures: [{ extensions: { KHR_texture_basisu: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleImageUri}`))).toBe(false);
+    expect(loader.resolvePendingFetch(/staged-triangle\.ktx2(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, basisuBytes.buffer.slice(0)))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(Array.from(new Uint8Array(decodeBasisuMock.mock.calls[0]?.[0] as ArrayBuffer))).toEqual(Array.from(basisuBytes));
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(calls).toContainEqual({
+      args: [gl.TEXTURE_2D, 0, gl.RGBA, 2, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
+      name: "texImage2D",
+    });
+  });
+
+  it("loads required KHR_texture_basisu base-color texture bufferView sources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const decodedPixels = Uint8Array.from([0, 0, 255, 255]);
+    decodeBasisuMock.mockResolvedValue({
+      data: decodedPixels,
+      height: 1,
+      kind: "rgba-texture",
+      width: 1,
+    });
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "basisu-texture-buffer-view" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        bufferViews: [
+          ...(triangleDocument().bufferViews),
+          { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
+        ],
+        buffers: [{ byteLength: triangleBinByteLength + 4, uri: triangleBinUri }],
+        extensionsRequired: ["KHR_texture_basisu"],
+        extensionsUsed: ["KHR_texture_basisu"],
+        images: [{ uri: triangleImageUri }, { bufferView: 4, mimeType: "image/ktx2" }],
+        textures: [{ extensions: { KHR_texture_basisu: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithBasisuBytes()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(Array.from(new Uint8Array(decodeBasisuMock.mock.calls[0]?.[0] as ArrayBuffer)))
+      .toEqual([0xAB, 0x4B, 0x54, 0x58]);
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleImageUri}`))).toBe(false);
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(calls).toContainEqual({
+      args: [gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
+      name: "texImage2D",
+    });
   });
 
   it("renders required KHR_materials_unlit glTF materials without lighting", async () => {

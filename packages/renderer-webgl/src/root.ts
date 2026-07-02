@@ -31,11 +31,16 @@ import {
   type GltfIndexArray,
 } from "./gltf-accessors";
 import {
+  decodeDataUri,
   gltfBufferViewBytes,
   loadGltfBuffers,
   loadGltfDocument,
   resolveResourceUri,
 } from "./gltf-io";
+import {
+  decodeGltfBasisuRgba,
+  type DecodedGltfBasisuTexture,
+} from "./gltf-basisu";
 import { decodeGltfMeshoptBufferViews } from "./gltf-meshopt";
 import {
   assertSupportedRequiredGltfExtensions,
@@ -168,6 +173,8 @@ type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
   readonly flipY?: boolean;
 };
 
+type LoadedTextureSource = HTMLImageElement | ImageBitmap | DecodedGltfBasisuTexture;
+
 type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
@@ -223,11 +230,18 @@ type LoadedGltfMaterial = {
   readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
   readonly emissive?: Rgba;
-  readonly image?: HTMLImageElement | ImageBitmap;
+  readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
   readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
   readonly unlit?: boolean;
+};
+
+type GltfImageKind = "basisu" | "image";
+
+type GltfTextureImageSelection = {
+  readonly imageIndex: number;
+  readonly kind: GltfImageKind;
 };
 
 type GltfNodePrimitiveLod = {
@@ -1104,27 +1118,42 @@ const gltfTextureIdentity = (
   textureIndex: number,
   imageIndex: number | undefined,
   image: GltfImage,
+  kind: GltfImageKind,
 ): string => {
-  if (image.uri !== undefined) return `${assetKey}:image-uri:${resolveUrl(src, image.uri)}`;
+  if (image.uri !== undefined) {
+    const prefix = kind === "basisu" ? "basisu-uri" : "image-uri";
+    return `${assetKey}:${prefix}:${resolveUrl(src, image.uri)}`;
+  }
   if (image.bufferView !== undefined) {
-    return `${assetKey}:image-buffer-view:${image.bufferView}:${image.mimeType ?? ""}`;
+    const prefix = kind === "basisu" ? "basisu-buffer-view" : "image-buffer-view";
+    return `${assetKey}:${prefix}:${image.bufferView}:${image.mimeType ?? ""}`;
   }
 
   return `${assetKey}:texture-index:${textureIndex}:image-index:${imageIndex ?? ""}`;
 };
 
-const gltfTextureImageIndex = (texture: GltfTexture | undefined): number | undefined =>
-  texture?.extensions?.EXT_texture_webp?.source ?? texture?.source;
+const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextureImageSelection | undefined => {
+  const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
+  if (basisuSource !== undefined) return { imageIndex: basisuSource, kind: "basisu" };
+
+  const imageIndex = texture?.extensions?.EXT_texture_webp?.source ?? texture?.source;
+  return imageIndex === undefined ? undefined : { imageIndex, kind: "image" };
+};
 
 const gltfImageLoadKey = (
   assetKey: string,
   src: string,
   imageIndex: number | undefined,
   image: GltfImage,
+  kind: GltfImageKind,
 ): string | undefined => {
-  if (image.uri !== undefined) return resolveUrl(src, image.uri);
+  if (image.uri !== undefined) {
+    const url = resolveUrl(src, image.uri);
+    return kind === "basisu" ? `${assetKey}:basisu-uri:${url}` : url;
+  }
   if (image.bufferView !== undefined) {
-    return `${assetKey}:image-buffer-view:${image.bufferView}:image-index:${imageIndex ?? ""}:${image.mimeType ?? ""}`;
+    const prefix = kind === "basisu" ? "basisu-buffer-view" : "image-buffer-view";
+    return `${assetKey}:${prefix}:${image.bufferView}:image-index:${imageIndex ?? ""}:${image.mimeType ?? ""}`;
   }
 
   return undefined;
@@ -1193,6 +1222,45 @@ const loadImageBitmapFromBufferView = (
 
   return createBitmap(blob);
 };
+
+const loadBasisuBytesFromUri = async (
+  src: string,
+  image: GltfImage,
+): Promise<ArrayBuffer> => {
+  if (image.uri === undefined) throw new Error("glTF KHR_texture_basisu image has no URI");
+  if (image.uri.startsWith("data:")) return decodeDataUri(image.uri);
+
+  const url = resolveUrl(src, image.uri);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+  return response.arrayBuffer();
+};
+
+const loadGltfImageSource = (
+  src: string,
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+  image: GltfImage,
+  kind: GltfImageKind,
+): Promise<LoadedTextureSource> => {
+  if (kind === "basisu") {
+    const bytes = image.uri === undefined
+      ? image.bufferView === undefined
+        ? Promise.reject(new Error("glTF KHR_texture_basisu image has no URI or bufferView"))
+        : Promise.resolve(gltfBufferViewBytes(document, buffers, image.bufferView))
+      : loadBasisuBytesFromUri(src, image);
+
+    return bytes.then((buffer) => decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`));
+  }
+
+  return image.uri === undefined
+    ? loadImageBitmapFromBufferView(document, buffers, image)
+    : loadImage(resolveUrl(src, image.uri));
+};
+
+const sourceIsRgbaTexture = (source: LoadedTextureSource): source is DecodedGltfBasisuTexture =>
+  typeof source === "object" && source !== null && "kind" in source && source.kind === "rgba-texture";
 
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
@@ -3672,7 +3740,7 @@ void main() {
     return state;
   }
 
-  #ensureImmediateTexture(texture: TextureAssetUploadRef, image: HTMLImageElement | ImageBitmap): TextureResource {
+  #ensureImmediateTexture(texture: TextureAssetUploadRef, image: LoadedTextureSource): TextureResource {
     const key = textureKey(texture);
     const cached = this.#textures.get(key);
     if (cached !== undefined && cached.uploaded) return cached;
@@ -3689,7 +3757,7 @@ void main() {
 
   #uploadTexture(
     resource: TextureResource,
-    source: HTMLImageElement | ImageBitmap,
+    source: LoadedTextureSource,
     texture: TextureAssetUploadRef,
   ): void {
     if (this.#disposed || !this.#ownedTextures.has(resource.texture)) return;
@@ -3699,7 +3767,11 @@ void main() {
     if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
     }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    if (sourceIsRgbaTexture(source)) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    }
     const sampler = texture.sampler;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, samplerConstant(gl, sampler?.magFilter, gl.LINEAR));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, samplerConstant(gl, sampler?.minFilter, gl.LINEAR));
@@ -4067,11 +4139,13 @@ void main() {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
     const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-    const imageIndex = gltfTextureImageIndex(texture);
+    const imageSelection = gltfTextureImageSelection(texture);
+    const imageIndex = imageSelection?.imageIndex;
+    const imageKind = imageSelection?.kind ?? "image";
     const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
     const imageLoadKey = image === undefined
       ? undefined
-      : gltfImageLoadKey(assetKey, src, imageIndex, image);
+      : gltfImageLoadKey(assetKey, src, imageIndex, image, imageKind);
     const sampler = texture === undefined
       ? undefined
       : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
@@ -4090,6 +4164,7 @@ void main() {
             textureIndex,
             imageIndex,
             image,
+            imageKind,
           ),
         }),
       ...(color === undefined ? {} : { color }),
@@ -4132,28 +4207,27 @@ void main() {
   ): void {
     const usedImageKeys = this.#usedGltfImageLoadKeys(state);
     for (const [imageIndex, image] of (document.images ?? []).entries()) {
-      const key = gltfImageLoadKey(state.key, src, imageIndex, image);
-      if (key === undefined) continue;
-      if (!usedImageKeys.has(key)) continue;
-      const imageLoad = image.uri === undefined
-        ? loadImageBitmapFromBufferView(document, buffers, image)
-        : loadImage(key);
-      imageLoad.then((loadedImage) => {
-        if (this.#disposed || state.status !== "ready") return;
-        state.primitives = state.primitives.map((primitive) =>
-          this.#mapGltfPrimitiveMaterials(primitive, (material) =>
-            this.#settleGltfMaterialImage(material, key, loadedImage)));
-        this.#scheduleRender();
-      }, (error: unknown) => {
-        if (this.#disposed) return;
-        if (state.status === "ready") {
+      for (const kind of ["image", "basisu"] as const) {
+        const key = gltfImageLoadKey(state.key, src, imageIndex, image, kind);
+        if (key === undefined) continue;
+        if (!usedImageKeys.has(key)) continue;
+        loadGltfImageSource(src, document, buffers, image, kind).then((loadedImage) => {
+          if (this.#disposed || state.status !== "ready") return;
           state.primitives = state.primitives.map((primitive) =>
             this.#mapGltfPrimitiveMaterials(primitive, (material) =>
-              this.#failGltfMaterialImage(material, key)));
+              this.#settleGltfMaterialImage(material, key, loadedImage)));
           this.#scheduleRender();
-        }
-        this.#recordDiagnostic(`glTF base-color image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
-      });
+        }, (error: unknown) => {
+          if (this.#disposed) return;
+          if (state.status === "ready") {
+            state.primitives = state.primitives.map((primitive) =>
+              this.#mapGltfPrimitiveMaterials(primitive, (material) =>
+                this.#failGltfMaterialImage(material, key)));
+            this.#scheduleRender();
+          }
+          this.#recordDiagnostic(`glTF base-color image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
     }
   }
 
@@ -4212,7 +4286,7 @@ void main() {
   #settleGltfMaterialImage(
     material: LoadedGltfMaterial,
     uri: string,
-    image: HTMLImageElement | ImageBitmap,
+    image: LoadedTextureSource,
   ): LoadedGltfMaterial {
     return material.baseColorImageUri === uri ? { ...material, image } : material;
   }

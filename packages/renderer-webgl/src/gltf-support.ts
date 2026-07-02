@@ -201,6 +201,9 @@ export type GltfTexture = {
     readonly EXT_texture_webp?: {
       readonly source?: number;
     };
+    readonly KHR_texture_basisu?: {
+      readonly source?: number;
+    };
   };
   readonly sampler?: number;
   readonly source?: number;
@@ -217,6 +220,7 @@ export const supportedGltfExtensions = new Set<string>([
   "EXT_meshopt_compression",
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
+  "KHR_texture_basisu",
   "KHR_lights_punctual",
   "KHR_materials_emissive_strength",
   "KHR_materials_unlit",

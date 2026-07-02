@@ -20,6 +20,8 @@
     "test": "vitest run --root ../.. ../../tests/renderer-webgl-*.test.ts"
   },
   "dependencies": {
+    "@loaders.gl/core": "^4.4.3",
+    "@loaders.gl/textures": "^4.4.3",
     "@royal/renderer-core": "workspace:*",
     "gl-matrix": "^3.4.4",
     "meshoptimizer": "^1.2.0"

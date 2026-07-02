@@ -50,7 +50,7 @@ sparse accessors, normalized integer attributes, base color factor/texture,
 samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
 `EXT_meshopt_compression`, `EXT_mesh_gpu_instancing`, `EXT_texture_webp`,
-`KHR_materials_unlit`, `KHR_lights_punctual`,
+`KHR_texture_basisu`, `KHR_materials_unlit`, `KHR_lights_punctual`,
 `KHR_materials_emissive_strength`, `KHR_materials_variants`,
 `KHR_node_visibility`, and vendor `MSFT_lod`.
 
@@ -65,7 +65,7 @@ path. They are sorted in suggested implementation order.
 | P0 | Core `.glb` support | Binary container for JSON plus binary payload. | Core glTF 2.0 delivery format; many assets ship as GLB. |
 | P1 | `KHR_mesh_quantization` | Stores vertex attributes in smaller integer formats with decode rules. | Common size reduction; required if an asset has no float fallback. |
 | P1 | `EXT_meshopt_compression` | Compresses buffer views with meshoptimizer codecs. | Implemented for required compressed bufferViews; maintain decoder regression coverage. |
-| P1 | `KHR_texture_basisu` | Adds KTX2/Basis Universal compressed textures. | Important for GPU-friendly texture delivery; required without PNG/JPEG fallback. |
+| P1 | `KHR_texture_basisu` | Adds KTX2/Basis Universal texture sources. | Implemented for required base-color textures by transcoding KTX2/Basis to RGBA8 through loaders.gl before WebGL upload. |
 | P1 | `EXT_texture_webp` | Allows WebP texture images. | Web-focused texture size win; required without PNG/JPEG fallback. |
 | P2 | `KHR_draco_mesh_compression` | Compresses mesh primitive attributes and indices with Draco. | Older but still common; required if no uncompressed primitive fallback exists. |
 | P2 | `KHR_texture_transform` | Adds per-texture UV offset, scale, rotation, and texCoord override. | Common authoring feature; without it textures appear misaligned. |
@@ -150,12 +150,12 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 
 ## Starting Recommendation
 
-The required-contract gate, core loadability baseline, and
-`EXT_meshopt_compression` / `EXT_mesh_gpu_instancing` are now in place. Next,
-implement the remaining decoder-backed blockers in this order:
+The required-contract gate, core loadability baseline,
+`EXT_meshopt_compression`, `EXT_mesh_gpu_instancing`, and
+`KHR_texture_basisu` are now in place. Next, implement the remaining
+decoder-backed blocker:
 
-1. `KHR_texture_basisu`
-2. `KHR_draco_mesh_compression`
+1. `KHR_draco_mesh_compression`
 
 Add richer material and lighting extensions after the decoder-backed required
 path is stable.
