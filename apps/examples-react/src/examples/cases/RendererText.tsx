@@ -1,137 +1,139 @@
 /** @jsxImportSource @royal/react */
-import { TextSurface, textFieldHeight, type TextSurfaceBox } from '@royal/react';
+import { TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
-import { layoutFlexTree, type FlexLayoutBox } from '../flex-layout';
 import { useAtkinsonFont } from './text-font';
 
-const bounds = {
+const viewport = {
   bottom: -3.2,
   left: -5.6,
   right: 5.6,
   top: 3.2,
 } as const;
 
+const inputLorem = 'Lorem ipsum dolor sit amet';
+const loremIpsum = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus posuere velit aliquet.';
+const textareaLorem = 'Lorem ipsum dolor sit amet.\nConsectetur adipiscing elit.\nInteger posuere erat a ante.';
+const textareaRows = 4;
 const textStyle = {
-  fieldPaddingX: 0.14,
-  fieldPaddingY: 0.11,
-  fontSize: 0.32,
-  lineHeight: 0.42,
-} as const;
-
-const textColumnWidth = 7.6;
-const textColumnBoxWidth = textColumnWidth + textStyle.fieldPaddingX * 2;
-const titleRows = 1;
-const notesRows = 4;
-
-const fieldHeight = (rows: number): number =>
-  textFieldHeight({
-    lineHeight: textStyle.lineHeight,
-    paddingY: textStyle.fieldPaddingY,
-    rows,
-  });
-
-type TextExampleLayoutKey = 'copy' | 'notes' | 'title';
-type TextExampleLayout = Record<TextExampleLayoutKey, TextSurfaceBox>;
-
-const surfaceBox = (box: FlexLayoutBox): TextSurfaceBox => ({
-  height: box.height,
-  left: box.left,
-  top: box.top,
-  width: box.width,
-});
-
-const contentBox = (box: FlexLayoutBox): TextSurfaceBox => ({
-  height: box.height,
-  left: box.left + textStyle.fieldPaddingX,
-  top: box.top,
-  width: box.width - textStyle.fieldPaddingX * 2,
-});
-
-const createTextExampleLayout = (): TextExampleLayout => {
-  const boxes = layoutFlexTree<TextExampleLayoutKey>({
-    alignItems: 'flex-start',
-    children: [
-      {
-        height: textStyle.lineHeight,
-        id: 'copy',
-        margin: { bottom: 0.38 },
-      },
-      {
-        height: fieldHeight(titleRows),
-        id: 'title',
-      },
-      {
-        height: fieldHeight(notesRows),
-        id: 'notes',
-      },
-    ],
-    direction: 'column',
-    gap: 0.26,
-    height: bounds.top - bounds.bottom,
-    itemWidth: textColumnBoxWidth,
-    padding: { left: 0.74, top: 1.38 },
-    width: bounds.right - bounds.left,
-  });
-
-  return {
-    copy: contentBox(boxes.copy),
-    notes: surfaceBox(boxes.notes),
-    title: surfaceBox(boxes.title),
-  };
+  fieldPaddingY: 0.12,
+  lineHeight: 0.38,
 };
 
-const textExampleLayout = createTextExampleLayout();
+const styles = {
+  label: {
+    fontSize: 0.22,
+    lineHeight: 0.28,
+  },
+  input: {
+    left: 1.2,
+    top: 2.28,
+    width: 8.8,
+  },
+  inputLabel: {
+    left: 1.2,
+    top: 1.88,
+    width: 8.8,
+  },
+  selectableLabel: {
+    left: 1.2,
+    top: 0.72,
+    width: 8.8,
+  },
+  selectableText: {
+    left: 1.2,
+    top: 1.12,
+    width: 8.8,
+  },
+  textarea: {
+    height: textareaRows * textStyle.lineHeight + textStyle.fieldPaddingY * 2,
+    left: 1.2,
+    top: 3.48,
+    width: 8.8,
+  },
+  textareaLabel: {
+    left: 1.2,
+    top: 3.08,
+    width: 8.8,
+  },
+} as const;
 
 const TextPrimitivesExample = ({
   font,
 }: {
   readonly font: TextFontFace;
 }): ReactNode => {
-  const [title, setTitle] = useState('Royal text primitives');
-  const [notes, setNotes] = useState('Selectable text, input, and textarea share the same canvas focus, selection, clipboard, and context-menu primitives.');
+  const [title, setTitle] = useState(inputLorem);
+  const [notes, setNotes] = useState(textareaLorem);
 
   return (
     <TextSurface
       aria-label="Text primitives"
-      bounds={bounds}
       style={{ cursor: 'text', touchAction: 'none' }}
       styleOptions={{
-        color: htmlColor('#dbf0fa'),
-        fieldColor: htmlColor('#0e1214'),
-        fieldPaddingX: textStyle.fieldPaddingX,
+        color: htmlColor('#e7f3f5'),
+        fieldColor: htmlColor('#101619'),
+        fieldPaddingX: 0.18,
         fieldPaddingY: textStyle.fieldPaddingY,
-        fontSize: textStyle.fontSize,
+        fontSize: 0.28,
         lineHeight: textStyle.lineHeight,
-        selectionColor: htmlColor('#144f7a'),
+        placeholderColor: htmlColor('#6d797c'),
+        selectionColor: htmlColor('#1d5e86'),
       }}
     >
       <scene>
-        <pass clearColor={htmlColor('#06080a')}>
-          <orthographicCamera {...bounds} />
+        <pass clearColor={htmlColor('#07090b')}>
+          <orthographicCamera {...viewport} />
           <text
+            box={styles.selectableLabel}
             color={htmlColor('#59f28f')}
-            box={textExampleLayout.copy}
+            font={font}
+            fontSize={styles.label.fontSize}
+            lineHeight={styles.label.lineHeight}
+          >
+            Selectable non-editable text
+          </text>
+          <text
+            box={styles.selectableText}
+            color={htmlColor('#d8f6e4')}
             copyable
             font={font}
             selectable
           >
-            Select and copy this renderer text.
+            {loremIpsum}
+          </text>
+          <text
+            box={styles.inputLabel}
+            color={htmlColor('#a9cfff')}
+            font={font}
+            fontSize={styles.label.fontSize}
+            lineHeight={styles.label.lineHeight}
+          >
+            Input type = text
           </text>
           <input
-            box={textExampleLayout.title}
+            box={styles.input}
             font={font}
             onValueChange={setTitle}
-            placeholder="Title"
+            placeholder="Lorem ipsum"
             value={title}
           />
+          <text
+            box={styles.textareaLabel}
+            color={htmlColor('#ffd77a')}
+            font={font}
+            fontSize={styles.label.fontSize}
+            lineHeight={styles.label.lineHeight}
+          >
+            multiline textarea
+          </text>
           <textarea
-            box={textExampleLayout.notes}
+            box={styles.textarea}
             font={font}
             onValueChange={setNotes}
-            placeholder="Notes"
-            rows={notesRows}
+            placeholder="Lorem ipsum"
+            rows={textareaRows}
             value={notes}
           />
         </pass>

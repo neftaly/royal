@@ -42,8 +42,10 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type CSSProperties,
   type ClipboardEvent,
   type CompositionEvent,
+  type FocusEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -237,6 +239,18 @@ const defaultTextStyle = {
   placeholderColor: [0.55, 0.62, 0.62, 1],
   selectionColor: [0.08, 0.28, 0.42, 1],
 } as const satisfies Required<TextInteractionStyle>;
+
+const pasteSinkStyle = {
+  height: 1,
+  left: 0,
+  opacity: 0,
+  pointerEvents: "none",
+  position: "fixed",
+  top: 0,
+  transform: "translate(-100vw, -100vh)",
+  width: 1,
+  zIndex: -1,
+} as const satisfies CSSProperties;
 
 export const textFieldHeight = ({
   lineHeight = defaultTextStyle.lineHeight,
@@ -617,6 +631,8 @@ export const TextSurface = ({
 }: TextSurfaceProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<DragState | undefined>(undefined);
+  const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingKeyboardPasteControlIdRef = useRef<string | undefined>(undefined);
   const pendingMenuCommandRef = useRef<PendingMenuCommand | undefined>(undefined);
   const store = useMemo(createTextSurfaceStore, []);
   const activeId = useStore(store, (state) => state.activeId);
@@ -644,6 +660,16 @@ export const TextSurface = ({
   const focusCanvas = useCallback((): void => {
     canvasRef.current?.focus({ preventScroll: true });
   }, []);
+
+  const focusControl = useCallback((control: TextControlRegistration | undefined): void => {
+    if (control?.editable === true && pasteSinkRef.current !== null) {
+      pasteSinkRef.current.value = "";
+      pasteSinkRef.current.focus({ preventScroll: true });
+      return;
+    }
+
+    focusCanvas();
+  }, [focusCanvas]);
 
   const setCaretFromPoint = useCallback((
     control: TextControlRegistration,
@@ -684,7 +710,7 @@ export const TextSurface = ({
       const value = await readClipboardText();
       if (value !== undefined) store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, value));
       store.getState().closeMenu();
-      focusCanvas();
+      focusControl(control);
       return;
     }
 
@@ -694,14 +720,18 @@ export const TextSurface = ({
       store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, ""));
     }
     store.getState().closeMenu();
-    focusCanvas();
-  }, [focusCanvas, store]);
+    focusControl(control);
+  }, [focusControl, store]);
 
-  const handlePaste = useCallback((event: ClipboardEvent<HTMLCanvasElement>): void => {
-    onPaste?.(event);
-    if (event.defaultPrevented) return;
+  const handlePaste = useCallback((event: ClipboardEvent<HTMLElement>): void => {
+    if (event.currentTarget === canvasRef.current) {
+      onPaste?.(event as ClipboardEvent<HTMLCanvasElement>);
+      if (event.defaultPrevented) return;
+    }
 
-    const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
+    const controlId = pendingKeyboardPasteControlIdRef.current ?? activeId;
+    pendingKeyboardPasteControlIdRef.current = undefined;
+    const control = controlId === undefined ? undefined : store.getState().getControl(controlId);
     if (control === undefined || !control.editable) return;
 
     const value = event.clipboardData.getData("text/plain");
@@ -710,10 +740,10 @@ export const TextSurface = ({
     event.preventDefault();
     store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, value));
     store.getState().closeMenu();
-    focusCanvas();
-  }, [activeId, focusCanvas, onPaste, store]);
+    focusControl(control);
+  }, [activeId, focusControl, onPaste, store]);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLCanvasElement>): void => {
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
     if (control === undefined) return;
 
@@ -734,6 +764,10 @@ export const TextSurface = ({
 
     if (intent.type === "clipboard-shortcut") {
       if (intent.shortcut === "paste") {
+        if (control.editable) {
+          pendingKeyboardPasteControlIdRef.current = control.id;
+          focusControl(control);
+        }
         return;
       }
 
@@ -760,7 +794,7 @@ export const TextSurface = ({
     }
 
     if (intent.type !== "enter-key") store.getState().applyEditorState(control.id, nextState);
-  }, [activeId, runClipboardCommand, store]);
+  }, [activeId, focusControl, runClipboardCommand, store]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return;
@@ -795,11 +829,11 @@ export const TextSurface = ({
     store.getState().clearSelectionsExcept(control.id);
     store.getState().setActiveId(control.id);
     const clicked = setCaretFromPoint(control, worldX, worldY, event.shiftKey);
-    event.currentTarget.focus({ preventScroll: true });
+    focusControl(control);
     const anchor = event.shiftKey ? { index: control.selection.anchor, line: control.selection.anchorLine } : clicked;
     dragRef.current = anchor === undefined ? undefined : { anchor, controlId: control.id, moved: false };
     captureCanvasPointer(event.currentTarget, event.pointerId);
-  }, [bounds, findControlAt, menu, setCaretFromPoint, store]);
+  }, [bounds, findControlAt, focusControl, menu, setCaretFromPoint, store]);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     const drag = dragRef.current;
@@ -858,20 +892,27 @@ export const TextSurface = ({
     store.getState().clearSelectionsExcept(control.id);
     store.getState().applyEditorState(control.id, setEditableTextEditorSelection(control.state, nextSelection));
     store.getState().setActiveId(control.id);
-    event.currentTarget.focus({ preventScroll: true });
+    focusControl(control);
     store.getState().setMenu({
       controlId: control.id,
       open: true,
       worldX,
       worldY,
     });
-  }, [findControlAt, store]);
+  }, [findControlAt, focusControl, store]);
 
-  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLCanvasElement>): void => {
+  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLElement>): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
     if (control === undefined || !control.editable || event.data === "") return;
     store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, event.data));
   }, [activeId, store]);
+
+  const handleBlur = useCallback((event: FocusEvent<HTMLElement>): void => {
+    if (event.relatedTarget === canvasRef.current || event.relatedTarget === pasteSinkRef.current) return;
+    store.getState().clearSelectionsExcept(undefined);
+    store.getState().setActiveId(undefined);
+    store.getState().closeMenu();
+  }, [store]);
 
   const context = useMemo<TextSurfaceContextValue>(() => ({
     activeId,
@@ -887,11 +928,7 @@ export const TextSurface = ({
   return createElement(Canvas, {
     ...canvasProps,
     "aria-multiline": true,
-    onBlur: () => {
-      store.getState().clearSelectionsExcept(undefined);
-      store.getState().setActiveId(undefined);
-      store.getState().closeMenu();
-    },
+    onBlur: handleBlur,
     onCompositionEnd: handleCompositionEnd,
     onContextMenu: handleContextMenu,
     onKeyDown: handleKeyDown,
@@ -903,11 +940,30 @@ export const TextSurface = ({
     ref: canvasRef,
     role: "textbox",
     tabIndex: 0,
-    children: createElement(
-      TextSurfaceContext.Provider,
-      { value: context },
-      children as ReactNode,
-    ),
+    children: [
+      createElement(
+        TextSurfaceContext.Provider,
+        { key: "scene", value: context },
+        children as ReactNode,
+      ),
+      createElement("textarea", {
+        "aria-label": "Text clipboard input",
+        autoCapitalize: "off",
+        autoComplete: "off",
+        autoCorrect: "off",
+        "data-royal-text-clipboard-staging": true,
+        key: "paste-sink",
+        onBlur: handleBlur,
+        onCompositionEnd: handleCompositionEnd,
+        onKeyDown: handleKeyDown,
+        onPaste: handlePaste,
+        ref: pasteSinkRef,
+        spellCheck: false,
+        style: pasteSinkStyle,
+        tabIndex: -1,
+        wrap: "off",
+      }),
+    ],
   });
 };
 
