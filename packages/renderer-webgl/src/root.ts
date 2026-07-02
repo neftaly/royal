@@ -236,6 +236,7 @@ type LoadedGltfMaterial = {
   readonly emissive?: Rgba;
   readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
+  readonly pbrExtensionFactors?: MaterialPbrExtensionFactors;
   readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
   readonly unlit?: boolean;
@@ -301,6 +302,15 @@ type GltfPrimitiveDrawBatch = {
 
 type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly emissive?: Rgba;
+  readonly pbrExtensionFactors?: MaterialPbrExtensionFactors;
+};
+
+type MaterialPbrExtensionFactors = {
+  readonly clearcoatFactor: number;
+  readonly clearcoatRoughnessFactor: number;
+  readonly ior: number;
+  readonly specularColorFactor: Vec3;
+  readonly specularFactor: number;
 };
 
 type SurfaceDirectionalLight = {
@@ -343,6 +353,13 @@ const DEFAULT_SURFACE_LIGHT_SET: SurfaceLightSet = {
 const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   key: "empty",
   lights: [],
+};
+const DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS: MaterialPbrExtensionFactors = {
+  clearcoatFactor: 0,
+  clearcoatRoughnessFactor: 0,
+  ior: 1.5,
+  specularColorFactor: [1, 1, 1],
+  specularFactor: 1,
 };
 const MAX_SURFACE_LIGHTS = 8;
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
@@ -936,8 +953,25 @@ const materialEmissiveColor = (material: Material): Rgba =>
       ]
     : [0, 0, 0, 1];
 
+const materialPbrExtensionFactors = (material: SurfaceMaterial): MaterialPbrExtensionFactors =>
+  material.pbrExtensionFactors ?? DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS;
+
+const materialPbrExtensionFactorsKey = (factors: MaterialPbrExtensionFactors): string =>
+  [
+    factors.specularFactor,
+    ...factors.specularColorFactor,
+    factors.ior,
+    factors.clearcoatFactor,
+    factors.clearcoatRoughnessFactor,
+  ].map((value) => surfaceLightValueKey(value)).join(",");
+
 const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
-  `${material.kind}:${textureKey(material.baseColor)}:${surfaceLightVectorKey(materialEmissiveColor(material))}`;
+  [
+    material.kind,
+    textureKey(material.baseColor),
+    surfaceLightVectorKey(materialEmissiveColor(material)),
+    materialPbrExtensionFactorsKey(materialPbrExtensionFactors(material)),
+  ].join(":");
 
 const surfaceLightValueKey = (value: number | undefined): string =>
   value === undefined || !Number.isFinite(value) ? "" : Number(value.toFixed(6)).toString();
@@ -1288,6 +1322,48 @@ const finiteNumber = (value: number | undefined, fallback: number): number =>
 const positiveFiniteNumber = (value: number | undefined): number | undefined =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 
+const clampedFiniteNumber = (
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number =>
+  Math.min(max, Math.max(min, finiteNumber(value, fallback)));
+
+const nonNegativeFiniteNumber = (value: number | undefined, fallback: number): number =>
+  Math.max(0, finiteNumber(value, fallback));
+
+const gltfIor = (value: number | undefined): number => {
+  if (value === 0) return 0;
+  if (typeof value === "number" && Number.isFinite(value) && value >= 1) return value;
+
+  return DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS.ior;
+};
+
+const gltfSpecularColorFactor = (values: readonly number[] | undefined): Vec3 => [
+  nonNegativeFiniteNumber(values?.[0], 1),
+  nonNegativeFiniteNumber(values?.[1], 1),
+  nonNegativeFiniteNumber(values?.[2], 1),
+];
+
+const gltfMaterialPbrExtensionFactors = (
+  material: GltfMaterial | undefined,
+): MaterialPbrExtensionFactors | undefined => {
+  const extensions = material?.extensions;
+  const specular = extensions?.KHR_materials_specular;
+  const ior = extensions?.KHR_materials_ior;
+  const clearcoat = extensions?.KHR_materials_clearcoat;
+  if (specular === undefined && ior === undefined && clearcoat === undefined) return undefined;
+
+  return {
+    clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
+    clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
+    ior: gltfIor(ior?.ior),
+    specularColorFactor: gltfSpecularColorFactor(specular?.specularColorFactor),
+    specularFactor: clampedFiniteNumber(specular?.specularFactor, 1, 0, 1),
+  };
+};
+
 const gltfLightColor = (light: GltfPunctualLight): Rgba => {
   const color = light.color;
   const intensity = Math.max(0, finiteNumber(light.intensity, 1));
@@ -1563,6 +1639,7 @@ export class WebGlRoot {
   readonly #ownedTextures = new Set<WebGLTexture>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
+  readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
   #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
@@ -2164,9 +2241,11 @@ export class WebGlRoot {
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
 
         const emissive = loadedMaterial.emissive;
+        const pbrExtensionFactors = loadedMaterial.pbrExtensionFactors;
         let material: SurfaceMaterial = {
           baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
           ...(emissive === undefined ? {} : { emissive }),
+          ...(pbrExtensionFactors === undefined ? {} : { pbrExtensionFactors }),
           kind: loadedMaterial.unlit === true ? "unlit" : "standard",
         };
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
@@ -2175,6 +2254,7 @@ export class WebGlRoot {
           material = {
             baseColor,
             ...(emissive === undefined ? {} : { emissive }),
+            ...(pbrExtensionFactors === undefined ? {} : { pbrExtensionFactors }),
             kind: loadedMaterial.unlit === true ? "unlit" : "standard",
           };
         }
@@ -2497,8 +2577,9 @@ export class WebGlRoot {
     this.#uniformMatrix(program, "u_model", model);
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    if (programKind === "surface") {
+    if (programKind === "surface" && material.kind !== "wireframe") {
       this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
+      this.#bindSurfaceMaterialFactors(program, material);
       this.#bindSurfaceLights(program, material.kind === "standard"
         ? lights ?? DEFAULT_SURFACE_LIGHT_SET
         : EMPTY_SURFACE_LIGHT_SET);
@@ -2543,6 +2624,7 @@ export class WebGlRoot {
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
+    this.#bindSurfaceMaterialFactors(program, material);
     this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET);
 
     const useTexture = this.#bindMaterialTexture(program, material);
@@ -2558,6 +2640,22 @@ export class WebGlRoot {
     }
 
     this.#unbindGltfInstanceModels();
+  }
+
+  #bindSurfaceMaterialFactors(program: WebGLProgram, material: SurfaceMaterial): void {
+    const factors = materialPbrExtensionFactors(material);
+    this.#uniformColor(program, "u_specularColorFactor", [
+      factors.specularColorFactor[0],
+      factors.specularColorFactor[1],
+      factors.specularColorFactor[2],
+      1,
+    ]);
+    this.#uniformColor(program, "u_materialExtensionFactors", [
+      factors.specularFactor,
+      factors.ior,
+      factors.clearcoatFactor,
+      factors.clearcoatRoughnessFactor,
+    ]);
   }
 
   #bindSurfaceLights(program: WebGLProgram, lightSet: SurfaceLightSet): void {
@@ -3371,6 +3469,7 @@ in vec3 v_normal;
 in vec3 v_worldPosition;
 in vec2 v_uv;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
+uniform mat4 u_view;
 uniform bool u_useTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
@@ -3382,7 +3481,41 @@ uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
 uniform sampler2D u_texture;
+uniform vec4 u_specularColorFactor;
+uniform vec4 u_materialExtensionFactors;
 out vec4 outColor;
+float maxComponent(vec3 value) {
+  return max(max(value.r, value.g), value.b);
+}
+float fresnelPow(float cosTheta) {
+  return pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+float iorF0(float ior) {
+  if (ior <= 0.0) {
+    return 1.0;
+  }
+  float safeIor = max(ior, 1.0);
+  float reflectance = (safeIor - 1.0) / (safeIor + 1.0);
+  return reflectance * reflectance;
+}
+vec3 materialSpecularFresnel(vec3 viewDirection, vec3 halfVector) {
+  float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
+  vec3 specularColor = max(u_specularColorFactor.rgb, vec3(0.0));
+  vec3 f0 = min(vec3(iorF0(u_materialExtensionFactors.y)) * specularColor, vec3(1.0)) * specular;
+  return mix(f0, vec3(specular), fresnelPow(max(dot(viewDirection, halfVector), 0.0)));
+}
+float materialClearcoatFresnel(vec3 normal, vec3 viewDirection) {
+  float clearcoat = clamp(u_materialExtensionFactors.z, 0.0, 1.0);
+  float fresnel = 0.04 + 0.96 * fresnelPow(max(dot(normal, viewDirection), 0.0));
+  return clearcoat * fresnel;
+}
+float materialClearcoatShininess() {
+  float roughness = clamp(u_materialExtensionFactors.w, 0.0, 1.0);
+  return mix(96.0, 8.0, roughness);
+}
+vec3 cameraWorldPosition() {
+  return -transpose(mat3(u_view)) * u_view[3].xyz;
+}
 float rangeAttenuation(float distanceToLight, float range) {
   if (range <= 0.0) {
     return 1.0 / max(distanceToLight * distanceToLight, 0.0001);
@@ -3391,7 +3524,7 @@ float rangeAttenuation(float distanceToLight, float range) {
   float smoothCutoff = max(min(1.0 - normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance, 1.0), 0.0);
   return smoothCutoff / max(distanceToLight * distanceToLight, 0.0001);
 }
-vec3 lightContribution(int index, vec3 normal, vec3 worldPosition, vec3 baseColor) {
+vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
   int kind = u_surfaceLightKind[index];
   vec3 lightVector;
   float attenuation = 1.0;
@@ -3409,7 +3542,23 @@ vec3 lightContribution(int index, vec3 normal, vec3 worldPosition, vec3 baseColo
     }
   }
   float lambert = max(dot(normal, lightVector), 0.0);
-  return baseColor * lambert * u_surfaceLightColor[index].rgb * attenuation;
+  vec3 lightColor = u_surfaceLightColor[index].rgb * attenuation;
+  vec3 diffuse = baseColor * lambert * lightColor;
+  if (lambert <= 0.0) {
+    return diffuse;
+  }
+  vec3 halfInput = lightVector + viewDirection;
+  vec3 halfVector = length(halfInput) <= 0.0001 ? normal : normalize(halfInput);
+  float NdotH = max(dot(normal, halfVector), 0.0);
+  vec3 fresnel = materialSpecularFresnel(viewDirection, halfVector);
+  float specularShape = pow(NdotH, 32.0) * lambert;
+  vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + fresnel * specularShape * lightColor;
+  float clearcoat = materialClearcoatFresnel(normal, viewDirection);
+  if (clearcoat <= 0.0) {
+    return material;
+  }
+  float clearcoatShape = pow(NdotH, materialClearcoatShininess()) * lambert;
+  return mix(material, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 void main() {
   vec4 baseColor = u_useTexture ? texture(u_texture, v_uv) : u_color;
@@ -3418,14 +3567,17 @@ void main() {
     return;
   }
   vec3 normal = normalize(v_normal);
-  vec3 lit = baseColor.rgb * 0.18;
+  vec3 viewInput = cameraWorldPosition() - v_worldPosition;
+  vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
+  float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
+  vec3 lit = baseColor.rgb * 0.18 * (1.0 - viewClearcoat);
   for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
     if (index >= u_surfaceLightCount) {
       break;
     }
-    lit += lightContribution(index, normal, v_worldPosition, baseColor.rgb);
+    lit += lightContribution(index, normal, viewDirection, v_worldPosition, baseColor.rgb);
   }
-  lit += u_emissiveColor.rgb;
+  lit += u_emissiveColor.rgb * (1.0 - viewClearcoat);
   outColor = vec4(lit, baseColor.a);
 }`;
   }
@@ -4197,6 +4349,42 @@ void main() {
       .filter((mapping): mapping is LoadedGltfMaterialVariant => mapping !== undefined);
   }
 
+  #diagnoseUnsupportedGltfMaterialExtensionTextures(
+    material: GltfMaterial | undefined,
+    materialIndex: number | undefined,
+  ): void {
+    const specular = material?.extensions?.KHR_materials_specular;
+    if (specular?.specularTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_specular.specularTexture");
+    }
+    if (specular?.specularColorTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_specular.specularColorTexture");
+    }
+
+    const clearcoat = material?.extensions?.KHR_materials_clearcoat;
+    if (clearcoat?.clearcoatTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatTexture");
+    }
+    if (clearcoat?.clearcoatRoughnessTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatRoughnessTexture");
+    }
+    if (clearcoat?.clearcoatNormalTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatNormalTexture");
+    }
+  }
+
+  #recordUnsupportedGltfMaterialExtensionTexture(
+    materialIndex: number | undefined,
+    field: string,
+  ): void {
+    const materialLabel = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
+    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, and KHR_materials_clearcoat at factor level only.`;
+    if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
+
+    this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);
+    this.#recordDiagnostic(message);
+  }
+
   #readGltfMaterial(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
@@ -4207,6 +4395,7 @@ void main() {
     decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
+    this.#diagnoseUnsupportedGltfMaterialExtensionTextures(material, materialIndex);
     const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
     const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
     const imageSelection = gltfTextureImageSelection(texture);
@@ -4221,6 +4410,7 @@ void main() {
       : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
+    const pbrExtensionFactors = gltfMaterialPbrExtensionFactors(material);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
     return {
@@ -4239,6 +4429,7 @@ void main() {
         }),
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
+      ...(pbrExtensionFactors === undefined ? {} : { pbrExtensionFactors }),
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),

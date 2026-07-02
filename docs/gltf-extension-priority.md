@@ -52,7 +52,8 @@ samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `EXT_meshopt_compression`, `KHR_draco_mesh_compression`,
 `EXT_mesh_gpu_instancing`, `EXT_texture_webp`,
 `KHR_texture_basisu`, `KHR_materials_unlit`, `KHR_lights_punctual`,
-`KHR_materials_emissive_strength`, `KHR_materials_variants`,
+`KHR_materials_emissive_strength`, `KHR_materials_specular`,
+`KHR_materials_ior`, `KHR_materials_clearcoat`, `KHR_materials_variants`,
 `KHR_node_visibility`, and vendor `MSFT_lod`.
 
 ## Should Do
@@ -86,11 +87,11 @@ need them.
 | Priority | Extension | Short explanation | When to do it |
 | --- | --- | --- | --- |
 | M1 | `KHR_materials_emissive_strength` | Allows emissive colors brighter than the core range. | Implemented for emissive factors; emissive textures remain future material work. |
-| M1 | `KHR_materials_specular` | Adds specular color and intensity controls to PBR. | Better product/material fidelity. |
-| M1 | `KHR_materials_ior` | Adds index of refraction for transparent materials. | Needed with transmission/volume materials. |
+| M1 | `KHR_materials_specular` | Adds specular color and intensity controls to PBR. | Implemented for specular factor and specular color factor in the forward shader; specular textures are diagnosed and ignored. |
+| M1 | `KHR_materials_ior` | Adds index of refraction for transparent materials. | Implemented for the factor-level Fresnel term; transmission/volume/refraction targets remain future work. |
 | M1 | `KHR_materials_transmission` | Adds physically based light transmission through surfaces. | Glass/plastic product rendering. |
 | M1 | `KHR_materials_volume` | Adds thickness, attenuation color, and attenuation distance. | Thick glass, liquids, gems. |
-| M1 | `KHR_materials_clearcoat` | Adds an extra glossy coating layer. | Cars, coated plastics, varnished objects. |
+| M1 | `KHR_materials_clearcoat` | Adds an extra glossy coating layer. | Implemented for clearcoat factor and clearcoat roughness factor in the forward shader; clearcoat textures are diagnosed and ignored. |
 | M1 | `KHR_materials_sheen` | Adds cloth-like grazing sheen. | Fabric, apparel, soft goods. |
 | M1 | `KHR_materials_anisotropy` | Adds direction-dependent specular highlights. | Brushed metal and hair-like materials. |
 | M1 | `KHR_materials_iridescence` | Adds thin-film color shifting. | Pearlescent, soap-film, coated surfaces. |
@@ -151,7 +152,8 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 
 ## Starting Recommendation
 
-The required-contract gate, core loadability baseline, meshopt/Draco
-geometry compression, GPU instancing, WebP, and Basis texture paths are now in
-place. Add richer material extensions after this required asset-loading path is
-stable.
+The required-contract gate, core loadability baseline, meshopt/Draco geometry
+compression, GPU instancing, WebP, Basis texture paths, and factor-level
+specular/IOR/clearcoat material terms are now in place. Add richer material
+extensions only after the forward material model, texture plumbing, and
+environment/refraction targets can support them deterministically.

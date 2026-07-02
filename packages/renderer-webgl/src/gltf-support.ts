@@ -113,13 +113,26 @@ export type GltfSampler = {
 
 export type GltfMaterial = {
   readonly emissiveFactor?: readonly number[];
-  readonly emissiveTexture?: {
-    readonly index?: number;
-    readonly texCoord?: number;
-  };
+  readonly emissiveTexture?: GltfTextureInfo;
   readonly extensions?: {
+    readonly KHR_materials_clearcoat?: {
+      readonly clearcoatFactor?: number;
+      readonly clearcoatNormalTexture?: GltfNormalTextureInfo;
+      readonly clearcoatRoughnessFactor?: number;
+      readonly clearcoatRoughnessTexture?: GltfTextureInfo;
+      readonly clearcoatTexture?: GltfTextureInfo;
+    };
     readonly KHR_materials_emissive_strength?: {
       readonly emissiveStrength?: number;
+    };
+    readonly KHR_materials_ior?: {
+      readonly ior?: number;
+    };
+    readonly KHR_materials_specular?: {
+      readonly specularColorFactor?: readonly number[];
+      readonly specularColorTexture?: GltfTextureInfo;
+      readonly specularFactor?: number;
+      readonly specularTexture?: GltfTextureInfo;
     };
     readonly KHR_materials_unlit?: Record<string, unknown>;
     readonly MSFT_lod?: GltfLodExtension;
@@ -127,14 +140,20 @@ export type GltfMaterial = {
   readonly extras?: GltfLodExtras;
   readonly pbrMetallicRoughness?: {
     readonly baseColorFactor?: readonly number[];
-    readonly baseColorTexture?: {
-      readonly extensions?: {
-        readonly KHR_texture_transform?: GltfTextureTransformExtension;
-      };
-      readonly index?: number;
-      readonly texCoord?: number;
-    };
+    readonly baseColorTexture?: GltfTextureInfo;
   };
+};
+
+export type GltfTextureInfo = {
+  readonly extensions?: {
+    readonly KHR_texture_transform?: GltfTextureTransformExtension;
+  };
+  readonly index?: number;
+  readonly texCoord?: number;
+};
+
+export type GltfNormalTextureInfo = GltfTextureInfo & {
+  readonly scale?: number;
 };
 
 export type GltfMesh = {
@@ -235,7 +254,10 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_draco_mesh_compression",
   "KHR_texture_basisu",
   "KHR_lights_punctual",
+  "KHR_materials_clearcoat",
   "KHR_materials_emissive_strength",
+  "KHR_materials_ior",
+  "KHR_materials_specular",
   "KHR_materials_unlit",
   "KHR_materials_variants",
   "KHR_mesh_quantization",

@@ -1437,6 +1437,86 @@ const emissiveStrengthTriangleDocument = () => {
   };
 };
 
+const materialPbrExtensionFactorsTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_specular", "KHR_materials_ior", "KHR_materials_clearcoat"],
+    extensionsUsed: ["KHR_materials_specular", "KHR_materials_ior", "KHR_materials_clearcoat"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_clearcoat: {
+            clearcoatFactor: 0.75,
+            clearcoatRoughnessFactor: 0.2,
+          },
+          KHR_materials_ior: {
+            ior: 1.33,
+          },
+          KHR_materials_specular: {
+            specularColorFactor: [1.4, 0.5, 0.25],
+            specularFactor: 0.35,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
+const materialPbrExtensionDefaultsTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_specular", "KHR_materials_ior", "KHR_materials_clearcoat"],
+    extensionsUsed: ["KHR_materials_specular", "KHR_materials_ior", "KHR_materials_clearcoat"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_clearcoat: {},
+          KHR_materials_ior: {},
+          KHR_materials_specular: {},
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
+const materialPbrExtensionTextureDiagnosticTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_specular", "KHR_materials_clearcoat"],
+    extensionsUsed: ["KHR_materials_specular", "KHR_materials_clearcoat"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_clearcoat: {
+            clearcoatNormalTexture: { index: 4 },
+            clearcoatRoughnessTexture: { index: 3 },
+            clearcoatTexture: { index: 2 },
+          },
+          KHR_materials_specular: {
+            specularColorTexture: { index: 1 },
+            specularTexture: { index: 0 },
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
 const materialVariantsTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -1594,7 +1674,7 @@ const requestUrl = (input: RequestInfo | URL): string => {
   if (input instanceof URL) return input.toString();
   if ("url" in input && typeof input.url === "string") return input.url;
 
-  return String(input);
+  return Object.prototype.toString.call(input);
 };
 
 const installStagedGltfLoader = () => {
@@ -1956,6 +2036,116 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_color").map(roundVector)).toContainEqual([0.25, 0.25, 0.25, 1]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector)).toContainEqual([2, 0.5, 1, 1]);
+  });
+
+  it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-pbr-extension-factors",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialPbrExtensionFactorsTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_specularColorFactor").map(roundVector))
+      .toContainEqual([1.4, 0.5, 0.25, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_materialExtensionFactors").map(roundVector))
+      .toContainEqual([0.35, 1.33, 0.75, 0.2]);
+  });
+
+  it("renders required KHR material specular, IOR, and clearcoat defaults deterministically", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-pbr-extension-defaults",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialPbrExtensionDefaultsTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_specularColorFactor").map(roundVector))
+      .toContainEqual([1, 1, 1, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_materialExtensionFactors").map(roundVector))
+      .toContainEqual([1, 1.5, 0, 0]);
+  });
+
+  it("diagnoses unsupported KHR material extension texture fields while rendering factor defaults", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-pbr-extension-texture-diagnostics",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialPbrExtensionTextureDiagnosticTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const diagnostics = root.snapshot().diagnostics.join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(diagnostics).toMatch(/KHR_materials_specular\.specularTexture.*factor level only/i);
+    expect(diagnostics).toMatch(/KHR_materials_specular\.specularColorTexture.*factor level only/i);
+    expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatTexture.*factor level only/i);
+    expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatRoughnessTexture.*factor level only/i);
+    expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*factor level only/i);
   });
 
   it("selects KHR_materials_variants materials by name or index and falls back to the base material", async () => {
@@ -2825,7 +3015,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["KHR_materials_clearcoat"],
+        extensionsUsed: ["KHR_materials_sheen"],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -2852,7 +3042,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        version: "unsupported-required-clearcoat-extension",
+        version: "unsupported-required-sheen-extension",
       }),
     ]);
 
@@ -2860,15 +3050,15 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsRequired: ["KHR_materials_clearcoat"],
-        extensionsUsed: ["KHR_materials_clearcoat"],
+        extensionsRequired: ["KHR_materials_sheen"],
+        extensionsUsed: ["KHR_materials_sheen"],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
     expect(root.snapshot().diagnostics.some((message) =>
-      /unsupported required glTF extension.*KHR_materials_clearcoat/i.test(message))).toBe(true);
+      /unsupported required glTF extension.*KHR_materials_sheen/i.test(message))).toBe(true);
 
     root.render(renderGraph);
     expect(drawCalls(calls)).toHaveLength(0);

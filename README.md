@@ -17,6 +17,14 @@ See [Royal Direction](docs/royal-direction.md) for the current product goals, bo
 See [glTF Extension Priority](docs/gltf-extension-priority.md) for the current
 WebGL glTF support set, including required extension handling.
 
+## glTF Materials
+
+The WebGL loader supports factor-level `KHR_materials_specular`,
+`KHR_materials_ior`, and `KHR_materials_clearcoat` for deterministic forward
+rendering. Texture fields from those extensions are currently ignored with
+renderer diagnostics; transmission, volume, and environment/refraction targets
+remain future work.
+
 ## Development
 
 ```sh
