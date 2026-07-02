@@ -46,6 +46,7 @@ import {
   rendererOutputToSingleDescriptor,
   type RendererComponentOutput
 } from './renderer-output';
+import type { RoyalPointerEventProps } from './picking-events';
 import {
   ButtonPrimitive,
   InputPrimitive,
@@ -91,7 +92,7 @@ export type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
   readonly texture?: MeshTextureInput;
-};
+} & RoyalPointerEventProps;
 export type TextProps = Omit<TextOptions, 'text'> & {
   readonly box?: TextSurfaceBox;
   readonly children?: RendererJsxChild;
@@ -103,7 +104,7 @@ export type TextProps = Omit<TextOptions, 'text'> & {
 export type ButtonProps = ButtonPrimitiveProps;
 export type InputProps = InputPrimitiveProps;
 export type TextareaProps = TextAreaPrimitiveProps;
-export type ModelProps = GltfOptions;
+export type ModelProps = GltfOptions & RoyalPointerEventProps;
 type MeshChildren = {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;

@@ -17,6 +17,11 @@ import {
   type JSX as RoyalReactJSX,
   type RoyalRendererJsxElement,
 } from './jsx-runtime';
+import {
+  hasRoyalPointerEventHandlers,
+  royalPointerEventHandlersFrom,
+  type RoyalPointerEventTarget,
+} from './picking-events';
 import { rendererDescriptorHostType } from './renderer-output';
 import type { RoyalRoot } from './root';
 
@@ -51,6 +56,7 @@ type RoyalRendererContainer = {
   children: RoyalHostChild[];
   disabled: boolean;
   latestScene: RenderRoot | undefined;
+  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>;
   renderScheduled: boolean;
   root: RoyalRoot | null;
   renderLatest(): void;
@@ -134,11 +140,12 @@ const removeHostChild = (
 
 const descriptorChildrenFor = (
   instance: RoyalHostInstance,
+  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>,
 ): readonly (RoyalRendererJsxElement | string)[] => {
   const children: (RoyalRendererJsxElement | string)[] = [];
 
   for (const child of instance.children) {
-    const descriptor = toDescriptorChild(child, instance.type);
+    const descriptor = toDescriptorChild(child, pointerEventTargets, instance.type);
     if (descriptor !== undefined) children.push(descriptor);
   }
 
@@ -168,6 +175,7 @@ const withDescriptorChildren = (
 
 const toDescriptorChild = (
   child: RoyalHostChild,
+  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>,
   parentType?: RoyalHostType,
 ): RoyalRendererJsxElement | string | undefined => {
   if (child.hidden) return undefined;
@@ -187,8 +195,20 @@ const toDescriptorChild = (
 
   const descriptor = createRendererElement(
     child.type,
-    withDescriptorChildren(child, descriptorChildrenFor(child)) as Parameters<typeof createRendererElement>[1],
+    withDescriptorChildren(
+      child,
+      descriptorChildrenFor(child, pointerEventTargets),
+    ) as Parameters<typeof createRendererElement>[1],
   );
+  if (
+    isRenderObjectHostType(child.type) &&
+    hasRoyalPointerEventHandlers(child.props) &&
+    (descriptor.kind === 'mesh' || descriptor.kind === 'gltf')
+  ) {
+    pointerEventTargets.set(descriptor, {
+      handlers: royalPointerEventHandlersFrom(child.props),
+    });
+  }
 
   return descriptor;
 };
@@ -196,9 +216,11 @@ const toDescriptorChild = (
 const sceneFromContainer = (
   container: RoyalRendererContainer,
 ): RenderRoot | undefined => {
+  const pointerEventTargets = new WeakMap<object, RoyalPointerEventTarget>();
   const sceneChildren = container.children
-    .map((child) => toDescriptorChild(child))
+    .map((child) => toDescriptorChild(child, pointerEventTargets))
     .filter((child): child is RoyalRendererJsxElement | string => child !== undefined);
+  container.pointerEventTargets = pointerEventTargets;
   if (sceneChildren.length === 0) return undefined;
   if (sceneChildren.length !== 1 || !isRenderRoot(sceneChildren[0])) {
     throw new Error('Canvas expects exactly one renderer scene child');
@@ -217,6 +239,7 @@ const createRendererContainer = (): RoyalRendererContainer => {
     children: [],
     disabled: false,
     latestScene: undefined,
+    pointerEventTargets: new WeakMap(),
     renderScheduled: false,
     root: null,
     renderLatest: () => {
@@ -393,6 +416,7 @@ const reconciler: RoyalReconciler = createReconciler();
 
 export type RoyalRendererTree = {
   dispose(): void;
+  pointerEventTarget(node: object): RoyalPointerEventTarget | undefined;
   render(children: ReactNode): void;
   setTarget(root: RoyalRoot | null, disabled: boolean): void;
 };
@@ -419,7 +443,9 @@ export const createRoyalRendererTree = (): RoyalRendererTree => {
       reconciler.flushPassiveEffects();
       container.root = null;
       container.latestScene = undefined;
+      container.pointerEventTargets = new WeakMap();
     },
+    pointerEventTarget: (node) => container.pointerEventTargets.get(node),
     render: (children) => {
       reconciler.updateContainerSync(children, root, null, null);
       reconciler.flushSyncWork();

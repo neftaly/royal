@@ -182,6 +182,26 @@ describe("renderer JSX contract", () => {
     });
   });
 
+  it("does not leak pointer handlers into renderer descriptors", () => {
+    const meshDescriptor = (
+      <mesh onClick={() => undefined}>
+        <boxGeometry size={1} />
+        <unlitMaterial color={[0.2, 0.4, 0.8, 1]} />
+      </mesh>
+    );
+    const modelDescriptor = (
+      <model
+        onPointerEnter={() => undefined}
+        src="/models/terrain.gltf"
+      />
+    );
+
+    expect(meshDescriptor).toMatchObject({ kind: "mesh" });
+    expect(meshDescriptor).not.toHaveProperty("onClick");
+    expect(modelDescriptor).toMatchObject({ kind: "gltf" });
+    expect(modelDescriptor).not.toHaveProperty("onPointerEnter");
+  });
+
   it("rejects surface-local text boxes in renderer-only JSX", () => {
     expect(() => jsx("text", {
       box: { left: 0, top: 0, width: 1 },

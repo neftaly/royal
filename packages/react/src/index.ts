@@ -30,6 +30,12 @@ export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, text
 export { useFrame, useFrameIndex } from './frame';
 export { markRendererComponent } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
+export type {
+  RoyalPointerEvent,
+  RoyalPointerEventHandler,
+  RoyalPointerEventProps,
+  RoyalPointerEventType
+} from './picking-events';
 
 export const Canvas = markReactComponent(CanvasComponent);
 export const OrbitControls = markReactComponent(OrbitControlsComponent);

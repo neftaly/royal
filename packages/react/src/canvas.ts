@@ -16,6 +16,12 @@ import {
 } from "react";
 import { createFrameLoop, FrameLoopContext } from "./frame";
 import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime";
+import {
+  createRoyalPointerEvent,
+  handlerForRoyalPointerEvent,
+  type RoyalPointerEventTarget,
+  type RoyalPointerEventType,
+} from "./picking-events";
 import { createRoyalRendererTree } from "./renderer-tree";
 import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
 
@@ -129,6 +135,12 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
+type PickedPointerTarget = {
+  readonly hit: PickResult;
+  readonly node: PickResult["target"]["node"];
+  readonly target: RoyalPointerEventTarget;
+};
+
 const toCanvasRootOptions = ({
   backend,
   context,
@@ -205,6 +217,32 @@ export const Canvas = ({
     ref: setCanvasRef,
   });
 
+  const hoveredPointerTargetRef = useRef<PickedPointerTarget | undefined>(undefined);
+  const pressedPointerTargetNodesRef = useRef(new Map<number, PickResult["target"]["node"]>());
+
+  const eventTargetForHit = useCallback((hit: PickResult | undefined): PickedPointerTarget | undefined => {
+    if (hit === undefined) return undefined;
+
+    const target = rendererTree.pointerEventTarget(hit.target.node);
+    return target === undefined ? undefined : { hit, node: hit.target.node, target };
+  }, [rendererTree]);
+
+  const dispatchRoyalPointerEvent = useCallback((
+    type: RoyalPointerEventType,
+    nativeEvent: PointerEvent,
+    picked: PickedPointerTarget,
+  ): void => {
+    const target = rendererTree.pointerEventTarget(picked.node) ?? picked.target;
+    const handler = handlerForRoyalPointerEvent(target, type);
+    if (handler === undefined) return;
+
+    handler(createRoyalPointerEvent({
+      hit: picked.hit,
+      nativeEvent,
+      type,
+    }));
+  }, [rendererTree]);
+
   useLayoutEffect(() => () => {
     rendererTree.dispose();
   }, [rendererTree]);
@@ -264,6 +302,86 @@ export const Canvas = ({
       ),
     ));
   }, [canvasElement, canvasRoot, frameLoop, rendererTree, rootError, sceneChild]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasElement;
+    const root = canvasRoot;
+    if (canvas === null || root === null) return undefined;
+
+    const pickedTargetAt = (event: PointerEvent): PickedPointerTarget | undefined =>
+      eventTargetForHit(root.pick(event));
+
+    const handlePointerMove = (event: PointerEvent): void => {
+      const next = pickedTargetAt(event);
+      const previous = hoveredPointerTargetRef.current;
+      if (previous?.node !== next?.node) {
+        if (previous !== undefined) {
+          dispatchRoyalPointerEvent('pointerleave', event, previous);
+        }
+        if (next !== undefined) {
+          dispatchRoyalPointerEvent('pointerenter', event, next);
+        }
+        hoveredPointerTargetRef.current = next;
+      }
+
+      if (next !== undefined) {
+        dispatchRoyalPointerEvent('pointermove', event, next);
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const picked = pickedTargetAt(event);
+      if (picked === undefined) {
+        pressedPointerTargetNodesRef.current.delete(event.pointerId);
+      } else {
+        pressedPointerTargetNodesRef.current.set(event.pointerId, picked.node);
+      }
+      if (picked !== undefined) dispatchRoyalPointerEvent('pointerdown', event, picked);
+    };
+
+    const handlePointerUp = (event: PointerEvent): void => {
+      const picked = pickedTargetAt(event);
+      const pressedNode = pressedPointerTargetNodesRef.current.get(event.pointerId);
+      pressedPointerTargetNodesRef.current.delete(event.pointerId);
+      if (picked === undefined) return;
+
+      dispatchRoyalPointerEvent('pointerup', event, picked);
+      if (pressedNode === picked.node && event.button === 0) {
+        dispatchRoyalPointerEvent('click', event, picked);
+      }
+    };
+
+    const handlePointerLeave = (event: PointerEvent): void => {
+      const previous = hoveredPointerTargetRef.current;
+      hoveredPointerTargetRef.current = undefined;
+      pressedPointerTargetNodesRef.current.clear();
+      if (previous !== undefined) dispatchRoyalPointerEvent('pointerleave', event, previous);
+    };
+
+    const handlePointerCancel = (event: PointerEvent): void => {
+      pressedPointerTargetNodesRef.current.delete(event.pointerId);
+    };
+
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
+    canvas.addEventListener('pointercancel', handlePointerCancel);
+    return () => {
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointerup', handlePointerUp);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
+      canvas.removeEventListener('pointercancel', handlePointerCancel);
+      hoveredPointerTargetRef.current = undefined;
+      pressedPointerTargetNodesRef.current.clear();
+    };
+  }, [
+    canvasElement,
+    canvasRoot,
+    dispatchRoyalPointerEvent,
+    eventTargetForHit,
+  ]);
 
   if (rootError !== null) {
     if (fallback !== undefined) {

@@ -6,23 +6,9 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import {
-  type CSSProperties,
   type ReactNode,
 } from 'react';
-
-const renderer = {
-  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
-} as const;
-
-const orbitCanvasStyle = {
-  cursor: 'grab',
-  touchAction: 'none',
-} satisfies CSSProperties;
-
-const orbitOptions = {
-  rotateSpeed: 0.006,
-  zoomSpeed: 0.0018,
-} as const;
+import { exampleRenderer } from '../rendering';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
@@ -37,8 +23,8 @@ export const TextureMaterials = (): ReactNode => {
   return (
     <Canvas
       aria-label="Texture materials"
-      renderer={renderer}
-      style={orbitCanvasStyle}
+      renderer={exampleRenderer}
+      style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
         <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.052, 1]}>
@@ -53,10 +39,7 @@ export const TextureMaterials = (): ReactNode => {
           />
         </pass>
       </scene>
-      <OrbitControls
-        {...orbit.controls}
-        {...orbitOptions}
-      />
+      <OrbitControls {...orbit.controls} />
     </Canvas>
   );
 };
