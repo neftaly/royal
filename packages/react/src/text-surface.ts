@@ -194,6 +194,7 @@ type TextSurfaceStoreState = {
   readonly applyEditorState: (id: string, state: EditableTextEditorState) => void;
   readonly clearSelectionsExcept: (id: string | undefined) => void;
   readonly closeMenu: () => void;
+  readonly controls: ReadonlyMap<string, TextControlRegistration>;
   readonly getControl: (id: string) => TextControlRegistration | undefined;
   readonly getControls: () => readonly TextControlRegistration[];
   readonly menu: TextMenuState;
@@ -348,25 +349,25 @@ const withSelection = (
 };
 
 const createTextSurfaceStore = (): TextSurfaceStore => {
-  let controls = new Map<string, TextControlRegistration>();
-
   return createStore<TextSurfaceStoreState>()((set, get) => {
     const setSelection = (id: string, selection: EditableTextSelection): void => {
       const current = get().selections.get(id);
       if (current !== undefined && sameEditableTextSelection(current, selection)) return;
 
       const nextSelections = new Map(get().selections).set(id, selection);
-      const control = controls.get(id);
+      const currentControls = get().controls;
+      const control = currentControls.get(id);
+      let nextControls = currentControls;
       if (control !== undefined) {
-        controls = new Map(controls).set(id, withSelection(control, selection));
+        nextControls = new Map(currentControls).set(id, withSelection(control, selection));
       }
-      set({ selections: nextSelections });
+      set({ controls: nextControls, selections: nextSelections });
     };
 
     return {
       activeId: undefined,
       applyEditorState: (id, nextState) => {
-        const control = controls.get(id);
+        const control = get().controls.get(id);
         setSelection(id, nextState.selection);
         if (control !== undefined && control.text !== nextState.text) {
           control.onValueChange?.(nextState.text);
@@ -374,10 +375,11 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       },
       clearSelectionsExcept: (id) => {
         let changed = false;
-        let nextControls = controls;
+        const currentControls = get().controls;
+        let nextControls = currentControls;
         let nextSelections = get().selections;
 
-        for (const control of controls.values()) {
+        for (const control of currentControls.values()) {
           if (control.id === id || !hasSelection(control)) continue;
           const nextState = collapseEditableTextEditorSelection(
             control.state,
@@ -392,22 +394,24 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         }
 
         if (!changed) return;
-        controls = nextControls;
-        set({ selections: nextSelections });
+        set({ controls: nextControls, selections: nextSelections });
       },
       closeMenu: () => {
         if (sameMenuState(get().menu, closedMenu)) return;
         set({ menu: closedMenu });
       },
-      getControl: (id) => controls.get(id),
-      getControls: () => Array.from(controls.values()),
+      controls: new Map(),
+      getControl: (id) => get().controls.get(id),
+      getControls: () => Array.from(get().controls.values()),
       menu: closedMenu,
       registerControl: (control) => {
         const selection = get().selections.get(control.id);
-        controls = new Map(controls).set(
-          control.id,
-          selection === undefined ? control : withSelection(control, selection),
-        );
+        const nextControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
+          ? control
+          : withSelection(control, selection);
+        const currentControls = get().controls;
+        if (currentControls.get(control.id) === nextControl) return;
+        set({ controls: new Map(currentControls).set(control.id, nextControl) });
       },
       selections: new Map(),
       setActiveId: (id) => {
@@ -419,10 +423,11 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         set({ menu });
       },
       unregisterControl: (id) => {
-        if (!controls.has(id)) return;
-        const nextControls = new Map(controls);
+        const currentControls = get().controls;
+        if (!currentControls.has(id)) return;
+        const nextControls = new Map(currentControls);
         nextControls.delete(id);
-        controls = nextControls;
+        set({ controls: nextControls });
       },
     };
   });
