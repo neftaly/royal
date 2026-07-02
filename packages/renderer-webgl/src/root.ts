@@ -1232,6 +1232,8 @@ const gltfSpotConeAngles = (light: GltfPunctualLight): {
 const gltfEmissiveColor = (
   material: GltfMaterial | undefined,
 ): Rgba | undefined => {
+  if (material?.emissiveTexture?.index !== undefined) return undefined;
+
   const factor = material?.emissiveFactor;
   const strength = Math.max(
     0,

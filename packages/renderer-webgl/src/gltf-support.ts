@@ -88,6 +88,10 @@ export type GltfSampler = {
 
 export type GltfMaterial = {
   readonly emissiveFactor?: readonly number[];
+  readonly emissiveTexture?: {
+    readonly index?: number;
+    readonly texCoord?: number;
+  };
   readonly extensions?: {
     readonly KHR_materials_emissive_strength?: {
       readonly emissiveStrength?: number;
