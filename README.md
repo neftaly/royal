@@ -20,10 +20,11 @@ WebGL glTF support set, including required extension handling.
 ## glTF Materials
 
 The WebGL loader supports factor-level `KHR_materials_specular`,
-`KHR_materials_ior`, and `KHR_materials_clearcoat` for deterministic forward
-rendering. Texture fields from those extensions are currently ignored with
-renderer diagnostics; transmission, volume, and environment/refraction targets
-remain future work.
+`KHR_materials_ior`, `KHR_materials_clearcoat`, `KHR_materials_transmission`,
+and `KHR_materials_volume` for deterministic forward rendering. Transmission
+uses renderer-private current-frame color sampling with volume attenuation;
+texture fields from these extensions are currently ignored with renderer
+diagnostics.
 
 ## Development
 

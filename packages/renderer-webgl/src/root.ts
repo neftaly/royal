@@ -168,6 +168,13 @@ type TextureResource = {
   uploaded: boolean;
 };
 
+type ScreenColorTextureResource = {
+  height: number;
+  readonly texture: WebGLTexture;
+  uploaded: boolean;
+  width: number;
+};
+
 type TextureLoadState = TextureResource & {
   error?: string;
   loading: boolean;
@@ -300,17 +307,23 @@ type GltfPrimitiveDrawBatch = {
   readonly models: Mat4[];
 };
 
+type ViewportSize = readonly [width: number, height: number];
+
 type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly emissive?: Rgba;
   readonly pbrExtensionFactors?: MaterialPbrExtensionFactors;
 };
 
 type MaterialPbrExtensionFactors = {
+  readonly attenuationColor: Vec3;
+  readonly attenuationDistance: number;
   readonly clearcoatFactor: number;
   readonly clearcoatRoughnessFactor: number;
   readonly ior: number;
   readonly specularColorFactor: Vec3;
   readonly specularFactor: number;
+  readonly thicknessFactor: number;
+  readonly transmissionFactor: number;
 };
 
 type SurfaceDirectionalLight = {
@@ -355,11 +368,15 @@ const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   lights: [],
 };
 const DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS: MaterialPbrExtensionFactors = {
+  attenuationColor: [1, 1, 1],
+  attenuationDistance: Infinity,
   clearcoatFactor: 0,
   clearcoatRoughnessFactor: 0,
   ior: 1.5,
   specularColorFactor: [1, 1, 1],
   specularFactor: 1,
+  thicknessFactor: 0,
+  transmissionFactor: 0,
 };
 const MAX_SURFACE_LIGHTS = 8;
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
@@ -956,6 +973,9 @@ const materialEmissiveColor = (material: Material): Rgba =>
 const materialPbrExtensionFactors = (material: SurfaceMaterial): MaterialPbrExtensionFactors =>
   material.pbrExtensionFactors ?? DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS;
 
+const isTransmissiveSurfaceMaterial = (material: SurfaceMaterial): boolean =>
+  material.kind === "standard" && materialPbrExtensionFactors(material).transmissionFactor > 0;
+
 const materialPbrExtensionFactorsKey = (factors: MaterialPbrExtensionFactors): string =>
   [
     factors.specularFactor,
@@ -963,6 +983,10 @@ const materialPbrExtensionFactorsKey = (factors: MaterialPbrExtensionFactors): s
     factors.ior,
     factors.clearcoatFactor,
     factors.clearcoatRoughnessFactor,
+    factors.transmissionFactor,
+    factors.thicknessFactor,
+    ...factors.attenuationColor,
+    factors.attenuationDistance,
   ].map((value) => surfaceLightValueKey(value)).join(",");
 
 const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
@@ -1346,6 +1370,15 @@ const gltfSpecularColorFactor = (values: readonly number[] | undefined): Vec3 =>
   nonNegativeFiniteNumber(values?.[2], 1),
 ];
 
+const gltfAttenuationColor = (values: readonly number[] | undefined): Vec3 => [
+  nonNegativeFiniteNumber(values?.[0], 1),
+  nonNegativeFiniteNumber(values?.[1], 1),
+  nonNegativeFiniteNumber(values?.[2], 1),
+];
+
+const gltfAttenuationDistance = (value: number | undefined): number =>
+  positiveFiniteNumber(value) ?? DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS.attenuationDistance;
+
 const gltfMaterialPbrExtensionFactors = (
   material: GltfMaterial | undefined,
 ): MaterialPbrExtensionFactors | undefined => {
@@ -1353,14 +1386,26 @@ const gltfMaterialPbrExtensionFactors = (
   const specular = extensions?.KHR_materials_specular;
   const ior = extensions?.KHR_materials_ior;
   const clearcoat = extensions?.KHR_materials_clearcoat;
-  if (specular === undefined && ior === undefined && clearcoat === undefined) return undefined;
+  const transmission = extensions?.KHR_materials_transmission;
+  const volume = extensions?.KHR_materials_volume;
+  if (
+    specular === undefined
+    && ior === undefined
+    && clearcoat === undefined
+    && transmission === undefined
+    && volume === undefined
+  ) return undefined;
 
   return {
+    attenuationColor: gltfAttenuationColor(volume?.attenuationColor),
+    attenuationDistance: gltfAttenuationDistance(volume?.attenuationDistance),
     clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
     clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
     ior: gltfIor(ior?.ior),
     specularColorFactor: gltfSpecularColorFactor(specular?.specularColorFactor),
     specularFactor: clampedFiniteNumber(specular?.specularFactor, 1, 0, 1),
+    thicknessFactor: nonNegativeFiniteNumber(volume?.thicknessFactor, 0),
+    transmissionFactor: clampedFiniteNumber(transmission?.transmissionFactor, 0, 0, 1),
   };
 };
 
@@ -1651,6 +1696,7 @@ export class WebGlRoot {
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
+  #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   #unsupportedVirtualTextureDraws = 0;
   readonly #viewportInvalidationListener = (): void => {
     this.#scheduleRender();
@@ -1734,10 +1780,11 @@ export class WebGlRoot {
       const view = viewMat4(renderPass.camera);
       const lights = this.#directionalLights(renderPass.children);
       const passLights = passSurfaceLightSet(lights[0]);
+      const viewportSize: ViewportSize = [width, height];
       const gltfDraws: GltfPrimitiveDraw[] = [];
       const flushGltfDraws = (): void => {
         if (gltfDraws.length === 0) return;
-        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, usedGeometry);
+        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, viewportSize, usedGeometry);
         gltfDraws.length = 0;
       };
 
@@ -1748,7 +1795,7 @@ export class WebGlRoot {
           continue;
         }
         flushGltfDraws();
-        this.#drawNode(child, projection, view, lights[0], usedGeometry);
+        this.#drawNode(child, projection, view, lights[0], viewportSize, usedGeometry);
       }
       flushGltfDraws();
     }
@@ -1816,6 +1863,7 @@ export class WebGlRoot {
     this.#virtualTextures.clear();
     this.#gltf.clear();
     this.#gltfLodSelections.clear();
+    this.#transmissionScreenColorTexture = undefined;
     this.#activeGltfLodSelectionKeys.clear();
     for (const [ref, binding] of this.#renderObjectBindings) {
       this.#renderObjectHandles.delete(binding.node);
@@ -2107,6 +2155,7 @@ export class WebGlRoot {
     projection: Mat4,
     view: Mat4,
     light: DirectionalLightNode | undefined,
+    viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
     switch (node.kind) {
@@ -2122,7 +2171,14 @@ export class WebGlRoot {
         {
           const draws: GltfPrimitiveDraw[] = [];
           this.#appendGltfPrimitiveDraws(node, projection, view, draws);
-          this.#drawGltfPrimitiveDraws(draws, projection, view, passSurfaceLightSet(light), usedGeometry);
+          this.#drawGltfPrimitiveDraws(
+            draws,
+            projection,
+            view,
+            passSurfaceLightSet(light),
+            viewportSize,
+            usedGeometry,
+          );
         }
         return;
       default:
@@ -2156,7 +2212,7 @@ export class WebGlRoot {
     }
     const gpu = this.#geometryResource(cpu);
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light));
+    this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light), undefined);
   }
 
   #drawText(
@@ -2193,7 +2249,7 @@ export class WebGlRoot {
       kind: "unlit",
     };
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined);
+    this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined, undefined);
   }
 
   #appendGltfPrimitiveDraws(
@@ -2290,6 +2346,7 @@ export class WebGlRoot {
     projection: Mat4,
     view: Mat4,
     passLights: SurfaceLightSet | undefined,
+    viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
     const batches = new Map<string, GltfPrimitiveDrawBatch>();
@@ -2311,12 +2368,51 @@ export class WebGlRoot {
       }
     }
 
+    const opaqueBatches: GltfPrimitiveDrawBatch[] = [];
+    const transmissiveBatches: GltfPrimitiveDrawBatch[] = [];
     for (const batch of batches.values()) {
-      if (batch.models.length === 1) {
-        this.#drawGeometry(batch.geometry, batch.material, batch.models[0]!, projection, view, batch.lights);
+      if (isTransmissiveSurfaceMaterial(batch.material)) {
+        transmissiveBatches.push(batch);
       } else {
-        this.#drawGeometryInstanced(batch.geometry, batch.material, batch.models, projection, view, batch.lights);
+        opaqueBatches.push(batch);
       }
+    }
+
+    for (const batch of opaqueBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, undefined);
+
+    if (transmissiveBatches.length === 0) return;
+    const screenColorTexture = this.#copyTransmissionScreenColorTexture(viewportSize);
+    for (const batch of transmissiveBatches) {
+      this.#drawGltfPrimitiveDrawBatch(batch, projection, view, screenColorTexture);
+    }
+  }
+
+  #drawGltfPrimitiveDrawBatch(
+    batch: GltfPrimitiveDrawBatch,
+    projection: Mat4,
+    view: Mat4,
+    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
+  ): void {
+    if (batch.models.length === 1) {
+      this.#drawGeometry(
+        batch.geometry,
+        batch.material,
+        batch.models[0]!,
+        projection,
+        view,
+        batch.lights,
+        transmissionScreenColorTexture,
+      );
+    } else {
+      this.#drawGeometryInstanced(
+        batch.geometry,
+        batch.material,
+        batch.models,
+        projection,
+        view,
+        batch.lights,
+        transmissionScreenColorTexture,
+      );
     }
   }
 
@@ -2561,6 +2657,7 @@ export class WebGlRoot {
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet | undefined,
+    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
     const virtualTexture = this.#virtualTextureDrawState(geometry, material);
@@ -2579,7 +2676,7 @@ export class WebGlRoot {
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (programKind === "surface" && material.kind !== "wireframe") {
       this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
-      this.#bindSurfaceMaterialFactors(program, material);
+      this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
       this.#bindSurfaceLights(program, material.kind === "standard"
         ? lights ?? DEFAULT_SURFACE_LIGHT_SET
         : EMPTY_SURFACE_LIGHT_SET);
@@ -2613,6 +2710,7 @@ export class WebGlRoot {
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet,
+    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
     const programResource = this.#program("surface-instanced");
@@ -2624,7 +2722,7 @@ export class WebGlRoot {
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    this.#bindSurfaceMaterialFactors(program, material);
+    this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
     this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET);
 
     const useTexture = this.#bindMaterialTexture(program, material);
@@ -2642,8 +2740,13 @@ export class WebGlRoot {
     this.#unbindGltfInstanceModels();
   }
 
-  #bindSurfaceMaterialFactors(program: WebGLProgram, material: SurfaceMaterial): void {
+  #bindSurfaceMaterialFactors(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
+  ): void {
     const factors = materialPbrExtensionFactors(material);
+    const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
     this.#uniformColor(program, "u_specularColorFactor", [
       factors.specularColorFactor[0],
       factors.specularColorFactor[1],
@@ -2656,6 +2759,36 @@ export class WebGlRoot {
       factors.clearcoatFactor,
       factors.clearcoatRoughnessFactor,
     ]);
+    this.#uniformColor(program, "u_attenuationColorFactor", [
+      factors.attenuationColor[0],
+      factors.attenuationColor[1],
+      factors.attenuationColor[2],
+      1,
+    ]);
+    this.#uniformColor(program, "u_transmissionVolumeFactors", [
+      factors.transmissionFactor,
+      factors.thicknessFactor,
+      hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
+      hasFiniteAttenuationDistance ? 1 : 0,
+    ]);
+    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture);
+  }
+
+  #bindTransmissionScreenColorTexture(
+    program: WebGLProgram,
+    resource: ScreenColorTextureResource | undefined,
+  ): void {
+    if (resource === undefined || !resource.uploaded) {
+      this.#uniform1i(program, "u_useTransmissionTexture", 0);
+      return;
+    }
+
+    const gl = this.#gl;
+    this.#uniform1i(program, "u_useTransmissionTexture", 1);
+    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
+    this.#uniform1i(program, "u_transmissionScreenTexture", 1);
+    this.#uniform2fv(program, "u_viewportSize", [resource.width, resource.height]);
   }
 
   #bindSurfaceLights(program: WebGLProgram, lightSet: SurfaceLightSet): void {
@@ -3481,8 +3614,13 @@ uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
 uniform sampler2D u_texture;
+uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
+uniform vec4 u_attenuationColorFactor;
+uniform vec4 u_transmissionVolumeFactors;
+uniform vec2 u_viewportSize;
+uniform bool u_useTransmissionTexture;
 out vec4 outColor;
 float maxComponent(vec3 value) {
   return max(max(value.r, value.g), value.b);
@@ -3512,6 +3650,20 @@ float materialClearcoatFresnel(vec3 normal, vec3 viewDirection) {
 float materialClearcoatShininess() {
   float roughness = clamp(u_materialExtensionFactors.w, 0.0, 1.0);
   return mix(96.0, 8.0, roughness);
+}
+vec3 materialVolumeAttenuation() {
+  float thickness = max(u_transmissionVolumeFactors.y, 0.0);
+  float attenuationDistance = u_transmissionVolumeFactors.z;
+  bool hasFiniteAttenuationDistance = u_transmissionVolumeFactors.w > 0.5;
+  if (thickness <= 0.0 || !hasFiniteAttenuationDistance || attenuationDistance <= 0.0) {
+    return vec3(1.0);
+  }
+  vec3 attenuationColor = clamp(u_attenuationColorFactor.rgb, vec3(0.0), vec3(1.0));
+  return pow(max(attenuationColor, vec3(0.0001)), vec3(thickness / attenuationDistance));
+}
+vec3 materialTransmissionScreenColor(vec3 baseColor) {
+  vec2 screenUv = clamp(gl_FragCoord.xy / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
+  return texture(u_transmissionScreenTexture, screenUv).rgb * baseColor * materialVolumeAttenuation();
 }
 vec3 cameraWorldPosition() {
   return -transpose(mat3(u_view)) * u_view[3].xyz;
@@ -3578,6 +3730,11 @@ void main() {
     lit += lightContribution(index, normal, viewDirection, v_worldPosition, baseColor.rgb);
   }
   lit += u_emissiveColor.rgb * (1.0 - viewClearcoat);
+  float transmission = clamp(u_transmissionVolumeFactors.x, 0.0, 1.0);
+  if (transmission > 0.0 && u_useTransmissionTexture) {
+    vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb);
+    lit = mix(lit, transmitted, transmission);
+  }
   outColor = vec4(lit, baseColor.a);
 }`;
   }
@@ -3917,6 +4074,42 @@ void main() {
     this.#textures.set(key, resource);
     this.#uploadTexture(resource, image, texture);
     return resource;
+  }
+
+  #copyTransmissionScreenColorTexture(viewportSize: ViewportSize): ScreenColorTextureResource {
+    const [width, height] = viewportSize;
+    const resource = this.#transmissionScreenColorTextureResource();
+    const gl = this.#gl;
+
+    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
+    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
+    resource.width = width;
+    resource.height = height;
+    resource.uploaded = true;
+
+    return resource;
+  }
+
+  #transmissionScreenColorTextureResource(): ScreenColorTextureResource {
+    if (this.#transmissionScreenColorTexture !== undefined) return this.#transmissionScreenColorTexture;
+
+    const gl = this.#gl;
+    const texture = this.#createTexture();
+    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    this.#transmissionScreenColorTexture = {
+      height: 0,
+      texture,
+      uploaded: false,
+      width: 0,
+    };
+    return this.#transmissionScreenColorTexture;
   }
 
   #uploadTexture(
@@ -4371,6 +4564,19 @@ void main() {
     if (clearcoat?.clearcoatNormalTexture !== undefined) {
       this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatNormalTexture");
     }
+
+    const transmission = material?.extensions?.KHR_materials_transmission;
+    if (transmission?.transmissionTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(
+        materialIndex,
+        "KHR_materials_transmission.transmissionTexture",
+      );
+    }
+
+    const volume = material?.extensions?.KHR_materials_volume;
+    if (volume?.thicknessTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_volume.thicknessTexture");
+    }
   }
 
   #recordUnsupportedGltfMaterialExtensionTexture(
@@ -4378,7 +4584,12 @@ void main() {
     field: string,
   ): void {
     const materialLabel = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
-    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, and KHR_materials_clearcoat at factor level only.`;
+    const detail = field === "KHR_materials_transmission.transmissionTexture"
+      ? " Its red-channel transmission multiplier is not implemented."
+      : field === "KHR_materials_volume.thicknessTexture"
+        ? " Its green-channel thickness multiplier is not implemented."
+        : " Extension texture multipliers are not implemented.";
+    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, KHR_materials_clearcoat, KHR_materials_transmission, and KHR_materials_volume at factor level only; scalar/color factors are applied.${detail}`;
     if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
 
     this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);

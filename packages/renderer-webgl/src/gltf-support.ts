@@ -134,7 +134,17 @@ export type GltfMaterial = {
       readonly specularFactor?: number;
       readonly specularTexture?: GltfTextureInfo;
     };
+    readonly KHR_materials_transmission?: {
+      readonly transmissionFactor?: number;
+      readonly transmissionTexture?: GltfTextureInfo;
+    };
     readonly KHR_materials_unlit?: Record<string, unknown>;
+    readonly KHR_materials_volume?: {
+      readonly attenuationColor?: readonly number[];
+      readonly attenuationDistance?: number;
+      readonly thicknessFactor?: number;
+      readonly thicknessTexture?: GltfTextureInfo;
+    };
     readonly MSFT_lod?: GltfLodExtension;
   };
   readonly extras?: GltfLodExtras;
@@ -258,7 +268,9 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_materials_emissive_strength",
   "KHR_materials_ior",
   "KHR_materials_specular",
+  "KHR_materials_transmission",
   "KHR_materials_unlit",
+  "KHR_materials_volume",
   "KHR_materials_variants",
   "KHR_mesh_quantization",
   "KHR_node_visibility",
