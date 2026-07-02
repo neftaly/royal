@@ -1,8 +1,9 @@
 /** @jsxImportSource @royal/react */
 import { type TextFontFace } from '@royal/renderer-core/text/font';
-import { TextSurface } from '@royal/react';
+import { TextFontProvider, TextInteractionProvider, TextSurface } from '@royal/react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
+import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
 const viewport = {
@@ -25,19 +26,16 @@ const textareaLorem = 'Lorem ipsum dolor sit amet.\nConsectetur adipiscing elit.
 const FieldLabel = ({
   children,
   color,
-  font,
   left,
   top,
 }: {
   readonly children: string;
   readonly color: string;
-  readonly font: TextFontFace;
   readonly left: number;
   readonly top: number;
 }): ReactNode => (
   <text
     color={htmlColor(color)}
-    font={font}
     style={{
       fontSize: 0.2,
       left,
@@ -75,127 +73,123 @@ const FormControlsScene = ({
   );
 
   return (
-    <TextSurface
-      aria-label="Controlled form controls"
-      style={{ cursor: 'text', touchAction: 'none' }}
-      styleOptions={{
-        color: htmlColor('#edf7f8'),
-        fieldColor: htmlColor('#10171a'),
-        fieldPaddingX: 0.16,
-        fieldPaddingY: fieldStyle.fieldPaddingY,
-        fontSize: 0.27,
-        lineHeight: fieldStyle.lineHeight,
-        placeholderColor: htmlColor('#6f7f83'),
-        selectionColor: htmlColor('#1d607f'),
-      }}
-    >
-      <scene>
-        <pass clearColor={htmlColor('#080b0d')}>
-          <orthographicCamera {...viewport} />
+    <TextInteractionProvider>
+      <TextFontProvider font={font}>
+        <TextSurface
+          aria-label="Controlled form controls"
+          renderer={exampleRenderer}
+          style={{ cursor: 'text', touchAction: 'none' }}
+          styleOptions={{
+            color: htmlColor('#edf7f8'),
+            fieldColor: htmlColor('#10171a'),
+            fieldPaddingX: 0.16,
+            fieldPaddingY: fieldStyle.fieldPaddingY,
+            fontSize: 0.27,
+            lineHeight: fieldStyle.lineHeight,
+            placeholderColor: htmlColor('#6f7f83'),
+            selectionColor: htmlColor('#1d607f'),
+          }}
+        >
+          <scene>
+            <pass clearColor={htmlColor('#080b0d')}>
+              <orthographicCamera {...viewport} />
 
-          <FieldLabel color="#55e08a" font={font} left={-4.95} top={0.35}>
-            Selectable non-editable text
-          </FieldLabel>
-          <text
-            color={htmlColor('#dff7e8')}
-            copyable
-            font={font}
-            selectable
-            style={{ left: -4.95, top: 0.68, width: 4.35 }}
-          >
-            {lorem}
-          </text>
+              <FieldLabel color="#55e08a" left={-4.95} top={0.35}>
+                Selectable non-editable text
+              </FieldLabel>
+              <text
+                color={htmlColor('#dff7e8')}
+                copyable
+                selectable
+                style={{ left: -4.95, top: 0.68, width: 4.35 }}
+              >
+                {lorem}
+              </text>
 
-          <FieldLabel color="#8fc7ff" font={font} left={0.65} top={0.35}>
-            Input type = text
-          </FieldLabel>
-          <input
-            font={font}
-            onValueChange={setTitle}
-            placeholder="Lorem ipsum"
-            style={{ left: 0.65, top: 0.68, width: 4.35 }}
-            value={title}
-          />
+              <FieldLabel color="#8fc7ff" left={0.65} top={0.35}>
+                Input type = text
+              </FieldLabel>
+              <input
+                onValueChange={setTitle}
+                placeholder="Lorem ipsum"
+                style={{ left: 0.65, top: 0.68, width: 4.35 }}
+                value={title}
+              />
 
-          <FieldLabel color="#b8a7ff" font={font} left={-4.95} top={1.72}>
-            Empty placeholder input
-          </FieldLabel>
-          <input
-            font={font}
-            onValueChange={setEmptyText}
-            placeholder="Type into this controlled field"
-            style={{ left: -4.95, top: 2.05, width: 4.35 }}
-            value={emptyText}
-          />
+              <FieldLabel color="#b8a7ff" left={-4.95} top={1.72}>
+                Empty placeholder input
+              </FieldLabel>
+              <input
+                onValueChange={setEmptyText}
+                placeholder="Type into this controlled field"
+                style={{ left: -4.95, top: 2.05, width: 4.35 }}
+                value={emptyText}
+              />
 
-          <FieldLabel color="#ffd166" font={font} left={0.65} top={1.72}>
-            multiline textarea
-          </FieldLabel>
-          <textarea
-            font={font}
-            onValueChange={setNotes}
-            placeholder="Lorem ipsum"
-            rows={rows}
-            style={{ left: 0.65, top: 2.05, width: 4.35 }}
-            value={notes}
-          />
+              <FieldLabel color="#ffd166" left={0.65} top={1.72}>
+                multiline textarea
+              </FieldLabel>
+              <textarea
+                onValueChange={setNotes}
+                placeholder="Lorem ipsum"
+                rows={rows}
+                style={{ left: 0.65, top: 2.05, width: 4.35 }}
+                value={notes}
+              />
 
-          <FieldLabel color="#f2a0a0" font={font} left={-4.95} top={3.62}>
-            Controlled action inputs
-          </FieldLabel>
-          <input
-            checked={checked}
-            font={font}
-            onCheckedChange={setChecked}
-            style={{ height: 0.5, left: -4.95, top: 3.95, width: 4.35 }}
-            type="checkbox"
-          >
-            Send me updates
-          </input>
-          <button
-            font={font}
-            onPress={() => setPresses((count) => count + 1)}
-            style={{ height: 0.5, left: 0.65, top: 3.95, width: 1.25 }}
-            type="button"
-          >
-            Press
-          </button>
-          <input
-            font={font}
-            multiple
-            onFilesChange={setFiles}
-            style={{ height: 0.5, left: 2.06, top: 3.95, width: 1.28 }}
-            type="file"
-          >
-            File
-          </input>
-          <input
-            font={font}
-            onValueChange={setColor}
-            style={{ height: 0.5, left: 3.5, top: 3.95, width: 1.5 }}
-            type="color"
-            value={color}
-          >
-            Color
-          </input>
+              <FieldLabel color="#f2a0a0" left={-4.95} top={3.62}>
+                Controlled action inputs
+              </FieldLabel>
+              <input
+                checked={checked}
+                onCheckedChange={setChecked}
+                style={{ height: 0.5, left: -4.95, top: 3.95, width: 4.35 }}
+                type="checkbox"
+              >
+                Send me updates
+              </input>
+              <button
+                onPress={() => setPresses((count) => count + 1)}
+                style={{ height: 0.5, left: 0.65, top: 3.95, width: 1.25 }}
+                type="button"
+              >
+                Press
+              </button>
+              <input
+                multiple
+                onFilesChange={setFiles}
+                style={{ height: 0.5, left: 2.06, top: 3.95, width: 1.28 }}
+                type="file"
+              >
+                File
+              </input>
+              <input
+                onValueChange={setColor}
+                style={{ height: 0.5, left: 3.5, top: 3.95, width: 1.5 }}
+                type="color"
+                value={color}
+              >
+                Color
+              </input>
 
-          <FieldLabel color="#7ee0d1" font={font} left={-4.95} top={4.68}>
-            React state preview
-          </FieldLabel>
-          <text
-            color={htmlColor('#cfe5e7')}
-            copyable
-            font={font}
-            fontSize={0.18}
-            lineHeight={0.23}
-            selectable
-            style={{ left: -4.95, top: 4.98, width: 9.95 }}
-          >
-            {summary}
-          </text>
-        </pass>
-      </scene>
-    </TextSurface>
+              <FieldLabel color="#7ee0d1" left={-4.95} top={4.68}>
+                React state preview
+              </FieldLabel>
+              <text
+                color={htmlColor('#cfe5e7')}
+                copyable
+                fontSize={0.18}
+                lineHeight={0.23}
+                selectable
+                style={{ left: -4.95, top: 4.98, width: 9.95 }}
+              >
+                {summary}
+              </text>
+            </pass>
+          </scene>
+        </TextSurface>
+      </TextFontProvider>
+    </TextInteractionProvider>
   );
 };
 

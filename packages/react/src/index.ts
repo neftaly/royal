@@ -1,7 +1,11 @@
 import { Canvas as CanvasComponent } from './canvas';
 import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
 import { markReactComponent } from './jsx-runtime';
-import { TextSurface as TextSurfaceComponent } from './text-surface';
+import {
+  TextFontProvider as TextFontProviderComponent,
+  TextInteractionProvider as TextInteractionProviderComponent,
+  TextSurface as TextSurfaceComponent
+} from './text-surface';
 
 export type { PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
 export type {
@@ -26,7 +30,7 @@ export {
   useOrbitCameraView
 } from './orbit-controls';
 export { createRoot } from './root';
-export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight } from './text-surface';
+export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight, useTextFont } from './text-surface';
 export { useFrame, useFrameIndex } from './frame';
 export { markRendererComponent } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
@@ -39,6 +43,8 @@ export type {
 
 export const Canvas = markReactComponent(CanvasComponent);
 export const OrbitControls = markReactComponent(OrbitControlsComponent);
+export const TextFontProvider = markReactComponent(TextFontProviderComponent);
+export const TextInteractionProvider = markReactComponent(TextInteractionProviderComponent);
 export const TextSurface = markReactComponent(TextSurfaceComponent);
 
 export type { CanvasProps, CanvasRendererOptions } from './canvas';
@@ -50,9 +56,11 @@ export type {
   FileInputPrimitiveProps,
   InputPrimitiveProps,
   TextAreaPrimitiveProps,
+  TextFontProviderProps,
   TextFieldHeightOptions,
   TextFieldPrimitiveProps,
   TextInputPrimitiveProps,
+  TextInteractionProviderProps,
   TextInteractionStyle,
   TextSurfaceControlStyle,
   TextPrimitiveProps,

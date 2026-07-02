@@ -1,8 +1,9 @@
 /** @jsxImportSource @royal/react */
-import { TextSurface } from '@royal/react';
+import { TextFontProvider, TextInteractionProvider, TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
+import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
 const viewport = {
@@ -68,77 +69,76 @@ const TextPrimitivesExample = ({
   const [notes, setNotes] = useState(textareaLorem);
 
   return (
-    <TextSurface
-      aria-label="Text primitives"
-      style={{ cursor: 'text', touchAction: 'none' }}
-      styleOptions={{
-        color: htmlColor('#e7f3f5'),
-        fieldColor: htmlColor('#101619'),
-        fieldPaddingX: 0.18,
-        fieldPaddingY: textStyle.fieldPaddingY,
-        fontSize: 0.28,
-        lineHeight: textStyle.lineHeight,
-        placeholderColor: htmlColor('#6d797c'),
-        selectionColor: htmlColor('#1d5e86'),
-      }}
-    >
-      <scene>
-        <pass clearColor={htmlColor('#07090b')}>
-          <orthographicCamera {...viewport} />
-          <text
-            box={styles.selectableLabel}
-            color={htmlColor('#59f28f')}
-            font={font}
-            fontSize={styles.label.fontSize}
-            lineHeight={styles.label.lineHeight}
-          >
-            Selectable non-editable text
-          </text>
-          <text
-            box={styles.selectableText}
-            color={htmlColor('#d8f6e4')}
-            copyable
-            font={font}
-            selectable
-          >
-            {loremIpsum}
-          </text>
-          <text
-            box={styles.inputLabel}
-            color={htmlColor('#a9cfff')}
-            font={font}
-            fontSize={styles.label.fontSize}
-            lineHeight={styles.label.lineHeight}
-          >
-            Input type = text
-          </text>
-          <input
-            box={styles.input}
-            font={font}
-            onValueChange={setTitle}
-            placeholder="Lorem ipsum"
-            value={title}
-          />
-          <text
-            box={styles.textareaLabel}
-            color={htmlColor('#ffd77a')}
-            font={font}
-            fontSize={styles.label.fontSize}
-            lineHeight={styles.label.lineHeight}
-          >
-            multiline textarea
-          </text>
-          <textarea
-            box={styles.textarea}
-            font={font}
-            onValueChange={setNotes}
-            placeholder="Lorem ipsum"
-            rows={textareaRows}
-            value={notes}
-          />
-        </pass>
-      </scene>
-    </TextSurface>
+    <TextInteractionProvider>
+      <TextFontProvider font={font}>
+        <TextSurface
+          aria-label="Text primitives"
+          renderer={exampleRenderer}
+          style={{ cursor: 'text', touchAction: 'none' }}
+          styleOptions={{
+            color: htmlColor('#e7f3f5'),
+            fieldColor: htmlColor('#101619'),
+            fieldPaddingX: 0.18,
+            fieldPaddingY: textStyle.fieldPaddingY,
+            fontSize: 0.28,
+            lineHeight: textStyle.lineHeight,
+            placeholderColor: htmlColor('#6d797c'),
+            selectionColor: htmlColor('#1d5e86'),
+          }}
+        >
+          <scene>
+            <pass clearColor={htmlColor('#07090b')}>
+              <orthographicCamera {...viewport} />
+              <text
+                box={styles.selectableLabel}
+                color={htmlColor('#59f28f')}
+                fontSize={styles.label.fontSize}
+                lineHeight={styles.label.lineHeight}
+              >
+                Selectable non-editable text
+              </text>
+              <text
+                box={styles.selectableText}
+                color={htmlColor('#d8f6e4')}
+                copyable
+                selectable
+              >
+                {loremIpsum}
+              </text>
+              <text
+                box={styles.inputLabel}
+                color={htmlColor('#a9cfff')}
+                fontSize={styles.label.fontSize}
+                lineHeight={styles.label.lineHeight}
+              >
+                Input type = text
+              </text>
+              <input
+                box={styles.input}
+                onValueChange={setTitle}
+                placeholder="Lorem ipsum"
+                value={title}
+              />
+              <text
+                box={styles.textareaLabel}
+                color={htmlColor('#ffd77a')}
+                fontSize={styles.label.fontSize}
+                lineHeight={styles.label.lineHeight}
+              >
+                multiline textarea
+              </text>
+              <textarea
+                box={styles.textarea}
+                onValueChange={setNotes}
+                placeholder="Lorem ipsum"
+                rows={textareaRows}
+                value={notes}
+              />
+            </pass>
+          </scene>
+        </TextSurface>
+      </TextFontProvider>
+    </TextInteractionProvider>
   );
 };
 

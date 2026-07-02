@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   createEditableTextEditorState,
   applyEditableTextEditorKeyInput,
@@ -14,11 +14,19 @@ import {
   type EditableTextSelection,
 } from "@royal/renderer-core/text/editable";
 import type { Vec3 } from "@royal/renderer-core";
+import type { TextFontFace } from "@royal/renderer-core/text/font";
+import { loadTestTextFont } from "./text-font-fixture";
 
 const origin: Vec3 = [0, 0, 0];
+let textFont: TextFontFace;
+
+beforeAll(async () => {
+  textFont = await loadTestTextFont();
+});
 
 const singleLineLayout = (text: string): EditableTextLayout =>
   layoutEditableText({
+    font: textFont,
     fontSize: 1,
     lineHeight: 1.2,
     maxWidth: 100,
@@ -137,6 +145,7 @@ describe("editable text interaction", () => {
 
   it("places the pointer caret by x position in single-line infinite-width layouts", () => {
     const layout = layoutEditableText({
+      font: textFont,
       fontSize: 1,
       lineHeight: 1.2,
       maxWidth: Number.POSITIVE_INFINITY,

@@ -16,6 +16,7 @@ import {
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import { loadTestTextFont } from "./text-font-fixture";
 
 type CanvasSize = {
   readonly width: number;
@@ -840,7 +841,8 @@ describe("WebGL renderer product descriptor contracts", () => {
     expectUniformVector(calls, lightDirection);
   });
 
-  it("uploads and draws text nodes as triangle geometry", () => {
+  it("uploads and draws text nodes as triangle geometry", async () => {
+    const font = await loadTestTextFont();
     const color: Rgba = [0.95, 0.2, 0.1, 1];
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -848,6 +850,7 @@ describe("WebGL renderer product descriptor contracts", () => {
     root.render(renderScene([
       text({
         color,
+        font,
         fontSize: 0.75,
         origin: [-0.5, -0.25, 0],
         text: "A",

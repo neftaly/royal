@@ -315,6 +315,7 @@ type TextSurfaceContextValue = {
   readonly activeActionId: string | undefined;
   readonly activeId: string | undefined;
   readonly bounds: CanvasWorldBounds;
+  readonly font: TextFontFace | undefined;
   readonly menu: TextMenuState;
   readonly menuLayoutFor: (control: TextControlRegistration) => EditableTextMenuLayout | undefined;
   readonly pressedActionId: string | undefined;
@@ -376,6 +377,8 @@ const closedMenu: TextMenuState = {
 };
 
 const TextSurfaceContext = createContext<TextSurfaceContextValue | undefined>(undefined);
+const TextInteractionStoreContext = createContext<TextSurfaceStore | undefined>(undefined);
+const TextFontContext = createContext<TextFontFace | undefined>(undefined);
 
 const menuWidth = 1.34;
 const menuItemHeight = 0.36;
@@ -570,6 +573,37 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       },
     };
   });
+};
+
+export interface TextFontProviderProps {
+  readonly children: ReactNode;
+  readonly font: TextFontFace;
+}
+
+export const TextFontProvider = ({
+  children,
+  font,
+}: TextFontProviderProps): ReactNode =>
+  createElement(TextFontContext.Provider, { value: font }, children);
+
+export const useTextFont = (): TextFontFace | undefined =>
+  useContext(TextFontContext);
+
+const useResolvedTextFont = (font: TextFontFace | undefined): TextFontFace | undefined => {
+  const contextFont = useContext(TextFontContext);
+  const surfaceContext = useContext(TextSurfaceContext);
+  return font ?? contextFont ?? surfaceContext?.font;
+};
+
+export interface TextInteractionProviderProps {
+  readonly children: ReactNode;
+}
+
+export const TextInteractionProvider = ({
+  children,
+}: TextInteractionProviderProps): ReactNode => {
+  const store = useMemo(createTextSurfaceStore, []);
+  return createElement(TextInteractionStoreContext.Provider, { value: store }, children);
 };
 
 const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "selections">>()(() => ({
@@ -843,7 +877,10 @@ export const TextSurface = ({
   const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingKeyboardPasteControlIdRef = useRef<string | undefined>(undefined);
   const pendingMenuCommandRef = useRef<PendingMenuCommand | undefined>(undefined);
-  const store = useMemo(createTextSurfaceStore, []);
+  const providedStore = useContext(TextInteractionStoreContext);
+  const providedFont = useContext(TextFontContext);
+  const fallbackStore = useMemo(createTextSurfaceStore, []);
+  const store = providedStore ?? fallbackStore;
   const activeActionId = useStore(store, (state) => state.activeActionId);
   const activeId = useStore(store, (state) => state.activeId);
   const menu = useStore(store, (state) => state.menu);
@@ -1197,6 +1234,7 @@ export const TextSurface = ({
     activeActionId,
     activeId,
     bounds,
+    font: providedFont,
     menu,
     menuLayoutFor: (control) => menuLayoutForControl(bounds, menu, control),
     pressedActionId: pressedAction?.controlId,
@@ -1206,7 +1244,7 @@ export const TextSurface = ({
     style,
     unregisterActionControl: store.getState().unregisterActionControl,
     unregisterControl: store.getState().unregisterControl,
-  }), [activeActionId, activeId, bounds, menu, pressedAction, store, style]);
+  }), [activeActionId, activeId, bounds, menu, pressedAction, providedFont, store, style]);
 
   const handlePasteSinkChange = useCallback((): void => undefined, []);
 
@@ -1711,6 +1749,7 @@ export const ButtonPrimitive = ({
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, "button");
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const resolvedFont = useResolvedTextFont(font);
   const handlePress = useCallback((): void => {
     onPress?.();
   }, [onPress]);
@@ -1726,7 +1765,7 @@ export const ButtonPrimitive = ({
     box,
     context,
     disabled,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     label: labelFromChildren(children, "Button"),
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
@@ -1750,6 +1789,7 @@ const FileInputPrimitive = ({
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="file"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const resolvedFont = useResolvedTextFont(font);
   const handlePress = useCallback((): void => {
     openFilePicker({
       ...(accept === undefined ? {} : { accept }),
@@ -1771,7 +1811,7 @@ const FileInputPrimitive = ({
     box,
     context,
     disabled: disabledControl,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     label: labelFromChildren(children, multiple === true ? "Choose files" : "Choose file"),
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
@@ -1793,6 +1833,7 @@ const ColorInputPrimitive = ({
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="color"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const resolvedFont = useResolvedTextFont(font);
   const handlePress = useCallback((): void => {
     openColorPicker({
       ...(onValueChange === undefined ? {} : { onValueChange }),
@@ -1836,7 +1877,7 @@ const ColorInputPrimitive = ({
       box,
       color: disabled ? disabledTextColor : style.color,
       context,
-      ...(font === undefined ? {} : { font }),
+      ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
       fontSize: effectiveFontSize,
       label,
       lineHeight: effectiveLineHeight,
@@ -1863,6 +1904,7 @@ const CheckboxPrimitive = ({
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="checkbox"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const resolvedFont = useResolvedTextFont(font);
   const handlePress = useCallback((): void => {
     onCheckedChange?.(!checked);
   }, [checked, onCheckedChange]);
@@ -1909,12 +1951,12 @@ const CheckboxPrimitive = ({
       ? [
           text({
             color: disabled ? disabledTextColor : [0.025, 0.032, 0.038, 1],
-            ...(font === undefined ? {} : { font }),
+            ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
             fontSize: squareSize * 0.68,
             lineHeight: squareSize * 0.78,
             origin: [
               squareX + squareSize * 0.28,
-              textBaselineForVerticalCenter(font, squareSize * 0.68, squareY, squareSize),
+              textBaselineForVerticalCenter(resolvedFont, squareSize * 0.68, squareY, squareSize),
               (box.z ?? 0) + 0.12,
             ],
             text: checkboxMark,
@@ -1928,7 +1970,7 @@ const CheckboxPrimitive = ({
             box,
             color: textColor,
             context,
-            ...(font === undefined ? {} : { font }),
+            ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
             fontSize: effectiveFontSize,
             height,
             label,
@@ -1959,6 +2001,7 @@ export const TextPrimitive = ({
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
+  const resolvedFont = useResolvedTextFont(font);
   const interactive = selectable === true || copyable === true;
   const { id, state } = useTextPrimitiveState(value);
   const surfaceContext = useContext(TextSurfaceContext);
@@ -1967,7 +2010,7 @@ export const TextPrimitive = ({
   const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const resolvedOrigin = box === undefined || surfaceContext === undefined
     ? origin
-    : textOriginForBox(surfaceContext, box, font, effectiveFontSize, effectiveLineHeight);
+    : textOriginForBox(surfaceContext, box, resolvedFont, effectiveFontSize, effectiveLineHeight);
   const resolvedMaxWidth = box === undefined ? styledMaxWidth : boxMaxWidth(box);
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
@@ -1976,7 +2019,7 @@ export const TextPrimitive = ({
     ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
     copyable: copyable === true || selectable === true,
     editable: false,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     id,
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
@@ -1993,7 +2036,7 @@ export const TextPrimitive = ({
   const textColor = styledColor ?? (context?.style ?? style).color;
   const fragment = createEditableTextFragment({
     color: textColor,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     fontSize: effectiveFontSize,
     lineHeight: effectiveLineHeight,
     maxWidth: resolvedMaxWidth,
@@ -2007,7 +2050,7 @@ export const TextPrimitive = ({
     return rendererOutputToReact([
       text({
         color: textColor,
-        ...(font === undefined ? {} : { font }),
+        ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
         ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
         ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
         origin: resolvedOrigin,
@@ -2045,6 +2088,7 @@ const TextFieldPrimitive = ({
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
+  const resolvedFont = useResolvedTextFont(font);
   const { id, state } = useTextPrimitiveState(value);
   const surfaceContext = useContext(TextSurfaceContext);
   const surfaceStyle = surfaceContext?.style ?? defaultTextStyle;
@@ -2067,7 +2111,7 @@ const TextFieldPrimitive = ({
     ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
     copyable: true,
     editable: true,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     id,
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
@@ -2087,7 +2131,7 @@ const TextFieldPrimitive = ({
     caretColor: style.caretColor,
     caretWidth: style.caretWidth,
     color: styledColor ?? style.color,
-    ...(font === undefined ? {} : { font }),
+    ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     fontSize: fieldFontSize,
     lineHeight: fieldLineHeight,
     maxWidth: resolvedMaxWidth,

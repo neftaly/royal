@@ -37,10 +37,12 @@ export interface CreateTextFontFaceOptions {
   readonly source?: string;
 }
 
-const builtinTextFamily = 'royal-ascii-default';
 const minimumTextUnit = 0.0001;
 const fontFaceFonts = new WeakMap<TextFontFace, OpenTypeFont>();
 let woff2Decompress: Promise<Woff2Decompress> | undefined;
+
+export const missingTextFontMessage =
+  'Royal text requires a TextFontFace. Load a font with createTextFontFace() or createTextFontFaceAsync() and pass it as font.';
 
 const positiveTextUnit = (value: number): number =>
   Number.isFinite(value) && value > 0 ? value : minimumTextUnit;
@@ -115,23 +117,6 @@ export const fontForFace = (face: TextFontFace): OpenTypeFont => {
   throw new Error('Text font face was not created by createTextFontFace()');
 };
 
-const fontMetrics = (fontSize: number, requestedLineHeight: number | undefined): TextFontMetrics => {
-  const size = positiveTextUnit(fontSize);
-  const naturalLineHeight = size * 1.2;
-  const lineHeight = positiveTextUnit(requestedLineHeight ?? naturalLineHeight);
-  const ascender = size * 0.82;
-  const descender = -size * 0.22;
-  const lineGap = Math.max(0, lineHeight - (ascender - descender));
-
-  return {
-    ascender,
-    descender,
-    lineGap,
-    lineHeight,
-    size
-  };
-};
-
 const fontFaceMetrics = (
   face: TextFontFace,
   fontSize: number,
@@ -154,12 +139,6 @@ const fontFaceMetrics = (
   };
 };
 
-export const fontDescriptor = (fontSize: number, lineHeight: number | undefined): TextFontDescriptor => ({
-  family: builtinTextFamily,
-  metrics: fontMetrics(fontSize, lineHeight),
-  unitsPerEm: 1
-});
-
 export const fontFaceDescriptor = (
   face: TextFontFace,
   fontSize: number,
@@ -174,5 +153,7 @@ export const textFontDescriptor = (
   face: TextFontFace | undefined,
   fontSize: number,
   lineHeight: number | undefined
-): TextFontDescriptor =>
-  face === undefined ? fontDescriptor(fontSize, lineHeight) : fontFaceDescriptor(face, fontSize, lineHeight);
+): TextFontDescriptor => {
+  if (face === undefined) throw new Error(missingTextFontMessage);
+  return fontFaceDescriptor(face, fontSize, lineHeight);
+};

@@ -12,6 +12,7 @@ import {
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import { loadTestTextFont } from "./text-font-fixture";
 
 type CanvasSize = {
   readonly width: number;
@@ -502,13 +503,15 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
       && call.args[1] === 2)).toBe(true);
   });
 
-  it("draws text from glyph mesh geometry instead of a single layout quad", () => {
+  it("draws text from glyph mesh geometry instead of a single layout quad", async () => {
+    const font = await loadTestTextFont();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(renderScene([
       text({
         color: [0.95, 0.2, 0.1, 1],
+        font,
         fontSize: 0.75,
         origin: [-0.5, -0.25, 0],
         text: "A",

@@ -1,13 +1,10 @@
 import earcut from 'earcut';
 import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
-import { fontForFace } from './text-font';
+import { fontForFace, missingTextFontMessage } from './text-font';
 import type { TextFontFace } from './text-font';
 import {
-  crossbarGlyphs,
   defaultOutlineFlattenTolerance,
-  isWhitespaceText,
   minimumTextUnit,
-  roundGlyphs,
   textBounds,
   unionBounds,
   whitespaceGlyphs
@@ -18,7 +15,6 @@ import type {
   TextLayout,
   TextMesh,
   TextMeshContour,
-  TextMeshContourRole,
   TextMeshVertex,
   TextNode
 } from './text-types';
@@ -31,94 +27,6 @@ export type {
   TextMeshVertex
 } from './text-types';
 
-const contourBounds = (
-  bounds: TextBounds,
-  xMinRatio: number,
-  yMinRatio: number,
-  xMaxRatio: number,
-  yMaxRatio: number
-): TextBounds => {
-  const width = bounds.xMax - bounds.xMin;
-  const height = bounds.yMax - bounds.yMin;
-  return textBounds(
-    bounds.xMin + width * xMinRatio,
-    bounds.yMin + height * yMinRatio,
-    bounds.xMin + width * xMaxRatio,
-    bounds.yMin + height * yMaxRatio
-  );
-};
-
-const addContour = (
-  contours: TextMeshContour[],
-  glyphIndex: number,
-  bounds: TextBounds,
-  role: TextMeshContourRole
-): void => {
-  if (bounds.xMax <= bounds.xMin || bounds.yMax <= bounds.yMin) return;
-  contours.push({ bounds, glyphIndex, role });
-};
-
-const contoursForGlyph = (placement: TextGlyphLayout, glyphIndex: number): readonly TextMeshContour[] => {
-  const text = placement.glyph.ligature?.source ?? placement.glyph.text;
-  const bounds = placement.bounds;
-  const contours: TextMeshContour[] = [];
-
-  if (isWhitespaceText(text)) return contours;
-
-  if (text === '.' || text === ',') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.55), 'outline');
-    return contours;
-  }
-
-  if (text === ':' || text === ';') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0, 0.72, 0.28), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.28, 0.65, 0.72, 0.93), 'outline');
-    return contours;
-  }
-
-  if (text === '-' || text === '_' || text === '=') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.42, 1, 0.58), 'outline');
-    if (text === '=') addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.68, 1, 0.84), 'outline');
-    return contours;
-  }
-
-  if (text === 'i' || text === 'j') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.35, 0, 0.65, 0.68), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.3, 0.82, 0.7, 1), 'outline');
-    return contours;
-  }
-
-  const first = text[0] ?? '';
-  if (roundGlyphs.has(first)) {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.78, 1, 1), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 1, 0.22), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0.12, 0.22, 0.9), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.78, 0.12, 1, 0.9), 'outline');
-    return contours;
-  }
-
-  if (crossbarGlyphs.has(first)) {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.2, 1), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.8, 0, 1, 1), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.42, 0.92, 0.6), 'outline');
-    if (first === 'E' || first === 'F') {
-      addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0.82, 1, 1), 'outline');
-    }
-    if (first === 'E') addContour(contours, glyphIndex, contourBounds(bounds, 0.08, 0, 1, 0.18), 'outline');
-    return contours;
-  }
-
-  if (first === 'm' || first === 'w' || first === 'M' || first === 'W') {
-    addContour(contours, glyphIndex, contourBounds(bounds, 0, 0, 0.18, 1), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.41, 0.08, 0.59, 0.92), 'outline');
-    addContour(contours, glyphIndex, contourBounds(bounds, 0.82, 0, 1, 1), 'outline');
-    return contours;
-  }
-
-  addContour(contours, glyphIndex, bounds, 'outline');
-  return contours;
-};
-
 const glyphCoord = (glyphBounds: TextBounds, x: number, y: number): readonly [number, number] => {
   const width = Math.max(minimumTextUnit, glyphBounds.xMax - glyphBounds.xMin);
   const height = Math.max(minimumTextUnit, glyphBounds.yMax - glyphBounds.yMin);
@@ -126,40 +34,6 @@ const glyphCoord = (glyphBounds: TextBounds, x: number, y: number): readonly [nu
     (x - glyphBounds.xMin) / width,
     (y - glyphBounds.yMin) / height
   ];
-};
-
-const appendContour = (
-  vertices: TextMeshVertex[],
-  indices: number[],
-  contour: TextMeshContour,
-  glyphBounds: TextBounds,
-  z: number
-): void => {
-  const vertex = vertices.length;
-  const bounds = contour.bounds;
-  vertices.push(
-    {
-      glyphCoord: glyphCoord(glyphBounds, bounds.xMin, bounds.yMax),
-      glyphIndex: contour.glyphIndex,
-      position: [bounds.xMin, bounds.yMax, z]
-    },
-    {
-      glyphCoord: glyphCoord(glyphBounds, bounds.xMax, bounds.yMax),
-      glyphIndex: contour.glyphIndex,
-      position: [bounds.xMax, bounds.yMax, z]
-    },
-    {
-      glyphCoord: glyphCoord(glyphBounds, bounds.xMax, bounds.yMin),
-      glyphIndex: contour.glyphIndex,
-      position: [bounds.xMax, bounds.yMin, z]
-    },
-    {
-      glyphCoord: glyphCoord(glyphBounds, bounds.xMin, bounds.yMin),
-      glyphIndex: contour.glyphIndex,
-      position: [bounds.xMin, bounds.yMin, z]
-    }
-  );
-  indices.push(vertex, vertex + 1, vertex + 2, vertex, vertex + 2, vertex + 3);
 };
 
 type OutlinePoint = {
@@ -492,19 +366,12 @@ const textMeshFromLayout = (layout: TextLayout): TextMesh => {
   const indices: number[] = [];
   let glyphIndex = 0;
   const face = layout.fontFace;
-  const font = face === undefined ? undefined : fontForFace(face);
+  if (face === undefined) throw new Error(missingTextFontMessage);
+  const font = fontForFace(face);
 
   for (const line of layout.lines) {
     for (const placement of line.glyphs) {
-      if (face !== undefined && font !== undefined) {
-        appendOutlineGlyph(vertices, indices, contours, face, font, placement, glyphIndex, layout.font.metrics.size);
-      } else {
-        const glyphContours = contoursForGlyph(placement, glyphIndex);
-        contours.push(...glyphContours);
-        for (const contour of glyphContours) {
-          appendContour(vertices, indices, contour, placement.bounds, placement.origin[2]);
-        }
-      }
+      appendOutlineGlyph(vertices, indices, contours, face, font, placement, glyphIndex, layout.font.metrics.size);
       glyphIndex += 1;
     }
   }
