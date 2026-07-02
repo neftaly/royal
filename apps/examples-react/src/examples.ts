@@ -11,8 +11,6 @@ import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { Picking } from './examples/cases/Picking';
 import pickingSource from './examples/cases/Picking.tsx?raw';
-import { RendererText } from './examples/cases/RendererText';
-import rendererTextSource from './examples/cases/RendererText.tsx?raw';
 import { StandardLighting } from './examples/cases/StandardLighting';
 import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
@@ -48,15 +46,6 @@ export const examples = [
     Component: WireframeCube,
     source: wireframeCubeSource,
     sourceFile: 'examples/cases/WireframeCube.tsx',
-  },
-  {
-    id: 'text',
-    maturity: 'product',
-    path: '/text',
-    title: 'Text',
-    Component: RendererText,
-    source: rendererTextSource,
-    sourceFile: 'examples/cases/RendererText.tsx',
   },
   {
     id: 'form-controls',

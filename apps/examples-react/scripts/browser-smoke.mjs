@@ -31,10 +31,6 @@ const smokeExpectations = {
     path: '/wireframe',
     minPaintedRatio: 0.003,
   },
-  text: {
-    path: '/text',
-    minPaintedRatio: 0.003,
-  },
   'form-controls': {
     path: '/form-controls',
     allowDomSurface: true,
