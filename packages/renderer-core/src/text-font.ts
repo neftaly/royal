@@ -1,6 +1,11 @@
 import opentype from 'opentype.js';
 import type { Font as OpenTypeFont } from 'opentype.js';
 
+type Woff2Decompress = (buffer: Uint8Array) => Promise<Uint8Array>;
+type Woff2DecompressModule = {
+  readonly default?: Woff2Decompress;
+};
+
 export type TextFontMetrics = {
   readonly ascender: number;
   readonly descender: number;
@@ -35,6 +40,7 @@ export interface CreateTextFontFaceOptions {
 const builtinTextFamily = 'royal-ascii-default';
 const minimumTextUnit = 0.0001;
 const fontFaceFonts = new WeakMap<TextFontFace, OpenTypeFont>();
+let woff2Decompress: Promise<Woff2Decompress> | undefined;
 
 const positiveTextUnit = (value: number): number =>
   Number.isFinite(value) && value > 0 ? value : minimumTextUnit;
@@ -59,8 +65,21 @@ const fontName = (font: OpenTypeFont, key: string): string | undefined =>
 const fontLineGap = (font: OpenTypeFont): number =>
   font.tables?.hhea?.lineGap ?? font.tables?.os2?.sTypoLineGap ?? 0;
 
-export const createTextFontFace = (options: CreateTextFontFaceOptions): TextFontFace => {
-  const font = opentype.parse(arrayBufferFromFontData(options.data));
+const isWoff2Data = (data: ArrayBuffer): boolean => {
+  const bytes = new Uint8Array(data, 0, Math.min(data.byteLength, 4));
+  return bytes[0] === 0x77 && bytes[1] === 0x4f && bytes[2] === 0x46 && bytes[3] === 0x32;
+};
+
+const loadWoff2Decompress = (): Promise<Woff2Decompress> => {
+  woff2Decompress ??= import('wawoff2/decompress').then((module: Woff2DecompressModule) => {
+    if (module.default === undefined) throw new Error('wawoff2/decompress did not provide a default export.');
+    return module.default;
+  });
+  return woff2Decompress;
+};
+
+const parseTextFontFace = (options: CreateTextFontFaceOptions, data: ArrayBuffer): TextFontFace => {
+  const font = opentype.parse(data);
   const face: TextFontFace = Object.freeze({
     ascender: font.ascender,
     descender: font.descender,
@@ -71,6 +90,23 @@ export const createTextFontFace = (options: CreateTextFontFaceOptions): TextFont
   });
   fontFaceFonts.set(face, font);
   return face;
+};
+
+export const createTextFontFace = (options: CreateTextFontFaceOptions): TextFontFace => {
+  const data = arrayBufferFromFontData(options.data);
+  if (isWoff2Data(data)) {
+    throw new Error('WOFF2 text fonts require createTextFontFaceAsync() because WOFF2 decompression is asynchronous.');
+  }
+  return parseTextFontFace(options, data);
+};
+
+export const createTextFontFaceAsync = async (options: CreateTextFontFaceOptions): Promise<TextFontFace> => {
+  const data = arrayBufferFromFontData(options.data);
+  if (!isWoff2Data(data)) return parseTextFontFace(options, data);
+
+  const decompress = await loadWoff2Decompress();
+  const decoded = await decompress(new Uint8Array(data));
+  return parseTextFontFace(options, arrayBufferFromFontData(decoded));
 };
 
 export const fontForFace = (face: TextFontFace): OpenTypeFont => {

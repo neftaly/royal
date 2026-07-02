@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
@@ -12,11 +13,18 @@ import {
 } from "@royal/renderer-core";
 import * as rendererCore from "@royal/renderer-core";
 import * as reactRoyal from "@royal/react";
+import { createTextFontFace, createTextFontFaceAsync } from "@royal/renderer-core/text/font";
 import { layoutText } from "@royal/renderer-core/text/layout";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import { text as textNode } from "@royal/renderer-core/text/node";
 import { shapeText } from "@royal/renderer-core/text/shaping";
 import { jsx } from "@royal/react/renderer/jsx-runtime";
+
+const atkinsonFontUrl = (extension: "woff" | "woff2"): URL =>
+  new URL(
+    `../packages/renderer-core/node_modules/@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.${extension}`,
+    import.meta.url,
+  );
 
 describe("renderer-core public API", () => {
   it("defaults orthographic camera pose and depth for flat UI scenes", () => {
@@ -113,6 +121,28 @@ describe("renderer-core public API", () => {
     expect(layout.source).toBe("Royal");
     expect(bounds.xMax).toBeGreaterThan(bounds.xMin);
     expect(textMesh(label).indices.length).toBeGreaterThan(0);
+  });
+
+  it("loads WOFF2 text fonts through the async font API", async () => {
+    const font = await createTextFontFaceAsync({
+      data: await readFile(atkinsonFontUrl("woff2")),
+      source: atkinsonFontUrl("woff2").pathname,
+    });
+    const label = textNode({
+      color: [1, 1, 1, 1],
+      font,
+      fontSize: 1,
+      text: "Royal",
+    });
+
+    expect(font.family).toBe("Atkinson Hyperlegible");
+    expect(textMesh(label).indices.length).toBeGreaterThan(0);
+  });
+
+  it("keeps WOFF2 decompression out of the sync font API", async () => {
+    const data = await readFile(atkinsonFontUrl("woff2"));
+
+    expect(() => createTextFontFace({ data })).toThrow(/WOFF2 text fonts require createTextFontFaceAsync/);
   });
 
   it("lowers Royal JSX tags into renderer descriptors", () => {

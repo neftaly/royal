@@ -1,4 +1,4 @@
-export { createTextFontFace } from './text-font';
+export { createTextFontFace, createTextFontFaceAsync } from './text-font';
 export type {
   CreateTextFontFaceOptions,
   TextFontData,
