@@ -250,6 +250,37 @@ describe("WebGL root working state contracts", () => {
     ]);
   });
 
+  it("allows non-clearing overlay passes with depth testing disabled", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        drawablePass([0.05, 0.1, 0.15, 1], [1, 0, 0, 1]),
+        pass({
+          camera: camera(),
+          children: [cube([0, 1, 1, 1])],
+          clear: "none",
+          depthTest: false,
+        }),
+      ],
+    }));
+
+    expect(drawCalls(calls)).toHaveLength(2);
+    expect(calls.filter((call) => call.name === "clear")).toEqual([
+      {
+        name: "clear",
+        args: [gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT],
+      },
+    ]);
+    expect(calls).toContainEqual({ name: "disable", args: [gl.DEPTH_TEST] });
+    expect(frameEvents(calls)).toEqual([
+      "clearColor(0.05,0.1,0.15,1)",
+      "draw",
+      "draw",
+    ]);
+  });
+
   it("accepts empty scenes and empty passes without issuing draw calls", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

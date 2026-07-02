@@ -9,6 +9,8 @@ import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
+import { HudOverlay } from './examples/cases/HudOverlay';
+import hudOverlaySource from './examples/cases/HudOverlay.tsx?raw';
 import { Picking } from './examples/cases/Picking';
 import pickingSource from './examples/cases/Picking.tsx?raw';
 import { StandardLighting } from './examples/cases/StandardLighting';
@@ -82,6 +84,15 @@ export const examples = [
     Component: StandardLighting,
     source: standardLightingSource,
     sourceFile: 'examples/cases/StandardLighting.tsx',
+  },
+  {
+    id: 'hud-overlay',
+    maturity: 'product',
+    path: '/hud-overlay',
+    title: 'HUD Overlay',
+    Component: HudOverlay,
+    source: hudOverlaySource,
+    sourceFile: 'examples/cases/HudOverlay.tsx',
   },
   {
     id: 'gltf-helmet',

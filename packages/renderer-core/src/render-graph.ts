@@ -4,6 +4,8 @@ import type { RenderNode } from './render-node';
 
 const TRANSPARENT_BLACK: Rgba = [0, 0, 0, 0];
 
+export type RenderPassClear = 'color-depth' | 'color' | 'depth' | 'none';
+
 export type RenderElement = Scene | RenderPass | RenderNode;
 /** Root render description accepted by renderer roots. */
 export type RenderRoot = Scene;
@@ -13,14 +15,20 @@ export interface RenderPass {
   readonly kind: 'pass';
   readonly camera: Camera;
   readonly children: readonly RenderNode[];
+  readonly clear: RenderPassClear;
   readonly clearColor: Rgba;
+  readonly depthTest: boolean;
 }
 
 export interface RenderPassOptions {
   readonly camera: Camera;
   readonly children: readonly RenderNode[];
+  /** Which buffers this pass clears before drawing. */
+  readonly clear?: RenderPassClear;
   /** @defaultValue `[0, 0, 0, 0]` */
   readonly clearColor?: Rgba;
+  /** Enables depth testing while drawing this pass. */
+  readonly depthTest?: boolean;
 }
 
 /** Ordered render passes for a frame. */
@@ -39,7 +47,9 @@ export const pass = (options: RenderPassOptions): RenderPass => {
     kind: 'pass',
     camera: options.camera,
     children: options.children,
-    clearColor: options.clearColor ?? TRANSPARENT_BLACK
+    clear: options.clear ?? 'color-depth',
+    clearColor: options.clearColor ?? TRANSPARENT_BLACK,
+    depthTest: options.depthTest ?? true
   };
 };
 

@@ -29,7 +29,26 @@ describe("renderer-core descriptor contract", () => {
     expect(pass({ camera, children: [] })).toEqual({
       camera,
       children: [],
+      clear: "color-depth",
       clearColor: [0, 0, 0, 0],
+      depthTest: true,
+      kind: "pass",
+    });
+  });
+
+  it("preserves render pass clear and depth options for overlays", () => {
+    expect(pass({
+      camera,
+      children: [],
+      clear: "none",
+      clearColor: [0.1, 0.2, 0.3, 1],
+      depthTest: false,
+    })).toEqual({
+      camera,
+      children: [],
+      clear: "none",
+      clearColor: [0.1, 0.2, 0.3, 1],
+      depthTest: false,
       kind: "pass",
     });
   });

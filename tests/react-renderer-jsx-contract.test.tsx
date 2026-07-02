@@ -93,11 +93,28 @@ describe("renderer JSX contract", () => {
               material: expect.objectContaining({ kind: "unlit" }),
             }),
           ],
+          clear: "color-depth",
           clearColor: [0, 0, 0, 0],
+          depthTest: true,
           kind: "pass",
         },
       ],
       kind: "scene",
+    });
+  });
+
+  it("threads overlay pass clear and depth props through JSX", () => {
+    expect(
+      <pass clear="none" depthTest={false}>
+        <perspectiveCamera {...perspectiveProps} />
+      </pass>,
+    ).toMatchObject({
+      camera: { kind: "perspective-camera" },
+      children: [],
+      clear: "none",
+      clearColor: [0, 0, 0, 0],
+      depthTest: false,
+      kind: "pass",
     });
   });
 

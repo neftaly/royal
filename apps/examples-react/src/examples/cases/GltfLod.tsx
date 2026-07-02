@@ -49,7 +49,7 @@ export const GltfLod = (): ReactNode => {
       </scene>
       <OrbitControls
         {...orbit.controls}
-        maxDistance={11}
+        maxDistance={28}
         minDistance={2.4}
         zoomSpeed={0.00075}
       />

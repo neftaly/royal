@@ -314,16 +314,13 @@ const toPass = (props: PassProps): RenderPass => {
     throw new Error('pass expects exactly one camera');
   }
 
-  const renderPass = {
+  return pass({
     camera,
-    children
-  } satisfies Omit<RenderPassOptions, 'clearColor'>;
-
-  return pass(
-    props.clearColor === undefined
-      ? renderPass
-      : { ...renderPass, clearColor: props.clearColor }
-  );
+    children,
+    ...(props.clear === undefined ? {} : { clear: props.clear }),
+    ...(props.clearColor === undefined ? {} : { clearColor: props.clearColor }),
+    ...(props.depthTest === undefined ? {} : { depthTest: props.depthTest })
+  });
 };
 
 export const toMesh = (props: MeshProps): RenderNode => {

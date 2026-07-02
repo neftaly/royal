@@ -73,6 +73,7 @@ export { createRenderObjectHandle } from './render-object';
 export type {
   RenderElement,
   RenderPass,
+  RenderPassClear,
   RenderPassOptions,
   RenderRoot,
   Scene,

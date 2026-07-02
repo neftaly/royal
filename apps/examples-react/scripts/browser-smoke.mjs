@@ -50,6 +50,11 @@ const smokeExpectations = {
     minColorBuckets: 12,
     minPaintedRatio: 0.01,
   },
+  'hud-overlay': {
+    path: '/hud-overlay',
+    minColorBuckets: 14,
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     path: '/gltf-helmet',
     minColorBuckets: 32,

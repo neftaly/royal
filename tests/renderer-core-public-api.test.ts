@@ -78,7 +78,9 @@ describe("renderer-core public API", () => {
         {
           camera,
           children: [cube, label],
+          clear: "color-depth",
           clearColor: [0, 0, 0, 0],
+          depthTest: true,
           kind: "pass",
         },
       ],

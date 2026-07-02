@@ -1284,9 +1284,28 @@ export class WebGlRoot {
 
     const usedGeometry = new Set<string>();
     for (const renderPass of scene.children) {
-      const [r, g, b, a] = renderPass.clearColor;
-      gl.clearColor(r, g, b, a);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      if (renderPass.depthTest) {
+        gl.enable?.(gl.DEPTH_TEST);
+      } else {
+        gl.disable?.(gl.DEPTH_TEST);
+      }
+
+      const clearMask =
+        renderPass.clear === "none"
+          ? 0
+          : renderPass.clear === "color"
+            ? gl.COLOR_BUFFER_BIT
+            : renderPass.clear === "depth"
+              ? gl.DEPTH_BUFFER_BIT
+              : gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT;
+
+      if (clearMask !== 0) {
+        if (renderPass.clear === "color" || renderPass.clear === "color-depth") {
+          const [r, g, b, a] = renderPass.clearColor;
+          gl.clearColor(r, g, b, a);
+        }
+        gl.clear(clearMask);
+      }
 
       const projection = projectionMat4(renderPass.camera, width, height);
       const view = viewMat4(renderPass.camera);
