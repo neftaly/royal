@@ -1,6 +1,15 @@
 /** @jsxImportSource @royal/react */
 import { TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
+import {
+  Align,
+  Direction,
+  Edge,
+  FlexDirection,
+  Gutter,
+  default as Yoga,
+  type Node as YogaNode,
+} from 'yoga-layout';
 import { useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
 import { useAtkinsonFont } from './text-font';
@@ -11,6 +20,130 @@ const bounds = {
   right: 5.6,
   top: 3.2,
 } as const;
+
+const textStyle = {
+  fieldPaddingX: 0.14,
+  fieldPaddingY: 0.11,
+  fontSize: 0.32,
+  lineHeight: 0.42,
+} as const;
+
+const textColumnWidth = 7.6;
+const textColumnBoxWidth = textColumnWidth + textStyle.fieldPaddingX * 2;
+const titleRows = 1;
+const notesRows = 4;
+
+const fieldHeight = (rows: number): number =>
+  rows * textStyle.lineHeight + textStyle.fieldPaddingY * 2;
+
+type LayoutBox = {
+  readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+};
+
+type TextExampleLayout = {
+  readonly copy: {
+    readonly maxWidth: number;
+    readonly origin: readonly [number, number, number];
+  };
+  readonly notes: {
+    readonly maxWidth: number;
+    readonly origin: readonly [number, number, number];
+  };
+  readonly title: {
+    readonly maxWidth: number;
+    readonly origin: readonly [number, number, number];
+  };
+};
+
+const layoutBox = (node: YogaNode): LayoutBox => ({
+  height: node.getComputedHeight(),
+  left: node.getComputedLeft(),
+  top: node.getComputedTop(),
+  width: node.getComputedWidth(),
+});
+
+const layoutMaxWidth = (box: LayoutBox): number =>
+  box.width - textStyle.fieldPaddingX * 2;
+
+const textOriginX = (box: LayoutBox): number =>
+  bounds.left + box.left + textStyle.fieldPaddingX;
+
+const fieldOrigin = (box: LayoutBox): readonly [number, number, number] => [
+  textOriginX(box),
+  bounds.top - box.top - textStyle.lineHeight / 2,
+  0,
+];
+
+const copyOrigin = (box: LayoutBox): readonly [number, number, number] => [
+  textOriginX(box),
+  bounds.top - box.top - textStyle.lineHeight * 0.64,
+  0,
+];
+
+const createTextExampleLayout = (): TextExampleLayout => {
+  const config = Yoga.Config.create();
+  config.setPointScaleFactor(0);
+  config.setUseWebDefaults(true);
+
+  const root = Yoga.Node.create(config);
+  const copy = Yoga.Node.create(config);
+  const title = Yoga.Node.create(config);
+  const notes = Yoga.Node.create(config);
+  const width = bounds.right - bounds.left;
+  const height = bounds.top - bounds.bottom;
+
+  try {
+    root.setWidth(width);
+    root.setHeight(height);
+    root.setFlexDirection(FlexDirection.Column);
+    root.setAlignItems(Align.FlexStart);
+    root.setPadding(Edge.Left, 0.74);
+    root.setPadding(Edge.Top, 1.38);
+    root.setGap(Gutter.All, 0.26);
+
+    copy.setWidth(textColumnBoxWidth);
+    copy.setHeight(textStyle.lineHeight);
+    copy.setMargin(Edge.Bottom, 0.38);
+
+    title.setWidth(textColumnBoxWidth);
+    title.setHeight(fieldHeight(titleRows));
+
+    notes.setWidth(textColumnBoxWidth);
+    notes.setHeight(fieldHeight(notesRows));
+
+    root.insertChild(copy, 0);
+    root.insertChild(title, 1);
+    root.insertChild(notes, 2);
+    root.calculateLayout(width, height, Direction.LTR);
+
+    const copyBox = layoutBox(copy);
+    const titleBox = layoutBox(title);
+    const notesBox = layoutBox(notes);
+
+    return {
+      copy: {
+        maxWidth: layoutMaxWidth(copyBox),
+        origin: copyOrigin(copyBox),
+      },
+      notes: {
+        maxWidth: layoutMaxWidth(notesBox),
+        origin: fieldOrigin(notesBox),
+      },
+      title: {
+        maxWidth: layoutMaxWidth(titleBox),
+        origin: fieldOrigin(titleBox),
+      },
+    };
+  } finally {
+    root.freeRecursive();
+    config.free();
+  }
+};
+
+const textExampleLayout = createTextExampleLayout();
 
 const TextPrimitivesExample = ({
   font,
@@ -27,9 +160,11 @@ const TextPrimitivesExample = ({
       style={{ cursor: 'text', touchAction: 'none' }}
       styleOptions={{
         color: htmlColor('#dbf0fa'),
-        fieldColor: htmlColor('rgba(14, 18, 20, 0.96)'),
-        fontSize: 0.32,
-        lineHeight: 0.42,
+        fieldColor: htmlColor('#0e1214'),
+        fieldPaddingX: textStyle.fieldPaddingX,
+        fieldPaddingY: textStyle.fieldPaddingY,
+        fontSize: textStyle.fontSize,
+        lineHeight: textStyle.lineHeight,
         selectionColor: htmlColor('#144f7a'),
       }}
     >
@@ -40,27 +175,27 @@ const TextPrimitivesExample = ({
             color={htmlColor('#59f28f')}
             copyable
             font={font}
-            maxWidth={7.6}
-            origin={[-4.72, 1.55, 0]}
+            maxWidth={textExampleLayout.copy.maxWidth}
+            origin={textExampleLayout.copy.origin}
             selectable
           >
             Select and copy this renderer text.
           </text>
           <input
             font={font}
-            maxWidth={7.6}
+            maxWidth={textExampleLayout.title.maxWidth}
             onValueChange={setTitle}
-            origin={[-4.72, 0.55, 0]}
+            origin={textExampleLayout.title.origin}
             placeholder="Title"
             value={title}
           />
           <textarea
             font={font}
-            maxWidth={7.6}
+            maxWidth={textExampleLayout.notes.maxWidth}
             onValueChange={setNotes}
-            origin={[-4.72, -0.35, 0]}
+            origin={textExampleLayout.notes.origin}
             placeholder="Notes"
-            rows={4}
+            rows={notesRows}
             value={notes}
           />
         </pass>
