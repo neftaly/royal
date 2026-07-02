@@ -3,6 +3,8 @@ import { FormControls } from './examples/cases/FormControls';
 import formControlsSource from './examples/cases/FormControls.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
+import { GltfInstancing } from './examples/cases/GltfInstancing';
+import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
@@ -100,6 +102,15 @@ export const examples = [
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
+  },
+  {
+    id: 'gltf-instancing',
+    maturity: 'product',
+    path: '/gltf-instancing',
+    title: 'glTF Auto Instancing',
+    Component: GltfInstancing,
+    source: gltfInstancingSource,
+    sourceFile: 'examples/cases/GltfInstancing.tsx',
   },
   {
     id: 'gltf-lod',
