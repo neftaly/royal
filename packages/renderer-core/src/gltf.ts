@@ -26,6 +26,8 @@ export interface GltfNode {
   readonly ref?: RenderObjectRef;
   readonly src: string;
   readonly transform?: Transform;
+  /** Selected `KHR_materials_variants` variant name or index. */
+  readonly variant?: number | string;
 }
 
 export interface GltfSrcOptions {
@@ -37,6 +39,8 @@ export interface GltfSrcOptions {
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
+  /** Selected `KHR_materials_variants` variant name or index. */
+  readonly variant?: number | string;
   /** Preferred asset version override for cache keys. */
   readonly version?: GltfAssetRef['version'];
 }
@@ -64,7 +68,8 @@ export function gltf(input: GltfInput): GltfNode {
     asset,
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
-    src: asset.uri
+    src: asset.uri,
+    ...(options.variant === undefined ? {} : { variant: options.variant })
   } satisfies Omit<GltfNode, 'transform'>;
 
   return options.transform === undefined

@@ -6,6 +6,11 @@ export type GltfDocument = {
     readonly KHR_lights_punctual?: {
       readonly lights?: readonly GltfPunctualLight[];
     };
+    readonly KHR_materials_variants?: {
+      readonly variants?: readonly {
+        readonly name?: string;
+      }[];
+    };
   };
   readonly extensionsRequired?: readonly string[];
   readonly extensionsUsed?: readonly string[];
@@ -124,6 +129,14 @@ export type GltfMeshPrimitive = {
     readonly TEXCOORD_0?: number;
     readonly [semantic: string]: number | undefined;
   };
+  readonly extensions?: {
+    readonly KHR_materials_variants?: {
+      readonly mappings?: readonly {
+        readonly material?: number;
+        readonly variants?: readonly number[];
+      }[];
+    };
+  };
   readonly indices?: number;
   readonly material?: number;
   readonly mode?: number;
@@ -186,6 +199,7 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_lights_punctual",
   "KHR_materials_emissive_strength",
   "KHR_materials_unlit",
+  "KHR_materials_variants",
   "KHR_mesh_quantization",
   "KHR_node_visibility",
   "KHR_texture_transform",

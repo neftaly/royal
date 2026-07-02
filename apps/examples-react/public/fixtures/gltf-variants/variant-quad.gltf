@@ -1,0 +1,182 @@
+{
+  "asset": {
+    "generator": "Royal KHR_materials_variants fixture",
+    "version": "2.0"
+  },
+  "extensions": {
+    "KHR_materials_variants": {
+      "variants": [
+        {
+          "name": "ruby"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "slate"
+        }
+      ]
+    }
+  },
+  "extensionsRequired": [
+    "KHR_materials_unlit",
+    "KHR_materials_variants"
+  ],
+  "extensionsUsed": [
+    "KHR_materials_unlit",
+    "KHR_materials_variants"
+  ],
+  "buffers": [
+    {
+      "byteLength": 60,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAAAAAAAPwAAAL8AAAAAAAAAPwAAAD8AAAAAAAAAvwAAAD8AAAAAAAABAAIAAAACAAMA"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 12,
+      "byteOffset": 48,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        0.5,
+        0.5,
+        0
+      ],
+      "min": [
+        -0.5,
+        -0.5,
+        0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    }
+  ],
+  "materials": [
+    {
+      "name": "base warm gray",
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.52,
+          0.5,
+          0.45,
+          1
+        ]
+      }
+    },
+    {
+      "name": "ruby",
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.9,
+          0.08,
+          0.12,
+          1
+        ]
+      }
+    },
+    {
+      "name": "mint",
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.12,
+          0.72,
+          0.48,
+          1
+        ]
+      }
+    },
+    {
+      "name": "slate",
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.24,
+          0.34,
+          0.56,
+          1
+        ]
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "extensions": {
+            "KHR_materials_variants": {
+              "mappings": [
+                {
+                  "material": 1,
+                  "variants": [
+                    0
+                  ]
+                },
+                {
+                  "material": 2,
+                  "variants": [
+                    1
+                  ]
+                },
+                {
+                  "material": 3,
+                  "variants": [
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          "indices": 1,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}

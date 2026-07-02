@@ -50,6 +50,7 @@ const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
+const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const triangleBinByteLength = 104;
 const instancedTriangleBinByteLength = triangleBinByteLength + 48;
@@ -1370,6 +1371,134 @@ const emissiveStrengthTriangleDocument = () => {
   };
 };
 
+const materialVariantsTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      KHR_materials_variants: {
+        variants: [
+          { name: "ruby" },
+          { name: "mint" },
+        ],
+      },
+    },
+    extensionsRequired: ["KHR_materials_variants"],
+    extensionsUsed: ["KHR_materials_variants"],
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.22, 0.24, 0.28, 1],
+        },
+      },
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.9, 0.1, 0.08, 1],
+        },
+      },
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.1, 0.72, 0.46, 1],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            attributes: {
+              NORMAL: 1,
+              POSITION: 0,
+              TEXCOORD_0: 2,
+            },
+            extensions: {
+              KHR_materials_variants: {
+                mappings: [
+                  { material: 1, variants: [0] },
+                  { material: 2, variants: [1] },
+                ],
+              },
+            },
+            indices: 3,
+            material: 0,
+            mode: 4,
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const materialVariantTextureTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      KHR_materials_variants: {
+        variants: [
+          { name: "textured" },
+        ],
+      },
+    },
+    extensionsRequired: ["KHR_materials_variants"],
+    extensionsUsed: ["KHR_materials_variants"],
+    images: [
+      {
+        uri: triangleVariantImageUri,
+      },
+    ],
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.2, 0.24, 0.3, 1],
+        },
+      },
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [1, 1, 1, 1],
+          baseColorTexture: {
+            index: 0,
+          },
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            attributes: {
+              NORMAL: 1,
+              POSITION: 0,
+              TEXCOORD_0: 2,
+            },
+            extensions: {
+              KHR_materials_variants: {
+                mappings: [
+                  { material: 1, variants: [0] },
+                ],
+              },
+            },
+            indices: 3,
+            material: 0,
+            mode: 4,
+          },
+        ],
+      },
+    ],
+    samplers: [
+      {},
+    ],
+    textures: [
+      {
+        sampler: 0,
+        source: 0,
+      },
+    ],
+  };
+};
+
 const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);
 
@@ -1760,6 +1889,95 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_color").map(roundVector)).toContainEqual([0.25, 0.25, 0.25, 1]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector)).toContainEqual([2, 0.5, 1, 1]);
+  });
+
+  it("selects KHR_materials_variants materials by name or index and falls back to the base material", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [-0.45, 0, 0], rotation: [0, 0, 0] },
+        variant: "ruby",
+        version: "khr-materials-variants",
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0, 0, 0], rotation: [0, 0, 0] },
+        variant: 1,
+        version: "khr-materials-variants",
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0.45, 0, 0], rotation: [0, 0, 0] },
+        variant: "missing",
+        version: "khr-materials-variants",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialVariantsTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const colors = uniform4fvPayloads(readyFrameCalls, "u_color").map(roundVector);
+
+    expect(drawCalls(readyFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
+      .toHaveLength(3);
+    expect(colors).toContainEqual([0.9, 0.1, 0.08, 1]);
+    expect(colors).toContainEqual([0.1, 0.72, 0.46, 1]);
+    expect(colors).toContainEqual([0.22, 0.24, 0.28, 1]);
+  });
+
+  it("settles and uploads images referenced only by KHR_materials_variants materials", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        variant: "textured",
+        version: "khr-materials-variants-texture",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialVariantTextureTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleVariantImageUri}`))).toBe(true);
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(0);
+
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {

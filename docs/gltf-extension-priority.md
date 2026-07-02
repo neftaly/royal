@@ -50,7 +50,7 @@ samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
 `EXT_mesh_gpu_instancing`, `EXT_texture_webp`, `KHR_materials_unlit`,
 `KHR_lights_punctual`, `KHR_materials_emissive_strength`,
-`KHR_node_visibility`, and vendor `MSFT_lod`.
+`KHR_materials_variants`, `KHR_node_visibility`, and vendor `MSFT_lod`.
 
 ## Should Do
 
@@ -69,6 +69,7 @@ path. They are sorted in suggested implementation order.
 | P2 | `KHR_texture_transform` | Adds per-texture UV offset, scale, rotation, and texCoord override. | Common authoring feature; without it textures appear misaligned. |
 | P2 | `KHR_materials_unlit` | Marks a material as unaffected by scene lighting. | Small implementation and common for UI, labels, CAD colors, and baked assets. |
 | P2 | `KHR_lights_punctual` | Adds punctual point, spot, and directional lights to glTF scenes. | Implemented locally; maintain required-extension regression coverage. |
+| P3 | `KHR_materials_variants` | Defines named material variants for the same mesh. | Implemented locally for `gltf({ variant })` and `<model variant>` material selection. |
 | P3 | `EXT_mesh_gpu_instancing` | Stores many instances of one mesh with per-instance transforms/attributes. | Implemented locally; maintain tests and example coverage. |
 | P3 | `KHR_node_visibility` | Lets assets mark nodes as visible or hidden. | Prevents rendering hidden authored content. |
 | P3 | `MSFT_lod` | Vendor extension for node/material levels of detail. | Already implemented locally; maintain tests and do not regress it. |
@@ -81,7 +82,6 @@ need them.
 
 | Priority | Extension | Short explanation | When to do it |
 | --- | --- | --- | --- |
-| M1 | `KHR_materials_variants` | Defines named material variants for the same mesh. | Product configurators or author-facing variant selection. |
 | M1 | `KHR_materials_emissive_strength` | Allows emissive colors brighter than the core range. | Implemented for emissive factors; emissive textures remain future material work. |
 | M1 | `KHR_materials_specular` | Adds specular color and intensity controls to PBR. | Better product/material fidelity. |
 | M1 | `KHR_materials_ior` | Adds index of refraction for transparent materials. | Needed with transmission/volume materials. |

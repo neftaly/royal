@@ -7,6 +7,8 @@ import { GltfInstancing } from './examples/cases/GltfInstancing';
 import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
+import { GltfVariants } from './examples/cases/GltfVariants';
+import gltfVariantsSource from './examples/cases/GltfVariants.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { HudOverlay } from './examples/cases/HudOverlay';
@@ -120,6 +122,15 @@ export const examples = [
     Component: GltfLod,
     source: gltfLodSource,
     sourceFile: 'examples/cases/GltfLod.tsx',
+  },
+  {
+    id: 'gltf-variants',
+    maturity: 'product',
+    path: '/gltf-variants',
+    title: 'glTF Material Variants',
+    Component: GltfVariants,
+    source: gltfVariantsSource,
+    sourceFile: 'examples/cases/GltfVariants.tsx',
   },
 ] as const satisfies readonly Example[];
 

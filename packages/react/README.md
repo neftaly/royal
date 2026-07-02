@@ -45,7 +45,7 @@ createRoot(canvas, {
       />
       <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
       <mesh geometry={cube} material={red} />
-      <model src={helmetSrc} />
+      <model src={helmetSrc} variant="display" />
     </pass>
   </scene>
 );
@@ -56,6 +56,10 @@ JSX import source. It is for already-lowered Royal scenes: descriptor objects
 from `@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or
 components marked with `markRendererComponent`. Arbitrary React components and
 DOM overlays belong under `<Canvas>` in a React DOM tree.
+
+glTF material variants from `KHR_materials_variants` can be selected with
+`gltf({ src, variant })` or `<model variant>`. Pass a variant name, or pass a
+zero-based variant index when an asset has unnamed variants.
 
 ## Workflows
 

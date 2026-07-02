@@ -255,6 +255,28 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
+  it("preserves selected glTF material variants by name or index", () => {
+    expect(gltf({
+      src: "/models/chair.gltf",
+      variant: "walnut",
+    })).toEqual({
+      asset: {
+        uri: "/models/chair.gltf",
+      },
+      kind: "gltf",
+      src: "/models/chair.gltf",
+      variant: "walnut",
+    });
+
+    expect(gltf({
+      src: "/models/chair.gltf",
+      variant: 2,
+    })).toMatchObject({
+      kind: "gltf",
+      variant: 2,
+    });
+  });
+
   it("preserves directional light descriptor fields", () => {
     expect(directionalLight({
       color: [1, 0.95, 0.84, 1],

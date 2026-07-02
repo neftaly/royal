@@ -188,7 +188,7 @@ describe("renderer JSX contract", () => {
 
   it("lowers model JSX to glTF descriptors", () => {
     expect(
-      <model src="/models/terrain.gltf" version="terrain-v1" />,
+      <model src="/models/terrain.gltf" variant="winter" version="terrain-v1" />,
     ).toMatchObject({
       asset: {
         uri: "/models/terrain.gltf",
@@ -196,6 +196,7 @@ describe("renderer JSX contract", () => {
       },
       kind: "gltf",
       src: "/models/terrain.gltf",
+      variant: "winter",
     });
   });
 
