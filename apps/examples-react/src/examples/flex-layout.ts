@@ -54,6 +54,12 @@ export type FlexLayoutNode<Key extends string = string> = {
   readonly width?: number;
 };
 
+export type FlexLayoutContainerOptions<Key extends string = string> =
+  Omit<FlexLayoutNode<Key>, 'children' | 'direction'>;
+
+export type FlexLayoutItemOptions<Key extends string = string> =
+  Omit<FlexLayoutNode<Key>, 'children' | 'direction' | 'id'>;
+
 export type FlexLayoutRoot<Key extends string = string> =
   & FlexLayoutNode<Key>
   & {
@@ -180,3 +186,45 @@ export const layoutFlexTree = <Key extends string>(
     root.freeRecursive();
   }
 };
+
+export const flexColumn = <Key extends string>(
+  children: readonly FlexLayoutNode<Key>[],
+  options: FlexLayoutContainerOptions<Key> = {},
+): FlexLayoutNode<Key> => ({
+  ...options,
+  children,
+  direction: 'column',
+});
+
+export const flexRow = <Key extends string>(
+  children: readonly FlexLayoutNode<Key>[],
+  options: FlexLayoutContainerOptions<Key> = {},
+): FlexLayoutNode<Key> => ({
+  ...options,
+  children,
+  direction: 'row',
+});
+
+export const flexItem = <Key extends string>(
+  id: Key,
+  options: FlexLayoutItemOptions<Key> = {},
+): FlexLayoutNode<Key> => ({
+  ...options,
+  id,
+});
+
+export const flexStyle = <Style extends object = Record<never, never>>(
+  box: FlexLayoutBox,
+  style?: Style,
+): {
+  readonly height: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+} & Style => ({
+  height: box.height,
+  left: box.left,
+  top: box.top,
+  width: box.width,
+  ...(style ?? ({} as Style)),
+});

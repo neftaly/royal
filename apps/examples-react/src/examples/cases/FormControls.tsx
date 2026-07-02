@@ -1,9 +1,16 @@
 /** @jsxImportSource @royal/react */
 import { type TextFontFace } from '@royal/renderer-core/text/font';
-import { TextFontProvider, TextInteractionProvider, TextSurface } from '@royal/react';
+import { TextFontProvider, TextInteractionProvider, TextSurface, textFieldHeight } from '@royal/react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
-import { layoutFlexTree, type FlexLayoutBox } from '../flex-layout';
+import {
+  flexColumn,
+  flexItem,
+  flexRow,
+  flexStyle,
+  layoutFlexTree,
+  type FlexLayoutNode,
+} from '../flex-layout';
 import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
@@ -20,12 +27,23 @@ const surfaceSize = {
 } as const;
 
 const rows = 3;
+const labelTextStyle = {
+  fontSize: 0.2,
+  lineHeight: 0.26,
+} as const;
 const fieldStyle = {
   fieldPaddingY: 0.12,
   lineHeight: 0.36,
 } as const;
-const fieldHeight = fieldStyle.lineHeight + fieldStyle.fieldPaddingY * 2;
-const textareaHeight = rows * fieldStyle.lineHeight + fieldStyle.fieldPaddingY * 2;
+const fieldHeight = textFieldHeight({
+  lineHeight: fieldStyle.lineHeight,
+  paddingY: fieldStyle.fieldPaddingY,
+});
+const textareaHeight = textFieldHeight({
+  lineHeight: fieldStyle.lineHeight,
+  paddingY: fieldStyle.fieldPaddingY,
+  rows,
+});
 
 type FormBoxId =
   | 'actionLabel'
@@ -44,120 +62,70 @@ type FormBoxId =
   | 'title'
   | 'titleLabel';
 
+const labeledField = (
+  label: FormBoxId,
+  control: FormBoxId,
+  controlHeight: number,
+): FlexLayoutNode<FormBoxId> => flexColumn([
+  flexItem(label, { height: labelTextStyle.lineHeight }),
+  flexItem(control, { height: controlHeight }),
+], { gap: 0.1 });
+
 const boxes = layoutFlexTree<FormBoxId>({
-  direction: 'column',
-  gap: 0.18,
-  height: surfaceSize.height,
-  padding: {
-    bottom: 0.25,
-    horizontal: 0.65,
-    top: 0.25,
-  },
-  width: surfaceSize.width,
-  children: [
-    {
-      direction: 'row',
+  ...flexColumn<FormBoxId>([
+    flexRow([
+      labeledField('readTextLabel', 'readText', 0.72),
+      labeledField('titleLabel', 'title', fieldHeight),
+    ], {
       gap: 0.65,
       height: 1.08,
       itemWidth: 4.63,
-      children: [
-        {
-          direction: 'column',
-          gap: 0.1,
-          children: [
-            { height: 0.26, id: 'readTextLabel' },
-            { height: 0.72, id: 'readText' },
-          ],
-        },
-        {
-          direction: 'column',
-          gap: 0.1,
-          children: [
-            { height: 0.26, id: 'titleLabel' },
-            { height: fieldHeight, id: 'title' },
-          ],
-        },
-      ],
-    },
-    {
-      direction: 'row',
+    }),
+    flexRow([
+      labeledField('emptyLabel', 'emptyInput', fieldHeight),
+      labeledField('notesLabel', 'notes', textareaHeight),
+    ], {
       gap: 0.65,
       height: 1.68,
       itemWidth: 4.63,
-      children: [
-        {
-          direction: 'column',
-          gap: 0.1,
-          children: [
-            { height: 0.26, id: 'emptyLabel' },
-            { height: fieldHeight, id: 'emptyInput' },
-          ],
-        },
-        {
-          direction: 'column',
-          gap: 0.1,
-          children: [
-            { height: 0.26, id: 'notesLabel' },
-            { height: textareaHeight, id: 'notes' },
-          ],
-        },
-      ],
-    },
-    {
-      direction: 'column',
+    }),
+    flexColumn([
+      flexItem('actionLabel', { height: 0.24 }),
+      flexRow([
+        flexItem('checkbox', { width: 4.3 }),
+        flexItem('button', { width: 1.25 }),
+        flexItem('file', { width: 1.28 }),
+        flexItem('color', { width: 1.5 }),
+      ], {
+        gap: 0.18,
+        height: 0.5,
+      }),
+    ], {
       gap: 0.1,
       height: 0.86,
-      children: [
-        { height: 0.24, id: 'actionLabel' },
-        {
-          direction: 'row',
-          gap: 0.18,
-          height: 0.5,
-          children: [
-            { id: 'checkbox', width: 4.3 },
-            { id: 'button', width: 1.25 },
-            { id: 'file', width: 1.28 },
-            { id: 'color', width: 1.5 },
-          ],
-        },
-      ],
-    },
-    {
-      direction: 'column',
+    }),
+    flexColumn([
+      flexItem('previewLabel', { height: 0.24 }),
+      flexItem('preview', { height: 1.36 }),
+    ], {
       gap: 0.1,
       height: 1.7,
-      children: [
-        { height: 0.24, id: 'previewLabel' },
-        { height: 1.36, id: 'preview' },
-      ],
+    }),
+  ], {
+    gap: 0.18,
+    padding: {
+      bottom: 0.25,
+      horizontal: 0.65,
+      top: 0.25,
     },
-  ],
+  }),
+  height: surfaceSize.height,
+  width: surfaceSize.width,
 });
 
 const lorem =
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus posuere velit aliquet.';
 const textareaLorem = 'Lorem ipsum dolor sit amet.\nConsectetur adipiscing elit.\nInteger posuere erat a ante.';
-
-const FieldLabel = ({
-  box,
-  children,
-  color,
-}: {
-  readonly box: FlexLayoutBox;
-  readonly children: string;
-  readonly color: string;
-}): ReactNode => (
-  <text
-    box={box}
-    color={htmlColor(color)}
-    style={{
-      fontSize: 0.2,
-      lineHeight: 0.26,
-    }}
-  >
-    {children}
-  </text>
-);
 
 const FormControlsScene = ({
   font,
@@ -188,7 +156,6 @@ const FormControlsScene = ({
       <TextFontProvider font={font}>
         <TextSurface
           aria-label="Controlled form controls"
-          bounds={surfaceBounds}
           renderer={exampleRenderer}
           style={{ cursor: 'text', touchAction: 'none' }}
           styleOptions={{
@@ -206,94 +173,92 @@ const FormControlsScene = ({
             <pass clearColor={htmlColor('#080b0d')}>
               <orthographicCamera {...surfaceBounds} />
 
-              <FieldLabel box={boxes.readTextLabel} color="#55e08a">
+              <text color={htmlColor('#55e08a')} style={flexStyle(boxes.readTextLabel, labelTextStyle)}>
                 Selectable non-editable text
-              </FieldLabel>
+              </text>
               <text
-                box={boxes.readText}
                 color={htmlColor('#dff7e8')}
                 copyable
-                selectable
+                style={flexStyle(boxes.readText)}
               >
                 {lorem}
               </text>
 
-              <FieldLabel box={boxes.titleLabel} color="#8fc7ff">
+              <text color={htmlColor('#8fc7ff')} style={flexStyle(boxes.titleLabel, labelTextStyle)}>
                 Input type = text
-              </FieldLabel>
+              </text>
               <input
-                box={boxes.title}
                 onValueChange={setTitle}
                 placeholder="Lorem ipsum"
+                style={flexStyle(boxes.title)}
                 value={title}
               />
 
-              <FieldLabel box={boxes.emptyLabel} color="#b8a7ff">
+              <text color={htmlColor('#b8a7ff')} style={flexStyle(boxes.emptyLabel, labelTextStyle)}>
                 Empty placeholder input
-              </FieldLabel>
+              </text>
               <input
-                box={boxes.emptyInput}
                 onValueChange={setEmptyText}
                 placeholder="Type into this controlled field"
+                style={flexStyle(boxes.emptyInput)}
                 value={emptyText}
               />
 
-              <FieldLabel box={boxes.notesLabel} color="#ffd166">
+              <text color={htmlColor('#ffd166')} style={flexStyle(boxes.notesLabel, labelTextStyle)}>
                 multiline textarea
-              </FieldLabel>
+              </text>
               <textarea
-                box={boxes.notes}
                 onValueChange={setNotes}
                 placeholder="Lorem ipsum"
                 rows={rows}
+                style={flexStyle(boxes.notes)}
                 value={notes}
               />
 
-              <FieldLabel box={boxes.actionLabel} color="#f2a0a0">
+              <text color={htmlColor('#f2a0a0')} style={flexStyle(boxes.actionLabel, labelTextStyle)}>
                 Controlled action inputs
-              </FieldLabel>
+              </text>
               <input
-                box={boxes.checkbox}
                 checked={checked}
                 onCheckedChange={setChecked}
+                style={flexStyle(boxes.checkbox)}
                 type="checkbox"
               >
                 Send me updates
               </input>
               <button
-                box={boxes.button}
                 onPress={() => setPresses((count) => count + 1)}
-                type="button"
+                style={flexStyle(boxes.button)}
               >
                 Press
               </button>
               <input
-                box={boxes.file}
                 multiple
                 onFilesChange={setFiles}
+                style={flexStyle(boxes.file)}
                 type="file"
               >
                 File
               </input>
               <input
-                box={boxes.color}
                 onValueChange={setColor}
+                style={flexStyle(boxes.color)}
                 type="color"
                 value={color}
               >
                 Color
               </input>
 
-              <FieldLabel box={boxes.previewLabel} color="#7ee0d1">
+              <text color={htmlColor('#7ee0d1')} style={flexStyle(boxes.previewLabel, labelTextStyle)}>
                 React state preview
-              </FieldLabel>
+              </text>
               <text
-                box={boxes.preview}
                 color={htmlColor('#cfe5e7')}
                 copyable
-                fontSize={0.18}
-                lineHeight={0.23}
-                selectable
+                style={flexStyle(boxes.preview, {
+                  fontSize: 0.18,
+                  lineHeight: 0.23,
+                })}
               >
                 {summary}
               </text>

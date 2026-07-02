@@ -9,12 +9,15 @@ import {
 } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
-  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
-import { layoutFlexTree } from '../flex-layout';
+import {
+  flexColumn,
+  flexItem,
+  layoutFlexTree,
+} from '../flex-layout';
 import {
   HudPass,
   HudRect,
@@ -44,56 +47,61 @@ type HudBoxId =
   | 'status';
 
 const hudBoxes = layoutFlexTree<HudBoxId>({
-  direction: 'column',
-  gap: 0.18,
-  height: hudSize.height,
-  padding: {
-    left: 0.55,
-    top: 0.45,
-  },
-  width: hudSize.width,
-  children: [
-    {
-      id: 'status',
-      direction: 'column',
+  ...flexColumn([
+    flexColumn([
+      flexItem('readout', { height: 0.34 }),
+      flexItem('shieldLabel', { height: 0.24 }),
+      flexItem('shieldTrack', { height: 0.26 }),
+      flexItem('energyLabel', { height: 0.24 }),
+      flexItem('energyTrack', { height: 0.26 }),
+    ], {
       gap: 0.12,
       height: 2.18,
+      id: 'status',
       padding: 0.24,
       width: 4.8,
-      children: [
-        { height: 0.34, id: 'readout' },
-        { height: 0.24, id: 'shieldLabel' },
-        { height: 0.26, id: 'shieldTrack' },
-        { height: 0.24, id: 'energyLabel' },
-        { height: 0.26, id: 'energyTrack' },
-      ],
-    },
-    {
-      id: 'mission',
-      direction: 'column',
+    }),
+    flexColumn([
+      flexItem('missionTitle', { height: 0.26 }),
+      flexItem('missionBody', { height: 0.58 }),
+    ], {
       gap: 0.1,
       height: 1.22,
+      id: 'mission',
       padding: 0.22,
       width: 4.8,
-      children: [
-        { height: 0.26, id: 'missionTitle' },
-        { height: 0.58, id: 'missionBody' },
-      ],
-    },
-    {
-      id: 'comms',
-      direction: 'column',
+    }),
+    flexColumn([
+      flexItem('commsTitle', { height: 0.24 }),
+      flexItem('commsBody', { height: 0.42 }),
+    ], {
       gap: 0.1,
       height: 1.02,
+      id: 'comms',
       padding: 0.22,
       width: 3.75,
-      children: [
-        { height: 0.24, id: 'commsTitle' },
-        { height: 0.42, id: 'commsBody' },
-      ],
+    }),
+  ], {
+    gap: 0.18,
+    padding: {
+      left: 0.55,
+      top: 0.45,
     },
-  ],
+  }),
+  height: hudSize.height,
+  width: hudSize.width,
 });
+
+const palette = {
+  amber: htmlColor('#ffb84f'),
+  cyan: htmlColor('#8ee8ff'),
+  energy: htmlColor('#7c8cff'),
+  panel: htmlColor('#071116'),
+  panelAlt: htmlColor('#0c1920'),
+  shield: htmlColor('#55e08a'),
+  text: htmlColor('#e7f7f4'),
+  track: htmlColor('#1a2b31'),
+} as const;
 
 const Scout = (): ReactNode => {
   const target = useRef<RenderObjectHandle | null>(null);
@@ -122,16 +130,6 @@ const HudReadout = ({
   readonly font: TextFontFace;
 }): ReactNode => {
   const frame = useFrameIndex();
-  const palette = useMemo(() => ({
-    amber: htmlColor('#ffb84f'),
-    cyan: htmlColor('#8ee8ff'),
-    energy: htmlColor('#7c8cff'),
-    panel: htmlColor('#071116'),
-    panelAlt: htmlColor('#0c1920'),
-    shield: htmlColor('#55e08a'),
-    text: htmlColor('#e7f7f4'),
-    track: htmlColor('#1a2b31'),
-  }), []);
   const shield = 0.68 + Math.sin(frame * 0.045) * 0.08;
   const energy = 0.46 + Math.cos(frame * 0.038) * 0.12;
   const shieldFill = hudBoxWithWidth(hudBoxes.shieldTrack, hudBoxes.shieldTrack.width * shield);
@@ -159,13 +157,13 @@ const HudReadout = ({
       <HudText box={hudBoxes.missionTitle} color={palette.amber} font={font} fontSize={0.2}>
         OBJECTIVE
       </HudText>
-      <HudText box={hudBoxes.missionBody} color={palette.text} font={font} fontSize={0.22} lineHeight={0.28}>
+      <HudText box={hudBoxes.missionBody} color={palette.text} font={font} fontSize={0.22}>
         Hold orbit while the scan resolves.
       </HudText>
       <HudText box={hudBoxes.commsTitle} color={palette.cyan} font={font} fontSize={0.18}>
         COMMS
       </HudText>
-      <HudText box={hudBoxes.commsBody} color={palette.text} font={font} fontSize={0.2} lineHeight={0.25}>
+      <HudText box={hudBoxes.commsBody} color={palette.text} font={font} fontSize={0.2}>
         Beacon locked.
       </HudText>
     </>
@@ -206,7 +204,7 @@ export const HudOverlay = (): ReactNode => {
             <standardMaterial color={htmlColor('#8f7aff')} />
           </mesh>
         </pass>
-        <HudPass height={hudSize.height} width={hudSize.width}>
+        <HudPass>
           <HudReadout font={fontState.font} />
         </HudPass>
       </scene>
