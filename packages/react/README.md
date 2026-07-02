@@ -42,7 +42,7 @@ createRoot(canvas, {
       />
       <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
       <mesh geometry={cube} material={red} />
-      <gltf src={helmetSrc} />
+      <model src={helmetSrc} />
     </pass>
   </scene>
 );

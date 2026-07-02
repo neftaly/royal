@@ -3,7 +3,8 @@ import { unlitMaterial } from './material';
 import { mesh } from './mesh';
 import type { Rgba, Vec3 } from './primitives';
 import type { RenderNode } from './render-node';
-import { text, type TextFontFace } from './text';
+import type { TextFontFace } from './text-font';
+import { text } from './text-node';
 import {
   clampTextIndex,
   editableTextCaretPlacement,

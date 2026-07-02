@@ -10,7 +10,7 @@ import {
   type EditableTextHitPoint,
   type EditableTextLayout,
   type EditableTextSelection,
-} from "@royal/renderer-core/text";
+} from "@royal/renderer-core/text/editable";
 import type { Vec3 } from "@royal/renderer-core";
 
 const origin: Vec3 = [0, 0, 0];

@@ -1,4 +1,4 @@
-import { createTextFontFace, type TextFontFace } from '@royal/renderer-core/text';
+import { createTextFontFace, type TextFontFace } from '@royal/renderer-core/text/font';
 import { useEffect, useState } from 'react';
 import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?url';
 

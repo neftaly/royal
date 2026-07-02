@@ -3,6 +3,7 @@ import type { PickInput, PickResult } from "@royal/renderer-core";
 import {
   createContext,
   createElement,
+  isValidElement,
   useCallback,
   useContext,
   useLayoutEffect,
@@ -15,6 +16,7 @@ import {
 } from "react";
 import { createFrameLoop, FrameLoopContext } from "./frame";
 import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime";
+import { createRoyalRendererTree } from "./renderer-tree";
 import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
 
 type CanvasChild = ReactNode | RoyalRendererJsxElement;
@@ -40,6 +42,9 @@ const isRenderRoot = (value: unknown): value is RenderRoot =>
   value !== null &&
   "kind" in value &&
   value.kind === "scene";
+
+const isReactRendererScene = (value: unknown): value is ReactNode =>
+  isValidElement(value) && value.type === "scene";
 
 const isCanvasChildrenArray = (
   value: CanvasChildren,
@@ -75,13 +80,17 @@ const splitCanvasChildren = (
   children: CanvasChildren,
 ): {
   readonly controls: readonly ReactNode[];
-  readonly sceneChild: RenderRoot;
+  readonly sceneChild: ReactNode | RenderRoot;
 } => {
-  const sceneChildren: RenderRoot[] = [];
+  const sceneChildren: (ReactNode | RenderRoot)[] = [];
   const controls: ReactNode[] = [];
 
   for (const child of toCanvasChildArray(children)) {
-    if (isRenderRoot(child)) {
+    if (
+      isRenderRoot(child) ||
+      isReactRendererScene(child) ||
+      (sceneChildren.length === 0 && isValidElement(child))
+    ) {
       sceneChildren.push(child);
       continue;
     }
@@ -151,9 +160,9 @@ export const Canvas = ({
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rootRef = useRef<RoyalRoot | undefined>(undefined);
   const rootCreationErrorRef = useRef<unknown>(null);
   const frameLoop = useMemo(() => createFrameLoop(), []);
+  const rendererTree = useMemo(() => createRoyalRendererTree(), []);
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [canvasRoot, setCanvasRoot] = useState<RoyalRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
@@ -197,6 +206,10 @@ export const Canvas = ({
   });
 
   useLayoutEffect(() => () => {
+    rendererTree.dispose();
+  }, [rendererTree]);
+
+  useLayoutEffect(() => () => {
     frameLoop.dispose();
   }, [frameLoop]);
 
@@ -212,28 +225,45 @@ export const Canvas = ({
       setRootError(null);
     } catch (error) {
       rootCreationErrorRef.current = error;
-      rootRef.current = undefined;
       setCanvasRoot(null);
       setRootError(error);
       return undefined;
     }
-    rootRef.current = root;
     setCanvasRoot(root);
 
     return () => {
       root.dispose();
-      rootRef.current = undefined;
       setCanvasRoot(null);
     };
   }, [memoizedRootOptions]);
 
   useLayoutEffect(() => {
-    if (rootError !== null || rootCreationErrorRef.current !== null) return;
-    const root = rootRef.current;
-    if (root === undefined) throw new Error("Canvas root was not created");
+    const hasRootError = rootError !== null || rootCreationErrorRef.current !== null;
 
-    root.render(sceneChild);
-  }, [rootError, sceneChild, memoizedRootOptions]);
+    if (isRenderRoot(sceneChild)) {
+      rendererTree.setTarget(canvasRoot, true);
+      rendererTree.render(null);
+      if (!hasRootError && canvasRoot !== null) {
+        canvasRoot.render(sceneChild);
+      }
+      return;
+    }
+
+    rendererTree.setTarget(canvasRoot, hasRootError);
+    rendererTree.render(createElement(
+      FrameLoopContext.Provider,
+      { value: frameLoop },
+      createElement(
+        CanvasElementContext.Provider,
+        { value: canvasElement },
+        createElement(
+          CanvasRootContext.Provider,
+          { value: canvasRoot },
+          sceneChild,
+        ),
+      ),
+    ));
+  }, [canvasElement, canvasRoot, frameLoop, rendererTree, rootError, sceneChild]);
 
   if (rootError !== null) {
     if (fallback !== undefined) {

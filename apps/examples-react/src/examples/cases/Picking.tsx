@@ -104,7 +104,7 @@ export const Picking = (): ReactNode => {
                   rotation: [0, 0, 0],
                 }}
               />
-              <gltf
+              <model
                 pickingId="helmet"
                 src={helmetSrc}
                 transform={helmetTransform(hovered === 'helmet')}

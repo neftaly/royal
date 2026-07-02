@@ -1,5 +1,4 @@
 import {
-  autoLod,
   boxGeometry,
   directionalLight,
   gltf,
@@ -14,7 +13,6 @@ import {
   text,
   unlitMaterial,
   wireframeMaterial,
-  type AutoLodOptions,
   type BoxGeometryOptions,
   type Camera,
   type DirectionalLightOptions,
@@ -37,40 +35,70 @@ import {
   type UnlitMaterialOptions,
   type WireframeMaterialOptions
 } from '@royal/renderer-core';
-import type { ReactNode } from 'react';
-import { jsx as reactJsx, jsxs as reactJsxs } from 'react/jsx-runtime';
+import { isValidElement, type ReactNode } from 'react';
+import {
+  Fragment as ReactFragment,
+  jsx as reactJsx,
+  jsxs as reactJsxs
+} from 'react/jsx-runtime';
+import {
+  rendererOutputToReact,
+  rendererOutputToSingleDescriptor,
+  type RendererComponentOutput
+} from './renderer-output';
+import {
+  InputPrimitive,
+  TextareaPrimitive,
+  TextPrimitive,
+  type TextAreaPrimitiveProps,
+  type TextFieldPrimitiveProps,
+  type TextPrimitiveProps
+} from './text-surface';
 
 export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
 export type RoyalRendererJsxChild = ReactNode | RoyalRendererJsxElement | readonly RoyalRendererJsxChild[];
 type ComponentOutput = ReactNode | RoyalRendererJsxElement;
 type RendererJsxChild = RoyalRendererJsxChild;
-type Component = (props: Record<string, unknown>) => ComponentOutput;
+type Component = (props: never) => RendererComponentOutput;
 type ElementType = keyof JSX.IntrinsicElements | Component;
 type ReactJsxFactory = typeof reactJsx;
+type RendererDescriptorFactory = (props: Record<string, unknown>) => RoyalRendererJsxElement;
+type MarkedRendererComponent<Component extends (props: never) => unknown> =
+  Component extends (props: infer Props) => infer Output
+    ? Output extends RoyalRendererJsxElement
+      ? {
+          (props: Props): RoyalRendererJsxElement;
+          (props: Props): ReactNode;
+        }
+      : (props: Props) => Output
+    : never;
 
-type SceneProps = {
+export type SceneProps = {
   readonly children?: RendererJsxChild;
 };
 
-type PassProps = Omit<RenderPassOptions, 'camera' | 'children'> & {
+export type PassProps = Omit<RenderPassOptions, 'camera' | 'children'> & {
   readonly camera?: Camera;
   readonly children?: RendererJsxChild;
 };
 type MeshTextureInput = TextureRef | string;
-type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
+export type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
   readonly children?: RendererJsxChild;
   readonly color?: Rgba;
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
   readonly texture?: MeshTextureInput;
 };
-type TextProps = Omit<TextOptions, 'text'> & {
+export type TextProps = Omit<TextOptions, 'text'> & {
   readonly children?: RendererJsxChild;
+  readonly copyable?: boolean;
+  readonly maxWidth?: number;
+  readonly selectable?: boolean;
   readonly text?: string;
 };
-export type AutoLodProps = Omit<AutoLodOptions, 'children'> & {
-  readonly children?: RoyalRendererJsxChild;
-};
+export type InputProps = TextFieldPrimitiveProps;
+export type TextareaProps = TextAreaPrimitiveProps;
+export type ModelProps = GltfOptions;
 type MeshChildren = {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
@@ -80,6 +108,9 @@ type JsxProps = Partial<
   PassProps &
   MeshProps &
   TextProps &
+  InputProps &
+  TextareaProps &
+  ModelProps &
   PerspectiveCameraOptions &
   OrthographicCameraOptions &
   DirectionalLightOptions &
@@ -90,7 +121,7 @@ type JsxProps = Partial<
 > & Record<string, unknown>;
 
 const reactComponentMarker = Symbol.for('@royal/react.react-component');
-const rendererComponentMarker = Symbol.for('@royal/react.renderer-component');
+const rendererDescriptorFactoryMarker = Symbol.for('@royal/react.renderer-descriptor-factory');
 
 export const markReactComponent = <Component extends object>(component: Component): Component => {
   Object.defineProperty(component, reactComponentMarker, {
@@ -102,19 +133,34 @@ export const markReactComponent = <Component extends object>(component: Componen
   return component;
 };
 
-export const markRendererComponent = <Component extends object>(component: Component): Component => {
-  Object.defineProperty(component, rendererComponentMarker, {
+export const markRendererComponent = <Component extends (props: never) => unknown>(
+  component: Component,
+): MarkedRendererComponent<Component> => {
+  const wrapped = ((props: Parameters<Component>[0]): ReactNode =>
+    rendererOutputToReact(component(props) as RendererComponentOutput)) as MarkedRendererComponent<Component>;
+
+  Object.defineProperty(wrapped, rendererDescriptorFactoryMarker, {
     configurable: false,
     enumerable: false,
-    value: true
+    value: (props: Record<string, unknown>) => {
+      const output = component(props as Parameters<Component>[0]) as RendererComponentOutput;
+      const descriptor = rendererOutputToSingleDescriptor(output);
+      if (isRoyalRendererJsxElement(descriptor)) return descriptor;
+
+      throw new Error('Royal renderer JSX components must return one renderer descriptor');
+    }
   });
 
-  return component;
+  return wrapped;
 };
 
-const isMarkedRendererComponent = (type: ElementType): boolean =>
-  typeof type === 'function' &&
-  (type as { readonly [rendererComponentMarker]?: true })[rendererComponentMarker] === true;
+const rendererDescriptorFactory = (type: ElementType): RendererDescriptorFactory | undefined =>
+  typeof type === 'function'
+    ? (type as { readonly [rendererDescriptorFactoryMarker]?: RendererDescriptorFactory })[rendererDescriptorFactoryMarker]
+    : undefined;
+
+const reactFactoryFor = (props: JsxProps | null): ReactJsxFactory =>
+  Array.isArray(props?.children) ? reactJsxs : reactJsx;
 
 export const isRoyalRendererJsxElement = (value: unknown): value is RoyalRendererJsxElement =>
   typeof value === 'object' &&
@@ -181,7 +227,6 @@ const isRenderNode = (element: ComponentOutput): element is RenderNode =>
     element.kind === 'mesh' ||
     element.kind === 'gltf' ||
     element.kind === 'directional-light' ||
-    element.kind === 'auto-lod' ||
     element.kind === 'text'
   );
 
@@ -211,11 +256,10 @@ const isRenderPass = (element: ComponentOutput): element is RenderPass =>
 
 const toRenderPasses = (children: RendererJsxChild): readonly RenderPass[] =>
   toStructuralArray(children).map((child) => {
-    if (!isRenderPass(child)) {
-      throw new Error(`scene children must be pass elements; received ${describeJsxChild(child)}`);
-    }
+    if (isRenderPass(child)) return child;
+    if (isValidElement(child)) return child as unknown as RenderPass;
 
-    return child;
+    throw new Error(`scene children must be pass elements; received ${describeJsxChild(child)}`);
   });
 
 const toRenderNodes = (
@@ -227,6 +271,11 @@ const toRenderNodes = (
   for (const child of toStructuralArray(children)) {
     if (isRenderNode(child)) {
       nodes.push(child);
+      continue;
+    }
+
+    if (isValidElement(child)) {
+      nodes.push(child as unknown as RenderNode);
       continue;
     }
 
@@ -269,7 +318,7 @@ const toPass = (props: PassProps): RenderPass => {
   );
 };
 
-const toMesh = (props: MeshProps): RenderNode => {
+export const toMesh = (props: MeshProps): RenderNode => {
   const children = toMeshChildren(props);
   const hasTextureMaterial = props.texture !== undefined;
   const materialSourceCount =
@@ -303,13 +352,7 @@ const toMesh = (props: MeshProps): RenderNode => {
   return mesh(toMeshOptions(props, standardMaterial({ color: props.color }), children.geometry));
 };
 
-const toGltfNode = (options: GltfOptions): RenderNode => gltf(options);
-
-const toAutoLod = (props: AutoLodProps): RenderNode => autoLod({
-  children: toRenderNodes(props.children, 'AutoLod children must be render nodes'),
-  ...(props.generatedMeshes === undefined ? {} : { generatedMeshes: props.generatedMeshes }),
-  ...(props.quality === undefined ? {} : { quality: props.quality })
-});
+export const toGltfNode = (options: GltfOptions): RenderNode => gltf(options);
 
 const toMeshTexture = (texture: MeshTextureInput | undefined): TextureRef => {
   if (texture === undefined) {
@@ -373,7 +416,8 @@ const toMeshOptions = (
   const options = {
     geometry: toMeshGeometry(props, childGeometry),
     material,
-    ...(props.pickingId === undefined ? {} : { pickingId: props.pickingId })
+    ...(props.pickingId === undefined ? {} : { pickingId: props.pickingId }),
+    ...(props.ref === undefined ? {} : { ref: props.ref })
   } satisfies Omit<MeshOptions, 'transform'>;
 
   return props.transform === undefined
@@ -381,7 +425,7 @@ const toMeshOptions = (
     : { ...options, transform: props.transform };
 };
 
-const toText = (props: TextProps): RenderNode => {
+export const toText = (props: TextProps): RenderNode => {
   const textValue = typeof props.text === 'string'
     ? props.text
     : toTextContent(props.children);
@@ -395,6 +439,21 @@ const toText = (props: TextProps): RenderNode => {
     text: textValue
   });
 };
+
+const toInteractiveText = (
+  props: TextProps,
+  key: string | undefined,
+): ReactNode => reactJsx(TextPrimitive as Parameters<ReactJsxFactory>[0], props as TextPrimitiveProps, key);
+
+const toInput = (
+  props: InputProps,
+  key: string | undefined,
+): ReactNode => reactJsx(InputPrimitive as Parameters<ReactJsxFactory>[0], props, key);
+
+const toTextarea = (
+  props: TextareaProps,
+  key: string | undefined,
+): ReactNode => reactJsx(TextareaPrimitive as Parameters<ReactJsxFactory>[0], props, key);
 
 const assertNever = (type: never): never => {
   throw new Error(
@@ -423,10 +482,13 @@ const createIntrinsicRendererElement = (
       return directionalLight(elementProps as DirectionalLightOptions);
     case 'mesh':
       return toMesh(elementProps as MeshProps);
-    case 'gltf':
-      return toGltfNode(elementProps as GltfOptions);
+    case 'model':
+      return toGltfNode(elementProps as ModelProps);
     case 'text':
       return toText(elementProps as TextProps);
+    case 'input':
+    case 'textarea':
+      throw new Error('input and textarea primitives require the @royal/react Canvas runtime');
     case 'boxGeometry':
       return boxGeometry(elementProps as BoxGeometryOptions);
     case 'planeGeometry':
@@ -447,44 +509,57 @@ export const createRendererElement = (
   props: JsxProps | null
 ): RoyalRendererJsxElement => {
   if (typeof type === 'function') {
-    if (!isMarkedRendererComponent(type)) {
+    const factory = rendererDescriptorFactory(type);
+    if (factory === undefined) {
       throw new Error('Royal renderer JSX components must be marked with markRendererComponent');
     }
 
-    const output = type(props ?? {});
+    const output = factory(props ?? {});
     if (isRoyalRendererJsxElement(output)) return output;
 
     throw new Error('Royal renderer JSX components must return one renderer descriptor');
   }
 
-  return createIntrinsicRendererElement(type, props);
+  const output = createIntrinsicRendererElement(type, props);
+  if (isRoyalRendererJsxElement(output)) return output;
+
+  throw new Error('Royal renderer JSX components must return one renderer descriptor');
 };
 
 const createElement = (
   type: ElementType,
   props: JsxProps | null,
   key?: string
-): ComponentOutput => {
-  const elementProps = props ?? {};
-
+): ReactNode => {
   if (typeof type === 'function') {
-    if (!isMarkedRendererComponent(type)) {
-      const factory: ReactJsxFactory = props?.children === undefined ? reactJsx : reactJsxs;
-      return factory(type as Parameters<ReactJsxFactory>[0], props, key);
-    }
-
-    return type(elementProps);
+    const factory = reactFactoryFor(props);
+    return factory(type as Parameters<ReactJsxFactory>[0], props, key);
   }
 
-  return createIntrinsicRendererElement(type, elementProps);
+  if (typeof type === 'string') {
+    if (
+      type === 'text' &&
+      (
+        (props as TextProps | null)?.selectable === true ||
+        (props as TextProps | null)?.copyable === true
+      )
+    ) {
+      return toInteractiveText(props as TextProps, key);
+    }
+
+    if (type === 'input') return toInput(props as InputProps, key);
+    if (type === 'textarea') return toTextarea(props as TextareaProps, key);
+  }
+
+  const factory = reactFactoryFor(props);
+  return factory(type as Parameters<ReactJsxFactory>[0], props, key);
 };
 
-export const Fragment = markRendererComponent((_props: {
+export const RendererFragment = markRendererComponent((_props: {
   readonly children?: RendererJsxChild;
-}): RendererJsxChild => _props.children);
+}): RoyalRendererJsxElement => _props.children as RoyalRendererJsxElement);
 
-export const AutoLod = markRendererComponent((props: AutoLodProps): RenderNode => toAutoLod(props));
-
+export const Fragment = ReactFragment;
 export const jsx = createElement;
 export const jsxs = createElement;
 
@@ -502,8 +577,10 @@ export namespace JSX {
     orthographicCamera: OrthographicCameraOptions;
     directionalLight: DirectionalLightOptions;
     mesh: MeshProps;
-    gltf: GltfOptions;
+    model: ModelProps;
     text: TextProps;
+    input: InputProps;
+    textarea: TextareaProps;
     boxGeometry: BoxGeometryOptions;
     planeGeometry: PlaneGeometryOptions;
     standardMaterial: StandardMaterialOptions;

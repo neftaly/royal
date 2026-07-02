@@ -11,7 +11,11 @@ import {
 } from "@royal/renderer-core";
 import * as rendererCore from "@royal/renderer-core";
 import * as reactRoyal from "@royal/react";
-import { jsx } from "@royal/react/jsx-runtime";
+import { layoutText } from "@royal/renderer-core/text/layout";
+import { textMesh } from "@royal/renderer-core/text/mesh";
+import { text as textNode } from "@royal/renderer-core/text/node";
+import { shapeText } from "@royal/renderer-core/text/shaping";
+import { jsx } from "@royal/react/renderer/jsx-runtime";
 
 describe("renderer-core public API", () => {
   it("builds plain render descriptors without backend state", () => {
@@ -77,6 +81,18 @@ describe("renderer-core public API", () => {
       // @ts-expect-error virtualTextureAsset is an internal texture helper.
       rendererCore.virtualTextureAsset;
     }
+  });
+
+  it("exposes focused text API subpaths", () => {
+    const shaped = shapeText({ fontSize: 1, text: "Royal" });
+    const layout = layoutText({ fontSize: 1, text: "Royal" });
+    const label = textNode({ color: [1, 1, 1, 1], fontSize: 1, text: "Royal" });
+    const bounds: import("@royal/renderer-core/text/types").TextBounds = layout.bounds;
+
+    expect(shaped.run.glyphs).toHaveLength(5);
+    expect(layout.source).toBe("Royal");
+    expect(bounds.xMax).toBeGreaterThan(bounds.xMin);
+    expect(textMesh(label).indices.length).toBeGreaterThan(0);
   });
 
   it("lowers Royal JSX tags into renderer descriptors", () => {

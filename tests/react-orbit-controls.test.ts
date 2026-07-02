@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  createOrbitCameraStore,
   createOrbitControls,
+  orbitCameraTransform,
+  resolveOrbitCameraView,
   type OrbitCameraView,
 } from "@royal/react";
 
@@ -101,6 +104,65 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
+  it("defaults sparse orbit views to origin target and zero yaw", () => {
+    expect(resolveOrbitCameraView({
+      distance: 5,
+      pitch: 0,
+    })).toEqual({
+      distance: 5,
+      pitch: 0,
+      target: [0, 0, 0],
+      yaw: 0,
+    });
+
+    expect(orbitCameraTransform({
+      distance: 5,
+      pitch: 0,
+    })).toEqual({
+      position: [0, 0, 5],
+      rotation: [-0, -0, 0],
+    });
+  });
+
+  it("publishes complete views from orbit camera stores", () => {
+    const store = createOrbitCameraStore({
+      distance: 5,
+      pitch: 0.1,
+    });
+    const changes: OrbitCameraView[] = [];
+    const unsubscribe = store.subscribe((state) => {
+      changes.push(state.view);
+    });
+
+    expect(store.getState().view).toEqual({
+      distance: 5,
+      pitch: 0.1,
+      target: [0, 0, 0],
+      yaw: 0,
+    });
+
+    store.getState().setView({
+      distance: 6,
+      pitch: 0.2,
+      target: [1, 2, 3],
+      yaw: 0.3,
+    });
+    unsubscribe();
+    store.getState().setView({
+      distance: 7,
+      pitch: 0.4,
+    });
+
+    expect(changes).toEqual([
+      {
+        distance: 6,
+        pitch: 0.2,
+        target: [1, 2, 3],
+        yaw: 0.3,
+      },
+    ]);
+  });
+
   it("zooms in and out from wheel input", () => {
     const canvas = fakeCanvas();
     const changes: OrbitCameraView[] = [];

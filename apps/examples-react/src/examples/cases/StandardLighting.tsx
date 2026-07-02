@@ -8,9 +8,8 @@ import {
 import {
   Canvas,
   OrbitControls,
-  orbitPerspectiveCamera,
   useFrameIndex,
-  type OrbitCameraView,
+  useOrbitCamera,
 } from '@royal/react';
 import {
   useEffect,
@@ -28,12 +27,6 @@ const orbitCanvasStyle = {
   touchAction: 'none',
 } satisfies CSSProperties;
 
-const defaultCameraView = {
-  distance: 7.2,
-  pitch: -0.03,
-  target: [0, 0.08, 0],
-  yaw: 0,
-} satisfies OrbitCameraView;
 const orbitOptions = {
   rotateSpeed: 0.006,
   zoomSpeed: 0.0018,
@@ -68,14 +61,12 @@ const ScopedFrameIndex = ({
 };
 
 export const StandardLighting = (): ReactNode => {
-  const [cameraView, setCameraView] = useState<OrbitCameraView>(defaultCameraView);
-  const [frame, setFrame] = useState(0);
-  const camera = orbitPerspectiveCamera({
-    far: 100,
-    fovY: Math.PI / 4,
-    near: 0.1,
-    view: cameraView,
+  const orbit = useOrbitCamera({
+    distance: 7.2,
+    pitch: -0.03,
+    target: [0, 0.08, 0],
   });
+  const [frame, setFrame] = useState(0);
   const sweep = frame * 0.021;
   const lightDirection = [
     Math.cos(sweep) * 0.72,
@@ -95,7 +86,7 @@ export const StandardLighting = (): ReactNode => {
       style={orbitCanvasStyle}
     >
       <scene>
-        <pass camera={camera} clearColor={[0.035, 0.043, 0.05, 1]}>
+        <pass camera={orbit.camera} clearColor={[0.035, 0.043, 0.05, 1]}>
           <directionalLight color={[1.32, 1.22, 1.04, 1]} direction={lightDirection} />
           <mesh
             geometry={backdropGeometry}
@@ -176,9 +167,8 @@ export const StandardLighting = (): ReactNode => {
         </pass>
       </scene>
       <OrbitControls
+        {...orbit.controls}
         {...orbitOptions}
-        defaultView={defaultCameraView}
-        onChange={setCameraView}
       />
       <ScopedFrameIndex onFrame={setFrame} />
     </Canvas>

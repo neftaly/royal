@@ -6,91 +6,55 @@ import {
 import {
   Canvas,
   OrbitControls,
-  orbitPerspectiveCamera,
-  useFrameIndex,
-  type OrbitCameraView,
+  useFrame,
+  useOrbitCamera,
+  type RenderObjectHandle,
 } from '@royal/react';
 import {
-  useEffect,
-  useState,
-  type CSSProperties,
+  useRef,
   type ReactNode,
 } from 'react';
-
-const renderer = {
-  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
-} as const;
-
-const orbitCanvasStyle = {
-  cursor: 'grab',
-  touchAction: 'none',
-} satisfies CSSProperties;
-
-const defaultCameraView = {
-  distance: 6,
-  pitch: 0.02,
-  target: [0, 0, 0],
-  yaw: 0,
-} satisfies OrbitCameraView;
-const orbitOptions = {
-  rotateSpeed: 0.006,
-  zoomSpeed: 0.0018,
-} as const;
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
   color: [0.38, 0.85, 0.95, 1],
 });
 
-const ScopedFrameIndex = ({
-  onFrame,
-}: {
-  readonly onFrame: (frame: number) => void;
-}): null => {
-  const frame = useFrameIndex();
+const SpinningCube = (): ReactNode => {
+  const target = useRef<RenderObjectHandle | null>(null);
 
-  useEffect(() => {
-    onFrame(frame);
-  }, [frame, onFrame]);
+  useFrame(({ elapsed }) => {
+    const spin = elapsed * 0.72;
+    target.current?.rotation.set(0.42 + spin * 0.28, 0.7 + spin, 0.12);
+  });
 
-  return null;
+  return (
+    <mesh
+      ref={target}
+      geometry={cubeGeometry}
+      material={cubeMaterial}
+      transform={{
+        position: [0, 0, 0],
+        rotation: [0.42, 0.7, 0.12],
+      }}
+    />
+  );
 };
 
 export const WireframeCube = (): ReactNode => {
-  const [cameraView, setCameraView] = useState<OrbitCameraView>(defaultCameraView);
-  const [frame, setFrame] = useState(0);
-  const camera = orbitPerspectiveCamera({
-    far: 100,
-    fovY: Math.PI / 4,
-    near: 0.1,
-    view: cameraView,
+  const orbit = useOrbitCamera({
+    distance: 6,
+    pitch: 0.02,
   });
-  const spin = frame * 0.012;
 
   return (
-    <Canvas
-      aria-label="Wireframe cube"
-      renderer={renderer}
-      style={orbitCanvasStyle}
-    >
+    <Canvas aria-label="Wireframe cube">
       <scene>
-        <pass camera={camera} clearColor={[0.04, 0.06, 0.08, 1]}>
-          <mesh
-            geometry={cubeGeometry}
-            material={cubeMaterial}
-            transform={{
-              position: [0, 0, 0],
-              rotation: [0.42 + spin * 0.28, 0.7 + spin, 0.12],
-            }}
-          />
+        <pass camera={orbit.camera} clearColor={[0.04, 0.06, 0.08, 1]}>
+          <SpinningCube />
         </pass>
       </scene>
-      <OrbitControls
-        {...orbitOptions}
-        defaultView={defaultCameraView}
-        onChange={setCameraView}
-      />
-      <ScopedFrameIndex onFrame={setFrame} />
+      <OrbitControls {...orbit.controls} />
     </Canvas>
   );
 };

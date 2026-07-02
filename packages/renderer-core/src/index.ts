@@ -62,6 +62,15 @@ export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type { PickInput, PickingId, PickResult, PickTarget } from './picking';
 export type {
+  RenderObjectHandle,
+  RenderObjectRef,
+  RenderObjectRefCallback,
+  RenderObjectRefObject,
+  RenderObjectTransformUpdate,
+  RenderObjectVector3
+} from './render-object';
+export { createRenderObjectHandle } from './render-object';
+export type {
   RenderElement,
   RenderPass,
   RenderPassOptions,
@@ -119,8 +128,8 @@ export {
   uiMenuCommand,
   uiMenuCommandAt
 } from './ui-menu';
-export type { TextNode, TextOptions } from './text';
-export { text } from './text';
+export type { TextNode, TextOptions } from './text-types';
+export { text } from './text-node';
 export type {
   Axis,
   AxisDirection,
@@ -138,11 +147,4 @@ export type {
   Vec4
 } from './primitives';
 export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
-export type {
-  AutoLodGeneratedMeshes,
-  AutoLodNode,
-  AutoLodOptions,
-  AutoLodQuality,
-  RenderNode
-} from './render-node';
-export { autoLod } from './render-node';
+export type { RenderNode } from './render-node';

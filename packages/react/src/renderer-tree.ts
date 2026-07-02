@@ -1,0 +1,434 @@
+import {
+  createRenderObjectHandle,
+  type RenderObjectHandle,
+  type RenderObjectRefObject,
+  type RenderRoot,
+} from '@royal/renderer-core';
+import { createContext, type ReactNode } from 'react';
+import ReactReconciler from 'react-reconciler';
+import {
+  ConcurrentRoot,
+  DefaultEventPriority,
+  NoEventPriority,
+} from 'react-reconciler/constants';
+import {
+  createRendererElement,
+  isRoyalRendererJsxElement,
+  type JSX as RoyalReactJSX,
+  type RoyalRendererJsxElement,
+} from './jsx-runtime';
+import { rendererDescriptorHostType } from './renderer-output';
+import type { RoyalRoot } from './root';
+
+type RoyalHostType = keyof RoyalReactJSX.IntrinsicElements | typeof rendererDescriptorHostType;
+type RoyalHostProps = Record<string, unknown>;
+type RoyalRenderObjectTransform = Parameters<typeof createRenderObjectHandle>[0];
+type RoyalPublicInstance = RenderObjectHandle | RoyalHostInstance | RoyalTextInstance;
+type RoyalHostParent = RoyalHostInstance | RoyalRendererContainer;
+type RoyalHostChild = RoyalHostInstance | RoyalTextInstance;
+type RoyalHostContext = Record<string, never>;
+
+type RoyalHostInstance = {
+  readonly kind: 'host';
+  readonly rootContainer: RoyalRendererContainer;
+  readonly renderObjectHandle: RenderObjectHandle | null;
+  readonly renderObjectRef: RenderObjectRefObject | null;
+  children: RoyalHostChild[];
+  hidden: boolean;
+  parent: RoyalHostParent | null;
+  props: RoyalHostProps;
+  type: RoyalHostType;
+};
+
+type RoyalTextInstance = {
+  readonly kind: 'text';
+  hidden: boolean;
+  parent: RoyalHostParent | null;
+  text: string;
+};
+
+type RoyalRendererContainer = {
+  children: RoyalHostChild[];
+  disabled: boolean;
+  latestScene: RenderRoot | undefined;
+  renderScheduled: boolean;
+  root: RoyalRoot | null;
+  renderLatest(): void;
+  scheduleRenderLatest(): void;
+};
+
+type RoyalReconciler = ReturnType<typeof createReconciler>;
+
+const identityTransform = {
+  position: [0, 0, 0],
+  rotation: [0, 0, 0],
+  scale: [1, 1, 1],
+} satisfies RoyalRenderObjectTransform;
+const hostContext = {} as const satisfies RoyalHostContext;
+
+const isRenderObjectHostType = (type: RoyalHostType): boolean =>
+  type === 'mesh' || type === 'model';
+
+const resolveRenderObjectTransform = (
+  transform: unknown,
+): RoyalRenderObjectTransform => {
+  if (typeof transform !== 'object' || transform === null) return identityTransform;
+
+  const options = transform as Partial<RoyalRenderObjectTransform>;
+  return {
+    position: options.position ?? identityTransform.position,
+    rotation: options.rotation ?? identityTransform.rotation,
+    scale: options.scale ?? identityTransform.scale,
+  };
+};
+
+const isRenderRoot = (value: unknown): value is RenderRoot =>
+  isRoyalRendererJsxElement(value) && value.kind === 'scene';
+
+const removeChildFromList = (
+  parent: RoyalHostParent,
+  child: RoyalHostChild,
+): void => {
+  const index = parent.children.indexOf(child);
+  if (index !== -1) parent.children.splice(index, 1);
+};
+
+const detachChild = (child: RoyalHostChild): void => {
+  if (child.parent === null) return;
+
+  removeChildFromList(child.parent, child);
+  child.parent = null;
+};
+
+const appendHostChild = (
+  parent: RoyalHostParent,
+  child: RoyalHostChild,
+): void => {
+  detachChild(child);
+  parent.children.push(child);
+  child.parent = parent;
+};
+
+const insertHostChildBefore = (
+  parent: RoyalHostParent,
+  child: RoyalHostChild,
+  beforeChild: RoyalHostChild,
+): void => {
+  detachChild(child);
+  const beforeIndex = parent.children.indexOf(beforeChild);
+  if (beforeIndex === -1) {
+    parent.children.push(child);
+  } else {
+    parent.children.splice(beforeIndex, 0, child);
+  }
+  child.parent = parent;
+};
+
+const removeHostChild = (
+  parent: RoyalHostParent,
+  child: RoyalHostChild,
+): void => {
+  removeChildFromList(parent, child);
+  child.parent = null;
+};
+
+const descriptorChildrenFor = (
+  instance: RoyalHostInstance,
+): readonly (RoyalRendererJsxElement | string)[] => {
+  const children: (RoyalRendererJsxElement | string)[] = [];
+
+  for (const child of instance.children) {
+    const descriptor = toDescriptorChild(child, instance.type);
+    if (descriptor !== undefined) children.push(descriptor);
+  }
+
+  return children;
+};
+
+const withDescriptorChildren = (
+  instance: RoyalHostInstance,
+  children: readonly (RoyalRendererJsxElement | string)[],
+): RoyalHostProps => {
+  const props = { ...instance.props };
+  delete props.children;
+  delete props.ref;
+
+  if (children.length === 1) {
+    props.children = children[0];
+  } else if (children.length > 1) {
+    props.children = children;
+  }
+
+  if (instance.renderObjectRef !== null) {
+    props.ref = instance.renderObjectRef;
+  }
+
+  return props;
+};
+
+const toDescriptorChild = (
+  child: RoyalHostChild,
+  parentType?: RoyalHostType,
+): RoyalRendererJsxElement | string | undefined => {
+  if (child.hidden) return undefined;
+
+  if (child.kind === 'text') {
+    if (parentType !== 'text' && child.text.trim() === '') return undefined;
+
+    return child.text;
+  }
+
+  if (child.type === rendererDescriptorHostType) {
+    const descriptor = child.props.descriptor;
+    if (isRoyalRendererJsxElement(descriptor)) return descriptor;
+
+    throw new Error('Royal descriptor host expected one renderer descriptor');
+  }
+
+  const descriptor = createRendererElement(
+    child.type,
+    withDescriptorChildren(child, descriptorChildrenFor(child)) as Parameters<typeof createRendererElement>[1],
+  );
+
+  return descriptor;
+};
+
+const sceneFromContainer = (
+  container: RoyalRendererContainer,
+): RenderRoot | undefined => {
+  const sceneChildren = container.children
+    .map((child) => toDescriptorChild(child))
+    .filter((child): child is RoyalRendererJsxElement | string => child !== undefined);
+  if (sceneChildren.length === 0) return undefined;
+  if (sceneChildren.length !== 1 || !isRenderRoot(sceneChildren[0])) {
+    throw new Error('Canvas expects exactly one renderer scene child');
+  }
+
+  return sceneChildren[0];
+};
+
+const commitContainer = (container: RoyalRendererContainer): void => {
+  container.latestScene = sceneFromContainer(container);
+  container.renderLatest();
+};
+
+const createRendererContainer = (): RoyalRendererContainer => {
+  const container: RoyalRendererContainer = {
+    children: [],
+    disabled: false,
+    latestScene: undefined,
+    renderScheduled: false,
+    root: null,
+    renderLatest: () => {
+      if (container.disabled || container.root === null || container.latestScene === undefined) return;
+
+      container.root.render(container.latestScene);
+    },
+    scheduleRenderLatest: () => {
+      if (container.renderScheduled) return;
+
+      container.renderScheduled = true;
+      queueMicrotask(() => {
+        container.renderScheduled = false;
+        container.renderLatest();
+      });
+    },
+  };
+
+  return container;
+};
+
+const createHostInstance = (
+  type: RoyalHostType,
+  props: RoyalHostProps,
+  rootContainer: RoyalRendererContainer,
+): RoyalHostInstance => {
+  const renderObjectHandle = isRenderObjectHostType(type)
+    ? createRenderObjectHandle(resolveRenderObjectTransform(props.transform), () => {
+      rootContainer.scheduleRenderLatest();
+    })
+    : null;
+  const renderObjectRef = renderObjectHandle === null
+    ? null
+    : { current: renderObjectHandle };
+
+  return {
+    children: [],
+    hidden: false,
+    kind: 'host',
+    parent: null,
+    props,
+    renderObjectHandle,
+    renderObjectRef,
+    rootContainer,
+    type,
+  };
+};
+
+let currentUpdatePriority = NoEventPriority;
+
+const now = (): number =>
+  typeof performance === 'object' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+
+const reportReconcilerError = (error: Error): void => {
+  queueMicrotask(() => {
+    throw error;
+  });
+};
+
+const createReconciler = () => ReactReconciler<
+  RoyalHostType,
+  RoyalHostProps,
+  RoyalRendererContainer,
+  RoyalHostInstance,
+  RoyalTextInstance,
+  never,
+  never,
+  never,
+  RoyalPublicInstance,
+  RoyalHostContext,
+  never,
+  ReturnType<typeof setTimeout>,
+  -1,
+  null
+>({
+  afterActiveInstanceBlur: () => {},
+  appendChild: appendHostChild,
+  appendChildToContainer: appendHostChild,
+  appendInitialChild: appendHostChild,
+  beforeActiveInstanceBlur: () => {},
+  cancelTimeout: clearTimeout,
+  clearContainer: (container) => {
+    for (const child of container.children) {
+      child.parent = null;
+    }
+    container.children = [];
+  },
+  commitTextUpdate: (textInstance, _oldText, newText) => {
+    textInstance.text = newText;
+  },
+  commitUpdate: (instance, _type, _prevProps, nextProps) => {
+    instance.props = nextProps;
+    if (instance.renderObjectHandle !== null) {
+      instance.renderObjectHandle.setTransform(resolveRenderObjectTransform(nextProps.transform));
+    }
+  },
+  createInstance: (type, props, rootContainer) =>
+    createHostInstance(type, props, rootContainer),
+  createTextInstance: (text) => ({
+    hidden: false,
+    kind: 'text',
+    parent: null,
+    text,
+  }),
+  detachDeletedInstance: () => {},
+  finalizeInitialChildren: () => false,
+  getChildHostContext: () => hostContext,
+  getCurrentUpdatePriority: () => currentUpdatePriority,
+  getInstanceFromNode: () => null,
+  getInstanceFromScope: () => null,
+  getPublicInstance: (instance) =>
+    instance.kind === 'host' && instance.renderObjectHandle !== null
+      ? instance.renderObjectHandle
+      : instance,
+  getRootHostContext: () => hostContext,
+  hideInstance: (instance) => {
+    instance.hidden = true;
+  },
+  hideTextInstance: (textInstance) => {
+    textInstance.hidden = true;
+  },
+  HostTransitionContext: createContext(null) as never,
+  insertBefore: insertHostChildBefore,
+  insertInContainerBefore: insertHostChildBefore,
+  isPrimaryRenderer: false,
+  maySuspendCommit: () => false,
+  noTimeout: -1,
+  NotPendingTransition: null,
+  prepareForCommit: () => null,
+  preparePortalMount: () => {},
+  prepareScopeUpdate: () => {},
+  preloadInstance: () => true,
+  removeChild: removeHostChild,
+  removeChildFromContainer: removeHostChild,
+  requestPostPaintCallback: (callback) => {
+    setTimeout(() => {
+      callback(now());
+    }, 0);
+  },
+  resetAfterCommit: commitContainer,
+  resetFormInstance: () => {},
+  resolveEventTimeStamp: now,
+  resolveEventType: () => null,
+  resolveUpdatePriority: () =>
+    currentUpdatePriority === NoEventPriority
+      ? DefaultEventPriority
+      : currentUpdatePriority,
+  scheduleMicrotask: queueMicrotask,
+  scheduleTimeout: setTimeout,
+  setCurrentUpdatePriority: (priority) => {
+    currentUpdatePriority = priority;
+  },
+  shouldAttemptEagerTransition: () => false,
+  shouldSetTextContent: () => false,
+  startSuspendingCommit: () => {},
+  supportsHydration: false,
+  supportsMicrotasks: true,
+  supportsMutation: true,
+  supportsPersistence: false,
+  suspendInstance: () => {},
+  trackSchedulerEvent: () => {},
+  unhideInstance: (instance) => {
+    instance.hidden = false;
+  },
+  unhideTextInstance: (textInstance) => {
+    textInstance.hidden = false;
+  },
+  waitForCommitToBeReady: () => null,
+});
+
+const reconciler: RoyalReconciler = createReconciler();
+
+export type RoyalRendererTree = {
+  dispose(): void;
+  render(children: ReactNode): void;
+  setTarget(root: RoyalRoot | null, disabled: boolean): void;
+};
+
+export const createRoyalRendererTree = (): RoyalRendererTree => {
+  const container = createRendererContainer();
+  const root = reconciler.createContainer(
+    container,
+    ConcurrentRoot,
+    null,
+    false,
+    null,
+    '',
+    reportReconcilerError,
+    reportReconcilerError,
+    reportReconcilerError,
+    () => {},
+  );
+
+  return {
+    dispose: () => {
+      reconciler.updateContainerSync(null, root, null, null);
+      reconciler.flushSyncWork();
+      reconciler.flushPassiveEffects();
+      container.root = null;
+      container.latestScene = undefined;
+    },
+    render: (children) => {
+      reconciler.updateContainerSync(children, root, null, null);
+      reconciler.flushSyncWork();
+      reconciler.flushPassiveEffects();
+    },
+    setTarget: (rendererRoot, disabled) => {
+      container.root = rendererRoot;
+      container.disabled = disabled;
+      container.renderLatest();
+    },
+  };
+};

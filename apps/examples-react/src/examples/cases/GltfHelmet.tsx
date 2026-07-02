@@ -3,10 +3,9 @@ import { type GltfOptions } from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
-  orbitPerspectiveCamera,
-  type OrbitCameraView,
+  useOrbitCamera,
 } from '@royal/react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
 
 const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -17,12 +16,6 @@ const orbitCanvasStyle = {
   touchAction: 'none',
 } satisfies CSSProperties;
 
-const helmetCameraView = {
-  distance: 3.4,
-  pitch: 0.05,
-  target: [0, -0.08, 0],
-  yaw: 0,
-} satisfies OrbitCameraView;
 const orbitOptions = {
   rotateSpeed: 0.006,
   zoomSpeed: 0.0018,
@@ -36,12 +29,10 @@ const helmetTransform = {
 } as const satisfies NonNullable<GltfOptions['transform']>;
 
 export const GltfHelmet = (): ReactNode => {
-  const [cameraView, setCameraView] = useState<OrbitCameraView>(helmetCameraView);
-  const camera = orbitPerspectiveCamera({
-    far: 100,
-    fovY: Math.PI / 4,
-    near: 0.1,
-    view: cameraView,
+  const orbit = useOrbitCamera({
+    distance: 3.4,
+    pitch: 0.05,
+    target: [0, -0.08, 0],
   });
 
   return (
@@ -51,18 +42,17 @@ export const GltfHelmet = (): ReactNode => {
       style={orbitCanvasStyle}
     >
       <scene>
-        <pass camera={camera} clearColor={[0.04, 0.05, 0.06, 1]}>
+        <pass camera={orbit.camera} clearColor={[0.04, 0.05, 0.06, 1]}>
           <directionalLight color={[1, 0.96, 0.9, 1]} direction={[0.4, -0.75, -1]} />
-          <gltf
+          <model
             src={helmetSrc}
             transform={helmetTransform}
           />
         </pass>
       </scene>
       <OrbitControls
+        {...orbit.controls}
         {...orbitOptions}
-        defaultView={helmetCameraView}
-        onChange={setCameraView}
       />
     </Canvas>
   );

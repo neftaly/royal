@@ -5,8 +5,6 @@ import { GltfHelmet } from './examples/cases/GltfHelmet';
 import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
-import { GeneratedAutoLod } from './examples/cases/GeneratedAutoLod';
-import generatedAutoLodSource from './examples/cases/GeneratedAutoLod.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
 import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
 import { Picking } from './examples/cases/Picking';
@@ -111,15 +109,6 @@ export const examples = [
     Component: GltfLod,
     source: gltfLodSource,
     sourceFile: 'examples/cases/GltfLod.tsx',
-  },
-  {
-    id: 'generated-autolod',
-    maturity: 'lab-probe',
-    path: '/generated-autolod',
-    title: 'Experimental AutoLod',
-    Component: GeneratedAutoLod,
-    source: generatedAutoLodSource,
-    sourceFile: 'examples/cases/GeneratedAutoLod.tsx',
   },
 ] as const satisfies readonly Example[];
 

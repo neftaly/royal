@@ -1,5 +1,6 @@
-import { layoutText, type TextFontFace } from './text';
 import type { Vec3 } from './primitives';
+import type { TextFontFace } from './text-font';
+import { layoutText } from './text-layout';
 
 export type EditableTextCaretPlacement = {
   readonly index: number;

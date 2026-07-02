@@ -3,7 +3,9 @@ import {
   type PerspectiveCamera,
   type PerspectiveCameraOptions,
 } from "@royal/renderer-core";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useStore } from "zustand/react";
+import { createStore, type StoreApi } from "zustand/vanilla";
 import { useCanvasElement } from "./canvas";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
 
@@ -15,6 +17,20 @@ export type OrbitCameraView = {
   readonly target: OrbitVector3;
   readonly yaw: number;
 };
+
+export type OrbitCameraViewOptions = {
+  readonly distance: number;
+  readonly pitch: number;
+  readonly target?: OrbitVector3 | undefined;
+  readonly yaw?: number | undefined;
+};
+
+export type OrbitCameraState = {
+  readonly setView: (view: OrbitCameraViewOptions) => void;
+  readonly view: OrbitCameraView;
+};
+
+export type OrbitCameraStore = StoreApi<OrbitCameraState>;
 
 export type OrbitControlsBehaviorOptions = {
   readonly enabled?: boolean | undefined;
@@ -36,7 +52,7 @@ export type OrbitControlsHandle = {
   getView(): OrbitCameraView;
   setOptions(options: OrbitControlsBehaviorOptions): void;
   setView(
-    view: OrbitCameraView,
+    view: OrbitCameraViewOptions,
     options?: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined }
   ): void;
 };
@@ -48,19 +64,21 @@ export type OrbitCameraTransform = {
 
 export type OrbitPerspectiveCameraOptions =
   Omit<PerspectiveCameraOptions, "position" | "rotation"> & {
-    readonly view: OrbitCameraView;
+    readonly view: OrbitCameraViewOptions;
   };
 
 export type OrbitControlsOptions = {
-  readonly defaultView?: OrbitCameraView;
-  readonly value?: OrbitCameraView;
+  readonly defaultView?: OrbitCameraViewOptions;
+  readonly value?: OrbitCameraViewOptions;
 } & OrbitControlsBehaviorOptions;
 
-export type OrbitControlsProps = OrbitControlsOptions;
+export type OrbitControlsProps = OrbitControlsOptions & {
+  readonly store?: OrbitCameraStore | undefined;
+};
 
 type OrbitControlsViewInputs = {
-  readonly defaultView?: OrbitCameraView | undefined;
-  readonly value?: OrbitCameraView | undefined;
+  readonly defaultView?: OrbitCameraViewOptions | undefined;
+  readonly value?: OrbitCameraViewOptions | undefined;
 };
 
 type DragMode = "orbit" | "pan";
@@ -92,6 +110,7 @@ type PointerContact = {
 const defaultPanSpeed = 0.0016;
 const defaultRotateSpeed = 0.006;
 const defaultZoomSpeed = 0.0018;
+const defaultTarget = [0, 0, 0] as const satisfies OrbitVector3;
 
 const clamp = (
   value: number,
@@ -99,13 +118,32 @@ const clamp = (
   maximum: number | undefined,
 ): number => Math.min(maximum ?? Infinity, Math.max(minimum ?? -Infinity, value));
 
+export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => ({
+  distance: view.distance,
+  pitch: view.pitch,
+  target: view.target ?? defaultTarget,
+  yaw: view.yaw ?? 0,
+});
+
+export const createOrbitCameraStore = (initialView: OrbitCameraViewOptions): OrbitCameraStore =>
+  createStore<OrbitCameraState>()((set) => ({
+    setView: (nextView) => {
+      set({ view: resolveOrbitCameraView(nextView) });
+    },
+    view: resolveOrbitCameraView(initialView),
+  }));
+
+const emptyOrbitCameraStore = createStore<{
+  readonly view: OrbitCameraView | undefined;
+}>(() => ({ view: undefined }));
+
 const resolveStartingView = (options: OrbitControlsViewInputs): OrbitCameraView => {
   const view = options.value ?? options.defaultView;
   if (view === undefined) {
     throw new Error("OrbitControls expects value or defaultView");
   }
 
-  return view;
+  return resolveOrbitCameraView(view);
 };
 
 const toBehaviorOptions = ({
@@ -166,8 +204,9 @@ const cameraBasis = (
 };
 
 export const orbitCameraTransform = (
-  { distance, pitch, target, yaw }: OrbitCameraView,
+  view: OrbitCameraViewOptions,
 ): OrbitCameraTransform => {
+  const { distance, pitch, target, yaw } = resolveOrbitCameraView(view);
   const cosPitch = Math.cos(pitch);
 
   return {
@@ -188,6 +227,63 @@ export const orbitPerspectiveCamera = ({
   ...orbitCameraTransform(view),
 });
 
+export const useOrbitCameraView = (store: OrbitCameraStore): OrbitCameraView =>
+  useStore(store, (state) => state.view);
+
+const useOptionalOrbitCameraView = (store: OrbitCameraStore | undefined): OrbitCameraView | undefined =>
+  useStore(
+    (store ?? emptyOrbitCameraStore) as StoreApi<{ readonly view: OrbitCameraView | undefined }>,
+    (state) => state.view,
+  );
+
+export type UseOrbitCameraOptions =
+  OrbitCameraViewOptions &
+  Partial<Omit<OrbitPerspectiveCameraOptions, "view">> & {
+    readonly store?: OrbitCameraStore | undefined;
+  };
+
+export type OrbitCameraHookResult = {
+  readonly camera: PerspectiveCamera;
+  readonly controls: Pick<OrbitControlsProps, "store">;
+  readonly setView: OrbitCameraState["setView"];
+  readonly store: OrbitCameraStore;
+  readonly view: OrbitCameraView;
+};
+
+export const useOrbitCamera = ({
+  distance,
+  far = 100,
+  fovY = Math.PI / 4,
+  near = 0.1,
+  pitch,
+  store,
+  target,
+  yaw,
+}: UseOrbitCameraOptions): OrbitCameraHookResult => {
+  const defaultStoreRef = useRef<OrbitCameraStore | undefined>(undefined);
+  if (defaultStoreRef.current === undefined) {
+    defaultStoreRef.current = createOrbitCameraStore({ distance, pitch, target, yaw });
+  }
+
+  const cameraStore = store ?? defaultStoreRef.current;
+  const view = useOrbitCameraView(cameraStore);
+  const controls = useMemo(() => ({ store: cameraStore }), [cameraStore]);
+  const setView = cameraStore.getState().setView;
+
+  return {
+    camera: orbitPerspectiveCamera({
+      far,
+      fovY,
+      near,
+      view,
+    }),
+    controls,
+    setView,
+    store: cameraStore,
+    view,
+  };
+};
+
 export const createOrbitControls = (
   canvas: HTMLCanvasElement,
   options: OrbitControlsOptions,
@@ -207,13 +303,14 @@ export const createOrbitControls = (
   });
 
   const applyView = (
-    nextView: OrbitCameraView,
+    nextView: OrbitCameraViewOptions,
     {
       clamp: shouldClamp = true,
       notify = true,
     }: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined } = {},
   ): void => {
-    view = shouldClamp ? clampView(nextView) : nextView;
+    const resolvedView = resolveOrbitCameraView(nextView);
+    view = shouldClamp ? clampView(resolvedView) : resolvedView;
     if (notify) {
       behaviorOptions.onChange?.(view);
     }
@@ -350,6 +447,11 @@ export const createOrbitControls = (
   const blockContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
   };
+  const canvasStyle = canvas.style as CSSStyleDeclaration | undefined;
+  const previousTouchAction = canvasStyle?.touchAction;
+  if (canvasStyle !== undefined) {
+    canvasStyle.touchAction = "none";
+  }
 
   canvas.addEventListener("contextmenu", blockContextMenu);
   canvas.addEventListener("pointercancel", endDrag);
@@ -367,6 +469,9 @@ export const createOrbitControls = (
       canvas.removeEventListener("pointermove", moveDrag);
       canvas.removeEventListener("pointerup", endDrag);
       canvas.removeEventListener("wheel", zoomView);
+      if (canvasStyle !== undefined && previousTouchAction !== undefined) {
+        canvasStyle.touchAction = previousTouchAction;
+      }
       activePointers.clear();
       interaction = undefined;
     },
@@ -395,6 +500,7 @@ export const OrbitControls = ({
   minPitch,
   onChange,
   panSpeed,
+  store,
   rotateSpeed,
   value,
   zoomSpeed,
@@ -409,7 +515,12 @@ export const OrbitControls = ({
     maxPitch,
     minDistance,
     minPitch,
-    onChange,
+    onChange: store === undefined && onChange === undefined
+      ? undefined
+      : (view) => {
+          store?.getState().setView(view);
+          onChange?.(view);
+        },
     panSpeed,
     rotateSpeed,
     zoomSpeed,
@@ -418,13 +529,14 @@ export const OrbitControls = ({
   const viewInputsRef = useRef<OrbitControlsViewInputs>({ defaultView, value });
   const controlsRef = useRef<OrbitControlsHandle | undefined>(undefined);
   const startingViewRef = useRef<OrbitCameraView | undefined>(undefined);
+  const storeView = useOptionalOrbitCameraView(store);
   behaviorOptionsRef.current = behaviorOptions;
   viewInputsRef.current = { defaultView, value };
-  startingViewRef.current ??= resolveStartingView(viewInputsRef.current);
+  startingViewRef.current ??= store?.getState().view ?? resolveStartingView(viewInputsRef.current);
 
   useEffect(() => {
     if (canvas === null) return undefined;
-    const controlsStartingView = viewInputsRef.current.value ?? startingViewRef.current;
+    const controlsStartingView = store?.getState().view ?? viewInputsRef.current.value ?? startingViewRef.current;
     if (controlsStartingView === undefined) {
       throw new Error("OrbitControls expects value or defaultView");
     }
@@ -454,9 +566,16 @@ export const OrbitControls = ({
     minPitch,
     onChange,
     panSpeed,
+    store,
     rotateSpeed,
     zoomSpeed,
   ]);
+
+  useEffect(() => {
+    if (storeView === undefined) return;
+
+    controlsRef.current?.setView(storeView, { clamp: false, notify: false });
+  }, [store, storeView]);
 
   useEffect(() => {
     if (value === undefined) return;

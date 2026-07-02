@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 export interface FrameSnapshot {
   readonly delta: number;
+  /** Seconds elapsed since this frame loop started. */
+  readonly elapsed: number;
   readonly index: number;
   readonly timestamp: number;
 }
@@ -30,6 +32,7 @@ export const createFrameLoop = (): FrameLoop => {
   let frameIndex = 0;
   let lastTimestamp: number | undefined;
   let nextSubscriberOrder = 0;
+  let startTimestamp: number | undefined;
 
   const sortSubscribers = (): void => {
     subscribers.sort((left, right) =>
@@ -44,6 +47,7 @@ export const createFrameLoop = (): FrameLoop => {
 
     animationFrame = undefined;
     lastTimestamp = undefined;
+    startTimestamp = undefined;
   };
 
   const schedule = (): void => {
@@ -57,12 +61,15 @@ export const createFrameLoop = (): FrameLoop => {
 
     if (subscribers.length === 0) {
       lastTimestamp = undefined;
+      startTimestamp = undefined;
       return;
     }
 
     frameIndex += 1;
+    startTimestamp ??= timestamp;
     const frame = {
       delta: lastTimestamp === undefined ? 0 : timestamp - lastTimestamp,
+      elapsed: (timestamp - startTimestamp) / 1000,
       index: frameIndex,
       timestamp
     } satisfies FrameSnapshot;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readRendererTextClipboardText } from './RendererTextClipboard';
 
 describe('RendererText clipboard helper', () => {
-  it('reports unavailable readText without requesting a custom paste fallback', async () => {
+  it('reports unavailable readText as a clipboard API failure', async () => {
     await expect(readRendererTextClipboardText(undefined)).resolves.toEqual({
       message: 'navigator.clipboard.readText is unavailable',
       ok: false,
@@ -10,7 +10,7 @@ describe('RendererText clipboard helper', () => {
     });
   });
 
-  it('reports Firefox async clipboard read denial without requesting a custom paste fallback', async () => {
+  it('reports Firefox async clipboard read denial', async () => {
     const clipboard = {
       readText: async () => {
         throw new DOMException('Read permission denied', 'NotAllowedError');
@@ -24,7 +24,7 @@ describe('RendererText clipboard helper', () => {
     });
   });
 
-  it('reports empty reads without requesting a custom paste fallback', async () => {
+  it('reports empty reads as paste failures', async () => {
     const clipboard = {
       readText: async () => '',
     };

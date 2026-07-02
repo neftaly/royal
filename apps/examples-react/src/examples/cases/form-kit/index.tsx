@@ -19,8 +19,8 @@ import {
   type EditableTextEditorState,
   type EditableTextKeyInput,
   type EditableTextSelection,
-  type TextFontFace,
-} from '@royal/renderer-core/text';
+} from '@royal/renderer-core/text/editable';
+import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
   canvasPointToWorld,
   captureCanvasPointer,
@@ -29,6 +29,7 @@ import {
   type CanvasWorldBounds,
 } from '@royal/react';
 import {
+  createElement as createReactElement,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -145,6 +146,15 @@ export type RoyalFormKit = {
 };
 
 type RoyalNodeChild = ReactNode | RenderNode | readonly RoyalNodeChild[];
+
+const RenderNodeDescriptor = markRendererComponent(({
+  node,
+}: {
+  readonly node: RenderNode;
+}): RenderNode => node);
+const RenderNodeElement = RenderNodeDescriptor as (props: {
+  readonly node: RenderNode;
+}) => ReactNode;
 
 export const compactRoyalFormCameraBounds = {
   bottom: -3.4,
@@ -777,21 +787,23 @@ const fieldChrome = (
   bounds: RoyalFormBounds,
   focused: boolean,
   theme: RoyalFormTheme,
-): readonly ReactNode[] => [
-  rect({
-    height: bounds.height + 0.08,
-    width: bounds.width + 0.08,
-    x: bounds.x - 0.04,
-    y: bounds.y + 0.03,
-  }, theme.shadow, -0.01),
-  rect({
-    height: bounds.height + 0.04,
-    width: bounds.width + 0.04,
-    x: bounds.x - 0.02,
-    y: bounds.y + 0.02,
-  }, focused ? theme.accentStrong : theme.border, 0.02),
-  rect(bounds, focused ? theme.fieldFocused : theme.field, 0.04),
-];
+): ReactNode => (
+  <>
+    {rect({
+      height: bounds.height + 0.08,
+      width: bounds.width + 0.08,
+      x: bounds.x - 0.04,
+      y: bounds.y + 0.03,
+    }, theme.shadow, -0.01)}
+    {rect({
+      height: bounds.height + 0.04,
+      width: bounds.width + 0.04,
+      x: bounds.x - 0.02,
+      y: bounds.y + 0.02,
+    }, focused ? theme.accentStrong : theme.border, 0.02)}
+    {rect(bounds, focused ? theme.fieldFocused : theme.field, 0.04)}
+  </>
+);
 
 export const Form = markRendererComponent(({
   children,
@@ -863,7 +875,7 @@ export const Label = markRendererComponent(({
 const renderTextControlNodes = (
   kit: RoyalFormKit,
   name: string,
-): readonly RenderNode[] => {
+): readonly ReactNode[] => {
   const definition = kit.textControls[name];
   const field = kit.layout.fields[name];
   if (definition === undefined || field === undefined) {
@@ -885,7 +897,12 @@ const renderTextControlNodes = (
     text: editor.text,
   });
 
-  return fragment.nodes;
+  return fragment.nodes.map((node, index) =>
+    createReactElement(RenderNodeElement, {
+      key: `${name}:${index}`,
+      node,
+    })
+  );
 };
 
 export const Input = markRendererComponent(({

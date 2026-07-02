@@ -6,6 +6,7 @@ import {
   pass,
   scene,
   unlitMaterial,
+  type RenderObjectHandle,
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
@@ -270,6 +271,53 @@ describe("WebGL root working state contracts", () => {
       disposed: false,
       frame: 2,
     });
+  });
+
+  it("redraws after imperative render object ref transform updates", async () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const renderScene = scene({
+      children: [
+        pass({
+          camera: camera(),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: unlitMaterial({ color: [1, 1, 1, 1] }),
+              ref,
+              transform: {
+                position: [0, 0, 0],
+                rotation: [0, 0, 0],
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    root.render(renderScene);
+    const handle = ref.current;
+    if (handle === null) throw new Error("Expected mesh ref to be attached");
+    const initialDraws = drawCalls(calls).length;
+
+    handle.rotation.y = Math.PI / 2;
+    await Promise.resolve();
+
+    expect(handle.rotation.y).toBe(Math.PI / 2);
+    expect(root.frame).toBe(2);
+    expect(drawCalls(calls)).toHaveLength(initialDraws + 1);
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: camera(),
+          children: [],
+        }),
+      ],
+    }));
+
+    expect(ref.current).toBeNull();
   });
 
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {

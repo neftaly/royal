@@ -6,4 +6,4 @@ export type MaterialKind = 'standard' | 'unlit' | 'wireframe';
 
 export type RenderGraphKind = 'pass' | 'scene';
 
-export type RenderNodeKind = 'auto-lod' | 'directional-light' | 'gltf' | 'mesh' | 'text';
+export type RenderNodeKind = 'directional-light' | 'gltf' | 'mesh' | 'text';

@@ -3,10 +3,9 @@ import { type GltfOptions } from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
-  orbitPerspectiveCamera,
-  type OrbitCameraView,
+  useOrbitCamera,
 } from '@royal/react';
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
 
 const renderer = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
@@ -17,12 +16,6 @@ const orbitCanvasStyle = {
   touchAction: 'none',
 } satisfies CSSProperties;
 
-const defaultCameraView = {
-  distance: 7.4,
-  pitch: 0.02,
-  target: [0, 0, 0],
-  yaw: 0,
-} satisfies OrbitCameraView;
 const orbitOptions = {
   rotateSpeed: 0.006,
   zoomSpeed: 0.0018,
@@ -46,12 +39,9 @@ const smallLodTransform = {
 } as const satisfies NonNullable<GltfOptions['transform']>;
 
 export const GltfLod = (): ReactNode => {
-  const [cameraView, setCameraView] = useState<OrbitCameraView>(defaultCameraView);
-  const camera = orbitPerspectiveCamera({
-    far: 100,
-    fovY: Math.PI / 4,
-    near: 0.1,
-    view: cameraView,
+  const orbit = useOrbitCamera({
+    distance: 7.4,
+    pitch: 0.02,
   });
 
   return (
@@ -61,19 +51,19 @@ export const GltfLod = (): ReactNode => {
       style={orbitCanvasStyle}
     >
       <scene>
-        <pass camera={camera} clearColor={[0.035, 0.042, 0.052, 1]}>
+        <pass camera={orbit.camera} clearColor={[0.035, 0.042, 0.052, 1]}>
           <directionalLight color={[1.22, 1.16, 1.05, 1]} direction={[-0.42, -0.5, -1]} />
-          <gltf
+          <model
             src={lodSrc}
             transform={largeLodTransform}
             version="msft-lod-large"
           />
-          <gltf
+          <model
             src={lodSrc}
             transform={mediumLodTransform}
             version="msft-lod-medium"
           />
-          <gltf
+          <model
             src={lodSrc}
             transform={smallLodTransform}
             version="msft-lod-small"
@@ -81,9 +71,8 @@ export const GltfLod = (): ReactNode => {
         </pass>
       </scene>
       <OrbitControls
+        {...orbit.controls}
         {...orbitOptions}
-        defaultView={defaultCameraView}
-        onChange={setCameraView}
       />
     </Canvas>
   );
