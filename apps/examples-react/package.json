@@ -18,9 +18,9 @@
     "@royal/renderer-core": "workspace:*",
     "@royal/renderer-webgl": "workspace:*",
     "@tanstack/react-router": "^1.170.16",
+    "flexily": "0.7.3",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "yoga-layout": "3.2.1"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:",

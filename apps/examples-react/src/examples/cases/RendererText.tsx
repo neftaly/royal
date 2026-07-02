@@ -2,14 +2,15 @@
 import { TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
-  Align,
-  Direction,
-  Edge,
-  FlexDirection,
-  Gutter,
-  default as Yoga,
-  type Node as YogaNode,
-} from 'yoga-layout';
+  ALIGN_FLEX_START,
+  DIRECTION_LTR,
+  EDGE_BOTTOM,
+  EDGE_LEFT,
+  EDGE_TOP,
+  FLEX_DIRECTION_COLUMN,
+  GUTTER_ALL,
+  Node,
+} from 'flexily';
 import { useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
 import { useAtkinsonFont } from './text-font';
@@ -58,7 +59,7 @@ type TextExampleLayout = {
   };
 };
 
-const layoutBox = (node: YogaNode): LayoutBox => ({
+const layoutBox = (node: Node): LayoutBox => ({
   height: node.getComputedHeight(),
   left: node.getComputedLeft(),
   top: node.getComputedTop(),
@@ -84,29 +85,25 @@ const copyOrigin = (box: LayoutBox): readonly [number, number, number] => [
 ];
 
 const createTextExampleLayout = (): TextExampleLayout => {
-  const config = Yoga.Config.create();
-  config.setPointScaleFactor(0);
-  config.setUseWebDefaults(true);
-
-  const root = Yoga.Node.create(config);
-  const copy = Yoga.Node.create(config);
-  const title = Yoga.Node.create(config);
-  const notes = Yoga.Node.create(config);
+  const root = Node.create({ defaults: 'css' });
+  const copy = Node.create({ defaults: 'css' });
+  const title = Node.create({ defaults: 'css' });
+  const notes = Node.create({ defaults: 'css' });
   const width = bounds.right - bounds.left;
   const height = bounds.top - bounds.bottom;
 
   try {
     root.setWidth(width);
     root.setHeight(height);
-    root.setFlexDirection(FlexDirection.Column);
-    root.setAlignItems(Align.FlexStart);
-    root.setPadding(Edge.Left, 0.74);
-    root.setPadding(Edge.Top, 1.38);
-    root.setGap(Gutter.All, 0.26);
+    root.setFlexDirection(FLEX_DIRECTION_COLUMN);
+    root.setAlignItems(ALIGN_FLEX_START);
+    root.setPadding(EDGE_LEFT, 0.74);
+    root.setPadding(EDGE_TOP, 1.38);
+    root.setGap(GUTTER_ALL, 0.26);
 
     copy.setWidth(textColumnBoxWidth);
     copy.setHeight(textStyle.lineHeight);
-    copy.setMargin(Edge.Bottom, 0.38);
+    copy.setMargin(EDGE_BOTTOM, 0.38);
 
     title.setWidth(textColumnBoxWidth);
     title.setHeight(fieldHeight(titleRows));
@@ -117,7 +114,7 @@ const createTextExampleLayout = (): TextExampleLayout => {
     root.insertChild(copy, 0);
     root.insertChild(title, 1);
     root.insertChild(notes, 2);
-    root.calculateLayout(width, height, Direction.LTR);
+    root.calculateLayout(width, height, DIRECTION_LTR);
 
     const copyBox = layoutBox(copy);
     const titleBox = layoutBox(title);
@@ -139,7 +136,6 @@ const createTextExampleLayout = (): TextExampleLayout => {
     };
   } finally {
     root.freeRecursive();
-    config.free();
   }
 };
 
