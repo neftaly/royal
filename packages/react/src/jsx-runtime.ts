@@ -56,7 +56,8 @@ import {
   type TextAreaPrimitiveProps,
   type InputPrimitiveProps,
   type TextPrimitiveProps,
-  type TextSurfaceBox
+  type TextSurfaceBox,
+  type TextSurfaceControlStyle
 } from './text-surface';
 
 export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
@@ -99,6 +100,7 @@ export type TextProps = Omit<TextOptions, 'text'> & {
   readonly copyable?: boolean;
   readonly maxWidth?: number;
   readonly selectable?: boolean;
+  readonly style?: TextSurfaceControlStyle;
   readonly text?: string;
 };
 export type ButtonProps = ButtonPrimitiveProps;
@@ -558,7 +560,8 @@ const createElement = (
       (
         (props as TextProps | null)?.selectable === true ||
         (props as TextProps | null)?.copyable === true ||
-        (props as TextProps | null)?.box !== undefined
+        (props as TextProps | null)?.box !== undefined ||
+        (props as TextProps | null)?.style !== undefined
       )
     ) {
       return toInteractiveText(props as TextProps, key);

@@ -54,6 +54,7 @@ export type {
   TextFieldPrimitiveProps,
   TextInputPrimitiveProps,
   TextInteractionStyle,
+  TextSurfaceControlStyle,
   TextPrimitiveProps,
   TextSurfaceBox,
   TextSurfaceProps

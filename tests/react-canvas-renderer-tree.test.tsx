@@ -66,24 +66,24 @@ describe("React Canvas renderer tree", () => {
   });
 
   it("routes surface controls through React primitives", () => {
-    const box = { height: 0.5, left: 0.25, top: 0.5, width: 3 };
+    const style = { height: 0.5, left: 0.25, top: 0.5, width: 3 };
     const label = (
-      <text box={box} color={[1, 1, 1, 1]}>
+      <text style={style} color={[1, 1, 1, 1]}>
         Boxed label
       </text>
     );
     const input = (
       <input
-        box={box}
         onValueChange={() => undefined}
+        style={style}
         value="Controlled"
       />
     );
     const checkbox = (
       <input
-        box={box}
         checked
         onCheckedChange={() => undefined}
+        style={style}
         type="checkbox"
       >
         Checked
@@ -91,8 +91,8 @@ describe("React Canvas renderer tree", () => {
     );
     const file = (
       <input
-        box={box}
         onFilesChange={() => undefined}
+        style={style}
         type="file"
       >
         File
@@ -100,8 +100,8 @@ describe("React Canvas renderer tree", () => {
     );
     const color = (
       <input
-        box={box}
         onValueChange={() => undefined}
+        style={style}
         type="color"
         value="#ff0000"
       >
@@ -110,8 +110,8 @@ describe("React Canvas renderer tree", () => {
     );
     const button = (
       <button
-        box={box}
         onPress={() => undefined}
+        style={style}
         type="button"
       >
         Press

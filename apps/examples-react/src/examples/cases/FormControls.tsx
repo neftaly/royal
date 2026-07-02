@@ -1,6 +1,6 @@
 /** @jsxImportSource @royal/react */
 import { type TextFontFace } from '@royal/renderer-core/text/font';
-import { TextSurface, textFieldHeight } from '@royal/react';
+import { TextSurface } from '@royal/react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
 import { useAtkinsonFont } from './text-font';
@@ -17,11 +17,6 @@ const fieldStyle = {
   fieldPaddingY: 0.12,
   lineHeight: 0.36,
 } as const;
-const fieldHeight = textFieldHeight({
-  lineHeight: fieldStyle.lineHeight,
-  paddingY: fieldStyle.fieldPaddingY,
-  rows,
-});
 
 const lorem =
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus posuere velit aliquet.';
@@ -41,11 +36,15 @@ const FieldLabel = ({
   readonly top: number;
 }): ReactNode => (
   <text
-    box={{ left, top, width: 4.6 }}
     color={htmlColor(color)}
     font={font}
-    fontSize={0.2}
-    lineHeight={0.26}
+    style={{
+      fontSize: 0.2,
+      left,
+      lineHeight: 0.26,
+      top,
+      width: 4.6,
+    }}
   >
     {children}
   </text>
@@ -98,11 +97,11 @@ const FormControlsScene = ({
             Selectable non-editable text
           </FieldLabel>
           <text
-            box={{ left: -4.95, top: 0.68, width: 4.35 }}
             color={htmlColor('#dff7e8')}
             copyable
             font={font}
             selectable
+            style={{ left: -4.95, top: 0.68, width: 4.35 }}
           >
             {lorem}
           </text>
@@ -111,10 +110,10 @@ const FormControlsScene = ({
             Input type = text
           </FieldLabel>
           <input
-            box={{ left: 0.65, top: 0.68, width: 4.35 }}
             font={font}
             onValueChange={setTitle}
             placeholder="Lorem ipsum"
+            style={{ left: 0.65, top: 0.68, width: 4.35 }}
             value={title}
           />
 
@@ -122,10 +121,10 @@ const FormControlsScene = ({
             Empty placeholder input
           </FieldLabel>
           <input
-            box={{ left: -4.95, top: 2.05, width: 4.35 }}
             font={font}
             onValueChange={setEmptyText}
             placeholder="Type into this controlled field"
+            style={{ left: -4.95, top: 2.05, width: 4.35 }}
             value={emptyText}
           />
 
@@ -133,11 +132,11 @@ const FormControlsScene = ({
             multiline textarea
           </FieldLabel>
           <textarea
-            box={{ height: fieldHeight, left: 0.65, top: 2.05, width: 4.35 }}
             font={font}
             onValueChange={setNotes}
             placeholder="Lorem ipsum"
             rows={rows}
+            style={{ left: 0.65, top: 2.05, width: 4.35 }}
             value={notes}
           />
 
@@ -145,35 +144,35 @@ const FormControlsScene = ({
             Controlled action inputs
           </FieldLabel>
           <input
-            box={{ height: 0.5, left: -4.95, top: 3.95, width: 4.35 }}
             checked={checked}
             font={font}
             onCheckedChange={setChecked}
+            style={{ height: 0.5, left: -4.95, top: 3.95, width: 4.35 }}
             type="checkbox"
           >
             Send me updates
           </input>
           <button
-            box={{ height: 0.5, left: 0.65, top: 3.95, width: 1.25 }}
             font={font}
             onPress={() => setPresses((count) => count + 1)}
+            style={{ height: 0.5, left: 0.65, top: 3.95, width: 1.25 }}
             type="button"
           >
             Press
           </button>
           <input
-            box={{ height: 0.5, left: 2.06, top: 3.95, width: 1.28 }}
             font={font}
             multiple
             onFilesChange={setFiles}
+            style={{ height: 0.5, left: 2.06, top: 3.95, width: 1.28 }}
             type="file"
           >
             File
           </input>
           <input
-            box={{ height: 0.5, left: 3.5, top: 3.95, width: 1.5 }}
             font={font}
             onValueChange={setColor}
+            style={{ height: 0.5, left: 3.5, top: 3.95, width: 1.5 }}
             type="color"
             value={color}
           >
@@ -184,13 +183,13 @@ const FormControlsScene = ({
             React state preview
           </FieldLabel>
           <text
-            box={{ left: -4.95, top: 4.98, width: 9.95 }}
             color={htmlColor('#cfe5e7')}
             copyable
             font={font}
             fontSize={0.18}
             lineHeight={0.23}
             selectable
+            style={{ left: -4.95, top: 4.98, width: 9.95 }}
           >
             {summary}
           </text>

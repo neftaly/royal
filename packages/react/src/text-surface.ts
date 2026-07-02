@@ -84,6 +84,18 @@ export type TextSurfaceBox = {
   readonly z?: number;
 };
 
+export type TextSurfaceControlStyle = {
+  readonly color?: Rgba;
+  readonly fontSize?: number;
+  readonly height?: number;
+  readonly left?: number;
+  readonly lineHeight?: number;
+  readonly maxWidth?: number;
+  readonly top?: number;
+  readonly width?: number;
+  readonly z?: number;
+};
+
 export type TextFieldHeightOptions = {
   readonly lineHeight?: number;
   readonly paddingY?: number;
@@ -122,6 +134,7 @@ export interface TextPrimitiveProps {
   readonly maxWidth?: number;
   readonly origin?: Vec3;
   readonly selectable?: boolean;
+  readonly style?: TextSurfaceControlStyle;
   readonly text?: string;
 }
 
@@ -136,6 +149,7 @@ export interface TextFieldPrimitiveProps {
   readonly onValueChange?: (value: string) => void;
   readonly origin?: Vec3;
   readonly placeholder?: string;
+  readonly style?: TextSurfaceControlStyle;
   readonly value: string;
 }
 
@@ -149,19 +163,20 @@ export interface TextAreaPrimitiveProps extends TextFieldPrimitiveProps {
 
 export interface ButtonPrimitiveProps {
   readonly ariaLabel?: string;
-  readonly box: TextSurfaceBox;
+  readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly disabled?: boolean;
   readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly onPress?: () => void;
+  readonly style?: TextSurfaceControlStyle;
   readonly type?: "button";
 }
 
 export interface CheckboxInputPrimitiveProps {
   readonly ariaLabel?: string;
-  readonly box: TextSurfaceBox;
+  readonly box?: TextSurfaceBox;
   readonly checked: boolean;
   readonly children?: ReactNode;
   readonly disabled?: boolean;
@@ -169,13 +184,14 @@ export interface CheckboxInputPrimitiveProps {
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly onCheckedChange?: (checked: boolean) => void;
+  readonly style?: TextSurfaceControlStyle;
   readonly type: "checkbox";
 }
 
 export interface FileInputPrimitiveProps {
   readonly accept?: string;
   readonly ariaLabel?: string;
-  readonly box: TextSurfaceBox;
+  readonly box?: TextSurfaceBox;
   readonly capture?: "environment" | "user";
   readonly children?: ReactNode;
   readonly disabled?: boolean;
@@ -184,18 +200,20 @@ export interface FileInputPrimitiveProps {
   readonly lineHeight?: number;
   readonly multiple?: boolean;
   readonly onFilesChange?: (files: readonly File[]) => void;
+  readonly style?: TextSurfaceControlStyle;
   readonly type: "file";
 }
 
 export interface ColorInputPrimitiveProps {
   readonly ariaLabel?: string;
-  readonly box: TextSurfaceBox;
+  readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly disabled?: boolean;
   readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly onValueChange?: (value: string) => void;
+  readonly style?: TextSurfaceControlStyle;
   readonly type: "color";
   readonly value: string;
 }
@@ -622,6 +640,61 @@ const controlBounds = (
   right: origin[0] + maxWidth + paddingX,
   top: origin[1] + lineHeight * 0.7 + paddingY,
 });
+
+const isFiniteNumber = (value: number | undefined): value is number =>
+  value !== undefined && Number.isFinite(value);
+
+const styleHasBoxLayout = (style: TextSurfaceControlStyle | undefined): boolean =>
+  style?.left !== undefined ||
+  style?.top !== undefined ||
+  style?.width !== undefined ||
+  style?.height !== undefined ||
+  style?.z !== undefined;
+
+const boxFromStyle = (
+  style: TextSurfaceControlStyle | undefined,
+  componentName: string,
+): TextSurfaceBox | undefined => {
+  if (!styleHasBoxLayout(style)) return undefined;
+  if (style === undefined) return undefined;
+
+  if (!isFiniteNumber(style.left) || !isFiniteNumber(style.top) || !isFiniteNumber(style.width)) {
+    throw new Error(`${componentName} style layout requires finite left, top, and width values.`);
+  }
+  if (style.height !== undefined && !Number.isFinite(style.height)) {
+    throw new Error(`${componentName} style height must be finite when provided.`);
+  }
+  if (style.z !== undefined && !Number.isFinite(style.z)) {
+    throw new Error(`${componentName} style z must be finite when provided.`);
+  }
+
+  return {
+    ...(style.height === undefined ? {} : { height: style.height }),
+    left: style.left,
+    top: style.top,
+    width: style.width,
+    ...(style.z === undefined ? {} : { z: style.z }),
+  };
+};
+
+const resolveSurfaceBox = (
+  box: TextSurfaceBox | undefined,
+  style: TextSurfaceControlStyle | undefined,
+  componentName: string,
+): TextSurfaceBox | undefined => box ?? boxFromStyle(style, componentName);
+
+const resolveRequiredSurfaceBox = (
+  box: TextSurfaceBox | undefined,
+  style: TextSurfaceControlStyle | undefined,
+  componentName: string,
+): TextSurfaceBox => {
+  const resolvedBox = resolveSurfaceBox(box, style, componentName);
+  if (resolvedBox === undefined) {
+    throw new Error(`${componentName} requires box or style layout props inside TextSurface.`);
+  }
+
+  return resolvedBox;
+};
 
 const boxWorldLeft = (bounds: CanvasWorldBounds, box: TextSurfaceBox): number =>
   bounds.left + box.left;
@@ -1626,14 +1699,18 @@ const buttonControlNodes = ({
 };
 
 export const ButtonPrimitive = ({
-  box,
+  box: boxProp,
   children,
   disabled = false,
   font,
   fontSize,
   lineHeight,
   onPress,
+  style: primitiveStyle,
 }: ButtonPrimitiveProps): ReactNode => {
+  const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, "button");
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const handlePress = useCallback((): void => {
     onPress?.();
   }, [onPress]);
@@ -1650,16 +1727,16 @@ export const ButtonPrimitive = ({
     context,
     disabled,
     ...(font === undefined ? {} : { font }),
-    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     label: labelFromChildren(children, "Button"),
-    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     pressed,
   }));
 };
 
 const FileInputPrimitive = ({
   accept,
-  box,
+  box: boxProp,
   capture,
   children,
   disabled = false,
@@ -1668,7 +1745,11 @@ const FileInputPrimitive = ({
   lineHeight,
   multiple,
   onFilesChange,
+  style: primitiveStyle,
 }: FileInputPrimitiveProps): ReactNode => {
+  const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="file"');
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const handlePress = useCallback((): void => {
     openFilePicker({
       ...(accept === undefined ? {} : { accept }),
@@ -1691,23 +1772,27 @@ const FileInputPrimitive = ({
     context,
     disabled: disabledControl,
     ...(font === undefined ? {} : { font }),
-    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     label: labelFromChildren(children, multiple === true ? "Choose files" : "Choose file"),
-    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     pressed,
   }));
 };
 
 const ColorInputPrimitive = ({
-  box,
+  box: boxProp,
   children,
   disabled = false,
   font,
   fontSize,
   lineHeight,
   onValueChange,
+  style: primitiveStyle,
   value,
 }: ColorInputPrimitiveProps): ReactNode => {
+  const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="color"');
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const handlePress = useCallback((): void => {
     openColorPicker({
       ...(onValueChange === undefined ? {} : { onValueChange }),
@@ -1722,8 +1807,8 @@ const ColorInputPrimitive = ({
   });
   const style = context.style;
   const label = labelFromChildren(children, "Color");
-  const effectiveFontSize = fontSize ?? style.fontSize;
-  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const effectiveFontSize = styledFontSize ?? style.fontSize;
+  const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const height = box.height ?? actionControlHeight;
   const fill = disabled
     ? disabledControlColor
@@ -1765,7 +1850,7 @@ const ColorInputPrimitive = ({
 };
 
 const CheckboxPrimitive = ({
-  box,
+  box: boxProp,
   checked,
   children,
   disabled = false,
@@ -1773,7 +1858,11 @@ const CheckboxPrimitive = ({
   fontSize,
   lineHeight,
   onCheckedChange,
+  style: primitiveStyle,
 }: CheckboxInputPrimitiveProps): ReactNode => {
+  const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="checkbox"');
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const handlePress = useCallback((): void => {
     onCheckedChange?.(!checked);
   }, [checked, onCheckedChange]);
@@ -1785,8 +1874,8 @@ const CheckboxPrimitive = ({
   });
   const style = context.style;
   const label = textFromChildren(children);
-  const effectiveFontSize = fontSize ?? style.fontSize;
-  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const effectiveFontSize = styledFontSize ?? style.fontSize;
+  const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const height = box.height ?? actionControlHeight;
   const left = boxWorldLeft(context.bounds, box);
   const top = boxWorldTop(context.bounds, box);
@@ -1851,29 +1940,35 @@ const CheckboxPrimitive = ({
 };
 
 export const TextPrimitive = ({
-  box,
+  box: boxProp,
   children,
   color,
   copyable,
   font,
   fontSize,
   lineHeight,
-  maxWidth = 7,
+  maxWidth,
   origin = [0, 0, 0],
   selectable,
+  style: primitiveStyle,
   text: textProp,
 }: TextPrimitiveProps): ReactNode => {
   const value = textProp ?? textFromChildren(children);
+  const box = resolveSurfaceBox(boxProp, primitiveStyle, "text");
+  const styledColor = color ?? primitiveStyle?.color;
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
   const interactive = selectable === true || copyable === true;
   const { id, state } = useTextPrimitiveState(value);
   const surfaceContext = useContext(TextSurfaceContext);
   const style = surfaceContext?.style ?? defaultTextStyle;
-  const effectiveFontSize = fontSize ?? style.fontSize;
-  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const effectiveFontSize = styledFontSize ?? style.fontSize;
+  const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const resolvedOrigin = box === undefined || surfaceContext === undefined
     ? origin
     : textOriginForBox(surfaceContext, box, font, effectiveFontSize, effectiveLineHeight);
-  const resolvedMaxWidth = box === undefined ? maxWidth : boxMaxWidth(box);
+  const resolvedMaxWidth = box === undefined ? styledMaxWidth : boxMaxWidth(box);
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
     : boxBounds(surfaceContext.bounds, box, box.height ?? effectiveLineHeight);
@@ -1882,9 +1977,9 @@ export const TextPrimitive = ({
     copyable: copyable === true || selectable === true,
     editable: false,
     ...(font === undefined ? {} : { font }),
-    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     id,
-    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     maxWidth: resolvedMaxWidth,
     mode: "multiline",
     origin: resolvedOrigin,
@@ -1895,7 +1990,7 @@ export const TextPrimitive = ({
     throw new Error("Royal text box props require a TextSurface ancestor.");
   }
 
-  const textColor = color ?? (context?.style ?? style).color;
+  const textColor = styledColor ?? (context?.style ?? style).color;
   const fragment = createEditableTextFragment({
     color: textColor,
     ...(font === undefined ? {} : { font }),
@@ -1913,8 +2008,8 @@ export const TextPrimitive = ({
       text({
         color: textColor,
         ...(font === undefined ? {} : { font }),
-        ...(fontSize === undefined ? {} : { fontSize }),
-        ...(lineHeight === undefined ? {} : { lineHeight }),
+        ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
+        ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
         origin: resolvedOrigin,
         text: value,
       }),
@@ -1928,34 +2023,40 @@ export const TextPrimitive = ({
 };
 
 const TextFieldPrimitive = ({
-  box,
+  box: boxProp,
   color,
   font,
   fontSize,
   lineHeight,
-  maxWidth = 7,
+  maxWidth,
   mode,
   onValueChange,
   origin = [0, 0, 0],
   placeholder,
   rows,
+  style: primitiveStyle,
   value,
 }: TextFieldPrimitiveProps & {
   readonly mode: TextControlMode;
   readonly rows: number;
 }): readonly RenderNode[] => {
+  const box = resolveSurfaceBox(boxProp, primitiveStyle, mode === "single-line" ? "input" : "textarea");
+  const styledColor = color ?? primitiveStyle?.color;
+  const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
+  const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
+  const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
   const { id, state } = useTextPrimitiveState(value);
   const surfaceContext = useContext(TextSurfaceContext);
   const surfaceStyle = surfaceContext?.style ?? defaultTextStyle;
-  const fieldFontSize = fontSize ?? surfaceStyle.fontSize;
-  const fieldLineHeight = lineHeight ?? surfaceStyle.lineHeight;
+  const fieldFontSize = styledFontSize ?? surfaceStyle.fontSize;
+  const fieldLineHeight = styledLineHeight ?? surfaceStyle.lineHeight;
   const defaultFieldHeight = textFieldHeight({
     lineHeight: fieldLineHeight,
     paddingY: surfaceStyle.fieldPaddingY,
     rows,
   });
   const resolvedHeight = box?.height ?? defaultFieldHeight;
-  const resolvedMaxWidth = box === undefined ? maxWidth : boxMaxWidth(box, surfaceStyle.fieldPaddingX);
+  const resolvedMaxWidth = box === undefined ? styledMaxWidth : boxMaxWidth(box, surfaceStyle.fieldPaddingX);
   const resolvedOrigin = box === undefined || surfaceContext === undefined
     ? origin
     : fieldOriginForBox(surfaceContext, box, fieldLineHeight, surfaceStyle.fieldPaddingX);
@@ -1967,9 +2068,9 @@ const TextFieldPrimitive = ({
     copyable: true,
     editable: true,
     ...(font === undefined ? {} : { font }),
-    ...(fontSize === undefined ? {} : { fontSize }),
+    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
     id,
-    ...(lineHeight === undefined ? {} : { lineHeight }),
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     maxWidth: resolvedMaxWidth,
     mode,
     ...(onValueChange === undefined ? {} : { onValueChange }),
@@ -1985,7 +2086,7 @@ const TextFieldPrimitive = ({
   const fragment = createEditableTextFragment({
     caretColor: style.caretColor,
     caretWidth: style.caretWidth,
-    color: color ?? style.color,
+    color: styledColor ?? style.color,
     ...(font === undefined ? {} : { font }),
     fontSize: fieldFontSize,
     lineHeight: fieldLineHeight,
