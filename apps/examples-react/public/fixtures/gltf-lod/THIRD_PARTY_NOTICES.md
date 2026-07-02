@@ -1,48 +1,21 @@
-# glTF LOD fixtures
+# glTF LOD fixture
 
-These fixtures are copied from the BabylonJS Assets repository:
+This fixture is copied from the Microsoft glTF SDK repository:
 
-https://github.com/BabylonJS/Assets
+https://github.com/microsoft/glTF-SDK/blob/master/GLTFSDK.Test/Resources/gltf/CubeWithLOD.gltf
 
-They are licensed under Creative Commons Attribution 4.0 International. The
-full license text is included in `LICENSE-CC-BY-4.0.txt`.
+The glTF SDK repository is licensed under the MIT License. The license text is
+included in `LICENSE-MIT.txt`.
 
-No local changes were made to the asset contents. The files were only copied
-into this fixture directory for the Royal examples app.
+No local changes were made to the asset contents. The file was only copied into
+this fixture directory for the Royal examples app.
 
-## Included assets
+## Included asset
 
-### LevelOfDetail
-
-Source:
-https://github.com/BabylonJS/Assets/tree/master/meshes/Tests/LevelOfDetail
+### CubeWithLOD
 
 Files:
-- `LevelOfDetail/LevelOfDetail.glb`
-
-Purpose:
-Material-level `MSFT_lod` fixture.
-
-### MSFT_lod_test
-
-Source:
-https://github.com/BabylonJS/Assets/tree/master/meshes/MSFT_lod_test
-
-Files:
-- `MSFT_lod_test/MSFT_lod_test.gltf`
-- `MSFT_lod_test/MSFT_lod_test_data.bin`
+- `microsoft/CubeWithLOD.gltf`
 
 Purpose:
 Node-level `MSFT_lod` fixture.
-
-### MSFT_lod_complex_hierarchy
-
-Source:
-https://github.com/BabylonJS/Assets/tree/master/meshes/MSFT_lod_complex_hierarchy
-
-Files:
-- `MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.gltf`
-- `MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.bin`
-
-Purpose:
-Hierarchy-level node `MSFT_lod` fixture.

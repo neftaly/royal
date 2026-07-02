@@ -7,15 +7,12 @@ import {
 import { type ReactNode } from 'react';
 import { exampleRenderer } from '../rendering';
 
-const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-lod/';
-const materialLodSrc = fixtureBase + 'LevelOfDetail/LevelOfDetail.glb';
-const nodeLodSrc = fixtureBase + 'MSFT_lod_test/MSFT_lod_test.gltf';
-const hierarchyLodSrc = fixtureBase + 'MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.gltf';
+const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/microsoft/CubeWithLOD.gltf';
 
 export const GltfLod = (): ReactNode => {
   const orbit = useOrbitCamera({
-    distance: 6.8,
-    pitch: 0.04,
+    distance: 4.6,
+    pitch: 0.02,
   });
 
   return (
@@ -31,48 +28,15 @@ export const GltfLod = (): ReactNode => {
             color={[0.82, 0.9, 0.92, 1]}
             fontSize={0.14}
             lineHeight={0.18}
-            origin={[-3.05, -1.24, 0.35]}
+            origin={[-0.88, -1.12, 0.35]}
           >
-            material LOD
-          </text>
-          <text
-            color={[0.82, 0.9, 0.92, 1]}
-            fontSize={0.14}
-            lineHeight={0.18}
-            origin={[-0.58, -1.24, 0.35]}
-          >
-            node LOD
-          </text>
-          <text
-            color={[0.82, 0.9, 0.92, 1]}
-            fontSize={0.14}
-            lineHeight={0.18}
-            origin={[1.78, -1.24, 0.35]}
-          >
-            hierarchy LOD
+            Microsoft CubeWithLOD
           </text>
           <model
-            src={materialLodSrc}
+            src={lodSrc}
             transform={{
-              position: [-2.55, 0.15, 0],
-              rotation: [0.12, -0.2, 0],
-              scale: [1.8, 1.8, 1.8],
-            }}
-          />
-          <model
-            src={nodeLodSrc}
-            transform={{
-              position: [0, 0.02, 0],
-              rotation: [0.1, -0.35, 0],
-              scale: [0.82, 0.82, 0.82],
-            }}
-          />
-          <model
-            src={hierarchyLodSrc}
-            transform={{
-              position: [2.55, 0, 0],
-              rotation: [0.12, -0.45, 0],
-              scale: [0.72, 0.72, 0.72],
+              rotation: [0.18, -0.28, 0],
+              scale: [1.3, 1.3, 1.3],
             }}
           />
         </pass>
