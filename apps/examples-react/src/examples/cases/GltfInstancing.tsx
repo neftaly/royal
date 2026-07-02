@@ -1,10 +1,9 @@
 /** @jsxImportSource @royal/react */
 import {
   Canvas,
-  OrbitCameraSync,
   OrbitControls,
   useFrame,
-  useImperativeOrbitCamera,
+  useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
 import { useRef, type ReactNode } from 'react';
@@ -90,7 +89,7 @@ const InstancedCubeField = (): ReactNode => {
 };
 
 export const GltfInstancing = (): ReactNode => {
-  const orbit = useImperativeOrbitCamera({
+  const orbit = useOrbitCamera({
     distance: 11,
     pitch: -0.32,
     target: [0, 0, 0],
@@ -110,7 +109,6 @@ export const GltfInstancing = (): ReactNode => {
         </pass>
       </scene>
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />
-      <OrbitCameraSync {...orbit.sync} />
     </Canvas>
   );
 };
