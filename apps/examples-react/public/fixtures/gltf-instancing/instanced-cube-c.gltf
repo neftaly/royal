@@ -64,9 +64,9 @@
       "name": "Instanced cube",
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.22,
-          0.68,
-          0.92,
+          0.58,
+          0.48,
+          0.95,
           1
         ],
         "metallicFactor": 0,

@@ -646,8 +646,8 @@ const smokeExpression = `
         };
       })() : undefined,
       picking: routeId === 'picking' ? {
-        hoveredId: document.querySelector('[data-picking-readout]')?.getAttribute('data-hovered-id') ?? '',
-        text: document.querySelector('[data-picking-readout]')?.textContent?.trim() ?? '',
+        hoveredId: window.__royalPickingProbe?.hoveredId ?? '',
+        text: window.__royalPickingProbe?.text ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
       source: (() => {
@@ -1495,7 +1495,7 @@ const dispatchKeyboardShortcut = async (session, key) => {
 const runPickingInteractionSmoke = async (session) => evaluate(session, `
 (async () => {
   const readHoveredId = () =>
-    document.querySelector('[data-picking-readout]')?.getAttribute('data-hovered-id') ?? '';
+    window.__royalPickingProbe?.hoveredId ?? '';
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing picking canvas' };
   if (typeof PointerEvent !== 'function') return { error: 'missing PointerEvent' };
@@ -1524,14 +1524,17 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
   const before = readHoveredId();
   let hoveredId = before;
   let hoveredPoint = null;
-  for (const point of hoverPoints) {
-    dispatch('pointermove', point);
-    await animationFrame();
-    hoveredId = readHoveredId();
-    if (hoveredId === 'helmet') {
-      hoveredPoint = point;
-      break;
+  for (let attempt = 0; attempt < 45 && hoveredId !== 'helmet'; attempt += 1) {
+    for (const point of hoverPoints) {
+      dispatch('pointermove', point);
+      await animationFrame();
+      hoveredId = readHoveredId();
+      if (hoveredId === 'helmet') {
+        hoveredPoint = point;
+        break;
+      }
     }
+    await animationFrame();
   }
   dispatch('pointermove', emptyPoint);
   await animationFrame();

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   createEditableTextEditorState,
+  createEditableTextFragment,
   applyEditableTextEditorKeyInput,
   editableTextEditorContextMenuSelection,
   editableTextEditorPointerSelection,
@@ -164,5 +165,64 @@ describe("editable text interaction", () => {
       point,
       state,
     })).toEqual(lineSelection(3));
+  });
+
+  it("renders editable text fragments through a visible line window", () => {
+    const state = createEditableTextEditorState({
+      selection: {
+        anchor: 6,
+        anchorLine: 1,
+        focus: 17,
+        focusLine: 2,
+      },
+      text: "alpha\nbravo\ncharlie\ndelta",
+    });
+    const fragment = createEditableTextFragment({
+      color: [1, 1, 1, 1],
+      font: textFont,
+      fontSize: 1,
+      lineHeight: 1.2,
+      lineWindow: {
+        lineCount: 2,
+        startLine: 1,
+      },
+      maxWidth: 100,
+      origin,
+      selection: state.selection,
+      showCaret: true,
+      text: state.text,
+    });
+    const textNode = fragment.nodes.find((node) => node.kind === "text");
+
+    expect(textNode).toMatchObject({
+      layout: {
+        source: "bravo\ncharlie",
+      },
+    });
+    expect(fragment.selectionRects.map((rect) => rect.line)).toEqual([1, 2]);
+    expect(fragment.caretPosition[1]).toBeGreaterThan(-2.4);
+  });
+
+  it("renders single-line fragments through one wrapped viewport line", () => {
+    const fragment = createEditableTextFragment({
+      color: [1, 1, 1, 1],
+      font: textFont,
+      fontSize: 1,
+      lineHeight: 1.2,
+      lineWindow: {
+        lineCount: 1,
+        startLine: 1,
+      },
+      maxWidth: 2,
+      mode: "single-line",
+      origin,
+      selection: selection(8),
+      showCaret: true,
+      text: "alpha beta gamma",
+    });
+    const textNode = fragment.nodes.find((node) => node.kind === "text");
+
+    expect(textNode?.layout.source.split("\n")).toHaveLength(1);
+    expect(fragment.layout.lines.length).toBeGreaterThan(1);
   });
 });

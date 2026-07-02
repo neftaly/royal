@@ -20,6 +20,11 @@ import {
 
 export type EditableTextFragmentMode = 'single-line' | 'multiline';
 
+export type EditableTextLineWindow = {
+  readonly lineCount: number;
+  readonly startLine: number;
+};
+
 export interface EditableTextFragmentOptions {
   readonly caretColor?: Rgba;
   readonly caretWidth?: number;
@@ -27,6 +32,7 @@ export interface EditableTextFragmentOptions {
   readonly font?: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
+  readonly lineWindow?: EditableTextLineWindow;
   readonly maxWidth: number;
   readonly mode?: EditableTextFragmentMode;
   readonly origin: Vec3;
@@ -55,8 +61,7 @@ const defaultCaretWidth = 0.025;
 const textForMode = (textValue: string, mode: EditableTextFragmentMode): string =>
   mode === 'single-line' ? textValue.replace(/[\r\n]/g, ' ') : textValue;
 
-const maxWidthForMode = (maxWidth: number, mode: EditableTextFragmentMode): number =>
-  mode === 'single-line' ? Number.POSITIVE_INFINITY : maxWidth;
+const maxWidthForMode = (maxWidth: number, _mode: EditableTextFragmentMode): number => maxWidth;
 
 const normalizedSelection = (
   value: string,
@@ -120,6 +125,50 @@ const caretNode = (
     },
   });
 
+const clampLineWindow = (
+  layout: EditableTextLayout,
+  window: EditableTextLineWindow | undefined,
+): EditableTextLineWindow => {
+  const layoutLineCount = Math.max(1, layout.lines.length);
+  if (window === undefined || !Number.isFinite(window.lineCount)) {
+    return { lineCount: layoutLineCount, startLine: 0 };
+  }
+
+  const lineCount = Math.max(1, Math.floor(window.lineCount));
+  const maxStart = Math.max(0, layoutLineCount - lineCount);
+  const startLine = Math.max(0, Math.min(maxStart, Math.floor(window.startLine)));
+
+  return {
+    lineCount,
+    startLine,
+  };
+};
+
+const visibleWrappedText = (
+  layout: EditableTextLayout,
+  window: EditableTextLineWindow,
+): string =>
+  layout.lines
+    .slice(window.startLine, window.startLine + window.lineCount)
+    .map((line) => line.text)
+    .join('\n');
+
+const visiblePlaceholderText = (
+  options: EditableTextFragmentOptions,
+  mode: EditableTextFragmentMode,
+  window: EditableTextLineWindow,
+): string =>
+  wrapEditableText({
+    ...(options.font === undefined ? {} : { font: options.font }),
+    fontSize: options.fontSize,
+    lineHeight: options.lineHeight,
+    maxWidth: maxWidthForMode(options.maxWidth, mode),
+    text: textForMode(options.placeholder ?? '', mode),
+  })
+    .split('\n')
+    .slice(window.startLine, window.startLine + window.lineCount)
+    .join('\n');
+
 export const createEditableTextFragment = (
   options: EditableTextFragmentOptions,
 ): EditableTextFragment => {
@@ -135,18 +184,35 @@ export const createEditableTextFragment = (
   });
   const selection = normalizedSelection(displayValue, options.selection);
   const range = sortedEditableTextRange(selection);
-  const selectionRects = editableTextSelectionRects(layout, range, options.origin);
+  const lineWindow = clampLineWindow(layout, options.lineWindow);
+  const lineOffsetY = lineWindow.startLine * layout.lineHeight;
+  const selectionRects = editableTextSelectionRects(layout, range, options.origin)
+    .filter((rect) =>
+      rect.line >= lineWindow.startLine &&
+      rect.line < lineWindow.startLine + lineWindow.lineCount
+    )
+    .map((rect) => ({
+      ...rect,
+      y: rect.y + lineOffsetY,
+    }));
   const caretWidth = options.caretWidth ?? defaultCaretWidth;
+  const caretPlacement = editableTextCaretPlacement(layout, selection.focus, selection.focusLine) ??
+    layout.caretPlacements.at(-1);
   const caretPosition = caretPositionFor(layout, selection, options.origin, caretWidth);
+  const visibleCaretPosition: Vec3 = [
+    caretPosition[0],
+    caretPosition[1] + lineOffsetY,
+    caretPosition[2],
+  ];
+  const caretVisible =
+    caretPlacement === undefined ||
+    (
+      caretPlacement.line >= lineWindow.startLine &&
+      caretPlacement.line < lineWindow.startLine + lineWindow.lineCount
+    );
   const displayText = displayValue.length === 0
-    ? wrapEditableText({
-      ...(options.font === undefined ? {} : { font: options.font }),
-      fontSize: options.fontSize,
-      lineHeight: options.lineHeight,
-      maxWidth: layoutMaxWidth,
-      text: textForMode(options.placeholder ?? '', mode),
-    })
-    : layout.wrappedText;
+    ? visiblePlaceholderText(options, mode, lineWindow)
+    : visibleWrappedText(layout, lineWindow);
   const textColor = displayValue.length === 0
     ? options.placeholderColor ?? defaultPlaceholderColor
     : options.color;
@@ -160,13 +226,13 @@ export const createEditableTextFragment = (
       origin: options.origin,
       text: displayText,
     }),
-    ...(options.showCaret === true
-      ? [caretNode(caretPosition, layout.selectionHeight, caretWidth, options.caretColor ?? defaultCaretColor)]
+    ...(options.showCaret === true && caretVisible
+      ? [caretNode(visibleCaretPosition, layout.selectionHeight, caretWidth, options.caretColor ?? defaultCaretColor)]
       : []),
   ];
 
   return {
-    caretPosition,
+    caretPosition: visibleCaretPosition,
     layout,
     nodes,
     range,

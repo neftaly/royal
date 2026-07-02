@@ -13,6 +13,7 @@ import {
   createEditableTextEditorState,
   createEditableTextFragment,
   editableTextClipboardMenuCommands,
+  editableTextCaretPlacement,
   editableTextEditorCaretSelection,
   editableTextEditorContextMenuSelection,
   editableTextEditorPointerSelection,
@@ -42,7 +43,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  type CSSProperties,
   type ClipboardEvent,
   type CompositionEvent,
   type FocusEvent,
@@ -50,6 +50,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type WheelEvent,
 } from "react";
 import { useStore } from "zustand/react";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -114,12 +115,14 @@ export interface TextSurfaceProps
     | "onPointerDown"
     | "onPointerMove"
     | "onPointerUp"
+    | "onWheel"
     | "ref"
     | "role"
     | "tabIndex"
   > {
   readonly bounds?: CanvasWorldBounds;
   readonly children: CanvasProps["children"];
+  readonly onWheel?: CanvasProps["onWheel"];
   readonly styleOptions?: TextInteractionStyle;
 }
 
@@ -248,8 +251,10 @@ type TextControlRegistration = {
   readonly selectable: boolean;
   readonly selectedText: string;
   readonly selection: EditableTextSelection;
+  readonly scrollLine: number;
   readonly state: EditableTextEditorState;
   readonly text: string;
+  readonly visibleLineCount: number;
 };
 
 type ActionControlRegistration = {
@@ -300,6 +305,8 @@ type TextSurfaceStoreState = {
   readonly pressedAction: PressedActionControl | undefined;
   readonly registerActionControl: (control: ActionControlRegistration) => void;
   readonly registerControl: (control: TextControlRegistration) => void;
+  readonly scrollControlBy: (id: string, deltaLines: number) => void;
+  readonly scrollLines: ReadonlyMap<string, number>;
   readonly selections: ReadonlyMap<string, EditableTextSelection>;
   readonly setActiveActionId: (id: string | undefined) => void;
   readonly setActiveId: (id: string | undefined) => void;
@@ -350,17 +357,28 @@ const defaultTextStyle = {
   selectionColor: [0.08, 0.28, 0.42, 1],
 } as const satisfies Required<TextInteractionStyle>;
 
-const pasteSinkStyle = {
-  height: 1,
-  left: 0,
-  opacity: 0,
-  pointerEvents: "none",
-  position: "fixed",
-  top: 0,
-  transform: "translate(-100vw, -100vh)",
-  width: 1,
-  zIndex: -1,
-} as const satisfies CSSProperties;
+const configurePasteSink = (sink: HTMLTextAreaElement): void => {
+  sink.setAttribute("aria-label", "Text clipboard input");
+  sink.setAttribute("autoCapitalize", "off");
+  sink.setAttribute("autoComplete", "off");
+  sink.setAttribute("autoCorrect", "off");
+  sink.setAttribute("data-royal-text-clipboard-staging", "true");
+  sink.spellcheck = false;
+  sink.tabIndex = -1;
+  sink.value = "";
+  sink.wrap = "off";
+  Object.assign(sink.style, {
+    height: "1px",
+    left: "0",
+    opacity: "0",
+    pointerEvents: "none",
+    position: "fixed",
+    top: "0",
+    transform: "translate(-100vw, -100vh)",
+    width: "1px",
+    zIndex: "-1",
+  });
+};
 
 export const textFieldHeight = ({
   lineHeight = defaultTextStyle.lineHeight,
@@ -459,6 +477,36 @@ const withSelection = (
   };
 };
 
+const maxScrollLineFor = (control: TextControlRegistration): number => {
+  if (!Number.isFinite(control.visibleLineCount)) return 0;
+  return Math.max(0, control.layout.lines.length - Math.max(1, Math.floor(control.visibleLineCount)));
+};
+
+const clampScrollLineFor = (
+  control: TextControlRegistration,
+  scrollLine: number,
+): number => Math.max(0, Math.min(maxScrollLineFor(control), Math.floor(scrollLine)));
+
+const scrollLineForSelection = (
+  control: TextControlRegistration,
+  selection: EditableTextSelection,
+): number => {
+  const visibleLineCount = Math.max(1, Math.floor(control.visibleLineCount));
+  if (!Number.isFinite(control.visibleLineCount)) return 0;
+
+  const caret = editableTextCaretPlacement(control.layout, selection.focus, selection.focusLine) ??
+    control.layout.caretPlacements.at(-1);
+  const line = caret?.line ?? 0;
+  const current = clampScrollLineFor(control, control.scrollLine);
+
+  if (line < current) return clampScrollLineFor(control, line);
+  if (line >= current + visibleLineCount) {
+    return clampScrollLineFor(control, line - visibleLineCount + 1);
+  }
+
+  return current;
+};
+
 const createTextSurfaceStore = (): TextSurfaceStore => {
   return createStore<TextSurfaceStoreState>()((set, get) => {
     const setSelection = (id: string, selection: EditableTextSelection): void => {
@@ -484,6 +532,16 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         setSelection(id, nextState.selection);
         if (control !== undefined && control.text !== nextState.text) {
           control.onValueChange?.(nextState.text);
+        }
+        if (control !== undefined) {
+          const scrollControl = {
+            ...control,
+            scrollLine: get().scrollLines.get(id) ?? control.scrollLine,
+          };
+          const nextScrollLine = scrollLineForSelection(scrollControl, nextState.selection);
+          if (nextScrollLine !== scrollControl.scrollLine) {
+            set({ scrollLines: new Map(get().scrollLines).set(id, nextScrollLine) });
+          }
         }
       },
       clearSelectionsExcept: (id) => {
@@ -527,13 +585,34 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       },
       registerControl: (control) => {
         const selection = get().selections.get(control.id);
-        const nextControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
+        const selectedControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
           ? control
           : withSelection(control, selection);
+        const scrollLine = clampScrollLineFor({
+          ...selectedControl,
+          scrollLine: get().scrollLines.get(control.id) ?? selectedControl.scrollLine,
+        }, get().scrollLines.get(control.id) ?? selectedControl.scrollLine);
+        const nextControl = {
+          ...selectedControl,
+          scrollLine,
+        };
         const currentControls = get().controls;
-        if (currentControls.get(control.id) === nextControl) return;
-        set({ controls: new Map(currentControls).set(control.id, nextControl) });
+        const currentScroll = get().scrollLines.get(control.id);
+        if (currentControls.get(control.id) === nextControl && currentScroll === scrollLine) return;
+        set({
+          controls: new Map(currentControls).set(control.id, nextControl),
+          ...(currentScroll === scrollLine ? {} : { scrollLines: new Map(get().scrollLines).set(control.id, scrollLine) }),
+        });
       },
+      scrollControlBy: (id, deltaLines) => {
+        const control = get().controls.get(id);
+        if (control === undefined || deltaLines === 0) return;
+        const current = get().scrollLines.get(id) ?? control.scrollLine;
+        const next = clampScrollLineFor(control, current + deltaLines);
+        if (next === current) return;
+        set({ scrollLines: new Map(get().scrollLines).set(id, next) });
+      },
+      scrollLines: new Map(),
       selections: new Map(),
       setActiveActionId: (id) => {
         if (get().activeActionId === id) return;
@@ -569,7 +648,9 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         if (!currentControls.has(id)) return;
         const nextControls = new Map(currentControls);
         nextControls.delete(id);
-        set({ controls: nextControls });
+        const nextScrollLines = new Map(get().scrollLines);
+        nextScrollLines.delete(id);
+        set({ controls: nextControls, scrollLines: nextScrollLines });
       },
     };
   });
@@ -606,7 +687,8 @@ export const TextInteractionProvider = ({
   return createElement(TextInteractionStoreContext.Provider, { value: store }, children);
 };
 
-const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "selections">>()(() => ({
+const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "scrollLines" | "selections">>()(() => ({
+  scrollLines: new Map(),
   selections: new Map(),
 }));
 
@@ -660,6 +742,11 @@ const pointInActionControl = (
   worldX <= control.bounds.right &&
   worldY <= control.bounds.top &&
   worldY >= control.bounds.bottom;
+
+const isScrollableTextControl = (control: TextControlRegistration): boolean =>
+  control.mode === "multiline" &&
+  Number.isFinite(control.visibleLineCount) &&
+  control.layout.lines.length > control.visibleLineCount;
 
 const controlBounds = (
   origin: Vec3,
@@ -757,6 +844,25 @@ const boxMaxWidth = (
   box: TextSurfaceBox,
   paddingX = 0,
 ): number => Math.max(0, box.width - paddingX * 2);
+
+const visibleLineCountFor = (
+  height: number | undefined,
+  lineHeight: number,
+  paddingY = 0,
+): number => {
+  if (height === undefined) return Number.POSITIVE_INFINITY;
+  return Math.max(1, Math.floor(Math.max(0, height - paddingY * 2) / lineHeight));
+};
+
+const interactionOriginForScroll = (
+  origin: Vec3,
+  lineHeight: number,
+  scrollLine: number,
+): Vec3 => [
+  origin[0],
+  origin[1] + scrollLine * lineHeight,
+  origin[2],
+];
 
 const textOriginForBox = (
   context: TextSurfaceContextValue,
@@ -865,10 +971,26 @@ const readClipboardText = async (): Promise<string | undefined> => {
   }
 };
 
+const wheelDeltaLines = (event: WheelEvent<HTMLElement>): number => {
+  if (event.deltaY === 0) return 0;
+  if (event.deltaMode === 1) return Math.trunc(event.deltaY);
+  if (event.deltaMode === 2) return Math.sign(event.deltaY) * 4;
+
+  return Math.sign(event.deltaY) * Math.max(1, Math.ceil(Math.abs(event.deltaY) / 48));
+};
+
+const isKeyboardComposing = (
+  event: KeyboardEvent<HTMLElement> | globalThis.KeyboardEvent,
+): boolean =>
+  "nativeEvent" in event
+    ? event.nativeEvent.isComposing
+    : event.isComposing;
+
 export const TextSurface = ({
   bounds = defaultSurfaceBounds,
   children,
   onPaste,
+  onWheel,
   styleOptions,
   ...canvasProps
 }: TextSurfaceProps): ReactNode => {
@@ -903,6 +1025,20 @@ export const TextSurface = ({
     );
 
     return control === undefined ? undefined : { control, worldX, worldY };
+  }, [bounds, store]);
+
+  const findScrollableControlAt = useCallback((
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number,
+  ): TextControlRegistration | undefined => {
+    const [worldX, worldY] = canvasPointToWorld(canvas, bounds, clientX, clientY);
+    const controls = Array.from(store.getState().getControls()).reverse();
+
+    return controls.find((candidate) =>
+      isScrollableTextControl(candidate) &&
+      pointInControl(candidate, worldX, worldY)
+    );
   }, [bounds, store]);
 
   const findActionControlAt = useCallback((
@@ -992,7 +1128,7 @@ export const TextSurface = ({
     focusControl(control);
   }, [focusControl, store]);
 
-  const handlePaste = useCallback((event: ClipboardEvent<HTMLElement>): void => {
+  const handlePaste = useCallback((event: ClipboardEvent<HTMLElement> | globalThis.ClipboardEvent): void => {
     const fromPasteSink = event.currentTarget === pasteSinkRef.current;
     if (event.currentTarget === canvasRef.current) {
       onPaste?.(event as ClipboardEvent<HTMLCanvasElement>);
@@ -1004,7 +1140,7 @@ export const TextSurface = ({
     const control = controlId === undefined ? undefined : store.getState().getControl(controlId);
     if (control === undefined || !control.editable) return;
 
-    const value = event.clipboardData.getData("text/plain");
+    const value = event.clipboardData?.getData("text/plain") ?? "";
     if (fromPasteSink) event.preventDefault();
     if (value === "") return;
 
@@ -1014,7 +1150,7 @@ export const TextSurface = ({
     focusControl(control);
   }, [activeId, focusControl, onPaste, store]);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>): void => {
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement> | globalThis.KeyboardEvent): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
     if (control === undefined) {
       const actionControl = activeActionId === undefined
@@ -1035,7 +1171,7 @@ export const TextSurface = ({
       {
         altKey: event.altKey,
         ctrlKey: event.ctrlKey,
-        isComposing: event.nativeEvent.isComposing,
+        isComposing: isKeyboardComposing(event),
         key: event.key,
         keyCode: event.keyCode,
         metaKey: event.metaKey,
@@ -1196,12 +1332,14 @@ export const TextSurface = ({
     const { control, worldX, worldY } = hit;
     if (!control.copyable && !control.editable) return;
 
-    const nextSelection = editableTextEditorContextMenuSelection({
-      layout: control.layout,
-      origin: control.origin,
-      point: { x: worldX, y: worldY },
-      state: control.state,
-    });
+    const nextSelection = hasSelection(control)
+      ? control.selection
+      : editableTextEditorContextMenuSelection({
+          layout: control.layout,
+          origin: control.origin,
+          point: { x: worldX, y: worldY },
+          state: control.state,
+        });
     store.getState().clearSelectionsExcept(control.id);
     store.getState().setActiveActionId(undefined);
     store.getState().applyEditorState(control.id, setEditableTextEditorSelection(control.state, nextSelection));
@@ -1215,13 +1353,13 @@ export const TextSurface = ({
     });
   }, [findControlAt, focusControl, store]);
 
-  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLElement>): void => {
+  const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLElement> | globalThis.CompositionEvent): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
     if (control === undefined || !control.editable || event.data === "") return;
     store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, event.data));
   }, [activeId, store]);
 
-  const handleBlur = useCallback((event: FocusEvent<HTMLElement>): void => {
+  const handleBlur = useCallback((event: FocusEvent<HTMLElement> | globalThis.FocusEvent): void => {
     if (event.relatedTarget === canvasRef.current || event.relatedTarget === pasteSinkRef.current) return;
     store.getState().clearSelectionsExcept(undefined);
     store.getState().setActiveActionId(undefined);
@@ -1229,6 +1367,53 @@ export const TextSurface = ({
     store.getState().setPressedAction(undefined);
     store.getState().closeMenu();
   }, [store]);
+
+  const handleWheel = useCallback((event: WheelEvent<HTMLCanvasElement>): void => {
+    onWheel?.(event);
+    if (event.defaultPrevented) return;
+
+    const hit = findScrollableControlAt(event.currentTarget, event.clientX, event.clientY);
+    const activeControl = activeId === undefined ? undefined : store.getState().getControl(activeId);
+    const control = hit ?? (activeControl !== undefined && isScrollableTextControl(activeControl)
+      ? activeControl
+      : undefined);
+    if (control === undefined) return;
+
+    const deltaLines = wheelDeltaLines(event);
+    if (deltaLines === 0) return;
+
+    event.preventDefault();
+    store.getState().scrollControlBy(control.id, deltaLines);
+  }, [activeId, findScrollableControlAt, onWheel, store]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null || typeof document === "undefined") return undefined;
+
+    const sink = document.createElement("textarea");
+    configurePasteSink(sink);
+    pasteSinkRef.current = sink;
+
+    const handleSinkPaste = (event: globalThis.ClipboardEvent): void => handlePaste(event);
+    const handleSinkKeyDown = (event: globalThis.KeyboardEvent): void => handleKeyDown(event);
+    const handleSinkCompositionEnd = (event: globalThis.CompositionEvent): void => handleCompositionEnd(event);
+    const handleSinkBlur = (event: globalThis.FocusEvent): void => handleBlur(event);
+
+    sink.addEventListener("paste", handleSinkPaste);
+    sink.addEventListener("keydown", handleSinkKeyDown);
+    sink.addEventListener("compositionend", handleSinkCompositionEnd);
+    sink.addEventListener("blur", handleSinkBlur);
+    (canvas.parentElement ?? document.body).append(sink);
+
+    return () => {
+      sink.removeEventListener("paste", handleSinkPaste);
+      sink.removeEventListener("keydown", handleSinkKeyDown);
+      sink.removeEventListener("compositionend", handleSinkCompositionEnd);
+      sink.removeEventListener("blur", handleSinkBlur);
+      if (pasteSinkRef.current === sink) pasteSinkRef.current = null;
+      sink.remove();
+    };
+  }, [handleBlur, handleCompositionEnd, handleKeyDown, handlePaste]);
 
   const context = useMemo<TextSurfaceContextValue>(() => ({
     activeActionId,
@@ -1246,8 +1431,6 @@ export const TextSurface = ({
     unregisterControl: store.getState().unregisterControl,
   }), [activeActionId, activeId, bounds, menu, pressedAction, providedFont, store, style]);
 
-  const handlePasteSinkChange = useCallback((): void => undefined, []);
-
   return createElement(Canvas, {
     ...canvasProps,
     "aria-multiline": true,
@@ -1260,6 +1443,7 @@ export const TextSurface = ({
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerEnd,
+    onWheel: handleWheel,
     ref: canvasRef,
     role: "textbox",
     tabIndex: 0,
@@ -1269,25 +1453,6 @@ export const TextSurface = ({
         { key: "scene", value: context },
         children as ReactNode,
       ),
-      createElement("textarea", {
-        "aria-label": "Text clipboard input",
-        autoCapitalize: "off",
-        autoComplete: "off",
-        autoCorrect: "off",
-        "data-royal-text-clipboard-staging": true,
-        key: "paste-sink",
-        onChange: handlePasteSinkChange,
-        onBlur: handleBlur,
-        onCompositionEnd: handleCompositionEnd,
-        onKeyDown: handleKeyDown,
-        onPaste: handlePaste,
-        ref: pasteSinkRef,
-        spellCheck: false,
-        style: pasteSinkStyle,
-        tabIndex: -1,
-        value: "",
-        wrap: "off",
-      }),
     ],
   });
 };
@@ -1311,6 +1476,16 @@ const useTextPrimitiveState = (textValue: string): {
       text: textValue,
     }),
   }), [id, selection, textValue]);
+};
+
+const useTextControlScrollLine = (id: string): number => {
+  const context = useContext(TextSurfaceContext);
+  const store = context?.store;
+
+  return useStore(
+    (store ?? emptyTextSurfaceStore) as StoreApi<Pick<TextSurfaceStoreState, "scrollLines">>,
+    (state) => state.scrollLines.get(id) ?? 0,
+  );
 };
 
 const useRegisterTextControl = (control: TextControlRegistration): void => {
@@ -1601,7 +1776,9 @@ const usePrimitiveRegistration = ({
   onValueChange,
   origin,
   selectable,
+  scrollLine,
   state,
+  visibleLineCount,
 }: {
   readonly bounds?: TextControlBounds;
   readonly copyable: boolean;
@@ -1615,7 +1792,9 @@ const usePrimitiveRegistration = ({
   readonly onValueChange?: (value: string) => void;
   readonly origin: Vec3;
   readonly selectable: boolean;
+  readonly scrollLine: number;
   readonly state: EditableTextEditorState;
+  readonly visibleLineCount: number;
 }): {
   readonly active: boolean;
   readonly context: TextSurfaceContextValue | undefined;
@@ -1656,8 +1835,10 @@ const usePrimitiveRegistration = ({
     selectable,
     selectedText: editableTextEditorSelectedText(state),
     selection: state.selection,
+    scrollLine,
     state,
     text: state.text,
+    visibleLineCount,
   }), [
     bounds,
     copyable,
@@ -1671,9 +1852,11 @@ const usePrimitiveRegistration = ({
     onValueChange,
     origin,
     selectable,
+    scrollLine,
     state,
     style.fieldPaddingX,
     style.fieldPaddingY,
+    visibleLineCount,
   ]);
 
   useRegisterTextControl(control);
@@ -2004,6 +2187,7 @@ export const TextPrimitive = ({
   const resolvedFont = useResolvedTextFont(font);
   const interactive = selectable === true || copyable === true;
   const { id, state } = useTextPrimitiveState(value);
+  const scrollLine = useTextControlScrollLine(id);
   const surfaceContext = useContext(TextSurfaceContext);
   const style = surfaceContext?.style ?? defaultTextStyle;
   const effectiveFontSize = styledFontSize ?? style.fontSize;
@@ -2012,6 +2196,10 @@ export const TextPrimitive = ({
     ? origin
     : textOriginForBox(surfaceContext, box, resolvedFont, effectiveFontSize, effectiveLineHeight);
   const resolvedMaxWidth = box === undefined ? styledMaxWidth : boxMaxWidth(box);
+  const visibleLineCount = box === undefined
+    ? Number.POSITIVE_INFINITY
+    : visibleLineCountFor(box.height ?? effectiveLineHeight, effectiveLineHeight);
+  const interactionOrigin = interactionOriginForScroll(resolvedOrigin, effectiveLineHeight, scrollLine);
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
     : boxBounds(surfaceContext.bounds, box, box.height ?? effectiveLineHeight);
@@ -2025,9 +2213,11 @@ export const TextPrimitive = ({
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     maxWidth: resolvedMaxWidth,
     mode: "multiline",
-    origin: resolvedOrigin,
+    origin: interactionOrigin,
     selectable: interactive,
+    scrollLine,
     state,
+    visibleLineCount,
   });
   if (box !== undefined && surfaceContext === undefined) {
     throw new Error("Royal text box props require a TextSurface ancestor.");
@@ -2039,6 +2229,10 @@ export const TextPrimitive = ({
     ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     fontSize: effectiveFontSize,
     lineHeight: effectiveLineHeight,
+    lineWindow: {
+      lineCount: visibleLineCount,
+      startLine: scrollLine,
+    },
     maxWidth: resolvedMaxWidth,
     origin: resolvedOrigin,
     selection: interactive ? state.selection : createEditableTextEditorState({ text: value }).selection,
@@ -2047,16 +2241,18 @@ export const TextPrimitive = ({
   });
 
   if (!interactive) {
-    return rendererOutputToReact([
-      text({
-        color: textColor,
-        ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
-        ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
-        ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
-        origin: resolvedOrigin,
-        text: value,
-      }),
-    ]);
+    return rendererOutputToReact(box === undefined
+      ? [
+          text({
+            color: textColor,
+            ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
+            ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
+            ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
+            origin: resolvedOrigin,
+            text: value,
+          }),
+        ]
+      : fragment.nodes);
   }
 
   return rendererOutputToReact([
@@ -2090,6 +2286,7 @@ const TextFieldPrimitive = ({
   const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
   const resolvedFont = useResolvedTextFont(font);
   const { id, state } = useTextPrimitiveState(value);
+  const scrollLine = useTextControlScrollLine(id);
   const surfaceContext = useContext(TextSurfaceContext);
   const surfaceStyle = surfaceContext?.style ?? defaultTextStyle;
   const fieldFontSize = styledFontSize ?? surfaceStyle.fontSize;
@@ -2104,6 +2301,8 @@ const TextFieldPrimitive = ({
   const resolvedOrigin = box === undefined || surfaceContext === undefined
     ? origin
     : fieldOriginForBox(surfaceContext, box, fieldLineHeight, surfaceStyle.fieldPaddingX);
+  const visibleLineCount = visibleLineCountFor(resolvedHeight, fieldLineHeight, surfaceStyle.fieldPaddingY);
+  const interactionOrigin = interactionOriginForScroll(resolvedOrigin, fieldLineHeight, scrollLine);
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
     : boxBounds(surfaceContext.bounds, box, resolvedHeight);
@@ -2118,9 +2317,11 @@ const TextFieldPrimitive = ({
     maxWidth: resolvedMaxWidth,
     mode,
     ...(onValueChange === undefined ? {} : { onValueChange }),
-    origin: resolvedOrigin,
+    origin: interactionOrigin,
     selectable: true,
+    scrollLine,
     state,
+    visibleLineCount,
   });
   if (box !== undefined && surfaceContext === undefined) {
     throw new Error("Royal text box props require a TextSurface ancestor.");
@@ -2134,6 +2335,10 @@ const TextFieldPrimitive = ({
     ...(resolvedFont === undefined ? {} : { font: resolvedFont }),
     fontSize: fieldFontSize,
     lineHeight: fieldLineHeight,
+    lineWindow: {
+      lineCount: visibleLineCount,
+      startLine: scrollLine,
+    },
     maxWidth: resolvedMaxWidth,
     mode,
     origin: resolvedOrigin,
