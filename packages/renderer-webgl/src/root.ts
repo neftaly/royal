@@ -41,6 +41,7 @@ import {
   type GltfDocument,
   type GltfImage,
   type GltfLodExtras,
+  type GltfMaterial,
   type GltfMeshPrimitive,
   type GltfPunctualLight,
   type GltfSampler,
@@ -219,6 +220,7 @@ type LoadedGltfMaterial = {
   readonly baseColorImageUri?: string;
   readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
+  readonly emissive?: Rgba;
   readonly image?: HTMLImageElement | ImageBitmap;
   readonly imageFailed?: boolean;
   readonly sampler?: TextureSampler;
@@ -253,15 +255,19 @@ type GltfState = {
 type GltfPrimitiveDraw = {
   readonly geometry: CpuGeometry;
   readonly lights?: SurfaceLightSet;
-  readonly material: StandardMaterial | UnlitMaterial;
+  readonly material: SurfaceMaterial;
   readonly model: Mat4;
 };
 
 type GltfPrimitiveDrawBatch = {
   readonly geometry: GeometryResource;
   readonly lights: SurfaceLightSet;
-  readonly material: StandardMaterial | UnlitMaterial;
+  readonly material: SurfaceMaterial;
   readonly models: Mat4[];
+};
+
+type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
+  readonly emissive?: Rgba;
 };
 
 type SurfaceDirectionalLight = {
@@ -887,8 +893,18 @@ const textureKey = (texture: TextureRef): string => {
   ].join(":");
 };
 
-const surfaceMaterialBatchKey = (material: StandardMaterial | UnlitMaterial): string =>
-  `${material.kind}:${textureKey(material.baseColor)}`;
+const materialEmissiveColor = (material: Material): Rgba =>
+  "emissive" in material && Array.isArray(material.emissive) && material.emissive.length >= 3
+    ? [
+        material.emissive[0] ?? 0,
+        material.emissive[1] ?? 0,
+        material.emissive[2] ?? 0,
+        material.emissive[3] ?? 1,
+      ]
+    : [0, 0, 0, 1];
+
+const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
+  `${material.kind}:${textureKey(material.baseColor)}:${surfaceLightVectorKey(materialEmissiveColor(material))}`;
 
 const surfaceLightValueKey = (value: number | undefined): string =>
   value === undefined || !Number.isFinite(value) ? "" : Number(value.toFixed(6)).toString();
@@ -1211,6 +1227,26 @@ const gltfSpotConeAngles = (light: GltfPunctualLight): {
   );
 
   return { innerConeAngle, outerConeAngle };
+};
+
+const gltfEmissiveColor = (
+  material: GltfMaterial | undefined,
+): Rgba | undefined => {
+  const factor = material?.emissiveFactor;
+  const strength = Math.max(
+    0,
+    finiteNumber(material?.extensions?.KHR_materials_emissive_strength?.emissiveStrength, 1),
+  );
+  const emissive: Rgba = [
+    (factor?.[0] ?? 0) * strength,
+    (factor?.[1] ?? 0) * strength,
+    (factor?.[2] ?? 0) * strength,
+    1,
+  ];
+
+  return emissive[0] === 0 && emissive[1] === 0 && emissive[2] === 0
+    ? undefined
+    : emissive;
 };
 
 const gltfPrimitiveMode = (mode: number | undefined): "lines" | "triangles" | undefined => {
@@ -2028,14 +2064,20 @@ export class WebGlRoot {
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitive.materialLod, materialSelection.level);
 
-        let material: StandardMaterial | UnlitMaterial = {
+        const emissive = loadedMaterial.emissive;
+        let material: SurfaceMaterial = {
           baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+          ...(emissive === undefined ? {} : { emissive }),
           kind: loadedMaterial.unlit === true ? "unlit" : "standard",
         };
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
         if (loadedMaterial.image !== undefined && baseColor !== undefined) {
           this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
-          material = { baseColor, kind: loadedMaterial.unlit === true ? "unlit" : "standard" };
+          material = {
+            baseColor,
+            ...(emissive === undefined ? {} : { emissive }),
+            kind: loadedMaterial.unlit === true ? "unlit" : "standard",
+          };
         }
         const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
@@ -2313,6 +2355,7 @@ export class WebGlRoot {
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (programKind === "surface") {
+      this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
       this.#bindSurfaceLights(program, material.kind === "standard"
         ? lights ?? DEFAULT_SURFACE_LIGHT_SET
         : EMPTY_SURFACE_LIGHT_SET);
@@ -2341,7 +2384,7 @@ export class WebGlRoot {
 
   #drawGeometryInstanced(
     geometry: GeometryResource,
-    material: StandardMaterial | UnlitMaterial,
+    material: SurfaceMaterial,
     models: readonly Mat4[],
     projection: Mat4,
     view: Mat4,
@@ -2355,6 +2398,7 @@ export class WebGlRoot {
     this.#uniformMatrix(program, "u_projection", projection);
     this.#uniformMatrix(program, "u_view", view);
     this.#uniformColor(program, "u_color", materialColor(material));
+    this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET);
 
@@ -3187,6 +3231,7 @@ in vec2 v_uv;
 uniform bool u_useTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
+uniform vec4 u_emissiveColor;
 uniform int u_surfaceLightCount;
 uniform int u_surfaceLightKind[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightColor[MAX_SURFACE_LIGHTS];
@@ -3237,6 +3282,7 @@ void main() {
     }
     lit += lightContribution(index, normal, v_worldPosition, baseColor.rgb);
   }
+  lit += u_emissiveColor.rgb;
   outColor = vec4(lit, baseColor.a);
 }`;
   }
@@ -3914,6 +3960,7 @@ void main() {
       ? undefined
       : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
+    const emissive = gltfEmissiveColor(material);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex);
 
     return {
@@ -3930,6 +3977,7 @@ void main() {
           ),
         }),
       ...(color === undefined ? {} : { color }),
+      ...(emissive === undefined ? {} : { emissive }),
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),

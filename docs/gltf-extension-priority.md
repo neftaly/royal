@@ -49,7 +49,8 @@ sparse accessors, normalized integer attributes, base color factor/texture,
 samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
 `EXT_mesh_gpu_instancing`, `EXT_texture_webp`, `KHR_materials_unlit`,
-`KHR_lights_punctual`, `KHR_node_visibility`, and vendor `MSFT_lod`.
+`KHR_lights_punctual`, `KHR_materials_emissive_strength`,
+`KHR_node_visibility`, and vendor `MSFT_lod`.
 
 ## Should Do
 
@@ -81,7 +82,7 @@ need them.
 | Priority | Extension | Short explanation | When to do it |
 | --- | --- | --- | --- |
 | M1 | `KHR_materials_variants` | Defines named material variants for the same mesh. | Product configurators or author-facing variant selection. |
-| M1 | `KHR_materials_emissive_strength` | Allows emissive colors brighter than the core range. | Needed for glowing/baked-light assets. |
+| M1 | `KHR_materials_emissive_strength` | Allows emissive colors brighter than the core range. | Implemented for emissive factors; emissive textures remain future material work. |
 | M1 | `KHR_materials_specular` | Adds specular color and intensity controls to PBR. | Better product/material fidelity. |
 | M1 | `KHR_materials_ior` | Adds index of refraction for transparent materials. | Needed with transmission/volume materials. |
 | M1 | `KHR_materials_transmission` | Adds physically based light transmission through surfaces. | Glass/plastic product rendering. |

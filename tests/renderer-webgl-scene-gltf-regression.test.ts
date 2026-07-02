@@ -1347,6 +1347,29 @@ const punctualLightTriangleDocument = () => {
   };
 };
 
+const emissiveStrengthTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_emissive_strength"],
+    extensionsUsed: ["KHR_materials_emissive_strength"],
+    materials: [
+      {
+        emissiveFactor: [0.4, 0.1, 0.2],
+        extensions: {
+          KHR_materials_emissive_strength: {
+            emissiveStrength: 5,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.25, 0.25, 0.25, 1],
+        },
+      },
+    ],
+  };
+};
+
 const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);
 
@@ -1703,6 +1726,40 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0,
       0,
     ]);
+  });
+
+  it("renders required KHR_materials_emissive_strength as an emissive material multiplier", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-emissive-strength",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, emissiveStrengthTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_color").map(roundVector)).toContainEqual([0.25, 0.25, 0.25, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector)).toContainEqual([2, 0.5, 1, 1]);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {

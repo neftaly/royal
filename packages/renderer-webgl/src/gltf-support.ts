@@ -87,7 +87,11 @@ export type GltfSampler = {
 };
 
 export type GltfMaterial = {
+  readonly emissiveFactor?: readonly number[];
   readonly extensions?: {
+    readonly KHR_materials_emissive_strength?: {
+      readonly emissiveStrength?: number;
+    };
     readonly KHR_materials_unlit?: Record<string, unknown>;
     readonly MSFT_lod?: GltfLodExtension;
   };
@@ -176,6 +180,7 @@ export const supportedGltfExtensions = new Set<string>([
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_lights_punctual",
+  "KHR_materials_emissive_strength",
   "KHR_materials_unlit",
   "KHR_mesh_quantization",
   "KHR_node_visibility",
