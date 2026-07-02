@@ -42,6 +42,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
   type CompositionEvent,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -538,6 +539,7 @@ const readClipboardText = async (): Promise<string | undefined> => {
 export const TextSurface = ({
   bounds = defaultSurfaceBounds,
   children,
+  onPaste,
   styleOptions,
   ...canvasProps
 }: TextSurfaceProps): ReactNode => {
@@ -623,6 +625,22 @@ export const TextSurface = ({
     focusCanvas();
   }, [focusCanvas, store]);
 
+  const handlePaste = useCallback((event: ClipboardEvent<HTMLCanvasElement>): void => {
+    onPaste?.(event);
+    if (event.defaultPrevented) return;
+
+    const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
+    if (control === undefined || !control.editable) return;
+
+    const value = event.clipboardData.getData("text/plain");
+    if (value === "") return;
+
+    event.preventDefault();
+    store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, value));
+    store.getState().closeMenu();
+    focusCanvas();
+  }, [activeId, focusCanvas, onPaste, store]);
+
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLCanvasElement>): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
     if (control === undefined) return;
@@ -643,12 +661,11 @@ export const TextSurface = ({
     if (intent === undefined) return;
 
     if (intent.type === "clipboard-shortcut") {
-      event.preventDefault();
       if (intent.shortcut === "paste") {
-        void runClipboardCommand(control, "paste", "keyboard");
         return;
       }
 
+      event.preventDefault();
       void runClipboardCommand(control, intent.shortcut, "keyboard");
       return;
     }
@@ -806,6 +823,7 @@ export const TextSurface = ({
     onCompositionEnd: handleCompositionEnd,
     onContextMenu: handleContextMenu,
     onKeyDown: handleKeyDown,
+    onPaste: handlePaste,
     onPointerCancel: handlePointerEnd,
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
