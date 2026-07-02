@@ -3469,7 +3469,7 @@ in vec3 v_normal;
 in vec3 v_worldPosition;
 in vec2 v_uv;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
-uniform mat4 u_view;
+uniform highp mat4 u_view;
 uniform bool u_useTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
