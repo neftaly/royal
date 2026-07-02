@@ -14,9 +14,10 @@ import {
 } from 'react';
 import { htmlColor } from '../color';
 import {
-  flexColumn,
-  flexItem,
-  layoutFlexTree,
+  Box,
+  Column,
+  Container,
+  layoutFlex,
 } from '../flex-layout';
 import {
   HudPass,
@@ -46,51 +47,50 @@ type HudBoxId =
   | 'shieldTrack'
   | 'status';
 
-const hudBoxes = layoutFlexTree<HudBoxId>({
-  ...flexColumn([
-    flexColumn([
-      flexItem('readout', { height: 0.34 }),
-      flexItem('shieldLabel', { height: 0.24 }),
-      flexItem('shieldTrack', { height: 0.26 }),
-      flexItem('energyLabel', { height: 0.24 }),
-      flexItem('energyTrack', { height: 0.26 }),
-    ], {
-      gap: 0.12,
-      height: 2.18,
-      id: 'status',
-      padding: 0.24,
-      width: 4.8,
-    }),
-    flexColumn([
-      flexItem('missionTitle', { height: 0.26 }),
-      flexItem('missionBody', { height: 0.58 }),
-    ], {
-      gap: 0.1,
-      height: 1.22,
-      id: 'mission',
-      padding: 0.22,
-      width: 4.8,
-    }),
-    flexColumn([
-      flexItem('commsTitle', { height: 0.24 }),
-      flexItem('commsBody', { height: 0.42 }),
-    ], {
-      gap: 0.1,
-      height: 1.02,
-      id: 'comms',
-      padding: 0.22,
-      width: 3.75,
-    }),
-  ], {
+const hudBoxes = layoutFlex<HudBoxId>(
+  Container({
     gap: 0.18,
     padding: {
       left: 0.55,
       top: 0.45,
     },
-  }),
-  height: hudSize.height,
-  width: hudSize.width,
-});
+    size: hudSize,
+  },
+    Column({
+      gap: 0.12,
+      height: 2.18,
+      id: 'status',
+      padding: 0.24,
+      width: 4.8,
+    },
+      Box('readout', { height: 0.34 }),
+      Box('shieldLabel', { height: 0.24 }),
+      Box('shieldTrack', { height: 0.26 }),
+      Box('energyLabel', { height: 0.24 }),
+      Box('energyTrack', { height: 0.26 }),
+    ),
+    Column({
+      gap: 0.1,
+      height: 1.22,
+      id: 'mission',
+      padding: 0.22,
+      width: 4.8,
+    },
+      Box('missionTitle', { height: 0.26 }),
+      Box('missionBody', { height: 0.58 }),
+    ),
+    Column({
+      gap: 0.1,
+      height: 1.02,
+      id: 'comms',
+      padding: 0.22,
+      width: 3.75,
+    },
+      Box('commsTitle', { height: 0.24 }),
+      Box('commsBody', { height: 0.42 }),
+    ),
+  ),
+);
 
 const palette = {
   amber: htmlColor('#ffb84f'),

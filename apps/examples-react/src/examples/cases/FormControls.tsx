@@ -4,12 +4,13 @@ import { TextFontProvider, TextInteractionProvider, TextSurface, textFieldHeight
 import { useMemo, useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
 import {
-  flexColumn,
-  flexItem,
-  flexRow,
+  Box,
+  Column,
+  Container,
   flexStyle,
-  layoutFlexTree,
-  type FlexLayoutNode,
+  layoutFlex,
+  Row,
+  type FlexLayoutElement,
 } from '../flex-layout';
 import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
@@ -66,62 +67,61 @@ const labeledField = (
   label: FormBoxId,
   control: FormBoxId,
   controlHeight: number,
-): FlexLayoutNode<FormBoxId> => flexColumn([
-  flexItem(label, { height: labelTextStyle.lineHeight }),
-  flexItem(control, { height: controlHeight }),
-], { gap: 0.1 });
+): FlexLayoutElement<FormBoxId> => Column({ gap: 0.1 },
+  Box(label, { height: labelTextStyle.lineHeight }),
+  Box(control, { height: controlHeight }),
+);
 
-const boxes = layoutFlexTree<FormBoxId>({
-  ...flexColumn<FormBoxId>([
-    flexRow([
-      labeledField('readTextLabel', 'readText', 0.72),
-      labeledField('titleLabel', 'title', fieldHeight),
-    ], {
-      gap: 0.65,
-      height: 1.08,
-      itemWidth: 4.63,
-    }),
-    flexRow([
-      labeledField('emptyLabel', 'emptyInput', fieldHeight),
-      labeledField('notesLabel', 'notes', textareaHeight),
-    ], {
-      gap: 0.65,
-      height: 1.68,
-      itemWidth: 4.63,
-    }),
-    flexColumn([
-      flexItem('actionLabel', { height: 0.24 }),
-      flexRow([
-        flexItem('checkbox', { width: 4.3 }),
-        flexItem('button', { width: 1.25 }),
-        flexItem('file', { width: 1.28 }),
-        flexItem('color', { width: 1.5 }),
-      ], {
-        gap: 0.18,
-        height: 0.5,
-      }),
-    ], {
-      gap: 0.1,
-      height: 0.86,
-    }),
-    flexColumn([
-      flexItem('previewLabel', { height: 0.24 }),
-      flexItem('preview', { height: 1.36 }),
-    ], {
-      gap: 0.1,
-      height: 1.7,
-    }),
-  ], {
+const boxes = layoutFlex<FormBoxId>(
+  Container({
     gap: 0.18,
     padding: {
       bottom: 0.25,
       horizontal: 0.65,
       top: 0.25,
     },
-  }),
-  height: surfaceSize.height,
-  width: surfaceSize.width,
-});
+    size: surfaceSize,
+  },
+    Row({
+      gap: 0.65,
+      height: 1.08,
+      itemWidth: 4.63,
+    },
+      labeledField('readTextLabel', 'readText', 0.72),
+      labeledField('titleLabel', 'title', fieldHeight),
+    ),
+    Row({
+      gap: 0.65,
+      height: 1.68,
+      itemWidth: 4.63,
+    },
+      labeledField('emptyLabel', 'emptyInput', fieldHeight),
+      labeledField('notesLabel', 'notes', textareaHeight),
+    ),
+    Column({
+      gap: 0.1,
+      height: 0.86,
+    },
+      Box('actionLabel', { height: 0.24 }),
+      Row({
+        gap: 0.18,
+        height: 0.5,
+      },
+        Box('checkbox', { width: 4.3 }),
+        Box('button', { width: 1.25 }),
+        Box('file', { width: 1.28 }),
+        Box('color', { width: 1.5 }),
+      ),
+    ),
+    Column({
+      gap: 0.1,
+      height: 1.7,
+    },
+      Box('previewLabel', { height: 0.24 }),
+      Box('preview', { height: 1.36 }),
+    ),
+  ),
+);
 
 const lorem =
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus posuere velit aliquet.';

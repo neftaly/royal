@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { type FlexLayoutBox, layoutFlexTree } from './flex-layout';
+import {
+  Box,
+  Container,
+  type FlexLayoutBox,
+  layoutFlex,
+} from './flex-layout';
 
 const expectBox = (box: FlexLayoutBox, expected: FlexLayoutBox): void => {
   expect(box.left).toBeCloseTo(expected.left);
@@ -10,25 +15,19 @@ const expectBox = (box: FlexLayoutBox, expected: FlexLayoutBox): void => {
   expect(box.height).toBeCloseTo(expected.height);
 };
 
-describe('layoutFlexTree', () => {
+describe('layoutFlex', () => {
   it('applies item width defaults to direct children', () => {
-    const boxes = layoutFlexTree<'defaulted' | 'override'>({
-      children: [
-        {
-          height: 1,
-          id: 'defaulted',
-        },
-        {
-          height: 1,
-          id: 'override',
-          width: 2,
-        },
-      ],
-      direction: 'column',
+    const boxes = layoutFlex<'defaulted' | 'override'>(Container({
       height: 10,
       itemWidth: 4,
       width: 10,
-    });
+    },
+      Box('defaulted', { height: 1 }),
+      Box('override', {
+        height: 1,
+        width: 2,
+      }),
+    ));
 
     expectBox(boxes.defaulted, {
       bottom: 1,
@@ -49,26 +48,21 @@ describe('layoutFlexTree', () => {
   });
 
   it('lays out keyed direct children with padding, gap, and margins', () => {
-    const boxes = layoutFlexTree<'one' | 'two'>({
-      children: [
-        {
-          height: 1,
-          id: 'one',
-          margin: { bottom: 0.25 },
-          width: 4,
-        },
-        {
-          height: 2,
-          id: 'two',
-          width: 5,
-        },
-      ],
-      direction: 'column',
+    const boxes = layoutFlex<'one' | 'two'>(Container({
       gap: 0.5,
-      height: 10,
       padding: { left: 1, top: 2 },
-      width: 10,
-    });
+      size: { height: 10, width: 10 },
+    },
+      Box('one', {
+        height: 1,
+        margin: { bottom: 0.25 },
+        width: 4,
+      }),
+      Box('two', {
+        height: 2,
+        width: 5,
+      }),
+    ));
 
     expectBox(boxes.one, {
       bottom: 3,
@@ -89,27 +83,23 @@ describe('layoutFlexTree', () => {
   });
 
   it('returns nested boxes in root coordinates', () => {
-    const boxes = layoutFlexTree<'inner' | 'outer'>({
-      children: [
-        {
-          children: [
-            {
-              height: 1,
-              id: 'inner',
-              width: 2,
-            },
-          ],
-          height: 4,
-          id: 'outer',
-          padding: { left: 0.5, top: 0.75 },
-          width: 6,
-        },
-      ],
-      direction: 'column',
+    const boxes = layoutFlex<'inner' | 'outer'>(Container({
       height: 10,
       padding: { left: 1, top: 2 },
       width: 10,
-    });
+    },
+      Container({
+        height: 4,
+        id: 'outer',
+        padding: { left: 0.5, top: 0.75 },
+        width: 6,
+      },
+        Box('inner', {
+          height: 1,
+          width: 2,
+        }),
+      ),
+    ));
 
     expectBox(boxes.outer, {
       bottom: 6,
