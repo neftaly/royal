@@ -25,6 +25,23 @@ Before adding visual extension support, start with this required-first work:
    sparse accessors, non-float normalized attributes, and primitive modes.
 4. Implement required-when-present compression and texture format extensions.
 
+Required-extension implementation priority:
+
+1. `KHR_mesh_quantization` - not optional when an asset uses quantized
+   attributes.
+2. `EXT_meshopt_compression` - required when fallback buffer data is unavailable.
+3. `KHR_texture_basisu` - required when no PNG/JPEG texture fallback is supplied.
+4. `EXT_texture_webp` - required when no PNG/JPEG texture fallback is supplied.
+5. `KHR_draco_mesh_compression` - required when no uncompressed mesh fallback is
+   supplied.
+6. `EXT_mesh_gpu_instancing` - required when the asset depends on instancing and
+   has no expanded-node fallback.
+7. `KHR_texture_transform` - can be required when no fallback UVs are supplied.
+
+If draft or domain-specific extensions such as `KHR_accessor_float64`,
+`KHR_texture_video`, physics, audio, or MPEG entries are required, reject them
+until the corresponding runtime exists.
+
 The current Royal loader supports a narrow JSON `.gltf` path: external buffers,
 root scene nodes, node transforms, mesh primitives, `POSITION` / `NORMAL` /
 `TEXCOORD_0`, base color factor/texture, samplers, triangle drawing,
@@ -139,3 +156,5 @@ Start with the required-contract path, not a visual extension:
    `KHR_mesh_quantization`, `EXT_meshopt_compression`,
    `KHR_texture_basisu`, `EXT_texture_webp`, and
    `KHR_draco_mesh_compression`.
+6. Follow with `EXT_mesh_gpu_instancing` and `KHR_texture_transform` when source
+   assets require them.
