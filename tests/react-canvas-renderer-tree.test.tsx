@@ -65,7 +65,7 @@ describe("React Canvas renderer tree", () => {
     expect(isReactElementLike(child) ? child.type : undefined).toBe(Cube);
   });
 
-  it("routes boxed text controls through React primitives", () => {
+  it("routes surface controls through React primitives", () => {
     const box = { height: 0.5, left: 0.25, top: 0.5, width: 3 };
     const label = (
       <text box={box} color={[1, 1, 1, 1]}>
@@ -79,11 +79,57 @@ describe("React Canvas renderer tree", () => {
         value="Controlled"
       />
     );
+    const checkbox = (
+      <input
+        box={box}
+        checked
+        onCheckedChange={() => undefined}
+        type="checkbox"
+      >
+        Checked
+      </input>
+    );
+    const file = (
+      <input
+        box={box}
+        onFilesChange={() => undefined}
+        type="file"
+      >
+        File
+      </input>
+    );
+    const color = (
+      <input
+        box={box}
+        onValueChange={() => undefined}
+        type="color"
+        value="#ff0000"
+      >
+        Color
+      </input>
+    );
+    const button = (
+      <button
+        box={box}
+        onPress={() => undefined}
+        type="button"
+      >
+        Press
+      </button>
+    );
 
     expect(isReactElementLike(label)).toBe(true);
     expect(isReactElementLike(label) ? label.type : undefined).not.toBe("text");
     expect(isReactElementLike(input)).toBe(true);
     expect(isReactElementLike(input) ? input.type : undefined).not.toBe("input");
+    expect(isReactElementLike(checkbox)).toBe(true);
+    expect(isReactElementLike(checkbox) ? checkbox.type : undefined).not.toBe("input");
+    expect(isReactElementLike(file)).toBe(true);
+    expect(isReactElementLike(file) ? file.type : undefined).not.toBe("input");
+    expect(isReactElementLike(color)).toBe(true);
+    expect(isReactElementLike(color) ? color.type : undefined).not.toBe("input");
+    expect(isReactElementLike(button)).toBe(true);
+    expect(isReactElementLike(button) ? button.type : undefined).not.toBe("button");
   });
 
   it("measures text field row height from text metrics and padding", () => {

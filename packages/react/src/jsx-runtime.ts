@@ -47,11 +47,13 @@ import {
   type RendererComponentOutput
 } from './renderer-output';
 import {
+  ButtonPrimitive,
   InputPrimitive,
   TextareaPrimitive,
   TextPrimitive,
+  type ButtonPrimitiveProps,
   type TextAreaPrimitiveProps,
-  type TextFieldPrimitiveProps,
+  type InputPrimitiveProps,
   type TextPrimitiveProps,
   type TextSurfaceBox
 } from './text-surface';
@@ -98,7 +100,8 @@ export type TextProps = Omit<TextOptions, 'text'> & {
   readonly selectable?: boolean;
   readonly text?: string;
 };
-export type InputProps = TextFieldPrimitiveProps;
+export type ButtonProps = ButtonPrimitiveProps;
+export type InputProps = InputPrimitiveProps;
 export type TextareaProps = TextAreaPrimitiveProps;
 export type ModelProps = GltfOptions;
 type MeshChildren = {
@@ -110,6 +113,7 @@ type JsxProps = Partial<
   PassProps &
   MeshProps &
   TextProps &
+  ButtonProps &
   InputProps &
   TextareaProps &
   ModelProps &
@@ -455,6 +459,11 @@ const toInput = (
   key: string | undefined,
 ): ReactNode => reactJsx(InputPrimitive as Parameters<ReactJsxFactory>[0], props, key);
 
+const toButton = (
+  props: ButtonProps,
+  key: string | undefined,
+): ReactNode => reactJsx(ButtonPrimitive as Parameters<ReactJsxFactory>[0], props, key);
+
 const toTextarea = (
   props: TextareaProps,
   key: string | undefined,
@@ -492,8 +501,9 @@ const createIntrinsicRendererElement = (
     case 'text':
       return toText(elementProps as TextProps);
     case 'input':
+    case 'button':
     case 'textarea':
-      throw new Error('input and textarea primitives require the @royal/react Canvas runtime');
+      throw new Error('form control primitives require the @royal/react Canvas runtime');
     case 'boxGeometry':
       return boxGeometry(elementProps as BoxGeometryOptions);
     case 'planeGeometry':
@@ -554,6 +564,7 @@ const createElement = (
     }
 
     if (type === 'input') return toInput(props as InputProps, key);
+    if (type === 'button') return toButton(props as ButtonProps, key);
     if (type === 'textarea') return toTextarea(props as TextareaProps, key);
   }
 
@@ -584,6 +595,7 @@ export namespace JSX {
     directionalLight: DirectionalLightOptions;
     mesh: MeshProps;
     model: ModelProps;
+    button: ButtonProps;
     text: TextProps;
     input: InputProps;
     textarea: TextareaProps;

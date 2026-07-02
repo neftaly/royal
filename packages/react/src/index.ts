@@ -26,7 +26,7 @@ export {
   useOrbitCameraView
 } from './orbit-controls';
 export { createRoot } from './root';
-export { TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight } from './text-surface';
+export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight } from './text-surface';
 export { useFrame, useFrameIndex } from './frame';
 export { markRendererComponent } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
@@ -38,9 +38,15 @@ export const TextSurface = markReactComponent(TextSurfaceComponent);
 export type { CanvasProps, CanvasRendererOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
 export type {
+  ButtonPrimitiveProps,
+  CheckboxInputPrimitiveProps,
+  ColorInputPrimitiveProps,
+  FileInputPrimitiveProps,
+  InputPrimitiveProps,
   TextAreaPrimitiveProps,
   TextFieldHeightOptions,
   TextFieldPrimitiveProps,
+  TextInputPrimitiveProps,
   TextInteractionStyle,
   TextPrimitiveProps,
   TextSurfaceBox,

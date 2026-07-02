@@ -139,12 +139,76 @@ export interface TextFieldPrimitiveProps {
   readonly value: string;
 }
 
+export interface TextInputPrimitiveProps extends TextFieldPrimitiveProps {
+  readonly type?: "text";
+}
+
 export interface TextAreaPrimitiveProps extends TextFieldPrimitiveProps {
   readonly rows?: number;
 }
 
+export interface ButtonPrimitiveProps {
+  readonly ariaLabel?: string;
+  readonly box: TextSurfaceBox;
+  readonly children?: ReactNode;
+  readonly disabled?: boolean;
+  readonly font?: TextFontFace;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly onPress?: () => void;
+  readonly type?: "button";
+}
+
+export interface CheckboxInputPrimitiveProps {
+  readonly ariaLabel?: string;
+  readonly box: TextSurfaceBox;
+  readonly checked: boolean;
+  readonly children?: ReactNode;
+  readonly disabled?: boolean;
+  readonly font?: TextFontFace;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly onCheckedChange?: (checked: boolean) => void;
+  readonly type: "checkbox";
+}
+
+export interface FileInputPrimitiveProps {
+  readonly accept?: string;
+  readonly ariaLabel?: string;
+  readonly box: TextSurfaceBox;
+  readonly capture?: "environment" | "user";
+  readonly children?: ReactNode;
+  readonly disabled?: boolean;
+  readonly font?: TextFontFace;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly multiple?: boolean;
+  readonly onFilesChange?: (files: readonly File[]) => void;
+  readonly type: "file";
+}
+
+export interface ColorInputPrimitiveProps {
+  readonly ariaLabel?: string;
+  readonly box: TextSurfaceBox;
+  readonly children?: ReactNode;
+  readonly disabled?: boolean;
+  readonly font?: TextFontFace;
+  readonly fontSize?: number;
+  readonly lineHeight?: number;
+  readonly onValueChange?: (value: string) => void;
+  readonly type: "color";
+  readonly value: string;
+}
+
+export type InputPrimitiveProps =
+  | CheckboxInputPrimitiveProps
+  | ColorInputPrimitiveProps
+  | FileInputPrimitiveProps
+  | TextInputPrimitiveProps;
+
 type ClipboardAction = EditableTextMenuAction;
 type ClipboardSource = "keyboard" | "menu";
+type ActionControlKind = "button" | "checkbox" | "color" | "file";
 
 type TextControlBounds = {
   readonly bottom: number;
@@ -170,8 +234,21 @@ type TextControlRegistration = {
   readonly text: string;
 };
 
+type ActionControlRegistration = {
+  readonly bounds: TextControlBounds;
+  readonly disabled: boolean;
+  readonly id: string;
+  readonly kind: ActionControlKind;
+  readonly onPress: () => void;
+};
+
 type PendingMenuCommand = {
   readonly action: ClipboardAction;
+  readonly controlId: string;
+  readonly pointerId: number;
+};
+
+type PressedActionControl = {
   readonly controlId: string;
   readonly pointerId: number;
 };
@@ -190,31 +267,44 @@ type TextMenuState = {
 };
 
 type TextSurfaceStoreState = {
+  readonly actionControls: ReadonlyMap<string, ActionControlRegistration>;
+  readonly activeActionId: string | undefined;
   readonly activeId: string | undefined;
   readonly applyEditorState: (id: string, state: EditableTextEditorState) => void;
   readonly clearSelectionsExcept: (id: string | undefined) => void;
   readonly closeMenu: () => void;
   readonly controls: ReadonlyMap<string, TextControlRegistration>;
+  readonly getActionControl: (id: string) => ActionControlRegistration | undefined;
+  readonly getActionControls: () => readonly ActionControlRegistration[];
   readonly getControl: (id: string) => TextControlRegistration | undefined;
   readonly getControls: () => readonly TextControlRegistration[];
   readonly menu: TextMenuState;
+  readonly pressedAction: PressedActionControl | undefined;
+  readonly registerActionControl: (control: ActionControlRegistration) => void;
   readonly registerControl: (control: TextControlRegistration) => void;
   readonly selections: ReadonlyMap<string, EditableTextSelection>;
+  readonly setActiveActionId: (id: string | undefined) => void;
   readonly setActiveId: (id: string | undefined) => void;
   readonly setMenu: (menu: TextMenuState) => void;
+  readonly setPressedAction: (pressedAction: PressedActionControl | undefined) => void;
+  readonly unregisterActionControl: (id: string) => void;
   readonly unregisterControl: (id: string) => void;
 };
 
 type TextSurfaceStore = StoreApi<TextSurfaceStoreState>;
 
 type TextSurfaceContextValue = {
+  readonly activeActionId: string | undefined;
   readonly activeId: string | undefined;
   readonly bounds: CanvasWorldBounds;
   readonly menu: TextMenuState;
   readonly menuLayoutFor: (control: TextControlRegistration) => EditableTextMenuLayout | undefined;
+  readonly pressedActionId: string | undefined;
+  readonly registerActionControl: (control: ActionControlRegistration) => void;
   readonly registerControl: (control: TextControlRegistration) => void;
   readonly store: TextSurfaceStore;
   readonly style: Required<TextInteractionStyle>;
+  readonly unregisterActionControl: (id: string) => void;
   readonly unregisterControl: (id: string) => void;
 };
 
@@ -365,6 +455,8 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
     };
 
     return {
+      actionControls: new Map(),
+      activeActionId: undefined,
       activeId: undefined,
       applyEditorState: (id, nextState) => {
         const control = get().controls.get(id);
@@ -401,9 +493,17 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         set({ menu: closedMenu });
       },
       controls: new Map(),
+      getActionControl: (id) => get().actionControls.get(id),
+      getActionControls: () => Array.from(get().actionControls.values()),
       getControl: (id) => get().controls.get(id),
       getControls: () => Array.from(get().controls.values()),
       menu: closedMenu,
+      pressedAction: undefined,
+      registerActionControl: (control) => {
+        const currentControls = get().actionControls;
+        if (currentControls.get(control.id) === control) return;
+        set({ actionControls: new Map(currentControls).set(control.id, control) });
+      },
       registerControl: (control) => {
         const selection = get().selections.get(control.id);
         const nextControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
@@ -414,6 +514,10 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         set({ controls: new Map(currentControls).set(control.id, nextControl) });
       },
       selections: new Map(),
+      setActiveActionId: (id) => {
+        if (get().activeActionId === id) return;
+        set({ activeActionId: id });
+      },
       setActiveId: (id) => {
         if (get().activeId === id) return;
         set({ activeId: id });
@@ -421,6 +525,23 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       setMenu: (menu) => {
         if (sameMenuState(get().menu, menu)) return;
         set({ menu });
+      },
+      setPressedAction: (pressedAction) => {
+        const current = get().pressedAction;
+        if (
+          current?.controlId === pressedAction?.controlId &&
+          current?.pointerId === pressedAction?.pointerId
+        ) {
+          return;
+        }
+        set({ pressedAction });
+      },
+      unregisterActionControl: (id) => {
+        const currentControls = get().actionControls;
+        if (!currentControls.has(id)) return;
+        const nextControls = new Map(currentControls);
+        nextControls.delete(id);
+        set({ actionControls: nextControls });
       },
       unregisterControl: (id) => {
         const currentControls = get().controls;
@@ -470,6 +591,16 @@ const commandAt = (
 
 const pointInControl = (
   control: TextControlRegistration,
+  worldX: number,
+  worldY: number,
+): boolean =>
+  worldX >= control.bounds.left &&
+  worldX <= control.bounds.right &&
+  worldY <= control.bounds.top &&
+  worldY >= control.bounds.bottom;
+
+const pointInActionControl = (
+  control: ActionControlRegistration,
   worldX: number,
   worldY: number,
 ): boolean =>
@@ -640,8 +771,10 @@ export const TextSurface = ({
   const pendingKeyboardPasteControlIdRef = useRef<string | undefined>(undefined);
   const pendingMenuCommandRef = useRef<PendingMenuCommand | undefined>(undefined);
   const store = useMemo(createTextSurfaceStore, []);
+  const activeActionId = useStore(store, (state) => state.activeActionId);
   const activeId = useStore(store, (state) => state.activeId);
   const menu = useStore(store, (state) => state.menu);
+  const pressedAction = useStore(store, (state) => state.pressedAction);
   const style = useMemo<Required<TextInteractionStyle>>(() => ({
     ...defaultTextStyle,
     ...styleOptions,
@@ -657,6 +790,21 @@ export const TextSurface = ({
     const control = controls.find((candidate) =>
       (candidate.selectable || candidate.editable || candidate.copyable) &&
       pointInControl(candidate, worldX, worldY)
+    );
+
+    return control === undefined ? undefined : { control, worldX, worldY };
+  }, [bounds, store]);
+
+  const findActionControlAt = useCallback((
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number,
+  ): { readonly control: ActionControlRegistration; readonly worldX: number; readonly worldY: number } | undefined => {
+    const [worldX, worldY] = canvasPointToWorld(canvas, bounds, clientX, clientY);
+    const controls = Array.from(store.getState().getActionControls()).reverse();
+    const control = controls.find((candidate) =>
+      !candidate.disabled &&
+      pointInActionControl(candidate, worldX, worldY)
     );
 
     return control === undefined ? undefined : { control, worldX, worldY };
@@ -703,6 +851,13 @@ export const TextSurface = ({
     store.getState().applyEditorState(control.id, setEditableTextEditorSelection(control.state, nextSelection));
     return { index: nextSelection.focus, line: nextSelection.focusLine };
   }, [store]);
+
+  const activateActionControl = useCallback((control: ActionControlRegistration): void => {
+    if (control.disabled) return;
+    store.getState().closeMenu();
+    control.onPress();
+    focusCanvas();
+  }, [focusCanvas, store]);
 
   const runClipboardCommand = useCallback(async (
     control: TextControlRegistration,
@@ -751,7 +906,19 @@ export const TextSurface = ({
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>): void => {
     const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
-    if (control === undefined) return;
+    if (control === undefined) {
+      const actionControl = activeActionId === undefined
+        ? undefined
+        : store.getState().getActionControl(activeActionId);
+      if (
+        actionControl !== undefined &&
+        (event.key === " " || event.key === "Enter")
+      ) {
+        event.preventDefault();
+        activateActionControl(actionControl);
+      }
+      return;
+    }
 
     const { intent, state: nextState } = applyEditableTextEditorKeyInput(
       control.state,
@@ -800,7 +967,7 @@ export const TextSurface = ({
     }
 
     if (intent.type !== "enter-key") store.getState().applyEditorState(control.id, nextState);
-  }, [activeId, focusControl, runClipboardCommand, store]);
+  }, [activateActionControl, activeActionId, activeId, focusControl, runClipboardCommand, store]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return;
@@ -822,24 +989,41 @@ export const TextSurface = ({
     }
 
     const hit = findControlAt(event.currentTarget, event.clientX, event.clientY);
+    const actionHit = findActionControlAt(event.currentTarget, event.clientX, event.clientY);
     pendingMenuCommandRef.current = undefined;
     store.getState().closeMenu();
+    if (actionHit !== undefined) {
+      event.preventDefault();
+      store.getState().clearSelectionsExcept(undefined);
+      store.getState().setActiveId(undefined);
+      store.getState().setActiveActionId(actionHit.control.id);
+      store.getState().setPressedAction({
+        controlId: actionHit.control.id,
+        pointerId: event.pointerId,
+      });
+      focusCanvas();
+      captureCanvasPointer(event.currentTarget, event.pointerId);
+      return;
+    }
+
     if (hit === undefined) {
       store.getState().clearSelectionsExcept(undefined);
       store.getState().setActiveId(undefined);
+      store.getState().setActiveActionId(undefined);
       return;
     }
 
     event.preventDefault();
     const { control, worldX, worldY } = hit;
     store.getState().clearSelectionsExcept(control.id);
+    store.getState().setActiveActionId(undefined);
     store.getState().setActiveId(control.id);
     const clicked = setCaretFromPoint(control, worldX, worldY, event.shiftKey);
     focusControl(control);
     const anchor = event.shiftKey ? { index: control.selection.anchor, line: control.selection.anchorLine } : clicked;
     dragRef.current = anchor === undefined ? undefined : { anchor, controlId: control.id, moved: false };
     captureCanvasPointer(event.currentTarget, event.pointerId);
-  }, [bounds, findControlAt, focusControl, menu, setCaretFromPoint, store]);
+  }, [bounds, findActionControlAt, findControlAt, focusCanvas, focusControl, menu, setCaretFromPoint, store]);
 
   const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     const drag = dragRef.current;
@@ -863,6 +1047,19 @@ export const TextSurface = ({
       return;
     }
 
+    const pressed = store.getState().pressedAction;
+    if (pressed?.pointerId === event.pointerId) {
+      store.getState().setPressedAction(undefined);
+      event.preventDefault();
+      const hit = event.type === "pointercancel"
+        ? undefined
+        : findActionControlAt(event.currentTarget, event.clientX, event.clientY);
+      const control = store.getState().getActionControl(pressed.controlId);
+      if (control !== undefined && hit?.control.id === control.id) activateActionControl(control);
+      releaseCanvasPointer(event.currentTarget, event.pointerId);
+      return;
+    }
+
     const drag = dragRef.current;
     if (drag?.moved === true) {
       const control = store.getState().getControl(drag.controlId);
@@ -875,7 +1072,7 @@ export const TextSurface = ({
     dragRef.current = undefined;
     pendingMenuCommandRef.current = undefined;
     releaseCanvasPointer(event.currentTarget, event.pointerId);
-  }, [bounds, runClipboardCommand, setCaretFromPoint, store]);
+  }, [activateActionControl, bounds, findActionControlAt, runClipboardCommand, setCaretFromPoint, store]);
 
   const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLCanvasElement>): void => {
     event.preventDefault();
@@ -896,6 +1093,7 @@ export const TextSurface = ({
       state: control.state,
     });
     store.getState().clearSelectionsExcept(control.id);
+    store.getState().setActiveActionId(undefined);
     store.getState().applyEditorState(control.id, setEditableTextEditorSelection(control.state, nextSelection));
     store.getState().setActiveId(control.id);
     focusControl(control);
@@ -916,20 +1114,26 @@ export const TextSurface = ({
   const handleBlur = useCallback((event: FocusEvent<HTMLElement>): void => {
     if (event.relatedTarget === canvasRef.current || event.relatedTarget === pasteSinkRef.current) return;
     store.getState().clearSelectionsExcept(undefined);
+    store.getState().setActiveActionId(undefined);
     store.getState().setActiveId(undefined);
+    store.getState().setPressedAction(undefined);
     store.getState().closeMenu();
   }, [store]);
 
   const context = useMemo<TextSurfaceContextValue>(() => ({
+    activeActionId,
     activeId,
     bounds,
     menu,
     menuLayoutFor: (control) => menuLayoutForControl(bounds, menu, control),
+    pressedActionId: pressedAction?.controlId,
+    registerActionControl: store.getState().registerActionControl,
     registerControl: store.getState().registerControl,
     store,
     style,
+    unregisterActionControl: store.getState().unregisterActionControl,
     unregisterControl: store.getState().unregisterControl,
-  }), [activeId, bounds, menu, store, style]);
+  }), [activeActionId, activeId, bounds, menu, pressedAction, store, style]);
 
   const handlePasteSinkChange = useCallback((): void => undefined, []);
 
@@ -1012,6 +1216,20 @@ const useRegisterTextControl = (control: TextControlRegistration): void => {
   }, [control, store]);
 };
 
+const useRegisterActionControl = (control: ActionControlRegistration | undefined): void => {
+  const context = useContext(TextSurfaceContext);
+  const store = context?.store;
+
+  useLayoutEffect(() => {
+    if (store === undefined || control === undefined) return undefined;
+
+    store.getState().registerActionControl(control);
+    return () => {
+      store.getState().unregisterActionControl(control.id);
+    };
+  }, [control, store]);
+};
+
 const fieldNodes = ({
   context,
   height,
@@ -1048,6 +1266,215 @@ const fieldNodes = ({
       },
     }),
   ];
+};
+
+const actionControlHeight = 0.5;
+const actionControlTextInsetX = 0.16;
+const actionControlBorder = 0.035;
+const checkboxMark = "x";
+
+const disabledControlColor: Rgba = [0.12, 0.13, 0.14, 1];
+const disabledTextColor: Rgba = [0.46, 0.5, 0.52, 1];
+
+const labelFromChildren = (children: ReactNode, fallback: string): string => {
+  const value = textFromChildren(children);
+  return value === "" ? fallback : value;
+};
+
+const actionControlBounds = (
+  context: TextSurfaceContextValue,
+  box: TextSurfaceBox,
+): TextControlBounds => boxBounds(context.bounds, box, box.height ?? actionControlHeight);
+
+const actionControlRect = ({
+  box,
+  color,
+  context,
+  height = box.height ?? actionControlHeight,
+  inset = 0,
+  z = 0,
+}: {
+  readonly box: TextSurfaceBox;
+  readonly color: Rgba;
+  readonly context: TextSurfaceContextValue;
+  readonly height?: number;
+  readonly inset?: number;
+  readonly z?: number;
+}): RenderNode => {
+  const left = boxWorldLeft(context.bounds, box) + inset;
+  const top = boxWorldTop(context.bounds, box) - inset;
+  const width = Math.max(0.01, box.width - inset * 2);
+  const resolvedHeight = Math.max(0.01, height - inset * 2);
+
+  return mesh({
+    geometry: boxGeometry({ size: [width, resolvedHeight, 0.02] }),
+    material: unlitMaterial({ color }),
+    transform: {
+      position: [
+        left + width / 2,
+        top - resolvedHeight / 2,
+        (box.z ?? 0) + z,
+      ],
+      rotation: [0, 0, 0],
+    },
+  });
+};
+
+const actionLabelNode = ({
+  box,
+  color,
+  context,
+  font,
+  fontSize,
+  height = box.height ?? actionControlHeight,
+  label,
+  lineHeight,
+  x,
+}: {
+  readonly box: TextSurfaceBox;
+  readonly color: Rgba;
+  readonly context: TextSurfaceContextValue;
+  readonly font?: TextFontFace;
+  readonly fontSize: number;
+  readonly height?: number;
+  readonly label: string;
+  readonly lineHeight: number;
+  readonly x?: number;
+}): RenderNode => {
+  const left = boxWorldLeft(context.bounds, box);
+  const top = boxWorldTop(context.bounds, box);
+  const originX = x ?? left + actionControlTextInsetX;
+
+  return text({
+    color,
+    ...(font === undefined ? {} : { font }),
+    fontSize,
+    lineHeight,
+    origin: [
+      originX,
+      textBaselineForVerticalCenter(font, fontSize, top, height),
+      (box.z ?? 0) + 0.08,
+    ],
+    text: label,
+  });
+};
+
+const useActionPrimitiveRegistration = ({
+  box,
+  disabled,
+  kind,
+  onPress,
+}: {
+  readonly box: TextSurfaceBox;
+  readonly disabled: boolean;
+  readonly kind: ActionControlKind;
+  readonly onPress: () => void;
+}): {
+  readonly active: boolean;
+  readonly context: TextSurfaceContextValue;
+  readonly pressed: boolean;
+} => {
+  const id = useId();
+  const context = useContext(TextSurfaceContext);
+  const control = useMemo<ActionControlRegistration | undefined>(() => context === undefined
+    ? undefined
+    : {
+        bounds: actionControlBounds(context, box),
+        disabled,
+        id,
+        kind,
+        onPress,
+      }, [box, context, disabled, id, kind, onPress]);
+
+  useRegisterActionControl(control);
+  if (context === undefined) throw new Error("Royal action control box props require a TextSurface ancestor.");
+
+  return {
+    active: context?.activeActionId === id,
+    context,
+    pressed: context?.pressedActionId === id,
+  };
+};
+
+const openEphemeralInput = (input: HTMLInputElement): void => {
+  if (typeof document === "undefined") return;
+
+  let removed = false;
+  const cleanup = (): void => {
+    if (removed) return;
+    removed = true;
+    window.removeEventListener("focus", handleWindowFocus);
+    input.remove();
+  };
+  const handleWindowFocus = (): void => {
+    window.setTimeout(cleanup, 0);
+  };
+
+  input.style.height = "1px";
+  input.style.left = "0";
+  input.style.opacity = "0";
+  input.style.pointerEvents = "none";
+  input.style.position = "fixed";
+  input.style.top = "0";
+  input.style.transform = "translate(-100vw, -100vh)";
+  input.style.width = "1px";
+  input.tabIndex = -1;
+  document.body.append(input);
+  window.addEventListener("focus", handleWindowFocus, { once: true });
+  input.addEventListener("change", cleanup, { once: true });
+  input.click();
+};
+
+const openFilePicker = ({
+  accept,
+  capture,
+  multiple,
+  onFilesChange,
+}: Pick<FileInputPrimitiveProps, "accept" | "capture" | "multiple" | "onFilesChange">): void => {
+  if (typeof document === "undefined") return;
+
+  const input = document.createElement("input");
+  input.type = "file";
+  if (accept !== undefined) input.accept = accept;
+  if (capture !== undefined) input.capture = capture;
+  input.multiple = multiple === true;
+  input.addEventListener("change", () => {
+    onFilesChange?.(Array.from(input.files ?? []));
+  }, { once: true });
+  openEphemeralInput(input);
+};
+
+const colorInputPattern = /^#[\da-f]{6}$/i;
+
+const normalizeColorInputValue = (value: string): string =>
+  colorInputPattern.test(value) ? value : "#000000";
+
+const colorInputToRgba = (value: string): Rgba => {
+  const normalized = normalizeColorInputValue(value);
+  return [
+    Number.parseInt(normalized.slice(1, 3), 16) / 255,
+    Number.parseInt(normalized.slice(3, 5), 16) / 255,
+    Number.parseInt(normalized.slice(5, 7), 16) / 255,
+    1,
+  ];
+};
+
+const openColorPicker = ({
+  onValueChange,
+  value,
+}: Pick<ColorInputPrimitiveProps, "onValueChange" | "value">): void => {
+  if (typeof document === "undefined") return;
+
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = normalizeColorInputValue(value);
+  input.addEventListener("input", () => {
+    onValueChange?.(input.value);
+  });
+  input.addEventListener("change", () => {
+    onValueChange?.(input.value);
+  }, { once: true });
+  openEphemeralInput(input);
 };
 
 const usePrimitiveRegistration = ({
@@ -1145,6 +1572,282 @@ const usePrimitiveRegistration = ({
     context,
     control,
   };
+};
+
+const buttonControlNodes = ({
+  active,
+  box,
+  context,
+  disabled,
+  font,
+  fontSize,
+  label,
+  lineHeight,
+  pressed,
+}: {
+  readonly active: boolean;
+  readonly box: TextSurfaceBox;
+  readonly context: TextSurfaceContextValue;
+  readonly disabled: boolean;
+  readonly font?: TextFontFace;
+  readonly fontSize?: number;
+  readonly label: string;
+  readonly lineHeight?: number;
+  readonly pressed: boolean;
+}): readonly RenderNode[] => {
+  const style = context.style;
+  const effectiveFontSize = fontSize ?? style.fontSize;
+  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const fill = disabled
+    ? disabledControlColor
+    : pressed
+      ? style.caretColor
+      : style.fieldColor;
+  const textColor = disabled ? disabledTextColor : style.color;
+
+  return [
+    ...(active ? [actionControlRect({ box, color: style.caretColor, context })] : []),
+    actionControlRect({
+      box,
+      color: fill,
+      context,
+      inset: active ? actionControlBorder : 0,
+    }),
+    actionLabelNode({
+      box,
+      color: textColor,
+      context,
+      ...(font === undefined ? {} : { font }),
+      fontSize: effectiveFontSize,
+      label,
+      lineHeight: effectiveLineHeight,
+    }),
+  ];
+};
+
+export const ButtonPrimitive = ({
+  box,
+  children,
+  disabled = false,
+  font,
+  fontSize,
+  lineHeight,
+  onPress,
+}: ButtonPrimitiveProps): ReactNode => {
+  const handlePress = useCallback((): void => {
+    onPress?.();
+  }, [onPress]);
+  const { active, context, pressed } = useActionPrimitiveRegistration({
+    box,
+    disabled: disabled || onPress === undefined,
+    kind: "button",
+    onPress: handlePress,
+  });
+
+  return rendererOutputToReact(buttonControlNodes({
+    active,
+    box,
+    context,
+    disabled,
+    ...(font === undefined ? {} : { font }),
+    ...(fontSize === undefined ? {} : { fontSize }),
+    label: labelFromChildren(children, "Button"),
+    ...(lineHeight === undefined ? {} : { lineHeight }),
+    pressed,
+  }));
+};
+
+const FileInputPrimitive = ({
+  accept,
+  box,
+  capture,
+  children,
+  disabled = false,
+  font,
+  fontSize,
+  lineHeight,
+  multiple,
+  onFilesChange,
+}: FileInputPrimitiveProps): ReactNode => {
+  const handlePress = useCallback((): void => {
+    openFilePicker({
+      ...(accept === undefined ? {} : { accept }),
+      ...(capture === undefined ? {} : { capture }),
+      ...(multiple === undefined ? {} : { multiple }),
+      ...(onFilesChange === undefined ? {} : { onFilesChange }),
+    });
+  }, [accept, capture, multiple, onFilesChange]);
+  const disabledControl = disabled || onFilesChange === undefined;
+  const { active, context, pressed } = useActionPrimitiveRegistration({
+    box,
+    disabled: disabledControl,
+    kind: "file",
+    onPress: handlePress,
+  });
+
+  return rendererOutputToReact(buttonControlNodes({
+    active,
+    box,
+    context,
+    disabled: disabledControl,
+    ...(font === undefined ? {} : { font }),
+    ...(fontSize === undefined ? {} : { fontSize }),
+    label: labelFromChildren(children, multiple === true ? "Choose files" : "Choose file"),
+    ...(lineHeight === undefined ? {} : { lineHeight }),
+    pressed,
+  }));
+};
+
+const ColorInputPrimitive = ({
+  box,
+  children,
+  disabled = false,
+  font,
+  fontSize,
+  lineHeight,
+  onValueChange,
+  value,
+}: ColorInputPrimitiveProps): ReactNode => {
+  const handlePress = useCallback((): void => {
+    openColorPicker({
+      ...(onValueChange === undefined ? {} : { onValueChange }),
+      value,
+    });
+  }, [onValueChange, value]);
+  const { active, context, pressed } = useActionPrimitiveRegistration({
+    box,
+    disabled: disabled || onValueChange === undefined,
+    kind: "color",
+    onPress: handlePress,
+  });
+  const style = context.style;
+  const label = labelFromChildren(children, "Color");
+  const effectiveFontSize = fontSize ?? style.fontSize;
+  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const height = box.height ?? actionControlHeight;
+  const fill = disabled
+    ? disabledControlColor
+    : pressed
+      ? style.caretColor
+      : style.fieldColor;
+  const swatchSize = Math.max(0.16, height - 0.18);
+  const swatchBox = {
+    height: swatchSize,
+    left: box.left + box.width - swatchSize - 0.1,
+    top: box.top + (height - swatchSize) / 2,
+    width: swatchSize,
+    z: (box.z ?? 0) + 0.03,
+  } satisfies TextSurfaceBox;
+
+  return rendererOutputToReact([
+    ...(active ? [actionControlRect({ box, color: style.caretColor, context })] : []),
+    actionControlRect({
+      box,
+      color: fill,
+      context,
+      inset: active ? actionControlBorder : 0,
+    }),
+    actionLabelNode({
+      box,
+      color: disabled ? disabledTextColor : style.color,
+      context,
+      ...(font === undefined ? {} : { font }),
+      fontSize: effectiveFontSize,
+      label,
+      lineHeight: effectiveLineHeight,
+    }),
+    actionControlRect({
+      box: swatchBox,
+      color: disabled ? disabledTextColor : colorInputToRgba(value),
+      context,
+    }),
+  ]);
+};
+
+const CheckboxPrimitive = ({
+  box,
+  checked,
+  children,
+  disabled = false,
+  font,
+  fontSize,
+  lineHeight,
+  onCheckedChange,
+}: CheckboxInputPrimitiveProps): ReactNode => {
+  const handlePress = useCallback((): void => {
+    onCheckedChange?.(!checked);
+  }, [checked, onCheckedChange]);
+  const { active, context, pressed } = useActionPrimitiveRegistration({
+    box,
+    disabled: disabled || onCheckedChange === undefined,
+    kind: "checkbox",
+    onPress: handlePress,
+  });
+  const style = context.style;
+  const label = textFromChildren(children);
+  const effectiveFontSize = fontSize ?? style.fontSize;
+  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const height = box.height ?? actionControlHeight;
+  const left = boxWorldLeft(context.bounds, box);
+  const top = boxWorldTop(context.bounds, box);
+  const squareSize = Math.max(0.18, Math.min(0.34, height - 0.12));
+  const squareX = left;
+  const squareY = top - (height - squareSize) / 2;
+  const fill = disabled
+    ? disabledControlColor
+    : checked
+      ? style.caretColor
+      : style.fieldColor;
+  const border = active || pressed ? style.caretColor : style.placeholderColor;
+  const textColor = disabled ? disabledTextColor : style.color;
+  const squareBox = {
+    height: squareSize,
+    left: squareX - context.bounds.left,
+    top: context.bounds.top - squareY,
+    width: squareSize,
+    z: (box.z ?? 0) + 0.01,
+  } satisfies TextSurfaceBox;
+
+  return rendererOutputToReact([
+    actionControlRect({ box: squareBox, color: border, context }),
+    actionControlRect({
+      box: squareBox,
+      color: fill,
+      context,
+      inset: actionControlBorder,
+    }),
+    ...(checked
+      ? [
+          text({
+            color: disabled ? disabledTextColor : [0.025, 0.032, 0.038, 1],
+            ...(font === undefined ? {} : { font }),
+            fontSize: squareSize * 0.68,
+            lineHeight: squareSize * 0.78,
+            origin: [
+              squareX + squareSize * 0.28,
+              textBaselineForVerticalCenter(font, squareSize * 0.68, squareY, squareSize),
+              (box.z ?? 0) + 0.12,
+            ],
+            text: checkboxMark,
+          }),
+        ]
+      : []),
+    ...(label === ""
+      ? []
+      : [
+          actionLabelNode({
+            box,
+            color: textColor,
+            context,
+            ...(font === undefined ? {} : { font }),
+            fontSize: effectiveFontSize,
+            height,
+            label,
+            lineHeight: effectiveLineHeight,
+            x: squareX + squareSize + 0.16,
+          }),
+        ]),
+  ]);
 };
 
 export const TextPrimitive = ({
@@ -1313,12 +2016,17 @@ const TextFieldPrimitive = ({
   ];
 };
 
-export const InputPrimitive = (props: TextFieldPrimitiveProps): ReactNode =>
-  rendererOutputToReact(TextFieldPrimitive({
+export const InputPrimitive = (props: InputPrimitiveProps): ReactNode => {
+  if (props.type === "checkbox") return CheckboxPrimitive(props);
+  if (props.type === "file") return FileInputPrimitive(props);
+  if (props.type === "color") return ColorInputPrimitive(props);
+
+  return rendererOutputToReact(TextFieldPrimitive({
     ...props,
     mode: "single-line",
     rows: 1,
   }));
+};
 
 export const TextareaPrimitive = ({
   rows = 4,
