@@ -1,5 +1,8 @@
 import { Canvas as CanvasComponent } from './canvas';
-import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
+import {
+  OrbitCameraSync as OrbitCameraSyncComponent,
+  OrbitControls as OrbitControlsComponent
+} from './orbit-controls';
 import { markReactComponent } from './jsx-runtime';
 import {
   TextFontProvider as TextFontProviderComponent,
@@ -26,6 +29,8 @@ export {
   orbitCameraTransform,
   orbitPerspectiveCamera,
   resolveOrbitCameraView,
+  updateOrbitPerspectiveCamera,
+  useImperativeOrbitCamera,
   useOrbitCamera,
   useOrbitCameraView
 } from './orbit-controls';
@@ -42,6 +47,7 @@ export type {
 } from './picking-events';
 
 export const Canvas = markReactComponent(CanvasComponent);
+export const OrbitCameraSync = markReactComponent(OrbitCameraSyncComponent);
 export const OrbitControls = markReactComponent(OrbitControlsComponent);
 export const TextFontProvider = markReactComponent(TextFontProviderComponent);
 export const TextInteractionProvider = markReactComponent(TextInteractionProviderComponent);
@@ -78,9 +84,11 @@ export type {
 } from './editable-text-keyboard';
 export type {
   OrbitControlsBehaviorOptions,
+  ImperativeOrbitCameraHookResult,
   OrbitCameraHookResult,
   OrbitCameraState,
   OrbitCameraStore,
+  OrbitCameraSyncProps,
   OrbitCameraTransform,
   OrbitCameraView,
   OrbitCameraViewOptions,
