@@ -1,18 +1,9 @@
 /** @jsxImportSource @royal/react */
 import { TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
-import {
-  ALIGN_FLEX_START,
-  DIRECTION_LTR,
-  EDGE_BOTTOM,
-  EDGE_LEFT,
-  EDGE_TOP,
-  FLEX_DIRECTION_COLUMN,
-  GUTTER_ALL,
-  Node,
-} from 'flexily';
 import { useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
+import { layoutFlexTree, type FlexLayoutBox } from '../flex-layout';
 import { useAtkinsonFont } from './text-font';
 
 const bounds = {
@@ -37,13 +28,6 @@ const notesRows = 4;
 const fieldHeight = (rows: number): number =>
   rows * textStyle.lineHeight + textStyle.fieldPaddingY * 2;
 
-type LayoutBox = {
-  readonly height: number;
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-};
-
 type TextExampleLayout = {
   readonly copy: {
     readonly maxWidth: number;
@@ -59,84 +43,68 @@ type TextExampleLayout = {
   };
 };
 
-const layoutBox = (node: Node): LayoutBox => ({
-  height: node.getComputedHeight(),
-  left: node.getComputedLeft(),
-  top: node.getComputedTop(),
-  width: node.getComputedWidth(),
-});
+type TextExampleLayoutKey = 'copy' | 'notes' | 'title';
 
-const layoutMaxWidth = (box: LayoutBox): number =>
+const layoutMaxWidth = (box: FlexLayoutBox): number =>
   box.width - textStyle.fieldPaddingX * 2;
 
-const textOriginX = (box: LayoutBox): number =>
+const textOriginX = (box: FlexLayoutBox): number =>
   bounds.left + box.left + textStyle.fieldPaddingX;
 
-const fieldOrigin = (box: LayoutBox): readonly [number, number, number] => [
+const fieldOrigin = (box: FlexLayoutBox): readonly [number, number, number] => [
   textOriginX(box),
   bounds.top - box.top - textStyle.lineHeight / 2,
   0,
 ];
 
-const copyOrigin = (box: LayoutBox): readonly [number, number, number] => [
+const copyOrigin = (box: FlexLayoutBox): readonly [number, number, number] => [
   textOriginX(box),
   bounds.top - box.top - textStyle.lineHeight * 0.64,
   0,
 ];
 
 const createTextExampleLayout = (): TextExampleLayout => {
-  const root = Node.create({ defaults: 'css' });
-  const copy = Node.create({ defaults: 'css' });
-  const title = Node.create({ defaults: 'css' });
-  const notes = Node.create({ defaults: 'css' });
-  const width = bounds.right - bounds.left;
-  const height = bounds.top - bounds.bottom;
-
-  try {
-    root.setWidth(width);
-    root.setHeight(height);
-    root.setFlexDirection(FLEX_DIRECTION_COLUMN);
-    root.setAlignItems(ALIGN_FLEX_START);
-    root.setPadding(EDGE_LEFT, 0.74);
-    root.setPadding(EDGE_TOP, 1.38);
-    root.setGap(GUTTER_ALL, 0.26);
-
-    copy.setWidth(textColumnBoxWidth);
-    copy.setHeight(textStyle.lineHeight);
-    copy.setMargin(EDGE_BOTTOM, 0.38);
-
-    title.setWidth(textColumnBoxWidth);
-    title.setHeight(fieldHeight(titleRows));
-
-    notes.setWidth(textColumnBoxWidth);
-    notes.setHeight(fieldHeight(notesRows));
-
-    root.insertChild(copy, 0);
-    root.insertChild(title, 1);
-    root.insertChild(notes, 2);
-    root.calculateLayout(width, height, DIRECTION_LTR);
-
-    const copyBox = layoutBox(copy);
-    const titleBox = layoutBox(title);
-    const notesBox = layoutBox(notes);
-
-    return {
-      copy: {
-        maxWidth: layoutMaxWidth(copyBox),
-        origin: copyOrigin(copyBox),
+  const boxes = layoutFlexTree<TextExampleLayoutKey>({
+    alignItems: 'flex-start',
+    children: [
+      {
+        height: textStyle.lineHeight,
+        id: 'copy',
+        margin: { bottom: 0.38 },
+        width: textColumnBoxWidth,
       },
-      notes: {
-        maxWidth: layoutMaxWidth(notesBox),
-        origin: fieldOrigin(notesBox),
+      {
+        height: fieldHeight(titleRows),
+        id: 'title',
+        width: textColumnBoxWidth,
       },
-      title: {
-        maxWidth: layoutMaxWidth(titleBox),
-        origin: fieldOrigin(titleBox),
+      {
+        height: fieldHeight(notesRows),
+        id: 'notes',
+        width: textColumnBoxWidth,
       },
-    };
-  } finally {
-    root.freeRecursive();
-  }
+    ],
+    direction: 'column',
+    gap: 0.26,
+    height: bounds.top - bounds.bottom,
+    padding: { left: 0.74, top: 1.38 },
+    width: bounds.right - bounds.left,
+  });
+
+  return {
+    copy: {
+      maxWidth: layoutMaxWidth(boxes.copy),
+      origin: copyOrigin(boxes.copy),
+    },
+    notes: {
+      maxWidth: layoutMaxWidth(boxes.notes),
+      origin: fieldOrigin(boxes.notes),
+    },
+    title: {
+      maxWidth: layoutMaxWidth(boxes.title),
+      origin: fieldOrigin(boxes.title),
+    },
+  };
 };
 
 const textExampleLayout = createTextExampleLayout();
