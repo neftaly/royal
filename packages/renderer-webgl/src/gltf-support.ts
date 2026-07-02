@@ -50,6 +50,21 @@ export type GltfBufferView = {
   readonly byteLength: number;
   readonly byteOffset?: number;
   readonly byteStride?: number;
+  readonly extensions?: {
+    readonly EXT_meshopt_compression?: GltfMeshoptCompressionExtension;
+    readonly [name: string]: unknown;
+  };
+  readonly target?: number;
+};
+
+export type GltfMeshoptCompressionExtension = {
+  readonly buffer: number;
+  readonly byteLength: number;
+  readonly byteOffset?: number;
+  readonly byteStride: number;
+  readonly count: number;
+  readonly filter?: string;
+  readonly mode: string;
 };
 
 export type GltfMeshGpuInstancingExtension = {
@@ -63,6 +78,11 @@ export type GltfMeshGpuInstancingExtension = {
 
 export type GltfBuffer = {
   readonly byteLength?: number;
+  readonly extensions?: {
+    readonly EXT_meshopt_compression?: {
+      readonly fallback?: boolean;
+    };
+  };
   readonly uri?: string;
 };
 
@@ -194,6 +214,7 @@ export type GltfTextureTransformExtension = {
 };
 
 export const supportedGltfExtensions = new Set<string>([
+  "EXT_meshopt_compression",
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_lights_punctual",

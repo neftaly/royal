@@ -14,6 +14,8 @@ hierarchies and transforms, mesh primitives with `POSITION`/`NORMAL`/selected
 attributes, `UNSIGNED_BYTE`/`UNSIGNED_SHORT`/`UNSIGNED_INT` indices, triangle
 and line drawing, base color factor/texture/sampler data, and the supported
 required extensions documented in `docs/gltf-extension-priority.md`.
+That supported required-extension set includes meshopt-compressed bufferViews
+via `EXT_meshopt_compression`.
 
 ```tsx
 /** @jsxImportSource @royal/react/renderer */

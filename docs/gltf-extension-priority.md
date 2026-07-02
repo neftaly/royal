@@ -29,7 +29,8 @@ Required-extension implementation priority:
 
 1. `KHR_mesh_quantization` - not optional when an asset uses quantized
    attributes.
-2. `EXT_meshopt_compression` - required when fallback buffer data is unavailable.
+2. `EXT_meshopt_compression` - implemented for bufferView decompression; required
+   when fallback buffer data is unavailable.
 3. `KHR_texture_basisu` - required when no PNG/JPEG texture fallback is supplied.
 4. `EXT_texture_webp` - required when no PNG/JPEG texture fallback is supplied.
 5. `KHR_draco_mesh_compression` - required when no uncompressed mesh fallback is
@@ -48,9 +49,10 @@ mesh primitives, `POSITION` / `NORMAL` / selected `TEXCOORD_n`, strided and
 sparse accessors, normalized integer attributes, base color factor/texture,
 samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
-`EXT_mesh_gpu_instancing`, `EXT_texture_webp`, `KHR_materials_unlit`,
-`KHR_lights_punctual`, `KHR_materials_emissive_strength`,
-`KHR_materials_variants`, `KHR_node_visibility`, and vendor `MSFT_lod`.
+`EXT_meshopt_compression`, `EXT_mesh_gpu_instancing`, `EXT_texture_webp`,
+`KHR_materials_unlit`, `KHR_lights_punctual`,
+`KHR_materials_emissive_strength`, `KHR_materials_variants`,
+`KHR_node_visibility`, and vendor `MSFT_lod`.
 
 ## Should Do
 
@@ -62,7 +64,7 @@ path. They are sorted in suggested implementation order.
 | P0 | `extensionsRequired` gate | Not an extension. Reads required extension names and fails unsupported assets clearly. | This is the first "required" feature because it prevents silent wrong renders. |
 | P0 | Core `.glb` support | Binary container for JSON plus binary payload. | Core glTF 2.0 delivery format; many assets ship as GLB. |
 | P1 | `KHR_mesh_quantization` | Stores vertex attributes in smaller integer formats with decode rules. | Common size reduction; required if an asset has no float fallback. |
-| P1 | `EXT_meshopt_compression` | Compresses buffer views with meshoptimizer codecs. | Modern, fast mesh compression; likely production requirement. |
+| P1 | `EXT_meshopt_compression` | Compresses buffer views with meshoptimizer codecs. | Implemented for required compressed bufferViews; maintain decoder regression coverage. |
 | P1 | `KHR_texture_basisu` | Adds KTX2/Basis Universal compressed textures. | Important for GPU-friendly texture delivery; required without PNG/JPEG fallback. |
 | P1 | `EXT_texture_webp` | Allows WebP texture images. | Web-focused texture size win; required without PNG/JPEG fallback. |
 | P2 | `KHR_draco_mesh_compression` | Compresses mesh primitive attributes and indices with Draco. | Older but still common; required if no uncompressed primitive fallback exists. |
@@ -149,12 +151,11 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 ## Starting Recommendation
 
 The required-contract gate, core loadability baseline, and
-`EXT_mesh_gpu_instancing` are now in place. Next, implement the remaining
-decoder-backed blockers in this order:
+`EXT_meshopt_compression` / `EXT_mesh_gpu_instancing` are now in place. Next,
+implement the remaining decoder-backed blockers in this order:
 
-1. `EXT_meshopt_compression`
-2. `KHR_texture_basisu`
-3. `KHR_draco_mesh_compression`
+1. `KHR_texture_basisu`
+2. `KHR_draco_mesh_compression`
 
 Add richer material and lighting extensions after the decoder-backed required
 path is stable.

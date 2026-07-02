@@ -53,6 +53,9 @@ const triangleImageUri = "staged-triangle.png";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const triangleBinByteLength = 104;
+const meshoptCompressedPositionByteLength = 56;
+const meshoptCompressedIndexByteLength = 18;
+const meshoptCompressedTriangleBinByteLength = meshoptCompressedPositionByteLength + meshoptCompressedIndexByteLength;
 const instancedTriangleBinByteLength = triangleBinByteLength + 48;
 const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
@@ -599,6 +602,20 @@ const triangleBin = (): ArrayBuffer => {
     1, 1,
   ]);
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const meshoptCompressedTriangleBin = (): ArrayBuffer => {
+  const bytes = Uint8Array.from([
+    160, 0, 0, 0, 1, 60, 0, 0, 0, 129, 255, 0, 0, 0, 1, 48,
+    0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 63, 0, 0, 0, 0, 225, 240, 0, 118, 135, 86, 103, 120,
+    169, 134, 101, 137, 104, 152, 1, 105, 0, 0,
+  ]);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
 
   return buffer;
 };
@@ -2056,6 +2073,84 @@ describe("WebGL renderer scene and glTF regressions", () => {
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
       "GLB should draw from its embedded BIN chunk",
     ).toBe(true);
+  });
+
+  it("decodes required EXT_meshopt_compression bufferViews before reading accessors", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "ext-meshopt-compression" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [
+          { bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+          { bufferView: 1, componentType: 5123, count: 3, type: "SCALAR" },
+        ],
+        asset: { version: "2.0" },
+        bufferViews: [
+          {
+            buffer: 1,
+            byteLength: 36,
+            byteOffset: 0,
+            extensions: {
+              EXT_meshopt_compression: {
+                buffer: 0,
+                byteLength: meshoptCompressedPositionByteLength,
+                byteOffset: 0,
+                byteStride: 12,
+                count: 3,
+                mode: "ATTRIBUTES",
+              },
+            },
+            target: 34962,
+          },
+          {
+            buffer: 1,
+            byteLength: 6,
+            byteOffset: 36,
+            extensions: {
+              EXT_meshopt_compression: {
+                buffer: 0,
+                byteLength: meshoptCompressedIndexByteLength,
+                byteOffset: meshoptCompressedPositionByteLength,
+                byteStride: 2,
+                count: 3,
+                mode: "TRIANGLES",
+              },
+            },
+            target: 34963,
+          },
+        ],
+        buffers: [
+          { byteLength: meshoptCompressedTriangleBinByteLength, uri: triangleBinUri },
+          { byteLength: 42 },
+        ],
+        extensionsRequired: ["EXT_meshopt_compression"],
+        extensionsUsed: ["EXT_meshopt_compression"],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0, mode: 4 }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, meshoptCompressedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0, 0.5, 0,
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+    ]);
   });
 
   it("decodes interleaved glTF accessors with byteStride", async () => {

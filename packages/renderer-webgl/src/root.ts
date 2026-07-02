@@ -36,6 +36,7 @@ import {
   loadGltfDocument,
   resolveResourceUri,
 } from "./gltf-io";
+import { decodeGltfMeshoptBufferViews } from "./gltf-meshopt";
 import {
   assertSupportedRequiredGltfExtensions,
   type GltfDocument,
@@ -3732,15 +3733,17 @@ void main() {
       if (this.#disposed) return;
       assertSupportedRequiredGltfExtensions(src, document);
       if (this.#disposed) return;
-      const buffers = await loadGltfBuffers(src, document, binaryChunk);
+      const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk);
       if (this.#disposed) return;
-      const scene = this.#readGltfScene(document, buffers, src, state.key);
+      const { buffers, document: decodedDocument } = await decodeGltfMeshoptBufferViews(document, loadedBuffers);
+      if (this.#disposed) return;
+      const scene = this.#readGltfScene(decodedDocument, buffers, src, state.key);
       state.lights = scene.lights;
       state.primitives = scene.primitives;
       state.variants = scene.variants;
       state.status = "ready";
       this.#scheduleRender();
-      this.#loadGltfImages(src, document, buffers, state);
+      this.#loadGltfImages(src, decodedDocument, buffers, state);
     } catch (error) {
       if (this.#disposed) return;
       state.status = "error";
