@@ -42,10 +42,13 @@ If draft or domain-specific extensions such as `KHR_accessor_float64`,
 `KHR_texture_video`, physics, audio, or MPEG entries are required, reject them
 until the corresponding runtime exists.
 
-The current Royal loader supports a narrow JSON `.gltf` path: external buffers,
-root scene nodes, node transforms, mesh primitives, `POSITION` / `NORMAL` /
-`TEXCOORD_0`, base color factor/texture, samplers, triangle drawing,
-`UNSIGNED_BYTE` / `UNSIGNED_SHORT` / `UNSIGNED_INT` indices, and vendor
+The current Royal loader supports `.gltf` and `.glb` documents, external/data
+URI/GLB BIN buffers, bufferView images, node child hierarchies, node transforms,
+mesh primitives, `POSITION` / `NORMAL` / selected `TEXCOORD_n`, strided and
+sparse accessors, normalized integer attributes, base color factor/texture,
+samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
+`UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
+`EXT_texture_webp`, `KHR_materials_unlit`, `KHR_node_visibility`, and vendor
 `MSFT_lod`.
 
 ## Should Do
@@ -144,17 +147,13 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 
 ## Starting Recommendation
 
-Start with the required-contract path, not a visual extension:
+The required-contract gate and core loadability baseline are now in place.
+Next, implement the remaining decoder-backed blockers in this order:
 
-1. Parse top-level `extensionsUsed` and `extensionsRequired`.
-2. Add a supported-extension registry in the loader.
-3. If an unsupported extension is required, mark the glTF state as `error` and
-   record a diagnostic naming the extension and source asset.
-4. Add tests for unsupported required extensions and ignored optional
-   extensions.
-5. Then implement the first loadability blockers in this order:
-   `KHR_mesh_quantization`, `EXT_meshopt_compression`,
-   `KHR_texture_basisu`, `EXT_texture_webp`, and
-   `KHR_draco_mesh_compression`.
-6. Follow with `EXT_mesh_gpu_instancing` and `KHR_texture_transform` when source
-   assets require them.
+1. `EXT_meshopt_compression`
+2. `KHR_texture_basisu`
+3. `KHR_draco_mesh_compression`
+
+Treat `EXT_mesh_gpu_instancing` as a separate follow-up because it changes
+scene expansion, picking, and draw batching semantics rather than basic asset
+loading.

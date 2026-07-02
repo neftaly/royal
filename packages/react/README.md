@@ -7,10 +7,13 @@ and render graph primitives from `@royal/renderer-core`.
 
 ## Example
 
-The WebGL renderer currently supports a narrow glTF subset: JSON `.gltf`
-documents with external buffers, non-interleaved `FLOAT`
-`POSITION`/`NORMAL`/`TEXCOORD_0` accessors, `UNSIGNED_SHORT` indices, and a
-`pbrMetallicRoughness.baseColorTexture` image.
+The WebGL renderer currently supports a practical glTF subset: `.gltf` and
+`.glb` documents, external/data URI/GLB BIN buffers, bufferView images, node
+hierarchies and transforms, mesh primitives with `POSITION`/`NORMAL`/selected
+`TEXCOORD_n` accessors, sparse and strided accessors, normalized integer
+attributes, `UNSIGNED_BYTE`/`UNSIGNED_SHORT`/`UNSIGNED_INT` indices, triangle
+and line drawing, base color factor/texture/sampler data, and the supported
+required extensions documented in `docs/gltf-extension-priority.md`.
 
 ```tsx
 /** @jsxImportSource @royal/react/renderer */

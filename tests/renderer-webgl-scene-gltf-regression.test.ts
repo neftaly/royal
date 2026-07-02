@@ -49,6 +49,7 @@ const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
+const triangleWebpImageUri = "staged-triangle.webp";
 const triangleBinByteLength = 104;
 const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
@@ -509,6 +510,12 @@ const numericArray = (value: unknown): readonly number[] => {
   return [];
 };
 
+const bufferDataPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "bufferData")
+    .map((call) => numericArray(call.args[1]))
+    .filter((values) => values.length > 0);
+
 const roundNumber = (value: number): number => {
   const rounded = Number(value.toFixed(6));
 
@@ -548,9 +555,10 @@ const uniform4fvPayloads = (
       return values.slice(offset, offset + length).slice(0, 4);
     });
 
-const matrixUniformPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+const matrixUniformPayloads = (calls: readonly GlCall[], name?: string): readonly (readonly number[])[] =>
   calls
     .filter((call) => call.name === "uniformMatrix4fv")
+    .filter((call) => name === undefined || uniformLocationName(call.args[0]) === name)
     .map((call) => {
       const values = numericArray(call.args[2]);
       const offset = typeof call.args[3] === "number" ? call.args[3] : 0;
@@ -584,6 +592,123 @@ const triangleBin = (): ArrayBuffer => {
     1, 1,
   ]);
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const paddedLength = (byteLength: number): number => Math.ceil(byteLength / 4) * 4;
+
+const paddedJsonBytes = (value: unknown): Uint8Array => {
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(value));
+  const bytes = new Uint8Array(paddedLength(jsonBytes.byteLength));
+  bytes.set(jsonBytes);
+  bytes.fill(0x20, jsonBytes.byteLength);
+
+  return bytes;
+};
+
+const paddedBinaryBytes = (buffer: ArrayBuffer): Uint8Array => {
+  const bytes = new Uint8Array(paddedLength(buffer.byteLength));
+  bytes.set(new Uint8Array(buffer));
+
+  return bytes;
+};
+
+const glbContainer = (document: unknown, binaryChunk: ArrayBuffer): ArrayBuffer => {
+  const jsonBytes = paddedJsonBytes(document);
+  const binBytes = paddedBinaryBytes(binaryChunk);
+  const totalLength = 12 + 8 + jsonBytes.byteLength + 8 + binBytes.byteLength;
+  const glb = new ArrayBuffer(totalLength);
+  const view = new DataView(glb);
+  let offset = 0;
+  view.setUint32(offset, 0x46546C67, true);
+  offset += 4;
+  view.setUint32(offset, 2, true);
+  offset += 4;
+  view.setUint32(offset, totalLength, true);
+  offset += 4;
+  view.setUint32(offset, jsonBytes.byteLength, true);
+  offset += 4;
+  view.setUint32(offset, 0x4E4F534A, true);
+  offset += 4;
+  new Uint8Array(glb, offset, jsonBytes.byteLength).set(jsonBytes);
+  offset += jsonBytes.byteLength;
+  view.setUint32(offset, binBytes.byteLength, true);
+  offset += 4;
+  view.setUint32(offset, 0x004E4942, true);
+  offset += 4;
+  new Uint8Array(glb, offset, binBytes.byteLength).set(binBytes);
+
+  return glb;
+};
+
+const dataUriForBuffer = (buffer: ArrayBuffer): string =>
+  `data:application/octet-stream;base64,${Buffer.from(buffer).toString("base64")}`;
+
+const interleavedTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(102);
+  const view = new DataView(buffer);
+  const vertices = [
+    { normal: [0, 0, 1], position: [0, 0.5, 0], uv: [0.5, 1.5] },
+    { normal: [0, 0, 1], position: [-0.5, -0.5, 0], uv: [0, 1] },
+    { normal: [0, 0, 1], position: [0.5, -0.5, 0], uv: [1, 1] },
+  ];
+  for (const [vertexIndex, vertex] of vertices.entries()) {
+    const offset = vertexIndex * 32;
+    for (const [componentIndex, value] of vertex.position.entries()) {
+      view.setFloat32(offset + componentIndex * 4, value, true);
+    }
+    for (const [componentIndex, value] of vertex.normal.entries()) {
+      view.setFloat32(offset + 12 + componentIndex * 4, value, true);
+    }
+    for (const [componentIndex, value] of vertex.uv.entries()) {
+      view.setFloat32(offset + 24 + componentIndex * 4, value, true);
+    }
+  }
+  new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const quantizedTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(24);
+  new Int16Array(buffer, 0, 9).set([
+    0, 32767, 0,
+    -32767, -32767, 0,
+    32767, -32767, 0,
+  ]);
+  new Uint16Array(buffer, 18, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const sparseTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(40);
+  new Uint8Array(buffer, 0, 3).set([0, 1, 2]);
+  new Float32Array(buffer, 4, 9).set([
+    0, 0.5, 0,
+    -0.5, -0.5, 0,
+    0.5, -0.5, 0,
+  ]);
+
+  return buffer;
+};
+
+const lineBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(24);
+  new Float32Array(buffer).set([
+    -0.5, 0, 0,
+    0.5, 0, 0,
+  ]);
+
+  return buffer;
+};
+
+const triangleWithImageBytes = (): ArrayBuffer => {
+  const base = triangleBin();
+  const buffer = new ArrayBuffer(base.byteLength + 4);
+  new Uint8Array(buffer).set(new Uint8Array(base));
+  new Uint8Array(buffer, base.byteLength).set([0x89, 0x50, 0x4E, 0x47]);
 
   return buffer;
 };
@@ -1269,6 +1394,584 @@ describe("WebGL renderer scene and glTF regressions", () => {
       /base-?color|image|texture/i.test(message))).toBe(true);
   });
 
+  it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "data-uri-buffer",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        buffers: [
+          {
+            byteLength: triangleBinByteLength,
+            uri: dataUriForBuffer(triangleBin()),
+          },
+        ],
+      }))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+      "glTF should draw from an embedded data URI buffer",
+    ).toBe(true);
+  });
+
+  it("loads GLB JSON and BIN chunks without fetching external buffer resources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const triangleGlbSrc = "https://example.test/fixtures/staged-triangle.glb";
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGlbSrc,
+        version: "glb-bin-chunk",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.glb(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, glbContainer({
+        ...triangleDocument(),
+        buffers: [
+          {
+            byteLength: triangleBinByteLength,
+          },
+        ],
+      }, triangleBin())))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+      "GLB should draw from its embedded BIN chunk",
+    ).toBe(true);
+  });
+
+  it("decodes interleaved glTF accessors with byteStride", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "interleaved-accessors" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [
+          { bufferView: 0, byteOffset: 0, componentType: 5126, count: 3, type: "VEC3" },
+          { bufferView: 0, byteOffset: 12, componentType: 5126, count: 3, type: "VEC3" },
+          { bufferView: 0, byteOffset: 24, componentType: 5126, count: 3, type: "VEC2" },
+          { bufferView: 1, componentType: 5123, count: 3, type: "SCALAR" },
+        ],
+        asset: { version: "2.0" },
+        bufferViews: [
+          { buffer: 0, byteLength: 96, byteOffset: 0, byteStride: 32, target: 34962 },
+          { buffer: 0, byteLength: 6, byteOffset: 96, target: 34963 },
+        ],
+        buffers: [{ byteLength: 102, uri: triangleBinUri }],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 }, indices: 3, material: 0, mode: 4 }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, interleavedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0, 0.5, 0,
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+    ]);
+  });
+
+  it("decodes required KHR_mesh_quantization normalized integer attributes", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "quantized-accessors" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [
+          { bufferView: 0, componentType: 5122, count: 3, normalized: true, type: "VEC3" },
+          { bufferView: 1, componentType: 5123, count: 3, type: "SCALAR" },
+        ],
+        asset: { version: "2.0" },
+        bufferViews: [
+          { buffer: 0, byteLength: 18, byteOffset: 0, target: 34962 },
+          { buffer: 0, byteLength: 6, byteOffset: 18, target: 34963 },
+        ],
+        buffers: [{ byteLength: 24, uri: triangleBinUri }],
+        extensionsRequired: ["KHR_mesh_quantization"],
+        extensionsUsed: ["KHR_mesh_quantization"],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0, mode: 4 }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, quantizedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0, 1, 0,
+      -1, -1, 0,
+      1, -1, 0,
+    ]);
+  });
+
+  it("applies sparse glTF accessor overrides", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "sparse-accessor" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [
+          {
+            componentType: 5126,
+            count: 3,
+            sparse: {
+              count: 3,
+              indices: { bufferView: 0, componentType: 5121 },
+              values: { bufferView: 1 },
+            },
+            type: "VEC3",
+          },
+        ],
+        asset: { version: "2.0" },
+        bufferViews: [
+          { buffer: 0, byteLength: 3, byteOffset: 0 },
+          { buffer: 0, byteLength: 36, byteOffset: 4 },
+        ],
+        buffers: [{ byteLength: 40, uri: triangleBinUri }],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, mode: 4 }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, sparseTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0, 0.5, 0,
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+    ]);
+  });
+
+  it("applies required KHR_texture_transform to base-color texture coordinates", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "texture-transform" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_texture_transform"],
+        extensionsUsed: ["KHR_texture_transform"],
+        materials: [
+          {
+            pbrMetallicRoughness: {
+              baseColorTexture: {
+                extensions: {
+                  KHR_texture_transform: {
+                    offset: [0.25, 0.5],
+                    scale: [0.5, 0.25],
+                  },
+                },
+                index: 0,
+              },
+            },
+          },
+        ],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0.5, 0.875,
+      0.25, 0.75,
+      0.75, 0.75,
+    ]);
+  });
+
+  it("applies parent and child transforms when traversing glTF node hierarchies", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "node-hierarchy" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        nodes: [
+          { children: [1], translation: [0.25, 0, 0] },
+          { mesh: 0, translation: [0.25, 0, 0] },
+        ],
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(matrixUniformPayloads(calls, "u_model").map(roundVector)).toContainEqual([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.5, 0, 0, 1,
+    ]);
+  });
+
+  it("loads glTF base-color images from bufferViews", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "buffer-view-image" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        bufferViews: [
+          ...(triangleDocument().bufferViews),
+          { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
+        ],
+        buffers: [{ byteLength: triangleBinByteLength + 4, uri: triangleBinUri }],
+        images: [{ bufferView: 4, mimeType: "image/png" }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(loader.bitmapRequests).toHaveLength(1);
+
+    loader.bitmapRequests[0]?.resolve({} as ImageBitmap);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("loads required EXT_texture_webp base-color texture sources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "webp-texture" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["EXT_texture_webp"],
+        extensionsUsed: ["EXT_texture_webp"],
+        images: [{ uri: triangleImageUri }, { uri: triangleWebpImageUri }],
+        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleWebpImageUri}`))).toBe(true);
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleImageUri}`))).toBe(false);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("renders required KHR_materials_unlit glTF materials without lighting", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      gltf({ src: triangleGltfSrc, version: "unlit-material" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_materials_unlit"],
+        extensionsUsed: ["KHR_materials_unlit"],
+        images: [],
+        materials: [
+          {
+            extensions: { KHR_materials_unlit: {} },
+            pbrMetallicRoughness: { baseColorFactor: [0.25, 0.5, 0.75, 1] },
+          },
+        ],
+        samplers: [],
+        textures: [],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.25, 0.5, 0.75, 1]);
+    expect(calls.some((call) => call.name === "uniform1i" && uniformLocationName(call.args[0]) === "u_unlit" && call.args[1] === 1))
+      .toBe(true);
+  });
+
+  it("hides required KHR_node_visibility node hierarchies", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "node-visibility" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_node_visibility"],
+        extensionsUsed: ["KHR_node_visibility"],
+        images: [],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        nodes: [
+          {
+            children: [1],
+            extensions: { KHR_node_visibility: { visible: false } },
+          },
+          { mesh: 0 },
+        ],
+        samplers: [],
+        scenes: [{ nodes: [0] }],
+        textures: [],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls)).toHaveLength(0);
+  });
+
+  it("renders glTF line primitives with line draw mode", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "line-primitive" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [{ bufferView: 0, componentType: 5126, count: 2, type: "VEC3" }],
+        asset: { version: "2.0" },
+        bufferViews: [{ buffer: 0, byteLength: 24, byteOffset: 0 }],
+        buffers: [{ byteLength: 24, uri: triangleBinUri }],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, mode: 1 }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, lineBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.LINES && drawCount(call) === 2)).toBe(true);
+  });
+
+  it("skips unsupported glTF primitive modes with a diagnostic", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "unsupported-primitive-mode" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        images: [],
+        materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, mode: 5 }] }],
+        samplers: [],
+        textures: [],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls)).toHaveLength(0);
+    expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode 5/i.test(message))).toBe(true);
+  });
+
+  it("ignores unsupported optional glTF extensions when core fallback data is present", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "optional-extension-fallback",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["KHR_materials_clearcoat"],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+      "optional unsupported material extension should fall back to core glTF data",
+    ).toBe(true);
+  });
+
+  it("rejects glTF assets with unsupported required extensions before fetching dependent resources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "unsupported-required-extension",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_draco_mesh_compression"],
+        extensionsUsed: ["KHR_draco_mesh_compression"],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /unsupported required glTF extension.*KHR_draco_mesh_compression/i.test(message))).toBe(true);
+
+    root.render(renderGraph);
+    expect(drawCalls(calls)).toHaveLength(0);
+  });
+
   it("binds glTF normals and texcoords, applies node transform, and uses the pass light", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
@@ -1424,6 +2127,66 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     const lowColors = uniform4fvPayloads(low.calls, "u_color").map(roundVector);
     expect(lowColors).toContainEqual([0, 0, 1, 1]);
+  });
+
+  it("uses selected material LOD texture transforms for glTF texcoords", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [0.2, 0.2, 1],
+        },
+        version: "material-lod-texture-transform",
+      }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["KHR_texture_transform"],
+        extensionsUsed: ["KHR_texture_transform", "MSFT_lod"],
+        materials: [
+          {
+            extensions: { MSFT_lod: { ids: [1] } },
+            extras: { MSFT_screencoverage: [0.2, 0] },
+            pbrMetallicRoughness: {
+              baseColorTexture: { index: 0 },
+            },
+          },
+          {
+            pbrMetallicRoughness: {
+              baseColorTexture: {
+                extensions: {
+                  KHR_texture_transform: {
+                    offset: [0.25, 0.5],
+                    scale: [0.5, 0.25],
+                  },
+                },
+                index: 0,
+              },
+            },
+          },
+        ],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0.5, 0.875,
+      0.25, 0.75,
+      0.75, 0.75,
+    ]);
   });
 
   it("keeps node-level MSFT_lod selection stable inside a threshold hysteresis band", async () => {
