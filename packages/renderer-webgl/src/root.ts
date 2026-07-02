@@ -103,7 +103,7 @@ type Mat4 = readonly [
   number, number, number, number,
 ];
 
-type ProgramKind = "surface" | "surface-vt-base-color" | "wireframe";
+type ProgramKind = "surface" | "surface-instanced" | "surface-vt-base-color" | "wireframe";
 
 type Vec4 = readonly [x: number, y: number, z: number, w: number];
 
@@ -248,6 +248,18 @@ type GltfState = {
   status: "loading" | "ready" | "error";
 };
 
+type GltfPrimitiveDraw = {
+  readonly geometry: CpuGeometry;
+  readonly material: StandardMaterial | UnlitMaterial;
+  readonly model: Mat4;
+};
+
+type GltfPrimitiveDrawBatch = {
+  readonly geometry: GeometryResource;
+  readonly material: StandardMaterial | UnlitMaterial;
+  readonly models: Mat4[];
+};
+
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
@@ -261,6 +273,56 @@ const IDENTITY_TRANSFORM: Transform = {
   rotation: [0, 0, 0],
   scale: [1, 1, 1],
 };
+
+const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
+const FNV_1A_32_OFFSET = 0x811c9dc5;
+const FNV_1A_32_PRIME = 0x01000193;
+
+const hashBytes = (bytes: Uint8Array): string => {
+  let hash = FNV_1A_32_OFFSET;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, FNV_1A_32_PRIME) >>> 0;
+  }
+
+  return hash.toString(16).padStart(8, "0");
+};
+
+const typedArrayContentKey = (array: ArrayBufferView | undefined): string => {
+  if (array === undefined) return "none";
+  const cached = TYPED_ARRAY_CONTENT_KEYS.get(array);
+  if (cached !== undefined) return cached;
+
+  const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+  const key = [
+    array.constructor.name,
+    array.byteLength,
+    hashBytes(bytes),
+  ].join(":");
+  TYPED_ARRAY_CONTENT_KEYS.set(array, key);
+  return key;
+};
+
+const gltfGeometryContentKey = ({
+  indices,
+  mode,
+  normals,
+  positions,
+  texCoords,
+}: {
+  readonly indices?: GltfIndexArray | undefined;
+  readonly mode: "lines" | "triangles";
+  readonly normals?: Float32Array | undefined;
+  readonly positions: Float32Array;
+  readonly texCoords?: Float32Array | undefined;
+}): string => [
+  "gltf-geometry",
+  mode,
+  typedArrayContentKey(positions),
+  typedArrayContentKey(normals),
+  typedArrayContentKey(texCoords),
+  typedArrayContentKey(indices),
+].join("|");
 
 type TransformableRenderNode = GltfNode | MeshNode;
 
@@ -737,6 +799,9 @@ const textureKey = (texture: TextureRef): string => {
   ].join(":");
 };
 
+const surfaceMaterialBatchKey = (material: StandardMaterial | UnlitMaterial): string =>
+  `${material.kind}:${textureKey(material.baseColor)}`;
+
 const materialColor = (material: Material): Rgba => {
   const texture = material.baseColor;
   if (texture.kind === "solid") return texture.color;
@@ -1158,6 +1223,7 @@ export class WebGlRoot {
   #diagnostics: string[] = [];
   #disposed = false;
   #frame = 0;
+  #gltfInstanceBuffer: WebGLBuffer | undefined;
   #gltfRenderOrdinal = 0;
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
@@ -1225,11 +1291,23 @@ export class WebGlRoot {
       const projection = projectionMat4(renderPass.camera, width, height);
       const view = viewMat4(renderPass.camera);
       const lights = this.#directionalLights(renderPass.children);
+      const gltfDraws: GltfPrimitiveDraw[] = [];
+      const flushGltfDraws = (): void => {
+        if (gltfDraws.length === 0) return;
+        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, lights[0], usedGeometry);
+        gltfDraws.length = 0;
+      };
 
       for (const child of renderPass.children) {
         if (child.kind === "directional-light") continue;
+        if (child.kind === "gltf") {
+          this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws);
+          continue;
+        }
+        flushGltfDraws();
         this.#drawNode(child, projection, view, lights[0], usedGeometry);
       }
+      flushGltfDraws();
     }
 
     this.#releaseUnusedGeometry(usedGeometry);
@@ -1594,7 +1672,11 @@ export class WebGlRoot {
         this.#drawText(node, projection, view, usedGeometry);
         return;
       case "gltf":
-        this.#drawGltf(node, projection, view, light, usedGeometry);
+        {
+          const draws: GltfPrimitiveDraw[] = [];
+          this.#appendGltfPrimitiveDraws(node, projection, view, draws);
+          this.#drawGltfPrimitiveDraws(draws, projection, view, light, usedGeometry);
+        }
         return;
       default:
         this.#recordDiagnostic(`Unsupported render node kind "${getNodeKind(node)}"`);
@@ -1667,12 +1749,11 @@ export class WebGlRoot {
     this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined);
   }
 
-  #drawGltf(
+  #appendGltfPrimitiveDraws(
     node: GltfNode,
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
-    usedGeometry: Set<string>,
+    draws: GltfPrimitiveDraw[],
   ): void {
     const renderInstanceKey = `instance:${this.#gltfRenderOrdinal}`;
     this.#gltfRenderOrdinal += 1;
@@ -1716,12 +1797,15 @@ export class WebGlRoot {
         this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         material = { baseColor, kind: loadedMaterial.unlit === true ? "unlit" : "standard" };
       }
-      const baseGeometryKey = primitive.materialLod === undefined
-        ? `${state.key}:primitive:${primitive.key}`
-        : `${state.key}:primitive:${primitive.key}:material-level:${materialSelection.level}`;
       const cpu: CpuGeometry = {
         ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-        key: baseGeometryKey,
+        key: gltfGeometryContentKey({
+          ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+          mode: primitive.mode,
+          ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
+          positions: primitive.positions,
+          ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
+        }),
         mode: primitive.mode,
         ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
         positions: primitive.positions,
@@ -1730,9 +1814,44 @@ export class WebGlRoot {
       if (!this.#isVisible(cpu.positions, model, projection, view)) {
         continue;
       }
-      const gpu = this.#geometryResource(cpu);
-      usedGeometry.add(gpu.key);
-      this.#drawGeometry(gpu, material, model, projection, view, light);
+      draws.push({
+        geometry: cpu,
+        material,
+        model,
+      });
+    }
+  }
+
+  #drawGltfPrimitiveDraws(
+    draws: readonly GltfPrimitiveDraw[],
+    projection: Mat4,
+    view: Mat4,
+    light: DirectionalLightNode | undefined,
+    usedGeometry: Set<string>,
+  ): void {
+    const batches = new Map<string, GltfPrimitiveDrawBatch>();
+    for (const draw of draws) {
+      const geometry = this.#geometryResource(draw.geometry);
+      usedGeometry.add(geometry.key);
+      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}`;
+      const batch = batches.get(batchKey);
+      if (batch === undefined) {
+        batches.set(batchKey, {
+          geometry,
+          material: draw.material,
+          models: [draw.model],
+        });
+      } else {
+        batch.models.push(draw.model);
+      }
+    }
+
+    for (const batch of batches.values()) {
+      if (batch.models.length === 1) {
+        this.#drawGeometry(batch.geometry, batch.material, batch.models[0]!, projection, view, light);
+      } else {
+        this.#drawGeometryInstanced(batch.geometry, batch.material, batch.models, projection, view, light);
+      }
     }
   }
 
@@ -1956,6 +2075,59 @@ export class WebGlRoot {
       virtualTexture.stats.fallbackDraws += 1;
     }
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
+    this.#bindGeometryAttributes(program, geometry);
+
+    if (material.kind === "wireframe") gl.lineWidth?.(material.width);
+
+    const mode = geometry.mode === "lines" ? gl.LINES : gl.TRIANGLES;
+    if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
+      gl.drawArrays(mode, 0, geometry.drawCount);
+    } else {
+      gl.drawElements(mode, geometry.drawCount, geometry.indexType, 0);
+    }
+  }
+
+  #drawGeometryInstanced(
+    geometry: GeometryResource,
+    material: StandardMaterial | UnlitMaterial,
+    models: readonly Mat4[],
+    projection: Mat4,
+    view: Mat4,
+    light: DirectionalLightNode | undefined,
+  ): void {
+    const gl = this.#gl;
+    const programResource = this.#program("surface-instanced");
+    const program = programResource.program;
+    gl.useProgram(program);
+
+    this.#uniformMatrix(program, "u_projection", projection);
+    this.#uniformMatrix(program, "u_view", view);
+    this.#uniformColor(program, "u_color", materialColor(material));
+    this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
+    if (material.kind === "standard") {
+      this.#uniformColor(program, "u_lightColor", light?.color ?? DEFAULT_LIGHT_COLOR);
+      this.#uniformVec3(program, "u_lightDirection", light?.direction ?? DEFAULT_LIGHT_DIRECTION);
+    } else {
+      this.#uniformColor(program, "u_lightColor", DEFAULT_LIGHT_COLOR);
+    }
+
+    const useTexture = this.#bindMaterialTexture(program, material);
+    this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
+    this.#bindGeometryAttributes(program, geometry);
+    this.#bindGltfInstanceModels(models);
+
+    const mode = geometry.mode === "lines" ? gl.LINES : gl.TRIANGLES;
+    if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
+      gl.drawArraysInstanced(mode, 0, geometry.drawCount, models.length);
+    } else {
+      gl.drawElementsInstanced(mode, geometry.drawCount, geometry.indexType, 0, models.length);
+    }
+
+    this.#unbindGltfInstanceModels();
+  }
+
+  #bindGeometryAttributes(program: WebGLProgram, geometry: GeometryResource): void {
+    const gl = this.#gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, geometry.arrayBuffer);
     const positionLocation = gl.getAttribLocation(program, "a_position");
     if (positionLocation >= 0) {
@@ -1985,15 +2157,39 @@ export class WebGlRoot {
     if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
     }
+  }
 
-    if (material.kind === "wireframe") gl.lineWidth?.(material.width);
+  #bindGltfInstanceModels(models: readonly Mat4[]): void {
+    const gl = this.#gl;
+    const buffer = this.#gltfInstanceBufferResource();
+    const data = new Float32Array(models.length * 16);
+    for (const [index, model] of models.entries()) data.set(model, index * 16);
 
-    const mode = geometry.mode === "lines" ? gl.LINES : gl.TRIANGLES;
-    if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
-      gl.drawArrays(mode, 0, geometry.drawCount);
-    } else {
-      gl.drawElements(mode, geometry.drawCount, geometry.indexType, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    for (let column = 0; column < 4; column += 1) {
+      const location = 3 + column;
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 64, column * 16);
+      gl.vertexAttribDivisor(location, 1);
     }
+  }
+
+  #unbindGltfInstanceModels(): void {
+    const gl = this.#gl;
+    for (let column = 0; column < 4; column += 1) {
+      const location = 3 + column;
+      gl.vertexAttribDivisor(location, 0);
+      gl.disableVertexAttribArray?.(location);
+    }
+  }
+
+  #gltfInstanceBufferResource(): WebGLBuffer {
+    if (this.#gltfInstanceBuffer === undefined) {
+      this.#gltfInstanceBuffer = this.#createBuffer();
+    }
+
+    return this.#gltfInstanceBuffer;
   }
 
   #bindMaterialTexture(program: WebGLProgram, material: Material): boolean {
@@ -2545,6 +2741,7 @@ export class WebGlRoot {
       gl.bindAttribLocation?.(program, 0, "a_position");
       gl.bindAttribLocation?.(program, 1, "a_normal");
       gl.bindAttribLocation?.(program, 2, "a_uv");
+      gl.bindAttribLocation?.(program, 3, "a_instanceModel");
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         throw new Error(`WebGL program link failed: ${gl.getProgramInfoLog(program) ?? "unknown link error"}`);
@@ -2598,6 +2795,23 @@ out vec2 v_uv;
 void main() {
   v_uv = a_uv;
   gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+}`;
+    }
+
+    if (kind === "surface-instanced") {
+      return `#version 300 es
+in vec3 a_position;
+in vec3 a_normal;
+in vec2 a_uv;
+layout(location = 3) in mat4 a_instanceModel;
+uniform mat4 u_projection;
+uniform mat4 u_view;
+out vec3 v_normal;
+out vec2 v_uv;
+void main() {
+  v_normal = mat3(a_instanceModel) * a_normal;
+  v_uv = a_uv;
+  gl_Position = u_projection * u_view * a_instanceModel * vec4(a_position, 1.0);
 }`;
     }
 

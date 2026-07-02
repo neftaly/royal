@@ -57,7 +57,10 @@ export const Picking = (): ReactNode => {
               <mesh
                 geometry={backplateGeometry}
                 material={active ? activeBackplateMaterial : backplateMaterial}
-                transform={{ position: [0, 0, -0.9] }}
+                transform={{
+                  position: [0, 0, -0.9],
+                  rotation: [0, 0, 0],
+                }}
               />
               <model
                 onClick={() => setClicks((count) => count + 1)}

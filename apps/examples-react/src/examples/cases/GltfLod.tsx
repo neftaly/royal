@@ -40,6 +40,7 @@ export const GltfLod = (): ReactNode => {
           <model
             src={lodSrc}
             transform={{
+              position: [0, 0, 0],
               rotation: [0.18, -0.28, 0],
               scale: [1.3, 1.3, 1.3],
             }}

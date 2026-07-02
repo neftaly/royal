@@ -47,6 +47,7 @@ type BitmapRequest = {
 
 const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
+const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
 const triangleWebpImageUri = "staged-triangle.webp";
@@ -105,6 +106,7 @@ const fakeGl = (): FakeGl => {
     CULL_FACE: 0x0B44,
     DEPTH_BUFFER_BIT: 0x0100,
     DEPTH_TEST: 0x0B71,
+    DYNAMIC_DRAW: 0x88E8,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
     FRAGMENT_SHADER: 0x8B30,
@@ -489,8 +491,14 @@ const renderScene = (children: readonly RenderNode[]): RenderRoot =>
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
 
+const instancedDrawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
+  calls.filter((call) => call.name === "drawArraysInstanced" || call.name === "drawElementsInstanced");
+
 const drawCount = (call: GlCall): number =>
   call.name === "drawArrays" ? Number(call.args[2]) : Number(call.args[1]);
+
+const instancedDrawInstanceCount = (call: GlCall): number =>
+  call.name === "drawArraysInstanced" ? Number(call.args[3]) : Number(call.args[4]);
 
 const callCount = (calls: readonly GlCall[], name: string): number =>
   calls.filter((call) => call.name === name).length;
@@ -1183,6 +1191,20 @@ const triangleDocument = () => ({
   ],
 });
 
+const solidTriangleDocument = () => ({
+  ...triangleDocument(),
+  images: [],
+  materials: [
+    {
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.8, 0.62, 0.36, 1],
+      },
+    },
+  ],
+  samplers: [],
+  textures: [],
+});
+
 const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);
 
@@ -1392,6 +1414,62 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toBeGreaterThan(drawsBeforeFailure);
     expect(root.snapshot().diagnostics.some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
+  });
+
+  it("automatically instances matching glTF geometry across different asset URLs", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: {
+          position: [-0.25, 0, 0],
+          rotation: [0, 0, 0],
+        },
+        version: "instanced-a",
+      }),
+      gltf({
+        src: matchingTriangleGltfSrc,
+        transform: {
+          position: [0.25, 0, 0],
+          rotation: [0, 0, 0],
+        },
+        version: "instanced-b",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const instancedDraws = instancedDrawCalls(readyFrameCalls);
+
+    expect(instancedDraws).toHaveLength(1);
+    expect(instancedDraws[0]?.name).toBe("drawElementsInstanced");
+    expect(instancedDraws[0]?.args[0]).toBe(gl.TRIANGLES);
+    expect(instancedDraws[0]?.args[1]).toBe(3);
+    expect(instancedDrawInstanceCount(instancedDraws[0]!)).toBe(2);
+    expect(drawCalls(readyFrameCalls)).toHaveLength(0);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {
