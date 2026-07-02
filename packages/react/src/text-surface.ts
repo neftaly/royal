@@ -50,7 +50,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
-  type WheelEvent,
 } from "react";
 import { useStore } from "zustand/react";
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -115,14 +114,12 @@ export interface TextSurfaceProps
     | "onPointerDown"
     | "onPointerMove"
     | "onPointerUp"
-    | "onWheel"
     | "ref"
     | "role"
     | "tabIndex"
   > {
   readonly bounds?: CanvasWorldBounds;
   readonly children: CanvasProps["children"];
-  readonly onWheel?: CanvasProps["onWheel"];
   readonly styleOptions?: TextInteractionStyle;
 }
 
@@ -305,7 +302,6 @@ type TextSurfaceStoreState = {
   readonly pressedAction: PressedActionControl | undefined;
   readonly registerActionControl: (control: ActionControlRegistration) => void;
   readonly registerControl: (control: TextControlRegistration) => void;
-  readonly scrollControlBy: (id: string, deltaLines: number) => void;
   readonly scrollLines: ReadonlyMap<string, number>;
   readonly selections: ReadonlyMap<string, EditableTextSelection>;
   readonly setActiveActionId: (id: string | undefined) => void;
@@ -604,14 +600,6 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
           ...(currentScroll === scrollLine ? {} : { scrollLines: new Map(get().scrollLines).set(control.id, scrollLine) }),
         });
       },
-      scrollControlBy: (id, deltaLines) => {
-        const control = get().controls.get(id);
-        if (control === undefined || deltaLines === 0) return;
-        const current = get().scrollLines.get(id) ?? control.scrollLine;
-        const next = clampScrollLineFor(control, current + deltaLines);
-        if (next === current) return;
-        set({ scrollLines: new Map(get().scrollLines).set(id, next) });
-      },
       scrollLines: new Map(),
       selections: new Map(),
       setActiveActionId: (id) => {
@@ -742,11 +730,6 @@ const pointInActionControl = (
   worldX <= control.bounds.right &&
   worldY <= control.bounds.top &&
   worldY >= control.bounds.bottom;
-
-const isScrollableTextControl = (control: TextControlRegistration): boolean =>
-  control.mode === "multiline" &&
-  Number.isFinite(control.visibleLineCount) &&
-  control.layout.lines.length > control.visibleLineCount;
 
 const controlBounds = (
   origin: Vec3,
@@ -971,14 +954,6 @@ const readClipboardText = async (): Promise<string | undefined> => {
   }
 };
 
-const wheelDeltaLines = (event: WheelEvent<HTMLElement>): number => {
-  if (event.deltaY === 0) return 0;
-  if (event.deltaMode === 1) return Math.trunc(event.deltaY);
-  if (event.deltaMode === 2) return Math.sign(event.deltaY) * 4;
-
-  return Math.sign(event.deltaY) * Math.max(1, Math.ceil(Math.abs(event.deltaY) / 48));
-};
-
 const isKeyboardComposing = (
   event: KeyboardEvent<HTMLElement> | globalThis.KeyboardEvent,
 ): boolean =>
@@ -990,7 +965,6 @@ export const TextSurface = ({
   bounds = defaultSurfaceBounds,
   children,
   onPaste,
-  onWheel,
   styleOptions,
   ...canvasProps
 }: TextSurfaceProps): ReactNode => {
@@ -1025,20 +999,6 @@ export const TextSurface = ({
     );
 
     return control === undefined ? undefined : { control, worldX, worldY };
-  }, [bounds, store]);
-
-  const findScrollableControlAt = useCallback((
-    canvas: HTMLCanvasElement,
-    clientX: number,
-    clientY: number,
-  ): TextControlRegistration | undefined => {
-    const [worldX, worldY] = canvasPointToWorld(canvas, bounds, clientX, clientY);
-    const controls = Array.from(store.getState().getControls()).reverse();
-
-    return controls.find((candidate) =>
-      isScrollableTextControl(candidate) &&
-      pointInControl(candidate, worldX, worldY)
-    );
   }, [bounds, store]);
 
   const findActionControlAt = useCallback((
@@ -1322,17 +1282,19 @@ export const TextSurface = ({
 
   const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLCanvasElement>): void => {
     event.preventDefault();
+    const [worldX, worldY] = canvasPointToWorld(event.currentTarget, bounds, event.clientX, event.clientY);
     const hit = findControlAt(event.currentTarget, event.clientX, event.clientY);
-    if (hit === undefined) {
+    const selectedControl = store.getState().getControls().find((candidate) => hasSelection(candidate));
+    const control = selectedControl ?? hit?.control;
+    if (control === undefined) {
       store.getState().clearSelectionsExcept(undefined);
       store.getState().closeMenu();
       return;
     }
 
-    const { control, worldX, worldY } = hit;
     if (!control.copyable && !control.editable) return;
 
-    const nextSelection = hasSelection(control)
+    const nextSelection = selectedControl !== undefined
       ? control.selection
       : editableTextEditorContextMenuSelection({
           layout: control.layout,
@@ -1367,24 +1329,6 @@ export const TextSurface = ({
     store.getState().setPressedAction(undefined);
     store.getState().closeMenu();
   }, [store]);
-
-  const handleWheel = useCallback((event: WheelEvent<HTMLCanvasElement>): void => {
-    onWheel?.(event);
-    if (event.defaultPrevented) return;
-
-    const hit = findScrollableControlAt(event.currentTarget, event.clientX, event.clientY);
-    const activeControl = activeId === undefined ? undefined : store.getState().getControl(activeId);
-    const control = hit ?? (activeControl !== undefined && isScrollableTextControl(activeControl)
-      ? activeControl
-      : undefined);
-    if (control === undefined) return;
-
-    const deltaLines = wheelDeltaLines(event);
-    if (deltaLines === 0) return;
-
-    event.preventDefault();
-    store.getState().scrollControlBy(control.id, deltaLines);
-  }, [activeId, findScrollableControlAt, onWheel, store]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -1443,7 +1387,6 @@ export const TextSurface = ({
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerEnd,
-    onWheel: handleWheel,
     ref: canvasRef,
     role: "textbox",
     tabIndex: 0,
