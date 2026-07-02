@@ -49,7 +49,8 @@ mesh primitives, `POSITION` / `NORMAL` / selected `TEXCOORD_n`, strided and
 sparse accessors, normalized integer attributes, base color factor/texture,
 samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
-`EXT_meshopt_compression`, `EXT_mesh_gpu_instancing`, `EXT_texture_webp`,
+`EXT_meshopt_compression`, `KHR_draco_mesh_compression`,
+`EXT_mesh_gpu_instancing`, `EXT_texture_webp`,
 `KHR_texture_basisu`, `KHR_materials_unlit`, `KHR_lights_punctual`,
 `KHR_materials_emissive_strength`, `KHR_materials_variants`,
 `KHR_node_visibility`, and vendor `MSFT_lod`.
@@ -67,7 +68,7 @@ path. They are sorted in suggested implementation order.
 | P1 | `EXT_meshopt_compression` | Compresses buffer views with meshoptimizer codecs. | Implemented for required compressed bufferViews; maintain decoder regression coverage. |
 | P1 | `KHR_texture_basisu` | Adds KTX2/Basis Universal texture sources. | Implemented for required base-color textures by transcoding KTX2/Basis to RGBA8 through loaders.gl before WebGL upload. |
 | P1 | `EXT_texture_webp` | Allows WebP texture images. | Web-focused texture size win; required without PNG/JPEG fallback. |
-| P2 | `KHR_draco_mesh_compression` | Compresses mesh primitive attributes and indices with Draco. | Older but still common; required if no uncompressed primitive fallback exists. |
+| P2 | `KHR_draco_mesh_compression` | Compresses mesh primitive attributes and indices with Draco. | Implemented for required primitive geometry; maintain decoder regression coverage. |
 | P2 | `KHR_texture_transform` | Adds per-texture UV offset, scale, rotation, and texCoord override. | Common authoring feature; without it textures appear misaligned. |
 | P2 | `KHR_materials_unlit` | Marks a material as unaffected by scene lighting. | Small implementation and common for UI, labels, CAD colors, and baked assets. |
 | P2 | `KHR_lights_punctual` | Adds punctual point, spot, and directional lights to glTF scenes. | Implemented locally; maintain required-extension regression coverage. |
@@ -150,12 +151,7 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 
 ## Starting Recommendation
 
-The required-contract gate, core loadability baseline,
-`EXT_meshopt_compression`, `EXT_mesh_gpu_instancing`, and
-`KHR_texture_basisu` are now in place. Next, implement the remaining
-decoder-backed blocker:
-
-1. `KHR_draco_mesh_compression`
-
-Add richer material and lighting extensions after the decoder-backed required
-path is stable.
+The required-contract gate, core loadability baseline, meshopt/Draco
+geometry compression, GPU instancing, WebP, and Basis texture paths are now in
+place. Add richer material extensions after this required asset-loading path is
+stable.

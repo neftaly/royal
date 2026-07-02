@@ -150,17 +150,29 @@ export type GltfMeshPrimitive = {
     readonly [semantic: string]: number | undefined;
   };
   readonly extensions?: {
+    readonly KHR_draco_mesh_compression?: GltfDracoMeshCompressionExtension;
     readonly KHR_materials_variants?: {
       readonly mappings?: readonly {
         readonly material?: number;
         readonly variants?: readonly number[];
       }[];
     };
+    readonly [name: string]: unknown;
   };
   readonly indices?: number;
   readonly material?: number;
   readonly mode?: number;
   readonly targets?: readonly unknown[];
+};
+
+export type GltfDracoMeshCompressionExtension = {
+  readonly attributes?: {
+    readonly NORMAL?: number;
+    readonly POSITION?: number;
+    readonly TEXCOORD_0?: number;
+    readonly [semantic: string]: number | undefined;
+  };
+  readonly bufferView: number;
 };
 
 export type GltfSceneNode = {
@@ -220,6 +232,7 @@ export const supportedGltfExtensions = new Set<string>([
   "EXT_meshopt_compression",
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
+  "KHR_draco_mesh_compression",
   "KHR_texture_basisu",
   "KHR_lights_punctual",
   "KHR_materials_emissive_strength",

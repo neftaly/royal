@@ -64,6 +64,7 @@ const triangleBinByteLength = 104;
 const meshoptCompressedPositionByteLength = 56;
 const meshoptCompressedIndexByteLength = 18;
 const meshoptCompressedTriangleBinByteLength = meshoptCompressedPositionByteLength + meshoptCompressedIndexByteLength;
+const dracoCompressedTriangleBinByteLength = 173;
 const instancedTriangleBinByteLength = triangleBinByteLength + 48;
 const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
@@ -479,6 +480,17 @@ const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<
   await flushMicrotasks();
 };
 
+const waitForAnimationFrameWork = async (
+  callbacks: FrameRequestCallback[],
+  isReady: () => boolean,
+): Promise<void> => {
+  for (let attempt = 0; attempt < 20 && !isReady(); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await flushMicrotasks();
+    await flushAnimationFrames(callbacks);
+  }
+};
+
 const camera = () => orthographicCamera({
   bottom: -1,
   far: 20,
@@ -621,6 +633,26 @@ const meshoptCompressedTriangleBin = (): ArrayBuffer => {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 63, 0, 0, 0, 0, 225, 240, 0, 118, 135, 86, 103, 120,
     169, 134, 101, 137, 104, 152, 1, 105, 0, 0,
+  ]);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+
+  return buffer;
+};
+
+const dracoCompressedTriangleBin = (): ArrayBuffer => {
+  const bytes = Uint8Array.from([
+    68, 82, 65, 67, 79, 2, 2, 1, 1, 0, 0, 0, 3, 1, 2, 1,
+    0, 0, 1, 7, 255, 1, 17, 1, 1, 0, 1, 1, 0, 3, 255, 0,
+    0, 0, 0, 0, 1, 0, 0, 1, 0, 9, 3, 0, 0, 2, 1, 1,
+    9, 3, 0, 1, 3, 1, 3, 9, 2, 0, 2, 2, 1, 1, 1, 0,
+    15, 3, 173, 42, 47, 85, 21, 3, 160, 122, 129, 72, 255, 31, 0, 0,
+    0, 0, 0, 0, 0, 255, 63, 0, 0, 0, 0, 0, 191, 0, 0, 0,
+    191, 0, 0, 0, 0, 0, 0, 128, 63, 14, 0, 3, 1, 0, 10, 3,
+    173, 42, 27, 85, 21, 3, 175, 90, 129, 0, 254, 3, 255, 3, 0, 0,
+    255, 1, 0, 0, 10, 1, 1, 1, 0, 13, 3, 173, 42, 39, 85, 21,
+    3, 160, 122, 129, 212, 255, 1, 0, 0, 0, 0, 0, 255, 15, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 12,
   ]);
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
@@ -2171,6 +2203,82 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
   });
 
+  it("decodes required KHR_draco_mesh_compression primitive geometry and texture coordinates", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "khr-draco-mesh-compression" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [
+          { componentType: 5126, count: 3, max: [0.5, 0.5, 0], min: [-0.5, -0.5, 0], type: "VEC3" },
+          { componentType: 5126, count: 3, type: "VEC3" },
+          { componentType: 5126, count: 3, type: "VEC2" },
+          { componentType: 5123, count: 3, type: "SCALAR" },
+        ],
+        asset: { version: "2.0" },
+        bufferViews: [{ buffer: 0, byteLength: dracoCompressedTriangleBinByteLength, byteOffset: 0 }],
+        buffers: [{ byteLength: dracoCompressedTriangleBinByteLength, uri: triangleBinUri }],
+        extensionsRequired: ["KHR_draco_mesh_compression"],
+        extensionsUsed: ["KHR_draco_mesh_compression"],
+        images: [{ mimeType: "image/png", uri: triangleImageUri }],
+        materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+        meshes: [{
+          primitives: [{
+            attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 },
+            extensions: {
+              KHR_draco_mesh_compression: {
+                attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 },
+                bufferView: 0,
+              },
+            },
+            indices: 3,
+            material: 0,
+            mode: 4,
+          }],
+        }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        textures: [{ sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, dracoCompressedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+    );
+
+    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    const payloads = bufferDataPayloads(calls).map(roundVector);
+    expect(payloads).toContainEqual([
+      0.000031, 0.5, 0,
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+    ]);
+    expect(payloads).toContainEqual([
+      0, 0, 1,
+      0, 0, 1,
+      0, 0, 1,
+    ]);
+    expect(payloads).toContainEqual([
+      0.500122, 1,
+      0, 0,
+      1, 0,
+    ]);
+    expect(payloads).toContainEqual([0, 1, 2]);
+  });
+
   it("decodes interleaved glTF accessors with byteStride", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
@@ -2744,7 +2852,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        version: "unsupported-required-extension",
+        version: "unsupported-required-clearcoat-extension",
       }),
     ]);
 
@@ -2752,15 +2860,15 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsRequired: ["KHR_draco_mesh_compression"],
-        extensionsUsed: ["KHR_draco_mesh_compression"],
+        extensionsRequired: ["KHR_materials_clearcoat"],
+        extensionsUsed: ["KHR_materials_clearcoat"],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
     expect(root.snapshot().diagnostics.some((message) =>
-      /unsupported required glTF extension.*KHR_draco_mesh_compression/i.test(message))).toBe(true);
+      /unsupported required glTF extension.*KHR_materials_clearcoat/i.test(message))).toBe(true);
 
     root.render(renderGraph);
     expect(drawCalls(calls)).toHaveLength(0);

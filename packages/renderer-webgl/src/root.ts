@@ -41,6 +41,10 @@ import {
   decodeGltfBasisuRgba,
   type DecodedGltfBasisuTexture,
 } from "./gltf-basisu";
+import {
+  decodeGltfDracoPrimitives,
+  type DecodedGltfDracoPrimitive,
+} from "./gltf-draco";
 import { decodeGltfMeshoptBufferViews } from "./gltf-meshopt";
 import {
   assertSupportedRequiredGltfExtensions,
@@ -1409,10 +1413,18 @@ const gltfMaterialTexCoords = (
   buffers: readonly ArrayBuffer[],
   primitive: GltfMeshPrimitive,
   materialIndex: number | undefined,
+  decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
 ): Float32Array | undefined => {
+  if (gltfBaseColorTextureInfo(document, materialIndex)?.index === undefined) return undefined;
+
+  const texCoordSet = gltfBaseColorTexCoordSet(document, materialIndex);
+  const decodedTexCoords = decodedAttributes?.get(`TEXCOORD_${texCoordSet}`);
+  if (decodedTexCoords !== undefined) {
+    return transformGltfTexCoords(decodedTexCoords, gltfBaseColorTextureTransform(document, materialIndex));
+  }
+
   const texCoordAccessor = gltfTexCoordAccessor(document, primitive, materialIndex);
   if (texCoordAccessor === undefined) return undefined;
-
   return transformGltfTexCoords(
     readGltfFloatAccessor(document, buffers, texCoordAccessor),
     gltfBaseColorTextureTransform(document, materialIndex),
@@ -3809,7 +3821,9 @@ void main() {
       if (this.#disposed) return;
       const { buffers, document: decodedDocument } = await decodeGltfMeshoptBufferViews(document, loadedBuffers);
       if (this.#disposed) return;
-      const scene = this.#readGltfScene(decodedDocument, buffers, src, state.key);
+      const dracoPrimitives = await decodeGltfDracoPrimitives(decodedDocument, buffers);
+      if (this.#disposed) return;
+      const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, state.key);
       state.lights = scene.lights;
       state.primitives = scene.primitives;
       state.variants = scene.variants;
@@ -3827,6 +3841,7 @@ void main() {
   #readGltfScene(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
+    dracoPrimitives: ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive>,
     src: string,
     assetKey: string,
   ): {
@@ -3852,6 +3867,7 @@ void main() {
       this.#appendGltfNodeTreePrimitives(
         document,
         buffers,
+        dracoPrimitives,
         src,
         assetKey,
         primitives,
@@ -3869,6 +3885,7 @@ void main() {
   #appendGltfNodeTreePrimitives(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
+    dracoPrimitives: ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive>,
     src: string,
     assetKey: string,
     primitives: LoadedGltfPrimitive[],
@@ -3895,6 +3912,7 @@ void main() {
       this.#appendGltfNodeTreePrimitives(
         document,
         buffers,
+        dracoPrimitives,
         src,
         assetKey,
         primitives,
@@ -3915,6 +3933,7 @@ void main() {
         this.#appendGltfNodeTreePrimitives(
           document,
           buffers,
+          dracoPrimitives,
           src,
           assetKey,
           primitives,
@@ -3940,21 +3959,53 @@ void main() {
     const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
+      const dracoPrimitive = dracoPrimitives.get(primitive);
+      const decodedAttributes = dracoPrimitive?.attributes;
       const positionAccessor = primitive.attributes?.POSITION;
       const normalAccessor = primitive.attributes?.NORMAL;
       const indexAccessor = primitive.indices;
-      if (positionAccessor === undefined) continue;
+      const positions = decodedAttributes?.get("POSITION")
+        ?? (positionAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, positionAccessor));
+      if (positions === undefined) continue;
       const mode = gltfPrimitiveMode(primitive.mode);
       if (mode === undefined) {
         this.#recordDiagnostic(`glTF primitive ${nodeIndex}:${primitiveIndex} skipped: unsupported primitive mode ${primitive.mode ?? 4}`);
         continue;
       }
-      const material = this.#readGltfMaterial(document, buffers, src, assetKey, primitive.material, primitive);
-      const materialLod = this.#readGltfMaterialLod(document, buffers, src, assetKey, primitive.material, primitive);
-      const materialVariants = this.#readGltfMaterialVariants(document, buffers, src, assetKey, primitive, variantCount);
+      const normals = decodedAttributes?.get("NORMAL")
+        ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, normalAccessor));
+      const indices = dracoPrimitive?.indices
+        ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
+      const material = this.#readGltfMaterial(
+        document,
+        buffers,
+        src,
+        assetKey,
+        primitive.material,
+        primitive,
+        decodedAttributes,
+      );
+      const materialLod = this.#readGltfMaterialLod(
+        document,
+        buffers,
+        src,
+        assetKey,
+        primitive.material,
+        primitive,
+        decodedAttributes,
+      );
+      const materialVariants = this.#readGltfMaterialVariants(
+        document,
+        buffers,
+        src,
+        assetKey,
+        primitive,
+        variantCount,
+        decodedAttributes,
+      );
       const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
       primitives.push({
-        ...(indexAccessor === undefined ? {} : { indices: readGltfIndices(document, buffers, indexAccessor) }),
+        ...(indices === undefined ? {} : { indices }),
         key,
         localModels,
         material,
@@ -3962,8 +4013,8 @@ void main() {
         ...(materialVariants.length === 0 ? {} : { materialVariants }),
         mode,
         ...(nodeLod === undefined ? {} : { nodeLod }),
-        ...(normalAccessor === undefined ? {} : { normals: readGltfFloatAccessor(document, buffers, normalAccessor) }),
-        positions: readGltfFloatAccessor(document, buffers, positionAccessor),
+        ...(normals === undefined ? {} : { normals }),
+        positions,
       });
     }
 
@@ -3972,6 +4023,7 @@ void main() {
       this.#appendGltfNodeTreePrimitives(
         document,
         buffers,
+        dracoPrimitives,
         src,
         assetKey,
         primitives,
@@ -4100,6 +4152,7 @@ void main() {
     assetKey: string,
     primitive: GltfMeshPrimitive,
     variantCount: number,
+    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): readonly LoadedGltfMaterialVariant[] {
     return (primitive.extensions?.KHR_materials_variants?.mappings ?? [])
       .map((mapping): LoadedGltfMaterialVariant | undefined => {
@@ -4116,8 +4169,24 @@ void main() {
           return undefined;
         }
 
-        const material = this.#readGltfMaterial(document, buffers, src, assetKey, materialIndex, primitive);
-        const materialLod = this.#readGltfMaterialLod(document, buffers, src, assetKey, materialIndex, primitive);
+        const material = this.#readGltfMaterial(
+          document,
+          buffers,
+          src,
+          assetKey,
+          materialIndex,
+          primitive,
+          decodedAttributes,
+        );
+        const materialLod = this.#readGltfMaterialLod(
+          document,
+          buffers,
+          src,
+          assetKey,
+          materialIndex,
+          primitive,
+          decodedAttributes,
+        );
 
         return {
           material,
@@ -4135,6 +4204,7 @@ void main() {
     assetKey: string,
     materialIndex: number | undefined,
     primitive: GltfMeshPrimitive,
+    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
@@ -4151,7 +4221,7 @@ void main() {
       : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
-    const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex);
+    const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
     return {
       ...(imageLoadKey === undefined ? {} : { baseColorImageUri: imageLoadKey }),
@@ -4182,6 +4252,7 @@ void main() {
     assetKey: string,
     materialIndex: number | undefined,
     primitive: GltfMeshPrimitive,
+    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): GltfMaterialPrimitiveLod | undefined {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     const lodIds = (material?.extensions?.MSFT_lod?.ids ?? [])
@@ -4189,8 +4260,9 @@ void main() {
     if (materialIndex === undefined || lodIds.length === 0) return undefined;
 
     const levels = [
-      this.#readGltfMaterial(document, buffers, src, assetKey, materialIndex, primitive),
-      ...lodIds.map((id) => this.#readGltfMaterial(document, buffers, src, assetKey, id, primitive)),
+      this.#readGltfMaterial(document, buffers, src, assetKey, materialIndex, primitive, decodedAttributes),
+      ...lodIds.map((id) =>
+        this.#readGltfMaterial(document, buffers, src, assetKey, id, primitive, decodedAttributes)),
     ];
 
     return {
