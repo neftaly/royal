@@ -28,7 +28,27 @@ const orthographicProps = {
   top: 1,
 };
 
+const orthographicBounds = {
+  bottom: -2,
+  left: -3,
+  right: 3,
+  top: 2,
+};
+
 describe("renderer JSX contract", () => {
+  it("defaults optional orthographic camera props for flat scenes", () => {
+    expect(
+      <orthographicCamera {...orthographicBounds} />,
+    ).toEqual({
+      ...orthographicBounds,
+      far: 1,
+      kind: "orthographic-camera",
+      near: -1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+    });
+  });
+
   it("ignores empty conditional and whitespace children under scene and pass", () => {
     const showExtraPass = false;
     const showExtraNode = false;

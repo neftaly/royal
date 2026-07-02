@@ -3,6 +3,7 @@ import {
   boxGeometry,
   imageTexture,
   mesh,
+  orthographicCamera,
   pass,
   perspectiveCamera,
   scene,
@@ -18,6 +19,25 @@ import { shapeText } from "@royal/renderer-core/text/shaping";
 import { jsx } from "@royal/react/renderer/jsx-runtime";
 
 describe("renderer-core public API", () => {
+  it("defaults orthographic camera pose and depth for flat UI scenes", () => {
+    expect(orthographicCamera({
+      bottom: -1,
+      left: -2,
+      right: 2,
+      top: 1,
+    })).toEqual({
+      bottom: -1,
+      far: 1,
+      kind: "orthographic-camera",
+      left: -2,
+      near: -1,
+      position: [0, 0, 0],
+      right: 2,
+      rotation: [0, 0, 0],
+      top: 1,
+    });
+  });
+
   it("builds plain render descriptors without backend state", () => {
     const camera = perspectiveCamera({
       far: 100,

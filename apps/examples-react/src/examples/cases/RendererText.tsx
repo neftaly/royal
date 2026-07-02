@@ -2,6 +2,7 @@
 import { TextSurface } from '@royal/react';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { useState, type ReactNode } from 'react';
+import { htmlColor } from '../color';
 import { useAtkinsonFont } from './text-font';
 
 const bounds = {
@@ -9,10 +10,6 @@ const bounds = {
   left: -5.6,
   right: 5.6,
   top: 3.2,
-} as const;
-
-const renderer = {
-  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
 const TextPrimitivesExample = ({
@@ -27,30 +24,20 @@ const TextPrimitivesExample = ({
     <TextSurface
       aria-label="Text primitives"
       bounds={bounds}
-      renderer={renderer}
       style={{ cursor: 'text', touchAction: 'none' }}
       styleOptions={{
-        color: [0.86, 0.94, 0.98, 1],
-        fieldColor: [0.055, 0.07, 0.08, 0.96],
+        color: htmlColor('#dbf0fa'),
+        fieldColor: htmlColor('rgba(14, 18, 20, 0.96)'),
         fontSize: 0.32,
         lineHeight: 0.42,
-        selectionColor: [0.08, 0.31, 0.48, 1],
+        selectionColor: htmlColor('#144f7a'),
       }}
     >
       <scene>
-        <pass clearColor={[0.025, 0.032, 0.038, 1]}>
-          <orthographicCamera
-            bottom={bounds.bottom}
-            far={100}
-            left={bounds.left}
-            near={0.1}
-            position={[0, 0, 10]}
-            right={bounds.right}
-            rotation={[0, 0, 0]}
-            top={bounds.top}
-          />
+        <pass clearColor={htmlColor('#06080a')}>
+          <orthographicCamera {...bounds} />
           <text
-            color={[0.35, 0.95, 0.56, 1]}
+            color={htmlColor('#59f28f')}
             copyable
             font={font}
             maxWidth={7.6}
