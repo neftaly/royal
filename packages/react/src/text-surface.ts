@@ -663,7 +663,6 @@ export const TextSurface = ({
 
   const focusControl = useCallback((control: TextControlRegistration | undefined): void => {
     if (control?.editable === true && pasteSinkRef.current !== null) {
-      pasteSinkRef.current.value = "";
       pasteSinkRef.current.focus({ preventScroll: true });
       return;
     }
@@ -724,6 +723,7 @@ export const TextSurface = ({
   }, [focusControl, store]);
 
   const handlePaste = useCallback((event: ClipboardEvent<HTMLElement>): void => {
+    const fromPasteSink = event.currentTarget === pasteSinkRef.current;
     if (event.currentTarget === canvasRef.current) {
       onPaste?.(event as ClipboardEvent<HTMLCanvasElement>);
       if (event.defaultPrevented) return;
@@ -735,6 +735,7 @@ export const TextSurface = ({
     if (control === undefined || !control.editable) return;
 
     const value = event.clipboardData.getData("text/plain");
+    if (fromPasteSink) event.preventDefault();
     if (value === "") return;
 
     event.preventDefault();
@@ -925,6 +926,8 @@ export const TextSurface = ({
     unregisterControl: store.getState().unregisterControl,
   }), [activeId, bounds, menu, store, style]);
 
+  const handlePasteSinkChange = useCallback((): void => undefined, []);
+
   return createElement(Canvas, {
     ...canvasProps,
     "aria-multiline": true,
@@ -953,6 +956,7 @@ export const TextSurface = ({
         autoCorrect: "off",
         "data-royal-text-clipboard-staging": true,
         key: "paste-sink",
+        onChange: handlePasteSinkChange,
         onBlur: handleBlur,
         onCompositionEnd: handleCompositionEnd,
         onKeyDown: handleKeyDown,
@@ -961,6 +965,7 @@ export const TextSurface = ({
         spellCheck: false,
         style: pasteSinkStyle,
         tabIndex: -1,
+        value: "",
         wrap: "off",
       }),
     ],
