@@ -205,10 +205,10 @@ type VirtualTextureRuntimeState = {
 type LoadedGltfPrimitive = {
   readonly indices?: GltfIndexArray;
   readonly key: string;
+  readonly localModels: readonly Mat4[];
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
   readonly mode: "lines" | "triangles";
-  readonly model: Mat4;
   readonly nodeLod?: GltfNodePrimitiveLod;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
@@ -733,6 +733,46 @@ const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
     ),
   );
 };
+
+const gltfInstanceTransformMat4 = (
+  translations: Float32Array | undefined,
+  rotations: Float32Array | undefined,
+  scales: Float32Array | undefined,
+  index: number,
+): Mat4 => {
+  const translationOffset = index * 3;
+  const rotationOffset = index * 4;
+  const scaleOffset = index * 3;
+
+  return multiplyMat4(
+    translationMat4([
+      translations?.[translationOffset] ?? 0,
+      translations?.[translationOffset + 1] ?? 0,
+      translations?.[translationOffset + 2] ?? 0,
+    ]),
+    multiplyMat4(
+      quaternionMat4(rotations === undefined
+        ? undefined
+        : [
+            rotations[rotationOffset] ?? 0,
+            rotations[rotationOffset + 1] ?? 0,
+            rotations[rotationOffset + 2] ?? 0,
+            rotations[rotationOffset + 3] ?? 1,
+          ]),
+      scaleMat4([
+        scales?.[scaleOffset] ?? 1,
+        scales?.[scaleOffset + 1] ?? 1,
+        scales?.[scaleOffset + 2] ?? 1,
+      ]),
+    ),
+  );
+};
+
+const gltfInstancingAttributeCount = (
+  document: GltfDocument,
+  accessorIndex: number | undefined,
+): number | undefined =>
+  accessorIndex === undefined ? undefined : document.accessors?.[accessorIndex]?.count;
 
 const viewMat4 = (camera: Camera): Mat4 => multiplyMat4(
   multiplyMat4(
@@ -1567,24 +1607,28 @@ export class WebGlRoot {
       let best: PickCandidate | undefined;
       for (const primitive of state.primitives) {
         if (primitive.mode !== "triangles") continue;
-        const model = multiplyMat4(rootModel, primitive.model);
-        if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
-        const hit = this.#pickGeometry({
-          bounds: worldBounds(primitive.positions, model),
-          drawOrdinal,
-          geometry: primitive,
-          input,
-          model,
-          passOrdinal,
-          ray,
-          target: {
-            ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-            kind: "gltf",
-            node,
-            primitiveKey: primitive.key,
-          },
-        });
-        if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+        for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
+          const model = multiplyMat4(rootModel, localModel);
+          if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
+          const hit = this.#pickGeometry({
+            bounds: worldBounds(primitive.positions, model),
+            drawOrdinal,
+            geometry: primitive,
+            input,
+            model,
+            passOrdinal,
+            ray,
+            target: {
+              ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+              kind: "gltf",
+              node,
+              primitiveKey: primitive.localModels.length === 1
+                ? primitive.key
+                : `${primitive.key}:instance:${instanceIndex}`,
+            },
+          });
+          if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+        }
       }
 
       return best;
@@ -1795,49 +1839,52 @@ export class WebGlRoot {
         if (selectedLevel !== nodeLod.level) continue;
       }
 
-      const model = multiplyMat4(rootModel, primitive.model);
-      const materialSelection = this.#selectedGltfMaterial(
-        state,
-        renderInstanceKey,
-        primitive,
-        model,
-        projection,
-        view,
-      );
-      const loadedMaterial = materialSelection.material;
-      this.#preloadAdjacentGltfMaterialLodTextures(primitive.materialLod, materialSelection.level);
+      for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
+        const model = multiplyMat4(rootModel, localModel);
+        const materialSelection = this.#selectedGltfMaterial(
+          state,
+          renderInstanceKey,
+          primitive,
+          instanceIndex,
+          model,
+          projection,
+          view,
+        );
+        const loadedMaterial = materialSelection.material;
+        this.#preloadAdjacentGltfMaterialLodTextures(primitive.materialLod, materialSelection.level);
 
-      let material: StandardMaterial | UnlitMaterial = {
-        baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-        kind: loadedMaterial.unlit === true ? "unlit" : "standard",
-      };
-      const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
-      if (loadedMaterial.image !== undefined && baseColor !== undefined) {
-        this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
-        material = { baseColor, kind: loadedMaterial.unlit === true ? "unlit" : "standard" };
-      }
-      const cpu: CpuGeometry = {
-        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-        key: gltfGeometryContentKey({
+        let material: StandardMaterial | UnlitMaterial = {
+          baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+          kind: loadedMaterial.unlit === true ? "unlit" : "standard",
+        };
+        const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
+        if (loadedMaterial.image !== undefined && baseColor !== undefined) {
+          this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
+          material = { baseColor, kind: loadedMaterial.unlit === true ? "unlit" : "standard" };
+        }
+        const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+          key: gltfGeometryContentKey({
+            ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+            mode: primitive.mode,
+            ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
+            positions: primitive.positions,
+            ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
+          }),
           mode: primitive.mode,
           ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
           positions: primitive.positions,
           ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-        }),
-        mode: primitive.mode,
-        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-        positions: primitive.positions,
-        ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-      };
-      if (!this.#isVisible(cpu.positions, model, projection, view)) {
-        continue;
+        };
+        if (!this.#isVisible(cpu.positions, model, projection, view)) {
+          continue;
+        }
+        draws.push({
+          geometry: cpu,
+          material,
+          model,
+        });
       }
-      draws.push({
-        geometry: cpu,
-        material,
-        model,
-      });
     }
   }
 
@@ -1893,9 +1940,11 @@ export class WebGlRoot {
       levelPrimitives.set(levelKey, [...(levelPrimitives.get(levelKey) ?? []), primitive]);
       if (lod.level !== 0) continue;
 
-      const model = multiplyMat4(rootModel, primitive.model);
-      const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
-      coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
+      for (const localModel of primitive.localModels) {
+        const model = multiplyMat4(rootModel, localModel);
+        const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+        coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
+      }
     }
 
     const selected = new Map<string, number>();
@@ -1923,6 +1972,7 @@ export class WebGlRoot {
     state: GltfState,
     renderInstanceKey: string,
     primitive: LoadedGltfPrimitive,
+    instanceIndex: number,
     model: Mat4,
     projection: Mat4,
     view: Mat4,
@@ -1932,7 +1982,7 @@ export class WebGlRoot {
 
     const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
     const level = this.#selectGltfLodLevel(
-      `${state.key}:${renderInstanceKey}:material:${primitive.key}`,
+      `${state.key}:${renderInstanceKey}:material:${primitive.key}:instance:${instanceIndex}`,
       coverage,
       lod.levels.length,
       lod.thresholds,
@@ -3426,6 +3476,7 @@ void main() {
     }
 
     const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
+    const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
       const positionAccessor = primitive.attributes?.POSITION;
@@ -3443,10 +3494,10 @@ void main() {
       primitives.push({
         ...(indexAccessor === undefined ? {} : { indices: readGltfIndices(document, buffers, indexAccessor) }),
         key,
+        localModels,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
         mode,
-        model: nodeModel,
         ...(nodeLod === undefined ? {} : { nodeLod }),
         ...(normalAccessor === undefined ? {} : { normals: readGltfFloatAccessor(document, buffers, normalAccessor) }),
         positions: readGltfFloatAccessor(document, buffers, positionAccessor),
@@ -3468,6 +3519,54 @@ void main() {
         nodeLod === undefined,
       );
     }
+  }
+
+  #gltfNodeInstanceModels(
+    document: GltfDocument,
+    buffers: readonly ArrayBuffer[],
+    sceneNode: GltfSceneNode,
+    nodeIndex: number,
+    nodeModel: Mat4,
+  ): readonly Mat4[] {
+    const attributes = sceneNode.extensions?.EXT_mesh_gpu_instancing?.attributes;
+    if (attributes === undefined) return [nodeModel];
+
+    const supportedSemantics = new Set(["ROTATION", "SCALE", "TRANSLATION"]);
+    const attributeEntries = Object.entries(attributes)
+      .filter((entry): entry is [string, number] =>
+        typeof entry[1] === "number" && Number.isInteger(entry[1]) && entry[1] >= 0);
+    const counts = attributeEntries
+      .map(([, accessorIndex]) => gltfInstancingAttributeCount(document, accessorIndex))
+      .filter((count): count is number => count !== undefined && Number.isFinite(count));
+    if (counts.length === 0) {
+      this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing skipped: no instance attribute accessors`);
+      return [];
+    }
+
+    const instanceCount = Math.min(...counts);
+    if (new Set(counts).size > 1) {
+      this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing has mismatched attribute counts; using ${instanceCount} instances`);
+    }
+
+    const unsupportedSemantics = attributeEntries
+      .map(([semantic]) => semantic)
+      .filter((semantic) => !supportedSemantics.has(semantic));
+    if (unsupportedSemantics.length > 0) {
+      this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ignored custom attributes: ${unsupportedSemantics.join(", ")}`);
+    }
+
+    const translations = attributes.TRANSLATION === undefined
+      ? undefined
+      : readGltfFloatAccessor(document, buffers, attributes.TRANSLATION);
+    const rotations = attributes.ROTATION === undefined
+      ? undefined
+      : readGltfFloatAccessor(document, buffers, attributes.ROTATION);
+    const scales = attributes.SCALE === undefined
+      ? undefined
+      : readGltfFloatAccessor(document, buffers, attributes.SCALE);
+
+    return Array.from({ length: instanceCount }, (_, index) =>
+      multiplyMat4(nodeModel, gltfInstanceTransformMat4(translations, rotations, scales, index)));
   }
 
   #readGltfMaterial(

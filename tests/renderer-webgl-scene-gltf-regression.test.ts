@@ -52,6 +52,7 @@ const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const triangleBinByteLength = 104;
+const instancedTriangleBinByteLength = triangleBinByteLength + 48;
 const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
 const lodImageUri = "lod-shared.png";
@@ -600,6 +601,21 @@ const triangleBin = (): ArrayBuffer => {
     1, 1,
   ]);
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
+
+  return buffer;
+};
+
+const instancedTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(instancedTriangleBinByteLength);
+  new Uint8Array(buffer).set(new Uint8Array(triangleBin()));
+  new Float32Array(buffer, triangleBinByteLength, 6).set([
+    -0.25, 0, 0,
+    0.25, 0, 0,
+  ]);
+  new Float32Array(buffer, triangleBinByteLength + 24, 6).set([
+    1, 1, 1,
+    1.25, 1.25, 1.25,
+  ]);
 
   return buffer;
 };
@@ -1205,6 +1221,65 @@ const solidTriangleDocument = () => ({
   textures: [],
 });
 
+const instancedTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: 4,
+        componentType: 5126,
+        count: 2,
+        type: "VEC3",
+      },
+      {
+        bufferView: 5,
+        componentType: 5126,
+        count: 2,
+        type: "VEC3",
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 0,
+        byteLength: 24,
+        byteOffset: triangleBinByteLength,
+        target: 34962,
+      },
+      {
+        buffer: 0,
+        byteLength: 24,
+        byteOffset: triangleBinByteLength + 24,
+        target: 34962,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: instancedTriangleBinByteLength,
+        uri: triangleBinUri,
+      },
+    ],
+    extensionsRequired: ["EXT_mesh_gpu_instancing"],
+    extensionsUsed: ["EXT_mesh_gpu_instancing"],
+    nodes: [
+      {
+        extensions: {
+          EXT_mesh_gpu_instancing: {
+            attributes: {
+              SCALE: 5,
+              TRANSLATION: 4,
+            },
+          },
+        },
+        mesh: 0,
+      },
+    ],
+  };
+};
+
 const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);
 
@@ -1470,6 +1545,53 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(instancedDraws[0]?.args[1]).toBe(3);
     expect(instancedDrawInstanceCount(instancedDraws[0]!)).toBe(2);
     expect(drawCalls(readyFrameCalls)).toHaveLength(0);
+  });
+
+  it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-mesh-gpu-instancing",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, instancedTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, instancedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const instancedDraws = instancedDrawCalls(readyFrameCalls);
+    const instanceModelPayload = bufferDataPayloads(readyFrameCalls)
+      .find((payload) => payload.length === 32);
+
+    expect(instancedDraws).toHaveLength(1);
+    expect(instancedDraws[0]?.name).toBe("drawElementsInstanced");
+    expect(instancedDraws[0]?.args[0]).toBe(gl.TRIANGLES);
+    expect(instancedDraws[0]?.args[1]).toBe(3);
+    expect(instancedDrawInstanceCount(instancedDraws[0]!)).toBe(2);
+    expect(drawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(instanceModelPayload).toBeDefined();
+    expect(roundVector([
+      instanceModelPayload?.[0] ?? 0,
+      instanceModelPayload?.[12] ?? 0,
+      instanceModelPayload?.[16] ?? 0,
+      instanceModelPayload?.[28] ?? 0,
+    ])).toEqual([1, -0.25, 1.25, 0.25]);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {

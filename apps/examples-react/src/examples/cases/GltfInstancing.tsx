@@ -10,6 +10,7 @@ import { useRef, type ReactNode } from 'react';
 import { exampleRenderer } from '../rendering';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
+const extensionInstancingSrc = fixtureBase + 'ext-mesh-gpu-instancing-cube.gltf';
 const cubeSources = [
   fixtureBase + 'instanced-cube-a.gltf',
   fixtureBase + 'instanced-cube-b.gltf',
@@ -106,6 +107,14 @@ export const GltfInstancing = (): ReactNode => {
         <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.052, 1]}>
           <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
           <InstancedCubeField />
+          <model
+            src={extensionInstancingSrc}
+            transform={{
+              position: [0, -2.9, 0],
+              rotation: [0.1, 0.45, 0],
+              scale: [0.16, 0.16, 0.16],
+            }}
+          />
         </pass>
       </scene>
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />

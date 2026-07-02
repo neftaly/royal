@@ -42,6 +42,15 @@ export type GltfBufferView = {
   readonly byteStride?: number;
 };
 
+export type GltfMeshGpuInstancingExtension = {
+  readonly attributes?: {
+    readonly ROTATION?: number;
+    readonly SCALE?: number;
+    readonly TRANSLATION?: number;
+    readonly [semantic: string]: number | undefined;
+  };
+};
+
 export type GltfBuffer = {
   readonly byteLength?: number;
   readonly uri?: string;
@@ -99,6 +108,7 @@ export type GltfMeshPrimitive = {
 export type GltfSceneNode = {
   readonly children?: readonly number[];
   readonly extensions?: {
+    readonly EXT_mesh_gpu_instancing?: GltfMeshGpuInstancingExtension;
     readonly KHR_node_visibility?: {
       readonly visible?: boolean;
     };
@@ -143,6 +153,7 @@ export type GltfTextureTransformExtension = {
 };
 
 export const supportedGltfExtensions = new Set<string>([
+  "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_materials_unlit",
   "KHR_mesh_quantization",

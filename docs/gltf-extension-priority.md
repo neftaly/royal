@@ -1,6 +1,6 @@
 # glTF Extension Priority
 
-Status date: 2026-07-02.
+Status date: 2026-07-03.
 
 Sources:
 
@@ -48,8 +48,8 @@ mesh primitives, `POSITION` / `NORMAL` / selected `TEXCOORD_n`, strided and
 sparse accessors, normalized integer attributes, base color factor/texture,
 samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `UNSIGNED_INT` indices, `KHR_mesh_quantization`, `KHR_texture_transform`,
-`EXT_texture_webp`, `KHR_materials_unlit`, `KHR_node_visibility`, and vendor
-`MSFT_lod`.
+`EXT_mesh_gpu_instancing`, `EXT_texture_webp`, `KHR_materials_unlit`,
+`KHR_node_visibility`, and vendor `MSFT_lod`.
 
 ## Should Do
 
@@ -68,7 +68,7 @@ path. They are sorted in suggested implementation order.
 | P2 | `KHR_texture_transform` | Adds per-texture UV offset, scale, rotation, and texCoord override. | Common authoring feature; without it textures appear misaligned. |
 | P2 | `KHR_materials_unlit` | Marks a material as unaffected by scene lighting. | Small implementation and common for UI, labels, CAD colors, and baked assets. |
 | P2 | `KHR_lights_punctual` | Adds punctual point, spot, and directional lights to glTF scenes. | Needed for asset-authored lighting once we support more complete scenes. |
-| P3 | `EXT_mesh_gpu_instancing` | Stores many instances of one mesh with per-instance transforms/attributes. | High value for repeated props; required if no expanded-node fallback exists. |
+| P3 | `EXT_mesh_gpu_instancing` | Stores many instances of one mesh with per-instance transforms/attributes. | Implemented locally; maintain tests and example coverage. |
 | P3 | `KHR_node_visibility` | Lets assets mark nodes as visible or hidden. | Prevents rendering hidden authored content. |
 | P3 | `MSFT_lod` | Vendor extension for node/material levels of detail. | Already implemented locally; maintain tests and do not regress it. |
 
@@ -147,13 +147,13 @@ the loader should reject it with a clear unsupported-extension diagnostic.
 
 ## Starting Recommendation
 
-The required-contract gate and core loadability baseline are now in place.
-Next, implement the remaining decoder-backed blockers in this order:
+The required-contract gate, core loadability baseline, and
+`EXT_mesh_gpu_instancing` are now in place. Next, implement the remaining
+decoder-backed blockers in this order:
 
 1. `EXT_meshopt_compression`
 2. `KHR_texture_basisu`
 3. `KHR_draco_mesh_compression`
 
-Treat `EXT_mesh_gpu_instancing` as a separate follow-up because it changes
-scene expansion, picking, and draw batching semantics rather than basic asset
-loading.
+Add richer material and lighting extensions after the decoder-backed required
+path is stable.

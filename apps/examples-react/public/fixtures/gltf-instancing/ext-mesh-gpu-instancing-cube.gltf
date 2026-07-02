@@ -1,0 +1,136 @@
+{
+  "asset": {
+    "generator": "Royal EXT_mesh_gpu_instancing cube fixture",
+    "version": "2.0"
+  },
+  "extensionsRequired": [
+    "EXT_mesh_gpu_instancing"
+  ],
+  "extensionsUsed": [
+    "EXT_mesh_gpu_instancing"
+  ],
+  "buffers": [
+    {
+      "byteLength": 648,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAPwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA"
+    },
+    {
+      "byteLength": 1500,
+      "uri": "data:application/octet-stream;base64,PQpXvz0KV789Cle/PQpXvz0KV789Cte+PQpXvz0KV78AAAAAPQpXvz0KV789Ctc+PQpXvz0KV789Clc/PQpXvz0K1749Cle/PQpXvz0K1749Cte+PQpXvz0K174AAAAAPQpXvz0K1749Ctc+PQpXvz0K1749Clc/PQpXvwAAAAA9Cle/PQpXvwAAAAA9Cte+PQpXvwAAAAAAAAAAPQpXvwAAAAA9Ctc+PQpXvwAAAAA9Clc/PQpXvz0K1z49Cle/PQpXvz0K1z49Cte+PQpXvz0K1z4AAAAAPQpXvz0K1z49Ctc+PQpXvz0K1z49Clc/PQpXvz0KVz89Cle/PQpXvz0KVz89Cte+PQpXvz0KVz8AAAAAPQpXvz0KVz89Ctc+PQpXvz0KVz89Clc/PQrXvj0KV789Cle/PQrXvj0KV789Cte+PQrXvj0KV78AAAAAPQrXvj0KV789Ctc+PQrXvj0KV789Clc/PQrXvj0K1749Cle/PQrXvj0K1749Cte+PQrXvj0K174AAAAAPQrXvj0K1749Ctc+PQrXvj0K1749Clc/PQrXvgAAAAA9Cle/PQrXvgAAAAA9Cte+PQrXvgAAAAAAAAAAPQrXvgAAAAA9Ctc+PQrXvgAAAAA9Clc/PQrXvj0K1z49Cle/PQrXvj0K1z49Cte+PQrXvj0K1z4AAAAAPQrXvj0K1z49Ctc+PQrXvj0K1z49Clc/PQrXvj0KVz89Cle/PQrXvj0KVz89Cte+PQrXvj0KVz8AAAAAPQrXvj0KVz89Ctc+PQrXvj0KVz89Clc/AAAAAD0KV789Cle/AAAAAD0KV789Cte+AAAAAD0KV78AAAAAAAAAAD0KV789Ctc+AAAAAD0KV789Clc/AAAAAD0K1749Cle/AAAAAD0K1749Cte+AAAAAD0K174AAAAAAAAAAD0K1749Ctc+AAAAAD0K1749Clc/AAAAAAAAAAA9Cle/AAAAAAAAAAA9Cte+AAAAAAAAAAAAAAAAAAAAAAAAAAA9Ctc+AAAAAAAAAAA9Clc/AAAAAD0K1z49Cle/AAAAAD0K1z49Cte+AAAAAD0K1z4AAAAAAAAAAD0K1z49Ctc+AAAAAD0K1z49Clc/AAAAAD0KVz89Cle/AAAAAD0KVz89Cte+AAAAAD0KVz8AAAAAAAAAAD0KVz89Ctc+AAAAAD0KVz89Clc/PQrXPj0KV789Cle/PQrXPj0KV789Cte+PQrXPj0KV78AAAAAPQrXPj0KV789Ctc+PQrXPj0KV789Clc/PQrXPj0K1749Cle/PQrXPj0K1749Cte+PQrXPj0K174AAAAAPQrXPj0K1749Ctc+PQrXPj0K1749Clc/PQrXPgAAAAA9Cle/PQrXPgAAAAA9Cte+PQrXPgAAAAAAAAAAPQrXPgAAAAA9Ctc+PQrXPgAAAAA9Clc/PQrXPj0K1z49Cle/PQrXPj0K1z49Cte+PQrXPj0K1z4AAAAAPQrXPj0K1z49Ctc+PQrXPj0K1z49Clc/PQrXPj0KVz89Cle/PQrXPj0KVz89Cte+PQrXPj0KVz8AAAAAPQrXPj0KVz89Ctc+PQrXPj0KVz89Clc/PQpXPz0KV789Cle/PQpXPz0KV789Cte+PQpXPz0KV78AAAAAPQpXPz0KV789Ctc+PQpXPz0KV789Clc/PQpXPz0K1749Cle/PQpXPz0K1749Cte+PQpXPz0K174AAAAAPQpXPz0K1749Ctc+PQpXPz0K1749Clc/PQpXPwAAAAA9Cle/PQpXPwAAAAA9Cte+PQpXPwAAAAAAAAAAPQpXPwAAAAA9Ctc+PQpXPwAAAAA9Clc/PQpXPz0K1z49Cle/PQpXPz0K1z49Cte+PQpXPz0K1z4AAAAAPQpXPz0K1z49Ctc+PQpXPz0K1z49Clc/PQpXPz0KVz89Cle/PQpXPz0KVz89Cte+PQpXPz0KVz8AAAAAPQpXPz0KVz89Ctc+PQpXPz0KVz89Clc/"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteOffset": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 72,
+      "byteOffset": 576,
+      "target": 34963
+    },
+    {
+      "buffer": 1,
+      "byteLength": 1500,
+      "byteOffset": 0,
+      "target": 34962
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "min": [
+        -0.5,
+        -0.5,
+        -0.5
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 125,
+      "type": "VEC3"
+    }
+  ],
+  "materials": [
+    {
+      "name": "EXT mesh GPU instancing cube",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.95,
+          0.72,
+          0.2,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.58
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "ext-mesh-gpu-instancing-cube-mesh",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0
+          },
+          "indices": 2,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "extensions": {
+        "EXT_mesh_gpu_instancing": {
+          "attributes": {
+            "TRANSLATION": 3
+          }
+        }
+      },
+      "mesh": 0,
+      "name": "ext-mesh-gpu-instancing-cube"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}
