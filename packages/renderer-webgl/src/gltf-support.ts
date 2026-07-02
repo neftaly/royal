@@ -2,6 +2,11 @@ export type GltfDocument = {
   readonly accessors?: readonly GltfAccessor[];
   readonly bufferViews?: readonly GltfBufferView[];
   readonly buffers?: readonly GltfBuffer[];
+  readonly extensions?: {
+    readonly KHR_lights_punctual?: {
+      readonly lights?: readonly GltfPunctualLight[];
+    };
+  };
   readonly extensionsRequired?: readonly string[];
   readonly extensionsUsed?: readonly string[];
   readonly images?: readonly GltfImage[];
@@ -54,6 +59,18 @@ export type GltfMeshGpuInstancingExtension = {
 export type GltfBuffer = {
   readonly byteLength?: number;
   readonly uri?: string;
+};
+
+export type GltfPunctualLight = {
+  readonly color?: readonly number[];
+  readonly intensity?: number;
+  readonly name?: string;
+  readonly range?: number;
+  readonly spot?: {
+    readonly innerConeAngle?: number;
+    readonly outerConeAngle?: number;
+  };
+  readonly type?: "directional" | "point" | "spot";
 };
 
 export type GltfImage = {
@@ -109,6 +126,9 @@ export type GltfSceneNode = {
   readonly children?: readonly number[];
   readonly extensions?: {
     readonly EXT_mesh_gpu_instancing?: GltfMeshGpuInstancingExtension;
+    readonly KHR_lights_punctual?: {
+      readonly light?: number;
+    };
     readonly KHR_node_visibility?: {
       readonly visible?: boolean;
     };
@@ -155,6 +175,7 @@ export type GltfTextureTransformExtension = {
 export const supportedGltfExtensions = new Set<string>([
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
+  "KHR_lights_punctual",
   "KHR_materials_unlit",
   "KHR_mesh_quantization",
   "KHR_node_visibility",

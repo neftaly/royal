@@ -42,6 +42,7 @@ import {
   type GltfImage,
   type GltfLodExtras,
   type GltfMeshPrimitive,
+  type GltfPunctualLight,
   type GltfSampler,
   type GltfSceneNode,
   type GltfTexture,
@@ -244,25 +245,67 @@ type GltfLodSelectionState = {
 type GltfState = {
   readonly key: string;
   error?: string;
+  lights: readonly SurfaceLight[];
   primitives: readonly LoadedGltfPrimitive[];
   status: "loading" | "ready" | "error";
 };
 
 type GltfPrimitiveDraw = {
   readonly geometry: CpuGeometry;
+  readonly lights?: SurfaceLightSet;
   readonly material: StandardMaterial | UnlitMaterial;
   readonly model: Mat4;
 };
 
 type GltfPrimitiveDrawBatch = {
   readonly geometry: GeometryResource;
+  readonly lights: SurfaceLightSet;
   readonly material: StandardMaterial | UnlitMaterial;
   readonly models: Mat4[];
+};
+
+type SurfaceDirectionalLight = {
+  readonly color: Rgba;
+  readonly direction: Vec3;
+  readonly kind: "directional";
+};
+
+type SurfacePointLight = {
+  readonly color: Rgba;
+  readonly kind: "point";
+  readonly position: Vec3;
+  readonly range?: number;
+};
+
+type SurfaceSpotLight = {
+  readonly color: Rgba;
+  readonly direction: Vec3;
+  readonly innerConeAngle: number;
+  readonly kind: "spot";
+  readonly outerConeAngle: number;
+  readonly position: Vec3;
+  readonly range?: number;
+};
+
+type SurfaceLight = SurfaceDirectionalLight | SurfacePointLight | SurfaceSpotLight;
+
+type SurfaceLightSet = {
+  readonly key: string;
+  readonly lights: readonly SurfaceLight[];
 };
 
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
+const DEFAULT_SURFACE_LIGHT_SET: SurfaceLightSet = {
+  key: "default",
+  lights: [{ color: DEFAULT_LIGHT_COLOR, direction: DEFAULT_LIGHT_DIRECTION, kind: "directional" }],
+};
+const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
+  key: "empty",
+  lights: [],
+};
+const MAX_SURFACE_LIGHTS = 8;
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
@@ -459,6 +502,11 @@ const transformPoint = (matrix: Mat4, point: Vec3): Vec3 => {
   const [x, y, z, w] = transformVec4(matrix, [point[0], point[1], point[2], 1]);
   const divisor = w === 0 ? 1 : w;
   return [x / divisor, y / divisor, z / divisor];
+};
+
+const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 => {
+  const [x, y, z] = transformVec4(matrix, [direction[0], direction[1], direction[2], 0]);
+  return normalizeVec3([x, y, z]);
 };
 
 const normalizeVec3 = ([x, y, z]: Vec3): Vec3 => {
@@ -842,6 +890,97 @@ const textureKey = (texture: TextureRef): string => {
 const surfaceMaterialBatchKey = (material: StandardMaterial | UnlitMaterial): string =>
   `${material.kind}:${textureKey(material.baseColor)}`;
 
+const surfaceLightValueKey = (value: number | undefined): string =>
+  value === undefined || !Number.isFinite(value) ? "" : Number(value.toFixed(6)).toString();
+
+const surfaceLightVectorKey = (values: readonly number[]): string =>
+  values.map((value) => surfaceLightValueKey(value)).join(",");
+
+const surfaceLightKey = (light: SurfaceLight): string => {
+  switch (light.kind) {
+    case "directional":
+      return [
+        "directional",
+        surfaceLightVectorKey(light.color),
+        surfaceLightVectorKey(light.direction),
+      ].join(":");
+    case "point":
+      return [
+        "point",
+        surfaceLightVectorKey(light.color),
+        surfaceLightVectorKey(light.position),
+        surfaceLightValueKey(light.range),
+      ].join(":");
+    case "spot":
+      return [
+        "spot",
+        surfaceLightVectorKey(light.color),
+        surfaceLightVectorKey(light.position),
+        surfaceLightVectorKey(light.direction),
+        surfaceLightValueKey(light.range),
+        surfaceLightValueKey(light.innerConeAngle),
+        surfaceLightValueKey(light.outerConeAngle),
+      ].join(":");
+  }
+};
+
+const surfaceLightSet = (lights: readonly SurfaceLight[]): SurfaceLightSet => ({
+  key: lights.length === 0 ? "default" : lights.map(surfaceLightKey).join("|"),
+  lights: lights.length === 0 ? DEFAULT_SURFACE_LIGHT_SET.lights : lights,
+});
+
+const passSurfaceLightSet = (light: DirectionalLightNode | undefined): SurfaceLightSet | undefined =>
+  light === undefined
+    ? undefined
+    : surfaceLightSet([{
+        color: light.color,
+        direction: light.direction,
+        kind: "directional",
+      }]);
+
+const combineSurfaceLightSets = (
+  passLights: SurfaceLightSet | undefined,
+  assetLights: SurfaceLightSet | undefined,
+): SurfaceLightSet => {
+  if (passLights === undefined && assetLights === undefined) return DEFAULT_SURFACE_LIGHT_SET;
+  if (assetLights === undefined) return passLights ?? DEFAULT_SURFACE_LIGHT_SET;
+  if (passLights === undefined) return assetLights;
+  const lights = [...passLights.lights, ...assetLights.lights].slice(0, MAX_SURFACE_LIGHTS);
+
+  return {
+    key: `${passLights.key}|${assetLights.key}`,
+    lights,
+  };
+};
+
+const transformSurfaceLight = (model: Mat4, light: SurfaceLight): SurfaceLight => {
+  switch (light.kind) {
+    case "directional":
+      return {
+        color: light.color,
+        direction: transformDirection(model, light.direction),
+        kind: "directional",
+      };
+    case "point":
+      return {
+        color: light.color,
+        kind: "point",
+        position: transformPoint(model, light.position),
+        ...(light.range === undefined ? {} : { range: light.range }),
+      };
+    case "spot":
+      return {
+        color: light.color,
+        direction: transformDirection(model, light.direction),
+        innerConeAngle: light.innerConeAngle,
+        kind: "spot",
+        outerConeAngle: light.outerConeAngle,
+        position: transformPoint(model, light.position),
+        ...(light.range === undefined ? {} : { range: light.range }),
+      };
+  }
+};
+
 const materialColor = (material: Material): Rgba => {
   const texture = material.baseColor;
   if (texture.kind === "solid") return texture.color;
@@ -1038,6 +1177,40 @@ const gltfColor = (values: readonly number[] | undefined): Rgba | undefined => {
     values[2] ?? 1,
     values[3] ?? 1,
   ];
+};
+
+const finiteNumber = (value: number | undefined, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const positiveFiniteNumber = (value: number | undefined): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+
+const gltfLightColor = (light: GltfPunctualLight): Rgba => {
+  const color = light.color;
+  const intensity = Math.max(0, finiteNumber(light.intensity, 1));
+
+  return [
+    (color?.[0] ?? 1) * intensity,
+    (color?.[1] ?? 1) * intensity,
+    (color?.[2] ?? 1) * intensity,
+    1,
+  ];
+};
+
+const gltfSpotConeAngles = (light: GltfPunctualLight): {
+  readonly innerConeAngle: number;
+  readonly outerConeAngle: number;
+} => {
+  const outerConeAngle = Math.min(
+    Math.PI / 2,
+    Math.max(0.0001, finiteNumber(light.spot?.outerConeAngle, Math.PI / 4)),
+  );
+  const innerConeAngle = Math.min(
+    outerConeAngle - 0.0001,
+    Math.max(0, finiteNumber(light.spot?.innerConeAngle, 0)),
+  );
+
+  return { innerConeAngle, outerConeAngle };
 };
 
 const gltfPrimitiveMode = (mode: number | undefined): "lines" | "triangles" | undefined => {
@@ -1350,10 +1523,11 @@ export class WebGlRoot {
       const projection = projectionMat4(renderPass.camera, width, height);
       const view = viewMat4(renderPass.camera);
       const lights = this.#directionalLights(renderPass.children);
+      const passLights = passSurfaceLightSet(lights[0]);
       const gltfDraws: GltfPrimitiveDraw[] = [];
       const flushGltfDraws = (): void => {
         if (gltfDraws.length === 0) return;
-        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, lights[0], usedGeometry);
+        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, usedGeometry);
         gltfDraws.length = 0;
       };
 
@@ -1738,7 +1912,7 @@ export class WebGlRoot {
         {
           const draws: GltfPrimitiveDraw[] = [];
           this.#appendGltfPrimitiveDraws(node, projection, view, draws);
-          this.#drawGltfPrimitiveDraws(draws, projection, view, light, usedGeometry);
+          this.#drawGltfPrimitiveDraws(draws, projection, view, passSurfaceLightSet(light), usedGeometry);
         }
         return;
       default:
@@ -1772,7 +1946,7 @@ export class WebGlRoot {
     }
     const gpu = this.#geometryResource(cpu);
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, node.material, model, projection, view, light);
+    this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light));
   }
 
   #drawText(
@@ -1823,7 +1997,8 @@ export class WebGlRoot {
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
 
-    const rootModel = transformMat4(this.#renderObjectTransform(node));
+      const rootModel = transformMat4(this.#renderObjectTransform(node));
+    const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
       state,
       renderInstanceKey,
@@ -1881,6 +2056,7 @@ export class WebGlRoot {
         }
         draws.push({
           geometry: cpu,
+          ...(assetLights === undefined ? {} : { lights: assetLights }),
           material,
           model,
         });
@@ -1892,18 +2068,20 @@ export class WebGlRoot {
     draws: readonly GltfPrimitiveDraw[],
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
+    passLights: SurfaceLightSet | undefined,
     usedGeometry: Set<string>,
   ): void {
     const batches = new Map<string, GltfPrimitiveDrawBatch>();
     for (const draw of draws) {
       const geometry = this.#geometryResource(draw.geometry);
       usedGeometry.add(geometry.key);
-      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}`;
+      const lights = combineSurfaceLightSets(passLights, draw.lights);
+      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${lights.key}`;
       const batch = batches.get(batchKey);
       if (batch === undefined) {
         batches.set(batchKey, {
           geometry,
+          lights,
           material: draw.material,
           models: [draw.model],
         });
@@ -1914,11 +2092,17 @@ export class WebGlRoot {
 
     for (const batch of batches.values()) {
       if (batch.models.length === 1) {
-        this.#drawGeometry(batch.geometry, batch.material, batch.models[0]!, projection, view, light);
+        this.#drawGeometry(batch.geometry, batch.material, batch.models[0]!, projection, view, batch.lights);
       } else {
-        this.#drawGeometryInstanced(batch.geometry, batch.material, batch.models, projection, view, light);
+        this.#drawGeometryInstanced(batch.geometry, batch.material, batch.models, projection, view, batch.lights);
       }
     }
+  }
+
+  #gltfAssetLightSet(state: GltfState, rootModel: Mat4): SurfaceLightSet | undefined {
+    if (state.lights.length === 0) return undefined;
+
+    return surfaceLightSet(state.lights.map((light) => transformSurfaceLight(rootModel, light)));
   }
 
   #selectedGltfNodeLodLevels(
@@ -2111,7 +2295,7 @@ export class WebGlRoot {
     model: Mat4,
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
+    lights: SurfaceLightSet | undefined,
   ): void {
     const gl = this.#gl;
     const virtualTexture = this.#virtualTextureDrawState(geometry, material);
@@ -2128,11 +2312,10 @@ export class WebGlRoot {
     this.#uniformMatrix(program, "u_model", model);
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    if (material.kind === "standard") {
-      this.#uniformColor(program, "u_lightColor", light?.color ?? DEFAULT_LIGHT_COLOR);
-      this.#uniformVec3(program, "u_lightDirection", light?.direction ?? DEFAULT_LIGHT_DIRECTION);
-    } else if (material.kind !== "wireframe") {
-      this.#uniformColor(program, "u_lightColor", DEFAULT_LIGHT_COLOR);
+    if (programKind === "surface") {
+      this.#bindSurfaceLights(program, material.kind === "standard"
+        ? lights ?? DEFAULT_SURFACE_LIGHT_SET
+        : EMPTY_SURFACE_LIGHT_SET);
     }
 
     const useTexture = useVirtualTexture
@@ -2162,7 +2345,7 @@ export class WebGlRoot {
     models: readonly Mat4[],
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
+    lights: SurfaceLightSet,
   ): void {
     const gl = this.#gl;
     const programResource = this.#program("surface-instanced");
@@ -2173,12 +2356,7 @@ export class WebGlRoot {
     this.#uniformMatrix(program, "u_view", view);
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    if (material.kind === "standard") {
-      this.#uniformColor(program, "u_lightColor", light?.color ?? DEFAULT_LIGHT_COLOR);
-      this.#uniformVec3(program, "u_lightDirection", light?.direction ?? DEFAULT_LIGHT_DIRECTION);
-    } else {
-      this.#uniformColor(program, "u_lightColor", DEFAULT_LIGHT_COLOR);
-    }
+    this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET);
 
     const useTexture = this.#bindMaterialTexture(program, material);
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
@@ -2193,6 +2371,48 @@ export class WebGlRoot {
     }
 
     this.#unbindGltfInstanceModels();
+  }
+
+  #bindSurfaceLights(program: WebGLProgram, lightSet: SurfaceLightSet): void {
+    const lights = lightSet.lights.slice(0, MAX_SURFACE_LIGHTS);
+    this.#uniform1i(program, "u_surfaceLightCount", lights.length);
+
+    for (let index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
+      const light = lights[index];
+      if (light === undefined) {
+        this.#uniform1i(program, `u_surfaceLightKind[${index}]`, 0);
+        this.#uniformColor(program, `u_surfaceLightColor[${index}]`, [0, 0, 0, 1]);
+        this.#uniformColor(program, `u_surfaceLightDirection[${index}]`, [0, -1, 0, 0]);
+        this.#uniformColor(program, `u_surfaceLightPosition[${index}]`, [0, 0, 0, 0]);
+        this.#uniformColor(program, `u_surfaceLightCone[${index}]`, [1, 0, 0, 0]);
+        continue;
+      }
+
+      const range = light.kind === "directional" ? 0 : light.range ?? 0;
+      const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
+      const position = light.kind === "directional" ? [0, 0, 0] as const : light.position;
+      const cone = light.kind === "spot"
+        ? [Math.cos(light.innerConeAngle), Math.cos(light.outerConeAngle), 0, 0] as const
+        : [1, 0, 0, 0] as const;
+      const kind = light.kind === "directional" ? 0 : light.kind === "point" ? 1 : 2;
+
+      this.#uniform1i(program, `u_surfaceLightKind[${index}]`, kind);
+      this.#uniformColor(program, `u_surfaceLightColor[${index}]`, light.color);
+      this.#uniformColor(program, `u_surfaceLightDirection[${index}]`, [
+        direction[0],
+        direction[1],
+        direction[2],
+        range,
+      ]);
+      this.#uniformColor(program, `u_surfaceLightPosition[${index}]`, [
+        position[0],
+        position[1],
+        position[2],
+        0,
+      ]);
+      this.#uniformColor(program, `u_surfaceLightCone[${index}]`, cone);
+    }
+
   }
 
   #bindGeometryAttributes(program: WebGLProgram, geometry: GeometryResource): void {
@@ -2764,16 +2984,6 @@ export class WebGlRoot {
     if (location !== null) this.#gl.uniform4fv(location, new Float32Array(color));
   }
 
-  #uniformVec3(program: WebGLProgram, name: string, vector: Vec3): void {
-    const location = this.#gl.getUniformLocation(program, name);
-    if (location === null) return;
-    if (typeof this.#gl.uniform3fv === "function") {
-      this.#gl.uniform3fv(location, new Float32Array(vector));
-    } else {
-      this.#gl.uniform3f(location, vector[0], vector[1], vector[2]);
-    }
-  }
-
   #uniform1i(program: WebGLProgram, name: string, value: number): void {
     const location = this.#gl.getUniformLocation(program, name);
     if (location !== null) this.#gl.uniform1i(location, value);
@@ -2876,11 +3086,14 @@ layout(location = 3) in mat4 a_instanceModel;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 out vec3 v_normal;
+out vec3 v_worldPosition;
 out vec2 v_uv;
 void main() {
+  vec4 worldPosition = a_instanceModel * vec4(a_position, 1.0);
   v_normal = mat3(a_instanceModel) * a_normal;
+  v_worldPosition = worldPosition.xyz;
   v_uv = a_uv;
-  gl_Position = u_projection * u_view * a_instanceModel * vec4(a_position, 1.0);
+  gl_Position = u_projection * u_view * worldPosition;
 }`;
     }
 
@@ -2892,11 +3105,14 @@ uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_model;
 out vec3 v_normal;
+out vec3 v_worldPosition;
 out vec2 v_uv;
 void main() {
+  vec4 worldPosition = u_model * vec4(a_position, 1.0);
   v_normal = mat3(u_model) * a_normal;
+  v_worldPosition = worldPosition.xyz;
   v_uv = a_uv;
-  gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+  gl_Position = u_projection * u_view * worldPosition;
 }`;
   }
 
@@ -2965,22 +3181,62 @@ void main() {
     return `#version 300 es
 precision mediump float;
 in vec3 v_normal;
+in vec3 v_worldPosition;
 in vec2 v_uv;
+#define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
 uniform bool u_useTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
-uniform vec4 u_lightColor;
-uniform vec3 u_lightDirection;
+uniform int u_surfaceLightCount;
+uniform int u_surfaceLightKind[MAX_SURFACE_LIGHTS];
+uniform vec4 u_surfaceLightColor[MAX_SURFACE_LIGHTS];
+uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
+uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
+uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
 uniform sampler2D u_texture;
 out vec4 outColor;
+float rangeAttenuation(float distanceToLight, float range) {
+  if (range <= 0.0) {
+    return 1.0 / max(distanceToLight * distanceToLight, 0.0001);
+  }
+  float normalizedDistance = distanceToLight / range;
+  float smoothCutoff = max(min(1.0 - normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance, 1.0), 0.0);
+  return smoothCutoff / max(distanceToLight * distanceToLight, 0.0001);
+}
+vec3 lightContribution(int index, vec3 normal, vec3 worldPosition, vec3 baseColor) {
+  int kind = u_surfaceLightKind[index];
+  vec3 lightVector;
+  float attenuation = 1.0;
+  if (kind == 0) {
+    lightVector = normalize(-u_surfaceLightDirection[index].xyz);
+  } else {
+    vec3 toLight = u_surfaceLightPosition[index].xyz - worldPosition;
+    float distanceToLight = length(toLight);
+    lightVector = distanceToLight <= 0.0001 ? vec3(0.0, 1.0, 0.0) : toLight / distanceToLight;
+    attenuation = rangeAttenuation(distanceToLight, u_surfaceLightDirection[index].w);
+    if (kind == 2) {
+      float coneDot = dot(normalize(u_surfaceLightDirection[index].xyz), -lightVector);
+      float cone = clamp((coneDot - u_surfaceLightCone[index].y) / max(u_surfaceLightCone[index].x - u_surfaceLightCone[index].y, 0.001), 0.0, 1.0);
+      attenuation *= cone * cone;
+    }
+  }
+  float lambert = max(dot(normal, lightVector), 0.0);
+  return baseColor * lambert * u_surfaceLightColor[index].rgb * attenuation;
+}
 void main() {
   vec4 baseColor = u_useTexture ? texture(u_texture, v_uv) : u_color;
   if (u_unlit) {
     outColor = baseColor;
     return;
   }
-  float lambert = max(dot(normalize(v_normal), normalize(-u_lightDirection)), 0.0);
-  vec3 lit = baseColor.rgb * (0.18 + lambert * u_lightColor.rgb);
+  vec3 normal = normalize(v_normal);
+  vec3 lit = baseColor.rgb * 0.18;
+  for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
+    if (index >= u_surfaceLightCount) {
+      break;
+    }
+    lit += lightContribution(index, normal, v_worldPosition, baseColor.rgb);
+  }
   outColor = vec4(lit, baseColor.a);
 }`;
   }
@@ -3351,6 +3607,7 @@ void main() {
 
     const state: GltfState = {
       key,
+      lights: [],
       primitives: [],
       status: "loading",
     };
@@ -3368,7 +3625,9 @@ void main() {
       if (this.#disposed) return;
       const buffers = await loadGltfBuffers(src, document, binaryChunk);
       if (this.#disposed) return;
-      state.primitives = this.#readGltfPrimitives(document, buffers, src, state.key);
+      const scene = this.#readGltfScene(document, buffers, src, state.key);
+      state.lights = scene.lights;
+      state.primitives = scene.primitives;
       state.status = "ready";
       this.#scheduleRender();
       this.#loadGltfImages(src, document, buffers, state);
@@ -3380,12 +3639,13 @@ void main() {
     }
   }
 
-  #readGltfPrimitives(
+  #readGltfScene(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
     src: string,
     assetKey: string,
-  ): readonly LoadedGltfPrimitive[] {
+  ): { readonly lights: readonly SurfaceLight[]; readonly primitives: readonly LoadedGltfPrimitive[] } {
+    const lights: SurfaceLight[] = [];
     const primitives: LoadedGltfPrimitive[] = [];
     const scene = document.scenes?.[document.scene ?? 0];
     const referencedLodNodes = new Set<number>();
@@ -3403,13 +3663,14 @@ void main() {
         src,
         assetKey,
         primitives,
+        lights,
         nodeIndex,
         identityMat4(),
         referencedLodNodes,
       );
     }
 
-    return primitives;
+    return { lights, primitives };
   }
 
   #appendGltfNodeTreePrimitives(
@@ -3418,6 +3679,7 @@ void main() {
     src: string,
     assetKey: string,
     primitives: LoadedGltfPrimitive[],
+    lights: SurfaceLight[],
     nodeIndex: number,
     parentModel: Mat4,
     referencedLodNodes: ReadonlySet<number>,
@@ -3442,6 +3704,7 @@ void main() {
         src,
         assetKey,
         primitives,
+        lights,
         nodeIndex,
         parentModel,
         referencedLodNodes,
@@ -3460,6 +3723,7 @@ void main() {
           src,
           assetKey,
           primitives,
+          lights,
           lodNodeIndex,
           parentModel,
           referencedLodNodes,
@@ -3476,6 +3740,7 @@ void main() {
     }
 
     const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
+    this.#appendGltfNodeLight(document, lights, sceneNode, nodeIndex, nodeModel);
     const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
@@ -3512,12 +3777,72 @@ void main() {
         src,
         assetKey,
         primitives,
+        lights,
         childIndex,
         nodeModel,
         referencedLodNodes,
         nodeLod,
         nodeLod === undefined,
       );
+    }
+  }
+
+  #appendGltfNodeLight(
+    document: GltfDocument,
+    lights: SurfaceLight[],
+    sceneNode: GltfSceneNode,
+    nodeIndex: number,
+    nodeModel: Mat4,
+  ): void {
+    const lightIndex = sceneNode.extensions?.KHR_lights_punctual?.light;
+    if (lightIndex === undefined) return;
+    if (!Number.isInteger(lightIndex) || lightIndex < 0) {
+      this.#recordDiagnostic(`glTF node ${nodeIndex} KHR_lights_punctual skipped: invalid light index ${lightIndex}`);
+      return;
+    }
+
+    const light = document.extensions?.KHR_lights_punctual?.lights?.[lightIndex];
+    if (light === undefined) {
+      this.#recordDiagnostic(`glTF node ${nodeIndex} KHR_lights_punctual skipped: missing light ${lightIndex}`);
+      return;
+    }
+
+    const color = gltfLightColor(light);
+    const direction = transformDirection(nodeModel, [0, 0, -1]);
+    const position = transformPoint(nodeModel, [0, 0, 0]);
+    const range = positiveFiniteNumber(light.range);
+    switch (light.type) {
+      case "directional":
+        lights.push({
+          color,
+          direction,
+          kind: "directional",
+        });
+        return;
+      case "point":
+        lights.push({
+          color,
+          kind: "point",
+          position,
+          ...(range === undefined ? {} : { range }),
+        });
+        return;
+      case "spot":
+        {
+          const { innerConeAngle, outerConeAngle } = gltfSpotConeAngles(light);
+          lights.push({
+            color,
+            direction,
+            innerConeAngle,
+            kind: "spot",
+            outerConeAngle,
+            position,
+            ...(range === undefined ? {} : { range }),
+          });
+        }
+        return;
+      default:
+        this.#recordDiagnostic(`glTF node ${nodeIndex} KHR_lights_punctual skipped: unsupported light type ${light.type ?? "missing"}`);
     }
   }
 

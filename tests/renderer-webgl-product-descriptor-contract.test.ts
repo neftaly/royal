@@ -838,7 +838,7 @@ describe("WebGL renderer product descriptor contracts", () => {
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 6)).toBe(true);
     expectUniformVector(calls, materialColor);
     expectUniformVector(calls, lightColor);
-    expectUniformVector(calls, lightDirection);
+    expectUniformVector(calls, [...lightDirection, 0]);
   });
 
   it("uploads and draws text nodes as triangle geometry", async () => {

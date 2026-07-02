@@ -534,21 +534,18 @@ const roundNumber = (value: number): number => {
 const roundVector = (values: readonly number[]): readonly number[] =>
   values.map(roundNumber);
 
-const uniform3fvPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
-  calls
-    .filter((call) => call.name === "uniform3fv")
-    .map((call) => {
-      const values = numericArray(call.args[1]);
-      const offset = typeof call.args[2] === "number" ? call.args[2] : 0;
-      const length = typeof call.args[3] === "number" ? call.args[3] : 3;
-
-      return values.slice(offset, offset + length).slice(0, 3);
-    });
-
 const uniformLocationName = (value: unknown): string | undefined =>
   typeof value === "object" && value !== null && "name" in value && typeof value.name === "string"
     ? value.name
     : undefined;
+
+const uniform1iPayloads = (
+  calls: readonly GlCall[],
+  name: string,
+): readonly number[] =>
+  calls
+    .filter((call) => call.name === "uniform1i" && uniformLocationName(call.args[0]) === name)
+    .map((call) => typeof call.args[1] === "number" ? call.args[1] : NaN);
 
 const uniform4fvPayloads = (
   calls: readonly GlCall[],
@@ -1280,6 +1277,76 @@ const instancedTriangleDocument = () => {
   };
 };
 
+const punctualLightTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      KHR_lights_punctual: {
+        lights: [
+          {
+            color: [0.5, 0.5, 1],
+            intensity: 2,
+            type: "directional",
+          },
+          {
+            color: [1, 0.5, 0.25],
+            intensity: 3,
+            range: 5,
+            type: "point",
+          },
+          {
+            color: [0.25, 1, 0.5],
+            intensity: 4,
+            range: 6,
+            spot: {
+              innerConeAngle: 0.1,
+              outerConeAngle: 0.5,
+            },
+            type: "spot",
+          },
+        ],
+      },
+    },
+    extensionsRequired: ["KHR_lights_punctual"],
+    extensionsUsed: ["KHR_lights_punctual"],
+    nodes: [
+      {
+        extensions: {
+          KHR_lights_punctual: {
+            light: 0,
+          },
+        },
+      },
+      {
+        extensions: {
+          KHR_lights_punctual: {
+            light: 1,
+          },
+        },
+        translation: [1, 2, 3],
+      },
+      {
+        extensions: {
+          KHR_lights_punctual: {
+            light: 2,
+          },
+        },
+        translation: [-1, -2, -3],
+      },
+      {
+        mesh: 0,
+      },
+    ],
+    scenes: [
+      {
+        nodes: [0, 1, 2, 3],
+      },
+    ],
+  };
+};
+
 const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);
 
@@ -1592,6 +1659,50 @@ describe("WebGL renderer scene and glTF regressions", () => {
       instanceModelPayload?.[16] ?? 0,
       instanceModelPayload?.[28] ?? 0,
     ])).toEqual([1, -0.25, 1.25, 0.25]);
+  });
+
+  it("renders required KHR_lights_punctual directional, point, and spot lights without a pass light", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-lights-punctual",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, punctualLightTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(3);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[0]")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[1]")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[2]")).toContain(2);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightColor[0]").map(roundVector)).toContainEqual([1, 1, 2, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightColor[1]").map(roundVector)).toContainEqual([3, 1.5, 0.75, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightPosition[1]").map(roundVector)).toContainEqual([1, 2, 3, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightDirection[1]").map(roundVector)).toContainEqual([0, -1, 0, 5]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightPosition[2]").map(roundVector)).toContainEqual([-1, -2, -3, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightDirection[2]").map(roundVector)).toContainEqual([0, 0, -1, 6]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightCone[2]").map(roundVector)).toContainEqual([
+      roundNumber(Math.cos(0.1)),
+      roundNumber(Math.cos(0.5)),
+      0,
+      0,
+    ]);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {
@@ -2211,7 +2322,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[0] === 2
       && call.args[1] === 2
       && call.args[2] === gl.FLOAT)).toBe(true);
-    expect(uniform3fvPayloads(calls).map(roundVector)).toContainEqual(roundVector(lightDirection));
+    expect(uniform4fvPayloads(calls, "u_surfaceLightDirection[0]").map(roundVector)).toContainEqual([
+      ...roundVector(lightDirection),
+      0,
+    ]);
     expect(matrixUniformPayloads(calls).map(roundVector)).toContainEqual(roundVector([
       2, 0, 0, 0,
       0, 1, 0, 0,

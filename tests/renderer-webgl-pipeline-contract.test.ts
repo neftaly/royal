@@ -571,9 +571,9 @@ describe("WebGL renderer pipeline contracts", () => {
 
     const sources = shaderSources(calls).join("\n");
     expect(sources).toMatch(/\ba_normal\b/);
-    expect(sources).toMatch(/\bu_lightDirection\b/);
+    expect(sources).toMatch(/\bu_surfaceLightDirection\b/);
     expect(sources).toMatch(/dot\s*\(\s*normalize/);
-    expect(sources).not.toContain("baseColor * u_lightColor");
+    expect(sources).not.toContain("baseColor * u_surfaceLightColor");
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {
