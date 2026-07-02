@@ -27,10 +27,10 @@ describe("renderer-core public API", () => {
       top: 1,
     })).toEqual({
       bottom: -1,
-      far: 1,
+      far: 1000,
       kind: "orthographic-camera",
       left: -2,
-      near: -1,
+      near: -1000,
       position: [0, 0, 0],
       right: 2,
       rotation: [0, 0, 0],

@@ -33,13 +33,17 @@ export interface PerspectiveCameraOptions {
 }
 
 export interface OrthographicCameraOptions {
+  /** @defaultValue `[0, 0, 0]` */
   readonly position?: Vec3;
+  /** @defaultValue `[0, 0, 0]` */
   readonly rotation?: EulerRads;
   readonly left: number;
   readonly right: number;
   readonly bottom: number;
   readonly top: number;
+  /** @defaultValue `-1000` */
   readonly near?: number;
+  /** @defaultValue `1000` */
   readonly far?: number;
 }
 
@@ -62,6 +66,6 @@ export const orthographicCamera = (options: OrthographicCameraOptions): Orthogra
   right: options.right,
   bottom: options.bottom,
   top: options.top,
-  near: options.near ?? -1,
-  far: options.far ?? 1
+  near: options.near ?? -1000,
+  far: options.far ?? 1000
 });

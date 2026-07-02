@@ -41,9 +41,9 @@ describe("renderer JSX contract", () => {
       <orthographicCamera {...orthographicBounds} />,
     ).toEqual({
       ...orthographicBounds,
-      far: 1,
+      far: 1000,
       kind: "orthographic-camera",
-      near: -1,
+      near: -1000,
       position: [0, 0, 0],
       rotation: [0, 0, 0],
     });
