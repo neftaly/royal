@@ -3,7 +3,9 @@ import {
   createEditableTextEditorState,
   applyEditableTextEditorKeyInput,
   editableTextEditorContextMenuSelection,
+  editableTextEditorPointerSelection,
   layoutEditableText,
+  nearestEditableTextCaret,
   pasteEditableTextEditorText,
   setEditableTextEditorSelection,
   type EditableTextCaretPlacement,
@@ -131,5 +133,27 @@ describe("editable text interaction", () => {
     expect(contextSelection).toEqual(selection(1, 4));
     expect(pasted.text).toBe("aXef");
     expect(pasted.selection).toEqual(selection(2));
+  });
+
+  it("places the pointer caret by x position in single-line infinite-width layouts", () => {
+    const layout = layoutEditableText({
+      fontSize: 1,
+      lineHeight: 1.2,
+      maxWidth: Number.POSITIVE_INFINITY,
+      text: "abcdef",
+    });
+    const state = createEditableTextEditorState({ text: "abcdef" });
+    const point = pointAtCaret(layout, 3);
+
+    expect(nearestEditableTextCaret(layout, point, origin)).toMatchObject({
+      index: 3,
+      line: 0,
+    });
+    expect(editableTextEditorPointerSelection({
+      layout,
+      origin,
+      point,
+      state,
+    })).toEqual(lineSelection(3));
   });
 });

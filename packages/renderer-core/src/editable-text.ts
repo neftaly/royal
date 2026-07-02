@@ -331,11 +331,15 @@ export const nearestEditableTextCaret = (
   const targetX = point.x - origin[0];
   const linePlacements = layout.caretPlacements.filter((placement) => placement.line === targetLine);
   const placements = linePlacements.length > 0 ? linePlacements : layout.caretPlacements;
+  const lineDistanceScale = Number.isFinite(layout.maxWidth)
+    ? layout.maxWidth
+    : Math.max(1, ...layout.lines.map((line) => line.width));
   let closest = placements[0];
   let closestDistance = Number.POSITIVE_INFINITY;
 
   for (const placement of placements) {
-    const lineDistance = Math.abs(placement.line - targetLine) * layout.maxWidth;
+    const lineDelta = Math.abs(placement.line - targetLine);
+    const lineDistance = lineDelta === 0 ? 0 : lineDelta * lineDistanceScale;
     const distance = Math.abs(placement.x - targetX) + lineDistance;
     if (distance >= closestDistance) continue;
     closest = placement;
