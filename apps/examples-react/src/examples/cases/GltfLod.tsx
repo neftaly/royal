@@ -7,7 +7,7 @@ import {
 import { type ReactNode } from 'react';
 import { exampleRenderer } from '../rendering';
 
-const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/microsoft/CubeWithLOD.gltf';
+const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
 
 export const GltfLod = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -30,7 +30,7 @@ export const GltfLod = (): ReactNode => {
             lineHeight={0.18}
             origin={[-0.88, -1.12, 0.35]}
           >
-            Microsoft CubeWithLOD
+            4-step color LOD cube
           </text>
           <model
             src={lodSrc}
