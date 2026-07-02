@@ -21,6 +21,7 @@ import {
   editableTextMenuCommandAt,
   layoutEditableTextMenu,
   pasteEditableTextEditorText,
+  sameEditableTextSelection,
   setEditableTextEditorSelection,
   type EditableTextCaretEndpoint,
   type EditableTextEditorState,
@@ -41,7 +42,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   type ClipboardEvent,
   type CompositionEvent,
   type KeyboardEvent,
@@ -111,7 +111,6 @@ export interface TextPrimitiveProps {
 export interface TextFieldPrimitiveProps {
   readonly ariaLabel?: string;
   readonly color?: Rgba;
-  readonly defaultValue?: string;
   readonly font?: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
@@ -119,7 +118,7 @@ export interface TextFieldPrimitiveProps {
   readonly onValueChange?: (value: string) => void;
   readonly origin?: Vec3;
   readonly placeholder?: string;
-  readonly value?: string;
+  readonly value: string;
 }
 
 export interface TextAreaPrimitiveProps extends TextFieldPrimitiveProps {
@@ -139,7 +138,6 @@ type TextControlBounds = {
 type TextControlRegistration = {
   readonly bounds: TextControlBounds;
   readonly copyable: boolean;
-  readonly controlled: boolean;
   readonly editable: boolean;
   readonly font?: TextFontFace;
   readonly id: string;
@@ -178,15 +176,13 @@ type TextSurfaceStoreState = {
   readonly applyEditorState: (id: string, state: EditableTextEditorState) => void;
   readonly clearSelectionsExcept: (id: string | undefined) => void;
   readonly closeMenu: () => void;
-  readonly ensureEditorState: (id: string, textValue: string) => void;
-  readonly editors: ReadonlyMap<string, EditableTextEditorState>;
   readonly getControl: (id: string) => TextControlRegistration | undefined;
   readonly getControls: () => readonly TextControlRegistration[];
   readonly menu: TextMenuState;
   readonly registerControl: (control: TextControlRegistration) => void;
+  readonly selections: ReadonlyMap<string, EditableTextSelection>;
   readonly setActiveId: (id: string | undefined) => void;
   readonly setMenu: (menu: TextMenuState) => void;
-  readonly syncEditorText: (id: string, textValue: string) => void;
   readonly unregisterControl: (id: string) => void;
 };
 
@@ -297,52 +293,52 @@ const sameMenuState = (left: TextMenuState, right: TextMenuState): boolean =>
   left.worldX === right.worldX &&
   left.worldY === right.worldY;
 
-const withEditorState = (
+const withSelection = (
   control: TextControlRegistration,
-  state: EditableTextEditorState,
-): TextControlRegistration => ({
-  ...control,
-  selectedText: editableTextEditorSelectedText(state),
-  selection: state.selection,
-  state,
-  text: state.text,
-});
+  nextSelection: EditableTextSelection,
+): TextControlRegistration => {
+  const state = createEditableTextEditorState({
+    selection: nextSelection,
+    text: control.text,
+  });
+
+  return {
+    ...control,
+    selectedText: editableTextEditorSelectedText(state),
+    selection: state.selection,
+    state,
+  };
+};
 
 const createTextSurfaceStore = (): TextSurfaceStore => {
   let controls = new Map<string, TextControlRegistration>();
 
   return createStore<TextSurfaceStoreState>()((set, get) => {
-    const setEditorState = (id: string, state: EditableTextEditorState): void => {
-      const nextEditors = new Map(get().editors).set(id, state);
+    const setSelection = (id: string, selection: EditableTextSelection): void => {
+      const current = get().selections.get(id);
+      if (current !== undefined && sameEditableTextSelection(current, selection)) return;
+
+      const nextSelections = new Map(get().selections).set(id, selection);
       const control = controls.get(id);
       if (control !== undefined) {
-        controls = new Map(controls).set(id, withEditorState(control, state));
+        controls = new Map(controls).set(id, withSelection(control, selection));
       }
-      set({ editors: nextEditors });
-    };
-
-    const syncEditorText = (id: string, textValue: string): void => {
-      const current = get().editors.get(id);
-      if (current !== undefined && current.text === textValue) return;
-
-      setEditorState(id, createEditableTextEditorState({
-        ...(current === undefined ? {} : { selection: current.selection }),
-        text: textValue,
-      }));
+      set({ selections: nextSelections });
     };
 
     return {
       activeId: undefined,
       applyEditorState: (id, nextState) => {
         const control = controls.get(id);
-        const current = get().editors.get(id) ?? control?.state;
-        setEditorState(id, nextState);
-        if (current?.text !== nextState.text) control?.onValueChange?.(nextState.text);
+        setSelection(id, nextState.selection);
+        if (control !== undefined && control.text !== nextState.text) {
+          control.onValueChange?.(nextState.text);
+        }
       },
       clearSelectionsExcept: (id) => {
         let changed = false;
         let nextControls = controls;
-        let nextEditors = get().editors;
+        let nextSelections = get().selections;
 
         for (const control of controls.values()) {
           if (control.id === id || !hasSelection(control)) continue;
@@ -351,34 +347,32 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
             control.state.selection.focus,
             control.layout,
           );
+          const current = nextSelections.get(control.id);
+          if (current !== undefined && sameEditableTextSelection(current, nextState.selection)) continue;
           changed = true;
-          nextEditors = new Map(nextEditors).set(control.id, nextState);
-          nextControls = new Map(nextControls).set(control.id, withEditorState(control, nextState));
+          nextSelections = new Map(nextSelections).set(control.id, nextState.selection);
+          nextControls = new Map(nextControls).set(control.id, withSelection(control, nextState.selection));
         }
 
         if (!changed) return;
         controls = nextControls;
-        set({ editors: nextEditors });
+        set({ selections: nextSelections });
       },
       closeMenu: () => {
         if (sameMenuState(get().menu, closedMenu)) return;
         set({ menu: closedMenu });
       },
-      editors: new Map(),
-      ensureEditorState: (id, textValue) => {
-        if (get().editors.has(id)) return;
-        setEditorState(id, createEditableTextEditorState({ text: textValue }));
-      },
       getControl: (id) => controls.get(id),
       getControls: () => Array.from(controls.values()),
       menu: closedMenu,
       registerControl: (control) => {
-        const editorState = get().editors.get(control.id);
+        const selection = get().selections.get(control.id);
         controls = new Map(controls).set(
           control.id,
-          editorState === undefined ? control : withEditorState(control, editorState),
+          selection === undefined ? control : withSelection(control, selection),
         );
       },
+      selections: new Map(),
       setActiveId: (id) => {
         if (get().activeId === id) return;
         set({ activeId: id });
@@ -387,7 +381,6 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
         if (sameMenuState(get().menu, menu)) return;
         set({ menu });
       },
-      syncEditorText,
       unregisterControl: (id) => {
         if (!controls.has(id)) return;
         const nextControls = new Map(controls);
@@ -398,8 +391,8 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
   });
 };
 
-const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "editors">>()(() => ({
-  editors: new Map(),
+const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "selections">>()(() => ({
+  selections: new Map(),
 }));
 
 const menuLayoutForControl = (
@@ -839,58 +832,25 @@ export const TextSurface = ({
   });
 };
 
-const useTextPrimitiveState = ({
-  defaultValue,
-  textValue,
-}: {
-  readonly defaultValue: string;
-  readonly onValueChange: ((value: string) => void) | undefined;
-  readonly textValue: string | undefined;
-}): {
+const useTextPrimitiveState = (textValue: string): {
   readonly id: string;
   readonly state: EditableTextEditorState;
 } => {
   const id = useId();
   const context = useContext(TextSurfaceContext);
   const store = context?.store;
-  const storedState = useStore(
-    (store ?? emptyTextSurfaceStore) as StoreApi<Pick<TextSurfaceStoreState, "editors">>,
-    (state) => state.editors.get(id),
-  );
-  const controlled = textValue !== undefined;
-  const initialTextRef = useRef(textValue ?? defaultValue);
-  const initialStateRef = useRef<EditableTextEditorState>(
-    createEditableTextEditorState({ text: initialTextRef.current }),
-  );
-  const [localState] = useState(initialStateRef.current);
-  const localControlledState = useMemo(
-    () => controlled
-      ? createEditableTextEditorState({
-          selection: localState.selection,
-          text: textValue ?? "",
-        })
-      : localState,
-    [controlled, localState, textValue],
+  const selection = useStore(
+    (store ?? emptyTextSurfaceStore) as StoreApi<Pick<TextSurfaceStoreState, "selections">>,
+    (state) => state.selections.get(id),
   );
 
-  useLayoutEffect(() => {
-    if (store === undefined) return;
-    store.getState().ensureEditorState(id, controlled ? textValue ?? "" : initialTextRef.current);
-  }, [controlled, id, store, textValue]);
-
-  useLayoutEffect(() => {
-    if (store === undefined || !controlled || textValue === undefined) return;
-    store.getState().syncEditorText(id, textValue);
-  }, [controlled, id, store, textValue]);
-
-  if (store === undefined) {
-    return { id, state: localControlledState };
-  }
-
-  return {
+  return useMemo(() => ({
     id,
-    state: storedState ?? initialStateRef.current,
-  };
+    state: createEditableTextEditorState({
+      ...(selection === undefined ? {} : { selection }),
+      text: textValue,
+    }),
+  }), [id, selection, textValue]);
 };
 
 const useRegisterTextControl = (control: TextControlRegistration): void => {
@@ -941,7 +901,6 @@ const fieldNodes = ({
 
 const usePrimitiveRegistration = ({
   copyable,
-  controlled,
   editable,
   font,
   fontSize,
@@ -955,7 +914,6 @@ const usePrimitiveRegistration = ({
   state,
 }: {
   readonly copyable: boolean;
-  readonly controlled: boolean;
   readonly editable: boolean;
   readonly font?: TextFontFace;
   readonly fontSize?: number;
@@ -997,7 +955,6 @@ const usePrimitiveRegistration = ({
       style.fieldPaddingY,
     ),
     copyable,
-    controlled,
     editable,
     ...(font === undefined ? {} : { font }),
     id,
@@ -1012,7 +969,6 @@ const usePrimitiveRegistration = ({
     text: state.text,
   }), [
     copyable,
-    controlled,
     editable,
     font,
     fragment.layout,
@@ -1051,14 +1007,9 @@ export const TextPrimitive = ({
 }: TextPrimitiveProps): ReactNode => {
   const value = textProp ?? textFromChildren(children);
   const interactive = selectable === true || copyable === true;
-  const { id, state } = useTextPrimitiveState({
-    defaultValue: value,
-    onValueChange: undefined,
-    textValue: value,
-  });
+  const { id, state } = useTextPrimitiveState(value);
   const { context, control } = usePrimitiveRegistration({
     copyable: copyable === true || selectable === true,
-    controlled: true,
     editable: false,
     ...(font === undefined ? {} : { font }),
     ...(fontSize === undefined ? {} : { fontSize }),
@@ -1105,7 +1056,6 @@ export const TextPrimitive = ({
 
 const TextFieldPrimitive = ({
   color,
-  defaultValue = "",
   font,
   fontSize,
   lineHeight,
@@ -1120,17 +1070,12 @@ const TextFieldPrimitive = ({
   readonly mode: TextControlMode;
   readonly rows: number;
 }): readonly RenderNode[] => {
-  const { id, state } = useTextPrimitiveState({
-    defaultValue,
-    onValueChange,
-    textValue: value,
-  });
+  const { id, state } = useTextPrimitiveState(value);
   const surfaceStyle = useContext(TextSurfaceContext)?.style ?? defaultTextStyle;
   const fieldFontSize = fontSize ?? surfaceStyle.fontSize;
   const fieldLineHeight = lineHeight ?? surfaceStyle.lineHeight;
   const { active, context, control } = usePrimitiveRegistration({
     copyable: true,
-    controlled: value !== undefined,
     editable: true,
     ...(font === undefined ? {} : { font }),
     ...(fontSize === undefined ? {} : { fontSize }),
