@@ -52,7 +52,8 @@ import {
   TextPrimitive,
   type TextAreaPrimitiveProps,
   type TextFieldPrimitiveProps,
-  type TextPrimitiveProps
+  type TextPrimitiveProps,
+  type TextSurfaceBox
 } from './text-surface';
 
 export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
@@ -90,6 +91,7 @@ export type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
   readonly texture?: MeshTextureInput;
 };
 export type TextProps = Omit<TextOptions, 'text'> & {
+  readonly box?: TextSurfaceBox;
   readonly children?: RendererJsxChild;
   readonly copyable?: boolean;
   readonly maxWidth?: number;
@@ -114,7 +116,6 @@ type JsxProps = Partial<
   PerspectiveCameraOptions &
   OrthographicCameraOptions &
   DirectionalLightOptions &
-  GltfOptions &
   BoxGeometryOptions &
   PlaneGeometryOptions &
   WireframeMaterialOptions
@@ -426,6 +427,10 @@ const toMeshOptions = (
 };
 
 export const toText = (props: TextProps): RenderNode => {
+  if (props.box !== undefined) {
+    throw new Error('text box props require the @royal/react Canvas runtime');
+  }
+
   const textValue = typeof props.text === 'string'
     ? props.text
     : toTextContent(props.children);
@@ -541,7 +546,8 @@ const createElement = (
       type === 'text' &&
       (
         (props as TextProps | null)?.selectable === true ||
-        (props as TextProps | null)?.copyable === true
+        (props as TextProps | null)?.copyable === true ||
+        (props as TextProps | null)?.box !== undefined
       )
     ) {
       return toInteractiveText(props as TextProps, key);

@@ -1,5 +1,6 @@
 /** @jsxImportSource @royal/react */
 import { describe, expect, it } from "vitest";
+import { textFieldHeight } from "@royal/react";
 import {
   boxGeometry,
   unlitMaterial,
@@ -62,5 +63,34 @@ describe("React Canvas renderer tree", () => {
     const child = Array.isArray(passChildren) ? passChildren[1] : undefined;
     expect(isReactElementLike(child)).toBe(true);
     expect(isReactElementLike(child) ? child.type : undefined).toBe(Cube);
+  });
+
+  it("routes boxed text controls through React primitives", () => {
+    const box = { height: 0.5, left: 0.25, top: 0.5, width: 3 };
+    const label = (
+      <text box={box} color={[1, 1, 1, 1]}>
+        Boxed label
+      </text>
+    );
+    const input = (
+      <input
+        box={box}
+        onValueChange={() => undefined}
+        value="Controlled"
+      />
+    );
+
+    expect(isReactElementLike(label)).toBe(true);
+    expect(isReactElementLike(label) ? label.type : undefined).not.toBe("text");
+    expect(isReactElementLike(input)).toBe(true);
+    expect(isReactElementLike(input) ? input.type : undefined).not.toBe("input");
+  });
+
+  it("measures text field row height from text metrics and padding", () => {
+    expect(textFieldHeight({
+      lineHeight: 0.4,
+      paddingY: 0.1,
+      rows: 3,
+    })).toBeCloseTo(1.4);
   });
 });

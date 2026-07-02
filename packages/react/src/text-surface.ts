@@ -74,6 +74,20 @@ export interface TextInteractionStyle {
   readonly selectionColor?: Rgba;
 }
 
+export type TextSurfaceBox = {
+  readonly height?: number;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly z?: number;
+};
+
+export type TextFieldHeightOptions = {
+  readonly lineHeight?: number;
+  readonly paddingY?: number;
+  readonly rows?: number;
+};
+
 export interface TextSurfaceProps
   extends Omit<
     CanvasProps,
@@ -96,6 +110,7 @@ export interface TextSurfaceProps
 }
 
 export interface TextPrimitiveProps {
+  readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly color?: Rgba;
   readonly copyable?: boolean;
@@ -110,6 +125,7 @@ export interface TextPrimitiveProps {
 
 export interface TextFieldPrimitiveProps {
   readonly ariaLabel?: string;
+  readonly box?: TextSurfaceBox;
   readonly color?: Rgba;
   readonly font?: TextFontFace;
   readonly fontSize?: number;
@@ -221,6 +237,13 @@ const defaultTextStyle = {
   placeholderColor: [0.55, 0.62, 0.62, 1],
   selectionColor: [0.08, 0.28, 0.42, 1],
 } as const satisfies Required<TextInteractionStyle>;
+
+export const textFieldHeight = ({
+  lineHeight = defaultTextStyle.lineHeight,
+  paddingY = defaultTextStyle.fieldPaddingY,
+  rows = 1,
+}: TextFieldHeightOptions = {}): number =>
+  Math.max(1, rows) * lineHeight + paddingY * 2;
 
 const closedMenu: TextMenuState = {
   controlId: undefined,
@@ -449,6 +472,62 @@ const controlBounds = (
   right: origin[0] + maxWidth + paddingX,
   top: origin[1] + lineHeight * 0.7 + paddingY,
 });
+
+const boxWorldLeft = (bounds: CanvasWorldBounds, box: TextSurfaceBox): number =>
+  bounds.left + box.left;
+
+const boxWorldTop = (bounds: CanvasWorldBounds, box: TextSurfaceBox): number =>
+  bounds.top - box.top;
+
+const boxBounds = (
+  surfaceBounds: CanvasWorldBounds,
+  box: TextSurfaceBox,
+  fallbackHeight: number,
+): TextControlBounds => {
+  const left = boxWorldLeft(surfaceBounds, box);
+  const top = boxWorldTop(surfaceBounds, box);
+  const height = box.height ?? fallbackHeight;
+
+  return {
+    bottom: top - height,
+    left,
+    right: left + box.width,
+    top,
+  };
+};
+
+const boxMaxWidth = (
+  box: TextSurfaceBox,
+  paddingX = 0,
+): number => Math.max(0, box.width - paddingX * 2);
+
+const textOriginForBox = (
+  context: TextSurfaceContextValue,
+  box: TextSurfaceBox,
+  font: TextFontFace | undefined,
+  fontSize: number,
+  lineHeight: number,
+): Vec3 => [
+  boxWorldLeft(context.bounds, box),
+  textBaselineForVerticalCenter(
+    font,
+    fontSize,
+    boxWorldTop(context.bounds, box),
+    box.height ?? lineHeight,
+  ),
+  box.z ?? 0,
+];
+
+const fieldOriginForBox = (
+  context: TextSurfaceContextValue,
+  box: TextSurfaceBox,
+  lineHeight: number,
+  paddingX: number,
+): Vec3 => [
+  boxWorldLeft(context.bounds, box) + paddingX,
+  boxWorldTop(context.bounds, box) - lineHeight / 2,
+  box.z ?? 0,
+];
 
 const menuNodes = (
   context: TextSurfaceContextValue,
@@ -869,28 +948,34 @@ const useRegisterTextControl = (control: TextControlRegistration): void => {
 
 const fieldNodes = ({
   context,
+  height,
   lineHeight,
   maxWidth,
   origin,
   rows,
 }: {
   readonly context: TextSurfaceContextValue;
+  readonly height?: number;
   readonly lineHeight: number;
   readonly maxWidth: number;
   readonly origin: Vec3;
   readonly rows: number;
 }): readonly RenderNode[] => {
   const width = maxWidth + context.style.fieldPaddingX * 2;
-  const height = rows * lineHeight + context.style.fieldPaddingY * 2;
+  const resolvedHeight = height ?? textFieldHeight({
+    lineHeight,
+    paddingY: context.style.fieldPaddingY,
+    rows,
+  });
 
   return [
     mesh({
-      geometry: boxGeometry({ size: [width, height, 0.02] }),
+      geometry: boxGeometry({ size: [width, resolvedHeight, 0.02] }),
       material: unlitMaterial({ color: context.style.fieldColor }),
       transform: {
         position: [
           origin[0] + maxWidth / 2,
-          origin[1] - (height - lineHeight) / 2,
+          origin[1] - (resolvedHeight - lineHeight) / 2,
           origin[2] - 0.05,
         ],
         rotation: [0, 0, 0],
@@ -900,6 +985,7 @@ const fieldNodes = ({
 };
 
 const usePrimitiveRegistration = ({
+  bounds,
   copyable,
   editable,
   font,
@@ -913,6 +999,7 @@ const usePrimitiveRegistration = ({
   selectable,
   state,
 }: {
+  readonly bounds?: TextControlBounds;
   readonly copyable: boolean;
   readonly editable: boolean;
   readonly font?: TextFontFace;
@@ -946,7 +1033,7 @@ const usePrimitiveRegistration = ({
     text: state.text,
   }), [effectiveFontSize, effectiveLineHeight, font, maxWidth, mode, origin, state.selection, state.text, style.color]);
   const control = useMemo<TextControlRegistration>(() => ({
-    bounds: controlBounds(
+    bounds: bounds ?? controlBounds(
       origin,
       maxWidth,
       effectiveLineHeight,
@@ -968,6 +1055,7 @@ const usePrimitiveRegistration = ({
     state,
     text: state.text,
   }), [
+    bounds,
     copyable,
     editable,
     font,
@@ -994,6 +1082,7 @@ const usePrimitiveRegistration = ({
 };
 
 export const TextPrimitive = ({
+  box,
   children,
   color,
   copyable,
@@ -1008,30 +1097,45 @@ export const TextPrimitive = ({
   const value = textProp ?? textFromChildren(children);
   const interactive = selectable === true || copyable === true;
   const { id, state } = useTextPrimitiveState(value);
+  const surfaceContext = useContext(TextSurfaceContext);
+  const style = surfaceContext?.style ?? defaultTextStyle;
+  const effectiveFontSize = fontSize ?? style.fontSize;
+  const effectiveLineHeight = lineHeight ?? style.lineHeight;
+  const resolvedOrigin = box === undefined || surfaceContext === undefined
+    ? origin
+    : textOriginForBox(surfaceContext, box, font, effectiveFontSize, effectiveLineHeight);
+  const resolvedMaxWidth = box === undefined ? maxWidth : boxMaxWidth(box);
+  const resolvedBounds = box === undefined || surfaceContext === undefined
+    ? undefined
+    : boxBounds(surfaceContext.bounds, box, box.height ?? effectiveLineHeight);
   const { context, control } = usePrimitiveRegistration({
+    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
     copyable: copyable === true || selectable === true,
     editable: false,
     ...(font === undefined ? {} : { font }),
     ...(fontSize === undefined ? {} : { fontSize }),
     id,
     ...(lineHeight === undefined ? {} : { lineHeight }),
-    maxWidth,
+    maxWidth: resolvedMaxWidth,
     mode: "multiline",
-    origin,
+    origin: resolvedOrigin,
     selectable: interactive,
     state,
   });
-  const style = context?.style ?? defaultTextStyle;
-  const textColor = color ?? style.color;
+  if (box !== undefined && surfaceContext === undefined) {
+    throw new Error("Royal text box props require a TextSurface ancestor.");
+  }
+
+  const textColor = color ?? (context?.style ?? style).color;
   const fragment = createEditableTextFragment({
     color: textColor,
     ...(font === undefined ? {} : { font }),
-    fontSize: fontSize ?? style.fontSize,
-    lineHeight: lineHeight ?? style.lineHeight,
-    maxWidth,
-    origin,
+    fontSize: effectiveFontSize,
+    lineHeight: effectiveLineHeight,
+    maxWidth: resolvedMaxWidth,
+    origin: resolvedOrigin,
     selection: interactive ? state.selection : createEditableTextEditorState({ text: value }).selection,
-    selectionColor: style.selectionColor,
+    selectionColor: (context?.style ?? style).selectionColor,
     text: value,
   });
 
@@ -1042,7 +1146,7 @@ export const TextPrimitive = ({
         ...(font === undefined ? {} : { font }),
         ...(fontSize === undefined ? {} : { fontSize }),
         ...(lineHeight === undefined ? {} : { lineHeight }),
-        origin,
+        origin: resolvedOrigin,
         text: value,
       }),
     ]);
@@ -1055,6 +1159,7 @@ export const TextPrimitive = ({
 };
 
 const TextFieldPrimitive = ({
+  box,
   color,
   font,
   fontSize,
@@ -1071,23 +1176,42 @@ const TextFieldPrimitive = ({
   readonly rows: number;
 }): readonly RenderNode[] => {
   const { id, state } = useTextPrimitiveState(value);
-  const surfaceStyle = useContext(TextSurfaceContext)?.style ?? defaultTextStyle;
+  const surfaceContext = useContext(TextSurfaceContext);
+  const surfaceStyle = surfaceContext?.style ?? defaultTextStyle;
   const fieldFontSize = fontSize ?? surfaceStyle.fontSize;
   const fieldLineHeight = lineHeight ?? surfaceStyle.lineHeight;
+  const defaultFieldHeight = textFieldHeight({
+    lineHeight: fieldLineHeight,
+    paddingY: surfaceStyle.fieldPaddingY,
+    rows,
+  });
+  const resolvedHeight = box?.height ?? defaultFieldHeight;
+  const resolvedMaxWidth = box === undefined ? maxWidth : boxMaxWidth(box, surfaceStyle.fieldPaddingX);
+  const resolvedOrigin = box === undefined || surfaceContext === undefined
+    ? origin
+    : fieldOriginForBox(surfaceContext, box, fieldLineHeight, surfaceStyle.fieldPaddingX);
+  const resolvedBounds = box === undefined || surfaceContext === undefined
+    ? undefined
+    : boxBounds(surfaceContext.bounds, box, resolvedHeight);
   const { active, context, control } = usePrimitiveRegistration({
+    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
     copyable: true,
     editable: true,
     ...(font === undefined ? {} : { font }),
     ...(fontSize === undefined ? {} : { fontSize }),
     id,
     ...(lineHeight === undefined ? {} : { lineHeight }),
-    maxWidth,
+    maxWidth: resolvedMaxWidth,
     mode,
     ...(onValueChange === undefined ? {} : { onValueChange }),
-    origin,
+    origin: resolvedOrigin,
     selectable: true,
     state,
   });
+  if (box !== undefined && surfaceContext === undefined) {
+    throw new Error("Royal text box props require a TextSurface ancestor.");
+  }
+
   const style = context?.style ?? defaultTextStyle;
   const fragment = createEditableTextFragment({
     caretColor: style.caretColor,
@@ -1096,9 +1220,9 @@ const TextFieldPrimitive = ({
     ...(font === undefined ? {} : { font }),
     fontSize: fieldFontSize,
     lineHeight: fieldLineHeight,
-    maxWidth,
+    maxWidth: resolvedMaxWidth,
     mode,
-    origin,
+    origin: resolvedOrigin,
     ...(placeholder === undefined ? {} : { placeholder }),
     placeholderColor: style.placeholderColor,
     selection: state.selection,
@@ -1112,9 +1236,10 @@ const TextFieldPrimitive = ({
       ? []
       : fieldNodes({
         context,
+        height: resolvedHeight,
         lineHeight: fieldLineHeight,
-        maxWidth,
-        origin,
+        maxWidth: resolvedMaxWidth,
+        origin: resolvedOrigin,
         rows,
       })),
     ...fragment.nodes,

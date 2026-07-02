@@ -182,6 +182,14 @@ describe("renderer JSX contract", () => {
     });
   });
 
+  it("rejects surface-local text boxes in renderer-only JSX", () => {
+    expect(() => jsx("text", {
+      box: { left: 0, top: 0, width: 1 },
+      color: [1, 1, 1, 1],
+      text: "Boxed text",
+    })).toThrow("text box props require the @royal/react Canvas runtime");
+  });
+
   it("rejects conflicting mesh geometry and material sources", () => {
     expect(() => (
       <mesh color={[1, 1, 1, 1]} geometry={boxGeometry(1)}>
