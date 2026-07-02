@@ -2,10 +2,27 @@
 import {
   Canvas,
   OrbitControls,
+  useFrameIndex,
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
 import { exampleRenderer } from '../rendering';
+
+const MovingLight = (): ReactNode => {
+  const frame = useFrameIndex();
+  const sweep = frame * 0.018;
+
+  return (
+    <directionalLight
+      color={[1.25, 1.18, 1.04, 1]}
+      direction={[
+        Math.cos(sweep) * 0.72,
+        -0.82,
+        -0.48 + Math.sin(sweep) * 0.64,
+      ]}
+    />
+  );
+};
 
 export const StandardLighting = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -22,7 +39,7 @@ export const StandardLighting = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera} clearColor={[0.035, 0.043, 0.05, 1]}>
-          <directionalLight color={[1.25, 1.18, 1.04, 1]} direction={[0.45, -0.8, -1]} />
+          <MovingLight />
           <mesh transform={{ position: [0, -0.78, -0.35], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[5.2, 3.2]} />
             <standardMaterial color={[0.16, 0.2, 0.22, 1]} />
