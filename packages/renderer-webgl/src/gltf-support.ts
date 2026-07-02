@@ -128,6 +128,20 @@ export type GltfMaterial = {
     readonly KHR_materials_ior?: {
       readonly ior?: number;
     };
+    readonly KHR_materials_iridescence?: {
+      readonly iridescenceFactor?: number;
+      readonly iridescenceIor?: number;
+      readonly iridescenceTexture?: GltfTextureInfo;
+      readonly iridescenceThicknessMaximum?: number;
+      readonly iridescenceThicknessMinimum?: number;
+      readonly iridescenceThicknessTexture?: GltfTextureInfo;
+    };
+    readonly KHR_materials_sheen?: {
+      readonly sheenColorFactor?: readonly number[];
+      readonly sheenColorTexture?: GltfTextureInfo;
+      readonly sheenRoughnessFactor?: number;
+      readonly sheenRoughnessTexture?: GltfTextureInfo;
+    };
     readonly KHR_materials_specular?: {
       readonly specularColorFactor?: readonly number[];
       readonly specularColorTexture?: GltfTextureInfo;
@@ -267,6 +281,8 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_materials_clearcoat",
   "KHR_materials_emissive_strength",
   "KHR_materials_ior",
+  "KHR_materials_iridescence",
+  "KHR_materials_sheen",
   "KHR_materials_specular",
   "KHR_materials_transmission",
   "KHR_materials_unlit",

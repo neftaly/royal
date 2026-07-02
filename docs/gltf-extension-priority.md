@@ -54,6 +54,7 @@ samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `KHR_texture_basisu`, `KHR_materials_unlit`, `KHR_lights_punctual`,
 `KHR_materials_emissive_strength`, `KHR_materials_specular`,
 `KHR_materials_ior`, `KHR_materials_clearcoat`,
+`KHR_materials_sheen`, `KHR_materials_iridescence`,
 `KHR_materials_transmission`, `KHR_materials_volume`,
 `KHR_materials_variants`,
 `KHR_node_visibility`, and vendor `MSFT_lod`.
@@ -94,9 +95,9 @@ need them.
 | M1 | `KHR_materials_transmission` | Adds physically based light transmission through surfaces. | Implemented for `transmissionFactor` with renderer-private current-frame color sampling; `transmissionTexture` is diagnosed and ignored. |
 | M1 | `KHR_materials_volume` | Adds thickness, attenuation color, and attenuation distance. | Implemented for factor-level attenuation on the private transmission screen sample; `thicknessTexture` is diagnosed and ignored. |
 | M1 | `KHR_materials_clearcoat` | Adds an extra glossy coating layer. | Implemented for clearcoat factor and clearcoat roughness factor in the forward shader; clearcoat textures are diagnosed and ignored. |
-| M1 | `KHR_materials_sheen` | Adds cloth-like grazing sheen. | Fabric, apparel, soft goods. |
-| M1 | `KHR_materials_anisotropy` | Adds direction-dependent specular highlights. | Brushed metal and hair-like materials. |
-| M1 | `KHR_materials_iridescence` | Adds thin-film color shifting. | Pearlescent, soap-film, coated surfaces. |
+| M1 | `KHR_materials_sheen` | Adds cloth-like grazing sheen. | Implemented for sheen color and roughness factors in the forward shader; sheen textures are diagnosed and ignored. |
+| M1 | `KHR_materials_iridescence` | Adds thin-film color shifting. | Implemented for iridescence factor, thin-film IOR, and uniform effective thickness in the forward shader; iridescence textures are diagnosed and ignored. |
+| M1 | `KHR_materials_anisotropy` | Adds direction-dependent specular highlights. | Next material chunk; requires `TANGENT` VEC4 accessor plumbing and bitangent-aware shader behavior before it can be required-extension supported. |
 | M1 | `KHR_materials_dispersion` | Adds chromatic separation for transmitted light. | Gems or high-end glass; depends on volume/transmission. |
 | M2 | `KHR_animation_pointer` | Lets animations target arbitrary mutable glTF properties with JSON pointers. | After core animation support exists. |
 | M2 | `KHR_xmp_json_ld` | Embeds XMP metadata using JSON-LD. | Asset provenance, commerce metadata, content pipelines. |

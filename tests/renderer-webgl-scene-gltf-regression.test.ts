@@ -1536,6 +1536,138 @@ const materialPbrExtensionTextureDiagnosticTriangleDocument = () => {
   };
 };
 
+const materialSheenIridescenceFactorsTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    extensionsUsed: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_iridescence: {
+            iridescenceFactor: 0.65,
+            iridescenceIor: 1.8,
+            iridescenceThicknessMaximum: 620,
+            iridescenceThicknessMinimum: 120,
+          },
+          KHR_materials_sheen: {
+            sheenColorFactor: [1.4, 0.2, 0.1],
+            sheenRoughnessFactor: 0.55,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
+const materialSheenIridescenceDefaultsTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    extensionsUsed: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_iridescence: {},
+          KHR_materials_sheen: {},
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
+const materialSheenIridescenceTextureDiagnosticTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    extensionsUsed: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_iridescence: {
+            iridescenceTexture: { index: 2 },
+            iridescenceThicknessTexture: { index: 3 },
+          },
+          KHR_materials_sheen: {
+            sheenColorTexture: { index: 0 },
+            sheenRoughnessTexture: { index: 1 },
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+  };
+};
+
+const materialSheenIridescenceBatchKeyTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    extensionsUsed: ["KHR_materials_sheen", "KHR_materials_iridescence"],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_iridescence: {
+            iridescenceFactor: 0.15,
+            iridescenceThicknessMaximum: 300,
+          },
+          KHR_materials_sheen: {
+            sheenColorFactor: [0.1, 0.2, 0.3],
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+      {
+        extensions: {
+          KHR_materials_iridescence: {
+            iridescenceFactor: 0.85,
+            iridescenceThicknessMaximum: 700,
+          },
+          KHR_materials_sheen: {
+            sheenColorFactor: [0.3, 0.2, 0.1],
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            material: 0,
+          },
+          {
+            ...primitive,
+            material: 1,
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const materialTransmissionVolumeTriangleDocument = () => {
   const base = solidTriangleDocument();
   const primitive = base.meshes[0]!.primitives[0]!;
@@ -2305,6 +2437,161 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatTexture.*factor level only/i);
     expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatRoughnessTexture.*factor level only/i);
     expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*factor level only/i);
+  });
+
+  it("renders required KHR material sheen and iridescence factors as visible shader uniforms", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-sheen-iridescence-factors",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialSheenIridescenceFactorsTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
+      .toContainEqual([1, 0.2, 0.1, 0.55]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors").map(roundVector))
+      .toContainEqual([0.65, 1.8, 120, 620]);
+    expect(sources).toContain("materialSheenContribution");
+    expect(sources).toContain("materialSheenAlbedoScale");
+    expect(sources).toContain("materialIridescenceTint");
+    expect(sources).toContain("materialSpecularFresnel");
+  });
+
+  it("renders required KHR material sheen and iridescence defaults exactly", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-sheen-iridescence-defaults",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialSheenIridescenceDefaultsTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
+      .toContainEqual([0, 0, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors").map(roundVector))
+      .toContainEqual([0, 1.3, 100, 400]);
+  });
+
+  it("diagnoses ignored KHR material sheen and iridescence textures while rendering factors", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-sheen-iridescence-texture-diagnostics",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialSheenIridescenceTextureDiagnosticTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const diagnostics = root.snapshot().diagnostics.join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(diagnostics).toMatch(/KHR_materials_sheen\.sheenColorTexture.*sRGB RGB sheen color multiplier is not implemented/i);
+    expect(diagnostics).toMatch(/KHR_materials_sheen\.sheenRoughnessTexture.*alpha-channel sheen roughness multiplier is not implemented/i);
+    expect(diagnostics).toMatch(/KHR_materials_iridescence\.iridescenceTexture.*red-channel iridescence multiplier is not implemented/i);
+    expect(diagnostics).toMatch(/KHR_materials_iridescence\.iridescenceThicknessTexture.*green-channel thickness-range sampler is not implemented/i);
+  });
+
+  it("keeps sheen and iridescence factors in glTF material batch keys", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-sheen-iridescence-batch-key",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialSheenIridescenceBatchKeyTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
+      .toContainEqual([0.1, 0.2, 0.3, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
+      .toContainEqual([0.3, 0.2, 0.1, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors").map(roundVector))
+      .toContainEqual([0.15, 1.3, 100, 300]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iridescenceFactors").map(roundVector))
+      .toContainEqual([0.85, 1.3, 100, 700]);
   });
 
   it("renders required KHR materials transmission and volume through current-frame screen sampling", async () => {
@@ -3348,7 +3635,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["KHR_materials_sheen"],
+        extensionsUsed: ["KHR_materials_anisotropy"],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -3375,7 +3662,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        version: "unsupported-required-sheen-extension",
+        version: "unsupported-required-anisotropy-extension",
       }),
     ]);
 
@@ -3383,15 +3670,15 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsRequired: ["KHR_materials_sheen"],
-        extensionsUsed: ["KHR_materials_sheen"],
+        extensionsRequired: ["KHR_materials_anisotropy"],
+        extensionsUsed: ["KHR_materials_anisotropy"],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
     expect(root.snapshot().diagnostics.some((message) =>
-      /unsupported required glTF extension.*KHR_materials_sheen/i.test(message))).toBe(true);
+      /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(true);
 
     root.render(renderGraph);
     expect(drawCalls(calls)).toHaveLength(0);
