@@ -1,6 +1,4 @@
 import type { ComponentType } from 'react';
-import { DonnybrookAwarenessPhysics } from './examples/cases/donnybrook/DonnybrookAwarenessPhysics';
-import donnybrookAwarenessPhysicsSource from './examples/cases/donnybrook/DonnybrookAwarenessPhysics.tsx?raw';
 import { FormControls } from './examples/cases/FormControls';
 import formControlsSource from './examples/cases/FormControls.tsx?raw';
 import { GltfHelmet } from './examples/cases/GltfHelmet';
@@ -122,15 +120,6 @@ export const examples = [
     Component: GeneratedAutoLod,
     source: generatedAutoLodSource,
     sourceFile: 'examples/cases/GeneratedAutoLod.tsx',
-  },
-  {
-    id: 'donnybrook-awareness-physics',
-    maturity: 'lab-probe',
-    path: '/donnybrook-awareness-physics',
-    title: 'Donnybrook Awareness Physics',
-    Component: DonnybrookAwarenessPhysics,
-    source: donnybrookAwarenessPhysicsSource,
-    sourceFile: 'examples/cases/donnybrook/DonnybrookAwarenessPhysics.tsx',
   },
 ] as const satisfies readonly Example[];
 

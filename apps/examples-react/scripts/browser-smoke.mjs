@@ -69,11 +69,6 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
   },
-  'donnybrook-awareness-physics': {
-    path: '/donnybrook-awareness-physics',
-    minColorBuckets: 8,
-    minPaintedRatio: 0.006,
-  },
 };
 
 const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) => ({
