@@ -14,12 +14,17 @@ import {
   type Ref,
   type ReactNode,
 } from "react";
+import {
+  createCanvasPointerInteractionState,
+  reduceCanvasPointerInteraction,
+  type CanvasPickedPointerTarget,
+  type CanvasPointerInteractionAction,
+} from "./canvas-pointer-interaction";
 import { createFrameLoop, FrameLoopContext } from "./frame";
 import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime";
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
-  type RoyalPointerEventTarget,
   type RoyalPointerEventType,
 } from "./picking-events";
 import { createRoyalRendererTree } from "./renderer-tree";
@@ -135,12 +140,6 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-type PickedPointerTarget = {
-  readonly hit: PickResult;
-  readonly node: PickResult["target"]["node"];
-  readonly target: RoyalPointerEventTarget;
-};
-
 const toCanvasRootOptions = ({
   backend,
   context,
@@ -217,10 +216,9 @@ export const Canvas = ({
     ref: setCanvasRef,
   });
 
-  const hoveredPointerTargetRef = useRef<PickedPointerTarget | undefined>(undefined);
-  const pressedPointerTargetNodesRef = useRef(new Map<number, PickResult["target"]["node"]>());
+  const pointerInteractionStateRef = useRef(createCanvasPointerInteractionState());
 
-  const eventTargetForHit = useCallback((hit: PickResult | undefined): PickedPointerTarget | undefined => {
+  const eventTargetForHit = useCallback((hit: PickResult | undefined): CanvasPickedPointerTarget | undefined => {
     if (hit === undefined) return undefined;
 
     const target = rendererTree.pointerEventTarget(hit.target.node);
@@ -230,7 +228,7 @@ export const Canvas = ({
   const dispatchRoyalPointerEvent = useCallback((
     type: RoyalPointerEventType,
     nativeEvent: PointerEvent,
-    picked: PickedPointerTarget,
+    picked: CanvasPickedPointerTarget,
   ): void => {
     const target = rendererTree.pointerEventTarget(picked.node) ?? picked.target;
     const handler = handlerForRoyalPointerEvent(target, type);
@@ -308,58 +306,52 @@ export const Canvas = ({
     const root = canvasRoot;
     if (canvas === null || root === null) return undefined;
 
-    const pickedTargetAt = (event: PointerEvent): PickedPointerTarget | undefined =>
+    const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined =>
       eventTargetForHit(root.pick(event));
+    const applyPointerInteraction = (
+      event: PointerEvent,
+      action: CanvasPointerInteractionAction,
+    ): void => {
+      const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, action);
+      pointerInteractionStateRef.current = result.state;
+      for (const dispatch of result.dispatches) {
+        dispatchRoyalPointerEvent(dispatch.type, event, dispatch.picked);
+      }
+    };
 
     const handlePointerMove = (event: PointerEvent): void => {
-      const next = pickedTargetAt(event);
-      const previous = hoveredPointerTargetRef.current;
-      if (previous?.node !== next?.node) {
-        if (previous !== undefined) {
-          dispatchRoyalPointerEvent('pointerleave', event, previous);
-        }
-        if (next !== undefined) {
-          dispatchRoyalPointerEvent('pointerenter', event, next);
-        }
-        hoveredPointerTargetRef.current = next;
-      }
-
-      if (next !== undefined) {
-        dispatchRoyalPointerEvent('pointermove', event, next);
-      }
+      applyPointerInteraction(event, {
+        picked: pickedTargetAt(event),
+        type: "pointermove",
+      });
     };
 
     const handlePointerDown = (event: PointerEvent): void => {
-      const picked = pickedTargetAt(event);
-      if (picked === undefined) {
-        pressedPointerTargetNodesRef.current.delete(event.pointerId);
-      } else {
-        pressedPointerTargetNodesRef.current.set(event.pointerId, picked.node);
-      }
-      if (picked !== undefined) dispatchRoyalPointerEvent('pointerdown', event, picked);
+      applyPointerInteraction(event, {
+        picked: pickedTargetAt(event),
+        pointerId: event.pointerId,
+        type: "pointerdown",
+      });
     };
 
     const handlePointerUp = (event: PointerEvent): void => {
-      const picked = pickedTargetAt(event);
-      const pressedNode = pressedPointerTargetNodesRef.current.get(event.pointerId);
-      pressedPointerTargetNodesRef.current.delete(event.pointerId);
-      if (picked === undefined) return;
-
-      dispatchRoyalPointerEvent('pointerup', event, picked);
-      if (pressedNode === picked.node && event.button === 0) {
-        dispatchRoyalPointerEvent('click', event, picked);
-      }
+      applyPointerInteraction(event, {
+        button: event.button,
+        picked: pickedTargetAt(event),
+        pointerId: event.pointerId,
+        type: "pointerup",
+      });
     };
 
     const handlePointerLeave = (event: PointerEvent): void => {
-      const previous = hoveredPointerTargetRef.current;
-      hoveredPointerTargetRef.current = undefined;
-      pressedPointerTargetNodesRef.current.clear();
-      if (previous !== undefined) dispatchRoyalPointerEvent('pointerleave', event, previous);
+      applyPointerInteraction(event, { type: "pointerleave" });
     };
 
     const handlePointerCancel = (event: PointerEvent): void => {
-      pressedPointerTargetNodesRef.current.delete(event.pointerId);
+      applyPointerInteraction(event, {
+        pointerId: event.pointerId,
+        type: "pointercancel",
+      });
     };
 
     canvas.addEventListener('pointermove', handlePointerMove);
@@ -373,8 +365,10 @@ export const Canvas = ({
       canvas.removeEventListener('pointerup', handlePointerUp);
       canvas.removeEventListener('pointerleave', handlePointerLeave);
       canvas.removeEventListener('pointercancel', handlePointerCancel);
-      hoveredPointerTargetRef.current = undefined;
-      pressedPointerTargetNodesRef.current.clear();
+      pointerInteractionStateRef.current = reduceCanvasPointerInteraction(
+        pointerInteractionStateRef.current,
+        { type: "reset" },
+      ).state;
     };
   }, [
     canvasElement,
