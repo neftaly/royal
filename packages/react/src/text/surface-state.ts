@@ -253,22 +253,26 @@ const registerTextControl = (
   state: TextSurfaceState,
   control: TextControlRegistration,
 ): TextSurfaceState => {
+  const currentControl = state.controls.get(control.id);
   const selection = state.selections.get(control.id);
   const selectedControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
     ? control
     : withSelection(control, selection);
   const persistedScrollLine = state.scrollLines.get(control.id) ?? selectedControl.scrollLine;
-  const scrollLine = clampScrollLineFor({
+  const clampedScrollLine = clampScrollLineFor({
     ...selectedControl,
     scrollLine: persistedScrollLine,
   }, persistedScrollLine);
+  const scrollLine = currentControl !== undefined && currentControl.text !== selectedControl.text
+    ? scrollLineForSelection({ ...selectedControl, scrollLine: clampedScrollLine }, selectedControl.selection)
+    : clampedScrollLine;
   const nextControl = {
     ...selectedControl,
     scrollLine,
   };
   const currentScroll = state.scrollLines.get(control.id);
 
-  if (state.controls.get(control.id) === nextControl && currentScroll === scrollLine) return state;
+  if (currentControl === nextControl && currentScroll === scrollLine) return state;
 
   const nextControls = new Map(state.controls).set(control.id, nextControl);
   if (currentScroll === scrollLine) {

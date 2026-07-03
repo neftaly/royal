@@ -1,21 +1,28 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Vec3 } from "@royal/renderer-core";
 import {
+  applyEditableTextEditorKeyInput,
   createEditableTextEditorState,
+  editableTextCaretPlacement,
   editableTextEditorSelectedText,
   layoutEditableText,
   type EditableTextLayout,
+  type EditableTextKeyInput,
   type EditableTextSelection,
 } from "@royal/renderer-core/text/editable";
 import type { TextFontFace } from "@royal/renderer-core/text/font";
 import {
   closedMenu,
+  clampScrollLineFor,
   initialTextSurfaceState,
+  maxScrollLineFor,
   reduceTextSurfaceState,
+  scrollLineForSelection,
   type ActionControlRegistration,
   type TextControlRegistration,
   type TextSurfaceState,
 } from "../packages/react/src/text/surface-state";
+import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 import { loadTestTextFont } from "./text-font-fixture";
 
 const origin: Vec3 = [0, 0, 0];
@@ -118,6 +125,84 @@ const actionControl = (id = "button"): ActionControlRegistration => ({
   kind: "button",
   onPress: () => undefined,
 });
+
+const fuzzText = (random: SeededRandom): string => {
+  const characters = ["a", "b", "c", "x", "y", "z", " ", "\n"] as const;
+  const length = random.int(0, 28);
+  return random.array(length, () => random.pick(characters)).join("");
+};
+
+const fuzzSelectionFor = (
+  random: SeededRandom,
+  layout: EditableTextLayout,
+): EditableTextSelection => {
+  const anchor = random.int(0, layout.text.length + 1);
+  const focus = random.int(0, layout.text.length + 1);
+  return {
+    anchor,
+    anchorLine: editableTextCaretPlacement(layout, anchor)?.line,
+    focus,
+    focusLine: editableTextCaretPlacement(layout, focus)?.line,
+  };
+};
+
+const fuzzKeyInput = (random: SeededRandom): EditableTextKeyInput => {
+  const key = random.pick([
+    "a",
+    "b",
+    " ",
+    "Enter",
+    "Backspace",
+    "Delete",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+    "c",
+    "x",
+    "v",
+  ] as const);
+
+  if (key === "c" || key === "x" || key === "v") {
+    return random.boolean(0.45) ? { ctrlKey: true, key } : { key };
+  }
+
+  return {
+    key,
+    shiftKey: random.boolean(0.25),
+  };
+};
+
+const expectRegisteredTextInvariants = (
+  state: TextSurfaceState,
+  id: string,
+  expectedText: string,
+): TextControlRegistration => {
+  const control = state.controls.get(id);
+  if (control === undefined) throw new Error(`Missing registered control ${id}`);
+
+  expect(control.text).toBe(expectedText);
+  expect(control.state.text).toBe(expectedText);
+  expect(control.layout.text).toBe(expectedText);
+  expect(control.selection.anchor).toBeGreaterThanOrEqual(0);
+  expect(control.selection.focus).toBeGreaterThanOrEqual(0);
+  expect(control.selection.anchor).toBeLessThanOrEqual(expectedText.length);
+  expect(control.selection.focus).toBeLessThanOrEqual(expectedText.length);
+  expect(control.selectedText).toBe(editableTextEditorSelectedText(control.state));
+
+  const persistedSelection = state.selections.get(id);
+  if (persistedSelection !== undefined) {
+    expect(control.selection).toEqual(persistedSelection);
+  }
+
+  const scrollLine = state.scrollLines.get(id) ?? control.scrollLine;
+  expect(scrollLine).toBe(clampScrollLineFor(control, scrollLine));
+  expect(scrollLine).toBeGreaterThanOrEqual(0);
+  expect(scrollLine).toBeLessThanOrEqual(maxScrollLineFor(control));
+  expect(control.scrollLine).toBe(scrollLine);
+
+  return control;
+};
 
 describe("React text surface state reducer", () => {
   it("updates editor selection and emits controlled value-change effects", () => {
@@ -277,6 +362,66 @@ describe("React text surface state reducer", () => {
       type: "action-control/unregister",
     }).state;
     expect(withoutAction.actionControls.has(button.id)).toBe(false);
+  });
+
+  it("keeps controlled editor key updates, re-registration, and scroll windows coherent", () => {
+    forEachFuzzCase({ cases: 24, seed: 0x6ef3_7a11 }, ({ label, random }) => {
+      const id = `field-${label}`;
+      const visibleLineCount = random.pick([1, 2, 3] as const);
+      let text = fuzzText(random);
+      let layout = layoutFor(text);
+      let state = reduceTextSurfaceState(emptyState(), {
+        control: textControl({
+          id,
+          scrollLine: random.int(0, layout.lines.length + 4),
+          selected: fuzzSelectionFor(random, layout),
+          text,
+          visibleLineCount,
+        }),
+        type: "text-control/register",
+      }).state;
+
+      expectRegisteredTextInvariants(state, id, text);
+
+      for (let step = 0; step < 18; step += 1) {
+        const control = expectRegisteredTextInvariants(state, id, text);
+        const applied = applyEditableTextEditorKeyInput(control.state, fuzzKeyInput(random), {
+          mode: "multiline",
+        });
+        const result = reduceTextSurfaceState(state, {
+          editorState: applied.state,
+          id,
+          type: "editor/apply-state",
+        });
+        const changedText = applied.state.text !== control.text;
+
+        expect(result.effects).toEqual(
+          changedText
+            ? [{ id, type: "value-change", value: applied.state.text }]
+            : [],
+        );
+        expect(result.state.selections.get(id)).toEqual(applied.state.selection);
+
+        text = changedText ? applied.state.text : text;
+        layout = layoutFor(text);
+        state = reduceTextSurfaceState(result.state, {
+          control: textControl({
+            id,
+            selected: selection(0),
+            text,
+            visibleLineCount,
+          }),
+          type: "text-control/register",
+        }).state;
+
+        const registered = expectRegisteredTextInvariants(state, id, text);
+        expect(registered.selection).toEqual(applied.state.selection);
+        expect(state.scrollLines.get(id)).toBe(
+          scrollLineForSelection(registered, registered.selection),
+        );
+        expect(registered.layout.lines).toEqual(layout.lines);
+      }
+    });
   });
 
   it("keeps menu and pressed action updates idempotent", () => {

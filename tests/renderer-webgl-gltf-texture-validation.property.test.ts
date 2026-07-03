@@ -27,6 +27,25 @@ type GsSvgReplay = {
   readonly expectedPass: boolean;
 };
 
+type TextureSourceConflictReplay = {
+  readonly document: GltfDocument;
+  readonly extension: TextureSourceExtension;
+  readonly conflictIndex: number;
+};
+
+type ImageLoadKeyExpectation = {
+  readonly description: string;
+  readonly image: GltfImage;
+  readonly imageIndex?: number;
+  readonly kind: GltfImageKind;
+};
+
+type ImageLoadKeyReplay = {
+  readonly entries: readonly ImageLoadKeyExpectation[];
+  readonly expectedEqualGroups: readonly (readonly number[])[];
+  readonly expectedDistinctGroups: readonly (readonly number[])[];
+};
+
 const extensionPool = [
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
@@ -288,6 +307,101 @@ const gsSvgReplays: readonly FuzzReplay[] = [
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
+  {
+    label: "missing raster fallback image ref",
+    value: {
+      document: {
+        ...acceptedGsSvgDocument,
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 3 }],
+      },
+      expectedPass: false,
+    } satisfies GsSvgReplay,
+  },
+  {
+    label: "missing svg source image ref",
+    value: {
+      document: {
+        ...acceptedGsSvgDocument,
+        textures: [{ extensions: { GS_texture_svg: { source: 4 } }, source: 0 }],
+      },
+      expectedPass: false,
+    } satisfies GsSvgReplay,
+  },
+];
+
+const textureSourceConflictReplays: readonly FuzzReplay[] = [
+  {
+    label: "required EXT_texture_webp conflicts with core fallback",
+    value: {
+      conflictIndex: 0,
+      document: {
+        extensionsRequired: ["EXT_texture_webp"],
+        extensionsUsed: ["EXT_texture_webp"],
+        images: [{ uri: "fallback.png" }, { uri: "texture.webp" }],
+        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, source: 0 }],
+      },
+      extension: "EXT_texture_webp",
+    } satisfies TextureSourceConflictReplay,
+  },
+  {
+    label: "required KHR_texture_basisu conflicts after unrelated texture",
+    value: {
+      conflictIndex: 1,
+      document: {
+        extensionsRequired: ["KHR_texture_basisu"],
+        extensionsUsed: ["KHR_texture_basisu"],
+        images: [{ uri: "albedo.png" }, { uri: "albedo.ktx2" }],
+        textures: [
+          { source: 0 },
+          { extensions: { KHR_texture_basisu: { source: 1 } }, source: 0 },
+          { extensions: { KHR_texture_basisu: { source: 1 } } },
+        ],
+      },
+      extension: "KHR_texture_basisu",
+    } satisfies TextureSourceConflictReplay,
+  },
+];
+
+const imageLoadKeyReplays: readonly FuzzReplay[] = [
+  {
+    label: "same URI and kind reuse one cache key across image indices",
+    value: {
+      entries: [
+        { description: "first URI image", image: { uri: "textures/shared.png" }, imageIndex: 0, kind: "image" },
+        { description: "second URI image", image: { uri: "textures/shared.png" }, imageIndex: 7, kind: "image" },
+        { description: "same URI loaded as svg", image: { uri: "textures/shared.png" }, imageIndex: 7, kind: "svg" },
+      ],
+      expectedDistinctGroups: [[0, 2], [1, 2]],
+      expectedEqualGroups: [[0, 1]],
+    } satisfies ImageLoadKeyReplay,
+  },
+  {
+    label: "same bufferView keeps image-index identity separate",
+    value: {
+      entries: [
+        {
+          description: "bufferView image index zero",
+          image: { bufferView: 2, mimeType: "image/png" },
+          imageIndex: 0,
+          kind: "image",
+        },
+        {
+          description: "bufferView image index one",
+          image: { bufferView: 2, mimeType: "image/png" },
+          imageIndex: 1,
+          kind: "image",
+        },
+        {
+          description: "bufferView image index one as basisu",
+          image: { bufferView: 2, mimeType: "image/png" },
+          imageIndex: 1,
+          kind: "basisu",
+        },
+      ],
+      expectedDistinctGroups: [[0, 1], [1, 2], [0, 2]],
+      expectedEqualGroups: [],
+    } satisfies ImageLoadKeyReplay,
+  },
 ];
 
 describe("renderer-webgl glTF texture validation properties", () => {
@@ -315,11 +429,17 @@ describe("renderer-webgl glTF texture validation properties", () => {
   });
 
   it("rejects required texture source extensions when the texture also has a core source", () => {
-    forEachFuzzCase({ cases: 24, seed: 0x2190a7e4 }, ({ label, random }) => {
-      const extension = random.pick(textureSourceExtensions);
+    forEachFuzzCase({ cases: 24, replays: textureSourceConflictReplays, seed: 0x2190a7e4 }, ({
+      label,
+      random,
+      replay,
+    }) => {
+      const replayValue = replay as TextureSourceConflictReplay | undefined;
+      const extension = replayValue?.extension ?? random.pick(textureSourceExtensions);
       const textureCount = random.int(1, 6);
-      const conflictIndex = random.int(0, textureCount);
-      const document = documentWithConflictingTextureSource(extension, textureCount, conflictIndex);
+      const conflictIndex = replayValue?.conflictIndex ?? random.int(0, textureCount);
+      const document = replayValue?.document
+        ?? documentWithConflictingTextureSource(extension, textureCount, conflictIndex);
       const counters = validationCounters(document, "rejected");
 
       expect(
@@ -338,9 +458,37 @@ describe("renderer-webgl glTF texture validation properties", () => {
   });
 
   it("keeps generated image load keys distinct across source kind and backing source identity", () => {
-    forEachFuzzCase({ cases: 32, seed: 0x91e0f3c6 }, ({ label, random, seed }) => {
+    forEachFuzzCase({ cases: 32, replays: imageLoadKeyReplays, seed: 0x91e0f3c6 }, ({
+      label,
+      random,
+      replay,
+      seed,
+    }) => {
       const assetKey = `asset-${seed.toString(16)}`;
       const src = `https://example.test/models/${seed.toString(16)}/scene.gltf`;
+      const replayValue = replay as ImageLoadKeyReplay | undefined;
+      if (replayValue !== undefined) {
+        const keys = replayValue.entries.map((entry) => ({
+          description: entry.description,
+          key: gltfImageLoadKey(assetKey, src, entry.imageIndex, entry.image, entry.kind),
+        }));
+        for (const group of replayValue.expectedEqualGroups) {
+          const expected = keys[group[0] ?? 0]?.key;
+          expect(
+            group.map((index) => keys[index]?.key),
+            `${label} equal group=${JSON.stringify(group)} keys=${JSON.stringify(keys)}`,
+          ).toEqual(group.map(() => expected));
+        }
+        for (const group of replayValue.expectedDistinctGroups) {
+          const groupKeys = group.map((index) => keys[index]?.key);
+          expect(
+            new Set(groupKeys).size,
+            `${label} distinct group=${JSON.stringify(group)} keys=${JSON.stringify(keys)}`,
+          ).toBe(groupKeys.length);
+        }
+        return;
+      }
+
       const entries: { readonly key: string; readonly summary: string }[] = [];
 
       const uriCount = random.int(1, 5);
