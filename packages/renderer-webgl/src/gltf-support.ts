@@ -134,6 +134,9 @@ export type GltfMaterial = {
       readonly clearcoatRoughnessTexture?: GltfTextureInfo;
       readonly clearcoatTexture?: GltfTextureInfo;
     };
+    readonly KHR_materials_dispersion?: {
+      readonly dispersion?: number;
+    };
     readonly KHR_materials_emissive_strength?: {
       readonly emissiveStrength?: number;
     };
@@ -296,6 +299,7 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_texture_basisu",
   "KHR_lights_punctual",
   "KHR_materials_clearcoat",
+  "KHR_materials_dispersion",
   "KHR_materials_emissive_strength",
   "KHR_materials_ior",
   "KHR_materials_iridescence",

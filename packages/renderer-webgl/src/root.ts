@@ -333,6 +333,7 @@ type MaterialPbrExtensionFactors = {
   readonly attenuationDistance: number;
   readonly clearcoatFactor: number;
   readonly clearcoatRoughnessFactor: number;
+  readonly dispersionFactor: number;
   readonly ior: number;
   readonly iridescenceFactor: number;
   readonly iridescenceIor: number;
@@ -393,6 +394,7 @@ const DEFAULT_MATERIAL_PBR_EXTENSION_FACTORS: MaterialPbrExtensionFactors = {
   attenuationDistance: Infinity,
   clearcoatFactor: 0,
   clearcoatRoughnessFactor: 0,
+  dispersionFactor: 0,
   ior: 1.5,
   iridescenceFactor: 0,
   iridescenceIor: 1.3,
@@ -1010,6 +1012,7 @@ const materialPbrExtensionFactorsKey = (factors: MaterialPbrExtensionFactors): s
     factors.ior,
     factors.clearcoatFactor,
     factors.clearcoatRoughnessFactor,
+    factors.dispersionFactor,
     ...factors.sheenColorFactor,
     factors.sheenRoughnessFactor,
     factors.iridescenceFactor,
@@ -1467,6 +1470,7 @@ const gltfMaterialPbrExtensionFactors = (
   const sheen = extensions?.KHR_materials_sheen;
   const iridescence = extensions?.KHR_materials_iridescence;
   const clearcoat = extensions?.KHR_materials_clearcoat;
+  const dispersion = extensions?.KHR_materials_dispersion;
   const transmission = extensions?.KHR_materials_transmission;
   const volume = extensions?.KHR_materials_volume;
   if (
@@ -1475,6 +1479,7 @@ const gltfMaterialPbrExtensionFactors = (
     && sheen === undefined
     && iridescence === undefined
     && clearcoat === undefined
+    && dispersion === undefined
     && transmission === undefined
     && volume === undefined
   ) return undefined;
@@ -1484,6 +1489,7 @@ const gltfMaterialPbrExtensionFactors = (
     attenuationDistance: gltfAttenuationDistance(volume?.attenuationDistance),
     clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
     clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
+    dispersionFactor: nonNegativeFiniteNumber(dispersion?.dispersion, 0),
     ior: gltfIor(ior?.ior),
     iridescenceFactor: clampedFiniteNumber(iridescence?.iridescenceFactor, 0, 0, 1),
     iridescenceIor: gltfIridescenceIor(iridescence?.iridescenceIor),
@@ -2912,6 +2918,12 @@ export class WebGlRoot {
       factors.iridescenceThicknessMinimum,
       factors.iridescenceThicknessMaximum,
     ]);
+    this.#uniformColor(program, "u_dispersionFactors", [
+      factors.dispersionFactor,
+      0,
+      0,
+      0,
+    ]);
     this.#uniformColor(program, "u_attenuationColorFactor", [
       factors.attenuationColor[0],
       factors.attenuationColor[1],
@@ -3795,6 +3807,7 @@ uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
 uniform vec4 u_sheenColorFactor;
 uniform vec4 u_iridescenceFactors;
+uniform vec4 u_dispersionFactors;
 uniform vec4 u_attenuationColorFactor;
 uniform vec4 u_transmissionVolumeFactors;
 uniform vec2 u_viewportSize;
@@ -3885,9 +3898,40 @@ vec3 materialVolumeAttenuation() {
   vec3 attenuationColor = clamp(u_attenuationColorFactor.rgb, vec3(0.0), vec3(1.0));
   return pow(max(attenuationColor, vec3(0.0001)), vec3(thickness / attenuationDistance));
 }
-vec3 materialTransmissionScreenColor(vec3 baseColor) {
+vec3 materialDispersionIors(float ior, float dispersion) {
+  float safeIor = max(ior, 1.0);
+  float halfSpread = (safeIor - 1.0) * 0.025 * max(dispersion, 0.0);
+  return max(vec3(safeIor - halfSpread, safeIor, safeIor + halfSpread), vec3(1.0));
+}
+vec2 materialDispersionDirection(vec3 normal, vec3 viewDirection) {
+  vec3 refracted = refract(-viewDirection, normal, 1.0 / max(u_materialExtensionFactors.y, 1.0));
+  vec2 direction = refracted.xy;
+  if (dot(direction, direction) <= 0.000001) {
+    direction = normal.xy;
+  }
+  if (dot(direction, direction) <= 0.000001) {
+    return vec2(0.0);
+  }
+  return normalize(direction);
+}
+vec3 materialTransmissionScreenColor(vec3 baseColor, vec3 normal, vec3 viewDirection) {
   vec2 screenUv = clamp(gl_FragCoord.xy / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
-  return texture(u_transmissionScreenTexture, screenUv).rgb * baseColor * materialVolumeAttenuation();
+  float dispersion = max(u_dispersionFactors.x, 0.0);
+  if (dispersion <= 0.0) {
+    return texture(u_transmissionScreenTexture, screenUv).rgb * baseColor * materialVolumeAttenuation();
+  }
+  vec3 iors = materialDispersionIors(u_materialExtensionFactors.y, dispersion);
+  vec2 direction = materialDispersionDirection(normal, viewDirection);
+  float thickness = max(u_transmissionVolumeFactors.y, 0.0);
+  float offsetScale = clamp(max(thickness, 0.0) * 0.25, 0.0, 0.08);
+  vec2 redUv = clamp(screenUv - direction * max(iors.g - iors.r, 0.0) * offsetScale, vec2(0.0), vec2(1.0));
+  vec2 blueUv = clamp(screenUv + direction * max(iors.b - iors.g, 0.0) * offsetScale, vec2(0.0), vec2(1.0));
+  vec3 transmitted = vec3(
+    texture(u_transmissionScreenTexture, redUv).r,
+    texture(u_transmissionScreenTexture, screenUv).g,
+    texture(u_transmissionScreenTexture, blueUv).b
+  );
+  return transmitted * baseColor * materialVolumeAttenuation();
 }
 vec3 cameraWorldPosition() {
   return -transpose(mat3(u_view)) * u_view[3].xyz;
@@ -3976,7 +4020,7 @@ void main() {
   lit += u_emissiveColor.rgb * (1.0 - viewClearcoat);
   float transmission = clamp(u_transmissionVolumeFactors.x, 0.0, 1.0);
   if (transmission > 0.0 && u_useTransmissionTexture) {
-    vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb);
+    vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);
     lit = mix(lit, transmitted, transmission);
   }
   outColor = vec4(lit, baseColor.a);
@@ -4929,7 +4973,7 @@ void main() {
               : field === "KHR_materials_iridescence.iridescenceThicknessTexture"
                 ? " Its green-channel thickness-range sampler is not implemented."
                 : " Extension texture multipliers are not implemented.";
-    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, KHR_materials_clearcoat, KHR_materials_sheen, KHR_materials_iridescence, KHR_materials_transmission, and KHR_materials_volume at factor level only; scalar/color factors are applied.${detail}`;
+    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, KHR_materials_clearcoat, KHR_materials_sheen, KHR_materials_iridescence, KHR_materials_transmission, KHR_materials_volume, and KHR_materials_dispersion at factor level only; scalar/color factors are applied.${detail}`;
     if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
 
     this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);

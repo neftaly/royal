@@ -1869,6 +1869,126 @@ const materialTransmissionVolumeDefaultsTriangleDocument = () => {
   };
 };
 
+const materialDispersionTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    extensionsRequired: [
+      "KHR_materials_ior",
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    extensionsUsed: [
+      "KHR_materials_ior",
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.25, 0.3, 0.35, 1],
+        },
+      },
+      {
+        extensions: {
+          KHR_materials_dispersion: {
+            dispersion: 0.8,
+          },
+          KHR_materials_ior: {
+            ior: 1.6,
+          },
+          KHR_materials_transmission: {
+            transmissionFactor: 0.7,
+          },
+          KHR_materials_volume: {
+            attenuationColor: [0.9, 0.8, 0.7],
+            attenuationDistance: 3,
+            thicknessFactor: 0.5,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.9, 0.95, 1, 1],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            material: 0,
+          },
+          {
+            ...primitive,
+            material: 1,
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const materialDispersionDefaultsClampingTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    extensionsRequired: [
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    extensionsUsed: [
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_dispersion: {},
+          KHR_materials_transmission: {},
+          KHR_materials_volume: {},
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.45, 0.5, 0.55, 1],
+        },
+      },
+      {
+        extensions: {
+          KHR_materials_dispersion: {
+            dispersion: -0.5,
+          },
+          KHR_materials_transmission: {},
+          KHR_materials_volume: {},
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.65, 0.7, 0.75, 1],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            material: 0,
+          },
+          {
+            ...primitive,
+            material: 1,
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const materialTransmissionVolumeTextureDiagnosticTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -1917,6 +2037,73 @@ const materialTransmissionBatchKeyTriangleDocument = () => {
         extensions: {
           KHR_materials_transmission: {
             transmissionFactor: 0.8,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            material: 0,
+          },
+          {
+            ...primitive,
+            material: 1,
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const materialDispersionBatchKeyTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    extensionsRequired: [
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    extensionsUsed: [
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+      "KHR_materials_dispersion",
+    ],
+    materials: [
+      {
+        extensions: {
+          KHR_materials_dispersion: {
+            dispersion: 0.2,
+          },
+          KHR_materials_transmission: {
+            transmissionFactor: 0.6,
+          },
+          KHR_materials_volume: {
+            thicknessFactor: 0.5,
+          },
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.5, 0.5, 0.5, 1],
+        },
+      },
+      {
+        extensions: {
+          KHR_materials_dispersion: {
+            dispersion: 0.8,
+          },
+          KHR_materials_transmission: {
+            transmissionFactor: 0.6,
+          },
+          KHR_materials_volume: {
+            thicknessFactor: 0.5,
           },
         },
         pbrMetallicRoughness: {
@@ -2976,6 +3163,103 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toContainEqual([0, 0, 0, 0]);
   });
 
+  it("renders required KHR materials dispersion through per-channel transmission sampling", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-dispersion",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialDispersionTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+    const readyDrawCalls = drawCalls(readyFrameCalls);
+    const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexImage2D");
+    const drawIndexes = readyFrameCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.name === "drawArrays" || call.name === "drawElements")
+      .map(({ index }) => index);
+    const diagnostics = root.snapshot().diagnostics.join("\n");
+
+    expect(readyDrawCalls).toHaveLength(2);
+    expect(copyIndex).toBeGreaterThan(drawIndexes[0] ?? -1);
+    expect(copyIndex).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
+    expect(diagnostics).not.toMatch(/unsupported required glTF extension/i);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_materialExtensionFactors").map(roundVector))
+      .toContainEqual([1, 1.6, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor").map(roundVector))
+      .toContainEqual([0.9, 0.8, 0.7, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
+      .toContainEqual([0.7, 0.5, 3, 1]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
+      .toContainEqual([0.8, 0, 0, 0]);
+    expect(sources).toContain("uniform vec4 u_dispersionFactors;");
+    expect(sources).toContain("materialDispersionIors");
+    expect(sources).toContain("float halfSpread = (safeIor - 1.0) * 0.025 * max(dispersion, 0.0);");
+    expect(sources).toContain("vec3(safeIor - halfSpread, safeIor, safeIor + halfSpread)");
+    expect(sources).toContain("texture(u_transmissionScreenTexture, redUv).r");
+    expect(sources).toContain("texture(u_transmissionScreenTexture, blueUv).b");
+  });
+
+  it("defaults and clamps KHR materials dispersion to non-negative scalar uniforms", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-dispersion-defaults-clamping",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialDispersionDefaultsClampingTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const dispersionPayloads = uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector);
+    const transmissionVolumePayloads = uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors")
+      .map(roundVector);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(readyFrameCalls.some((call) => call.name === "copyTexImage2D")).toBe(false);
+    expect(dispersionPayloads.filter((payload) =>
+      JSON.stringify(payload) === JSON.stringify([0, 0, 0, 0]))).toHaveLength(2);
+    expect(transmissionVolumePayloads.filter((payload) =>
+      JSON.stringify(payload) === JSON.stringify([0, 0, 0, 0]))).toHaveLength(2);
+  });
+
   it("diagnoses ignored KHR materials transmission and volume texture multipliers", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
@@ -3046,6 +3330,44 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
       .toContainEqual([0.2, 0, 0, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
+      .toContainEqual([0.8, 0, 0, 0]);
+  });
+
+  it("keeps dispersion factors in glTF material batch keys", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-dispersion-batch-key",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialDispersionBatchKeyTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(readyFrameCalls.filter((call) => call.name === "copyTexImage2D")).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
+      .toContainEqual([0.2, 0, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
       .toContainEqual([0.8, 0, 0, 0]);
   });
 

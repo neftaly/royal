@@ -21,10 +21,12 @@ WebGL glTF support set, including required extension handling.
 
 The WebGL loader supports factor-level `KHR_materials_specular`,
 `KHR_materials_ior`, `KHR_materials_clearcoat`, `KHR_materials_sheen`,
-`KHR_materials_iridescence`, `KHR_materials_transmission`, and
-`KHR_materials_volume` for deterministic forward rendering. Transmission uses
-renderer-private current-frame color sampling with volume attenuation; texture
-fields from these extensions are currently ignored with renderer diagnostics.
+`KHR_materials_iridescence`, `KHR_materials_transmission`,
+`KHR_materials_volume`, and `KHR_materials_dispersion` for deterministic forward
+rendering. Transmission uses renderer-private current-frame color sampling with
+volume attenuation; dispersion is approximated as scalar per-channel screen
+sampling on that path. Texture fields from these extensions are currently
+ignored with renderer diagnostics.
 
 ## glTF Image-Based Lights
 
