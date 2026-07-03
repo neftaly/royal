@@ -18,13 +18,13 @@ export const GltfHelmet = (): ReactNode => {
 
   return (
     <Canvas
-      aria-label="glTF DamagedHelmet"
+      aria-label="glTF DamagedHelmet PBR material"
       renderer={exampleRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.04, 0.05, 0.06, 1]}>
-          <directionalLight color={[1, 0.96, 0.9, 1]} direction={[0.4, -0.75, -1]} />
+        <pass camera={orbit.camera} clearColor={[0.025, 0.031, 0.038, 1]}>
+          <directionalLight color={[0.72, 0.68, 0.6, 1]} direction={[0.4, -0.75, -1]} />
           <model
             src={helmetSrc}
             transform={{

@@ -17,8 +17,11 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly emissive?: Rgba;
+  readonly emissiveTexture?: TextureAssetUploadRef;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
   readonly metallicRoughnessTexture?: TextureAssetUploadRef;
+  readonly occlusionStrength?: number;
+  readonly occlusionTexture?: TextureAssetUploadRef;
 };
 
 export type SurfaceMaterialExtensionFactors = {
@@ -118,6 +121,9 @@ export const surfaceMaterialMetallicFactor = (material: SurfaceMaterial): number
 export const surfaceMaterialRoughnessFactor = (material: SurfaceMaterial): number =>
   material.kind === "standard" ? material.roughnessFactor : 1;
 
+export const surfaceMaterialOcclusionStrength = (material: SurfaceMaterial): number =>
+  material.kind === "standard" ? material.occlusionStrength ?? 1 : 1;
+
 export const surfaceMaterialExtensionFactorsKey = (
   factors: SurfaceMaterialExtensionFactors,
 ): string =>
@@ -144,8 +150,11 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
     textureCacheKey(material.baseColor),
+    material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
+    material.occlusionTexture === undefined ? "" : textureCacheKey(material.occlusionTexture),
     surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
+    surfaceLightValueKey(surfaceMaterialOcclusionStrength(material)),
     surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),
     surfaceLightVectorKey(materialEmissiveColor(material)),
     surfaceMaterialExtensionFactorsKey(surfaceMaterialExtensionFactors(material)),

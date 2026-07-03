@@ -126,6 +126,7 @@ export type GltfSampler = {
 export type GltfMaterial = {
   readonly emissiveFactor?: readonly number[];
   readonly emissiveTexture?: GltfTextureInfo;
+  readonly occlusionTexture?: GltfOcclusionTextureInfo;
   readonly extensions?: {
     readonly KHR_materials_clearcoat?: {
       readonly clearcoatFactor?: number;
@@ -196,6 +197,10 @@ export type GltfTextureInfo = {
 
 export type GltfNormalTextureInfo = GltfTextureInfo & {
   readonly scale?: number;
+};
+
+export type GltfOcclusionTextureInfo = GltfTextureInfo & {
+  readonly strength?: number;
 };
 
 export type GltfMesh = {

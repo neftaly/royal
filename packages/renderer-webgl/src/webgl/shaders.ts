@@ -138,7 +138,9 @@ in vec2 v_uv;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
 uniform highp mat4 u_view;
 uniform bool u_useTexture;
+uniform bool u_useEmissiveTexture;
 uniform bool u_useMetallicRoughnessTexture;
+uniform bool u_useOcclusionTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
 uniform vec4 u_emissiveColor;
@@ -156,9 +158,12 @@ uniform bool u_useIblSpecular;
 uniform vec4 u_iblSpecularSettings;
 uniform samplerCube u_iblSpecularCube;
 uniform sampler2D u_texture;
+uniform sampler2D u_emissiveTexture;
 uniform sampler2D u_metallicRoughnessTexture;
+uniform sampler2D u_occlusionTexture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
+uniform vec4 u_occlusionSettings;
 uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
 uniform vec4 u_sheenColorFactor;
@@ -212,6 +217,17 @@ return clamp(u_materialPbrFactors.y * textureRoughness, 0.04, 1.0);
 }
 vec3 materialDiffuseColor(vec3 baseColor) {
 return baseColor * (1.0 - materialMetallicFactor());
+}
+vec3 materialEmissiveColor() {
+vec3 textureEmissive = u_useEmissiveTexture ? texture(u_emissiveTexture, v_uv).rgb : vec3(1.0);
+return u_emissiveColor.rgb * textureEmissive;
+}
+float materialOcclusion() {
+if (!u_useOcclusionTexture) {
+  return 1.0;
+}
+float strength = clamp(u_occlusionSettings.x, 0.0, 1.0);
+return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);
 }
 vec3 materialDielectricF0() {
 float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
@@ -417,16 +433,17 @@ vec3 normal = normalize(v_normal);
 vec3 viewInput = cameraWorldPosition() - v_worldPosition;
 vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
 float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
+float occlusion = materialOcclusion();
 vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
-vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
-lit += iblSpecularRadiance(normal, viewDirection, baseColor.rgb) * (1.0 - viewClearcoat);
+vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance * occlusion * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+lit += iblSpecularRadiance(normal, viewDirection, baseColor.rgb) * occlusion * (1.0 - viewClearcoat);
 for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
   if (index >= u_surfaceLightCount) {
     break;
   }
   lit += lightContribution(index, normal, viewDirection, v_worldPosition, baseColor.rgb);
 }
-lit += u_emissiveColor.rgb * (1.0 - viewClearcoat);
+lit += materialEmissiveColor() * (1.0 - viewClearcoat);
 float transmission = clamp(u_transmissionVolumeFactors.x, 0.0, 1.0);
 if (transmission > 0.0 && u_useTransmissionTexture) {
   vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);

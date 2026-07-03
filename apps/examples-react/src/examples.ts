@@ -100,7 +100,7 @@ export const examples = [
     id: 'gltf-helmet',
     maturity: 'product',
     path: '/gltf-helmet',
-    title: 'glTF Subset Helmet',
+    title: 'glTF PBR Helmet',
     Component: GltfHelmet,
     source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',

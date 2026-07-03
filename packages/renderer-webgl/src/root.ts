@@ -102,6 +102,7 @@ import {
   materialColor,
   materialEmissiveColor,
   surfaceMaterialMetallicFactor,
+  surfaceMaterialOcclusionStrength,
   surfaceMaterialRoughnessFactor,
   surfaceMaterialBatchKey,
   surfaceMaterialExtensionFactors,
@@ -284,6 +285,11 @@ type LoadedGltfMaterial = {
   readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
   readonly emissive?: Rgba;
+  readonly emissiveImage?: LoadedTextureSource;
+  readonly emissiveImageFailed?: boolean;
+  readonly emissiveImageUri?: string;
+  readonly emissiveSampler?: TextureSampler;
+  readonly emissiveTextureUri?: string;
   readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
@@ -293,6 +299,12 @@ type LoadedGltfMaterial = {
   readonly metallicRoughnessSampler?: TextureSampler;
   readonly metallicRoughnessTextureUri?: string;
   readonly metallicFactor?: number;
+  readonly occlusionImage?: LoadedTextureSource;
+  readonly occlusionImageFailed?: boolean;
+  readonly occlusionImageUri?: string;
+  readonly occlusionSampler?: TextureSampler;
+  readonly occlusionStrength?: number;
+  readonly occlusionTextureUri?: string;
   readonly roughnessFactor?: number;
   readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
@@ -333,14 +345,18 @@ type LoadedGltfPrimitiveMaterial = {
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
+  emissiveTexture: TextureAssetUploadRef | undefined,
   metallicRoughnessTexture: TextureAssetUploadRef | undefined,
+  occlusionTexture: TextureAssetUploadRef | undefined,
 ): SurfaceMaterial => {
   const emissive = loadedMaterial.emissive;
   const extensionFactors = loadedMaterial.extensionFactors;
   const common = {
     baseColor,
     ...(emissive === undefined ? {} : { emissive }),
+    ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
     ...(extensionFactors === undefined ? {} : { extensionFactors }),
+    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
   };
   if (loadedMaterial.unlit === true) {
     return {
@@ -354,6 +370,7 @@ const loadedGltfSurfaceMaterial = (
     kind: "standard",
     metallicFactor: loadedMaterial.metallicFactor ?? 1,
     ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
+    occlusionStrength: loadedMaterial.occlusionStrength ?? 1,
     roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
   };
 };
@@ -769,6 +786,9 @@ const nonNegativeFiniteNumber = (value: number | undefined, fallback: number): n
 const gltfMetallicRoughnessFactor = (value: number | undefined, fallback: number): number =>
   clampedFiniteNumber(value, fallback, 0, 1);
 
+const gltfOcclusionStrength = (value: number | undefined): number =>
+  clampedFiniteNumber(value, 1, 0, 1);
+
 const gltfIor = (value: number | undefined): number => {
   if (value === 0) return 0;
   if (typeof value === "number" && Number.isFinite(value) && value >= 1) return value;
@@ -921,8 +941,6 @@ const gltfSpotConeAngles = (light: GltfPunctualLight): {
 const gltfEmissiveColor = (
   material: GltfMaterial | undefined,
 ): Rgba | undefined => {
-  if (material?.emissiveTexture?.index !== undefined) return undefined;
-
   const factor = material?.emissiveFactor;
   const strength = Math.max(
     0,
@@ -965,12 +983,28 @@ const gltfMetallicRoughnessTextureInfo = (
   ? undefined
   : document.materials?.[materialIndex]?.pbrMetallicRoughness?.metallicRoughnessTexture;
 
+const gltfEmissiveTextureInfo = (
+  document: GltfDocument,
+  materialIndex: number | undefined,
+) => materialIndex === undefined
+  ? undefined
+  : document.materials?.[materialIndex]?.emissiveTexture;
+
+const gltfOcclusionTextureInfo = (
+  document: GltfDocument,
+  materialIndex: number | undefined,
+) => materialIndex === undefined
+  ? undefined
+  : document.materials?.[materialIndex]?.occlusionTexture;
+
 const gltfMaterialPrimaryTextureInfo = (
   document: GltfDocument,
   materialIndex: number | undefined,
 ): GltfTextureInfo | undefined =>
   gltfBaseColorTextureInfo(document, materialIndex)
-    ?? gltfMetallicRoughnessTextureInfo(document, materialIndex);
+    ?? gltfMetallicRoughnessTextureInfo(document, materialIndex)
+    ?? gltfEmissiveTextureInfo(document, materialIndex)
+    ?? gltfOcclusionTextureInfo(document, materialIndex);
 
 const gltfBaseColorTexCoordSet = (
   document: GltfDocument,
@@ -1796,19 +1830,29 @@ export class WebGlRoot {
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
 
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
+        const emissiveTexture = this.#gltfMaterialEmissiveTextureRef(loadedMaterial);
         const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(loadedMaterial);
+        const occlusionTexture = this.#gltfMaterialOcclusionTextureRef(loadedMaterial);
         if (loadedMaterial.image !== undefined && baseColor !== undefined) {
           this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         }
+        if (loadedMaterial.emissiveImage !== undefined && emissiveTexture !== undefined) {
+          this.#ensureImmediateTexture(emissiveTexture, loadedMaterial.emissiveImage);
+        }
         if (loadedMaterial.metallicRoughnessImage !== undefined && metallicRoughnessTexture !== undefined) {
           this.#ensureImmediateTexture(metallicRoughnessTexture, loadedMaterial.metallicRoughnessImage);
+        }
+        if (loadedMaterial.occlusionImage !== undefined && occlusionTexture !== undefined) {
+          this.#ensureImmediateTexture(occlusionTexture, loadedMaterial.occlusionImage);
         }
         const material = loadedGltfSurfaceMaterial(
           loadedMaterial,
           loadedMaterial.image !== undefined && baseColor !== undefined
             ? baseColor
             : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+          loadedMaterial.emissiveImage !== undefined ? emissiveTexture : undefined,
           loadedMaterial.metallicRoughnessImage !== undefined ? metallicRoughnessTexture : undefined,
+          loadedMaterial.occlusionImage !== undefined ? occlusionTexture : undefined,
         );
         const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
@@ -2112,6 +2156,14 @@ export class WebGlRoot {
       && this.#isGltfMaterialTextureReady(
         this.#gltfMaterialMetallicRoughnessTextureRef(material),
         material.metallicRoughnessImage,
+      )
+      && this.#isGltfMaterialTextureReady(
+        this.#gltfMaterialEmissiveTextureRef(material),
+        material.emissiveImage,
+      )
+      && this.#isGltfMaterialTextureReady(
+        this.#gltfMaterialOcclusionTextureRef(material),
+        material.occlusionImage,
       );
   }
 
@@ -2143,6 +2195,28 @@ export class WebGlRoot {
       kind: "asset",
       ...(material.metallicRoughnessSampler === undefined ? {} : { sampler: material.metallicRoughnessSampler }),
       uri: material.metallicRoughnessTextureUri,
+    };
+  }
+
+  #gltfMaterialEmissiveTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
+    if (material.emissiveTextureUri === undefined) return undefined;
+    return {
+      colorSpace: "srgb",
+      flipY: false,
+      kind: "asset",
+      ...(material.emissiveSampler === undefined ? {} : { sampler: material.emissiveSampler }),
+      uri: material.emissiveTextureUri,
+    };
+  }
+
+  #gltfMaterialOcclusionTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
+    if (material.occlusionTextureUri === undefined) return undefined;
+    return {
+      colorSpace: "linear",
+      flipY: false,
+      kind: "asset",
+      ...(material.occlusionSampler === undefined ? {} : { sampler: material.occlusionSampler }),
+      uri: material.occlusionTextureUri,
     };
   }
 
@@ -2193,6 +2267,14 @@ export class WebGlRoot {
     const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(material);
     if (metallicRoughnessTexture !== undefined && material.metallicRoughnessImage !== undefined) {
       this.#ensureImmediateTexture(metallicRoughnessTexture, material.metallicRoughnessImage);
+    }
+    const emissiveTexture = this.#gltfMaterialEmissiveTextureRef(material);
+    if (emissiveTexture !== undefined && material.emissiveImage !== undefined) {
+      this.#ensureImmediateTexture(emissiveTexture, material.emissiveImage);
+    }
+    const occlusionTexture = this.#gltfMaterialOcclusionTextureRef(material);
+    if (occlusionTexture !== undefined && material.occlusionImage !== undefined) {
+      this.#ensureImmediateTexture(occlusionTexture, material.occlusionImage);
     }
   }
 
@@ -2342,27 +2424,70 @@ export class WebGlRoot {
       hasFiniteAttenuationDistance ? 1 : 0,
     ]);
     this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture);
+    this.#bindEmissiveTexture(program, material);
     this.#bindMetallicRoughnessTexture(program, material);
+    this.#bindOcclusionTexture(program, material);
+  }
+
+  #bindEmissiveTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+    this.#bindCachedTexture2d(
+      program,
+      "u_useEmissiveTexture",
+      "u_emissiveTexture",
+      4,
+      material.emissiveTexture,
+    );
   }
 
   #bindMetallicRoughnessTexture(program: WebGLProgram, material: SurfaceMaterial): void {
-    const texture = material.kind === "standard" ? material.metallicRoughnessTexture : undefined;
+    this.#bindCachedTexture2d(
+      program,
+      "u_useMetallicRoughnessTexture",
+      "u_metallicRoughnessTexture",
+      3,
+      material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
+    );
+  }
+
+  #bindOcclusionTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+    this.#uniformColor(program, "u_occlusionSettings", [
+      surfaceMaterialOcclusionStrength(material),
+      0,
+      0,
+      0,
+    ]);
+    this.#bindCachedTexture2d(
+      program,
+      "u_useOcclusionTexture",
+      "u_occlusionTexture",
+      5,
+      material.kind === "standard" ? material.occlusionTexture : undefined,
+    );
+  }
+
+  #bindCachedTexture2d(
+    program: WebGLProgram,
+    useUniform: string,
+    samplerUniform: string,
+    textureUnit: number,
+    texture: TextureAssetUploadRef | undefined,
+  ): void {
     if (texture === undefined) {
-      this.#uniform1i(program, "u_useMetallicRoughnessTexture", 0);
+      this.#uniform1i(program, useUniform, 0);
       return;
     }
 
     const resource = this.#textures.get(textureCacheKey(texture));
     if (resource === undefined || !resource.uploaded) {
-      this.#uniform1i(program, "u_useMetallicRoughnessTexture", 0);
+      this.#uniform1i(program, useUniform, 0);
       return;
     }
 
     const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + 3);
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, "u_metallicRoughnessTexture", 3);
-    this.#uniform1i(program, "u_useMetallicRoughnessTexture", 1);
+    this.#uniform1i(program, samplerUniform, textureUnit);
+    this.#uniform1i(program, useUniform, 1);
   }
 
   #bindTransmissionScreenColorTexture(
@@ -4260,10 +4385,43 @@ export class WebGlRoot {
           ? undefined
           : document.samplers?.[metallicRoughnessTexture.sampler],
       );
+    const emissiveTextureIndex = material?.emissiveTexture?.index;
+    const emissiveTexture = emissiveTextureIndex === undefined ? undefined : document.textures?.[emissiveTextureIndex];
+    const emissiveImageSelection = gltfTextureImageSelection(emissiveTexture);
+    const emissiveImageIndex = emissiveImageSelection?.imageIndex;
+    const emissiveImageKind = emissiveImageSelection?.kind ?? "image";
+    const emissiveImage = emissiveImageIndex === undefined ? undefined : document.images?.[emissiveImageIndex];
+    const emissiveImageLoadKey = emissiveImage === undefined
+      ? undefined
+      : gltfImageLoadKey(assetKey, src, emissiveImageIndex, emissiveImage, emissiveImageKind);
+    const emissiveSampler = emissiveTexture === undefined
+      ? undefined
+      : gltfTextureSampler(
+        emissiveTexture.sampler === undefined
+          ? undefined
+          : document.samplers?.[emissiveTexture.sampler],
+      );
+    const occlusionTextureIndex = material?.occlusionTexture?.index;
+    const occlusionTexture = occlusionTextureIndex === undefined ? undefined : document.textures?.[occlusionTextureIndex];
+    const occlusionImageSelection = gltfTextureImageSelection(occlusionTexture);
+    const occlusionImageIndex = occlusionImageSelection?.imageIndex;
+    const occlusionImageKind = occlusionImageSelection?.kind ?? "image";
+    const occlusionImage = occlusionImageIndex === undefined ? undefined : document.images?.[occlusionImageIndex];
+    const occlusionImageLoadKey = occlusionImage === undefined
+      ? undefined
+      : gltfImageLoadKey(assetKey, src, occlusionImageIndex, occlusionImage, occlusionImageKind);
+    const occlusionSampler = occlusionTexture === undefined
+      ? undefined
+      : gltfTextureSampler(
+        occlusionTexture.sampler === undefined
+          ? undefined
+          : document.samplers?.[occlusionTexture.sampler],
+      );
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
     const extensionFactors = readGltfMaterialExtensionFactors(material);
     const metallicFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.metallicFactor, 1);
+    const occlusionStrength = gltfOcclusionStrength(material?.occlusionTexture?.strength);
     const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
@@ -4296,12 +4454,41 @@ export class WebGlRoot {
             metallicRoughnessImageKind,
           ),
         }),
+      ...(emissiveImageLoadKey === undefined ? {} : { emissiveImageUri: emissiveImageLoadKey }),
+      ...(emissiveTextureIndex === undefined || emissiveImage === undefined
+        ? {}
+        : {
+          emissiveTextureUri: gltfTextureIdentity(
+            assetKey,
+            src,
+            emissiveTextureIndex,
+            emissiveImageIndex,
+            emissiveImage,
+            emissiveImageKind,
+          ),
+        }),
+      ...(occlusionImageLoadKey === undefined ? {} : { occlusionImageUri: occlusionImageLoadKey }),
+      ...(occlusionTextureIndex === undefined || occlusionImage === undefined
+        ? {}
+        : {
+          occlusionTextureUri: gltfTextureIdentity(
+            assetKey,
+            src,
+            occlusionTextureIndex,
+            occlusionImageIndex,
+            occlusionImage,
+            occlusionImageKind,
+          ),
+        }),
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
       metallicFactor,
+      occlusionStrength,
       roughnessFactor,
+      ...(emissiveSampler === undefined ? {} : { emissiveSampler }),
       ...(metallicRoughnessSampler === undefined ? {} : { metallicRoughnessSampler }),
+      ...(occlusionSampler === undefined ? {} : { occlusionSampler }),
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
@@ -4388,7 +4575,9 @@ export class WebGlRoot {
 
   #addGltfMaterialImageLoadKeys(keys: Set<string>, material: LoadedGltfMaterial): void {
     if (material.baseColorImageUri !== undefined) keys.add(material.baseColorImageUri);
+    if (material.emissiveImageUri !== undefined) keys.add(material.emissiveImageUri);
     if (material.metallicRoughnessImageUri !== undefined) keys.add(material.metallicRoughnessImageUri);
+    if (material.occlusionImageUri !== undefined) keys.add(material.occlusionImageUri);
   }
 
   #mapGltfPrimitiveMaterials(
@@ -4433,7 +4622,9 @@ export class WebGlRoot {
     return {
       ...material,
       ...(material.baseColorImageUri === uri ? { image } : {}),
+      ...(material.emissiveImageUri === uri ? { emissiveImage: image } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
+      ...(material.occlusionImageUri === uri ? { occlusionImage: image } : {}),
     };
   }
 
@@ -4444,7 +4635,9 @@ export class WebGlRoot {
     return {
       ...material,
       ...(material.baseColorImageUri === uri ? { imageFailed: true } : {}),
+      ...(material.emissiveImageUri === uri ? { emissiveImageFailed: true } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImageFailed: true } : {}),
+      ...(material.occlusionImageUri === uri ? { occlusionImageFailed: true } : {}),
     };
   }
 

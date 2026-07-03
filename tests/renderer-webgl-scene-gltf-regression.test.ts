@@ -56,9 +56,11 @@ const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
+const triangleEmissiveImageUri = "staged-triangle-emissive.png";
 const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
 const triangleMetallicRoughnessImageUri = "staged-triangle-metallic-roughness.png";
+const triangleOcclusionImageUri = "staged-triangle-occlusion.png";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const iblSpecularImageUris = [
@@ -1670,6 +1672,74 @@ const emissiveStrengthTriangleDocument = () => {
   };
 };
 
+const emissiveTextureTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    images: [
+      {
+        mimeType: "image/png",
+        uri: triangleEmissiveImageUri,
+      },
+    ],
+    materials: [
+      {
+        emissiveFactor: [0.4, 0.5, 0.6],
+        emissiveTexture: {
+          index: 0,
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.25, 0.25, 0.25, 1],
+        },
+      },
+    ],
+    samplers: [
+      {},
+    ],
+    textures: [
+      {
+        sampler: 0,
+        source: 0,
+      },
+    ],
+  };
+};
+
+const occlusionTextureTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    images: [
+      {
+        mimeType: "image/png",
+        uri: triangleOcclusionImageUri,
+      },
+    ],
+    materials: [
+      {
+        occlusionTexture: {
+          index: 0,
+          strength: 0.35,
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.25, 0.25, 0.25, 1],
+        },
+      },
+    ],
+    samplers: [
+      {},
+    ],
+    textures: [
+      {
+        sampler: 0,
+        source: 0,
+      },
+    ],
+  };
+};
+
 const materialPbrExtensionFactorsTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -2914,6 +2984,56 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector)).toContainEqual([2, 0.5, 1, 1]);
   });
 
+  it("uploads and binds glTF emissive textures", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "emissive-texture",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, emissiveTextureTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle-emissive.png",
+    ]);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector))
+      .toContainEqual([0.4, 0.5, 0.6, 1]);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useEmissiveTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_emissiveTexture")).toContain(4);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 4)).toBe(true);
+    expect(sources).toContain("uniform sampler2D u_emissiveTexture;");
+    expect(sources).toContain("texture(u_emissiveTexture, v_uv).rgb");
+  });
+
   it("renders glTF metallic and roughness factors as surface uniforms", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
@@ -2997,6 +3117,56 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(sources).toContain("uniform sampler2D u_metallicRoughnessTexture;");
     expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).b");
     expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).g");
+  });
+
+  it("uploads and binds glTF occlusion textures", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "occlusion-texture",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, occlusionTextureTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle-occlusion.png",
+    ]);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_occlusionSettings").map(roundVector))
+      .toContainEqual([0.35, 0, 0, 0]);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useOcclusionTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_occlusionTexture")).toContain(5);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 5)).toBe(true);
+    expect(sources).toContain("uniform sampler2D u_occlusionTexture;");
+    expect(sources).toContain("texture(u_occlusionTexture, v_uv).r");
   });
 
   it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {
