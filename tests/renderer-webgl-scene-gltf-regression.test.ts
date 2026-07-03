@@ -2938,6 +2938,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(changedFrameCalls)).toHaveLength(1);
     expect(changedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
+
+    const callsBeforeSecondImperativeChange = calls.length;
+    leftRef.current?.position.set([-0.75, 0, 0]);
+    await flushAnimationFrames(viewport.animationFrames);
+    const secondChangedFrameCalls = calls.slice(callsBeforeSecondImperativeChange);
+
+    expect(instancedDrawCalls(secondChangedFrameCalls)).toHaveLength(1);
+    expect(secondChangedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
   });
 
   it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {
@@ -2992,6 +3000,24 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(1);
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+
+    const translatedRenderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0.1, 0, 0], rotation: [0, 0, 0] },
+        version: "ext-mesh-gpu-instancing",
+      }),
+    ]);
+    const callsBeforeTranslatedRender = calls.length;
+    root.render(translatedRenderGraph);
+    const translatedFrameCalls = calls.slice(callsBeforeTranslatedRender);
+
+    expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
+    expect(translatedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
   });
 
   it("reuses instanced glTF model buffers across supplied XR views", async () => {

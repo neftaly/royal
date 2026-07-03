@@ -631,6 +631,7 @@ type GltfLodSelectionState = {
 
 type GltfState = {
   imageBasedLight?: SurfaceImageBasedLight;
+  readonly instanceKey: number;
   readonly key: string;
   error?: string;
   lights: readonly SurfaceLight[];
@@ -644,7 +645,9 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly material: SurfaceMaterial;
   readonly model: Mat4;
-  readonly modelKey: string;
+  readonly modelSignatureInstanceIndex: number;
+  readonly modelSignatureStateKey: number;
+  readonly modelSignatureTransform: Transform | undefined;
   readonly sidedness: DrawSidedness;
 };
 
@@ -653,7 +656,7 @@ type GltfPrimitiveDrawBatch = {
   readonly key: string;
   readonly lights: SurfaceLightSet;
   readonly material: SurfaceMaterial;
-  readonly modelKeys: string[];
+  readonly modelSignature: number[];
   readonly models: Mat4[];
   readonly sidedness: DrawSidedness;
 };
@@ -663,7 +666,7 @@ type GltfInstanceBufferResource = {
   readonly buffer: WebGLBuffer;
   readonly data: Float32Array;
   dirty: boolean;
-  modelsKey?: string;
+  modelSignature?: readonly number[];
 };
 
 type ViewportSize = readonly [width: number, height: number];
@@ -774,6 +777,42 @@ const sameTransform = (left: Transform, right: Transform): boolean =>
   sameVec3(left.position, right.position) &&
   sameVec3(left.rotation, right.rotation) &&
   sameVec3(left.scale, right.scale);
+
+const appendTransformSignatureValues = (signature: number[], transform: Transform | undefined): void => {
+  const resolved = transform ?? IDENTITY_TRANSFORM;
+  signature.push(
+    resolved.position[0],
+    resolved.position[1],
+    resolved.position[2],
+    resolved.rotation[0],
+    resolved.rotation[1],
+    resolved.rotation[2],
+    resolved.scale[0],
+    resolved.scale[1],
+    resolved.scale[2],
+  );
+};
+
+const appendGltfModelSignature = (
+  signature: number[],
+  draw: GltfPrimitiveDraw,
+): void => {
+  signature.push(draw.modelSignatureStateKey);
+  appendTransformSignatureValues(signature, draw.modelSignatureTransform);
+  signature.push(draw.modelSignatureInstanceIndex);
+};
+
+const sameGltfModelSignature = (
+  left: readonly number[] | undefined,
+  right: readonly number[],
+): boolean => {
+  if (left === undefined || left.length !== right.length) return false;
+  for (let index = 0; index < right.length; index += 1) {
+    if (!Object.is(left[index], right[index])) return false;
+  }
+
+  return true;
+};
 
 const assignRenderObjectRef = (
   ref: RenderObjectRef,
@@ -1917,6 +1956,7 @@ class WebGlRootImpl implements WebGlRoot {
   #disposed = false;
   #frame = 0;
   #gltfRenderOrdinal = 0;
+  #gltfStateInstanceKey = 1;
   #iblFallbackSpecularTexture: WebGLTexture | undefined;
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
@@ -2202,13 +2242,14 @@ class WebGlRootImpl implements WebGlRoot {
     if (binding === undefined) {
       const existingHandle = typeof ref === "function" ? null : ref.current;
       const invalidation = existingHandle === null ? { suppress: false } : undefined;
+      const handle = existingHandle ?? createRenderObjectHandle(declarativeTransform, () => {
+        if (invalidation?.suppress === true) return;
+
+        this.invalidate();
+      });
       binding = {
         declarativeTransform,
-        handle: existingHandle ?? createRenderObjectHandle(declarativeTransform, () => {
-          if (invalidation?.suppress === true) return;
-
-          this.invalidate();
-        }),
+        handle,
         invalidation,
         node,
       };
@@ -2554,13 +2595,14 @@ class WebGlRootImpl implements WebGlRoot {
     view: Mat4,
     draws: GltfPrimitiveDraw[],
   ): void {
-    const renderInstanceKey = `instance:${this.#gltfRenderOrdinal}`;
+    const renderInstanceOrdinal = this.#gltfRenderOrdinal;
+    const renderInstanceKey = `instance:${renderInstanceOrdinal}`;
     this.#gltfRenderOrdinal += 1;
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
 
-    const rootModel = transformMat4(this.#renderObjectTransform(node));
-    const rootModelKey = mat4ContentKey(rootModel);
+    const rootTransform = this.#renderObjectTransform(node);
+    const rootModel = transformMat4(rootTransform);
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
       state,
@@ -2580,7 +2622,6 @@ class WebGlRootImpl implements WebGlRoot {
       const primitiveMaterial = this.#gltfPrimitiveMaterialForVariant(state, node, primitive);
       for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
         const model = multiplyMat4(rootModel, localModel);
-        const modelKey = `${rootModelKey}:${primitive.localModelKeys[instanceIndex] ?? mat4ContentKey(localModel)}`;
         const materialSelection = this.#selectedGltfMaterial(
           state,
           renderInstanceKey,
@@ -2629,7 +2670,9 @@ class WebGlRootImpl implements WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           material,
           model,
-          modelKey,
+          modelSignatureInstanceIndex: instanceIndex,
+          modelSignatureStateKey: state.instanceKey,
+          modelSignatureTransform: rootTransform,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
             frontFaceCcw: orientationPreservingMat4(model),
@@ -2658,17 +2701,19 @@ class WebGlRootImpl implements WebGlRoot {
       const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${sidednessKey}|${lights.key}`;
       const batch = batches.get(batchKey);
       if (batch === undefined) {
+        const modelSignature: number[] = [];
+        appendGltfModelSignature(modelSignature, draw);
         batches.set(batchKey, {
           geometry,
           key: batchKey,
           lights,
           material: draw.material,
-          modelKeys: [draw.modelKey],
+          modelSignature,
           models: [draw.model],
           sidedness: draw.sidedness,
         });
       } else {
-        batch.modelKeys.push(draw.modelKey);
+        appendGltfModelSignature(batch.modelSignature, draw);
         batch.models.push(draw.model);
       }
     }
@@ -2716,7 +2761,7 @@ class WebGlRootImpl implements WebGlRoot {
           batch.key,
           batch.material,
           batch.models,
-          `${batch.models.length}\0${batch.modelKeys.join("\0")}`,
+          batch.modelSignature,
           projection,
           view,
           batch.lights,
@@ -3188,7 +3233,7 @@ class WebGlRootImpl implements WebGlRoot {
     instanceBufferKey: string,
     material: SurfaceMaterial,
     models: readonly Mat4[],
-    modelsKey: string,
+    modelSignature: readonly number[],
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet,
@@ -3210,7 +3255,7 @@ class WebGlRootImpl implements WebGlRoot {
     const useTexture = this.#bindMaterialTexture(program, material);
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
-    this.#bindGltfInstanceModels(instanceBufferKey, models, modelsKey);
+    this.#bindGltfInstanceModels(instanceBufferKey, models, modelSignature);
 
     const mode = webGlDrawMode(gl, geometry.mode);
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
@@ -3457,12 +3502,12 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #bindGltfInstanceModels(key: string, models: readonly Mat4[], modelsKey: string): void {
+  #bindGltfInstanceModels(key: string, models: readonly Mat4[], modelSignature: readonly number[]): void {
     const gl = this.#gl;
     const floatCount = models.length * 16;
     const resource = this.#gltfInstanceBufferResource(key, floatCount);
     const { data } = resource;
-    const changed = resource.dirty || resource.modelsKey !== modelsKey;
+    const changed = resource.dirty || !sameGltfModelSignature(resource.modelSignature, modelSignature);
     if (changed) {
       for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
         const model = models[modelIndex]!;
@@ -3477,7 +3522,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (changed) {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, floatCount);
       resource.dirty = false;
-      resource.modelsKey = modelsKey;
+      resource.modelSignature = [...modelSignature];
     }
     for (let column = 0; column < 4; column += 1) {
       const location = 3 + column;
@@ -4540,12 +4585,14 @@ class WebGlRootImpl implements WebGlRoot {
     if (cached !== undefined) return cached;
 
     const state: GltfState = {
+      instanceKey: this.#gltfStateInstanceKey,
       key,
       lights: [],
       primitives: [],
       status: "loading",
       variants: [],
     };
+    this.#gltfStateInstanceKey += 1;
     this.#gltf.set(key, state);
 
     void this.#loadGltf(node.src, state);

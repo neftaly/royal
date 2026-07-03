@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
+  rayAabbDistance,
   rayGeometryDistance,
   rayTriangleDistance,
   type Ray,
@@ -89,5 +90,41 @@ describe("renderer-webgl picking math", () => {
     });
 
     expectHitDistance(distance, 1);
+  });
+
+  it("replays a notched bounds false-positive as a geometry miss", () => {
+    const bounds = {
+      max: [4, 2, 0],
+      min: [0, 0, 0],
+    } as const;
+    const positions = new Float32Array([
+      0, 0, 0, 1.25, 0, 0, 1.25, 2, 0, 0, 0, 0, 1.25, 2, 0, 0, 2, 0,
+      2.75, 0, 0, 4, 0, 0, 4, 2, 0, 2.75, 0, 0, 4, 2, 0, 2.75, 2, 0,
+      1.25, 0, 0, 2.75, 0, 0, 2.75, 0.45, 0, 1.25, 0, 0, 2.75, 0.45, 0, 1.25, 0.45, 0,
+      1.25, 1.55, 0, 2.75, 1.55, 0, 2.75, 2, 0, 1.25, 1.55, 0, 2.75, 2, 0, 1.25, 2, 0,
+    ]);
+    const rayThroughTransparentNotch: Ray = {
+      direction: [0, 0, -1],
+      origin: [2, 1, 1],
+    };
+    const rayThroughVisibleSurface: Ray = {
+      direction: [0, 0, -1],
+      origin: [0.5, 1, 1],
+    };
+
+    expectHitDistance(rayAabbDistance(rayThroughTransparentNotch, bounds), 1);
+    expect(rayGeometryDistance({
+      model: identityMat4(),
+      positions,
+      ray: rayThroughTransparentNotch,
+    })).toBeUndefined();
+    expectHitDistance(
+      rayGeometryDistance({
+        model: identityMat4(),
+        positions,
+        ray: rayThroughVisibleSurface,
+      }),
+      1,
+    );
   });
 });

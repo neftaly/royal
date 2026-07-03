@@ -85,6 +85,11 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
   },
+  'gltf-variants': {
+    path: '/gltf-variants',
+    minColorBuckets: 8,
+    minPaintedRatio: 0.006,
+  },
   'webxr-vr': {
     path: '/webxr-vr',
     minColorBuckets: 10,

@@ -17,7 +17,6 @@ export type RendererCapabilitySource =
   | "webgl2-core"
   | "webgl-extension"
   | "webgpu-probe"
-  | "unprobed"
   | "missing";
 
 export type RendererCapabilityRow = {
