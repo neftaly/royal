@@ -60,6 +60,14 @@ const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
+const iblSpecularImageUris = [
+  "ibl-pos-x.png",
+  "ibl-neg-x.png",
+  "ibl-pos-y.png",
+  "ibl-neg-y.png",
+  "ibl-pos-z.png",
+  "ibl-neg-z.png",
+] as const;
 const triangleBinByteLength = 104;
 const meshoptCompressedPositionByteLength = 56;
 const meshoptCompressedIndexByteLength = 18;
@@ -1433,6 +1441,131 @@ const punctualLightTriangleDocument = () => {
   };
 };
 
+const iblCoefficients = (
+  c0: readonly [number, number, number],
+  c8: readonly [number, number, number] = [0, 0, 0],
+): readonly (readonly [number, number, number])[] =>
+  Array.from({ length: 9 }, (_unused, index) =>
+    index === 0 ? c0 : index === 8 ? c8 : [0, 0, 0] as const);
+
+const imageBasedLightTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      EXT_lights_image_based: {
+        lights: [
+          {
+            intensity: 2,
+            irradianceCoefficients: iblCoefficients([0.5, 0.25, 0.125], [0.1, 0.2, 0.3]),
+            specularImages: [
+              [0, 1, 2, 3, 4, 5],
+            ],
+            specularImageSize: 16,
+          },
+        ],
+      },
+    },
+    extensionsUsed: ["EXT_lights_image_based"],
+    images: iblSpecularImageUris.map((uri) => ({ mimeType: "image/png", uri })),
+    scene: 0,
+    scenes: [
+      {
+        extensions: {
+          EXT_lights_image_based: {
+            light: 0,
+          },
+        },
+        nodes: [0],
+      },
+    ],
+  };
+};
+
+const sceneSelectedImageBasedLightTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      EXT_lights_image_based: {
+        lights: [
+          {
+            intensity: 4,
+            irradianceCoefficients: iblCoefficients([9, 9, 9]),
+            specularImages: [
+              [0, 1, 2, 3, 4, 5],
+            ],
+            specularImageSize: 16,
+          },
+          {
+            irradianceCoefficients: iblCoefficients([0.7, 0.6, 0.5]),
+            specularImages: [
+              [0, 1, 2, 3, 4, 5],
+            ],
+            specularImageSize: 16,
+          },
+        ],
+      },
+    },
+    extensionsUsed: ["EXT_lights_image_based"],
+    images: iblSpecularImageUris.map((uri) => ({ mimeType: "image/png", uri })),
+    scene: 1,
+    scenes: [
+      {
+        extensions: {
+          EXT_lights_image_based: {
+            light: 0,
+          },
+        },
+        nodes: [0],
+      },
+      {
+        extensions: {
+          EXT_lights_image_based: {
+            light: 1,
+          },
+        },
+        nodes: [0],
+      },
+    ],
+  };
+};
+
+const invalidImageBasedLightReferenceTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensions: {
+      EXT_lights_image_based: {
+        lights: [
+          {
+            irradianceCoefficients: iblCoefficients([0.5, 0.5, 0.5]),
+            specularImages: [
+              [0, 1, 2, 3, 4, 5],
+            ],
+            specularImageSize: 16,
+          },
+        ],
+      },
+    },
+    extensionsUsed: ["EXT_lights_image_based"],
+    images: iblSpecularImageUris.map((uri) => ({ mimeType: "image/png", uri })),
+    scenes: [
+      {
+        extensions: {
+          EXT_lights_image_based: {
+            light: 5,
+          },
+        },
+        nodes: [0],
+      },
+    ],
+  };
+};
+
 const emissiveStrengthTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -2293,6 +2426,154 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0,
       0,
     ]);
+  });
+
+  it("uses optional EXT_lights_image_based diffuse irradiance without fetching ignored specular images", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-lights-image-based-optional",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, imageBasedLightTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+    const diagnostics = root.snapshot().diagnostics.join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 2, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[0]").map(roundVector))
+      .toContainEqual([0.5, 0.25, 0.125, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[8]").map(roundVector))
+      .toContainEqual([0.1, 0.2, 0.3, 0]);
+    expect(sources).toContain("iblDiffuseIrradiance");
+    expect(sources).toContain("baseColor.rgb * ambientIrradiance");
+    expect(diagnostics).toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
+    expect(loader.fetchRequests.some((request) => /ibl-.*\.png(?:$|[?#])/.test(request.url))).toBe(false);
+    expect(ControlledImage.instances.some((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toBe(false);
+  });
+
+  it("selects EXT_lights_image_based from the active glTF scene and applies defaults", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-lights-image-based-scene-selection",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, sceneSelectedImageBasedLightTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 1, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[0]").map(roundVector))
+      .toContainEqual([0.7, 0.6, 0.5, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[0]").map(roundVector))
+      .not.toContainEqual([9, 9, 9, 0]);
+    expect(matrixUniformPayloads(readyFrameCalls, "u_iblWorldToIbl").map(roundVector))
+      .toContainEqual([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ]);
+  });
+
+  it("diagnoses invalid optional EXT_lights_image_based scene references and falls back to default lighting", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-lights-image-based-invalid-reference",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, invalidImageBasedLightReferenceTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const diagnostics = root.snapshot().diagnostics.join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(1);
+    expect(diagnostics).toMatch(/EXT_lights_image_based skipped: missing light 5/i);
+  });
+
+  it("rejects required EXT_lights_image_based until specular cubemap support is implemented", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-lights-image-based-required-rejected",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...imageBasedLightTriangleDocument(),
+        extensionsRequired: ["EXT_lights_image_based"],
+        extensionsUsed: ["EXT_lights_image_based"],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(ControlledImage.instances.some((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toBe(false);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(true);
+
+    root.render(renderGraph);
+    expect(drawCalls(calls)).toHaveLength(0);
   });
 
   it("renders required KHR_materials_emissive_strength as an emissive material multiplier", async () => {

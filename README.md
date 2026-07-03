@@ -26,6 +26,15 @@ The WebGL loader supports factor-level `KHR_materials_specular`,
 renderer-private current-frame color sampling with volume attenuation; texture
 fields from these extensions are currently ignored with renderer diagnostics.
 
+## glTF Image-Based Lights
+
+Optional `EXT_lights_image_based` scene references are parsed as renderer
+groundwork and can drive diffuse spherical-harmonic irradiance for glTF
+materials. The required specular cubemap path (`specularImages`,
+`specularImageSize`, mip/face upload, RGBD HDR unpacking, and `samplerCube` LOD
+sampling) is not implemented, so assets that list `EXT_lights_image_based` in
+`extensionsRequired` are still rejected.
+
 ## Development
 
 ```sh

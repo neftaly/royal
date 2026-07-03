@@ -17,6 +17,9 @@ required extensions documented in `docs/gltf-extension-priority.md`.
 That supported required-extension set includes meshopt-compressed bufferViews
 via `EXT_meshopt_compression` and KTX2/Basis base-color textures via
 `KHR_texture_basisu` with an RGBA8 transcode fallback.
+Optional `EXT_lights_image_based` diffuse irradiance is renderer groundwork
+only; assets that require the extension are rejected until specular cubemap
+sampling support lands.
 
 ```tsx
 /** @jsxImportSource @royal/react/renderer */

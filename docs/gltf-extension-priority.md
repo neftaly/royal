@@ -59,6 +59,13 @@ samplers, triangle and line drawing, `UNSIGNED_BYTE` / `UNSIGNED_SHORT` /
 `KHR_materials_variants`,
 `KHR_node_visibility`, and vendor `MSFT_lod`.
 
+Optional `EXT_lights_image_based` scene references are partially parsed for
+diffuse spherical-harmonic irradiance groundwork. It is not listed as supported
+for required assets because the specular cubemap image path is still missing:
+direct `images[]` face refs must be uploaded into cubemap mip levels, PNG RGBD
+HDR data must be unpacked correctly, and the forward shader must sample
+`samplerCube`/LOD for specular radiance.
+
 ## Should Do
 
 These are high-value for production asset loading or already part of the local
@@ -101,7 +108,7 @@ need them.
 | M1 | `KHR_materials_dispersion` | Adds chromatic separation for transmitted light. | Gems or high-end glass; depends on volume/transmission. |
 | M2 | `KHR_animation_pointer` | Lets animations target arbitrary mutable glTF properties with JSON pointers. | After core animation support exists. |
 | M2 | `KHR_xmp_json_ld` | Embeds XMP metadata using JSON-LD. | Asset provenance, commerce metadata, content pipelines. |
-| M2 | `EXT_lights_image_based` | Adds image-based/environment lighting data. | PBR scene fidelity once material support matures. |
+| M2 | `EXT_lights_image_based` | Adds image-based/environment lighting data. | Partial optional diffuse SH groundwork exists. Keep required assets rejected until specular cubemap mip upload, RGBD unpacking, and `samplerCube` LOD sampling are implemented. |
 | M2 | `EXT_lights_ies` | Adds IES photometric light profiles. | Architectural or product lighting workflows. |
 | M2 | `EXT_mesh_manifold` | Stores manifold/topology data for meshes. | CAD/print/geometry workflows, not basic rendering. |
 | M2 | `CESIUM_primitive_outline` | Stores outline data for mesh primitives. | Geospatial/CAD-style outline rendering. |

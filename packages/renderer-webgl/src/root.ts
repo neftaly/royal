@@ -49,6 +49,7 @@ import { decodeGltfMeshoptBufferViews } from "./gltf-meshopt";
 import {
   assertSupportedRequiredGltfExtensions,
   type GltfDocument,
+  type GltfImageBasedLight,
   type GltfImage,
   type GltfLodExtras,
   type GltfMaterial,
@@ -285,6 +286,7 @@ type GltfLodSelectionState = {
 };
 
 type GltfState = {
+  imageBasedLight?: LoadedGltfImageBasedLight;
   readonly key: string;
   error?: string;
   lights: readonly SurfaceLight[];
@@ -312,6 +314,18 @@ type ViewportSize = readonly [width: number, height: number];
 type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly emissive?: Rgba;
   readonly pbrExtensionFactors?: MaterialPbrExtensionFactors;
+};
+
+type LoadedGltfImageBasedLight = {
+  readonly coefficients: readonly Vec3[];
+  readonly intensity: number;
+  readonly rotation: Mat4;
+};
+
+type SurfaceIblIrradiance = {
+  readonly coefficients: readonly Vec3[];
+  readonly intensity: number;
+  readonly worldToIbl: Mat4;
 };
 
 type MaterialPbrExtensionFactors = {
@@ -358,6 +372,7 @@ type SurfaceSpotLight = {
 type SurfaceLight = SurfaceDirectionalLight | SurfacePointLight | SurfaceSpotLight;
 
 type SurfaceLightSet = {
+  readonly irradiance?: SurfaceIblIrradiance;
   readonly key: string;
   readonly lights: readonly SurfaceLight[];
 };
@@ -1021,6 +1036,13 @@ const surfaceLightValueKey = (value: number | undefined): string =>
 const surfaceLightVectorKey = (values: readonly number[]): string =>
   values.map((value) => surfaceLightValueKey(value)).join(",");
 
+const surfaceIblIrradianceKey = (irradiance: SurfaceIblIrradiance): string =>
+  [
+    surfaceLightValueKey(irradiance.intensity),
+    ...irradiance.coefficients.map((coefficient) => surfaceLightVectorKey(coefficient)),
+    surfaceLightVectorKey(irradiance.worldToIbl),
+  ].join(":");
+
 const surfaceLightKey = (light: SurfaceLight): string => {
   switch (light.kind) {
     case "directional":
@@ -1049,10 +1071,23 @@ const surfaceLightKey = (light: SurfaceLight): string => {
   }
 };
 
-const surfaceLightSet = (lights: readonly SurfaceLight[]): SurfaceLightSet => ({
-  key: lights.length === 0 ? "default" : lights.map(surfaceLightKey).join("|"),
-  lights: lights.length === 0 ? DEFAULT_SURFACE_LIGHT_SET.lights : lights,
-});
+const surfaceLightSet = (
+  lights: readonly SurfaceLight[],
+  irradiance?: SurfaceIblIrradiance,
+): SurfaceLightSet => {
+  const useDefaultLight = lights.length === 0 && irradiance === undefined;
+  const actualLights = useDefaultLight ? DEFAULT_SURFACE_LIGHT_SET.lights : lights;
+  const lightKey = useDefaultLight
+    ? "default"
+    : lights.length === 0 ? "none" : lights.map(surfaceLightKey).join("|");
+  const key = irradiance === undefined ? lightKey : `${lightKey}|ibl:${surfaceIblIrradianceKey(irradiance)}`;
+
+  return {
+    ...(irradiance === undefined ? {} : { irradiance }),
+    key,
+    lights: actualLights,
+  };
+};
 
 const passSurfaceLightSet = (light: DirectionalLightNode | undefined): SurfaceLightSet | undefined =>
   light === undefined
@@ -1071,10 +1106,25 @@ const combineSurfaceLightSets = (
   if (assetLights === undefined) return passLights ?? DEFAULT_SURFACE_LIGHT_SET;
   if (passLights === undefined) return assetLights;
   const lights = [...passLights.lights, ...assetLights.lights].slice(0, MAX_SURFACE_LIGHTS);
+  const irradiance = assetLights.irradiance ?? passLights.irradiance;
 
   return {
+    ...(irradiance === undefined ? {} : { irradiance }),
     key: `${passLights.key}|${assetLights.key}`,
     lights,
+  };
+};
+
+const transformSurfaceIblIrradiance = (
+  model: Mat4,
+  light: LoadedGltfImageBasedLight,
+): SurfaceIblIrradiance => {
+  const worldFromIbl = multiplyMat4(model, light.rotation);
+
+  return {
+    coefficients: light.coefficients,
+    intensity: light.intensity,
+    worldToIbl: inverseMat4(worldFromIbl) ?? identityMat4(),
   };
 };
 
@@ -1454,6 +1504,45 @@ const gltfMaterialPbrExtensionFactors = (
   };
 };
 
+const gltfImageBasedLightHasValidRotation = (light: GltfImageBasedLight): boolean =>
+  light.rotation === undefined
+  || (
+    Array.isArray(light.rotation)
+    && light.rotation.length >= 4
+    && light.rotation.slice(0, 4).every((value) => typeof value === "number" && Number.isFinite(value))
+  );
+
+const gltfImageBasedLightRotation = (light: GltfImageBasedLight): Mat4 =>
+  quaternionMat4(gltfImageBasedLightHasValidRotation(light) ? light.rotation : undefined);
+
+const gltfImageBasedLightIntensity = (light: GltfImageBasedLight): number =>
+  Math.max(0, finiteNumber(light.intensity, 1));
+
+const gltfImageBasedLightIrradianceCoefficients = (
+  light: GltfImageBasedLight,
+): readonly Vec3[] | undefined => {
+  const coefficients = light.irradianceCoefficients;
+  if (!Array.isArray(coefficients) || coefficients.length !== 9) return undefined;
+
+  const parsed: Vec3[] = [];
+  for (const coefficient of coefficients) {
+    if (
+      !Array.isArray(coefficient)
+      || coefficient.length < 3
+      || coefficient.slice(0, 3).some((value) => typeof value !== "number" || !Number.isFinite(value))
+    ) {
+      return undefined;
+    }
+    parsed.push([
+      coefficient[0]!,
+      coefficient[1]!,
+      coefficient[2]!,
+    ]);
+  }
+
+  return parsed;
+};
+
 const gltfLightColor = (light: GltfPunctualLight): Rgba => {
   const color = light.color;
   const intensity = Math.max(0, finiteNumber(light.intensity, 1));
@@ -1729,6 +1818,7 @@ export class WebGlRoot {
   readonly #ownedTextures = new Set<WebGLTexture>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
+  readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
   readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
   #activeGltfLodSelectionKeys = new Set<string>();
@@ -2462,9 +2552,15 @@ export class WebGlRoot {
   }
 
   #gltfAssetLightSet(state: GltfState, rootModel: Mat4): SurfaceLightSet | undefined {
-    if (state.lights.length === 0) return undefined;
+    const irradiance = state.imageBasedLight === undefined
+      ? undefined
+      : transformSurfaceIblIrradiance(rootModel, state.imageBasedLight);
+    if (state.lights.length === 0 && irradiance === undefined) return undefined;
 
-    return surfaceLightSet(state.lights.map((light) => transformSurfaceLight(rootModel, light)));
+    return surfaceLightSet(
+      state.lights.map((light) => transformSurfaceLight(rootModel, light)),
+      irradiance,
+    );
   }
 
   #selectedGltfNodeLodLevels(
@@ -2849,6 +2945,25 @@ export class WebGlRoot {
   }
 
   #bindSurfaceLights(program: WebGLProgram, lightSet: SurfaceLightSet): void {
+    const irradiance = lightSet.irradiance;
+    this.#uniform1i(program, "u_useIblIrradiance", irradiance === undefined ? 0 : 1);
+    this.#uniformColor(program, "u_iblIrradianceSettings", [
+      irradiance === undefined ? 0 : 1,
+      irradiance?.intensity ?? 1,
+      0,
+      0,
+    ]);
+    this.#uniformMatrix(program, "u_iblWorldToIbl", irradiance?.worldToIbl ?? identityMat4());
+    for (let index = 0; index < 9; index += 1) {
+      const coefficient = irradiance?.coefficients[index] ?? [0, 0, 0] as const;
+      this.#uniformColor(program, `u_iblIrradianceCoefficients[${index}]`, [
+        coefficient[0],
+        coefficient[1],
+        coefficient[2],
+        0,
+      ]);
+    }
+
     const lights = lightSet.lights.slice(0, MAX_SURFACE_LIGHTS);
     this.#uniform1i(program, "u_surfaceLightCount", lights.length);
 
@@ -3670,6 +3785,10 @@ uniform vec4 u_surfaceLightColor[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
+uniform bool u_useIblIrradiance;
+uniform vec4 u_iblIrradianceCoefficients[9];
+uniform vec4 u_iblIrradianceSettings;
+uniform mat4 u_iblWorldToIbl;
 uniform sampler2D u_texture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_specularColorFactor;
@@ -3781,6 +3900,23 @@ float rangeAttenuation(float distanceToLight, float range) {
   float smoothCutoff = max(min(1.0 - normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance, 1.0), 0.0);
   return smoothCutoff / max(distanceToLight * distanceToLight, 0.0001);
 }
+vec3 iblDiffuseIrradiance(vec3 normal) {
+  if (!u_useIblIrradiance) {
+    return vec3(0.18);
+  }
+  vec3 n = normalize((u_iblWorldToIbl * vec4(normal, 0.0)).xyz);
+  vec3 irradiance = vec3(0.0);
+  irradiance += u_iblIrradianceCoefficients[0].rgb * 0.282095;
+  irradiance += u_iblIrradianceCoefficients[1].rgb * (0.488603 * n.y);
+  irradiance += u_iblIrradianceCoefficients[2].rgb * (0.488603 * n.z);
+  irradiance += u_iblIrradianceCoefficients[3].rgb * (0.488603 * n.x);
+  irradiance += u_iblIrradianceCoefficients[4].rgb * (1.092548 * n.x * n.y);
+  irradiance += u_iblIrradianceCoefficients[5].rgb * (1.092548 * n.y * n.z);
+  irradiance += u_iblIrradianceCoefficients[6].rgb * (0.315392 * (3.0 * n.z * n.z - 1.0));
+  irradiance += u_iblIrradianceCoefficients[7].rgb * (1.092548 * n.x * n.z);
+  irradiance += u_iblIrradianceCoefficients[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
+  return max(irradiance * u_iblIrradianceSettings.y, vec3(0.0));
+}
 vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
   int kind = u_surfaceLightKind[index];
   vec3 lightVector;
@@ -3829,7 +3965,8 @@ void main() {
   vec3 viewInput = cameraWorldPosition() - v_worldPosition;
   vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
   float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
-  vec3 lit = baseColor.rgb * 0.18 * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+  vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
+  vec3 lit = baseColor.rgb * ambientIrradiance * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
   for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
     if (index >= u_surfaceLightCount) {
       break;
@@ -4276,6 +4413,11 @@ void main() {
       const dracoPrimitives = await decodeGltfDracoPrimitives(decodedDocument, buffers);
       if (this.#disposed) return;
       const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, state.key);
+      if (scene.imageBasedLight === undefined) {
+        delete state.imageBasedLight;
+      } else {
+        state.imageBasedLight = scene.imageBasedLight;
+      }
       state.lights = scene.lights;
       state.primitives = scene.primitives;
       state.variants = scene.variants;
@@ -4297,6 +4439,7 @@ void main() {
     src: string,
     assetKey: string,
   ): {
+    readonly imageBasedLight?: LoadedGltfImageBasedLight;
     readonly lights: readonly SurfaceLight[];
     readonly primitives: readonly LoadedGltfPrimitive[];
     readonly variants: readonly string[];
@@ -4306,7 +4449,9 @@ void main() {
     const variants = (document.extensions?.KHR_materials_variants?.variants ?? [])
       .map((variant) => variant.name)
       .map((name, index) => typeof name === "string" ? name : String(index));
-    const scene = document.scenes?.[document.scene ?? 0];
+    const sceneIndex = document.scene ?? 0;
+    const scene = document.scenes?.[sceneIndex];
+    const imageBasedLight = this.#readGltfSceneImageBasedLight(document, sceneIndex);
     const referencedLodNodes = new Set<number>();
     for (const node of document.nodes ?? []) {
       for (const id of node.extensions?.MSFT_lod?.ids ?? []) {
@@ -4331,7 +4476,65 @@ void main() {
       );
     }
 
-    return { lights, primitives, variants };
+    return {
+      ...(imageBasedLight === undefined ? {} : { imageBasedLight }),
+      lights,
+      primitives,
+      variants,
+    };
+  }
+
+  #readGltfSceneImageBasedLight(
+    document: GltfDocument,
+    sceneIndex: number,
+  ): LoadedGltfImageBasedLight | undefined {
+    const reference = document.scenes?.[sceneIndex]?.extensions?.EXT_lights_image_based;
+    if (reference === undefined) return undefined;
+
+    const lightIndex = reference.light;
+    if (typeof lightIndex !== "number" || !Number.isInteger(lightIndex) || lightIndex < 0) {
+      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: invalid light index ${lightIndex}`);
+      return undefined;
+    }
+
+    const light = document.extensions?.EXT_lights_image_based?.lights?.[lightIndex];
+    if (light === undefined) {
+      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: missing light ${lightIndex}`);
+      return undefined;
+    }
+
+    const coefficients = gltfImageBasedLightIrradianceCoefficients(light);
+    if (coefficients === undefined) {
+      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: light ${lightIndex} has invalid irradianceCoefficients; expected a 9x3 finite numeric array`);
+      return undefined;
+    }
+
+    this.#diagnoseGltfImageBasedLightSpecularSupport(sceneIndex, lightIndex, light);
+    if (light.rotation !== undefined && !gltfImageBasedLightHasValidRotation(light)) {
+      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} has invalid rotation; using default [0, 0, 0, 1]`);
+    }
+
+    return {
+      coefficients,
+      intensity: gltfImageBasedLightIntensity(light),
+      rotation: gltfImageBasedLightRotation(light),
+    };
+  }
+
+  #diagnoseGltfImageBasedLightSpecularSupport(
+    sceneIndex: number,
+    lightIndex: number,
+    light: GltfImageBasedLight,
+  ): void {
+    const hasSpecularImages = light.specularImages !== undefined;
+    const hasSpecularImageSize = typeof light.specularImageSize === "number" && Number.isFinite(light.specularImageSize);
+    const message = hasSpecularImages && hasSpecularImageSize
+      ? `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} specularImages are ignored: Royal currently applies diffuse irradianceCoefficients only; prefiltered cubemap mip sampling and PNG RGBD HDR unpacking are not implemented, so EXT_lights_image_based remains unsupported when required.`
+      : `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} is missing required specularImages/specularImageSize data; Royal currently applies diffuse irradianceCoefficients only, so EXT_lights_image_based remains unsupported when required.`;
+    if (this.#unsupportedGltfImageBasedLightDiagnostics.has(message)) return;
+
+    this.#unsupportedGltfImageBasedLightDiagnostics.add(message);
+    this.#recordDiagnostic(message);
   }
 
   #appendGltfNodeTreePrimitives(

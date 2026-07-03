@@ -3,6 +3,9 @@ export type GltfDocument = {
   readonly bufferViews?: readonly GltfBufferView[];
   readonly buffers?: readonly GltfBuffer[];
   readonly extensions?: {
+    readonly EXT_lights_image_based?: {
+      readonly lights?: readonly GltfImageBasedLight[];
+    };
     readonly KHR_lights_punctual?: {
       readonly lights?: readonly GltfPunctualLight[];
     };
@@ -96,6 +99,15 @@ export type GltfPunctualLight = {
     readonly outerConeAngle?: number;
   };
   readonly type?: "directional" | "point" | "spot";
+};
+
+export type GltfImageBasedLight = {
+  readonly intensity?: number;
+  readonly irradianceCoefficients?: readonly (readonly number[])[];
+  readonly name?: string;
+  readonly rotation?: readonly number[];
+  readonly specularImages?: readonly (readonly number[])[];
+  readonly specularImageSize?: number;
 };
 
 export type GltfImage = {
@@ -248,6 +260,11 @@ export type GltfLodExtras = {
 };
 
 export type GltfScene = {
+  readonly extensions?: {
+    readonly EXT_lights_image_based?: {
+      readonly light?: number;
+    };
+  };
   readonly nodes?: readonly number[];
 };
 
