@@ -3,7 +3,7 @@ import type {
   GltfBufferView,
   GltfDocument,
   GltfMeshoptCompressionExtension,
-} from "./gltf-support";
+} from "../schema";
 
 type DecodedGltfBuffers = {
   readonly buffers: readonly ArrayBuffer[];

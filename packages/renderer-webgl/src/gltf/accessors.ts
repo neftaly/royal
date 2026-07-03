@@ -1,4 +1,4 @@
-import type { GltfAccessor, GltfDocument } from "./gltf-support";
+import type { GltfAccessor, GltfDocument } from "./schema";
 
 export type GltfIndexArray = Uint8Array | Uint16Array | Uint32Array;
 

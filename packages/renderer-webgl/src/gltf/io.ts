@@ -1,4 +1,4 @@
-import type { GltfDocument } from "./gltf-support";
+import type { GltfDocument } from "./schema";
 
 export type GltfDocumentPayload = {
   readonly binaryChunk?: ArrayBuffer;

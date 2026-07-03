@@ -29,25 +29,25 @@ import {
   readGltfFloatAccessor,
   readGltfIndices,
   type GltfIndexArray,
-} from "./gltf-accessors";
+} from "./gltf/accessors";
 import {
   decodeDataUri,
   gltfBufferViewBytes,
   loadGltfBuffers,
   loadGltfDocument,
   resolveResourceUri,
-} from "./gltf-io";
+} from "./gltf/io";
 import {
   decodeGltfBasisuRgba,
   type DecodedGltfBasisuTexture,
-} from "./gltf-basisu";
+} from "./gltf/codecs/basisu";
 import {
   decodeGltfDracoPrimitives,
   type DecodedGltfDracoPrimitive,
-} from "./gltf-draco";
-import { decodeGltfMeshoptBufferViews } from "./gltf-meshopt";
+} from "./gltf/codecs/draco";
+import { decodeGltfMeshoptBufferViews } from "./gltf/codecs/meshopt";
+import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
 import {
-  assertSupportedRequiredGltfExtensions,
   type GltfDocument,
   type GltfImageBasedLight,
   type GltfImage,
@@ -59,7 +59,7 @@ import {
   type GltfSceneNode,
   type GltfTexture,
   type GltfTextureTransformExtension,
-} from "./gltf-support";
+} from "./gltf/schema";
 import {
   encodeVirtualTexturePageTableRgba8,
   parseVirtualTextureManifest,

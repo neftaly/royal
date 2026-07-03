@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const decodeBasisuMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../packages/renderer-webgl/src/gltf-basisu", () => ({
+vi.mock("../packages/renderer-webgl/src/gltf/codecs/basisu", () => ({
   decodeGltfBasisuRgba: decodeBasisuMock,
 }));
 

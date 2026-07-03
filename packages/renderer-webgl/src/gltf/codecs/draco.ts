@@ -6,13 +6,13 @@ import draco3dgltf, {
   type DracoPointAttribute,
 } from "draco3dgltf";
 import dracoDecoderWasmUrl from "draco3dgltf/draco_decoder_gltf.wasm?url";
-import type { GltfIndexArray } from "./gltf-accessors";
-import { gltfBufferViewBytes } from "./gltf-io";
+import type { GltfIndexArray } from "../accessors";
+import { gltfBufferViewBytes } from "../io";
 import type {
   GltfDocument,
   GltfDracoMeshCompressionExtension,
   GltfMeshPrimitive,
-} from "./gltf-support";
+} from "../schema";
 
 export type DecodedGltfDracoPrimitive = {
   readonly attributes: ReadonlyMap<string, Float32Array>;
