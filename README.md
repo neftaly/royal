@@ -1,8 +1,21 @@
 # Royal
 
-Royal is a WebGL2 renderer, with a react-[regl](https://github.com/regl-project/regl)-fiber renderer (should also work with solid etc). It targets Quest 2 XR and Safari 17 (iPad gen 6 A10+ 2018).
+Royal is a DOM-free renderer core with a thin React authoring layer for canvas
+interface scenes. `@royal/react` exposes `<Canvas>` as the primary React API:
+it owns the canvas element, renders one Royal scene, and lets React-only
+controls live beside that scene.
 
-GLTF support is first-class. We try to support optional and draft features in a really [Metaverse Standards Forum-pilled](https://www.youtube.com/watch?v=Aj4kUpF9H0I) way.
+`createRendererRoot(canvas)` is the lower-level host and testing escape hatch
+for code that already owns a canvas and lowered renderer descriptors. App
+examples and docs should start with `<Canvas>`.
+
+Royal renderer APIs stop at renderer primitives. App-specific surface
+descriptors, placement contracts, product panels, and event rows belong in
+Patchpit/Opshop lab or example integration code, not in the product renderer
+API.
+
+glTF support is first-class. Optional and draft features should stay isolated
+until they are useful through the public renderer and React APIs.
 
 ## SVG textures (experimental)
 

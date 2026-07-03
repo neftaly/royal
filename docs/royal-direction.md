@@ -41,7 +41,7 @@ Royal should not be:
 - A renderer backend whose private resources leak into author-facing primitives.
 - A home for app-level surface descriptors, placement schemas, product panels, or event-row contracts.
 
-## OS-Grade Primitive Direction
+## Primitive Direction
 
 Royal's useful endpoint is not "draw 3D" or "rebuild HTML in canvas". It is a primitive set for application surfaces that may be touched, clicked, keyboard-driven, inspected, or placed in space.
 
@@ -61,7 +61,7 @@ Core primitive areas:
 - XR, instancing, and performance: backend-neutral primitives and measurements that let renderers optimize without importing app concepts.
 - Render backend boundary: core describes intent; WebGL/WebGPU choose buffers, shaders, culling, upload policy, and capability fallbacks.
 
-This is why text and UI work matters as much as VT or WebGL performance. A spatial OS still needs caret placement, selection, copy/paste, labels, forms, accessible names, and predictable focus. A touch-screen canvas still benefits from cameras, transforms, depth, assets, and spatial picking. Royal should keep those concepts aligned.
+This is why text and UI work matters as much as VT or WebGL performance. Spatial interfaces still need caret placement, selection, copy/paste, labels, forms, accessible names, and predictable focus. A touch-screen canvas still benefits from cameras, transforms, depth, assets, and spatial picking. Royal should keep those concepts aligned.
 
 ## Layer Boundaries
 
@@ -69,11 +69,11 @@ This is why text and UI work matters as much as VT or WebGL performance. A spati
 
 App-level surface descriptors belong outside Royal. Descriptor schemas for product panels, placement, app surfaces, event rows, and app/control-plane routing belong in Patchpit/Opshop, which can project those app contracts into Royal renderer primitives.
 
-`@royal/react` owns JSX and host integration. It should stay thin: convert JSX to renderer descriptors, mount roots, pass through options, and avoid becoming an application framework.
+`@royal/react` owns JSX and host integration. It should stay thin: convert JSX to renderer descriptors, mount roots, pass through options, and avoid becoming an application framework. `<Canvas>` is the primary React API for apps and examples. `createRendererRoot` is a lower-level host/testing escape hatch for code that already owns a canvas and renderer descriptors.
 
 `@royal/renderer-webgl` owns GL resources, shaders, caches, upload scheduling, visibility culling, and backend-specific performance work. It should not expose internal testing APIs to examples.
 
-Examples demonstrate intended product APIs. They should use JSX, avoid hidden DOM bridges, avoid renderer internals, and stay small enough to explain the API at a glance.
+Product examples demonstrate intended APIs through `<Canvas>`. Lab probes can show host/app integration ideas, but app-specific Patchpit/Opshop contracts are lab/example code, not Royal product renderer APIs.
 
 Research can exist, but it must not become a second product surface. When research moves on, delete the old path or move it out of Royal.
 
@@ -123,7 +123,7 @@ The current public examples should not pretend to demonstrate automatic VT if th
 
 ## Performance Direction
 
-Performance work should be benchmark-led and used to decomplect:
+Performance work should be benchmark-led and used to separate concerns:
 
 - Startup and first render.
 - Texture load and upload hitches.

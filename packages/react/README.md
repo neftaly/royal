@@ -1,11 +1,16 @@
 # @royal/react
 
-React adapter for Royal.
+React adapter for Royal. It renders Royal scene descriptors into a canvas
+without using the DOM as the scene model.
 
 Examples and documentation should import React adapter APIs from `@royal/react`
 and render graph primitives from `@royal/renderer-core`.
 
 ## Example
+
+`<Canvas>` is the primary React API. It owns the canvas element, accepts exactly
+one Royal scene child, and can host React-only control components such as
+`<OrbitControls>`.
 
 The WebGL renderer currently supports a practical glTF subset: `.gltf` and
 `.glb` documents, external/data URI/GLB BIN buffers, bufferView images, node
@@ -22,44 +27,45 @@ only; assets that require the extension are rejected until specular cubemap
 sampling support lands.
 
 ```tsx
-/** @jsxImportSource @royal/react/renderer */
+/** @jsxImportSource @royal/react */
 import {
-  createRendererRoot,
+  Canvas,
+  OrbitControls,
+  useOrbitCamera,
 } from '@royal/react';
 import {
   boxGeometry,
-  standardMaterial
+  standardMaterial,
 } from '@royal/renderer-core';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({
-  color: [1, 0, 0, 1]
-});
+const red = standardMaterial({ color: [1, 0, 0, 1] });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 
-createRendererRoot(canvas).render(
-  <scene>
-    <pass>
-      <perspectiveCamera
-        position={[0, 1, 5]}
-        rotation={[0, 0, 0]}
-        fovY={Math.PI / 4}
-        near={0.1}
-        far={1000}
-      />
-      <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
-      <mesh geometry={cube} material={red} />
-      <model src={helmetSrc} variant="display" />
-    </pass>
-  </scene>
-);
+export function App() {
+  const orbit = useOrbitCamera({ distance: 5 });
+
+  return (
+    <Canvas aria-label="Royal scene">
+      <scene>
+        <pass camera={orbit.camera}>
+          <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
+          <mesh geometry={cube} material={red} />
+          <model src={helmetSrc} variant="display" />
+        </pass>
+      </scene>
+      <OrbitControls {...orbit.controls} />
+    </Canvas>
+  );
+}
 ```
 
-The imperative `createRendererRoot(canvas)` path uses `@royal/react/renderer` as its
-JSX import source. It is for already-lowered Royal scenes: descriptor objects
-from `@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or
-plain function components that return one renderer descriptor. Arbitrary React
-children and DOM overlays belong under `<Canvas>` in a React DOM tree.
+The imperative `createRendererRoot(canvas)` path uses
+`@royal/react/renderer` as its JSX import source. It is a lower-level host and
+testing escape hatch for already-lowered Royal scenes: descriptor objects from
+`@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or plain
+function components that return one renderer descriptor. React children,
+hooks, and controls belong under `<Canvas>`.
 
 React commits render the latest descriptor graph immediately. Use
 `useInvalidate()` inside `<Canvas>` only for changes React did not commit, such

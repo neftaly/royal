@@ -4,11 +4,11 @@ import {
   useFrame,
   useFrameIndex,
   useOrbitCamera,
-  type RenderObjectHandle,
 } from '@royal/react';
+import { type EulerRads } from '@royal/renderer-core';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
-  useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
@@ -103,18 +103,17 @@ const palette = {
 } as const;
 
 const Scout = (): ReactNode => {
-  const target = useRef<RenderObjectHandle | null>(null);
+  const [rotation, setRotation] = useState<EulerRads>([0.24, 0.6, 0.12]);
 
   useFrame(({ elapsed }) => {
-    target.current?.rotation.set(0.24 + elapsed * 0.16, elapsed * 0.72, 0.12);
+    setRotation([0.24 + elapsed * 0.16, elapsed * 0.72, 0.12]);
   });
 
   return (
     <mesh
-      ref={target}
       transform={{
         position: [0, 0.15, 0],
-        rotation: [0.24, 0.6, 0.12],
+        rotation,
       }}
     >
       <boxGeometry size={[1.08, 1.08, 1.08]} />

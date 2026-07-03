@@ -106,7 +106,7 @@ export const examples = [
   },
   {
     id: 'shared-surface-binding',
-    maturity: 'product',
+    maturity: 'lab-probe',
     path: '/shared-surface-binding',
     title: 'Shared Surface Binding',
     Component: SharedSurfaceBinding,
