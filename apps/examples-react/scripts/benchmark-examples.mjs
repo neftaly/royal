@@ -11,7 +11,9 @@ const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_BENCH_PORT ?? 4673);
 const debugPort = Number(process.env.EXAMPLES_BENCH_DEBUG_PORT ?? 4674);
-const baseUrl = `http://${host}:${previewPort}`;
+const debugHost = process.env.EXAMPLES_BENCH_DEBUG_HOST?.trim() || host;
+const baseUrl = process.env.EXAMPLES_BENCH_BASE_URL?.trim() || `http://${host}:${previewPort}`;
+const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
 const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
 
@@ -29,13 +31,52 @@ const frameSampleCount = envInteger('EXAMPLES_BENCH_FRAMES', 90);
 const frameWarmupCount = envInteger('EXAMPLES_BENCH_WARMUP_FRAMES', 30);
 const instancingFuzzCases = envInteger('EXAMPLES_BENCH_INSTANCING_CASES', 4);
 const instancingSeed = envInteger('EXAMPLES_BENCH_INSTANCING_SEED', 0x1a57a11);
+const instancingSweepMode = process.env.EXAMPLES_BENCH_INSTANCING_SWEEP?.trim() || 'default';
+const defaultInstancingGrid = 16;
 const routeReadyTimeoutMs = envInteger('EXAMPLES_BENCH_READY_TIMEOUT_MS', 20_000);
 const clearCachePerRoute = process.env.EXAMPLES_BENCH_CLEAR_CACHE !== '0';
+const managePreview = process.env.EXAMPLES_BENCH_PREVIEW !== '0';
 const fakeXrEnabled = process.env.EXAMPLES_BENCH_FAKE_XR === '1';
 const fakeXrHz = envInteger('EXAMPLES_BENCH_XR_HZ', 72);
 const fakeXrPrepareTimeoutMs = envInteger('EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS', 5_000);
 const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
 const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
+
+if (!new Set(['chromium', 'cdp']).has(browserMode)) {
+  throw new Error(`EXAMPLES_BENCH_BROWSER must be "chromium" or "cdp", received ${JSON.stringify(browserMode)}`);
+}
+
+if (!new Set(['0', 'quick', 'default', 'full']).has(instancingSweepMode)) {
+  throw new Error(
+    `EXAMPLES_BENCH_INSTANCING_SWEEP must be "0", "quick", "default", or "full", received ${JSON.stringify(instancingSweepMode)}`,
+  );
+}
+
+const instancingRoute = ({ animate, grid, id, seed, sweep }) => ({
+  id,
+  path: `/gltf-instancing?animate=${animate ? 1 : 0}&grid=${grid}&seed=${seed}`,
+  profile: {
+    animate,
+    grid,
+    instanceCount: grid ** 3,
+    kind: 'gltf-instancing',
+    seed,
+    sweep,
+  },
+});
+
+const defaultInstancingRoute = () => ({
+  id: 'gltf-instancing',
+  path: '/gltf-instancing',
+  profile: {
+    animate: true,
+    grid: defaultInstancingGrid,
+    instanceCount: defaultInstancingGrid ** 3,
+    kind: 'gltf-instancing',
+    seed: 0,
+    sweep: 'baseline',
+  },
+});
 
 const routes = [
   { id: 'cube', path: '/cube' },
@@ -45,10 +86,23 @@ const routes = [
   { id: 'texture-materials', path: '/texture-materials' },
   { id: 'standard-lighting', path: '/standard-lighting' },
   { id: 'hud-overlay', path: '/hud-overlay' },
+  { id: 'shared-surface-binding', path: '/shared-surface-binding' },
   { id: 'gltf-helmet', path: '/gltf-helmet' },
-  { id: 'gltf-instancing', path: '/gltf-instancing' },
-  { id: 'gltf-instancing-static', path: '/gltf-instancing?animate=0' },
-  { id: 'gltf-instancing-animated', path: '/gltf-instancing?animate=1' },
+  defaultInstancingRoute(),
+  instancingRoute({
+    animate: false,
+    grid: defaultInstancingGrid,
+    id: 'gltf-instancing-static',
+    seed: 0,
+    sweep: 'baseline',
+  }),
+  instancingRoute({
+    animate: true,
+    grid: defaultInstancingGrid,
+    id: 'gltf-instancing-animated',
+    seed: 0,
+    sweep: 'baseline',
+  }),
   { id: 'gltf-material-extensions', path: '/gltf-material-extensions' },
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
@@ -75,22 +129,46 @@ class SeededRandom {
   }
 }
 
+const instancingSweepRoutes = () => {
+  if (instancingSweepMode === '0') return [];
+  const quick = [
+    instancingRoute({ animate: false, grid: 8, id: 'gltf-instancing-grid-8-static', seed: 0, sweep: 'quick' }),
+    instancingRoute({ animate: false, grid: 16, id: 'gltf-instancing-grid-16-seed-271828-static', seed: 271828, sweep: 'quick' }),
+  ];
+  const defaultRows = [
+    ...quick,
+    instancingRoute({ animate: true, grid: 16, id: 'gltf-instancing-grid-16-seed-271828-animated', seed: 271828, sweep: 'default' }),
+    instancingRoute({ animate: false, grid: 24, id: 'gltf-instancing-grid-24-static', seed: 314159, sweep: 'default' }),
+  ];
+  if (instancingSweepMode === 'quick') return quick;
+  if (instancingSweepMode === 'default') return defaultRows;
+  return [
+    ...defaultRows,
+    instancingRoute({ animate: true, grid: 24, id: 'gltf-instancing-grid-24-animated', seed: 314159, sweep: 'full' }),
+    instancingRoute({ animate: false, grid: 28, id: 'gltf-instancing-grid-28-static', seed: 161803, sweep: 'full' }),
+    instancingRoute({ animate: true, grid: 28, id: 'gltf-instancing-grid-28-animated', seed: 161803, sweep: 'full' }),
+  ];
+};
+
 const instancingFuzzRoutes = () => {
   const random = new SeededRandom(instancingSeed);
   return Array.from({ length: instancingFuzzCases }, (_value, index) => {
     const grid = random.int(8, 25);
     const seed = random.int(0, 0xffff_ffff);
-    return {
+    return instancingRoute({
+      animate: index % 2 === 1,
+      grid,
       id: `gltf-instancing-fuzz-${index}`,
-      path: `/gltf-instancing?animate=0&grid=${grid}&seed=${seed}`,
-      profile: { grid, seed },
-    };
+      seed,
+      sweep: 'fuzz',
+    });
   });
 };
 
 const selectedRoutes = () => {
   const allRoutes = [
     ...routes,
+    ...instancingSweepRoutes(),
     ...(process.env.EXAMPLES_BENCH_INSTANCING_FUZZ === '0' ? [] : instancingFuzzRoutes()),
   ];
   if (routeFilter === '') return allRoutes;
@@ -185,13 +263,13 @@ class CdpSession {
 }
 
 const connectPage = async () => {
-  await waitForJson(`http://${host}:${debugPort}/json/version`, 10_000);
-  const pages = await waitForJson(`http://${host}:${debugPort}/json/list`, 10_000);
+  await waitForJson(`http://${debugHost}:${debugPort}/json/version`, 10_000);
+  const pages = await waitForJson(`http://${debugHost}:${debugPort}/json/list`, 10_000);
   const page = pages.find((entry) => entry.type === 'page');
   if (page?.webSocketDebuggerUrl === undefined) {
     throw new Error('Chromium did not expose a debuggable page target');
   }
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
+  const socket = new WebSocket(page.webSocketDebuggerUrl.replace(/^ws:\/\/[^/]+/, `ws://${debugHost}:${debugPort}`));
   await once(socket, 'open');
   return new CdpSession(socket);
 };
@@ -233,6 +311,12 @@ const gzipSize = (filePath) => new Promise((resolve, reject) => {
   gzip.on('end', () => resolve(size));
   gzip.on('error', reject);
   createReadStream(filePath).on('error', reject).pipe(gzip);
+});
+
+const glCounterTotals = (gl) => ({
+  ...gl,
+  drawCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
+  instancedDrawCalls: (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
 });
 
 const deploymentSize = async () => {
@@ -637,6 +721,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const beforeGc = await session.call('Runtime.getHeapUsage');
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
+  const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
   await evaluate(session, `
 (async () => {
   for (let index = 0; index < ${frameWarmupCount}; index += 1) {
@@ -740,9 +825,8 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   return {
     frameStats,
     gl: {
-      ...gl,
-      drawCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
-      instancedDrawCalls: (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
+      ...glCounterTotals(gl),
+      setup: glCounterTotals(setupGl),
     },
     heap: {
       afterFinalGc,
@@ -845,22 +929,125 @@ const benchmarkRoute = async (session, route) => {
   };
 };
 
+const round = (value, digits = 2) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+};
+
+const routeSummary = (route) => {
+  const drawCallsPerFrame = route.gl.drawCalls / frameSampleCount;
+  const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / frameSampleCount;
+  const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / frameSampleCount;
+  const setupInstancedDrawCalls = route.gl.setup?.instancedDrawCalls ?? 0;
+  const instanceCount = route.profile?.kind === 'gltf-instancing' ? route.profile.instanceCount : undefined;
+  return {
+    id: route.id,
+    path: route.path,
+    ...(route.profile === undefined ? {} : { profile: route.profile }),
+    p95Ms: round(route.frameStats.p95Ms),
+    p99Ms: round(route.frameStats.p99Ms),
+    maxMs: round(route.frameStats.maxMs),
+    jitterP95MinusP50Ms: round(route.frameStats.jitterP95MinusP50Ms),
+    drawCallsPerFrame: round(drawCallsPerFrame),
+    instancedDrawCallsPerFrame: round(instancedDrawCallsPerFrame),
+    setupDrawCalls: route.gl.setup?.drawCalls ?? 0,
+    setupInstancedDrawCalls,
+    setupBufferDataBytes: route.gl.setup?.bufferDataBytes ?? 0,
+    setupBufferSubDataBytes: route.gl.setup?.bufferSubDataBytes ?? 0,
+    ...(instanceCount === undefined
+      ? {}
+      : {
+        drawCallsPer1000Instances: round(drawCallsPerFrame / (instanceCount / 1000), 3),
+        instancedDrawCallsPer1000Instances: round(instancedDrawCallsPerFrame / (instanceCount / 1000), 3),
+        setupInstancedDrawCallsPer1000Instances: round(setupInstancedDrawCalls / (instanceCount / 1000), 3),
+      }),
+    bufferSubDataBytesPerFrame: round(bufferSubDataBytesPerFrame),
+    retainedGrowthBytes: route.heap.retainedGrowthBytes,
+    resourceTransferBytes: route.performance.resources.totalTransferSize,
+    ...(typeof route.xr?.frameStats?.p95Ms === 'number'
+      ? { xrP95Ms: round(route.xr.frameStats.p95Ms) }
+      : {}),
+    ...(route.xr?.frameStats?.failed === true
+      ? { xrFrameFailure: route.xr.frameStats.reason }
+      : {}),
+  };
+};
+
+const instancingComparisons = (summaries) => {
+  const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
+  const staticRows = new Map();
+  for (const route of instancing) {
+    if (route.profile.animate) continue;
+    staticRows.set(`${route.profile.grid}:${route.profile.seed}`, route);
+  }
+  return instancing
+    .filter((route) => route.profile.animate)
+    .map((animated) => {
+      const staticRoute = staticRows.get(`${animated.profile.grid}:${animated.profile.seed}`);
+      if (staticRoute === undefined) return undefined;
+      return {
+        animatedId: animated.id,
+        staticId: staticRoute.id,
+        grid: animated.profile.grid,
+        instanceCount: animated.profile.instanceCount,
+        seed: animated.profile.seed,
+        deltaP95Ms: round(animated.p95Ms - staticRoute.p95Ms),
+        deltaDrawCallsPerFrame: round(animated.drawCallsPerFrame - staticRoute.drawCallsPerFrame),
+        deltaBufferSubDataBytesPerFrame: round(
+          animated.bufferSubDataBytesPerFrame - staticRoute.bufferSubDataBytesPerFrame,
+        ),
+      };
+    })
+    .filter((comparison) => comparison !== undefined);
+};
+
+const analyzeResults = (results) => {
+  const summaries = results.map(routeSummary);
+  const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
+  return {
+    slowestRoutesByP95: [...summaries]
+      .sort((left, right) => right.p95Ms - left.p95Ms)
+      .slice(0, 8),
+    heaviestDrawRoutes: [...summaries]
+      .sort((left, right) => right.drawCallsPerFrame - left.drawCallsPerFrame)
+      .slice(0, 8),
+    instancing: {
+      comparisons: instancingComparisons(summaries),
+      highestP95: [...instancing]
+        .sort((left, right) => right.p95Ms - left.p95Ms)
+        .slice(0, 8),
+      highestDrawCallsPer1000Instances: [...instancing]
+        .sort((left, right) => right.drawCallsPer1000Instances - left.drawCallsPer1000Instances)
+        .slice(0, 8),
+      highestSetupInstancedDrawCallsPer1000Instances: [...instancing]
+        .sort((left, right) =>
+          right.setupInstancedDrawCallsPer1000Instances - left.setupInstancedDrawCallsPer1000Instances
+        )
+        .slice(0, 8),
+    },
+    xrFrameFailures: summaries.filter((route) => route.xrFrameFailure !== undefined),
+  };
+};
+
 const main = async () => {
   const profileDir = await import('node:fs/promises').then(({ mkdtemp }) =>
     mkdtemp(path.join(tmpdir(), 'royal-examples-bench-'))
   );
-  const preview = spawnLogged('pnpm', [
-    'exec',
-    'vite',
-    'preview',
-    '--config',
-    'vite.config.ts',
-    '--host',
-    host,
-    '--port',
-    String(previewPort),
-    '--strictPort',
-  ], { cwd: appRoot });
+  const preview = managePreview
+    ? spawnLogged('pnpm', [
+      'exec',
+      'vite',
+      'preview',
+      '--config',
+      'vite.config.ts',
+      '--host',
+      host,
+      '--port',
+      String(previewPort),
+      '--strictPort',
+    ], { cwd: appRoot })
+    : undefined;
   const browserArgs = [
     '--headless=new',
     '--no-sandbox',
@@ -873,7 +1060,9 @@ const main = async () => {
     ...(fakeXrEnabled ? [`--unsafely-treat-insecure-origin-as-secure=${baseUrl}`] : []),
     'about:blank',
   ];
-  const browser = spawnLogged('chromium', browserArgs, { cwd: appRoot });
+  const browser = browserMode === 'chromium'
+    ? spawnLogged('chromium', browserArgs, { cwd: appRoot })
+    : undefined;
 
   let session;
   try {
@@ -894,10 +1083,15 @@ const main = async () => {
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
       const drawCallsPerFrame = result.gl.drawCalls / frameSampleCount;
+      const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / frameSampleCount;
       const xrP95 = result.xr?.frameStats?.p95Ms;
       const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
+      const profile = result.profile?.kind === 'gltf-instancing'
+        ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0}`
+        : undefined;
       console.log([
         route.id.padEnd(28),
+        ...(profile === undefined ? [] : [profile]),
         `load=${(result.performance.navigation?.duration ?? 0).toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
@@ -905,16 +1099,26 @@ const main = async () => {
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
+        ...(instancedDrawCallsPerFrame === 0 ? [] : [`inst/frame=${instancedDrawCallsPerFrame.toFixed(1)}`]),
+        ...(typeof result.gl.setup?.instancedDrawCalls === 'number' && result.gl.setup.instancedDrawCalls > 0
+          ? [`setupInst=${result.gl.setup.instancedDrawCalls}`]
+          : []),
         `heap=${retainedKb.toFixed(1)}KiB`,
       ].join(' '));
     }
+
+    const analysis = analyzeResults(results);
 
     const report = {
       generatedAt: new Date().toISOString(),
       options: {
         frameSampleCount,
         frameWarmupCount,
+        baseUrl,
+        browserMode,
         clearCachePerRoute,
+        debugHost,
+        debugPort,
         fakeXrEnabled,
         fakeXrHz,
         fakeXrPrepareTimeoutMs,
@@ -922,7 +1126,10 @@ const main = async () => {
         fakeXrViews,
         instancingFuzzCases,
         instancingSeed,
+        instancingSweepMode,
+        managePreview,
       },
+      analysis,
       deployment: size,
       routes: results,
     };
@@ -931,10 +1138,12 @@ const main = async () => {
       deploymentBytes: report.deployment.totalBytes,
       deploymentGzipBytes: report.deployment.gzipBytes,
       routeCount: report.routes.length,
-      slowestRouteByP95: [...report.routes]
-        .sort((left, right) => right.frameStats.p95Ms - left.frameStats.p95Ms)
-        .slice(0, 5)
-        .map((route) => ({ id: route.id, p95Ms: route.frameStats.p95Ms })),
+      slowestRoutesByP95: analysis.slowestRoutesByP95.slice(0, 5),
+      instancingComparisons: analysis.instancing.comparisons,
+      instancingHighestDrawCallsPer1000Instances: analysis.instancing.highestDrawCallsPer1000Instances.slice(0, 5),
+      instancingHighestSetupInstancedDrawCallsPer1000Instances:
+        analysis.instancing.highestSetupInstancedDrawCallsPer1000Instances.slice(0, 5),
+      xrFrameFailures: analysis.xrFrameFailures,
     }, null, 2));
 
     if (outputPath !== '') {
@@ -943,8 +1152,8 @@ const main = async () => {
     }
   } finally {
     session?.close();
-    await stop(browser);
-    await stop(preview);
+    if (browser !== undefined) await stop(browser);
+    if (preview !== undefined) await stop(preview);
     await rm(profileDir, { force: true, maxRetries: 3, recursive: true, retryDelay: 100 });
   }
 };

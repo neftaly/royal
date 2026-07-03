@@ -2,13 +2,22 @@ export type FuzzCaseContext = {
   readonly caseIndex: number;
   readonly label: string;
   readonly random: SeededRandom;
+  readonly replayLabel?: string;
+  readonly replay?: unknown;
   readonly seed: number;
 };
 
 export type FuzzCaseOptions = {
   readonly cases?: number;
   readonly envName?: string;
+  readonly replays?: readonly FuzzReplay[];
   readonly seed: number;
+};
+
+export type FuzzReplay = {
+  readonly label: string;
+  readonly seed?: number;
+  readonly value: unknown;
 };
 
 const defaultFuzzCasesEnvName = "ROYAL_FUZZ_CASES";
@@ -22,6 +31,9 @@ export class SeededRandom {
   }
 
   boolean(probability = 0.5): boolean {
+    if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
+      throw new Error("fuzz probability must be between 0 and 1");
+    }
     return this.float() < probability;
   }
 
@@ -42,6 +54,18 @@ export class SeededRandom {
       throw new Error("fuzz number range must be finite and non-empty");
     }
     return minInclusive + this.float() * (maxExclusive - minInclusive);
+  }
+
+  pick<T>(values: readonly T[]): T {
+    if (values.length < 1) throw new Error("fuzz pick requires at least one value");
+    return values[this.int(0, values.length)] as T;
+  }
+
+  array<T>(length: number, item: (index: number) => T): readonly T[] {
+    if (!Number.isInteger(length) || length < 0) {
+      throw new Error("fuzz array length must be a non-negative integer");
+    }
+    return Array.from({ length }, (_value, index) => item(index));
   }
 }
 
@@ -67,6 +91,23 @@ export const forEachFuzzCase = (
   options: FuzzCaseOptions,
   run: (context: FuzzCaseContext) => void,
 ): void => {
+  for (const [replayIndex, replay] of (options.replays ?? []).entries()) {
+    const seed = replay.seed ?? seedForCase(options.seed, replayIndex);
+    const label = `replay=${replay.label} seed=0x${seed.toString(16).padStart(8, "0")}`;
+    try {
+      run({
+        caseIndex: -1 - replayIndex,
+        label,
+        random: new SeededRandom(seed),
+        replay: replay.value,
+        replayLabel: replay.label,
+        seed,
+      });
+    } catch (error) {
+      throw new Error(`Fuzz replay failed (${label})`, { cause: error });
+    }
+  }
+
   const count = fuzzCaseCount(options.cases ?? 16, options.envName);
   for (let caseIndex = 0; caseIndex < count; caseIndex += 1) {
     const seed = seedForCase(options.seed, caseIndex);

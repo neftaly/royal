@@ -21,6 +21,8 @@ import { Picking } from './examples/cases/Picking';
 import pickingSource from './examples/cases/Picking.tsx?raw';
 import { StandardLighting } from './examples/cases/StandardLighting';
 import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
+import { SharedSurfaceBinding } from './examples/cases/SharedSurfaceBinding';
+import sharedSurfaceBindingSource from './examples/cases/SharedSurfaceBinding.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
 import { WebXrVr } from './examples/cases/WebXrVr';
@@ -101,6 +103,15 @@ export const examples = [
     Component: HudOverlay,
     source: hudOverlaySource,
     sourceFile: 'examples/cases/HudOverlay.tsx',
+  },
+  {
+    id: 'shared-surface-binding',
+    maturity: 'product',
+    path: '/shared-surface-binding',
+    title: 'Shared Surface Binding',
+    Component: SharedSurfaceBinding,
+    source: sharedSurfaceBindingSource,
+    sourceFile: 'examples/cases/SharedSurfaceBinding.tsx',
   },
   {
     id: 'gltf-helmet',

@@ -49,8 +49,9 @@ const finiteIntegerParam = (
 
 const instancingConfigFromLocation = (): InstancingConfig => {
   const params = new URL(globalThis.location.href).searchParams;
+  const animate = params.get('animate') !== '0';
   return {
-    animate: params.get('animate') !== '0',
+    animate,
     gridSize: finiteIntegerParam(params, 'grid', defaultGridSize, 1, maxBenchmarkGridSize),
     seed: finiteIntegerParam(params, 'seed', 0, 0, 0xffff_ffff),
   };
@@ -95,6 +96,7 @@ const InstancedCubeAnimation = ({
   useFrame(({ elapsed }) => {
     const pulse = elapsed * 1.65;
 
+    // Animation mutates renderer handles to avoid reconciling thousands of model elements per frame.
     for (const [index, instance] of cubeInstances.entries()) {
       const handle = refs[index]?.current;
       if (handle === null || handle === undefined) continue;
@@ -119,11 +121,35 @@ const InstancedCubeAnimation = ({
   return null;
 };
 
-const InstancedCubeField = ({
-  animate,
+const cubeKey = (instance: CubeInstance): string =>
+  `${instance.src}:${instance.position.join(',')}`;
+
+const StaticInstancedCubeField = ({
   cubeInstances,
 }: {
-  readonly animate: boolean;
+  readonly cubeInstances: readonly CubeInstance[];
+}): ReactNode => (
+  <>
+    {cubeInstances.map((instance) =>
+      createElement(
+        Fragment,
+        { key: cubeKey(instance) },
+        <model
+          src={instance.src}
+          transform={{
+            position: instance.position,
+            rotation: instance.rotation,
+            scale: instance.scale,
+          }}
+        />
+      )
+    )}
+  </>
+);
+
+const AnimatedInstancedCubeField = ({
+  cubeInstances,
+}: {
   readonly cubeInstances: readonly CubeInstance[];
 }): ReactNode => {
   const refs = useRef(cubeInstances.map(() => ({ current: null as RenderObjectHandle | null })));
@@ -133,11 +159,11 @@ const InstancedCubeField = ({
 
   return (
     <>
-      {animate ? <InstancedCubeAnimation cubeInstances={cubeInstances} refs={refs.current} /> : null}
+      <InstancedCubeAnimation cubeInstances={cubeInstances} refs={refs.current} />
       {cubeInstances.map((instance, index) =>
         createElement(
           Fragment,
-          { key: `${instance.src}:${instance.position.join(',')}` },
+          { key: cubeKey(instance) },
           <model
             ref={refs.current[index]!}
             src={instance.src}
@@ -175,7 +201,9 @@ export const GltfInstancing = (): ReactNode => {
       <scene>
         <pass camera={orbit.camera}>
           <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
-          <InstancedCubeField animate={instancingConfig.animate} cubeInstances={cubeInstances} />
+          {instancingConfig.animate
+            ? <AnimatedInstancedCubeField cubeInstances={cubeInstances} />
+            : <StaticInstancedCubeField cubeInstances={cubeInstances} />}
         </pass>
       </scene>
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />

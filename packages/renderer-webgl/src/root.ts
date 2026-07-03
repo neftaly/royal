@@ -1967,6 +1967,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#renderScene(scene, {
       framebuffer: null,
       scissor: false,
+      syncRenderObjectRefs: true,
       views: [{
         projection: (renderPass) => projectionMat4(renderPass.camera, width, height),
         view: (renderPass) => viewMat4(renderPass.camera),
@@ -1983,6 +1984,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#renderScene(scene, {
       framebuffer: options.framebuffer ?? null,
       scissor: true,
+      syncRenderObjectRefs: true,
       views: options.views.map((view) => ({
         projection: () => mat4FromArrayLike(view.projectionMatrix),
         view: () => mat4FromArrayLike(view.viewMatrix),
@@ -1996,13 +1998,14 @@ class WebGlRootImpl implements WebGlRoot {
     options: {
       readonly framebuffer: WebGLFramebuffer | null;
       readonly scissor: boolean;
+      readonly syncRenderObjectRefs: boolean;
       readonly views: readonly SceneRenderView[];
     },
   ): void {
     if (options.views.length === 0) return;
 
     this.#latestScene = scene;
-    this.#syncRenderObjectRefs(scene);
+    if (options.syncRenderObjectRefs) this.#syncRenderObjectRefs(scene);
     this.#activeGltfInstanceBufferKeys = new Set();
     this.#activeGltfLodSelectionKeys = new Set();
     this.#gltfRenderOrdinal = 0;
@@ -5369,7 +5372,24 @@ class WebGlRootImpl implements WebGlRoot {
     this.#renderScheduled = true;
     requestFrame(() => {
       this.#renderScheduled = false;
-      if (!this.#disposed && this.#latestScene !== undefined) this.render(this.#latestScene);
+      if (!this.#disposed && this.#latestScene !== undefined) this.#renderLatestScene();
+    });
+  }
+
+  #renderLatestScene(): void {
+    const scene = this.#latestScene;
+    if (scene === undefined) return;
+
+    const { height, width } = this.#resize();
+    this.#renderScene(scene, {
+      framebuffer: null,
+      scissor: false,
+      syncRenderObjectRefs: false,
+      views: [{
+        projection: (renderPass) => projectionMat4(renderPass.camera, width, height),
+        view: (renderPass) => viewMat4(renderPass.camera),
+        viewport: { height, width, x: 0, y: 0 },
+      }],
     });
   }
 

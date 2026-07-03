@@ -37,15 +37,17 @@ type BrowserXrSessionInit = {
   readonly optionalFeatures?: readonly string[];
 };
 
+type BrowserXrSessionMode = 'immersive-ar' | 'immersive-vr';
+
 type BrowserXrSessionOfferResult = BrowserXrSession | null | undefined;
 
 type BrowserXrSystem = {
-  isSessionSupported(mode: 'immersive-vr'): Promise<boolean>;
+  isSessionSupported(mode: BrowserXrSessionMode): Promise<boolean>;
   offerSession?(
-    mode: 'immersive-vr',
+    mode: BrowserXrSessionMode,
     options?: BrowserXrSessionInit,
   ): BrowserXrSessionOfferResult | Promise<BrowserXrSessionOfferResult>;
-  requestSession(mode: 'immersive-vr', options?: BrowserXrSessionInit): Promise<BrowserXrSession>;
+  requestSession(mode: BrowserXrSessionMode, options?: BrowserXrSessionInit): Promise<BrowserXrSession>;
 };
 
 type XrNavigator = Navigator & {
@@ -55,11 +57,21 @@ type XrNavigator = Navigator & {
 type BrowserXrSessionOfferGlobal = typeof globalThis & {
   __royalBrowserXrSessionOfferCache?: WeakMap<
     object,
-    Promise<BrowserXrSessionOfferResult>
+    Promise<BrowserXrSessionOffer>
   >;
 };
 
-const immersiveVrSessionOptions: BrowserXrSessionInit = {
+type BrowserXrSessionOffer = {
+  readonly mode: BrowserXrSessionMode | null;
+  readonly session: BrowserXrSessionOfferResult;
+};
+
+const browserXrSessionOfferModes: readonly BrowserXrSessionMode[] = [
+  'immersive-ar',
+  'immersive-vr',
+];
+
+const immersiveSessionOptions: BrowserXrSessionInit = {
   optionalFeatures: ['bounded-floor', 'local-floor'],
 };
 
@@ -79,7 +91,7 @@ const isUnsupportedXrOfferError = (error: unknown): boolean =>
 
 const getBrowserXrSessionOfferCache = (): WeakMap<
   object,
-  Promise<BrowserXrSessionOfferResult>
+  Promise<BrowserXrSessionOffer>
 > => {
   const globalScope = globalThis as BrowserXrSessionOfferGlobal;
   globalScope.__royalBrowserXrSessionOfferCache ??= new WeakMap();
@@ -87,16 +99,42 @@ const getBrowserXrSessionOfferCache = (): WeakMap<
   return globalScope.__royalBrowserXrSessionOfferCache;
 };
 
+const isBrowserXrSessionModeSupported = async (
+  xr: BrowserXrSystem,
+  mode: BrowserXrSessionMode,
+): Promise<boolean> => {
+  try {
+    return await xr.isSessionSupported(mode);
+  } catch {
+    return false;
+  }
+};
+
+const getPreferredBrowserXrSessionMode = async (
+  xr: BrowserXrSystem,
+): Promise<BrowserXrSessionMode | null> => {
+  for (const mode of browserXrSessionOfferModes) {
+    if (await isBrowserXrSessionModeSupported(xr, mode)) return mode;
+  }
+
+  return null;
+};
+
 const getBrowserXrSessionOffer = (
   xr: BrowserXrSystem & Required<Pick<BrowserXrSystem, 'offerSession'>>,
-): Promise<BrowserXrSessionOfferResult> => {
+): Promise<BrowserXrSessionOffer> => {
   const cache = getBrowserXrSessionOfferCache();
   const cachedOffer = cache.get(xr);
   if (cachedOffer !== undefined) return cachedOffer;
 
-  let offer: Promise<BrowserXrSessionOfferResult>;
+  let offer: Promise<BrowserXrSessionOffer>;
   try {
-    offer = Promise.resolve(xr.offerSession('immersive-vr', immersiveVrSessionOptions));
+    offer = getPreferredBrowserXrSessionMode(xr).then(async (mode) => {
+      if (mode === null) return { mode, session: null };
+
+      const session = await xr.offerSession(mode, immersiveSessionOptions);
+      return { mode, session };
+    });
   } catch (error) {
     offer = Promise.reject(error);
   }
@@ -144,7 +182,10 @@ const XrSessionControl = (): ReactNode => {
     void currentSession.end().catch(() => undefined);
   }, [cleanupFrameLoop, endSession, store]);
 
-  const startXrSession = useCallback(async (session: BrowserXrSession) => {
+  const startXrSession = useCallback(async (
+    session: BrowserXrSession,
+    mode: BrowserXrSessionMode,
+  ) => {
     if (root === null || root.disposed || rootRef.current !== root) {
       await session.end().catch(() => undefined);
       return;
@@ -156,7 +197,7 @@ const XrSessionControl = (): ReactNode => {
     }
 
     cleanupFrameLoop();
-    beginSession(session, { mode: 'immersive-vr' });
+    beginSession(session, { mode });
 
     let renderer: XrSessionRenderer;
     try {
@@ -223,7 +264,7 @@ const XrSessionControl = (): ReactNode => {
 
     frameCleanupRef.current = cleanupCurrentFrameLoop;
     session.addEventListener('end', onEnd);
-    activateSession(session, { mode: 'immersive-vr' });
+    activateSession(session, { mode });
     requestNextFrame();
   }, [
     activateSession,
@@ -243,10 +284,10 @@ const XrSessionControl = (): ReactNode => {
       return;
     }
 
-    void xr.isSessionSupported('immersive-vr')
-      .then((supported) => {
+    void getPreferredBrowserXrSessionMode(xr)
+      .then((mode) => {
         if (cancelled) return;
-        setAvailability(supported);
+        setAvailability(mode !== null, { mode });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -290,14 +331,18 @@ const XrSessionControl = (): ReactNode => {
     }
 
     let cancelled = false;
-    setAvailability(true, { mode: 'immersive-vr', status: 'available' });
     setOfferStatus('pending');
 
     void getBrowserXrSessionOffer(
       xr as BrowserXrSystem & Required<Pick<BrowserXrSystem, 'offerSession'>>,
     )
-      .then(async (session) => {
+      .then(async ({ mode, session }) => {
         if (cancelled) return;
+        setAvailability(mode !== null, { mode, status: mode === null ? 'unavailable' : 'available' });
+        if (mode === null) {
+          setOfferStatus('unsupported');
+          return;
+        }
         if (session === null || session === undefined) {
           setOfferStatus('offered');
           return;
@@ -306,7 +351,7 @@ const XrSessionControl = (): ReactNode => {
         setOfferStatus('accepted');
         beginSession();
         try {
-          await startXrSession(session);
+          await startXrSession(session, mode);
         } catch (error) {
           if (cancelled) return;
           setOfferStatus('error', errorMessageFromUnknown(error));
@@ -340,13 +385,21 @@ const XrSessionControl = (): ReactNode => {
 
     cleanupFrameLoop();
     beginSession();
-    const session = await xr.requestSession('immersive-vr', immersiveVrSessionOptions);
-    await startXrSession(session);
+    const mode = await getPreferredBrowserXrSessionMode(xr);
+    if (mode === null) {
+      setAvailability(false);
+      return;
+    }
+
+    setAvailability(true, { mode, status: 'available' });
+    const session = await xr.requestSession(mode, immersiveSessionOptions);
+    await startXrSession(session, mode);
   }, [
     beginSession,
     canvas,
     cleanupFrameLoop,
     root,
+    setAvailability,
     startXrSession,
     store,
   ]);

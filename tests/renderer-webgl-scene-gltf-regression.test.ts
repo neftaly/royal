@@ -18,6 +18,7 @@ import {
   scene,
   standardMaterial,
   unlitMaterial,
+  type RenderObjectHandle,
   type RenderNode,
   type RenderRoot,
 } from "@royal/renderer-core";
@@ -2875,10 +2876,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
   it("automatically instances matching glTF geometry across different asset URLs", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
+    const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const leftRef: { current: RenderObjectHandle | null } = { current: null };
     const renderGraph = renderScene([
       directionalLight({
         color: [1, 1, 1, 1],
@@ -2890,6 +2892,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
           position: [-0.25, 0, 0],
           rotation: [0, 0, 0],
         },
+        ref: leftRef,
         version: "instanced-a",
       }),
       gltf({
@@ -2927,6 +2930,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(instancedDraws[0]?.args[1]).toBe(3);
     expect(instancedDrawInstanceCount(instancedDraws[0]!)).toBe(2);
     expect(drawCalls(readyFrameCalls)).toHaveLength(0);
+
+    const callsBeforeImperativeChange = calls.length;
+    leftRef.current?.position.set([-0.5, 0, 0]);
+    await flushAnimationFrames(viewport.animationFrames);
+    const changedFrameCalls = calls.slice(callsBeforeImperativeChange);
+
+    expect(instancedDrawCalls(changedFrameCalls)).toHaveLength(1);
+    expect(changedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
   });
 
   it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {

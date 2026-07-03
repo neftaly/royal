@@ -55,6 +55,11 @@ const smokeExpectations = {
     minColorBuckets: 14,
     minPaintedRatio: 0.01,
   },
+  'shared-surface-binding': {
+    path: '/shared-surface-binding',
+    minColorBuckets: 10,
+    minPaintedRatio: 0.01,
+  },
   'gltf-helmet': {
     path: '/gltf-helmet',
     minColorBuckets: 32,

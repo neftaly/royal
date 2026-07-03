@@ -1,10 +1,10 @@
 # Royal Direction
 
-Royal is a DOM-free renderer and interaction primitive toolkit for interfaces that need both game-style scenes and UI-library semantics. The useful question is not whether Royal is a 2D UI library or a 3D simulation/game engine. It is what primitives let those two worlds meet without either one becoming a pile of special cases.
+Royal is a DOM-free renderer and interaction primitive toolkit for interfaces that need both game-style scenes and UI-library semantics. The useful question is not whether Royal is a 2D UI library or a 3D simulation/game engine. It is what renderer primitives let those two worlds meet without either one becoming a pile of special cases.
 
 A 3D simulation or game owns world state, time, cameras, materials, physics, and spatial placement. A 2D UI library owns semantics: controls, text, forms, layout, focus, input, accessibility, and predictable user intent. Royal's direction is the layer where those meet: small typed primitives that can describe interactive surfaces in a flat canvas, on a touch screen, or in spatial XR without making the DOM, React, WebGL, WebGPU, or Tarstate the source of truth.
 
-Royal is not an OS, compositor, XR runtime, browser engine, accessibility platform, or game engine. The long-term framing is narrower: Royal should grow OS-grade primitives for renderable, inspectable, accessible interface scenes that can be backed by different renderers. The repo should stay focused on Royal-owned renderer and interaction APIs; generic state libraries, standalone apps, and one-off research fixtures belong outside the main package path.
+Royal is not an OS, compositor, XR runtime, browser engine, accessibility platform, app descriptor schema, placement contract, or game engine. The long-term framing is narrower: Royal should grow renderer primitives for renderable, inspectable, accessible interface scenes that can be backed by different renderers. The repo should stay focused on Royal-owned renderer and interaction APIs; generic state libraries, standalone apps, descriptor schemas, placement contracts, event-row contracts, and one-off research fixtures belong outside the main package path.
 
 ## 3D Scenes And 2D UI
 
@@ -18,15 +18,15 @@ Royal should not collapse one into the other. Meshes, cameras, materials, textur
 
 Royal should be:
 
-- A small scene descriptor API in `@royal/renderer-core`.
+- A small renderer primitive vocabulary in `@royal/renderer-core`.
 - A thin React/JSX authoring layer in `@royal/react`.
 - Renderer implementations that own backend details, starting with WebGL.
 - Product examples that use public APIs only.
 - A place where performance-sensitive features are benchmarked before they become defaults.
 - A canvas-first UI/text/rendering system, not a DOM facade.
 - A primitive layer for touch and spatial interfaces, not only a WebGL drawing API.
-- A scene graph that can carry both render geometry and UI semantics.
-- Renderer-neutral input, focus, picking, text, layout, and accessibility contracts.
+- A scene graph that can carry render geometry and renderer-neutral UI semantics.
+- Renderer-neutral input, focus, picking, text, layout, refs, imperative escape hatches, XR, instancing, and performance contracts.
 
 Royal should not be:
 
@@ -39,6 +39,7 @@ Royal should not be:
 - A complete OS, compositor, browser DOM replacement, XR runtime, accessibility platform, or physics/gameplay engine.
 - A UI system whose semantics only exist in examples or hidden DOM controls.
 - A renderer backend whose private resources leak into author-facing primitives.
+- A home for app-level surface descriptors, placement schemas, product panels, or event-row contracts.
 
 ## OS-Grade Primitive Direction
 
@@ -56,13 +57,17 @@ Core primitive areas:
 - Spatial placement: transforms, anchors, billboards/panels, world/screen/local coordinate spaces, and camera/pass relationships.
 - Control plane: bounded facts, diagnostics, probes, commands, and stable ids; never renderer hot-loop ownership.
 - Accessibility: renderer-neutral metadata that a host can project to platform accessibility, without promising Royal owns the platform API.
+- Refs and imperative escape hatches: stable handles for focused mutation, picking probes, and renderer lifecycle control without exposing backend internals.
+- XR, instancing, and performance: backend-neutral primitives and measurements that let renderers optimize without importing app concepts.
 - Render backend boundary: core describes intent; WebGL/WebGPU choose buffers, shaders, culling, upload policy, and capability fallbacks.
 
 This is why text and UI work matters as much as VT or WebGL performance. A spatial OS still needs caret placement, selection, copy/paste, labels, forms, accessible names, and predictable focus. A touch-screen canvas still benefits from cameras, transforms, depth, assets, and spatial picking. Royal should keep those concepts aligned.
 
 ## Layer Boundaries
 
-`@royal/renderer-core` owns renderer-neutral descriptors, asset refs, materials, text/layout primitives, diagnostics shapes, and public authoring helpers. It should not import DOM, React, WebGL, WebGPU, or Tarstate.
+`@royal/renderer-core` owns renderer-neutral primitives: scene graph nodes, cameras, geometry, materials, textures, asset refs, text/layout primitives, UI semantics, picking, XR-facing inputs, instancing/performance-oriented contracts, refs, imperative escape hatches, diagnostics shapes, and public authoring helpers. It should not import DOM, React, WebGL, WebGPU, Tarstate, Patchpit, or Opshop.
+
+App-level surface descriptors belong outside Royal. Descriptor schemas for product panels, placement, app surfaces, event rows, and app/control-plane routing belong in Patchpit/Opshop, which can project those app contracts into Royal renderer primitives.
 
 `@royal/react` owns JSX and host integration. It should stay thin: convert JSX to renderer descriptors, mount roots, pass through options, and avoid becoming an application framework.
 
