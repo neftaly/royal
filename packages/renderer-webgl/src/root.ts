@@ -100,6 +100,8 @@ import {
   isTransmissiveSurfaceMaterial,
   materialColor,
   materialEmissiveColor,
+  surfaceMaterialMetallicFactor,
+  surfaceMaterialRoughnessFactor,
   surfaceMaterialBatchKey,
   surfaceMaterialExtensionFactors,
   textureCacheKey,
@@ -276,6 +278,8 @@ type LoadedGltfMaterial = {
   readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
+  readonly metallicFactor?: number;
+  readonly roughnessFactor?: number;
   readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
   readonly unlit?: boolean;
@@ -310,6 +314,32 @@ type LoadedGltfPrimitiveMaterial = {
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
   readonly selectionKey: string;
+};
+
+const loadedGltfSurfaceMaterial = (
+  loadedMaterial: LoadedGltfMaterial,
+  baseColor: TextureRef,
+): SurfaceMaterial => {
+  const emissive = loadedMaterial.emissive;
+  const extensionFactors = loadedMaterial.extensionFactors;
+  const common = {
+    baseColor,
+    ...(emissive === undefined ? {} : { emissive }),
+    ...(extensionFactors === undefined ? {} : { extensionFactors }),
+  };
+  if (loadedMaterial.unlit === true) {
+    return {
+      ...common,
+      kind: "unlit",
+    };
+  }
+
+  return {
+    ...common,
+    kind: "standard",
+    metallicFactor: loadedMaterial.metallicFactor ?? 1,
+    roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
+  };
 };
 
 type GltfLodSelectionState = {
@@ -708,6 +738,9 @@ const clampedFiniteNumber = (
 
 const nonNegativeFiniteNumber = (value: number | undefined, fallback: number): number =>
   Math.max(0, finiteNumber(value, fallback));
+
+const gltfMetallicRoughnessFactor = (value: number | undefined, fallback: number): number =>
+  clampedFiniteNumber(value, fallback, 0, 1);
 
 const gltfIor = (value: number | undefined): number => {
   if (value === 0) return 0;
@@ -1718,23 +1751,14 @@ export class WebGlRoot {
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
 
-        const emissive = loadedMaterial.emissive;
-        const extensionFactors = loadedMaterial.extensionFactors;
-        let material: SurfaceMaterial = {
-          baseColor: { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-          ...(emissive === undefined ? {} : { emissive }),
-          ...(extensionFactors === undefined ? {} : { extensionFactors }),
-          kind: loadedMaterial.unlit === true ? "unlit" : "standard",
-        };
+        let material = loadedGltfSurfaceMaterial(
+          loadedMaterial,
+          { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+        );
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
         if (loadedMaterial.image !== undefined && baseColor !== undefined) {
           this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
-          material = {
-            baseColor,
-            ...(emissive === undefined ? {} : { emissive }),
-            ...(extensionFactors === undefined ? {} : { extensionFactors }),
-            kind: loadedMaterial.unlit === true ? "unlit" : "standard",
-          };
+          material = loadedGltfSurfaceMaterial(loadedMaterial, baseColor);
         }
         const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
@@ -2175,6 +2199,12 @@ export class WebGlRoot {
   ): void {
     const factors = surfaceMaterialExtensionFactors(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
+    this.#uniformColor(program, "u_materialPbrFactors", [
+      surfaceMaterialMetallicFactor(material),
+      surfaceMaterialRoughnessFactor(material),
+      0,
+      0,
+    ]);
     this.#uniformColor(program, "u_specularColorFactor", [
       factors.specularColorFactor[0],
       factors.specularColorFactor[1],
@@ -3915,6 +3945,8 @@ export class WebGlRoot {
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
     const extensionFactors = readGltfMaterialExtensionFactors(material);
+    const metallicFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.metallicFactor, 1);
+    const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
     return {
@@ -3934,6 +3966,8 @@ export class WebGlRoot {
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
+      metallicFactor,
+      roughnessFactor,
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),

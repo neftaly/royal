@@ -153,6 +153,7 @@ uniform vec4 u_iblIrradianceSettings;
 uniform mat4 u_iblWorldToIbl;
 uniform sampler2D u_texture;
 uniform sampler2D u_transmissionScreenTexture;
+uniform vec4 u_materialPbrFactors;
 uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
 uniform vec4 u_sheenColorFactor;
@@ -196,12 +197,43 @@ float filmReflectance = clamp(iorF0(filmIor) * 8.0, 0.0, 1.0);
 vec3 filmTint = mix(vec3(1.0), 0.35 + 1.15 * filmBands, filmReflectance);
 return mix(vec3(1.0), filmTint, strength);
 }
-vec3 materialSpecularFresnel(vec3 viewDirection, vec3 halfVector) {
+float materialMetallicFactor() {
+return clamp(u_materialPbrFactors.x, 0.0, 1.0);
+}
+float materialRoughnessFactor() {
+return clamp(u_materialPbrFactors.y, 0.04, 1.0);
+}
+vec3 materialDiffuseColor(vec3 baseColor) {
+return baseColor * (1.0 - materialMetallicFactor());
+}
+vec3 materialDielectricF0() {
 float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
 vec3 specularColor = max(u_specularColorFactor.rgb, vec3(0.0));
-vec3 f0 = min(vec3(iorF0(u_materialExtensionFactors.y)) * specularColor, vec3(1.0)) * specular;
+return min(vec3(iorF0(u_materialExtensionFactors.y)) * specularColor, vec3(1.0)) * specular;
+}
+vec3 materialF0(vec3 baseColor) {
+return mix(materialDielectricF0(), baseColor, materialMetallicFactor());
+}
+vec3 materialF90() {
+float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
+return mix(vec3(specular), vec3(1.0), materialMetallicFactor());
+}
+vec3 materialSpecularFresnel(vec3 baseColor, vec3 viewDirection, vec3 halfVector) {
 float VdotH = max(dot(viewDirection, halfVector), 0.0);
-return mix(f0, vec3(specular), fresnelPow(VdotH)) * materialIridescenceTint(VdotH);
+return mix(materialF0(baseColor), materialF90(), fresnelPow(VdotH)) * materialIridescenceTint(VdotH);
+}
+float materialGgxDistribution(float NdotH, float roughness) {
+float alpha = max(roughness * roughness, 0.001);
+float alpha2 = alpha * alpha;
+float denom = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
+return alpha2 / max(PI * denom * denom, 0.0001);
+}
+float materialSmithG1(float NdotX, float roughness) {
+float k = pow(roughness + 1.0, 2.0) / 8.0;
+return NdotX / max(NdotX * (1.0 - k) + k, 0.0001);
+}
+float materialSmithVisibility(float NdotL, float NdotV, float roughness) {
+return materialSmithG1(NdotL, roughness) * materialSmithG1(NdotV, roughness);
 }
 float materialClearcoatFresnel(vec3 normal, vec3 viewDirection) {
 float clearcoat = clamp(u_materialExtensionFactors.z, 0.0, 1.0);
@@ -330,17 +362,21 @@ if (kind == 0) {
 }
 float lambert = max(dot(normal, lightVector), 0.0);
 vec3 lightColor = u_surfaceLightColor[index].rgb * attenuation;
-vec3 diffuse = baseColor * lambert * lightColor;
+vec3 diffuse = materialDiffuseColor(baseColor) * lambert * lightColor;
 if (lambert <= 0.0) {
   return diffuse;
 }
 vec3 halfInput = lightVector + viewDirection;
 vec3 halfVector = length(halfInput) <= 0.0001 ? normal : normalize(halfInput);
+float NdotV = max(dot(normal, viewDirection), 0.0);
 float NdotH = max(dot(normal, halfVector), 0.0);
-vec3 fresnel = materialSpecularFresnel(viewDirection, halfVector);
-float specularShape = pow(NdotH, 32.0) * lambert;
-vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + fresnel * specularShape * lightColor;
-material *= materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+float roughness = materialRoughnessFactor();
+vec3 fresnel = materialSpecularFresnel(baseColor, viewDirection, halfVector);
+float distribution = materialGgxDistribution(NdotH, roughness);
+float visibility = materialSmithVisibility(lambert, NdotV, roughness);
+vec3 specular = fresnel * min(distribution * visibility * lambert, 4.0) * lightColor;
+vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular;
+material *= materialSheenAlbedoScale(NdotV);
 material += materialSheenContribution(normal, viewDirection, lightVector, halfVector, lambert, lightColor);
 float clearcoat = materialClearcoatFresnel(normal, viewDirection);
 if (clearcoat <= 0.0) {
@@ -360,7 +396,7 @@ vec3 viewInput = cameraWorldPosition() - v_worldPosition;
 vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
 float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
 vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
-vec3 lit = baseColor.rgb * ambientIrradiance * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
 for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
   if (index >= u_surfaceLightCount) {
     break;

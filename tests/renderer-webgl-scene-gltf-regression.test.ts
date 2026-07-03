@@ -1312,6 +1312,47 @@ const solidTriangleDocument = () => ({
   textures: [],
 });
 
+const metallicRoughnessTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.8, 0.62, 0.36, 1],
+          metallicFactor: 0.75,
+          roughnessFactor: 0.2,
+        },
+      },
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.2, 0.3, 0.4, 1],
+          metallicFactor: -2,
+          roughnessFactor: 3,
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          ...(base.meshes[0]?.primitives ?? []),
+          {
+            attributes: {
+              NORMAL: 1,
+              POSITION: 0,
+              TEXCOORD_0: 2,
+            },
+            indices: 3,
+            material: 1,
+            mode: 4,
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const instancedTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -2652,7 +2693,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[8]").map(roundVector))
       .toContainEqual([0.1, 0.2, 0.3, 0]);
     expect(sources).toContain("iblDiffuseIrradiance");
-    expect(sources).toContain("baseColor.rgb * ambientIrradiance");
+    expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * ambientIrradiance");
     expect(diagnostics).toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
     expect(loader.fetchRequests.some((request) => /ibl-.*\.png(?:$|[?#])/.test(request.url))).toBe(false);
     expect(ControlledImage.instances.some((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toBe(false);
@@ -2795,6 +2836,41 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_color").map(roundVector)).toContainEqual([0.25, 0.25, 0.25, 1]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector)).toContainEqual([2, 0.5, 1, 1]);
+  });
+
+  it("renders glTF metallic and roughness factors as surface uniforms", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "metallic-roughness-factors",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, metallicRoughnessTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const pbrFactors = uniform4fvPayloads(readyFrameCalls, "u_materialPbrFactors").map(roundVector);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(pbrFactors).toContainEqual([0.75, 0.2, 0, 0]);
+    expect(pbrFactors).toContainEqual([0, 1, 0, 0]);
   });
 
   it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {

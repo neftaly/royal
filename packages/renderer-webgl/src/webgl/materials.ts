@@ -111,6 +111,12 @@ export const surfaceMaterialExtensionFactors = (
 export const isTransmissiveSurfaceMaterial = (material: SurfaceMaterial): boolean =>
   material.kind === "standard" && surfaceMaterialExtensionFactors(material).transmissionFactor > 0;
 
+export const surfaceMaterialMetallicFactor = (material: SurfaceMaterial): number =>
+  material.kind === "standard" ? material.metallicFactor : 0;
+
+export const surfaceMaterialRoughnessFactor = (material: SurfaceMaterial): number =>
+  material.kind === "standard" ? material.roughnessFactor : 1;
+
 export const surfaceMaterialExtensionFactorsKey = (
   factors: SurfaceMaterialExtensionFactors,
 ): string =>
@@ -137,6 +143,8 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
     textureCacheKey(material.baseColor),
+    surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
+    surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),
     surfaceLightVectorKey(materialEmissiveColor(material)),
     surfaceMaterialExtensionFactorsKey(surfaceMaterialExtensionFactors(material)),
   ].join(":");

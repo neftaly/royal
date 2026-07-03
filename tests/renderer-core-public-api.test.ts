@@ -169,6 +169,8 @@ describe("renderer-core public API", () => {
           kind: "solid",
         },
         kind: "standard",
+        metallicFactor: 0,
+        roughnessFactor: 1,
       },
     });
   });

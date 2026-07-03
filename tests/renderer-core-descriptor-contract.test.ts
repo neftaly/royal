@@ -204,11 +204,24 @@ describe("renderer-core descriptor contract", () => {
         kind: "solid",
       },
       kind: "standard",
+      metallicFactor: 0,
+      roughnessFactor: 1,
     });
 
     expect(standardMaterial({ texture })).toEqual({
       baseColor: texture,
       kind: "standard",
+      metallicFactor: 0,
+      roughnessFactor: 1,
+    });
+
+    expect(standardMaterial({
+      color: [1, 1, 1, 1],
+      metallic: 2,
+      roughness: -1,
+    })).toMatchObject({
+      metallicFactor: 1,
+      roughnessFactor: 0,
     });
 
     expect(unlitMaterial({ color: [0.9, 0.8, 0.7, 1] })).toEqual({

@@ -316,6 +316,14 @@ const uniform4fvPayloads = (calls: readonly GlCall[]): readonly (readonly number
       return values.slice(offset, offset + length).slice(0, 4);
     });
 
+const uniformLocationName = (value: unknown): string | undefined =>
+  typeof value === "object" && value !== null && "name" in value
+    ? String((value as { readonly name: unknown }).name)
+    : undefined;
+
+const uniform4fvPayloadsByName = (calls: readonly GlCall[], name: string): readonly (readonly number[])[] =>
+  uniform4fvPayloads(calls.filter((call) => uniformLocationName(call.args[0]) === name));
+
 const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
   calls
     .filter((call) => call.name === "bufferData" || call.name === "bufferSubData")
@@ -574,6 +582,49 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toMatch(/\bu_surfaceLightDirection\b/);
     expect(sources).toMatch(/dot\s*\(\s*normalize/);
     expect(sources).not.toContain("baseColor * u_surfaceLightColor");
+  });
+
+  it("sends standard material metallic and roughness factors to the shader", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [
+            directionalLight({
+              color: [1, 1, 1, 1],
+              direction: [0, 0, -1],
+            }),
+            mesh({
+              geometry: boxGeometry(1),
+              material: standardMaterial({
+                color: [1, 1, 1, 1],
+                metallic: 0.65,
+                roughness: 0.35,
+              }),
+            }),
+          ],
+        }),
+      ],
+    }));
+
+    expect(uniform4fvPayloadsByName(calls, "u_materialPbrFactors").map(roundVector))
+      .toContainEqual([0.65, 0.35, 0, 0]);
+    const sources = shaderSources(calls).join("\n");
+    expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
+    expect(sources).toContain("materialGgxDistribution");
+    expect(sources).not.toContain("pow(NdotH, 32.0)");
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {

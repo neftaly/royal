@@ -18,6 +18,8 @@ export type MaterialSurfaceOptions =
 export interface StandardMaterial {
   readonly kind: 'standard';
   readonly baseColor: TextureRef;
+  readonly metallicFactor: number;
+  readonly roughnessFactor: number;
 }
 
 /** Normalized unlit material descriptor. Create with `unlitMaterial({ color })` or `unlitMaterial({ texture })`. */
@@ -35,9 +37,14 @@ export interface WireframeMaterial {
 
 export type Material = StandardMaterial | UnlitMaterial | WireframeMaterial;
 
-export type StandardMaterialOptions = MaterialSurfaceOptions;
+export type StandardMaterialOptions = MaterialSurfaceOptions & {
+  /** @defaultValue `0` */
+  readonly metallic?: number;
+  /** @defaultValue `1` */
+  readonly roughness?: number;
+};
 
-export type UnlitMaterialOptions = StandardMaterialOptions;
+export type UnlitMaterialOptions = MaterialSurfaceOptions;
 
 export interface WireframeMaterialOptions {
   readonly color: MaterialColorInput;
@@ -50,10 +57,17 @@ const toBaseColorTexture = (options: MaterialSurfaceOptions): TextureRef => {
   return solidTexture({ color: options.color });
 };
 
+const factor01 = (value: number | undefined, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : fallback;
+
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
   return {
     kind: 'standard',
-    baseColor: toBaseColorTexture(options)
+    baseColor: toBaseColorTexture(options),
+    metallicFactor: factor01(options.metallic, 0),
+    roughnessFactor: factor01(options.roughness, 1)
   };
 };
 
