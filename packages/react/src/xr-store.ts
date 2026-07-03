@@ -341,3 +341,8 @@ export const useXrSessionStore = <Session extends object, State>(
   store: XrSessionStore<Session>,
   selector: (state: XrSessionStoreState<Session>) => State,
 ): State => useStore(store, selector);
+
+export const useRoyalXR = <Session extends object>(
+  store: XrSessionStore<Session>,
+): XrSessionSnapshot =>
+  useXrSessionStore(store, selectXrSessionSnapshot);

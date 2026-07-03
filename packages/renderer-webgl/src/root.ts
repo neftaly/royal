@@ -320,6 +320,7 @@ type VirtualTextureRuntimeState = {
 type LoadedGltfPrimitive = {
   readonly indices?: GltfIndexArray;
   readonly key: string;
+  readonly localModelKeys: readonly string[];
   readonly localModels: readonly Mat4[];
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
@@ -643,6 +644,7 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly material: SurfaceMaterial;
   readonly model: Mat4;
+  readonly modelKey: string;
   readonly sidedness: DrawSidedness;
 };
 
@@ -651,6 +653,7 @@ type GltfPrimitiveDrawBatch = {
   readonly key: string;
   readonly lights: SurfaceLightSet;
   readonly material: SurfaceMaterial;
+  readonly modelKeys: string[];
   readonly models: Mat4[];
   readonly sidedness: DrawSidedness;
 };
@@ -660,6 +663,7 @@ type GltfInstanceBufferResource = {
   readonly buffer: WebGLBuffer;
   readonly data: Float32Array;
   dirty: boolean;
+  modelsKey?: string;
 };
 
 type ViewportSize = readonly [width: number, height: number];
@@ -719,6 +723,8 @@ const mat4FromArrayLike = (matrix: ArrayLike<number>): Mat4 => {
     matrix[12]!, matrix[13]!, matrix[14]!, matrix[15]!,
   ];
 };
+
+const mat4ContentKey = (matrix: Mat4): string => matrix.join(",");
 
 const gltfGeometryContentKey = ({
   indices,
@@ -2551,6 +2557,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (state.status !== "ready") return;
 
     const rootModel = transformMat4(this.#renderObjectTransform(node));
+    const rootModelKey = mat4ContentKey(rootModel);
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
       state,
@@ -2570,6 +2577,7 @@ class WebGlRootImpl implements WebGlRoot {
       const primitiveMaterial = this.#gltfPrimitiveMaterialForVariant(state, node, primitive);
       for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
         const model = multiplyMat4(rootModel, localModel);
+        const modelKey = `${rootModelKey}:${primitive.localModelKeys[instanceIndex] ?? mat4ContentKey(localModel)}`;
         const materialSelection = this.#selectedGltfMaterial(
           state,
           renderInstanceKey,
@@ -2618,6 +2626,7 @@ class WebGlRootImpl implements WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           material,
           model,
+          modelKey,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
             frontFaceCcw: orientationPreservingMat4(model),
@@ -2651,10 +2660,12 @@ class WebGlRootImpl implements WebGlRoot {
           key: batchKey,
           lights,
           material: draw.material,
+          modelKeys: [draw.modelKey],
           models: [draw.model],
           sidedness: draw.sidedness,
         });
       } else {
+        batch.modelKeys.push(draw.modelKey);
         batch.models.push(draw.model);
       }
     }
@@ -2702,6 +2713,7 @@ class WebGlRootImpl implements WebGlRoot {
           batch.key,
           batch.material,
           batch.models,
+          `${batch.models.length}\0${batch.modelKeys.join("\0")}`,
           projection,
           view,
           batch.lights,
@@ -3173,6 +3185,7 @@ class WebGlRootImpl implements WebGlRoot {
     instanceBufferKey: string,
     material: SurfaceMaterial,
     models: readonly Mat4[],
+    modelsKey: string,
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet,
@@ -3194,7 +3207,7 @@ class WebGlRootImpl implements WebGlRoot {
     const useTexture = this.#bindMaterialTexture(program, material);
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
-    this.#bindGltfInstanceModels(instanceBufferKey, models);
+    this.#bindGltfInstanceModels(instanceBufferKey, models, modelsKey);
 
     const mode = webGlDrawMode(gl, geometry.mode);
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
@@ -3441,20 +3454,18 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #bindGltfInstanceModels(key: string, models: readonly Mat4[]): void {
+  #bindGltfInstanceModels(key: string, models: readonly Mat4[], modelsKey: string): void {
     const gl = this.#gl;
     const floatCount = models.length * 16;
     const resource = this.#gltfInstanceBufferResource(key, floatCount);
     const { data } = resource;
-    let changed = resource.dirty;
-    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
-      const model = models[modelIndex]!;
-      const offset = modelIndex * 16;
-      for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
-        const value = model[elementIndex]!;
-        if (data[offset + elementIndex] !== value) {
-          changed = true;
-          data[offset + elementIndex] = value;
+    const changed = resource.dirty || resource.modelsKey !== modelsKey;
+    if (changed) {
+      for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+        const model = models[modelIndex]!;
+        const offset = modelIndex * 16;
+        for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
+          data[offset + elementIndex] = model[elementIndex]!;
         }
       }
     }
@@ -3463,6 +3474,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (changed) {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, floatCount);
       resource.dirty = false;
+      resource.modelsKey = modelsKey;
     }
     for (let column = 0; column < 4; column += 1) {
       const location = 3 + column;
@@ -4706,6 +4718,7 @@ class WebGlRootImpl implements WebGlRoot {
     const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
     this.#appendGltfNodeLight(document, lights, sceneNode, nodeIndex, nodeModel);
     const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
+    const localModelKeys = localModels.map(mat4ContentKey);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
       const dracoPrimitive = dracoPrimitives.get(primitive);
@@ -4756,6 +4769,7 @@ class WebGlRootImpl implements WebGlRoot {
       primitives.push({
         ...(indices === undefined ? {} : { indices }),
         key,
+        localModelKeys,
         localModels,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),

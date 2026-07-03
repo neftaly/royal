@@ -5,7 +5,7 @@ import {
   useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
-import { useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
+import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
@@ -134,17 +134,21 @@ const InstancedCubeField = ({
   return (
     <>
       {animate ? <InstancedCubeAnimation cubeInstances={cubeInstances} refs={refs.current} /> : null}
-      {cubeInstances.map((instance, index) => (
-        <model
-          ref={refs.current[index]!}
-          src={instance.src}
-          transform={{
-            position: instance.position,
-            rotation: instance.rotation,
-            scale: instance.scale,
-          }}
-        />
-      ))}
+      {cubeInstances.map((instance, index) =>
+        createElement(
+          Fragment,
+          { key: `${instance.src}:${instance.position.join(',')}` },
+          <model
+            ref={refs.current[index]!}
+            src={instance.src}
+            transform={{
+              position: instance.position,
+              rotation: instance.rotation,
+              scale: instance.scale,
+            }}
+          />
+        )
+      )}
     </>
   );
 };

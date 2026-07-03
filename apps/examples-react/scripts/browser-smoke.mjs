@@ -34,7 +34,6 @@ const smokeExpectations = {
   },
   'form-controls': {
     path: '/form-controls',
-    allowDomSurface: true,
     minPaintedRatio: 0.01,
   },
   picking: {
@@ -953,7 +952,7 @@ const textInteractionPlanExpression = `
 const routeCanvasReady = (route, state) => {
   if (state.route?.id !== route.id || state.route?.path !== route.path) return false;
   const sample = state.canvas?.sample;
-  if (sample === undefined) return route.allowDomSurface === true && state.canvas === undefined;
+  if (sample === undefined) return false;
   if (sample.paintedPixels <= 0) return false;
   if (sample.paintedRatio < route.minPaintedRatio) return false;
   if (route.minColorBuckets !== undefined && sample.colorBuckets < route.minColorBuckets) return false;
@@ -985,7 +984,7 @@ const assertRoute = (expected, state) => {
   }
 
   const sample = state.canvas?.sample;
-  if (state.canvas === undefined && expected.allowDomSurface !== true) {
+  if (state.canvas === undefined) {
     failures.push('missing canvas');
   } else if (state.canvas !== undefined && (sample === undefined || sample.paintedPixels <= 0)) {
     failures.push('canvas pixels stayed blank');

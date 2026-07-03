@@ -176,3 +176,35 @@ export type {
 } from './primitives';
 export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
 export type { RenderNode } from './render-node';
+export type {
+  SurfaceDescriptor,
+  SurfaceDescriptorOptions,
+  SurfaceDiagnostic,
+  SurfaceDiagnosticCode,
+  SurfaceEventKind,
+  SurfaceEventRow,
+  SurfaceEventRowOptions,
+  SurfaceItemNode,
+  SurfaceItemOptions,
+  SurfaceNode,
+  SurfacePanelNode,
+  SurfacePanelOptions,
+  SurfaceTableNode,
+  SurfaceTableOptions,
+  SurfaceTargetId,
+  SurfaceTextNode,
+  SurfaceTextOptions,
+  SurfaceZoneNode,
+  SurfaceZoneOptions
+} from './surface';
+export {
+  surface,
+  surfaceEventRow,
+  surfaceItem,
+  surfacePanel,
+  surfaceTable,
+  surfaceTargetId,
+  surfaceText,
+  surfaceZone,
+  validateSurfaceDescriptor
+} from './surface';

@@ -2983,6 +2983,78 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
   });
 
+  it("reuses instanced glTF model buffers across supplied XR views", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-mesh-gpu-instancing-xr-views",
+      }),
+    ]);
+    const projectionMatrix = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const leftViewMatrix = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      -0.03, 0, 0, 1,
+    ];
+    const rightViewMatrix = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.03, 0, 0, 1,
+    ];
+    const xrViews = [
+      {
+        projectionMatrix,
+        viewMatrix: leftViewMatrix,
+        viewport: { height: 80, width: 100, x: 0, y: 0 },
+      },
+      {
+        projectionMatrix,
+        viewMatrix: rightViewMatrix,
+        viewport: { height: 80, width: 100, x: 100, y: 0 },
+      },
+    ];
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, instancedTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, instancedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.renderViews(renderGraph, { views: xrViews });
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const instancedDraws = instancedDrawCalls(readyFrameCalls);
+
+    expect(instancedDraws).toHaveLength(2);
+    expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
+    expect(readyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
+
+    const callsBeforeSecondReadyRender = calls.length;
+    root.renderViews(renderGraph, { views: xrViews });
+    const secondReadyFrameCalls = calls.slice(callsBeforeSecondReadyRender);
+
+    expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(2);
+    expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+  });
+
   it("renders required KHR_lights_punctual directional, point, and spot lights without a pass light", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();

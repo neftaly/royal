@@ -74,6 +74,7 @@ export {
   createXrSessionStore,
   selectXrSessionControlSnapshot,
   selectXrSessionSnapshot,
+  useRoyalXR,
   useXrSessionStore,
 } from "./xr-store";
 
