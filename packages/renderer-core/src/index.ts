@@ -81,14 +81,23 @@ export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type { PickInput, PickingId, PickResult, PickTarget } from './picking';
 export type {
+  RenderObjectTransformAction,
+  RenderObjectTransformComponent,
+  RenderObjectTransformField,
   RenderObjectHandle,
   RenderObjectRef,
   RenderObjectRefCallback,
   RenderObjectRefObject,
+  RenderObjectTransformState,
   RenderObjectTransformUpdate,
   RenderObjectVector3
 } from './render-object';
-export { createRenderObjectHandle } from './render-object';
+export {
+  createRenderObjectHandle,
+  createRenderObjectTransformState,
+  reduceRenderObjectTransform,
+  renderObjectTransformStateToTransform
+} from './render-object';
 export type {
   RenderElement,
   RenderPass,
