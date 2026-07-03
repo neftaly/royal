@@ -18,6 +18,7 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly emissive?: Rgba;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
+  readonly metallicRoughnessTexture?: TextureAssetUploadRef;
 };
 
 export type SurfaceMaterialExtensionFactors = {
@@ -143,6 +144,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
     textureCacheKey(material.baseColor),
+    material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
     surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
     surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),
     surfaceLightVectorKey(materialEmissiveColor(material)),

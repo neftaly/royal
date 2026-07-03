@@ -58,6 +58,7 @@ const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle
 const triangleBinUri = "staged-triangle.bin";
 const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
+const triangleMetallicRoughnessImageUri = "staged-triangle-metallic-roughness.png";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const iblSpecularImageUris = [
@@ -1351,6 +1352,42 @@ const metallicRoughnessTriangleDocument = () => {
             mode: 4,
           },
         ],
+      },
+    ],
+  };
+};
+
+const metallicRoughnessTextureTriangleDocument = () => {
+  const base = triangleDocument();
+
+  return {
+    ...base,
+    images: [
+      ...(base.images ?? []),
+      {
+        mimeType: "image/png",
+        uri: triangleMetallicRoughnessImageUri,
+      },
+    ],
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorTexture: {
+            index: 0,
+          },
+          metallicFactor: 0.8,
+          metallicRoughnessTexture: {
+            index: 1,
+          },
+          roughnessFactor: 0.6,
+        },
+      },
+    ],
+    textures: [
+      ...(base.textures ?? []),
+      {
+        sampler: 0,
+        source: 1,
       },
     ],
   };
@@ -2910,6 +2947,56 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(2);
     expect(pbrFactors).toContainEqual([0.75, 0.2, 0, 0]);
     expect(pbrFactors).toContainEqual([0, 1, 0, 0]);
+  });
+
+  it("uploads and binds glTF metallic-roughness textures", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "metallic-roughness-texture",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, metallicRoughnessTextureTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle.png",
+      "https://example.test/fixtures/staged-triangle-metallic-roughness.png",
+    ]);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(callCount(calls, "texImage2D")).toBe(2);
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useMetallicRoughnessTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_metallicRoughnessTexture")).toContain(3);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 3)).toBe(true);
+    expect(sources).toContain("uniform sampler2D u_metallicRoughnessTexture;");
+    expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).b");
+    expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).g");
   });
 
   it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {

@@ -181,6 +181,7 @@ export type GltfMaterial = {
     readonly baseColorFactor?: readonly number[];
     readonly baseColorTexture?: GltfTextureInfo;
     readonly metallicFactor?: number;
+    readonly metallicRoughnessTexture?: GltfTextureInfo;
     readonly roughnessFactor?: number;
   };
 };

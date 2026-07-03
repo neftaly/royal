@@ -56,6 +56,7 @@ import {
   type GltfSampler,
   type GltfSceneNode,
   type GltfTexture,
+  type GltfTextureInfo,
   type GltfTextureTransformExtension,
 } from "./gltf/schema";
 import {
@@ -286,6 +287,11 @@ type LoadedGltfMaterial = {
   readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
+  readonly metallicRoughnessImage?: LoadedTextureSource;
+  readonly metallicRoughnessImageFailed?: boolean;
+  readonly metallicRoughnessImageUri?: string;
+  readonly metallicRoughnessSampler?: TextureSampler;
+  readonly metallicRoughnessTextureUri?: string;
   readonly metallicFactor?: number;
   readonly roughnessFactor?: number;
   readonly sampler?: TextureSampler;
@@ -327,6 +333,7 @@ type LoadedGltfPrimitiveMaterial = {
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
+  metallicRoughnessTexture: TextureAssetUploadRef | undefined,
 ): SurfaceMaterial => {
   const emissive = loadedMaterial.emissive;
   const extensionFactors = loadedMaterial.extensionFactors;
@@ -346,6 +353,7 @@ const loadedGltfSurfaceMaterial = (
     ...common,
     kind: "standard",
     metallicFactor: loadedMaterial.metallicFactor ?? 1,
+    ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
     roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
   };
 };
@@ -950,11 +958,25 @@ const gltfBaseColorTextureInfo = (
   ? undefined
   : document.materials?.[materialIndex]?.pbrMetallicRoughness?.baseColorTexture;
 
+const gltfMetallicRoughnessTextureInfo = (
+  document: GltfDocument,
+  materialIndex: number | undefined,
+) => materialIndex === undefined
+  ? undefined
+  : document.materials?.[materialIndex]?.pbrMetallicRoughness?.metallicRoughnessTexture;
+
+const gltfMaterialPrimaryTextureInfo = (
+  document: GltfDocument,
+  materialIndex: number | undefined,
+): GltfTextureInfo | undefined =>
+  gltfBaseColorTextureInfo(document, materialIndex)
+    ?? gltfMetallicRoughnessTextureInfo(document, materialIndex);
+
 const gltfBaseColorTexCoordSet = (
   document: GltfDocument,
   materialIndex: number | undefined,
 ): number => {
-  const textureInfo = gltfBaseColorTextureInfo(document, materialIndex);
+  const textureInfo = gltfMaterialPrimaryTextureInfo(document, materialIndex);
 
   return textureInfo?.extensions?.KHR_texture_transform?.texCoord
     ?? textureInfo?.texCoord
@@ -965,7 +987,7 @@ const gltfBaseColorTextureTransform = (
   document: GltfDocument,
   materialIndex: number | undefined,
 ): GltfTextureTransformExtension | undefined =>
-  gltfBaseColorTextureInfo(document, materialIndex)?.extensions?.KHR_texture_transform;
+  gltfMaterialPrimaryTextureInfo(document, materialIndex)?.extensions?.KHR_texture_transform;
 
 const transformGltfTexCoords = (
   texCoords: Float32Array,
@@ -996,7 +1018,7 @@ const gltfTexCoordAccessor = (
   primitive: GltfMeshPrimitive,
   materialIndex: number | undefined,
 ): number | undefined => {
-  if (gltfBaseColorTextureInfo(document, materialIndex)?.index === undefined) return undefined;
+  if (gltfMaterialPrimaryTextureInfo(document, materialIndex)?.index === undefined) return undefined;
   const texCoordSet = gltfBaseColorTexCoordSet(document, materialIndex);
 
   return primitive.attributes?.[`TEXCOORD_${texCoordSet}`];
@@ -1009,7 +1031,7 @@ const gltfMaterialTexCoords = (
   materialIndex: number | undefined,
   decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
 ): Float32Array | undefined => {
-  if (gltfBaseColorTextureInfo(document, materialIndex)?.index === undefined) return undefined;
+  if (gltfMaterialPrimaryTextureInfo(document, materialIndex)?.index === undefined) return undefined;
 
   const texCoordSet = gltfBaseColorTexCoordSet(document, materialIndex);
   const decodedTexCoords = decodedAttributes?.get(`TEXCOORD_${texCoordSet}`);
@@ -1168,6 +1190,7 @@ export class WebGlRoot {
   #frame = 0;
   #gltfInstanceBuffer: WebGLBuffer | undefined;
   #gltfRenderOrdinal = 0;
+  #iblFallbackSpecularTexture: WebGLTexture | undefined;
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
@@ -1338,6 +1361,7 @@ export class WebGlRoot {
     this.#virtualTextures.clear();
     this.#gltf.clear();
     this.#gltfLodSelections.clear();
+    this.#iblFallbackSpecularTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
     this.#activeGltfLodSelectionKeys.clear();
     for (const [ref, binding] of this.#renderObjectBindings) {
@@ -1771,15 +1795,21 @@ export class WebGlRoot {
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
 
-        let material = loadedGltfSurfaceMaterial(
-          loadedMaterial,
-          { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-        );
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
+        const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(loadedMaterial);
         if (loadedMaterial.image !== undefined && baseColor !== undefined) {
           this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
-          material = loadedGltfSurfaceMaterial(loadedMaterial, baseColor);
         }
+        if (loadedMaterial.metallicRoughnessImage !== undefined && metallicRoughnessTexture !== undefined) {
+          this.#ensureImmediateTexture(metallicRoughnessTexture, loadedMaterial.metallicRoughnessImage);
+        }
+        const material = loadedGltfSurfaceMaterial(
+          loadedMaterial,
+          loadedMaterial.image !== undefined && baseColor !== undefined
+            ? baseColor
+            : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+          loadedMaterial.metallicRoughnessImage !== undefined ? metallicRoughnessTexture : undefined,
+        );
         const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
           key: gltfGeometryContentKey({
@@ -2078,10 +2108,19 @@ export class WebGlRoot {
   }
 
   #isGltfMaterialReadyForLod(material: LoadedGltfMaterial): boolean {
-    if (material.baseColorTextureUri === undefined) return true;
-    if (material.image !== undefined) return true;
-    const texture = this.#gltfMaterialTextureRef(material);
+    return this.#isGltfMaterialTextureReady(this.#gltfMaterialTextureRef(material), material.image)
+      && this.#isGltfMaterialTextureReady(
+        this.#gltfMaterialMetallicRoughnessTextureRef(material),
+        material.metallicRoughnessImage,
+      );
+  }
+
+  #isGltfMaterialTextureReady(
+    texture: TextureAssetUploadRef | undefined,
+    image: LoadedTextureSource | undefined,
+  ): boolean {
     if (texture === undefined) return true;
+    if (image !== undefined) return true;
     return this.#textures.get(textureCacheKey(texture))?.uploaded === true;
   }
 
@@ -2093,6 +2132,17 @@ export class WebGlRoot {
       kind: "asset",
       ...(material.sampler === undefined ? {} : { sampler: material.sampler }),
       uri: material.baseColorTextureUri,
+    };
+  }
+
+  #gltfMaterialMetallicRoughnessTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
+    if (material.metallicRoughnessTextureUri === undefined) return undefined;
+    return {
+      colorSpace: "linear",
+      flipY: false,
+      kind: "asset",
+      ...(material.metallicRoughnessSampler === undefined ? {} : { sampler: material.metallicRoughnessSampler }),
+      uri: material.metallicRoughnessTextureUri,
     };
   }
 
@@ -2139,8 +2189,11 @@ export class WebGlRoot {
 
   #preloadGltfMaterialTexture(material: LoadedGltfMaterial): void {
     const texture = this.#gltfMaterialTextureRef(material);
-    if (texture === undefined || material.image === undefined) return;
-    this.#ensureImmediateTexture(texture, material.image);
+    if (texture !== undefined && material.image !== undefined) this.#ensureImmediateTexture(texture, material.image);
+    const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(material);
+    if (metallicRoughnessTexture !== undefined && material.metallicRoughnessImage !== undefined) {
+      this.#ensureImmediateTexture(metallicRoughnessTexture, material.metallicRoughnessImage);
+    }
   }
 
   #drawGeometry(
@@ -2289,6 +2342,27 @@ export class WebGlRoot {
       hasFiniteAttenuationDistance ? 1 : 0,
     ]);
     this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture);
+    this.#bindMetallicRoughnessTexture(program, material);
+  }
+
+  #bindMetallicRoughnessTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+    const texture = material.kind === "standard" ? material.metallicRoughnessTexture : undefined;
+    if (texture === undefined) {
+      this.#uniform1i(program, "u_useMetallicRoughnessTexture", 0);
+      return;
+    }
+
+    const resource = this.#textures.get(textureCacheKey(texture));
+    if (resource === undefined || !resource.uploaded) {
+      this.#uniform1i(program, "u_useMetallicRoughnessTexture", 0);
+      return;
+    }
+
+    const gl = this.#gl;
+    gl.activeTexture(gl.TEXTURE0 + 3);
+    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
+    this.#uniform1i(program, "u_metallicRoughnessTexture", 3);
+    this.#uniform1i(program, "u_useMetallicRoughnessTexture", 1);
   }
 
   #bindTransmissionScreenColorTexture(
@@ -2326,12 +2400,10 @@ export class WebGlRoot {
       specular?.mipCount ?? 1,
       0,
     ]);
-    if (specular !== undefined) {
-      const gl = this.#gl;
-      gl.activeTexture(gl.TEXTURE0 + 2);
-      gl.bindTexture(gl.TEXTURE_CUBE_MAP, specular.texture);
-      this.#uniform1i(program, "u_iblSpecularCube", 2);
-    }
+    const gl = this.#gl;
+    gl.activeTexture(gl.TEXTURE0 + 2);
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, specular?.texture ?? this.#fallbackIblSpecularTexture());
+    this.#uniform1i(program, "u_iblSpecularCube", 2);
     for (let index = 0; index < 9; index += 1) {
       const coefficient = irradiance?.coefficients[index] ?? [0, 0, 0] as const;
       this.#uniformColor(program, `u_iblIrradianceCoefficients[${index}]`, [
@@ -3439,6 +3511,24 @@ export class WebGlRoot {
     resource.uploaded = true;
   }
 
+  #fallbackIblSpecularTexture(): WebGLTexture {
+    if (this.#iblFallbackSpecularTexture !== undefined) return this.#iblFallbackSpecularTexture;
+
+    const gl = this.#gl;
+    const texture = this.#createTexture();
+    gl.activeTexture(gl.TEXTURE0 + 2);
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    gl.texStorage2D(gl.TEXTURE_CUBE_MAP, 1, gl.RGBA8, 1, 1);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, 0);
+    this.#iblFallbackSpecularTexture = texture;
+
+    return texture;
+  }
+
   #copyTransmissionScreenColorTexture(viewportSize: ViewportSize): ScreenColorTextureResource {
     const [width, height] = viewportSize;
     const resource = this.#transmissionScreenColorTextureResource();
@@ -4132,18 +4222,44 @@ export class WebGlRoot {
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     this.#diagnoseUnsupportedGltfMaterialExtensionTextures(material, materialIndex);
-    const textureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
-    const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-    const imageSelection = gltfTextureImageSelection(texture);
-    const imageIndex = imageSelection?.imageIndex;
-    const imageKind = imageSelection?.kind ?? "image";
-    const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
-    const imageLoadKey = image === undefined
+    const baseColorTextureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
+    const baseColorTexture = baseColorTextureIndex === undefined ? undefined : document.textures?.[baseColorTextureIndex];
+    const baseColorImageSelection = gltfTextureImageSelection(baseColorTexture);
+    const baseColorImageIndex = baseColorImageSelection?.imageIndex;
+    const baseColorImageKind = baseColorImageSelection?.kind ?? "image";
+    const baseColorImage = baseColorImageIndex === undefined ? undefined : document.images?.[baseColorImageIndex];
+    const baseColorImageLoadKey = baseColorImage === undefined
       ? undefined
-      : gltfImageLoadKey(assetKey, src, imageIndex, image, imageKind);
-    const sampler = texture === undefined
+      : gltfImageLoadKey(assetKey, src, baseColorImageIndex, baseColorImage, baseColorImageKind);
+    const sampler = baseColorTexture === undefined
       ? undefined
-      : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
+      : gltfTextureSampler(baseColorTexture.sampler === undefined ? undefined : document.samplers?.[baseColorTexture.sampler]);
+    const metallicRoughnessTextureIndex = material?.pbrMetallicRoughness?.metallicRoughnessTexture?.index;
+    const metallicRoughnessTexture = metallicRoughnessTextureIndex === undefined
+      ? undefined
+      : document.textures?.[metallicRoughnessTextureIndex];
+    const metallicRoughnessImageSelection = gltfTextureImageSelection(metallicRoughnessTexture);
+    const metallicRoughnessImageIndex = metallicRoughnessImageSelection?.imageIndex;
+    const metallicRoughnessImageKind = metallicRoughnessImageSelection?.kind ?? "image";
+    const metallicRoughnessImage = metallicRoughnessImageIndex === undefined
+      ? undefined
+      : document.images?.[metallicRoughnessImageIndex];
+    const metallicRoughnessImageLoadKey = metallicRoughnessImage === undefined
+      ? undefined
+      : gltfImageLoadKey(
+        assetKey,
+        src,
+        metallicRoughnessImageIndex,
+        metallicRoughnessImage,
+        metallicRoughnessImageKind,
+      );
+    const metallicRoughnessSampler = metallicRoughnessTexture === undefined
+      ? undefined
+      : gltfTextureSampler(
+        metallicRoughnessTexture.sampler === undefined
+          ? undefined
+          : document.samplers?.[metallicRoughnessTexture.sampler],
+      );
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
     const extensionFactors = readGltfMaterialExtensionFactors(material);
@@ -4152,17 +4268,32 @@ export class WebGlRoot {
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
     return {
-      ...(imageLoadKey === undefined ? {} : { baseColorImageUri: imageLoadKey }),
-      ...(textureIndex === undefined || image === undefined
+      ...(baseColorImageLoadKey === undefined ? {} : { baseColorImageUri: baseColorImageLoadKey }),
+      ...(baseColorTextureIndex === undefined || baseColorImage === undefined
         ? {}
         : {
           baseColorTextureUri: gltfTextureIdentity(
             assetKey,
             src,
-            textureIndex,
-            imageIndex,
-            image,
-            imageKind,
+            baseColorTextureIndex,
+            baseColorImageIndex,
+            baseColorImage,
+            baseColorImageKind,
+          ),
+        }),
+      ...(metallicRoughnessImageLoadKey === undefined
+        ? {}
+        : { metallicRoughnessImageUri: metallicRoughnessImageLoadKey }),
+      ...(metallicRoughnessTextureIndex === undefined || metallicRoughnessImage === undefined
+        ? {}
+        : {
+          metallicRoughnessTextureUri: gltfTextureIdentity(
+            assetKey,
+            src,
+            metallicRoughnessTextureIndex,
+            metallicRoughnessImageIndex,
+            metallicRoughnessImage,
+            metallicRoughnessImageKind,
           ),
         }),
       ...(color === undefined ? {} : { color }),
@@ -4170,6 +4301,7 @@ export class WebGlRoot {
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
       metallicFactor,
       roughnessFactor,
+      ...(metallicRoughnessSampler === undefined ? {} : { metallicRoughnessSampler }),
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
@@ -4231,7 +4363,7 @@ export class WebGlRoot {
                 this.#failGltfMaterialImage(material, key)));
             this.#scheduleRender();
           }
-          this.#recordDiagnostic(`glTF base-color image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
+          this.#recordDiagnostic(`glTF image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
         });
       }
     }
@@ -4256,6 +4388,7 @@ export class WebGlRoot {
 
   #addGltfMaterialImageLoadKeys(keys: Set<string>, material: LoadedGltfMaterial): void {
     if (material.baseColorImageUri !== undefined) keys.add(material.baseColorImageUri);
+    if (material.metallicRoughnessImageUri !== undefined) keys.add(material.metallicRoughnessImageUri);
   }
 
   #mapGltfPrimitiveMaterials(
@@ -4297,14 +4430,22 @@ export class WebGlRoot {
     uri: string,
     image: LoadedTextureSource,
   ): LoadedGltfMaterial {
-    return material.baseColorImageUri === uri ? { ...material, image } : material;
+    return {
+      ...material,
+      ...(material.baseColorImageUri === uri ? { image } : {}),
+      ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
+    };
   }
 
   #failGltfMaterialImage(
     material: LoadedGltfMaterial,
     uri: string,
   ): LoadedGltfMaterial {
-    return material.baseColorImageUri === uri ? { ...material, imageFailed: true } : material;
+    return {
+      ...material,
+      ...(material.baseColorImageUri === uri ? { imageFailed: true } : {}),
+      ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImageFailed: true } : {}),
+    };
   }
 
   #scheduleRender(): void {

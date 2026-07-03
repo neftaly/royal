@@ -138,6 +138,7 @@ in vec2 v_uv;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
 uniform highp mat4 u_view;
 uniform bool u_useTexture;
+uniform bool u_useMetallicRoughnessTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
 uniform vec4 u_emissiveColor;
@@ -155,6 +156,7 @@ uniform bool u_useIblSpecular;
 uniform vec4 u_iblSpecularSettings;
 uniform samplerCube u_iblSpecularCube;
 uniform sampler2D u_texture;
+uniform sampler2D u_metallicRoughnessTexture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
 uniform vec4 u_specularColorFactor;
@@ -201,10 +203,12 @@ vec3 filmTint = mix(vec3(1.0), 0.35 + 1.15 * filmBands, filmReflectance);
 return mix(vec3(1.0), filmTint, strength);
 }
 float materialMetallicFactor() {
-return clamp(u_materialPbrFactors.x, 0.0, 1.0);
+float textureMetallic = u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, v_uv).b : 1.0;
+return clamp(u_materialPbrFactors.x * textureMetallic, 0.0, 1.0);
 }
 float materialRoughnessFactor() {
-return clamp(u_materialPbrFactors.y, 0.04, 1.0);
+float textureRoughness = u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, v_uv).g : 1.0;
+return clamp(u_materialPbrFactors.y * textureRoughness, 0.04, 1.0);
 }
 vec3 materialDiffuseColor(vec3 baseColor) {
 return baseColor * (1.0 - materialMetallicFactor());

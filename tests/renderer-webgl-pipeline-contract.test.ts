@@ -118,6 +118,7 @@ const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
     BLEND: 0x0BE2,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
+    CLAMP_TO_EDGE: 0x812F,
     CULL_FACE: 0x0B44,
     DEPTH_BUFFER_BIT: 0x0100,
     DEPTH_TEST: 0x0B71,
@@ -126,16 +127,22 @@ const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
     FRAGMENT_SHADER: 0x8B30,
     LEQUAL: 0x0203,
     LESS: 0x0201,
+    LINEAR: 0x2601,
+    LINEAR_MIPMAP_LINEAR: 0x2703,
     LINK_STATUS: 0x8B82,
     MAX_TEXTURE_IMAGE_UNITS: 0x8872,
     MAX_TEXTURE_SIZE: 0x0D33,
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
     RGBA: 0x1908,
+    RGBA8: 0x8058,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
+    TEXTURE_CUBE_MAP: 0x8513,
+    TEXTURE_CUBE_MAP_POSITIVE_X: 0x8515,
     TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MAX_LEVEL: 0x813D,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
@@ -253,6 +260,7 @@ const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
+    texStorage2D: record("texStorage2D"),
     uniform1f: record("uniform1f"),
     uniform1i: record("uniform1i"),
     uniform2fv: record("uniform2fv"),
@@ -323,6 +331,11 @@ const uniformLocationName = (value: unknown): string | undefined =>
 
 const uniform4fvPayloadsByName = (calls: readonly GlCall[], name: string): readonly (readonly number[])[] =>
   uniform4fvPayloads(calls.filter((call) => uniformLocationName(call.args[0]) === name));
+
+const uniform1iPayloadsByName = (calls: readonly GlCall[], name: string): readonly number[] =>
+  calls
+    .filter((call) => call.name === "uniform1i" && uniformLocationName(call.args[0]) === name)
+    .map((call) => typeof call.args[1] === "number" ? call.args[1] : Number.NaN);
 
 const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
   calls
@@ -625,6 +638,17 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).not.toContain("pow(NdotH, 32.0)");
+
+    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
+    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
+    expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
+    expect(calls.some((call) =>
+      call.name === "texStorage2D"
+      && call.args[0] === gl.TEXTURE_CUBE_MAP
+      && call.args[1] === 1
+      && call.args[2] === gl.RGBA8
+      && call.args[3] === 1
+      && call.args[4] === 1)).toBe(true);
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {
