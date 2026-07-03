@@ -7,6 +7,25 @@ export type {
 } from './camera';
 export { orthographicCamera, perspectiveCamera } from './camera';
 export type {
+  OrbitCameraBasis,
+  OrbitCameraTransform,
+  OrbitCameraView,
+  OrbitCameraViewConstraints,
+  OrbitCameraViewOptions,
+  OrbitPerspectiveCameraOptions,
+  OrbitVector3
+} from './orbit';
+export {
+  clampOrbitCameraView,
+  orbitCameraBasis,
+  orbitCameraTransform,
+  orbitPerspectiveCamera,
+  panOrbitCameraView,
+  resolveOrbitCameraView,
+  rotateOrbitCameraView,
+  zoomOrbitCameraView
+} from './orbit';
+export type {
   BoxGeometry,
   BoxGeometryInput,
   BoxGeometryOptions,

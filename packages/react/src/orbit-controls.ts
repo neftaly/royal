@@ -1,7 +1,14 @@
 import {
-  perspectiveCamera,
+  clampOrbitCameraView,
+  orbitPerspectiveCamera,
+  panOrbitCameraView,
+  resolveOrbitCameraView,
+  rotateOrbitCameraView,
+  zoomOrbitCameraView,
   type PerspectiveCamera,
-  type PerspectiveCameraOptions,
+  type OrbitCameraView,
+  type OrbitCameraViewOptions,
+  type OrbitPerspectiveCameraOptions,
 } from "@royal/renderer-core";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useStore } from "zustand/react";
@@ -9,21 +16,18 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useCanvasElement, useCanvasRoot } from "./canvas";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
 
-export type OrbitVector3 = readonly [x: number, y: number, z: number];
-
-export type OrbitCameraView = {
-  readonly distance: number;
-  readonly pitch: number;
-  readonly target: OrbitVector3;
-  readonly yaw: number;
-};
-
-export type OrbitCameraViewOptions = {
-  readonly distance: number;
-  readonly pitch: number;
-  readonly target?: OrbitVector3 | undefined;
-  readonly yaw?: number | undefined;
-};
+export {
+  orbitCameraTransform,
+  orbitPerspectiveCamera,
+  resolveOrbitCameraView,
+} from "@royal/renderer-core";
+export type {
+  OrbitCameraTransform,
+  OrbitCameraView,
+  OrbitCameraViewOptions,
+  OrbitPerspectiveCameraOptions,
+  OrbitVector3,
+} from "@royal/renderer-core";
 
 export type OrbitCameraState = {
   readonly setView: (view: OrbitCameraViewOptions) => void;
@@ -56,16 +60,6 @@ export type OrbitControlsHandle = {
     options?: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined }
   ): void;
 };
-
-export type OrbitCameraTransform = {
-  readonly position: OrbitVector3;
-  readonly rotation: OrbitVector3;
-};
-
-export type OrbitPerspectiveCameraOptions =
-  Omit<PerspectiveCameraOptions, "position" | "rotation"> & {
-    readonly view: OrbitCameraViewOptions;
-  };
 
 export type OrbitControlsOptions = {
   readonly defaultView?: OrbitCameraViewOptions;
@@ -122,20 +116,6 @@ type PointerContact = {
 const defaultPanSpeed = 0.0016;
 const defaultRotateSpeed = 0.006;
 const defaultZoomSpeed = 0.0018;
-const defaultTarget = [0, 0, 0] as const satisfies OrbitVector3;
-
-const clamp = (
-  value: number,
-  minimum: number | undefined,
-  maximum: number | undefined,
-): number => Math.min(maximum ?? Infinity, Math.max(minimum ?? -Infinity, value));
-
-export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => ({
-  distance: view.distance,
-  pitch: view.pitch,
-  target: view.target ?? defaultTarget,
-  yaw: view.yaw ?? 0,
-});
 
 export const createOrbitCameraStore = (initialView: OrbitCameraViewOptions): OrbitCameraStore =>
   createStore<OrbitCameraState>()((set) => ({
@@ -197,44 +177,7 @@ const toPointerContact = (event: PointerEvent): PointerContact => ({
 const pointerDistance = (first: PointerContact, second: PointerContact): number =>
   Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 
-const cameraBasis = (
-  { pitch, yaw }: OrbitCameraView,
-): { readonly right: OrbitVector3; readonly up: OrbitVector3 } => {
-  const cy = Math.cos(yaw);
-  const sy = Math.sin(yaw);
-  const cx = Math.cos(pitch);
-  const sx = Math.sin(pitch);
-
-  return {
-    right: [cy, 0, sy],
-    up: [sx * sy, cx, -sx * cy],
-  };
-};
-
-export const orbitCameraTransform = (
-  view: OrbitCameraViewOptions,
-): OrbitCameraTransform => {
-  const { distance, pitch, target, yaw } = resolveOrbitCameraView(view);
-  const cosPitch = Math.cos(pitch);
-
-  return {
-    position: [
-      target[0] - Math.sin(yaw) * cosPitch * distance,
-      target[1] + Math.sin(pitch) * distance,
-      target[2] + Math.cos(yaw) * cosPitch * distance,
-    ],
-    rotation: [-pitch, -yaw, 0],
-  };
-};
-
-export const orbitPerspectiveCamera = ({
-  view,
-  ...options
-}: OrbitPerspectiveCameraOptions): PerspectiveCamera => perspectiveCamera({
-  ...options,
-  ...orbitCameraTransform(view),
-});
-
+/** @deprecated Use orbitPerspectiveCamera(options) and replace the camera descriptor instead. */
 export const updateOrbitPerspectiveCamera = (
   camera: PerspectiveCamera,
   options: OrbitPerspectiveCameraOptions,
@@ -397,10 +340,11 @@ export const createOrbitControls = (
   let interaction: InteractionState | undefined;
   const activePointers = new Map<number, PointerContact>();
 
-  const clampView = (nextView: OrbitCameraView): OrbitCameraView => ({
-    ...nextView,
-    distance: clamp(nextView.distance, behaviorOptions.minDistance, behaviorOptions.maxDistance),
-    pitch: clamp(nextView.pitch, behaviorOptions.minPitch, behaviorOptions.maxPitch),
+  const clampView = (nextView: OrbitCameraView): OrbitCameraView => clampOrbitCameraView(nextView, {
+    maxDistance: behaviorOptions.maxDistance,
+    maxPitch: behaviorOptions.maxPitch,
+    minDistance: behaviorOptions.minDistance,
+    minPitch: behaviorOptions.minPitch,
   });
 
   const applyView = (
@@ -418,10 +362,7 @@ export const createOrbitControls = (
   };
 
   const applyZoomDelta = (deltaPixels: number, startView = view): void => {
-    applyView({
-      ...startView,
-      distance: startView.distance * Math.exp(deltaPixels * currentZoomSpeed()),
-    });
+    applyView(zoomOrbitCameraView(startView, deltaPixels, currentZoomSpeed()));
   };
 
   const startPinch = (): boolean => {
@@ -502,24 +443,21 @@ export const createOrbitControls = (
     const deltaY = event.clientY - interaction.startY;
 
     if (interaction.mode === "orbit") {
-      applyView({
-        ...interaction.startView,
-        pitch: interaction.startView.pitch + deltaY * currentRotateSpeed(),
-        yaw: interaction.startView.yaw + deltaX * currentRotateSpeed(),
-      });
+      applyView(rotateOrbitCameraView(
+        interaction.startView,
+        deltaX,
+        deltaY,
+        currentRotateSpeed(),
+      ));
       return;
     }
 
-    const { right, up } = cameraBasis(interaction.startView);
-    const scale = interaction.startView.distance * currentPanSpeed();
-    applyView({
-      ...interaction.startView,
-      target: [
-        interaction.startView.target[0] - right[0] * deltaX * scale + up[0] * deltaY * scale,
-        interaction.startView.target[1] - right[1] * deltaX * scale + up[1] * deltaY * scale,
-        interaction.startView.target[2] - right[2] * deltaX * scale + up[2] * deltaY * scale,
-      ],
-    });
+    applyView(panOrbitCameraView(
+      interaction.startView,
+      deltaX,
+      deltaY,
+      currentPanSpeed(),
+    ));
   };
 
   const endDrag = (event: PointerEvent): void => {
