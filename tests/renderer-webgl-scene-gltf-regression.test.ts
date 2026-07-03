@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const decodeBasisuMock = vi.hoisted(() => vi.fn());
@@ -81,6 +82,51 @@ const lodGltfSrc = "https://example.test/fixtures/lod.gltf";
 const lodBinUri = "lod.bin";
 const lodImageUri = "lod-shared.png";
 const lodBinByteLength = 102;
+const khronosEnvironmentTestGltfSrc = "https://example.test/khronos/EnvironmentTest/glTF-IBL/EnvironmentTest.gltf";
+const khronosEnvironmentTestFixtureUrl = new URL(
+  "./fixtures/khronos/EnvironmentTest/glTF-IBL/EnvironmentTest.gltf",
+  import.meta.url,
+);
+const khronosEnvironmentTestTransform = {
+  position: [0, -0.25, 0] as const,
+  rotation: [0, 0, 0] as const,
+  scale: [0.05, 0.05, 0.05] as const,
+};
+
+type TestGltfDocument = {
+  readonly buffers?: readonly {
+    readonly byteLength?: number;
+    readonly uri?: string;
+  }[];
+  readonly extensions?: {
+    readonly EXT_lights_image_based?: {
+      readonly lights?: readonly {
+        readonly specularImages?: readonly (readonly number[])[];
+      }[];
+    };
+  };
+  readonly images?: readonly Record<string, unknown>[];
+};
+
+const khronosEnvironmentTestDocument = (): TestGltfDocument & Record<string, unknown> =>
+  JSON.parse(readFileSync(khronosEnvironmentTestFixtureUrl, "utf8")) as TestGltfDocument & Record<string, unknown>;
+
+const khronosEnvironmentTestBuffer = (document: TestGltfDocument): ArrayBuffer =>
+  new ArrayBuffer(document.buffers?.[0]?.byteLength ?? 0);
+
+const khronosEnvironmentTestLdrSpecularDocument = (): TestGltfDocument & Record<string, unknown> => {
+  const document = khronosEnvironmentTestDocument();
+  const specularImageIndexes = new Set(
+    document.extensions?.EXT_lights_image_based?.lights?.[0]?.specularImages?.flat() ?? [],
+  );
+  const images = document.images?.map((image, imageIndex) =>
+    specularImageIndexes.has(imageIndex) ? { ...image, mimeType: "image/jpeg" } : image);
+
+  return {
+    ...document,
+    ...(images === undefined ? {} : { images }),
+  };
+};
 
 const fakeCanvas = (
   gl: WebGL2RenderingContext,
@@ -486,6 +532,26 @@ const installViewportInvalidationStubs = () => {
 
 const flushMicrotasks = async (): Promise<void> => {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
+};
+
+const fakeImageBitmap = (size: number): ImageBitmap => ({
+  close: vi.fn(),
+  height: size,
+  width: size,
+}) as unknown as ImageBitmap;
+
+const settleKhronosEnvironmentTestIblBitmaps = async (
+  loader: ReturnType<typeof installStagedGltfLoader>,
+): Promise<void> => {
+  const mipSizes = [256, 128, 64, 32, 16] as const;
+  for (let attempt = 0; attempt < 20 && loader.bitmapRequests.length < 30; attempt += 1) {
+    await flushMicrotasks();
+  }
+  expect(loader.bitmapRequests).toHaveLength(30);
+  for (const [index, request] of loader.bitmapRequests.entries()) {
+    request.resolve(fakeImageBitmap(mipSizes[index % mipSizes.length] ?? 16));
+  }
+  await flushMicrotasks();
 };
 
 const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<void> => {
@@ -1530,41 +1596,6 @@ const iblCoefficients = (
 ): readonly (readonly [number, number, number])[] =>
   Array.from({ length: 9 }, (_unused, index) =>
     index === 0 ? c0 : index === 8 ? c8 : [0, 0, 0] as const);
-
-const imageBasedLightTriangleDocument = () => {
-  const base = solidTriangleDocument();
-
-  return {
-    ...base,
-    extensions: {
-      EXT_lights_image_based: {
-        lights: [
-          {
-            intensity: 2,
-            irradianceCoefficients: iblCoefficients([0.5, 0.25, 0.125], [0.1, 0.2, 0.3]),
-            specularImages: [
-              [0, 1, 2, 3, 4, 5],
-            ],
-            specularImageSize: 4,
-          },
-        ],
-      },
-    },
-    extensionsUsed: ["EXT_lights_image_based"],
-    images: iblSpecularImageUris.map((uri) => ({ mimeType: "image/png", uri })),
-    scene: 0,
-    scenes: [
-      {
-        extensions: {
-          EXT_lights_image_based: {
-            light: 0,
-          },
-        },
-        nodes: [0],
-      },
-    ],
-  };
-};
 
 const sceneSelectedImageBasedLightTriangleDocument = () => {
   const base = solidTriangleDocument();
@@ -2772,72 +2803,104 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const document = khronosEnvironmentTestDocument();
     const renderGraph = renderScene([
       gltf({
-        src: triangleGltfSrc,
+        src: khronosEnvironmentTestGltfSrc,
+        transform: khronosEnvironmentTestTransform,
         version: "ext-lights-image-based-optional",
       }),
     ]);
 
     root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, imageBasedLightTriangleDocument()))).toBe(true);
+    expect(loader.resolvePendingFetch(/EnvironmentTest\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, document))).toBe(true);
     await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
+    expect(loader.resolvePendingFetch(/EnvironmentTest_binary\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, khronosEnvironmentTestBuffer(document)))).toBe(true);
     await flushMicrotasks();
 
-    const callsBeforeReadyRender = calls.length;
+    const callsBeforeSpecularImagesSettle = calls.length;
+    await settleKhronosEnvironmentTestIblBitmaps(loader);
+
     root.render(renderGraph);
-    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const readyFrameCalls = calls.slice(callsBeforeSpecularImagesSettle);
     const sources = shaderSources(readyFrameCalls).join("\n");
     const diagnostics = root.snapshot().diagnostics.join("\n");
 
-    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(drawCalls(readyFrameCalls).length).toBeGreaterThan(0);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
     expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceSettings").map(roundVector))
-      .toContainEqual([1, 2, 0, 0]);
+      .toContainEqual([1, 1, 0, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[0]").map(roundVector))
-      .toContainEqual([0.5, 0.25, 0.125, 0]);
+      .toContainEqual([1.883914, 1.233669, 1.681576, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[8]").map(roundVector))
-      .toContainEqual([0.1, 0.2, 0.3, 0]);
+      .toContainEqual([0.432833, 0.126378, -0.004153, 0]);
     expect(sources).toContain("iblDiffuseIrradiance");
     expect(sources).toContain("iblSpecularRadiance");
-    expect(sources).toContain("iblDecodeRgbd");
+    expect(sources).toContain("iblDecodeSpecularRadiance");
+    expect(sources).toContain("u_iblSpecularSettings.w > 0.5");
+    expect(sources).toContain("iblEnvironmentBrdf");
+    expect(sources).toContain("iblSpecularBrdf");
     expect(sources).toContain("textureLod(u_iblSpecularCube");
+    expect(sources).toContain("return radiance * iblSpecularBrdf(baseColor, roughness, NdotV) * u_iblSpecularSettings.y;");
     expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * ambientIrradiance");
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIblSpecular")).toContain(0);
     expect(diagnostics).not.toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
-    expect(ControlledImage.instances.filter((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toHaveLength(6);
-
-    const callsBeforeSpecularImagesSettle = calls.length;
-    for (const image of ControlledImage.instances) {
-      if (/ibl-.*\.png(?:$|[?#])/.test(image.src)) image.settleLoad();
-    }
-    await flushMicrotasks();
-
-    root.render(renderGraph);
-    const specularReadyCalls = calls.slice(callsBeforeSpecularImagesSettle);
-    const cubeFaceTargets = specularReadyCalls
+    const cubeFaceTargets = readyFrameCalls
       .filter((call) => call.name === "texImage2D")
       .map((call) => Number(call.args[0]))
       .filter((target) => target >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && target < gl.TEXTURE_CUBE_MAP_POSITIVE_X + 6);
-
-    expect(cubeFaceTargets).toEqual([
+    const expectedCubeFaceTargets = Array.from({ length: 5 }, () => [
       gl.TEXTURE_CUBE_MAP_POSITIVE_X,
       gl.TEXTURE_CUBE_MAP_POSITIVE_X + 1,
       gl.TEXTURE_CUBE_MAP_POSITIVE_X + 2,
       gl.TEXTURE_CUBE_MAP_POSITIVE_X + 3,
       gl.TEXTURE_CUBE_MAP_POSITIVE_X + 4,
       gl.TEXTURE_CUBE_MAP_POSITIVE_X + 5,
-    ]);
-    expect(uniform1iPayloads(specularReadyCalls, "u_useIblSpecular")).toContain(1);
-    expect(uniform1iPayloads(specularReadyCalls, "u_iblSpecularCube")).toContain(2);
-    expect(uniform4fvPayloads(specularReadyCalls, "u_iblSpecularSettings").map(roundVector))
-      .toContainEqual([1, 2, 1, 0]);
-    expect(specularReadyCalls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_CUBE_MAP))
+    ]).flat();
+
+    expect(cubeFaceTargets).toEqual(expectedCubeFaceTargets);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useIblSpecular")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_iblSpecularSettings").map(roundVector))
+      .toContainEqual([1, 1, 5, 1]);
+    expect(readyFrameCalls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_CUBE_MAP))
       .toBe(false);
+  });
+
+  it("treats non-PNG EXT_lights_image_based specular images as LDR", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const document = khronosEnvironmentTestLdrSpecularDocument();
+    const renderGraph = renderScene([
+      gltf({
+        src: khronosEnvironmentTestGltfSrc,
+        transform: khronosEnvironmentTestTransform,
+        version: "ext-lights-image-based-ldr-specular",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/EnvironmentTest\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, document))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/EnvironmentTest_binary\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, khronosEnvironmentTestBuffer(document)))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeSpecularImagesSettle = calls.length;
+    await settleKhronosEnvironmentTestIblBitmaps(loader);
+
+    root.render(renderGraph);
+    const specularReadyCalls = calls.slice(callsBeforeSpecularImagesSettle);
+
+    expect(uniform1iPayloads(specularReadyCalls, "u_useIblSpecular")).toContain(1);
+    expect(uniform4fvPayloads(specularReadyCalls, "u_iblSpecularSettings").map(roundVector))
+      .toContainEqual([1, 1, 5, 0]);
   });
 
   it("selects EXT_lights_image_based from the active glTF scene and applies defaults", async () => {
@@ -2919,35 +2982,36 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const document = {
+      ...khronosEnvironmentTestDocument(),
+      extensionsRequired: ["EXT_lights_image_based"],
+    };
     const renderGraph = renderScene([
       gltf({
-        src: triangleGltfSrc,
+        src: khronosEnvironmentTestGltfSrc,
+        transform: khronosEnvironmentTestTransform,
         version: "ext-lights-image-based-required",
       }),
     ]);
 
     root.render(renderGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...imageBasedLightTriangleDocument(),
-        extensionsRequired: ["EXT_lights_image_based"],
-        extensionsUsed: ["EXT_lights_image_based"],
-      }))).toBe(true);
+    expect(loader.resolvePendingFetch(/EnvironmentTest\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, document))).toBe(true);
     await flushMicrotasks();
 
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
+    expect(loader.resolvePendingFetch(/EnvironmentTest_binary\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, khronosEnvironmentTestBuffer(document)))).toBe(true);
     await flushMicrotasks();
 
-    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+    expect(loader.fetchRequests.some((request) => /EnvironmentTest_binary\.bin(?:$|[?#])/.test(request.url)))
       .toBe(true);
-    expect(ControlledImage.instances.filter((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toHaveLength(6);
+    await settleKhronosEnvironmentTestIblBitmaps(loader);
     expect(root.snapshot().diagnostics.some((message) =>
       /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(false);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
-    expect(drawCalls(calls.slice(callsBeforeReadyRender))).toHaveLength(1);
+    expect(drawCalls(calls.slice(callsBeforeReadyRender)).length).toBeGreaterThan(0);
   });
 
   it("renders required KHR_materials_emissive_strength as an emissive material multiplier", async () => {

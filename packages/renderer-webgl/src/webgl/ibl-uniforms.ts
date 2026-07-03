@@ -33,7 +33,7 @@ export const bindSurfaceIblUniforms = (
     specular === undefined ? 0 : 1,
     specular?.intensity ?? 1,
     specular?.mipCount ?? 1,
-    0,
+    specular?.encoding === "rgbd" ? 1 : 0,
   ]);
   const gl = context.gl;
   gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);

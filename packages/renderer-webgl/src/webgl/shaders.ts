@@ -366,8 +366,22 @@ irradiance += u_iblIrradianceCoefficients[7].rgb * (1.092548 * n.x * n.z);
 irradiance += u_iblIrradianceCoefficients[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
 return max(irradiance * u_iblIrradianceSettings.y, vec3(0.0));
 }
-vec3 iblDecodeRgbd(vec4 rgbd) {
-return rgbd.rgb / max(rgbd.a, 0.00392156862);
+vec3 iblDecodeSpecularRadiance(vec4 sampleValue) {
+if (u_iblSpecularSettings.w > 0.5) {
+  return sampleValue.rgb / max(sampleValue.a, 0.00392156862);
+}
+return sampleValue.rgb;
+}
+vec2 iblEnvironmentBrdf(float roughness, float NdotV) {
+vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+vec4 r = roughness * c0 + c1;
+float a004 = min(r.x * r.x, exp2(-9.28 * NdotV)) * r.x + r.y;
+return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+vec3 iblSpecularBrdf(vec3 baseColor, float roughness, float NdotV) {
+vec2 brdf = iblEnvironmentBrdf(roughness, NdotV);
+return (materialF0(baseColor) * brdf.x + materialF90() * brdf.y) * materialIridescenceTint(NdotV);
 }
 vec3 iblSpecularRadiance(vec3 normal, vec3 viewDirection, vec3 baseColor) {
 if (!u_useIblSpecular) {
@@ -376,10 +390,11 @@ if (!u_useIblSpecular) {
 vec3 reflection = normalize(reflect(-viewDirection, normal));
 vec3 direction = normalize((u_iblWorldToIbl * vec4(reflection, 0.0)).xyz);
 float mipCount = max(u_iblSpecularSettings.z, 1.0);
-float lod = materialRoughnessFactor() * max(mipCount - 1.0, 0.0);
+float roughness = materialRoughnessFactor();
+float lod = roughness * max(mipCount - 1.0, 0.0);
 float NdotV = max(dot(normal, viewDirection), 0.0);
-vec3 fresnel = mix(materialF0(baseColor), materialF90(), fresnelPow(NdotV));
-return iblDecodeRgbd(textureLod(u_iblSpecularCube, direction, lod)) * fresnel * u_iblSpecularSettings.y;
+vec3 radiance = iblDecodeSpecularRadiance(textureLod(u_iblSpecularCube, direction, lod));
+return radiance * iblSpecularBrdf(baseColor, roughness, NdotV) * u_iblSpecularSettings.y;
 }
 vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
 int kind = u_surfaceLightKind[index];

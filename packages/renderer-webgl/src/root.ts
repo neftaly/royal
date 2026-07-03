@@ -1910,6 +1910,7 @@ export class WebGlRoot {
     if (!resource.uploaded) return undefined;
 
     return {
+      encoding: specular.encoding,
       intensity: irradiance.intensity,
       key: specular.key,
       mipCount: resource.mipCount,

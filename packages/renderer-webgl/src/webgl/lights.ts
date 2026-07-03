@@ -25,10 +25,13 @@ export type SurfaceImageBasedLight = {
 };
 
 export type SurfaceImageBasedLightSpecular = {
+  readonly encoding: SurfaceIblSpecularEncoding;
   readonly imageLoadKeys: readonly (readonly string[])[];
   readonly imageSize: number;
   readonly key: string;
 };
+
+export type SurfaceIblSpecularEncoding = "ldr" | "rgbd";
 
 export type SurfaceIblIrradiance = {
   readonly coefficients: readonly Vec3[];
@@ -37,6 +40,7 @@ export type SurfaceIblIrradiance = {
 };
 
 export type SurfaceIblSpecular = {
+  readonly encoding: SurfaceIblSpecularEncoding;
   readonly key: string;
   readonly mipCount: number;
   readonly intensity: number;
@@ -102,6 +106,7 @@ const surfaceIblIrradianceKey = (irradiance: SurfaceIblIrradiance): string =>
 const surfaceIblSpecularKey = (specular: SurfaceIblSpecular): string =>
   [
     specular.key,
+    specular.encoding,
     surfaceLightValueKey(specular.intensity),
     surfaceLightValueKey(specular.mipCount),
     surfaceLightVectorKey(specular.worldToIbl),

@@ -4,6 +4,7 @@ import { isPowerOfTwo } from "../texture-sources";
 import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,
+  SurfaceIblSpecularEncoding,
 } from "../webgl/lights";
 import { gltfImageLoadKey } from "./image-keys";
 import type {
@@ -18,6 +19,26 @@ type GltfImageBasedLightDiagnostics = {
 
 const finiteNumber = (value: number | undefined, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const uriMimeType = (uri: string | undefined): string | undefined => {
+  if (uri === undefined) return undefined;
+  const dataUriMatch = /^data:([^;,]+)/i.exec(uri);
+  if (dataUriMatch !== null) return dataUriMatch[1]?.toLowerCase();
+  const path = uri.split(/[?#]/, 1)[0]?.toLowerCase();
+  if (path === undefined) return undefined;
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".webp")) return "image/webp";
+
+  return undefined;
+};
+
+const gltfImageBasedLightSpecularEncoding = (
+  image: NonNullable<GltfDocument["images"]>[number],
+): SurfaceIblSpecularEncoding =>
+  (image.mimeType ?? uriMimeType(image.uri))?.toLowerCase() === "image/png"
+    ? "rgbd"
+    : "ldr";
 
 export const gltfImageBasedLightHasValidRotation = (light: GltfImageBasedLight): boolean =>
   light.rotation === undefined
@@ -83,6 +104,7 @@ const readGltfImageBasedLightSpecular = (
   }
 
   const imageLoadKeys: string[][] = [];
+  let encoding: SurfaceIblSpecularEncoding = "ldr";
   for (const [mipIndex, mipImages] of specularImages.entries()) {
     if (mipImages.length !== 6) {
       diagnostics.recordUnsupportedGltfImageBasedLight(
@@ -112,6 +134,7 @@ const readGltfImageBasedLightSpecular = (
         );
         return undefined;
       }
+      if (gltfImageBasedLightSpecularEncoding(image) === "rgbd") encoding = "rgbd";
       mipKeys.push(key);
     }
     imageLoadKeys.push(mipKeys);
@@ -125,9 +148,10 @@ const readGltfImageBasedLightSpecular = (
   }
 
   return {
+    encoding,
     imageLoadKeys,
     imageSize,
-    key: `${assetKey}:ibl-specular:${lightIndex}:${imageSize}:${imageLoadKeys.flat().join("|")}`,
+    key: `${assetKey}:ibl-specular:${lightIndex}:${imageSize}:${encoding}:${imageLoadKeys.flat().join("|")}`,
   };
 };
 
