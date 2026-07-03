@@ -9,29 +9,22 @@ import {
 } from "@royal/renderer-core";
 import {
   applyEditableTextEditorKeyInput,
-  collapseEditableTextEditorSelection,
   createEditableTextEditorState,
   createEditableTextFragment,
   editableTextClipboardMenuCommands,
-  editableTextCaretPlacement,
   editableTextEditorCaretSelection,
   editableTextEditorContextMenuSelection,
   editableTextEditorPointerSelection,
-  editableTextEditorSelectedRange,
   editableTextEditorSelectedText,
   editableTextMenuCommandAt,
   layoutEditableTextMenu,
   pasteEditableTextEditorText,
-  sameEditableTextSelection,
   setEditableTextEditorSelection,
   type EditableTextCaretEndpoint,
   type EditableTextEditorState,
-  type EditableTextFragmentMode,
-  type EditableTextLayout,
   type EditableTextMenuAction,
   type EditableTextMenuCommandRect,
   type EditableTextMenuLayout,
-  type EditableTextSelection,
 } from "@royal/renderer-core/text/editable";
 import type { TextFontFace } from "@royal/renderer-core/text/font";
 import {
@@ -57,8 +50,23 @@ import { Canvas, type CanvasProps } from "../canvas";
 import { canvasPointToWorld, type CanvasWorldBounds } from "../canvas-coordinate";
 import { captureCanvasPointer, releaseCanvasPointer } from "../canvas-pointer";
 import { rendererOutputToReact } from "../renderer-output";
+import {
+  hasSelection,
+  initialTextSurfaceState,
+  reduceTextSurfaceState,
+  type ActionControlKind,
+  type ActionControlRegistration,
+  type PressedActionControl,
+  type TextControlBounds,
+  type TextControlMode,
+  type TextControlRegistration,
+  type TextMenuState,
+  type TextSurfaceState,
+  type TextSurfaceStateAction,
+  type TextSurfaceStateEffect,
+} from "./surface-state";
 
-export type TextControlMode = EditableTextFragmentMode;
+export type { TextControlMode } from "./surface-state";
 
 export interface TextInteractionStyle {
   readonly backgroundColor?: Rgba;
@@ -226,49 +234,9 @@ export type InputPrimitiveProps =
 
 type ClipboardAction = EditableTextMenuAction;
 type ClipboardSource = "keyboard" | "menu";
-type ActionControlKind = "button" | "checkbox" | "color" | "file";
-
-type TextControlBounds = {
-  readonly bottom: number;
-  readonly left: number;
-  readonly right: number;
-  readonly top: number;
-};
-
-type TextControlRegistration = {
-  readonly bounds: TextControlBounds;
-  readonly copyable: boolean;
-  readonly editable: boolean;
-  readonly font?: TextFontFace;
-  readonly id: string;
-  readonly layout: EditableTextLayout;
-  readonly mode: TextControlMode;
-  readonly onValueChange?: (value: string) => void;
-  readonly origin: Vec3;
-  readonly selectable: boolean;
-  readonly selectedText: string;
-  readonly selection: EditableTextSelection;
-  readonly scrollLine: number;
-  readonly state: EditableTextEditorState;
-  readonly text: string;
-  readonly visibleLineCount: number;
-};
-
-type ActionControlRegistration = {
-  readonly bounds: TextControlBounds;
-  readonly disabled: boolean;
-  readonly id: string;
-  readonly kind: ActionControlKind;
-  readonly onPress: () => void;
-};
 
 type PendingMenuCommand = {
   readonly action: ClipboardAction;
-  readonly controlId: string;
-  readonly pointerId: number;
-};
-
-type PressedActionControl = {
   readonly controlId: string;
   readonly pointerId: number;
 };
@@ -279,31 +247,16 @@ type DragState = {
   readonly moved: boolean;
 };
 
-type TextMenuState = {
-  readonly controlId: string | undefined;
-  readonly open: boolean;
-  readonly worldX: number;
-  readonly worldY: number;
-};
-
-type TextSurfaceStoreState = {
-  readonly actionControls: ReadonlyMap<string, ActionControlRegistration>;
-  readonly activeActionId: string | undefined;
-  readonly activeId: string | undefined;
+type TextSurfaceStoreState = TextSurfaceState & {
   readonly applyEditorState: (id: string, state: EditableTextEditorState) => void;
   readonly clearSelectionsExcept: (id: string | undefined) => void;
   readonly closeMenu: () => void;
-  readonly controls: ReadonlyMap<string, TextControlRegistration>;
   readonly getActionControl: (id: string) => ActionControlRegistration | undefined;
   readonly getActionControls: () => readonly ActionControlRegistration[];
   readonly getControl: (id: string) => TextControlRegistration | undefined;
   readonly getControls: () => readonly TextControlRegistration[];
-  readonly menu: TextMenuState;
-  readonly pressedAction: PressedActionControl | undefined;
   readonly registerActionControl: (control: ActionControlRegistration) => void;
   readonly registerControl: (control: TextControlRegistration) => void;
-  readonly scrollLines: ReadonlyMap<string, number>;
-  readonly selections: ReadonlyMap<string, EditableTextSelection>;
   readonly setActiveActionId: (id: string | undefined) => void;
   readonly setActiveId: (id: string | undefined) => void;
   readonly setMenu: (menu: TextMenuState) => void;
@@ -383,13 +336,6 @@ export const textFieldHeight = ({
 }: TextFieldHeightOptions = {}): number =>
   Math.max(1, rows) * lineHeight + paddingY * 2;
 
-const closedMenu: TextMenuState = {
-  controlId: undefined,
-  open: false,
-  worldX: 0,
-  worldY: 0,
-};
-
 const TextSurfaceContext = createContext<TextSurfaceContextValue | undefined>(undefined);
 const TextInteractionStoreContext = createContext<TextSurfaceStore | undefined>(undefined);
 const TextFontContext = createContext<TextFontFace | undefined>(undefined);
@@ -445,200 +391,97 @@ const menuLayoutBoundsFor = (bounds: CanvasWorldBounds) => ({
   y: menuBoundsMargin,
 });
 
-const hasSelection = (control: TextControlRegistration): boolean => {
-  const range = editableTextEditorSelectedRange(control.state);
-  return range.start !== range.end;
-};
-
-const sameMenuState = (left: TextMenuState, right: TextMenuState): boolean =>
-  left.controlId === right.controlId &&
-  left.open === right.open &&
-  left.worldX === right.worldX &&
-  left.worldY === right.worldY;
-
-const withSelection = (
-  control: TextControlRegistration,
-  nextSelection: EditableTextSelection,
-): TextControlRegistration => {
-  const state = createEditableTextEditorState({
-    selection: nextSelection,
-    text: control.text,
-  });
-
-  return {
-    ...control,
-    selectedText: editableTextEditorSelectedText(state),
-    selection: state.selection,
-    state,
-  };
-};
-
-const maxScrollLineFor = (control: TextControlRegistration): number => {
-  if (!Number.isFinite(control.visibleLineCount)) return 0;
-  return Math.max(0, control.layout.lines.length - Math.max(1, Math.floor(control.visibleLineCount)));
-};
-
-const clampScrollLineFor = (
-  control: TextControlRegistration,
-  scrollLine: number,
-): number => Math.max(0, Math.min(maxScrollLineFor(control), Math.floor(scrollLine)));
-
-const scrollLineForSelection = (
-  control: TextControlRegistration,
-  selection: EditableTextSelection,
-): number => {
-  const visibleLineCount = Math.max(1, Math.floor(control.visibleLineCount));
-  if (!Number.isFinite(control.visibleLineCount)) return 0;
-
-  const caret = editableTextCaretPlacement(control.layout, selection.focus, selection.focusLine) ??
-    control.layout.caretPlacements.at(-1);
-  const line = caret?.line ?? 0;
-  const current = clampScrollLineFor(control, control.scrollLine);
-
-  if (line < current) return clampScrollLineFor(control, line);
-  if (line >= current + visibleLineCount) {
-    return clampScrollLineFor(control, line - visibleLineCount + 1);
-  }
-
-  return current;
-};
-
 const createTextSurfaceStore = (): TextSurfaceStore => {
   return createStore<TextSurfaceStoreState>()((set, get) => {
-    const setSelection = (id: string, selection: EditableTextSelection): void => {
-      const current = get().selections.get(id);
-      if (current !== undefined && sameEditableTextSelection(current, selection)) return;
-
-      const nextSelections = new Map(get().selections).set(id, selection);
-      const currentControls = get().controls;
-      const control = currentControls.get(id);
-      let nextControls = currentControls;
-      if (control !== undefined) {
-        nextControls = new Map(currentControls).set(id, withSelection(control, selection));
+    const runEffects = (effects: readonly TextSurfaceStateEffect[]): void => {
+      for (const effect of effects) {
+        get().controls.get(effect.id)?.onValueChange?.(effect.value);
       }
-      set({ controls: nextControls, selections: nextSelections });
+    };
+
+    const dispatch = (action: TextSurfaceStateAction): readonly TextSurfaceStateEffect[] => {
+      const current = get();
+      const result = reduceTextSurfaceState(current, action);
+      if (result.state !== current) set(result.state);
+      return result.effects;
     };
 
     return {
-      actionControls: new Map(),
-      activeActionId: undefined,
-      activeId: undefined,
+      actionControls: new Map(initialTextSurfaceState.actionControls),
+      activeActionId: initialTextSurfaceState.activeActionId,
+      activeId: initialTextSurfaceState.activeId,
       applyEditorState: (id, nextState) => {
-        const control = get().controls.get(id);
-        setSelection(id, nextState.selection);
-        if (control !== undefined && control.text !== nextState.text) {
-          control.onValueChange?.(nextState.text);
-        }
-        if (control !== undefined) {
-          const scrollControl = {
-            ...control,
-            scrollLine: get().scrollLines.get(id) ?? control.scrollLine,
-          };
-          const nextScrollLine = scrollLineForSelection(scrollControl, nextState.selection);
-          if (nextScrollLine !== scrollControl.scrollLine) {
-            set({ scrollLines: new Map(get().scrollLines).set(id, nextScrollLine) });
-          }
-        }
+        runEffects(dispatch({
+          editorState: nextState,
+          id,
+          type: "editor/apply-state",
+        }));
       },
       clearSelectionsExcept: (id) => {
-        let changed = false;
-        const currentControls = get().controls;
-        let nextControls = currentControls;
-        let nextSelections = get().selections;
-
-        for (const control of currentControls.values()) {
-          if (control.id === id || !hasSelection(control)) continue;
-          const nextState = collapseEditableTextEditorSelection(
-            control.state,
-            control.state.selection.focus,
-            control.layout,
-          );
-          const current = nextSelections.get(control.id);
-          if (current !== undefined && sameEditableTextSelection(current, nextState.selection)) continue;
-          changed = true;
-          nextSelections = new Map(nextSelections).set(control.id, nextState.selection);
-          nextControls = new Map(nextControls).set(control.id, withSelection(control, nextState.selection));
-        }
-
-        if (!changed) return;
-        set({ controls: nextControls, selections: nextSelections });
+        runEffects(dispatch({
+          id,
+          type: "selection/clear-except",
+        }));
       },
       closeMenu: () => {
-        if (sameMenuState(get().menu, closedMenu)) return;
-        set({ menu: closedMenu });
+        runEffects(dispatch({ type: "menu/close" }));
       },
-      controls: new Map(),
+      controls: new Map(initialTextSurfaceState.controls),
       getActionControl: (id) => get().actionControls.get(id),
       getActionControls: () => Array.from(get().actionControls.values()),
       getControl: (id) => get().controls.get(id),
       getControls: () => Array.from(get().controls.values()),
-      menu: closedMenu,
-      pressedAction: undefined,
+      menu: initialTextSurfaceState.menu,
+      pressedAction: initialTextSurfaceState.pressedAction,
       registerActionControl: (control) => {
-        const currentControls = get().actionControls;
-        if (currentControls.get(control.id) === control) return;
-        set({ actionControls: new Map(currentControls).set(control.id, control) });
+        runEffects(dispatch({
+          control,
+          type: "action-control/register",
+        }));
       },
       registerControl: (control) => {
-        const selection = get().selections.get(control.id);
-        const selectedControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
-          ? control
-          : withSelection(control, selection);
-        const scrollLine = clampScrollLineFor({
-          ...selectedControl,
-          scrollLine: get().scrollLines.get(control.id) ?? selectedControl.scrollLine,
-        }, get().scrollLines.get(control.id) ?? selectedControl.scrollLine);
-        const nextControl = {
-          ...selectedControl,
-          scrollLine,
-        };
-        const currentControls = get().controls;
-        const currentScroll = get().scrollLines.get(control.id);
-        if (currentControls.get(control.id) === nextControl && currentScroll === scrollLine) return;
-        set({
-          controls: new Map(currentControls).set(control.id, nextControl),
-          ...(currentScroll === scrollLine ? {} : { scrollLines: new Map(get().scrollLines).set(control.id, scrollLine) }),
-        });
+        runEffects(dispatch({
+          control,
+          type: "text-control/register",
+        }));
       },
-      scrollLines: new Map(),
-      selections: new Map(),
+      scrollLines: new Map(initialTextSurfaceState.scrollLines),
+      selections: new Map(initialTextSurfaceState.selections),
       setActiveActionId: (id) => {
-        if (get().activeActionId === id) return;
-        set({ activeActionId: id });
+        runEffects(dispatch({
+          id,
+          type: "active-action/set",
+        }));
       },
       setActiveId: (id) => {
-        if (get().activeId === id) return;
-        set({ activeId: id });
+        runEffects(dispatch({
+          id,
+          type: "active-text/set",
+        }));
       },
       setMenu: (menu) => {
-        if (sameMenuState(get().menu, menu)) return;
-        set({ menu });
+        runEffects(dispatch({
+          menu,
+          type: "menu/set",
+        }));
       },
       setPressedAction: (pressedAction) => {
-        const current = get().pressedAction;
-        if (
-          current?.controlId === pressedAction?.controlId &&
-          current?.pointerId === pressedAction?.pointerId
-        ) {
-          return;
-        }
-        set({ pressedAction });
+        runEffects(dispatch({
+          pressedAction,
+          type: "pressed-action/set",
+        }));
       },
       unregisterActionControl: (id) => {
-        const currentControls = get().actionControls;
-        if (!currentControls.has(id)) return;
-        const nextControls = new Map(currentControls);
-        nextControls.delete(id);
-        set({ actionControls: nextControls });
+        runEffects(dispatch({
+          id,
+          type: "action-control/unregister",
+        }));
       },
       unregisterControl: (id) => {
-        const currentControls = get().controls;
-        if (!currentControls.has(id)) return;
-        const nextControls = new Map(currentControls);
-        nextControls.delete(id);
-        const nextScrollLines = new Map(get().scrollLines);
-        nextScrollLines.delete(id);
-        set({ controls: nextControls, scrollLines: nextScrollLines });
+        runEffects(dispatch({
+          id,
+          type: "text-control/unregister",
+        }));
       },
     };
   });
