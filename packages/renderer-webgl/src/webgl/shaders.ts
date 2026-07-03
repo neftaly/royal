@@ -141,6 +141,16 @@ uniform bool u_useTexture;
 uniform bool u_useEmissiveTexture;
 uniform bool u_useMetallicRoughnessTexture;
 uniform bool u_useOcclusionTexture;
+uniform bool u_useSpecularTexture;
+uniform bool u_useSpecularColorTexture;
+uniform bool u_useClearcoatTexture;
+uniform bool u_useClearcoatRoughnessTexture;
+uniform bool u_useSheenColorTexture;
+uniform bool u_useSheenRoughnessTexture;
+uniform bool u_useIridescenceTexture;
+uniform bool u_useIridescenceThicknessTexture;
+uniform bool u_useMaterialTransmissionTexture;
+uniform bool u_useThicknessTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
 uniform vec4 u_emissiveColor;
@@ -161,6 +171,16 @@ uniform sampler2D u_texture;
 uniform sampler2D u_emissiveTexture;
 uniform sampler2D u_metallicRoughnessTexture;
 uniform sampler2D u_occlusionTexture;
+uniform sampler2D u_specularTexture;
+uniform sampler2D u_specularColorTexture;
+uniform sampler2D u_clearcoatTexture;
+uniform sampler2D u_clearcoatRoughnessTexture;
+uniform sampler2D u_sheenColorTexture;
+uniform sampler2D u_sheenRoughnessTexture;
+uniform sampler2D u_iridescenceTexture;
+uniform sampler2D u_iridescenceThicknessTexture;
+uniform sampler2D u_materialTransmissionTexture;
+uniform sampler2D u_thicknessTexture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
 uniform vec4 u_occlusionSettings;
@@ -189,13 +209,50 @@ float safeIor = max(ior, 1.0);
 float reflectance = (safeIor - 1.0) / (safeIor + 1.0);
 return reflectance * reflectance;
 }
+float materialSpecularFactor() {
+float textureSpecular = u_useSpecularTexture ? texture(u_specularTexture, v_uv).a : 1.0;
+return clamp(u_materialExtensionFactors.x * textureSpecular, 0.0, 1.0);
+}
+vec3 materialSpecularColorFactor() {
+vec3 textureSpecularColor = u_useSpecularColorTexture ? texture(u_specularColorTexture, v_uv).rgb : vec3(1.0);
+return max(u_specularColorFactor.rgb * textureSpecularColor, vec3(0.0));
+}
+float materialClearcoatFactor() {
+float textureClearcoat = u_useClearcoatTexture ? texture(u_clearcoatTexture, v_uv).r : 1.0;
+return clamp(u_materialExtensionFactors.z * textureClearcoat, 0.0, 1.0);
+}
+float materialClearcoatRoughnessFactor() {
+float textureRoughness = u_useClearcoatRoughnessTexture ? texture(u_clearcoatRoughnessTexture, v_uv).g : 1.0;
+return clamp(u_materialExtensionFactors.w * textureRoughness, 0.0, 1.0);
+}
+vec3 materialSheenColor() {
+vec3 textureSheenColor = u_useSheenColorTexture ? texture(u_sheenColorTexture, v_uv).rgb : vec3(1.0);
+return max(u_sheenColorFactor.rgb * textureSheenColor, vec3(0.0));
+}
+float materialSheenRoughness() {
+float textureRoughness = u_useSheenRoughnessTexture ? texture(u_sheenRoughnessTexture, v_uv).a : 1.0;
+return clamp(u_sheenColorFactor.a * textureRoughness, 0.0, 1.0);
+}
+float materialIridescenceFactor() {
+float textureIridescence = u_useIridescenceTexture ? texture(u_iridescenceTexture, v_uv).r : 1.0;
+return clamp(u_iridescenceFactors.x * textureIridescence, 0.0, 1.0);
+}
 float materialIridescenceThickness() {
 float minimumThickness = max(u_iridescenceFactors.z, 0.0);
 float maximumThickness = max(u_iridescenceFactors.w, 0.0);
-return mix(minimumThickness, maximumThickness, 1.0);
+float textureThickness = u_useIridescenceThicknessTexture ? texture(u_iridescenceThicknessTexture, v_uv).g : 1.0;
+return mix(minimumThickness, maximumThickness, clamp(textureThickness, 0.0, 1.0));
+}
+float materialTransmissionFactor() {
+float textureTransmission = u_useMaterialTransmissionTexture ? texture(u_materialTransmissionTexture, v_uv).r : 1.0;
+return clamp(u_transmissionVolumeFactors.x * textureTransmission, 0.0, 1.0);
+}
+float materialThicknessFactor() {
+float textureThickness = u_useThicknessTexture ? texture(u_thicknessTexture, v_uv).g : 1.0;
+return max(u_transmissionVolumeFactors.y * textureThickness, 0.0);
 }
 vec3 materialIridescenceTint(float cosTheta) {
-float strength = clamp(u_iridescenceFactors.x, 0.0, 1.0);
+float strength = materialIridescenceFactor();
 if (strength <= 0.0) {
   return vec3(1.0);
 }
@@ -230,15 +287,15 @@ float strength = clamp(u_occlusionSettings.x, 0.0, 1.0);
 return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);
 }
 vec3 materialDielectricF0() {
-float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
-vec3 specularColor = max(u_specularColorFactor.rgb, vec3(0.0));
+float specular = materialSpecularFactor();
+vec3 specularColor = materialSpecularColorFactor();
 return min(vec3(iorF0(u_materialExtensionFactors.y)) * specularColor, vec3(1.0)) * specular;
 }
 vec3 materialF0(vec3 baseColor) {
 return mix(materialDielectricF0(), baseColor, materialMetallicFactor());
 }
 vec3 materialF90() {
-float specular = clamp(u_materialExtensionFactors.x, 0.0, 1.0);
+float specular = materialSpecularFactor();
 return mix(vec3(specular), vec3(1.0), materialMetallicFactor());
 }
 vec3 materialSpecularFresnel(vec3 baseColor, vec3 viewDirection, vec3 halfVector) {
@@ -259,16 +316,16 @@ float materialSmithVisibility(float NdotL, float NdotV, float roughness) {
 return materialSmithG1(NdotL, roughness) * materialSmithG1(NdotV, roughness);
 }
 float materialClearcoatFresnel(vec3 normal, vec3 viewDirection) {
-float clearcoat = clamp(u_materialExtensionFactors.z, 0.0, 1.0);
+float clearcoat = materialClearcoatFactor();
 float fresnel = 0.04 + 0.96 * fresnelPow(max(dot(normal, viewDirection), 0.0));
 return clearcoat * fresnel;
 }
 float materialClearcoatShininess() {
-float roughness = clamp(u_materialExtensionFactors.w, 0.0, 1.0);
+float roughness = materialClearcoatRoughnessFactor();
 return mix(96.0, 8.0, roughness);
 }
 float materialSheenDistribution(float NdotH) {
-float roughness = clamp(u_sheenColorFactor.a, 0.0, 1.0);
+float roughness = materialSheenRoughness();
 float alphaG = max(roughness * roughness, 0.001);
 float invR = 1.0 / alphaG;
 float sin2h = max(1.0 - NdotH * NdotH, 0.0001);
@@ -278,13 +335,13 @@ float materialSheenVisibility(float NdotL, float NdotV) {
 return 1.0 / max(4.0 * (NdotL + NdotV - NdotL * NdotV), 0.001);
 }
 float materialSheenAlbedoScale(float NdotV) {
-vec3 sheenColor = max(u_sheenColorFactor.rgb, vec3(0.0));
+vec3 sheenColor = materialSheenColor();
 float sheenStrength = clamp(maxComponent(sheenColor), 0.0, 1.0);
-float roughness = clamp(u_sheenColorFactor.a, 0.0, 1.0);
+float roughness = materialSheenRoughness();
 return clamp(1.0 - sheenStrength * mix(0.35, 0.65, roughness) * fresnelPow(NdotV), 0.0, 1.0);
 }
 vec3 materialSheenContribution(vec3 normal, vec3 viewDirection, vec3 lightVector, vec3 halfVector, float NdotL, vec3 lightColor) {
-vec3 sheenColor = max(u_sheenColorFactor.rgb, vec3(0.0));
+vec3 sheenColor = materialSheenColor();
 if (maxComponent(sheenColor) <= 0.0) {
   return vec3(0.0);
 }
@@ -294,7 +351,7 @@ float sheenShape = min(materialSheenDistribution(NdotH) * materialSheenVisibilit
 return sheenColor * sheenShape * lightColor;
 }
 vec3 materialVolumeAttenuation() {
-float thickness = max(u_transmissionVolumeFactors.y, 0.0);
+float thickness = materialThicknessFactor();
 float attenuationDistance = u_transmissionVolumeFactors.z;
 bool hasFiniteAttenuationDistance = u_transmissionVolumeFactors.w > 0.5;
 if (thickness <= 0.0 || !hasFiniteAttenuationDistance || attenuationDistance <= 0.0) {
@@ -327,7 +384,7 @@ if (dispersion <= 0.0) {
 }
 vec3 iors = materialDispersionIors(u_materialExtensionFactors.y, dispersion);
 vec2 direction = materialDispersionDirection(normal, viewDirection);
-float thickness = max(u_transmissionVolumeFactors.y, 0.0);
+float thickness = materialThicknessFactor();
 float offsetScale = clamp(max(thickness, 0.0) * 0.25, 0.0, 0.08);
 vec2 redUv = clamp(screenUv - direction * max(iors.g - iors.r, 0.0) * offsetScale, vec2(0.0), vec2(1.0));
 vec2 blueUv = clamp(screenUv + direction * max(iors.b - iors.g, 0.0) * offsetScale, vec2(0.0), vec2(1.0));
@@ -459,7 +516,7 @@ for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
   lit += lightContribution(index, normal, viewDirection, v_worldPosition, baseColor.rgb);
 }
 lit += materialEmissiveColor() * (1.0 - viewClearcoat);
-float transmission = clamp(u_transmissionVolumeFactors.x, 0.0, 1.0);
+float transmission = materialTransmissionFactor();
 if (transmission > 0.0 && u_useTransmissionTexture) {
   vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);
   lit = mix(lit, transmitted, transmission);

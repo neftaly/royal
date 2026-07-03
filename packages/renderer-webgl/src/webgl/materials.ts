@@ -16,12 +16,22 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 };
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
+  readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
+  readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly emissive?: Rgba;
   readonly emissiveTexture?: TextureAssetUploadRef;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
+  readonly iridescenceTexture?: TextureAssetUploadRef;
+  readonly iridescenceThicknessTexture?: TextureAssetUploadRef;
+  readonly materialTransmissionTexture?: TextureAssetUploadRef;
   readonly metallicRoughnessTexture?: TextureAssetUploadRef;
   readonly occlusionStrength?: number;
   readonly occlusionTexture?: TextureAssetUploadRef;
+  readonly sheenColorTexture?: TextureAssetUploadRef;
+  readonly sheenRoughnessTexture?: TextureAssetUploadRef;
+  readonly specularColorTexture?: TextureAssetUploadRef;
+  readonly specularTexture?: TextureAssetUploadRef;
+  readonly thicknessTexture?: TextureAssetUploadRef;
 };
 
 export type SurfaceMaterialExtensionFactors = {
@@ -153,6 +163,16 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
     material.occlusionTexture === undefined ? "" : textureCacheKey(material.occlusionTexture),
+    material.specularTexture === undefined ? "" : textureCacheKey(material.specularTexture),
+    material.specularColorTexture === undefined ? "" : textureCacheKey(material.specularColorTexture),
+    material.clearcoatTexture === undefined ? "" : textureCacheKey(material.clearcoatTexture),
+    material.clearcoatRoughnessTexture === undefined ? "" : textureCacheKey(material.clearcoatRoughnessTexture),
+    material.sheenColorTexture === undefined ? "" : textureCacheKey(material.sheenColorTexture),
+    material.sheenRoughnessTexture === undefined ? "" : textureCacheKey(material.sheenRoughnessTexture),
+    material.iridescenceTexture === undefined ? "" : textureCacheKey(material.iridescenceTexture),
+    material.iridescenceThicknessTexture === undefined ? "" : textureCacheKey(material.iridescenceThicknessTexture),
+    material.materialTransmissionTexture === undefined ? "" : textureCacheKey(material.materialTransmissionTexture),
+    material.thicknessTexture === undefined ? "" : textureCacheKey(material.thicknessTexture),
     surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
     surfaceLightValueKey(surfaceMaterialOcclusionStrength(material)),
     surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),

@@ -312,6 +312,28 @@ type LoadedGltfMaterial = {
   readonly sampler?: TextureSampler;
   readonly texCoords?: Float32Array;
   readonly unlit?: boolean;
+  readonly extensionTextures?: LoadedGltfMaterialExtensionTextures;
+};
+
+type LoadedGltfMaterialTextureSlot = {
+  readonly image?: LoadedTextureSource;
+  readonly imageFailed?: boolean;
+  readonly imageUri?: string;
+  readonly sampler?: TextureSampler;
+  readonly textureUri?: string;
+};
+
+type LoadedGltfMaterialExtensionTextures = {
+  readonly clearcoatRoughnessTexture?: LoadedGltfMaterialTextureSlot;
+  readonly clearcoatTexture?: LoadedGltfMaterialTextureSlot;
+  readonly iridescenceTexture?: LoadedGltfMaterialTextureSlot;
+  readonly iridescenceThicknessTexture?: LoadedGltfMaterialTextureSlot;
+  readonly materialTransmissionTexture?: LoadedGltfMaterialTextureSlot;
+  readonly sheenColorTexture?: LoadedGltfMaterialTextureSlot;
+  readonly sheenRoughnessTexture?: LoadedGltfMaterialTextureSlot;
+  readonly specularColorTexture?: LoadedGltfMaterialTextureSlot;
+  readonly specularTexture?: LoadedGltfMaterialTextureSlot;
+  readonly thicknessTexture?: LoadedGltfMaterialTextureSlot;
 };
 
 type GltfTextureImageSelection = {
@@ -343,21 +365,170 @@ type LoadedGltfPrimitiveMaterial = {
   readonly selectionKey: string;
 };
 
+type LoadedGltfSurfaceTextures = {
+  readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
+  readonly clearcoatTexture?: TextureAssetUploadRef;
+  readonly emissiveTexture?: TextureAssetUploadRef;
+  readonly iridescenceTexture?: TextureAssetUploadRef;
+  readonly iridescenceThicknessTexture?: TextureAssetUploadRef;
+  readonly materialTransmissionTexture?: TextureAssetUploadRef;
+  readonly metallicRoughnessTexture?: TextureAssetUploadRef;
+  readonly occlusionTexture?: TextureAssetUploadRef;
+  readonly sheenColorTexture?: TextureAssetUploadRef;
+  readonly sheenRoughnessTexture?: TextureAssetUploadRef;
+  readonly specularColorTexture?: TextureAssetUploadRef;
+  readonly specularTexture?: TextureAssetUploadRef;
+  readonly thicknessTexture?: TextureAssetUploadRef;
+};
+
+type TextureColorSpace = NonNullable<TextureRef["colorSpace"]>;
+type GltfMaterialExtensionTextureKey =
+  & keyof LoadedGltfMaterialExtensionTextures
+  & keyof LoadedGltfSurfaceTextures;
+
+type GltfMaterialExtensionTextureDefinition = {
+  readonly colorSpace: TextureColorSpace;
+  readonly key: GltfMaterialExtensionTextureKey;
+  readonly textureInfo: (material: GltfMaterial | undefined) => GltfTextureInfo | undefined;
+};
+
+const GLTF_MATERIAL_EXTENSION_TEXTURES = [
+  {
+    colorSpace: "linear",
+    key: "clearcoatRoughnessTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatRoughnessTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "clearcoatTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "iridescenceTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_iridescence?.iridescenceTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "iridescenceThicknessTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_iridescence?.iridescenceThicknessTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "materialTransmissionTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_transmission?.transmissionTexture,
+  },
+  {
+    colorSpace: "srgb",
+    key: "sheenColorTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_sheen?.sheenColorTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "sheenRoughnessTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_sheen?.sheenRoughnessTexture,
+  },
+  {
+    colorSpace: "srgb",
+    key: "specularColorTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_specular?.specularColorTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "specularTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_specular?.specularTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "thicknessTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_volume?.thicknessTexture,
+  },
+] as const satisfies readonly GltfMaterialExtensionTextureDefinition[];
+
+type GltfMaterialExtensionTextureBinding = {
+  readonly key: GltfMaterialExtensionTextureKey;
+  readonly samplerUniform: string;
+  readonly textureUnit: number;
+  readonly useUniform: string;
+};
+
+// Units 0-5 are reserved by base color, transmission screen, IBL, and core material maps.
+// Keeping extension maps at 6-15 stays within WebGL2's guaranteed 16 fragment samplers.
+const GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS = [
+  {
+    key: "specularTexture",
+    samplerUniform: "u_specularTexture",
+    textureUnit: 6,
+    useUniform: "u_useSpecularTexture",
+  },
+  {
+    key: "specularColorTexture",
+    samplerUniform: "u_specularColorTexture",
+    textureUnit: 7,
+    useUniform: "u_useSpecularColorTexture",
+  },
+  {
+    key: "clearcoatTexture",
+    samplerUniform: "u_clearcoatTexture",
+    textureUnit: 8,
+    useUniform: "u_useClearcoatTexture",
+  },
+  {
+    key: "clearcoatRoughnessTexture",
+    samplerUniform: "u_clearcoatRoughnessTexture",
+    textureUnit: 9,
+    useUniform: "u_useClearcoatRoughnessTexture",
+  },
+  {
+    key: "sheenColorTexture",
+    samplerUniform: "u_sheenColorTexture",
+    textureUnit: 10,
+    useUniform: "u_useSheenColorTexture",
+  },
+  {
+    key: "sheenRoughnessTexture",
+    samplerUniform: "u_sheenRoughnessTexture",
+    textureUnit: 11,
+    useUniform: "u_useSheenRoughnessTexture",
+  },
+  {
+    key: "iridescenceTexture",
+    samplerUniform: "u_iridescenceTexture",
+    textureUnit: 12,
+    useUniform: "u_useIridescenceTexture",
+  },
+  {
+    key: "iridescenceThicknessTexture",
+    samplerUniform: "u_iridescenceThicknessTexture",
+    textureUnit: 13,
+    useUniform: "u_useIridescenceThicknessTexture",
+  },
+  {
+    key: "materialTransmissionTexture",
+    samplerUniform: "u_materialTransmissionTexture",
+    textureUnit: 14,
+    useUniform: "u_useMaterialTransmissionTexture",
+  },
+  {
+    key: "thicknessTexture",
+    samplerUniform: "u_thicknessTexture",
+    textureUnit: 15,
+    useUniform: "u_useThicknessTexture",
+  },
+] as const satisfies readonly GltfMaterialExtensionTextureBinding[];
+
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
-  emissiveTexture: TextureAssetUploadRef | undefined,
-  metallicRoughnessTexture: TextureAssetUploadRef | undefined,
-  occlusionTexture: TextureAssetUploadRef | undefined,
+  textures: LoadedGltfSurfaceTextures,
 ): SurfaceMaterial => {
   const emissive = loadedMaterial.emissive;
   const extensionFactors = loadedMaterial.extensionFactors;
   const common = {
     baseColor,
     ...(emissive === undefined ? {} : { emissive }),
-    ...(emissiveTexture === undefined ? {} : { emissiveTexture }),
+    ...(textures.emissiveTexture === undefined ? {} : { emissiveTexture: textures.emissiveTexture }),
     ...(extensionFactors === undefined ? {} : { extensionFactors }),
-    ...(occlusionTexture === undefined ? {} : { occlusionTexture }),
   };
   if (loadedMaterial.unlit === true) {
     return {
@@ -369,10 +540,33 @@ const loadedGltfSurfaceMaterial = (
   return {
     ...common,
     kind: "standard",
+    ...(textures.clearcoatRoughnessTexture === undefined
+      ? {}
+      : { clearcoatRoughnessTexture: textures.clearcoatRoughnessTexture }),
+    ...(textures.clearcoatTexture === undefined ? {} : { clearcoatTexture: textures.clearcoatTexture }),
+    ...(textures.iridescenceTexture === undefined ? {} : { iridescenceTexture: textures.iridescenceTexture }),
+    ...(textures.iridescenceThicknessTexture === undefined
+      ? {}
+      : { iridescenceThicknessTexture: textures.iridescenceThicknessTexture }),
+    ...(textures.materialTransmissionTexture === undefined
+      ? {}
+      : { materialTransmissionTexture: textures.materialTransmissionTexture }),
     metallicFactor: loadedMaterial.metallicFactor ?? 1,
-    ...(metallicRoughnessTexture === undefined ? {} : { metallicRoughnessTexture }),
+    ...(textures.metallicRoughnessTexture === undefined
+      ? {}
+      : { metallicRoughnessTexture: textures.metallicRoughnessTexture }),
+    ...(textures.occlusionTexture === undefined ? {} : { occlusionTexture: textures.occlusionTexture }),
     occlusionStrength: loadedMaterial.occlusionStrength ?? 1,
     roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
+    ...(textures.sheenColorTexture === undefined ? {} : { sheenColorTexture: textures.sheenColorTexture }),
+    ...(textures.sheenRoughnessTexture === undefined
+      ? {}
+      : { sheenRoughnessTexture: textures.sheenRoughnessTexture }),
+    ...(textures.specularColorTexture === undefined
+      ? {}
+      : { specularColorTexture: textures.specularColorTexture }),
+    ...(textures.specularTexture === undefined ? {} : { specularTexture: textures.specularTexture }),
+    ...(textures.thicknessTexture === undefined ? {} : { thicknessTexture: textures.thicknessTexture }),
   };
 };
 
@@ -616,6 +810,52 @@ const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextur
 
   const imageIndex = texture?.extensions?.EXT_texture_webp?.source ?? texture?.source;
   return imageIndex === undefined ? undefined : { imageIndex, kind: "image" };
+};
+
+const gltfMaterialTextureSlot = (
+  document: GltfDocument,
+  assetKey: string,
+  src: string,
+  textureInfo: GltfTextureInfo | undefined,
+): LoadedGltfMaterialTextureSlot | undefined => {
+  const textureIndex = textureInfo?.index;
+  const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
+  const imageSelection = gltfTextureImageSelection(texture);
+  const imageIndex = imageSelection?.imageIndex;
+  const imageKind = imageSelection?.kind ?? "image";
+  const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
+  const imageUri = image === undefined
+    ? undefined
+    : gltfImageLoadKey(assetKey, src, imageIndex, image, imageKind);
+  const sampler = texture === undefined
+    ? undefined
+    : gltfTextureSampler(texture.sampler === undefined ? undefined : document.samplers?.[texture.sampler]);
+  const textureUri = textureIndex === undefined || image === undefined
+    ? undefined
+    : gltfTextureIdentity(assetKey, src, textureIndex, imageIndex, image, imageKind);
+
+  if (imageUri === undefined && sampler === undefined && textureUri === undefined) return undefined;
+
+  return {
+    ...(imageUri === undefined ? {} : { imageUri }),
+    ...(sampler === undefined ? {} : { sampler }),
+    ...(textureUri === undefined ? {} : { textureUri }),
+  };
+};
+
+const gltfMaterialExtensionTextureSlots = (
+  document: GltfDocument,
+  assetKey: string,
+  src: string,
+  material: GltfMaterial | undefined,
+): LoadedGltfMaterialExtensionTextures | undefined => {
+  const slots: Partial<Record<keyof LoadedGltfMaterialExtensionTextures, LoadedGltfMaterialTextureSlot>> = {};
+  for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+    const slot = gltfMaterialTextureSlot(document, assetKey, src, texture.textureInfo(material));
+    if (slot !== undefined) slots[texture.key] = slot;
+  }
+
+  return Object.keys(slots).length === 0 ? undefined : slots;
 };
 
 const usesMipmaps = (value: string | undefined): boolean =>
@@ -1759,29 +1999,17 @@ export class WebGlRoot {
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
 
         const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
-        const emissiveTexture = this.#gltfMaterialEmissiveTextureRef(loadedMaterial);
-        const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(loadedMaterial);
-        const occlusionTexture = this.#gltfMaterialOcclusionTextureRef(loadedMaterial);
+        const textures = this.#gltfMaterialSurfaceTextures(loadedMaterial);
         if (loadedMaterial.image !== undefined && baseColor !== undefined) {
           this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
         }
-        if (loadedMaterial.emissiveImage !== undefined && emissiveTexture !== undefined) {
-          this.#ensureImmediateTexture(emissiveTexture, loadedMaterial.emissiveImage);
-        }
-        if (loadedMaterial.metallicRoughnessImage !== undefined && metallicRoughnessTexture !== undefined) {
-          this.#ensureImmediateTexture(metallicRoughnessTexture, loadedMaterial.metallicRoughnessImage);
-        }
-        if (loadedMaterial.occlusionImage !== undefined && occlusionTexture !== undefined) {
-          this.#ensureImmediateTexture(occlusionTexture, loadedMaterial.occlusionImage);
-        }
+        this.#ensureLoadedGltfMaterialSurfaceTextures(loadedMaterial, textures);
         const material = loadedGltfSurfaceMaterial(
           loadedMaterial,
           loadedMaterial.image !== undefined && baseColor !== undefined
             ? baseColor
             : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-          loadedMaterial.emissiveImage !== undefined ? emissiveTexture : undefined,
-          loadedMaterial.metallicRoughnessImage !== undefined ? metallicRoughnessTexture : undefined,
-          loadedMaterial.occlusionImage !== undefined ? occlusionTexture : undefined,
+          textures,
         );
         const cpu: CpuGeometry = {
           ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
@@ -2094,7 +2322,8 @@ export class WebGlRoot {
       && this.#isGltfMaterialTextureReady(
         this.#gltfMaterialOcclusionTextureRef(material),
         material.occlusionImage,
-      );
+      )
+      && this.#isGltfMaterialExtensionTexturesReady(material.extensionTextures);
   }
 
   #isGltfMaterialTextureReady(
@@ -2150,6 +2379,55 @@ export class WebGlRoot {
     };
   }
 
+  #gltfTextureSlotRef(
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+    colorSpace: TextureColorSpace,
+  ): TextureAssetUploadRef | undefined {
+    if (slot?.textureUri === undefined) return undefined;
+    return {
+      colorSpace,
+      flipY: false,
+      kind: "asset",
+      ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
+      uri: slot.textureUri,
+    };
+  }
+
+  #gltfMaterialSurfaceTextures(material: LoadedGltfMaterial): LoadedGltfSurfaceTextures {
+    const extensionTextures = material.extensionTextures;
+    const textures: Partial<Record<keyof LoadedGltfSurfaceTextures, TextureAssetUploadRef>> = {};
+    const setTexture = (
+      key: keyof LoadedGltfSurfaceTextures,
+      texture: TextureAssetUploadRef | undefined,
+    ): void => {
+      if (texture !== undefined) textures[key] = texture;
+    };
+
+    setTexture("emissiveTexture", this.#gltfMaterialEmissiveTextureRef(material));
+    setTexture("metallicRoughnessTexture", this.#gltfMaterialMetallicRoughnessTextureRef(material));
+    setTexture("occlusionTexture", this.#gltfMaterialOcclusionTextureRef(material));
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      setTexture(texture.key, this.#gltfTextureSlotRef(extensionTextures?.[texture.key], texture.colorSpace));
+    }
+
+    return textures;
+  }
+
+  #isGltfMaterialTextureSlotReady(
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+    colorSpace: TextureColorSpace,
+  ): boolean {
+    return this.#isGltfMaterialTextureReady(this.#gltfTextureSlotRef(slot, colorSpace), slot?.image);
+  }
+
+  #isGltfMaterialExtensionTexturesReady(
+    textures: LoadedGltfMaterialExtensionTextures | undefined,
+  ): boolean {
+    return GLTF_MATERIAL_EXTENSION_TEXTURES.every((texture) =>
+      this.#isGltfMaterialTextureSlotReady(textures?.[texture.key], texture.colorSpace)
+    );
+  }
+
   #preloadAdjacentGltfNodeLodTextures(
     primitives: readonly LoadedGltfPrimitive[],
     selectedLevels: ReadonlyMap<string, number>,
@@ -2194,18 +2472,28 @@ export class WebGlRoot {
   #preloadGltfMaterialTexture(material: LoadedGltfMaterial): void {
     const texture = this.#gltfMaterialTextureRef(material);
     if (texture !== undefined && material.image !== undefined) this.#ensureImmediateTexture(texture, material.image);
-    const metallicRoughnessTexture = this.#gltfMaterialMetallicRoughnessTextureRef(material);
-    if (metallicRoughnessTexture !== undefined && material.metallicRoughnessImage !== undefined) {
-      this.#ensureImmediateTexture(metallicRoughnessTexture, material.metallicRoughnessImage);
+    this.#ensureLoadedGltfMaterialSurfaceTextures(material, this.#gltfMaterialSurfaceTextures(material));
+  }
+
+  #ensureLoadedGltfMaterialSurfaceTextures(
+    material: LoadedGltfMaterial,
+    textures: LoadedGltfSurfaceTextures,
+  ): void {
+    this.#ensureLoadedGltfTexture(textures.metallicRoughnessTexture, material.metallicRoughnessImage);
+    this.#ensureLoadedGltfTexture(textures.emissiveTexture, material.emissiveImage);
+    this.#ensureLoadedGltfTexture(textures.occlusionTexture, material.occlusionImage);
+
+    const extensionTextures = material.extensionTextures;
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      this.#ensureLoadedGltfTexture(textures[texture.key], extensionTextures?.[texture.key]?.image);
     }
-    const emissiveTexture = this.#gltfMaterialEmissiveTextureRef(material);
-    if (emissiveTexture !== undefined && material.emissiveImage !== undefined) {
-      this.#ensureImmediateTexture(emissiveTexture, material.emissiveImage);
-    }
-    const occlusionTexture = this.#gltfMaterialOcclusionTextureRef(material);
-    if (occlusionTexture !== undefined && material.occlusionImage !== undefined) {
-      this.#ensureImmediateTexture(occlusionTexture, material.occlusionImage);
-    }
+  }
+
+  #ensureLoadedGltfTexture(
+    texture: TextureAssetUploadRef | undefined,
+    image: LoadedTextureSource | undefined,
+  ): void {
+    if (texture !== undefined && image !== undefined) this.#ensureImmediateTexture(texture, image);
   }
 
   #drawGeometry(
@@ -2357,6 +2645,7 @@ export class WebGlRoot {
     this.#bindEmissiveTexture(program, material);
     this.#bindMetallicRoughnessTexture(program, material);
     this.#bindOcclusionTexture(program, material);
+    this.#bindMaterialExtensionTextures(program, material);
   }
 
   #bindEmissiveTexture(program: WebGLProgram, material: SurfaceMaterial): void {
@@ -2393,6 +2682,18 @@ export class WebGlRoot {
       5,
       material.kind === "standard" ? material.occlusionTexture : undefined,
     );
+  }
+
+  #bindMaterialExtensionTextures(program: WebGLProgram, material: SurfaceMaterial): void {
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS) {
+      this.#bindCachedTexture2d(
+        program,
+        texture.useUniform,
+        texture.samplerUniform,
+        texture.textureUnit,
+        material.kind === "standard" ? material[texture.key] : undefined,
+      );
+    }
   }
 
   #bindCachedTexture2d(
@@ -3990,58 +4291,9 @@ export class WebGlRoot {
     material: GltfMaterial | undefined,
     materialIndex: number | undefined,
   ): void {
-    const specular = material?.extensions?.KHR_materials_specular;
-    if (specular?.specularTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_specular.specularTexture");
-    }
-    if (specular?.specularColorTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_specular.specularColorTexture");
-    }
-
     const clearcoat = material?.extensions?.KHR_materials_clearcoat;
-    if (clearcoat?.clearcoatTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatTexture");
-    }
-    if (clearcoat?.clearcoatRoughnessTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatRoughnessTexture");
-    }
     if (clearcoat?.clearcoatNormalTexture !== undefined) {
       this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatNormalTexture");
-    }
-
-    const sheen = material?.extensions?.KHR_materials_sheen;
-    if (sheen?.sheenColorTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_sheen.sheenColorTexture");
-    }
-    if (sheen?.sheenRoughnessTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_sheen.sheenRoughnessTexture");
-    }
-
-    const iridescence = material?.extensions?.KHR_materials_iridescence;
-    if (iridescence?.iridescenceTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(
-        materialIndex,
-        "KHR_materials_iridescence.iridescenceTexture",
-      );
-    }
-    if (iridescence?.iridescenceThicknessTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(
-        materialIndex,
-        "KHR_materials_iridescence.iridescenceThicknessTexture",
-      );
-    }
-
-    const transmission = material?.extensions?.KHR_materials_transmission;
-    if (transmission?.transmissionTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(
-        materialIndex,
-        "KHR_materials_transmission.transmissionTexture",
-      );
-    }
-
-    const volume = material?.extensions?.KHR_materials_volume;
-    if (volume?.thicknessTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_volume.thicknessTexture");
     }
   }
 
@@ -4050,20 +4302,7 @@ export class WebGlRoot {
     field: string,
   ): void {
     const materialLabel = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
-    const detail = field === "KHR_materials_transmission.transmissionTexture"
-      ? " Its red-channel transmission multiplier is not implemented."
-      : field === "KHR_materials_volume.thicknessTexture"
-        ? " Its green-channel thickness multiplier is not implemented."
-        : field === "KHR_materials_sheen.sheenColorTexture"
-          ? " Its sRGB RGB sheen color multiplier is not implemented."
-          : field === "KHR_materials_sheen.sheenRoughnessTexture"
-            ? " Its alpha-channel sheen roughness multiplier is not implemented."
-            : field === "KHR_materials_iridescence.iridescenceTexture"
-              ? " Its red-channel iridescence multiplier is not implemented."
-              : field === "KHR_materials_iridescence.iridescenceThicknessTexture"
-                ? " Its green-channel thickness-range sampler is not implemented."
-                : " Extension texture multipliers are not implemented.";
-    const message = `glTF ${materialLabel} ${field} is ignored: Royal currently supports KHR_materials_specular, KHR_materials_ior, KHR_materials_clearcoat, KHR_materials_sheen, KHR_materials_iridescence, KHR_materials_transmission, KHR_materials_volume, and KHR_materials_dispersion at factor level only; scalar/color factors are applied.${detail}`;
+    const message = `glTF ${materialLabel} ${field} is ignored: Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support.`;
     if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
 
     this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);
@@ -4154,6 +4393,7 @@ export class WebGlRoot {
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
     const extensionFactors = readGltfMaterialExtensionFactors(material);
+    const extensionTextures = gltfMaterialExtensionTextureSlots(document, assetKey, src, material);
     const metallicFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.metallicFactor, 1);
     const occlusionStrength = gltfOcclusionStrength(material?.occlusionTexture?.strength);
     const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
@@ -4217,6 +4457,7 @@ export class WebGlRoot {
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
+      ...(extensionTextures === undefined ? {} : { extensionTextures }),
       metallicFactor,
       occlusionStrength,
       roughnessFactor,
@@ -4312,6 +4553,17 @@ export class WebGlRoot {
     if (material.emissiveImageUri !== undefined) keys.add(material.emissiveImageUri);
     if (material.metallicRoughnessImageUri !== undefined) keys.add(material.metallicRoughnessImageUri);
     if (material.occlusionImageUri !== undefined) keys.add(material.occlusionImageUri);
+    const extensionTextures = material.extensionTextures;
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      this.#addGltfMaterialTextureSlotImageLoadKey(keys, extensionTextures?.[texture.key]);
+    }
+  }
+
+  #addGltfMaterialTextureSlotImageLoadKey(
+    keys: Set<string>,
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+  ): void {
+    if (slot?.imageUri !== undefined) keys.add(slot.imageUri);
   }
 
   #mapGltfPrimitiveMaterials(
@@ -4353,12 +4605,14 @@ export class WebGlRoot {
     uri: string,
     image: LoadedTextureSource,
   ): LoadedGltfMaterial {
+    const extensionTextures = this.#settleGltfMaterialExtensionTextureImages(material.extensionTextures, uri, image);
     return {
       ...material,
       ...(material.baseColorImageUri === uri ? { image } : {}),
       ...(material.emissiveImageUri === uri ? { emissiveImage: image } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
       ...(material.occlusionImageUri === uri ? { occlusionImage: image } : {}),
+      ...(extensionTextures === undefined ? {} : { extensionTextures }),
     };
   }
 
@@ -4366,13 +4620,68 @@ export class WebGlRoot {
     material: LoadedGltfMaterial,
     uri: string,
   ): LoadedGltfMaterial {
+    const extensionTextures = this.#failGltfMaterialExtensionTextureImages(material.extensionTextures, uri);
     return {
       ...material,
       ...(material.baseColorImageUri === uri ? { imageFailed: true } : {}),
       ...(material.emissiveImageUri === uri ? { emissiveImageFailed: true } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImageFailed: true } : {}),
       ...(material.occlusionImageUri === uri ? { occlusionImageFailed: true } : {}),
+      ...(extensionTextures === undefined ? {} : { extensionTextures }),
     };
+  }
+
+  #settleGltfMaterialExtensionTextureImages(
+    textures: LoadedGltfMaterialExtensionTextures | undefined,
+    uri: string,
+    image: LoadedTextureSource,
+  ): LoadedGltfMaterialExtensionTextures | undefined {
+    return this.#mapGltfMaterialExtensionTextureSlots(
+      textures,
+      (slot) => this.#settleGltfMaterialTextureSlot(slot, uri, image),
+    );
+  }
+
+  #settleGltfMaterialTextureSlot(
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+    uri: string,
+    image: LoadedTextureSource,
+  ): LoadedGltfMaterialTextureSlot | undefined {
+    if (slot === undefined) return undefined;
+    return slot.imageUri === uri ? { ...slot, image } : slot;
+  }
+
+  #failGltfMaterialExtensionTextureImages(
+    textures: LoadedGltfMaterialExtensionTextures | undefined,
+    uri: string,
+  ): LoadedGltfMaterialExtensionTextures | undefined {
+    return this.#mapGltfMaterialExtensionTextureSlots(
+      textures,
+      (slot) => this.#failGltfMaterialTextureSlot(slot, uri),
+    );
+  }
+
+  #mapGltfMaterialExtensionTextureSlots(
+    textures: LoadedGltfMaterialExtensionTextures | undefined,
+    mapSlot: (slot: LoadedGltfMaterialTextureSlot | undefined) => LoadedGltfMaterialTextureSlot | undefined,
+  ): LoadedGltfMaterialExtensionTextures | undefined {
+    if (textures === undefined) return undefined;
+
+    const mapped: Partial<Record<keyof LoadedGltfMaterialExtensionTextures, LoadedGltfMaterialTextureSlot>> = {};
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      const slot = mapSlot(textures[texture.key]);
+      if (slot !== undefined) mapped[texture.key] = slot;
+    }
+
+    return mapped;
+  }
+
+  #failGltfMaterialTextureSlot(
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+    uri: string,
+  ): LoadedGltfMaterialTextureSlot | undefined {
+    if (slot === undefined) return undefined;
+    return slot.imageUri === uri ? { ...slot, imageFailed: true } : slot;
   }
 
   #scheduleRender(): void {

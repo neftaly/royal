@@ -7,6 +7,8 @@ import { GltfInstancing } from './examples/cases/GltfInstancing';
 import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
+import { GltfMaterialExtensions } from './examples/cases/GltfMaterialExtensions';
+import gltfMaterialExtensionsSource from './examples/cases/GltfMaterialExtensions.tsx?raw';
 import { GltfVariants } from './examples/cases/GltfVariants';
 import gltfVariantsSource from './examples/cases/GltfVariants.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
@@ -113,6 +115,15 @@ export const examples = [
     Component: GltfInstancing,
     source: gltfInstancingSource,
     sourceFile: 'examples/cases/GltfInstancing.tsx',
+  },
+  {
+    id: 'gltf-material-extensions',
+    maturity: 'product',
+    path: '/gltf-material-extensions',
+    title: 'glTF Material Extensions',
+    Component: GltfMaterialExtensions,
+    source: gltfMaterialExtensionsSource,
+    sourceFile: 'examples/cases/GltfMaterialExtensions.tsx',
   },
   {
     id: 'gltf-lod',

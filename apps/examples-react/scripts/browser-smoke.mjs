@@ -65,6 +65,11 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.01,
   },
+  'gltf-material-extensions': {
+    path: '/gltf-material-extensions',
+    minColorBuckets: 12,
+    minPaintedRatio: 0.006,
+  },
   'gltf-lod': {
     path: '/gltf-lod',
     minColorBuckets: 8,
