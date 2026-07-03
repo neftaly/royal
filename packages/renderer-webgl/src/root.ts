@@ -628,10 +628,18 @@ type GltfPrimitiveDraw = {
 
 type GltfPrimitiveDrawBatch = {
   readonly geometry: GeometryResource;
+  readonly key: string;
   readonly lights: SurfaceLightSet;
   readonly material: SurfaceMaterial;
   readonly models: Mat4[];
   readonly sidedness: DrawSidedness;
+};
+
+type GltfInstanceBufferResource = {
+  capacity: number;
+  readonly buffer: WebGLBuffer;
+  readonly data: Float32Array;
+  dirty: boolean;
 };
 
 type ViewportSize = readonly [width: number, height: number];
@@ -1849,6 +1857,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #gltf = new Map<string, GltfState>();
+  readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
   readonly #ownedBuffers = new Set<WebGLBuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
@@ -1859,12 +1868,12 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
   readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
+  #activeGltfInstanceBufferKeys = new Set<string>();
   #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   #diagnostics: string[] = [];
   #disposed = false;
   #frame = 0;
-  #gltfInstanceBuffer: WebGLBuffer | undefined;
   #gltfRenderOrdinal = 0;
   #iblFallbackSpecularTexture: WebGLTexture | undefined;
   #latestScene: RenderRoot | undefined;
@@ -1914,6 +1923,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     this.#latestScene = scene;
     this.#syncRenderObjectRefs(scene);
+    this.#activeGltfInstanceBufferKeys = new Set();
     this.#activeGltfLodSelectionKeys = new Set();
     this.#gltfRenderOrdinal = 0;
     const { height, width } = this.#resize();
@@ -1975,6 +1985,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     this.#releaseUnusedGeometry(usedGeometry);
+    this.#releaseUnusedGltfInstanceBuffers();
     this.#pruneGltfLodSelections();
     this.#frame += 1;
   }
@@ -2040,9 +2051,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#textures.clear();
     this.#virtualTextures.clear();
     this.#gltf.clear();
+    this.#gltfInstanceBuffers.clear();
     this.#gltfLodSelections.clear();
     this.#iblFallbackSpecularTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
+    this.#activeGltfInstanceBufferKeys.clear();
     this.#activeGltfLodSelectionKeys.clear();
     for (const [ref, binding] of this.#renderObjectBindings) {
       this.#renderObjectHandles.delete(binding.node);
@@ -2551,6 +2564,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (batch === undefined) {
         batches.set(batchKey, {
           geometry,
+          key: batchKey,
           lights,
           material: draw.material,
           models: [draw.model],
@@ -2601,6 +2615,7 @@ class WebGlRootImpl implements WebGlRoot {
       } else {
         this.#drawGeometryInstanced(
           batch.geometry,
+          batch.key,
           batch.material,
           batch.models,
           projection,
@@ -3071,6 +3086,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #drawGeometryInstanced(
     geometry: GeometryResource,
+    instanceBufferKey: string,
     material: SurfaceMaterial,
     models: readonly Mat4[],
     projection: Mat4,
@@ -3094,7 +3110,7 @@ class WebGlRootImpl implements WebGlRoot {
     const useTexture = this.#bindMaterialTexture(program, material);
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
-    this.#bindGltfInstanceModels(models);
+    this.#bindGltfInstanceModels(instanceBufferKey, models);
 
     const mode = webGlDrawMode(gl, geometry.mode);
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
@@ -3341,14 +3357,29 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #bindGltfInstanceModels(models: readonly Mat4[]): void {
+  #bindGltfInstanceModels(key: string, models: readonly Mat4[]): void {
     const gl = this.#gl;
-    const buffer = this.#gltfInstanceBufferResource();
-    const data = new Float32Array(models.length * 16);
-    for (const [index, model] of models.entries()) data.set(model, index * 16);
+    const floatCount = models.length * 16;
+    const resource = this.#gltfInstanceBufferResource(key, floatCount);
+    const { data } = resource;
+    let changed = resource.dirty;
+    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+      const model = models[modelIndex]!;
+      const offset = modelIndex * 16;
+      for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
+        const value = model[elementIndex]!;
+        if (data[offset + elementIndex] !== value) {
+          changed = true;
+          data[offset + elementIndex] = value;
+        }
+      }
+    }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
+    if (changed) {
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, floatCount);
+      resource.dirty = false;
+    }
     for (let column = 0; column < 4; column += 1) {
       const location = 3 + column;
       gl.enableVertexAttribArray(location);
@@ -3366,12 +3397,37 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #gltfInstanceBufferResource(): WebGLBuffer {
-    if (this.#gltfInstanceBuffer === undefined) {
-      this.#gltfInstanceBuffer = this.#createBuffer();
+  #gltfInstanceBufferResource(key: string, requiredFloatCount: number): GltfInstanceBufferResource {
+    this.#activeGltfInstanceBufferKeys.add(key);
+    const existing = this.#gltfInstanceBuffers.get(key);
+    if (existing !== undefined && existing.capacity >= requiredFloatCount) return existing;
+
+    const buffer = existing?.buffer ?? this.#createBuffer();
+    const data = new Float32Array(requiredFloatCount);
+    if (existing !== undefined) {
+      data.set(existing.data.subarray(0, Math.min(existing.data.length, data.length)));
     }
 
-    return this.#gltfInstanceBuffer;
+    const resource: GltfInstanceBufferResource = {
+      buffer,
+      capacity: requiredFloatCount,
+      data,
+      dirty: true,
+    };
+    this.#gltfInstanceBuffers.set(key, resource);
+
+    const gl = this.#gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, requiredFloatCount * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
+    return resource;
+  }
+
+  #releaseUnusedGltfInstanceBuffers(): void {
+    for (const [key, resource] of this.#gltfInstanceBuffers) {
+      if (this.#activeGltfInstanceBufferKeys.has(key)) continue;
+      this.#deleteBuffer(resource.buffer);
+      this.#gltfInstanceBuffers.delete(key);
+    }
   }
 
   #bindMaterialTexture(program: WebGLProgram, material: Material): boolean {

@@ -5,7 +5,7 @@ import {
   useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
@@ -28,6 +28,7 @@ type CubeInstance = {
 };
 
 type InstancingConfig = {
+  readonly animate: boolean;
   readonly gridSize: number;
   readonly seed: number;
 };
@@ -49,6 +50,7 @@ const finiteIntegerParam = (
 const instancingConfigFromLocation = (): InstancingConfig => {
   const params = new URL(globalThis.location.href).searchParams;
   return {
+    animate: params.get('animate') !== '0',
     gridSize: finiteIntegerParam(params, 'grid', defaultGridSize, 1, maxBenchmarkGridSize),
     seed: finiteIntegerParam(params, 'seed', 0, 0, 0xffff_ffff),
   };
@@ -81,17 +83,20 @@ const createCubeInstances = ({ gridSize, seed }: InstancingConfig): readonly Cub
     };
   });
 
-const InstancedCubeField = ({ cubeInstances }: { readonly cubeInstances: readonly CubeInstance[] }): ReactNode => {
-  const refs = useRef(cubeInstances.map(() => ({ current: null as RenderObjectHandle | null })));
-  if (refs.current.length !== cubeInstances.length) {
-    refs.current = cubeInstances.map(() => ({ current: null as RenderObjectHandle | null }));
-  }
+type InstanceHandleRef = MutableRefObject<RenderObjectHandle | null>;
 
+const InstancedCubeAnimation = ({
+  cubeInstances,
+  refs,
+}: {
+  readonly cubeInstances: readonly CubeInstance[];
+  readonly refs: readonly InstanceHandleRef[];
+}): null => {
   useFrame(({ elapsed }) => {
     const pulse = elapsed * 1.65;
 
     for (const [index, instance] of cubeInstances.entries()) {
-      const handle = refs.current[index]?.current;
+      const handle = refs[index]?.current;
       if (handle === null || handle === undefined) continue;
 
       const lift = Math.sin(pulse + instance.phase) * 0.18;
@@ -111,8 +116,24 @@ const InstancedCubeField = ({ cubeInstances }: { readonly cubeInstances: readonl
     }
   });
 
+  return null;
+};
+
+const InstancedCubeField = ({
+  animate,
+  cubeInstances,
+}: {
+  readonly animate: boolean;
+  readonly cubeInstances: readonly CubeInstance[];
+}): ReactNode => {
+  const refs = useRef(cubeInstances.map(() => ({ current: null as RenderObjectHandle | null })));
+  if (refs.current.length !== cubeInstances.length) {
+    refs.current = cubeInstances.map(() => ({ current: null as RenderObjectHandle | null }));
+  }
+
   return (
     <>
+      {animate ? <InstancedCubeAnimation cubeInstances={cubeInstances} refs={refs.current} /> : null}
       {cubeInstances.map((instance, index) => (
         <model
           ref={refs.current[index]!}
@@ -150,7 +171,7 @@ export const GltfInstancing = (): ReactNode => {
       <scene>
         <pass camera={orbit.camera}>
           <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
-          <InstancedCubeField cubeInstances={cubeInstances} />
+          <InstancedCubeField animate={instancingConfig.animate} cubeInstances={cubeInstances} />
         </pass>
       </scene>
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />

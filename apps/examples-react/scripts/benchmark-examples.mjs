@@ -42,6 +42,8 @@ const routes = [
   { id: 'hud-overlay', path: '/hud-overlay' },
   { id: 'gltf-helmet', path: '/gltf-helmet' },
   { id: 'gltf-instancing', path: '/gltf-instancing' },
+  { id: 'gltf-instancing-static', path: '/gltf-instancing?animate=0' },
+  { id: 'gltf-instancing-animated', path: '/gltf-instancing?animate=1' },
   { id: 'gltf-material-extensions', path: '/gltf-material-extensions' },
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
@@ -74,7 +76,7 @@ const instancingFuzzRoutes = () => {
     const seed = random.int(0, 0xffff_ffff);
     return {
       id: `gltf-instancing-fuzz-${index}`,
-      path: `/gltf-instancing?grid=${grid}&seed=${seed}`,
+      path: `/gltf-instancing?animate=0&grid=${grid}&seed=${seed}`,
       profile: { grid, seed },
     };
   });

@@ -645,6 +645,12 @@ const bufferDataPayloads = (calls: readonly GlCall[]): readonly (readonly number
     .map((call) => numericArray(call.args[1]))
     .filter((values) => values.length > 0);
 
+const bufferUploadPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "bufferData" || call.name === "bufferSubData")
+    .map((call) => numericArray(call.name === "bufferSubData" ? call.args[2] : call.args[1]))
+    .filter((values) => values.length > 0);
+
 const roundNumber = (value: number): number => {
   const rounded = Number(value.toFixed(6));
 
@@ -2952,7 +2958,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const instancedDraws = instancedDrawCalls(readyFrameCalls);
-    const instanceModelPayload = bufferDataPayloads(readyFrameCalls)
+    const instanceModelPayload = bufferUploadPayloads(readyFrameCalls)
       .find((payload) => payload.length === 32);
 
     expect(instancedDraws).toHaveLength(1);
@@ -2968,6 +2974,13 @@ describe("WebGL renderer scene and glTF regressions", () => {
       instanceModelPayload?.[16] ?? 0,
       instanceModelPayload?.[28] ?? 0,
     ])).toEqual([1, -0.25, 1.25, 0.25]);
+
+    const callsBeforeSecondReadyRender = calls.length;
+    root.render(renderGraph);
+    const secondReadyFrameCalls = calls.slice(callsBeforeSecondReadyRender);
+
+    expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(1);
+    expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
   });
 
   it("renders required KHR_lights_punctual directional, point, and spot lights without a pass light", async () => {
