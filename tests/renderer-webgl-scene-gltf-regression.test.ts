@@ -205,6 +205,7 @@ const fakeGl = (): FakeGl => {
     POINTS: 0x0000,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -288,6 +289,7 @@ const fakeGl = (): FakeGl => {
     getActiveUniform: record("getActiveUniform", () => null),
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
       const normalized = name.toLowerCase();
+      if (normalized.includes("color")) return 10;
       if (normalized.includes("normal")) return 1;
       if (normalized.includes("uv") || normalized.includes("texcoord")) return 2;
 
@@ -342,6 +344,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
     validateProgram: record("validateProgram"),
+    vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
   };
@@ -754,6 +757,18 @@ const triangleBin = (): ArrayBuffer => {
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
 
   return buffer;
+};
+
+const vertexColorTriangleBin = (): ArrayBuffer => {
+  const bytes = new Uint8Array(triangleBinByteLength + 9);
+  bytes.set(new Uint8Array(triangleBin()));
+  bytes.set([
+    255, 0, 0,
+    0, 128, 0,
+    0, 0, 255,
+  ], triangleBinByteLength);
+
+  return bytes.buffer;
 };
 
 const meshoptCompressedTriangleBin = (): ArrayBuffer => {
@@ -1415,6 +1430,55 @@ const solidTriangleDocument = () => ({
   textures: [],
 });
 
+const vertexColorTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const colorBufferViewIndex = base.bufferViews.length;
+  const colorAccessorIndex = base.accessors.length;
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: colorBufferViewIndex,
+        componentType: 5121,
+        count: 3,
+        normalized: true,
+        type: "VEC3",
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 0,
+        byteLength: 9,
+        byteOffset: triangleBinByteLength,
+        target: 34962,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: triangleBinByteLength + 9,
+        uri: triangleBinUri,
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            attributes: {
+              ...primitive.attributes,
+              COLOR_0: colorAccessorIndex,
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const doubleSidedTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -1426,6 +1490,60 @@ const doubleSidedTriangleDocument = () => {
         pbrMetallicRoughness: {
           baseColorFactor: [0.8, 0.62, 0.36, 1],
         },
+      },
+    ],
+  };
+};
+
+const alphaMaskTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    materials: [
+      {
+        alphaCutoff: 0.37,
+        alphaMode: "MASK",
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.8, 0.62, 0.36, 0.25],
+        },
+      },
+    ],
+  };
+};
+
+const alphaBlendTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    materials: [
+      {
+        alphaMode: "BLEND",
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.9, 0.2, 0.1, 0.4],
+        },
+      },
+      {
+        alphaMode: "OPAQUE",
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.1, 0.8, 0.2, 0.25],
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            material: 0,
+          },
+          {
+            ...primitive,
+            material: 1,
+          },
+        ],
       },
     ],
   };
@@ -1897,7 +2015,7 @@ const materialPbrExtensionTextureDiagnosticTriangleDocument = () => {
 
   return {
     ...base,
-    extensionsRequired: ["KHR_materials_specular", "KHR_materials_clearcoat"],
+    extensionsRequired: ["KHR_materials_specular"],
     extensionsUsed: ["KHR_materials_specular", "KHR_materials_clearcoat"],
     images: [
       {
@@ -2793,6 +2911,105 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(readyFrameCalls.some((call) => call.name === "cullFace")).toBe(false);
   });
 
+  it("threads glTF MASK alpha cutoff into the surface shader", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "alpha-mask-material",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, alphaMaskTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(sources).toContain("u_alphaSettings");
+    expect(sources).toContain("discard");
+    expect(uniform4fvPayloads(readyFrameCalls, "u_alphaSettings").map(roundVector))
+      .toContainEqual([1, 0.37, 0, 0]);
+  });
+
+  it("draws glTF BLEND alpha after opaque batches and resets depth writes", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "alpha-blend-material",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, alphaBlendTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const drawIndexes = readyFrameCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.name === "drawArrays" || call.name === "drawElements")
+      .map(({ index }) => index);
+    const depthMaskIndexes = readyFrameCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call.name === "depthMask")
+      .map(({ call, index }) => ({ index, value: call.args[0] }));
+    const firstBlendDepthMask = depthMaskIndexes.find(({ value }) => value === false);
+    const finalDepthMask = depthMaskIndexes.at(-1);
+    const blendStateIndexes = readyFrameCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => (call.name === "enable" || call.name === "disable") && call.args[0] === gl.BLEND);
+    const firstBlendEnable = blendStateIndexes.find(({ call }) => call.name === "enable");
+    const finalBlendState = blendStateIndexes.at(-1);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(readyFrameCalls).toContainEqual({ args: [gl.BLEND], name: "enable" });
+    expect(readyFrameCalls).toContainEqual({
+      args: [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
+      name: "blendFunc",
+    });
+    expect(uniform4fvPayloads(readyFrameCalls, "u_alphaSettings").map(roundVector))
+      .toEqual([[0, 0, 0, 0], [2, 0, 0, 0]]);
+    expect(firstBlendEnable?.index).toBeGreaterThan(drawIndexes[0] ?? -1);
+    expect(firstBlendEnable?.index).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
+    expect(firstBlendDepthMask?.index).toBeGreaterThan(drawIndexes[0] ?? -1);
+    expect(firstBlendDepthMask?.index).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
+    expect(finalBlendState?.call).toEqual({ args: [gl.BLEND], name: "disable" });
+    expect(finalBlendState?.index).toBeGreaterThan(drawIndexes[1] ?? -1);
+    expect(finalDepthMask?.value).toBe(true);
+  });
+
   it("splits one-sided mirrored glTF draws so frontFace tracks model orientation", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
@@ -2885,6 +3102,40 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toBeGreaterThan(drawsBeforeFailure);
     expect(root.snapshot().diagnostics.some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
+  });
+
+  it("switches a prepared glTF draw from fallback color to settled base-color texture", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "staged-texture-settle",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(uniform1iPayloads(calls, "u_useTexture").at(-1)).toBe(0);
+    expect(ControlledImage.instances).toHaveLength(1);
+
+    const callsBeforeImageSettle = calls.length;
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    const imageReadyCalls = calls.slice(callsBeforeImageSettle);
+
+    expect(drawCalls(imageReadyCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(imageReadyCalls, "u_useTexture").at(-1)).toBe(1);
   });
 
   it("automatically instances matching glTF geometry across different asset URLs", async () => {
@@ -3738,6 +3989,40 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatRoughnessTexture.*ignored/i);
     expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*extension normal maps/i);
+  });
+
+  it("rejects required KHR_materials_clearcoat normal maps before fetching dependent resources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "khr-materials-clearcoat-required-normal-map",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...materialPbrExtensionTextureDiagnosticTriangleDocument(),
+        extensionsRequired: ["KHR_materials_clearcoat"],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /KHR_materials_clearcoat\.clearcoatNormalTexture.*extension normal maps/i.test(message))).toBe(true);
+
+    root.render(renderGraph);
+    expect(drawCalls(calls)).toHaveLength(0);
   });
 
   it("renders required KHR material sheen and iridescence factors as visible shader uniforms", async () => {
@@ -5472,6 +5757,53 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     root.render(renderGraph);
     expect(drawCalls(calls)).toHaveLength(0);
+  });
+
+  it("multiplies glTF COLOR_0 vertex colors into base color", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "core-color-0",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, vertexColorTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, vertexColorTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(bufferDataPayloads(readyFrameCalls).map(roundVector)).toContainEqual([
+      1, 0, 0, 1,
+      0, 0.501961, 0, 1,
+      0, 0, 1, 1,
+    ]);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "getAttribLocation" && call.args[1] === "a_color")).toBe(true);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 10
+      && call.args[1] === 4
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(sources).toContain("in vec4 a_color;");
+    expect(sources).toContain("* v_color");
   });
 
   it("binds glTF normals and texcoords, applies node transform, and uses the pass light", async () => {

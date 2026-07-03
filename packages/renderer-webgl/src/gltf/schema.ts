@@ -119,6 +119,8 @@ export type GltfSampler = {
 };
 
 export type GltfMaterial = {
+  readonly alphaCutoff?: number;
+  readonly alphaMode?: "OPAQUE" | "MASK" | "BLEND";
   readonly doubleSided?: boolean;
   readonly emissiveFactor?: readonly number[];
   readonly emissiveTexture?: GltfTextureInfo;
@@ -206,6 +208,7 @@ export type GltfMesh = {
 
 export type GltfMeshPrimitive = {
   readonly attributes?: {
+    readonly COLOR_0?: number;
     readonly NORMAL?: number;
     readonly POSITION?: number;
     readonly TEXCOORD_0?: number;

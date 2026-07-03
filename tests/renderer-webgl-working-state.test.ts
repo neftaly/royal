@@ -175,6 +175,7 @@ const fakeGl = (): FakeGl => {
     uniform4fv: record("uniform4fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
+    vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
   } as unknown as WebGL2RenderingContext;
@@ -277,6 +278,36 @@ describe("WebGL root working state contracts", () => {
       "clearColor(0.8,0.7,0.6,1)",
       "draw",
     ]);
+  });
+
+  it("keeps regular mesh draws non-blended by default", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: camera(),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: unlitMaterial({ color: [1, 0, 0, 0.35] }),
+            }),
+          ],
+        }),
+      ],
+    }));
+
+    const drawIndex = calls.findIndex((call) => call.name === "drawArrays" || call.name === "drawElements");
+    const lastBlendStateBeforeDraw = calls
+      .slice(0, drawIndex)
+      .filter((call) => (call.name === "enable" || call.name === "disable") && call.args[0] === gl.BLEND)
+      .at(-1);
+
+    expect(drawIndex).toBeGreaterThan(-1);
+    expect(lastBlendStateBeforeDraw).toEqual({ name: "disable", args: [gl.BLEND] });
+    expect(calls).not.toContainEqual({ name: "enable", args: [gl.BLEND] });
+    expect(calls).not.toContainEqual({ name: "depthMask", args: [false] });
   });
 
   it("allows non-clearing overlay passes with depth testing disabled", () => {

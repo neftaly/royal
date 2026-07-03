@@ -29,6 +29,13 @@ const envInteger = (name, fallback) => {
 
 const frameSampleCount = envInteger('EXAMPLES_BENCH_FRAMES', 90);
 const frameWarmupCount = envInteger('EXAMPLES_BENCH_WARMUP_FRAMES', 30);
+const cameraDragEnabled = process.env.EXAMPLES_BENCH_CAMERA_DRAG === '1';
+const cameraDragFrameCount = cameraDragEnabled
+  ? envInteger('EXAMPLES_BENCH_CAMERA_DRAG_FRAMES', frameSampleCount)
+  : frameSampleCount;
+const cameraDragStepPixels = cameraDragEnabled
+  ? envInteger('EXAMPLES_BENCH_CAMERA_DRAG_STEP_PX', 7)
+  : 7;
 const instancingFuzzCases = envInteger('EXAMPLES_BENCH_INSTANCING_CASES', 4);
 const instancingSeed = envInteger('EXAMPLES_BENCH_INSTANCING_SEED', 0x1a57a11);
 const instancingSweepMode = process.env.EXAMPLES_BENCH_INSTANCING_SWEEP?.trim() || 'default';
@@ -86,7 +93,6 @@ const routes = [
   { id: 'texture-materials', path: '/texture-materials' },
   { id: 'standard-lighting', path: '/standard-lighting' },
   { id: 'hud-overlay', path: '/hud-overlay' },
-  { id: 'shared-surface-binding', path: '/shared-surface-binding' },
   { id: 'gltf-helmet', path: '/gltf-helmet' },
   defaultInstancingRoute(),
   instancingRoute({
@@ -103,7 +109,7 @@ const routes = [
     seed: 0,
     sweep: 'baseline',
   }),
-  { id: 'gltf-material-extensions', path: '/gltf-material-extensions' },
+  { id: 'gltf-kitchen-sink', path: '/gltf-kitchen-sink' },
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
   { id: 'gltf-variants', path: '/gltf-variants' },
@@ -406,7 +412,7 @@ const installBenchmarkHooks = async (session) => {
   };
   const statsFromTimes = (times) =>
     statsFromDeltas(times.slice(1).map((time, index) => time - times[index]));
-  const failedXrFrameStats = (reason, details = {}) => ({
+  const failedFrameStats = (reason, details = {}) => ({
     failed: true,
     reason,
     sampleCount: 0,
@@ -423,7 +429,7 @@ const installBenchmarkHooks = async (session) => {
   const failXrWaiters = (reason, details = {}) => {
     const waiters = xr.waiters;
     xr.waiters = [];
-    for (const waiter of waiters) waiter.resolve(failedXrFrameStats(reason, details));
+    for (const waiter of waiters) waiter.resolve(failedFrameStats(reason, details));
   };
   const recordXrFrame = (time) => {
     xr.frameTimes.push(time);
@@ -494,7 +500,7 @@ const installBenchmarkHooks = async (session) => {
       timeoutHandle = setTimeout(() => {
         const observedTimes = xr.frameTimes.slice(startIndex);
         xr.waiters = xr.waiters.filter((entry) => entry !== waiter);
-        waiter.resolve(failedXrFrameStats('timeout', {
+        waiter.resolve(failedFrameStats('timeout', {
           observedFrameCount: observedTimes.length,
           requestedFrameCount,
           sampleCount: Math.max(0, observedTimes.length - 1),
@@ -540,6 +546,51 @@ const installBenchmarkHooks = async (session) => {
       measurement: 'synthetic-pointer-event-to-next-observed-frame-or-draw',
       note: 'These are event-to-next-frame/draw timings, not true motion-to-photon latency.',
     };
+  };
+  const cameraDragSample = async (frameDeltas, stepPixels) => {
+    if (typeof PointerEvent !== 'function') return failedFrameStats('missing-pointer-event');
+    const canvas = document.querySelector('canvas');
+    if (canvas === null) return failedFrameStats('missing-canvas');
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return failedFrameStats('empty-canvas-bounds', {
+        height: rect.height,
+        width: rect.width,
+      });
+    }
+    const requestedSampleCount = Math.max(1, Math.floor(Number(frameDeltas) || 0));
+    const step = Math.max(1, Math.floor(Number(stepPixels) || 1));
+    const pointerId = 913;
+    let clientX = rect.left + rect.width * 0.5;
+    const clientY = rect.top + rect.height * 0.5;
+    const eventOptions = (type) => ({
+      bubbles: true,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      cancelable: true,
+      clientX,
+      clientY,
+      isPrimary: true,
+      pointerId,
+      pointerType: 'mouse',
+    });
+    const deltas = [];
+    const dispatchPointer = (type) => {
+      canvas.dispatchEvent(new PointerEvent(type, eventOptions(type)));
+    };
+    dispatchPointer('pointerdown');
+    try {
+      for (let index = 0; index < requestedSampleCount; index += 1) {
+        clientX += step;
+        const eventAt = performance.now();
+        dispatchPointer('pointermove');
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        deltas.push(performance.now() - eventAt);
+      }
+    } finally {
+      dispatchPointer('pointerup');
+    }
+    return statsFromDeltas(deltas);
   };
   if (config.fakeXrEnabled) {
     const webGl2Prototype = globalThis.WebGL2RenderingContext?.prototype;
@@ -670,6 +721,7 @@ const installBenchmarkHooks = async (session) => {
   }
   globalThis.__royalBench = {
     counters,
+    cameraDragSample,
     latencyPulse,
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
@@ -757,6 +809,21 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 })()
 `);
   const gl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+  const cameraDrag = cameraDragEnabled
+    ? await (async () => {
+        await evaluate(session, 'globalThis.__royalBench?.reset?.()');
+        const frameStats = await evaluate(session, `
+(async () => globalThis.__royalBench?.cameraDragSample?.(${cameraDragFrameCount}, ${cameraDragStepPixels}) ?? null)()
+`);
+        const dragGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+        return frameStats === null
+          ? undefined
+          : {
+              frameStats,
+              gl: glCounterTotals(dragGl),
+            };
+      })()
+    : undefined;
   const xrFrameStats = sampleXr
     ? await evaluate(session, `
 (async () => globalThis.__royalBench?.sampleXrFrames?.(${frames}, ${fakeXrSampleTimeoutMs}) ?? null)()
@@ -837,6 +904,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
       transientGrowthBytes: afterFrameGc.usedSize - afterGc.usedSize,
     },
     latency,
+    ...(cameraDrag === undefined ? {} : { cameraDrag }),
     performance: perf,
     xr: xr === null ? undefined : {
       ...xr,
@@ -939,6 +1007,20 @@ const routeSummary = (route) => {
   const drawCallsPerFrame = route.gl.drawCalls / frameSampleCount;
   const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / frameSampleCount;
   const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / frameSampleCount;
+  const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
+  const cameraDragFrameStats = route.cameraDrag?.frameStats;
+  const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+    ? undefined
+    : route.cameraDrag.gl.drawCalls / cameraDragSampleCount;
+  const cameraDragInstancedDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+    ? undefined
+    : route.cameraDrag.gl.instancedDrawCalls / cameraDragSampleCount;
+  const cameraDragBufferSubDataBytesPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+    ? undefined
+    : route.cameraDrag.gl.bufferSubDataBytes / cameraDragSampleCount;
+  const hasCameraDragStats =
+    typeof cameraDragFrameStats?.p95Ms === 'number' &&
+    typeof cameraDragDrawCallsPerFrame === 'number';
   const setupInstancedDrawCalls = route.gl.setup?.instancedDrawCalls ?? 0;
   const instanceCount = route.profile?.kind === 'gltf-instancing' ? route.profile.instanceCount : undefined;
   return {
@@ -963,6 +1045,22 @@ const routeSummary = (route) => {
         setupInstancedDrawCallsPer1000Instances: round(setupInstancedDrawCalls / (instanceCount / 1000), 3),
       }),
     bufferSubDataBytesPerFrame: round(bufferSubDataBytesPerFrame),
+    ...(hasCameraDragStats
+      ? {
+        cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
+        ...(typeof cameraDragBufferSubDataBytesPerFrame === 'number' && cameraDragBufferSubDataBytesPerFrame !== 0
+          ? { cameraDragBufferSubDataBytesPerFrame: round(cameraDragBufferSubDataBytesPerFrame) }
+          : {}),
+        ...(typeof cameraDragInstancedDrawCallsPerFrame === 'number' && cameraDragInstancedDrawCallsPerFrame !== 0
+          ? { cameraDragInstancedDrawCallsPerFrame: round(cameraDragInstancedDrawCallsPerFrame) }
+          : {}),
+        cameraDragP95Ms: round(cameraDragFrameStats.p95Ms),
+        cameraDragP99Ms: round(cameraDragFrameStats.p99Ms),
+      }
+      : {}),
+    ...(cameraDragFrameStats?.failed === true
+      ? { cameraDragFailure: cameraDragFrameStats.reason }
+      : {}),
     retainedGrowthBytes: route.heap.retainedGrowthBytes,
     resourceTransferBytes: route.performance.resources.totalTransferSize,
     ...(typeof route.xr?.frameStats?.p95Ms === 'number'
@@ -1005,6 +1103,7 @@ const instancingComparisons = (summaries) => {
 const analyzeResults = (results) => {
   const summaries = results.map(routeSummary);
   const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
+  const cameraDrag = summaries.filter((route) => typeof route.cameraDragP95Ms === 'number');
   return {
     slowestRoutesByP95: [...summaries]
       .sort((left, right) => right.p95Ms - left.p95Ms)
@@ -1026,6 +1125,16 @@ const analyzeResults = (results) => {
         )
         .slice(0, 8),
     },
+    ...(cameraDragEnabled
+      ? {
+        cameraDrag: {
+          failures: summaries.filter((route) => route.cameraDragFailure !== undefined),
+          slowestRoutesByP95: [...cameraDrag]
+            .sort((left, right) => right.cameraDragP95Ms - left.cameraDragP95Ms)
+            .slice(0, 8),
+        },
+      }
+      : {}),
     xrFrameFailures: summaries.filter((route) => route.xrFrameFailure !== undefined),
   };
 };
@@ -1084,6 +1193,14 @@ const main = async () => {
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
       const drawCallsPerFrame = result.gl.drawCalls / frameSampleCount;
       const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / frameSampleCount;
+      const cameraDragFrameStats = result.cameraDrag?.frameStats;
+      const cameraDragSampleCount = cameraDragFrameStats?.sampleCount ?? 0;
+      const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || result.cameraDrag === undefined
+        ? undefined
+        : result.cameraDrag.gl.drawCalls / cameraDragSampleCount;
+      const hasCameraDragStats =
+        typeof cameraDragFrameStats?.p95Ms === 'number' &&
+        typeof cameraDragDrawCallsPerFrame === 'number';
       const xrP95 = result.xr?.frameStats?.p95Ms;
       const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
       const profile = result.profile?.kind === 'gltf-instancing'
@@ -1095,6 +1212,13 @@ const main = async () => {
         `load=${(result.performance.navigation?.duration ?? 0).toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
+        ...(hasCameraDragStats
+          ? [
+            `dragP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
+            `dragDraw/frame=${cameraDragDrawCallsPerFrame.toFixed(1)}`,
+          ]
+          : []),
+        ...(cameraDragFrameStats?.failed === true ? [`drag=${cameraDragFrameStats.reason}`] : []),
         ...(typeof xrP95 === 'number' ? [`xrP95=${xrP95.toFixed(1)}ms`] : []),
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
@@ -1116,6 +1240,13 @@ const main = async () => {
         frameWarmupCount,
         baseUrl,
         browserMode,
+        cameraDragEnabled,
+        ...(cameraDragEnabled
+          ? {
+            cameraDragFrameCount,
+            cameraDragStepPixels,
+          }
+          : {}),
         clearCachePerRoute,
         debugHost,
         debugPort,
@@ -1139,6 +1270,12 @@ const main = async () => {
       deploymentGzipBytes: report.deployment.gzipBytes,
       routeCount: report.routes.length,
       slowestRoutesByP95: analysis.slowestRoutesByP95.slice(0, 5),
+      ...(cameraDragEnabled
+        ? {
+          cameraDragFailures: analysis.cameraDrag.failures,
+          cameraDragSlowestRoutesByP95: analysis.cameraDrag.slowestRoutesByP95.slice(0, 5),
+        }
+        : {}),
       instancingComparisons: analysis.instancing.comparisons,
       instancingHighestDrawCallsPer1000Instances: analysis.instancing.highestDrawCallsPer1000Instances.slice(0, 5),
       instancingHighestSetupInstancedDrawCallsPer1000Instances:

@@ -18,6 +18,7 @@ import {
   createCanvasPointerInteractionState,
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
+  type CanvasPointerInteractionState,
   type CanvasPointerInteractionAction,
 } from "./canvas-pointer-interaction";
 import { createFrameLoop, FrameLoopContext } from "./frame";
@@ -27,7 +28,7 @@ import {
   handlerForRoyalPointerEvent,
   type RoyalPointerEventType,
 } from "./picking-events";
-import { createRoyalRendererTree } from "./renderer-tree";
+import { createRoyalRendererTree, type RoyalRendererTree } from "./renderer-tree";
 import {
   createRendererRoot,
   type RoyalRendererRoot,
@@ -169,6 +170,102 @@ const assignCanvasRef = (
   ref.current = canvas;
 };
 
+export type CanvasPointerInteractionStateRef = {
+  current: CanvasPointerInteractionState;
+};
+
+export interface CanvasPointerEventBindings {
+  readonly canvas: HTMLCanvasElement;
+  readonly dispatchRoyalPointerEvent: (
+    type: RoyalPointerEventType,
+    nativeEvent: PointerEvent,
+    picked: CanvasPickedPointerTarget,
+  ) => void;
+  readonly pointerInteractionStateRef: CanvasPointerInteractionStateRef;
+  readonly rendererTree: Pick<RoyalRendererTree, "hasPointerEventTargets" | "pointerEventTarget">;
+  readonly root: Pick<RoyalRendererRoot, "pick">;
+}
+
+export const attachCanvasPointerEventHandlers = ({
+  canvas,
+  dispatchRoyalPointerEvent,
+  pointerInteractionStateRef,
+  rendererTree,
+  root,
+}: CanvasPointerEventBindings): (() => void) => {
+  const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined => {
+    if (!rendererTree.hasPointerEventTargets()) return undefined;
+
+    const hit = root.pick(event);
+    if (hit === undefined) return undefined;
+
+    const target = rendererTree.pointerEventTarget(hit.target.node);
+    return target === undefined ? undefined : { hit, node: hit.target.node, target };
+  };
+  const applyPointerInteraction = (
+    event: PointerEvent,
+    action: CanvasPointerInteractionAction,
+  ): void => {
+    const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, action);
+    pointerInteractionStateRef.current = result.state;
+    for (const dispatch of result.dispatches) {
+      dispatchRoyalPointerEvent(dispatch.type, event, dispatch.picked);
+    }
+  };
+
+  const handlePointerMove = (event: PointerEvent): void => {
+    applyPointerInteraction(event, {
+      picked: pickedTargetAt(event),
+      type: "pointermove",
+    });
+  };
+
+  const handlePointerDown = (event: PointerEvent): void => {
+    applyPointerInteraction(event, {
+      picked: pickedTargetAt(event),
+      pointerId: event.pointerId,
+      type: "pointerdown",
+    });
+  };
+
+  const handlePointerUp = (event: PointerEvent): void => {
+    applyPointerInteraction(event, {
+      button: event.button,
+      picked: pickedTargetAt(event),
+      pointerId: event.pointerId,
+      type: "pointerup",
+    });
+  };
+
+  const handlePointerLeave = (event: PointerEvent): void => {
+    applyPointerInteraction(event, { type: "pointerleave" });
+  };
+
+  const handlePointerCancel = (event: PointerEvent): void => {
+    applyPointerInteraction(event, {
+      pointerId: event.pointerId,
+      type: "pointercancel",
+    });
+  };
+
+  canvas.addEventListener("pointermove", handlePointerMove);
+  canvas.addEventListener("pointerdown", handlePointerDown);
+  canvas.addEventListener("pointerup", handlePointerUp);
+  canvas.addEventListener("pointerleave", handlePointerLeave);
+  canvas.addEventListener("pointercancel", handlePointerCancel);
+  return () => {
+    canvas.removeEventListener("pointermove", handlePointerMove);
+    canvas.removeEventListener("pointerdown", handlePointerDown);
+    canvas.removeEventListener("pointerup", handlePointerUp);
+    canvas.removeEventListener("pointerleave", handlePointerLeave);
+    canvas.removeEventListener("pointercancel", handlePointerCancel);
+    pointerInteractionStateRef.current = reduceCanvasPointerInteraction(
+      pointerInteractionStateRef.current,
+      { type: "reset" },
+    ).state;
+  };
+};
+
 /** Canvas component that renders one Royal scene child. */
 export const Canvas = ({
   children,
@@ -216,13 +313,6 @@ export const Canvas = ({
   });
 
   const pointerInteractionStateRef = useRef(createCanvasPointerInteractionState());
-
-  const eventTargetForHit = useCallback((hit: PickResult | undefined): CanvasPickedPointerTarget | undefined => {
-    if (hit === undefined) return undefined;
-
-    const target = rendererTree.pointerEventTarget(hit.target.node);
-    return target === undefined ? undefined : { hit, node: hit.target.node, target };
-  }, [rendererTree]);
 
   const dispatchRoyalPointerEvent = useCallback((
     type: RoyalPointerEventType,
@@ -303,75 +393,18 @@ export const Canvas = ({
     const root = canvasRoot;
     if (canvas === null || root === null) return undefined;
 
-    const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined =>
-      eventTargetForHit(root.pick(event));
-    const applyPointerInteraction = (
-      event: PointerEvent,
-      action: CanvasPointerInteractionAction,
-    ): void => {
-      const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, action);
-      pointerInteractionStateRef.current = result.state;
-      for (const dispatch of result.dispatches) {
-        dispatchRoyalPointerEvent(dispatch.type, event, dispatch.picked);
-      }
-    };
-
-    const handlePointerMove = (event: PointerEvent): void => {
-      applyPointerInteraction(event, {
-        picked: pickedTargetAt(event),
-        type: "pointermove",
-      });
-    };
-
-    const handlePointerDown = (event: PointerEvent): void => {
-      applyPointerInteraction(event, {
-        picked: pickedTargetAt(event),
-        pointerId: event.pointerId,
-        type: "pointerdown",
-      });
-    };
-
-    const handlePointerUp = (event: PointerEvent): void => {
-      applyPointerInteraction(event, {
-        button: event.button,
-        picked: pickedTargetAt(event),
-        pointerId: event.pointerId,
-        type: "pointerup",
-      });
-    };
-
-    const handlePointerLeave = (event: PointerEvent): void => {
-      applyPointerInteraction(event, { type: "pointerleave" });
-    };
-
-    const handlePointerCancel = (event: PointerEvent): void => {
-      applyPointerInteraction(event, {
-        pointerId: event.pointerId,
-        type: "pointercancel",
-      });
-    };
-
-    canvas.addEventListener('pointermove', handlePointerMove);
-    canvas.addEventListener('pointerdown', handlePointerDown);
-    canvas.addEventListener('pointerup', handlePointerUp);
-    canvas.addEventListener('pointerleave', handlePointerLeave);
-    canvas.addEventListener('pointercancel', handlePointerCancel);
-    return () => {
-      canvas.removeEventListener('pointermove', handlePointerMove);
-      canvas.removeEventListener('pointerdown', handlePointerDown);
-      canvas.removeEventListener('pointerup', handlePointerUp);
-      canvas.removeEventListener('pointerleave', handlePointerLeave);
-      canvas.removeEventListener('pointercancel', handlePointerCancel);
-      pointerInteractionStateRef.current = reduceCanvasPointerInteraction(
-        pointerInteractionStateRef.current,
-        { type: "reset" },
-      ).state;
-    };
+    return attachCanvasPointerEventHandlers({
+      canvas,
+      dispatchRoyalPointerEvent,
+      pointerInteractionStateRef,
+      rendererTree,
+      root,
+    });
   }, [
     canvasElement,
     canvasRoot,
     dispatchRoyalPointerEvent,
-    eventTargetForHit,
+    rendererTree,
   ]);
 
   if (rootError !== null) {

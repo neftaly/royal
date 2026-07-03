@@ -25,6 +25,7 @@ import {
 } from "@royal/renderer-core";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import {
+  gltfComponentCount,
   readGltfFloatAccessor,
   readGltfIndices,
   type GltfIndexArray,
@@ -104,9 +105,12 @@ import {
 } from "./virtual-texturing";
 import {
   DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
+  isBlendedSurfaceMaterial,
   isTransmissiveSurfaceMaterial,
   materialColor,
   materialEmissiveColor,
+  surfaceMaterialAlphaCutoff,
+  surfaceMaterialAlphaMode,
   surfaceMaterialMetallicFactor,
   surfaceMaterialOcclusionStrength,
   surfaceMaterialRoughnessFactor,
@@ -114,6 +118,7 @@ import {
   surfaceMaterialExtensionFactors,
   textureCacheKey,
   type SurfaceMaterial,
+  type SurfaceMaterialAlphaMode,
   type SurfaceMaterialExtensionFactors,
   type TextureAssetUploadRef,
 } from "./webgl/materials";
@@ -242,6 +247,7 @@ type GeometryDrawMode =
 type GeometryResource = {
   readonly arrayBuffer: WebGLBuffer;
   readonly borrowedVertexBufferKey?: string;
+  readonly colorBuffer?: WebGLBuffer;
   readonly drawCount: number;
   readonly indexBuffer?: WebGLBuffer;
   readonly indexType?: number;
@@ -252,6 +258,7 @@ type GeometryResource = {
 };
 
 type CpuGeometry = {
+  readonly colors?: Float32Array;
   readonly indices?: GltfIndexArray;
   readonly key: string;
   readonly mode: GeometryDrawMode;
@@ -317,6 +324,7 @@ type VirtualTextureRuntimeState = {
 };
 
 type LoadedGltfPrimitive = {
+  readonly colors?: Float32Array;
   readonly indices?: GltfIndexArray;
   readonly key: string;
   readonly localBounds: readonly (Bounds3 | undefined)[];
@@ -333,6 +341,8 @@ type LoadedGltfPrimitive = {
 };
 
 type LoadedGltfMaterial = {
+  readonly alphaCutoff?: number;
+  readonly alphaMode: SurfaceMaterialAlphaMode;
   readonly baseColorImageUri?: string;
   readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
@@ -581,6 +591,8 @@ const loadedGltfSurfaceMaterial = (
   const extensionFactors = loadedMaterial.extensionFactors;
   const common = {
     baseColor,
+    alphaMode: loadedMaterial.alphaMode,
+    ...(loadedMaterial.alphaMode === "MASK" ? { alphaCutoff: loadedMaterial.alphaCutoff ?? 0.5 } : {}),
     doubleSided: loadedMaterial.doubleSided,
     ...(emissive === undefined ? {} : { emissive }),
     ...(textures.emissiveTexture === undefined ? {} : { emissiveTexture: textures.emissiveTexture }),
@@ -668,6 +680,17 @@ type GltfPrimitiveDrawBatch = {
   readonly sidedness: DrawSidedness;
 };
 
+type GltfPreparedTextureUpload = {
+  readonly image: LoadedTextureSource;
+  readonly texture: TextureAssetUploadRef;
+};
+
+type GltfPreparedPrimitiveMaterial = {
+  readonly geometry: CpuGeometry;
+  readonly material: SurfaceMaterial;
+  readonly textureUploads: readonly GltfPreparedTextureUpload[];
+};
+
 type GltfInstanceVectorBufferResource = {
   capacity: number;
   readonly buffer: WebGLBuffer;
@@ -749,12 +772,14 @@ const mat4FromArrayLike = (matrix: ArrayLike<number>): Mat4 => {
 const mat4ContentKey = (matrix: Mat4): string => matrix.join(",");
 
 const gltfGeometryContentKey = ({
+  colors,
   indices,
   mode,
   normals,
   positions,
   texCoords,
 }: {
+  readonly colors?: Float32Array | undefined;
   readonly indices?: GltfIndexArray | undefined;
   readonly mode: GeometryDrawMode;
   readonly normals?: Float32Array | undefined;
@@ -765,6 +790,7 @@ const gltfGeometryContentKey = ({
   mode,
   typedArrayContentKey(positions),
   typedArrayContentKey(normals),
+  typedArrayContentKey(colors),
   typedArrayContentKey(texCoords),
   typedArrayContentKey(indices),
 ].join("|");
@@ -1580,6 +1606,20 @@ const gltfMetallicRoughnessFactor = (value: number | undefined, fallback: number
 const gltfOcclusionStrength = (value: number | undefined): number =>
   clampedFiniteNumber(value, 1, 0, 1);
 
+const gltfMaterialAlphaMode = (mode: unknown): SurfaceMaterialAlphaMode => {
+  switch (mode) {
+    case "MASK":
+      return "MASK";
+    case "BLEND":
+      return "BLEND";
+    default:
+      return "OPAQUE";
+  }
+};
+
+const gltfMaterialAlphaCutoff = (value: number | undefined): number =>
+  finiteNumber(value, 0.5);
+
 const gltfIor = (value: number | undefined): number => {
   if (value === 0) return 0;
   if (typeof value === "number" && Number.isFinite(value) && value >= 1) return value;
@@ -1868,6 +1908,39 @@ const gltfMaterialTexCoords = (
   );
 };
 
+const gltfVertexColors = (
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+  primitive: GltfMeshPrimitive,
+  positions: Float32Array,
+  decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
+): Float32Array | undefined => {
+  const colorAccessor = primitive.attributes?.COLOR_0;
+  const colors = decodedAttributes?.get("COLOR_0")
+    ?? (colorAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, colorAccessor));
+  if (colors === undefined) return undefined;
+
+  const vertexCount = positions.length / 3;
+  const accessorComponentCount = colorAccessor === undefined
+    ? undefined
+    : gltfComponentCount(document.accessors?.[colorAccessor]?.type ?? "VEC4");
+  const componentCount = accessorComponentCount ?? colors.length / Math.max(vertexCount, 1);
+  if (componentCount === 4 && colors.length === vertexCount * 4) return colors;
+  if (componentCount !== 3 || colors.length !== vertexCount * 3) return undefined;
+
+  const output = new Float32Array(vertexCount * 4);
+  for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+    const sourceOffset = vertexIndex * 3;
+    const outputOffset = vertexIndex * 4;
+    output[outputOffset] = colors[sourceOffset] ?? 1;
+    output[outputOffset + 1] = colors[sourceOffset + 1] ?? 1;
+    output[outputOffset + 2] = colors[sourceOffset + 2] ?? 1;
+    output[outputOffset + 3] = 1;
+  }
+
+  return output;
+};
+
 const clamp01 = (value: number): number =>
   Math.max(0, Math.min(1, value));
 
@@ -2039,6 +2112,8 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #gltf = new Map<string, GltfState>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
+  readonly #gltfPreparedPrimitiveMaterials =
+    new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #ownedBuffers = new Set<WebGLBuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
@@ -2153,8 +2228,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.clearDepth?.(1);
     gl.enable?.(gl.DEPTH_TEST);
     gl.depthFunc?.(gl.LEQUAL);
-    gl.enable?.(gl.BLEND);
-    gl.blendFunc?.(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable?.(gl.BLEND);
     if (options.scissor) gl.enable?.(gl.SCISSOR_TEST);
 
     const usedGeometry = new Set<string>();
@@ -2648,7 +2722,12 @@ class WebGlRootImpl implements WebGlRoot {
     }
     const gpu = this.#geometryResource(cpu);
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light), undefined);
+    this.#applyDrawAlphaState(node.material);
+    try {
+      this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light), undefined);
+    } finally {
+      this.#resetDrawAlphaState();
+    }
   }
 
   #drawText(
@@ -2685,7 +2764,12 @@ class WebGlRootImpl implements WebGlRoot {
       kind: "unlit",
     };
     usedGeometry.add(gpu.key);
-    this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined, undefined);
+    this.#applyDrawAlphaState(material);
+    try {
+      this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined, undefined);
+    } finally {
+      this.#resetDrawAlphaState();
+    }
   }
 
   #appendGltfPrimitiveDraws(
@@ -2732,42 +2816,18 @@ class WebGlRootImpl implements WebGlRoot {
         );
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
-
-        const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
-        const textures = this.#gltfMaterialSurfaceTextures(loadedMaterial);
-        if (loadedMaterial.image !== undefined && baseColor !== undefined) {
-          this.#ensureImmediateTexture(baseColor, loadedMaterial.image);
-        }
-        this.#ensureLoadedGltfMaterialSurfaceTextures(loadedMaterial, textures);
-        const material = loadedGltfSurfaceMaterial(
-          loadedMaterial,
-          loadedMaterial.image !== undefined && baseColor !== undefined
-            ? baseColor
-            : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-          textures,
-        );
-        const cpu: CpuGeometry = {
-          ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-          key: gltfGeometryContentKey({
-            ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-            mode: primitive.mode,
-            ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-            positions: primitive.positions,
-            ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-          }),
-          mode: primitive.mode,
-          ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-          positions: primitive.positions,
-          ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-        };
         if (!isBoundsVisible(localBounds, rootViewProjectionModel)) {
           continue;
         }
+        const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
+        for (const upload of prepared.textureUploads) {
+          this.#ensureImmediateTexture(upload.texture, upload.image);
+        }
         draws.push({
-          geometry: cpu,
+          geometry: prepared.geometry,
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           localModel,
-          material,
+          material: prepared.material,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
           rootModel,
@@ -2838,9 +2898,12 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const opaqueBatches: GltfPrimitiveDrawBatch[] = [];
+    const blendedBatches: GltfPrimitiveDrawBatch[] = [];
     const transmissiveBatches: GltfPrimitiveDrawBatch[] = [];
     for (const batch of batches.values()) {
-      if (isTransmissiveSurfaceMaterial(batch.material)) {
+      if (isBlendedSurfaceMaterial(batch.material)) {
+        blendedBatches.push(batch);
+      } else if (isTransmissiveSurfaceMaterial(batch.material)) {
         transmissiveBatches.push(batch);
       } else {
         opaqueBatches.push(batch);
@@ -2849,11 +2912,13 @@ class WebGlRootImpl implements WebGlRoot {
 
     for (const batch of opaqueBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, undefined);
 
-    if (transmissiveBatches.length === 0) return;
-    const screenColorTexture = this.#copyTransmissionScreenColorTexture(viewportSize);
-    for (const batch of transmissiveBatches) {
-      this.#drawGltfPrimitiveDrawBatch(batch, projection, view, screenColorTexture);
+    if (transmissiveBatches.length > 0) {
+      const screenColorTexture = this.#copyTransmissionScreenColorTexture(viewportSize);
+      for (const batch of transmissiveBatches) {
+        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, screenColorTexture);
+      }
     }
+    for (const batch of blendedBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, undefined);
   }
 
   #drawGltfPrimitiveDrawBatch(
@@ -2863,6 +2928,7 @@ class WebGlRootImpl implements WebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     this.#applyDrawSidedness(batch.sidedness);
+    this.#applyDrawAlphaState(batch.material);
     try {
       if (batch.localModels.length === 1) {
         this.#drawGeometry(
@@ -2892,8 +2958,29 @@ class WebGlRootImpl implements WebGlRoot {
         );
       }
     } finally {
+      this.#resetDrawAlphaState();
       this.#resetDrawSidedness();
     }
+  }
+
+  #applyDrawAlphaState(material: Material): void {
+    const gl = this.#gl;
+    if (material.kind !== "wireframe" && isBlendedSurfaceMaterial(material)) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+
+      return;
+    }
+
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+  }
+
+  #resetDrawAlphaState(): void {
+    const gl = this.#gl;
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
   }
 
   #applyDrawSidedness(sidedness: DrawSidedness): void {
@@ -3018,6 +3105,52 @@ class WebGlRootImpl implements WebGlRoot {
       (level) => lod.levels[level] !== undefined,
     );
     return { level, material: lod.levels[level] ?? primitiveMaterial.material };
+  }
+
+  #preparedGltfPrimitiveMaterial(
+    primitive: LoadedGltfPrimitive,
+    loadedMaterial: LoadedGltfMaterial,
+  ): GltfPreparedPrimitiveMaterial {
+    let primitiveCache = this.#gltfPreparedPrimitiveMaterials.get(primitive);
+    if (primitiveCache === undefined) {
+      primitiveCache = new WeakMap();
+      this.#gltfPreparedPrimitiveMaterials.set(primitive, primitiveCache);
+    }
+
+    const cached = primitiveCache.get(loadedMaterial);
+    if (cached !== undefined) return cached;
+
+    const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
+    const surfaceTextures = this.#gltfMaterialSurfaceTextures(loadedMaterial);
+    const geometry: CpuGeometry = {
+      ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
+      ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+      key: gltfGeometryContentKey({
+        ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
+        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+        mode: primitive.mode,
+        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
+        positions: primitive.positions,
+        ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
+      }),
+      mode: primitive.mode,
+      ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
+      positions: primitive.positions,
+      ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
+    };
+    const prepared: GltfPreparedPrimitiveMaterial = {
+      geometry,
+      material: loadedGltfSurfaceMaterial(
+        loadedMaterial,
+        loadedMaterial.image !== undefined && baseColor !== undefined
+          ? baseColor
+          : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+        surfaceTextures,
+      ),
+      textureUploads: this.#gltfMaterialTextureUploads(loadedMaterial, baseColor, surfaceTextures),
+    };
+    primitiveCache.set(loadedMaterial, prepared);
+    return prepared;
   }
 
   #gltfPrimitiveMaterialForVariant(
@@ -3209,6 +3342,32 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return textures;
+  }
+
+  #gltfMaterialTextureUploads(
+    material: LoadedGltfMaterial,
+    baseColor: TextureAssetUploadRef | undefined,
+    surfaceTextures: LoadedGltfSurfaceTextures,
+  ): readonly GltfPreparedTextureUpload[] {
+    const uploads: GltfPreparedTextureUpload[] = [];
+    const append = (
+      texture: TextureAssetUploadRef | undefined,
+      image: LoadedTextureSource | undefined,
+    ): void => {
+      if (texture !== undefined && image !== undefined) uploads.push({ image, texture });
+    };
+
+    append(baseColor, material.image);
+    append(surfaceTextures.metallicRoughnessTexture, material.metallicRoughnessImage);
+    append(surfaceTextures.emissiveTexture, material.emissiveImage);
+    append(surfaceTextures.occlusionTexture, material.occlusionImage);
+
+    const extensionTextures = material.extensionTextures;
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      append(surfaceTextures[texture.key], extensionTextures?.[texture.key]?.image);
+    }
+
+    return uploads;
   }
 
   #isGltfMaterialTextureSlotReady(
@@ -3404,7 +3563,14 @@ class WebGlRootImpl implements WebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const factors = surfaceMaterialExtensionFactors(material);
+    const alphaMode = surfaceMaterialAlphaMode(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
+    this.#uniformColor(program, "u_alphaSettings", [
+      alphaMode === "MASK" ? 1 : alphaMode === "BLEND" ? 2 : 0,
+      surfaceMaterialAlphaCutoff(material),
+      0,
+      0,
+    ]);
     this.#uniformColor(program, "u_materialPbrFactors", [
       surfaceMaterialMetallicFactor(material),
       surfaceMaterialRoughnessFactor(material),
@@ -3626,6 +3792,17 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray?.(normalLocation);
+      }
+    }
+    const colorLocation = gl.getAttribLocation(program, "a_color");
+    if (colorLocation >= 0) {
+      if (geometry.colorBuffer !== undefined) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.colorBuffer);
+        gl.enableVertexAttribArray(colorLocation);
+        gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
+      } else {
+        gl.disableVertexAttribArray?.(colorLocation);
+        gl.vertexAttrib4f(colorLocation, 1, 1, 1, 1);
       }
     }
     if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
@@ -4432,6 +4609,7 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bindAttribLocation?.(program, 0, "a_position");
       gl.bindAttribLocation?.(program, 1, "a_normal");
       gl.bindAttribLocation?.(program, 2, "a_uv");
+      gl.bindAttribLocation?.(program, 10, "a_color");
       gl.bindAttribLocation?.(program, 3, "a_instanceModel");
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
@@ -4719,6 +4897,15 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bufferData(gl.ARRAY_BUFFER, cpu.texCoords, gl.STATIC_DRAW);
     }
 
+    let colorBuffer: WebGLBuffer | undefined;
+    if (borrowedVertexResource !== undefined) {
+      colorBuffer = borrowedVertexResource.colorBuffer;
+    } else if (cpu.colors !== undefined) {
+      colorBuffer = this.#createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, cpu.colors, gl.STATIC_DRAW);
+    }
+
     let indexBuffer: WebGLBuffer | undefined;
     let indexType: number | undefined;
     if (cpu.indices !== undefined) {
@@ -4733,6 +4920,7 @@ class WebGlRootImpl implements WebGlRoot {
     const resource: GeometryResource = {
       arrayBuffer,
       ...(borrowedVertexResource === undefined ? {} : { borrowedVertexBufferKey: borrowedVertexResource.key }),
+      ...(colorBuffer === undefined ? {} : { colorBuffer }),
       drawCount: cpu.indices?.length ?? cpu.positions.length / 3,
       ...(indexBuffer === undefined ? {} : { indexBuffer }),
       ...(indexType === undefined ? {} : { indexType }),
@@ -4750,6 +4938,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (used.has(key)) continue;
       if (resource.borrowedVertexBufferKey === undefined) {
         this.#deleteBuffer(resource.arrayBuffer);
+        if (resource.colorBuffer !== undefined) this.#deleteBuffer(resource.colorBuffer);
         if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
         if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
       }
@@ -5107,6 +5296,7 @@ class WebGlRootImpl implements WebGlRoot {
       }
       const normals = decodedAttributes?.get("NORMAL")
         ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, normalAccessor));
+      const colors = gltfVertexColors(document, buffers, primitive, positions, decodedAttributes);
       const indices = dracoPrimitive?.indices
         ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
       const material = this.#readGltfMaterial(
@@ -5138,6 +5328,7 @@ class WebGlRootImpl implements WebGlRoot {
       );
       const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
       primitives.push({
+        ...(colors === undefined ? {} : { colors }),
         ...(indices === undefined ? {} : { indices }),
         key,
         localBounds: localModels.map((localModel) => worldBounds(positions, localModel)),
@@ -5443,9 +5634,13 @@ class WebGlRootImpl implements WebGlRoot {
     const metallicFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.metallicFactor, 1);
     const occlusionStrength = gltfOcclusionStrength(material?.occlusionTexture?.strength);
     const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
+    const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
+    const alphaCutoff = gltfMaterialAlphaCutoff(material?.alphaCutoff);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
 
     return {
+      alphaMode,
+      ...(alphaMode === "MASK" ? { alphaCutoff } : {}),
       ...(baseColorImageLoadKey === undefined ? {} : { baseColorImageUri: baseColorImageLoadKey }),
       ...(baseColorTextureIndex === undefined || baseColorImage === undefined
         ? {}

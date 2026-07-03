@@ -15,7 +15,11 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
   readonly flipY?: boolean;
 };
 
+export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
+
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
+  readonly alphaCutoff?: number;
+  readonly alphaMode?: SurfaceMaterialAlphaMode;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly doubleSided?: boolean;
@@ -126,6 +130,15 @@ export const surfaceMaterialExtensionFactors = (
 export const isTransmissiveSurfaceMaterial = (material: SurfaceMaterial): boolean =>
   material.kind === "standard" && surfaceMaterialExtensionFactors(material).transmissionFactor > 0;
 
+export const surfaceMaterialAlphaMode = (material: SurfaceMaterial): SurfaceMaterialAlphaMode =>
+  material.alphaMode ?? "OPAQUE";
+
+export const surfaceMaterialAlphaCutoff = (material: SurfaceMaterial): number =>
+  surfaceMaterialAlphaMode(material) === "MASK" ? material.alphaCutoff ?? 0.5 : 0;
+
+export const isBlendedSurfaceMaterial = (material: SurfaceMaterial): boolean =>
+  surfaceMaterialAlphaMode(material) === "BLEND";
+
 export const surfaceMaterialMetallicFactor = (material: SurfaceMaterial): number =>
   material.kind === "standard" ? material.metallicFactor : 0;
 
@@ -161,6 +174,8 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
     material.doubleSided === true ? "double-sided" : "front-sided",
+    surfaceMaterialAlphaMode(material),
+    surfaceLightValueKey(surfaceMaterialAlphaCutoff(material)),
     textureCacheKey(material.baseColor),
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),

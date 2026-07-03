@@ -1,0 +1,436 @@
+{
+  "asset": {
+    "generator": "Royal examples glTF Kitchen Sink SVG material grid",
+    "version": "2.0"
+  },
+  "extensionsRequired": [
+    "KHR_materials_unlit"
+  ],
+  "extensionsUsed": [
+    "KHR_materials_unlit",
+    "GS_texture_svg"
+  ],
+  "buffers": [
+    {
+      "byteLength": 92,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAAAAAAAPwAAAL8AAAAAAAAAPwAAAD8AAAAAAAAAvwAAAD8AAAAAAAAAAAAAgD8AAIA/AACAPwAAgD8AAAAAAAAAAAAAAAAAAAEAAgAAAAIAAwA="
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 48,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 32,
+      "byteOffset": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 12,
+      "byteOffset": 80,
+      "target": 34963
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 4,
+      "max": [
+        0.5,
+        0.5,
+        0
+      ],
+      "min": [
+        -0.5,
+        -0.5,
+        0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 4,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5123,
+      "count": 6,
+      "type": "SCALAR"
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "grid fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "grid SVG",
+      "uri": "khronos-grid.svg"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "rings fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "rings SVG",
+      "uri": "khronos-rings.svg"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "mask fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "mask SVG",
+      "uri": "khronos-mask.svg"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "symbols fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "symbols SVG",
+      "uri": "khronos-symbols.svg"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "text fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "text SVG",
+      "uri": "khronos-text.svg"
+    },
+    {
+      "mimeType": "image/png",
+      "name": "filter fallback",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    },
+    {
+      "mimeType": "image/svg+xml",
+      "name": "filter SVG",
+      "uri": "khronos-filter.svg"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 33071,
+      "wrapT": 33071
+    }
+  ],
+  "textures": [
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 1
+        }
+      },
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 3
+        }
+      },
+      "sampler": 0,
+      "source": 2
+    },
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 5
+        }
+      },
+      "sampler": 0,
+      "source": 4
+    },
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 7
+        }
+      },
+      "sampler": 0,
+      "source": 6
+    },
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 9
+        }
+      },
+      "sampler": 0,
+      "source": 8
+    },
+    {
+      "extensions": {
+        "GS_texture_svg": {
+          "source": 11
+        }
+      },
+      "sampler": 0,
+      "source": 10
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG grid axes",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    },
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG dashed rings",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    },
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG masked gradient",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 2
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    },
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG symbols",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 3
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    },
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG text strokes",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 4
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    },
+    {
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_unlit": {}
+      },
+      "name": "SVG filter plate",
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 5
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "grid card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "rings card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "mask card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "symbols card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 3,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "text card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 4,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "filter card",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "TEXCOORD_0": 1
+          },
+          "indices": 2,
+          "material": 5,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "grid card",
+      "translation": [
+        -2.2,
+        0.72,
+        0
+      ]
+    },
+    {
+      "mesh": 1,
+      "name": "rings card",
+      "translation": [
+        -1.08,
+        0.72,
+        0
+      ]
+    },
+    {
+      "mesh": 2,
+      "name": "mask card",
+      "translation": [
+        0.04,
+        0.72,
+        0
+      ]
+    },
+    {
+      "mesh": 3,
+      "name": "symbols card",
+      "translation": [
+        1.16,
+        0.72,
+        0
+      ]
+    },
+    {
+      "mesh": 4,
+      "name": "text card",
+      "translation": [
+        -0.52,
+        -0.42,
+        0
+      ]
+    },
+    {
+      "mesh": 5,
+      "name": "filter card",
+      "translation": [
+        0.6,
+        -0.42,
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  ]
+}

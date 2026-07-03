@@ -512,6 +512,8 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     deleteShader: record("deleteShader"),
     deleteTexture: record("deleteTexture"),
     depthFunc: record("depthFunc"),
+    depthMask: record("depthMask"),
+    disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
     drawElements: record("drawElements"),
     enable: record("enable"),
@@ -551,6 +553,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     uniform4fv: record("uniform4fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
+    vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
   };

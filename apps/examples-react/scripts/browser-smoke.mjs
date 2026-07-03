@@ -50,11 +50,6 @@ const smokeExpectations = {
     minColorBuckets: 14,
     minPaintedRatio: 0.01,
   },
-  'shared-surface-binding': {
-    path: '/shared-surface-binding',
-    minColorBuckets: 10,
-    minPaintedRatio: 0.01,
-  },
   'gltf-helmet': {
     path: '/gltf-helmet',
     minColorBuckets: 32,
@@ -65,9 +60,9 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.01,
   },
-  'gltf-material-extensions': {
-    path: '/gltf-material-extensions',
-    minColorBuckets: 12,
+  'gltf-kitchen-sink': {
+    path: '/gltf-kitchen-sink',
+    minColorBuckets: 18,
     minPaintedRatio: 0.006,
   },
   'gltf-ghostscript-tiger-svg': {

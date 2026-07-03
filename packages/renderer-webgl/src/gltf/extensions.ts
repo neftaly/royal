@@ -1,4 +1,4 @@
-import type { GltfDocument, GltfImage } from "./schema";
+import type { GltfDocument, GltfImage, GltfMaterial } from "./schema";
 
 export const supportedGltfExtensions = new Set<string>([
   "EXT_meshopt_compression",
@@ -56,6 +56,7 @@ export const assertSupportedRequiredGltfExtensions = (
 ): void => {
   const unsupported = unsupportedRequiredGltfExtensions(document, supportedExtensions);
   if (unsupported.length > 0) throw new UnsupportedRequiredGltfExtensionError(src, unsupported);
+  assertRequiredMaterialExtensionFeatures(src, document);
   assertRequiredTextureSourceExtensions(src, document);
   assertGsTextureSvgReferences(src, document);
 };
@@ -88,6 +89,29 @@ const requiredTextureSourceExtensions = [
   "EXT_texture_webp",
   "KHR_texture_basisu",
 ] as const;
+
+const requiredGltfMaterialExtensionFeatures = [
+  {
+    extension: "KHR_materials_clearcoat",
+    field: "clearcoatNormalTexture",
+    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
+      material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined,
+    reason: "Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support",
+  },
+] as const;
+
+const assertRequiredMaterialExtensionFeatures = (src: string, document: GltfDocument): void => {
+  const required = new Set(uniqueStrings(document.extensionsRequired));
+  for (const feature of requiredGltfMaterialExtensionFeatures) {
+    if (!required.has(feature.extension)) continue;
+    for (const [materialIndex, material] of (document.materials ?? []).entries()) {
+      if (!feature.hasUnsupportedFeature(material)) continue;
+      throw new Error(
+        `glTF ${feature.extension}.${feature.field} in material ${materialIndex} in ${src} is unsupported when ${feature.extension} is required: ${feature.reason}.`,
+      );
+    }
+  }
+};
 
 const assertRequiredTextureSourceExtensions = (src: string, document: GltfDocument): void => {
   const textures = document.textures ?? [];

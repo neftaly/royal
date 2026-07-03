@@ -7,8 +7,8 @@ import { GltfInstancing } from './examples/cases/GltfInstancing';
 import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
-import { GltfMaterialExtensions } from './examples/cases/GltfMaterialExtensions';
-import gltfMaterialExtensionsSource from './examples/cases/GltfMaterialExtensions.tsx?raw';
+import { GltfKitchenSink } from './examples/cases/GltfKitchenSink';
+import gltfKitchenSinkSource from './examples/cases/GltfKitchenSink.tsx?raw';
 import { GltfGhostscriptTigerSvg } from './examples/cases/GltfGhostscriptTigerSvg';
 import gltfGhostscriptTigerSvgSource from './examples/cases/GltfGhostscriptTigerSvg.tsx?raw';
 import { GltfVariants } from './examples/cases/GltfVariants';
@@ -21,8 +21,6 @@ import { Picking } from './examples/cases/Picking';
 import pickingSource from './examples/cases/Picking.tsx?raw';
 import { StandardLighting } from './examples/cases/StandardLighting';
 import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
-import { SharedSurfaceBinding } from './examples/cases/SharedSurfaceBinding';
-import sharedSurfaceBindingSource from './examples/cases/SharedSurfaceBinding.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
 import { WebXrVr } from './examples/cases/WebXrVr';
@@ -105,15 +103,6 @@ export const examples = [
     sourceFile: 'examples/cases/HudOverlay.tsx',
   },
   {
-    id: 'shared-surface-binding',
-    maturity: 'lab-probe',
-    path: '/shared-surface-binding',
-    title: 'Shared Surface Binding',
-    Component: SharedSurfaceBinding,
-    source: sharedSurfaceBindingSource,
-    sourceFile: 'examples/cases/SharedSurfaceBinding.tsx',
-  },
-  {
     id: 'gltf-helmet',
     maturity: 'product',
     path: '/gltf-helmet',
@@ -132,13 +121,13 @@ export const examples = [
     sourceFile: 'examples/cases/GltfInstancing.tsx',
   },
   {
-    id: 'gltf-material-extensions',
+    id: 'gltf-kitchen-sink',
     maturity: 'product',
-    path: '/gltf-material-extensions',
-    title: 'glTF Material Extensions',
-    Component: GltfMaterialExtensions,
-    source: gltfMaterialExtensionsSource,
-    sourceFile: 'examples/cases/GltfMaterialExtensions.tsx',
+    path: '/gltf-kitchen-sink',
+    title: 'glTF Kitchen Sink',
+    Component: GltfKitchenSink,
+    source: gltfKitchenSinkSource,
+    sourceFile: 'examples/cases/GltfKitchenSink.tsx',
   },
   {
     id: 'gltf-ghostscript-tiger-svg',

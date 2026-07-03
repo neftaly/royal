@@ -202,6 +202,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
     validateProgram: record("validateProgram"),
+    vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
   } as unknown as WebGL2RenderingContext;

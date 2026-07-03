@@ -37,6 +37,7 @@ gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
 in vec3 a_position;
 in vec3 a_normal;
 in vec2 a_uv;
+in vec4 a_color;
 layout(location = 3) in mat4 a_instanceLocalModel;
 layout(location = 7) in vec3 a_instancePosition;
 layout(location = 8) in vec3 a_instanceRotation;
@@ -46,6 +47,7 @@ uniform mat4 u_view;
 out vec3 v_normal;
 out vec3 v_worldPosition;
 out vec2 v_uv;
+out vec4 v_color;
 vec3 rotateX(vec3 value, float radians) {
   float c = cos(radians);
   float s = sin(radians);
@@ -76,6 +78,7 @@ vec3 worldPosition = transformRootPoint(localPosition.xyz);
 v_normal = transformRootVector(mat3(a_instanceLocalModel) * a_normal);
 v_worldPosition = worldPosition;
 v_uv = a_uv;
+v_color = a_color;
 gl_Position = u_projection * u_view * vec4(worldPosition, localPosition.w);
 }`;
   }
@@ -84,17 +87,20 @@ gl_Position = u_projection * u_view * vec4(worldPosition, localPosition.w);
 in vec3 a_position;
 in vec3 a_normal;
 in vec2 a_uv;
+in vec4 a_color;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_model;
 out vec3 v_normal;
 out vec3 v_worldPosition;
 out vec2 v_uv;
+out vec4 v_color;
 void main() {
 vec4 worldPosition = u_model * vec4(a_position, 1.0);
 v_normal = mat3(u_model) * a_normal;
 v_worldPosition = worldPosition.xyz;
 v_uv = a_uv;
+v_color = a_color;
 gl_Position = u_projection * u_view * worldPosition;
 }`;
 };
@@ -167,6 +173,7 @@ precision mediump float;
 in vec3 v_normal;
 in vec3 v_worldPosition;
 in vec2 v_uv;
+in vec4 v_color;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
 uniform highp mat4 u_view;
 uniform bool u_useTexture;
@@ -185,6 +192,7 @@ uniform bool u_useMaterialTransmissionTexture;
 uniform bool u_useThicknessTexture;
 uniform bool u_unlit;
 uniform vec4 u_color;
+uniform vec4 u_alphaSettings;
 uniform vec4 u_emissiveColor;
 uniform int u_surfaceLightCount;
 uniform int u_surfaceLightKind[MAX_SURFACE_LIGHTS];
@@ -528,7 +536,13 @@ float clearcoatShape = pow(NdotH, materialClearcoatShininess()) * lambert;
 return mix(material, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 void main() {
-vec4 baseColor = u_useTexture ? texture(u_texture, v_uv) : u_color;
+vec4 baseColor = (u_useTexture ? texture(u_texture, v_uv) : u_color) * v_color;
+if (u_alphaSettings.x > 0.5 && u_alphaSettings.x < 1.5 && baseColor.a < u_alphaSettings.y) {
+  discard;
+}
+if (u_alphaSettings.x < 1.5) {
+  baseColor.a = 1.0;
+}
 if (u_unlit) {
   outColor = baseColor;
   return;

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <symbol id="tile" viewBox="-32 -32 64 64">
+      <path d="M0 -30L29 0L0 30L-29 0Z" fill="#64b5f6"/>
+      <path d="M0 -20L19 0L0 20L-19 0Z" fill="#111827"/>
+      <circle cx="0" cy="0" r="9" fill="#ffd54f"/>
+    </symbol>
+  </defs>
+  <rect width="512" height="512" fill="#07111f"/>
+  <g opacity="0.95">
+    <use href="#tile" x="96" y="96" width="64" height="64"/>
+    <use href="#tile" x="224" y="96" width="64" height="64" transform="rotate(20 256 128)"/>
+    <use href="#tile" x="352" y="96" width="64" height="64" transform="rotate(40 384 128)"/>
+    <use href="#tile" x="96" y="224" width="64" height="64" transform="rotate(60 128 256)"/>
+    <use href="#tile" x="224" y="224" width="64" height="64" transform="rotate(80 256 256)"/>
+    <use href="#tile" x="352" y="224" width="64" height="64" transform="rotate(100 384 256)"/>
+    <use href="#tile" x="96" y="352" width="64" height="64" transform="rotate(120 128 384)"/>
+    <use href="#tile" x="224" y="352" width="64" height="64" transform="rotate(140 256 384)"/>
+    <use href="#tile" x="352" y="352" width="64" height="64" transform="rotate(160 384 384)"/>
+  </g>
+  <path d="M128 128H384V384H128Z" fill="none" stroke="#b0bec5" stroke-width="7" stroke-dasharray="24 14"/>
+</svg>

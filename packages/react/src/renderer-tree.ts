@@ -56,11 +56,17 @@ type RoyalTextInstance = {
 type RoyalRendererContainer = {
   children: RoyalHostChild[];
   disabled: boolean;
+  hasPointerEventTargets: boolean;
   latestScene: RenderRoot | undefined;
   pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>;
   root: RoyalRendererRoot | null;
   renderLatest(): void;
   scheduleRenderLatest(): void;
+};
+
+type RoyalPointerEventTargetRegistry = {
+  hasPointerEventTargets: boolean;
+  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>;
 };
 
 type RoyalReconciler = ReturnType<typeof createReconciler>;
@@ -140,12 +146,12 @@ const removeHostChild = (
 
 const descriptorChildrenFor = (
   instance: RoyalHostInstance,
-  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>,
+  pointerEventRegistry: RoyalPointerEventTargetRegistry,
 ): readonly (RoyalRendererJsxElement | string)[] => {
   const children: (RoyalRendererJsxElement | string)[] = [];
 
   for (const child of instance.children) {
-    const descriptor = toDescriptorChild(child, pointerEventTargets, instance.type);
+    const descriptor = toDescriptorChild(child, pointerEventRegistry, instance.type);
     if (descriptor !== undefined) children.push(descriptor);
   }
 
@@ -175,7 +181,7 @@ const withDescriptorChildren = (
 
 const toDescriptorChild = (
   child: RoyalHostChild,
-  pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>,
+  pointerEventRegistry: RoyalPointerEventTargetRegistry,
   parentType?: RoyalHostType,
 ): RoyalRendererJsxElement | string | undefined => {
   if (child.hidden) return undefined;
@@ -197,7 +203,7 @@ const toDescriptorChild = (
     child.type,
     withDescriptorChildren(
       child,
-      descriptorChildrenFor(child, pointerEventTargets),
+      descriptorChildrenFor(child, pointerEventRegistry),
     ) as Parameters<typeof createRendererElement>[1],
   );
   if (
@@ -205,7 +211,8 @@ const toDescriptorChild = (
     hasRoyalPointerEventHandlers(child.props) &&
     (descriptor.kind === 'mesh' || descriptor.kind === 'gltf')
   ) {
-    pointerEventTargets.set(descriptor, {
+    pointerEventRegistry.hasPointerEventTargets = true;
+    pointerEventRegistry.pointerEventTargets.set(descriptor, {
       handlers: royalPointerEventHandlersFrom(child.props),
     });
   }
@@ -216,11 +223,15 @@ const toDescriptorChild = (
 const sceneFromContainer = (
   container: RoyalRendererContainer,
 ): RenderRoot | undefined => {
-  const pointerEventTargets = new WeakMap<object, RoyalPointerEventTarget>();
+  const pointerEventRegistry: RoyalPointerEventTargetRegistry = {
+    hasPointerEventTargets: false,
+    pointerEventTargets: new WeakMap(),
+  };
   const sceneChildren = container.children
-    .map((child) => toDescriptorChild(child, pointerEventTargets))
+    .map((child) => toDescriptorChild(child, pointerEventRegistry))
     .filter((child): child is RoyalRendererJsxElement | string => child !== undefined);
-  container.pointerEventTargets = pointerEventTargets;
+  container.hasPointerEventTargets = pointerEventRegistry.hasPointerEventTargets;
+  container.pointerEventTargets = pointerEventRegistry.pointerEventTargets;
   if (sceneChildren.length === 0) return undefined;
   if (sceneChildren.length !== 1 || !isRenderRoot(sceneChildren[0])) {
     throw new Error('Canvas expects exactly one renderer scene child');
@@ -238,6 +249,7 @@ const createRendererContainer = (): RoyalRendererContainer => {
   const container: RoyalRendererContainer = {
     children: [],
     disabled: false,
+    hasPointerEventTargets: false,
     latestScene: undefined,
     pointerEventTargets: new WeakMap(),
     root: null,
@@ -423,6 +435,7 @@ const reconciler: RoyalReconciler = createReconciler();
 
 export type RoyalRendererTree = {
   dispose(): void;
+  hasPointerEventTargets(): boolean;
   pointerEventTarget(node: object): RoyalPointerEventTarget | undefined;
   render(children: ReactNode): void;
   setTarget(root: RoyalRendererRoot | null, disabled: boolean): void;
@@ -450,8 +463,10 @@ export const createRoyalRendererTree = (): RoyalRendererTree => {
       reconciler.flushPassiveEffects();
       container.root = null;
       container.latestScene = undefined;
+      container.hasPointerEventTargets = false;
       container.pointerEventTargets = new WeakMap();
     },
+    hasPointerEventTargets: () => container.hasPointerEventTargets,
     pointerEventTarget: (node) => container.pointerEventTargets.get(node),
     render: (children) => {
       reconciler.updateContainerSync(children, root, null, null);
