@@ -1,10 +1,10 @@
-# ROYAL_texture_svg
+# GS_texture_svg
 
-Status: Draft Royal vendor extension.
+Status: Draft Garbo Succus vendor extension.
 
 ## Extension Name
 
-`ROYAL_texture_svg`
+`GS_texture_svg`
 
 ## Dependencies
 
@@ -14,9 +14,9 @@ The referenced image data uses the `image/svg+xml` media type.
 
 ## Overview
 
-`ROYAL_texture_svg` adds an SVG image source to a glTF texture object.
+`GS_texture_svg` adds an SVG image source to a glTF texture object.
 
-The extension object is stored on `textures[i].extensions.ROYAL_texture_svg` and
+The extension object is stored on `textures[i].extensions.GS_texture_svg` and
 contains a required `source` property. The property indexes `images[]`, and the
 referenced image MUST contain SVG data.
 
@@ -24,10 +24,10 @@ Implementations that support this extension MUST use the SVG source when the
 extension is present on a texture. The SVG source has priority over
 core `texture.source`.
 
-`ROYAL_texture_svg` is an optional extension by design. Assets MUST list it in
+`GS_texture_svg` is an optional extension by design. Assets MUST list it in
 top-level `extensionsUsed` and MUST NOT list it in `extensionsRequired`.
 
-Every texture that uses `extensions.ROYAL_texture_svg` MUST provide exactly one
+Every texture that uses `extensions.GS_texture_svg` MUST provide exactly one
 compatibility fallback through core `texture.source`. That fallback MUST be a
 non-SVG image source. Additional texture-source fallbacks such as
 `KHR_texture_basisu` or `EXT_texture_webp` MUST NOT be attached to the same
@@ -47,14 +47,14 @@ The extension is added to texture objects.
     "version": "2.0"
   },
   "extensionsUsed": [
-    "ROYAL_texture_svg"
+    "GS_texture_svg"
   ],
   "textures": [
     {
       "source": 0,
       "sampler": 0,
       "extensions": {
-        "ROYAL_texture_svg": {
+        "GS_texture_svg": {
           "source": 1
         }
       }
@@ -73,7 +73,7 @@ The extension is added to texture objects.
 }
 ```
 
-### `texture.extensions.ROYAL_texture_svg`
+### `texture.extensions.GS_texture_svg`
 
 | Property | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -83,16 +83,16 @@ No other extension properties are defined.
 
 ## Validation
 
-- A glTF asset that uses `ROYAL_texture_svg` MUST list it in `extensionsUsed`.
-- A glTF asset that uses `ROYAL_texture_svg` MUST NOT list it in
+- A glTF asset that uses `GS_texture_svg` MUST list it in `extensionsUsed`.
+- A glTF asset that uses `GS_texture_svg` MUST NOT list it in
   `extensionsRequired`.
-- Each texture object with `extensions.ROYAL_texture_svg` MUST include a core
+- Each texture object with `extensions.GS_texture_svg` MUST include a core
   `texture.source` fallback.
 - The core fallback image MUST be a non-SVG image.
-- Each texture object with `extensions.ROYAL_texture_svg` MUST NOT include
+- Each texture object with `extensions.GS_texture_svg` MUST NOT include
   another texture-source fallback extension such as `KHR_texture_basisu` or
   `EXT_texture_webp`.
-- `extensions.ROYAL_texture_svg.source` MUST be a non-negative integer and MUST
+- `extensions.GS_texture_svg.source` MUST be a non-negative integer and MUST
   reference an existing `images[]` entry.
 - The referenced image MUST provide either `uri` or `bufferView`.
 - If the referenced image uses `bufferView`, `image.mimeType` MUST be
@@ -106,7 +106,7 @@ No other extension properties are defined.
 
 ## Source Selection
 
-For a texture with `ROYAL_texture_svg`, an implementation that supports this
+For a texture with `GS_texture_svg`, an implementation that supports this
 extension MUST select the SVG source. Implementations that do not support this
 extension can ignore it and use the core `texture.source` fallback.
 
@@ -122,7 +122,7 @@ required. If neither a finite `viewBox` nor finite `width` and `height` are
 available, implementations MUST reject the SVG image.
 
 Dimensionless SVG can be conforming SVG, but it is not valid input for
-`ROYAL_texture_svg`.
+`GS_texture_svg`.
 
 Implementations MAY normalize an SVG that has a finite `viewBox` but no finite
 `width` and `height` by adding image decode dimensions equal to the `viewBox`
@@ -179,9 +179,9 @@ rasterization deterministic for a fixed set of resolved resources.
 ```json
 {
   "$schema": "http://json-schema.org/draft-04/schema",
-  "title": "ROYAL_texture_svg texture extension",
+  "title": "GS_texture_svg texture extension",
   "type": "object",
-  "description": "Royal SVG texture source extension.",
+  "description": "Garbo Succus SVG texture source extension.",
   "allOf": [
     { "$ref": "glTFProperty.schema.json" }
   ],

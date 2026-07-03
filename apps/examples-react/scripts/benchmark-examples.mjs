@@ -31,6 +31,11 @@ const instancingFuzzCases = envInteger('EXAMPLES_BENCH_INSTANCING_CASES', 4);
 const instancingSeed = envInteger('EXAMPLES_BENCH_INSTANCING_SEED', 0x1a57a11);
 const routeReadyTimeoutMs = envInteger('EXAMPLES_BENCH_READY_TIMEOUT_MS', 20_000);
 const clearCachePerRoute = process.env.EXAMPLES_BENCH_CLEAR_CACHE !== '0';
+const fakeXrEnabled = process.env.EXAMPLES_BENCH_FAKE_XR === '1';
+const fakeXrHz = envInteger('EXAMPLES_BENCH_XR_HZ', 72);
+const fakeXrPrepareTimeoutMs = envInteger('EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS', 5_000);
+const fakeXrSampleTimeoutMs = envInteger('EXAMPLES_BENCH_XR_SAMPLE_TIMEOUT_MS', 10_000);
+const fakeXrViews = envInteger('EXAMPLES_BENCH_XR_VIEWS', 2);
 
 const routes = [
   { id: 'cube', path: '/cube' },
@@ -48,6 +53,7 @@ const routes = [
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
   { id: 'gltf-variants', path: '/gltf-variants' },
+  { id: 'webxr-vr', path: '/webxr-vr' },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -268,9 +274,16 @@ const deploymentSize = async () => {
 };
 
 const installBenchmarkHooks = async (session) => {
+  const hookConfig = JSON.stringify({
+    fakeXrEnabled,
+    fakeXrHz,
+    fakeXrSampleTimeoutMs,
+    fakeXrViews,
+  });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
     source: `
 (() => {
+  const config = ${hookConfig};
   const counters = {
     bufferDataBytes: 0,
     bufferDataCalls: 0,
@@ -282,6 +295,64 @@ const installBenchmarkHooks = async (session) => {
     drawElementsInstanced: 0,
     texImage2D: 0,
     texSubImage2D: 0,
+  };
+  const xr = {
+    activeSession: null,
+    frameTimes: [],
+    hz: config.fakeXrHz,
+    sessions: 0,
+    waiters: [],
+  };
+  const pendingDrawPulses = [];
+  const pendingXrPulses = [];
+  const statsFromDeltas = (deltas) => {
+    const sorted = [...deltas].sort((left, right) => left - right);
+    const sum = sorted.reduce((total, value) => total + value, 0);
+    const percentile = (ratio) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
+    return {
+      averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
+      jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
+      maxMs: sorted[sorted.length - 1] ?? 0,
+      minMs: sorted[0] ?? 0,
+      p50Ms: percentile(0.5),
+      p95Ms: percentile(0.95),
+      p99Ms: percentile(0.99),
+      sampleCount: sorted.length,
+    };
+  };
+  const statsFromTimes = (times) =>
+    statsFromDeltas(times.slice(1).map((time, index) => time - times[index]));
+  const failedXrFrameStats = (reason, details = {}) => ({
+    failed: true,
+    reason,
+    sampleCount: 0,
+    ...details,
+  });
+  const resolveXrWaiters = () => {
+    xr.waiters = xr.waiters.filter((waiter) => {
+      const sample = xr.frameTimes.slice(waiter.startIndex, waiter.startIndex + waiter.frameCount);
+      if (sample.length < waiter.frameCount) return true;
+      waiter.resolve(statsFromTimes(sample));
+      return false;
+    });
+  };
+  const failXrWaiters = (reason, details = {}) => {
+    const waiters = xr.waiters;
+    xr.waiters = [];
+    for (const waiter of waiters) waiter.resolve(failedXrFrameStats(reason, details));
+  };
+  const recordXrFrame = (time) => {
+    xr.frameTimes.push(time);
+    while (pendingXrPulses.length > 0) {
+      pendingXrPulses.shift().resolve(time);
+    }
+    resolveXrWaiters();
+  };
+  const recordDraw = () => {
+    const now = performance.now();
+    while (pendingDrawPulses.length > 0) {
+      pendingDrawPulses.shift().resolve(now);
+    }
   };
   const byteLengthOf = (value) => {
     if (typeof value === 'number') return value;
@@ -300,10 +371,10 @@ const installBenchmarkHooks = async (session) => {
     prototype[name] = wrapped;
   };
   const patchPrototype = (prototype) => {
-    patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; });
-    patch(prototype, 'drawElements', () => { counters.drawElements += 1; });
-    patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; });
-    patch(prototype, 'drawElementsInstanced', () => { counters.drawElementsInstanced += 1; });
+    patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; recordDraw(); });
+    patch(prototype, 'drawElements', () => { counters.drawElements += 1; recordDraw(); });
+    patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; recordDraw(); });
+    patch(prototype, 'drawElementsInstanced', () => { counters.drawElementsInstanced += 1; recordDraw(); });
     patch(prototype, 'bufferData', (args) => {
       counters.bufferDataCalls += 1;
       counters.bufferDataBytes += byteLengthOf(args[1]);
@@ -317,13 +388,221 @@ const installBenchmarkHooks = async (session) => {
   };
   patchPrototype(globalThis.WebGLRenderingContext?.prototype);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype);
+  const sampleXrFrames = (frameDeltas, timeoutMs = config.fakeXrSampleTimeoutMs) => {
+    if (xr.activeSession === null) return null;
+    const requestedFrameDeltas = Math.max(1, Math.floor(Number(frameDeltas) || 0));
+    const requestedFrameCount = requestedFrameDeltas + 1;
+    const startIndex = xr.frameTimes.length;
+    const boundedTimeoutMs = Math.max(1, Math.floor(Number(timeoutMs) || config.fakeXrSampleTimeoutMs));
+    return new Promise((resolve) => {
+      let settled = false;
+      let timeoutHandle;
+      const waiter = {
+        frameCount: requestedFrameCount,
+        resolve(value) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutHandle);
+          resolve(value);
+        },
+        startIndex,
+      };
+      timeoutHandle = setTimeout(() => {
+        const observedTimes = xr.frameTimes.slice(startIndex);
+        xr.waiters = xr.waiters.filter((entry) => entry !== waiter);
+        waiter.resolve(failedXrFrameStats('timeout', {
+          observedFrameCount: observedTimes.length,
+          requestedFrameCount,
+          sampleCount: Math.max(0, observedTimes.length - 1),
+          timeoutMs: boundedTimeoutMs,
+          ...(observedTimes.length > 1 ? { partialStats: statsFromTimes(observedTimes) } : {}),
+        }));
+      }, boundedTimeoutMs);
+      xr.waiters.push(waiter);
+      resolveXrWaiters();
+    });
+  };
+  const latencyPulse = async () => {
+    const eventAt = performance.now();
+    const timeout = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
+    const drawPromise = new Promise((resolve) => {
+      pendingDrawPulses.push({ resolve });
+    });
+    const windowRafPromise = new Promise((resolve) => {
+      requestAnimationFrame((time) => resolve(time));
+    });
+    const xrPromise = xr.activeSession === null
+      ? Promise.resolve(null)
+      : new Promise((resolve) => {
+        pendingXrPulses.push({ resolve });
+      });
+    const canvas = document.querySelector('canvas');
+    canvas?.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      clientX: canvas.clientWidth / 2,
+      clientY: canvas.clientHeight / 2,
+      pointerId: 1,
+      pointerType: 'mouse',
+    }));
+    const [drawAt, windowRafAt, xrFrameAt] = await Promise.all([
+      Promise.race([drawPromise, timeout(250)]),
+      Promise.race([windowRafPromise, timeout(250)]),
+      Promise.race([xrPromise, timeout(250)]),
+    ]);
+    return {
+      eventToNextDrawMs: drawAt === null ? null : drawAt - eventAt,
+      eventToNextWindowRafMs: windowRafAt === null ? null : windowRafAt - eventAt,
+      eventToNextXrFrameMs: xrFrameAt === null ? null : xrFrameAt - eventAt,
+      measurement: 'synthetic-pointer-event-to-next-observed-frame-or-draw',
+      note: 'These are event-to-next-frame/draw timings, not true motion-to-photon latency.',
+    };
+  };
+  if (config.fakeXrEnabled) {
+    const webGl2Prototype = globalThis.WebGL2RenderingContext?.prototype;
+    if (webGl2Prototype !== undefined) {
+      Object.defineProperty(webGl2Prototype, 'makeXRCompatible', {
+        configurable: true,
+        value: async function makeXRCompatible() {},
+        writable: true,
+      });
+    }
+    const framePeriodMs = 1000 / config.fakeXrHz;
+    const viewCount = Math.max(1, config.fakeXrViews);
+    const projectionMatrix = [
+      1.3, 0, 0, 0,
+      0, 1.7, 0, 0,
+      0, 0, -1, -1,
+      0, 0, -0.05, 0,
+    ];
+    const viewMatrix = (index) => {
+      const eyeOffset = viewCount === 1 ? 0 : (index / (viewCount - 1) - 0.5) * 0.064;
+      return [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        eyeOffset, -1.55, -2.4, 1,
+      ];
+    };
+    const makeViews = (canvas) => {
+      const width = canvas?.width || canvas?.clientWidth || 800;
+      const height = canvas?.height || canvas?.clientHeight || 600;
+      const viewWidth = Math.max(1, Math.floor(width / viewCount));
+      return Array.from({ length: viewCount }, (_value, index) => ({
+        __royalBenchViewport: {
+          height,
+          width: index === viewCount - 1 ? width - viewWidth * index : viewWidth,
+          x: viewWidth * index,
+          y: 0,
+        },
+        eye: index === 0 ? 'left' : index === 1 ? 'right' : 'none',
+        projectionMatrix,
+        transform: { inverse: { matrix: viewMatrix(index) } },
+      }));
+    };
+    class RoyalBenchXrSession extends EventTarget {
+      constructor() {
+        super();
+        this.ended = false;
+        this.frameHandle = 0;
+        this.handles = new Map();
+        this.nextFrameTime = performance.now();
+        this.renderState = {};
+        xr.activeSession = this;
+        xr.sessions += 1;
+      }
+      requestReferenceSpace(type) {
+        return Promise.resolve({ __royalBenchReferenceSpace: true, type });
+      }
+      updateRenderState(state) {
+        this.renderState = { ...this.renderState, ...state };
+      }
+      requestAnimationFrame(callback) {
+        if (this.ended) return 0;
+        const handle = ++this.frameHandle;
+        const now = performance.now();
+        const delay = Math.max(0, this.nextFrameTime - now);
+        this.nextFrameTime = Math.max(this.nextFrameTime + framePeriodMs, now + framePeriodMs);
+        const timeoutHandle = setTimeout(() => {
+          if (this.ended || !this.handles.has(handle)) return;
+          this.handles.delete(handle);
+          const time = performance.now();
+          const canvas = this.renderState.baseLayer?.context?.canvas ?? document.querySelector('canvas');
+          const frame = {
+            predictedDisplayTime: time + framePeriodMs,
+            session: this,
+            getViewerPose: () => ({ views: makeViews(canvas) }),
+          };
+          recordXrFrame(time);
+          callback(time, frame);
+        }, delay);
+        this.handles.set(handle, timeoutHandle);
+        return handle;
+      }
+      cancelAnimationFrame(handle) {
+        const timeoutHandle = this.handles.get(handle);
+        if (timeoutHandle === undefined) return;
+        clearTimeout(timeoutHandle);
+        this.handles.delete(handle);
+      }
+      end() {
+        if (this.ended) return Promise.resolve();
+        this.ended = true;
+        for (const timeoutHandle of this.handles.values()) clearTimeout(timeoutHandle);
+        this.handles.clear();
+        if (xr.activeSession === this) xr.activeSession = null;
+        failXrWaiters('session-ended');
+        this.dispatchEvent(new Event('end'));
+        return Promise.resolve();
+      }
+    }
+    class RoyalBenchXrWebGlLayer {
+      constructor(session, context, options = {}) {
+        this.context = context;
+        this.framebuffer = null;
+        this.options = options;
+        this.session = session;
+      }
+      getViewport(view) {
+        return view.__royalBenchViewport;
+      }
+    }
+    const xrSystem = {
+      isSessionSupported: async (mode) => mode === 'immersive-vr',
+      requestSession: async (mode) => {
+        if (mode !== 'immersive-vr') throw new Error('Royal benchmark fake XR only supports immersive-vr');
+        return new RoyalBenchXrSession();
+      },
+    };
+    Object.defineProperty(globalThis, 'XRWebGLLayer', {
+      configurable: true,
+      value: RoyalBenchXrWebGlLayer,
+    });
+    Object.defineProperty(Navigator.prototype, 'xr', {
+      configurable: true,
+      get() {
+        return xrSystem;
+      },
+    });
+  }
   globalThis.__royalBench = {
     counters,
+    latencyPulse,
     reset() {
       for (const key of Object.keys(counters)) counters[key] = 0;
+      xr.frameTimes.length = 0;
     },
+    sampleXrFrames,
     snapshot() {
       return { ...counters };
+    },
+    xrSnapshot() {
+      return {
+        active: xr.activeSession !== null,
+        frameCount: xr.frameTimes.length,
+        hz: xr.hz,
+        sessions: xr.sessions,
+        viewCount: config.fakeXrViews,
+      };
     },
   };
 })();
@@ -353,7 +632,8 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
 })()
 `);
 
-const collectPageMetrics = async (session, frames) => {
+const collectPageMetrics = async (session, frames, options = {}) => {
+  const { sampleXr = true } = options;
   const beforeGc = await session.call('Runtime.getHeapUsage');
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
@@ -381,15 +661,26 @@ const collectPageMetrics = async (session, frames) => {
   const percentile = (ratio) => deltas[Math.min(deltas.length - 1, Math.floor((deltas.length - 1) * ratio))] ?? 0;
   return {
     averageMs: sum / deltas.length,
+    jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
     maxMs: deltas[deltas.length - 1] ?? 0,
     minMs: deltas[0] ?? 0,
     p50Ms: percentile(0.5),
     p95Ms: percentile(0.95),
+    p99Ms: percentile(0.99),
     sampleCount: deltas.length,
   };
 })()
 `);
   const gl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+  const xrFrameStats = sampleXr
+    ? await evaluate(session, `
+(async () => globalThis.__royalBench?.sampleXrFrames?.(${frames}, ${fakeXrSampleTimeoutMs}) ?? null)()
+`)
+    : null;
+  const latency = await evaluate(session, `
+(async () => globalThis.__royalBench?.latencyPulse?.() ?? null)()
+`);
+  const xr = await evaluate(session, 'globalThis.__royalBench?.xrSnapshot?.() ?? null');
   const perf = await evaluate(session, `
 (() => {
   const navigation = performance.getEntriesByType('navigation')[0];
@@ -461,8 +752,67 @@ const collectPageMetrics = async (session, frames) => {
       retainedGrowthBytes: afterFinalGc.usedSize - afterGc.usedSize,
       transientGrowthBytes: afterFrameGc.usedSize - afterGc.usedSize,
     },
+    latency,
     performance: perf,
+    xr: xr === null ? undefined : {
+      ...xr,
+      frameStats: xrFrameStats,
+    },
   };
+};
+
+const prepareRouteForBenchmark = async (session, route) => {
+  if (!fakeXrEnabled || route.id !== 'webxr-vr') return undefined;
+  try {
+    return await evaluate(session, `
+(async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const errorMessage = (error) => error instanceof Error ? error.message : String(error);
+  const timeoutMs = ${fakeXrPrepareTimeoutMs};
+  const deadline = performance.now() + timeoutMs;
+  let clicked = false;
+  while (performance.now() < deadline) {
+    const button = [...document.querySelectorAll('button')]
+      .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
+    if (button !== undefined && !button.disabled) {
+      if (button.textContent?.includes('Enter XR')) {
+        try {
+          button.click();
+          clicked = true;
+        } catch (error) {
+          return { active: false, clicked, error: errorMessage(error), reason: 'click-failed' };
+        }
+      }
+      break;
+    }
+    await sleep(25);
+  }
+  while (performance.now() < deadline) {
+    const button = [...document.querySelectorAll('button')]
+      .find((entry) => entry.textContent?.includes('Enter XR') || entry.textContent?.includes('Exit XR'));
+    const text = document.body.innerText;
+    if (button?.textContent?.includes('Exit XR') && text.includes('immersive')) {
+      return { active: true, status: 'immersive' };
+    }
+    await sleep(25);
+  }
+  return {
+    active: false,
+    clicked,
+    reason: 'timeout',
+    status: document.body.innerText.slice(0, 300),
+    timedOut: true,
+    timeoutMs,
+  };
+})()
+`);
+  } catch (error) {
+    return {
+      active: false,
+      error: error instanceof Error ? error.message : String(error),
+      reason: 'prepare-evaluate-failed',
+    };
+  }
 };
 
 const benchmarkRoute = async (session, route) => {
@@ -472,9 +822,23 @@ const benchmarkRoute = async (session, route) => {
   await session.call('Page.navigate', { url: baseUrl + route.path });
   await Promise.race([loaded, sleep(10_000)]);
   const ready = await waitForBenchmarkReady(session);
-  const measured = await collectPageMetrics(session, frameSampleCount);
+  const prepared = await prepareRouteForBenchmark(session, route);
+  const measured = await collectPageMetrics(session, frameSampleCount, {
+    sampleXr: prepared?.active !== false,
+  });
+  const activationFailure = prepared?.active === false
+    ? {
+      error: prepared.error,
+      reason: prepared.reason ?? 'activation-failed',
+      status: prepared.status,
+      timedOut: prepared.timedOut === true,
+      timeoutMs: prepared.timeoutMs,
+    }
+    : undefined;
   return {
     ...route,
+    ...(prepared === undefined ? {} : { prepared }),
+    ...(activationFailure === undefined ? {} : { fakeXrActivationFailure: activationFailure }),
     ready,
     wallNavigationAndReadyMs: performance.now() - start,
     ...measured,
@@ -497,7 +861,7 @@ const main = async () => {
     String(previewPort),
     '--strictPort',
   ], { cwd: appRoot });
-  const browser = spawnLogged('chromium', [
+  const browserArgs = [
     '--headless=new',
     '--no-sandbox',
     '--disable-dev-shm-usage',
@@ -506,8 +870,10 @@ const main = async () => {
     '--use-angle=swiftshader',
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
+    ...(fakeXrEnabled ? [`--unsafely-treat-insecure-origin-as-secure=${baseUrl}`] : []),
     'about:blank',
-  ], { cwd: appRoot });
+  ];
+  const browser = spawnLogged('chromium', browserArgs, { cwd: appRoot });
 
   let session;
   try {
@@ -528,11 +894,16 @@ const main = async () => {
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
       const drawCallsPerFrame = result.gl.drawCalls / frameSampleCount;
+      const xrP95 = result.xr?.frameStats?.p95Ms;
+      const xrFrameFailure = result.xr?.frameStats?.failed === true ? result.xr.frameStats.reason : undefined;
       console.log([
         route.id.padEnd(28),
         `load=${(result.performance.navigation?.duration ?? 0).toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
+        ...(typeof xrP95 === 'number' ? [`xrP95=${xrP95.toFixed(1)}ms`] : []),
+        ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
+        ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
         `heap=${retainedKb.toFixed(1)}KiB`,
       ].join(' '));
@@ -544,6 +915,11 @@ const main = async () => {
         frameSampleCount,
         frameWarmupCount,
         clearCachePerRoute,
+        fakeXrEnabled,
+        fakeXrHz,
+        fakeXrPrepareTimeoutMs,
+        fakeXrSampleTimeoutMs,
+        fakeXrViews,
         instancingFuzzCases,
         instancingSeed,
       },

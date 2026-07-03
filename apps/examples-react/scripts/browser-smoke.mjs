@@ -81,6 +81,11 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
   },
+  'webxr-vr': {
+    path: '/webxr-vr',
+    minColorBuckets: 10,
+    minPaintedRatio: 0.01,
+  },
 };
 
 const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) => ({

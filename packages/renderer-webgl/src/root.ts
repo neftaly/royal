@@ -10,6 +10,7 @@ import {
   type PickInput,
   type PickResult,
   type PickTarget,
+  type RenderPass,
   type RenderObjectHandle,
   type RenderObjectRef,
   type RenderNode,
@@ -185,6 +186,24 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly uploadedPages: number;
 }
 
+export interface WebGlRenderViewport {
+  readonly height: number;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface WebGlRenderView {
+  readonly projectionMatrix: ArrayLike<number>;
+  readonly viewMatrix: ArrayLike<number>;
+  readonly viewport: WebGlRenderViewport;
+}
+
+export interface WebGlRenderViewsOptions {
+  readonly framebuffer?: WebGLFramebuffer | null;
+  readonly views: readonly WebGlRenderView[];
+}
+
 /** Imperative WebGL2 renderer root. */
 export interface WebGlRoot {
   readonly canvas: HTMLCanvasElement;
@@ -197,6 +216,7 @@ export interface WebGlRoot {
   invalidate(): void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
+  renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;
   snapshot(): WebGlRootSnapshot;
 }
 
@@ -644,6 +664,12 @@ type GltfInstanceBufferResource = {
 
 type ViewportSize = readonly [width: number, height: number];
 
+type SceneRenderView = {
+  projection(renderPass: RenderPass): Mat4;
+  readonly viewport: WebGlRenderViewport;
+  view(renderPass: RenderPass): Mat4;
+};
+
 const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
@@ -682,6 +708,16 @@ const typedArrayContentKey = (array: ArrayBufferView | undefined): string => {
   ].join(":");
   TYPED_ARRAY_CONTENT_KEYS.set(array, key);
   return key;
+};
+
+const mat4FromArrayLike = (matrix: ArrayLike<number>): Mat4 => {
+  if (matrix.length !== 16) throw new Error("Royal WebGL render views require 4x4 matrices");
+  return [
+    matrix[0]!, matrix[1]!, matrix[2]!, matrix[3]!,
+    matrix[4]!, matrix[5]!, matrix[6]!, matrix[7]!,
+    matrix[8]!, matrix[9]!, matrix[10]!, matrix[11]!,
+    matrix[12]!, matrix[13]!, matrix[14]!, matrix[15]!,
+  ];
 };
 
 const gltfGeometryContentKey = ({
@@ -850,7 +886,7 @@ const gltfTextureIdentity = (
 };
 
 const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextureImageSelection | undefined => {
-  const svgSource = texture?.extensions?.ROYAL_texture_svg?.source;
+  const svgSource = texture?.extensions?.GS_texture_svg?.source;
   if (svgSource !== undefined) return { imageIndex: svgSource, kind: "svg" };
 
   const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
@@ -1334,7 +1370,7 @@ const loadSvgUriImage = async (url: string): Promise<HTMLImageElement> => {
 
   return loadSvgTextImage(
     await response.text(),
-    `glTF ROYAL_texture_svg image ${url}`,
+    `glTF GS_texture_svg image ${url}`,
     absoluteSvgBaseUrl(response.url || url),
   );
 };
@@ -1348,18 +1384,18 @@ const loadSvgImageSource = async (
   if (image.uri !== undefined) {
     if (image.uri.startsWith("data:")) {
       const svgText = svgTextDecoder.decode(decodeDataUri(image.uri));
-      return loadSvgTextImage(svgText, `glTF ROYAL_texture_svg data URI ${image.uri.slice(0, 48)}`, absoluteSvgBaseUrl(src));
+      return loadSvgTextImage(svgText, `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`, absoluteSvgBaseUrl(src));
     }
 
     return loadSvgUriImage(resolveResourceUri(src, image.uri));
   }
   if (image.bufferView === undefined) {
-    throw new Error("glTF ROYAL_texture_svg image has no URI or bufferView");
+    throw new Error("glTF GS_texture_svg image has no URI or bufferView");
   }
 
   return loadSvgTextImage(
     svgTextDecoder.decode(gltfBufferViewBytes(document, buffers, image.bufferView)),
-    `glTF ROYAL_texture_svg bufferView ${image.bufferView}`,
+    `glTF GS_texture_svg bufferView ${image.bufferView}`,
     absoluteSvgBaseUrl(src),
   );
 };
@@ -1921,67 +1957,115 @@ class WebGlRootImpl implements WebGlRoot {
       throw new Error("Cannot render with a disposed Royal renderer root");
     }
 
+    const { height, width } = this.#resize();
+    this.#renderScene(scene, {
+      framebuffer: null,
+      scissor: false,
+      views: [{
+        projection: (renderPass) => projectionMat4(renderPass.camera, width, height),
+        view: (renderPass) => viewMat4(renderPass.camera),
+        viewport: { height, width, x: 0, y: 0 },
+      }],
+    });
+  }
+
+  renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void {
+    if (this.#disposed) {
+      throw new Error("Cannot render views with a disposed Royal renderer root");
+    }
+
+    this.#renderScene(scene, {
+      framebuffer: options.framebuffer ?? null,
+      scissor: true,
+      views: options.views.map((view) => ({
+        projection: () => mat4FromArrayLike(view.projectionMatrix),
+        view: () => mat4FromArrayLike(view.viewMatrix),
+        viewport: view.viewport,
+      })),
+    });
+  }
+
+  #renderScene(
+    scene: RenderRoot,
+    options: {
+      readonly framebuffer: WebGLFramebuffer | null;
+      readonly scissor: boolean;
+      readonly views: readonly SceneRenderView[];
+    },
+  ): void {
+    if (options.views.length === 0) return;
+
     this.#latestScene = scene;
     this.#syncRenderObjectRefs(scene);
     this.#activeGltfInstanceBufferKeys = new Set();
     this.#activeGltfLodSelectionKeys = new Set();
     this.#gltfRenderOrdinal = 0;
-    const { height, width } = this.#resize();
     const gl = this.#gl;
-    gl.viewport(0, 0, width, height);
+    gl.bindFramebuffer?.(gl.FRAMEBUFFER, options.framebuffer);
     gl.clearDepth?.(1);
     gl.enable?.(gl.DEPTH_TEST);
     gl.depthFunc?.(gl.LEQUAL);
     gl.enable?.(gl.BLEND);
     gl.blendFunc?.(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    if (options.scissor) gl.enable?.(gl.SCISSOR_TEST);
 
     const usedGeometry = new Set<string>();
-    for (const renderPass of scene.children) {
-      if (renderPass.depthTest) {
-        gl.enable?.(gl.DEPTH_TEST);
-      } else {
-        gl.disable?.(gl.DEPTH_TEST);
-      }
-
-      const clearMask =
-        renderPass.clear === "none"
-          ? 0
-          : renderPass.clear === "color"
-            ? gl.COLOR_BUFFER_BIT
-            : renderPass.clear === "depth"
-              ? gl.DEPTH_BUFFER_BIT
-              : gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT;
-
-      if (clearMask !== 0) {
-        if (renderPass.clear === "color" || renderPass.clear === "color-depth") {
-          const [r, g, b, a] = renderPass.clearColor;
-          gl.clearColor(r, g, b, a);
+    try {
+      for (const renderPass of scene.children) {
+        if (renderPass.depthTest) {
+          gl.enable?.(gl.DEPTH_TEST);
+        } else {
+          gl.disable?.(gl.DEPTH_TEST);
         }
-        gl.clear(clearMask);
-      }
 
-      const projection = projectionMat4(renderPass.camera, width, height);
-      const view = viewMat4(renderPass.camera);
-      const lights = this.#directionalLights(renderPass.children);
-      const passLights = passSurfaceLightSet(lights[0]);
-      const viewportSize: ViewportSize = [width, height];
-      const gltfDraws: GltfPrimitiveDraw[] = [];
-      const flushGltfDraws = (): void => {
-        if (gltfDraws.length === 0) return;
-        this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, viewportSize, usedGeometry);
-        gltfDraws.length = 0;
-      };
+        for (const renderView of options.views) {
+          const { height, width, x, y } = renderView.viewport;
+          gl.viewport(x, y, width, height);
+          if (options.scissor) gl.scissor?.(x, y, width, height);
+          const clearMask =
+            renderPass.clear === "none"
+              ? 0
+              : renderPass.clear === "color"
+                ? gl.COLOR_BUFFER_BIT
+                : renderPass.clear === "depth"
+                  ? gl.DEPTH_BUFFER_BIT
+                  : gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT;
 
-      for (const child of renderPass.children) {
-        if (child.kind === "directional-light") continue;
-        if (child.kind === "gltf") {
-          this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws);
-          continue;
+          if (clearMask !== 0) {
+            if (renderPass.clear === "color" || renderPass.clear === "color-depth") {
+              const [r, g, b, a] = renderPass.clearColor;
+              gl.clearColor(r, g, b, a);
+            }
+            gl.clear(clearMask);
+          }
+
+          const projection = renderView.projection(renderPass);
+          const view = renderView.view(renderPass);
+          const lights = this.#directionalLights(renderPass.children);
+          const passLights = passSurfaceLightSet(lights[0]);
+          const viewportSize: ViewportSize = [width, height];
+          const gltfDraws: GltfPrimitiveDraw[] = [];
+          const flushGltfDraws = (): void => {
+            if (gltfDraws.length === 0) return;
+            this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, viewportSize, usedGeometry);
+            gltfDraws.length = 0;
+          };
+
+          for (const child of renderPass.children) {
+            if (child.kind === "directional-light") continue;
+            if (child.kind === "gltf") {
+              this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws);
+              continue;
+            }
+            flushGltfDraws();
+            this.#drawNode(child, projection, view, lights[0], viewportSize, usedGeometry);
+          }
+          flushGltfDraws();
         }
-        flushGltfDraws();
-        this.#drawNode(child, projection, view, lights[0], viewportSize, usedGeometry);
       }
-      flushGltfDraws();
+    } finally {
+      if (options.scissor) gl.disable?.(gl.SCISSOR_TEST);
+      gl.bindFramebuffer?.(gl.FRAMEBUFFER, null);
     }
 
     this.#releaseUnusedGeometry(usedGeometry);

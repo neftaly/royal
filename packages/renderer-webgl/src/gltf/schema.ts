@@ -283,7 +283,7 @@ export type GltfTexture = {
     readonly KHR_texture_basisu?: {
       readonly source?: number;
     };
-    readonly ROYAL_texture_svg?: {
+    readonly GS_texture_svg?: {
       readonly source?: number;
     };
   };

@@ -12,6 +12,8 @@
     "build": "pnpm -r --if-present build",
     "check:gpu": "node scripts/gpu.ts check",
     "dev": "pnpm --filter @royal/examples-react dev",
+    "dev:xr": "node scripts/dev-xr.mjs",
+    "quest:browser": "node scripts/quest-browser-control.mjs",
     "test": "vitest run tests/*.test.ts tests/*.test.tsx",
     "test:browser": "pnpm --filter @royal/examples-react test:browser",
     "typecheck": "tsc"

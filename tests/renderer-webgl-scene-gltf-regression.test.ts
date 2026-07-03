@@ -4800,7 +4800,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
-  it("loads ROYAL_texture_svg base-color texture sources through automatic image upload", async () => {
+  it("loads GS_texture_svg base-color texture sources through automatic image upload", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -4814,12 +4814,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4870,12 +4870,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4909,7 +4909,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().diagnostics).toEqual([]);
   });
 
-  it("prefers optional ROYAL_texture_svg sources over core raster fallbacks when supported", async () => {
+  it("prefers optional GS_texture_svg sources over core raster fallbacks when supported", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -4923,12 +4923,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4952,7 +4952,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(callCount(calls, "texImage2D")).toBe(1);
   });
 
-  it("rejects ROYAL_texture_svg textures with additional texture-source fallbacks", async () => {
+  it("rejects GS_texture_svg textures with additional texture-source fallbacks", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -4967,7 +4967,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu", "ROYAL_texture_svg"],
+        extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu", "GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/webp", uri: triangleWebpImageUri },
@@ -4978,7 +4978,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
           extensions: {
             EXT_texture_webp: { source: 1 },
             KHR_texture_basisu: { source: 2 },
-            ROYAL_texture_svg: { source: 3 },
+            GS_texture_svg: { source: 3 },
           },
           sampler: 0,
           source: 0,
@@ -4987,14 +4987,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushMicrotasks();
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /ROYAL_texture_svg texture 0 .*additional texture source fallbacks/i,
+      /GS_texture_svg texture 0 .*additional texture source fallbacks/i,
     ));
     expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
     expect(decodeBasisuMock).not.toHaveBeenCalled();
     expect(ControlledImage.instances).toHaveLength(0);
   });
 
-  it("rejects ROYAL_texture_svg images without a finite viewBox or width and height", async () => {
+  it("rejects GS_texture_svg images without a finite viewBox or width and height", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -5009,7 +5009,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           {
@@ -5017,7 +5017,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
             uri: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3C%2Fsvg%3E",
           },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -5026,12 +5026,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /ROYAL_texture_svg .*requires a finite viewBox or finite width and height/i,
+      /GS_texture_svg .*requires a finite viewBox or finite width and height/i,
     ));
     expect(ControlledImage.instances).toHaveLength(0);
   });
 
-  it("rejects ROYAL_texture_svg listed in extensionsRequired", async () => {
+  it("rejects GS_texture_svg listed in extensionsRequired", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -5046,24 +5046,24 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsRequired: ["ROYAL_texture_svg"],
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsRequired: ["GS_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/png", uri: triangleImageUri },
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /ROYAL_texture_svg .*must not be listed in extensionsRequired/i,
+      /GS_texture_svg .*must not be listed in extensionsRequired/i,
     ));
     expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
     expect(ControlledImage.instances).toHaveLength(0);
   });
 
-  it("rejects ROYAL_texture_svg textures without a core source fallback", async () => {
+  it("rejects GS_texture_svg textures without a core source fallback", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -5078,16 +5078,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["ROYAL_texture_svg"],
+        extensionsUsed: ["GS_texture_svg"],
         images: [
           { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
         ],
-        textures: [{ extensions: { ROYAL_texture_svg: { source: 0 } }, sampler: 0 }],
+        textures: [{ extensions: { GS_texture_svg: { source: 0 } }, sampler: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /ROYAL_texture_svg texture 0 .*core source fallback/i,
+      /GS_texture_svg texture 0 .*core source fallback/i,
     ));
     expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
     expect(ControlledImage.instances).toHaveLength(0);

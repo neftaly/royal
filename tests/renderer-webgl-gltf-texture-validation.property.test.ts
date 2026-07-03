@@ -27,7 +27,7 @@ const extensionPool = [
   "EXT_texture_webp",
   "KHR_materials_unlit",
   "KHR_texture_basisu",
-  "ROYAL_texture_svg",
+  "GS_texture_svg",
   "VENDOR_alpha",
   "VENDOR_beta",
   "VENDOR_gamma",
@@ -119,13 +119,13 @@ const imageLooksSvg = (image: GltfImage): boolean => {
   return isSvgUri(image.uri);
 };
 
-const royalSvgDocumentShouldPass = (document: GltfDocument): boolean => {
-  if (!document.textures?.some((texture) => texture.extensions?.ROYAL_texture_svg !== undefined)) return true;
-  if (!document.extensionsUsed?.includes("ROYAL_texture_svg")) return false;
-  if (document.extensionsRequired?.includes("ROYAL_texture_svg")) return false;
+const gsSvgDocumentShouldPass = (document: GltfDocument): boolean => {
+  if (!document.textures?.some((texture) => texture.extensions?.GS_texture_svg !== undefined)) return true;
+  if (!document.extensionsUsed?.includes("GS_texture_svg")) return false;
+  if (document.extensionsRequired?.includes("GS_texture_svg")) return false;
 
   for (const texture of document.textures) {
-    const extension = texture.extensions?.ROYAL_texture_svg;
+    const extension = texture.extensions?.GS_texture_svg;
     if (extension === undefined) continue;
     if (texture.extensions?.EXT_texture_webp !== undefined || texture.extensions?.KHR_texture_basisu !== undefined) {
       return false;
@@ -151,7 +151,7 @@ const royalSvgDocumentShouldPass = (document: GltfDocument): boolean => {
   return true;
 };
 
-const randomRoyalSvgDocument = (random: SeededRandom): GltfDocument => {
+const randomGsSvgDocument = (random: SeededRandom): GltfDocument => {
   const imageCount = random.int(0, 7);
   const textureCount = random.int(1, 6);
   const images = Array.from({ length: imageCount }, () => randomSvgImage(random));
@@ -178,14 +178,14 @@ const randomRoyalSvgDocument = (random: SeededRandom): GltfDocument => {
       extensions: {
         ...(random.boolean(0.16) ? { EXT_texture_webp: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
         ...(random.boolean(0.16) ? { KHR_texture_basisu: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
-        ROYAL_texture_svg: source === undefined ? {} : { source },
+        GS_texture_svg: source === undefined ? {} : { source },
       },
     };
   });
 
   return {
-    extensionsRequired: random.boolean(0.22) ? ["ROYAL_texture_svg"] : [],
-    extensionsUsed: random.boolean(0.82) ? ["ROYAL_texture_svg"] : [],
+    extensionsRequired: random.boolean(0.22) ? ["GS_texture_svg"] : [],
+    extensionsUsed: random.boolean(0.82) ? ["GS_texture_svg"] : [],
     images,
     textures,
   };
@@ -263,32 +263,32 @@ describe("renderer-webgl glTF texture validation properties", () => {
     });
   });
 
-  it("validates ROYAL_texture_svg extension usage and SVG image reference coherence", () => {
+  it("validates GS_texture_svg extension usage and SVG image reference coherence", () => {
     forEachFuzzCase({ cases: 48, seed: 0x56bd49e2 }, ({ label, random }) => {
-      const document = randomRoyalSvgDocument(random);
-      expectValidationOutcome(document, royalSvgDocumentShouldPass(document), label);
+      const document = randomGsSvgDocument(random);
+      expectValidationOutcome(document, gsSvgDocumentShouldPass(document), label);
     });
   });
 
-  it("requires exactly one core raster fallback for ROYAL_texture_svg textures", () => {
+  it("requires exactly one core raster fallback for GS_texture_svg textures", () => {
     const accepted: GltfDocument = {
-      extensionsUsed: ["ROYAL_texture_svg"],
+      extensionsUsed: ["GS_texture_svg"],
       images: [
         { mimeType: "image/jpeg", uri: "label-fallback.jpg" },
         { mimeType: "image/svg+xml", uri: "label.svg" },
       ],
-      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, source: 0 }],
+      textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 0 }],
     };
     expect(() => assertSupportedRequiredGltfExtensions("accepted.gltf", accepted)).not.toThrow();
 
     expect(() => assertSupportedRequiredGltfExtensions("missing-fallback.gltf", {
       ...accepted,
-      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } } }],
+      textures: [{ extensions: { GS_texture_svg: { source: 1 } } }],
     })).toThrow(/core source fallback/i);
 
     expect(() => assertSupportedRequiredGltfExtensions("required-svg.gltf", {
       ...accepted,
-      extensionsRequired: ["ROYAL_texture_svg"],
+      extensionsRequired: ["GS_texture_svg"],
     })).toThrow(/extensionsRequired/i);
 
     expect(() => assertSupportedRequiredGltfExtensions("extra-fallback.gltf", {
@@ -296,7 +296,7 @@ describe("renderer-webgl glTF texture validation properties", () => {
       textures: [{
         extensions: {
           EXT_texture_webp: { source: 0 },
-          ROYAL_texture_svg: { source: 1 },
+          GS_texture_svg: { source: 1 },
         },
         source: 0,
       }],
@@ -304,7 +304,7 @@ describe("renderer-webgl glTF texture validation properties", () => {
 
     expect(() => assertSupportedRequiredGltfExtensions("svg-fallback.gltf", {
       ...accepted,
-      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, source: 1 }],
+      textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 1 }],
     })).toThrow(/non-SVG image/i);
   });
 

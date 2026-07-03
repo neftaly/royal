@@ -20,7 +20,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
 
   return (
     <Canvas
-      aria-label="glTF ROYAL_texture_svg Ghostscript tiger card fixture"
+      aria-label="glTF GS_texture_svg Ghostscript tiger card fixture"
       renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >

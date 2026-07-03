@@ -44,8 +44,14 @@
       "@royal/renderer-webgl/capabilities": [
         "./packages/renderer-webgl/src/capabilities.ts"
       ],
+      "@royal/renderer-webgl/webxr": [
+        "./packages/renderer-webgl/src/webxr.ts"
+      ],
       "@royal/react": [
         "./packages/react/src/index.ts"
+      ],
+      "@royal/react/xr": [
+        "./packages/react/src/xr.ts"
       ],
       "@royal/react/jsx-dev-runtime": [
         "./packages/react/src/jsx-dev-runtime.ts"

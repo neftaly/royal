@@ -6,20 +6,20 @@ GLTF support is first-class. We try to support optional and draft features in a 
 
 ## SVG textures (experimental)
 
-We also support `.svg` textures, with an experimental GLTF extension.
+We also support `.svg` textures, with an experimental Garbo Succus GLTF extension.
 This lets the renderer show perfect textures at any resolution.
 
-Spec: [docs/ROYAL_texture_svg.md](docs/ROYAL_texture_svg.md)
+Spec: [docs/GS_texture_svg.md](docs/GS_texture_svg.md)
 
 Example: [apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx](apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx)
 
 ```json
 {
-  "extensionsUsed": ["ROYAL_texture_svg"],
+  "extensionsUsed": ["GS_texture_svg"],
   "textures": [{
     "source": 0,
     "extensions": {
-      "ROYAL_texture_svg": { "source": 1 }
+      "GS_texture_svg": { "source": 1 }
     }
   }],
   "images": [

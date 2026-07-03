@@ -36,7 +36,8 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        capabilities: 'src/capabilities.ts'
+        capabilities: 'src/capabilities.ts',
+        webxr: 'src/webxr.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -47,6 +48,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
+        xr: 'src/xr.ts',
         'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
         'jsx-runtime': 'src/jsx-runtime.ts',
         'renderer-jsx-dev-runtime': 'src/renderer-jsx-dev-runtime.ts',
@@ -68,6 +70,7 @@ const repoRoot = fileURLToPath(new URL('.', import.meta.url));
 const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
+  { find: '@royal/renderer-webgl/webxr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/webxr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/text/editable', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/editable/index.ts') },
   { find: '@royal/renderer-core/text/font', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/font.ts') },
@@ -81,6 +84,7 @@ export const sourceAliases = [
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
   { find: '@royal/react/renderer/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-dev-runtime.ts') },
   { find: '@royal/react/renderer/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-runtime.ts') },
+  { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') }
 ];

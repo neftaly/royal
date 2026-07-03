@@ -23,6 +23,8 @@ import { StandardLighting } from './examples/cases/StandardLighting';
 import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
 import { TextureMaterials } from './examples/cases/TextureMaterials';
 import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
+import { WebXrVr } from './examples/cases/WebXrVr';
+import webXrVrSource from './examples/cases/WebXrVr.tsx?raw';
 import { WireframeCube } from './examples/cases/WireframeCube';
 import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
 
@@ -153,6 +155,15 @@ export const examples = [
     Component: GltfVariants,
     source: gltfVariantsSource,
     sourceFile: 'examples/cases/GltfVariants.tsx',
+  },
+  {
+    id: 'webxr-vr',
+    maturity: 'lab-probe',
+    path: '/webxr-vr',
+    title: 'WebXR VR',
+    Component: WebXrVr,
+    source: webXrVrSource,
+    sourceFile: 'examples/cases/WebXrVr.tsx',
   },
 ] as const satisfies readonly Example[];
 

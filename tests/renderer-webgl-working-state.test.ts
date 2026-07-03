@@ -10,6 +10,14 @@ import {
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import {
+  createWebGlXrSessionRenderer,
+  type WebGlXrFrameSnapshot,
+  type WebGlXrLayerConstructor,
+  type WebGlXrReferenceSpace,
+  type WebGlXrSession,
+  type WebGlXrView,
+} from "@royal/renderer-webgl/webxr";
 
 type CanvasSize = {
   readonly width: number;
@@ -92,6 +100,7 @@ const fakeGl = (): FakeGl => {
     DEPTH_TEST: 0x0B71,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
     FRAGMENT_SHADER: 0x8B30,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
@@ -101,6 +110,7 @@ const fakeGl = (): FakeGl => {
     ONE_MINUS_SRC_ALPHA: 0x0303,
     RGBA: 0x1908,
     RGBA8: 0x8058,
+    SCISSOR_TEST: 0x0C11,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -118,6 +128,7 @@ const fakeGl = (): FakeGl => {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
     blendFunc: record("blendFunc"),
@@ -153,8 +164,10 @@ const fakeGl = (): FakeGl => {
     getShaderParameter: record("getShaderParameter", () => true),
     getUniformLocation: record("getUniformLocation", () => uniform),
     linkProgram: record("linkProgram"),
+    makeXRCompatible: record("makeXRCompatible", async () => undefined),
     pixelStorei: record("pixelStorei"),
     shaderSource: record("shaderSource"),
+    scissor: record("scissor"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
     texStorage2D: record("texStorage2D"),
@@ -193,6 +206,16 @@ const drawablePass = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => pass({
 
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
+
+const expectMatricesToContainClose = (
+  matrices: readonly (readonly number[])[],
+  expected: readonly number[],
+) => {
+  const hasMatrix = matrices.some((matrix) =>
+    matrix.length === expected.length
+    && matrix.every((value, index) => Math.abs(value - expected[index]!) < 0.00001));
+  expect(hasMatrix).toBe(true);
+};
 
 const frameEvents = (calls: readonly GlCall[]): readonly string[] =>
   calls
@@ -420,6 +443,130 @@ describe("WebGL root working state contracts", () => {
 
     expect(root.frame).toBe(2);
     expect(drawCalls(calls)).toHaveLength(initialDraws + 1);
+  });
+
+  it("renders caller-owned views with supplied matrices and scissored viewports", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const framebuffer = makeHandle<WebGLFramebuffer>();
+    const projection = [
+      2, 0, 0, 0,
+      0, 3, 0, 0,
+      0, 0, -1, -1,
+      0, 0, -0.1, 0,
+    ];
+    const view = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.25, -0.5, -2, 1,
+    ];
+
+    root.renderViews(scene({ children: [drawablePass([0, 0, 0, 0])] }), {
+      framebuffer,
+      views: [
+        { projectionMatrix: projection, viewMatrix: view, viewport: { height: 80, width: 100, x: 0, y: 0 } },
+        { projectionMatrix: projection, viewMatrix: view, viewport: { height: 80, width: 100, x: 100, y: 0 } },
+      ],
+    });
+
+    const framebufferBinds = calls.filter((call) => call.name === "bindFramebuffer");
+    expect(framebufferBinds[0]?.args).toEqual([gl.FRAMEBUFFER, framebuffer]);
+    expect(framebufferBinds.at(-1)?.args).toEqual([gl.FRAMEBUFFER, null]);
+    expect(calls.filter((call) => call.name === "viewport").map((call) => call.args)).toEqual([
+      [0, 0, 100, 80],
+      [100, 0, 100, 80],
+    ]);
+    expect(calls.filter((call) => call.name === "scissor").map((call) => call.args)).toEqual([
+      [0, 0, 100, 80],
+      [100, 0, 100, 80],
+    ]);
+    expect(drawCalls(calls)).toHaveLength(2);
+
+    const uniformMatrices = calls
+      .filter((call) => call.name === "uniformMatrix4fv")
+      .map((call) => Array.from(call.args[2] as ArrayLike<number>));
+    expectMatricesToContainClose(uniformMatrices, projection);
+    expectMatricesToContainClose(uniformMatrices, view);
+  });
+
+  it("creates a WebXR session renderer that renders the latest scene through XR views", async () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const framebuffer = makeHandle<WebGLFramebuffer>();
+    const referenceSpace: WebGlXrReferenceSpace = {};
+    const session: WebGlXrSession = {
+      requestReferenceSpace: vi.fn(async () => referenceSpace),
+      updateRenderState: vi.fn(),
+    };
+    const layerConstructor: WebGlXrLayerConstructor = class {
+      readonly framebuffer = framebuffer;
+      constructor(
+        readonly session: WebGlXrSession,
+        readonly context: WebGL2RenderingContext,
+        readonly options?: unknown,
+      ) {}
+      getViewport(view: WebGlXrView) {
+        return (view as WebGlXrView & {
+          readonly viewport: { readonly height: number; readonly width: number; readonly x: number; readonly y: number };
+        }).viewport;
+      }
+    };
+    const projectionMatrix = [
+      2, 0, 0, 0,
+      0, 2, 0, 0,
+      0, 0, -1, -1,
+      0, 0, -0.1, 0,
+    ];
+    const viewMatrix = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, -1, -3, 1,
+    ];
+    const xrViewport = { height: 90, width: 110, x: 4, y: 8 };
+    const snapshots: WebGlXrFrameSnapshot[] = [];
+    const onFrameSnapshot = vi.fn((snapshot: WebGlXrFrameSnapshot) => {
+      snapshots.push(snapshot);
+    });
+
+    root.render(scene({ children: [drawablePass([0, 0, 0, 0])] }));
+    const renderer = await createWebGlXrSessionRenderer(root, session, {
+      layerConstructor,
+      onFrameSnapshot,
+      referenceSpaceTypes: ["local"],
+    });
+    const callsBeforeXrFrame = calls.length;
+    const rendered = renderer.renderFrame({
+      getViewerPose: (space) => {
+        expect(space).toBe(referenceSpace);
+        return {
+          views: [{
+            projectionMatrix,
+            viewMatrix,
+            viewport: xrViewport,
+          }],
+        };
+      },
+    });
+    const xrCalls = calls.slice(callsBeforeXrFrame);
+
+    expect(rendered).toBe(true);
+    expect((gl as WebGL2RenderingContext & {
+      readonly makeXRCompatible: ReturnType<typeof vi.fn>;
+    }).makeXRCompatible).toHaveBeenCalled();
+    expect(session.updateRenderState).toHaveBeenCalledWith({ baseLayer: renderer.layer });
+    expect(session.requestReferenceSpace).toHaveBeenCalledWith("local");
+    expect(onFrameSnapshot).toHaveBeenCalledTimes(1);
+    expect(snapshots).toEqual([{
+      frameIndex: 0,
+      viewCount: 1,
+      viewports: [xrViewport],
+    }]);
+    expect(snapshots[0]?.viewports[0]).not.toBe(xrViewport);
+    expect(xrCalls.filter((call) => call.name === "bindFramebuffer")[0]?.args).toEqual([gl.FRAMEBUFFER, framebuffer]);
+    expect(xrCalls.filter((call) => call.name === "viewport").map((call) => call.args)).toEqual([[4, 8, 110, 90]]);
+    expect(drawCalls(xrCalls)).toHaveLength(1);
   });
 
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {

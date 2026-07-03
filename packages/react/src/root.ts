@@ -1,6 +1,7 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
+  type WebGlRoot,
   type WebGlRootOptions,
 } from "@royal/renderer-webgl";
 import type { RoyalRendererJsxElement } from "./jsx-runtime-internal";
@@ -49,6 +50,12 @@ export interface RoyalRendererRoot {
   snapshot(): RoyalRendererRootSnapshot;
 }
 
+const WEB_GL_ROOT = Symbol("Royal React WebGL root");
+
+type WebGlBackedRoyalRendererRoot = RoyalRendererRoot & {
+  readonly [WEB_GL_ROOT]: WebGlRoot;
+};
+
 const toWebGlRootOptions = (
   options: RoyalRendererRootOptions | undefined,
 ): WebGlRootOptions | undefined => {
@@ -67,6 +74,15 @@ const toRenderRoot = (scene: RoyalRendererRootRenderInput): RenderRoot => {
   throw new Error("Royal renderer root render expects a renderer scene");
 };
 
+export const webGlRootForRoyalRoot = (root: RoyalRendererRoot): WebGlRoot => {
+  const webGlRoot = (root as Partial<WebGlBackedRoyalRendererRoot>)[WEB_GL_ROOT];
+  if (webGlRoot === undefined) {
+    throw new Error("Royal React root is not backed by the WebGL renderer");
+  }
+
+  return webGlRoot;
+};
+
 /** Creates an imperative renderer root. */
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
@@ -74,7 +90,8 @@ export const createRendererRoot = (
 ): RoyalRendererRoot => {
   const root = createWebGlRoot(canvas, toWebGlRootOptions(options));
 
-  return {
+  const royalRoot: WebGlBackedRoyalRendererRoot = {
+    [WEB_GL_ROOT]: root,
     get canvas() {
       return root.canvas;
     },
@@ -110,4 +127,6 @@ export const createRendererRoot = (
       };
     },
   };
+
+  return royalRoot;
 };
