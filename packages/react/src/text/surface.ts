@@ -53,10 +53,10 @@ import {
 } from "react";
 import { useStore } from "zustand/react";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { Canvas, type CanvasProps } from "./canvas";
-import { canvasPointToWorld, type CanvasWorldBounds } from "./canvas-coordinate";
-import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
-import { rendererOutputToReact } from "./renderer-output";
+import { Canvas, type CanvasProps } from "../canvas";
+import { canvasPointToWorld, type CanvasWorldBounds } from "../canvas-coordinate";
+import { captureCanvasPointer, releaseCanvasPointer } from "../canvas-pointer";
+import { rendererOutputToReact } from "../renderer-output";
 
 export type TextControlMode = EditableTextFragmentMode;
 

@@ -10,7 +10,7 @@ import {
   type UiMenuLayout,
   type UiMenuLayoutMetrics,
   type UiMenuPoint,
-} from './ui-menu';
+} from '../../ui-menu';
 
 export type EditableTextMenuAction = 'copy' | 'cut' | 'paste';
 

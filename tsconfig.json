@@ -18,28 +18,28 @@
         "./packages/renderer-core/src/svg-index.ts"
       ],
       "@royal/renderer-core/text": [
-        "./packages/renderer-core/src/text-index.ts"
+        "./packages/renderer-core/src/text/index.ts"
       ],
       "@royal/renderer-core/text/editable": [
-        "./packages/renderer-core/src/text-editable-index.ts"
+        "./packages/renderer-core/src/text/editable/index.ts"
       ],
       "@royal/renderer-core/text/font": [
-        "./packages/renderer-core/src/text-font-index.ts"
+        "./packages/renderer-core/src/text/font.ts"
       ],
       "@royal/renderer-core/text/layout": [
-        "./packages/renderer-core/src/text-layout.ts"
+        "./packages/renderer-core/src/text/layout.ts"
       ],
       "@royal/renderer-core/text/mesh": [
-        "./packages/renderer-core/src/text-mesh.ts"
+        "./packages/renderer-core/src/text/mesh.ts"
       ],
       "@royal/renderer-core/text/node": [
-        "./packages/renderer-core/src/text-node.ts"
+        "./packages/renderer-core/src/text/node.ts"
       ],
       "@royal/renderer-core/text/shaping": [
-        "./packages/renderer-core/src/text-shaping.ts"
+        "./packages/renderer-core/src/text/shaping.ts"
       ],
       "@royal/renderer-core/text/types": [
-        "./packages/renderer-core/src/text-types.ts"
+        "./packages/renderer-core/src/text/types.ts"
       ],
       "@royal/renderer-webgl": [
         "./packages/renderer-webgl/src/index.ts"

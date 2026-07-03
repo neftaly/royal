@@ -5,7 +5,7 @@ import {
   TextFontProvider as TextFontProviderComponent,
   TextInteractionProvider as TextInteractionProviderComponent,
   TextSurface as TextSurfaceComponent
-} from './text-surface';
+} from './text/surface';
 
 export type { PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
 export type {
@@ -19,7 +19,7 @@ export type {
 export { canvasPointToWorld, worldPointToCanvasClient } from './canvas-coordinate';
 export { useCanvasElement, useCanvasPick, useCanvasRoot } from './canvas';
 export { captureCanvasPointer, releaseCanvasPointer } from './canvas-pointer';
-export { editableTextKeyboardIntent } from './editable-text-keyboard';
+export { editableTextKeyboardIntent } from './text/editable-keyboard';
 export {
   createOrbitCameraStore,
   createOrbitControls,
@@ -31,7 +31,7 @@ export {
   useOrbitCameraView
 } from './orbit-controls';
 export { createRoot } from './root';
-export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight, useTextFont } from './text-surface';
+export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight, useTextFont } from './text/surface';
 export { useFrame, useFrameIndex } from './frame';
 export { markRendererComponent } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
@@ -67,7 +67,7 @@ export type {
   TextPrimitiveProps,
   TextSurfaceBox,
   TextSurfaceProps
-} from './text-surface';
+} from './text/surface';
 export type {
   EditableTextClipboardShortcut,
   EditableTextClipboardShortcutIntent,
@@ -76,7 +76,7 @@ export type {
   EditableTextKeyboardIntent,
   EditableTextKeyboardMode,
   EditableTextKeyboardOptions
-} from './editable-text-keyboard';
+} from './text/editable-keyboard';
 export type {
   OrbitControlsBehaviorOptions,
   OrbitCameraHookResult,

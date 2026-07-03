@@ -9,14 +9,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./svg": "./src/svg-index.ts",
-    "./text": "./src/text-index.ts",
-    "./text/editable": "./src/text-editable-index.ts",
-    "./text/font": "./src/text-font-index.ts",
-    "./text/layout": "./src/text-layout.ts",
-    "./text/mesh": "./src/text-mesh.ts",
-    "./text/node": "./src/text-node.ts",
-    "./text/shaping": "./src/text-shaping.ts",
-    "./text/types": "./src/text-types.ts"
+    "./text": "./src/text/index.ts",
+    "./text/editable": "./src/text/editable/index.ts",
+    "./text/font": "./src/text/font.ts",
+    "./text/layout": "./src/text/layout.ts",
+    "./text/mesh": "./src/text/mesh.ts",
+    "./text/node": "./src/text/node.ts",
+    "./text/shaping": "./src/text/shaping.ts",
+    "./text/types": "./src/text/types.ts"
   },
   "files": [
     "src",

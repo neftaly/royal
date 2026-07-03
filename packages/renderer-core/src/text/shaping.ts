@@ -3,13 +3,13 @@ import {
   fontFaceDescriptor,
   fontForFace,
   missingTextFontMessage
-} from './text-font';
-import type { TextFontFace, TextFontMetrics } from './text-font';
+} from './font';
+import type { TextFontFace, TextFontMetrics } from './font';
 import {
   emptyBounds,
   replacementGlyphId,
   textBounds
-} from './text-shared';
+} from './shared';
 import type {
   ShapeTextOptions,
   ShapeTextResult,
@@ -18,7 +18,7 @@ import type {
   TextGlyphId,
   TextRunMetrics,
   TextShapingDiagnostic
-} from './text-types';
+} from './types';
 
 export type {
   ShapeTextOptions,
@@ -32,7 +32,7 @@ export type {
   TextLigatureMetadata,
   TextRunMetrics,
   TextShapingDiagnostic
-} from './text-types';
+} from './types';
 
 const glyphIdForFontGlyph = (face: TextFontFace, glyph: OpenTypeGlyph): TextGlyphId =>
   `font:${face.family}:${glyph.index}`;

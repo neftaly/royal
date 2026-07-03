@@ -129,8 +129,8 @@ export {
   uiMenuCommand,
   uiMenuCommandAt
 } from './ui-menu';
-export type { TextNode, TextOptions } from './text-types';
-export { text } from './text-node';
+export type { TextNode, TextOptions } from './text/types';
+export { text } from './text/node';
 export type {
   Axis,
   AxisDirection,

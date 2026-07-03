@@ -1,5 +1,5 @@
-import type { Rgba, Vec3 } from './primitives';
-import type { TextFontDescriptor, TextFontFace } from './text-font';
+import type { Rgba, Vec3 } from '../primitives';
+import type { TextFontDescriptor, TextFontFace } from './font';
 
 export type TextBounds = {
   readonly xMax: number;

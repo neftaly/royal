@@ -1,10 +1,10 @@
-import { boxGeometry } from './geometry';
-import { unlitMaterial } from './material';
-import { mesh } from './mesh';
-import type { Rgba, Vec3 } from './primitives';
-import type { RenderNode } from './render-node';
-import type { TextFontFace } from './text-font';
-import { text } from './text-node';
+import { boxGeometry } from '../../geometry';
+import { unlitMaterial } from '../../material';
+import { mesh } from '../../mesh';
+import type { Rgba, Vec3 } from '../../primitives';
+import type { RenderNode } from '../../render-node';
+import type { TextFontFace } from '../font';
+import { text } from '../node';
 import {
   clampTextIndex,
   editableTextCaretPlacement,
@@ -16,7 +16,7 @@ import {
   type EditableTextRange,
   type EditableTextSelection,
   type EditableTextSelectionRect,
-} from './editable-text';
+} from './model';
 
 export type EditableTextFragmentMode = 'single-line' | 'multiline';
 

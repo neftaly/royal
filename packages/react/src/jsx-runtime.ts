@@ -58,7 +58,7 @@ import {
   type TextPrimitiveProps,
   type TextSurfaceBox,
   type TextSurfaceControlStyle
-} from './text-surface';
+} from './text/surface';
 
 export type RoyalRendererJsxElement = RenderElement | Camera | Geometry<GeometryKindValue> | Material;
 export type RoyalRendererJsxChild = ReactNode | RoyalRendererJsxElement | readonly RoyalRendererJsxChild[];

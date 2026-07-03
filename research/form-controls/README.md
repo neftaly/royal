@@ -34,7 +34,7 @@ It defines browser-independent primitives for:
 Current renderer text APIs already provide most of the text geometry needed by form controls:
 
 - `packages/renderer-core/src/text.ts` exposes `layoutText(...)`, `TextLayout`, and `textMesh(...)`. `layoutText` returns line origins, glyph placements, run metrics, bounds, diagnostics, and the original source text.
-- `packages/renderer-core/src/editable-text.ts` has the browser-independent helpers a form control worker should reuse or mirror: `layoutEditableText`, `editableTextCaretPlacement`, `editableTextSelectionRects`, `nearestEditableTextCaret`, `previousTextIndex`, and `nextTextIndex`.
+- `packages/renderer-core/src/text/editable/model.ts` has the browser-independent helpers a form control worker should reuse or mirror: `layoutEditableText`, `editableTextCaretPlacement`, `editableTextSelectionRects`, `nearestEditableTextCaret`, `previousTextIndex`, and `nextTextIndex`.
 - `apps/examples-react/src/examples/cases/RendererText.tsx` demonstrates the browser adapter shape: a focusable canvas with `role="textbox"`, `aria-multiline`, `aria-valuetext`, key handling, paste handling, IME commit handling, pointer capture, hit testing, caret rendering, and drag selection.
 
 The form-control path should reuse the exported editable text helpers rather

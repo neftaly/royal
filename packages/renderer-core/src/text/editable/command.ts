@@ -4,7 +4,7 @@ import {
   previousTextIndex,
   sortedEditableTextRange,
   type EditableTextSelection,
-} from './editable-text';
+} from './model';
 
 export type EditableTextCommandState = {
   readonly text: string;

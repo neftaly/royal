@@ -2,7 +2,7 @@ import {
   applyEditableTextCommand,
   type EditableTextCommand,
   type EditableTextCommandState,
-} from './editable-text-command';
+} from './command';
 import {
   editableTextCaretPlacement,
   nearestEditableTextCaret,
@@ -11,7 +11,7 @@ import {
   type EditableTextLayout,
   type EditableTextRange,
   type EditableTextSelection,
-} from './editable-text';
+} from './model';
 import {
   clampEditableTextSelection,
   editableTextKeyIntent,
@@ -22,8 +22,8 @@ import {
   type EditableTextKeyInput,
   type EditableTextKeyIntent,
   type EditableTextKeyIntentOptions,
-} from './editable-text-input';
-import type { Vec3 } from './primitives';
+} from './input';
+import type { Vec3 } from '../../primitives';
 
 export type EditableTextEditorState = EditableTextCommandState;
 

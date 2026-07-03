@@ -1,14 +1,14 @@
 import earcut from 'earcut';
 import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
-import { fontForFace, missingTextFontMessage } from './text-font';
-import type { TextFontFace } from './text-font';
+import { fontForFace, missingTextFontMessage } from './font';
+import type { TextFontFace } from './font';
 import {
   defaultOutlineFlattenTolerance,
   minimumTextUnit,
   textBounds,
   unionBounds,
   whitespaceGlyphs
-} from './text-shared';
+} from './shared';
 import type {
   TextBounds,
   TextGlyphLayout,
@@ -17,15 +17,15 @@ import type {
   TextMeshContour,
   TextMeshVertex,
   TextNode
-} from './text-types';
-import type { Vec3 } from './primitives';
+} from './types';
+import type { Vec3 } from '../primitives';
 
 export type {
   TextMesh,
   TextMeshContour,
   TextMeshContourRole,
   TextMeshVertex
-} from './text-types';
+} from './types';
 
 const glyphCoord = (glyphBounds: TextBounds, x: number, y: number): readonly [number, number] => {
   const width = Math.max(minimumTextUnit, glyphBounds.xMax - glyphBounds.xMin);

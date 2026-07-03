@@ -1,7 +1,7 @@
-import { layoutText } from './text-layout';
-import type { TextNode, TextOptions } from './text-types';
+import { layoutText } from './layout';
+import type { TextNode, TextOptions } from './types';
 
-export type { TextNode, TextOptions } from './text-types';
+export type { TextNode, TextOptions } from './types';
 
 const createTextNode = (options: TextOptions): TextNode => {
   const layout = layoutText({

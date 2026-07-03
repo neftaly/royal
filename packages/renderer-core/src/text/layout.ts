@@ -1,13 +1,13 @@
-import type { Vec3 } from './primitives';
-import { textFontDescriptor } from './text-font';
-import type { TextFontMetrics } from './text-font';
+import type { Vec3 } from '../primitives';
+import { textFontDescriptor } from './font';
+import type { TextFontMetrics } from './font';
 import {
   defaultOrigin,
   textBounds,
   translateBounds,
   unionBounds
-} from './text-shared';
-import { shapeText } from './text-shaping';
+} from './shared';
+import { shapeText } from './shaping';
 import type {
   LayoutTextOptions,
   TextBounds,
@@ -16,7 +16,7 @@ import type {
   TextLineLayout,
   TextRunMetrics,
   TextShapingDiagnostic
-} from './text-types';
+} from './types';
 
 export type {
   LayoutTextOptions,
@@ -25,7 +25,7 @@ export type {
   TextGlyphLayout,
   TextLayout,
   TextLineLayout
-} from './text-types';
+} from './types';
 
 type TextLineSource = {
   readonly start: number;

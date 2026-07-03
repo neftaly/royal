@@ -1,4 +1,4 @@
-import type { EditableTextCommand } from './editable-text-command';
+import type { EditableTextCommand } from './command';
 import {
   clampTextIndex,
   editableTextCaretPlacement,
@@ -7,7 +7,7 @@ import {
   type EditableTextLayout,
   type EditableTextRange,
   type EditableTextSelection,
-} from './editable-text';
+} from './model';
 
 export type EditableTextInputMode = 'single-line' | 'multiline';
 

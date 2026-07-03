@@ -1,5 +1,5 @@
-import type { Vec3 } from './primitives';
-import type { TextBounds } from './text-types';
+import type { Vec3 } from '../primitives';
+import type { TextBounds } from './types';
 
 export const replacementGlyphId = 'glyph:.notdef';
 export const minimumTextUnit = 0.0001;

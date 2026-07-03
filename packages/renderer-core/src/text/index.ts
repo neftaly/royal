@@ -1,11 +1,11 @@
-export { createTextFontFace, createTextFontFaceAsync } from './text-font';
+export { createTextFontFace, createTextFontFaceAsync } from './font';
 export type {
   CreateTextFontFaceOptions,
   TextFontData,
   TextFontDescriptor,
   TextFontFace,
   TextFontMetrics
-} from './text-font';
+} from './font';
 export type {
   LayoutTextOptions,
   ShapeTextOptions,
@@ -30,8 +30,9 @@ export type {
   TextOptions,
   TextRunMetrics,
   TextShapingDiagnostic
-} from './text-types';
-export { layoutText } from './text-layout';
-export { textMesh } from './text-mesh';
-export { text } from './text-node';
-export { shapeText } from './text-shaping';
+} from './types';
+export { layoutText } from './layout';
+export { textMesh } from './mesh';
+export { text } from './node';
+export { shapeText } from './shaping';
+export * from './editable';
