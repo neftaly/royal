@@ -151,6 +151,9 @@ uniform bool u_useIblIrradiance;
 uniform vec4 u_iblIrradianceCoefficients[9];
 uniform vec4 u_iblIrradianceSettings;
 uniform mat4 u_iblWorldToIbl;
+uniform bool u_useIblSpecular;
+uniform vec4 u_iblSpecularSettings;
+uniform samplerCube u_iblSpecularCube;
 uniform sampler2D u_texture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
@@ -343,6 +346,21 @@ irradiance += u_iblIrradianceCoefficients[7].rgb * (1.092548 * n.x * n.z);
 irradiance += u_iblIrradianceCoefficients[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
 return max(irradiance * u_iblIrradianceSettings.y, vec3(0.0));
 }
+vec3 iblDecodeRgbd(vec4 rgbd) {
+return rgbd.rgb / max(rgbd.a, 0.00392156862);
+}
+vec3 iblSpecularRadiance(vec3 normal, vec3 viewDirection, vec3 baseColor) {
+if (!u_useIblSpecular) {
+  return vec3(0.0);
+}
+vec3 reflection = normalize(reflect(-viewDirection, normal));
+vec3 direction = normalize((u_iblWorldToIbl * vec4(reflection, 0.0)).xyz);
+float mipCount = max(u_iblSpecularSettings.z, 1.0);
+float lod = materialRoughnessFactor() * max(mipCount - 1.0, 0.0);
+float NdotV = max(dot(normal, viewDirection), 0.0);
+vec3 fresnel = mix(materialF0(baseColor), materialF90(), fresnelPow(NdotV));
+return iblDecodeRgbd(textureLod(u_iblSpecularCube, direction, lod)) * fresnel * u_iblSpecularSettings.y;
+}
 vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
 int kind = u_surfaceLightKind[index];
 vec3 lightVector;
@@ -397,6 +415,7 @@ vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput)
 float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
 vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
 vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+lit += iblSpecularRadiance(normal, viewDirection, baseColor.rgb) * (1.0 - viewClearcoat);
 for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
   if (index >= u_surfaceLightCount) {
     break;

@@ -2,6 +2,7 @@ import type { GltfDocument } from "./schema";
 
 export const supportedGltfExtensions = new Set<string>([
   "EXT_meshopt_compression",
+  "EXT_lights_image_based",
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_draco_mesh_compression",

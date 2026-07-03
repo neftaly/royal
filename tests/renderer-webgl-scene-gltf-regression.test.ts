@@ -150,7 +150,10 @@ const fakeGl = (): FakeGl => {
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
+    TEXTURE_CUBE_MAP: 0x8513,
+    TEXTURE_CUBE_MAP_POSITIVE_X: 0x8515,
     TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MAX_LEVEL: 0x813D,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
@@ -1503,7 +1506,7 @@ const imageBasedLightTriangleDocument = () => {
             specularImages: [
               [0, 1, 2, 3, 4, 5],
             ],
-            specularImageSize: 16,
+            specularImageSize: 4,
           },
         ],
       },
@@ -1538,14 +1541,14 @@ const sceneSelectedImageBasedLightTriangleDocument = () => {
             specularImages: [
               [0, 1, 2, 3, 4, 5],
             ],
-            specularImageSize: 16,
+            specularImageSize: 4,
           },
           {
             irradianceCoefficients: iblCoefficients([0.7, 0.6, 0.5]),
             specularImages: [
               [0, 1, 2, 3, 4, 5],
             ],
-            specularImageSize: 16,
+            specularImageSize: 4,
           },
         ],
       },
@@ -1587,7 +1590,7 @@ const invalidImageBasedLightReferenceTriangleDocument = () => {
             specularImages: [
               [0, 1, 2, 3, 4, 5],
             ],
-            specularImageSize: 16,
+            specularImageSize: 4,
           },
         ],
       },
@@ -2656,7 +2659,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
   });
 
-  it("uses optional EXT_lights_image_based diffuse irradiance without fetching ignored specular images", async () => {
+  it("uses optional EXT_lights_image_based diffuse and specular cubemap irradiance", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -2693,10 +2696,41 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[8]").map(roundVector))
       .toContainEqual([0.1, 0.2, 0.3, 0]);
     expect(sources).toContain("iblDiffuseIrradiance");
+    expect(sources).toContain("iblSpecularRadiance");
+    expect(sources).toContain("iblDecodeRgbd");
+    expect(sources).toContain("textureLod(u_iblSpecularCube");
     expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * ambientIrradiance");
-    expect(diagnostics).toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
-    expect(loader.fetchRequests.some((request) => /ibl-.*\.png(?:$|[?#])/.test(request.url))).toBe(false);
-    expect(ControlledImage.instances.some((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toBe(false);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useIblSpecular")).toContain(0);
+    expect(diagnostics).not.toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
+    expect(ControlledImage.instances.filter((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toHaveLength(6);
+
+    const callsBeforeSpecularImagesSettle = calls.length;
+    for (const image of ControlledImage.instances) {
+      if (/ibl-.*\.png(?:$|[?#])/.test(image.src)) image.settleLoad();
+    }
+    await flushMicrotasks();
+
+    root.render(renderGraph);
+    const specularReadyCalls = calls.slice(callsBeforeSpecularImagesSettle);
+    const cubeFaceTargets = specularReadyCalls
+      .filter((call) => call.name === "texImage2D")
+      .map((call) => Number(call.args[0]))
+      .filter((target) => target >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && target < gl.TEXTURE_CUBE_MAP_POSITIVE_X + 6);
+
+    expect(cubeFaceTargets).toEqual([
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X + 1,
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X + 2,
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X + 3,
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X + 4,
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X + 5,
+    ]);
+    expect(uniform1iPayloads(specularReadyCalls, "u_useIblSpecular")).toContain(1);
+    expect(uniform1iPayloads(specularReadyCalls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform4fvPayloads(specularReadyCalls, "u_iblSpecularSettings").map(roundVector))
+      .toContainEqual([1, 2, 1, 0]);
+    expect(specularReadyCalls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_CUBE_MAP))
+      .toBe(false);
   });
 
   it("selects EXT_lights_image_based from the active glTF scene and applies defaults", async () => {
@@ -2772,7 +2806,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(diagnostics).toMatch(/EXT_lights_image_based skipped: missing light 5/i);
   });
 
-  it("rejects required EXT_lights_image_based until specular cubemap support is implemented", async () => {
+  it("accepts required EXT_lights_image_based with specular cubemap support", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -2781,7 +2815,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const renderGraph = renderScene([
       gltf({
         src: triangleGltfSrc,
-        version: "ext-lights-image-based-required-rejected",
+        version: "ext-lights-image-based-required",
       }),
     ]);
 
@@ -2794,14 +2828,19 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }))).toBe(true);
     await flushMicrotasks();
 
-    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
-      .toBe(false);
-    expect(ControlledImage.instances.some((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toBe(false);
-    expect(root.snapshot().diagnostics.some((message) =>
-      /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(true);
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
 
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(true);
+    expect(ControlledImage.instances.filter((image) => /ibl-.*\.png(?:$|[?#])/.test(image.src))).toHaveLength(6);
+    expect(root.snapshot().diagnostics.some((message) =>
+      /unsupported required glTF extension.*EXT_lights_image_based/i.test(message))).toBe(false);
+
+    const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
-    expect(drawCalls(calls)).toHaveLength(0);
+    expect(drawCalls(calls.slice(callsBeforeReadyRender))).toHaveLength(1);
   });
 
   it("renders required KHR_materials_emissive_strength as an emissive material multiplier", async () => {

@@ -21,11 +21,26 @@ export type SurfaceImageBasedLight = {
   readonly coefficients: readonly Vec3[];
   readonly intensity: number;
   readonly rotation: Mat4;
+  readonly specular?: SurfaceImageBasedLightSpecular;
+};
+
+export type SurfaceImageBasedLightSpecular = {
+  readonly imageLoadKeys: readonly (readonly string[])[];
+  readonly imageSize: number;
+  readonly key: string;
 };
 
 export type SurfaceIblIrradiance = {
   readonly coefficients: readonly Vec3[];
   readonly intensity: number;
+  readonly worldToIbl: Mat4;
+};
+
+export type SurfaceIblSpecular = {
+  readonly key: string;
+  readonly mipCount: number;
+  readonly intensity: number;
+  readonly texture: WebGLTexture;
   readonly worldToIbl: Mat4;
 };
 
@@ -58,6 +73,7 @@ export type SurfaceLightSet = {
   readonly irradiance?: SurfaceIblIrradiance;
   readonly key: string;
   readonly lights: readonly SurfaceLight[];
+  readonly specular?: SurfaceIblSpecular;
 };
 
 export const DEFAULT_SURFACE_LIGHT_SET: SurfaceLightSet = {
@@ -81,6 +97,14 @@ const surfaceIblIrradianceKey = (irradiance: SurfaceIblIrradiance): string =>
     surfaceLightValueKey(irradiance.intensity),
     ...irradiance.coefficients.map((coefficient) => surfaceLightVectorKey(coefficient)),
     surfaceLightVectorKey(irradiance.worldToIbl),
+  ].join(":");
+
+const surfaceIblSpecularKey = (specular: SurfaceIblSpecular): string =>
+  [
+    specular.key,
+    surfaceLightValueKey(specular.intensity),
+    surfaceLightValueKey(specular.mipCount),
+    surfaceLightVectorKey(specular.worldToIbl),
   ].join(":");
 
 const surfaceLightKey = (light: SurfaceLight): string => {
@@ -114,18 +138,21 @@ const surfaceLightKey = (light: SurfaceLight): string => {
 export const surfaceLightSet = (
   lights: readonly SurfaceLight[],
   irradiance?: SurfaceIblIrradiance,
+  specular?: SurfaceIblSpecular,
 ): SurfaceLightSet => {
-  const useDefaultLight = lights.length === 0 && irradiance === undefined;
+  const useDefaultLight = lights.length === 0 && irradiance === undefined && specular === undefined;
   const actualLights = useDefaultLight ? DEFAULT_SURFACE_LIGHT_SET.lights : lights;
   const lightKey = useDefaultLight
     ? "default"
     : lights.length === 0 ? "none" : lights.map(surfaceLightKey).join("|");
-  const key = irradiance === undefined ? lightKey : `${lightKey}|ibl:${surfaceIblIrradianceKey(irradiance)}`;
+  const irradianceKey = irradiance === undefined ? "" : `|ibl:${surfaceIblIrradianceKey(irradiance)}`;
+  const specularKey = specular === undefined ? "" : `|ibl-specular:${surfaceIblSpecularKey(specular)}`;
 
   return {
     ...(irradiance === undefined ? {} : { irradiance }),
-    key,
+    key: `${lightKey}${irradianceKey}${specularKey}`,
     lights: actualLights,
+    ...(specular === undefined ? {} : { specular }),
   };
 };
 
@@ -147,9 +174,11 @@ export const combineSurfaceLightSets = (
   if (passLights === undefined) return assetLights;
   const lights = [...passLights.lights, ...assetLights.lights].slice(0, MAX_SURFACE_LIGHTS);
   const irradiance = assetLights.irradiance ?? passLights.irradiance;
+  const specular = assetLights.specular ?? passLights.specular;
 
   return {
     ...(irradiance === undefined ? {} : { irradiance }),
+    ...(specular === undefined ? {} : { specular }),
     key: `${passLights.key}|${assetLights.key}`,
     lights,
   };
