@@ -3,9 +3,7 @@ import {
   createOrbitCameraStore,
   createOrbitControls,
   orbitCameraTransform,
-  orbitPerspectiveCamera,
   resolveOrbitCameraView,
-  updateOrbitPerspectiveCamera,
   type OrbitCameraView,
 } from "@royal/react";
 
@@ -163,42 +161,6 @@ describe("OrbitControls", () => {
         yaw: 0.3,
       },
     ]);
-  });
-
-  it("updates stable perspective camera descriptors for imperative camera paths", () => {
-    const camera = orbitPerspectiveCamera({
-      far: 10,
-      fovY: Math.PI / 3,
-      near: 0.1,
-      view: defaultView,
-    });
-    const originalCamera = camera;
-    const expected = orbitPerspectiveCamera({
-      far: 20,
-      fovY: Math.PI / 4,
-      near: 0.2,
-      view: {
-        distance: 6,
-        pitch: -0.2,
-        target: [1, 2, 3],
-        yaw: 0.4,
-      },
-    });
-
-    updateOrbitPerspectiveCamera(camera, {
-      far: 20,
-      fovY: Math.PI / 4,
-      near: 0.2,
-      view: {
-        distance: 6,
-        pitch: -0.2,
-        target: [1, 2, 3],
-        yaw: 0.4,
-      },
-    });
-
-    expect(camera).toBe(originalCamera);
-    expect(camera).toEqual(expected);
   });
 
   it("zooms in and out from wheel input", () => {

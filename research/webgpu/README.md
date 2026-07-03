@@ -43,7 +43,7 @@ Local source checked:
 Royal currently exposes a synchronous WebGL2 root:
 
 ```ts
-const root = createRoot(canvas, options);
+const root = createRendererRoot(canvas, options);
 root.render(scene);
 ```
 
@@ -90,14 +90,14 @@ type RoyalRootOptions = {
   readonly fallback?: RoyalFallbackPolicy;
 };
 
-const root = await createRoot(canvas, options);
+const root = await createRendererRoot(canvas, options);
 ```
 
 WebGPU requires `navigator.gpu.requestAdapter()` and usually
 `adapter.requestDevice()`. That makes synchronous root construction the wrong
 default contract. If preserving sync creation is important, the root still needs
 a public `ready: Promise<RoyalRootReadyState>` and `render()` must either queue
-or return a diagnostic until ready. The cleaner break is `await createRoot`.
+or return a diagnostic until ready. The cleaner break is `await createRendererRoot`.
 
 React impact:
 
@@ -311,7 +311,7 @@ unavailable.
 3. Add private capability rows for root selection and diagnostics.
 4. Add private indexed geometry upload/cache in the WebGL2 backend.
 5. Prototype WebGPU root behind a non-exported test hook or research harness.
-6. Only then break public `createRoot`/`Canvas` options in one release.
+6. Only then break public `createRendererRoot`/`Canvas` options in one release.
 
 The important public break is not "add WebGPU"; it is "Royal roots are
 capability-negotiated GPU backends, and readiness/fallback are observable".

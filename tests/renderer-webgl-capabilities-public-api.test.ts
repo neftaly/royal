@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canvasSupportsImageMimeType,
   collectRendererCapabilityRows,
   type WebGlLikeContext,
 } from "@royal/renderer-webgl/capabilities";
@@ -64,6 +65,23 @@ const fakeCapabilityContext = (
 };
 
 describe("renderer-webgl capabilities public API", () => {
+  it("feature-detects canvas image MIME support", () => {
+    const document = {
+      createElement: (tagName: string) => tagName === "canvas"
+        ? {
+          toDataURL: (type?: string) =>
+            type === "image/avif" || type === "image/jpeg"
+              ? `data:${type};base64,AA==`
+              : "data:image/png;base64,AA==",
+        }
+        : null,
+    };
+
+    expect(canvasSupportsImageMimeType("image/avif", { document })).toBe(true);
+    expect(canvasSupportsImageMimeType("image/jpeg", { document })).toBe(true);
+    expect(canvasSupportsImageMimeType("image/webp", { document })).toBe(false);
+  });
+
   it("reports probed capabilities from a fake WebGL2-like context", () => {
     const { gl, parameterQueries } = fakeCapabilityContext();
     const result = collectRendererCapabilityRows(gl);
@@ -133,9 +151,7 @@ describe("renderer-webgl capabilities public API", () => {
       scope: "combined",
       value: 16,
     }));
-    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
-      code: "renderer_capability_stubbed",
-    }));
+    expect(result.diagnostics).toEqual([]);
     expect(parameterQueries).toContain(gl.VERSION);
     expect(parameterQueries).toContain(gl.RENDERER);
     expect(parameterQueries).toContain(gl.SHADING_LANGUAGE_VERSION);
@@ -145,16 +161,9 @@ describe("renderer-webgl capabilities public API", () => {
     expect(parameterQueries).toContain(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
   });
 
-  it("keeps diagnostics suppression deterministic when no GL context is supplied", () => {
-    const result = collectRendererCapabilityRows({}, {
-      contextVersion: 1,
-      includeMissingDiagnostics: false,
-    });
-
-    expect(result.rows).toContainEqual(expect.objectContaining({
-      kind: "context_version",
-      version: 1,
-    }));
-    expect(result.diagnostics).toEqual([]);
+  it("requires a WebGL-like context instead of returning stubbed rows", () => {
+    expect(() => collectRendererCapabilityRows({})).toThrow(
+      "Renderer capability probing requires a WebGL-like context",
+    );
   });
 });

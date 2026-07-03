@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import { type Rgba, type Vec3 } from '@royal/renderer-core';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { type ReactNode } from 'react';

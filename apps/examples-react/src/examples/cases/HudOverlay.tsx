@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
@@ -13,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
+import { exampleCanvasRenderer } from '../example-renderer';
 import {
   Box,
   Column,
@@ -25,7 +25,6 @@ import {
   HudText,
   hudBoxWithWidth,
 } from '../hud';
-import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
 const hudSize = {
@@ -183,11 +182,11 @@ export const HudOverlay = (): ReactNode => {
   return (
     <Canvas
       aria-label="HUD overlay"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={htmlColor('#071015')}>
+        <pass camera={orbit.camera}>
           <directionalLight color={[1.2, 1.15, 1.04, 1]} direction={[-0.48, -0.64, -0.58]} />
           <directionalLight color={[0.35, 0.55, 0.9, 1]} direction={[0.65, -0.2, 0.46]} />
           <mesh transform={{ position: [0, -0.78, -0.2], rotation: [-Math.PI / 2, 0, 0] }}>

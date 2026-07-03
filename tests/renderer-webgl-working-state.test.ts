@@ -357,6 +357,71 @@ describe("WebGL root working state contracts", () => {
     expect(ref.current).toBeNull();
   });
 
+  it("does not invalidate again while syncing declarative ref transforms", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const renderScene = (x: number) => scene({
+      children: [
+        pass({
+          camera: camera(),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: unlitMaterial({ color: [1, 1, 1, 1] }),
+              ref,
+              transform: {
+                position: [x, 0, 0],
+                rotation: [0, 0, 0],
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    root.render(renderScene(0));
+    root.render(renderScene(1));
+
+    expect(frameCallbacks).toHaveLength(0);
+    expect(ref.current?.position.x).toBe(1);
+
+    ref.current?.position.set([2, 0, 0]);
+
+    expect(frameCallbacks).toHaveLength(1);
+  });
+
+  it("coalesces explicit invalidations to one animation frame", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderScene = scene({ children: [drawablePass([0, 0, 0, 0])] });
+
+    root.render(renderScene);
+    const initialDraws = drawCalls(calls).length;
+
+    root.invalidate();
+    root.invalidate();
+
+    expect(frameCallbacks).toHaveLength(1);
+    expect(root.frame).toBe(1);
+    expect(drawCalls(calls)).toHaveLength(initialDraws);
+
+    frameCallbacks[0]?.(16);
+
+    expect(root.frame).toBe(2);
+    expect(drawCalls(calls)).toHaveLength(initialDraws + 1);
+  });
+
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

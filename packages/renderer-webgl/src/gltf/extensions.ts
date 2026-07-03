@@ -1,4 +1,4 @@
-import type { GltfDocument } from "./schema";
+import type { GltfDocument, GltfImage } from "./schema";
 
 export const supportedGltfExtensions = new Set<string>([
   "EXT_meshopt_compression",
@@ -23,6 +23,7 @@ export const supportedGltfExtensions = new Set<string>([
   "KHR_node_visibility",
   "KHR_texture_transform",
   "MSFT_lod",
+  "ROYAL_texture_svg",
 ]);
 
 export class UnsupportedRequiredGltfExtensionError extends Error {
@@ -55,4 +56,97 @@ export const assertSupportedRequiredGltfExtensions = (
 ): void => {
   const unsupported = unsupportedRequiredGltfExtensions(document, supportedExtensions);
   if (unsupported.length > 0) throw new UnsupportedRequiredGltfExtensionError(src, unsupported);
+  assertRequiredTextureSourceExtensions(src, document);
+  assertRoyalTextureSvgReferences(src, document);
+};
+
+const hasExtension = (
+  extensions: readonly string[] | undefined,
+  extension: string,
+): boolean => uniqueStrings(extensions).includes(extension);
+
+const isDataUri = (uri: string): boolean => /^data:/iu.test(uri);
+
+const dataUriMediaType = (uri: string): string | undefined => {
+  const match = /^data:([^,]*),/isu.exec(uri);
+  return match?.[1]?.split(";")[0]?.toLowerCase();
+};
+
+const isSvgMimeType = (value: string | undefined): boolean =>
+  value?.toLowerCase() === "image/svg+xml";
+
+const isSvgUri = (uri: string): boolean => /\.svg(?:$|[?#])/iu.test(uri);
+
+const imageLooksSvg = (image: GltfImage): boolean => {
+  if (isSvgMimeType(image.mimeType)) return true;
+  if (image.uri === undefined) return false;
+  if (isDataUri(image.uri)) return isSvgMimeType(dataUriMediaType(image.uri));
+  return isSvgUri(image.uri);
+};
+
+const requiredTextureSourceExtensions = [
+  "EXT_texture_webp",
+  "KHR_texture_basisu",
+] as const;
+
+const assertRequiredTextureSourceExtensions = (src: string, document: GltfDocument): void => {
+  const textures = document.textures ?? [];
+  const required = new Set(uniqueStrings(document.extensionsRequired));
+  for (const [textureIndex, texture] of textures.entries()) {
+    if (texture.source === undefined) continue;
+    for (const extension of requiredTextureSourceExtensions) {
+      if (!required.has(extension) || texture.extensions?.[extension] === undefined) continue;
+      throw new Error(`glTF ${extension} texture ${textureIndex} in ${src} must omit core source when the extension is required`);
+    }
+  }
+};
+
+const assertRoyalTextureSvgReferences = (src: string, document: GltfDocument): void => {
+  const textures = document.textures ?? [];
+  if (!textures.some((texture) => texture.extensions?.ROYAL_texture_svg !== undefined)) return;
+  if (!hasExtension(document.extensionsUsed, "ROYAL_texture_svg")) {
+    throw new Error(`glTF ROYAL_texture_svg is used by ${src} but is missing from extensionsUsed`);
+  }
+  if (hasExtension(document.extensionsRequired, "ROYAL_texture_svg")) {
+    throw new Error(`glTF ROYAL_texture_svg in ${src} must not be listed in extensionsRequired; provide one core source fallback instead`);
+  }
+
+  for (const [textureIndex, texture] of textures.entries()) {
+    const extension = texture.extensions?.ROYAL_texture_svg;
+    if (extension === undefined) continue;
+    if (texture.extensions?.EXT_texture_webp !== undefined || texture.extensions?.KHR_texture_basisu !== undefined) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} must not include additional texture source fallbacks`);
+    }
+    if (texture.source === undefined || !Number.isInteger(texture.source) || texture.source < 0) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} must provide exactly one core source fallback`);
+    }
+    if (extension.source === undefined || !Number.isInteger(extension.source) || extension.source < 0) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} has an invalid source`);
+    }
+
+    const fallbackImage = document.images?.[texture.source];
+    if (fallbackImage === undefined) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} references missing fallback image ${texture.source}`);
+    }
+    if (texture.source === extension.source || imageLooksSvg(fallbackImage)) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} core source fallback must be a non-SVG image`);
+    }
+
+    const image = document.images?.[extension.source];
+    if (image === undefined) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} references missing image ${extension.source}`);
+    }
+    if (image.bufferView !== undefined && !isSvgMimeType(image.mimeType)) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} bufferView image must use image/svg+xml`);
+    }
+    if (image.uri !== undefined && isDataUri(image.uri) && !isSvgMimeType(dataUriMediaType(image.uri))) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} data URI image must use image/svg+xml`);
+    }
+    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType !== undefined && !isSvgMimeType(image.mimeType)) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} image must be SVG data`);
+    }
+    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType === undefined && !isSvgUri(image.uri)) {
+      throw new Error(`glTF ROYAL_texture_svg texture ${textureIndex} in ${src} image URI should end in .svg or declare image/svg+xml`);
+    }
+  }
 };

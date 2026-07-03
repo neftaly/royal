@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createRoot } from "@royal/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRendererRoot } from "@royal/react";
 import {
   pass,
   perspectiveCamera,
@@ -119,11 +119,15 @@ const emptyScene = (): RenderRoot => scene({
   ],
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 describe("React root public API", () => {
   it("normalizes context options and renders through the public root", () => {
     const canvas = fakeCanvas();
-    const root = createRoot(canvas, {
-      backend: "webgl2",
+    const root = createRendererRoot(canvas, {
       context: {
         alpha: false,
         preserveDrawingBuffer: true,
@@ -178,10 +182,30 @@ describe("React root public API", () => {
   });
 
   it("rejects rendering after disposal", () => {
-    const root = createRoot(fakeCanvas());
+    const root = createRendererRoot(fakeCanvas());
 
     root.dispose();
 
     expect(() => root.render(emptyScene())).toThrow("disposed Royal renderer root");
+  });
+
+  it("exposes coalesced invalidation for imperative changes", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const root = createRendererRoot(fakeCanvas());
+
+    root.render(emptyScene());
+    root.invalidate();
+    root.invalidate();
+
+    expect(frameCallbacks).toHaveLength(1);
+    expect(root.frame).toBe(1);
+
+    frameCallbacks[0]?.(16);
+
+    expect(root.frame).toBe(2);
   });
 });

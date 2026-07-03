@@ -81,11 +81,6 @@ export type GltfMeshGpuInstancingExtension = {
 
 export type GltfBuffer = {
   readonly byteLength?: number;
-  readonly extensions?: {
-    readonly EXT_meshopt_compression?: {
-      readonly fallback?: boolean;
-    };
-  };
   readonly uri?: string;
 };
 
@@ -124,6 +119,7 @@ export type GltfSampler = {
 };
 
 export type GltfMaterial = {
+  readonly doubleSided?: boolean;
   readonly emissiveFactor?: readonly number[];
   readonly emissiveTexture?: GltfTextureInfo;
   readonly occlusionTexture?: GltfOcclusionTextureInfo;
@@ -285,6 +281,9 @@ export type GltfTexture = {
       readonly source?: number;
     };
     readonly KHR_texture_basisu?: {
+      readonly source?: number;
+    };
+    readonly ROYAL_texture_svg?: {
       readonly source?: number;
     };
   };

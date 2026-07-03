@@ -1,5 +1,4 @@
 import {
-  defaultTextureFallbackColor,
   unlitMaterial,
   virtualTexture,
   type UnlitMaterial,
@@ -33,7 +32,6 @@ export const createSurfaceMaterial = (): UnlitMaterial =>
     texture: virtualTexture({
       colorSpace: 'srgb',
       assetId: surfaceVirtualTextureProbe.id,
-      fallbackColor: defaultTextureFallbackColor,
       sampler: surfaceSampler,
       src: surfaceVirtualTextureProbe.manifestUri,
       version: surfaceVirtualTextureProbe.revision,

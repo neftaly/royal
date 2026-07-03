@@ -1,6 +1,13 @@
-/** @jsxImportSource @royal/react */
 import { type TextFontFace } from '@royal/renderer-core/text/font';
-import { TextFontProvider, TextInteractionProvider, TextSurface, textFieldHeight } from '@royal/react';
+import {
+  Button,
+  Input,
+  Textarea,
+  TextFontProvider,
+  TextInteractionProvider,
+  TextSurface,
+  textFieldHeight,
+} from '@royal/react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { htmlColor } from '../color';
 import {
@@ -12,7 +19,6 @@ import {
   Row,
   type FlexLayoutElement,
 } from '../flex-layout';
-import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
 const surfaceBounds = {
@@ -156,7 +162,6 @@ const FormControlsScene = ({
       <TextFontProvider font={font}>
         <TextSurface
           aria-label="Controlled form controls"
-          renderer={exampleRenderer}
           style={{ cursor: 'text', touchAction: 'none' }}
           styleOptions={{
             color: htmlColor('#edf7f8'),
@@ -170,7 +175,7 @@ const FormControlsScene = ({
           }}
         >
           <scene>
-            <pass clearColor={htmlColor('#080b0d')}>
+            <pass>
               <orthographicCamera {...surfaceBounds} />
 
               <text color={htmlColor('#55e08a')} style={flexStyle(boxes.readTextLabel, labelTextStyle)}>
@@ -187,7 +192,7 @@ const FormControlsScene = ({
               <text color={htmlColor('#8fc7ff')} style={flexStyle(boxes.titleLabel, labelTextStyle)}>
                 Input type = text
               </text>
-              <input
+              <Input
                 onValueChange={setTitle}
                 placeholder="Lorem ipsum"
                 style={flexStyle(boxes.title)}
@@ -197,7 +202,7 @@ const FormControlsScene = ({
               <text color={htmlColor('#b8a7ff')} style={flexStyle(boxes.emptyLabel, labelTextStyle)}>
                 Empty placeholder input
               </text>
-              <input
+              <Input
                 onValueChange={setEmptyText}
                 placeholder="Type into this controlled field"
                 style={flexStyle(boxes.emptyInput)}
@@ -207,7 +212,7 @@ const FormControlsScene = ({
               <text color={htmlColor('#ffd166')} style={flexStyle(boxes.notesLabel, labelTextStyle)}>
                 multiline textarea
               </text>
-              <textarea
+              <Textarea
                 onValueChange={setNotes}
                 placeholder="Lorem ipsum"
                 rows={rows}
@@ -218,36 +223,36 @@ const FormControlsScene = ({
               <text color={htmlColor('#f2a0a0')} style={flexStyle(boxes.actionLabel, labelTextStyle)}>
                 Controlled action inputs
               </text>
-              <input
+              <Input
                 checked={checked}
                 onCheckedChange={setChecked}
                 style={flexStyle(boxes.checkbox)}
                 type="checkbox"
               >
                 Send me updates
-              </input>
-              <button
+              </Input>
+              <Button
                 onPress={() => setPresses((count) => count + 1)}
                 style={flexStyle(boxes.button)}
               >
                 Press
-              </button>
-              <input
+              </Button>
+              <Input
                 multiple
                 onFilesChange={setFiles}
                 style={flexStyle(boxes.file)}
                 type="file"
               >
                 File
-              </input>
-              <input
+              </Input>
+              <Input
                 onValueChange={setColor}
                 style={flexStyle(boxes.color)}
                 type="color"
                 value={color}
               >
                 Color
-              </input>
+              </Input>
 
               <text color={htmlColor('#7ee0d1')} style={flexStyle(boxes.previewLabel, labelTextStyle)}>
                 React state preview

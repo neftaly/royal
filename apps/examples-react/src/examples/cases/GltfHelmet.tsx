@@ -1,11 +1,10 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 
@@ -19,11 +18,11 @@ export const GltfHelmet = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF DamagedHelmet PBR material"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.025, 0.031, 0.038, 1]}>
+        <pass camera={orbit.camera}>
           <directionalLight color={[0.72, 0.68, 0.6, 1]} direction={[0.4, -0.75, -1]} />
           <model
             src={helmetSrc}

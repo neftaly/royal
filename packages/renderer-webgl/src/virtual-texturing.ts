@@ -1,4 +1,4 @@
-import type { Rgba, TextureColorSpace } from "@royal/renderer-core";
+import type { TextureColorSpace } from "@royal/renderer-core";
 
 export interface VirtualTexturePageId {
   readonly mip: number;
@@ -16,7 +16,6 @@ export interface VirtualTexturePageEntry extends VirtualTexturePageId {
 export interface VirtualTextureManifestModel {
   readonly borderTexels?: number;
   readonly colorSpace?: TextureColorSpace;
-  readonly fallbackColor?: Rgba;
   readonly height: number;
   readonly id?: string;
   readonly mipCount?: number;
@@ -156,17 +155,6 @@ const readWidthHeight = (value: Record<string, unknown>): readonly [number, numb
 
 const readColorSpace = (value: unknown): TextureColorSpace | undefined =>
   value === "linear" || value === "srgb" ? value : undefined;
-
-const readRgba = (value: unknown): Rgba | undefined => {
-  if (!Array.isArray(value) || value.length !== 4) return undefined;
-  const [r, g, b, a] = value;
-  return typeof r === "number"
-    && typeof g === "number"
-    && typeof b === "number"
-    && typeof a === "number"
-    ? [r, g, b, a]
-    : undefined;
-};
 
 const pageIdFromKey = (key: string): VirtualTexturePageId | undefined => {
   const match = /^(?:mip-?|m)?(\d+)\/(\d+)\/(\d+)$/.exec(key)
@@ -359,7 +347,6 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
 
   const [width, height] = dimensions;
   const colorSpace = readColorSpace(payload.colorSpace);
-  const fallbackColor = readRgba(payload.fallbackColor);
   const id = typeof root.id === "string" && root.id.length > 0
     ? root.id
     : typeof root.assetId === "string" && root.assetId.length > 0
@@ -382,7 +369,6 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     manifest: {
       ...(borderTexels === undefined ? {} : { borderTexels }),
       ...(colorSpace === undefined ? {} : { colorSpace }),
-      ...(fallbackColor === undefined ? {} : { fallbackColor }),
       height,
       ...(id === undefined ? {} : { id }),
       ...(mipCount === undefined ? {} : { mipCount }),
@@ -425,7 +411,6 @@ export const createVirtualTextureRuntimeManifest = (
     ...(baseUri === undefined ? {} : { baseUri }),
     borderTexels,
     ...(manifest.colorSpace === undefined ? {} : { colorSpace: manifest.colorSpace }),
-    ...(manifest.fallbackColor === undefined ? {} : { fallbackColor: manifest.fallbackColor }),
     height: manifest.height,
     ...(manifest.id === undefined ? {} : { id: manifest.id }),
     ...(options.manifestUri === undefined ? {} : { manifestUri: options.manifestUri }),

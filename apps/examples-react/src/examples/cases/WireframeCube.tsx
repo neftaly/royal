@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import {
   boxGeometry,
   wireframeMaterial,
@@ -14,6 +13,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
@@ -48,9 +48,9 @@ export const WireframeCube = (): ReactNode => {
   });
 
   return (
-    <Canvas aria-label="Wireframe cube">
+    <Canvas aria-label="Wireframe cube" renderer={exampleCanvasRenderer}>
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.04, 0.06, 0.08, 1]}>
+        <pass camera={orbit.camera}>
           <SpinningCube />
         </pass>
       </scene>

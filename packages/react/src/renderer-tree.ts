@@ -16,14 +16,14 @@ import {
   isRoyalRendererJsxElement,
   type JSX as RoyalReactJSX,
   type RoyalRendererJsxElement,
-} from './jsx-runtime';
+} from './jsx-runtime-internal';
 import {
   hasRoyalPointerEventHandlers,
   royalPointerEventHandlersFrom,
   type RoyalPointerEventTarget,
 } from './picking-events';
 import { rendererDescriptorHostType } from './renderer-output';
-import type { RoyalRoot } from './root';
+import type { RoyalRendererRoot } from './root';
 
 type RoyalHostType = keyof RoyalReactJSX.IntrinsicElements | typeof rendererDescriptorHostType;
 type RoyalHostProps = Record<string, unknown>;
@@ -36,6 +36,7 @@ type RoyalHostContext = Record<string, never>;
 type RoyalHostInstance = {
   readonly kind: 'host';
   readonly rootContainer: RoyalRendererContainer;
+  readonly renderObjectInvalidation: { suppress: boolean } | null;
   readonly renderObjectHandle: RenderObjectHandle | null;
   readonly renderObjectRef: RenderObjectRefObject | null;
   children: RoyalHostChild[];
@@ -57,8 +58,7 @@ type RoyalRendererContainer = {
   disabled: boolean;
   latestScene: RenderRoot | undefined;
   pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>;
-  renderScheduled: boolean;
-  root: RoyalRoot | null;
+  root: RoyalRendererRoot | null;
   renderLatest(): void;
   scheduleRenderLatest(): void;
 };
@@ -240,7 +240,6 @@ const createRendererContainer = (): RoyalRendererContainer => {
     disabled: false,
     latestScene: undefined,
     pointerEventTargets: new WeakMap(),
-    renderScheduled: false,
     root: null,
     renderLatest: () => {
       if (container.disabled || container.root === null || container.latestScene === undefined) return;
@@ -248,13 +247,9 @@ const createRendererContainer = (): RoyalRendererContainer => {
       container.root.render(container.latestScene);
     },
     scheduleRenderLatest: () => {
-      if (container.renderScheduled) return;
+      if (container.disabled || container.root === null || container.latestScene === undefined) return;
 
-      container.renderScheduled = true;
-      queueMicrotask(() => {
-        container.renderScheduled = false;
-        container.renderLatest();
-      });
+      container.root.invalidate();
     },
   };
 
@@ -266,8 +261,13 @@ const createHostInstance = (
   props: RoyalHostProps,
   rootContainer: RoyalRendererContainer,
 ): RoyalHostInstance => {
+  const renderObjectInvalidation = isRenderObjectHostType(type)
+    ? { suppress: false }
+    : null;
   const renderObjectHandle = isRenderObjectHostType(type)
     ? createRenderObjectHandle(resolveRenderObjectTransform(props.transform), () => {
+      if (renderObjectInvalidation?.suppress === true) return;
+
       rootContainer.scheduleRenderLatest();
     })
     : null;
@@ -282,6 +282,7 @@ const createHostInstance = (
     parent: null,
     props,
     renderObjectHandle,
+    renderObjectInvalidation,
     renderObjectRef,
     rootContainer,
     type,
@@ -335,7 +336,13 @@ const createReconciler = () => ReactReconciler<
   commitUpdate: (instance, _type, _prevProps, nextProps) => {
     instance.props = nextProps;
     if (instance.renderObjectHandle !== null) {
-      instance.renderObjectHandle.setTransform(resolveRenderObjectTransform(nextProps.transform));
+      const invalidation = instance.renderObjectInvalidation;
+      if (invalidation !== null) invalidation.suppress = true;
+      try {
+        instance.renderObjectHandle.setTransform(resolveRenderObjectTransform(nextProps.transform));
+      } finally {
+        if (invalidation !== null) invalidation.suppress = false;
+      }
     }
   },
   createInstance: (type, props, rootContainer) =>
@@ -418,7 +425,7 @@ export type RoyalRendererTree = {
   dispose(): void;
   pointerEventTarget(node: object): RoyalPointerEventTarget | undefined;
   render(children: ReactNode): void;
-  setTarget(root: RoyalRoot | null, disabled: boolean): void;
+  setTarget(root: RoyalRendererRoot | null, disabled: boolean): void;
 };
 
 export const createRoyalRendererTree = (): RoyalRendererTree => {

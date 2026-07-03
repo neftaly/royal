@@ -1,6 +1,5 @@
 /** @jsxImportSource @royal/react/renderer */
 import { describe, expect, it } from "vitest";
-import { markRendererComponent } from "@royal/react";
 import type { RenderObjectHandle } from "@royal/react";
 import { jsx } from "@royal/react/renderer/jsx-runtime";
 import {
@@ -245,15 +244,12 @@ describe("renderer JSX contract", () => {
     )).toThrow("mesh expects only one material source: material, material child, color, or texture");
   });
 
-  it("requires function components to opt into renderer descriptor output", () => {
-    const Cube = markRendererComponent((props: { readonly size: number }) => (
+  it("accepts plain function components that return renderer descriptors", () => {
+    const Cube = (props: { readonly size: number }) => (
       <mesh>
         <boxGeometry size={props.size} />
         <unlitMaterial color={[1, 0, 0, 1]} />
       </mesh>
-    ));
-    const PlainComponent = () => (
-      <mesh geometry={boxGeometry(1)} material={unlitMaterial({ color: [1, 0, 0, 1] })} />
     );
 
     expect(<Cube size={2} />).toMatchObject({
@@ -263,9 +259,13 @@ describe("renderer JSX contract", () => {
       },
       kind: "mesh",
     });
-    expect(() => jsx(PlainComponent, null)).toThrow(
-      "Royal renderer JSX components must be marked with markRendererComponent",
-    );
+    expect(jsx(Cube, { size: 3 })).toMatchObject({
+      geometry: {
+        kind: "box",
+        size: [3, 3, 3],
+      },
+      kind: "mesh",
+    });
   });
 
   it("does not expose virtual textures as JSX renderer nodes", () => {

@@ -680,10 +680,7 @@ describe("WebGL renderer error and texture contracts", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const failingScene = renderScene(unlitMaterial({
-      texture: imageTexture({
-        fallbackColor: [0.25, 0.25, 0.25, 1],
-        src: "/textures/missing-texture.png",
-      }),
+      texture: imageTexture("/textures/missing-texture.png"),
     }));
 
     root.render(failingScene);

@@ -62,6 +62,9 @@ const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
 const triangleMetallicRoughnessImageUri = "staged-triangle-metallic-roughness.png";
 const triangleOcclusionImageUri = "staged-triangle-occlusion.png";
+const triangleJpegImageUri = "staged-triangle.jpg";
+const triangleSvgImageUri = "staged-triangle.svg";
+const triangleSvgTexture = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><path d=\"M64 64h384v384H64z\" fill=\"#f60\"/></svg>";
 const triangleVariantImageUri = "staged-triangle-variant.png";
 const triangleWebpImageUri = "staged-triangle.webp";
 const iblSpecularImageUris = [
@@ -175,6 +178,8 @@ const fakeGl = (): FakeGl => {
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
     CULL_FACE: 0x0B44,
+    CCW: 0x0901,
+    CW: 0x0900,
     DEPTH_BUFFER_BIT: 0x0100,
     DEPTH_TEST: 0x0B71,
     DYNAMIC_DRAW: 0x88E8,
@@ -184,6 +189,8 @@ const fakeGl = (): FakeGl => {
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
     LINEAR_MIPMAP_LINEAR: 0x2703,
+    LINE_LOOP: 0x0002,
+    LINE_STRIP: 0x0003,
     LINES: 0x0001,
     LINK_STATUS: 0x8B82,
     MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
@@ -194,6 +201,7 @@ const fakeGl = (): FakeGl => {
     NO_ERROR: 0,
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
+    POINTS: 0x0000,
     REPEAT: 0x2901,
     RGBA: 0x1908,
     STATIC_DRAW: 0x88E4,
@@ -206,6 +214,8 @@ const fakeGl = (): FakeGl => {
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
+    TRIANGLE_FAN: 0x0006,
+    TRIANGLE_STRIP: 0x0005,
     TRIANGLES: 0x0004,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     UNSIGNED_BYTE: 0x1401,
@@ -271,6 +281,7 @@ const fakeGl = (): FakeGl => {
     drawElements: record("drawElements"),
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
+    frontFace: record("frontFace"),
     generateMipmap: record("generateMipmap"),
     getActiveAttrib: record("getActiveAttrib", () => null),
     getActiveUniform: record("getActiveUniform", () => null),
@@ -1384,6 +1395,44 @@ const solidTriangleDocument = () => ({
   textures: [],
 });
 
+const doubleSidedTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    materials: [
+      {
+        doubleSided: true,
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.8, 0.62, 0.36, 1],
+        },
+      },
+    ],
+  };
+};
+
+const mirroredTriangleNodesDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    nodes: [
+      {
+        mesh: 0,
+      },
+      {
+        mesh: 0,
+        scale: [-1, 1, 1],
+      },
+    ],
+    scenes: [
+      {
+        nodes: [0, 1],
+      },
+    ],
+  };
+};
+
 const metallicRoughnessTriangleDocument = () => {
   const base = solidTriangleDocument();
 
@@ -2495,6 +2544,16 @@ const responseWithBuffer = (url: string, buffer: ArrayBuffer): Response => ({
   url,
 }) as unknown as Response;
 
+const responseWithText = (url: string, text: string, type = "text/plain"): Response => ({
+  arrayBuffer: vi.fn(() => Promise.resolve(new TextEncoder().encode(text).buffer)),
+  blob: vi.fn(() => Promise.resolve(new Blob([text], { type }))),
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  text: vi.fn(() => Promise.resolve(text)),
+  url,
+}) as unknown as Response;
+
 const requestUrl = (input: RequestInfo | URL): string => {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.toString();
@@ -2506,9 +2565,19 @@ const requestUrl = (input: RequestInfo | URL): string => {
 const installStagedGltfLoader = () => {
   const bitmapRequests: BitmapRequest[] = [];
   const fetchRequests: FetchRequest[] = [];
+  const objectUrlBlobs: Blob[] = [];
   const settledFetches = new Set<FetchRequest>();
+  let nextObjectUrl = 0;
 
   vi.stubGlobal("Image", ControlledImage);
+  class TestURL extends URL {
+    static createObjectURL = vi.fn((blob: Blob) => {
+      objectUrlBlobs.push(blob);
+      return `blob:royal-test-${nextObjectUrl += 1}`;
+    });
+    static revokeObjectURL = vi.fn();
+  }
+  vi.stubGlobal("URL", TestURL);
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>
     new Promise<Response>((resolve, reject) => {
       fetchRequests.push({
@@ -2525,6 +2594,7 @@ const installStagedGltfLoader = () => {
   return {
     bitmapRequests,
     fetchRequests,
+    objectUrlBlobs,
     rejectPendingFetch: (pattern: RegExp, reason: unknown): boolean => {
       const request = fetchRequests.find((entry) => !settledFetches.has(entry) && pattern.test(entry.url));
       if (request === undefined) return false;
@@ -2544,6 +2614,22 @@ const installStagedGltfLoader = () => {
       return true;
     },
   };
+};
+
+const installCanvasImageMimeTypeSupport = (supported: readonly string[]): void => {
+  const supportedTypes = new Set(supported.map((type) => type.toLowerCase()));
+  vi.stubGlobal("document", {
+    createElement: vi.fn((tagName: string) => tagName === "canvas"
+      ? {
+        toDataURL: vi.fn((type?: string) => {
+          const normalizedType = String(type ?? "image/png").toLowerCase();
+          return supportedTypes.has(normalizedType)
+            ? `data:${normalizedType};base64,AA==`
+            : "data:image/png;base64,AA==";
+        }),
+      }
+      : {}),
+  });
 };
 
 const settleDocumentAndBuffer = async (
@@ -2623,6 +2709,104 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]));
 
     expect(drawCalls(calls), "only the visible mesh should draw").toHaveLength(1);
+  });
+
+  it("draws default glTF materials front-sided with back-face culling", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "default-front-sided-material",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(readyFrameCalls).toContainEqual({ args: [gl.CULL_FACE], name: "enable" });
+    expect(readyFrameCalls).toContainEqual({ args: [gl.BACK], name: "cullFace" });
+    expect(readyFrameCalls).toContainEqual({ args: [gl.CCW], name: "frontFace" });
+  });
+
+  it("draws double-sided glTF materials without face culling", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "double-sided-material",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, doubleSidedTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(readyFrameCalls).toContainEqual({ args: [gl.CULL_FACE], name: "disable" });
+    expect(readyFrameCalls).not.toContainEqual({ args: [gl.CULL_FACE], name: "enable" });
+    expect(readyFrameCalls.some((call) => call.name === "cullFace")).toBe(false);
+  });
+
+  it("splits one-sided mirrored glTF draws so frontFace tracks model orientation", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "mirrored-front-face-material",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, mirroredTriangleNodesDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const frontFaceValues = readyFrameCalls
+      .filter((call) => call.name === "frontFace")
+      .map((call) => call.args[0]);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
+    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(frontFaceValues).toContain(gl.CCW);
+    expect(frontFaceValues).toContain(gl.CW);
+    expect(readyFrameCalls.filter((call) =>
+      call.name === "cullFace" && call.args[0] === gl.BACK)).toHaveLength(2);
   });
 
   it("requires a directionalLight when drawing standardMaterial meshes", () => {
@@ -4493,6 +4677,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
   it("loads required EXT_texture_webp base-color texture sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
+    installCanvasImageMimeTypeSupport(["image/webp"]);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
@@ -4507,8 +4692,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
         ...triangleDocument(),
         extensionsRequired: ["EXT_texture_webp"],
         extensionsUsed: ["EXT_texture_webp"],
-        images: [{ uri: triangleImageUri }, { uri: triangleWebpImageUri }],
-        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, sampler: 0, source: 0 }],
+        images: [{ uri: triangleWebpImageUri }],
+        textures: [{ extensions: { EXT_texture_webp: { source: 0 } }, sampler: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4524,6 +4709,425 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("uses core JPEG sources when optional EXT_texture_webp is not canvas-supported", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installCanvasImageMimeTypeSupport(["image/jpeg"]);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "optional-webp-unsupported" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["EXT_texture_webp"],
+        images: [
+          { mimeType: "image/jpeg", uri: triangleJpegImageUri },
+          { mimeType: "image/webp", uri: triangleWebpImageUri },
+        ],
+        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleJpegImageUri}`))).toBe(true);
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleWebpImageUri}`))).toBe(false);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("uses optional EXT_texture_webp sources when canvas-supported", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installCanvasImageMimeTypeSupport(["image/jpeg", "image/webp"]);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "optional-webp-supported" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["EXT_texture_webp"],
+        images: [
+          { mimeType: "image/jpeg", uri: triangleJpegImageUri },
+          { mimeType: "image/webp", uri: triangleWebpImageUri },
+        ],
+        textures: [{ extensions: { EXT_texture_webp: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleWebpImageUri}`))).toBe(true);
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleJpegImageUri}`))).toBe(false);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("loads ROYAL_texture_svg base-color texture sources through automatic image upload", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "svg-texture" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);
+    expect(await loader.objectUrlBlobs[0]?.text()).toContain("width=\"512\"");
+    expect(await loader.objectUrlBlobs[0]?.text()).toContain("height=\"512\"");
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(calls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_2D)).toBe(true);
+  });
+
+  it("preserves URI SVG asset base while normalizing viewBox-only SVG textures", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const wrapperSvgTexture = [
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 210 287\" width=\"1024\" height=\"1024\">",
+      "<rect x=\"0\" y=\"0\" width=\"210\" height=\"287\" fill=\"#c7b084\"/>",
+      "<image href=\"ghostscript-tiger.svg\" x=\"10\" y=\"10\" width=\"190\" height=\"267\" preserveAspectRatio=\"xMidYMid meet\"/>",
+      "</svg>",
+    ].join("");
+    const nestedTigerSvg = [
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">",
+      "<path d=\"M1 1h8v8H1z\" fill=\"#f60\"/>",
+      "</svg>",
+    ].join("");
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "svg-texture-relative-image-reference" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, wrapperSvgTexture, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/ghostscript-tiger\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, nestedTigerSvg, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.objectUrlBlobs).toHaveLength(1);
+    const normalizedSvg = await loader.objectUrlBlobs[0]?.text();
+    expect(normalizedSvg).toContain("width=\"1024\"");
+    expect(normalizedSvg).toContain("height=\"1024\"");
+    expect(normalizedSvg).toContain("xml:base=\"https://example.test/fixtures/staged-triangle.svg\"");
+    expect(normalizedSvg).toContain("x=\"10\"");
+    expect(normalizedSvg).toContain("width=\"190\"");
+    expect(normalizedSvg).toContain("d=\"M1 1h8v8H1z\"");
+    expect(normalizedSvg).not.toContain("href=\"ghostscript-tiger.svg\"");
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(root.snapshot().diagnostics).toEqual([]);
+  });
+
+  it("prefers optional ROYAL_texture_svg sources over core raster fallbacks when supported", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "optional-svg-texture" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);
+    expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleImageUri}`))).toBe(false);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
+  });
+
+  it("rejects ROYAL_texture_svg textures with additional texture-source fallbacks", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "svg-texture-extra-fallbacks" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu", "ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/webp", uri: triangleWebpImageUri },
+          { mimeType: "image/ktx2", uri: triangleBasisuImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{
+          extensions: {
+            EXT_texture_webp: { source: 1 },
+            KHR_texture_basisu: { source: 2 },
+            ROYAL_texture_svg: { source: 3 },
+          },
+          sampler: 0,
+          source: 0,
+        }],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /ROYAL_texture_svg texture 0 .*additional texture source fallbacks/i,
+    ));
+    expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
+    expect(decodeBasisuMock).not.toHaveBeenCalled();
+    expect(ControlledImage.instances).toHaveLength(0);
+  });
+
+  it("rejects ROYAL_texture_svg images without a finite viewBox or width and height", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "dimensionless-svg-texture" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          {
+            mimeType: "image/svg+xml",
+            uri: "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3C%2Fsvg%3E",
+          },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /ROYAL_texture_svg .*requires a finite viewBox or finite width and height/i,
+    ));
+    expect(ControlledImage.instances).toHaveLength(0);
+  });
+
+  it("rejects ROYAL_texture_svg listed in extensionsRequired", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "invalid-required-svg-texture" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: ["ROYAL_texture_svg"],
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /ROYAL_texture_svg .*must not be listed in extensionsRequired/i,
+    ));
+    expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
+    expect(ControlledImage.instances).toHaveLength(0);
+  });
+
+  it("rejects ROYAL_texture_svg textures without a core source fallback", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "invalid-svg-texture-missing-fallback" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["ROYAL_texture_svg"],
+        images: [
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { ROYAL_texture_svg: { source: 0 } }, sampler: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /ROYAL_texture_svg texture 0 .*core source fallback/i,
+    ));
+    expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
+    expect(ControlledImage.instances).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      extension: "EXT_texture_webp",
+      image: { mimeType: "image/webp", uri: triangleWebpImageUri },
+      textureExtension: { EXT_texture_webp: { source: 1 } },
+      version: "invalid-required-webp-texture",
+    },
+    {
+      extension: "KHR_texture_basisu",
+      image: { mimeType: "image/ktx2", uri: triangleBasisuImageUri },
+      textureExtension: { KHR_texture_basisu: { source: 1 } },
+      version: "invalid-required-basisu-texture",
+    },
+  ])("rejects required $extension textures that keep a core source fallback", async ({
+    extension,
+    image,
+    textureExtension,
+    version,
+  }) => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsRequired: [extension],
+        extensionsUsed: [extension],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          image,
+        ],
+        textures: [{ extensions: textureExtension, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      new RegExp(`${extension} texture 0 .*must omit core source`, "i"),
+    ));
+    expect(loader.fetchRequests.some((request) => request.url.endsWith(triangleBinUri))).toBe(false);
+    expect(ControlledImage.instances).toHaveLength(0);
   });
 
   it("loads required KHR_texture_basisu base-color texture URI sources through RGBA upload", async () => {
@@ -4550,8 +5154,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
         ...triangleDocument(),
         extensionsRequired: ["KHR_texture_basisu"],
         extensionsUsed: ["KHR_texture_basisu"],
-        images: [{ uri: triangleImageUri }, { mimeType: "image/ktx2", uri: triangleBasisuImageUri }],
-        textures: [{ extensions: { KHR_texture_basisu: { source: 1 } }, sampler: 0, source: 0 }],
+        images: [{ mimeType: "image/ktx2", uri: triangleBasisuImageUri }],
+        textures: [{ extensions: { KHR_texture_basisu: { source: 0 } }, sampler: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4601,8 +5205,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
         buffers: [{ byteLength: triangleBinByteLength + 4, uri: triangleBinUri }],
         extensionsRequired: ["KHR_texture_basisu"],
         extensionsUsed: ["KHR_texture_basisu"],
-        images: [{ uri: triangleImageUri }, { bufferView: 4, mimeType: "image/ktx2" }],
-        textures: [{ extensions: { KHR_texture_basisu: { source: 1 } }, sampler: 0, source: 0 }],
+        images: [{ bufferView: 4, mimeType: "image/ktx2" }],
+        textures: [{ extensions: { KHR_texture_basisu: { source: 0 } }, sampler: 0 }],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -4728,7 +5332,49 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(calls).some((call) => call.args[0] === gl.LINES && drawCount(call) === 2)).toBe(true);
   });
 
-  it("skips unsupported glTF primitive modes with a diagnostic", async () => {
+  it("renders all core glTF primitive modes", async () => {
+    const primitiveModes = [
+      { drawMode: (gl: WebGL2RenderingContext) => gl.POINTS, mode: 0, version: "points" },
+      { drawMode: (gl: WebGL2RenderingContext) => gl.LINE_LOOP, mode: 2, version: "line-loop" },
+      { drawMode: (gl: WebGL2RenderingContext) => gl.LINE_STRIP, mode: 3, version: "line-strip" },
+      { drawMode: (gl: WebGL2RenderingContext) => gl.TRIANGLE_STRIP, mode: 5, version: "triangle-strip" },
+      { drawMode: (gl: WebGL2RenderingContext) => gl.TRIANGLE_FAN, mode: 6, version: "triangle-fan" },
+    ] as const;
+
+    for (const { drawMode, mode, version } of primitiveModes) {
+      vi.stubGlobal("devicePixelRatio", 1);
+      const viewport = installViewportInvalidationStubs();
+      const loader = installStagedGltfLoader();
+      const { calls, gl } = fakeGl();
+      const root = createWebGlRoot(fakeCanvas(gl));
+
+      root.render(renderScene([
+        directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+        gltf({ src: triangleGltfSrc, version: `core-primitive-${version}` }),
+      ]));
+      expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+        responseWithJson(url, {
+          ...triangleDocument(),
+          images: [],
+          materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 3, material: 0, mode }] }],
+          samplers: [],
+          textures: [],
+        }))).toBe(true);
+      await flushMicrotasks();
+      expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+        responseWithBuffer(url, triangleBin()))).toBe(true);
+      await flushMicrotasks();
+      await flushAnimationFrames(viewport.animationFrames);
+
+      expect(drawCalls(calls).some((call) => call.args[0] === drawMode(gl) && drawCount(call) === 3)).toBe(true);
+      expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode/i.test(message))).toBe(false);
+      root.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("skips invalid glTF primitive modes with a diagnostic", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -4737,14 +5383,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     root.render(renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "unsupported-primitive-mode" }),
+      gltf({ src: triangleGltfSrc, version: "invalid-primitive-mode" }),
     ]));
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
         images: [],
         materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
-        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, mode: 5 }] }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0, mode: 99 }] }],
         samplers: [],
         textures: [],
       }))).toBe(true);
@@ -4755,7 +5401,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(drawCalls(calls)).toHaveLength(0);
-    expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode 5/i.test(message))).toBe(true);
+    expect(root.snapshot().diagnostics.some((message) => /unsupported primitive mode 99/i.test(message))).toBe(true);
   });
 
   it("ignores unsupported optional glTF extensions when core fallback data is present", async () => {

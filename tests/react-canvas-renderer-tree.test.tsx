@@ -1,10 +1,20 @@
 /** @jsxImportSource @royal/react */
-import { describe, expect, it } from "vitest";
-import { textFieldHeight } from "@royal/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  Button,
+  Input,
+  Text,
+  Textarea,
+  type RenderObjectHandle,
+  textFieldHeight,
+} from "@royal/react";
 import {
   boxGeometry,
+  type RenderRoot,
   unlitMaterial,
 } from "@royal/renderer-core";
+import { createRoyalRendererTree } from "../packages/react/src/renderer-tree";
+import type { RoyalRendererRoot } from "../packages/react/src/root";
 
 type ReactElementLike = {
   readonly $$typeof: symbol;
@@ -36,6 +46,43 @@ const Cube = () => (
   />
 );
 
+const fakeRoot = (): RoyalRendererRoot => {
+  let frame = 0;
+  let latestScene: RenderRoot | undefined;
+  const root: RoyalRendererRoot = {
+    canvas: {} as HTMLCanvasElement,
+    context: {
+      alpha: true,
+      antialias: true,
+      preserveDrawingBuffer: false,
+    },
+    get disposed() {
+      return false;
+    },
+    get frame() {
+      return frame;
+    },
+    get latestScene() {
+      return latestScene;
+    },
+    dispose: vi.fn(),
+    invalidate: vi.fn(),
+    pick: vi.fn(() => undefined),
+    render: vi.fn((scene: RenderRoot) => {
+      latestScene = scene;
+      frame += 1;
+    }),
+    snapshot: vi.fn(() => ({
+      context: root.context,
+      disposed: root.disposed,
+      frame: root.frame,
+      latestScene: root.latestScene,
+    })),
+  };
+
+  return root;
+};
+
 describe("React Canvas renderer tree", () => {
   it("keeps renderer JSX as React elements for Canvas resolution", () => {
     const renderScene = (
@@ -65,71 +112,113 @@ describe("React Canvas renderer tree", () => {
     expect(isReactElementLike(child) ? child.type : undefined).toBe(Cube);
   });
 
-  it("routes surface controls through React primitives", () => {
+  it("routes surface controls through React components", () => {
     const style = { height: 0.5, left: 0.25, top: 0.5, width: 3 };
     const label = (
-      <text style={style} color={[1, 1, 1, 1]}>
+      <Text style={style} color={[1, 1, 1, 1]}>
         Boxed label
-      </text>
+      </Text>
     );
     const input = (
-      <input
+      <Input
         onValueChange={() => undefined}
         style={style}
         value="Controlled"
       />
     );
     const checkbox = (
-      <input
+      <Input
         checked
         onCheckedChange={() => undefined}
         style={style}
         type="checkbox"
       >
         Checked
-      </input>
+      </Input>
     );
     const file = (
-      <input
+      <Input
         onFilesChange={() => undefined}
         style={style}
         type="file"
       >
         File
-      </input>
+      </Input>
     );
     const color = (
-      <input
+      <Input
         onValueChange={() => undefined}
         style={style}
         type="color"
         value="#ff0000"
       >
         Color
-      </input>
+      </Input>
     );
     const button = (
-      <button
+      <Button
         onPress={() => undefined}
         style={style}
         type="button"
       >
         Press
-      </button>
+      </Button>
+    );
+    const textarea = (
+      <Textarea
+        onValueChange={() => undefined}
+        rows={3}
+        style={style}
+        value="Notes"
+      />
     );
 
     expect(isReactElementLike(label)).toBe(true);
-    expect(isReactElementLike(label) ? label.type : undefined).not.toBe("text");
+    expect(isReactElementLike(label) ? label.type : undefined).toBe(Text);
     expect(isReactElementLike(input)).toBe(true);
-    expect(isReactElementLike(input) ? input.type : undefined).not.toBe("input");
+    expect(isReactElementLike(input) ? input.type : undefined).toBe(Input);
     expect(isReactElementLike(checkbox)).toBe(true);
-    expect(isReactElementLike(checkbox) ? checkbox.type : undefined).not.toBe("input");
+    expect(isReactElementLike(checkbox) ? checkbox.type : undefined).toBe(Input);
     expect(isReactElementLike(file)).toBe(true);
-    expect(isReactElementLike(file) ? file.type : undefined).not.toBe("input");
+    expect(isReactElementLike(file) ? file.type : undefined).toBe(Input);
     expect(isReactElementLike(color)).toBe(true);
-    expect(isReactElementLike(color) ? color.type : undefined).not.toBe("input");
+    expect(isReactElementLike(color) ? color.type : undefined).toBe(Input);
     expect(isReactElementLike(button)).toBe(true);
-    expect(isReactElementLike(button) ? button.type : undefined).not.toBe("button");
+    expect(isReactElementLike(button) ? button.type : undefined).toBe(Button);
+    expect(isReactElementLike(textarea)).toBe(true);
+    expect(isReactElementLike(textarea) ? textarea.type : undefined).toBe(Textarea);
+  });
+
+  it("does not invalidate again while syncing declarative transform props", () => {
+    const tree = createRoyalRendererTree();
+    const root = fakeRoot();
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const renderScene = (x: number) => (
+      <scene>
+        <pass>
+          <perspectiveCamera {...perspectiveProps} />
+          <mesh
+            ref={ref}
+            geometry={boxGeometry(1)}
+            material={unlitMaterial({ color: [1, 0, 0, 1] })}
+            transform={{ position: [x, 0, 0], rotation: [0, 0, 0] }}
+          />
+        </pass>
+      </scene>
+    );
+
+    tree.setTarget(root, false);
+    tree.render(renderScene(0));
+    tree.render(renderScene(1));
+
+    expect(root.render).toHaveBeenCalledTimes(2);
+    expect(root.invalidate).not.toHaveBeenCalled();
+    expect(ref.current?.position.x).toBe(1);
+
+    ref.current?.position.set([2, 0, 0]);
+
+    expect(root.invalidate).toHaveBeenCalledTimes(1);
+    tree.dispose();
   });
 
   it("measures text field row height from text metrics and padding", () => {

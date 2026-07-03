@@ -5,7 +5,7 @@ import fontUrl from '../../assets/atkinson-hyperlegible-latin-400-normal.woff?ur
 export type ExampleTextFontState =
   | { readonly status: 'loading' }
   | { readonly font: TextFontFace; readonly status: 'ready' }
-  | { readonly status: 'failed' };
+  | { readonly error: Error; readonly status: 'failed' };
 
 export const useAtkinsonFont = (): ExampleTextFontState => {
   const [state, setState] = useState<ExampleTextFontState>({ status: 'loading' });
@@ -24,8 +24,9 @@ export const useAtkinsonFont = (): ExampleTextFontState => {
           source: fontUrl,
         });
         if (!cancelled) setState({ font: face, status: 'ready' });
-      } catch {
-        if (!cancelled) setState({ status: 'failed' });
+      } catch (error) {
+        const reason = error instanceof Error ? error : new Error(String(error));
+        if (!cancelled) setState({ error: reason, status: 'failed' });
       }
     };
 
@@ -34,6 +35,8 @@ export const useAtkinsonFont = (): ExampleTextFontState => {
       cancelled = true;
     };
   }, []);
+
+  if (state.status === 'failed') throw state.error;
 
   return state;
 };

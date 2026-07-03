@@ -1,2 +1,7 @@
-export { createWebGlRoot, WebGlRoot } from "./root";
-export type { WebGlRootOptions, WebGlRootSnapshot } from "./root";
+export { createWebGlRoot } from "./root";
+export type {
+  WebGlRoot,
+  WebGlRootOptions,
+  WebGlRootSnapshot,
+  WebGlVirtualTexturingSnapshot,
+} from "./root";

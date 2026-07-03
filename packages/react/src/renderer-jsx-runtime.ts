@@ -3,10 +3,10 @@ import {
   RendererFragment,
   type RoyalRendererJsxElement,
   type JSX as RoyalReactJSX,
-} from './jsx-runtime';
+} from './jsx-runtime-internal';
 export const Fragment = RendererFragment;
 
-type RendererJsxComponent = (...args: readonly unknown[]) => unknown;
+type RendererJsxComponent = (props: never) => unknown;
 type RendererJsxElementType = keyof JSX.IntrinsicElements | RendererJsxComponent;
 type RendererJsxFactory = (
   type: RendererJsxElementType,

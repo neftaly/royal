@@ -433,10 +433,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const texturedMaterial = unlitMaterial({
-      texture: imageTexture({
-        fallbackColor: [0.05, 0.05, 0.05, 1],
-        src: "/textures/checker.png",
-      }),
+      texture: imageTexture("/textures/checker.png"),
     });
 
     root.render(renderScene(boxGeometry(1), texturedMaterial));

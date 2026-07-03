@@ -21,29 +21,32 @@ import {
   type CanvasPointerInteractionAction,
 } from "./canvas-pointer-interaction";
 import { createFrameLoop, FrameLoopContext } from "./frame";
-import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime";
+import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime-internal";
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
   type RoyalPointerEventType,
 } from "./picking-events";
 import { createRoyalRendererTree } from "./renderer-tree";
-import { createRoot, type RoyalRoot, type RoyalRootOptions } from "./root";
+import {
+  createRendererRoot,
+  type RoyalRendererRoot,
+  type RoyalRendererRootOptions,
+} from "./root";
 
 type CanvasChild = ReactNode | RoyalRendererJsxElement;
 type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
-const CanvasRootContext = createContext<RoyalRoot | null>(null);
+const CanvasRootContext = createContext<RoyalRendererRoot | null>(null);
 
-export type CanvasRendererOptions = RoyalRootOptions;
+export type CanvasRendererOptions = RoyalRendererRootOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
   /** Runtime-validated as exactly one Royal scene, plus optional React-only side-effect children. */
   readonly children: CanvasChildren;
-  readonly fallback?: ReactNode;
   readonly ref?: Ref<HTMLCanvasElement>;
   readonly renderer?: CanvasRendererOptions;
 }
@@ -130,8 +133,17 @@ const splitCanvasChildren = (
 export const useCanvasElement = (): HTMLCanvasElement | null =>
   useContext(CanvasElementContext);
 
-export const useCanvasRoot = (): RoyalRoot | null =>
+export const useCanvasRoot = (): RoyalRendererRoot | null =>
   useContext(CanvasRootContext);
+
+/** Returns a stable callback that requests one render of the current Canvas root. */
+export const useInvalidate = (): (() => void) => {
+  const root = useCanvasRoot();
+
+  return useCallback(() => {
+    root?.invalidate();
+  }, [root]);
+};
 
 export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
   const root = useCanvasRoot();
@@ -140,13 +152,8 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toCanvasRootOptions = ({
-  backend,
-  context,
-}: CanvasRendererOptions): RoyalRootOptions => ({
-  ...(backend === undefined ? {} : { backend }),
-  ...(context === undefined ? {} : { context }),
-});
+const toCanvasRootOptions = ({ context }: CanvasRendererOptions): RoyalRendererRootOptions =>
+  context === undefined ? {} : { context };
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -165,20 +172,17 @@ const assignCanvasRef = (
 /** Canvas component that renders one Royal scene child. */
 export const Canvas = ({
   children,
-  fallback,
   ref,
   renderer,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rootCreationErrorRef = useRef<unknown>(null);
   const frameLoop = useMemo(() => createFrameLoop(), []);
   const rendererTree = useMemo(() => createRoyalRendererTree(), []);
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
-  const [canvasRoot, setCanvasRoot] = useState<RoyalRoot | null>(null);
+  const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
   const { controls, sceneChild } = splitCanvasChildren(children);
-  const rendererBackend = renderer?.backend;
   const rendererContextAlpha = renderer?.context?.alpha;
   const rendererContextAntialias = renderer?.context?.antialias;
   const rendererContextPreserveDrawingBuffer = renderer?.context?.preserveDrawingBuffer;
@@ -192,17 +196,15 @@ export const Canvas = ({
     () => renderer === undefined
       ? undefined
       : toCanvasRootOptions({
-        ...(rendererBackend === undefined ? {} : { backend: rendererBackend }),
         context: {
           ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
           ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
-          ...(rendererContextPreserveDrawingBuffer === undefined
+        ...(rendererContextPreserveDrawingBuffer === undefined
             ? {}
             : { preserveDrawingBuffer: rendererContextPreserveDrawingBuffer }),
         },
       }),
     [
-      rendererBackend,
       rendererContextAlpha,
       rendererContextAntialias,
       rendererContextPreserveDrawingBuffer,
@@ -210,9 +212,6 @@ export const Canvas = ({
   );
   const canvasElementNode = createElement("canvas", {
     ...canvasProps,
-    hidden: rootError !== null && fallback !== undefined
-      ? true
-      : canvasProps.hidden,
     ref: setCanvasRef,
   });
 
@@ -254,13 +253,11 @@ export const Canvas = ({
     const canvas = canvasRef.current;
     if (canvas === null) throw new Error("Canvas ref was not attached");
 
-    let root: RoyalRoot;
+    let root: RoyalRendererRoot;
     try {
-      root = createRoot(canvas, memoizedRootOptions);
-      rootCreationErrorRef.current = null;
+      root = createRendererRoot(canvas, memoizedRootOptions);
       setRootError(null);
     } catch (error) {
-      rootCreationErrorRef.current = error;
       setCanvasRoot(null);
       setRootError(error);
       return undefined;
@@ -274,7 +271,7 @@ export const Canvas = ({
   }, [memoizedRootOptions]);
 
   useLayoutEffect(() => {
-    const hasRootError = rootError !== null || rootCreationErrorRef.current !== null;
+    const hasRootError = rootError !== null;
 
     if (isRenderRoot(sceneChild)) {
       rendererTree.setTarget(canvasRoot, true);
@@ -378,23 +375,6 @@ export const Canvas = ({
   ]);
 
   if (rootError !== null) {
-    if (fallback !== undefined) {
-      return createElement(
-        FrameLoopContext.Provider,
-        { value: frameLoop },
-        createElement(
-          CanvasElementContext.Provider,
-          { value: canvasElement },
-          createElement(
-            CanvasRootContext.Provider,
-            { value: canvasRoot },
-            fallback,
-            canvasElementNode,
-          ),
-        ),
-      );
-    }
-
     throw rootError;
   }
 

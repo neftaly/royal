@@ -35,6 +35,7 @@ import {
   loadGltfDocument,
   resolveResourceUri,
 } from "./gltf/io";
+import { canvasSupportsImageMimeType } from "./capabilities";
 import {
   decodeGltfBasisuRgba,
 } from "./gltf/codecs/basisu";
@@ -69,6 +70,7 @@ import {
   inverseMat4,
   multiplyMat4,
   normalizeVec3,
+  orientationPreservingMat4,
   projectionMat4,
   transformDirection,
   transformMat4,
@@ -84,6 +86,7 @@ import {
   worldBounds,
   type Bounds3,
   type Ray,
+  type RayGeometryMode,
 } from "./math/picking";
 import {
   isDecodedRgbaTexture,
@@ -162,13 +165,12 @@ export interface WebGlRootSnapshot {
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: NormalizedWebGlRootOptions;
+  readonly options: Required<WebGlRootOptions>;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
 
 export interface WebGlVirtualTexturingSnapshot {
   readonly atlasTextures: number;
-  readonly fallbackDraws: number;
   readonly manifestFailures: number;
   readonly manifestRequests: number;
   readonly manifestsReady: number;
@@ -178,8 +180,24 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly requestedPages: number;
   readonly residentPages: number;
   readonly shaderBinds: number;
+  readonly unreadyDraws: number;
   readonly unsupportedDraws: number;
   readonly uploadedPages: number;
+}
+
+/** Imperative WebGL2 renderer root. */
+export interface WebGlRoot {
+  readonly canvas: HTMLCanvasElement;
+  readonly disposed: boolean;
+  readonly frame: number;
+  readonly latestScene: RenderRoot | undefined;
+  readonly options: Required<WebGlRootOptions>;
+  dispose(): void;
+  /** Requests one render of the latest scene on the root's active render clock. */
+  invalidate(): void;
+  pick(input: PickInput): PickResult | undefined;
+  render(scene: RenderRoot): void;
+  snapshot(): WebGlRootSnapshot;
 }
 
 type PickCandidate = PickResult & {
@@ -193,6 +211,15 @@ type ProgramResource = {
   readonly vertexShader: WebGLShader;
 };
 
+type GeometryDrawMode =
+  | "line-loop"
+  | "line-strip"
+  | "lines"
+  | "points"
+  | "triangle-fan"
+  | "triangle-strip"
+  | "triangles";
+
 type GeometryResource = {
   readonly arrayBuffer: WebGLBuffer;
   readonly borrowedVertexBufferKey?: string;
@@ -200,7 +227,7 @@ type GeometryResource = {
   readonly indexBuffer?: WebGLBuffer;
   readonly indexType?: number;
   readonly key: string;
-  readonly mode: "lines" | "triangles";
+  readonly mode: GeometryDrawMode;
   readonly normalBuffer?: WebGLBuffer;
   readonly texCoordBuffer?: WebGLBuffer;
 };
@@ -208,7 +235,7 @@ type GeometryResource = {
 type CpuGeometry = {
   readonly indices?: GltfIndexArray;
   readonly key: string;
-  readonly mode: "lines" | "triangles";
+  readonly mode: GeometryDrawMode;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array;
@@ -247,11 +274,11 @@ type VirtualTextureResourceSet = {
 };
 
 type VirtualTextureRuntimeStats = {
-  fallbackDraws: number;
   manifestFailures: number;
   manifestRequests: number;
   pageTableUpdates: number;
   shaderBinds: number;
+  unreadyDraws: number;
   unsupportedDraws: number;
   uploadedPages: number;
 };
@@ -277,7 +304,7 @@ type LoadedGltfPrimitive = {
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
   readonly materialVariants?: readonly LoadedGltfMaterialVariant[];
-  readonly mode: "lines" | "triangles";
+  readonly mode: GeometryDrawMode;
   readonly nodeLod?: GltfNodePrimitiveLod;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
@@ -287,6 +314,7 @@ type LoadedGltfMaterial = {
   readonly baseColorImageUri?: string;
   readonly baseColorTextureUri?: string;
   readonly color?: Rgba;
+  readonly doubleSided: boolean;
   readonly emissive?: Rgba;
   readonly emissiveImage?: LoadedTextureSource;
   readonly emissiveImageFailed?: boolean;
@@ -334,6 +362,11 @@ type LoadedGltfMaterialExtensionTextures = {
   readonly specularColorTexture?: LoadedGltfMaterialTextureSlot;
   readonly specularTexture?: LoadedGltfMaterialTextureSlot;
   readonly thicknessTexture?: LoadedGltfMaterialTextureSlot;
+};
+
+type DrawSidedness = {
+  readonly doubleSided: boolean;
+  readonly frontFaceCcw: boolean;
 };
 
 type GltfTextureImageSelection = {
@@ -526,6 +559,7 @@ const loadedGltfSurfaceMaterial = (
   const extensionFactors = loadedMaterial.extensionFactors;
   const common = {
     baseColor,
+    doubleSided: loadedMaterial.doubleSided,
     ...(emissive === undefined ? {} : { emissive }),
     ...(textures.emissiveTexture === undefined ? {} : { emissiveTexture: textures.emissiveTexture }),
     ...(extensionFactors === undefined ? {} : { extensionFactors }),
@@ -589,6 +623,7 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly material: SurfaceMaterial;
   readonly model: Mat4;
+  readonly sidedness: DrawSidedness;
 };
 
 type GltfPrimitiveDrawBatch = {
@@ -596,6 +631,7 @@ type GltfPrimitiveDrawBatch = {
   readonly lights: SurfaceLightSet;
   readonly material: SurfaceMaterial;
   readonly models: Mat4[];
+  readonly sidedness: DrawSidedness;
 };
 
 type ViewportSize = readonly [width: number, height: number];
@@ -648,7 +684,7 @@ const gltfGeometryContentKey = ({
   texCoords,
 }: {
   readonly indices?: GltfIndexArray | undefined;
-  readonly mode: "lines" | "triangles";
+  readonly mode: GeometryDrawMode;
   readonly normals?: Float32Array | undefined;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array | undefined;
@@ -666,6 +702,7 @@ type TransformableRenderNode = GltfNode | MeshNode;
 type RenderObjectBinding = {
   declarativeTransform: Transform;
   readonly handle: RenderObjectHandle;
+  readonly invalidation: { suppress: boolean } | undefined;
   node: TransformableRenderNode;
 };
 
@@ -793,11 +830,11 @@ const gltfTextureIdentity = (
   kind: GltfImageKind,
 ): string => {
   if (image.uri !== undefined) {
-    const prefix = kind === "basisu" ? "basisu-uri" : "image-uri";
+    const prefix = kind === "basisu" ? "basisu-uri" : kind === "svg" ? "svg-uri" : "image-uri";
     return `${assetKey}:${prefix}:${resolveResourceUri(src, image.uri)}`;
   }
   if (image.bufferView !== undefined) {
-    const prefix = kind === "basisu" ? "basisu-buffer-view" : "image-buffer-view";
+    const prefix = kind === "basisu" ? "basisu-buffer-view" : kind === "svg" ? "svg-buffer-view" : "image-buffer-view";
     return `${assetKey}:${prefix}:${image.bufferView}:${image.mimeType ?? ""}`;
   }
 
@@ -805,10 +842,16 @@ const gltfTextureIdentity = (
 };
 
 const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextureImageSelection | undefined => {
+  const svgSource = texture?.extensions?.ROYAL_texture_svg?.source;
+  if (svgSource !== undefined) return { imageIndex: svgSource, kind: "svg" };
+
   const basisuSource = texture?.extensions?.KHR_texture_basisu?.source;
   if (basisuSource !== undefined) return { imageIndex: basisuSource, kind: "basisu" };
 
-  const imageIndex = texture?.extensions?.EXT_texture_webp?.source ?? texture?.source;
+  const webpSource = texture?.extensions?.EXT_texture_webp?.source;
+  const imageIndex = webpSource !== undefined && canvasSupportsImageMimeType("image/webp")
+    ? webpSource
+    : texture?.source;
   return imageIndex === undefined ? undefined : { imageIndex, kind: "image" };
 };
 
@@ -922,6 +965,397 @@ const loadImageBitmapFromBufferView = (
   return createBitmap(blob);
 };
 
+const loadImageFromBlob = async (blob: Blob, label: string): Promise<HTMLImageElement> => {
+  if (
+    typeof globalThis.URL?.createObjectURL !== "function"
+    || typeof globalThis.URL.revokeObjectURL !== "function"
+  ) {
+    throw new Error(`Object URL loading is unavailable for ${label}`);
+  }
+
+  const url = globalThis.URL.createObjectURL(blob);
+  try {
+    return await loadImage(url);
+  } finally {
+    globalThis.URL.revokeObjectURL(url);
+  }
+};
+
+const svgRootPattern = /<svg\b([^>]*)>/iu;
+const svgViewBoxPattern = /\bviewBox\s*=\s*(["'])(.*?)\1/iu;
+const svgWidthPattern = /\bwidth\s*=\s*(["'])(.*?)\1/iu;
+const svgHeightPattern = /\bheight\s*=\s*(["'])(.*?)\1/iu;
+const svgXmlBasePattern = /\bxml:base\s*=\s*(["'])(.*?)\1/iu;
+const svgImageElementPattern = /<image\b[^>]*>/giu;
+const svgHrefAttributePattern = /\b((?:xlink:)?href)\s*=\s*(["'])(.*?)\2/giu;
+const svgAttributePattern = /\b([A-Za-z_:][\w:.-]*)\s*=\s*(["'])(.*?)\2/giu;
+const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)\s*(?:px|pt|pc|mm|cm|in)?\s*$/iu;
+const svgExternalReferenceMaxDepth = 8;
+const svgTextDecoder = new TextDecoder();
+
+type SvgTextureViewport = {
+  readonly fromViewBox: boolean;
+  readonly height: number;
+  readonly width: number;
+};
+
+type SvgImageReferenceContext = {
+  readonly active: Set<string>;
+  readonly cache: Map<string, Promise<SvgImageReferenceValue>>;
+  readonly depth: number;
+};
+
+type SvgImageReferenceValue =
+  | {
+    readonly kind: "data-uri";
+    readonly value: string;
+  }
+  | {
+    readonly kind: "svg";
+    readonly text: string;
+  };
+
+const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
+
+const parseSvgDimension = (value: string | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  const match = svgDimensionPattern.exec(value);
+  if (match === null) return undefined;
+  const parsed = Number.parseFloat(match[1] ?? "");
+
+  return positiveFinite(parsed) ? parsed : undefined;
+};
+
+const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => {
+  const svgRoot = svgRootPattern.exec(svgText);
+  if (svgRoot === null) return undefined;
+
+  const attributes = svgRoot[1] ?? "";
+  const width = parseSvgDimension(svgWidthPattern.exec(attributes)?.[2]);
+  const height = parseSvgDimension(svgHeightPattern.exec(attributes)?.[2]);
+  if (width !== undefined && height !== undefined) {
+    return {
+      fromViewBox: false,
+      height,
+      width,
+    };
+  }
+
+  const viewBox = svgViewBoxPattern.exec(attributes)?.[2];
+  if (viewBox !== undefined) {
+    const values = viewBox.trim().split(/[\s,]+/u).map((value) => Number(value));
+    if (
+      values.length === 4
+      && values.every((value) => Number.isFinite(value))
+      && positiveFinite(values[2] ?? Number.NaN)
+      && positiveFinite(values[3] ?? Number.NaN)
+    ) {
+      return {
+        fromViewBox: true,
+        height: values[3]!,
+        width: values[2]!,
+      };
+    }
+  }
+
+  return undefined;
+};
+
+const svgNumberAttribute = (value: number): string =>
+  Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+
+const escapeSvgAttribute = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+const absoluteSvgBaseUrl = (url: string, baseUrl?: string): string => {
+  try {
+    const base = globalThis.document?.baseURI ?? globalThis.location?.href;
+    return new URL(url, baseUrl ?? base).href;
+  } catch {
+    return url;
+  }
+};
+
+const svgRootBaseUrl = (attributes: string, documentBaseUrl: string): string => {
+  const authoredBase = svgXmlBasePattern.exec(attributes)?.[2];
+  return authoredBase === undefined
+    ? documentBaseUrl
+    : absoluteSvgBaseUrl(authoredBase, documentBaseUrl);
+};
+
+const svgRootBaseUrlForText = (svgText: string, documentBaseUrl: string): string => {
+  const svgRoot = svgRootPattern.exec(svgText);
+  return svgRoot === null ? documentBaseUrl : svgRootBaseUrl(svgRoot[1] ?? "", documentBaseUrl);
+};
+
+const shouldInlineSvgImageReference = (href: string): boolean =>
+  href.trim() !== ""
+  && !href.startsWith("#")
+  && !/^(?:about|blob|data|javascript|mailto):/iu.test(href);
+
+const responseContentMimeType = (response: Response): string | undefined => {
+  const header = (response as { readonly headers?: Headers }).headers?.get("content-type");
+  const mediaType = header?.split(";")[0]?.trim().toLowerCase();
+  return mediaType === "" ? undefined : mediaType;
+};
+
+const imageMimeTypeForUrl = (url: string, response: Response): string => {
+  const contentType = responseContentMimeType(response);
+  if (contentType !== undefined) return contentType;
+  if (/\.svg(?:$|[?#])/iu.test(url)) return "image/svg+xml";
+  if (/\.avif(?:$|[?#])/iu.test(url)) return "image/avif";
+  if (/\.webp(?:$|[?#])/iu.test(url)) return "image/webp";
+  if (/\.jpe?g(?:$|[?#])/iu.test(url)) return "image/jpeg";
+  if (/\.png(?:$|[?#])/iu.test(url)) return "image/png";
+  if (/\.gif(?:$|[?#])/iu.test(url)) return "image/gif";
+  return "application/octet-stream";
+};
+
+const base64Bytes = (bytes: Uint8Array): string => {
+  const encode = globalThis.btoa;
+  if (typeof encode !== "function") throw new Error("Base64 encoding is unavailable for SVG image reference");
+
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return encode(binary);
+};
+
+const bytesDataUri = (bytes: Uint8Array, mimeType: string): string =>
+  `data:${mimeType};base64,${base64Bytes(bytes)}`;
+
+const setSvgAttribute = (attributes: string, name: string, value: string): string => {
+  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s*=\\s*(["']).*?\\1`, "iu");
+  const attribute = `${name}="${escapeSvgAttribute(value)}"`;
+  if (pattern.test(attributes)) return attributes.replace(pattern, attribute);
+
+  return `${attributes} ${attribute}`;
+};
+
+const svgTextWithFiniteImageDimensions = (
+  svgText: string,
+  label: string,
+  baseUrl?: string,
+  { requireViewport = true }: { readonly requireViewport?: boolean } = {},
+): string => {
+  const viewport = svgTextureViewport(svgText);
+  if (viewport === undefined) {
+    if (!requireViewport && baseUrl === undefined) return svgText;
+    if (!requireViewport && baseUrl !== undefined) {
+      const svgRoot = svgRootPattern.exec(svgText);
+      if (svgRoot === null) return svgText;
+      const attributes = setSvgAttribute(svgRoot[1] ?? "", "xml:base", svgRootBaseUrl(svgRoot[1] ?? "", baseUrl));
+      return `${svgText.slice(0, svgRoot.index)}<svg${attributes}>${svgText.slice(svgRoot.index + svgRoot[0].length)}`;
+    }
+    throw new Error(`${label} requires a finite viewBox or finite width and height`);
+  }
+  if (!viewport.fromViewBox && baseUrl === undefined) return svgText;
+
+  const svgRoot = svgRootPattern.exec(svgText);
+  if (svgRoot === null) return svgText;
+
+  let attributes = svgRoot[1] ?? "";
+  if (viewport.fromViewBox) {
+    attributes = setSvgAttribute(attributes, "width", svgNumberAttribute(viewport.width));
+    attributes = setSvgAttribute(attributes, "height", svgNumberAttribute(viewport.height));
+  }
+  if (baseUrl !== undefined) attributes = setSvgAttribute(attributes, "xml:base", svgRootBaseUrl(attributes, baseUrl));
+
+  return `${svgText.slice(0, svgRoot.index)}<svg${attributes}>${svgText.slice(svgRoot.index + svgRoot[0].length)}`;
+};
+
+const fetchSvgImageReferenceValue = (
+  href: string,
+  baseUrl: string,
+  label: string,
+  context: SvgImageReferenceContext,
+): Promise<SvgImageReferenceValue> => {
+  if (context.depth >= svgExternalReferenceMaxDepth) {
+    return Promise.reject(new Error(`${label} exceeds nested SVG image reference depth ${svgExternalReferenceMaxDepth}`));
+  }
+
+  const url = absoluteSvgBaseUrl(href, baseUrl);
+  const cached = context.cache.get(url);
+  if (cached !== undefined) return cached;
+
+  const request = (async (): Promise<SvgImageReferenceValue> => {
+    if (context.active.has(url)) throw new Error(`${label} contains a cyclic SVG image reference to ${url}`);
+    context.active.add(url);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+      const responseUrl = absoluteSvgBaseUrl(response.url || url, baseUrl);
+      const mimeType = imageMimeTypeForUrl(responseUrl, response);
+      if (mimeType === "image/svg+xml") {
+        return {
+          kind: "svg",
+          text: await prepareSvgTextForImage(await response.text(), `SVG image reference ${responseUrl}`, responseUrl, {
+            context: {
+              active: context.active,
+              cache: context.cache,
+              depth: context.depth + 1,
+            },
+            requireViewport: false,
+          }),
+        };
+      }
+
+      return {
+        kind: "data-uri",
+        value: bytesDataUri(new Uint8Array(await response.arrayBuffer()), mimeType),
+      };
+    } finally {
+      context.active.delete(url);
+    }
+  })();
+  context.cache.set(url, request);
+  return request;
+};
+
+const svgImageAttributes = (imageTag: string): readonly (readonly [name: string, value: string])[] => {
+  const attributes: Array<readonly [string, string]> = [];
+  for (const match of imageTag.matchAll(svgAttributePattern)) {
+    const name = match[1] ?? "";
+    if (/^(?:xlink:)?href$/iu.test(name)) continue;
+    attributes.push([name, match[3] ?? ""]);
+  }
+  return attributes;
+};
+
+const inlineNestedSvgImageElement = (imageTag: string, value: SvgImageReferenceValue): string | undefined => {
+  if (value.kind !== "svg") return undefined;
+
+  const svgRoot = svgRootPattern.exec(value.text);
+  if (svgRoot === null) throw new Error("Nested SVG image reference has no root <svg> element");
+
+  let attributes = svgRoot[1] ?? "";
+  for (const [name, attributeValue] of svgImageAttributes(imageTag)) {
+    attributes = setSvgAttribute(attributes, name, attributeValue);
+  }
+
+  return `<svg${attributes}>${value.text.slice(svgRoot.index + svgRoot[0].length)}`;
+};
+
+const svgHrefValueForImageTag = (
+  imageTag: string,
+  resolved: ReadonlyMap<string, SvgImageReferenceValue>,
+): SvgImageReferenceValue | undefined => {
+  for (const hrefMatch of imageTag.matchAll(svgHrefAttributePattern)) {
+    const value = resolved.get(hrefMatch[3] ?? "");
+    if (value !== undefined) return value;
+  }
+  return undefined;
+};
+
+const inlineSvgImageReferences = async (
+  svgText: string,
+  label: string,
+  baseUrl: string,
+  context: SvgImageReferenceContext,
+): Promise<string> => {
+  const rootBaseUrl = svgRootBaseUrlForText(svgText, baseUrl);
+  const replacements = new Map<string, Promise<SvgImageReferenceValue>>();
+
+  for (const imageMatch of svgText.matchAll(svgImageElementPattern)) {
+    const imageTag = imageMatch[0];
+    for (const hrefMatch of imageTag.matchAll(svgHrefAttributePattern)) {
+      const href = hrefMatch[3] ?? "";
+      if (!shouldInlineSvgImageReference(href)) continue;
+      replacements.set(href, fetchSvgImageReferenceValue(href, rootBaseUrl, label, context));
+    }
+  }
+
+  if (replacements.size === 0) return svgText;
+
+  const resolved = new Map<string, SvgImageReferenceValue>();
+  await Promise.all([...replacements].map(async ([href, value]) => {
+    resolved.set(href, await value);
+  }));
+
+  return svgText.replace(svgImageElementPattern, (imageTag) => {
+    const value = svgHrefValueForImageTag(imageTag, resolved);
+    if (value === undefined) return imageTag;
+
+    const nestedSvg = inlineNestedSvgImageElement(imageTag, value);
+    if (nestedSvg !== undefined) return nestedSvg;
+
+    return imageTag.replace(svgHrefAttributePattern, (attribute, name: string, quote: string, href: string) => {
+      const replacement = resolved.get(href);
+      return replacement?.kind === "data-uri" ? `${name}=${quote}${replacement.value}${quote}` : attribute;
+    });
+  });
+};
+
+const prepareSvgTextForImage = async (
+  svgText: string,
+  label: string,
+  baseUrl: string | undefined,
+  {
+    context = { active: new Set<string>(), cache: new Map<string, Promise<SvgImageReferenceValue>>(), depth: 0 },
+    requireViewport = true,
+  }: {
+    readonly context?: SvgImageReferenceContext;
+    readonly requireViewport?: boolean;
+  } = {},
+): Promise<string> => {
+  const normalizedText = svgTextWithFiniteImageDimensions(svgText, label, baseUrl, { requireViewport });
+  return baseUrl === undefined
+    ? normalizedText
+    : inlineSvgImageReferences(normalizedText, label, baseUrl, context);
+};
+
+const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string): Promise<HTMLImageElement> => {
+  const normalizedText = await prepareSvgTextForImage(svgText, label, baseUrl);
+
+  return loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label);
+};
+
+const loadSvgUriImage = async (url: string): Promise<HTMLImageElement> => {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+  return loadSvgTextImage(
+    await response.text(),
+    `glTF ROYAL_texture_svg image ${url}`,
+    absoluteSvgBaseUrl(response.url || url),
+  );
+};
+
+const loadSvgImageSource = async (
+  src: string,
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+  image: GltfImage,
+): Promise<HTMLImageElement> => {
+  if (image.uri !== undefined) {
+    if (image.uri.startsWith("data:")) {
+      const svgText = svgTextDecoder.decode(decodeDataUri(image.uri));
+      return loadSvgTextImage(svgText, `glTF ROYAL_texture_svg data URI ${image.uri.slice(0, 48)}`, absoluteSvgBaseUrl(src));
+    }
+
+    return loadSvgUriImage(resolveResourceUri(src, image.uri));
+  }
+  if (image.bufferView === undefined) {
+    throw new Error("glTF ROYAL_texture_svg image has no URI or bufferView");
+  }
+
+  return loadSvgTextImage(
+    svgTextDecoder.decode(gltfBufferViewBytes(document, buffers, image.bufferView)),
+    `glTF ROYAL_texture_svg bufferView ${image.bufferView}`,
+    absoluteSvgBaseUrl(src),
+  );
+};
+
 const loadBasisuBytesFromUri = async (
   src: string,
   image: GltfImage,
@@ -943,6 +1377,10 @@ const loadGltfImageSource = (
   image: GltfImage,
   kind: GltfImageKind,
 ): Promise<LoadedTextureSource> => {
+  if (kind === "svg") {
+    return loadSvgImageSource(src, document, buffers, image);
+  }
+
   if (kind === "basisu") {
     const bytes = image.uri === undefined
       ? image.bufferView === undefined
@@ -1127,16 +1565,51 @@ const gltfEmissiveColor = (
     : emissive;
 };
 
-const gltfPrimitiveMode = (mode: number | undefined): "lines" | "triangles" | undefined => {
+const gltfPrimitiveMode = (mode: number | undefined): GeometryDrawMode | undefined => {
   switch (mode ?? 4) {
+    case 0:
+      return "points";
     case 1:
       return "lines";
+    case 2:
+      return "line-loop";
+    case 3:
+      return "line-strip";
     case 4:
       return "triangles";
+    case 5:
+      return "triangle-strip";
+    case 6:
+      return "triangle-fan";
     default:
       return undefined;
   }
 };
+
+const webGlDrawMode = (gl: WebGL2RenderingContext, mode: GeometryDrawMode): number => {
+  switch (mode) {
+    case "line-loop":
+      return gl.LINE_LOOP;
+    case "line-strip":
+      return gl.LINE_STRIP;
+    case "lines":
+      return gl.LINES;
+    case "points":
+      return gl.POINTS;
+    case "triangle-fan":
+      return gl.TRIANGLE_FAN;
+    case "triangle-strip":
+      return gl.TRIANGLE_STRIP;
+    case "triangles":
+      return gl.TRIANGLES;
+  }
+};
+
+const isPickableDrawMode = (mode: GeometryDrawMode | undefined): boolean =>
+  mode === undefined
+  || mode === "triangles"
+  || mode === "triangle-strip"
+  || mode === "triangle-fan";
 
 const gltfBaseColorTextureInfo = (
   document: GltfDocument,
@@ -1366,7 +1839,7 @@ const projectedScreenCoverage = (
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
  * by the contracts while keeping all GPU ownership inside this root.
  */
-export class WebGlRoot {
+class WebGlRootImpl implements WebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
@@ -1400,7 +1873,7 @@ export class WebGlRoot {
   #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   #unsupportedVirtualTextureDraws = 0;
   readonly #viewportInvalidationListener = (): void => {
-    this.#scheduleRender();
+    this.invalidate();
   };
 
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
@@ -1504,6 +1977,10 @@ export class WebGlRoot {
     this.#releaseUnusedGeometry(usedGeometry);
     this.#pruneGltfLodSelections();
     this.#frame += 1;
+  }
+
+  invalidate(): void {
+    this.#scheduleRender();
   }
 
   pick(input: PickInput): PickResult | undefined {
@@ -1618,11 +2095,15 @@ export class WebGlRoot {
     let binding = this.#renderObjectBindings.get(ref);
     if (binding === undefined) {
       const existingHandle = typeof ref === "function" ? null : ref.current;
+      const invalidation = existingHandle === null ? { suppress: false } : undefined;
       binding = {
         declarativeTransform,
         handle: existingHandle ?? createRenderObjectHandle(declarativeTransform, () => {
-          this.#scheduleRenderMicrotask();
+          if (invalidation?.suppress === true) return;
+
+          this.invalidate();
         }),
+        invalidation,
         node,
       };
       this.#renderObjectBindings.set(ref, binding);
@@ -1630,7 +2111,12 @@ export class WebGlRoot {
     } else {
       this.#renderObjectHandles.delete(binding.node);
       if (!sameTransform(binding.declarativeTransform, declarativeTransform)) {
-        binding.handle.setTransform(declarativeTransform);
+        if (binding.invalidation !== undefined) binding.invalidation.suppress = true;
+        try {
+          binding.handle.setTransform(declarativeTransform);
+        } finally {
+          if (binding.invalidation !== undefined) binding.invalidation.suppress = false;
+        }
         binding.declarativeTransform = declarativeTransform;
       }
       binding.node = node;
@@ -1740,7 +2226,7 @@ export class WebGlRoot {
     if (state?.status === "ready") {
       let best: PickCandidate | undefined;
       for (const primitive of state.primitives) {
-        if (primitive.mode !== "triangles") continue;
+        if (!isPickableDrawMode(primitive.mode)) continue;
         for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
           const model = multiplyMat4(rootModel, localModel);
           if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
@@ -1785,7 +2271,7 @@ export class WebGlRoot {
     readonly drawOrdinal: number;
     readonly geometry: {
       readonly indices?: Uint16Array | Uint32Array | Uint8Array;
-      readonly mode?: "lines" | "triangles";
+      readonly mode?: GeometryDrawMode;
       readonly positions: Float32Array;
     };
     readonly input: PickInput;
@@ -1794,11 +2280,13 @@ export class WebGlRoot {
     readonly ray: Ray;
     readonly target: PickTarget;
   }): PickCandidate | undefined {
-    if (geometry.mode === "lines") return undefined;
+    if (!isPickableDrawMode(geometry.mode)) return undefined;
     if (bounds === undefined) return undefined;
     if (rayAabbDistance(ray, bounds) === undefined) return undefined;
+    const mode = geometry.mode as RayGeometryMode | undefined;
     const distance = rayGeometryDistance({
       ...(geometry.indices === undefined ? {} : { indices: geometry.indices }),
+      ...(mode === undefined ? {} : { mode }),
       model,
       positions: geometry.positions,
       ray,
@@ -2033,6 +2521,10 @@ export class WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           material,
           model,
+          sidedness: {
+            doubleSided: loadedMaterial.doubleSided,
+            frontFaceCcw: orientationPreservingMat4(model),
+          },
         });
       }
     }
@@ -2051,7 +2543,10 @@ export class WebGlRoot {
       const geometry = this.#geometryResource(draw.geometry);
       usedGeometry.add(geometry.key);
       const lights = combineSurfaceLightSets(passLights, draw.lights);
-      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${lights.key}`;
+      const sidednessKey = draw.sidedness.doubleSided
+        ? "double-sided"
+        : draw.sidedness.frontFaceCcw ? "front-ccw" : "front-cw";
+      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${sidednessKey}|${lights.key}`;
       const batch = batches.get(batchKey);
       if (batch === undefined) {
         batches.set(batchKey, {
@@ -2059,6 +2554,7 @@ export class WebGlRoot {
           lights,
           material: draw.material,
           models: [draw.model],
+          sidedness: draw.sidedness,
         });
       } else {
         batch.models.push(draw.model);
@@ -2090,27 +2586,51 @@ export class WebGlRoot {
     view: Mat4,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
-    if (batch.models.length === 1) {
-      this.#drawGeometry(
-        batch.geometry,
-        batch.material,
-        batch.models[0]!,
-        projection,
-        view,
-        batch.lights,
-        transmissionScreenColorTexture,
-      );
-    } else {
-      this.#drawGeometryInstanced(
-        batch.geometry,
-        batch.material,
-        batch.models,
-        projection,
-        view,
-        batch.lights,
-        transmissionScreenColorTexture,
-      );
+    this.#applyDrawSidedness(batch.sidedness);
+    try {
+      if (batch.models.length === 1) {
+        this.#drawGeometry(
+          batch.geometry,
+          batch.material,
+          batch.models[0]!,
+          projection,
+          view,
+          batch.lights,
+          transmissionScreenColorTexture,
+        );
+      } else {
+        this.#drawGeometryInstanced(
+          batch.geometry,
+          batch.material,
+          batch.models,
+          projection,
+          view,
+          batch.lights,
+          transmissionScreenColorTexture,
+        );
+      }
+    } finally {
+      this.#resetDrawSidedness();
     }
+  }
+
+  #applyDrawSidedness(sidedness: DrawSidedness): void {
+    const gl = this.#gl;
+    if (sidedness.doubleSided) {
+      gl.disable(gl.CULL_FACE);
+
+      return;
+    }
+
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    gl.frontFace(sidedness.frontFaceCcw ? gl.CCW : gl.CW);
+  }
+
+  #resetDrawSidedness(): void {
+    const gl = this.#gl;
+    gl.disable(gl.CULL_FACE);
+    gl.frontFace(gl.CCW);
   }
 
   #gltfAssetLightSet(state: GltfState, rootModel: Mat4): SurfaceLightSet | undefined {
@@ -2534,14 +3054,14 @@ export class WebGlRoot {
         ? false
         : this.#bindMaterialTexture(program, material);
     if (material.baseColor.kind === "virtual-asset" && !useVirtualTexture && virtualTexture !== undefined) {
-      virtualTexture.stats.fallbackDraws += 1;
+      virtualTexture.stats.unreadyDraws += 1;
     }
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
 
     if (material.kind === "wireframe") gl.lineWidth?.(material.width);
 
-    const mode = geometry.mode === "lines" ? gl.LINES : gl.TRIANGLES;
+    const mode = webGlDrawMode(gl, geometry.mode);
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
       gl.drawArrays(mode, 0, geometry.drawCount);
     } else {
@@ -2576,7 +3096,7 @@ export class WebGlRoot {
     this.#bindGeometryAttributes(program, geometry);
     this.#bindGltfInstanceModels(models);
 
-    const mode = geometry.mode === "lines" ? gl.LINES : gl.TRIANGLES;
+    const mode = webGlDrawMode(gl, geometry.mode);
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
       gl.drawArraysInstanced(mode, 0, geometry.drawCount, models.length);
     } else {
@@ -2904,11 +3424,11 @@ export class WebGlRoot {
       loadingPages: new Set(),
       requestedPages: new Set(),
       stats: {
-        fallbackDraws: 0,
         manifestFailures: 0,
         manifestRequests: 1,
         pageTableUpdates: 0,
         shaderBinds: 0,
+        unreadyDraws: 0,
         unsupportedDraws: 0,
         uploadedPages: 0,
       },
@@ -2956,7 +3476,7 @@ export class WebGlRoot {
       this.#allocateVirtualTextureResources(state, parsed.manifest);
       state.status = "ready";
       this.#demandVirtualTexturePages(state);
-      this.#scheduleRender();
+      this.invalidate();
     } catch (error) {
       if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
       this.#failVirtualTexture(state, error instanceof Error ? error.message : String(error));
@@ -3152,7 +3672,7 @@ export class WebGlRoot {
       }
       state.loadingPages.delete(pageKey);
       this.#uploadVirtualTexturePage(state, page, image);
-      this.#scheduleRender();
+      this.invalidate();
     }, (error: unknown) => {
       if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
       state.loadingPages.delete(pageKey);
@@ -3312,7 +3832,6 @@ export class WebGlRoot {
     this.#uniform2fv(program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
     this.#uniform1i(program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
     this.#uniform1i(program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
-    this.#uniformColor(program, "u_color", state.texture.fallback?.color ?? manifest.fallbackColor ?? DEFAULT_COLOR);
     state.stats.shaderBinds += 1;
 
     return true;
@@ -3341,10 +3860,10 @@ export class WebGlRoot {
   #markVirtualTextureUnsupported(state: VirtualTextureRuntimeState, reason: string): void {
     state.status = "unsupported";
     state.stats.unsupportedDraws += 1;
-    const message = `Virtual texture ${state.texture.manifestUri} unsupported: ${reason}. Using fixed fallback color.`;
+    const message = `Virtual texture ${state.texture.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
     state.diagnostics.push(message);
     this.#recordDiagnostic(message);
-    this.#scheduleRender();
+    this.invalidate();
   }
 
   #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
@@ -3737,7 +4256,7 @@ export class WebGlRoot {
       if (this.#disposed) return;
       state.loading = false;
       this.#uploadTexture(state, image, texture);
-      this.#scheduleRender();
+      this.invalidate();
     }, (error: unknown) => {
       if (this.#disposed) return;
       state.loading = false;
@@ -3900,7 +4419,7 @@ export class WebGlRoot {
       state.primitives = scene.primitives;
       state.variants = scene.variants;
       state.status = "ready";
-      this.#scheduleRender();
+      this.invalidate();
       this.#loadGltfImages(src, decodedDocument, buffers, state);
     } catch (error) {
       if (this.#disposed) return;
@@ -4458,6 +4977,7 @@ export class WebGlRoot {
       ...(emissive === undefined ? {} : { emissive }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
+      doubleSided: material?.doubleSided === true,
       metallicFactor,
       occlusionStrength,
       roughnessFactor,
@@ -4504,7 +5024,7 @@ export class WebGlRoot {
   ): void {
     const usedImageKeys = this.#usedGltfImageLoadKeys(state);
     for (const [imageIndex, image] of (document.images ?? []).entries()) {
-      for (const kind of ["image", "basisu"] as const) {
+      for (const kind of ["image", "basisu", "svg"] as const) {
         const key = gltfImageLoadKey(state.key, src, imageIndex, image, kind);
         if (key === undefined) continue;
         if (!usedImageKeys.has(key)) continue;
@@ -4516,14 +5036,14 @@ export class WebGlRoot {
           if (kind === "image" && state.imageBasedLight?.specular !== undefined) {
             this.#settleIblSpecularImage(state.imageBasedLight.specular, key, loadedImage);
           }
-          this.#scheduleRender();
+          this.invalidate();
         }, (error: unknown) => {
           if (this.#disposed) return;
           if (state.status === "ready") {
             state.primitives = state.primitives.map((primitive) =>
               this.#mapGltfPrimitiveMaterials(primitive, (material) =>
                 this.#failGltfMaterialImage(material, key)));
-            this.#scheduleRender();
+            this.invalidate();
           }
           this.#recordDiagnostic(`glTF image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
         });
@@ -4699,16 +5219,6 @@ export class WebGlRoot {
     });
   }
 
-  #scheduleRenderMicrotask(): void {
-    if (this.#disposed || this.#renderScheduled || this.#latestScene === undefined) return;
-
-    this.#renderScheduled = true;
-    queueMicrotask(() => {
-      this.#renderScheduled = false;
-      if (!this.#disposed && this.#latestScene !== undefined) this.render(this.#latestScene);
-    });
-  }
-
   #createBuffer(): WebGLBuffer {
     const buffer = this.#gl.createBuffer();
     if (buffer === null) throw new Error("WebGL buffer creation failed");
@@ -4748,7 +5258,6 @@ export class WebGlRoot {
 
   #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {
     let atlasTextures = 0;
-    let fallbackDraws = 0;
     let manifestFailures = 0;
     let manifestRequests = 0;
     let manifestsReady = 0;
@@ -4758,6 +5267,7 @@ export class WebGlRoot {
     let requestedPages = 0;
     let residentPages = 0;
     let shaderBinds = 0;
+    let unreadyDraws = 0;
     let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
     let uploadedPages = 0;
 
@@ -4766,7 +5276,6 @@ export class WebGlRoot {
         atlasTextures += 1;
         pageTableTextures += 1;
       }
-      fallbackDraws += state.stats.fallbackDraws;
       manifestFailures += state.stats.manifestFailures;
       manifestRequests += state.stats.manifestRequests;
       if (state.status === "ready") manifestsReady += 1;
@@ -4775,13 +5284,13 @@ export class WebGlRoot {
       requestedPages += state.requestedPages.size;
       residentPages += state.pageTable?.residentCount ?? 0;
       shaderBinds += state.stats.shaderBinds;
+      unreadyDraws += state.stats.unreadyDraws;
       unsupportedDraws += state.stats.unsupportedDraws;
       uploadedPages += state.uploadedPages.size;
     }
 
     return {
       atlasTextures,
-      fallbackDraws,
       manifestFailures,
       manifestRequests,
       manifestsReady,
@@ -4791,6 +5300,7 @@ export class WebGlRoot {
       requestedPages,
       residentPages,
       shaderBinds,
+      unreadyDraws,
       unsupportedDraws,
       uploadedPages,
     };
@@ -4798,7 +5308,7 @@ export class WebGlRoot {
 
   #recordUnsupportedVirtualTexture(texture: VirtualTextureRef, reason: string): void {
     this.#unsupportedVirtualTextureDraws += 1;
-    const message = `Virtual texture ${texture.manifestUri} is not rendered: ${reason}. Preview and first-page fallback rendering are disabled; using fixed fallback color.`;
+    const message = `Virtual texture ${texture.manifestUri} is not rendered: ${reason}. Preview and first-page rendering are disabled.`;
     if (this.#unsupportedVirtualTextureDiagnostics.has(message)) return;
     this.#unsupportedVirtualTextureDiagnostics.add(message);
     this.#recordDiagnostic(message);
@@ -4809,4 +5319,4 @@ export class WebGlRoot {
 export const createWebGlRoot = (
   canvas: HTMLCanvasElement,
   options?: WebGlRootOptions,
-): WebGlRoot => new WebGlRoot(canvas, options);
+): WebGlRoot => new WebGlRootImpl(canvas, options);

@@ -1,5 +1,5 @@
 import type { Vec3 } from '../primitives';
-import { textFontDescriptor } from './font';
+import { textFontDescriptor } from './font-internal';
 import type { TextFontMetrics } from './font';
 import {
   defaultOrigin,

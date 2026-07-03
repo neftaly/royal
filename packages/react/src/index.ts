@@ -1,6 +1,6 @@
 import { Canvas as CanvasComponent } from './canvas';
 import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
-import { markReactComponent } from './jsx-runtime';
+import { markReactComponent } from './jsx-runtime-internal';
 import {
   TextFontProvider as TextFontProviderComponent,
   TextInteractionProvider as TextInteractionProviderComponent,
@@ -17,7 +17,7 @@ export type {
   RenderObjectVector3
 } from '@royal/renderer-core';
 export { canvasPointToWorld, worldPointToCanvasClient } from './canvas-coordinate';
-export { useCanvasElement, useCanvasPick, useCanvasRoot } from './canvas';
+export { useCanvasElement, useCanvasPick, useCanvasRoot, useInvalidate } from './canvas';
 export { captureCanvasPointer, releaseCanvasPointer } from './canvas-pointer';
 export { editableTextKeyboardIntent } from './text/editable-keyboard';
 export {
@@ -26,14 +26,19 @@ export {
   orbitCameraTransform,
   orbitPerspectiveCamera,
   resolveOrbitCameraView,
-  updateOrbitPerspectiveCamera,
   useOrbitCamera,
   useOrbitCameraView
 } from './orbit-controls';
-export { createRoot } from './root';
-export { ButtonPrimitive, TextPrimitive, InputPrimitive, TextareaPrimitive, textFieldHeight, useTextFont } from './text/surface';
+export { createRendererRoot } from './root';
+export {
+  Button,
+  Input,
+  Text,
+  Textarea,
+  textFieldHeight,
+  useTextFont
+} from './text/surface';
 export { useFrame, useFrameIndex } from './frame';
-export { markRendererComponent } from './jsx-runtime';
 export type { FrameCallback, FrameSnapshot } from './frame';
 export type {
   RoyalPointerEvent,
@@ -51,20 +56,20 @@ export const TextSurface = markReactComponent(TextSurfaceComponent);
 export type { CanvasProps, CanvasRendererOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
 export type {
-  ButtonPrimitiveProps,
-  CheckboxInputPrimitiveProps,
-  ColorInputPrimitiveProps,
-  FileInputPrimitiveProps,
-  InputPrimitiveProps,
-  TextAreaPrimitiveProps,
+  ButtonProps,
+  CheckboxInputProps,
+  ColorInputProps,
+  FileInputProps,
+  InputProps,
+  TextareaProps,
   TextFontProviderProps,
   TextFieldHeightOptions,
-  TextFieldPrimitiveProps,
-  TextInputPrimitiveProps,
+  TextFieldProps,
+  TextInputProps,
   TextInteractionProviderProps,
   TextInteractionStyle,
   TextSurfaceControlStyle,
-  TextPrimitiveProps,
+  TextProps,
   TextSurfaceBox,
   TextSurfaceProps
 } from './text/surface';
@@ -93,11 +98,10 @@ export type {
   UseOrbitCameraOptions
 } from './orbit-controls';
 export type {
-  RoyalRendererBackend,
-  RoyalRoot,
-  RoyalRootContextOptions,
-  RoyalRootContextSnapshot,
-  RoyalRootOptions,
-  RoyalRootRenderInput,
-  RoyalRootSnapshot
+  RoyalRendererRoot,
+  RoyalRendererRootContextOptions,
+  RoyalRendererRootContextSnapshot,
+  RoyalRendererRootOptions,
+  RoyalRendererRootRenderInput,
+  RoyalRendererRootSnapshot
 } from './root';

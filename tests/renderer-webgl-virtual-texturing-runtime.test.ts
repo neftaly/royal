@@ -26,7 +26,6 @@ describe("WebGL virtual texturing runtime model", () => {
   it("parses explicit page-entry manifests into a normalized resource model", () => {
     const result = parseVirtualTextureManifest({
       colorSpace: "srgb",
-      fallbackColor: [0.08, 0.1, 0.12, 1],
       id: "terrain",
       mipCount: 2,
       pageSize: 128,
@@ -43,7 +42,6 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.manifest).toEqual(expect.objectContaining({
       colorSpace: "srgb",
-      fallbackColor: [0.08, 0.1, 0.12, 1],
       height: 256,
       id: "terrain",
       mipCount: 2,
@@ -671,7 +669,6 @@ const renderScene = (material: Material) => scene({
 });
 
 const vtManifest = (physicalSlots = 2) => ({
-  fallbackColor: [1, 0, 1, 1],
   pageSize: 4,
   pages: {
     entries: {
@@ -685,7 +682,6 @@ const vtManifest = (physicalSlots = 2) => ({
 });
 
 const vtParentFallbackManifest = (physicalSlots = 3) => ({
-  fallbackColor: [1, 0, 1, 1],
   mipCount: 2,
   pageSize: 4,
   pages: {
@@ -1114,7 +1110,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.snapshot().disposed).toBe(true);
   });
 
-  it("records unsupported capability fallback and rejects WebGL1 contexts explicitly", async () => {
+  it("records unsupported capability diagnostics and rejects WebGL1 contexts explicitly", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -1137,7 +1133,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(() => createWebGlRoot(fakeCanvas(null))).toThrow(/webgl2/i);
   });
 
-  it("uses fixed fallback diagnostics for VT materials outside the first supported path", () => {
+  it("diagnoses VT materials outside the first supported path", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

@@ -1,0 +1,340 @@
+import { describe, expect, it } from "vitest";
+import {
+  assertSupportedRequiredGltfExtensions,
+  unsupportedRequiredGltfExtensions,
+} from "../packages/renderer-webgl/src/gltf/extensions";
+import { gltfImageLoadKey, type GltfImageKind } from "../packages/renderer-webgl/src/gltf/image-keys";
+import type { GltfDocument, GltfImage, GltfTexture } from "../packages/renderer-webgl/src/gltf/schema";
+import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+
+const textureSourceExtensions = [
+  "EXT_texture_webp",
+  "KHR_texture_basisu",
+] as const;
+
+type TextureSourceExtension = typeof textureSourceExtensions[number];
+
+type ValidationCounters = {
+  readonly extensionBlockCount: number;
+  readonly imageCount: number;
+  readonly sourceMask: number;
+  readonly textureCount: number;
+  readonly validationOutcome: "accepted" | "rejected";
+};
+
+const extensionPool = [
+  "EXT_mesh_gpu_instancing",
+  "EXT_texture_webp",
+  "KHR_materials_unlit",
+  "KHR_texture_basisu",
+  "ROYAL_texture_svg",
+  "VENDOR_alpha",
+  "VENDOR_beta",
+  "VENDOR_gamma",
+] as const;
+
+const randomRequiredExtensions = (random: SeededRandom): readonly unknown[] => {
+  const count = random.int(0, 14);
+  const values: unknown[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const extension = extensionPool[random.int(0, extensionPool.length)];
+    values.push(extension);
+    if (random.boolean(0.25)) values.push(extension);
+    if (random.boolean(0.12)) values.push(random.int(-4, 4));
+  }
+  return values;
+};
+
+const expectedUnsupported = (
+  required: readonly unknown[],
+  supported: ReadonlySet<string>,
+): readonly string[] => {
+  const unique = new Set<string>();
+  for (const value of required) {
+    if (typeof value === "string") unique.add(value);
+  }
+  return [...unique].filter((extension) => !supported.has(extension));
+};
+
+const extensionBlock = (extension: TextureSourceExtension, source: number) => ({
+  [extension]: { source },
+}) as NonNullable<GltfTexture["extensions"]>;
+
+const documentWithConflictingTextureSource = (
+  extension: TextureSourceExtension,
+  textureCount: number,
+  conflictIndex: number,
+): GltfDocument => ({
+  extensionsRequired: [extension],
+  extensionsUsed: [],
+  images: [{ uri: "texture.svg" }],
+  textures: Array.from({ length: textureCount }, (_, textureIndex): GltfTexture => ({
+    ...(textureIndex === conflictIndex ? { source: 0 } : {}),
+    ...(textureIndex === conflictIndex ? { extensions: extensionBlock(extension, 0) } : {}),
+  })),
+});
+
+const randomSvgImage = (random: SeededRandom): GltfImage => {
+  const variant = random.int(0, 10);
+  switch (variant) {
+    case 0:
+      return { uri: "icon.svg" };
+    case 1:
+      return { mimeType: "image/svg+xml", uri: "icon.texture" };
+    case 2:
+      return { uri: "icon.png" };
+    case 3:
+      return { mimeType: "image/png", uri: "icon.svg" };
+    case 4:
+      return { mimeType: "image/svg+xml", bufferView: random.int(0, 4) };
+    case 5:
+      return { mimeType: "image/png", bufferView: random.int(0, 4) };
+    case 6:
+      return { uri: "data:image/svg+xml,%3Csvg/%3E" };
+    case 7:
+      return { uri: "data:image/png;base64,AAAA" };
+    case 8:
+      return { uri: "badge.svg?cache=1" };
+    default:
+      return {};
+  }
+};
+
+const isDataUri = (uri: string): boolean => /^data:/iu.test(uri);
+
+const dataUriMediaType = (uri: string): string | undefined => {
+  const match = /^data:([^,]*),/isu.exec(uri);
+  return match?.[1]?.split(";")[0]?.toLowerCase();
+};
+
+const isSvgMimeType = (value: string | undefined): boolean =>
+  value?.toLowerCase() === "image/svg+xml";
+
+const isSvgUri = (uri: string): boolean => /\.svg(?:$|[?#])/iu.test(uri);
+
+const imageLooksSvg = (image: GltfImage): boolean => {
+  if (isSvgMimeType(image.mimeType)) return true;
+  if (image.uri === undefined) return false;
+  if (isDataUri(image.uri)) return isSvgMimeType(dataUriMediaType(image.uri));
+  return isSvgUri(image.uri);
+};
+
+const royalSvgDocumentShouldPass = (document: GltfDocument): boolean => {
+  if (!document.textures?.some((texture) => texture.extensions?.ROYAL_texture_svg !== undefined)) return true;
+  if (!document.extensionsUsed?.includes("ROYAL_texture_svg")) return false;
+  if (document.extensionsRequired?.includes("ROYAL_texture_svg")) return false;
+
+  for (const texture of document.textures) {
+    const extension = texture.extensions?.ROYAL_texture_svg;
+    if (extension === undefined) continue;
+    if (texture.extensions?.EXT_texture_webp !== undefined || texture.extensions?.KHR_texture_basisu !== undefined) {
+      return false;
+    }
+    if (typeof texture.source !== "number" || !Number.isInteger(texture.source) || texture.source < 0) return false;
+    const source = extension.source;
+    if (typeof source !== "number" || !Number.isInteger(source) || source < 0) return false;
+
+    const fallbackImage = document.images?.[texture.source];
+    if (fallbackImage === undefined || texture.source === source || imageLooksSvg(fallbackImage)) return false;
+
+    const image = document.images?.[source];
+    if (image === undefined) return false;
+    if (image.bufferView !== undefined && !isSvgMimeType(image.mimeType)) return false;
+    if (image.uri !== undefined && isDataUri(image.uri) && !isSvgMimeType(dataUriMediaType(image.uri))) return false;
+    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType !== undefined && !isSvgMimeType(image.mimeType)) {
+      return false;
+    }
+    if (image.uri !== undefined && !isDataUri(image.uri) && image.mimeType === undefined && !isSvgUri(image.uri)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const randomRoyalSvgDocument = (random: SeededRandom): GltfDocument => {
+  const imageCount = random.int(0, 7);
+  const textureCount = random.int(1, 6);
+  const images = Array.from({ length: imageCount }, () => randomSvgImage(random));
+  const textures = Array.from({ length: textureCount }, (): GltfTexture => {
+    if (random.boolean(0.35)) return {};
+    const sourceVariant = random.int(0, 6);
+    const source = sourceVariant === 0
+      ? undefined
+      : sourceVariant === 1
+        ? -1
+        : sourceVariant === 2
+        ? 0.5
+        : random.int(0, Math.max(1, imageCount + 2));
+    const fallbackVariant = random.int(0, 7);
+    const fallbackSource = fallbackVariant === 0
+      ? undefined
+      : fallbackVariant === 1
+        ? -1
+        : fallbackVariant === 2
+          ? 0.5
+          : random.int(0, Math.max(1, imageCount + 2));
+    return {
+      ...(fallbackSource === undefined ? {} : { source: fallbackSource }),
+      extensions: {
+        ...(random.boolean(0.16) ? { EXT_texture_webp: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
+        ...(random.boolean(0.16) ? { KHR_texture_basisu: { source: random.int(0, Math.max(1, imageCount + 1)) } } : {}),
+        ROYAL_texture_svg: source === undefined ? {} : { source },
+      },
+    };
+  });
+
+  return {
+    extensionsRequired: random.boolean(0.22) ? ["ROYAL_texture_svg"] : [],
+    extensionsUsed: random.boolean(0.82) ? ["ROYAL_texture_svg"] : [],
+    images,
+    textures,
+  };
+};
+
+const validationCounters = (
+  document: GltfDocument,
+  validationOutcome: ValidationCounters["validationOutcome"],
+): ValidationCounters => ({
+  extensionBlockCount: document.textures?.filter((texture) => texture.extensions !== undefined).length ?? 0,
+  imageCount: document.images?.length ?? 0,
+  sourceMask: document.textures?.reduce((mask, texture, index) => {
+    const hasCoreSource = texture.source !== undefined;
+    const hasExtensionSource = Object.values(texture.extensions ?? {})
+      .some((extension) => typeof extension === "object" && extension !== null && "source" in extension);
+    return mask | ((hasCoreSource || hasExtensionSource) ? (1 << index) : 0);
+  }, 0) ?? 0,
+  textureCount: document.textures?.length ?? 0,
+  validationOutcome,
+});
+
+const expectValidationOutcome = (document: GltfDocument, expectedPass: boolean, label: string): void => {
+  const outcome: ValidationCounters["validationOutcome"] = expectedPass ? "accepted" : "rejected";
+  const counters = validationCounters(document, outcome);
+  const counterLabel = `${label} counters=${JSON.stringify(counters)}`;
+  if (expectedPass) {
+    expect(() => assertSupportedRequiredGltfExtensions("fuzz.gltf", document), counterLabel).not.toThrow();
+  } else {
+    expect(() => assertSupportedRequiredGltfExtensions("fuzz.gltf", document), counterLabel).toThrow();
+  }
+};
+
+const randomImageKind = (random: SeededRandom): GltfImageKind => {
+  const kinds: readonly GltfImageKind[] = ["basisu", "image", "svg"];
+  return kinds[random.int(0, kinds.length)] ?? "image";
+};
+
+describe("renderer-webgl glTF texture validation properties", () => {
+  it("reports unsupported required extensions uniquely and in source order", () => {
+    forEachFuzzCase({ cases: 32, seed: 0x7a9f5c31 }, ({ label, random }) => {
+      const required = randomRequiredExtensions(random);
+      const supportedValues = extensionPool.filter(() => random.boolean(0.55));
+      const supported = new Set<string>(supportedValues);
+      const document = { extensionsRequired: required } as GltfDocument;
+
+      const unsupported = unsupportedRequiredGltfExtensions(document, supported);
+      expect(unsupported, `${label} filtered unsupported`).toEqual(expectedUnsupported(required, supported));
+      expect(new Set(unsupported).size, `${label} unique unsupported`).toBe(unsupported.length);
+
+      const documentWithDifferentIrrelevantFields = {
+        ...document,
+        images: Array.from({ length: random.int(0, 4) }, () => randomSvgImage(random)),
+        textures: Array.from({ length: random.int(0, 4) }, () => ({})),
+      } as GltfDocument;
+      expect(
+        unsupportedRequiredGltfExtensions(documentWithDifferentIrrelevantFields, supported),
+        `${label} only required/supported sets matter`,
+      ).toEqual(unsupported);
+    });
+  });
+
+  it("rejects required texture source extensions when the texture also has a core source", () => {
+    forEachFuzzCase({ cases: 24, seed: 0x2190a7e4 }, ({ label, random }) => {
+      const extension = textureSourceExtensions[random.int(0, textureSourceExtensions.length)];
+      if (extension === undefined) throw new Error(`${label} missing texture source extension`);
+      const textureCount = random.int(1, 6);
+      const conflictIndex = random.int(0, textureCount);
+      const document = documentWithConflictingTextureSource(extension, textureCount, conflictIndex);
+      const counters = validationCounters(document, "rejected");
+
+      expect(
+        () => assertSupportedRequiredGltfExtensions("conflict.gltf", document),
+        `${label} extension=${extension} conflict=${conflictIndex} counters=${JSON.stringify(counters)}`,
+      ).toThrow(/must omit core source/);
+    });
+  });
+
+  it("validates ROYAL_texture_svg extension usage and SVG image reference coherence", () => {
+    forEachFuzzCase({ cases: 48, seed: 0x56bd49e2 }, ({ label, random }) => {
+      const document = randomRoyalSvgDocument(random);
+      expectValidationOutcome(document, royalSvgDocumentShouldPass(document), label);
+    });
+  });
+
+  it("requires exactly one core raster fallback for ROYAL_texture_svg textures", () => {
+    const accepted: GltfDocument = {
+      extensionsUsed: ["ROYAL_texture_svg"],
+      images: [
+        { mimeType: "image/jpeg", uri: "label-fallback.jpg" },
+        { mimeType: "image/svg+xml", uri: "label.svg" },
+      ],
+      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, source: 0 }],
+    };
+    expect(() => assertSupportedRequiredGltfExtensions("accepted.gltf", accepted)).not.toThrow();
+
+    expect(() => assertSupportedRequiredGltfExtensions("missing-fallback.gltf", {
+      ...accepted,
+      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } } }],
+    })).toThrow(/core source fallback/i);
+
+    expect(() => assertSupportedRequiredGltfExtensions("required-svg.gltf", {
+      ...accepted,
+      extensionsRequired: ["ROYAL_texture_svg"],
+    })).toThrow(/extensionsRequired/i);
+
+    expect(() => assertSupportedRequiredGltfExtensions("extra-fallback.gltf", {
+      ...accepted,
+      textures: [{
+        extensions: {
+          EXT_texture_webp: { source: 0 },
+          ROYAL_texture_svg: { source: 1 },
+        },
+        source: 0,
+      }],
+    })).toThrow(/additional texture source fallbacks/i);
+
+    expect(() => assertSupportedRequiredGltfExtensions("svg-fallback.gltf", {
+      ...accepted,
+      textures: [{ extensions: { ROYAL_texture_svg: { source: 1 } }, source: 1 }],
+    })).toThrow(/non-SVG image/i);
+  });
+
+  it("keeps generated image load keys distinct across source kind and backing source identity", () => {
+    forEachFuzzCase({ cases: 32, seed: 0x91e0f3c6 }, ({ label, random, seed }) => {
+      const assetKey = `asset-${seed.toString(16)}`;
+      const src = `https://example.test/models/${seed.toString(16)}/scene.gltf`;
+      const entries: { readonly key: string; readonly summary: string }[] = [];
+
+      const uriCount = random.int(1, 5);
+      for (let index = 0; index < uriCount; index += 1) {
+        const kind = randomImageKind(random);
+        const image = { uri: `textures/${index}-${kind}.ktx2` };
+        const key = gltfImageLoadKey(assetKey, src, index, image, kind);
+        if (key !== undefined) entries.push({ key, summary: `uri:${index}:${kind}` });
+      }
+
+      const bufferViewCount = random.int(1, 5);
+      for (let index = 0; index < bufferViewCount; index += 1) {
+        const kind = randomImageKind(random);
+        const image = {
+          bufferView: index,
+          mimeType: kind === "svg" ? "image/svg+xml" : kind === "basisu" ? "image/ktx2" : "image/png",
+        };
+        const key = gltfImageLoadKey(assetKey, src, index + uriCount, image, kind);
+        if (key !== undefined) entries.push({ key, summary: `bufferView:${index}:${kind}` });
+      }
+
+      const keys = entries.map((entry) => entry.key);
+      expect(new Set(keys).size, `${label} entries=${JSON.stringify(entries)}`).toBe(keys.length);
+    });
+  });
+});

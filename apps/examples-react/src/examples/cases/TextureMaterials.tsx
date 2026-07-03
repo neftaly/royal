@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import { boxGeometry } from '@royal/renderer-core';
 import {
   Canvas,
@@ -8,7 +7,7 @@ import {
 import {
   type ReactNode,
 } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
@@ -23,11 +22,11 @@ export const TextureMaterials = (): ReactNode => {
   return (
     <Canvas
       aria-label="Texture materials"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.052, 1]}>
+        <pass camera={orbit.camera}>
           <directionalLight color={[1.35, 1.28, 1.16, 1]} direction={[-0.24, -0.42, -1]} />
           <mesh
             geometry={swatchGeometry}

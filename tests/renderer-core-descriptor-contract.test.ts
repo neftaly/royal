@@ -53,29 +53,6 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
-  it("normalizes transform scale when mesh and glTF transforms are present", () => {
-    const transform = {
-      position: [1, 2, 3] as const,
-      rotation: [0.1, 0.2, 0.3] as const,
-    };
-
-    expect(
-      mesh({
-        geometry: boxGeometry(1),
-        material: standardMaterial({ color: [1, 1, 1, 1] }),
-        transform,
-      }).transform,
-    ).toEqual({
-      ...transform,
-      scale: [1, 1, 1],
-    });
-
-    expect(gltf({ src: "/models/ship.gltf", transform }).transform).toEqual({
-      ...transform,
-      scale: [1, 1, 1],
-    });
-  });
-
   it("preserves picking ids on pickable mesh and glTF descriptors", () => {
     expect(mesh({
       geometry: boxGeometry(1),
@@ -101,17 +78,12 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
-  it("normalizes texture identity fields and fallback colors", () => {
+  it("normalizes texture identity fields without public fallback descriptors", () => {
     expect(imageTexture({
-      fallbackColor: [1, 0, 1, 1],
       src: "/textures/albedo.png",
       version: "albedo-v2",
     })).toEqual({
       colorSpace: "srgb",
-      fallback: {
-        color: [1, 0, 1, 1],
-        kind: "solid",
-      },
       kind: "asset",
       sampler: {
         magFilter: "linear",
@@ -124,14 +96,9 @@ describe("renderer-core descriptor contract", () => {
     });
 
     expect(textureAsset({
-      fallbackColor: [0.5, 0.5, 0.5, 1],
       uri: "/textures/mask.ktx2",
       version: 3,
     })).toEqual({
-      fallback: {
-        color: [0.5, 0.5, 0.5, 1],
-        kind: "solid",
-      },
       kind: "asset",
       uri: "/textures/mask.ktx2",
       version: 3,
@@ -139,15 +106,10 @@ describe("renderer-core descriptor contract", () => {
 
     expect(virtualTexture({
       debugName: "terrain-vt",
-      fallbackColor: [0.08, 0.1, 0.12, 1],
       src: "/textures/terrain.vt.json",
       version: "terrain-v1",
     })).toEqual({
       debugName: "terrain-vt",
-      fallback: {
-        color: [0.08, 0.1, 0.12, 1],
-        kind: "solid",
-      },
       kind: "virtual-asset",
       manifestUri: "/textures/terrain.vt.json",
       version: "terrain-v1",
@@ -157,7 +119,6 @@ describe("renderer-core descriptor contract", () => {
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
     const options = {
       debugName: "contract terrain",
-      fallbackColor: [0.08, 0.1, 0.12, 1],
       manifestUri: "/textures/terrain.vt.json",
     } satisfies VirtualTextureAssetOptions;
     const texture: TextureRef = virtualTexture(options);
@@ -166,10 +127,6 @@ describe("renderer-core descriptor contract", () => {
     expect(unlitMaterial({ texture }).baseColor).toBe(texture);
     expect(texture).toEqual({
       debugName: "contract terrain",
-      fallback: {
-        color: [0.08, 0.1, 0.12, 1],
-        kind: "solid",
-      },
       kind: "virtual-asset",
       manifestUri: "/textures/terrain.vt.json",
     });
@@ -183,6 +140,15 @@ describe("renderer-core descriptor contract", () => {
         preview: imageTexture("/textures/terrain-preview.png"),
         src: "/textures/terrain.vt.json",
       });
+
+      // @ts-expect-error fallbackColor is not a public render fallback for image textures.
+      imageTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/albedo.png" });
+
+      // @ts-expect-error fallback is not a public render fallback for texture assets.
+      textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, uri: "/textures/mask.ktx2" });
+
+      // @ts-expect-error fallbackColor is not a public render fallback for virtual textures.
+      virtualTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/terrain.vt.json" });
 
       // @ts-expect-error virtual textures require exactly one public source field.
       virtualTexture({});

@@ -9,6 +9,8 @@ import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
 import { GltfMaterialExtensions } from './examples/cases/GltfMaterialExtensions';
 import gltfMaterialExtensionsSource from './examples/cases/GltfMaterialExtensions.tsx?raw';
+import { GltfGhostscriptTigerSvg } from './examples/cases/GltfGhostscriptTigerSvg';
+import gltfGhostscriptTigerSvgSource from './examples/cases/GltfGhostscriptTigerSvg.tsx?raw';
 import { GltfVariants } from './examples/cases/GltfVariants';
 import gltfVariantsSource from './examples/cases/GltfVariants.tsx?raw';
 import { HelloCube } from './examples/cases/HelloCube';
@@ -124,6 +126,15 @@ export const examples = [
     Component: GltfMaterialExtensions,
     source: gltfMaterialExtensionsSource,
     sourceFile: 'examples/cases/GltfMaterialExtensions.tsx',
+  },
+  {
+    id: 'gltf-ghostscript-tiger-svg',
+    maturity: 'product',
+    path: '/gltf-ghostscript-tiger-svg',
+    title: 'glTF Ghostscript Tiger SVG',
+    Component: GltfGhostscriptTigerSvg,
+    source: gltfGhostscriptTigerSvgSource,
+    sourceFile: 'examples/cases/GltfGhostscriptTigerSvg.tsx',
   },
   {
     id: 'gltf-lod',

@@ -18,6 +18,7 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
+  readonly doubleSided?: boolean;
   readonly emissive?: Rgba;
   readonly emissiveTexture?: TextureAssetUploadRef;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
@@ -159,6 +160,7 @@ export const surfaceMaterialExtensionFactorsKey = (
 export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   [
     material.kind,
+    material.doubleSided === true ? "double-sided" : "front-sided",
     textureCacheKey(material.baseColor),
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
@@ -185,5 +187,5 @@ export const materialColor = (material: Material): Rgba => {
   if (texture.kind === "solid") return texture.color;
   if (texture.kind === "virtual-asset") return UNSUPPORTED_VIRTUAL_TEXTURE_COLOR;
 
-  return texture.fallback?.color ?? [0.5, 0.5, 0.5, 1];
+  return [1, 1, 1, 1];
 };

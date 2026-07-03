@@ -924,8 +924,8 @@ describe("WebGL renderer product descriptor contracts", () => {
       && drawCount(call) === 3)).toBe(true);
   });
 
-  it("draws virtual textures as an unsupported diagnostic material without using fallback colors", () => {
-    const fallbackColor: Rgba = [0.08, 0.1, 0.12, 1];
+  it("draws virtual textures as an unsupported diagnostic material without public fallback colors", () => {
+    const removedFallbackColor: Rgba = [0.08, 0.1, 0.12, 1];
     const unsupportedColor: Rgba = [1, 0, 1, 1];
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -941,7 +941,6 @@ describe("WebGL renderer product descriptor contracts", () => {
           geometry: planeGeometry(1),
           material: standardMaterial({
             texture: virtualTexture({
-              fallbackColor,
               src: "/textures/product-terrain.vt.json",
               version: "contract-v1",
             }),
@@ -952,10 +951,10 @@ describe("WebGL renderer product descriptor contracts", () => {
 
     expectUniformVector(calls, unsupportedColor);
     expect(uniformVectors(calls, 4).map((values) => values.map(roundNumber))).not.toContainEqual(
-      fallbackColor.map(roundNumber),
+      removedFallbackColor.map(roundNumber),
     );
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /Virtual texture \/textures\/product-terrain\.vt\.json is not rendered.*first-page fallback rendering are disabled/i,
+      /Virtual texture \/textures\/product-terrain\.vt\.json is not rendered.*first-page rendering are disabled/i,
     ));
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 6)).toBe(true);
   });

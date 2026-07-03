@@ -543,10 +543,7 @@ describe("WebGL renderer state and capability regressions", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const texture = virtualTexture({
-      fallbackColor: [0.08, 0.12, 0.16, 1],
-      src: "/textures/terrain.vt.json",
-    });
+    const texture = virtualTexture("/textures/terrain.vt.json");
 
     root.render(singleMeshScene(unlitMaterial({ texture })));
 
@@ -577,7 +574,6 @@ describe("WebGL renderer state and capability regressions", () => {
     const pageUrl = "/textures/pages/mip-0/x0-y0.png";
     const texture = virtualTexture({
       colorSpace: "srgb",
-      fallbackColor: [0.08, 0.12, 0.16, 1],
       sampler: {
         magFilter: "linear",
         minFilter: "linear",

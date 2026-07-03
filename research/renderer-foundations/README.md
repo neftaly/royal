@@ -430,7 +430,6 @@ interface Texture2dResource {
   readonly assetId: string;
   readonly colorSpace: "linear" | "srgb";
   readonly sampler: MaterialSamplerPolicy;
-  readonly fallbackColor: readonly [number, number, number, number];
   readonly revision: string;
 }
 
@@ -596,12 +595,12 @@ Virtual texturing:
 - A renderer-backed glTF/material demo uses material asset references lowered
   privately to page-table/cache resources.
 - Overlay shows physical slots, page ids, resident/free state, page-table dirty
-  entries, requested/queued pages, hits, misses, fallback samples, uploads,
+  entries, requested/queued pages, hits, misses, resident-parent samples, uploads,
   evictions, upload bytes, upload time, seam candidates, and selected mode.
 - Controls cover camera pan, cache slot budget, upload page budget, overlay,
-  seam stress, and fixed low-mip fallback.
+  seam stress, and fixed low-mip diagnostic mode.
 - Overlay on/off visual smoke passes.
-- Canvas smoke is nonblank in full and fallback capability modes.
+- Canvas smoke is nonblank in full and reduced capability modes.
 
 Terrain:
 

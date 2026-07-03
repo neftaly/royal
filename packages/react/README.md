@@ -12,11 +12,11 @@ The WebGL renderer currently supports a practical glTF subset: `.gltf` and
 hierarchies and transforms, mesh primitives with `POSITION`/`NORMAL`/selected
 `TEXCOORD_n` accessors, sparse and strided accessors, normalized integer
 attributes, `UNSIGNED_BYTE`/`UNSIGNED_SHORT`/`UNSIGNED_INT` indices, triangle
-and line drawing, base color factor/texture/sampler data, and the supported
-required extensions documented in `docs/gltf-extension-priority.md`.
+and line drawing, base color factor/texture/sampler data, and selected required
+extensions.
 That supported required-extension set includes meshopt-compressed bufferViews
 via `EXT_meshopt_compression` and KTX2/Basis base-color textures via
-`KHR_texture_basisu` with an RGBA8 transcode fallback.
+`KHR_texture_basisu` through an RGBA8 transcode path.
 Optional `EXT_lights_image_based` diffuse irradiance is renderer groundwork
 only; assets that require the extension are rejected until specular cubemap
 sampling support lands.
@@ -24,7 +24,7 @@ sampling support lands.
 ```tsx
 /** @jsxImportSource @royal/react/renderer */
 import {
-  createRoot,
+  createRendererRoot,
 } from '@royal/react';
 import {
   boxGeometry,
@@ -37,9 +37,7 @@ const red = standardMaterial({
 });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 
-createRoot(canvas, {
-  context: { alpha: true, antialias: true }
-}).render(
+createRendererRoot(canvas).render(
   <scene>
     <pass>
       <perspectiveCamera
@@ -57,11 +55,17 @@ createRoot(canvas, {
 );
 ```
 
-The imperative `createRoot(canvas)` path uses `@royal/react/renderer` as its
+The imperative `createRendererRoot(canvas)` path uses `@royal/react/renderer` as its
 JSX import source. It is for already-lowered Royal scenes: descriptor objects
 from `@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or
-components marked with `markRendererComponent`. Arbitrary React components and
-DOM overlays belong under `<Canvas>` in a React DOM tree.
+plain function components that return one renderer descriptor. Arbitrary React
+children and DOM overlays belong under `<Canvas>` in a React DOM tree.
+
+React commits render the latest descriptor graph immediately. Use
+`useInvalidate()` inside `<Canvas>` only for changes React did not commit, such
+as external store mutations, imperative animation state, or host integration
+events. Royal render-object refs already invalidate the current canvas when
+their transform changes.
 
 glTF material variants from `KHR_materials_variants` can be selected with
 `gltf({ src, variant })` or `<model variant>`. Pass a variant name, or pass a

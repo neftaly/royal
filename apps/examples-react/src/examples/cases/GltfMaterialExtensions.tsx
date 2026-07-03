@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
@@ -6,7 +5,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const iridescenceSrc = import.meta.env.BASE_URL
   + 'fixtures/khronos/CompareIridescence/glTF/CompareIridescence.gltf';
@@ -37,11 +36,11 @@ export const GltfMaterialExtensions = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF Khronos material extension fixture"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.028, 0.032, 0.037, 1]}>
+        <pass camera={orbit.camera}>
           <KeyLight />
           <directionalLight color={[0.24, 0.36, 0.72, 1]} direction={[-0.55, -0.35, 0.74]} />
           <model

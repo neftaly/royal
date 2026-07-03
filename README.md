@@ -1,47 +1,30 @@
 # Royal
 
-Royal is the clean package monorepo for the Royal renderer and Royal-owned integrations. Patchpit remains the research, prototype, and commit-history repo; this repo starts from a clean export.
+Royal is a WebGL2 renderer, with a react-[regl](https://github.com/regl-project/regl)-fiber renderer (should also work with solid etc). It targets Quest 2 XR and Safari 17 (iPad gen 6 A10+ 2018).
 
-Tarstate control-plane experiments live under `research/`; they are not part of the product workspace surface.
+GLTF support is first-class. We try to support optional and draft features in a really [Metaverse Standards Forum-pilled](https://www.youtube.com/watch?v=Aj4kUpF9H0I) way.
 
-## Packages
+## SVG textures (experimental)
 
-- `@royal/examples-react` - source-backed product examples and browser smoke surface.
-- `@royal/renderer-core` - DOM-free scene data and authoring helpers.
-- `@royal/renderer-webgl` - WebGL renderer implementation.
-- `@royal/react` - React JSX/runtime adapter.
+We also support `.svg` textures, with an experimental GLTF extension.
+This lets the renderer show perfect textures at any resolution.
 
-## Direction
+Spec: [docs/ROYAL_texture_svg.md](docs/ROYAL_texture_svg.md)
 
-See [Royal Direction](docs/royal-direction.md) for the current product goals, boundaries, and cleanup priorities.
-See [glTF Extension Priority](docs/gltf-extension-priority.md) for the current
-WebGL glTF support set, including required extension handling.
+Example: [apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx](apps/examples-react/src/examples/cases/GltfGhostscriptTigerSvg.tsx)
 
-## glTF Materials
-
-The WebGL loader supports factor-level `KHR_materials_specular`,
-`KHR_materials_ior`, `KHR_materials_clearcoat`, `KHR_materials_sheen`,
-`KHR_materials_iridescence`, `KHR_materials_transmission`,
-`KHR_materials_volume`, and `KHR_materials_dispersion` for deterministic forward
-rendering. Transmission uses renderer-private current-frame color sampling with
-volume attenuation; dispersion is approximated as scalar per-channel screen
-sampling on that path. Texture fields from these extensions are currently
-ignored with renderer diagnostics.
-
-## glTF Image-Based Lights
-
-Optional `EXT_lights_image_based` scene references are parsed as renderer
-groundwork and can drive diffuse spherical-harmonic irradiance for glTF
-materials. The required specular cubemap path (`specularImages`,
-`specularImageSize`, mip/face upload, RGBD HDR unpacking, and `samplerCube` LOD
-sampling) is not implemented, so assets that list `EXT_lights_image_based` in
-`extensionsRequired` are still rejected.
-
-## Development
-
-```sh
-pnpm install
-pnpm test
-pnpm typecheck
-pnpm build
+```json
+{
+  "extensionsUsed": ["ROYAL_texture_svg"],
+  "textures": [{
+    "source": 0,
+    "extensions": {
+      "ROYAL_texture_svg": { "source": 1 }
+    }
+  }],
+  "images": [
+    { "uri": "label-fallback.jpg", "mimeType": "image/jpeg" },
+    { "uri": "label.svg", "mimeType": "image/svg+xml" }
+  ]
+}
 ```

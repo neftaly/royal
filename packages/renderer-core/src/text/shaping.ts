@@ -3,7 +3,7 @@ import {
   fontFaceDescriptor,
   fontForFace,
   missingTextFontMessage
-} from './font';
+} from './font-internal';
 import type { TextFontFace, TextFontMetrics } from './font';
 import {
   emptyBounds,

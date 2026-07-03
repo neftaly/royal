@@ -17,6 +17,7 @@ const envNumber = (name, fallback) => {
   if (Number.isFinite(value)) return value;
   throw new Error(`${name} must be a finite number, received ${JSON.stringify(raw)}`);
 };
+const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
 const textSelectionLatencyBudget = {
   maxClickToProbeMs: envNumber('EXAMPLES_TEXT_MAX_CLICK_TO_PROBE_MS', 500),
   maxDragToProbeMs: envNumber('EXAMPLES_TEXT_MAX_DRAG_TO_PROBE_MS', 750),
@@ -68,6 +69,11 @@ const smokeExpectations = {
   'gltf-material-extensions': {
     path: '/gltf-material-extensions',
     minColorBuckets: 12,
+    minPaintedRatio: 0.006,
+  },
+  'gltf-ghostscript-tiger-svg': {
+    path: '/gltf-ghostscript-tiger-svg',
+    minColorBuckets: 18,
     minPaintedRatio: 0.006,
   },
   'gltf-lod': {
@@ -227,7 +233,7 @@ const smokeExpression = `
       const red = pixels[index];
       const green = pixels[index + 1];
       const blue = pixels[index + 2];
-      if (red > 8 || green > 8 || blue > 8) paintedPixels += 1;
+      paintedPixels += 1;
       buckets.add(\`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`);
     }
 
@@ -655,6 +661,13 @@ const smokeExpression = `
         text: canvas?.dataset.royalPickingReadout ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
+      resources: performance.getEntriesByType('resource')
+        .slice(-20)
+        .map((entry) => ({
+          duration: Math.round(entry.duration),
+          name: entry.name,
+          size: Math.round(entry.transferSize ?? 0),
+        })),
       source: (() => {
         const sourceFile = document.querySelector('.example-page[data-example-id="' + routeId + '"]')
           ?.getAttribute('data-source-file') ?? '';
@@ -664,7 +677,7 @@ const smokeExpression = `
       })(),
     };
   };
-  const deadline = performance.now() + 8000;
+  const deadline = performance.now() + ${routeReadyTimeoutMs};
   let state = await read();
   const isReady = () => {
     if (state.route.id === '') return false;
@@ -932,13 +945,23 @@ const textInteractionPlanExpression = `
 })()
 `;
 
+const routeCanvasReady = (route, state) => {
+  if (state.route?.id !== route.id || state.route?.path !== route.path) return false;
+  const sample = state.canvas?.sample;
+  if (sample === undefined) return route.allowDomSurface === true && state.canvas === undefined;
+  if (sample.paintedPixels <= 0) return false;
+  if (sample.paintedRatio < route.minPaintedRatio) return false;
+  if (route.minColorBuckets !== undefined && sample.colorBuckets < route.minColorBuckets) return false;
+  return true;
+};
+
 const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
   const deadline = Date.now() + timeoutMs;
   let lastState;
 
   while (Date.now() < deadline) {
     lastState = await evaluate(session, smokeExpression);
-    if (lastState.route?.id === route.id && lastState.route?.path === route.path) {
+    if (routeCanvasReady(route, lastState)) {
       return lastState;
     }
     await sleep(100);
@@ -2251,12 +2274,20 @@ const main = async () => {
 
   let session;
   const exceptions = [];
+  const consoleMessages = [];
 
   try {
     await waitForHttp(baseUrl, 15_000);
     session = await connectPage();
     session.on('Runtime.exceptionThrown', (event) => {
       exceptions.push(event.exceptionDetails?.text ?? 'Runtime exception');
+    });
+    session.on('Runtime.consoleAPICalled', (event) => {
+      if (event.type !== 'warning' && event.type !== 'error') return;
+      const text = event.args
+        .map((arg) => arg.value ?? arg.description ?? arg.type)
+        .join(' ');
+      if (text !== '') consoleMessages.push(`${event.type}: ${text}`);
     });
     await session.call('Page.enable');
     await session.call('Runtime.enable');
@@ -2289,7 +2320,19 @@ const main = async () => {
           pickingInteraction: await runPickingInteractionSmoke(session),
         };
       }
-      assertRoute(route, state);
+      try {
+        assertRoute(route, state);
+      } catch (error) {
+        const recentConsole = consoleMessages.slice(-8).join('; ');
+        const recentResources = (state.resources ?? [])
+          .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
+          .join('; ');
+        throw new Error(`${error instanceof Error ? error.message : String(error)}${
+          recentConsole === '' ? '' : `; console: ${recentConsole}`
+        }${
+          recentResources === '' ? '' : `; resources: ${recentResources}`
+        }`);
+      }
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
         : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)}`;

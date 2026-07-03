@@ -69,7 +69,6 @@ export type {
 } from './texture';
 export {
   defaultImageTextureSampler,
-  defaultTextureFallbackColor,
   imageTexture,
   solidTexture,
   textureAsset,

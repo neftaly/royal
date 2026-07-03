@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
@@ -7,7 +6,7 @@ import {
   type RenderObjectHandle,
 } from '@royal/react';
 import { useRef, type ReactNode } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
 const cubeSources = [
@@ -99,11 +98,11 @@ export const GltfInstancing = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF automatic instancing"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.052, 1]}>
+        <pass camera={orbit.camera}>
           <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
           <InstancedCubeField />
         </pass>

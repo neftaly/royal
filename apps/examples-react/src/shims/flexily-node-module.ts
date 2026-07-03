@@ -29,4 +29,8 @@ const modules: Record<string, unknown> = {
 };
 
 export const createRequire = (): BrowserRequire =>
-  (id: string): unknown => modules[id] ?? {};
+  (id: string): unknown => {
+    const mod = modules[id];
+    if (mod === undefined) throw new Error(`Unsupported browser module shim: ${id}`);
+    return mod;
+  };

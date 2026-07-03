@@ -117,15 +117,6 @@
       "churnScore": 2
     },
     {
-      "scope": "research/svg-canvas-gateway",
-      "commits": 1,
-      "files": 7,
-      "fixLikeCommits": 0,
-      "featureLikeCommits": 1,
-      "sharedTouches": 0,
-      "churnScore": 5
-    },
-    {
       "scope": "packages/react",
       "commits": 1,
       "files": 1,
@@ -826,8 +817,7 @@
       "apps/tarstate-demo",
       "packages/renderer-core",
       ".github",
-      "research/offline-terrain-pipeline",
-      "research/svg-canvas-gateway"
+      "research/offline-terrain-pipeline"
     ],
     "serializedFiles": [
       "apps/examples-react/src/style.css",

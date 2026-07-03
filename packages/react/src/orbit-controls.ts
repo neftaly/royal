@@ -13,7 +13,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useStore } from "zustand/react";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { useCanvasElement, useCanvasRoot } from "./canvas";
+import { useCanvasElement, useInvalidate } from "./canvas";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
 
 export {
@@ -177,8 +177,7 @@ const toPointerContact = (event: PointerEvent): PointerContact => ({
 const pointerDistance = (first: PointerContact, second: PointerContact): number =>
   Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 
-/** @deprecated Use orbitPerspectiveCamera(options) and replace the camera descriptor instead. */
-export const updateOrbitPerspectiveCamera = (
+const syncOrbitPerspectiveCameraDescriptor = (
   camera: PerspectiveCamera,
   options: OrbitPerspectiveCameraOptions,
 ): void => {
@@ -238,7 +237,7 @@ export const useOrbitCamera = ({
       view: cameraStore.getState().view,
     });
   } else {
-    updateOrbitPerspectiveCamera(cameraRef.current, {
+    syncOrbitPerspectiveCameraDescriptor(cameraRef.current, {
       far,
       fovY,
       near,
@@ -268,17 +267,10 @@ export const useOrbitCamera = ({
   };
 };
 
-const renderLatestScene = (root: ReturnType<typeof useCanvasRoot>): void => {
-  if (root === null || root.disposed || root.latestScene === undefined) return;
-
-  root.render(root.latestScene);
-};
-
 const useOrbitCameraSync = (
   syncOptions: OrbitCameraSyncOptions | undefined,
 ): void => {
-  const root = useCanvasRoot();
-  const animationFrameRef = useRef<number | undefined>(undefined);
+  const invalidate = useInvalidate();
 
   useLayoutEffect(() => {
     if (syncOptions === undefined) return undefined;
@@ -291,20 +283,10 @@ const useOrbitCameraSync = (
       store,
     } = syncOptions;
     const scheduleRenderLatest = (): void => {
-      if (root === null) return;
-      if (typeof requestAnimationFrame !== "function") {
-        renderLatestScene(root);
-        return;
-      }
-      if (animationFrameRef.current !== undefined) return;
-
-      animationFrameRef.current = requestAnimationFrame(() => {
-        animationFrameRef.current = undefined;
-        renderLatestScene(root);
-      });
+      invalidate();
     };
     const applyView = (view: OrbitCameraView): void => {
-      updateOrbitPerspectiveCamera(camera, {
+      syncOrbitPerspectiveCameraDescriptor(camera, {
         far,
         fovY,
         near,
@@ -320,12 +302,8 @@ const useOrbitCameraSync = (
 
     return () => {
       unsubscribe();
-      if (animationFrameRef.current !== undefined && typeof cancelAnimationFrame === "function") {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = undefined;
-      }
     };
-  }, [root, syncOptions]);
+  }, [invalidate, syncOptions]);
 };
 
 export const createOrbitControls = (

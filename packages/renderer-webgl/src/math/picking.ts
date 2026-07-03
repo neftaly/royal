@@ -14,6 +14,8 @@ export type Bounds3 = {
   readonly min: Vec3;
 };
 
+export type RayGeometryMode = "triangle-fan" | "triangle-strip" | "triangles";
+
 type Axis = 0 | 1 | 2;
 
 const RAY_TRIANGLE_MIN_DISTANCE = 1e-8;
@@ -146,11 +148,13 @@ const transformedVertex = (positions: Float32Array, vertexIndex: number, model: 
 
 export const rayGeometryDistance = ({
   indices,
+  mode = "triangles",
   model,
   positions,
   ray,
 }: {
   readonly indices?: Uint16Array | Uint32Array | Uint8Array;
+  readonly mode?: RayGeometryMode;
   readonly model: Mat4;
   readonly positions: Float32Array;
   readonly ray: Ray;
@@ -167,15 +171,43 @@ export const rayGeometryDistance = ({
   };
 
   if (indices !== undefined) {
-    for (let index = 0; index + 2 < indices.length; index += 3) {
-      consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+    switch (mode) {
+      case "triangle-fan":
+        for (let index = 1; index + 1 < indices.length; index += 1) {
+          consider(indices[0]!, indices[index]!, indices[index + 1]!);
+        }
+        break;
+      case "triangle-strip":
+        for (let index = 0; index + 2 < indices.length; index += 1) {
+          consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+        }
+        break;
+      case "triangles":
+        for (let index = 0; index + 2 < indices.length; index += 3) {
+          consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+        }
+        break;
     }
     return best;
   }
 
   const vertexCount = Math.floor(positions.length / 3);
-  for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
-    consider(vertex, vertex + 1, vertex + 2);
+  switch (mode) {
+    case "triangle-fan":
+      for (let vertex = 1; vertex + 1 < vertexCount; vertex += 1) {
+        consider(0, vertex, vertex + 1);
+      }
+      break;
+    case "triangle-strip":
+      for (let vertex = 0; vertex + 2 < vertexCount; vertex += 1) {
+        consider(vertex, vertex + 1, vertex + 2);
+      }
+      break;
+    case "triangles":
+      for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
+        consider(vertex, vertex + 1, vertex + 2);
+      }
+      break;
   }
 
   return best;

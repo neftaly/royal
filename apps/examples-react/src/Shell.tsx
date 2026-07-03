@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { Link, Outlet } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { examples } from './examples';

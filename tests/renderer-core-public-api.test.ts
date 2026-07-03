@@ -12,7 +12,11 @@ import {
   text,
 } from "@royal/renderer-core";
 import * as rendererCore from "@royal/renderer-core";
+import * as editableTextApi from "@royal/renderer-core/text/editable";
+import * as textFontApi from "@royal/renderer-core/text/font";
+import * as webglApi from "@royal/renderer-webgl";
 import * as reactRoyal from "@royal/react";
+import * as reactJsxRuntime from "@royal/react/jsx-runtime";
 import { createTextFontFace, createTextFontFaceAsync } from "@royal/renderer-core/text/font";
 import { layoutText } from "@royal/renderer-core/text/layout";
 import { textMesh } from "@royal/renderer-core/text/mesh";
@@ -94,8 +98,17 @@ describe("renderer-core public API", () => {
   });
 
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
+    expect(reactRoyal).toHaveProperty("Button");
     expect(reactRoyal).toHaveProperty("Canvas");
-    expect(reactRoyal).toHaveProperty("createRoot");
+    expect(reactRoyal).toHaveProperty("Input");
+    expect(reactRoyal).toHaveProperty("Text");
+    expect(reactRoyal).toHaveProperty("Textarea");
+    expect(reactRoyal).toHaveProperty("createRendererRoot");
+    expect(reactRoyal).toHaveProperty("useInvalidate");
+    expect(reactRoyal).not.toHaveProperty("ButtonPrimitive");
+    expect(reactRoyal).not.toHaveProperty("createRoot");
+    expect(reactRoyal).not.toHaveProperty("markRendererComponent");
+    expect(reactRoyal).not.toHaveProperty("updateOrbitPerspectiveCamera");
     expect(reactRoyal).not.toHaveProperty("boxGeometry");
     expect(reactRoyal).not.toHaveProperty("mesh");
     expect(reactRoyal).not.toHaveProperty("text");
@@ -107,6 +120,41 @@ describe("renderer-core public API", () => {
     if (false) {
       // @ts-expect-error virtualTextureAsset is an internal texture helper.
       rendererCore.virtualTextureAsset;
+    }
+  });
+
+  it("keeps public facades narrow at package boundaries", () => {
+    expect(Object.keys(reactJsxRuntime).sort()).toEqual(["Fragment", "jsx", "jsxs"]);
+    expect(reactJsxRuntime).not.toHaveProperty("createRendererElement");
+    expect(reactJsxRuntime).not.toHaveProperty("markRendererComponent");
+    expect(reactJsxRuntime).not.toHaveProperty("toMesh");
+    expect(reactJsxRuntime).not.toHaveProperty("toText");
+
+    expect(textFontApi).toHaveProperty("createTextFontFace");
+    expect(textFontApi).toHaveProperty("createTextFontFaceAsync");
+    expect(textFontApi).not.toHaveProperty("fontForFace");
+    expect(textFontApi).not.toHaveProperty("fontFaceDescriptor");
+    expect(textFontApi).not.toHaveProperty("missingTextFontMessage");
+    expect(textFontApi).not.toHaveProperty("textFontDescriptor");
+
+    expect(editableTextApi).toHaveProperty("layoutEditableText");
+    expect(editableTextApi).toHaveProperty("createEditableTextEditorState");
+    expect(editableTextApi).not.toHaveProperty("clampTextIndex");
+    expect(editableTextApi).not.toHaveProperty("nextTextIndex");
+    expect(editableTextApi).not.toHaveProperty("previousTextIndex");
+
+    expect(webglApi).toHaveProperty("createWebGlRoot");
+    expect(webglApi).not.toHaveProperty("WebGlRoot");
+
+    if (false) {
+      // @ts-expect-error JSX runtime internals are not public API.
+      reactJsxRuntime.createRendererElement;
+      // @ts-expect-error Text font internals are not public API.
+      textFontApi.fontForFace;
+      // @ts-expect-error Editable string-index helpers are not public API.
+      editableTextApi.clampTextIndex;
+      // @ts-expect-error WebGlRoot is a factory-created handle type, not a public constructor.
+      webglApi.WebGlRoot;
     }
   });
 

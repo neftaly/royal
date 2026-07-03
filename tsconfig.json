@@ -14,9 +14,6 @@
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],
-      "@royal/renderer-core/svg": [
-        "./packages/renderer-core/src/svg-index.ts"
-      ],
       "@royal/renderer-core/text": [
         "./packages/renderer-core/src/text/index.ts"
       ],
@@ -65,13 +62,16 @@
     },
     "isolatedModules": true,
     "jsx": "react-jsx",
+    "jsxImportSource": "@royal/react",
     "noEmit": true,
     "types": [
       "node",
       "vitest/globals"
-    ]
+    ],
+    "allowImportingTsExtensions": true
   },
   "include": [
+    "apps/*/scripts/**/*.ts",
     "apps/*/src",
     "packages/*/src",
     "packages/*/tests",

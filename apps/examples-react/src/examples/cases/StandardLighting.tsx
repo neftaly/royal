@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
@@ -6,7 +5,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const MovingLight = (): ReactNode => {
   const frame = useFrameIndex();
@@ -34,11 +33,11 @@ export const StandardLighting = (): ReactNode => {
   return (
     <Canvas
       aria-label="Standard material lighting"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.035, 0.043, 0.05, 1]}>
+        <pass camera={orbit.camera}>
           <MovingLight />
           <mesh transform={{ position: [0, -0.78, -0.35], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[5.2, 3.2]} />

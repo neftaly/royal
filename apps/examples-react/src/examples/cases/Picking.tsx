@@ -1,4 +1,3 @@
-/** @jsxImportSource @royal/react */
 import { planeGeometry, unlitMaterial, type GltfOptions } from '@royal/renderer-core';
 import {
   Canvas,
@@ -10,12 +9,12 @@ import {
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
+import { exampleCanvasRenderer } from '../example-renderer';
 import {
   HudPass,
   HudRect,
   HudText,
 } from '../hud';
-import { exampleRenderer } from '../rendering';
 import { useAtkinsonFont } from './text-font';
 
 const backplateGeometry = planeGeometry([4.4, 2.65]);
@@ -74,11 +73,11 @@ export const Picking = (): ReactNode => {
       aria-label="Pickable helmet"
       data-royal-picking-hovered-id={hoveredId}
       data-royal-picking-readout={`Target ${readoutText}`}
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.05, 1]}>
+        <pass camera={orbit.camera}>
           <directionalLight color={[1.28, 1.2, 1.05, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             geometry={backplateGeometry}

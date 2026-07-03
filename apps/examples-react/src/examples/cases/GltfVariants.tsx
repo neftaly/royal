@@ -1,11 +1,10 @@
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleRenderer } from '../rendering';
+import { exampleCanvasRenderer } from '../example-renderer';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
 
@@ -19,11 +18,11 @@ export const GltfVariants = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF KHR_materials_variants"
-      renderer={exampleRenderer}
+      renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} clearColor={[0.035, 0.045, 0.052, 1]}>
+        <pass camera={orbit.camera}>
           <model
             src={variantSrc}
             transform={{

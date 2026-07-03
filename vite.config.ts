@@ -18,7 +18,6 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        svg: 'src/svg-index.ts',
         text: 'src/text/index.ts',
         'text/editable': 'src/text/editable/index.ts',
         'text/font': 'src/text/font.ts',
@@ -70,7 +69,6 @@ const appBase = process.env.BASE_PATH ?? '/';
 export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
-  { find: '@royal/renderer-core/svg', replacement: path.join(repoRoot, 'packages/renderer-core/src/svg-index.ts') },
   { find: '@royal/renderer-core/text/editable', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/editable/index.ts') },
   { find: '@royal/renderer-core/text/font', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/font.ts') },
   { find: '@royal/renderer-core/text/layout', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/layout.ts') },

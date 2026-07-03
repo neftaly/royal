@@ -17,7 +17,6 @@ export type RendererCapabilitySource =
   | "webgl2-core"
   | "webgl-extension"
   | "webgpu-probe"
-  | "stub"
   | "unprobed"
   | "missing";
 
@@ -69,7 +68,7 @@ export type TextureLimitRow = {
 
 export type ContextVersionRow = {
   readonly kind: "context_version";
-  readonly api: "stub" | "webgl";
+  readonly api: "webgl";
   readonly version: WebGlContextVersion;
   readonly renderer?: string | undefined;
   readonly shadingLanguageVersion?: string | undefined;
@@ -100,7 +99,7 @@ export type RendererCapabilityProbeRow =
   | WebGpuLimitRow;
 
 export type RendererCapabilityDiagnostic = {
-  readonly code: "renderer_capability_stubbed";
+  readonly code: "renderer_capability_note";
   readonly severity: "info";
   readonly message: string;
   readonly relation: "renderer_capability" | "context_version";
@@ -137,7 +136,6 @@ export type WebGpuProbeInput = {
 export type RendererCapabilityProbeOptions = {
   readonly contextVersion?: 1 | 2;
   readonly webgpu?: WebGpuProbeInput;
-  readonly includeMissingDiagnostics?: boolean;
 };
 
 export type RendererCapabilityProbeResult = {
@@ -145,19 +143,32 @@ export type RendererCapabilityProbeResult = {
   readonly diagnostics: readonly RendererCapabilityDiagnostic[];
 };
 
-const stubCapabilities: readonly RendererCapabilityName[] = [
-  "webgl2",
-  "webgpu",
-  "draw_buffers",
-  "depth_texture",
-  "instancing",
-  "gpu_timer_query",
-  "anisotropy",
-  "float_texture",
-  "half_float_texture",
-  "compressed_texture",
-  "lose_context",
-];
+type CanvasImageMimeTypeDocument = {
+  readonly createElement?: (tagName: string) => {
+    readonly toDataURL?: (type?: string, quality?: number) => string;
+  } | null;
+};
+
+export const canvasSupportsImageMimeType = (
+  mimeType: string,
+  {
+    document = globalThis.document as CanvasImageMimeTypeDocument | undefined,
+    quality = 0.75,
+  }: {
+    readonly document?: CanvasImageMimeTypeDocument | undefined;
+    readonly quality?: number;
+  } = {},
+): boolean => {
+  const normalizedMimeType = mimeType.toLowerCase();
+  const canvas = document?.createElement?.("canvas");
+  if (typeof canvas?.toDataURL !== "function") return false;
+
+  try {
+    return canvas.toDataURL(normalizedMimeType, quality).toLowerCase().startsWith(`data:${normalizedMimeType}`);
+  } catch {
+    return false;
+  }
+};
 
 const extensionCapabilities = {
   anisotropy: [
@@ -446,12 +457,8 @@ const collectWebGlRows = (
   return rows;
 };
 
-/**
- * Deterministic capability report for the stub backend. The function keeps the
- * old public import usable while making it explicit that no GPU has been probed.
- */
 export const collectRendererCapabilityRows = (
-  gl: WebGlLikeContext = {},
+  gl: WebGlLikeContext,
   options: RendererCapabilityProbeOptions = {},
 ): RendererCapabilityProbeResult => {
   if (hasGlProbeSurface(gl)) {
@@ -461,33 +468,5 @@ export const collectRendererCapabilityRows = (
     };
   }
 
-  const version = contextVersion(gl, options);
-  const rows: RendererCapabilityProbeRow[] = [
-    {
-      api: "stub",
-      kind: "context_version",
-      version,
-      versionLabel: version === "unknown" ? "Royal stub renderer" : `Royal stub renderer over WebGL ${version}`,
-    },
-    ...stubCapabilities.map((capability): RendererCapabilityRow => ({
-      capability,
-      detail: "Capability probing is disabled while the renderer backend is stubbed.",
-      kind: "renderer_capability",
-      source: capability === "webgl2" && version === 2 ? "stub" : "unprobed",
-      supported: false,
-    })),
-  ];
-
-  return {
-    diagnostics: (options.includeMissingDiagnostics ?? true)
-      ? [{
-          code: "renderer_capability_stubbed",
-          key: "stub",
-          message: "Renderer capabilities are stubbed and do not reflect device support.",
-          relation: "renderer_capability",
-          severity: "info",
-        }]
-      : [],
-    rows,
-  };
+  throw new Error("Renderer capability probing requires a WebGL-like context");
 };

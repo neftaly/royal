@@ -1,8 +1,8 @@
 # Raster Text Research Prototype
 
 This directory evaluates canvas-backed raster text as a serious renderer path in
-parallel with SVG-as-canvas gateway work and the existing real-outline text
-path. The prototype keeps the authoring surface semantic: users still write
+parallel with the existing real-outline text path. The prototype keeps the
+authoring surface semantic: users still write
 `text(...)`; renderer policy chooses whether a run is rasterized by browser
 canvas, converted to real outlines, or selected automatically by capability and
 content.

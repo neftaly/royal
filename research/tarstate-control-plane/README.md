@@ -275,11 +275,11 @@ export const royalControlPlaneSchema = defineSchema({
 // selection commands are proposed control-plane APIs, not public exports yet.
 /** @jsxImportSource @royal/react */
 import { createRoyalControlPlane, royalControlQueries } from '@royal/tarstate-lens/control-plane';
-import { createRoot } from '@royal/react';
+import { createRendererRoot } from '@royal/react';
 import { boxGeometry, standardMaterial } from '@royal/renderer-core';
 
 const control = createRoyalControlPlane({ rootId: 'main-canvas' });
-const royal = createRoot(canvas, {
+const royal = createRendererRoot(canvas, {
   context: { antialias: true },
   controlSink: control.sink,
 });
@@ -350,7 +350,7 @@ Land this in small independent patches:
 3. `@royal/renderer-webgl`: accept an optional control sink on root creation;
    emit lifecycle/capability/asset/stat events outside hot loops; poll commands
    only between frames or at explicit lifecycle points.
-4. `@royal/react`: thread `controlSink` through `createRoot` options and expose
+4. `@royal/react`: thread `controlSink` through `createRendererRoot` options and expose
    a React hook/example for an inspector panel backed by Tarstate queries.
 5. `tests/package-boundaries.test.ts`: add the import and manifest guards above.
 

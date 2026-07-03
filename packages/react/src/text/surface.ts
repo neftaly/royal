@@ -131,7 +131,7 @@ export interface TextSurfaceProps
   readonly styleOptions?: TextInteractionStyle;
 }
 
-export interface TextPrimitiveProps {
+export interface TextProps {
   readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly color?: Rgba;
@@ -146,7 +146,7 @@ export interface TextPrimitiveProps {
   readonly text?: string;
 }
 
-export interface TextFieldPrimitiveProps {
+export interface TextFieldProps {
   readonly ariaLabel?: string;
   readonly box?: TextSurfaceBox;
   readonly color?: Rgba;
@@ -161,15 +161,15 @@ export interface TextFieldPrimitiveProps {
   readonly value: string;
 }
 
-export interface TextInputPrimitiveProps extends TextFieldPrimitiveProps {
+export interface TextInputProps extends TextFieldProps {
   readonly type?: "text";
 }
 
-export interface TextAreaPrimitiveProps extends TextFieldPrimitiveProps {
+export interface TextareaProps extends TextFieldProps {
   readonly rows?: number;
 }
 
-export interface ButtonPrimitiveProps {
+export interface ButtonProps {
   readonly ariaLabel?: string;
   readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
@@ -182,7 +182,7 @@ export interface ButtonPrimitiveProps {
   readonly type?: "button";
 }
 
-export interface CheckboxInputPrimitiveProps {
+export interface CheckboxInputProps {
   readonly ariaLabel?: string;
   readonly box?: TextSurfaceBox;
   readonly checked: boolean;
@@ -196,7 +196,7 @@ export interface CheckboxInputPrimitiveProps {
   readonly type: "checkbox";
 }
 
-export interface FileInputPrimitiveProps {
+export interface FileInputProps {
   readonly accept?: string;
   readonly ariaLabel?: string;
   readonly box?: TextSurfaceBox;
@@ -212,7 +212,7 @@ export interface FileInputPrimitiveProps {
   readonly type: "file";
 }
 
-export interface ColorInputPrimitiveProps {
+export interface ColorInputProps {
   readonly ariaLabel?: string;
   readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
@@ -226,11 +226,11 @@ export interface ColorInputPrimitiveProps {
   readonly value: string;
 }
 
-export type InputPrimitiveProps =
-  | CheckboxInputPrimitiveProps
-  | ColorInputPrimitiveProps
-  | FileInputPrimitiveProps
-  | TextInputPrimitiveProps;
+export type InputProps =
+  | CheckboxInputProps
+  | ColorInputProps
+  | FileInputProps
+  | TextInputProps;
 
 type ClipboardAction = EditableTextMenuAction;
 type ClipboardSource = "keyboard" | "menu";
@@ -1243,7 +1243,7 @@ export const TextSurface = ({
   });
 };
 
-const useTextPrimitiveState = (textValue: string): {
+const useTextControlState = (textValue: string): {
   readonly id: string;
   readonly state: EditableTextEditorState;
 } => {
@@ -1502,7 +1502,7 @@ const openFilePicker = ({
   capture,
   multiple,
   onFilesChange,
-}: Pick<FileInputPrimitiveProps, "accept" | "capture" | "multiple" | "onFilesChange">): void => {
+}: Pick<FileInputProps, "accept" | "capture" | "multiple" | "onFilesChange">): void => {
   if (typeof document === "undefined") return;
 
   const input = document.createElement("input");
@@ -1534,7 +1534,7 @@ const colorInputToRgba = (value: string): Rgba => {
 const openColorPicker = ({
   onValueChange,
   value,
-}: Pick<ColorInputPrimitiveProps, "onValueChange" | "value">): void => {
+}: Pick<ColorInputProps, "onValueChange" | "value">): void => {
   if (typeof document === "undefined") return;
 
   const input = document.createElement("input");
@@ -1705,7 +1705,7 @@ const buttonControlNodes = ({
   ];
 };
 
-export const ButtonPrimitive = ({
+export const Button = ({
   box: boxProp,
   children,
   disabled = false,
@@ -1714,7 +1714,7 @@ export const ButtonPrimitive = ({
   lineHeight,
   onPress,
   style: primitiveStyle,
-}: ButtonPrimitiveProps): ReactNode => {
+}: ButtonProps): ReactNode => {
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, "button");
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
@@ -1742,7 +1742,7 @@ export const ButtonPrimitive = ({
   }));
 };
 
-const FileInputPrimitive = ({
+const FileInputControl = ({
   accept,
   box: boxProp,
   capture,
@@ -1754,7 +1754,7 @@ const FileInputPrimitive = ({
   multiple,
   onFilesChange,
   style: primitiveStyle,
-}: FileInputPrimitiveProps): ReactNode => {
+}: FileInputProps): ReactNode => {
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="file"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
@@ -1788,7 +1788,7 @@ const FileInputPrimitive = ({
   }));
 };
 
-const ColorInputPrimitive = ({
+const ColorInputControl = ({
   box: boxProp,
   children,
   disabled = false,
@@ -1798,7 +1798,7 @@ const ColorInputPrimitive = ({
   onValueChange,
   style: primitiveStyle,
   value,
-}: ColorInputPrimitiveProps): ReactNode => {
+}: ColorInputProps): ReactNode => {
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="color"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
@@ -1859,7 +1859,7 @@ const ColorInputPrimitive = ({
   ]);
 };
 
-const CheckboxPrimitive = ({
+const CheckboxInputControl = ({
   box: boxProp,
   checked,
   children,
@@ -1869,7 +1869,7 @@ const CheckboxPrimitive = ({
   lineHeight,
   onCheckedChange,
   style: primitiveStyle,
-}: CheckboxInputPrimitiveProps): ReactNode => {
+}: CheckboxInputProps): ReactNode => {
   const box = resolveRequiredSurfaceBox(boxProp, primitiveStyle, 'input type="checkbox"');
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
@@ -1950,7 +1950,7 @@ const CheckboxPrimitive = ({
   ]);
 };
 
-export const TextPrimitive = ({
+export const Text = ({
   box: boxProp,
   children,
   color,
@@ -1963,7 +1963,7 @@ export const TextPrimitive = ({
   selectable,
   style: primitiveStyle,
   text: textProp,
-}: TextPrimitiveProps): ReactNode => {
+}: TextProps): ReactNode => {
   const value = textProp ?? textFromChildren(children);
   const box = resolveSurfaceBox(boxProp, primitiveStyle, "text");
   const styledColor = color ?? primitiveStyle?.color;
@@ -1972,7 +1972,7 @@ export const TextPrimitive = ({
   const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
   const resolvedFont = useResolvedTextFont(font);
   const interactive = selectable === true || copyable === true;
-  const { id, state } = useTextPrimitiveState(value);
+  const { id, state } = useTextControlState(value);
   const scrollLine = useTextControlScrollLine(id);
   const surfaceContext = useContext(TextSurfaceContext);
   const style = surfaceContext?.style ?? defaultTextStyle;
@@ -2047,7 +2047,7 @@ export const TextPrimitive = ({
   ]);
 };
 
-const TextFieldPrimitive = ({
+const TextFieldControl = ({
   box: boxProp,
   color,
   font,
@@ -2061,7 +2061,7 @@ const TextFieldPrimitive = ({
   rows,
   style: primitiveStyle,
   value,
-}: TextFieldPrimitiveProps & {
+}: TextFieldProps & {
   readonly mode: TextControlMode;
   readonly rows: number;
 }): readonly RenderNode[] => {
@@ -2071,7 +2071,7 @@ const TextFieldPrimitive = ({
   const styledLineHeight = lineHeight ?? primitiveStyle?.lineHeight;
   const styledMaxWidth = maxWidth ?? primitiveStyle?.maxWidth ?? 7;
   const resolvedFont = useResolvedTextFont(font);
-  const { id, state } = useTextPrimitiveState(value);
+  const { id, state } = useTextControlState(value);
   const scrollLine = useTextControlScrollLine(id);
   const surfaceContext = useContext(TextSurfaceContext);
   const surfaceStyle = surfaceContext?.style ?? defaultTextStyle;
@@ -2152,23 +2152,23 @@ const TextFieldPrimitive = ({
   ];
 };
 
-export const InputPrimitive = (props: InputPrimitiveProps): ReactNode => {
-  if (props.type === "checkbox") return CheckboxPrimitive(props);
-  if (props.type === "file") return FileInputPrimitive(props);
-  if (props.type === "color") return ColorInputPrimitive(props);
+export const Input = (props: InputProps): ReactNode => {
+  if (props.type === "checkbox") return CheckboxInputControl(props);
+  if (props.type === "file") return FileInputControl(props);
+  if (props.type === "color") return ColorInputControl(props);
 
-  return rendererOutputToReact(TextFieldPrimitive({
+  return rendererOutputToReact(TextFieldControl({
     ...props,
     mode: "single-line",
     rows: 1,
   }));
 };
 
-export const TextareaPrimitive = ({
+export const Textarea = ({
   rows = 4,
   ...props
-}: TextAreaPrimitiveProps): ReactNode =>
-  rendererOutputToReact(TextFieldPrimitive({
+}: TextareaProps): ReactNode =>
+  rendererOutputToReact(TextFieldControl({
     ...props,
     mode: "multiline",
     rows,

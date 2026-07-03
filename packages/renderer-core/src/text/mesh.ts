@@ -1,6 +1,6 @@
 import earcut from 'earcut';
 import type { Font as OpenTypeFont, Glyph as OpenTypeGlyph } from 'opentype.js';
-import { fontForFace, missingTextFontMessage } from './font';
+import { fontForFace, missingTextFontMessage } from './font-internal';
 import type { TextFontFace } from './font';
 import {
   defaultOutlineFlattenTolerance,

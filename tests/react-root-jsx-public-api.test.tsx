@@ -1,6 +1,6 @@
 /** @jsxImportSource @royal/react/renderer */
 import { describe, expect, it } from "vitest";
-import { createRoot } from "@royal/react";
+import { createRendererRoot } from "@royal/react";
 
 type ContextRequest = {
   readonly contextId: string;
@@ -102,7 +102,7 @@ const fakeCanvas = (
 describe("React root JSX public API", () => {
   it("renders a Royal JSX scene through the imperative root", () => {
     const canvas = fakeCanvas();
-    const root = createRoot(canvas, {
+    const root = createRendererRoot(canvas, {
       context: {
         antialias: false,
       },
@@ -153,7 +153,7 @@ describe("React root JSX public API", () => {
   });
 
   it("rejects non-scene React content at the imperative root boundary", () => {
-    const root = createRoot(fakeCanvas());
+    const root = createRendererRoot(fakeCanvas());
 
     // @ts-expect-error Imperative roots only accept Royal renderer descriptors.
     expect(() => root.render("plain text")).toThrow("renderer scene");
