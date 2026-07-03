@@ -666,6 +666,7 @@ type GltfInstanceBufferResource = {
   readonly buffer: WebGLBuffer;
   readonly data: Float32Array;
   dirty: boolean;
+  instanceCount: number;
   modelSignature?: readonly number[];
 };
 
@@ -802,13 +803,24 @@ const appendGltfModelSignature = (
   signature.push(draw.modelSignatureInstanceIndex);
 };
 
-const sameGltfModelSignature = (
-  left: readonly number[] | undefined,
+const gltfInstanceSignatureStride = (
+  instanceCount: number,
+  modelSignature: readonly number[],
+): number | undefined => {
+  if (instanceCount <= 0) return undefined;
+  const stride = modelSignature.length / instanceCount;
+
+  return Number.isInteger(stride) && stride > 0 ? stride : undefined;
+};
+
+const sameGltfModelSignatureRange = (
+  left: readonly number[],
   right: readonly number[],
+  start: number,
+  length: number,
 ): boolean => {
-  if (left === undefined || left.length !== right.length) return false;
-  for (let index = 0; index < right.length; index += 1) {
-    if (!Object.is(left[index], right[index])) return false;
+  for (let index = 0; index < length; index += 1) {
+    if (!Object.is(left[start + index], right[start + index])) return false;
   }
 
   return true;
@@ -3504,24 +3516,64 @@ class WebGlRootImpl implements WebGlRoot {
 
   #bindGltfInstanceModels(key: string, models: readonly Mat4[], modelSignature: readonly number[]): void {
     const gl = this.#gl;
+    const instanceCount = models.length;
     const floatCount = models.length * 16;
     const resource = this.#gltfInstanceBufferResource(key, floatCount);
     const { data } = resource;
-    const changed = resource.dirty || !sameGltfModelSignature(resource.modelSignature, modelSignature);
-    if (changed) {
-      for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
-        const model = models[modelIndex]!;
-        const offset = modelIndex * 16;
-        for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
-          data[offset + elementIndex] = model[elementIndex]!;
-        }
+    const previousSignature = resource.modelSignature;
+    const previousStride = previousSignature === undefined
+      ? undefined
+      : gltfInstanceSignatureStride(resource.instanceCount, previousSignature);
+    const nextStride = gltfInstanceSignatureStride(instanceCount, modelSignature);
+    const fullUpload = resource.dirty
+      || previousSignature === undefined
+      || previousStride === undefined
+      || nextStride === undefined
+      || previousStride !== nextStride
+      || previousSignature.length !== modelSignature.length
+      || resource.instanceCount !== instanceCount;
+    const changedRanges: Array<{ readonly start: number; end: number }> = [];
+    let activeRange: { readonly start: number; end: number } | undefined;
+
+    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+      const signatureOffset = modelIndex * (nextStride ?? 0);
+      const changed = fullUpload
+        || previousSignature === undefined
+        || nextStride === undefined
+        || !sameGltfModelSignatureRange(previousSignature, modelSignature, signatureOffset, nextStride);
+      if (!changed) continue;
+
+      const model = models[modelIndex]!;
+      const offset = modelIndex * 16;
+      for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
+        data[offset + elementIndex] = model[elementIndex]!;
+      }
+      if (activeRange !== undefined && activeRange.end === modelIndex) {
+        activeRange.end = modelIndex + 1;
+      } else {
+        activeRange = { start: modelIndex, end: modelIndex + 1 };
+        changedRanges.push(activeRange);
       }
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-    if (changed) {
+    if (fullUpload) {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, floatCount);
       resource.dirty = false;
+      resource.modelSignature = [...modelSignature];
+      resource.instanceCount = instanceCount;
+    } else if (changedRanges.length > 0) {
+      for (const range of changedRanges) {
+        const startFloat = range.start * 16;
+        const rangeFloatCount = (range.end - range.start) * 16;
+        gl.bufferSubData(
+          gl.ARRAY_BUFFER,
+          startFloat * Float32Array.BYTES_PER_ELEMENT,
+          data,
+          startFloat,
+          rangeFloatCount,
+        );
+      }
       resource.modelSignature = [...modelSignature];
     }
     for (let column = 0; column < 4; column += 1) {
@@ -3557,6 +3609,7 @@ class WebGlRootImpl implements WebGlRoot {
       capacity: requiredFloatCount,
       data,
       dirty: true,
+      instanceCount: 0,
     };
     this.#gltfInstanceBuffers.set(key, resource);
 

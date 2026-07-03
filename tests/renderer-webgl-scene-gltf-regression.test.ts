@@ -652,6 +652,19 @@ const bufferUploadPayloads = (calls: readonly GlCall[]): readonly (readonly numb
     .map((call) => numericArray(call.name === "bufferSubData" ? call.args[2] : call.args[1]))
     .filter((values) => values.length > 0);
 
+const bufferSubDataUploadRanges = (calls: readonly GlCall[]): readonly {
+  readonly byteOffset: number;
+  readonly floatLength: number | undefined;
+  readonly floatOffset: number;
+}[] =>
+  calls
+    .filter((call) => call.name === "bufferSubData")
+    .map((call) => ({
+      byteOffset: Number(call.args[1] ?? 0),
+      floatLength: typeof call.args[4] === "number" ? call.args[4] : undefined,
+      floatOffset: typeof call.args[3] === "number" ? call.args[3] : 0,
+    }));
+
 const roundNumber = (value: number): number => {
   const rounded = Number(value.toFixed(6));
 
@@ -2881,6 +2894,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const leftRef: { current: RenderObjectHandle | null } = { current: null };
+    const rightRef: { current: RenderObjectHandle | null } = { current: null };
     const renderGraph = renderScene([
       directionalLight({
         color: [1, 1, 1, 1],
@@ -2901,6 +2915,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
           position: [0.25, 0, 0],
           rotation: [0, 0, 0],
         },
+        ref: rightRef,
         version: "instanced-b",
       }),
     ]);
@@ -2930,6 +2945,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(instancedDraws[0]?.args[1]).toBe(3);
     expect(instancedDrawInstanceCount(instancedDraws[0]!)).toBe(2);
     expect(drawCalls(readyFrameCalls)).toHaveLength(0);
+    expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
+      { byteOffset: 0, floatLength: 32, floatOffset: 0 },
+    ]);
 
     const callsBeforeImperativeChange = calls.length;
     leftRef.current?.position.set([-0.5, 0, 0]);
@@ -2937,15 +2955,19 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const changedFrameCalls = calls.slice(callsBeforeImperativeChange);
 
     expect(instancedDrawCalls(changedFrameCalls)).toHaveLength(1);
-    expect(changedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
+    expect(bufferSubDataUploadRanges(changedFrameCalls)).toEqual([
+      { byteOffset: 0, floatLength: 16, floatOffset: 0 },
+    ]);
 
     const callsBeforeSecondImperativeChange = calls.length;
-    leftRef.current?.position.set([-0.75, 0, 0]);
+    rightRef.current?.position.set([0.5, 0, 0]);
     await flushAnimationFrames(viewport.animationFrames);
     const secondChangedFrameCalls = calls.slice(callsBeforeSecondImperativeChange);
 
     expect(instancedDrawCalls(secondChangedFrameCalls)).toHaveLength(1);
-    expect(secondChangedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
+    expect(bufferSubDataUploadRanges(secondChangedFrameCalls)).toEqual([
+      { byteOffset: 64, floatLength: 16, floatOffset: 16 },
+    ]);
   });
 
   it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {
@@ -3017,7 +3039,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const translatedFrameCalls = calls.slice(callsBeforeTranslatedRender);
 
     expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
-    expect(translatedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(1);
+    expect(bufferSubDataUploadRanges(translatedFrameCalls)).toEqual([
+      { byteOffset: 0, floatLength: 32, floatOffset: 0 },
+    ]);
   });
 
   it("reuses instanced glTF model buffers across supplied XR views", async () => {
