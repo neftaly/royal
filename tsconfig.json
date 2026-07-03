@@ -75,6 +75,7 @@
     "apps/*/src",
     "packages/*/src",
     "packages/*/tests",
+    "research/projected-sphere-bounds/**/*.ts",
     "scripts/*.ts",
     "tests/*.ts",
     "tests/*.tsx",
