@@ -59,18 +59,21 @@ import {
   type GltfTextureTransformExtension,
 } from "./gltf/schema";
 import {
+  gltfInstanceTransformMat4,
+  gltfInstancingAttributeCount,
+  gltfNodeMat4,
+} from "./gltf/transforms";
+import {
   identityMat4,
   inverseMat4,
   multiplyMat4,
   normalizeVec3,
   projectionMat4,
   quaternionMat4,
-  scaleMat4,
   transformDirection,
   transformMat4,
   transformPoint,
   transformVec4,
-  translationMat4,
   viewMat4,
   type Mat4,
 } from "./math/mat4";
@@ -211,10 +214,6 @@ type ScreenColorTextureResource = {
 type TextureLoadState = TextureResource & {
   error?: string;
   loading: boolean;
-};
-
-type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
-  readonly flipY?: boolean;
 };
 
 type LoadedTextureSource = HTMLImageElement | ImageBitmap | DecodedGltfBasisuTexture;
@@ -450,75 +449,6 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
     preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
   };
 };
-
-const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
-  if (node?.matrix !== undefined && node.matrix.length === 16) {
-    return [
-      node.matrix[0]!, node.matrix[1]!, node.matrix[2]!, node.matrix[3]!,
-      node.matrix[4]!, node.matrix[5]!, node.matrix[6]!, node.matrix[7]!,
-      node.matrix[8]!, node.matrix[9]!, node.matrix[10]!, node.matrix[11]!,
-      node.matrix[12]!, node.matrix[13]!, node.matrix[14]!, node.matrix[15]!,
-    ];
-  }
-
-  const translation = node?.translation;
-  const scale = node?.scale;
-  return multiplyMat4(
-    translationMat4([
-      translation?.[0] ?? 0,
-      translation?.[1] ?? 0,
-      translation?.[2] ?? 0,
-    ]),
-    multiplyMat4(
-      quaternionMat4(node?.rotation),
-      scaleMat4([
-        scale?.[0] ?? 1,
-        scale?.[1] ?? 1,
-        scale?.[2] ?? 1,
-      ]),
-    ),
-  );
-};
-
-const gltfInstanceTransformMat4 = (
-  translations: Float32Array | undefined,
-  rotations: Float32Array | undefined,
-  scales: Float32Array | undefined,
-  index: number,
-): Mat4 => {
-  const translationOffset = index * 3;
-  const rotationOffset = index * 4;
-  const scaleOffset = index * 3;
-
-  return multiplyMat4(
-    translationMat4([
-      translations?.[translationOffset] ?? 0,
-      translations?.[translationOffset + 1] ?? 0,
-      translations?.[translationOffset + 2] ?? 0,
-    ]),
-    multiplyMat4(
-      quaternionMat4(rotations === undefined
-        ? undefined
-        : [
-            rotations[rotationOffset] ?? 0,
-            rotations[rotationOffset + 1] ?? 0,
-            rotations[rotationOffset + 2] ?? 0,
-            rotations[rotationOffset + 3] ?? 1,
-          ]),
-      scaleMat4([
-        scales?.[scaleOffset] ?? 1,
-        scales?.[scaleOffset + 1] ?? 1,
-        scales?.[scaleOffset + 2] ?? 1,
-      ]),
-    ),
-  );
-};
-
-const gltfInstancingAttributeCount = (
-  document: GltfDocument,
-  accessorIndex: number | undefined,
-): number | undefined =>
-  accessorIndex === undefined ? undefined : document.accessors?.[accessorIndex]?.count;
 
 const samplerConstant = (
   gl: WebGL2RenderingContext,
@@ -3462,7 +3392,7 @@ export class WebGlRoot {
     src: string,
     assetKey: string,
   ): {
-    readonly imageBasedLight?: LoadedGltfImageBasedLight;
+    readonly imageBasedLight?: SurfaceImageBasedLight;
     readonly lights: readonly SurfaceLight[];
     readonly primitives: readonly LoadedGltfPrimitive[];
     readonly variants: readonly string[];
@@ -3510,7 +3440,7 @@ export class WebGlRoot {
   #readGltfSceneImageBasedLight(
     document: GltfDocument,
     sceneIndex: number,
-  ): LoadedGltfImageBasedLight | undefined {
+  ): SurfaceImageBasedLight | undefined {
     const reference = document.scenes?.[sceneIndex]?.extensions?.EXT_lights_image_based;
     if (reference === undefined) return undefined;
 
