@@ -77,6 +77,7 @@
     "packages/*/tests",
     "research/projected-sphere-bounds/**/*.ts",
     "scripts/*.ts",
+    "research/eon-rough-diffuse/*.ts",
     "tests/*.ts",
     "tests/*.tsx",
     "vite.config.ts",
