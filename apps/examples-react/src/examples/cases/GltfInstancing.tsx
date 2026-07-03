@@ -5,7 +5,7 @@ import {
   useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
-import { useRef, type ReactNode } from 'react';
+import { useMemo, useRef, type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
@@ -15,36 +15,77 @@ const cubeSources = [
   fixtureBase + 'instanced-cube-c.gltf',
 ] as const;
 
-const gridSize = 16;
 const spacing = 0.34;
-const cubeInstances = Array.from({ length: gridSize ** 3 }, (_, index) => {
-  const x = index % gridSize;
-  const y = Math.floor(index / gridSize) % gridSize;
-  const z = Math.floor(index / (gridSize * gridSize));
-  const centeredX = (x - (gridSize - 1) / 2) * spacing;
-  const centeredY = (y - (gridSize - 1) / 2) * spacing;
-  const centeredZ = (z - (gridSize - 1) / 2) * spacing;
-  const size = 0.105 + ((x + y + z) % 4) * 0.006;
+const defaultGridSize = 16;
+const maxBenchmarkGridSize = 28;
 
+type CubeInstance = {
+  readonly phase: number;
+  readonly position: readonly [number, number, number];
+  readonly rotation: readonly [number, number, number];
+  readonly scale: readonly [number, number, number];
+  readonly src: string;
+};
+
+type InstancingConfig = {
+  readonly gridSize: number;
+  readonly seed: number;
+};
+
+const finiteIntegerParam = (
+  params: URLSearchParams,
+  name: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number => {
+  const raw = params.get(name);
+  if (raw === null) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+};
+
+const instancingConfigFromLocation = (): InstancingConfig => {
+  const params = new URL(globalThis.location.href).searchParams;
   return {
-    phase: x * 0.36 + y * 0.24 + z * 0.18,
-    position: [
-      centeredX,
-      centeredY,
-      centeredZ,
-    ] as const,
-    rotation: [
-      0.08 + y * 0.012,
-      x * 0.03,
-      z * 0.022,
-    ] as const,
-    scale: [size, size, size] as const,
-    src: cubeSources[index % cubeSources.length]!,
+    gridSize: finiteIntegerParam(params, 'grid', defaultGridSize, 1, maxBenchmarkGridSize),
+    seed: finiteIntegerParam(params, 'seed', 0, 0, 0xffff_ffff),
   };
-});
+};
 
-const InstancedCubeField = (): ReactNode => {
+const createCubeInstances = ({ gridSize, seed }: InstancingConfig): readonly CubeInstance[] =>
+  Array.from({ length: gridSize ** 3 }, (_, index): CubeInstance => {
+    const x = index % gridSize;
+    const y = Math.floor(index / gridSize) % gridSize;
+    const z = Math.floor(index / (gridSize * gridSize));
+    const centeredX = (x - (gridSize - 1) / 2) * spacing;
+    const centeredY = (y - (gridSize - 1) / 2) * spacing;
+    const centeredZ = (z - (gridSize - 1) / 2) * spacing;
+    const size = 0.105 + ((x + y + z + seed) % 4) * 0.006;
+
+    return {
+      phase: x * 0.36 + y * 0.24 + z * 0.18 + seed * 0.0001,
+      position: [
+        centeredX,
+        centeredY,
+        centeredZ,
+      ] as const,
+      rotation: [
+        0.08 + y * 0.012,
+        x * 0.03,
+        z * 0.022,
+      ] as const,
+      scale: [size, size, size] as const,
+      src: cubeSources[(index + seed) % cubeSources.length]!,
+    };
+  });
+
+const InstancedCubeField = ({ cubeInstances }: { readonly cubeInstances: readonly CubeInstance[] }): ReactNode => {
   const refs = useRef(cubeInstances.map(() => ({ current: null as RenderObjectHandle | null })));
+  if (refs.current.length !== cubeInstances.length) {
+    refs.current = cubeInstances.map(() => ({ current: null as RenderObjectHandle | null }));
+  }
 
   useFrame(({ elapsed }) => {
     const pulse = elapsed * 1.65;
@@ -88,6 +129,11 @@ const InstancedCubeField = (): ReactNode => {
 };
 
 export const GltfInstancing = (): ReactNode => {
+  const instancingConfig = instancingConfigFromLocation();
+  const cubeInstances = useMemo(
+    () => createCubeInstances(instancingConfig),
+    [instancingConfig.gridSize, instancingConfig.seed],
+  );
   const orbit = useOrbitCamera({
     distance: 11,
     pitch: -0.32,
@@ -104,7 +150,7 @@ export const GltfInstancing = (): ReactNode => {
       <scene>
         <pass camera={orbit.camera}>
           <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
-          <InstancedCubeField />
+          <InstancedCubeField cubeInstances={cubeInstances} />
         </pass>
       </scene>
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />
