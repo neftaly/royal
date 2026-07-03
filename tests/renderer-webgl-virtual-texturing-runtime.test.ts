@@ -459,7 +459,9 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
+    TEXTURE_CUBE_MAP: 0x8513,
     TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_MAX_LEVEL: 0x813D,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
@@ -543,6 +545,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
+    texStorage2D: record("texStorage2D"),
     texSubImage2D: record("texSubImage2D"),
     uniform1i: record("uniform1i"),
     uniform2fv: record("uniform2fv"),
@@ -722,7 +725,8 @@ const texParameterTriples = (calls: readonly GlCall[]): readonly (readonly unkno
     .map((call) => call.args.slice(0, 3));
 
 const texParameterGroups = (calls: readonly GlCall[]): readonly (readonly (readonly unknown[])[])[] => {
-  const triples = texParameterTriples(calls);
+  const triples = texParameterTriples(calls)
+    .filter((triple) => triple[0] === 0x0DE1);
   const groups: Array<readonly (readonly unknown[])[]> = [];
   for (let index = 0; index < triples.length; index += 4) {
     groups.push(triples.slice(index, index + 4));
@@ -1106,7 +1110,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     expect(pageUploads(calls)).toHaveLength(beforeDisposeUploads);
-    expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(2);
+    expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(3);
     expect(root.snapshot().disposed).toBe(true);
   });
 

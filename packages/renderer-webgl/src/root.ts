@@ -37,7 +37,6 @@ import {
 } from "./gltf/io";
 import {
   decodeGltfBasisuRgba,
-  type DecodedGltfBasisuTexture,
 } from "./gltf/codecs/basisu";
 import {
   decodeGltfDracoPrimitives,
@@ -45,9 +44,10 @@ import {
 } from "./gltf/codecs/draco";
 import { decodeGltfMeshoptBufferViews } from "./gltf/codecs/meshopt";
 import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
+import { readGltfSceneImageBasedLight } from "./gltf/image-based-light";
+import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
 import {
   type GltfDocument,
-  type GltfImageBasedLight,
   type GltfImage,
   type GltfLodExtras,
   type GltfMaterial,
@@ -70,7 +70,6 @@ import {
   multiplyMat4,
   normalizeVec3,
   projectionMat4,
-  quaternionMat4,
   transformDirection,
   transformMat4,
   transformPoint,
@@ -86,6 +85,10 @@ import {
   type Bounds3,
   type Ray,
 } from "./math/picking";
+import {
+  isDecodedRgbaTexture,
+  type LoadedTextureSource,
+} from "./texture-sources";
 import {
   encodeVirtualTexturePageTableRgba8,
   parseVirtualTextureManifest,
@@ -132,6 +135,14 @@ import {
   type SurfaceLight,
   type SurfaceLightSet,
 } from "./webgl/lights";
+import {
+  createFallbackIblSpecularTexture,
+  ensureIblSpecularTexture,
+  settleIblSpecularImage,
+  type IblSpecularTextureContext,
+  type IblSpecularTextureResource,
+} from "./webgl/ibl-specular-textures";
+import { bindSurfaceIblUniforms } from "./webgl/ibl-uniforms";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -210,12 +221,6 @@ type TextureResource = {
   uploaded: boolean;
 };
 
-type IblSpecularTextureResource = TextureResource & {
-  readonly imageSize: number;
-  readonly mipCount: number;
-  readonly sources: Map<string, LoadedTextureSource>;
-};
-
 type ScreenColorTextureResource = {
   height: number;
   readonly texture: WebGLTexture;
@@ -227,8 +232,6 @@ type TextureLoadState = TextureResource & {
   error?: string;
   loading: boolean;
 };
-
-type LoadedTextureSource = HTMLImageElement | ImageBitmap | DecodedGltfBasisuTexture;
 
 type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
 
@@ -310,8 +313,6 @@ type LoadedGltfMaterial = {
   readonly texCoords?: Float32Array;
   readonly unlit?: boolean;
 };
-
-type GltfImageKind = "basisu" | "image";
 
 type GltfTextureImageSelection = {
   readonly imageIndex: number;
@@ -617,25 +618,6 @@ const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextur
   return imageIndex === undefined ? undefined : { imageIndex, kind: "image" };
 };
 
-const gltfImageLoadKey = (
-  assetKey: string,
-  src: string,
-  imageIndex: number | undefined,
-  image: GltfImage,
-  kind: GltfImageKind,
-): string | undefined => {
-  if (image.uri !== undefined) {
-    const url = resolveResourceUri(src, image.uri);
-    return kind === "basisu" ? `${assetKey}:basisu-uri:${url}` : url;
-  }
-  if (image.bufferView !== undefined) {
-    const prefix = kind === "basisu" ? "basisu-buffer-view" : "image-buffer-view";
-    return `${assetKey}:${prefix}:${image.bufferView}:image-index:${imageIndex ?? ""}:${image.mimeType ?? ""}`;
-  }
-
-  return undefined;
-};
-
 const usesMipmaps = (value: string | undefined): boolean =>
   value === "linear-mipmap-linear"
   || value === "linear-mipmap-nearest"
@@ -735,20 +717,6 @@ const loadGltfImageSource = (
     ? loadImageBitmapFromBufferView(document, buffers, image)
     : loadImage(resolveResourceUri(src, image.uri));
 };
-
-const isDecodedRgbaTexture = (source: LoadedTextureSource): source is DecodedGltfBasisuTexture =>
-  typeof source === "object" && source !== null && "kind" in source && source.kind === "rgba-texture";
-
-const loadedTextureSourceSize = (source: LoadedTextureSource): readonly [width: number, height: number] => {
-  if (isDecodedRgbaTexture(source)) return [source.width, source.height];
-  const candidate = source as HTMLImageElement | ImageBitmap;
-  const width = "naturalWidth" in candidate && candidate.naturalWidth > 0 ? candidate.naturalWidth : candidate.width;
-  const height = "naturalHeight" in candidate && candidate.naturalHeight > 0 ? candidate.naturalHeight : candidate.height;
-  return [width, height];
-};
-
-const isPowerOfTwo = (value: number): boolean =>
-  Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
 
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
@@ -869,45 +837,6 @@ const readGltfMaterialExtensionFactors = (
     thicknessFactor: nonNegativeFiniteNumber(volume?.thicknessFactor, 0),
     transmissionFactor: clampedFiniteNumber(transmission?.transmissionFactor, 0, 0, 1),
   };
-};
-
-const gltfImageBasedLightHasValidRotation = (light: GltfImageBasedLight): boolean =>
-  light.rotation === undefined
-  || (
-    Array.isArray(light.rotation)
-    && light.rotation.length >= 4
-    && light.rotation.slice(0, 4).every((value) => typeof value === "number" && Number.isFinite(value))
-  );
-
-const gltfImageBasedLightRotation = (light: GltfImageBasedLight): Mat4 =>
-  quaternionMat4(gltfImageBasedLightHasValidRotation(light) ? light.rotation : undefined);
-
-const gltfImageBasedLightIntensity = (light: GltfImageBasedLight): number =>
-  Math.max(0, finiteNumber(light.intensity, 1));
-
-const gltfImageBasedLightIrradianceCoefficients = (
-  light: GltfImageBasedLight,
-): readonly Vec3[] | undefined => {
-  const coefficients = light.irradianceCoefficients;
-  if (!Array.isArray(coefficients) || coefficients.length !== 9) return undefined;
-
-  const parsed: Vec3[] = [];
-  for (const coefficient of coefficients) {
-    if (
-      !Array.isArray(coefficient)
-      || coefficient.length < 3
-      || coefficient.slice(0, 3).some((value) => typeof value !== "number" || !Number.isFinite(value))
-    ) {
-      return undefined;
-    }
-    parsed.push([
-      coefficient[0]!,
-      coefficient[1]!,
-      coefficient[2]!,
-    ]);
-  }
-
-  return parsed;
 };
 
 const gltfLightColor = (light: GltfPunctualLight): Rgba => {
@@ -2508,36 +2437,13 @@ export class WebGlRoot {
   }
 
   #bindSurfaceLights(program: WebGLProgram, lightSet: SurfaceLightSet): void {
-    const irradiance = lightSet.irradiance;
-    this.#uniform1i(program, "u_useIblIrradiance", irradiance === undefined ? 0 : 1);
-    this.#uniformColor(program, "u_iblIrradianceSettings", [
-      irradiance === undefined ? 0 : 1,
-      irradiance?.intensity ?? 1,
-      0,
-      0,
-    ]);
-    this.#uniformMatrix(program, "u_iblWorldToIbl", irradiance?.worldToIbl ?? identityMat4());
-    const specular = lightSet.specular;
-    this.#uniform1i(program, "u_useIblSpecular", specular === undefined ? 0 : 1);
-    this.#uniformColor(program, "u_iblSpecularSettings", [
-      specular === undefined ? 0 : 1,
-      specular?.intensity ?? 1,
-      specular?.mipCount ?? 1,
-      0,
-    ]);
-    const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + 2);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, specular?.texture ?? this.#fallbackIblSpecularTexture());
-    this.#uniform1i(program, "u_iblSpecularCube", 2);
-    for (let index = 0; index < 9; index += 1) {
-      const coefficient = irradiance?.coefficients[index] ?? [0, 0, 0] as const;
-      this.#uniformColor(program, `u_iblIrradianceCoefficients[${index}]`, [
-        coefficient[0],
-        coefficient[1],
-        coefficient[2],
-        0,
-      ]);
-    }
+    bindSurfaceIblUniforms({
+      fallbackSpecularTexture: () => this.#fallbackIblSpecularTexture(),
+      gl: this.#gl,
+      uniform1i: (uniformProgram, name, value) => this.#uniform1i(uniformProgram, name, value),
+      uniformColor: (uniformProgram, name, color) => this.#uniformColor(uniformProgram, name, color),
+      uniformMatrix: (uniformProgram, name, matrix) => this.#uniformMatrix(uniformProgram, name, matrix),
+    }, program, lightSet);
 
     const lights = lightSet.lights.slice(0, MAX_SURFACE_LIGHTS);
     this.#uniform1i(program, "u_surfaceLightCount", lights.length);
@@ -3555,24 +3461,19 @@ export class WebGlRoot {
     return resource;
   }
 
-  #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
-    const existing = this.#iblSpecularTextures.get(specular.key);
-    if (existing !== undefined) {
-      this.#uploadIblSpecularTextureIfReady(specular, existing);
-      return existing;
-    }
-
-    const resource: IblSpecularTextureResource = {
-      imageSize: specular.imageSize,
-      key: specular.key,
-      mipCount: specular.imageLoadKeys.length,
-      sources: new Map(),
-      texture: this.#createTexture(),
-      uploaded: false,
+  #iblSpecularTextureContext(): IblSpecularTextureContext {
+    return {
+      createTexture: () => this.#createTexture(),
+      gl: this.#gl,
+      isDisposed: () => this.#disposed,
+      isTextureOwned: (texture) => this.#ownedTextures.has(texture),
+      recordUnsupportedGltfImageBasedLight: (message) => this.#recordUnsupportedGltfImageBasedLight(message),
+      textures: this.#iblSpecularTextures,
     };
-    this.#iblSpecularTextures.set(specular.key, resource);
-    this.#uploadIblSpecularTextureIfReady(specular, resource);
-    return resource;
+  }
+
+  #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
+    return ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
   }
 
   #settleIblSpecularImage(
@@ -3580,75 +3481,16 @@ export class WebGlRoot {
     key: string,
     image: LoadedTextureSource,
   ): void {
-    if (!specular.imageLoadKeys.some((mip) => mip.includes(key))) return;
-    const resource = this.#ensureIblSpecularTexture(specular);
-    resource.sources.set(key, image);
-    if (resource.uploaded) resource.uploaded = false;
-    this.#uploadIblSpecularTextureIfReady(specular, resource);
-  }
-
-  #uploadIblSpecularTextureIfReady(
-    specular: SurfaceImageBasedLightSpecular,
-    resource: IblSpecularTextureResource,
-  ): void {
-    if (resource.uploaded || this.#disposed || !this.#ownedTextures.has(resource.texture)) return;
-
-    const sources = specular.imageLoadKeys.map((mip) =>
-      mip.map((key) => resource.sources.get(key)));
-    if (sources.some((mip) => mip.some((source) => source === undefined))) return;
-
-    const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + 2);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, resource.texture);
-    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-
-    for (const [mipIndex, mipSources] of sources.entries()) {
-      const expectedSize = Math.max(1, specular.imageSize >> mipIndex);
-      for (const [faceIndex, source] of mipSources.entries()) {
-        if (source === undefined) return;
-        const [width, height] = loadedTextureSourceSize(source);
-        if (width !== height || width !== expectedSize || !isPowerOfTwo(width)) {
-          this.#recordUnsupportedGltfImageBasedLight(
-            `glTF EXT_lights_image_based specular cubemap ${specular.key} mip ${mipIndex} face ${faceIndex} has ${width}x${height}; expected ${expectedSize}x${expectedSize}.`,
-          );
-          return;
-        }
-        const target = gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex;
-        if (isDecodedRgbaTexture(source)) {
-          gl.texImage2D(target, mipIndex, gl.RGBA, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
-        } else {
-          gl.texImage2D(target, mipIndex, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-        }
-      }
-    }
-
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(
-      gl.TEXTURE_CUBE_MAP,
-      gl.TEXTURE_MIN_FILTER,
-      resource.mipCount > 1 ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR,
-    );
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, resource.mipCount - 1);
-    resource.uploaded = true;
+    settleIblSpecularImage(this.#iblSpecularTextureContext(), specular, key, image);
   }
 
   #fallbackIblSpecularTexture(): WebGLTexture {
     if (this.#iblFallbackSpecularTexture !== undefined) return this.#iblFallbackSpecularTexture;
 
-    const gl = this.#gl;
-    const texture = this.#createTexture();
-    gl.activeTexture(gl.TEXTURE0 + 2);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
-    gl.texStorage2D(gl.TEXTURE_CUBE_MAP, 1, gl.RGBA8, 1, 1);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, 0);
+    const texture = createFallbackIblSpecularTexture({
+      createTexture: () => this.#createTexture(),
+      gl: this.#gl,
+    });
     this.#iblFallbackSpecularTexture = texture;
 
     return texture;
@@ -3785,7 +3627,10 @@ export class WebGlRoot {
       .map((name, index) => typeof name === "string" ? name : String(index));
     const sceneIndex = document.scene ?? 0;
     const scene = document.scenes?.[sceneIndex];
-    const imageBasedLight = this.#readGltfSceneImageBasedLight(document, src, assetKey, sceneIndex);
+    const imageBasedLight = readGltfSceneImageBasedLight(document, src, assetKey, sceneIndex, {
+      recordDiagnostic: (message) => this.#recordDiagnostic(message),
+      recordUnsupportedGltfImageBasedLight: (message) => this.#recordUnsupportedGltfImageBasedLight(message),
+    });
     const referencedLodNodes = new Set<number>();
     for (const node of document.nodes ?? []) {
       for (const id of node.extensions?.MSFT_lod?.ids ?? []) {
@@ -3815,118 +3660,6 @@ export class WebGlRoot {
       lights,
       primitives,
       variants,
-    };
-  }
-
-  #readGltfSceneImageBasedLight(
-    document: GltfDocument,
-    src: string,
-    assetKey: string,
-    sceneIndex: number,
-  ): SurfaceImageBasedLight | undefined {
-    const reference = document.scenes?.[sceneIndex]?.extensions?.EXT_lights_image_based;
-    if (reference === undefined) return undefined;
-
-    const lightIndex = reference.light;
-    if (typeof lightIndex !== "number" || !Number.isInteger(lightIndex) || lightIndex < 0) {
-      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: invalid light index ${lightIndex}`);
-      return undefined;
-    }
-
-    const light = document.extensions?.EXT_lights_image_based?.lights?.[lightIndex];
-    if (light === undefined) {
-      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: missing light ${lightIndex}`);
-      return undefined;
-    }
-
-    const coefficients = gltfImageBasedLightIrradianceCoefficients(light);
-    if (coefficients === undefined) {
-      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: light ${lightIndex} has invalid irradianceCoefficients; expected a 9x3 finite numeric array`);
-      return undefined;
-    }
-
-    const specular = this.#readGltfImageBasedLightSpecular(document, src, assetKey, sceneIndex, lightIndex, light);
-    if (light.rotation !== undefined && !gltfImageBasedLightHasValidRotation(light)) {
-      this.#recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} has invalid rotation; using default [0, 0, 0, 1]`);
-    }
-
-    return {
-      coefficients,
-      intensity: gltfImageBasedLightIntensity(light),
-      rotation: gltfImageBasedLightRotation(light),
-      ...(specular === undefined ? {} : { specular }),
-    };
-  }
-
-  #readGltfImageBasedLightSpecular(
-    document: GltfDocument,
-    src: string,
-    assetKey: string,
-    sceneIndex: number,
-    lightIndex: number,
-    light: GltfImageBasedLight,
-  ): SurfaceImageBasedLightSpecular | undefined {
-    const specularImages = light.specularImages;
-    const imageSize = light.specularImageSize;
-    if (specularImages === undefined || typeof imageSize !== "number" || !Number.isFinite(imageSize)) {
-      this.#recordUnsupportedGltfImageBasedLight(
-        `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} is missing required specularImages/specularImageSize data; specular IBL is disabled for this light.`,
-      );
-      return undefined;
-    }
-    if (!isPowerOfTwo(imageSize)) {
-      this.#recordUnsupportedGltfImageBasedLight(
-        `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} has invalid specularImageSize ${imageSize}; expected a positive power-of-two size.`,
-      );
-      return undefined;
-    }
-
-    const imageLoadKeys: string[][] = [];
-    for (const [mipIndex, mipImages] of specularImages.entries()) {
-      if (mipImages.length !== 6) {
-        this.#recordUnsupportedGltfImageBasedLight(
-          `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} mip ${mipIndex} has ${mipImages.length} specular images; expected 6 cubemap faces.`,
-        );
-        return undefined;
-      }
-      const mipKeys: string[] = [];
-      for (const [faceIndex, imageIndex] of mipImages.entries()) {
-        if (!Number.isInteger(imageIndex) || imageIndex < 0) {
-          this.#recordUnsupportedGltfImageBasedLight(
-            `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} mip ${mipIndex} face ${faceIndex} has invalid image index ${imageIndex}.`,
-          );
-          return undefined;
-        }
-        const image = document.images?.[imageIndex];
-        if (image === undefined) {
-          this.#recordUnsupportedGltfImageBasedLight(
-            `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} mip ${mipIndex} face ${faceIndex} references missing image ${imageIndex}.`,
-          );
-          return undefined;
-        }
-        const key = gltfImageLoadKey(assetKey, src, imageIndex, image, "image");
-        if (key === undefined) {
-          this.#recordUnsupportedGltfImageBasedLight(
-            `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} mip ${mipIndex} face ${faceIndex} image ${imageIndex} has no URI or bufferView.`,
-          );
-          return undefined;
-        }
-        mipKeys.push(key);
-      }
-      imageLoadKeys.push(mipKeys);
-    }
-
-    if (imageLoadKeys.length === 0) {
-      this.#recordUnsupportedGltfImageBasedLight(
-        `glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} has no specular mip levels.`,
-      );
-      return undefined;
-    }
-
-    return {
-      imageLoadKeys,
-      imageSize,
-      key: `${assetKey}:ibl-specular:${lightIndex}:${imageSize}:${imageLoadKeys.flat().join("|")}`,
     };
   }
 
