@@ -2947,7 +2947,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCalls(readyFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 32, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 18, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
 
     const callsBeforeImperativeChange = calls.length;
@@ -2957,7 +2959,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(changedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(changedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 9, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
     ]);
 
     const callsBeforeSecondImperativeChange = calls.length;
@@ -2967,7 +2969,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(secondChangedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(secondChangedFrameCalls)).toEqual([
-      { byteOffset: 36, floatLength: 9, floatOffset: 9 },
+      { byteOffset: 12, floatLength: 3, floatOffset: 3 },
     ]);
   });
 
@@ -3041,7 +3043,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(translatedFrameCalls)).toEqual([
-      { byteOffset: 0, floatLength: 18, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
   });
 
@@ -3109,7 +3111,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
     expect(bufferSubDataUploadRanges(readyFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 32, floatOffset: 0 },
-      { byteOffset: 0, floatLength: 18, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
 
     const callsBeforeSecondReadyRender = calls.length;

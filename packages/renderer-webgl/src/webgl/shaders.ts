@@ -2,7 +2,6 @@ import { MAX_SURFACE_LIGHTS } from "./lights";
 
 export type ProgramKind =
   | "surface"
-  | "surface-instanced"
   | "surface-instanced-split"
   | "surface-vt-base-color"
   | "wireframe";
@@ -30,26 +29,6 @@ out vec2 v_uv;
 void main() {
 v_uv = a_uv;
 gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
-}`;
-  }
-
-  if (kind === "surface-instanced") {
-    return `#version 300 es
-in vec3 a_position;
-in vec3 a_normal;
-in vec2 a_uv;
-layout(location = 3) in mat4 a_instanceModel;
-uniform mat4 u_projection;
-uniform mat4 u_view;
-out vec3 v_normal;
-out vec3 v_worldPosition;
-out vec2 v_uv;
-void main() {
-vec4 worldPosition = a_instanceModel * vec4(a_position, 1.0);
-v_normal = mat3(a_instanceModel) * a_normal;
-v_worldPosition = worldPosition.xyz;
-v_uv = a_uv;
-gl_Position = u_projection * u_view * worldPosition;
 }`;
   }
 
