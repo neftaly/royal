@@ -17,7 +17,7 @@ import {
   initialTextSurfaceState,
   maxScrollLineFor,
   reduceTextSurfaceState,
-  scrollLineForSelection,
+  scrollLineForRegisteredTextControl,
   type ActionControlRegistration,
   type TextControlRegistration,
   type TextSurfaceState,
@@ -112,6 +112,24 @@ const textControl = ({
     visibleLineCount,
   };
 };
+
+const textScrollControl = ({
+  scrollLine = 0,
+  selected = selection(0),
+  text = "alpha",
+  visibleLineCount = Number.POSITIVE_INFINITY,
+}: {
+  readonly scrollLine?: number;
+  readonly selected?: EditableTextSelection;
+  readonly text?: string;
+  readonly visibleLineCount?: number;
+} = {}) => ({
+  layout: layoutFor(text),
+  scrollLine,
+  selection: selected,
+  text,
+  visibleLineCount,
+});
 
 const actionControl = (id = "button"): ActionControlRegistration => ({
   bounds: {
@@ -287,6 +305,65 @@ describe("React text surface state reducer", () => {
     expect(revealUp.scrollLines.get(revealControl.id)).toBe(1);
   });
 
+  it("computes registered scroll lines from small scroll inputs", () => {
+    const text = "zero\none\ntwo\nthree\nfour";
+    const layout = layoutFor(text);
+
+    expect(scrollLineForRegisteredTextControl({
+      control: textScrollControl({
+        scrollLine: 0,
+        selected: caretSelectionAtLine(layout, 4),
+        text,
+        visibleLineCount: 2,
+      }),
+      currentControl: { text },
+      persistedScrollLine: 2,
+    })).toBe(2);
+
+    expect(scrollLineForRegisteredTextControl({
+      control: textScrollControl({
+        scrollLine: 0,
+        text,
+        visibleLineCount: 2,
+      }),
+      currentControl: undefined,
+      persistedScrollLine: 99,
+    })).toBe(3);
+
+    expect(scrollLineForRegisteredTextControl({
+      control: textScrollControl({
+        scrollLine: 0,
+        selected: caretSelectionAtLine(layout, 4),
+        text,
+        visibleLineCount: 2,
+      }),
+      currentControl: { text: "zero\none" },
+      persistedScrollLine: 0,
+    })).toBe(3);
+
+    expect(scrollLineForRegisteredTextControl({
+      control: textScrollControl({
+        scrollLine: 0,
+        selected: caretSelectionAtLine(layout, 1),
+        text,
+        visibleLineCount: 2,
+      }),
+      currentControl: { text: "zero\none" },
+      persistedScrollLine: 3,
+    })).toBe(1);
+
+    expect(scrollLineForRegisteredTextControl({
+      control: textScrollControl({
+        scrollLine: 0,
+        selected: caretSelectionAtLine(layout, 4),
+        text,
+        visibleLineCount: 2,
+      }),
+      currentControl: { text },
+      persistedScrollLine: 0,
+    })).toBe(0);
+  });
+
   it("clears selections except the requested control", () => {
     const keep = textControl({
       id: "keep",
@@ -404,6 +481,8 @@ describe("React text surface state reducer", () => {
 
         text = changedText ? applied.state.text : text;
         layout = layoutFor(text);
+        const previousControl = result.state.controls.get(id);
+        const persistedScrollLine = result.state.scrollLines.get(id);
         state = reduceTextSurfaceState(result.state, {
           control: textControl({
             id,
@@ -417,7 +496,17 @@ describe("React text surface state reducer", () => {
         const registered = expectRegisteredTextInvariants(state, id, text);
         expect(registered.selection).toEqual(applied.state.selection);
         expect(state.scrollLines.get(id)).toBe(
-          scrollLineForSelection(registered, registered.selection),
+          scrollLineForRegisteredTextControl({
+            control: {
+              layout: registered.layout,
+              scrollLine: 0,
+              selection: registered.selection,
+              text: registered.text,
+              visibleLineCount: registered.visibleLineCount,
+            },
+            currentControl: previousControl,
+            persistedScrollLine,
+          }),
         );
         expect(registered.layout.lines).toEqual(layout.lines);
       }

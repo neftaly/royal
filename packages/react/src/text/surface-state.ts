@@ -176,18 +176,23 @@ export const withSelection = (
   };
 };
 
-export const maxScrollLineFor = (control: TextControlRegistration): number => {
+type TextControlScrollWindow = Pick<TextControlRegistration, "layout" | "scrollLine" | "visibleLineCount">;
+type TextControlRegistrationScrollControl = TextControlScrollWindow & Pick<TextControlRegistration, "selection" | "text">;
+
+export const maxScrollLineFor = (
+  control: Pick<TextControlRegistration, "layout" | "visibleLineCount">,
+): number => {
   if (!Number.isFinite(control.visibleLineCount)) return 0;
   return Math.max(0, control.layout.lines.length - Math.max(1, Math.floor(control.visibleLineCount)));
 };
 
 export const clampScrollLineFor = (
-  control: TextControlRegistration,
+  control: TextControlScrollWindow,
   scrollLine: number,
 ): number => Math.max(0, Math.min(maxScrollLineFor(control), Math.floor(scrollLine)));
 
 export const scrollLineForSelection = (
-  control: TextControlRegistration,
+  control: TextControlScrollWindow,
   selection: EditableTextSelection,
 ): number => {
   const visibleLineCount = Math.max(1, Math.floor(control.visibleLineCount));
@@ -204,6 +209,25 @@ export const scrollLineForSelection = (
   }
 
   return current;
+};
+
+export const scrollLineForRegisteredTextControl = ({
+  control,
+  currentControl,
+  persistedScrollLine,
+}: {
+  readonly control: TextControlRegistrationScrollControl;
+  readonly currentControl: Pick<TextControlRegistration, "text"> | undefined;
+  readonly persistedScrollLine: number | undefined;
+}): number => {
+  const persisted = persistedScrollLine ?? control.scrollLine;
+  const clamped = clampScrollLineFor({ ...control, scrollLine: persisted }, persisted);
+
+  if (currentControl !== undefined && currentControl.text !== control.text) {
+    return scrollLineForSelection({ ...control, scrollLine: clamped }, control.selection);
+  }
+
+  return clamped;
 };
 
 const stateWith = (
@@ -258,14 +282,11 @@ const registerTextControl = (
   const selectedControl = selection === undefined || sameEditableTextSelection(control.selection, selection)
     ? control
     : withSelection(control, selection);
-  const persistedScrollLine = state.scrollLines.get(control.id) ?? selectedControl.scrollLine;
-  const clampedScrollLine = clampScrollLineFor({
-    ...selectedControl,
-    scrollLine: persistedScrollLine,
-  }, persistedScrollLine);
-  const scrollLine = currentControl !== undefined && currentControl.text !== selectedControl.text
-    ? scrollLineForSelection({ ...selectedControl, scrollLine: clampedScrollLine }, selectedControl.selection)
-    : clampedScrollLine;
+  const scrollLine = scrollLineForRegisteredTextControl({
+    control: selectedControl,
+    currentControl,
+    persistedScrollLine: state.scrollLines.get(control.id),
+  });
   const nextControl = {
     ...selectedControl,
     scrollLine,

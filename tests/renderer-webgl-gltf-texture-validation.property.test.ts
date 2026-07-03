@@ -24,6 +24,7 @@ type ValidationCounters = {
 
 type GsSvgReplay = {
   readonly document: GltfDocument;
+  readonly expectedMessage?: RegExp;
   readonly expectedPass: boolean;
 };
 
@@ -231,14 +232,20 @@ const validationCounters = (
   validationOutcome,
 });
 
-const expectValidationOutcome = (document: GltfDocument, expectedPass: boolean, label: string): void => {
+const expectValidationOutcome = (
+  document: GltfDocument,
+  expectedPass: boolean,
+  label: string,
+  expectedMessage?: RegExp,
+): void => {
   const outcome: ValidationCounters["validationOutcome"] = expectedPass ? "accepted" : "rejected";
   const counters = validationCounters(document, outcome);
   const counterLabel = `${label} counters=${JSON.stringify(counters)}`;
   if (expectedPass) {
     expect(() => assertSupportedRequiredGltfExtensions("fuzz.gltf", document), counterLabel).not.toThrow();
   } else {
-    expect(() => assertSupportedRequiredGltfExtensions("fuzz.gltf", document), counterLabel).toThrow();
+    expect(() => assertSupportedRequiredGltfExtensions("fuzz.gltf", document), counterLabel)
+      .toThrow(expectedMessage);
   }
 };
 
@@ -268,6 +275,7 @@ const gsSvgReplays: readonly FuzzReplay[] = [
         ...acceptedGsSvgDocument,
         textures: [{ extensions: { GS_texture_svg: { source: 1 } } }],
       },
+      expectedMessage: /GS_texture_svg texture 0 .*core source fallback/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -278,6 +286,7 @@ const gsSvgReplays: readonly FuzzReplay[] = [
         ...acceptedGsSvgDocument,
         extensionsRequired: ["GS_texture_svg"],
       },
+      expectedMessage: /GS_texture_svg .*must not be listed in extensionsRequired/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -294,6 +303,32 @@ const gsSvgReplays: readonly FuzzReplay[] = [
           source: 0,
         }],
       },
+      expectedMessage: /GS_texture_svg texture 0 .*additional texture source fallbacks/i,
+      expectedPass: false,
+    } satisfies GsSvgReplay,
+  },
+  {
+    label: "extra webp and basisu source extension fallbacks",
+    value: {
+      document: {
+        ...acceptedGsSvgDocument,
+        extensionsUsed: ["EXT_texture_webp", "KHR_texture_basisu", "GS_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: "fallback.png" },
+          { mimeType: "image/webp", uri: "texture.webp" },
+          { mimeType: "image/ktx2", uri: "texture.ktx2" },
+          { mimeType: "image/svg+xml", uri: "texture.svg" },
+        ],
+        textures: [{
+          extensions: {
+            EXT_texture_webp: { source: 1 },
+            KHR_texture_basisu: { source: 2 },
+            GS_texture_svg: { source: 3 },
+          },
+          source: 0,
+        }],
+      },
+      expectedMessage: /GS_texture_svg texture 0 .*additional texture source fallbacks/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -304,6 +339,7 @@ const gsSvgReplays: readonly FuzzReplay[] = [
         ...acceptedGsSvgDocument,
         textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 1 }],
       },
+      expectedMessage: /GS_texture_svg texture 0 .*core source fallback must be a non-SVG image/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -314,6 +350,7 @@ const gsSvgReplays: readonly FuzzReplay[] = [
         ...acceptedGsSvgDocument,
         textures: [{ extensions: { GS_texture_svg: { source: 1 } }, source: 3 }],
       },
+      expectedMessage: /GS_texture_svg texture 0 .*references missing fallback image 3/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -324,6 +361,7 @@ const gsSvgReplays: readonly FuzzReplay[] = [
         ...acceptedGsSvgDocument,
         textures: [{ extensions: { GS_texture_svg: { source: 4 } }, source: 0 }],
       },
+      expectedMessage: /GS_texture_svg texture 0 .*references missing image 4/i,
       expectedPass: false,
     } satisfies GsSvgReplay,
   },
@@ -453,7 +491,12 @@ describe("renderer-webgl glTF texture validation properties", () => {
     forEachFuzzCase({ cases: 48, replays: gsSvgReplays, seed: 0x56bd49e2 }, ({ label, random, replay }) => {
       const replayValue = replay as GsSvgReplay | undefined;
       const document = replayValue?.document ?? randomGsSvgDocument(random);
-      expectValidationOutcome(document, replayValue?.expectedPass ?? gsSvgDocumentShouldPass(document), label);
+      expectValidationOutcome(
+        document,
+        replayValue?.expectedPass ?? gsSvgDocumentShouldPass(document),
+        label,
+        replayValue?.expectedMessage,
+      );
     });
   });
 

@@ -71,7 +71,6 @@ import {
   inverseMat4,
   multiplyMat4,
   normalizeVec3,
-  orientationPreservingMat4,
   projectionMat4,
   transformDirection,
   transformMat4,
@@ -320,6 +319,8 @@ type VirtualTextureRuntimeState = {
 type LoadedGltfPrimitive = {
   readonly indices?: GltfIndexArray;
   readonly key: string;
+  readonly localBounds: readonly (Bounds3 | undefined)[];
+  readonly localModelDeterminants: readonly number[];
   readonly localModelKeys: readonly string[];
   readonly localModels: readonly Mat4[];
   readonly material: LoadedGltfMaterial;
@@ -645,9 +646,9 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly localModel: Mat4;
   readonly material: SurfaceMaterial;
-  readonly model: Mat4;
   readonly modelSignatureInstanceIndex: number;
   readonly modelSignatureStateKey: number;
+  readonly rootModel: Mat4;
   readonly rootTransform: Transform | undefined;
   readonly sidedness: DrawSidedness;
 };
@@ -659,7 +660,7 @@ type GltfPrimitiveDrawBatch = {
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
   readonly material: SurfaceMaterial;
-  readonly models: Mat4[];
+  readonly rootModels: Mat4[];
   readonly rootSignature: number[];
   readonly rootTransforms: Array<Transform | undefined>;
   readonly sidedness: DrawSidedness;
@@ -1912,42 +1913,85 @@ const adjacentLodLevels = (level: number, levelCount: number): readonly number[]
   return levels;
 };
 
-const projectedScreenCoverage = (
-  positions: Float32Array,
-  model: Mat4,
-  projection: Mat4,
-  view: Mat4,
-): number => {
-  if (positions.length === 0) return 0;
+const mat4OrientationDeterminant = (matrix: Mat4): number =>
+  matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
+  - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
+  + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
 
-  const mvp = multiplyMat4(projection, multiplyMat4(view, model));
+const projectedBoundsScreenCoverage = (
+  bounds: Bounds3 | undefined,
+  viewProjectionModel: Mat4,
+): number => {
+  if (bounds === undefined) return 0;
+
   let minX = 1;
   let minY = 1;
   let maxX = -1;
   let maxY = -1;
   let projected = false;
 
-  for (let index = 0; index < positions.length; index += 3) {
-    const x = positions[index]!;
-    const y = positions[index + 1]!;
-    const z = positions[index + 2]!;
-    const clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
-    const clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
-    const clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
-    if (clipW === 0) continue;
+  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
+    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
+    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
+      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
+      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
+        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
+        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
+          + viewProjectionModel[12];
+        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
+          + viewProjectionModel[13];
+        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
+          + viewProjectionModel[15];
+        if (clipW === 0) continue;
 
-    const ndcX = clamp01((clipX / clipW + 1) / 2);
-    const ndcY = clamp01((clipY / clipW + 1) / 2);
-    minX = Math.min(minX, ndcX);
-    minY = Math.min(minY, ndcY);
-    maxX = Math.max(maxX, ndcX);
-    maxY = Math.max(maxY, ndcY);
-    projected = true;
+        const ndcX = clamp01((clipX / clipW + 1) / 2);
+        const ndcY = clamp01((clipY / clipW + 1) / 2);
+        minX = Math.min(minX, ndcX);
+        minY = Math.min(minY, ndcY);
+        maxX = Math.max(maxX, ndcX);
+        maxY = Math.max(maxY, ndcY);
+        projected = true;
+      }
+    }
   }
 
   if (!projected) return 0;
 
   return clamp01((maxX - minX) * (maxY - minY));
+};
+
+const isBoundsVisible = (
+  bounds: Bounds3 | undefined,
+  viewProjectionModel: Mat4,
+): boolean => {
+  if (bounds === undefined) return false;
+
+  const outside = [true, true, true, true, true, true];
+  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
+    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
+    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
+      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
+      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
+        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
+        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
+          + viewProjectionModel[12];
+        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
+          + viewProjectionModel[13];
+        const clipZ = viewProjectionModel[2] * x + viewProjectionModel[6] * y + viewProjectionModel[10] * z
+          + viewProjectionModel[14];
+        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
+          + viewProjectionModel[15];
+        outside[0] &&= clipX < -clipW;
+        outside[1] &&= clipX > clipW;
+        outside[2] &&= clipY < -clipW;
+        outside[3] &&= clipY > clipW;
+        outside[4] &&= clipZ < -clipW;
+        outside[5] &&= clipZ > clipW;
+      }
+    }
+  }
+
+  return !outside.some(Boolean);
 };
 
 /**
@@ -2629,13 +2673,13 @@ class WebGlRootImpl implements WebGlRoot {
 
     const rootTransform = this.#renderObjectTransform(node);
     const rootModel = transformMat4(rootTransform);
+    const rootDeterminant = mat4OrientationDeterminant(rootModel);
+    const rootViewProjectionModel = multiplyMat4(projection, multiplyMat4(view, rootModel));
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
       state,
       renderInstanceKey,
-      rootModel,
-      projection,
-      view,
+      rootViewProjectionModel,
     );
     this.#preloadAdjacentGltfNodeLodTextures(state.primitives, selectedNodeLevels);
     for (const primitive of state.primitives) {
@@ -2647,16 +2691,15 @@ class WebGlRootImpl implements WebGlRoot {
 
       const primitiveMaterial = this.#gltfPrimitiveMaterialForVariant(state, node, primitive);
       for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
-        const model = multiplyMat4(rootModel, localModel);
+        const localBounds = primitive.localBounds[instanceIndex];
         const materialSelection = this.#selectedGltfMaterial(
           state,
           renderInstanceKey,
           primitive,
           primitiveMaterial,
           instanceIndex,
-          model,
-          projection,
-          view,
+          localBounds,
+          rootViewProjectionModel,
         );
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
@@ -2688,7 +2731,7 @@ class WebGlRootImpl implements WebGlRoot {
           positions: primitive.positions,
           ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
         };
-        if (!this.#isVisible(cpu.positions, model, projection, view)) {
+        if (!isBoundsVisible(localBounds, rootViewProjectionModel)) {
           continue;
         }
         draws.push({
@@ -2696,13 +2739,13 @@ class WebGlRootImpl implements WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           localModel,
           material,
-          model,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
+          rootModel,
           rootTransform,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
-            frontFaceCcw: orientationPreservingMat4(model),
+            frontFaceCcw: rootDeterminant * (primitive.localModelDeterminants[instanceIndex] ?? 1) >= 0,
           },
         });
       }
@@ -2739,7 +2782,7 @@ class WebGlRootImpl implements WebGlRoot {
           localModelSignature,
           localModels: [draw.localModel],
           material: draw.material,
-          models: [draw.model],
+          rootModels: [draw.rootModel],
           rootSignature,
           rootTransforms: [draw.rootTransform],
           sidedness: draw.sidedness,
@@ -2748,7 +2791,7 @@ class WebGlRootImpl implements WebGlRoot {
         appendGltfLocalModelSignature(batch.localModelSignature, draw);
         appendGltfRootSignature(batch.rootSignature, draw);
         batch.localModels.push(draw.localModel);
-        batch.models.push(draw.model);
+        batch.rootModels.push(draw.rootModel);
         batch.rootTransforms.push(draw.rootTransform);
       }
     }
@@ -2780,11 +2823,11 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     this.#applyDrawSidedness(batch.sidedness);
     try {
-      if (batch.models.length === 1) {
+      if (batch.localModels.length === 1) {
         this.#drawGeometry(
           batch.geometry,
           batch.material,
-          batch.models[0]!,
+          multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!),
           projection,
           view,
           batch.lights,
@@ -2866,9 +2909,7 @@ class WebGlRootImpl implements WebGlRoot {
   #selectedGltfNodeLodLevels(
     state: GltfState,
     renderInstanceKey: string,
-    rootModel: Mat4,
-    projection: Mat4,
-    view: Mat4,
+    rootViewProjectionModel: Mat4,
   ): Map<string, number> {
     const coverages = new Map<string, number>();
     const lods = new Map<string, GltfNodePrimitiveLod>();
@@ -2882,9 +2923,8 @@ class WebGlRootImpl implements WebGlRoot {
       levelPrimitives.set(levelKey, [...(levelPrimitives.get(levelKey) ?? []), primitive]);
       if (lod.level !== 0) continue;
 
-      for (const localModel of primitive.localModels) {
-        const model = multiplyMat4(rootModel, localModel);
-        const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+      for (const localBounds of primitive.localBounds) {
+        const coverage = projectedBoundsScreenCoverage(localBounds, rootViewProjectionModel);
         coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
       }
     }
@@ -2916,14 +2956,13 @@ class WebGlRootImpl implements WebGlRoot {
     primitive: LoadedGltfPrimitive,
     primitiveMaterial: LoadedGltfPrimitiveMaterial,
     instanceIndex: number,
-    model: Mat4,
-    projection: Mat4,
-    view: Mat4,
+    localBounds: Bounds3 | undefined,
+    rootViewProjectionModel: Mat4,
   ): { readonly level: number; readonly material: LoadedGltfMaterial } {
     const lod = primitiveMaterial.materialLod;
     if (lod === undefined) return { level: 0, material: primitiveMaterial.material };
 
-    const coverage = projectedScreenCoverage(primitive.positions, model, projection, view);
+    const coverage = projectedBoundsScreenCoverage(localBounds, rootViewProjectionModel);
     const level = this.#selectGltfLodLevel(
       `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`,
       coverage,
@@ -4952,6 +4991,7 @@ class WebGlRootImpl implements WebGlRoot {
     const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
     this.#appendGltfNodeLight(document, lights, sceneNode, nodeIndex, nodeModel);
     const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
+    const localModelDeterminants = localModels.map(mat4OrientationDeterminant);
     const localModelKeys = localModels.map(mat4ContentKey);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
@@ -5003,6 +5043,8 @@ class WebGlRootImpl implements WebGlRoot {
       primitives.push({
         ...(indices === undefined ? {} : { indices }),
         key,
+        localBounds: localModels.map((localModel) => worldBounds(positions, localModel)),
+        localModelDeterminants,
         localModelKeys,
         localModels,
         material,
