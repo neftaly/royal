@@ -754,18 +754,29 @@ type GltfPrimitiveDraw = {
 };
 
 type GltfPrimitiveDrawBatch = {
-  readonly geometry: GeometryResource;
+  geometry: GeometryResource;
   readonly key: string;
-  readonly lights: SurfaceLightSet;
+  lights: SurfaceLightSet;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
-  readonly material: SurfaceMaterial;
+  material: SurfaceMaterial;
   readonly rootPositionSignature: number[];
   readonly rootRotationSignature: number[];
   readonly rootScaleSignature: number[];
   readonly rootModels: Mat4[];
   readonly rootTransforms: Array<Transform | undefined>;
-  readonly sidedness: DrawSidedness;
+  sidedness: DrawSidedness;
+};
+
+type GltfPrimitiveDrawBatchInput = {
+  readonly draw: GltfPrimitiveDraw;
+  readonly geometry: GeometryResource;
+  readonly key: string;
+  readonly lights: SurfaceLightSet;
+};
+
+type GltfPrimitiveDrawBatchPlanCacheEntry = {
+  readonly batches: GltfPrimitiveDrawBatch[];
 };
 
 type GltfPreparedTextureUpload = {
@@ -1056,6 +1067,47 @@ const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
+
+const gltfPrimitiveDrawBatchPlanKey = (inputs: readonly GltfPrimitiveDrawBatchInput[]): string => {
+  const parts: string[] = [];
+  let currentKey: string | undefined;
+  let runLength = 0;
+
+  const flushRun = (): void => {
+    if (currentKey === undefined) return;
+    parts.push(`${runLength}x${currentKey.length}:${currentKey}`);
+  };
+
+  for (const input of inputs) {
+    if (input.key === currentKey) {
+      runLength += 1;
+      continue;
+    }
+
+    flushRun();
+    currentKey = input.key;
+    runLength = 1;
+  }
+  flushRun();
+
+  return parts.join("|");
+};
+
+const appendGltfPrimitiveDrawBatchInput = (
+  batch: GltfPrimitiveDrawBatch,
+  input: GltfPrimitiveDrawBatchInput,
+): void => {
+  const draw = input.draw;
+  appendGltfLocalModelSignature(batch.localModelSignature, draw);
+  appendGltfRootSignatures({
+    position: batch.rootPositionSignature,
+    rotation: batch.rootRotationSignature,
+    scale: batch.rootScaleSignature,
+  }, draw);
+  batch.localModels.push(draw.localModel);
+  batch.rootModels.push(draw.rootModel);
+  batch.rootTransforms.push(draw.rootTransform);
+};
 
 const assignRenderObjectRef = (
   ref: RenderObjectRef,
@@ -2255,6 +2307,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #gltf = new Map<string, GltfState>();
+  readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
   readonly #gltfPreparedPrimitiveMaterials =
@@ -2269,6 +2322,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
   readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
+  #activeGltfBatchPlanCacheKeys = new Set<string>();
   #activeGltfInstanceBufferKeys = new Set<string>();
   #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
@@ -2370,6 +2424,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     this.#latestScene = scene;
     if (options.syncRenderObjectRefs) this.#syncRenderObjectRefs(scene);
+    this.#activeGltfBatchPlanCacheKeys = new Set();
     this.#activeGltfInstanceBufferKeys = new Set();
     this.#activeGltfLodSelectionKeys = new Set();
     this.#gltfRenderOrdinal = 0;
@@ -2442,6 +2497,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     this.#releaseUnusedGeometry(usedGeometry);
+    this.#releaseUnusedGltfBatchPlans();
     this.#releaseUnusedGltfInstanceBuffers();
     this.#pruneGltfLodSelections();
     this.#frame += 1;
@@ -2506,6 +2562,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#studioEnvironmentSpecularTextures.clear();
     this.#virtualTextures.clear();
     this.#gltf.clear();
+    this.#gltfBatchPlanCache.clear();
     this.#gltfInstanceBuffers.clear();
     this.#gltfLodSelections.clear();
     this.#iblBrdfLutTexture = undefined;
@@ -3036,7 +3093,9 @@ class WebGlRootImpl implements WebGlRoot {
     viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
-    const batches = new Map<string, GltfPrimitiveDrawBatch>();
+    if (draws.length === 0) return;
+
+    const batchInputs: GltfPrimitiveDrawBatchInput[] = [];
     for (const draw of draws) {
       const geometry = this.#geometryResource(draw.geometry);
       usedGeometry.add(geometry.key);
@@ -3045,53 +3104,17 @@ class WebGlRootImpl implements WebGlRoot {
         ? "double-sided"
         : draw.sidedness.frontFaceCcw ? "front-ccw" : "front-cw";
       const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${sidednessKey}|${lights.key}`;
-      const batch = batches.get(batchKey);
-      if (batch === undefined) {
-        const localModelSignature: number[] = [];
-        const rootPositionSignature: number[] = [];
-        const rootRotationSignature: number[] = [];
-        const rootScaleSignature: number[] = [];
-        appendGltfLocalModelSignature(localModelSignature, draw);
-        appendGltfRootSignatures({
-          position: rootPositionSignature,
-          rotation: rootRotationSignature,
-          scale: rootScaleSignature,
-        }, draw);
-        batches.set(batchKey, {
-          geometry,
-          key: batchKey,
-          lights,
-          localModelSignature,
-          localModels: [draw.localModel],
-          material: draw.material,
-          rootPositionSignature,
-          rootRotationSignature,
-          rootScaleSignature,
-          rootModels: [draw.rootModel],
-          rootTransforms: [draw.rootTransform],
-          sidedness: draw.sidedness,
-        });
-      } else {
-        appendGltfLocalModelSignature(batch.localModelSignature, draw);
-        appendGltfRootSignatures({
-          position: batch.rootPositionSignature,
-          rotation: batch.rootRotationSignature,
-          scale: batch.rootScaleSignature,
-        }, draw);
-        batch.localModels.push(draw.localModel);
-        batch.rootModels.push(draw.rootModel);
-        batch.rootTransforms.push(draw.rootTransform);
-      }
+      batchInputs.push({ draw, geometry, key: batchKey, lights });
     }
-    this.#gltfInstancingCounters.batchPlansBuilt += batches.size;
-    for (const batch of batches.values()) {
+    const batches = this.#gltfPrimitiveDrawBatches(batchInputs);
+    for (const batch of batches) {
       this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
 
     const opaqueBatches: GltfPrimitiveDrawBatch[] = [];
     const blendedBatches: GltfPrimitiveDrawBatch[] = [];
     const transmissiveBatches: GltfPrimitiveDrawBatch[] = [];
-    for (const batch of batches.values()) {
+    for (const batch of batches) {
       if (isBlendedSurfaceMaterial(batch.material)) {
         blendedBatches.push(batch);
       } else if (isTransmissiveSurfaceMaterial(batch.material)) {
@@ -3110,6 +3133,75 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
     for (const batch of blendedBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, undefined);
+  }
+
+  #gltfPrimitiveDrawBatches(inputs: readonly GltfPrimitiveDrawBatchInput[]): readonly GltfPrimitiveDrawBatch[] {
+    const planKey = gltfPrimitiveDrawBatchPlanKey(inputs);
+    this.#activeGltfBatchPlanCacheKeys.add(planKey);
+    const cached = this.#gltfBatchPlanCache.get(planKey);
+    if (cached !== undefined) {
+      this.#refreshGltfPrimitiveDrawBatchPlan(cached.batches, inputs);
+
+      return cached.batches;
+    }
+
+    const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
+    for (const input of inputs) {
+      let batch = batchesByKey.get(input.key);
+      if (batch === undefined) {
+        batch = {
+          geometry: input.geometry,
+          key: input.key,
+          lights: input.lights,
+          localModelSignature: [],
+          localModels: [],
+          material: input.draw.material,
+          rootPositionSignature: [],
+          rootRotationSignature: [],
+          rootScaleSignature: [],
+          rootModels: [],
+          rootTransforms: [],
+          sidedness: input.draw.sidedness,
+        };
+        batchesByKey.set(input.key, batch);
+      }
+      appendGltfPrimitiveDrawBatchInput(batch, input);
+    }
+
+    const batches = Array.from(batchesByKey.values());
+    this.#gltfBatchPlanCache.set(planKey, { batches });
+    this.#gltfInstancingCounters.batchPlansBuilt += batches.length;
+
+    return batches;
+  }
+
+  #refreshGltfPrimitiveDrawBatchPlan(
+    batches: readonly GltfPrimitiveDrawBatch[],
+    inputs: readonly GltfPrimitiveDrawBatchInput[],
+  ): void {
+    const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
+    for (const batch of batches) {
+      batch.localModelSignature.length = 0;
+      batch.localModels.length = 0;
+      batch.rootPositionSignature.length = 0;
+      batch.rootRotationSignature.length = 0;
+      batch.rootScaleSignature.length = 0;
+      batch.rootModels.length = 0;
+      batch.rootTransforms.length = 0;
+      batchesByKey.set(batch.key, batch);
+    }
+
+    for (const input of inputs) {
+      const batch = batchesByKey.get(input.key);
+      if (batch === undefined) continue;
+      if (batch.localModels.length === 0) {
+        batch.geometry = input.geometry;
+        batch.lights = input.lights;
+        batch.material = input.draw.material;
+        batch.sidedness = input.draw.sidedness;
+      }
+      appendGltfPrimitiveDrawBatchInput(batch, input);
+    }
   }
 
   #drawGltfPrimitiveDrawBatch(
@@ -4583,6 +4675,12 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindBuffer(gl.ARRAY_BUFFER, localBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, requiredLocalFloatCount * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
     return resource;
+  }
+
+  #releaseUnusedGltfBatchPlans(): void {
+    for (const key of this.#gltfBatchPlanCache.keys()) {
+      if (!this.#activeGltfBatchPlanCacheKeys.has(key)) this.#gltfBatchPlanCache.delete(key);
+    }
   }
 
   #releaseUnusedGltfInstanceBuffers(): void {

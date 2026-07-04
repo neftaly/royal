@@ -3765,7 +3765,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     expect(changedInstancing).toEqual({
       batchInstancesTotal: 2,
-      batchPlansBuilt: 1,
+      batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
       localModelUploadBytes: 0,
@@ -3800,7 +3800,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     expect(secondChangedInstancing).toEqual({
       batchInstancesTotal: 2,
-      batchPlansBuilt: 1,
+      batchPlansBuilt: 0,
       drawCalls: 1,
       instancesDrawn: 2,
       localModelUploadBytes: 0,
@@ -3840,8 +3840,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushMicrotasks();
 
     const callsBeforeReadyRender = calls.length;
+    const instancingBeforeReadyRender = root.snapshot().gltfInstancing;
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const readyInstancing = gltfInstancingDelta(root.snapshot().gltfInstancing, instancingBeforeReadyRender);
     const instancedDraws = instancedDrawCalls(readyFrameCalls);
     const instanceModelPayload = bufferUploadPayloads(readyFrameCalls)
       .find((payload) => payload.length === 32);
@@ -3859,13 +3861,22 @@ describe("WebGL renderer scene and glTF regressions", () => {
       instanceModelPayload?.[16] ?? 0,
       instanceModelPayload?.[28] ?? 0,
     ])).toEqual([1, -0.25, 1.25, 0.25]);
+    expect(readyInstancing.batchPlansBuilt).toBe(1);
+    expect(readyInstancing.batchInstancesTotal).toBe(2);
 
     const callsBeforeSecondReadyRender = calls.length;
+    const instancingBeforeSecondReadyRender = root.snapshot().gltfInstancing;
     root.render(renderGraph);
     const secondReadyFrameCalls = calls.slice(callsBeforeSecondReadyRender);
+    const secondReadyInstancing = gltfInstancingDelta(
+      root.snapshot().gltfInstancing,
+      instancingBeforeSecondReadyRender,
+    );
 
     expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(1);
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+    expect(secondReadyInstancing.batchPlansBuilt).toBe(0);
+    expect(secondReadyInstancing.batchInstancesTotal).toBe(2);
 
     const translatedRenderGraph = renderScene([
       directionalLight({
@@ -3879,13 +3890,49 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
     ]);
     const callsBeforeTranslatedRender = calls.length;
+    const instancingBeforeTranslatedRender = root.snapshot().gltfInstancing;
     root.render(translatedRenderGraph);
     const translatedFrameCalls = calls.slice(callsBeforeTranslatedRender);
+    const translatedInstancing = gltfInstancingDelta(
+      root.snapshot().gltfInstancing,
+      instancingBeforeTranslatedRender,
+    );
 
     expect(instancedDrawCalls(translatedFrameCalls)).toHaveLength(1);
     expect(bufferSubDataUploadRanges(translatedFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
+    expect(translatedInstancing.batchPlansBuilt).toBe(0);
+    expect(translatedInstancing.batchInstancesTotal).toBe(2);
+
+    const expandedRenderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-mesh-gpu-instancing",
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0.4, 0, 0], rotation: [0, 0, 0] },
+        version: "ext-mesh-gpu-instancing",
+      }),
+    ]);
+    const callsBeforeExpandedRender = calls.length;
+    const instancingBeforeExpandedRender = root.snapshot().gltfInstancing;
+    root.render(expandedRenderGraph);
+    const expandedInstancedDraws = instancedDrawCalls(calls.slice(callsBeforeExpandedRender));
+    const expandedInstancing = gltfInstancingDelta(
+      root.snapshot().gltfInstancing,
+      instancingBeforeExpandedRender,
+    );
+
+    expect(expandedInstancedDraws).toHaveLength(1);
+    expect(instancedDrawInstanceCount(expandedInstancedDraws[0]!)).toBe(4);
+    expect(expandedInstancing.batchPlansBuilt).toBe(1);
+    expect(expandedInstancing.batchInstancesTotal).toBe(4);
   });
 
   it("reuses instanced glTF model buffers across supplied XR views", async () => {

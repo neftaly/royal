@@ -42,9 +42,14 @@ export type RenderObjectTransformAction =
   };
 
 export interface RenderObjectHandle {
+  readonly renderObjectId: number;
   readonly position: RenderObjectVector3;
   readonly rotation: RenderObjectVector3;
   readonly scale: RenderObjectVector3;
+  readonly transformVersion: number;
+  readonly positionVersion: number;
+  readonly rotationVersion: number;
+  readonly scaleVersion: number;
   getTransform(): Transform;
   setTransform(transform: RenderObjectTransformUpdate): void;
 }
@@ -69,6 +74,8 @@ const componentIndex = {
   y: 1,
   z: 2
 } satisfies Record<RenderObjectTransformComponent, 0 | 1 | 2>;
+
+let nextRenderObjectId = 1;
 
 export const createRenderObjectTransformState = (transform: Transform): RenderObjectTransformState => ({
   position: copyVec3(transform.position),
@@ -215,13 +222,19 @@ class MutableRenderObjectVector3 implements RenderObjectVector3 {
 }
 
 class MutableRenderObjectHandle implements RenderObjectHandle {
+  readonly renderObjectId: number;
   readonly position: MutableRenderObjectVector3;
   readonly rotation: MutableRenderObjectVector3;
   readonly scale: MutableRenderObjectVector3;
   readonly #onChange: () => void;
   #state: RenderObjectTransformState;
+  #transformVersion = 0;
+  #positionVersion = 0;
+  #rotationVersion = 0;
+  #scaleVersion = 0;
 
   constructor(transform: Transform, onChange: () => void) {
+    this.renderObjectId = nextRenderObjectId++;
     this.#onChange = onChange;
     this.#state = createRenderObjectTransformState(transform);
     this.position = new MutableRenderObjectVector3(
@@ -241,6 +254,22 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
     );
   }
 
+  get transformVersion(): number {
+    return this.#transformVersion;
+  }
+
+  get positionVersion(): number {
+    return this.#positionVersion;
+  }
+
+  get rotationVersion(): number {
+    return this.#rotationVersion;
+  }
+
+  get scaleVersion(): number {
+    return this.#scaleVersion;
+  }
+
   getTransform(): Transform {
     return renderObjectTransformStateToTransform(this.#state);
   }
@@ -250,10 +279,15 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   #dispatch(action: RenderObjectTransformAction): void {
+    const previousState = this.#state;
     const nextState = reduceRenderObjectTransform(this.#state, action);
-    if (nextState === this.#state) return;
+    if (nextState === previousState) return;
 
     this.#state = nextState;
+    this.#transformVersion += 1;
+    if (nextState.position !== previousState.position) this.#positionVersion += 1;
+    if (nextState.rotation !== previousState.rotation) this.#rotationVersion += 1;
+    if (nextState.scale !== previousState.scale) this.#scaleVersion += 1;
     this.#onChange();
   }
 }
