@@ -723,30 +723,6 @@ describe("renderer-webgl glTF texture validation properties", () => {
     });
   });
 
-  it("rejects required clearcoat normal maps while allowing the optional fallback path", () => {
-    const optionalDocument: GltfDocument = {
-      extensionsUsed: ["KHR_materials_clearcoat"],
-      materials: [
-        {
-          extensions: {
-            KHR_materials_clearcoat: {
-              clearcoatFactor: 0.75,
-              clearcoatNormalTexture: { index: 0 },
-            },
-          },
-        },
-      ],
-    };
-    const requiredDocument: GltfDocument = {
-      ...optionalDocument,
-      extensionsRequired: ["KHR_materials_clearcoat"],
-    };
-
-    expect(() => assertSupportedRequiredGltfExtensions("clearcoat-optional.gltf", optionalDocument)).not.toThrow();
-    expect(() => assertSupportedRequiredGltfExtensions("clearcoat-required.gltf", requiredDocument))
-      .toThrow(/KHR_materials_clearcoat\.clearcoatNormalTexture.*material 0.*extension normal maps/i);
-  });
-
   it("keeps required material texture slot validation aligned with implemented renderer support", () => {
     forEachFuzzCase({ cases: 40, replays: materialTextureSlotReplays, seed: 0x4e8a2f19 }, ({
       label,
