@@ -36,7 +36,9 @@ gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
     return `#version 300 es
 in vec3 a_position;
 in vec3 a_normal;
+in vec4 a_tangent;
 in vec2 a_uv;
+in vec2 a_emissive_uv;
 in vec4 a_color;
 layout(location = 3) in mat4 a_instanceLocalModel;
 layout(location = 7) in vec3 a_instancePosition;
@@ -45,8 +47,10 @@ layout(location = 9) in vec3 a_instanceScale;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 out vec3 v_normal;
+out vec4 v_tangent;
 out vec3 v_worldPosition;
 out vec2 v_uv;
+out vec2 v_emissive_uv;
 out vec4 v_color;
 vec3 rotateX(vec3 value, float radians) {
   float c = cos(radians);
@@ -76,8 +80,10 @@ void main() {
 vec4 localPosition = a_instanceLocalModel * vec4(a_position, 1.0);
 vec3 worldPosition = transformRootPoint(localPosition.xyz);
 v_normal = transformRootVector(mat3(a_instanceLocalModel) * a_normal);
+v_tangent = vec4(transformRootVector(mat3(a_instanceLocalModel) * a_tangent.xyz), a_tangent.w);
 v_worldPosition = worldPosition;
 v_uv = a_uv;
+v_emissive_uv = a_emissive_uv;
 v_color = a_color;
 gl_Position = u_projection * u_view * vec4(worldPosition, localPosition.w);
 }`;
@@ -86,20 +92,26 @@ gl_Position = u_projection * u_view * vec4(worldPosition, localPosition.w);
   return `#version 300 es
 in vec3 a_position;
 in vec3 a_normal;
+in vec4 a_tangent;
 in vec2 a_uv;
+in vec2 a_emissive_uv;
 in vec4 a_color;
 uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_model;
 out vec3 v_normal;
+out vec4 v_tangent;
 out vec3 v_worldPosition;
 out vec2 v_uv;
+out vec2 v_emissive_uv;
 out vec4 v_color;
 void main() {
 vec4 worldPosition = u_model * vec4(a_position, 1.0);
 v_normal = mat3(u_model) * a_normal;
+v_tangent = vec4(mat3(u_model) * a_tangent.xyz, a_tangent.w);
 v_worldPosition = worldPosition.xyz;
 v_uv = a_uv;
+v_emissive_uv = a_emissive_uv;
 v_color = a_color;
 gl_Position = u_projection * u_view * worldPosition;
 }`;
@@ -171,14 +183,17 @@ outColor = texture(u_vtAtlas, atlasUv) * u_color;
   return `#version 300 es
 precision mediump float;
 in vec3 v_normal;
+in vec4 v_tangent;
 in vec3 v_worldPosition;
 in vec2 v_uv;
+in vec2 v_emissive_uv;
 in vec4 v_color;
 #define MAX_SURFACE_LIGHTS ${MAX_SURFACE_LIGHTS}
 uniform highp mat4 u_view;
 uniform bool u_useTexture;
 uniform bool u_useEmissiveTexture;
 uniform bool u_useMetallicRoughnessTexture;
+uniform bool u_useNormalTexture;
 uniform bool u_useOcclusionTexture;
 uniform bool u_useSpecularTexture;
 uniform bool u_useSpecularColorTexture;
@@ -210,6 +225,7 @@ uniform samplerCube u_iblSpecularCube;
 uniform sampler2D u_texture;
 uniform sampler2D u_emissiveTexture;
 uniform sampler2D u_metallicRoughnessTexture;
+uniform sampler2D u_normalTexture;
 uniform sampler2D u_occlusionTexture;
 uniform sampler2D u_specularTexture;
 uniform sampler2D u_specularColorTexture;
@@ -223,6 +239,7 @@ uniform sampler2D u_materialTransmissionTexture;
 uniform sampler2D u_thicknessTexture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
+uniform vec4 u_normalTextureSettings;
 uniform vec4 u_occlusionSettings;
 uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
@@ -316,7 +333,7 @@ vec3 materialDiffuseColor(vec3 baseColor) {
 return baseColor * (1.0 - materialMetallicFactor());
 }
 vec3 materialEmissiveColor() {
-vec3 textureEmissive = u_useEmissiveTexture ? texture(u_emissiveTexture, v_uv).rgb : vec3(1.0);
+vec3 textureEmissive = u_useEmissiveTexture ? texture(u_emissiveTexture, v_emissive_uv).rgb : vec3(1.0);
 return u_emissiveColor.rgb * textureEmissive;
 }
 float materialOcclusion() {
@@ -325,6 +342,33 @@ if (!u_useOcclusionTexture) {
 }
 float strength = clamp(u_occlusionSettings.x, 0.0, 1.0);
 return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);
+}
+vec3 materialNormal(vec3 geometricNormal) {
+if (!u_useNormalTexture) {
+  return geometricNormal;
+}
+vec3 textureNormal = texture(u_normalTexture, v_uv).xyz * 2.0 - 1.0;
+textureNormal.xy *= u_normalTextureSettings.x;
+vec3 normal = normalize(geometricNormal);
+vec3 tangent = v_tangent.w == 0.0 ? vec3(0.0) : normalize(v_tangent.xyz);
+vec3 bitangent = vec3(0.0);
+if (dot(tangent, tangent) > 0.0001) {
+  tangent = normalize(tangent - normal * dot(normal, tangent));
+  bitangent = normalize(cross(normal, tangent)) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
+} else {
+  vec3 dp1 = dFdx(v_worldPosition);
+  vec3 dp2 = dFdy(v_worldPosition);
+  vec2 duv1 = dFdx(v_uv);
+  vec2 duv2 = dFdy(v_uv);
+  float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+  if (abs(determinant) <= 0.000001) {
+    return normal;
+  }
+  tangent = normalize((dp1 * duv2.y - dp2 * duv1.y) / determinant);
+  tangent = normalize(tangent - normal * dot(normal, tangent));
+  bitangent = normalize(cross(normal, tangent));
+}
+return normalize(tangent * textureNormal.x + bitangent * textureNormal.y + normal * textureNormal.z);
 }
 vec3 materialDielectricF0() {
 float specular = materialSpecularFactor();
@@ -547,7 +591,7 @@ if (u_unlit) {
   outColor = baseColor;
   return;
 }
-vec3 normal = normalize(v_normal);
+vec3 normal = materialNormal(normalize(v_normal));
 vec3 viewInput = cameraWorldPosition() - v_worldPosition;
 vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
 float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);

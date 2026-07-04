@@ -18,6 +18,95 @@ const envNumber = (name, fallback) => {
   throw new Error(`${name} must be a finite number, received ${JSON.stringify(raw)}`);
 };
 const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
+
+const khronosKitchenSinkAssetNames = [
+  'AlphaBlendModeTest',
+  'AnimatedMorphCube',
+  'AttenuationTest',
+  'Box',
+  'BoxAnimated',
+  'BoxInterleaved',
+  'BoxTextured',
+  'BoxTexturedNonPowerOfTwo',
+  'BoxVertexColors',
+  'CesiumMan',
+  'CesiumMilkTruck',
+  'ClearCoatCarPaint',
+  'ClearCoatTest',
+  'ClearcoatWicker',
+  'CompareBaseColor',
+  'CompareClearcoat',
+  'CompareDispersion',
+  'CompareEmissiveStrength',
+  'CompareIor',
+  'CompareIridescence',
+  'CompareMetallic',
+  'CompareNormal',
+  'CompareRoughness',
+  'CompareSheen',
+  'CompareSpecular',
+  'CompareTransmission',
+  'CompareVolume',
+  'CubeVisibility',
+  'DirectionalLight',
+  'Duck',
+  'EmissiveStrengthTest',
+  'Fox',
+  'GlassBrokenWindow',
+  'InterpolationTest',
+  'IridescenceSuzanne',
+  'LightVisibility',
+  'MetalRoughSpheresNoTextures',
+  'MorphPrimitivesTest',
+  'MorphStressTest',
+  'MultiUVTest',
+  'NegativeScaleTest',
+  'NormalTangentTest',
+  'OrientationTest',
+  'PointLightIntensityTest',
+  'RecursiveSkeletons',
+  'RiggedFigure',
+  'RiggedSimple',
+  'SimpleInstancing',
+  'SpecularTest',
+  'SunglassesKhronos',
+  'TextureCoordinateTest',
+  'TextureEncodingTest',
+  'TextureLinearInterpolationTest',
+  'TextureSettingsTest',
+  'TextureTransformMultiTest',
+  'TransmissionRoughnessTest',
+  'TransmissionTest',
+  'TransmissionThinwallTestGrid',
+  'Unicode❤♻Test',
+  'UnlitTest',
+  'USDShaderBallForGltf',
+  'VertexColorTest',
+];
+const defaultKitchenSinkAssetNames = [
+  'AnimatedMorphCube',
+  'Box',
+  'BoxTextured',
+  'BoxVertexColors',
+  'CesiumMan',
+  'ClearCoatTest',
+  'CompareBaseColor',
+  'CompareSpecular',
+  'Duck',
+  'Fox',
+  'MetalRoughSpheresNoTextures',
+  'SimpleInstancing',
+  'SunglassesKhronos',
+  'TransmissionTest',
+  'Unicode❤♻Test',
+];
+const khronosGlbResourceSubstring = (name) => {
+  const encodedName = encodeURIComponent(name);
+  return `/fixtures/khronos/${encodedName}/glTF-Binary/${encodedName}.glb`;
+};
+const defaultKitchenSinkResourceSubstrings = defaultKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
+const fullKitchenSinkResourceSubstrings = khronosKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
+
 const smokeExpectations = {
   cube: {
     path: '/cube',
@@ -62,8 +151,17 @@ const smokeExpectations = {
   },
   'gltf-kitchen-sink': {
     path: '/gltf-kitchen-sink',
+    absentResourceSubstrings: fullKitchenSinkResourceSubstrings
+      .filter((resource) => !defaultKitchenSinkResourceSubstrings.includes(resource)),
+    resourceSubstrings: defaultKitchenSinkResourceSubstrings,
     minColorBuckets: 18,
-    minPaintedRatio: 0.006,
+    minPaintedRatio: 0.004,
+  },
+  'gltf-kitchen-sink-full': {
+    path: '/gltf-kitchen-sink?set=full',
+    resourceSubstrings: fullKitchenSinkResourceSubstrings,
+    minColorBuckets: 24,
+    minPaintedRatio: 0.004,
   },
   'gltf-ghostscript-tiger-svg': {
     path: '/gltf-ghostscript-tiger-svg',
@@ -439,9 +537,12 @@ const smokeExpression = `
     };
   };
   const read = async () => {
-    const routePath = window.location.pathname.replace(/\\/$/, '') || '/';
+    const routePathname = window.location.pathname.replace(/\\/$/, '') || '/';
+    const routePath = routePathname + window.location.search;
     const routeEntry = Object.entries(smokeExpectations).find(([, expectation]) =>
       expectation.path === routePath
+    ) ?? Object.entries(smokeExpectations).find(([, expectation]) =>
+      expectation.path === routePathname
     );
     const routeId = routeEntry?.[0] ?? '';
     const smoke = routeEntry?.[1];
@@ -470,6 +571,8 @@ const smokeExpression = `
           name: entry.name,
           size: Math.round(entry.transferSize ?? 0),
         })),
+      resourceNames: performance.getEntriesByType('resource')
+        .map((entry) => entry.name),
       source: (() => {
         const sourceFile = document.querySelector('.example-page[data-example-id="' + routeId + '"]')
           ?.getAttribute('data-source-file') ?? '';
@@ -645,6 +748,17 @@ const assertRoute = (expected, state) => {
       if (interaction.before === interaction.hoveredId) {
         failures.push(`picking hover readout did not change from "${interaction.before}"`);
       }
+    }
+  }
+
+  for (const resourceSubstring of expected.resourceSubstrings ?? []) {
+    if (!state.resourceNames?.some((name) => name.includes(resourceSubstring))) {
+      failures.push(`missing expected resource "${resourceSubstring}"`);
+    }
+  }
+  for (const resourceSubstring of expected.absentResourceSubstrings ?? []) {
+    if (state.resourceNames?.some((name) => name.includes(resourceSubstring))) {
+      failures.push(`unexpected default-route resource "${resourceSubstring}"`);
     }
   }
 

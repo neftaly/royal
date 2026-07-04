@@ -47,6 +47,12 @@ type ImageLoadKeyReplay = {
   readonly expectedDistinctGroups: readonly (readonly number[])[];
 };
 
+type MaterialTextureSlotReplay = {
+  readonly document: GltfDocument;
+  readonly expectedMessage?: RegExp;
+  readonly expectedPass: boolean;
+};
+
 const extensionPool = [
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
@@ -442,6 +448,162 @@ const imageLoadKeyReplays: readonly FuzzReplay[] = [
   },
 ];
 
+const materialTextureSlotExtensionNames = [
+  "KHR_materials_clearcoat",
+  "KHR_materials_iridescence",
+  "KHR_materials_sheen",
+  "KHR_materials_specular",
+  "KHR_materials_transmission",
+  "KHR_materials_volume",
+] as const;
+
+const materialTextureSlotReplays: readonly FuzzReplay[] = [
+  {
+    label: "required clearcoat normal map is rejected",
+    value: {
+      document: {
+        extensionsRequired: ["KHR_materials_clearcoat"],
+        extensionsUsed: ["KHR_materials_clearcoat"],
+        materials: [{
+          extensions: {
+            KHR_materials_clearcoat: {
+              clearcoatNormalTexture: { index: 0 },
+            },
+          },
+        }],
+      },
+      expectedMessage: /KHR_materials_clearcoat\.clearcoatNormalTexture.*material 0.*extension normal maps/i,
+      expectedPass: false,
+    } satisfies MaterialTextureSlotReplay,
+  },
+  {
+    label: "optional clearcoat normal map remains a fallback-compatible diagnostic path",
+    value: {
+      document: {
+        extensionsUsed: ["KHR_materials_clearcoat"],
+        materials: [{
+          extensions: {
+            KHR_materials_clearcoat: {
+              clearcoatNormalTexture: { index: 0 },
+            },
+          },
+        }],
+      },
+      expectedPass: true,
+    } satisfies MaterialTextureSlotReplay,
+  },
+  {
+    label: "required supported material texture slots are accepted",
+    value: {
+      document: {
+        extensionsRequired: [
+          "KHR_materials_clearcoat",
+          "KHR_materials_iridescence",
+          "KHR_materials_sheen",
+          "KHR_materials_specular",
+          "KHR_materials_transmission",
+          "KHR_materials_volume",
+        ],
+        extensionsUsed: [
+          "KHR_materials_clearcoat",
+          "KHR_materials_iridescence",
+          "KHR_materials_sheen",
+          "KHR_materials_specular",
+          "KHR_materials_transmission",
+          "KHR_materials_volume",
+        ],
+        materials: [{
+          extensions: {
+            KHR_materials_clearcoat: {
+              clearcoatRoughnessTexture: { index: 1 },
+              clearcoatTexture: { index: 0 },
+            },
+            KHR_materials_iridescence: {
+              iridescenceTexture: { index: 4 },
+              iridescenceThicknessTexture: { index: 5 },
+            },
+            KHR_materials_sheen: {
+              sheenColorTexture: { index: 2 },
+              sheenRoughnessTexture: { index: 3 },
+            },
+            KHR_materials_specular: {
+              specularColorTexture: { index: 7 },
+              specularTexture: { index: 6 },
+            },
+            KHR_materials_transmission: {
+              transmissionTexture: { index: 8 },
+            },
+            KHR_materials_volume: {
+              thicknessTexture: { index: 9 },
+            },
+          },
+        }],
+      },
+      expectedPass: true,
+    } satisfies MaterialTextureSlotReplay,
+  },
+];
+
+const randomTextureInfo = (random: SeededRandom): { readonly index: number; readonly texCoord?: number } => ({
+  index: random.int(0, 12),
+  ...(random.boolean(0.35) ? { texCoord: random.int(0, 4) } : {}),
+});
+
+const randomMaterialTextureSlotDocument = (random: SeededRandom): GltfDocument => {
+  const requiredExtensions = materialTextureSlotExtensionNames.filter(() => random.boolean(0.55));
+  const usedExtensions = materialTextureSlotExtensionNames.filter((extension) =>
+    requiredExtensions.includes(extension) || random.boolean(0.55));
+  const materialCount = random.int(1, 5);
+  return {
+    extensionsRequired: requiredExtensions,
+    extensionsUsed: usedExtensions,
+    materials: random.array(materialCount, () => ({
+      extensions: {
+        ...(usedExtensions.includes("KHR_materials_clearcoat") ? {
+          KHR_materials_clearcoat: {
+            ...(random.boolean(0.55) ? { clearcoatTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.55) ? { clearcoatRoughnessTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.22) ? { clearcoatNormalTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_iridescence") ? {
+          KHR_materials_iridescence: {
+            ...(random.boolean(0.55) ? { iridescenceTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.55) ? { iridescenceThicknessTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_sheen") ? {
+          KHR_materials_sheen: {
+            ...(random.boolean(0.55) ? { sheenColorTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.55) ? { sheenRoughnessTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_specular") ? {
+          KHR_materials_specular: {
+            ...(random.boolean(0.55) ? { specularTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.55) ? { specularColorTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_transmission") ? {
+          KHR_materials_transmission: {
+            ...(random.boolean(0.55) ? { transmissionTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_volume") ? {
+          KHR_materials_volume: {
+            ...(random.boolean(0.55) ? { thicknessTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+      },
+    })),
+  };
+};
+
+const materialTextureSlotDocumentShouldPass = (document: GltfDocument): boolean =>
+  !document.extensionsRequired?.includes("KHR_materials_clearcoat")
+  || !document.materials?.some((material) =>
+    material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined);
+
 describe("renderer-webgl glTF texture validation properties", () => {
   it("reports unsupported required extensions uniquely and in source order", () => {
     forEachFuzzCase({ cases: 32, seed: 0x7a9f5c31 }, ({ label, random }) => {
@@ -509,6 +671,23 @@ describe("renderer-webgl glTF texture validation properties", () => {
     expect(() => assertSupportedRequiredGltfExtensions("clearcoat-optional.gltf", optionalDocument)).not.toThrow();
     expect(() => assertSupportedRequiredGltfExtensions("clearcoat-required.gltf", requiredDocument))
       .toThrow(/KHR_materials_clearcoat\.clearcoatNormalTexture.*material 0.*extension normal maps/i);
+  });
+
+  it("keeps required material texture slot validation aligned with implemented renderer support", () => {
+    forEachFuzzCase({ cases: 40, replays: materialTextureSlotReplays, seed: 0x4e8a2f19 }, ({
+      label,
+      random,
+      replay,
+    }) => {
+      const replayValue = replay as MaterialTextureSlotReplay | undefined;
+      const document = replayValue?.document ?? randomMaterialTextureSlotDocument(random);
+      expectValidationOutcome(
+        document,
+        replayValue?.expectedPass ?? materialTextureSlotDocumentShouldPass(document),
+        label,
+        replayValue?.expectedMessage,
+      );
+    });
   });
 
   it("validates GS_texture_svg extension usage and SVG image reference coherence", () => {

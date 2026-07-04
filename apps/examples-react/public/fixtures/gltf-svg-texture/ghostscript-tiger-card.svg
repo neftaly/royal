@@ -3,5 +3,5 @@
      viewBox="0 0 1 1" width="1024" height="1024">
   <rect x="0" y="0" width="1" height="1" fill="#c7b084"/>
   <image href="ghostscript-tiger.svg" xlink:href="ghostscript-tiger.svg"
-         x="0" y="0" width="1" height="1" preserveAspectRatio="xMidYMid meet"/>
+         x="0.04" y="0.04" width="0.92" height="0.92" preserveAspectRatio="xMidYMid meet"/>
 </svg>

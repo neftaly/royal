@@ -62,6 +62,7 @@ const triangleEmissiveImageUri = "staged-triangle-emissive.png";
 const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
 const triangleMetallicRoughnessImageUri = "staged-triangle-metallic-roughness.png";
+const triangleNormalImageUri = "staged-triangle-normal.png";
 const triangleOcclusionImageUri = "staged-triangle-occlusion.png";
 const triangleJpegImageUri = "staged-triangle.jpg";
 const triangleSvgImageUri = "staged-triangle.svg";
@@ -290,6 +291,8 @@ const fakeGl = (): FakeGl => {
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
       const normalized = name.toLowerCase();
       if (normalized.includes("color")) return 10;
+      if (normalized.includes("emissive")) return 12;
+      if (normalized.includes("tangent")) return 11;
       if (normalized.includes("normal")) return 1;
       if (normalized.includes("uv") || normalized.includes("texcoord")) return 2;
 
@@ -344,6 +347,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
     validateProgram: record("validateProgram"),
+    vertexAttrib2f: record("vertexAttrib2f"),
     vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
@@ -769,6 +773,30 @@ const vertexColorTriangleBin = (): ArrayBuffer => {
   ], triangleBinByteLength);
 
   return bytes.buffer;
+};
+
+const tangentTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(triangleBinByteLength + 48);
+  new Uint8Array(buffer).set(new Uint8Array(triangleBin()));
+  new Float32Array(buffer, triangleBinByteLength, 12).set([
+    1, 0, 0, 1,
+    1, 0, 0, 1,
+    1, 0, 0, 1,
+  ]);
+
+  return buffer;
+};
+
+const multiUvTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(triangleBinByteLength + 24);
+  new Uint8Array(buffer).set(new Uint8Array(triangleBin()));
+  new Float32Array(buffer, triangleBinByteLength, 6).set([
+    0.125, 0.25,
+    0.375, 0.5,
+    0.625, 0.75,
+  ]);
+
+  return buffer;
 };
 
 const meshoptCompressedTriangleBin = (): ArrayBuffer => {
@@ -1471,6 +1499,141 @@ const vertexColorTriangleDocument = () => {
             attributes: {
               ...primitive.attributes,
               COLOR_0: colorAccessorIndex,
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const normalTextureTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    images: [
+      {
+        mimeType: "image/png",
+        uri: triangleNormalImageUri,
+      },
+    ],
+    materials: [
+      {
+        normalTexture: {
+          index: 0,
+          scale: 0.42,
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.25, 0.25, 0.25, 1],
+        },
+      },
+    ],
+    textures: [
+      {
+        source: 0,
+      },
+    ],
+  };
+};
+
+const tangentTriangleDocument = () => {
+  const base = normalTextureTriangleDocument();
+  const tangentBufferViewIndex = base.bufferViews.length;
+  const tangentAccessorIndex = base.accessors.length;
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: tangentBufferViewIndex,
+        componentType: 5126,
+        count: 3,
+        type: "VEC4",
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 0,
+        byteLength: 48,
+        byteOffset: triangleBinByteLength,
+        target: 34962,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: triangleBinByteLength + 48,
+        uri: triangleBinUri,
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            attributes: {
+              ...primitive.attributes,
+              TANGENT: tangentAccessorIndex,
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const multiUvEmissiveTriangleDocument = () => {
+  const base = emissiveTextureTriangleDocument();
+  const uv1BufferViewIndex = base.bufferViews.length;
+  const uv1AccessorIndex = base.accessors.length;
+  const primitive = base.meshes[0]!.primitives[0]!;
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: uv1BufferViewIndex,
+        componentType: 5126,
+        count: 3,
+        type: "VEC2",
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 0,
+        byteLength: 24,
+        byteOffset: triangleBinByteLength,
+        target: 34962,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: triangleBinByteLength + 24,
+        uri: triangleBinUri,
+      },
+    ],
+    materials: [
+      {
+        ...base.materials[0],
+        emissiveTexture: {
+          index: 0,
+          texCoord: 1,
+        },
+      },
+    ],
+    meshes: [
+      {
+        primitives: [
+          {
+            ...primitive,
+            attributes: {
+              ...primitive.attributes,
+              TEXCOORD_1: uv1AccessorIndex,
             },
           },
         ],
@@ -3126,6 +3289,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(uniform1iPayloads(calls, "u_useTexture").at(-1)).toBe(0);
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.5, 0.5, 0.5, 1]);
     expect(ControlledImage.instances).toHaveLength(1);
 
     const callsBeforeImageSettle = calls.length;
@@ -3717,7 +3881,58 @@ describe("WebGL renderer scene and glTF regressions", () => {
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 4)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_emissiveTexture;");
-    expect(sources).toContain("texture(u_emissiveTexture, v_uv).rgb");
+    expect(sources).toContain("texture(u_emissiveTexture, v_emissive_uv).rgb");
+  });
+
+  it("uses glTF emissiveTexture texCoord 1 when present", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "multi-uv-emissive",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, multiUvEmissiveTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, multiUvTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0.125, 0.25,
+      0.375, 0.5,
+      0.625, 0.75,
+    ]);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "getAttribLocation" && call.args[1] === "a_emissive_uv")).toBe(true);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 12
+      && call.args[1] === 2
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(sources).toContain("in vec2 a_emissive_uv;");
+    expect(sources).toContain("texture(u_emissiveTexture, v_emissive_uv).rgb");
   });
 
   it("renders glTF metallic and roughness factors as surface uniforms", async () => {
@@ -3853,6 +4068,106 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[0] === gl.TEXTURE0 + 5)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_occlusionTexture;");
     expect(sources).toContain("texture(u_occlusionTexture, v_uv).r");
+  });
+
+  it("uploads and binds core glTF normal textures without colliding with transmission texture units", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "normal-texture",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, normalTextureTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle-normal.png",
+    ]);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useNormalTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_normalTexture")).toContain(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_normalTextureSettings").map(roundVector))
+      .toContainEqual([0.42, 0, 0, 0]);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 1)).toBe(true);
+    expect(sources).toContain("uniform sampler2D u_normalTexture;");
+    expect(sources).toContain("dFdx(v_worldPosition)");
+    expect(sources).toContain("materialNormal(normalize(v_normal))");
+  });
+
+  it("uploads and binds glTF TANGENT attributes for normal mapping", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "normal-tangent",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, tangentTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, tangentTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(calls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      1, 0, 0, 1,
+      1, 0, 0, 1,
+      1, 0, 0, 1,
+    ]);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "getAttribLocation" && call.args[1] === "a_tangent")).toBe(true);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "vertexAttribPointer"
+      && call.args[0] === 11
+      && call.args[1] === 4
+      && call.args[2] === gl.FLOAT)).toBe(true);
+    expect(sources).toContain("in vec4 a_tangent;");
+    expect(sources).toContain("v_tangent.w < 0.0");
   });
 
   it("renders required KHR material specular, IOR, and clearcoat factors as surface uniforms", async () => {

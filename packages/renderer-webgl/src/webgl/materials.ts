@@ -30,6 +30,8 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly iridescenceThicknessTexture?: TextureAssetUploadRef;
   readonly materialTransmissionTexture?: TextureAssetUploadRef;
   readonly metallicRoughnessTexture?: TextureAssetUploadRef;
+  readonly normalScale?: number;
+  readonly normalTexture?: TextureAssetUploadRef;
   readonly occlusionStrength?: number;
   readonly occlusionTexture?: TextureAssetUploadRef;
   readonly sheenColorTexture?: TextureAssetUploadRef;
@@ -179,6 +181,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     textureCacheKey(material.baseColor),
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
+    material.normalTexture === undefined ? "" : `${textureCacheKey(material.normalTexture)}:${surfaceLightValueKey(material.normalScale ?? 1)}`,
     material.occlusionTexture === undefined ? "" : textureCacheKey(material.occlusionTexture),
     material.specularTexture === undefined ? "" : textureCacheKey(material.specularTexture),
     material.specularColorTexture === undefined ? "" : textureCacheKey(material.specularColorTexture),

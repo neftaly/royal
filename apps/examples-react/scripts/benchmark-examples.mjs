@@ -110,6 +110,7 @@ const routes = [
     sweep: 'baseline',
   }),
   { id: 'gltf-kitchen-sink', path: '/gltf-kitchen-sink' },
+  { id: 'gltf-kitchen-sink-full', path: '/gltf-kitchen-sink?set=full' },
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
   { id: 'gltf-variants', path: '/gltf-variants' },
@@ -1030,6 +1031,7 @@ const routeSummary = (route) => {
     p95Ms: round(route.frameStats.p95Ms),
     p99Ms: round(route.frameStats.p99Ms),
     maxMs: round(route.frameStats.maxMs),
+    readyMs: round(route.wallNavigationAndReadyMs),
     jitterP95MinusP50Ms: round(route.frameStats.jitterP95MinusP50Ms),
     drawCallsPerFrame: round(drawCallsPerFrame),
     instancedDrawCallsPerFrame: round(instancedDrawCallsPerFrame),
@@ -1210,6 +1212,7 @@ const main = async () => {
         route.id.padEnd(28),
         ...(profile === undefined ? [] : [profile]),
         `load=${(result.performance.navigation?.duration ?? 0).toFixed(1)}ms`,
+        `ready=${result.wallNavigationAndReadyMs.toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
         ...(hasCameraDragStats

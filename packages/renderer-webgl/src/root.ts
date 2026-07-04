@@ -150,7 +150,7 @@ import {
   type IblSpecularTextureContext,
   type IblSpecularTextureResource,
 } from "./webgl/ibl-specular-textures";
-import { bindSurfaceIblUniforms } from "./webgl/ibl-uniforms";
+import { bindSurfaceIblUniforms, IBL_SPECULAR_TEXTURE_UNIT } from "./webgl/ibl-uniforms";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -249,20 +249,24 @@ type GeometryResource = {
   readonly borrowedVertexBufferKey?: string;
   readonly colorBuffer?: WebGLBuffer;
   readonly drawCount: number;
+  readonly emissiveTexCoordBuffer?: WebGLBuffer;
   readonly indexBuffer?: WebGLBuffer;
   readonly indexType?: number;
   readonly key: string;
   readonly mode: GeometryDrawMode;
   readonly normalBuffer?: WebGLBuffer;
+  readonly tangentBuffer?: WebGLBuffer;
   readonly texCoordBuffer?: WebGLBuffer;
 };
 
 type CpuGeometry = {
   readonly colors?: Float32Array;
+  readonly emissiveTexCoords?: Float32Array;
   readonly indices?: GltfIndexArray;
   readonly key: string;
   readonly mode: GeometryDrawMode;
   readonly normals?: Float32Array;
+  readonly tangents?: Float32Array;
   readonly positions: Float32Array;
   readonly texCoords?: Float32Array;
   readonly vertexBufferKey?: string;
@@ -284,6 +288,10 @@ type ScreenColorTextureResource = {
 type TextureLoadState = TextureResource & {
   error?: string;
   loading: boolean;
+};
+
+type TextureUnitAllocator = {
+  readonly used: Set<number>;
 };
 
 type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
@@ -338,6 +346,7 @@ type LoadedGltfPrimitive = {
   readonly nodeLod?: GltfNodePrimitiveLod;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
+  readonly tangents?: Float32Array;
 };
 
 type LoadedGltfMaterial = {
@@ -352,6 +361,7 @@ type LoadedGltfMaterial = {
   readonly emissiveImageFailed?: boolean;
   readonly emissiveImageUri?: string;
   readonly emissiveSampler?: TextureSampler;
+  readonly emissiveTexCoords?: Float32Array;
   readonly emissiveTextureUri?: string;
   readonly image?: LoadedTextureSource;
   readonly imageFailed?: boolean;
@@ -362,6 +372,12 @@ type LoadedGltfMaterial = {
   readonly metallicRoughnessSampler?: TextureSampler;
   readonly metallicRoughnessTextureUri?: string;
   readonly metallicFactor?: number;
+  readonly normalImage?: LoadedTextureSource;
+  readonly normalImageFailed?: boolean;
+  readonly normalImageUri?: string;
+  readonly normalSampler?: TextureSampler;
+  readonly normalScale?: number;
+  readonly normalTextureUri?: string;
   readonly occlusionImage?: LoadedTextureSource;
   readonly occlusionImageFailed?: boolean;
   readonly occlusionImageUri?: string;
@@ -438,6 +454,7 @@ type LoadedGltfSurfaceTextures = {
   readonly iridescenceThicknessTexture?: TextureAssetUploadRef;
   readonly materialTransmissionTexture?: TextureAssetUploadRef;
   readonly metallicRoughnessTexture?: TextureAssetUploadRef;
+  readonly normalTexture?: TextureAssetUploadRef;
   readonly occlusionTexture?: TextureAssetUploadRef;
   readonly sheenColorTexture?: TextureAssetUploadRef;
   readonly sheenRoughnessTexture?: TextureAssetUploadRef;
@@ -623,6 +640,8 @@ const loadedGltfSurfaceMaterial = (
     ...(textures.metallicRoughnessTexture === undefined
       ? {}
       : { metallicRoughnessTexture: textures.metallicRoughnessTexture }),
+    ...(textures.normalTexture === undefined ? {} : { normalTexture: textures.normalTexture }),
+    normalScale: loadedMaterial.normalScale ?? 1,
     ...(textures.occlusionTexture === undefined ? {} : { occlusionTexture: textures.occlusionTexture }),
     occlusionStrength: loadedMaterial.occlusionStrength ?? 1,
     roughnessFactor: loadedMaterial.roughnessFactor ?? 1,
@@ -719,7 +738,7 @@ type SceneRenderView = {
   view(renderPass: RenderPass): Mat4;
 };
 
-const DEFAULT_COLOR: Rgba = [1, 1, 1, 1];
+const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
@@ -773,25 +792,31 @@ const mat4ContentKey = (matrix: Mat4): string => matrix.join(",");
 
 const gltfGeometryContentKey = ({
   colors,
+  emissiveTexCoords,
   indices,
   mode,
   normals,
   positions,
+  tangents,
   texCoords,
 }: {
   readonly colors?: Float32Array | undefined;
+  readonly emissiveTexCoords?: Float32Array | undefined;
   readonly indices?: GltfIndexArray | undefined;
   readonly mode: GeometryDrawMode;
   readonly normals?: Float32Array | undefined;
   readonly positions: Float32Array;
+  readonly tangents?: Float32Array | undefined;
   readonly texCoords?: Float32Array | undefined;
 }): string => [
   "gltf-geometry",
   mode,
   typedArrayContentKey(positions),
   typedArrayContentKey(normals),
+  typedArrayContentKey(tangents),
   typedArrayContentKey(colors),
   typedArrayContentKey(texCoords),
+  typedArrayContentKey(emissiveTexCoords),
   typedArrayContentKey(indices),
 ].join("|");
 
@@ -1905,6 +1930,30 @@ const gltfMaterialTexCoords = (
   return transformGltfTexCoords(
     readGltfFloatAccessor(document, buffers, texCoordAccessor),
     gltfBaseColorTextureTransform(document, materialIndex),
+  );
+};
+
+const gltfTextureInfoTexCoords = (
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+  primitive: GltfMeshPrimitive,
+  textureInfo: GltfTextureInfo | undefined,
+  decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
+): Float32Array | undefined => {
+  if (textureInfo?.index === undefined) return undefined;
+  const texCoordSet = textureInfo.extensions?.KHR_texture_transform?.texCoord
+    ?? textureInfo.texCoord
+    ?? 0;
+  const decodedTexCoords = decodedAttributes?.get(`TEXCOORD_${texCoordSet}`);
+  if (decodedTexCoords !== undefined) {
+    return transformGltfTexCoords(decodedTexCoords, textureInfo.extensions?.KHR_texture_transform);
+  }
+
+  const texCoordAccessor = primitive.attributes?.[`TEXCOORD_${texCoordSet}`];
+  if (texCoordAccessor === undefined) return undefined;
+  return transformGltfTexCoords(
+    readGltfFloatAccessor(document, buffers, texCoordAccessor),
+    textureInfo.extensions?.KHR_texture_transform,
   );
 };
 
@@ -3124,18 +3173,23 @@ class WebGlRootImpl implements WebGlRoot {
     const surfaceTextures = this.#gltfMaterialSurfaceTextures(loadedMaterial);
     const geometry: CpuGeometry = {
       ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
+      ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
       ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
       key: gltfGeometryContentKey({
         ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
+        ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
         ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
         mode: primitive.mode,
         ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
         positions: primitive.positions,
+        ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
         ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
       }),
       mode: primitive.mode,
       ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
       positions: primitive.positions,
+      ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
+      ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
       ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
     };
     const prepared: GltfPreparedPrimitiveMaterial = {
@@ -3251,6 +3305,10 @@ class WebGlRootImpl implements WebGlRoot {
         material.emissiveImage,
       )
       && this.#isGltfMaterialTextureReady(
+        this.#gltfMaterialNormalTextureRef(material),
+        material.normalImage,
+      )
+      && this.#isGltfMaterialTextureReady(
         this.#gltfMaterialOcclusionTextureRef(material),
         material.occlusionImage,
       )
@@ -3285,6 +3343,17 @@ class WebGlRootImpl implements WebGlRoot {
       kind: "asset",
       ...(material.metallicRoughnessSampler === undefined ? {} : { sampler: material.metallicRoughnessSampler }),
       uri: material.metallicRoughnessTextureUri,
+    };
+  }
+
+  #gltfMaterialNormalTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
+    if (material.normalTextureUri === undefined) return undefined;
+    return {
+      colorSpace: "linear",
+      flipY: false,
+      kind: "asset",
+      ...(material.normalSampler === undefined ? {} : { sampler: material.normalSampler }),
+      uri: material.normalTextureUri,
     };
   }
 
@@ -3336,6 +3405,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     setTexture("emissiveTexture", this.#gltfMaterialEmissiveTextureRef(material));
     setTexture("metallicRoughnessTexture", this.#gltfMaterialMetallicRoughnessTextureRef(material));
+    setTexture("normalTexture", this.#gltfMaterialNormalTextureRef(material));
     setTexture("occlusionTexture", this.#gltfMaterialOcclusionTextureRef(material));
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       setTexture(texture.key, this.#gltfTextureSlotRef(extensionTextures?.[texture.key], texture.colorSpace));
@@ -3359,6 +3429,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     append(baseColor, material.image);
     append(surfaceTextures.metallicRoughnessTexture, material.metallicRoughnessImage);
+    append(surfaceTextures.normalTexture, material.normalImage);
     append(surfaceTextures.emissiveTexture, material.emissiveImage);
     append(surfaceTextures.occlusionTexture, material.occlusionImage);
 
@@ -3437,6 +3508,7 @@ class WebGlRootImpl implements WebGlRoot {
     textures: LoadedGltfSurfaceTextures,
   ): void {
     this.#ensureLoadedGltfTexture(textures.metallicRoughnessTexture, material.metallicRoughnessImage);
+    this.#ensureLoadedGltfTexture(textures.normalTexture, material.normalImage);
     this.#ensureLoadedGltfTexture(textures.emissiveTexture, material.emissiveImage);
     this.#ensureLoadedGltfTexture(textures.occlusionTexture, material.occlusionImage);
 
@@ -3562,6 +3634,7 @@ class WebGlRootImpl implements WebGlRoot {
     material: SurfaceMaterial,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
+    const textureUnits = this.#surfaceTextureUnitAllocator();
     const factors = surfaceMaterialExtensionFactors(material);
     const alphaMode = surfaceMaterialAlphaMode(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
@@ -3619,34 +3692,88 @@ class WebGlRootImpl implements WebGlRoot {
       hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
       hasFiniteAttenuationDistance ? 1 : 0,
     ]);
-    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture);
-    this.#bindEmissiveTexture(program, material);
-    this.#bindMetallicRoughnessTexture(program, material);
-    this.#bindOcclusionTexture(program, material);
-    this.#bindMaterialExtensionTextures(program, material);
+    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, textureUnits);
+    this.#bindEmissiveTexture(program, material, textureUnits);
+    this.#bindMetallicRoughnessTexture(program, material, textureUnits);
+    this.#bindNormalTexture(program, material, textureUnits);
+    this.#bindOcclusionTexture(program, material, textureUnits);
+    this.#bindMaterialExtensionTextures(program, material, textureUnits);
   }
 
-  #bindEmissiveTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+  #surfaceTextureUnitAllocator(): TextureUnitAllocator {
+    return { used: new Set([0, IBL_SPECULAR_TEXTURE_UNIT]) };
+  }
+
+  #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number {
+    if (!allocator.used.has(preferred)) {
+      allocator.used.add(preferred);
+      return preferred;
+    }
+    for (let unit = 1; unit < 16; unit += 1) {
+      if (allocator.used.has(unit)) continue;
+      allocator.used.add(unit);
+      return unit;
+    }
+
+    return preferred;
+  }
+
+  #bindEmissiveTexture(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    allocator: TextureUnitAllocator,
+  ): void {
     this.#bindCachedTexture2d(
       program,
       "u_useEmissiveTexture",
       "u_emissiveTexture",
       4,
       material.emissiveTexture,
+      allocator,
     );
   }
 
-  #bindMetallicRoughnessTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+  #bindMetallicRoughnessTexture(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    allocator: TextureUnitAllocator,
+  ): void {
     this.#bindCachedTexture2d(
       program,
       "u_useMetallicRoughnessTexture",
       "u_metallicRoughnessTexture",
       3,
       material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
+      allocator,
     );
   }
 
-  #bindOcclusionTexture(program: WebGLProgram, material: SurfaceMaterial): void {
+  #bindNormalTexture(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    allocator: TextureUnitAllocator,
+  ): void {
+    this.#uniformColor(program, "u_normalTextureSettings", [
+      material.kind === "standard" ? material.normalScale ?? 1 : 1,
+      0,
+      0,
+      0,
+    ]);
+    this.#bindCachedTexture2d(
+      program,
+      "u_useNormalTexture",
+      "u_normalTexture",
+      1,
+      material.kind === "standard" ? material.normalTexture : undefined,
+      allocator,
+    );
+  }
+
+  #bindOcclusionTexture(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    allocator: TextureUnitAllocator,
+  ): void {
     this.#uniformColor(program, "u_occlusionSettings", [
       surfaceMaterialOcclusionStrength(material),
       0,
@@ -3659,10 +3786,15 @@ class WebGlRootImpl implements WebGlRoot {
       "u_occlusionTexture",
       5,
       material.kind === "standard" ? material.occlusionTexture : undefined,
+      allocator,
     );
   }
 
-  #bindMaterialExtensionTextures(program: WebGLProgram, material: SurfaceMaterial): void {
+  #bindMaterialExtensionTextures(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    allocator: TextureUnitAllocator,
+  ): void {
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS) {
       this.#bindCachedTexture2d(
         program,
@@ -3670,6 +3802,7 @@ class WebGlRootImpl implements WebGlRoot {
         texture.samplerUniform,
         texture.textureUnit,
         material.kind === "standard" ? material[texture.key] : undefined,
+        allocator,
       );
     }
   }
@@ -3680,6 +3813,7 @@ class WebGlRootImpl implements WebGlRoot {
     samplerUniform: string,
     textureUnit: number,
     texture: TextureAssetUploadRef | undefined,
+    allocator: TextureUnitAllocator,
   ): void {
     if (texture === undefined) {
       this.#uniform1i(program, useUniform, 0);
@@ -3693,15 +3827,17 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + textureUnit);
+    const allocatedUnit = this.#allocateTextureUnit(allocator, textureUnit);
+    gl.activeTexture(gl.TEXTURE0 + allocatedUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, samplerUniform, textureUnit);
+    this.#uniform1i(program, samplerUniform, allocatedUnit);
     this.#uniform1i(program, useUniform, 1);
   }
 
   #bindTransmissionScreenColorTexture(
     program: WebGLProgram,
     resource: ScreenColorTextureResource | undefined,
+    allocator: TextureUnitAllocator,
   ): void {
     if (resource === undefined || !resource.uploaded) {
       this.#uniform1i(program, "u_useTransmissionTexture", 0);
@@ -3709,10 +3845,11 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const gl = this.#gl;
+    const textureUnit = this.#allocateTextureUnit(allocator, 1);
     this.#uniform1i(program, "u_useTransmissionTexture", 1);
-    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, "u_transmissionScreenTexture", 1);
+    this.#uniform1i(program, "u_transmissionScreenTexture", textureUnit);
     this.#uniform2fv(program, "u_viewportSize", [resource.width, resource.height]);
   }
 
@@ -3784,6 +3921,17 @@ class WebGlRootImpl implements WebGlRoot {
         gl.disableVertexAttribArray?.(uvLocation);
       }
     }
+    const emissiveUvLocation = gl.getAttribLocation(program, "a_emissive_uv");
+    if (emissiveUvLocation >= 0) {
+      if (geometry.emissiveTexCoordBuffer !== undefined) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.emissiveTexCoordBuffer);
+        gl.enableVertexAttribArray(emissiveUvLocation);
+        gl.vertexAttribPointer(emissiveUvLocation, 2, gl.FLOAT, false, 0, 0);
+      } else {
+        gl.disableVertexAttribArray?.(emissiveUvLocation);
+        gl.vertexAttrib2f(emissiveUvLocation, 0, 0);
+      }
+    }
     const normalLocation = gl.getAttribLocation(program, "a_normal");
     if (normalLocation >= 0) {
       if (geometry.normalBuffer !== undefined) {
@@ -3792,6 +3940,17 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray?.(normalLocation);
+      }
+    }
+    const tangentLocation = gl.getAttribLocation(program, "a_tangent");
+    if (tangentLocation >= 0) {
+      if (geometry.tangentBuffer !== undefined) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.tangentBuffer);
+        gl.enableVertexAttribArray(tangentLocation);
+        gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, 0, 0);
+      } else {
+        gl.disableVertexAttribArray?.(tangentLocation);
+        gl.vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
       }
     }
     const colorLocation = gl.getAttribLocation(program, "a_color");
@@ -4897,6 +5056,26 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bufferData(gl.ARRAY_BUFFER, cpu.texCoords, gl.STATIC_DRAW);
     }
 
+    let emissiveTexCoordBuffer: WebGLBuffer | undefined;
+    if (borrowedVertexResource !== undefined) {
+      emissiveTexCoordBuffer = borrowedVertexResource.emissiveTexCoordBuffer;
+    } else if (cpu.emissiveTexCoords !== undefined) {
+      emissiveTexCoordBuffer = this.#createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, emissiveTexCoordBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, cpu.emissiveTexCoords, gl.STATIC_DRAW);
+    } else {
+      emissiveTexCoordBuffer = texCoordBuffer;
+    }
+
+    let tangentBuffer: WebGLBuffer | undefined;
+    if (borrowedVertexResource !== undefined) {
+      tangentBuffer = borrowedVertexResource.tangentBuffer;
+    } else if (cpu.tangents !== undefined) {
+      tangentBuffer = this.#createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, cpu.tangents, gl.STATIC_DRAW);
+    }
+
     let colorBuffer: WebGLBuffer | undefined;
     if (borrowedVertexResource !== undefined) {
       colorBuffer = borrowedVertexResource.colorBuffer;
@@ -4922,11 +5101,13 @@ class WebGlRootImpl implements WebGlRoot {
       ...(borrowedVertexResource === undefined ? {} : { borrowedVertexBufferKey: borrowedVertexResource.key }),
       ...(colorBuffer === undefined ? {} : { colorBuffer }),
       drawCount: cpu.indices?.length ?? cpu.positions.length / 3,
+      ...(emissiveTexCoordBuffer === undefined ? {} : { emissiveTexCoordBuffer }),
       ...(indexBuffer === undefined ? {} : { indexBuffer }),
       ...(indexType === undefined ? {} : { indexType }),
       key: cpu.key,
       mode: cpu.mode,
       ...(normalBuffer === undefined ? {} : { normalBuffer }),
+      ...(tangentBuffer === undefined ? {} : { tangentBuffer }),
       ...(texCoordBuffer === undefined ? {} : { texCoordBuffer }),
     };
     this.#geometry.set(cpu.key, resource);
@@ -4939,7 +5120,12 @@ class WebGlRootImpl implements WebGlRoot {
       if (resource.borrowedVertexBufferKey === undefined) {
         this.#deleteBuffer(resource.arrayBuffer);
         if (resource.colorBuffer !== undefined) this.#deleteBuffer(resource.colorBuffer);
+        if (
+          resource.emissiveTexCoordBuffer !== undefined
+          && resource.emissiveTexCoordBuffer !== resource.texCoordBuffer
+        ) this.#deleteBuffer(resource.emissiveTexCoordBuffer);
         if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
+        if (resource.tangentBuffer !== undefined) this.#deleteBuffer(resource.tangentBuffer);
         if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
       }
       if (resource.indexBuffer !== undefined) this.#deleteBuffer(resource.indexBuffer);
@@ -5285,6 +5471,7 @@ class WebGlRootImpl implements WebGlRoot {
       const decodedAttributes = dracoPrimitive?.attributes;
       const positionAccessor = primitive.attributes?.POSITION;
       const normalAccessor = primitive.attributes?.NORMAL;
+      const tangentAccessor = primitive.attributes?.TANGENT;
       const indexAccessor = primitive.indices;
       const positions = decodedAttributes?.get("POSITION")
         ?? (positionAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, positionAccessor));
@@ -5296,6 +5483,8 @@ class WebGlRootImpl implements WebGlRoot {
       }
       const normals = decodedAttributes?.get("NORMAL")
         ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, normalAccessor));
+      const tangents = decodedAttributes?.get("TANGENT")
+        ?? (tangentAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, tangentAccessor));
       const colors = gltfVertexColors(document, buffers, primitive, positions, decodedAttributes);
       const indices = dracoPrimitive?.indices
         ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
@@ -5342,6 +5531,7 @@ class WebGlRootImpl implements WebGlRoot {
         ...(nodeLod === undefined ? {} : { nodeLod }),
         ...(normals === undefined ? {} : { normals }),
         positions,
+        ...(tangents === undefined ? {} : { tangents }),
       });
     }
 
@@ -5595,6 +5785,22 @@ class WebGlRootImpl implements WebGlRoot {
           ? undefined
           : document.samplers?.[metallicRoughnessTexture.sampler],
       );
+    const normalTextureIndex = material?.normalTexture?.index;
+    const normalTexture = normalTextureIndex === undefined ? undefined : document.textures?.[normalTextureIndex];
+    const normalImageSelection = gltfTextureImageSelection(normalTexture);
+    const normalImageIndex = normalImageSelection?.imageIndex;
+    const normalImageKind = normalImageSelection?.kind ?? "image";
+    const normalImage = normalImageIndex === undefined ? undefined : document.images?.[normalImageIndex];
+    const normalImageLoadKey = normalImage === undefined
+      ? undefined
+      : gltfImageLoadKey(assetKey, src, normalImageIndex, normalImage, normalImageKind);
+    const normalSampler = normalTexture === undefined
+      ? undefined
+      : gltfTextureSampler(
+        normalTexture.sampler === undefined
+          ? undefined
+          : document.samplers?.[normalTexture.sampler],
+      );
     const emissiveTextureIndex = material?.emissiveTexture?.index;
     const emissiveTexture = emissiveTextureIndex === undefined ? undefined : document.textures?.[emissiveTextureIndex];
     const emissiveImageSelection = gltfTextureImageSelection(emissiveTexture);
@@ -5637,6 +5843,13 @@ class WebGlRootImpl implements WebGlRoot {
     const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
     const alphaCutoff = gltfMaterialAlphaCutoff(material?.alphaCutoff);
     const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
+    const emissiveTexCoords = gltfTextureInfoTexCoords(
+      document,
+      buffers,
+      primitive,
+      material?.emissiveTexture,
+      decodedAttributes,
+    );
 
     return {
       alphaMode,
@@ -5669,6 +5882,19 @@ class WebGlRootImpl implements WebGlRoot {
             metallicRoughnessImageKind,
           ),
         }),
+      ...(normalImageLoadKey === undefined ? {} : { normalImageUri: normalImageLoadKey }),
+      ...(normalTextureIndex === undefined || normalImage === undefined
+        ? {}
+        : {
+          normalTextureUri: gltfTextureIdentity(
+            assetKey,
+            src,
+            normalTextureIndex,
+            normalImageIndex,
+            normalImage,
+            normalImageKind,
+          ),
+        }),
       ...(emissiveImageLoadKey === undefined ? {} : { emissiveImageUri: emissiveImageLoadKey }),
       ...(emissiveTextureIndex === undefined || emissiveImage === undefined
         ? {}
@@ -5697,14 +5923,17 @@ class WebGlRootImpl implements WebGlRoot {
         }),
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
+      ...(emissiveTexCoords === undefined ? {} : { emissiveTexCoords }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
       doubleSided: material?.doubleSided === true,
       metallicFactor,
+      normalScale: material?.normalTexture?.scale ?? 1,
       occlusionStrength,
       roughnessFactor,
       ...(emissiveSampler === undefined ? {} : { emissiveSampler }),
       ...(metallicRoughnessSampler === undefined ? {} : { metallicRoughnessSampler }),
+      ...(normalSampler === undefined ? {} : { normalSampler }),
       ...(occlusionSampler === undefined ? {} : { occlusionSampler }),
       ...(sampler === undefined ? {} : { sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
@@ -5794,6 +6023,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (material.baseColorImageUri !== undefined) keys.add(material.baseColorImageUri);
     if (material.emissiveImageUri !== undefined) keys.add(material.emissiveImageUri);
     if (material.metallicRoughnessImageUri !== undefined) keys.add(material.metallicRoughnessImageUri);
+    if (material.normalImageUri !== undefined) keys.add(material.normalImageUri);
     if (material.occlusionImageUri !== undefined) keys.add(material.occlusionImageUri);
     const extensionTextures = material.extensionTextures;
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
@@ -5853,6 +6083,7 @@ class WebGlRootImpl implements WebGlRoot {
       ...(material.baseColorImageUri === uri ? { image } : {}),
       ...(material.emissiveImageUri === uri ? { emissiveImage: image } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
+      ...(material.normalImageUri === uri ? { normalImage: image } : {}),
       ...(material.occlusionImageUri === uri ? { occlusionImage: image } : {}),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
     };
@@ -5868,6 +6099,7 @@ class WebGlRootImpl implements WebGlRoot {
       ...(material.baseColorImageUri === uri ? { imageFailed: true } : {}),
       ...(material.emissiveImageUri === uri ? { emissiveImageFailed: true } : {}),
       ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImageFailed: true } : {}),
+      ...(material.normalImageUri === uri ? { normalImageFailed: true } : {}),
       ...(material.occlusionImageUri === uri ? { occlusionImageFailed: true } : {}),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
     };

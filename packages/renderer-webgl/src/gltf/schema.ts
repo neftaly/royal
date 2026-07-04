@@ -124,6 +124,7 @@ export type GltfMaterial = {
   readonly doubleSided?: boolean;
   readonly emissiveFactor?: readonly number[];
   readonly emissiveTexture?: GltfTextureInfo;
+  readonly normalTexture?: GltfNormalTextureInfo;
   readonly occlusionTexture?: GltfOcclusionTextureInfo;
   readonly extensions?: {
     readonly KHR_materials_clearcoat?: {
@@ -211,6 +212,7 @@ export type GltfMeshPrimitive = {
     readonly COLOR_0?: number;
     readonly NORMAL?: number;
     readonly POSITION?: number;
+    readonly TANGENT?: number;
     readonly TEXCOORD_0?: number;
     readonly [semantic: string]: number | undefined;
   };
@@ -234,6 +236,7 @@ export type GltfDracoMeshCompressionExtension = {
   readonly attributes?: {
     readonly NORMAL?: number;
     readonly POSITION?: number;
+    readonly TANGENT?: number;
     readonly TEXCOORD_0?: number;
     readonly [semantic: string]: number | undefined;
   };
