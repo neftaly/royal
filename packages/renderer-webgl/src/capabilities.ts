@@ -296,7 +296,6 @@ const collectWebGlRows = (
   gl: WebGlLikeContext,
   options: RendererCapabilityProbeOptions,
 ): RendererCapabilityProbeRow[] => {
-  const version: WebGlContextVersion = 2;
   const versionLabel = readStringParameter(gl, gl.VERSION);
   const renderer = readStringParameter(gl, gl.RENDERER);
   const shadingLanguageVersion = readStringParameter(gl, gl.SHADING_LANGUAGE_VERSION);
@@ -311,7 +310,7 @@ const collectWebGlRows = (
     renderer,
     shadingLanguageVersion,
     vendor,
-    version,
+    version: 2,
     versionLabel,
   }];
 
@@ -345,11 +344,12 @@ const collectWebGlRows = (
     ));
   }
 
+  const gpuTimerQueryExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.gpu_timer_query);
   rows.push({
-    extension: firstSupportedExtension(supportedExtensions, extensionCapabilities.gpu_timer_query),
+    extension: gpuTimerQueryExtension,
     kind: "gpu_timer_query_support",
-    queryApi: version === 2 && typeof gl.beginQuery === "function" ? "webgl2" : "none",
-    supported: firstSupportedExtension(supportedExtensions, extensionCapabilities.gpu_timer_query) !== undefined,
+    queryApi: typeof gl.beginQuery === "function" ? "webgl2" : "none",
+    supported: gpuTimerQueryExtension !== undefined,
   });
 
   for (const name of [...supportedExtensions].sort()) {
