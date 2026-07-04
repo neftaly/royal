@@ -318,7 +318,7 @@ const fakeGl = (): FakeGl => {
       if (
         parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS
         || parameter === constants.MAX_TEXTURE_IMAGE_UNITS
-      ) return 8;
+      ) return 16;
       if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
 
       return 0;
@@ -2782,6 +2782,81 @@ const materialTransmissionVolumeTextureDiagnosticTriangleDocument = () => {
   };
 };
 
+const materialOverfullTextureUnitTriangleDocument = () => {
+  const base = solidTriangleDocument();
+
+  return {
+    ...base,
+    extensionsRequired: [
+      "KHR_materials_clearcoat",
+      "KHR_materials_iridescence",
+      "KHR_materials_sheen",
+      "KHR_materials_specular",
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+    ],
+    extensionsUsed: [
+      "KHR_materials_clearcoat",
+      "KHR_materials_iridescence",
+      "KHR_materials_sheen",
+      "KHR_materials_specular",
+      "KHR_materials_transmission",
+      "KHR_materials_volume",
+    ],
+    images: [
+      {
+        mimeType: "image/png",
+        uri: triangleImageUri,
+      },
+    ],
+    materials: [
+      {
+        emissiveFactor: [0.2, 0.3, 0.4],
+        emissiveTexture: { index: 4 },
+        extensions: {
+          KHR_materials_clearcoat: {
+            clearcoatFactor: 0.75,
+            clearcoatRoughnessTexture: { index: 8 },
+            clearcoatTexture: { index: 7 },
+          },
+          KHR_materials_iridescence: {
+            iridescenceFactor: 0.5,
+            iridescenceTexture: { index: 11 },
+            iridescenceThicknessTexture: { index: 12 },
+          },
+          KHR_materials_sheen: {
+            sheenColorTexture: { index: 9 },
+            sheenRoughnessTexture: { index: 10 },
+          },
+          KHR_materials_specular: {
+            specularColorTexture: { index: 6 },
+            specularTexture: { index: 5 },
+          },
+          KHR_materials_transmission: {
+            transmissionFactor: 1,
+            transmissionTexture: { index: 13 },
+          },
+          KHR_materials_volume: {
+            thicknessFactor: 1,
+            thicknessTexture: { index: 14 },
+          },
+        },
+        normalTexture: { index: 2 },
+        occlusionTexture: { index: 3 },
+        pbrMetallicRoughness: {
+          baseColorTexture: { index: 0 },
+          metallicRoughnessTexture: { index: 1 },
+        },
+      },
+    ],
+    samplers: [{}],
+    textures: Array.from({ length: 15 }, () => ({
+      sampler: 0,
+      source: 0,
+    })),
+  };
+};
+
 const materialTransmissionBatchKeyTriangleDocument = () => {
   const base = solidTriangleDocument();
   const primitive = base.meshes[0]!.primitives[0]!;
@@ -5079,6 +5154,72 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(sources).toContain("texture(u_thicknessTexture, v_uv).g");
     expect(diagnostics).not.toMatch(/KHR_materials_transmission\.transmissionTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_volume\.thicknessTexture.*ignored/i);
+  });
+
+  it("does not alias optional material textures when fragment texture units are exhausted", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "overfull-texture-units",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialOverfullTextureUnitTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle.png",
+    ]);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const enabledSamplerUniforms = [
+      "u_texture",
+      "u_transmissionScreenTexture",
+      "u_iblSpecularCube",
+      "u_emissiveTexture",
+      "u_metallicRoughnessTexture",
+      "u_normalTexture",
+      "u_occlusionTexture",
+      "u_specularTexture",
+      "u_specularColorTexture",
+      "u_clearcoatTexture",
+      "u_clearcoatRoughnessTexture",
+      "u_sheenColorTexture",
+      "u_sheenRoughnessTexture",
+      "u_iridescenceTexture",
+      "u_iridescenceThicknessTexture",
+      "u_materialTransmissionTexture",
+    ].map((name) => uniform1iPayloads(readyFrameCalls, name).at(-1));
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(enabledSamplerUniforms).toHaveLength(new Set(enabledSamplerUniforms).size);
+    expect(enabledSamplerUniforms).toEqual(expect.arrayContaining(Array.from({ length: 16 }, (_value, index) => index)));
+    expect(uniform1iPayloads(readyFrameCalls, "u_useMaterialTransmissionTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(15);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useThicknessTexture")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).not.toContain(15);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
   });
 
   it("keeps transmission factors in glTF material batch keys", async () => {

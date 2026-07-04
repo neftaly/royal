@@ -3962,21 +3962,7 @@ class WebGlRootImpl implements WebGlRoot {
     ]);
   }
 
-  #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number {
-    if (!allocator.used.has(preferred)) {
-      allocator.used.add(preferred);
-      return preferred;
-    }
-    for (let unit = 1; unit < 16; unit += 1) {
-      if (allocator.used.has(unit)) continue;
-      allocator.used.add(unit);
-      return unit;
-    }
-
-    return preferred;
-  }
-
-  #allocateOptionalTextureUnit(allocator: TextureUnitAllocator, preferred: number): number | undefined {
+  #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number | undefined {
     const maxTextureImageUnits = this.#maxTextureImageUnits;
     if (maxTextureImageUnits <= 0) return undefined;
     if (preferred < maxTextureImageUnits && !allocator.used.has(preferred)) {
@@ -4102,6 +4088,10 @@ class WebGlRootImpl implements WebGlRoot {
 
     const gl = this.#gl;
     const allocatedUnit = this.#allocateTextureUnit(allocator, textureUnit);
+    if (allocatedUnit === undefined) {
+      this.#uniform1i(program, useUniform, 0);
+      return;
+    }
     gl.activeTexture(gl.TEXTURE0 + allocatedUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
     this.#uniform1i(program, samplerUniform, allocatedUnit);
@@ -4120,6 +4110,10 @@ class WebGlRootImpl implements WebGlRoot {
 
     const gl = this.#gl;
     const textureUnit = this.#allocateTextureUnit(allocator, 1);
+    if (textureUnit === undefined) {
+      this.#uniform1i(program, "u_useTransmissionTexture", 0);
+      return;
+    }
     this.#uniform1i(program, "u_useTransmissionTexture", 1);
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
@@ -4134,7 +4128,7 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     bindSurfaceIblUniforms({
       brdfLutTexture: () => {
-        const brdfLutTextureUnit = this.#allocateOptionalTextureUnit(
+        const brdfLutTextureUnit = this.#allocateTextureUnit(
           textureUnits,
           IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
         );
