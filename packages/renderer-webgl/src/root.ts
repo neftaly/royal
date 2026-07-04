@@ -1975,23 +1975,6 @@ const gltfMaterialPrimaryTextureInfo = (
     ?? gltfEmissiveTextureInfo(document, materialIndex)
     ?? gltfOcclusionTextureInfo(document, materialIndex);
 
-const gltfBaseColorTexCoordSet = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-): number => {
-  const textureInfo = gltfMaterialPrimaryTextureInfo(document, materialIndex);
-
-  return textureInfo?.extensions?.KHR_texture_transform?.texCoord
-    ?? textureInfo?.texCoord
-    ?? 0;
-};
-
-const gltfBaseColorTextureTransform = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-): GltfTextureTransformExtension | undefined =>
-  gltfMaterialPrimaryTextureInfo(document, materialIndex)?.extensions?.KHR_texture_transform;
-
 const transformGltfTexCoords = (
   texCoords: Float32Array,
   transform: GltfTextureTransformExtension | undefined,
@@ -2014,40 +1997,6 @@ const transformGltfTexCoords = (
   }
 
   return output;
-};
-
-const gltfTexCoordAccessor = (
-  document: GltfDocument,
-  primitive: GltfMeshPrimitive,
-  materialIndex: number | undefined,
-): number | undefined => {
-  if (gltfMaterialPrimaryTextureInfo(document, materialIndex)?.index === undefined) return undefined;
-  const texCoordSet = gltfBaseColorTexCoordSet(document, materialIndex);
-
-  return primitive.attributes?.[`TEXCOORD_${texCoordSet}`];
-};
-
-const gltfMaterialTexCoords = (
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
-  primitive: GltfMeshPrimitive,
-  materialIndex: number | undefined,
-  decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
-): Float32Array | undefined => {
-  if (gltfMaterialPrimaryTextureInfo(document, materialIndex)?.index === undefined) return undefined;
-
-  const texCoordSet = gltfBaseColorTexCoordSet(document, materialIndex);
-  const decodedTexCoords = decodedAttributes?.get(`TEXCOORD_${texCoordSet}`);
-  if (decodedTexCoords !== undefined) {
-    return transformGltfTexCoords(decodedTexCoords, gltfBaseColorTextureTransform(document, materialIndex));
-  }
-
-  const texCoordAccessor = gltfTexCoordAccessor(document, primitive, materialIndex);
-  if (texCoordAccessor === undefined) return undefined;
-  return transformGltfTexCoords(
-    readGltfFloatAccessor(document, buffers, texCoordAccessor),
-    gltfBaseColorTextureTransform(document, materialIndex),
-  );
 };
 
 const gltfTextureInfoTexCoords = (
@@ -6231,7 +6180,13 @@ class WebGlRootImpl implements WebGlRoot {
     const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
     const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
     const alphaCutoff = gltfMaterialAlphaCutoff(material?.alphaCutoff);
-    const texCoords = gltfMaterialTexCoords(document, buffers, primitive, materialIndex, decodedAttributes);
+    const texCoords = gltfTextureInfoTexCoords(
+      document,
+      buffers,
+      primitive,
+      gltfMaterialPrimaryTextureInfo(document, materialIndex),
+      decodedAttributes,
+    );
     const emissiveTexCoords = gltfTextureInfoTexCoords(
       document,
       buffers,
