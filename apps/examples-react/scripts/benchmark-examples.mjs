@@ -362,10 +362,8 @@ const emptyGltfInstancingCounters = Object.freeze({
   instancesDrawn: 0,
   localModelUploadBytes: 0,
   localModelUploadCalls: 0,
-  rootPositionUploadBytes: 0,
-  rootPositionUploadCalls: 0,
-  rootRotationUploadBytes: 0,
-  rootRotationUploadCalls: 0,
+  rootPoseUploadBytes: 0,
+  rootPoseUploadCalls: 0,
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
@@ -393,10 +391,10 @@ const gltfInstancingCounterDelta = (after, before) => {
 };
 
 const gltfInstancingRootTransformUploadBytes = (counters) =>
-  counters.rootPositionUploadBytes + counters.rootRotationUploadBytes + counters.rootScaleUploadBytes;
+  counters.rootPoseUploadBytes + counters.rootScaleUploadBytes;
 
 const gltfInstancingRootTransformUploadCalls = (counters) =>
-  counters.rootPositionUploadCalls + counters.rootRotationUploadCalls + counters.rootScaleUploadCalls;
+  counters.rootPoseUploadCalls + counters.rootScaleUploadCalls;
 
 const hasGltfInstancingCounters = (snapshot) =>
   snapshot?.gltfInstancing !== undefined &&

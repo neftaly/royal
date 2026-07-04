@@ -38,10 +38,8 @@ const requiredGltfInstancingCounters = [
   'instancesDrawn',
   'localModelUploadBytes',
   'localModelUploadCalls',
-  'rootPositionUploadBytes',
-  'rootPositionUploadCalls',
-  'rootRotationUploadBytes',
-  'rootRotationUploadCalls',
+  'rootPoseUploadBytes',
+  'rootPoseUploadCalls',
   'rootScaleUploadBytes',
   'rootScaleUploadCalls',
 ];

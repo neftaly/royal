@@ -12,10 +12,8 @@ type GltfInstancingCounters = {
   readonly instancesDrawn: number;
   readonly localModelUploadBytes: number;
   readonly localModelUploadCalls: number;
-  readonly rootPositionUploadBytes: number;
-  readonly rootPositionUploadCalls: number;
-  readonly rootRotationUploadBytes: number;
-  readonly rootRotationUploadCalls: number;
+  readonly rootPoseUploadBytes: number;
+  readonly rootPoseUploadCalls: number;
   readonly rootScaleUploadBytes: number;
   readonly rootScaleUploadCalls: number;
 };
@@ -37,10 +35,8 @@ const gltfInstancingCounterKeys = [
   'instancesDrawn',
   'localModelUploadBytes',
   'localModelUploadCalls',
-  'rootPositionUploadBytes',
-  'rootPositionUploadCalls',
-  'rootRotationUploadBytes',
-  'rootRotationUploadCalls',
+  'rootPoseUploadBytes',
+  'rootPoseUploadCalls',
   'rootScaleUploadBytes',
   'rootScaleUploadCalls',
 ] as const satisfies readonly (keyof GltfInstancingCounters)[];
