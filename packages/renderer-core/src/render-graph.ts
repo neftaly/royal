@@ -6,6 +6,7 @@ import type { RenderNode } from './render-node';
 const TRANSPARENT_BLACK: Rgba = [0, 0, 0, 0];
 
 export type RenderPassClear = 'color-depth' | 'color' | 'depth' | 'none';
+export type RenderToneMapping = 'none' | 'aces';
 
 export type RenderElement = Scene | RenderPass | RenderNode;
 /** Root render description accepted by renderer roots. */
@@ -20,6 +21,8 @@ export interface RenderPass {
   readonly clearColor: Rgba;
   readonly depthTest: boolean;
   readonly environment?: EnvironmentLight;
+  readonly exposure?: number;
+  readonly toneMapping?: RenderToneMapping;
 }
 
 export interface RenderPassOptions {
@@ -33,7 +36,14 @@ export interface RenderPassOptions {
   readonly depthTest?: boolean;
   /** Scene-authored image-based environment lighting for this pass. */
   readonly environment?: EnvironmentLight;
+  /** Linear exposure multiplier applied to lit surface output. */
+  readonly exposure?: number;
+  /** Tone mapping applied to lit surface output. Defaults to Three-style none. */
+  readonly toneMapping?: RenderToneMapping;
 }
+
+const finiteExposure = (value: number | undefined): number | undefined =>
+  value === undefined || !Number.isFinite(value) ? undefined : Math.max(0, value);
 
 /** Ordered render passes for a frame. */
 export interface Scene {
@@ -47,6 +57,8 @@ export interface SceneOptions {
 
 /** Creates a render pass. */
 export const pass = (options: RenderPassOptions): RenderPass => {
+  const exposure = finiteExposure(options.exposure);
+
   return {
     kind: 'pass',
     camera: options.camera,
@@ -54,7 +66,9 @@ export const pass = (options: RenderPassOptions): RenderPass => {
     clear: options.clear ?? 'color-depth',
     clearColor: options.clearColor ?? TRANSPARENT_BLACK,
     depthTest: options.depthTest ?? true,
-    ...(options.environment === undefined ? {} : { environment: options.environment })
+    ...(options.environment === undefined ? {} : { environment: options.environment }),
+    ...(exposure === undefined ? {} : { exposure }),
+    ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping })
   };
 };
 

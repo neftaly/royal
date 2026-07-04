@@ -5,11 +5,16 @@ import {
   useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
+import { studioEnvironment } from '@royal/renderer-core';
 import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
+const instancingEnvironment = studioEnvironment({
+  irradianceIntensity: 0.34,
+  specularIntensity: 1.1,
+});
 const cubeSources = [
   fixtureBase + 'instanced-cube-a.gltf',
   fixtureBase + 'instanced-cube-b.gltf',
@@ -200,7 +205,7 @@ export const GltfInstancing = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} environment={instancingEnvironment}>
           <directionalLight color={[0.86, 0.82, 0.74, 1]} direction={[0.42, -0.66, -1]} />
           {instancingConfig.animate
             ? <AnimatedInstancedCubeField cubeInstances={cubeInstances} />

@@ -56,14 +56,18 @@ describe("renderer-core descriptor contract", () => {
   it("preserves pass environment lighting descriptors", () => {
     const environment = studioEnvironment({
       intensity: 1.1,
+      irradianceIntensity: 0.7,
       rotation: [0, Math.PI / 4, 0],
+      specularIntensity: 1.35,
     });
 
     expect(environment).toEqual({
+      irradianceIntensity: 0.7,
       intensity: 1.1,
       kind: "environment-light",
       preset: "studio",
       rotation: [0, Math.PI / 4, 0],
+      specularIntensity: 1.35,
     });
     expect(pass({
       camera,
@@ -78,6 +82,25 @@ describe("renderer-core descriptor contract", () => {
       environment,
       kind: "pass",
     });
+  });
+
+  it("preserves optional pass color mapping descriptors", () => {
+    expect(pass({
+      camera,
+      children: [],
+      exposure: 1.25,
+      toneMapping: "aces",
+    })).toMatchObject({
+      exposure: 1.25,
+      kind: "pass",
+      toneMapping: "aces",
+    });
+
+    expect(pass({
+      camera,
+      children: [],
+      exposure: Number.NaN,
+    })).not.toHaveProperty("exposure");
   });
 
   it("preserves picking ids on pickable mesh and glTF descriptors", () => {

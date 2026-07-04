@@ -12,6 +12,7 @@ import {
   type PickResult,
   type PickTarget,
   type RenderPass,
+  type RenderToneMapping,
   type RenderObjectHandle,
   type RenderObjectRef,
   type RenderNode,
@@ -781,8 +782,16 @@ type SceneRenderView = {
   readonly viewport: WebGlRenderViewport;
   view(renderPass: RenderPass): Mat4;
 };
+type PassToneMappingState = {
+  readonly exposure: number;
+  readonly toneMapping: RenderToneMapping;
+};
 
 const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
+const DEFAULT_TONE_MAPPING_STATE: PassToneMappingState = {
+  exposure: 1,
+  toneMapping: "none",
+};
 const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
   [0.78, 0.78, 0.82],
   [0.05, 0.06, 0.08],
@@ -795,23 +804,7 @@ const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
   [0.04, 0.04, 0.04],
 ];
 const STUDIO_ENVIRONMENT_SPECULAR_KEY = "environment:studio:specular";
-const STUDIO_ENVIRONMENT_SPECULAR_MIPS = [
-  {
-    colors: [
-      [255, 251, 238, 255],
-      [222, 232, 255, 255],
-      [190, 202, 220, 255],
-      [116, 126, 144, 255],
-    ],
-    size: 2,
-  },
-  {
-    colors: [
-      [186, 194, 207, 255],
-    ],
-    size: 1,
-  },
-] as const;
+const STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES = [8, 4, 2, 1] as const;
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
@@ -826,16 +819,87 @@ const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
 
-const rgbaByteData = (colors: readonly (readonly number[])[]): Uint8Array => {
-  const data = new Uint8Array(colors.length * 4);
+const vec3Dot = (a: Vec3, b: Vec3): number =>
+  a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+const studioEnvironmentFaceDirection = (
+  faceIndex: number,
+  x: number,
+  y: number,
+  size: number,
+): Vec3 => {
+  const u = 2 * ((x + 0.5) / size) - 1;
+  const v = 2 * ((y + 0.5) / size) - 1;
+
+  switch (faceIndex) {
+    case 0:
+      return normalizeVec3([1, -v, -u]);
+    case 1:
+      return normalizeVec3([-1, -v, u]);
+    case 2:
+      return normalizeVec3([u, 1, v]);
+    case 3:
+      return normalizeVec3([u, -1, -v]);
+    case 4:
+      return normalizeVec3([u, -v, 1]);
+    default:
+      return normalizeVec3([-u, -v, -1]);
+  }
+};
+
+const studioEnvironmentRadiance = (direction: Vec3, mipIndex: number): Vec3 => {
+  const roughness = mipIndex / Math.max(STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length - 1, 1);
+  const sky = clamp01(direction[1] * 0.5 + 0.5);
+  const base: Vec3 = [
+    0.16 + sky * 0.18,
+    0.18 + sky * 0.20,
+    0.21 + sky * 0.24,
+  ];
+  const key = Math.pow(Math.max(0, vec3Dot(direction, normalizeVec3([-0.34, 0.62, 0.71]))), 42);
+  const strip = Math.pow(Math.max(0, vec3Dot(direction, normalizeVec3([0.76, 0.18, 0.62]))), 30);
+  const ceiling = Math.pow(Math.max(0, direction[1]), 6);
+  const raw: Vec3 = [
+    base[0] + key * 1.95 + strip * 0.62 + ceiling * 0.22,
+    base[1] + key * 1.84 + strip * 0.68 + ceiling * 0.24,
+    base[2] + key * 1.58 + strip * 0.78 + ceiling * 0.28,
+  ];
+  const roughAverage: Vec3 = [0.36, 0.39, 0.44];
+  const roughMix = roughness * 0.82;
+
+  return [
+    raw[0] * (1 - roughMix) + roughAverage[0] * roughMix,
+    raw[1] * (1 - roughMix) + roughAverage[1] * roughMix,
+    raw[2] * (1 - roughMix) + roughAverage[2] * roughMix,
+  ];
+};
+
+const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): Uint8Array => {
+  const size = STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES[mipIndex] ?? 1;
+  const data = new Uint8Array(size * size * 4);
   let offset = 0;
-  for (const color of colors) {
-    data.set(color, offset);
-    offset += 4;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const radiance = studioEnvironmentRadiance(
+        studioEnvironmentFaceDirection(faceIndex, x, y, size),
+        mipIndex,
+      );
+      data[offset] = Math.round(clamp01(radiance[0]) * 255);
+      data[offset + 1] = Math.round(clamp01(radiance[1]) * 255);
+      data[offset + 2] = Math.round(clamp01(radiance[2]) * 255);
+      data[offset + 3] = 255;
+      offset += 4;
+    }
   }
 
   return data;
 };
+
+const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => ({
+  exposure: renderPass.exposure === undefined || !Number.isFinite(renderPass.exposure)
+    ? DEFAULT_TONE_MAPPING_STATE.exposure
+    : Math.max(0, renderPass.exposure),
+  toneMapping: renderPass.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
+});
 
 const hashBytes = (bytes: Uint8Array): string => {
   let hash = FNV_1A_32_OFFSET;
@@ -2460,11 +2524,12 @@ class WebGlRootImpl implements WebGlRoot {
           const view = renderView.view(renderPass);
           const lights = this.#directionalLights(renderPass.children);
           const passLights = this.#passSurfaceLightSet(lights[0], renderPass.environment);
+          const toneMapping = passToneMappingState(renderPass);
           const viewportSize: ViewportSize = [width, height];
           const gltfDraws: GltfPrimitiveDraw[] = [];
           const flushGltfDraws = (): void => {
             if (gltfDraws.length === 0) return;
-            this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, viewportSize, usedGeometry);
+            this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, toneMapping, viewportSize, usedGeometry);
             gltfDraws.length = 0;
           };
 
@@ -2475,7 +2540,7 @@ class WebGlRootImpl implements WebGlRoot {
               continue;
             }
             flushGltfDraws();
-            this.#drawNode(child, projection, view, passLights, viewportSize, usedGeometry);
+            this.#drawNode(child, projection, view, passLights, toneMapping, viewportSize, usedGeometry);
           }
           flushGltfDraws();
         }
@@ -2883,6 +2948,7 @@ class WebGlRootImpl implements WebGlRoot {
     projection: Mat4,
     view: Mat4,
     passLights: SurfaceLightSet | undefined,
+    toneMapping: PassToneMappingState,
     viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
@@ -2890,10 +2956,10 @@ class WebGlRootImpl implements WebGlRoot {
       case "directional-light":
         return;
       case "mesh":
-        this.#drawMesh(node, projection, view, passLights, usedGeometry);
+        this.#drawMesh(node, projection, view, passLights, toneMapping, usedGeometry);
         return;
       case "text":
-        this.#drawText(node, projection, view, usedGeometry);
+        this.#drawText(node, projection, view, toneMapping, usedGeometry);
         return;
       case "gltf":
         {
@@ -2904,6 +2970,7 @@ class WebGlRootImpl implements WebGlRoot {
             projection,
             view,
             passLights,
+            toneMapping,
             viewportSize,
             usedGeometry,
           );
@@ -2930,6 +2997,7 @@ class WebGlRootImpl implements WebGlRoot {
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet | undefined,
+    toneMapping: PassToneMappingState,
     usedGeometry: Set<string>,
   ): void {
     const cpu = this.#meshGeometry(node.geometry, node.material);
@@ -2942,7 +3010,7 @@ class WebGlRootImpl implements WebGlRoot {
     usedGeometry.add(gpu.key);
     this.#applyDrawAlphaState(node.material);
     try {
-      this.#drawGeometry(gpu, node.material, model, projection, view, lights, undefined);
+      this.#drawGeometry(gpu, node.material, model, projection, view, lights, toneMapping, undefined);
     } finally {
       this.#resetDrawAlphaState();
     }
@@ -2952,6 +3020,7 @@ class WebGlRootImpl implements WebGlRoot {
     node: TextNode,
     projection: Mat4,
     view: Mat4,
+    toneMapping: PassToneMappingState,
     usedGeometry: Set<string>,
   ): void {
     const mesh = textMesh(node);
@@ -2984,7 +3053,7 @@ class WebGlRootImpl implements WebGlRoot {
     usedGeometry.add(gpu.key);
     this.#applyDrawAlphaState(material);
     try {
-      this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined, undefined);
+      this.#drawGeometry(gpu, material, identityMat4(), projection, view, undefined, toneMapping, undefined);
     } finally {
       this.#resetDrawAlphaState();
     }
@@ -3075,6 +3144,7 @@ class WebGlRootImpl implements WebGlRoot {
     projection: Mat4,
     view: Mat4,
     passLights: SurfaceLightSet | undefined,
+    toneMapping: PassToneMappingState,
     viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
@@ -3143,21 +3213,22 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
 
-    for (const batch of opaqueBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, undefined);
+    for (const batch of opaqueBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, undefined);
 
     if (transmissiveBatches.length > 0) {
       const screenColorTexture = this.#copyTransmissionScreenColorTexture(viewportSize);
       for (const batch of transmissiveBatches) {
-        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, screenColorTexture);
+        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, screenColorTexture);
       }
     }
-    for (const batch of blendedBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, undefined);
+    for (const batch of blendedBatches) this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, undefined);
   }
 
   #drawGltfPrimitiveDrawBatch(
     batch: GltfPrimitiveDrawBatch,
     projection: Mat4,
     view: Mat4,
+    toneMapping: PassToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     this.#applyDrawSidedness(batch.sidedness);
@@ -3171,6 +3242,7 @@ class WebGlRootImpl implements WebGlRoot {
           projection,
           view,
           batch.lights,
+          toneMapping,
           transmissionScreenColorTexture,
         );
       } else {
@@ -3187,6 +3259,7 @@ class WebGlRootImpl implements WebGlRoot {
           projection,
           view,
           batch.lights,
+          toneMapping,
           transmissionScreenColorTexture,
         );
       }
@@ -3274,12 +3347,12 @@ class WebGlRootImpl implements WebGlRoot {
     return {
       irradiance: {
         coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
-        intensity: environment.intensity,
+        intensity: environment.irradianceIntensity,
         worldToIbl,
       },
       specular: {
         encoding: "ldr",
-        intensity: environment.intensity,
+        intensity: environment.specularIntensity,
         key: specular.key,
         mipCount: specular.mipCount,
         texture: specular.texture,
@@ -3769,6 +3842,7 @@ class WebGlRootImpl implements WebGlRoot {
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet | undefined,
+    toneMapping: PassToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
@@ -3789,6 +3863,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (programKind === "surface" && material.kind !== "wireframe") {
       this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
       this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
+      this.#bindSurfaceToneMapping(program, toneMapping);
       this.#bindSurfaceLights(program, material.kind === "standard"
         ? lights ?? DEFAULT_SURFACE_LIGHT_SET
         : EMPTY_SURFACE_LIGHT_SET);
@@ -3828,6 +3903,7 @@ class WebGlRootImpl implements WebGlRoot {
     projection: Mat4,
     view: Mat4,
     lights: SurfaceLightSet,
+    toneMapping: PassToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
@@ -3841,6 +3917,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
+    this.#bindSurfaceToneMapping(program, toneMapping);
     this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET);
 
     const useTexture = this.#bindMaterialTexture(program, material);
@@ -3953,6 +4030,15 @@ class WebGlRootImpl implements WebGlRoot {
 
   #surfaceTextureUnitAllocator(): TextureUnitAllocator {
     return { used: new Set([0, IBL_SPECULAR_TEXTURE_UNIT]) };
+  }
+
+  #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: PassToneMappingState): void {
+    this.#uniformColor(program, "u_toneMappingSettings", [
+      toneMapping.toneMapping === "aces" ? 1 : 0,
+      toneMapping.exposure,
+      0,
+      0,
+    ]);
   }
 
   #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number {
@@ -5504,15 +5590,15 @@ class WebGlRootImpl implements WebGlRoot {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     }
 
-    for (const [mipIndex, mip] of STUDIO_ENVIRONMENT_SPECULAR_MIPS.entries()) {
-      const data = rgbaByteData(mip.colors);
+    for (const [mipIndex, mipSize] of STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.entries()) {
       for (let faceIndex = 0; faceIndex < 6; faceIndex += 1) {
+        const data = studioEnvironmentSpecularMipData(mipIndex, faceIndex);
         gl.texImage2D(
           gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex,
           mipIndex,
           gl.RGBA,
-          mip.size,
-          mip.size,
+          mipSize,
+          mipSize,
           0,
           gl.RGBA,
           gl.UNSIGNED_BYTE,
@@ -5525,11 +5611,11 @@ class WebGlRootImpl implements WebGlRoot {
     gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, STUDIO_ENVIRONMENT_SPECULAR_MIPS.length - 1);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length - 1);
 
     const resource = {
       key: STUDIO_ENVIRONMENT_SPECULAR_KEY,
-      mipCount: STUDIO_ENVIRONMENT_SPECULAR_MIPS.length,
+      mipCount: STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length,
       texture,
     };
     this.#studioEnvironmentSpecularTextures.set(STUDIO_ENVIRONMENT_SPECULAR_KEY, resource);

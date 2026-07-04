@@ -637,9 +637,11 @@ describe("WebGL renderer pipeline contracts", () => {
       .toContainEqual([0.65, 0.35, 0, 0]);
     const sources = shaderSources(calls).join("\n");
     expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
+    expect(sources).toContain("uniform vec4 u_toneMappingSettings;");
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).toContain("toneMapAces");
     expect(sources).toContain("linearToSrgb");
+    expect(sources).toContain("if (!u_useIblIrradiance) {\n  return vec3(0.0);");
     expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
     expect(sources).toContain("materialDiffuseColor(baseColor) * (lambert / PI) * lightColor");
     expect(sources).toContain("outColor = outputLinearColor(baseColor.rgb, baseColor.a);");
@@ -649,6 +651,8 @@ describe("WebGL renderer pipeline contracts", () => {
 
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
+      .toContainEqual([0, 1, 0, 0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
     expect(calls.some((call) =>
       call.name === "texStorage2D"
@@ -686,7 +690,13 @@ describe("WebGL renderer pipeline contracts", () => {
               }),
             }),
           ],
-          environment: studioEnvironment({ intensity: 1.1 }),
+          environment: studioEnvironment({
+            intensity: 1.1,
+            irradianceIntensity: 0.65,
+            specularIntensity: 1.35,
+          }),
+          exposure: 0.9,
+          toneMapping: "aces",
         }),
       ],
     }));
@@ -696,15 +706,17 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
     expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
-      .toContainEqual([1, 1.1, 0, 0]);
+      .toContainEqual([1, 0.65, 0, 0]);
     expect(uniform4fvPayloadsByName(calls, "u_iblSpecularSettings").map(roundVector))
-      .toContainEqual([1, 1.1, 2, 0]);
+      .toContainEqual([1, 1.35, 4, 0]);
+    expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
+      .toContainEqual([1, 0.9, 0, 0]);
     const cubeFaceUploads = calls.filter((call) =>
       call.name === "texImage2D"
       && Number(call.args[0]) >= gl.TEXTURE_CUBE_MAP_POSITIVE_X
       && Number(call.args[0]) < gl.TEXTURE_CUBE_MAP_POSITIVE_X + 6);
 
-    expect(cubeFaceUploads).toHaveLength(12);
+    expect(cubeFaceUploads).toHaveLength(24);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
   });
 

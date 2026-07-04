@@ -276,7 +276,9 @@ const toPass = (props: PassProps): RenderPass => {
     ...(props.clear === undefined ? {} : { clear: props.clear }),
     ...(props.clearColor === undefined ? {} : { clearColor: props.clearColor }),
     ...(props.depthTest === undefined ? {} : { depthTest: props.depthTest }),
-    ...(props.environment === undefined ? {} : { environment: props.environment })
+    ...(props.environment === undefined ? {} : { environment: props.environment }),
+    ...(props.exposure === undefined ? {} : { exposure: props.exposure }),
+    ...(props.toneMapping === undefined ? {} : { toneMapping: props.toneMapping })
   });
 };
 

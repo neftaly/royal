@@ -118,16 +118,23 @@ describe("renderer JSX contract", () => {
     });
   });
 
-  it("threads pass environment props through JSX", () => {
+  it("threads pass environment and color mapping props through JSX", () => {
     const environment = studioEnvironment({ intensity: 1.1 });
 
     expect(
-      <pass camera={perspectiveCamera(perspectiveProps)} environment={environment} />,
+      <pass
+        camera={perspectiveCamera(perspectiveProps)}
+        environment={environment}
+        exposure={0.9}
+        toneMapping="aces"
+      />,
     ).toMatchObject({
       camera: { kind: "perspective-camera" },
       children: [],
       environment,
+      exposure: 0.9,
       kind: "pass",
+      toneMapping: "aces",
     });
   });
 

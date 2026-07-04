@@ -105,6 +105,7 @@ export type {
   RenderPassClear,
   RenderPassOptions,
   RenderRoot,
+  RenderToneMapping,
   Scene,
   SceneOptions
 } from './render-graph';

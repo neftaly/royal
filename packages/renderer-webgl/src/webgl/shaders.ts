@@ -239,6 +239,7 @@ uniform sampler2D u_materialTransmissionTexture;
 uniform sampler2D u_thicknessTexture;
 uniform sampler2D u_transmissionScreenTexture;
 uniform vec4 u_materialPbrFactors;
+uniform vec4 u_toneMappingSettings;
 uniform vec4 u_normalTextureSettings;
 uniform vec4 u_occlusionSettings;
 uniform vec4 u_specularColorFactor;
@@ -275,7 +276,11 @@ vec4 outputLinearColor(vec3 color, float alpha) {
 return vec4(linearToSrgb(color), alpha);
 }
 vec4 outputMappedColor(vec3 color, float alpha) {
-return vec4(linearToSrgb(toneMapAces(color)), alpha);
+vec3 exposed = color * max(u_toneMappingSettings.y, 0.0);
+vec3 mapped = u_toneMappingSettings.x > 0.5
+  ? toneMapAces(exposed)
+  : clamp(exposed, vec3(0.0), vec3(1.0));
+return vec4(linearToSrgb(mapped), alpha);
 }
 float fresnelPow(float cosTheta) {
 return pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
@@ -558,7 +563,7 @@ return smoothCutoff / max(distanceToLight * distanceToLight, 0.0001);
 }
 vec3 iblDiffuseIrradiance(vec3 normal) {
 if (!u_useIblIrradiance) {
-  return vec3(0.18);
+  return vec3(0.0);
 }
 vec3 n = normalize((u_iblWorldToIbl * vec4(normal, 0.0)).xyz);
 vec3 irradiance = vec3(0.0);

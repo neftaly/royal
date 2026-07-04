@@ -8,7 +8,10 @@ import { type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
-const helmetEnvironment = studioEnvironment({ intensity: 1.1 });
+const helmetEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 export const GltfHelmet = (): ReactNode => {
   const orbit = useOrbitCamera({
