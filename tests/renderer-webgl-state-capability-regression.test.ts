@@ -108,6 +108,7 @@ const fakeGl = (): FakeGl => {
     ONE_MINUS_SRC_ALPHA: 0x0303,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    SRGB8_ALPHA8: 0x8C43,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -116,6 +117,7 @@ const fakeGl = (): FakeGl => {
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     TRIANGLES: 0x0004,
+    UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     UNSIGNED_BYTE: 0x1401,
     UNSIGNED_INT: 0x1405,
@@ -430,6 +432,11 @@ const drawCallIndices = (calls: readonly GlCall[]): readonly number[] =>
 const texParameterTriples = (calls: readonly GlCall[]): readonly (readonly unknown[])[] =>
   callsNamed(calls, "texParameteri").map((call) => call.args.slice(0, 3));
 
+const textureUploadInternalFormats = (calls: readonly GlCall[]): readonly unknown[] =>
+  callsNamed(calls, "texImage2D")
+    .filter((call) => call.args[0] === 0x0DE1)
+    .map((call) => call.args[2]);
+
 const hasSafeUvCleanupBeforeDraw = (calls: readonly GlCall[], start: number, end: number): boolean => {
   const betweenDraws = calls.slice(start + 1, end);
 
@@ -501,6 +508,11 @@ describe("WebGL renderer state and capability regressions", () => {
     expect(requestedUrls(loader).filter((url) => url.includes(sharedSource))).toHaveLength(2);
     expect(countCalls(calls, "createTexture"), "different sampler/colorSpace descriptors need separate texture resources").toBeGreaterThanOrEqual(2);
     expect(countCalls(calls, "texImage2D"), "both texture descriptors should upload their image data").toBeGreaterThanOrEqual(2);
+    expect(textureUploadInternalFormats(calls)).toEqual(expect.arrayContaining([gl.SRGB8_ALPHA8, gl.RGBA]));
+    expect(calls).toContainEqual({
+      args: [gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 0],
+      name: "pixelStorei",
+    });
     expect(texParameterTriples(calls)).toEqual(expect.arrayContaining([
       [gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST],
       [gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT],

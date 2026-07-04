@@ -637,6 +637,13 @@ describe("WebGL renderer pipeline contracts", () => {
     const sources = shaderSources(calls).join("\n");
     expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
     expect(sources).toContain("materialGgxDistribution");
+    expect(sources).toContain("toneMapAces");
+    expect(sources).toContain("linearToSrgb");
+    expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
+    expect(sources).toContain("materialDiffuseColor(baseColor) * (lambert / PI) * lightColor");
+    expect(sources).toContain("outColor = outputLinearColor(baseColor.rgb, baseColor.a);");
+    expect(sources).toContain("outColor = outputMappedColor(lit, baseColor.a);");
+    expect(sources).not.toContain("pow(roughness + 1.0, 2.0) / 8.0");
     expect(sources).not.toContain("pow(NdotH, 32.0)");
 
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);

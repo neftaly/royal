@@ -257,6 +257,26 @@ const float PI = 3.141592653589793;
 float maxComponent(vec3 value) {
 return max(max(value.r, value.g), value.b);
 }
+vec3 toneMapAces(vec3 color) {
+vec3 safeColor = max(color, vec3(0.0));
+return clamp(
+  (safeColor * (2.51 * safeColor + 0.03)) / (safeColor * (2.43 * safeColor + 0.59) + 0.14),
+  vec3(0.0),
+  vec3(1.0)
+);
+}
+vec3 linearToSrgb(vec3 color) {
+vec3 safeColor = clamp(color, vec3(0.0), vec3(1.0));
+vec3 lower = safeColor * 12.92;
+vec3 higher = 1.055 * pow(safeColor, vec3(1.0 / 2.4)) - 0.055;
+return mix(higher, lower, lessThanEqual(safeColor, vec3(0.0031308)));
+}
+vec4 outputLinearColor(vec3 color, float alpha) {
+return vec4(linearToSrgb(color), alpha);
+}
+vec4 outputMappedColor(vec3 color, float alpha) {
+return vec4(linearToSrgb(toneMapAces(color)), alpha);
+}
 float fresnelPow(float cosTheta) {
 return pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
@@ -438,12 +458,12 @@ float denom = TdotH * TdotH / (alphaT * alphaT)
   + NdotH * NdotH;
 return 1.0 / max(PI * alphaT * alphaB * denom * denom, 0.0001);
 }
-float materialSmithG1(float NdotX, float roughness) {
-float k = pow(roughness + 1.0, 2.0) / 8.0;
-return NdotX / max(NdotX * (1.0 - k) + k, 0.0001);
-}
 float materialSmithVisibility(float NdotL, float NdotV, float roughness) {
-return materialSmithG1(NdotL, roughness) * materialSmithG1(NdotV, roughness);
+float alpha = max(roughness * roughness, 0.001);
+float alpha2 = alpha * alpha;
+float lambdaV = NdotL * sqrt(max(NdotV * NdotV * (1.0 - alpha2) + alpha2, 0.0));
+float lambdaL = NdotV * sqrt(max(NdotL * NdotL * (1.0 - alpha2) + alpha2, 0.0));
+return 0.5 / max(lambdaV + lambdaL, 0.0001);
 }
 float materialClearcoatFresnel(vec3 normal, vec3 viewDirection) {
 float clearcoat = materialClearcoatFactor();
@@ -603,8 +623,8 @@ if (kind == 0) {
 float lambert = max(dot(normal, lightVector), 0.0);
 float diffuseTransmissionLambert = max(dot(-normal, lightVector), 0.0);
 vec3 lightColor = u_surfaceLightColor[index].rgb * attenuation;
-vec3 diffuse = materialDiffuseColor(baseColor) * lambert * lightColor;
-vec3 diffuseTransmission = materialDiffuseTransmissionColor(baseColor) * diffuseTransmissionLambert * lightColor;
+vec3 diffuse = materialDiffuseColor(baseColor) * (lambert / PI) * lightColor;
+vec3 diffuseTransmission = materialDiffuseTransmissionColor(baseColor) * (diffuseTransmissionLambert / PI) * lightColor;
 if (lambert <= 0.0) {
   return diffuse + diffuseTransmission;
 }
@@ -636,7 +656,7 @@ if (u_alphaSettings.x < 1.5) {
   baseColor.a = 1.0;
 }
 if (u_unlit) {
-  outColor = baseColor;
+  outColor = outputLinearColor(baseColor.rgb, baseColor.a);
   return;
 }
 vec3 normal = materialNormal(normalize(v_normal));
@@ -659,6 +679,6 @@ if (transmission > 0.0 && u_useTransmissionTexture) {
   vec3 transmitted = materialTransmissionScreenColor(baseColor.rgb, normal, viewDirection);
   lit = mix(lit, transmitted, transmission);
 }
-outColor = vec4(lit, baseColor.a);
+outColor = outputMappedColor(lit, baseColor.a);
 }`;
 };

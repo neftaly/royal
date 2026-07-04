@@ -1188,6 +1188,22 @@ const usesMipmaps = (value: string | undefined): boolean =>
   || value === "nearest-mipmap-linear"
   || value === "nearest-mipmap-nearest";
 
+const textureUploadInternalFormat = (
+  gl: WebGL2RenderingContext,
+  colorSpace: TextureColorSpace | undefined,
+): number =>
+  colorSpace === "srgb" && typeof gl.SRGB8_ALPHA8 === "number"
+    ? gl.SRGB8_ALPHA8
+    : gl.RGBA;
+
+const disableBrowserUnpackColorConversion = (gl: WebGL2RenderingContext): void => {
+  const conversionParameter = (gl as { readonly UNPACK_COLORSPACE_CONVERSION_WEBGL?: unknown })
+    .UNPACK_COLORSPACE_CONVERSION_WEBGL;
+  if (typeof gl.pixelStorei === "function" && typeof conversionParameter === "number") {
+    gl.pixelStorei(conversionParameter, 0);
+  }
+};
+
 const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
   if (ImageConstructor === undefined) {
@@ -5423,10 +5439,12 @@ class WebGlRootImpl implements WebGlRoot {
     if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
     }
+    disableBrowserUnpackColorConversion(gl);
+    const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
     if (isDecodedRgbaTexture(source)) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
     } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, gl.RGBA, gl.UNSIGNED_BYTE, source);
     }
     const sampler = texture.sampler;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, samplerConstant(gl, sampler?.magFilter, gl.LINEAR));
