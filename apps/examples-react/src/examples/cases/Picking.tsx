@@ -27,8 +27,8 @@ const backplateMaterial = unlitMaterial({ color: [0.08, 0.1, 0.12, 1] });
 const activeBackplateMaterial = unlitMaterial({ color: [0.1, 0.2, 0.19, 1] });
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.65,
-  specularIntensity: 1.35,
+  irradianceIntensity: 0.46,
+  specularIntensity: 0.82,
 });
 
 const readoutPanel = {
@@ -86,8 +86,8 @@ export const Picking = (): ReactNode => {
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
+          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             geometry={backplateGeometry}
             material={active ? activeBackplateMaterial : backplateMaterial}

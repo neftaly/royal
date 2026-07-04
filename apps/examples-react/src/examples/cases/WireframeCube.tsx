@@ -55,7 +55,7 @@ export const WireframeCube = (): ReactNode => {
   return (
     <Canvas aria-label="Wireframe cube" rootOptions={exampleCanvasRootOptions}>
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} toneMapping="none">
           <SpinningCube />
         </pass>
       </scene>

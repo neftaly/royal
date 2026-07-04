@@ -9,8 +9,8 @@ import { exampleCanvasRootOptions } from '../example-root-options';
 
 const cubeGeometry = boxGeometry({ size: [1.5, 1.5, 1.5] });
 const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.65,
-  specularIntensity: 1.35,
+  irradianceIntensity: 0.46,
+  specularIntensity: 0.82,
 });
 
 export const HelloCube = (): ReactNode => {
@@ -22,8 +22,8 @@ export const HelloCube = (): ReactNode => {
   return (
     <Canvas aria-label="Lit cube" rootOptions={exampleCanvasRootOptions}>
       <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
+          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             color={[0.9, 0.2, 0.16, 1]}
             geometry={cubeGeometry}

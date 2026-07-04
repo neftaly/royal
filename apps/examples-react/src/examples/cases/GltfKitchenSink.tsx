@@ -28,8 +28,8 @@ const khronosFixtureBase = import.meta.env.BASE_URL + 'fixtures/khronos/';
 const khronosGltf = (name: string): string =>
   `${khronosFixtureBase}${name}/glTF-Binary/${name}.glb`;
 const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.65,
-  specularIntensity: 1.35,
+  irradianceIntensity: 0.46,
+  specularIntensity: 0.82,
 });
 
 export const khronosKitchenSinkAssets = [
@@ -201,8 +201,8 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
+          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
           {kitchenSinkAssets.map((asset) =>
             createElement(
               Fragment,

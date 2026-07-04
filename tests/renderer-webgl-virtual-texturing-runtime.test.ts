@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   directionalLight,
+  imageTexture,
   mesh,
   orthographicCamera,
   pass,
@@ -454,6 +455,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     REPEAT: 0x2901,
     RGBA: 0x1908,
     RGBA8: 0x8058,
+    SRGB8_ALPHA8: 0x8C43,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -464,6 +466,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     TRIANGLES: 0x0004,
+    UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     UNSIGNED_BYTE: 0x1401,
     UNSIGNED_SHORT: 0x1403,
@@ -641,6 +644,13 @@ const responseJson = (body: unknown): Response => ({
   statusText: "OK",
 }) as unknown as Response;
 
+const responseStatus = (status: number, statusText: string): Response => ({
+  json: vi.fn(() => Promise.resolve({})),
+  ok: false,
+  status,
+  statusText,
+}) as unknown as Response;
+
 const camera = () => orthographicCamera({
   bottom: -1,
   far: 10,
@@ -776,7 +786,149 @@ afterEach(() => {
 });
 
 describe("WebGL renderer virtual texturing integration", () => {
-  it("fetches and parses a VT manifest without treating the manifest as an ordinary image texture", async () => {
+  it("renders ordinary image base color while an auto VT sidecar manifest is loading", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/albedo.png") });
+
+    root.render(renderScene(material));
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/albedo.png"]);
+    expect(calls.some((call) =>
+      call.name === "shaderSource"
+      && typeof call.args[1] === "string"
+      && call.args[1].includes("u_vtPageTable"))).toBe(false);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      manifestRequests: 1,
+      preparedResidencyResolutions: 1,
+      shaderBinds: 0,
+    }));
+
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(material));
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_texture: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([1]),
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
+  });
+
+  it("uses prepared VT for ordinary image base color after an auto sidecar page is resident", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/albedo.png") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+
+    expect(imageBySrc("/textures/pages/0-0.png")).toBeDefined();
+    imageBySrc("/textures/pages/0-0.png")!.settleLoad();
+    await flushMicrotasks();
+
+    const shaderBindsBeforeDraw = root.snapshot().virtualTexturing.shaderBinds;
+    root.render(renderScene(material));
+
+    expect(calls.some((call) =>
+      call.name === "shaderSource"
+      && typeof call.args[1] === "string"
+      && call.args[1].includes("u_vtPageTable"))).toBe(true);
+    expect(uniformNames(calls)).toEqual(expect.arrayContaining([
+      "u_vtAtlas",
+      "u_vtPageTable",
+      "u_vtPageTableSize",
+      "u_vtAtlasGrid",
+    ]));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      manifestRequests: 1,
+      manifestsReady: 1,
+      preparedResidencyResolutions: expect.any(Number),
+      residentPages: 1,
+      uploadedPages: 1,
+    }));
+    expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBeGreaterThan(1);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeDraw);
+  });
+
+  it("falls back to ordinary image base color after a missing auto VT sidecar without refetching", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/no-sidecar.png") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseStatus(404, "Not Found"));
+    await flushMicrotasks();
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(renderScene(material));
+    root.render(renderScene(material));
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/no-sidecar.png.vt.json"]);
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_texture: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([1]),
+    }));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      manifestFailures: 1,
+      manifestRequests: 1,
+      manifestsReady: 0,
+      shaderBinds: 0,
+    }));
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/no-sidecar\.png\.vt\.json/);
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it("inserts the auto VT sidecar suffix before image asset query and hash", () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene(unlitMaterial({
+      texture: imageTexture("/textures/albedo.png?v=7#tile"),
+    })));
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json?v=7#tile"]);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/albedo.png?v=7#tile"]);
+  });
+
+  it("keeps silent auto VT sidecar failures separate from explicit virtualTexture diagnostics", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const manifestUrl = "/textures/explicit.png.vt.json";
+
+    root.render(renderScene(unlitMaterial({ texture: imageTexture("/textures/explicit.png") })));
+    fetchRequests[0]!.resolve(responseStatus(404, "Not Found"));
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/explicit\.png\.vt\.json/);
+    expect(consoleWarn).not.toHaveBeenCalled();
+
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture(manifestUrl) })));
+    expect(fetchRequests.map((request) => request.url)).toEqual([manifestUrl, manifestUrl]);
+    fetchRequests[1]!.resolve(responseStatus(404, "Not Found"));
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics.join("\n")).toMatch(/explicit\.png\.vt\.json failed/i);
+    expect(consoleWarn).toHaveBeenCalled();
+  });
+
+  it("resolves explicit virtualTexture base color through prepared VT residency without ordinary image loads", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
@@ -794,7 +946,10 @@ describe("WebGL renderer virtual texturing integration", () => {
       ...fetchRequests.map((request) => request.url),
       ...ControlledImage.instances.map((image) => image.src),
     ]).not.toContain("/vt/pages/0-0.png");
-    expect(root.snapshot().virtualTexturing.manifestRequests).toBe(1);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      manifestRequests: 1,
+      preparedResidencyResolutions: 1,
+    }));
 
     fetchRequests[0]!.resolve(responseJson(vtManifest()));
     await flushMicrotasks();
@@ -1161,6 +1316,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(renderScene(standardMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
     expect(root.snapshot().virtualTexturing.unsupportedDraws).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBe(0);
     expect(root.snapshot().diagnostics.join("\n")).toMatch(/only unlit base-color virtual textures/i);
     expect(consoleWarn).toHaveBeenCalled();
   });

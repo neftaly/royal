@@ -25,7 +25,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} toneMapping="none">
           <gltf
             src={tigerCardSrc}
             transform={{

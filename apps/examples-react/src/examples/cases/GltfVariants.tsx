@@ -9,8 +9,8 @@ import { exampleCanvasRootOptions } from '../example-root-options';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
 const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.65,
-  specularIntensity: 1.35,
+  irradianceIntensity: 0.46,
+  specularIntensity: 0.82,
 });
 
 export const GltfVariants = (): ReactNode => {
@@ -27,8 +27,8 @@ export const GltfVariants = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
+          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
           <gltf
             src={variantSrc}
             transform={{

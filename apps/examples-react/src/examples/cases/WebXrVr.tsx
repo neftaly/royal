@@ -25,8 +25,8 @@ const camera = perspectiveCamera({
   rotation: [-0.2, 0, 0],
 });
 const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.65,
-  specularIntensity: 1.35,
+  irradianceIntensity: 0.46,
+  specularIntensity: 0.82,
 });
 
 type BrowserXrSession = XrSession & {
@@ -444,8 +444,8 @@ export const WebXrVr = (): ReactNode =>
       rootOptions={exampleCanvasRootOptions}
     >
       <scene>
-        <pass camera={camera} environment={exampleEnvironment}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
+        <pass camera={camera} environment={exampleEnvironment} toneMapping="none">
+          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
           <mesh transform={{ position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[7.2, 7.2]} />
             <standardMaterial color={[0.42, 0.39, 0.31, 1]} />

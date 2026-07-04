@@ -175,7 +175,7 @@ const FormControlsScene = ({
           }}
         >
           <scene>
-            <pass>
+            <pass toneMapping="none">
               <orthographicCamera {...surfaceBounds} />
 
               <text color={htmlColor('#55e08a')} style={flexStyle(boxes.readTextLabel, labelTextStyle)}>
