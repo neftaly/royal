@@ -6134,7 +6134,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...triangleDocument(),
-        extensionsUsed: ["KHR_materials_anisotropy"],
+        extensionsUsed: ["VENDOR_future_material_extension"],
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
@@ -6144,11 +6144,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
-      "optional unsupported material extension should fall back to core glTF data",
+      "optional unsupported extension should fall back to core glTF data",
     ).toBe(true);
   });
 
-  it("rejects glTF assets with unsupported required extensions before fetching dependent resources", async () => {
+  it("renders required KHR material anisotropy and diffuse transmission factors", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -6161,26 +6161,116 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        version: "unsupported-required-anisotropy-extension",
+        version: "required-anisotropy-extension",
       }),
     ]);
 
     root.render(renderGraph);
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
-        ...triangleDocument(),
-        extensionsRequired: ["KHR_materials_anisotropy"],
-        extensionsUsed: ["KHR_materials_anisotropy"],
+        ...solidTriangleDocument(),
+        extensionsRequired: ["KHR_materials_anisotropy", "KHR_materials_diffuse_transmission"],
+        extensionsUsed: ["KHR_materials_anisotropy", "KHR_materials_diffuse_transmission"],
+        materials: [
+          {
+            extensions: {
+              KHR_materials_anisotropy: {
+                anisotropyRotation: 1.125,
+                anisotropyStrength: 0.65,
+              },
+              KHR_materials_diffuse_transmission: {
+                diffuseTransmissionColorFactor: [0.25, 0.5, 0.75],
+                diffuseTransmissionFactor: 0.4,
+              },
+            },
+            pbrMetallicRoughness: {
+              baseColorFactor: [0.8, 0.62, 0.36, 1],
+            },
+          },
+        ],
       }))).toBe(true);
     await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
 
-    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
-      .toBe(false);
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const sources = shaderSources(readyFrameCalls).join("\n");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_anisotropyFactors").map(roundVector))
+      .toContainEqual([0.65, 1.125, 0, 0]);
+    expect(uniform4fvPayloads(readyFrameCalls, "u_diffuseTransmissionFactors").map(roundVector))
+      .toContainEqual([0.25, 0.5, 0.75, 0.4]);
+    expect(sources).toContain("uniform vec4 u_anisotropyFactors;");
+    expect(sources).toContain("uniform vec4 u_diffuseTransmissionFactors;");
+    expect(sources).toContain("materialAnisotropicGgxDistribution");
+    expect(sources).toContain("materialDiffuseTransmissionColor");
     expect(root.snapshot().diagnostics.some((message) =>
-      /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(true);
+      /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(false);
+  });
+
+  it("diagnoses optional KHR material extension textures while using scalar factors", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "optional-anisotropy-texture",
+      }),
+    ]);
 
     root.render(renderGraph);
-    expect(drawCalls(calls)).toHaveLength(0);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...solidTriangleDocument(),
+        extensionsUsed: ["KHR_materials_anisotropy", "KHR_materials_diffuse_transmission"],
+        materials: [
+          {
+            extensions: {
+              KHR_materials_anisotropy: {
+                anisotropyRotation: 0.25,
+                anisotropyStrength: 0.5,
+                anisotropyTexture: { index: 0 },
+              },
+              KHR_materials_diffuse_transmission: {
+                diffuseTransmissionColorFactor: [0.4, 0.5, 0.6],
+                diffuseTransmissionColorTexture: { index: 2 },
+                diffuseTransmissionFactor: 0.35,
+                diffuseTransmissionTexture: { index: 1 },
+              },
+            },
+            pbrMetallicRoughness: {
+              baseColorFactor: [0.8, 0.62, 0.36, 1],
+            },
+          },
+        ],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
+      "optional anisotropy texture should leave the scalar-factor material drawable",
+    ).toBe(true);
+    expect(root.snapshot().diagnostics.join("\n"))
+      .toMatch(/KHR_materials_anisotropy\.anisotropyTexture.*factor and rotation.*textures are not yet supported/i);
+    expect(root.snapshot().diagnostics.join("\n"))
+      .toMatch(/KHR_materials_diffuse_transmission\.diffuseTransmissionTexture.*factor and color factor.*textures are not yet supported/i);
+    expect(root.snapshot().diagnostics.join("\n"))
+      .toMatch(/KHR_materials_diffuse_transmission\.diffuseTransmissionColorTexture.*factor and color factor.*textures are not yet supported/i);
   });
 
   it("multiplies glTF COLOR_0 vertex colors into base color", async () => {

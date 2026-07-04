@@ -243,6 +243,8 @@ uniform vec4 u_normalTextureSettings;
 uniform vec4 u_occlusionSettings;
 uniform vec4 u_specularColorFactor;
 uniform vec4 u_materialExtensionFactors;
+uniform vec4 u_anisotropyFactors;
+uniform vec4 u_diffuseTransmissionFactors;
 uniform vec4 u_sheenColorFactor;
 uniform vec4 u_iridescenceFactors;
 uniform vec4 u_dispersionFactors;
@@ -332,6 +334,11 @@ return clamp(u_materialPbrFactors.y * textureRoughness, 0.04, 1.0);
 vec3 materialDiffuseColor(vec3 baseColor) {
 return baseColor * (1.0 - materialMetallicFactor());
 }
+vec3 materialDiffuseTransmissionColor(vec3 baseColor) {
+float factor = clamp(u_diffuseTransmissionFactors.a, 0.0, 1.0);
+vec3 colorFactor = clamp(u_diffuseTransmissionFactors.rgb, vec3(0.0), vec3(1.0));
+return materialDiffuseColor(baseColor) * colorFactor * factor;
+}
 vec3 materialEmissiveColor() {
 vec3 textureEmissive = u_useEmissiveTexture ? texture(u_emissiveTexture, v_emissive_uv).rgb : vec3(1.0);
 return u_emissiveColor.rgb * textureEmissive;
@@ -343,6 +350,35 @@ if (!u_useOcclusionTexture) {
 float strength = clamp(u_occlusionSettings.x, 0.0, 1.0);
 return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);
 }
+vec3 materialFallbackTangent(vec3 normal) {
+if (dot(normal, normal) <= 0.0001) {
+  return vec3(1.0, 0.0, 0.0);
+}
+vec3 dp1 = dFdx(v_worldPosition);
+vec3 dp2 = dFdy(v_worldPosition);
+vec2 duv1 = dFdx(v_uv);
+vec2 duv2 = dFdy(v_uv);
+float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+if (abs(determinant) > 0.000001) {
+  vec3 rawTangent = (dp1 * duv2.y - dp2 * duv1.y) / determinant;
+  vec3 projectedTangent = rawTangent - normal * dot(normal, rawTangent);
+  if (dot(projectedTangent, projectedTangent) > 0.0001) {
+    return normalize(projectedTangent);
+  }
+}
+vec3 axis = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+return normalize(cross(axis, normal));
+}
+vec3 materialGeometryTangent(vec3 normal) {
+vec3 tangent = v_tangent.w == 0.0 ? vec3(0.0) : v_tangent.xyz;
+if (dot(tangent, tangent) > 0.0001) {
+  vec3 projectedTangent = tangent - normal * dot(normal, tangent);
+  if (dot(projectedTangent, projectedTangent) > 0.0001) {
+    return normalize(projectedTangent);
+  }
+}
+return materialFallbackTangent(normal);
+}
 vec3 materialNormal(vec3 geometricNormal) {
 if (!u_useNormalTexture) {
   return geometricNormal;
@@ -350,24 +386,8 @@ if (!u_useNormalTexture) {
 vec3 textureNormal = texture(u_normalTexture, v_uv).xyz * 2.0 - 1.0;
 textureNormal.xy *= u_normalTextureSettings.x;
 vec3 normal = normalize(geometricNormal);
-vec3 tangent = v_tangent.w == 0.0 ? vec3(0.0) : normalize(v_tangent.xyz);
-vec3 bitangent = vec3(0.0);
-if (dot(tangent, tangent) > 0.0001) {
-  tangent = normalize(tangent - normal * dot(normal, tangent));
-  bitangent = normalize(cross(normal, tangent)) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
-} else {
-  vec3 dp1 = dFdx(v_worldPosition);
-  vec3 dp2 = dFdy(v_worldPosition);
-  vec2 duv1 = dFdx(v_uv);
-  vec2 duv2 = dFdy(v_uv);
-  float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
-  if (abs(determinant) <= 0.000001) {
-    return normal;
-  }
-  tangent = normalize((dp1 * duv2.y - dp2 * duv1.y) / determinant);
-  tangent = normalize(tangent - normal * dot(normal, tangent));
-  bitangent = normalize(cross(normal, tangent));
-}
+vec3 tangent = materialGeometryTangent(normal);
+vec3 bitangent = normalize(cross(normal, tangent)) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
 return normalize(tangent * textureNormal.x + bitangent * textureNormal.y + normal * textureNormal.z);
 }
 vec3 materialDielectricF0() {
@@ -391,6 +411,32 @@ float alpha = max(roughness * roughness, 0.001);
 float alpha2 = alpha * alpha;
 float denom = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
 return alpha2 / max(PI * denom * denom, 0.0001);
+}
+vec3 materialAnisotropyDirection(vec3 normal) {
+vec3 tangent = materialGeometryTangent(normal);
+vec3 bitangent = normalize(cross(normal, tangent)) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
+float rotation = u_anisotropyFactors.y;
+return normalize(tangent * cos(rotation) + bitangent * sin(rotation));
+}
+float materialAnisotropicGgxDistribution(vec3 normal, vec3 halfVector, float roughness) {
+float NdotH = max(dot(normal, halfVector), 0.0);
+float strength = clamp(u_anisotropyFactors.x, 0.0, 1.0);
+if (strength <= 0.0) {
+  return materialGgxDistribution(NdotH, roughness);
+}
+// KHR_materials_anisotropy is approximated with an anisotropic GGX D term for direct lights.
+vec3 tangent = materialAnisotropyDirection(normal);
+vec3 bitangent = normalize(cross(normal, tangent));
+float alpha = max(roughness * roughness, 0.001);
+float anisotropy = strength * 0.95;
+float alphaT = max(alpha * (1.0 + anisotropy), 0.001);
+float alphaB = max(alpha * (1.0 - anisotropy), 0.001);
+float TdotH = dot(tangent, halfVector);
+float BdotH = dot(bitangent, halfVector);
+float denom = TdotH * TdotH / (alphaT * alphaT)
+  + BdotH * BdotH / (alphaB * alphaB)
+  + NdotH * NdotH;
+return 1.0 / max(PI * alphaT * alphaB * denom * denom, 0.0001);
 }
 float materialSmithG1(float NdotX, float roughness) {
 float k = pow(roughness + 1.0, 2.0) / 8.0;
@@ -555,10 +601,12 @@ if (kind == 0) {
   }
 }
 float lambert = max(dot(normal, lightVector), 0.0);
+float diffuseTransmissionLambert = max(dot(-normal, lightVector), 0.0);
 vec3 lightColor = u_surfaceLightColor[index].rgb * attenuation;
 vec3 diffuse = materialDiffuseColor(baseColor) * lambert * lightColor;
+vec3 diffuseTransmission = materialDiffuseTransmissionColor(baseColor) * diffuseTransmissionLambert * lightColor;
 if (lambert <= 0.0) {
-  return diffuse;
+  return diffuse + diffuseTransmission;
 }
 vec3 halfInput = lightVector + viewDirection;
 vec3 halfVector = length(halfInput) <= 0.0001 ? normal : normalize(halfInput);
@@ -566,10 +614,10 @@ float NdotV = max(dot(normal, viewDirection), 0.0);
 float NdotH = max(dot(normal, halfVector), 0.0);
 float roughness = materialRoughnessFactor();
 vec3 fresnel = materialSpecularFresnel(baseColor, viewDirection, halfVector);
-float distribution = materialGgxDistribution(NdotH, roughness);
+float distribution = materialAnisotropicGgxDistribution(normal, halfVector, roughness);
 float visibility = materialSmithVisibility(lambert, NdotV, roughness);
 vec3 specular = fresnel * min(distribution * visibility * lambert, 4.0) * lightColor;
-vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular;
+vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular + diffuseTransmission;
 material *= materialSheenAlbedoScale(NdotV);
 material += materialSheenContribution(normal, viewDirection, lightVector, halfVector, lambert, lightColor);
 float clearcoat = materialClearcoatFresnel(normal, viewDirection);

@@ -42,10 +42,14 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
 };
 
 export type SurfaceMaterialExtensionFactors = {
+  readonly anisotropyRotation: number;
+  readonly anisotropyStrength: number;
   readonly attenuationColor: Vec3;
   readonly attenuationDistance: number;
   readonly clearcoatFactor: number;
   readonly clearcoatRoughnessFactor: number;
+  readonly diffuseTransmissionColorFactor: Vec3;
+  readonly diffuseTransmissionFactor: number;
   readonly dispersionFactor: number;
   readonly ior: number;
   readonly iridescenceFactor: number;
@@ -61,10 +65,14 @@ export type SurfaceMaterialExtensionFactors = {
 };
 
 export const DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS: SurfaceMaterialExtensionFactors = {
+  anisotropyRotation: 0,
+  anisotropyStrength: 0,
   attenuationColor: [1, 1, 1],
   attenuationDistance: Infinity,
   clearcoatFactor: 0,
   clearcoatRoughnessFactor: 0,
+  diffuseTransmissionColorFactor: [1, 1, 1],
+  diffuseTransmissionFactor: 0,
   dispersionFactor: 0,
   ior: 1.5,
   iridescenceFactor: 0,
@@ -154,11 +162,15 @@ export const surfaceMaterialExtensionFactorsKey = (
   factors: SurfaceMaterialExtensionFactors,
 ): string =>
   [
+    factors.anisotropyStrength,
+    factors.anisotropyRotation,
     factors.specularFactor,
     ...factors.specularColorFactor,
     factors.ior,
     factors.clearcoatFactor,
     factors.clearcoatRoughnessFactor,
+    factors.diffuseTransmissionFactor,
+    ...factors.diffuseTransmissionColorFactor,
     factors.dispersionFactor,
     ...factors.sheenColorFactor,
     factors.sheenRoughnessFactor,

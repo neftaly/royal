@@ -449,7 +449,9 @@ const imageLoadKeyReplays: readonly FuzzReplay[] = [
 ];
 
 const materialTextureSlotExtensionNames = [
+  "KHR_materials_anisotropy",
   "KHR_materials_clearcoat",
+  "KHR_materials_diffuse_transmission",
   "KHR_materials_iridescence",
   "KHR_materials_sheen",
   "KHR_materials_specular",
@@ -458,6 +460,41 @@ const materialTextureSlotExtensionNames = [
 ] as const;
 
 const materialTextureSlotReplays: readonly FuzzReplay[] = [
+  {
+    label: "required anisotropy texture is rejected",
+    value: {
+      document: {
+        extensionsRequired: ["KHR_materials_anisotropy"],
+        extensionsUsed: ["KHR_materials_anisotropy"],
+        materials: [{
+          extensions: {
+            KHR_materials_anisotropy: {
+              anisotropyTexture: { index: 0 },
+            },
+          },
+        }],
+      },
+      expectedMessage: /KHR_materials_anisotropy\.anisotropyTexture.*material 0.*anisotropy textures/i,
+      expectedPass: false,
+    } satisfies MaterialTextureSlotReplay,
+  },
+  {
+    label: "optional anisotropy texture remains a fallback-compatible diagnostic path",
+    value: {
+      document: {
+        extensionsUsed: ["KHR_materials_anisotropy"],
+        materials: [{
+          extensions: {
+            KHR_materials_anisotropy: {
+              anisotropyStrength: 0.7,
+              anisotropyTexture: { index: 0 },
+            },
+          },
+        }],
+      },
+      expectedPass: true,
+    } satisfies MaterialTextureSlotReplay,
+  },
   {
     label: "required clearcoat normal map is rejected",
     value: {
@@ -473,6 +510,25 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
         }],
       },
       expectedMessage: /KHR_materials_clearcoat\.clearcoatNormalTexture.*material 0.*extension normal maps/i,
+      expectedPass: false,
+    } satisfies MaterialTextureSlotReplay,
+  },
+  {
+    label: "required diffuse transmission textures are rejected",
+    value: {
+      document: {
+        extensionsRequired: ["KHR_materials_diffuse_transmission"],
+        extensionsUsed: ["KHR_materials_diffuse_transmission"],
+        materials: [{
+          extensions: {
+            KHR_materials_diffuse_transmission: {
+              diffuseTransmissionColorTexture: { index: 1 },
+              diffuseTransmissionTexture: { index: 0 },
+            },
+          },
+        }],
+      },
+      expectedMessage: /KHR_materials_diffuse_transmission\.diffuseTransmissionTexture.*material 0.*diffuse transmission textures/i,
       expectedPass: false,
     } satisfies MaterialTextureSlotReplay,
   },
@@ -559,11 +615,22 @@ const randomMaterialTextureSlotDocument = (random: SeededRandom): GltfDocument =
     extensionsUsed: usedExtensions,
     materials: random.array(materialCount, () => ({
       extensions: {
+        ...(usedExtensions.includes("KHR_materials_anisotropy") ? {
+          KHR_materials_anisotropy: {
+            ...(random.boolean(0.55) ? { anisotropyTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
         ...(usedExtensions.includes("KHR_materials_clearcoat") ? {
           KHR_materials_clearcoat: {
             ...(random.boolean(0.55) ? { clearcoatTexture: randomTextureInfo(random) } : {}),
             ...(random.boolean(0.55) ? { clearcoatRoughnessTexture: randomTextureInfo(random) } : {}),
             ...(random.boolean(0.22) ? { clearcoatNormalTexture: randomTextureInfo(random) } : {}),
+          },
+        } : {}),
+        ...(usedExtensions.includes("KHR_materials_diffuse_transmission") ? {
+          KHR_materials_diffuse_transmission: {
+            ...(random.boolean(0.55) ? { diffuseTransmissionColorTexture: randomTextureInfo(random) } : {}),
+            ...(random.boolean(0.55) ? { diffuseTransmissionTexture: randomTextureInfo(random) } : {}),
           },
         } : {}),
         ...(usedExtensions.includes("KHR_materials_iridescence") ? {
@@ -600,9 +667,16 @@ const randomMaterialTextureSlotDocument = (random: SeededRandom): GltfDocument =
 };
 
 const materialTextureSlotDocumentShouldPass = (document: GltfDocument): boolean =>
-  !document.extensionsRequired?.includes("KHR_materials_clearcoat")
-  || !document.materials?.some((material) =>
-    material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined);
+  !document.materials?.some((material) =>
+    (document.extensionsRequired?.includes("KHR_materials_anisotropy") === true
+      && material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined)
+    || (document.extensionsRequired?.includes("KHR_materials_clearcoat") === true
+      && material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined)
+    || (document.extensionsRequired?.includes("KHR_materials_diffuse_transmission") === true
+      && (
+        material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined
+        || material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture !== undefined
+      )));
 
 describe("renderer-webgl glTF texture validation properties", () => {
   it("reports unsupported required extensions uniquely and in source order", () => {

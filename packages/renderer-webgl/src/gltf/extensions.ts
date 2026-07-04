@@ -6,10 +6,13 @@ export const supportedGltfExtensions = new Set<string>([
   "EXT_mesh_gpu_instancing",
   "EXT_texture_webp",
   "KHR_draco_mesh_compression",
+  "KHR_meshopt_compression",
   "KHR_texture_basisu",
   "KHR_lights_punctual",
+  "KHR_materials_anisotropy",
   "KHR_materials_clearcoat",
   "KHR_materials_dispersion",
+  "KHR_materials_diffuse_transmission",
   "KHR_materials_emissive_strength",
   "KHR_materials_ior",
   "KHR_materials_iridescence",
@@ -92,11 +95,32 @@ const requiredTextureSourceExtensions = [
 
 const requiredGltfMaterialExtensionFeatures = [
   {
+    extension: "KHR_materials_anisotropy",
+    field: "anisotropyTexture",
+    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
+      material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined,
+    reason: "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported",
+  },
+  {
     extension: "KHR_materials_clearcoat",
     field: "clearcoatNormalTexture",
     hasUnsupportedFeature: (material: GltfMaterial): boolean =>
       material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined,
     reason: "Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support",
+  },
+  {
+    extension: "KHR_materials_diffuse_transmission",
+    field: "diffuseTransmissionTexture",
+    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
+      material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined,
+    reason: "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported",
+  },
+  {
+    extension: "KHR_materials_diffuse_transmission",
+    field: "diffuseTransmissionColorTexture",
+    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
+      material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture !== undefined,
+    reason: "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported",
   },
 ] as const;
 

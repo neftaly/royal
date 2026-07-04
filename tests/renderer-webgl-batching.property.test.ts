@@ -204,6 +204,37 @@ const batchDimensions = [
     },
   },
   {
+    extensionsUsed: ["KHR_materials_anisotropy"],
+    name: "anisotropy strength",
+    pair: (random) => scalarExtensionPair(random, "KHR_materials_anisotropy", "anisotropyStrength"),
+  },
+  {
+    extensionsUsed: ["KHR_materials_anisotropy"],
+    name: "anisotropy rotation",
+    pair: (random) => scalarExtensionPair(random, "KHR_materials_anisotropy", "anisotropyRotation"),
+  },
+  {
+    extensionsUsed: ["KHR_materials_diffuse_transmission"],
+    name: "diffuse transmission color",
+    pair: (random) => {
+      const first = vec3(random);
+      const base = pbrMaterial(random);
+
+      return [
+        withExtension(base, "KHR_materials_diffuse_transmission", { diffuseTransmissionColorFactor: first }),
+        withExtension(base, "KHR_materials_diffuse_transmission", {
+          diffuseTransmissionColorFactor: shiftedVec3(first),
+        }),
+      ];
+    },
+  },
+  {
+    extensionsUsed: ["KHR_materials_diffuse_transmission"],
+    name: "diffuse transmission factor",
+    pair: (random) =>
+      scalarExtensionPair(random, "KHR_materials_diffuse_transmission", "diffuseTransmissionFactor"),
+  },
+  {
     extensionsUsed: ["KHR_materials_specular"],
     name: "specular color",
     pair: (random) => {

@@ -1707,6 +1707,12 @@ const gltfSheenColorFactor = (values: readonly number[] | undefined): Vec3 => [
   clampedFiniteNumber(values?.[2], 0, 0, 1),
 ];
 
+const gltfDiffuseTransmissionColorFactor = (values: readonly number[] | undefined): Vec3 => [
+  clampedFiniteNumber(values?.[0], 1, 0, 1),
+  clampedFiniteNumber(values?.[1], 1, 0, 1),
+  clampedFiniteNumber(values?.[2], 1, 0, 1),
+];
+
 const gltfAttenuationColor = (values: readonly number[] | undefined): Vec3 => [
   nonNegativeFiniteNumber(values?.[0], 1),
   nonNegativeFiniteNumber(values?.[1], 1),
@@ -1720,30 +1726,45 @@ const readGltfMaterialExtensionFactors = (
   material: GltfMaterial | undefined,
 ): SurfaceMaterialExtensionFactors | undefined => {
   const extensions = material?.extensions;
+  const anisotropy = extensions?.KHR_materials_anisotropy;
   const specular = extensions?.KHR_materials_specular;
   const ior = extensions?.KHR_materials_ior;
   const sheen = extensions?.KHR_materials_sheen;
   const iridescence = extensions?.KHR_materials_iridescence;
   const clearcoat = extensions?.KHR_materials_clearcoat;
   const dispersion = extensions?.KHR_materials_dispersion;
+  const diffuseTransmission = extensions?.KHR_materials_diffuse_transmission;
   const transmission = extensions?.KHR_materials_transmission;
   const volume = extensions?.KHR_materials_volume;
   if (
-    specular === undefined
+    anisotropy === undefined
+    && specular === undefined
     && ior === undefined
     && sheen === undefined
     && iridescence === undefined
     && clearcoat === undefined
     && dispersion === undefined
+    && diffuseTransmission === undefined
     && transmission === undefined
     && volume === undefined
   ) return undefined;
 
   return {
+    anisotropyRotation: finiteNumber(anisotropy?.anisotropyRotation, 0),
+    anisotropyStrength: clampedFiniteNumber(anisotropy?.anisotropyStrength, 0, 0, 1),
     attenuationColor: gltfAttenuationColor(volume?.attenuationColor),
     attenuationDistance: gltfAttenuationDistance(volume?.attenuationDistance),
     clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
     clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
+    diffuseTransmissionColorFactor: gltfDiffuseTransmissionColorFactor(
+      diffuseTransmission?.diffuseTransmissionColorFactor,
+    ),
+    diffuseTransmissionFactor: clampedFiniteNumber(
+      diffuseTransmission?.diffuseTransmissionFactor,
+      0,
+      0,
+      1,
+    ),
     dispersionFactor: nonNegativeFiniteNumber(dispersion?.dispersion, 0),
     ior: gltfIor(ior?.ior),
     iridescenceFactor: clampedFiniteNumber(iridescence?.iridescenceFactor, 0, 0, 1),
@@ -3707,6 +3728,18 @@ class WebGlRootImpl implements WebGlRoot {
       factors.ior,
       factors.clearcoatFactor,
       factors.clearcoatRoughnessFactor,
+    ]);
+    this.#uniformColor(program, "u_anisotropyFactors", [
+      factors.anisotropyStrength,
+      factors.anisotropyRotation,
+      0,
+      0,
+    ]);
+    this.#uniformColor(program, "u_diffuseTransmissionFactors", [
+      factors.diffuseTransmissionColorFactor[0],
+      factors.diffuseTransmissionColorFactor[1],
+      factors.diffuseTransmissionColorFactor[2],
+      factors.diffuseTransmissionFactor,
     ]);
     this.#uniformColor(program, "u_sheenColorFactor", [
       factors.sheenColorFactor[0],
@@ -5793,18 +5826,46 @@ class WebGlRootImpl implements WebGlRoot {
     material: GltfMaterial | undefined,
     materialIndex: number | undefined,
   ): void {
+    const anisotropy = material?.extensions?.KHR_materials_anisotropy;
+    if (anisotropy?.anisotropyTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionFeature(
+        materialIndex,
+        "KHR_materials_anisotropy.anisotropyTexture",
+        "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported.",
+      );
+    }
     const clearcoat = material?.extensions?.KHR_materials_clearcoat;
     if (clearcoat?.clearcoatNormalTexture !== undefined) {
-      this.#recordUnsupportedGltfMaterialExtensionTexture(materialIndex, "KHR_materials_clearcoat.clearcoatNormalTexture");
+      this.#recordUnsupportedGltfMaterialExtensionFeature(
+        materialIndex,
+        "KHR_materials_clearcoat.clearcoatNormalTexture",
+        "Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support.",
+      );
+    }
+    const diffuseTransmission = material?.extensions?.KHR_materials_diffuse_transmission;
+    if (diffuseTransmission?.diffuseTransmissionTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionFeature(
+        materialIndex,
+        "KHR_materials_diffuse_transmission.diffuseTransmissionTexture",
+        "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported.",
+      );
+    }
+    if (diffuseTransmission?.diffuseTransmissionColorTexture !== undefined) {
+      this.#recordUnsupportedGltfMaterialExtensionFeature(
+        materialIndex,
+        "KHR_materials_diffuse_transmission.diffuseTransmissionColorTexture",
+        "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported.",
+      );
     }
   }
 
-  #recordUnsupportedGltfMaterialExtensionTexture(
+  #recordUnsupportedGltfMaterialExtensionFeature(
     materialIndex: number | undefined,
     field: string,
+    reason: string,
   ): void {
     const materialLabel = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
-    const message = `glTF ${materialLabel} ${field} is ignored: Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support.`;
+    const message = `glTF ${materialLabel} ${field} is ignored: ${reason}`;
     if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
 
     this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);

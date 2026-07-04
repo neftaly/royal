@@ -55,6 +55,7 @@ export type GltfBufferView = {
   readonly byteStride?: number;
   readonly extensions?: {
     readonly EXT_meshopt_compression?: GltfMeshoptCompressionExtension;
+    readonly KHR_meshopt_compression?: GltfMeshoptCompressionExtension;
     readonly [name: string]: unknown;
   };
   readonly target?: number;
@@ -81,6 +82,15 @@ export type GltfMeshGpuInstancingExtension = {
 
 export type GltfBuffer = {
   readonly byteLength?: number;
+  readonly extensions?: {
+    readonly EXT_meshopt_compression?: {
+      readonly fallback?: boolean;
+    };
+    readonly KHR_meshopt_compression?: {
+      readonly fallback?: boolean;
+    };
+    readonly [name: string]: unknown;
+  };
   readonly uri?: string;
 };
 
@@ -127,6 +137,11 @@ export type GltfMaterial = {
   readonly normalTexture?: GltfNormalTextureInfo;
   readonly occlusionTexture?: GltfOcclusionTextureInfo;
   readonly extensions?: {
+    readonly KHR_materials_anisotropy?: {
+      readonly anisotropyRotation?: number;
+      readonly anisotropyStrength?: number;
+      readonly anisotropyTexture?: GltfTextureInfo;
+    };
     readonly KHR_materials_clearcoat?: {
       readonly clearcoatFactor?: number;
       readonly clearcoatNormalTexture?: GltfNormalTextureInfo;
@@ -136,6 +151,12 @@ export type GltfMaterial = {
     };
     readonly KHR_materials_dispersion?: {
       readonly dispersion?: number;
+    };
+    readonly KHR_materials_diffuse_transmission?: {
+      readonly diffuseTransmissionColorFactor?: readonly number[];
+      readonly diffuseTransmissionColorTexture?: GltfTextureInfo;
+      readonly diffuseTransmissionFactor?: number;
+      readonly diffuseTransmissionTexture?: GltfTextureInfo;
     };
     readonly KHR_materials_emissive_strength?: {
       readonly emissiveStrength?: number;
