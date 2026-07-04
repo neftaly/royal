@@ -183,51 +183,44 @@ describe("React canvas pointer interaction planner", () => {
     expect(miss.state.pressedNodesByPointerId.has(7)).toBe(false);
   });
 
-  it("deletes pressed nodes on pointerup and clicks only for same left-button targets", () => {
+  it("handles pointerup dispatch and cleanup cases", () => {
     const targetA = pickedTarget(targetNode("a"));
     const targetB = pickedTarget(targetNode("b"));
-    const stateWithPress = (target: CanvasPickedPointerTarget) =>
+    const stateWithPress = () =>
       reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
-        picked: target,
+        picked: targetA,
         pointerId: 1,
         type: "pointerdown",
       }).state;
+    const cases: Array<[
+      string,
+      () => CanvasPointerInteractionState,
+      CanvasPickedPointerTarget | undefined,
+      number,
+      readonly string[],
+    ]> = [
+      ["same left-button target", stateWithPress, targetA, 0, ["pointerup", "click"]],
+      ["different left-button target", stateWithPress, targetB, 0, ["pointerup"]],
+      ["same right-button target", stateWithPress, targetA, 2, ["pointerup"]],
+      ["missed left-button target", stateWithPress, undefined, 0, []],
+      ["picked target without prior press", createCanvasPointerInteractionState, targetA, 0, ["pointerup"]],
+    ];
 
-    const click = reduceCanvasPointerInteraction(stateWithPress(targetA), {
-      button: 0,
-      picked: targetA,
-      pointerId: 1,
-      type: "pointerup",
-    });
-    expect(dispatchTypes(click)).toEqual(["pointerup", "click"]);
-    expect(click.state.pressedNodesByPointerId.has(1)).toBe(false);
+    for (const [label, state, picked, button, dispatches] of cases) {
+      const result = reduceCanvasPointerInteraction(state(), {
+        button,
+        picked,
+        pointerId: 1,
+        type: "pointerup",
+      });
 
-    const differentTarget = reduceCanvasPointerInteraction(stateWithPress(targetA), {
-      button: 0,
-      picked: targetB,
-      pointerId: 1,
-      type: "pointerup",
-    });
-    expect(dispatchTypes(differentTarget)).toEqual(["pointerup"]);
-    expect(differentTarget.state.pressedNodesByPointerId.has(1)).toBe(false);
-
-    const rightButton = reduceCanvasPointerInteraction(stateWithPress(targetA), {
-      button: 2,
-      picked: targetA,
-      pointerId: 1,
-      type: "pointerup",
-    });
-    expect(dispatchTypes(rightButton)).toEqual(["pointerup"]);
-    expect(rightButton.state.pressedNodesByPointerId.has(1)).toBe(false);
-
-    const miss = reduceCanvasPointerInteraction(stateWithPress(targetA), {
-      button: 0,
-      picked: undefined,
-      pointerId: 1,
-      type: "pointerup",
-    });
-    expect(dispatchTypes(miss)).toEqual([]);
-    expect(miss.state.pressedNodesByPointerId.has(1)).toBe(false);
+      expect(dispatchTypes(result), label).toEqual(dispatches);
+      expect(
+        result.dispatches.map((dispatch) => dispatch.picked),
+        `${label} dispatch targets`,
+      ).toEqual(dispatches.map(() => picked));
+      expect(result.state.pressedNodesByPointerId.has(1), `${label} cleanup`).toBe(false);
+    }
   });
 
   it("clears hover and all pressed nodes on pointerleave", () => {

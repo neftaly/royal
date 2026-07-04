@@ -118,24 +118,6 @@ const textControl = ({
   };
 };
 
-const textScrollControl = ({
-  scrollLine = 0,
-  selected = selection(0),
-  text = "alpha",
-  visibleLineCount = Number.POSITIVE_INFINITY,
-}: {
-  readonly scrollLine?: number;
-  readonly selected?: EditableTextSelection;
-  readonly text?: string;
-  readonly visibleLineCount?: number;
-} = {}) => ({
-  layout: layoutFor(text),
-  scrollLine,
-  selection: selected,
-  text,
-  visibleLineCount,
-});
-
 const actionControl = (id = "button"): ActionControlRegistration => ({
   bounds: {
     bottom: -1,
@@ -195,6 +177,18 @@ const fuzzKeyInput = (random: SeededRandom): EditableTextKeyInput => {
     shiftKey: random.boolean(0.25),
   };
 };
+
+type ScrollRegistrationReplay = {
+  readonly currentText: string | undefined;
+  readonly expectedScrollLine: number;
+  readonly persistedScrollLine: number;
+  readonly selectedLine: number | undefined;
+};
+
+const scrollRegistrationReplay = (
+  label: string,
+  value: ScrollRegistrationReplay,
+) => ({ label, value });
 
 const expectRegisteredTextInvariants = (
   state: TextSurfaceState,
@@ -529,65 +523,6 @@ describe("React text surface state reducer", () => {
     expect(revealUp.scrollLines.get(revealControl.id)).toBe(1);
   });
 
-  it("computes registered scroll lines from small scroll inputs", () => {
-    const text = "zero\none\ntwo\nthree\nfour";
-    const layout = layoutFor(text);
-
-    expect(scrollLineForRegisteredTextControl({
-      control: textScrollControl({
-        scrollLine: 0,
-        selected: caretSelectionAtLine(layout, 4),
-        text,
-        visibleLineCount: 2,
-      }),
-      currentControl: { text },
-      persistedScrollLine: 2,
-    })).toBe(2);
-
-    expect(scrollLineForRegisteredTextControl({
-      control: textScrollControl({
-        scrollLine: 0,
-        text,
-        visibleLineCount: 2,
-      }),
-      currentControl: undefined,
-      persistedScrollLine: 99,
-    })).toBe(3);
-
-    expect(scrollLineForRegisteredTextControl({
-      control: textScrollControl({
-        scrollLine: 0,
-        selected: caretSelectionAtLine(layout, 4),
-        text,
-        visibleLineCount: 2,
-      }),
-      currentControl: { text: "zero\none" },
-      persistedScrollLine: 0,
-    })).toBe(3);
-
-    expect(scrollLineForRegisteredTextControl({
-      control: textScrollControl({
-        scrollLine: 0,
-        selected: caretSelectionAtLine(layout, 1),
-        text,
-        visibleLineCount: 2,
-      }),
-      currentControl: { text: "zero\none" },
-      persistedScrollLine: 3,
-    })).toBe(1);
-
-    expect(scrollLineForRegisteredTextControl({
-      control: textScrollControl({
-        scrollLine: 0,
-        selected: caretSelectionAtLine(layout, 4),
-        text,
-        visibleLineCount: 2,
-      }),
-      currentControl: { text },
-      persistedScrollLine: 0,
-    })).toBe(0);
-  });
-
   it("clears selections except the requested control", () => {
     const keep = textControl({
       id: "keep",
@@ -666,8 +601,75 @@ describe("React text surface state reducer", () => {
   });
 
   it("keeps controlled editor key updates, re-registration, and scroll windows coherent", () => {
-    forEachFuzzCase({ cases: 24, seed: 0x6ef3_7a11 }, ({ label, random }) => {
+    const scrollText = "zero\none\ntwo\nthree\nfour";
+    const scrollRegistrationReplays = [
+      scrollRegistrationReplay("same-text-keeps-persisted-scroll", {
+        currentText: scrollText, expectedScrollLine: 2, persistedScrollLine: 2, selectedLine: 4,
+      }),
+      scrollRegistrationReplay("new-registration-clamps-persisted-scroll", {
+        currentText: undefined, expectedScrollLine: 3, persistedScrollLine: 99, selectedLine: undefined,
+      }),
+      scrollRegistrationReplay("changed-text-reveals-selection-below-window", {
+        currentText: "zero\none", expectedScrollLine: 3, persistedScrollLine: 0, selectedLine: 4,
+      }),
+      scrollRegistrationReplay("changed-text-reveals-selection-above-window", {
+        currentText: "zero\none", expectedScrollLine: 1, persistedScrollLine: 3, selectedLine: 1,
+      }),
+      scrollRegistrationReplay("same-text-ignores-offscreen-selection", {
+        currentText: scrollText, expectedScrollLine: 0, persistedScrollLine: 0, selectedLine: 4,
+      }),
+    ] as const;
+
+    forEachFuzzCase({
+      cases: 24,
+      replays: scrollRegistrationReplays,
+      seed: 0x6ef3_7a11,
+    }, ({ label, random, replay }) => {
       const id = `field-${label}`;
+      const replayValue = replay as ScrollRegistrationReplay | undefined;
+      if (replayValue !== undefined) {
+        const layout = layoutFor(scrollText);
+        const selected = replayValue.selectedLine === undefined
+          ? selection(0)
+          : caretSelectionAtLine(layout, replayValue.selectedLine);
+        const control = textControl({
+          id,
+          selected,
+          text: scrollText,
+          visibleLineCount: 2,
+        });
+        const currentControl = replayValue.currentText === undefined
+          ? undefined
+          : textControl({
+            id,
+            text: replayValue.currentText,
+            visibleLineCount: 2,
+          });
+        const state: TextSurfaceState = {
+          ...emptyState(),
+          controls: currentControl === undefined
+            ? new Map<string, TextControlRegistration>()
+            : new Map([[id, currentControl]]),
+          scrollLines: new Map([[id, replayValue.persistedScrollLine]]),
+        };
+
+        expect(scrollLineForRegisteredTextControl({
+          control,
+          currentControl,
+          persistedScrollLine: replayValue.persistedScrollLine,
+        }), `${label} helper`).toBe(replayValue.expectedScrollLine);
+
+        const registered = reduceTextSurfaceState(state, {
+          control,
+          type: "text-control/register",
+        }).state;
+
+        expect(registered.scrollLines.get(id), `${label} persisted`).toBe(replayValue.expectedScrollLine);
+        expect(registered.controls.get(id)?.scrollLine, `${label} control`).toBe(replayValue.expectedScrollLine);
+        expectRegisteredTextInvariants(registered, id, scrollText);
+        return;
+      }
+
       const visibleLineCount = random.pick([1, 2, 3] as const);
       let text = fuzzText(random);
       let layout = layoutFor(text);

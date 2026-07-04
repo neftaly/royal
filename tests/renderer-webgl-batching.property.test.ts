@@ -267,6 +267,19 @@ const batchDimensions = [
   },
   {
     extensionsUsed: ["KHR_materials_iridescence"],
+    name: "iridescence factor",
+    pair: (random) => {
+      const first = unit(random);
+      const base = pbrMaterial(random);
+
+      return [
+        withExtension(base, "KHR_materials_iridescence", { iridescenceFactor: first }),
+        withExtension(base, "KHR_materials_iridescence", { iridescenceFactor: shiftedUnit(first) }),
+      ];
+    },
+  },
+  {
+    extensionsUsed: ["KHR_materials_iridescence"],
     name: "iridescence thickness",
     pair: (random) => {
       const first = round(random.number(120, 320));

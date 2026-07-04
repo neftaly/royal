@@ -4864,7 +4864,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(diagnostics).not.toMatch(/KHR_materials_iridescence\.iridescenceThicknessTexture.*ignored/i);
   });
 
-  it("keeps sheen and iridescence factors in glTF material batch keys", async () => {
+  it("renders distinct sheen and iridescence uniforms for split glTF materials", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -4893,8 +4893,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
-    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
     expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
       .toContainEqual([0.1, 0.2, 0.3, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_sheenColorFactor").map(roundVector))
@@ -5224,7 +5222,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
   });
 
-  it("keeps transmission factors in glTF material batch keys", async () => {
+  it("renders distinct transmission uniforms while sampling the current frame once", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -5253,8 +5251,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
-    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
     expect(readyFrameCalls.filter((call) => call.name === "copyTexImage2D")).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
       .toContainEqual([0.2, 0, 0, 0]);
@@ -5262,7 +5258,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toContainEqual([0.8, 0, 0, 0]);
   });
 
-  it("keeps dispersion factors in glTF material batch keys", async () => {
+  it("renders distinct dispersion uniforms while sampling the current frame once", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -5291,8 +5287,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(drawCalls(readyFrameCalls)).toHaveLength(2);
-    expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
     expect(readyFrameCalls.filter((call) => call.name === "copyTexImage2D")).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
       .toContainEqual([0.2, 0, 0, 0]);
