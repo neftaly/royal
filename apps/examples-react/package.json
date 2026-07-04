@@ -10,6 +10,7 @@
     "bench:examples:full": "EXAMPLES_BENCH_MODE=full EXAMPLES_BENCH_INSTANCING_SWEEP=full EXAMPLES_BENCH_INSTANCING_FUZZ=1 pnpm run bench:examples",
     "bench:examples:instancing": "EXAMPLES_BENCH_ROUTE=gltf-instancing EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
     "bench:examples:quick": "EXAMPLES_BENCH_MODE=quick EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
+    "bench:auto-vt-load": "EXAMPLES_GLTF_LOAD_ROUTE=/gltf-helmet EXAMPLES_GLTF_LOAD_VT_FRAME_SAMPLE=1 EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT=1 pnpm run bench:gltf-load",
     "bench:gltf-load": "pnpm run build && node scripts/benchmark-gltf-load.mjs",
     "build": "vite build --config vite.config.ts --logLevel warn",
     "dev": "vite --config vite.config.ts",

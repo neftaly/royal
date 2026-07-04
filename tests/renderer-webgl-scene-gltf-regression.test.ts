@@ -6891,6 +6891,84 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
   });
 
+  it("uses SVG VT sidecar and generated fallback for plain glTF .svg image sources", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => {
+        throw new Error("unexpected 2D canvas raster fallback");
+      }),
+    });
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "plain-svg-texture-auto-vt" }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        images: [
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances[0]?.src).toBe("blob:royal-test-1");
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    root.render(renderGraph);
+
+    expect(loader.fetchRequests
+      .filter((request) => request.url.includes(".vt.json"))
+      .map((request) => request.url)).toEqual([
+        "https://example.test/fixtures/staged-triangle.svg.vt.json",
+      ]);
+    expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
+    expect(loader.rejectPendingFetch(/staged-triangle\.svg\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    for (
+      let frame = 0;
+      frame < 8
+      && root.snapshot().virtualTexturing.shaderBinds === 0;
+      frame += 1
+    ) {
+      await flushMicrotasks();
+      root.render(renderGraph);
+      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-test-2");
+      generatedPageImage?.settleLoad();
+      await flushAnimationFrames(viewport.animationFrames);
+    }
+
+    expect(loader.objectUrlBlobs.length).toBeGreaterThan(1);
+    expect(await loader.objectUrlBlobs[1]?.text()).toContain("<image href=\"data:image/svg+xml;base64,");
+    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      generatedPageFailures: 0,
+      generatedPagesTarget: 5,
+      manifestsReady: 1,
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/staged-triangle\.svg\.vt\.json/);
+  });
+
   it("sizes generated GS_texture_svg VT residency for the source mip pyramid", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

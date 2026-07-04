@@ -25,6 +25,12 @@ const envNumber = (name, fallback) => {
 
 const readyTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_READY_TIMEOUT_MS', 20_000);
 const fullyLoadedStableMs = envNumber('EXAMPLES_GLTF_LOAD_STABLE_MS', 500);
+const vtFrameSampleEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_FRAME_SAMPLE === '1';
+const vtFrameSampleCount = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAMES', 60);
+const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS', 10_000);
+const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1';
+const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
+const forceGeneratedVirtualTexturing = process.env.EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT === '1';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -162,6 +168,7 @@ const installBenchmarkHooks = async (session) => {
     firstUsableMinPaintedRatio: 0.01,
     firstUsableSampleSize: 96,
     readyTimeoutMs,
+    vtCameraDragStepPixels,
   });
   await session.call('Page.addScriptToEvaluateOnNewDocument', {
     source: `
@@ -190,12 +197,26 @@ const installBenchmarkHooks = async (session) => {
     textureUploadCalls: 0,
   };
   let firstDrawAt = null;
+  let firstTextureUploadAt = null;
+  let firstTexturedFrameAt = null;
+  let firstTexturedFrameSample = null;
   let firstUsableAt = null;
   let firstUsableSample = null;
   let fullyLoadedAt = null;
   let fullyLoadedState = null;
 
   const raf = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const rafBeforeDeadline = (deadline) => new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(value);
+    };
+    const timeout = setTimeout(() => finish(false), Math.max(1, deadline - performance.now()));
+    requestAnimationFrame(() => finish(true));
+  });
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const finiteDimension = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
   const sourceSize = (source) => {
@@ -245,6 +266,9 @@ const installBenchmarkHooks = async (session) => {
   const recordDraw = () => {
     if (firstDrawAt === null) firstDrawAt = performance.now();
   };
+  const recordTextureUpload = () => {
+    if (firstTextureUploadAt === null) firstTextureUploadAt = performance.now();
+  };
   const patch = (prototype, name, handler) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalGltfLoadBenchPatched === true) return;
@@ -268,11 +292,13 @@ const installBenchmarkHooks = async (session) => {
       counters.textureAllocationCalls += 1;
       counters.textureUploadCalls += 1;
       counters.textureUploadBytesRough += texImageBytes(args);
+      recordTextureUpload();
     });
     patch(prototype, 'texSubImage2D', (args) => {
       counters.texSubImage2D += 1;
       counters.textureUploadCalls += 1;
       counters.textureUploadBytesRough += texSubImageBytes(args);
+      recordTextureUpload();
     });
     patch(prototype, 'texStorage2D', () => {
       counters.texStorage2D += 1;
@@ -283,11 +309,13 @@ const installBenchmarkHooks = async (session) => {
       counters.textureAllocationCalls += 1;
       counters.textureUploadCalls += 1;
       counters.textureUploadBytesRough += compressedBytes(args);
+      recordTextureUpload();
     });
     patch(prototype, 'compressedTexSubImage2D', (args) => {
       counters.compressedTexSubImage2D += 1;
       counters.textureUploadCalls += 1;
       counters.textureUploadBytesRough += compressedBytes(args);
+      recordTextureUpload();
     });
     patch(prototype, 'copyTexImage2D', () => {
       counters.copyTexImage2D += 1;
@@ -296,6 +324,7 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'copyTexSubImage2D', () => {
       counters.copyTexSubImage2D += 1;
       counters.textureUploadCalls += 1;
+      recordTextureUpload();
     });
     patch(prototype, 'generateMipmap', () => { counters.generateMipmap += 1; });
   };
@@ -347,8 +376,12 @@ const installBenchmarkHooks = async (session) => {
     sample.paintedRatio >= config.firstUsableMinPaintedRatio &&
     sample.colorBuckets >= config.firstUsableMinColorBuckets;
   const updateFirstUsable = () => {
-    if (firstUsableAt !== null) return true;
     const sample = sampleCanvas();
+    if (firstTexturedFrameAt === null && firstTextureUploadAt !== null && isUsableSample(sample)) {
+      firstTexturedFrameAt = performance.now();
+      firstTexturedFrameSample = sample;
+    }
+    if (firstUsableAt !== null) return true;
     if (!isUsableSample(sample)) return false;
     firstUsableAt = performance.now();
     firstUsableSample = sample;
@@ -389,6 +422,14 @@ const installBenchmarkHooks = async (session) => {
   const resourceVirtualTexturingDone = (resources) => {
     const manifestCount = resources.byKind.vtManifest?.count ?? 0;
     if (manifestCount === 0) return true;
+    const virtualTexturing = readRendererSnapshot()?.virtualTexturing;
+    if (
+      (virtualTexturing?.generatedManifestUses ?? 0) > 0 &&
+      (virtualTexturing?.pendingPages ?? 0) === 0 &&
+      (virtualTexturing?.uploadedPages ?? 0) > 0
+    ) {
+      return true;
+    }
     return (resources.byKind.vtPage?.count ?? 0) > 0;
   };
   const resourceRows = () => performance.getEntriesByType('resource').map((entry) => ({
@@ -507,9 +548,124 @@ const installBenchmarkHooks = async (session) => {
   };
   const drawCalls = () =>
     counters.drawArrays + counters.drawElements + counters.drawArraysInstanced + counters.drawElementsInstanced;
+  const statsFromDeltas = (deltas) => {
+    const sorted = [...deltas].sort((left, right) => left - right);
+    const sum = sorted.reduce((total, value) => total + value, 0);
+    const percentile = (ratio) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
+    return {
+      averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
+      jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
+      maxMs: sorted[sorted.length - 1] ?? 0,
+      minMs: sorted[0] ?? 0,
+      p50Ms: percentile(0.5),
+      p95Ms: percentile(0.95),
+      p99Ms: percentile(0.99),
+      sampleCount: sorted.length,
+    };
+  };
+  const numberDelta = (after, before) => {
+    const result = {};
+    for (const [key, value] of Object.entries(after ?? {})) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      const previous = before?.[key];
+      result[key] = value - (typeof previous === 'number' && Number.isFinite(previous) ? previous : 0);
+    }
+    return result;
+  };
+  const dispatchCameraDragMove = (index) => {
+    if (typeof PointerEvent !== 'function') return false;
+    const canvas = document.querySelector('canvas');
+    if (canvas === null) return false;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    canvas.dispatchEvent(new PointerEvent(index === 0 ? 'pointerdown' : 'pointermove', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      cancelable: true,
+      clientX: rect.left + rect.width * 0.5 + index * config.vtCameraDragStepPixels,
+      clientY: rect.top + rect.height * 0.5,
+      isPrimary: true,
+      pointerId: 947,
+      pointerType: 'mouse',
+    }));
+    return true;
+  };
+  const endCameraDrag = () => {
+    if (typeof PointerEvent !== 'function') return;
+    const canvas = document.querySelector('canvas');
+    if (canvas === null) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      cancelable: true,
+      clientX: rect.left + rect.width * 0.5,
+      clientY: rect.top + rect.height * 0.5,
+      isPrimary: true,
+      pointerId: 947,
+      pointerType: 'mouse',
+    }));
+  };
+  const sampleVtUploadFrames = async (frameCount, timeoutMs, cameraDrag) => {
+    const requestedFrames = Math.max(1, Math.floor(Number(frameCount) || 1));
+    const deadline = performance.now() + Math.max(1, Math.floor(Number(timeoutMs) || config.readyTimeoutMs));
+    const beforeRenderer = readRendererSnapshot();
+    const beforeCounters = { ...counters, drawCalls: drawCalls() };
+    const frames = [];
+    let previous = performance.now();
+    let dragStarted = false;
+    let settledFrame = null;
+    try {
+      for (let index = 0; index < requestedFrames && performance.now() < deadline; index += 1) {
+        if (cameraDrag === true) dragStarted = dispatchCameraDragMove(index) || dragStarted;
+        if (!await rafBeforeDeadline(deadline)) break;
+        updateFirstUsable();
+        const now = performance.now();
+        const renderer = readRendererSnapshot();
+        frames.push({
+          deltaMs: now - previous,
+          drawCalls: drawCalls(),
+          rendererFrame: renderer?.frame,
+          vt: renderer?.virtualTexturing ?? null,
+        });
+        previous = now;
+        const vt = renderer?.virtualTexturing;
+        if (vt !== undefined && vt !== null && index > 0) {
+          const settled = (vt.pendingPages ?? 0) === 0 && (vt.uploadedPages ?? 0) > 0;
+          if (settledFrame === null && settled) settledFrame = index;
+        }
+      }
+    } finally {
+      if (dragStarted) endCameraDrag();
+    }
+    const afterRenderer = readRendererSnapshot();
+    const afterCounters = { ...counters, drawCalls: drawCalls() };
+    const pendingPages = frames
+      .map((frame) => frame.vt?.pendingPages)
+      .filter((value) => typeof value === 'number' && Number.isFinite(value));
+
+    return {
+      cameraDrag: cameraDrag === true,
+      timedOut: performance.now() >= deadline,
+      requestedFrames,
+      settledFrame,
+      frameStats: statsFromDeltas(frames.map((frame) => frame.deltaMs)),
+      gl: numberDelta(afterCounters, beforeCounters),
+      virtualTexturing: {
+        before: beforeRenderer?.virtualTexturing ?? null,
+        after: afterRenderer?.virtualTexturing ?? null,
+        delta: numberDelta(afterRenderer?.virtualTexturing ?? {}, beforeRenderer?.virtualTexturing ?? {}),
+        maxPendingPages: pendingPages.length === 0 ? 0 : Math.max(...pendingPages),
+        framesWithPendingPages: pendingPages.filter((value) => value > 0).length,
+      },
+    };
+  };
   void waitForFirstUsable(config.readyTimeoutMs);
   globalThis.__royalGltfLoadBench = {
     sampleCanvas,
+    sampleVtUploadFrames,
     snapshot() {
       return {
         counters: {
@@ -519,6 +675,9 @@ const installBenchmarkHooks = async (session) => {
         fullyLoadedAt,
         fullyLoadedState,
         firstDrawAt,
+        firstTexturedFrameAt,
+        firstTexturedFrameSample,
+        firstTextureUploadAt,
         firstUsableAt,
         firstUsableSample,
         renderer: readRendererSnapshot(),
@@ -564,6 +723,7 @@ const buildReport = ({
   fullState,
   routeStartedAt,
   snapshot,
+  vtFrameSample,
 }) => {
   const counters = snapshot.counters ?? {};
   const resources = snapshot.resources ?? {};
@@ -572,6 +732,8 @@ const buildReport = ({
   const firstDrawMs = snapshot.firstDrawAt ?? fullState.firstDrawAt ?? firstUsableState.firstDrawAt;
   const firstUsableDrawMs = snapshot.firstUsableAt ?? fullState.firstUsableAt ?? firstUsableState.firstUsableAt;
   const fullyLoadedMs = snapshot.fullyLoadedAt ?? fullState.fullyLoadedAt;
+  const firstTextureUploadMs = snapshot.firstTextureUploadAt;
+  const firstTexturedFrameMs = snapshot.firstTexturedFrameAt;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -582,9 +744,21 @@ const buildReport = ({
     config: {
       fullyLoadedStableMs,
       readyTimeoutMs,
+      vtFrameSampleEnabled,
+      vtFrameSampleCount,
+      vtFrameSampleTimeoutMs,
+      vtCameraDragEnabled,
+      forceGeneratedVirtualTexturing,
     },
     metrics: {
       firstDrawMs: round(firstDrawMs),
+      firstTextureUploadMs: round(firstTextureUploadMs),
+      firstTexturedFrameMs: round(firstTexturedFrameMs),
+      textureUploadToFirstTexturedFrameMs: round(
+        typeof firstTextureUploadMs === 'number' && typeof firstTexturedFrameMs === 'number'
+          ? firstTexturedFrameMs - firstTextureUploadMs
+          : undefined,
+      ),
       firstUsableDrawMs: round(firstUsableDrawMs),
       fullyLoadedMs: round(fullyLoadedMs),
       usableToFullyLoadedMs: round(
@@ -609,13 +783,29 @@ const buildReport = ({
         texStorage2D: counters.texStorage2D ?? 0,
         texSubImage2D: counters.texSubImage2D ?? 0,
       },
+      textureResources: {
+        imageCount: resourceKinds.image?.count ?? 0,
+        imageTransferBytes: resourceKinds.image?.transferSize ?? 0,
+        imageDecodedBytes: resourceKinds.image?.decodedBodySize ?? 0,
+      },
       vt: {
         manifestResourceCount: resourceKinds.vtManifest?.count ?? 0,
         manifestTransferBytes: resourceKinds.vtManifest?.transferSize ?? 0,
         pageResourceCount: resourceKinds.vtPage?.count ?? 0,
         pageTransferBytes: resourceKinds.vtPage?.transferSize ?? 0,
+        generatedPagePrep: rendererVirtualTexturing === null
+          ? null
+          : {
+              generatedManifestUses: rendererVirtualTexturing.generatedManifestUses ?? 0,
+              generatedPageFailures: rendererVirtualTexturing.generatedPageFailures ?? 0,
+              generatedPageRasterizeMaxMs: rendererVirtualTexturing.generatedPageRasterizeMaxMs ?? 0,
+              generatedPageRasterizeMs: rendererVirtualTexturing.generatedPageRasterizeMs ?? 0,
+              generatedPageRequests: rendererVirtualTexturing.generatedPageRequests ?? 0,
+              generatedPagesTarget: rendererVirtualTexturing.generatedPagesTarget ?? 0,
+            },
         renderer: rendererVirtualTexturing,
       },
+      vtFrameSample,
       heap: {
         afterFinalGc: afterFinalGcHeap,
         afterFullyLoaded: afterFullyLoadedHeap,
@@ -628,6 +818,7 @@ const buildReport = ({
       resources,
     },
     page: {
+      firstTexturedFrameSample: snapshot.firstTexturedFrameSample,
       firstUsableSample: snapshot.firstUsableSample ?? firstUsableState.firstUsableSample,
       fullyLoadedState: snapshot.fullyLoadedState ?? fullState.state,
       renderer: snapshot.renderer ?? null,
@@ -639,12 +830,16 @@ const printSummary = (report) => {
   const metrics = report.metrics;
   console.log(
     `gltf load ${report.route.path}: firstDraw=${metrics.firstDrawMs}ms` +
+      ` firstTextureUpload=${metrics.firstTextureUploadMs ?? 'n/a'}ms` +
+      ` firstTextured=${metrics.firstTexturedFrameMs ?? 'n/a'}ms` +
       ` firstUsable=${metrics.firstUsableDrawMs}ms` +
       ` fullyLoaded=${metrics.fullyLoadedMs}ms` +
       ` vtManifests=${metrics.vt.manifestResourceCount}` +
       ` vtPages=${metrics.vt.pageResourceCount}` +
+      ` generatedVtPages=${metrics.vt.generatedPagePrep?.generatedPageRequests ?? 'n/a'}` +
       ` textures=${metrics.textures.allocations}` +
       ` textureUploads=${metrics.textures.uploadCalls}` +
+      ` vtFrameP95=${metrics.vtFrameSample?.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms` +
       ` retainedHeap=${metrics.heap.retainedGrowthBytes ?? 'n/a'}B`,
   );
 };
@@ -695,6 +890,17 @@ const main = async () => {
     await session.call('Page.enable');
     await session.call('Runtime.enable');
     await session.call('HeapProfiler.enable');
+    if (forceGeneratedVirtualTexturing) {
+      await session.call('Fetch.enable', {
+        patterns: [{ requestStage: 'Request', urlPattern: '*.vt.json*' }],
+      });
+      session.on('Fetch.requestPaused', (event) => {
+        void session.call('Fetch.failRequest', {
+          errorReason: 'Failed',
+          requestId: event.requestId,
+        });
+      });
+    }
     await installBenchmarkHooks(session);
     await session.call('HeapProfiler.collectGarbage');
     const beforeHeap = await session.call('Runtime.getHeapUsage');
@@ -709,6 +915,11 @@ const main = async () => {
 (async () => globalThis.__royalGltfLoadBench.waitForFirstUsable(${readyTimeoutMs}))()
 `);
     const firstUsableHeap = await session.call('Runtime.getHeapUsage');
+    const vtFrameSample = vtFrameSampleEnabled
+      ? await evaluate(session, `
+(async () => globalThis.__royalGltfLoadBench.sampleVtUploadFrames(${vtFrameSampleCount}, ${vtFrameSampleTimeoutMs}, ${vtCameraDragEnabled ? 'true' : 'false'}))()
+`)
+      : null;
     const fullState = await evaluate(session, `
 (async () => globalThis.__royalGltfLoadBench.waitForFullyLoaded(${readyTimeoutMs}, ${fullyLoadedStableMs}))()
 `);
@@ -730,6 +941,7 @@ const main = async () => {
       fullState,
       routeStartedAt,
       snapshot,
+      vtFrameSample,
     });
     printSummary(report);
 

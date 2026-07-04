@@ -672,6 +672,14 @@ const responseStatus = (status: number, statusText: string): Response => ({
   statusText,
 }) as unknown as Response;
 
+const responseText = (url: string, text: string): Response => ({
+  ok: true,
+  status: 200,
+  statusText: "OK",
+  text: vi.fn(() => Promise.resolve(text)),
+  url,
+}) as unknown as Response;
+
 const camera = () => orthographicCamera({
   bottom: -1,
   far: 10,
@@ -1033,6 +1041,119 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(uniformNames(calls)).toEqual(expect.arrayContaining(["u_vtAtlas", "u_vtPageTable"]));
     expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/no-sidecar\.png\.vt\.json/);
     expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it("uses generated SVG VT for direct imageTexture SVG after a missing sidecar", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const objectUrlBlobs: Blob[] = [];
+    let nextObjectUrl = 0;
+    class TestURL extends URL {
+      static createObjectURL = vi.fn((blob: Blob) => {
+        objectUrlBlobs.push(blob);
+        return `blob:royal-svg-texture-${nextObjectUrl += 1}`;
+      });
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("URL", TestURL);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => {
+        throw new Error("unexpected 2D canvas raster fallback");
+      }),
+    });
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
+    const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#f60\"/></svg>";
+
+    root.render(renderScene(material));
+    expect(fetchRequests.some((request) => request.url === "/textures/plain.svg")).toBe(true);
+    fetchRequests.find((request) => request.url === "/textures/plain.svg")!
+      .resolve(responseText("/textures/plain.svg", svgText));
+    await flushMicrotasks();
+
+    expect(objectUrlBlobs).toHaveLength(1);
+    expect(ControlledImage.instances[0]?.src).toBe("blob:royal-svg-texture-1");
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+
+    root.render(renderScene(material));
+    expect(fetchRequests.map((request) => request.url)).toContain("/textures/plain.svg.vt.json");
+    fetchRequests.find((request) => request.url === "/textures/plain.svg.vt.json")!
+      .resolve(responseStatus(404, "Not Found"));
+    await flushMicrotasks();
+
+    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      await flushMicrotasks();
+      root.render(renderScene(material));
+      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-texture-2");
+      generatedPageImage?.settleLoad();
+      await flushMicrotasks();
+    }
+
+    expect(objectUrlBlobs.length).toBeGreaterThan(1);
+    expect(await objectUrlBlobs[1]?.text()).toContain("<image href=\"data:image/svg+xml;base64,");
+    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      generatedPageFailures: 0,
+      generatedPagesTarget: 5,
+      manifestsReady: 1,
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/plain\.svg\.vt\.json/);
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it("uses generated SVG VT for direct imageTexture SVG data URIs", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const objectUrlBlobs: Blob[] = [];
+    let nextObjectUrl = 0;
+    class TestURL extends URL {
+      static createObjectURL = vi.fn((blob: Blob) => {
+        objectUrlBlobs.push(blob);
+        return `blob:royal-svg-data-texture-${nextObjectUrl += 1}`;
+      });
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("URL", TestURL);
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => {
+        throw new Error("unexpected 2D canvas raster fallback");
+      }),
+    });
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#0af\"/></svg>";
+    const svgUri = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
+    const material = unlitMaterial({ texture: imageTexture(svgUri) });
+
+    root.render(renderScene(material));
+    expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
+    fetchRequests[0]!.resolve(responseText(svgUri, svgText));
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+
+    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      await flushMicrotasks();
+      root.render(renderScene(material));
+      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-data-texture-2");
+      generatedPageImage?.settleLoad();
+      await flushMicrotasks();
+    }
+
+    expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
+    expect(objectUrlBlobs.length).toBeGreaterThan(1);
+    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      generatedPagesTarget: 5,
+      manifestsReady: 1,
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
   it("uses generated raster VT after an unusable auto sidecar", async () => {

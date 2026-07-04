@@ -1438,7 +1438,25 @@ const gltfTextureContentKey = (
 const gltfImageSourceUri = (src: string, image: GltfImage | undefined): string | undefined =>
   image?.uri === undefined ? undefined : resolveResourceUri(src, image.uri);
 
-const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextureImageSelection | undefined => {
+const isSvgMimeType = (mimeType: string | undefined): boolean =>
+  mimeType?.toLowerCase() === "image/svg+xml";
+
+const isSvgUri = (uri: string): boolean =>
+  uri.startsWith("data:")
+    ? isSvgMimeType(dataUriMediaType(uri))
+    : /\.svg(?:$|[?#])/iu.test(uri);
+
+const gltfImageLooksSvg = (image: GltfImage | undefined): boolean => {
+  if (image === undefined) return false;
+  if (isSvgMimeType(image.mimeType)) return true;
+  if (image.uri === undefined) return false;
+  return isSvgUri(image.uri);
+};
+
+const gltfTextureImageSelection = (
+  texture: GltfTexture | undefined,
+  images: readonly GltfImage[] | undefined,
+): GltfTextureImageSelection | undefined => {
   const svgSource = texture?.extensions?.GS_texture_svg?.source;
   if (svgSource !== undefined) return { imageIndex: svgSource, kind: "svg" };
 
@@ -1449,7 +1467,9 @@ const gltfTextureImageSelection = (texture: GltfTexture | undefined): GltfTextur
   const imageIndex = webpSource !== undefined && canvasSupportsImageMimeType("image/webp")
     ? webpSource
     : texture?.source;
-  return imageIndex === undefined ? undefined : { imageIndex, kind: "image" };
+  return imageIndex === undefined
+    ? undefined
+    : { imageIndex, kind: gltfImageLooksSvg(images?.[imageIndex]) ? "svg" : "image" };
 };
 
 const gltfMaterialTextureSlot = (
@@ -1460,7 +1480,7 @@ const gltfMaterialTextureSlot = (
 ): LoadedGltfMaterialTextureSlot | undefined => {
   const textureIndex = textureInfo?.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
-  const imageSelection = gltfTextureImageSelection(texture);
+  const imageSelection = gltfTextureImageSelection(texture, document.images);
   const imageIndex = imageSelection?.imageIndex;
   const imageKind = imageSelection?.kind ?? "image";
   const image = imageIndex === undefined ? undefined : document.images?.[imageIndex];
@@ -5406,6 +5426,22 @@ class WebGlRootImpl implements WebGlRoot {
     });
   }
 
+  #registerAutoBaseColorVirtualTextureDecodedPageSource(
+    texture: TextureAssetUploadRef,
+    source: LoadedTextureSource,
+  ): void {
+    const svgSource = svgVirtualTextureSourceForImage(source);
+    if (svgSource !== undefined) {
+      this.#registerAutoBaseColorVirtualTextureGeneratedPageSource(texture, {
+        kind: "svg",
+        source: svgSource,
+      });
+      return;
+    }
+
+    this.#registerAutoBaseColorVirtualTextureRasterPageSource(texture, source);
+  }
+
   #autoBaseColorVirtualTextureGeneratedPageSource(
     texture: TextureAssetUploadRef,
   ): VirtualTextureGeneratedPageSource | undefined {
@@ -6856,11 +6892,16 @@ class WebGlRootImpl implements WebGlRoot {
     };
     this.#textures.set(key, state);
 
-    loadImage(texture.uri).then((image) => {
+    const imageSource = isSvgUri(texture.uri)
+      ? loadSvgUriImageSource(texture.uri)
+        .then((loadedImage) => loadedImage.image)
+      : loadImage(texture.uri);
+
+    imageSource.then((image) => {
       if (this.#disposed) return;
       if (state.uploaded) return;
       state.loading = false;
-      this.#registerAutoBaseColorVirtualTextureRasterPageSource(texture, image);
+      this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
       this.#uploadTexture(state, image, texture);
       this.invalidate();
     }, (error: unknown) => {
@@ -6886,7 +6927,7 @@ class WebGlRootImpl implements WebGlRoot {
       uploaded: false,
     };
     this.#textures.set(key, resource);
-    this.#registerAutoBaseColorVirtualTextureRasterPageSource(texture, image);
+    this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
     this.#uploadTexture(resource, image, texture);
     if ("loading" in resource) resource.loading = false;
   }

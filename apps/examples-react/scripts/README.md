@@ -48,6 +48,10 @@ routes such as `webxr-vr`, or `all` when you really want every route. Use
 `EXAMPLES_BENCH_ROUTE=<id-or-prefix>` to narrow the run. For Quest runs, open or
 keep any Quest Browser tab available before starting the benchmark; the script
 navigates the first CDP page target through the selected routes.
+`EXAMPLES_BENCH_FRAME_TIMEOUT_MS` bounds RAF warmup and sampling so a throttled
+headset tab records a timeout row instead of hanging the run.
+`EXAMPLES_BENCH_CDP_TIMEOUT_MS` bounds each DevTools command and defaults high
+enough to cover the route-ready and frame-sampling windows.
 
 Browser instancing fuzz rows are opt-in with
 `EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural
@@ -88,7 +92,9 @@ pnpm --filter @royal/examples-react bench:examples:instancing
 
 `benchmark-gltf-load.mjs` is a narrow browser probe for textured glTF load
 latency. It runs `/gltf-helmet`, records first WebGL draw, first usable
-nonblank canvas draw, fully loaded resource-stable time, VT manifest/page
+nonblank canvas draw, first texture upload, first usable frame after a texture
+upload, fully loaded resource-stable time, VT manifest/page resource counts,
+generated raster VT page prep counters/time from the renderer snapshot, texture
 resource counts, texture allocation/upload calls, rough upload bytes, and CDP
 heap growth before/after GC.
 
@@ -96,3 +102,30 @@ heap growth before/after GC.
 EXAMPLES_GLTF_LOAD_OUTPUT=research/gltf-load-host.json \
 pnpm --filter @royal/examples-react bench:gltf-load
 ```
+
+Focused auto-VT load and hitch probe:
+
+```sh
+EXAMPLES_GLTF_LOAD_OUTPUT=research/auto-vt-load-host.json \
+pnpm --filter @royal/examples-react bench:auto-vt-load
+```
+
+The auto-VT slice samples a bounded fixed RAF window after first usable draw
+while VT pages may still be loading/uploading. It reports frame pacing, the
+settle frame, GL texture-upload deltas, renderer VT counter deltas, max pending
+VT pages, generated raster page request/rasterize counters, and optional
+scripted camera drag:
+
+```sh
+EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG=1 \
+EXAMPLES_GLTF_LOAD_VT_FRAMES=90 \
+pnpm --filter @royal/examples-react bench:auto-vt-load
+```
+
+`bench:auto-vt-load` sets `EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT=1`, which
+fails `.vt.json` sidecar requests through DevTools so the renderer exercises its
+generated raster VT fallback. Clear that variable when measuring authored
+sidecar manifests.
+
+These are measurement reports, not CI thresholds. Prefer comparing saved JSON
+reports across commits or devices.

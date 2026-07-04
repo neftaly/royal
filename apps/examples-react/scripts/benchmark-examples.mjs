@@ -36,6 +36,7 @@ const defaultFrameSampleCount = benchmarkMode === 'quick' ? 24 : 90;
 const defaultFrameWarmupCount = benchmarkMode === 'quick' ? 8 : 30;
 const frameSampleCount = envInteger('EXAMPLES_BENCH_FRAMES', defaultFrameSampleCount);
 const frameWarmupCount = envInteger('EXAMPLES_BENCH_WARMUP_FRAMES', defaultFrameWarmupCount);
+const frameSampleTimeoutMs = envInteger('EXAMPLES_BENCH_FRAME_TIMEOUT_MS', 10_000);
 const cameraDragEnabled = process.env.EXAMPLES_BENCH_CAMERA_DRAG === '1';
 const cameraDragFrameCount = cameraDragEnabled
   ? envInteger('EXAMPLES_BENCH_CAMERA_DRAG_FRAMES', frameSampleCount)
@@ -50,6 +51,10 @@ const instancingSweepMode = process.env.EXAMPLES_BENCH_INSTANCING_SWEEP?.trim()
   || (benchmarkMode === 'quick' ? 'quick' : 'default');
 const defaultInstancingGrid = 16;
 const routeReadyTimeoutMs = envInteger('EXAMPLES_BENCH_READY_TIMEOUT_MS', 20_000);
+const cdpCommandTimeoutMs = envInteger(
+  'EXAMPLES_BENCH_CDP_TIMEOUT_MS',
+  Math.max(30_000, routeReadyTimeoutMs + frameSampleTimeoutMs + 15_000),
+);
 const clearCachePerRoute = process.env.EXAMPLES_BENCH_CLEAR_CACHE !== '0';
 const managePreview = process.env.EXAMPLES_BENCH_PREVIEW !== '0';
 const fakeXrEnabled = process.env.EXAMPLES_BENCH_FAKE_XR === '1';
@@ -258,11 +263,18 @@ class CdpSession {
         const pending = this.#pending.get(message.id);
         if (pending === undefined) return;
         this.#pending.delete(message.id);
+        clearTimeout(pending.timeout);
         if (message.error === undefined) pending.resolve(message.result);
-        else pending.reject(new Error(message.error.message));
+        else pending.reject(new Error(`${pending.method} failed: ${message.error.message}`));
         return;
       }
       for (const handler of this.#handlers.get(message.method) ?? []) handler(message.params);
+    });
+    socket.addEventListener('close', () => {
+      this.#rejectPending(new Error('CDP socket closed'));
+    });
+    socket.addEventListener('error', () => {
+      this.#rejectPending(new Error('CDP socket error'));
     });
   }
 
@@ -282,14 +294,33 @@ class CdpSession {
 
   call(method, params = {}) {
     const id = this.#nextId++;
-    this.socket.send(JSON.stringify({ id, method, params }));
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error(`${method} timed out after ${cdpCommandTimeoutMs}ms`));
+      }, cdpCommandTimeoutMs);
+      this.#pending.set(id, { method, reject, resolve, timeout });
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timeout);
+        this.#pending.delete(id);
+        reject(error);
+      }
     });
   }
 
   close() {
     this.socket.close();
+  }
+
+  #rejectPending(error) {
+    const pending = this.#pending;
+    this.#pending = new Map();
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timeout);
+      entry.reject(error);
+    }
   }
 }
 
@@ -917,6 +948,17 @@ const installBenchmarkHooks = async (session) => {
 const waitForBenchmarkReady = (session) => evaluate(session, `
 (async () => {
   const deadline = performance.now() + ${routeReadyTimeoutMs};
+  const rafOrTimeout = (timeoutMs) => new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(value);
+    };
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    requestAnimationFrame(() => finish(true));
+  });
   let stableResourceCount = -1;
   let stableSince = performance.now();
   while (performance.now() < deadline) {
@@ -927,8 +969,7 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
       stableSince = performance.now();
     }
     if (document.readyState === 'complete' && canvas !== null && performance.now() - stableSince > 350) {
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      return true;
+      return await rafOrTimeout(1000) && await rafOrTimeout(1000);
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -943,11 +984,25 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const afterGc = await session.call('Runtime.getHeapUsage');
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
   const setupRenderer = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
-  await evaluate(session, `
+  const warmupComplete = await evaluate(session, `
 (async () => {
+  const rafOrTimeout = (deadline) => new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(value);
+    };
+    const timeout = setTimeout(() => finish(false), Math.max(1, deadline - performance.now()));
+    requestAnimationFrame(() => finish(true));
+  });
+  const deadline = performance.now() + ${frameSampleTimeoutMs};
   for (let index = 0; index < ${frameWarmupCount}; index += 1) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (performance.now() >= deadline) return false;
+    if (!await rafOrTimeout(deadline)) return false;
   }
+  return true;
 })()
 `);
   const rendererBeforeFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
@@ -955,17 +1010,48 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const frameStats = await evaluate(session, `
 (async () => {
   const frames = ${frames};
+  const timeoutMs = ${frameSampleTimeoutMs};
+  const startedAt = performance.now();
+  const deadline = startedAt + timeoutMs;
   const deltas = [];
   let previous = performance.now();
   for (let index = 0; index < frames; index += 1) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (performance.now() >= deadline) break;
+    const frameArrived = await new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(value);
+      };
+      const timeout = setTimeout(() => finish(false), Math.max(1, deadline - performance.now()));
+      requestAnimationFrame(() => finish(true));
+    });
     const now = performance.now();
+    if (!frameArrived) break;
     deltas.push(now - previous);
     previous = now;
   }
   deltas.sort((left, right) => left - right);
   const sum = deltas.reduce((total, value) => total + value, 0);
   const percentile = (ratio) => deltas[Math.min(deltas.length - 1, Math.floor((deltas.length - 1) * ratio))] ?? 0;
+  if (deltas.length === 0) {
+    return {
+      averageMs: 0,
+      failed: true,
+      jitterP95MinusP50Ms: 0,
+      maxMs: 0,
+      minMs: 0,
+      p50Ms: 0,
+      p95Ms: 0,
+      p99Ms: 0,
+      reason: 'raf-timeout',
+      requestedSampleCount: frames,
+      sampleCount: 0,
+      timeoutMs,
+    };
+  }
   return {
     averageMs: sum / deltas.length,
     jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
@@ -974,7 +1060,10 @@ const collectPageMetrics = async (session, frames, options = {}) => {
     p50Ms: percentile(0.5),
     p95Ms: percentile(0.95),
     p99Ms: percentile(0.99),
+    requestedSampleCount: frames,
     sampleCount: deltas.length,
+    timedOut: deltas.length < frames,
+    timeoutMs,
   };
 })()
 `);
@@ -1090,6 +1179,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
       transientGrowthBytes: afterFrameGc.usedSize - afterGc.usedSize,
     },
     latency,
+    warmupComplete,
     ...(cameraDrag === undefined ? {} : { cameraDrag }),
     performance: perf,
     xr: xr === null ? undefined : {
@@ -1154,6 +1244,7 @@ const prepareRouteForBenchmark = async (session, route) => {
 };
 
 const benchmarkRoute = async (session, route) => {
+  await session.call('Page.bringToFront');
   if (clearCachePerRoute) await session.call('Network.clearBrowserCache');
   const loaded = session.once('Page.loadEventFired');
   const start = performance.now();
@@ -1221,6 +1312,11 @@ const routeSummary = (route) => {
   const hasCameraDragStats =
     typeof cameraDragFrameStats?.p95Ms === 'number' &&
     typeof cameraDragDrawCallsPerFrame === 'number';
+  const frameFailure = route.frameStats.failed === true
+    ? route.frameStats.reason
+    : route.frameStats.timedOut === true
+      ? 'partial-timeout'
+      : undefined;
   const setupInstancedDrawCalls = route.gl.setup?.instancedDrawCalls ?? 0;
   const instanceCount = route.profile?.kind === 'gltf-instancing' ? route.profile.instanceCount : undefined;
   const gltfInstancing = route.profile?.kind === 'gltf-instancing'
@@ -1241,6 +1337,7 @@ const routeSummary = (route) => {
     id: route.id,
     path: route.path,
     ...(route.profile === undefined ? {} : { profile: route.profile }),
+    ...(frameFailure === undefined ? {} : { frameFailure }),
     p95Ms: round(route.frameStats.p95Ms),
     p99Ms: round(route.frameStats.p99Ms),
     maxMs: round(route.frameStats.maxMs),
@@ -1503,6 +1600,11 @@ const main = async () => {
       const stateChangesPerFrame = result.gl.stateChanges / frameSampleCount;
       const uniformCallsPerFrame = result.gl.uniformCalls / frameSampleCount;
       const cameraDragFrameStats = result.cameraDrag?.frameStats;
+      const frameFailure = result.frameStats.failed === true
+        ? result.frameStats.reason
+        : result.frameStats.timedOut === true
+          ? 'partial-timeout'
+          : undefined;
       const cameraDragSampleCount = cameraDragFrameStats?.sampleCount ?? 0;
       const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || result.cameraDrag === undefined
         ? undefined
@@ -1528,6 +1630,7 @@ const main = async () => {
         `ready=${result.wallNavigationAndReadyMs.toFixed(1)}ms`,
         `res=${resourcesKb.toFixed(1)}KiB`,
         `p95=${result.frameStats.p95Ms.toFixed(1)}ms`,
+        ...(frameFailure === undefined ? [] : [`frames=${frameFailure}`]),
         ...(hasCameraDragStats
           ? [
             `dragP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
@@ -1564,6 +1667,7 @@ const main = async () => {
       options: {
         frameSampleCount,
         frameWarmupCount,
+        frameSampleTimeoutMs,
         baseUrl,
         browserMode,
         cameraDragEnabled,
