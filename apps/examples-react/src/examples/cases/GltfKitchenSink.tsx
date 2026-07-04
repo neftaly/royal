@@ -5,6 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { createElement, Fragment, type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRootOptions } from '../example-root-options';
 
 type KitchenSinkAsset = {
@@ -219,6 +220,7 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
           )}
         </pass>
       </scene>
+      <BenchmarkRendererSnapshot />
       <OrbitControls {...orbit.orbitControlsProps} maxDistance={60} minDistance={9} />
     </Canvas>
   );

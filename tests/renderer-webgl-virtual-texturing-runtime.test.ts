@@ -541,6 +541,56 @@ const installFetchQueue = (): FetchRequest[] => {
   return requests;
 };
 
+const installCanvas2d = (): {
+  readonly canvases: Array<{
+    height: number;
+    readonly getContext: ReturnType<typeof vi.fn>;
+    width: number;
+  }>;
+  readonly contexts: Array<{
+    clearRect: ReturnType<typeof vi.fn>;
+    drawImage: ReturnType<typeof vi.fn>;
+    imageSmoothingEnabled: boolean;
+    imageSmoothingQuality: ImageSmoothingQuality;
+    putImageData: ReturnType<typeof vi.fn>;
+  }>;
+} => {
+  const canvases: Array<{
+    height: number;
+    readonly getContext: ReturnType<typeof vi.fn>;
+    width: number;
+  }> = [];
+  const contexts: Array<{
+    clearRect: ReturnType<typeof vi.fn>;
+    drawImage: ReturnType<typeof vi.fn>;
+    imageSmoothingEnabled: boolean;
+    imageSmoothingQuality: ImageSmoothingQuality;
+    putImageData: ReturnType<typeof vi.fn>;
+  }> = [];
+  vi.stubGlobal("document", {
+    createElement: vi.fn((tagName: string) => {
+      if (tagName !== "canvas") throw new Error(`unexpected element ${tagName}`);
+      const context = {
+        clearRect: vi.fn(),
+        drawImage: vi.fn(),
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: "low" as ImageSmoothingQuality,
+        putImageData: vi.fn(),
+      };
+      const canvas = {
+        height: 0,
+        getContext: vi.fn((kind: string) => kind === "2d" ? context : null),
+        width: 0,
+      };
+      contexts.push(context);
+      canvases.push(canvas);
+      return canvas;
+    }),
+  });
+
+  return { canvases, contexts };
+};
+
 const responseJson = (body: unknown): Response => ({
   json: vi.fn(() => Promise.resolve(body)),
   ok: true,
@@ -847,8 +897,9 @@ describe("WebGL renderer virtual texturing integration", () => {
     ]));
   });
 
-  it("falls back to ordinary image base color after a missing auto VT sidecar without refetching", async () => {
+  it("uses generated raster VT after a missing auto sidecar without refetching", async () => {
     vi.stubGlobal("Image", ControlledImage);
+    const { canvases, contexts } = installCanvas2d();
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
@@ -858,23 +909,58 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(renderScene(material));
     fetchRequests[0]!.resolve(responseStatus(404, "Not Found"));
     await flushMicrotasks();
+    ControlledImage.instances[0]!.height = 512;
+    ControlledImage.instances[0]!.naturalHeight = 512;
+    ControlledImage.instances[0]!.naturalWidth = 512;
+    ControlledImage.instances[0]!.width = 512;
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
 
     root.render(renderScene(material));
-    root.render(renderScene(material));
-
-    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/no-sidecar.png.vt.json"]);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      generatedPagesTarget: 5,
+    }));
+    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_texture: expect.arrayContaining([0]),
       u_useTexture: expect.arrayContaining([1]),
     }));
+    expect(contexts[0]?.drawImage).toHaveBeenCalled();
+    expect(contexts[0]?.drawImage.mock.calls[0]).toEqual([
+      ControlledImage.instances[0],
+      0,
+      0,
+      512,
+      512,
+      0,
+      0,
+      256,
+      256,
+    ]);
+
+    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      await flushMicrotasks();
+      root.render(renderScene(material));
+    }
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/no-sidecar.png.vt.json"]);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedPageFailures: 0,
+      generatedPagesTarget: 5,
       manifestFailures: 1,
       manifestRequests: 1,
-      manifestsReady: 0,
-      shaderBinds: 0,
+      manifestsReady: 1,
+      residentPages: expect.any(Number),
+      uploadedPages: expect.any(Number),
     }));
+    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThanOrEqual(4);
+    expect(root.snapshot().virtualTexturing.residentPages).toBeGreaterThanOrEqual(4);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.uploadedPageBytes).toBeGreaterThanOrEqual(4 * 256 * 256 * 4);
+    expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThanOrEqual(4);
+    expect(canvases[0]).toEqual(expect.objectContaining({ height: 256, width: 256 }));
+    expect(uniformNames(calls)).toEqual(expect.arrayContaining(["u_vtAtlas", "u_vtPageTable"]));
     expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/no-sidecar\.png\.vt\.json/);
     expect(consoleWarn).not.toHaveBeenCalled();
   });

@@ -59,6 +59,30 @@ const zeroGltfInstancingSnapshot = {
   rootScaleUploadCalls: 0,
 };
 
+const zeroVirtualTexturingSnapshot = {
+  atlasTextures: 0,
+  generatedManifestUses: 0,
+  generatedPageFailures: 0,
+  generatedPageRasterizeMaxMs: 0,
+  generatedPageRasterizeMs: 0,
+  generatedPageRequests: 0,
+  generatedPagesTarget: 0,
+  manifestFailures: 0,
+  manifestRequests: 0,
+  manifestsReady: 0,
+  pageTableTextures: 0,
+  pageTableUpdates: 0,
+  pendingPages: 0,
+  preparedResidencyResolutions: 0,
+  requestedPages: 0,
+  residentPages: 0,
+  shaderBinds: 0,
+  unreadyDraws: 0,
+  unsupportedDraws: 0,
+  uploadedPageBytes: 0,
+  uploadedPages: 0,
+};
+
 const fakeRoot = (): RoyalRendererRoot => {
   let frame = 0;
   let latestScene: RenderRoot | undefined;
@@ -91,6 +115,7 @@ const fakeRoot = (): RoyalRendererRoot => {
       frame: root.frame,
       gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: root.latestScene,
+      virtualTexturing: zeroVirtualTexturingSnapshot,
     })),
   };
 

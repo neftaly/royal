@@ -105,6 +105,7 @@ import {
 } from "./math/picking";
 import {
   isDecodedRgbaTexture,
+  loadedTextureSourceSize,
   type LoadedTextureSource,
 } from "./texture-sources";
 import {
@@ -215,6 +216,12 @@ export interface WebGlGltfInstancingSnapshot {
 
 export interface WebGlVirtualTexturingSnapshot {
   readonly atlasTextures: number;
+  readonly generatedManifestUses: number;
+  readonly generatedPageFailures: number;
+  readonly generatedPageRasterizeMaxMs: number;
+  readonly generatedPageRasterizeMs: number;
+  readonly generatedPageRequests: number;
+  readonly generatedPagesTarget: number;
   readonly manifestFailures: number;
   readonly manifestRequests: number;
   readonly manifestsReady: number;
@@ -227,6 +234,7 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly shaderBinds: number;
   readonly unreadyDraws: number;
   readonly unsupportedDraws: number;
+  readonly uploadedPageBytes: number;
   readonly uploadedPages: number;
 }
 
@@ -361,7 +369,7 @@ type VirtualTextureResourceSet = {
 };
 
 type VirtualTexturePendingUpload = {
-  readonly image: HTMLImageElement | ImageBitmap;
+  readonly image: TexImageSource;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
 };
@@ -373,10 +381,26 @@ type SvgVirtualTextureSource = {
   readonly width: number;
 };
 
+type RasterVirtualTextureSource = {
+  canvasSource?: CanvasImageSource;
+  readonly colorSpace?: TextureColorSpace;
+  readonly height: number;
+  readonly label: string;
+  readonly source: LoadedTextureSource;
+  readonly width: number;
+};
+
 type VirtualTextureGeneratedPageSource =
+  | { readonly kind: "raster"; readonly source: RasterVirtualTextureSource }
   | { readonly kind: "svg"; readonly source: SvgVirtualTextureSource };
 
 type VirtualTextureRuntimeStats = {
+  generatedManifestUses: number;
+  generatedPageFailures: number;
+  generatedPageRasterizeMaxMs: number;
+  generatedPageRasterizeMs: number;
+  generatedPageRequests: number;
+  generatedPagesTarget: number;
   manifestFailures: number;
   manifestRequests: number;
   pageTableUpdates: number;
@@ -384,6 +408,7 @@ type VirtualTextureRuntimeStats = {
   shaderBinds: number;
   unreadyDraws: number;
   unsupportedDraws: number;
+  uploadedPageBytes: number;
   uploadedPages: number;
 };
 
@@ -907,6 +932,10 @@ const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
+const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
+const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
+const GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE + 1;
+const GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX = "royal-generated-vt:";
 const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
 const VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME = 2;
 const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
@@ -1854,28 +1883,16 @@ const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string
     });
 };
 
-const generatedSvgVirtualTextureManifest = (
-  source: SvgVirtualTextureSource,
-): VirtualTextureManifestModel => {
-  const width = Math.max(1, Math.ceil(source.width));
-  const height = Math.max(1, Math.ceil(source.height));
-  const pageSize = Math.min(GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
-  const physicalSlots = Math.min(
-    GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    generatedSvgVirtualTexturePageCount(width, height, pageSize),
-  );
+const generatedVirtualTextureManifestUri = (key: string): string =>
+  `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
 
-  return {
-    colorSpace: "srgb",
-    height,
-    pageSize,
-    pages: [],
-    physicalSlots,
-    width,
-  };
-};
+const isGeneratedVirtualTextureManifestUri = (uri: string): boolean =>
+  uri.startsWith(GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX);
 
-const generatedSvgVirtualTexturePageCount = (
+const virtualTextureNow = (): number =>
+  typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+
+const generatedVirtualTexturePageCount = (
   width: number,
   height: number,
   pageSize: number,
@@ -1889,6 +1906,27 @@ const generatedSvgVirtualTexturePageCount = (
     mipWidth = Math.ceil(mipWidth / 2);
     mipHeight = Math.ceil(mipHeight / 2);
   }
+};
+
+const generatedSvgVirtualTextureManifest = (
+  source: SvgVirtualTextureSource,
+): VirtualTextureManifestModel => {
+  const width = Math.max(1, Math.ceil(source.width));
+  const height = Math.max(1, Math.ceil(source.height));
+  const pageSize = Math.min(GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
+  const physicalSlots = Math.min(
+    GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+    generatedVirtualTexturePageCount(width, height, pageSize),
+  );
+
+  return {
+    colorSpace: "srgb",
+    height,
+    pageSize,
+    pages: [],
+    physicalSlots,
+    width,
+  };
 };
 
 const generatedSvgVirtualTexturePageText = (
@@ -1922,6 +1960,113 @@ const loadGeneratedSvgVirtualTexturePageImage = (
     new Blob([generatedSvgVirtualTexturePageText(source, manifest, page)], { type: "image/svg+xml" }),
     `generated SVG virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
   );
+
+const generatedRasterVirtualTextureManifest = (
+  source: RasterVirtualTextureSource,
+): VirtualTextureManifestModel => {
+  const width = Math.max(1, Math.ceil(source.width));
+  const height = Math.max(1, Math.ceil(source.height));
+  const pageSize = Math.min(GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
+  const physicalSlots = Math.min(
+    GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+    generatedVirtualTexturePageCount(width, height, pageSize),
+  );
+
+  return {
+    ...(source.colorSpace === undefined ? {} : { colorSpace: source.colorSpace }),
+    height,
+    pageSize,
+    pages: [],
+    physicalSlots,
+    width,
+  };
+};
+
+const createVirtualTextureCanvas = (
+  width: number,
+  height: number,
+  label: string,
+): HTMLCanvasElement | OffscreenCanvas => {
+  const document = globalThis.document;
+  if (typeof document?.createElement === "function") {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+
+  if (typeof globalThis.OffscreenCanvas === "function") {
+    return new globalThis.OffscreenCanvas(width, height);
+  }
+
+  throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
+};
+
+const virtualTextureCanvasContext = (
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  label: string,
+): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D => {
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  return context;
+};
+
+const rasterVirtualTextureCanvasSource = (
+  source: RasterVirtualTextureSource,
+): CanvasImageSource => {
+  if (source.canvasSource !== undefined) return source.canvasSource;
+  if (!isDecodedRgbaTexture(source.source)) {
+    source.canvasSource = source.source;
+    return source.canvasSource;
+  }
+
+  const canvas = createVirtualTextureCanvas(source.width, source.height, source.label);
+  const context = virtualTextureCanvasContext(canvas, source.label);
+  if (typeof globalThis.ImageData !== "function") {
+    throw new Error(`ImageData is unavailable for ${source.label}`);
+  }
+  const imageData = new globalThis.ImageData(
+    new Uint8ClampedArray(source.source.data),
+    source.source.width,
+    source.source.height,
+  );
+  context.putImageData(imageData, 0, 0);
+  source.canvasSource = canvas;
+  return source.canvasSource;
+};
+
+const generatedRasterVirtualTexturePageImage = (
+  source: RasterVirtualTextureSource,
+  manifest: VirtualTextureManifestModel,
+  page: VirtualTexturePageId,
+): TexImageSource => {
+  const mipScale = 2 ** page.mip;
+  const sourceX = page.x * manifest.pageSize * mipScale;
+  const sourceY = page.y * manifest.pageSize * mipScale;
+  const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
+  const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
+  const canvas = createVirtualTextureCanvas(
+    manifest.pageSize,
+    manifest.pageSize,
+    `generated raster virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
+  );
+  const context = virtualTextureCanvasContext(canvas, source.label);
+  context.clearRect(0, 0, manifest.pageSize, manifest.pageSize);
+  context.drawImage(
+    rasterVirtualTextureCanvasSource(source),
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    manifest.pageSize,
+    manifest.pageSize,
+  );
+  return canvas;
+};
 
 const loadSvgUriImage = async (url: string): Promise<HTMLImageElement> => {
   const response = await fetch(url);
@@ -3825,7 +3970,9 @@ class WebGlRootImpl implements WebGlRoot {
     this.#registerAutoBaseColorVirtualTextureManifest(texture, material.baseColorSourceUri);
     this.#registerAutoBaseColorVirtualTextureGeneratedPageSource(
       texture,
-      material.baseColorSvgVirtualTextureSource,
+      material.baseColorSvgVirtualTextureSource === undefined
+        ? undefined
+        : { kind: "svg", source: material.baseColorSvgVirtualTextureSource },
     );
     return texture;
   }
@@ -5072,7 +5219,10 @@ class WebGlRootImpl implements WebGlRoot {
 
   #autoBaseColorVirtualTextureManifestUri(texture: TextureAssetUploadRef): string | undefined {
     return this.#autoVirtualTextureManifestUris.get(textureCacheKey(texture))
-      ?? this.#autoBaseColorVirtualTextureManifestUriForUri(texture.uri);
+      ?? this.#autoBaseColorVirtualTextureManifestUriForUri(texture.uri)
+      ?? (this.#autoBaseColorVirtualTextureGeneratedPageSource(texture) === undefined
+        ? undefined
+        : generatedVirtualTextureManifestUri(textureCacheKey(texture)));
   }
 
   #registerAutoBaseColorVirtualTextureManifest(
@@ -5087,12 +5237,30 @@ class WebGlRootImpl implements WebGlRoot {
 
   #registerAutoBaseColorVirtualTextureGeneratedPageSource(
     texture: TextureAssetUploadRef,
-    source: SvgVirtualTextureSource | undefined,
+    source: VirtualTextureGeneratedPageSource | undefined,
   ): void {
     if (source === undefined) return;
-    this.#autoVirtualTextureGeneratedPageSources.set(textureCacheKey(texture), {
-      kind: "svg",
-      source,
+    this.#autoVirtualTextureGeneratedPageSources.set(textureCacheKey(texture), source);
+  }
+
+  #registerAutoBaseColorVirtualTextureRasterPageSource(
+    texture: TextureAssetUploadRef,
+    source: LoadedTextureSource,
+  ): void {
+    if (svgVirtualTextureSourceForImage(source) !== undefined) return;
+
+    const [width, height] = loadedTextureSourceSize(source);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+    if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
+    this.#registerAutoBaseColorVirtualTextureGeneratedPageSource(texture, {
+      kind: "raster",
+      source: {
+        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+        height: Math.ceil(height),
+        label: texture.uri,
+        source,
+        width: Math.ceil(width),
+      },
     });
   }
 
@@ -5172,13 +5340,20 @@ class WebGlRootImpl implements WebGlRoot {
       pendingUploads: [],
       requestedPages: new Set(),
       stats: {
+        generatedManifestUses: 0,
+        generatedPageFailures: 0,
+        generatedPageRasterizeMaxMs: 0,
+        generatedPageRasterizeMs: 0,
+        generatedPageRequests: 0,
+        generatedPagesTarget: 0,
         manifestFailures: 0,
-        manifestRequests: 1,
+        manifestRequests: isGeneratedVirtualTextureManifestUri(texture.manifestUri) ? 0 : 1,
         pageTableUpdates: 0,
         preparedResidencyResolutions: 0,
         shaderBinds: 0,
         unreadyDraws: 0,
         unsupportedDraws: 0,
+        uploadedPageBytes: 0,
         uploadedPages: 0,
       },
       status: "loading",
@@ -5186,7 +5361,11 @@ class WebGlRootImpl implements WebGlRoot {
       uploadedPages: new Set(),
     };
     this.#virtualTextures.set(key, state);
-    void this.#loadVirtualTextureManifest(state);
+    if (isGeneratedVirtualTextureManifestUri(texture.manifestUri) && options.generatedPageSource !== undefined) {
+      this.#tryUseGeneratedVirtualTextureManifest(state);
+    } else {
+      void this.#loadVirtualTextureManifest(state);
+    }
 
     return state;
   }
@@ -5241,6 +5420,12 @@ class WebGlRootImpl implements WebGlRoot {
     if (pageSource === undefined) return false;
 
     const manifest = this.#generatedVirtualTextureManifest(pageSource);
+    state.stats.generatedManifestUses += 1;
+    state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
+      manifest.width,
+      manifest.height,
+      manifest.pageSize,
+    );
     const unsupported = this.#unsupportedVirtualTextureRuntimeReason(manifest);
     if (unsupported !== undefined) {
       this.#markVirtualTextureUnsupported(state, unsupported);
@@ -5261,6 +5446,8 @@ class WebGlRootImpl implements WebGlRoot {
     source: VirtualTextureGeneratedPageSource,
   ): VirtualTextureManifestModel {
     switch (source.kind) {
+      case "raster":
+        return generatedRasterVirtualTextureManifest(source.source);
       case "svg":
         return generatedSvgVirtualTextureManifest(source.source);
     }
@@ -5656,11 +5843,11 @@ class WebGlRootImpl implements WebGlRoot {
   #virtualTexturePageImage(
     state: VirtualTextureRuntimeState,
     page: VirtualTexturePageId,
-  ): Promise<HTMLImageElement | ImageBitmap> | undefined {
+  ): Promise<TexImageSource> | undefined {
     const manifest = state.manifest;
     if (manifest === undefined) return undefined;
     if (state.generatedPages && state.generatedPageSource !== undefined) {
-      return this.#generatedVirtualTexturePageImage(state.generatedPageSource, manifest, page);
+      return this.#generatedVirtualTexturePageImage(state, state.generatedPageSource, manifest, page);
     }
 
     const uri = virtualTexturePageUri(manifest, page, state.pageUrisByKey);
@@ -5670,13 +5857,35 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #generatedVirtualTexturePageImage(
+    state: VirtualTextureRuntimeState,
     source: VirtualTextureGeneratedPageSource,
     manifest: VirtualTextureManifestModel,
     page: VirtualTexturePageId,
-  ): Promise<HTMLImageElement | ImageBitmap> {
+  ): Promise<TexImageSource> {
+    const started = virtualTextureNow();
+    state.stats.generatedPageRequests += 1;
+    const recordResult = (image: TexImageSource): TexImageSource => {
+      const elapsed = Math.max(0, virtualTextureNow() - started);
+      state.stats.generatedPageRasterizeMs += elapsed;
+      state.stats.generatedPageRasterizeMaxMs = Math.max(state.stats.generatedPageRasterizeMaxMs, elapsed);
+      return image;
+    };
+    const recordFailure = (error: unknown): never => {
+      state.stats.generatedPageFailures += 1;
+      throw error;
+    };
+
     switch (source.kind) {
+      case "raster":
+        try {
+          return Promise.resolve(recordResult(generatedRasterVirtualTexturePageImage(source.source, manifest, page)));
+        } catch (error) {
+          state.stats.generatedPageFailures += 1;
+          return Promise.reject(error);
+        }
       case "svg":
-        return loadGeneratedSvgVirtualTexturePageImage(source.source, manifest, page);
+        return loadGeneratedSvgVirtualTexturePageImage(source.source, manifest, page)
+          .then(recordResult, recordFailure);
     }
   }
 
@@ -5719,7 +5928,7 @@ class WebGlRootImpl implements WebGlRoot {
   #uploadVirtualTexturePage(
     state: VirtualTextureRuntimeState,
     page: VirtualTexturePageId,
-    image: HTMLImageElement | ImageBitmap,
+    image: TexImageSource,
   ): void {
     const manifest = state.manifest;
     const resources = state.resources;
@@ -5759,6 +5968,7 @@ class WebGlRootImpl implements WebGlRoot {
       image,
     );
     state.uploadedPages.add(virtualTexturePageKey(page));
+    state.stats.uploadedPageBytes += manifest.pageSize * manifest.pageSize * 4;
     state.stats.uploadedPages += 1;
     this.#flushVirtualTexturePageTableUpdates(state);
   }
@@ -5855,9 +6065,24 @@ class WebGlRootImpl implements WebGlRoot {
     if (!this.#isVirtualTextureDrawable(state)) return false;
     if (context === undefined) return true;
 
-    const candidates = this.#virtualTextureDemandCandidates(state, context);
+    const candidates = this.#virtualTextureTargetCoverageCandidates(state, context);
     return candidates.length > 0
       && candidates.every((page) => state.uploadedPages.has(virtualTexturePageKey(page)));
+  }
+
+  #virtualTextureTargetCoverageCandidates(
+    state: VirtualTextureRuntimeState,
+    context: VirtualTextureDrawDemandContext,
+  ): readonly VirtualTexturePageId[] {
+    const manifest = state.manifest;
+    if (manifest === undefined) return [];
+
+    const footprint = this.#virtualTextureScreenFootprint(context);
+    if (footprint === undefined) return this.#allVirtualTextureDemandCandidates(state);
+
+    const targetMip = this.#virtualTextureTargetMip(manifest, footprint);
+    return this.#virtualTexturePagesForFootprint(manifest, targetMip, footprint)
+      .filter((page) => this.#isVirtualTexturePageAvailable(state, page));
   }
 
   #bindVirtualTexture(
@@ -6440,6 +6665,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (this.#disposed) return;
       if (state.uploaded) return;
       state.loading = false;
+      this.#registerAutoBaseColorVirtualTextureRasterPageSource(texture, image);
       this.#uploadTexture(state, image, texture);
       this.invalidate();
     }, (error: unknown) => {
@@ -6465,6 +6691,7 @@ class WebGlRootImpl implements WebGlRoot {
       uploaded: false,
     };
     this.#textures.set(key, resource);
+    this.#registerAutoBaseColorVirtualTextureRasterPageSource(texture, image);
     this.#uploadTexture(resource, image, texture);
     if ("loading" in resource) resource.loading = false;
   }
@@ -7537,6 +7764,12 @@ class WebGlRootImpl implements WebGlRoot {
 
   #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {
     let atlasTextures = 0;
+    let generatedManifestUses = 0;
+    let generatedPageFailures = 0;
+    let generatedPageRasterizeMaxMs = 0;
+    let generatedPageRasterizeMs = 0;
+    let generatedPageRequests = 0;
+    let generatedPagesTarget = 0;
     let manifestFailures = 0;
     let manifestRequests = 0;
     let manifestsReady = 0;
@@ -7549,6 +7782,7 @@ class WebGlRootImpl implements WebGlRoot {
     let shaderBinds = 0;
     let unreadyDraws = 0;
     let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
+    let uploadedPageBytes = 0;
     let uploadedPages = 0;
 
     for (const state of this.#virtualTextures.values()) {
@@ -7556,6 +7790,12 @@ class WebGlRootImpl implements WebGlRoot {
         atlasTextures += 1;
         pageTableTextures += 1;
       }
+      generatedManifestUses += state.stats.generatedManifestUses;
+      generatedPageFailures += state.stats.generatedPageFailures;
+      generatedPageRasterizeMaxMs = Math.max(generatedPageRasterizeMaxMs, state.stats.generatedPageRasterizeMaxMs);
+      generatedPageRasterizeMs += state.stats.generatedPageRasterizeMs;
+      generatedPageRequests += state.stats.generatedPageRequests;
+      generatedPagesTarget += state.stats.generatedPagesTarget;
       manifestFailures += state.stats.manifestFailures;
       manifestRequests += state.stats.manifestRequests;
       if (state.status === "ready") manifestsReady += 1;
@@ -7567,11 +7807,18 @@ class WebGlRootImpl implements WebGlRoot {
       shaderBinds += state.stats.shaderBinds;
       unreadyDraws += state.stats.unreadyDraws;
       unsupportedDraws += state.stats.unsupportedDraws;
+      uploadedPageBytes += state.stats.uploadedPageBytes;
       uploadedPages += state.uploadedPages.size;
     }
 
     return {
       atlasTextures,
+      generatedManifestUses,
+      generatedPageFailures,
+      generatedPageRasterizeMaxMs,
+      generatedPageRasterizeMs,
+      generatedPageRequests,
+      generatedPagesTarget,
       manifestFailures,
       manifestRequests,
       manifestsReady,
@@ -7584,6 +7831,7 @@ class WebGlRootImpl implements WebGlRoot {
       shaderBinds,
       unreadyDraws,
       unsupportedDraws,
+      uploadedPageBytes,
       uploadedPages,
     };
   }

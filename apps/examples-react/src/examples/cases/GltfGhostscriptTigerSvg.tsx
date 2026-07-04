@@ -4,6 +4,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRootOptions } from '../example-root-options';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
@@ -36,6 +37,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
           />
         </pass>
       </scene>
+      <BenchmarkRendererSnapshot />
       <OrbitControls {...orbit.orbitControlsProps} maxDistance={2.5} minDistance={0.28} />
     </Canvas>
   );

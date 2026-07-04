@@ -65,11 +65,10 @@ const copyNumberCounters = (value: unknown): Record<string, number> | null => {
 
   const counters: Record<string, number> = {};
   for (const [key, counter] of Object.entries(value)) {
-    if (typeof counter !== 'number' || !Number.isFinite(counter)) return null;
-    counters[key] = counter;
+    if (typeof counter === 'number' && Number.isFinite(counter)) counters[key] = counter;
   }
 
-  return counters;
+  return Object.keys(counters).length === 0 ? null : counters;
 };
 
 export const BenchmarkRendererSnapshot = (): ReactNode => {

@@ -4,6 +4,7 @@ import {
   type WebGlGltfInstancingSnapshot,
   type WebGlRoot,
   type WebGlRootOptions,
+  type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
 import {
   isRenderRootDescriptor,
@@ -34,6 +35,7 @@ export interface RoyalRendererRootSnapshot {
   /** Renderer-owned counters for diagnostics; not scene or application state. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
+  readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
 
 export type RoyalRendererRootRenderInput = RenderRoot | RoyalRendererJsxElement;
@@ -125,6 +127,7 @@ export const createRendererRoot = (
         frame: snapshot.frame,
         gltfInstancing: snapshot.gltfInstancing,
         latestScene: snapshot.latestScene,
+        virtualTexturing: snapshot.virtualTexturing,
       };
     },
   };
