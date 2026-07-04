@@ -7,20 +7,14 @@ instancing-focused summaries for `/gltf-instancing` grid, seed, and animation ca
 Quick host check:
 
 ```sh
-EXAMPLES_BENCH_ROUTE=gltf-instancing \
-EXAMPLES_BENCH_INSTANCING_SWEEP=quick \
-EXAMPLES_BENCH_INSTANCING_CASES=1 \
-EXAMPLES_BENCH_FRAMES=24 \
-EXAMPLES_BENCH_WARMUP_FRAMES=8 \
-pnpm --filter @royal/examples-react bench:examples
+pnpm --filter @royal/examples-react bench:examples:quick
 ```
 
 Fuller host report:
 
 ```sh
-EXAMPLES_BENCH_INSTANCING_SWEEP=full \
 EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-host.json \
-pnpm --filter @royal/examples-react bench:examples
+pnpm --filter @royal/examples-react bench:examples:full
 ```
 
 Quest 2 report through forwarded DevTools:
@@ -31,14 +25,23 @@ QUEST_DEVTOOLS_PORT=9222 pnpm quest:browser forward
 EXAMPLES_BENCH_BROWSER=cdp \
 EXAMPLES_BENCH_DEBUG_PORT=9222 \
 EXAMPLES_BENCH_FAKE_XR=0 \
+EXAMPLES_BENCH_MODE=full \
 EXAMPLES_BENCH_INSTANCING_SWEEP=full \
 EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-quest2.json \
 pnpm --filter @royal/examples-react bench:examples
 ```
 
-Use `EXAMPLES_BENCH_ROUTE=<id-or-prefix>` to narrow the run. For Quest runs, open
-or keep any Quest Browser tab available before starting the benchmark; the script
+The default mode is `quick`: product routes, short frame windows, no instancing
+fuzz rows, no `gltf-kitchen-sink-full`, and no XR lab route. Use
+`EXAMPLES_BENCH_MODE=full` for heavier product coverage, `labs` for explicit lab
+routes such as `webxr-vr`, or `all` when you really want every route. Use
+`EXAMPLES_BENCH_ROUTE=<id-or-prefix>` to narrow the run. For Quest runs, open or
+keep any Quest Browser tab available before starting the benchmark; the script
 navigates the first CDP page target through the selected routes.
+
+Browser instancing fuzz rows are opt-in with
+`EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural
+instancing invariants and keep browser fuzz rows as replayed perf probes.
 
 ## Review Notes
 
@@ -66,5 +69,5 @@ Focused checks:
 ```sh
 ROYAL_FUZZ_CASES=64 pnpm exec vitest run tests/*property*.test.ts
 node --check apps/examples-react/scripts/benchmark-examples.mjs
-EXAMPLES_BENCH_ROUTE=gltf-instancing EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm --filter @royal/examples-react bench:examples
+pnpm --filter @royal/examples-react bench:examples:instancing
 ```

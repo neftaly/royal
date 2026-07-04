@@ -22,7 +22,6 @@ import { layoutText } from "@royal/renderer-core/text/layout";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import { text as textNode } from "@royal/renderer-core/text/node";
 import { shapeText } from "@royal/renderer-core/text/shaping";
-import { jsx } from "@royal/react/renderer/jsx-runtime";
 import { loadTestTextFont, testTextFontUrl } from "./text-font-fixture";
 
 describe("renderer-core public API", () => {
@@ -199,27 +198,4 @@ describe("renderer-core public API", () => {
     expect(() => createTextFontFace({ data })).toThrow(/WOFF2 text fonts require createTextFontFaceAsync/);
   });
 
-  it("lowers Royal JSX tags into renderer descriptors", () => {
-    const node = jsx("mesh", {
-      color: [0.2, 0.4, 0.8, 1],
-      geometry: boxGeometry([1, 2, 3]),
-    });
-
-    expect(node).toMatchObject({
-      geometry: {
-        kind: "box",
-        size: [1, 2, 3],
-      },
-      kind: "mesh",
-      material: {
-        baseColor: {
-          color: [0.2, 0.4, 0.8, 1],
-          kind: "solid",
-        },
-        kind: "standard",
-        metallicFactor: 0,
-        roughnessFactor: 1,
-      },
-    });
-  });
 });

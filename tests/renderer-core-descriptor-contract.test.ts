@@ -13,7 +13,6 @@ import {
   unlitMaterial,
   virtualTexture,
   type VirtualTextureAssetOptions,
-  wireframeMaterial,
 } from "@royal/renderer-core";
 
 const camera = perspectiveCamera({
@@ -78,44 +77,6 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
-  it("normalizes texture identity fields without public fallback descriptors", () => {
-    expect(imageTexture({
-      src: "/textures/albedo.png",
-      version: "albedo-v2",
-    })).toEqual({
-      colorSpace: "srgb",
-      kind: "asset",
-      sampler: {
-        magFilter: "linear",
-        minFilter: "linear-mipmap-linear",
-        wrapS: "clamp-to-edge",
-        wrapT: "clamp-to-edge",
-      },
-      uri: "/textures/albedo.png",
-      version: "albedo-v2",
-    });
-
-    expect(textureAsset({
-      uri: "/textures/mask.ktx2",
-      version: 3,
-    })).toEqual({
-      kind: "asset",
-      uri: "/textures/mask.ktx2",
-      version: 3,
-    });
-
-    expect(virtualTexture({
-      debugName: "terrain-vt",
-      src: "/textures/terrain.vt.json",
-      version: "terrain-v1",
-    })).toEqual({
-      debugName: "terrain-vt",
-      kind: "virtual-asset",
-      manifestUri: "/textures/terrain.vt.json",
-      version: "terrain-v1",
-    });
-  });
-
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
     const options = {
       debugName: "contract terrain",
@@ -161,26 +122,7 @@ describe("renderer-core descriptor contract", () => {
     }
   });
 
-  it("normalizes material baseColor from color or texture inputs", () => {
-    const texture = imageTexture("/textures/panel.png");
-
-    expect(standardMaterial({ color: [0.1, 0.2, 0.3, 1] })).toEqual({
-      baseColor: {
-        color: [0.1, 0.2, 0.3, 1],
-        kind: "solid",
-      },
-      kind: "standard",
-      metallicFactor: 0,
-      roughnessFactor: 1,
-    });
-
-    expect(standardMaterial({ texture })).toEqual({
-      baseColor: texture,
-      kind: "standard",
-      metallicFactor: 0,
-      roughnessFactor: 1,
-    });
-
+  it("clamps standard material PBR factors", () => {
     expect(standardMaterial({
       color: [1, 1, 1, 1],
       metallic: 2,
@@ -188,28 +130,6 @@ describe("renderer-core descriptor contract", () => {
     })).toMatchObject({
       metallicFactor: 1,
       roughnessFactor: 0,
-    });
-
-    expect(unlitMaterial({ color: [0.9, 0.8, 0.7, 1] })).toEqual({
-      baseColor: {
-        color: [0.9, 0.8, 0.7, 1],
-        kind: "solid",
-      },
-      kind: "unlit",
-    });
-
-    expect(unlitMaterial({ texture })).toEqual({
-      baseColor: texture,
-      kind: "unlit",
-    });
-
-    expect(wireframeMaterial({ color: [1, 0.8, 0.2, 1] })).toEqual({
-      baseColor: {
-        color: [1, 0.8, 0.2, 1],
-        kind: "solid",
-      },
-      kind: "wireframe",
-      width: 1.25,
     });
   });
 

@@ -14,6 +14,7 @@ const debugPort = Number(process.env.EXAMPLES_BENCH_DEBUG_PORT ?? 4674);
 const debugHost = process.env.EXAMPLES_BENCH_DEBUG_HOST?.trim() || host;
 const baseUrl = process.env.EXAMPLES_BENCH_BASE_URL?.trim() || `http://${host}:${previewPort}`;
 const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
+const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
 const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
 
@@ -27,8 +28,14 @@ const envInteger = (name, fallback) => {
   return value;
 };
 
-const frameSampleCount = envInteger('EXAMPLES_BENCH_FRAMES', 90);
-const frameWarmupCount = envInteger('EXAMPLES_BENCH_WARMUP_FRAMES', 30);
+if (!new Set(['quick', 'full', 'labs', 'all']).has(benchmarkMode)) {
+  throw new Error(`EXAMPLES_BENCH_MODE must be "quick", "full", "labs", or "all", received ${JSON.stringify(benchmarkMode)}`);
+}
+
+const defaultFrameSampleCount = benchmarkMode === 'quick' ? 24 : 90;
+const defaultFrameWarmupCount = benchmarkMode === 'quick' ? 8 : 30;
+const frameSampleCount = envInteger('EXAMPLES_BENCH_FRAMES', defaultFrameSampleCount);
+const frameWarmupCount = envInteger('EXAMPLES_BENCH_WARMUP_FRAMES', defaultFrameWarmupCount);
 const cameraDragEnabled = process.env.EXAMPLES_BENCH_CAMERA_DRAG === '1';
 const cameraDragFrameCount = cameraDragEnabled
   ? envInteger('EXAMPLES_BENCH_CAMERA_DRAG_FRAMES', frameSampleCount)
@@ -38,7 +45,9 @@ const cameraDragStepPixels = cameraDragEnabled
   : 7;
 const instancingFuzzCases = envInteger('EXAMPLES_BENCH_INSTANCING_CASES', 4);
 const instancingSeed = envInteger('EXAMPLES_BENCH_INSTANCING_SEED', 0x1a57a11);
-const instancingSweepMode = process.env.EXAMPLES_BENCH_INSTANCING_SWEEP?.trim() || 'default';
+const instancingFuzzEnabled = process.env.EXAMPLES_BENCH_INSTANCING_FUZZ === '1';
+const instancingSweepMode = process.env.EXAMPLES_BENCH_INSTANCING_SWEEP?.trim()
+  || (benchmarkMode === 'quick' ? 'quick' : 'default');
 const defaultInstancingGrid = 16;
 const routeReadyTimeoutMs = envInteger('EXAMPLES_BENCH_READY_TIMEOUT_MS', 20_000);
 const clearCachePerRoute = process.env.EXAMPLES_BENCH_CLEAR_CACHE !== '0';
@@ -117,6 +126,14 @@ const routes = [
   { id: 'webxr-vr', path: '/webxr-vr' },
 ];
 
+const routeMatchesBenchmarkMode = (route) => {
+  if (benchmarkMode === 'all') return true;
+  if (benchmarkMode === 'labs') return route.id === 'webxr-vr';
+  if (benchmarkMode === 'full') return route.id !== 'webxr-vr';
+
+  return route.id !== 'gltf-kitchen-sink-full' && route.id !== 'webxr-vr';
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class SeededRandom {
@@ -173,12 +190,19 @@ const instancingFuzzRoutes = () => {
 };
 
 const selectedRoutes = () => {
+  const sweepRoutes = benchmarkMode === 'labs' ? [] : instancingSweepRoutes();
+  const fuzzRoutes = instancingFuzzEnabled ? instancingFuzzRoutes() : [];
+  const benchmarkRoutes = routes.filter(routeMatchesBenchmarkMode);
   const allRoutes = [
     ...routes,
-    ...instancingSweepRoutes(),
-    ...(process.env.EXAMPLES_BENCH_INSTANCING_FUZZ === '0' ? [] : instancingFuzzRoutes()),
+    ...sweepRoutes,
+    ...fuzzRoutes,
   ];
-  if (routeFilter === '') return allRoutes;
+  if (routeFilter === '') return [
+    ...benchmarkRoutes,
+    ...sweepRoutes,
+    ...fuzzRoutes,
+  ];
   const selected = allRoutes.filter((route) =>
     route.id === routeFilter ||
     route.path === routeFilter ||
@@ -1258,6 +1282,8 @@ const main = async () => {
         fakeXrPrepareTimeoutMs,
         fakeXrSampleTimeoutMs,
         fakeXrViews,
+        benchmarkMode,
+        instancingFuzzEnabled,
         instancingFuzzCases,
         instancingSeed,
         instancingSweepMode,

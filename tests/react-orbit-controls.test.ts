@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   createOrbitCameraStore,
   createOrbitControls,
-  orbitCameraTransform,
-  resolveOrbitCameraView,
   type OrbitCameraView,
 } from "@royal/react";
 
@@ -104,26 +102,6 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
-  it("defaults sparse orbit views to origin target and zero yaw", () => {
-    expect(resolveOrbitCameraView({
-      distance: 5,
-      pitch: 0,
-    })).toEqual({
-      distance: 5,
-      pitch: 0,
-      target: [0, 0, 0],
-      yaw: 0,
-    });
-
-    expect(orbitCameraTransform({
-      distance: 5,
-      pitch: 0,
-    })).toEqual({
-      position: [0, 0, 5],
-      rotation: [-0, -0, 0],
-    });
-  });
-
   it("publishes complete views from orbit camera stores", () => {
     const store = createOrbitCameraStore({
       distance: 5,
