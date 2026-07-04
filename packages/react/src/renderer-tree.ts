@@ -13,6 +13,7 @@ import {
 } from 'react-reconciler/constants';
 import {
   createRendererElement,
+  isRenderRootDescriptor,
   isRoyalRendererJsxElement,
   type JSX as RoyalReactJSX,
   type RoyalRendererJsxElement,
@@ -93,9 +94,6 @@ const resolveRenderObjectTransform = (
     scale: options.scale ?? identityTransform.scale,
   };
 };
-
-const isRenderRoot = (value: unknown): value is RenderRoot =>
-  isRoyalRendererJsxElement(value) && value.kind === 'scene';
 
 const removeChildFromList = (
   parent: RoyalHostParent,
@@ -233,7 +231,7 @@ const sceneFromContainer = (
   container.hasPointerEventTargets = pointerEventRegistry.hasPointerEventTargets;
   container.pointerEventTargets = pointerEventRegistry.pointerEventTargets;
   if (sceneChildren.length === 0) return undefined;
-  if (sceneChildren.length !== 1 || !isRenderRoot(sceneChildren[0])) {
+  if (sceneChildren.length !== 1 || !isRenderRootDescriptor(sceneChildren[0])) {
     throw new Error('Canvas expects exactly one renderer scene child');
   }
 

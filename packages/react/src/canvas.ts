@@ -22,7 +22,11 @@ import {
   type CanvasPointerInteractionAction,
 } from "./canvas-pointer-interaction";
 import { createFrameLoop, FrameLoopContext } from "./frame";
-import { isRoyalRendererJsxElement, type RoyalRendererJsxElement } from "./jsx-runtime-internal";
+import {
+  isRenderRootDescriptor,
+  isRoyalRendererJsxElement,
+  type RoyalRendererJsxElement,
+} from "./jsx-runtime-internal";
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
@@ -51,12 +55,6 @@ export interface CanvasProps
   readonly ref?: Ref<HTMLCanvasElement>;
   readonly renderer?: CanvasRendererOptions;
 }
-
-const isRenderRoot = (value: unknown): value is RenderRoot =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  value.kind === "scene";
 
 const isReactRendererScene = (value: unknown): value is ReactNode =>
   isValidElement(value) && value.type === "scene";
@@ -102,7 +100,7 @@ const splitCanvasChildren = (
 
   for (const child of toCanvasChildArray(children)) {
     if (
-      isRenderRoot(child) ||
+      isRenderRootDescriptor(child) ||
       isReactRendererScene(child) ||
       (sceneChildren.length === 0 && isValidElement(child))
     ) {
@@ -363,7 +361,7 @@ export const Canvas = ({
   useLayoutEffect(() => {
     const hasRootError = rootError !== null;
 
-    if (isRenderRoot(sceneChild)) {
+    if (isRenderRootDescriptor(sceneChild)) {
       rendererTree.setTarget(canvasRoot, true);
       rendererTree.render(null);
       if (!hasRootError && canvasRoot !== null) {

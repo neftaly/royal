@@ -25,6 +25,7 @@ import {
   type PlaneGeometryOptions,
   type PerspectiveCameraOptions,
   type RenderElement,
+  type RenderRoot,
   type RenderNode,
   type RenderPass,
   type RenderPassOptions,
@@ -130,6 +131,12 @@ export const isRoyalRendererJsxElement = (value: unknown): value is RoyalRendere
   typeof value === 'object' &&
   value !== null &&
   'kind' in value;
+
+export const isRenderRootDescriptor = (value: unknown): value is RenderRoot =>
+  typeof value === 'object' &&
+  value !== null &&
+  'kind' in value &&
+  value.kind === 'scene';
 
 const isRendererJsxChildArray = (
   value: RendererJsxChild

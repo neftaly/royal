@@ -5,7 +5,10 @@ import {
   type WebGlRoot,
   type WebGlRootOptions,
 } from "@royal/renderer-webgl";
-import type { RoyalRendererJsxElement } from "./jsx-runtime-internal";
+import {
+  isRenderRootDescriptor,
+  type RoyalRendererJsxElement,
+} from "./jsx-runtime-internal";
 
 /** WebGL context options for the Royal renderer root. */
 export interface RoyalRendererRootContextOptions {
@@ -65,14 +68,8 @@ const toWebGlRootOptions = (
   return options?.context;
 };
 
-const isRenderRoot = (value: unknown): value is RenderRoot =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  value.kind === "scene";
-
 const toRenderRoot = (scene: RoyalRendererRootRenderInput): RenderRoot => {
-  if (isRenderRoot(scene)) return scene;
+  if (isRenderRootDescriptor(scene)) return scene;
 
   throw new Error("Royal renderer root render expects a renderer scene");
 };
