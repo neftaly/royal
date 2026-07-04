@@ -396,9 +396,10 @@ export const createVirtualTextureRuntimeManifest = (
     ?? (manifest.physicalByteBudget === undefined
       ? 64
       : Math.max(1, Math.floor(manifest.physicalByteBudget / pageByteSize)));
+  const pageUrisByKey = virtualTextureExplicitPageUrisByKey(manifest);
   const pages = manifest.pages.map((page): VirtualTextureRuntimeManifestPage => {
     const key = virtualTexturePageKey(page);
-    const uri = virtualTexturePageUri(manifest, page);
+    const uri = virtualTexturePageUri(manifest, page, pageUrisByKey);
     return {
       ...page,
       key,
@@ -427,14 +428,24 @@ export const createVirtualTextureRuntimeManifest = (
   };
 };
 
+export const virtualTextureExplicitPageUrisByKey = (
+  manifest: VirtualTextureManifestModel,
+): ReadonlyMap<string, string> => {
+  const pageUrisByKey = new Map<string, string>();
+  for (const page of manifest.pages) {
+    if (page.uri !== undefined) pageUrisByKey.set(virtualTexturePageKey(page), page.uri);
+  }
+  return pageUrisByKey;
+};
+
 export const virtualTexturePageUri = (
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
+  pageUrisByKey: ReadonlyMap<string, string> = virtualTextureExplicitPageUrisByKey(manifest),
 ): string | undefined => {
   const key = virtualTexturePageKey(page);
-  const entry = manifest.pages.find((candidate) =>
-    candidate.mip === page.mip && candidate.x === page.x && candidate.y === page.y);
-  if (entry?.uri !== undefined) return entry.uri;
+  const explicitUri = pageUrisByKey.get(key);
+  if (explicitUri !== undefined) return explicitUri;
   if (manifest.uriTemplate === undefined) return undefined;
 
   return manifest.uriTemplate

@@ -378,10 +378,9 @@ const clearSelectionsExcept = (
   state: TextSurfaceState,
   id: string | undefined,
 ): TextSurfaceState => {
-  let changed = false;
   const currentControls = state.controls;
-  let nextControls = currentControls;
-  let nextSelections = state.selections;
+  let nextControls: Map<string, TextControlRegistration> | undefined;
+  let nextSelections: Map<string, EditableTextSelection> | undefined;
 
   for (const control of currentControls.values()) {
     if (control.id === id || !hasSelection(control)) continue;
@@ -390,14 +389,16 @@ const clearSelectionsExcept = (
       control.state.selection.focus,
       control.layout,
     );
-    const current = nextSelections.get(control.id);
+    const current = (nextSelections ?? state.selections).get(control.id);
     if (current !== undefined && sameEditableTextSelection(current, nextState.selection)) continue;
-    changed = true;
-    nextSelections = new Map(nextSelections).set(control.id, nextState.selection);
-    nextControls = new Map(nextControls).set(control.id, withSelection(control, nextState.selection));
+
+    nextSelections ??= new Map(state.selections);
+    nextControls ??= new Map(currentControls);
+    nextSelections.set(control.id, nextState.selection);
+    nextControls.set(control.id, withSelection(control, nextState.selection));
   }
 
-  if (!changed) return state;
+  if (nextControls === undefined || nextSelections === undefined) return state;
   return stateWith(state, {
     controls: nextControls,
     selections: nextSelections,

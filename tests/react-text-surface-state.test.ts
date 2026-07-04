@@ -551,6 +551,13 @@ describe("React text surface state reducer", () => {
     expect(result.state.controls.get(clear.id)?.selection).toEqual(selection(5, 5, 0, 0));
     expect(result.state.selections.get(keep.id)).toBeUndefined();
     expect(result.state.selections.get(clear.id)).toEqual(selection(5, 5, 0, 0));
+
+    const idempotent = reduceTextSurfaceState(result.state, {
+      id: keep.id,
+      type: "selection/clear-except",
+    });
+
+    expect(idempotent.state).toBe(result.state);
   });
 
   it("registers controls and unregisters text controls without dropping selections", () => {

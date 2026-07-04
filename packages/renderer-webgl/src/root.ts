@@ -110,6 +110,7 @@ import {
   encodeVirtualTexturePageTableRgba8,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
+  virtualTextureExplicitPageUrisByKey,
   virtualTexturePageKey,
   virtualTexturePageUri,
   type VirtualTextureManifestModel,
@@ -355,10 +356,13 @@ type VirtualTextureRuntimeStats = {
 };
 
 type VirtualTextureRuntimeState = {
+  demandCandidateIndex: number;
+  demandCandidates?: readonly VirtualTexturePageId[];
   diagnostics: string[];
   readonly key: string;
   loadingPages: Set<string>;
   manifest?: VirtualTextureManifestModel;
+  pageUrisByKey?: ReadonlyMap<string, string>;
   pageTable?: VirtualTextureAtlasPageTable;
   readonly requestedPages: Set<string>;
   resources?: VirtualTextureResourceSet;
@@ -4533,6 +4537,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (cached !== undefined) return cached;
 
     const state: VirtualTextureRuntimeState = {
+      demandCandidateIndex: 0,
       diagnostics: [],
       key,
       loadingPages: new Set(),
@@ -4577,6 +4582,9 @@ class WebGlRootImpl implements WebGlRoot {
       }
 
       state.manifest = parsed.manifest;
+      state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
+      state.demandCandidates = this.#virtualTextureDemandCandidates(state);
+      state.demandCandidateIndex = 0;
       const unsupported = parsed.diagnostics.find((diagnostic) => diagnostic.severity === "unsupported")
         ?? this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest);
       if (unsupported !== undefined) {
@@ -4716,16 +4724,22 @@ class WebGlRootImpl implements WebGlRoot {
 
     const budget = this.#virtualTexturePhysicalSlots(manifest);
     let requested = 0;
-    for (const page of this.#virtualTextureDemandCandidates(manifest)) {
-      if (requested >= budget) break;
+    const candidates = state.demandCandidates ?? this.#virtualTextureDemandCandidates(state);
+    while (requested < budget && state.demandCandidateIndex < candidates.length) {
+      const page = candidates[state.demandCandidateIndex];
+      state.demandCandidateIndex += 1;
+      if (page === undefined) continue;
       if (this.#requestVirtualTexturePage(state, page)) requested += 1;
     }
   }
 
-  #virtualTextureDemandCandidates(manifest: VirtualTextureManifestModel): readonly VirtualTexturePageId[] {
+  #virtualTextureDemandCandidates(state: VirtualTextureRuntimeState): readonly VirtualTexturePageId[] {
+    const manifest = state.manifest;
+    if (manifest === undefined) return [];
+
     const candidates = new Map<string, VirtualTexturePageId>();
     for (const page of manifest.pages) {
-      if (virtualTexturePageUri(manifest, page) !== undefined) {
+      if (virtualTexturePageUri(manifest, page, state.pageUrisByKey) !== undefined) {
         candidates.set(virtualTexturePageKey(page), page);
       }
     }
@@ -4771,7 +4785,7 @@ class WebGlRootImpl implements WebGlRoot {
       return false;
     }
 
-    const uri = virtualTexturePageUri(manifest, page);
+    const uri = virtualTexturePageUri(manifest, page, state.pageUrisByKey);
     if (uri === undefined) return false;
 
     state.requestedPages.add(pageKey);
