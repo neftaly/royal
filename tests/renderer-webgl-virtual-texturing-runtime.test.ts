@@ -1126,7 +1126,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     expect(pageUploads(calls)).toHaveLength(beforeDisposeUploads);
-    expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(3);
+    expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(2);
     expect(root.snapshot().disposed).toBe(true);
   });
 

@@ -2859,6 +2859,56 @@ const materialOverfullTextureUnitTriangleDocument = () => {
   };
 };
 
+const materialOverfullSolidBaseImageBasedLightTriangleDocument = () => {
+  const base = materialOverfullTextureUnitTriangleDocument();
+  const material = base.materials[0]!;
+
+  return {
+    ...base,
+    extensions: {
+      EXT_lights_image_based: {
+        lights: [
+          {
+            intensity: 1,
+            irradianceCoefficients: iblCoefficients([0.4, 0.4, 0.4]),
+            specularImages: [
+              [1, 2, 3, 4, 5, 6],
+            ],
+            specularImageSize: 4,
+          },
+        ],
+      },
+    },
+    extensionsUsed: [
+      ...base.extensionsUsed,
+      "EXT_lights_image_based",
+    ],
+    images: [
+      ...base.images,
+      ...iblSpecularImageUris.map((uri) => ({ mimeType: "image/png", uri })),
+    ],
+    materials: [
+      {
+        ...material,
+        pbrMetallicRoughness: {
+          baseColorFactor: [0.42, 0.42, 0.42, 1],
+          metallicRoughnessTexture: material.pbrMetallicRoughness.metallicRoughnessTexture,
+        },
+      },
+    ],
+    scenes: [
+      {
+        ...base.scenes[0],
+        extensions: {
+          EXT_lights_image_based: {
+            light: 0,
+          },
+        },
+      },
+    ],
+  };
+};
+
 const materialTransmissionBatchKeyTriangleDocument = () => {
   const base = solidTriangleDocument();
   const primitive = base.meshes[0]!.primitives[0]!;
@@ -4762,7 +4812,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(sources).toContain("materialSheenContribution");
     expect(sources).toContain("materialSheenAlbedoScale");
     expect(sources).toContain("materialIridescenceTint");
-    expect(sources).toContain("materialSpecularFresnel");
+    expect(sources).toContain("vec3 fresnel = mix(f0, f90, fresnelPow(VdotH)) * materialIridescenceTint(VdotH);");
   });
 
   it("renders required KHR material sheen and iridescence defaults exactly", async () => {
@@ -5191,10 +5241,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const overfullSurfaceSource =
+      shaderSources(calls).filter((source) => source.includes("u_materialTransmissionTexture")).at(-1) ?? "";
     const enabledSamplerUniforms = [
       "u_texture",
       "u_transmissionScreenTexture",
-      "u_iblSpecularCube",
       "u_emissiveTexture",
       "u_metallicRoughnessTexture",
       "u_normalTexture",
@@ -5208,15 +5259,65 @@ describe("WebGL renderer scene and glTF regressions", () => {
       "u_iridescenceTexture",
       "u_iridescenceThicknessTexture",
       "u_materialTransmissionTexture",
+      "u_thicknessTexture",
     ].map((name) => uniform1iPayloads(readyFrameCalls, name).at(-1));
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(enabledSamplerUniforms).toHaveLength(new Set(enabledSamplerUniforms).size);
     expect(enabledSamplerUniforms).toEqual(expect.arrayContaining(Array.from({ length: 16 }, (_value, index) => index)));
+    expect((overfullSurfaceSource.match(/uniform sampler/g) ?? [])).toHaveLength(16);
+    expect(overfullSurfaceSource).not.toContain("u_iblSpecularCube");
     expect(uniform1iPayloads(readyFrameCalls, "u_useMaterialTransmissionTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(15);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useThicknessTexture")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).not.toContain(15);
+    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(14);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useThicknessTexture")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).toContain(15);
+    expect(readyFrameCalls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
+  });
+
+  it("uses material samplers before optional BRDF LUT when IBL exhausts texture units", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "overfull-texture-units-ibl",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialOverfullSolidBaseImageBasedLightTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances).toHaveLength(7);
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const surfaceSource =
+      shaderSources(calls).filter((source) => source.includes("u_materialTransmissionTexture")).at(-1) ?? "";
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect((surfaceSource.match(/uniform sampler/g) ?? [])).toHaveLength(16);
+    expect(surfaceSource).toContain("uniform samplerCube u_iblSpecularCube;");
+    expect(surfaceSource).not.toContain("uniform sampler2D u_iblBrdfLut;");
+    expect(uniform1iPayloads(readyFrameCalls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useIblBrdfLut")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_iblBrdfLut")).toEqual([]);
+    expect(uniform1iPayloads(readyFrameCalls, "u_normalTexture")).toContain(0);
+    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(14);
+    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).toContain(15);
     expect(readyFrameCalls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
@@ -6600,7 +6701,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(sources).toContain("uniform vec4 u_anisotropyFactors;");
     expect(sources).toContain("uniform vec4 u_diffuseTransmissionFactors;");
     expect(sources).toContain("materialAnisotropicGgxDistribution");
-    expect(sources).toContain("materialDiffuseTransmissionColor");
+    expect(sources).toContain("diffuseTransmissionFactor = clamp(u_diffuseTransmissionFactors.a");
     expect(root.snapshot().diagnostics.some((message) =>
       /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(false);
   });

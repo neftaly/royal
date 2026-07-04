@@ -108,20 +108,3 @@ export const uploadIblSpecularTextureIfReady = (
   gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, resource.mipCount - 1);
   resource.uploaded = true;
 };
-
-export const createFallbackIblSpecularTexture = (
-  context: Pick<IblSpecularTextureContext, "createTexture" | "gl">,
-): WebGLTexture => {
-  const gl = context.gl;
-  const texture = context.createTexture();
-  gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
-  gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
-  gl.texStorage2D(gl.TEXTURE_CUBE_MAP, 1, gl.RGBA8, 1, 1);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, 0);
-
-  return texture;
-};

@@ -137,8 +137,11 @@ import {
   type TextureAssetUploadRef,
 } from "./webgl/materials";
 import {
+  type SurfaceShaderFeatures,
+  type SurfaceShaderTextureFeature,
   type ProgramKind,
   fragmentShaderSource,
+  surfaceShaderFeatureKey,
   vertexShaderSource,
 } from "./webgl/shaders";
 import {
@@ -157,7 +160,6 @@ import {
   type SurfaceLightSet,
 } from "./webgl/lights";
 import {
-  createFallbackIblSpecularTexture,
   ensureIblSpecularTexture,
   settleIblSpecularImage,
   type IblSpecularTextureContext,
@@ -330,6 +332,11 @@ type TextureLoadState = TextureResource & {
 
 type TextureUnitAllocator = {
   readonly used: Set<number>;
+};
+
+type SurfaceTextureBindingPlan = {
+  readonly features: SurfaceShaderFeatures;
+  readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
 };
 
 type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
@@ -641,6 +648,22 @@ const GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS = [
     useUniform: "u_useThicknessTexture",
   },
 ] as const satisfies readonly GltfMaterialExtensionTextureBinding[];
+
+const SURFACE_SHADER_FEATURE_BY_EXTENSION_TEXTURE_KEY: Record<
+  GltfMaterialExtensionTextureKey,
+  SurfaceShaderTextureFeature
+> = {
+  clearcoatRoughnessTexture: "clearcoatRoughnessTexture",
+  clearcoatTexture: "clearcoatTexture",
+  iridescenceTexture: "iridescenceTexture",
+  iridescenceThicknessTexture: "iridescenceThicknessTexture",
+  materialTransmissionTexture: "materialTransmissionTexture",
+  sheenColorTexture: "sheenColorTexture",
+  sheenRoughnessTexture: "sheenRoughnessTexture",
+  specularColorTexture: "specularColorTexture",
+  specularTexture: "specularTexture",
+  thicknessTexture: "thicknessTexture",
+};
 
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
@@ -2223,7 +2246,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
-  readonly #programs = new Map<ProgramKind, ProgramResource>();
+  readonly #programs = new Map<string, ProgramResource>();
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
@@ -2253,7 +2276,6 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
   #iblBrdfLutTexture: WebGLTexture | undefined;
-  #iblFallbackSpecularTexture: WebGLTexture | undefined;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   #latestScene: RenderRoot | undefined;
   #maxTextureImageUnits = 0;
@@ -2488,7 +2510,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfInstanceBuffers.clear();
     this.#gltfLodSelections.clear();
     this.#iblBrdfLutTexture = undefined;
-    this.#iblFallbackSpecularTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
     this.#activeGltfInstanceBufferKeys.clear();
     this.#activeGltfLodSelectionKeys.clear();
@@ -3719,7 +3740,15 @@ class WebGlRootImpl implements WebGlRoot {
     const programKind: ProgramKind = material.kind === "wireframe"
       ? "wireframe"
       : useVirtualTexture ? "surface-vt-base-color" : "surface";
-    const programResource = this.#program(programKind);
+    const surfaceMaterial: SurfaceMaterial | undefined =
+      programKind === "surface" && material.kind !== "wireframe" ? material : undefined;
+    const surfaceLights = surfaceMaterial?.kind === "standard"
+      ? lights ?? DEFAULT_SURFACE_LIGHT_SET
+      : surfaceMaterial === undefined ? undefined : EMPTY_SURFACE_LIGHT_SET;
+    const surfaceTexturePlan = surfaceMaterial === undefined || surfaceLights === undefined
+      ? undefined
+      : this.#surfaceTextureBindingPlan(surfaceMaterial, transmissionScreenColorTexture, surfaceLights);
+    const programResource = this.#program(programKind, surfaceTexturePlan?.features);
     const program = programResource.program;
     gl.useProgram(program);
 
@@ -3728,20 +3757,18 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformMatrix(program, "u_model", model);
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    if (programKind === "surface" && material.kind !== "wireframe") {
-      this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
-      const textureUnits = this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
+    if (surfaceTexturePlan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
+      this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
+      this.#bindSurfaceMaterialFactors(program, surfaceMaterial, transmissionScreenColorTexture, surfaceTexturePlan);
       this.#bindSurfaceToneMapping(program, toneMapping);
-      this.#bindSurfaceLights(program, material.kind === "standard"
-        ? lights ?? DEFAULT_SURFACE_LIGHT_SET
-        : EMPTY_SURFACE_LIGHT_SET, textureUnits);
+      this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
     }
 
     const useTexture = useVirtualTexture
       ? this.#bindVirtualTexture(program, virtualTexture)
       : material.baseColor.kind === "virtual-asset"
         ? false
-        : this.#bindMaterialTexture(program, material);
+        : this.#bindMaterialTexture(program, material, surfaceTexturePlan);
     if (material.baseColor.kind === "virtual-asset" && !useVirtualTexture && virtualTexture !== undefined) {
       virtualTexture.stats.unreadyDraws += 1;
     }
@@ -3775,7 +3802,13 @@ class WebGlRootImpl implements WebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
-    const programResource = this.#program("surface-instanced-split");
+    const surfaceLights = material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET;
+    const surfaceTexturePlan = this.#surfaceTextureBindingPlan(
+      material,
+      transmissionScreenColorTexture,
+      surfaceLights,
+    );
+    const programResource = this.#program("surface-instanced-split", surfaceTexturePlan.features);
     const program = programResource.program;
     gl.useProgram(program);
 
@@ -3784,11 +3817,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformColor(program, "u_color", materialColor(material));
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    const textureUnits = this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture);
+    this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture, surfaceTexturePlan);
     this.#bindSurfaceToneMapping(program, toneMapping);
-    this.#bindSurfaceLights(program, material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET, textureUnits);
+    this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
 
-    const useTexture = this.#bindMaterialTexture(program, material);
+    const useTexture = this.#bindMaterialTexture(program, material, surfaceTexturePlan);
     this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
     this.#bindGltfInstanceModels(
@@ -3817,8 +3850,8 @@ class WebGlRootImpl implements WebGlRoot {
     program: WebGLProgram,
     material: SurfaceMaterial,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
-  ): TextureUnitAllocator {
-    const textureUnits = this.#surfaceTextureUnitAllocator();
+    plan: SurfaceTextureBindingPlan,
+  ): void {
     const factors = surfaceMaterialExtensionFactors(material);
     const alphaMode = surfaceMaterialAlphaMode(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
@@ -3888,18 +3921,94 @@ class WebGlRootImpl implements WebGlRoot {
       hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
       hasFiniteAttenuationDistance ? 1 : 0,
     ]);
-    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, textureUnits);
-    this.#bindEmissiveTexture(program, material, textureUnits);
-    this.#bindMetallicRoughnessTexture(program, material, textureUnits);
-    this.#bindNormalTexture(program, material, textureUnits);
-    this.#bindOcclusionTexture(program, material, textureUnits);
-    this.#bindMaterialExtensionTextures(program, material, textureUnits);
-
-    return textureUnits;
+    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
+    this.#bindEmissiveTexture(program, material, plan);
+    this.#bindMetallicRoughnessTexture(program, material, plan);
+    this.#bindNormalTexture(program, material, plan);
+    this.#bindOcclusionTexture(program, material, plan);
+    this.#bindMaterialExtensionTextures(program, material, plan);
   }
 
   #surfaceTextureUnitAllocator(): TextureUnitAllocator {
-    return { used: new Set([0, IBL_SPECULAR_TEXTURE_UNIT]) };
+    return { used: new Set() };
+  }
+
+  #surfaceTextureBindingPlan(
+    material: SurfaceMaterial,
+    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
+    lightSet: SurfaceLightSet,
+  ): SurfaceTextureBindingPlan {
+    const features = new Set<SurfaceShaderTextureFeature>();
+    const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
+    const reserveTextureUnit = (
+      feature: SurfaceShaderTextureFeature,
+      allocator: TextureUnitAllocator,
+      preferred: number,
+    ): void => {
+      const unit = this.#allocateTextureUnit(allocator, preferred);
+      if (unit === undefined) return;
+      features.add(feature);
+      textureUnits.set(feature, unit);
+    };
+    const reserveMaterialTexture = (
+      feature: SurfaceShaderTextureFeature,
+      allocator: TextureUnitAllocator,
+      preferred: number,
+      texture: TextureAssetUploadRef | undefined,
+    ): void => {
+      if (texture === undefined) return;
+      const resource = this.#textures.get(textureCacheKey(texture));
+      if (resource === undefined || !resource.uploaded) return;
+      reserveTextureUnit(feature, allocator, preferred);
+    };
+
+    const allocator = this.#surfaceTextureUnitAllocator();
+    if (material.baseColor.kind === "asset" && this.#maxTextureImageUnits > 0) {
+      features.add("baseColorTexture");
+      textureUnits.set("baseColorTexture", 0);
+      allocator.used.add(0);
+    }
+    if (lightSet.specular !== undefined && IBL_SPECULAR_TEXTURE_UNIT < this.#maxTextureImageUnits) {
+      features.add("iblSpecularCube");
+      textureUnits.set("iblSpecularCube", IBL_SPECULAR_TEXTURE_UNIT);
+      allocator.used.add(IBL_SPECULAR_TEXTURE_UNIT);
+    }
+    if (transmissionScreenColorTexture?.uploaded === true) {
+      reserveTextureUnit("transmissionScreenTexture", allocator, 1);
+    }
+
+    reserveMaterialTexture("emissiveTexture", allocator, 4, material.emissiveTexture);
+    reserveMaterialTexture(
+      "metallicRoughnessTexture",
+      allocator,
+      3,
+      material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
+    );
+    reserveMaterialTexture(
+      "normalTexture",
+      allocator,
+      1,
+      material.kind === "standard" ? material.normalTexture : undefined,
+    );
+    reserveMaterialTexture(
+      "occlusionTexture",
+      allocator,
+      5,
+      material.kind === "standard" ? material.occlusionTexture : undefined,
+    );
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS) {
+      reserveMaterialTexture(
+        SURFACE_SHADER_FEATURE_BY_EXTENSION_TEXTURE_KEY[texture.key],
+        allocator,
+        texture.textureUnit,
+        material.kind === "standard" ? material[texture.key] : undefined,
+      );
+    }
+    if (lightSet.specular !== undefined && features.has("iblSpecularCube")) {
+      reserveTextureUnit("iblBrdfLut", allocator, IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT);
+    }
+
+    return { features, textureUnits };
   }
 
   #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: PassToneMappingState): void {
@@ -3918,7 +4027,7 @@ class WebGlRootImpl implements WebGlRoot {
       allocator.used.add(preferred);
       return preferred;
     }
-    for (let unit = 1; unit < maxTextureImageUnits; unit += 1) {
+    for (let unit = 0; unit < maxTextureImageUnits; unit += 1) {
       if (allocator.used.has(unit)) continue;
       allocator.used.add(unit);
       return unit;
@@ -3930,37 +4039,37 @@ class WebGlRootImpl implements WebGlRoot {
   #bindEmissiveTexture(
     program: WebGLProgram,
     material: SurfaceMaterial,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     this.#bindCachedTexture2d(
       program,
       "u_useEmissiveTexture",
       "u_emissiveTexture",
-      4,
+      "emissiveTexture",
       material.emissiveTexture,
-      allocator,
+      plan,
     );
   }
 
   #bindMetallicRoughnessTexture(
     program: WebGLProgram,
     material: SurfaceMaterial,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     this.#bindCachedTexture2d(
       program,
       "u_useMetallicRoughnessTexture",
       "u_metallicRoughnessTexture",
-      3,
+      "metallicRoughnessTexture",
       material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
-      allocator,
+      plan,
     );
   }
 
   #bindNormalTexture(
     program: WebGLProgram,
     material: SurfaceMaterial,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     this.#uniformColor(program, "u_normalTextureSettings", [
       material.kind === "standard" ? material.normalScale ?? 1 : 1,
@@ -3972,16 +4081,16 @@ class WebGlRootImpl implements WebGlRoot {
       program,
       "u_useNormalTexture",
       "u_normalTexture",
-      1,
+      "normalTexture",
       material.kind === "standard" ? material.normalTexture : undefined,
-      allocator,
+      plan,
     );
   }
 
   #bindOcclusionTexture(
     program: WebGLProgram,
     material: SurfaceMaterial,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     this.#uniformColor(program, "u_occlusionSettings", [
       surfaceMaterialOcclusionStrength(material),
@@ -3993,25 +4102,25 @@ class WebGlRootImpl implements WebGlRoot {
       program,
       "u_useOcclusionTexture",
       "u_occlusionTexture",
-      5,
+      "occlusionTexture",
       material.kind === "standard" ? material.occlusionTexture : undefined,
-      allocator,
+      plan,
     );
   }
 
   #bindMaterialExtensionTextures(
     program: WebGLProgram,
     material: SurfaceMaterial,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS) {
       this.#bindCachedTexture2d(
         program,
         texture.useUniform,
         texture.samplerUniform,
-        texture.textureUnit,
+        SURFACE_SHADER_FEATURE_BY_EXTENSION_TEXTURE_KEY[texture.key],
         material.kind === "standard" ? material[texture.key] : undefined,
-        allocator,
+        plan,
       );
     }
   }
@@ -4020,9 +4129,9 @@ class WebGlRootImpl implements WebGlRoot {
     program: WebGLProgram,
     useUniform: string,
     samplerUniform: string,
-    textureUnit: number,
+    feature: SurfaceShaderTextureFeature,
     texture: TextureAssetUploadRef | undefined,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     if (texture === undefined) {
       this.#uniform1i(program, useUniform, 0);
@@ -4036,7 +4145,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const gl = this.#gl;
-    const allocatedUnit = this.#allocateTextureUnit(allocator, textureUnit);
+    const allocatedUnit = plan.textureUnits.get(feature);
     if (allocatedUnit === undefined) {
       this.#uniform1i(program, useUniform, 0);
       return;
@@ -4050,7 +4159,7 @@ class WebGlRootImpl implements WebGlRoot {
   #bindTransmissionScreenColorTexture(
     program: WebGLProgram,
     resource: ScreenColorTextureResource | undefined,
-    allocator: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     if (resource === undefined || !resource.uploaded) {
       this.#uniform1i(program, "u_useTransmissionTexture", 0);
@@ -4058,7 +4167,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const gl = this.#gl;
-    const textureUnit = this.#allocateTextureUnit(allocator, 1);
+    const textureUnit = plan.textureUnits.get("transmissionScreenTexture");
     if (textureUnit === undefined) {
       this.#uniform1i(program, "u_useTransmissionTexture", 0);
       return;
@@ -4073,14 +4182,11 @@ class WebGlRootImpl implements WebGlRoot {
   #bindSurfaceLights(
     program: WebGLProgram,
     lightSet: SurfaceLightSet,
-    textureUnits: TextureUnitAllocator,
+    plan: SurfaceTextureBindingPlan,
   ): void {
     bindSurfaceIblUniforms({
       brdfLutTexture: () => {
-        const brdfLutTextureUnit = this.#allocateTextureUnit(
-          textureUnits,
-          IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-        );
+        const brdfLutTextureUnit = plan.textureUnits.get("iblBrdfLut");
         if (brdfLutTextureUnit === undefined) return undefined;
 
         return {
@@ -4088,7 +4194,6 @@ class WebGlRootImpl implements WebGlRoot {
           textureUnit: brdfLutTextureUnit,
         };
       },
-      fallbackSpecularTexture: () => this.#fallbackIblSpecularTexture(),
       gl: this.#gl,
       uniform1i: (uniformProgram, name, value) => this.#uniform1i(uniformProgram, name, value),
       uniformColor: (uniformProgram, name, color) => this.#uniformColor(uniformProgram, name, color),
@@ -4492,8 +4597,13 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #bindMaterialTexture(program: WebGLProgram, material: Material): boolean {
+  #bindMaterialTexture(
+    program: WebGLProgram,
+    material: Material,
+    plan?: SurfaceTextureBindingPlan,
+  ): boolean {
     if (material.baseColor.kind === "solid") return false;
+    if (plan !== undefined && !plan.features.has("baseColorTexture")) return false;
     let resource: TextureResource | TextureLoadState;
     if (material.baseColor.kind === "virtual-asset") {
       this.#recordUnsupportedVirtualTexture(material.baseColor, "only unlit base-color virtual textures on UV geometry are supported");
@@ -5012,16 +5122,17 @@ class WebGlRootImpl implements WebGlRoot {
     if (location !== null) this.#gl.uniform2fv(location, value);
   }
 
-  #program(kind: ProgramKind): ProgramResource {
-    const cached = this.#programs.get(kind);
+  #program(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
+    const key = features === undefined ? kind : `${kind}:${surfaceShaderFeatureKey(features)}`;
+    const cached = this.#programs.get(key);
     if (cached !== undefined) return cached;
 
-    const program = this.#compileProgram(kind);
-    this.#programs.set(kind, program);
+    const program = this.#compileProgram(kind, features);
+    this.#programs.set(key, program);
     return program;
   }
 
-  #compileProgram(kind: ProgramKind): ProgramResource {
+  #compileProgram(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
     const gl = this.#gl;
     const program = gl.createProgram();
     if (program === null) throw new Error("WebGL program creation failed");
@@ -5032,7 +5143,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     try {
       vertexShader = this.#compileShader(gl.VERTEX_SHADER, vertexShaderSource(kind));
-      fragmentShader = this.#compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource(kind));
+      fragmentShader = this.#compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource(kind, features));
       gl.attachShader(program, vertexShader);
       gl.attachShader(program, fragmentShader);
       gl.bindAttribLocation?.(program, 0, "a_position");
@@ -5468,18 +5579,6 @@ class WebGlRootImpl implements WebGlRoot {
     image: LoadedTextureSource,
   ): void {
     settleIblSpecularImage(this.#iblSpecularTextureContext(), specular, key, image);
-  }
-
-  #fallbackIblSpecularTexture(): WebGLTexture {
-    if (this.#iblFallbackSpecularTexture !== undefined) return this.#iblFallbackSpecularTexture;
-
-    const texture = createFallbackIblSpecularTexture({
-      createTexture: () => this.#createTexture(),
-      gl: this.#gl,
-    });
-    this.#iblFallbackSpecularTexture = texture;
-
-    return texture;
   }
 
   #iblBrdfLutTextureResource(textureUnit: number): WebGLTexture {

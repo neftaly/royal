@@ -685,32 +685,32 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
     expect(sources).toContain("uniform vec4 u_toneMappingSettings;");
     expect(sources).toContain("uniform bool u_useIblBrdfLut;");
-    expect(sources).toContain("uniform sampler2D u_iblBrdfLut;");
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).toContain("toneMapAces");
     expect(sources).toContain("linearToSrgb");
     expect(sources).toContain("if (!u_useIblIrradiance) {\n  return vec3(0.0);");
-    expect(sources).toContain("if (u_useIblBrdfLut) {\n  return texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg;");
+    expect(sources).not.toContain("uniform sampler2D u_iblBrdfLut;");
+    expect(sources).not.toContain("texture(u_iblBrdfLut");
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
     expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
-    expect(sources).toContain("materialDiffuseColor(baseColor) * (lambert / PI) * lightColor");
+    expect(sources).toContain("vec3 diffuse = diffuseColor * (lambert / PI) * lightColor");
     expect(sources).toContain("outColor = outputLinearColor(baseColor.rgb, baseColor.a);");
     expect(sources).toContain("outColor = outputMappedColor(lit, baseColor.a);");
     expect(sources).not.toContain("pow(roughness + 1.0, 2.0) / 8.0");
     expect(sources).not.toContain("pow(NdotH, 32.0)");
 
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
-    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
       .toContainEqual([0, 1, 0, 0]);
-    expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
+    expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
     expect(calls.some((call) =>
       call.name === "texStorage2D"
       && call.args[0] === gl.TEXTURE_CUBE_MAP
       && call.args[1] === 1
       && call.args[2] === gl.RGBA8
       && call.args[3] === 1
-      && call.args[4] === 1)).toBe(true);
+      && call.args[4] === 1)).toBe(false);
   });
 
   it("binds pass environment irradiance, specular cubemap, and BRDF LUT without glTF IBL", () => {
@@ -769,7 +769,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
     expect(uniform1iPayloadsByName(calls, "u_useIblBrdfLut")).toContain(0);
-    expect(uniform1iPayloadsByName(calls, "u_iblBrdfLut")).toContain(0);
+    expect(uniform1iPayloadsByName(calls, "u_iblBrdfLut")).toEqual([]);
     expect(calls.some((call) =>
       call.name === "texImage2D"
       && call.args[0] === gl.TEXTURE_2D
