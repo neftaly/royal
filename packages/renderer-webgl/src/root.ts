@@ -164,6 +164,12 @@ import {
 } from "./webgl/ibl-specular-textures";
 import { createIblBrdfLutTexture, IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT } from "./webgl/ibl-brdf-lut";
 import { bindSurfaceIblUniforms, IBL_SPECULAR_TEXTURE_UNIT } from "./webgl/ibl-uniforms";
+import {
+  createStudioEnvironmentSpecularTexture,
+  STUDIO_ENVIRONMENT_IRRADIANCE,
+  STUDIO_ENVIRONMENT_SPECULAR_KEY,
+  type StudioEnvironmentSpecularResource,
+} from "./webgl/studio-environment";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -314,12 +320,6 @@ type ScreenColorTextureResource = {
   readonly texture: WebGLTexture;
   uploaded: boolean;
   width: number;
-};
-
-type StudioEnvironmentSpecularResource = {
-  readonly key: string;
-  readonly mipCount: number;
-  readonly texture: WebGLTexture;
 };
 
 type TextureLoadState = TextureResource & {
@@ -794,19 +794,6 @@ const DEFAULT_TONE_MAPPING_STATE: PassToneMappingState = {
   exposure: 1,
   toneMapping: "none",
 };
-const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
-  [0.78, 0.78, 0.82],
-  [0.05, 0.06, 0.08],
-  [0.34, 0.35, 0.38],
-  [-0.08, -0.08, -0.07],
-  [0.02, 0.02, 0.02],
-  [0.05, 0.05, 0.06],
-  [-0.18, -0.17, -0.16],
-  [-0.03, -0.03, -0.02],
-  [0.04, 0.04, 0.04],
-];
-const STUDIO_ENVIRONMENT_SPECULAR_KEY = "environment:studio:specular";
-const STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES = [8, 4, 2, 1] as const;
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
@@ -820,81 +807,6 @@ const IDENTITY_TRANSFORM: Transform = {
 const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
-
-const vec3Dot = (a: Vec3, b: Vec3): number =>
-  a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-
-const studioEnvironmentFaceDirection = (
-  faceIndex: number,
-  x: number,
-  y: number,
-  size: number,
-): Vec3 => {
-  const u = 2 * ((x + 0.5) / size) - 1;
-  const v = 2 * ((y + 0.5) / size) - 1;
-
-  switch (faceIndex) {
-    case 0:
-      return normalizeVec3([1, -v, -u]);
-    case 1:
-      return normalizeVec3([-1, -v, u]);
-    case 2:
-      return normalizeVec3([u, 1, v]);
-    case 3:
-      return normalizeVec3([u, -1, -v]);
-    case 4:
-      return normalizeVec3([u, -v, 1]);
-    default:
-      return normalizeVec3([-u, -v, -1]);
-  }
-};
-
-const studioEnvironmentRadiance = (direction: Vec3, mipIndex: number): Vec3 => {
-  const roughness = mipIndex / Math.max(STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length - 1, 1);
-  const sky = clamp01(direction[1] * 0.5 + 0.5);
-  const base: Vec3 = [
-    0.16 + sky * 0.18,
-    0.18 + sky * 0.20,
-    0.21 + sky * 0.24,
-  ];
-  const key = Math.pow(Math.max(0, vec3Dot(direction, normalizeVec3([-0.34, 0.62, 0.71]))), 42);
-  const strip = Math.pow(Math.max(0, vec3Dot(direction, normalizeVec3([0.76, 0.18, 0.62]))), 30);
-  const ceiling = Math.pow(Math.max(0, direction[1]), 6);
-  const raw: Vec3 = [
-    base[0] + key * 1.95 + strip * 0.62 + ceiling * 0.22,
-    base[1] + key * 1.84 + strip * 0.68 + ceiling * 0.24,
-    base[2] + key * 1.58 + strip * 0.78 + ceiling * 0.28,
-  ];
-  const roughAverage: Vec3 = [0.36, 0.39, 0.44];
-  const roughMix = roughness * 0.82;
-
-  return [
-    raw[0] * (1 - roughMix) + roughAverage[0] * roughMix,
-    raw[1] * (1 - roughMix) + roughAverage[1] * roughMix,
-    raw[2] * (1 - roughMix) + roughAverage[2] * roughMix,
-  ];
-};
-
-const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): Uint8Array => {
-  const size = STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES[mipIndex] ?? 1;
-  const data = new Uint8Array(size * size * 4);
-  let offset = 0;
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const radiance = studioEnvironmentRadiance(
-        studioEnvironmentFaceDirection(faceIndex, x, y, size),
-        mipIndex,
-      );
-      data[offset] = Math.round(clamp01(radiance[0]) * 255);
-      data[offset + 1] = Math.round(clamp01(radiance[1]) * 255);
-      data[offset + 2] = Math.round(clamp01(radiance[2]) * 255);
-      data[offset + 3] = 255;
-      offset += 4;
-    }
-  }
-
-  return data;
-};
 
 const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => ({
   exposure: renderPass.exposure === undefined || !Number.isFinite(renderPass.exposure)
@@ -5636,42 +5548,10 @@ class WebGlRootImpl implements WebGlRoot {
     const cached = this.#studioEnvironmentSpecularTextures.get(STUDIO_ENVIRONMENT_SPECULAR_KEY);
     if (cached !== undefined) return cached;
 
-    const gl = this.#gl;
-    const texture = this.#createTexture();
-    gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
-    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
-    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-
-    for (const [mipIndex, mipSize] of STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.entries()) {
-      for (let faceIndex = 0; faceIndex < 6; faceIndex += 1) {
-        const data = studioEnvironmentSpecularMipData(mipIndex, faceIndex);
-        gl.texImage2D(
-          gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex,
-          mipIndex,
-          gl.RGBA,
-          mipSize,
-          mipSize,
-          0,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          data,
-        );
-      }
-    }
-
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length - 1);
-
-    const resource = {
-      key: STUDIO_ENVIRONMENT_SPECULAR_KEY,
-      mipCount: STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.length,
-      texture,
-    };
+    const resource = createStudioEnvironmentSpecularTexture({
+      createTexture: () => this.#createTexture(),
+      gl: this.#gl,
+    });
     this.#studioEnvironmentSpecularTextures.set(STUDIO_ENVIRONMENT_SPECULAR_KEY, resource);
 
     return resource;
