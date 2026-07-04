@@ -46,6 +46,21 @@ const Cube = () => (
   />
 );
 
+const zeroGltfInstancingSnapshot = {
+  batchInstancesTotal: 0,
+  batchPlansBuilt: 0,
+  drawCalls: 0,
+  instancesDrawn: 0,
+  localModelUploadBytes: 0,
+  localModelUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
+  rootScaleUploadBytes: 0,
+  rootScaleUploadCalls: 0,
+};
+
 const fakeRoot = (): RoyalRendererRoot => {
   let frame = 0;
   let latestScene: RenderRoot | undefined;
@@ -76,6 +91,7 @@ const fakeRoot = (): RoyalRendererRoot => {
       context: root.context,
       disposed: root.disposed,
       frame: root.frame,
+      gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: root.latestScene,
     })),
   };

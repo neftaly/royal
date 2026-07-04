@@ -27,6 +27,21 @@ const requiredSummaryCounters = [
   'useProgramPerFrame',
 ];
 
+const requiredGltfInstancingCounters = [
+  'batchInstancesTotal',
+  'batchPlansBuilt',
+  'drawCalls',
+  'instancesDrawn',
+  'localModelUploadBytes',
+  'localModelUploadCalls',
+  'rootPositionUploadBytes',
+  'rootPositionUploadCalls',
+  'rootRotationUploadBytes',
+  'rootRotationUploadCalls',
+  'rootScaleUploadBytes',
+  'rootScaleUploadCalls',
+];
+
 const errors = [];
 
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -46,6 +61,18 @@ const requireArray = (value, label) => {
 const requireNumber = (value, label) => {
   if (typeof value === 'number' && Number.isFinite(value)) return;
   errors.push(`${label} must be a finite number`);
+};
+
+const requireBoolean = (value, label) => {
+  if (typeof value === 'boolean') return;
+  errors.push(`${label} must be a boolean`);
+};
+
+const requireGltfInstancingCounters = (value, label) => {
+  if (!requireObject(value, label)) return;
+  for (const counter of requiredGltfInstancingCounters) {
+    requireNumber(value[counter], `${label}.${counter}`);
+  }
 };
 
 const parseReport = async () => {
@@ -71,6 +98,51 @@ if (requireObject(report, 'report')) {
       if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
         for (const counter of requiredGlCounters) {
           requireNumber(route.gl.setup[counter], `${routeLabel}.gl.setup.${counter}`);
+        }
+      }
+      if (route.profile?.kind === 'gltf-instancing') {
+        if (requireObject(route.renderer, `${routeLabel}.renderer`)) {
+          if (requireObject(route.renderer.gltfInstancing, `${routeLabel}.renderer.gltfInstancing`)) {
+            requireBoolean(
+              route.renderer.gltfInstancing.available,
+              `${routeLabel}.renderer.gltfInstancing.available`,
+            );
+            requireGltfInstancingCounters(
+              route.renderer.gltfInstancing.delta,
+              `${routeLabel}.renderer.gltfInstancing.delta`,
+            );
+            requireGltfInstancingCounters(
+              route.renderer.gltfInstancing.perFrame,
+              `${routeLabel}.renderer.gltfInstancing.perFrame`,
+            );
+            requireNumber(
+              route.renderer.gltfInstancing.rendererFrames,
+              `${routeLabel}.renderer.gltfInstancing.rendererFrames`,
+            );
+            requireNumber(
+              route.renderer.gltfInstancing.sampleFrames,
+              `${routeLabel}.renderer.gltfInstancing.sampleFrames`,
+            );
+          }
+          if (requireObject(route.renderer.setup, `${routeLabel}.renderer.setup`)) {
+            if (requireObject(
+              route.renderer.setup.gltfInstancing,
+              `${routeLabel}.renderer.setup.gltfInstancing`,
+            )) {
+              requireBoolean(
+                route.renderer.setup.gltfInstancing.available,
+                `${routeLabel}.renderer.setup.gltfInstancing.available`,
+              );
+              requireGltfInstancingCounters(
+                route.renderer.setup.gltfInstancing.counters,
+                `${routeLabel}.renderer.setup.gltfInstancing.counters`,
+              );
+              requireNumber(
+                route.renderer.setup.gltfInstancing.rendererFrame,
+                `${routeLabel}.renderer.setup.gltfInstancing.rendererFrame`,
+              );
+            }
+          }
         }
       }
     });

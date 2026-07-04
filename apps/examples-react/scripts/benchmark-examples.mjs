@@ -355,6 +355,91 @@ const glCounterTotals = (gl) => ({
     (gl.useProgram ?? 0),
 });
 
+const emptyGltfInstancingCounters = Object.freeze({
+  batchInstancesTotal: 0,
+  batchPlansBuilt: 0,
+  drawCalls: 0,
+  instancesDrawn: 0,
+  localModelUploadBytes: 0,
+  localModelUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
+  rootScaleUploadBytes: 0,
+  rootScaleUploadCalls: 0,
+});
+
+const gltfInstancingCounterKeys = Object.keys(emptyGltfInstancingCounters);
+
+const gltfInstancingCounters = (snapshot) => {
+  const counters = snapshot?.gltfInstancing;
+  if (counters === undefined || counters === null || typeof counters !== 'object') {
+    return emptyGltfInstancingCounters;
+  }
+  return Object.fromEntries(gltfInstancingCounterKeys.map((key) => {
+    const value = counters[key];
+    return [key, typeof value === 'number' && Number.isFinite(value) ? value : 0];
+  }));
+};
+
+const gltfInstancingCounterDelta = (after, before) => {
+  const afterCounters = gltfInstancingCounters(after);
+  const beforeCounters = gltfInstancingCounters(before);
+  return Object.fromEntries(gltfInstancingCounterKeys.map((key) => [
+    key,
+    afterCounters[key] - beforeCounters[key],
+  ]));
+};
+
+const gltfInstancingRootTransformUploadBytes = (counters) =>
+  counters.rootPositionUploadBytes + counters.rootRotationUploadBytes + counters.rootScaleUploadBytes;
+
+const gltfInstancingRootTransformUploadCalls = (counters) =>
+  counters.rootPositionUploadCalls + counters.rootRotationUploadCalls + counters.rootScaleUploadCalls;
+
+const hasGltfInstancingCounters = (snapshot) =>
+  snapshot?.gltfInstancing !== undefined &&
+  snapshot.gltfInstancing !== null &&
+  typeof snapshot.gltfInstancing === 'object';
+
+const rendererFrame = (snapshot) =>
+  typeof snapshot?.frame === 'number' && Number.isFinite(snapshot.frame)
+    ? snapshot.frame
+    : undefined;
+
+const rendererFrameDelta = (after, before) => {
+  const afterFrame = rendererFrame(after);
+  const beforeFrame = rendererFrame(before);
+  if (afterFrame === undefined || beforeFrame === undefined) return 0;
+  return Math.max(0, afterFrame - beforeFrame);
+};
+
+const gltfInstancingCounterRate = (counters, sampleFrames) => {
+  const denominator = sampleFrames > 0 ? sampleFrames : 1;
+  return Object.fromEntries(gltfInstancingCounterKeys.map((key) => [
+    key,
+    counters[key] / denominator,
+  ]));
+};
+
+const gltfInstancingSampleMetrics = (after, before, sampleFrames) => {
+  const delta = gltfInstancingCounterDelta(after, before);
+  return {
+    available: hasGltfInstancingCounters(after) || hasGltfInstancingCounters(before),
+    delta,
+    perFrame: gltfInstancingCounterRate(delta, sampleFrames),
+    rendererFrames: rendererFrameDelta(after, before),
+    sampleFrames,
+  };
+};
+
+const gltfInstancingSetupMetrics = (snapshot) => ({
+  available: hasGltfInstancingCounters(snapshot),
+  counters: gltfInstancingCounters(snapshot),
+  rendererFrame: rendererFrame(snapshot) ?? 0,
+});
+
 const deploymentSize = async () => {
   const distRoot = path.join(appRoot, 'dist');
   const entries = [];
@@ -855,6 +940,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+  const setupRenderer = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
   await evaluate(session, `
 (async () => {
   for (let index = 0; index < ${frameWarmupCount}; index += 1) {
@@ -862,6 +948,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   }
 })()
 `);
+  const rendererBeforeFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
   await evaluate(session, 'globalThis.__royalBench?.reset?.()');
   const frameStats = await evaluate(session, `
 (async () => {
@@ -890,18 +977,28 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 })()
 `);
   const gl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+  const rendererAfterFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
   const cameraDrag = cameraDragEnabled
     ? await (async () => {
+        const dragRendererBefore = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
         await evaluate(session, 'globalThis.__royalBench?.reset?.()');
         const frameStats = await evaluate(session, `
 (async () => globalThis.__royalBench?.cameraDragSample?.(${cameraDragFrameCount}, ${cameraDragStepPixels}) ?? null)()
 `);
         const dragGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
+        const dragRendererAfter = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
         return frameStats === null
           ? undefined
           : {
               frameStats,
               gl: glCounterTotals(dragGl),
+              renderer: {
+                gltfInstancing: gltfInstancingSampleMetrics(
+                  dragRendererAfter,
+                  dragRendererBefore,
+                  frameStats.sampleCount ?? cameraDragFrameCount,
+                ),
+              },
             };
       })()
     : undefined;
@@ -975,6 +1072,12 @@ const collectPageMetrics = async (session, frames, options = {}) => {
     gl: {
       ...glCounterTotals(gl),
       setup: glCounterTotals(setupGl),
+    },
+    renderer: {
+      gltfInstancing: gltfInstancingSampleMetrics(rendererAfterFrames, rendererBeforeFrames, frames),
+      setup: {
+        gltfInstancing: gltfInstancingSetupMetrics(setupRenderer),
+      },
     },
     heap: {
       afterFinalGc,
@@ -1116,6 +1219,20 @@ const routeSummary = (route) => {
     typeof cameraDragDrawCallsPerFrame === 'number';
   const setupInstancedDrawCalls = route.gl.setup?.instancedDrawCalls ?? 0;
   const instanceCount = route.profile?.kind === 'gltf-instancing' ? route.profile.instanceCount : undefined;
+  const gltfInstancing = route.profile?.kind === 'gltf-instancing'
+    ? route.renderer?.gltfInstancing
+    : undefined;
+  const gltfInstancingPerFrame = gltfInstancing?.perFrame;
+  const setupGltfInstancing = route.profile?.kind === 'gltf-instancing'
+    ? route.renderer?.setup?.gltfInstancing
+    : undefined;
+  const setupGltfInstancingCounters = setupGltfInstancing?.counters;
+  const gltfInstancingRootTransformUploadBytesPerFrame = gltfInstancingPerFrame === undefined
+    ? undefined
+    : gltfInstancingRootTransformUploadBytes(gltfInstancingPerFrame);
+  const gltfInstancingRootTransformUploadCallsPerFrame = gltfInstancingPerFrame === undefined
+    ? undefined
+    : gltfInstancingRootTransformUploadCalls(gltfInstancingPerFrame);
   return {
     id: route.id,
     path: route.path,
@@ -1149,6 +1266,28 @@ const routeSummary = (route) => {
       ? {}
       : {
         drawCallsPer1000Instances: round(drawCallsPerFrame / (instanceCount / 1000), 3),
+        ...(gltfInstancing === undefined || gltfInstancingPerFrame === undefined
+          ? {}
+          : {
+            gltfInstancingDiagnostics: gltfInstancing.available ? 'available' : 'missing',
+            gltfRendererFrames: gltfInstancing.rendererFrames,
+            gltfBatchPlansBuiltPerFrame: round(gltfInstancingPerFrame.batchPlansBuilt, 3),
+            gltfBatchInstancesPerFrame: round(gltfInstancingPerFrame.batchInstancesTotal, 3),
+            gltfDrawCallsPerFrame: round(gltfInstancingPerFrame.drawCalls, 3),
+            gltfInstancesDrawnPerFrame: round(gltfInstancingPerFrame.instancesDrawn, 3),
+            gltfLocalModelUploadBytesPerFrame: round(gltfInstancingPerFrame.localModelUploadBytes, 1),
+            gltfLocalModelUploadCallsPerFrame: round(gltfInstancingPerFrame.localModelUploadCalls, 3),
+            gltfRootTransformUploadBytesPerFrame: round(gltfInstancingRootTransformUploadBytesPerFrame, 1),
+            gltfRootTransformUploadCallsPerFrame: round(gltfInstancingRootTransformUploadCallsPerFrame, 3),
+            setupGltfBatchPlansBuilt: setupGltfInstancingCounters?.batchPlansBuilt ?? 0,
+            setupGltfInstancesDrawn: setupGltfInstancingCounters?.instancesDrawn ?? 0,
+            setupGltfRootTransformUploadBytes: setupGltfInstancingCounters === undefined
+              ? 0
+              : gltfInstancingRootTransformUploadBytes(setupGltfInstancingCounters),
+            setupGltfRootTransformUploadCalls: setupGltfInstancingCounters === undefined
+              ? 0
+              : gltfInstancingRootTransformUploadCalls(setupGltfInstancingCounters),
+          }),
         instancedDrawCallsPer1000Instances: round(instancedDrawCallsPerFrame / (instanceCount / 1000), 3),
         setupInstancedDrawCallsPer1000Instances: round(setupInstancedDrawCalls / (instanceCount / 1000), 3),
       }),
@@ -1186,6 +1325,11 @@ const routeSummary = (route) => {
   };
 };
 
+const numericDelta = (left, right, digits = 2) =>
+  typeof left === 'number' && typeof right === 'number'
+    ? round(left - right, digits)
+    : undefined;
+
 const instancingComparisons = (summaries) => {
   const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
   const staticRows = new Map();
@@ -1198,6 +1342,22 @@ const instancingComparisons = (summaries) => {
     .map((animated) => {
       const staticRoute = staticRows.get(`${animated.profile.grid}:${animated.profile.seed}`);
       if (staticRoute === undefined) return undefined;
+      const deltaGltfRootTransformUploadBytesPerFrame = numericDelta(
+        animated.gltfRootTransformUploadBytesPerFrame,
+        staticRoute.gltfRootTransformUploadBytesPerFrame,
+        1,
+      );
+      const deltaGltfLocalModelUploadBytesPerFrame = numericDelta(
+        animated.gltfLocalModelUploadBytesPerFrame,
+        staticRoute.gltfLocalModelUploadBytesPerFrame,
+        1,
+      );
+      const deltaGltfInstancesDrawnPerFrame = numericDelta(
+        animated.gltfInstancesDrawnPerFrame,
+        staticRoute.gltfInstancesDrawnPerFrame,
+        3,
+      );
+
       return {
         animatedId: animated.id,
         staticId: staticRoute.id,
@@ -1209,6 +1369,15 @@ const instancingComparisons = (summaries) => {
         deltaBufferSubDataBytesPerFrame: round(
           animated.bufferSubDataBytesPerFrame - staticRoute.bufferSubDataBytesPerFrame,
         ),
+        ...(deltaGltfRootTransformUploadBytesPerFrame === undefined
+          ? {}
+          : { deltaGltfRootTransformUploadBytesPerFrame }),
+        ...(deltaGltfLocalModelUploadBytesPerFrame === undefined
+          ? {}
+          : { deltaGltfLocalModelUploadBytesPerFrame }),
+        ...(deltaGltfInstancesDrawnPerFrame === undefined
+          ? {}
+          : { deltaGltfInstancesDrawnPerFrame }),
       };
     })
     .filter((comparison) => comparison !== undefined);
@@ -1238,6 +1407,18 @@ const analyzeResults = (results) => {
         .slice(0, 8),
       highestDrawCallsPer1000Instances: [...instancing]
         .sort((left, right) => right.drawCallsPer1000Instances - left.drawCallsPer1000Instances)
+        .slice(0, 8),
+      highestGltfRootTransformUploadBytesPerFrame: [...instancing]
+        .sort((left, right) =>
+          (right.gltfRootTransformUploadBytesPerFrame ?? 0) -
+            (left.gltfRootTransformUploadBytesPerFrame ?? 0)
+        )
+        .slice(0, 8),
+      highestGltfLocalModelUploadBytesPerFrame: [...instancing]
+        .sort((left, right) =>
+          (right.gltfLocalModelUploadBytesPerFrame ?? 0) -
+            (left.gltfLocalModelUploadBytesPerFrame ?? 0)
+        )
         .slice(0, 8),
       highestSetupInstancedDrawCallsPer1000Instances: [...instancing]
         .sort((left, right) =>
@@ -1328,6 +1509,12 @@ const main = async () => {
       const profile = result.profile?.kind === 'gltf-instancing'
         ? `grid=${result.profile.grid} seed=${result.profile.seed} animate=${result.profile.animate ? 1 : 0}`
         : undefined;
+      const gltfInstancing = result.profile?.kind === 'gltf-instancing'
+        ? result.renderer?.gltfInstancing
+        : undefined;
+      const gltfRootTransformUploadKibPerFrame = gltfInstancing?.perFrame === undefined
+        ? undefined
+        : gltfInstancingRootTransformUploadBytes(gltfInstancing.perFrame) / 1024;
       console.log([
         route.id.padEnd(28),
         ...(profile === undefined ? [] : [profile]),
@@ -1351,6 +1538,14 @@ const main = async () => {
         ...(instancedDrawCallsPerFrame === 0 ? [] : [`inst/frame=${instancedDrawCallsPerFrame.toFixed(1)}`]),
         ...(typeof result.gl.setup?.instancedDrawCalls === 'number' && result.gl.setup.instancedDrawCalls > 0
           ? [`setupInst=${result.gl.setup.instancedDrawCalls}`]
+          : []),
+        ...(gltfInstancing?.available === false ? ['gltfDiag=missing'] : []),
+        ...(gltfInstancing?.available === true
+          ? [
+            `gltfFrames=${gltfInstancing.rendererFrames}`,
+            `gltfInstances/frame=${gltfInstancing.perFrame.instancesDrawn.toFixed(1)}`,
+            `gltfRootKiB/frame=${(gltfRootTransformUploadKibPerFrame ?? 0).toFixed(1)}`,
+          ]
           : []),
         `heap=${retainedKb.toFixed(1)}KiB`,
       ].join(' '));
@@ -1407,6 +1602,10 @@ const main = async () => {
         : {}),
       instancingComparisons: analysis.instancing.comparisons,
       instancingHighestDrawCallsPer1000Instances: analysis.instancing.highestDrawCallsPer1000Instances.slice(0, 5),
+      instancingHighestGltfRootTransformUploadBytesPerFrame:
+        analysis.instancing.highestGltfRootTransformUploadBytesPerFrame.slice(0, 5),
+      instancingHighestGltfLocalModelUploadBytesPerFrame:
+        analysis.instancing.highestGltfLocalModelUploadBytesPerFrame.slice(0, 5),
       instancingHighestSetupInstancedDrawCallsPer1000Instances:
         analysis.instancing.highestSetupInstancedDrawCallsPer1000Instances.slice(0, 5),
       xrFrameFailures: analysis.xrFrameFailures,

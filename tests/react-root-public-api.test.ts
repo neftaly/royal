@@ -104,6 +104,21 @@ const fakeCanvas = (
   return canvas as unknown as FakeCanvas;
 };
 
+const zeroGltfInstancingSnapshot = {
+  batchInstancesTotal: 0,
+  batchPlansBuilt: 0,
+  drawCalls: 0,
+  instancesDrawn: 0,
+  localModelUploadBytes: 0,
+  localModelUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
+  rootScaleUploadBytes: 0,
+  rootScaleUploadCalls: 0,
+};
+
 const emptyScene = (): RenderRoot => scene({
   children: [
     pass({
@@ -154,6 +169,7 @@ describe("React root public API", () => {
       },
       disposed: false,
       frame: 0,
+      gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: undefined,
     });
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
@@ -169,6 +185,7 @@ describe("React root public API", () => {
       context: root.context,
       disposed: false,
       frame: 1,
+      gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: renderRoot,
     });
 
@@ -177,6 +194,7 @@ describe("React root public API", () => {
       context: root.context,
       disposed: true,
       frame: 1,
+      gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: renderRoot,
     });
   });

@@ -3,8 +3,10 @@
 `benchmark-examples.mjs` builds a route-by-route browser report for the examples app.
 It records load timing, frame pacing, heap growth, WebGL draw/upload counters,
 low-overhead GL state counters (`useProgram`, `bindTexture`, `bindBuffer`,
-`bindVertexArray`, and uniform calls), and instancing-focused summaries for
-`/gltf-instancing` grid, seed, and animation cases.
+`bindVertexArray`, and uniform calls), renderer glTF instancing deltas exposed
+by the examples-only benchmark bridge, and instancing-focused summaries for
+`/gltf-instancing` grid, seed, animation, local-model upload, and root-transform
+upload cases.
 
 Quick host check:
 
@@ -68,10 +70,10 @@ found or protects the edge case. Good next targets are:
 Use benchmark output as a decomposition guide by sorting routes through
 `analysis.slowestRoutesByP95`, `analysis.heaviestDrawRoutes`,
 `analysis.heaviestGlStateRoutes`, `analysis.heaviestUniformRoutes`, and the
-instancing per-1000-instance summaries. Components that move those counters
-independently are good extraction candidates; components whose counters always
-move together should stay behind one renderer-owned boundary until a benchmark
-row separates them.
+instancing per-1000-instance and renderer glTF upload summaries. Components
+that move those counters independently are good extraction candidates;
+components whose counters always move together should stay behind one
+renderer-owned boundary until a benchmark row separates them.
 
 Focused checks:
 

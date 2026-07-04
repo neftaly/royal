@@ -169,9 +169,27 @@ export interface WebGlRootSnapshot {
   readonly diagnostics: readonly string[];
   readonly disposed: boolean;
   readonly frame: number;
+  /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
+  readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
   readonly options: Required<WebGlRootOptions>;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
+}
+
+export interface WebGlGltfInstancingSnapshot {
+  /** Transient batch plans built while grouping compatible glTF draws. */
+  readonly batchPlansBuilt: number;
+  readonly batchInstancesTotal: number;
+  readonly drawCalls: number;
+  readonly instancesDrawn: number;
+  readonly localModelUploadBytes: number;
+  readonly localModelUploadCalls: number;
+  readonly rootPositionUploadBytes: number;
+  readonly rootPositionUploadCalls: number;
+  readonly rootRotationUploadBytes: number;
+  readonly rootRotationUploadCalls: number;
+  readonly rootScaleUploadBytes: number;
+  readonly rootScaleUploadCalls: number;
 }
 
 export interface WebGlVirtualTexturingSnapshot {
@@ -730,6 +748,11 @@ type GltfInstanceBufferResource = {
   readonly rootScale: GltfInstanceVectorBufferResource;
 };
 
+type GltfInstanceVectorField = "rootPosition" | "rootRotation" | "rootScale";
+type WebGlGltfInstancingCounters = {
+  -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
+};
+
 type ViewportSize = readonly [width: number, height: number];
 
 type SceneRenderView = {
@@ -920,6 +943,21 @@ const createGltfInstanceVectorBufferResource = (
     dirty: true,
   };
 };
+
+const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
+  batchPlansBuilt: 0,
+  batchInstancesTotal: 0,
+  drawCalls: 0,
+  instancesDrawn: 0,
+  localModelUploadBytes: 0,
+  localModelUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
+  rootScaleUploadBytes: 0,
+  rootScaleUploadCalls: 0,
+});
 
 const assignRenderObjectRef = (
   ref: RenderObjectRef,
@@ -2181,6 +2219,7 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
   #iblFallbackSpecularTexture: WebGLTexture | undefined;
+  #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   #latestScene: RenderRoot | undefined;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
@@ -2429,6 +2468,7 @@ class WebGlRootImpl implements WebGlRoot {
       diagnostics: [...this.#diagnostics],
       disposed: this.#disposed,
       frame: this.#frame,
+      gltfInstancing: this.#gltfInstancingSnapshot(),
       latestScene: this.#latestScene,
       options: { ...this.#options },
       virtualTexturing: this.#virtualTexturingSnapshot(),
@@ -2944,6 +2984,10 @@ class WebGlRootImpl implements WebGlRoot {
         batch.rootModels.push(draw.rootModel);
         batch.rootTransforms.push(draw.rootTransform);
       }
+    }
+    this.#gltfInstancingCounters.batchPlansBuilt += batches.size;
+    for (const batch of batches.values()) {
+      this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
 
     const opaqueBatches: GltfPrimitiveDrawBatch[] = [];
@@ -3620,6 +3664,8 @@ class WebGlRootImpl implements WebGlRoot {
     );
 
     const mode = webGlDrawMode(gl, geometry.mode);
+    this.#gltfInstancingCounters.drawCalls += 1;
+    this.#gltfInstancingCounters.instancesDrawn += localModels.length;
     if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
       gl.drawArraysInstanced(mode, 0, geometry.drawCount, localModels.length);
     } else {
@@ -3865,16 +3911,9 @@ class WebGlRootImpl implements WebGlRoot {
     const lights = lightSet.lights.slice(0, MAX_SURFACE_LIGHTS);
     this.#uniform1i(program, "u_surfaceLightCount", lights.length);
 
-    for (let index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
+    for (let index = 0; index < lights.length; index += 1) {
       const light = lights[index];
-      if (light === undefined) {
-        this.#uniform1i(program, `u_surfaceLightKind[${index}]`, 0);
-        this.#uniformColor(program, `u_surfaceLightColor[${index}]`, [0, 0, 0, 1]);
-        this.#uniformColor(program, `u_surfaceLightDirection[${index}]`, [0, -1, 0, 0]);
-        this.#uniformColor(program, `u_surfaceLightPosition[${index}]`, [0, 0, 0, 0]);
-        this.#uniformColor(program, `u_surfaceLightCone[${index}]`, [1, 0, 0, 0]);
-        continue;
-      }
+      if (light === undefined) continue;
 
       const range = light.kind === "directional" ? 0 : light.range ?? 0;
       const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
@@ -3969,6 +4008,32 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
+  #recordGltfInstanceLocalBufferUpload(floatCount: number): void {
+    this.#gltfInstancingCounters.localModelUploadCalls += 1;
+    this.#gltfInstancingCounters.localModelUploadBytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
+  }
+
+  #recordGltfInstanceVectorBufferUpload(
+    field: GltfInstanceVectorField,
+    floatCount: number,
+  ): void {
+    const bytes = floatCount * Float32Array.BYTES_PER_ELEMENT;
+    switch (field) {
+      case "rootPosition":
+        this.#gltfInstancingCounters.rootPositionUploadCalls += 1;
+        this.#gltfInstancingCounters.rootPositionUploadBytes += bytes;
+        return;
+      case "rootRotation":
+        this.#gltfInstancingCounters.rootRotationUploadCalls += 1;
+        this.#gltfInstancingCounters.rootRotationUploadBytes += bytes;
+        return;
+      case "rootScale":
+        this.#gltfInstancingCounters.rootScaleUploadCalls += 1;
+        this.#gltfInstancingCounters.rootScaleUploadBytes += bytes;
+        return;
+    }
+  }
+
   #bindGltfInstanceModels(
     key: string,
     localModels: readonly Mat4[],
@@ -4029,6 +4094,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
     if (localFullUpload) {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.localData, 0, localFloatCount);
+      this.#recordGltfInstanceLocalBufferUpload(localFloatCount);
       resource.localDirty = false;
       resource.localSignature = [...localModelSignature];
     } else if (localChangedRanges.length > 0) {
@@ -4042,6 +4108,7 @@ class WebGlRootImpl implements WebGlRoot {
           startFloat,
           rangeFloatCount,
         );
+        this.#recordGltfInstanceLocalBufferUpload(rangeFloatCount);
       }
       resource.localSignature = [...localModelSignature];
     }
@@ -4057,6 +4124,7 @@ class WebGlRootImpl implements WebGlRoot {
       rootTransforms,
       rootPositionSignature,
       "position",
+      "rootPosition",
       7,
       previousInstanceCount,
       instanceCount,
@@ -4066,6 +4134,7 @@ class WebGlRootImpl implements WebGlRoot {
       rootTransforms,
       rootRotationSignature,
       "rotation",
+      "rootRotation",
       8,
       previousInstanceCount,
       instanceCount,
@@ -4075,6 +4144,7 @@ class WebGlRootImpl implements WebGlRoot {
       rootTransforms,
       rootScaleSignature,
       "scale",
+      "rootScale",
       9,
       previousInstanceCount,
       instanceCount,
@@ -4087,6 +4157,7 @@ class WebGlRootImpl implements WebGlRoot {
     rootTransforms: readonly (Transform | undefined)[],
     nextSignature: readonly number[],
     field: keyof Transform,
+    counterField: GltfInstanceVectorField,
     attributeLocation: number,
     previousInstanceCount: number,
     instanceCount: number,
@@ -4132,6 +4203,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
     if (fullUpload) {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
+      this.#recordGltfInstanceVectorBufferUpload(counterField, floatCount);
       resource.dirty = false;
       resource.signature = [...nextSignature];
     } else if (changedRanges.length > 0) {
@@ -4145,6 +4217,7 @@ class WebGlRootImpl implements WebGlRoot {
           startFloat,
           rangeFloatCount,
         );
+        this.#recordGltfInstanceVectorBufferUpload(counterField, rangeFloatCount);
       }
       resource.signature = [...nextSignature];
     }
@@ -4175,7 +4248,9 @@ class WebGlRootImpl implements WebGlRoot {
       && existing.rootPosition.capacity >= requiredRootVectorFloatCount
       && existing.rootRotation.capacity >= requiredRootVectorFloatCount
       && existing.rootScale.capacity >= requiredRootVectorFloatCount
-    ) return existing;
+    ) {
+      return existing;
+    }
 
     const gl = this.#gl;
     const localBuffer = existing?.localBuffer ?? this.#createBuffer();
@@ -4724,12 +4799,12 @@ class WebGlRootImpl implements WebGlRoot {
 
   #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
     const location = this.#gl.getUniformLocation(program, name);
-    if (location !== null) this.#gl.uniformMatrix4fv(location, false, new Float32Array(matrix));
+    if (location !== null) this.#gl.uniformMatrix4fv(location, false, matrix);
   }
 
   #uniformColor(program: WebGLProgram, name: string, color: Rgba): void {
     const location = this.#gl.getUniformLocation(program, name);
-    if (location !== null) this.#gl.uniform4fv(location, new Float32Array(color));
+    if (location !== null) this.#gl.uniform4fv(location, color);
   }
 
   #uniform1i(program: WebGLProgram, name: string, value: number): void {
@@ -4739,7 +4814,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #uniform2fv(program: WebGLProgram, name: string, value: readonly [number, number]): void {
     const location = this.#gl.getUniformLocation(program, name);
-    if (location !== null) this.#gl.uniform2fv(location, new Float32Array(value));
+    if (location !== null) this.#gl.uniform2fv(location, value);
   }
 
   #program(kind: ProgramKind): ProgramResource {
@@ -6225,6 +6300,10 @@ class WebGlRootImpl implements WebGlRoot {
   #recordDiagnostic(message: string): void {
     this.#diagnostics = [...this.#diagnostics, message];
     console.warn(message);
+  }
+
+  #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
+    return { ...this.#gltfInstancingCounters };
   }
 
   #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {

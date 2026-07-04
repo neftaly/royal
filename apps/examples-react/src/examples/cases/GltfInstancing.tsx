@@ -6,6 +6,7 @@ import {
   type RenderObjectHandle,
 } from '@royal/react';
 import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
@@ -206,6 +207,7 @@ export const GltfInstancing = (): ReactNode => {
             : <StaticInstancedCubeField cubeInstances={cubeInstances} />}
         </pass>
       </scene>
+      <BenchmarkRendererSnapshot />
       <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />
     </Canvas>
   );

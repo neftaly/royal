@@ -22,7 +22,7 @@ import {
   type RenderNode,
   type RenderRoot,
 } from "@royal/renderer-core";
-import { createWebGlRoot } from "@royal/renderer-webgl";
+import { createWebGlRoot, type WebGlGltfInstancingSnapshot } from "@royal/renderer-webgl";
 
 type CanvasSize = {
   readonly height: number;
@@ -671,6 +671,44 @@ const bufferSubDataUploadRanges = (calls: readonly GlCall[]): readonly {
       floatLength: typeof call.args[4] === "number" ? call.args[4] : undefined,
       floatOffset: typeof call.args[3] === "number" ? call.args[3] : 0,
     }));
+
+const bufferSubDataPayloads = (calls: readonly GlCall[]): readonly (readonly number[])[] =>
+  calls
+    .filter((call) => call.name === "bufferSubData")
+    .map((call) => {
+      const values = numericArray(call.args[2]);
+      const offset = typeof call.args[3] === "number" ? call.args[3] : 0;
+      const length = typeof call.args[4] === "number" ? call.args[4] : values.length - offset;
+
+      return values.slice(offset, offset + length);
+    })
+    .filter((values) => values.length > 0);
+
+const gltfInstancingSnapshotKeys = [
+  "batchPlansBuilt",
+  "batchInstancesTotal",
+  "drawCalls",
+  "instancesDrawn",
+  "localModelUploadBytes",
+  "localModelUploadCalls",
+  "rootPositionUploadBytes",
+  "rootPositionUploadCalls",
+  "rootRotationUploadBytes",
+  "rootRotationUploadCalls",
+  "rootScaleUploadBytes",
+  "rootScaleUploadCalls",
+] as const satisfies readonly (keyof WebGlGltfInstancingSnapshot)[];
+
+const gltfInstancingDelta = (
+  after: WebGlGltfInstancingSnapshot,
+  before: WebGlGltfInstancingSnapshot,
+): WebGlGltfInstancingSnapshot => {
+  const delta = {} as Record<keyof WebGlGltfInstancingSnapshot, number>;
+  for (const key of gltfInstancingSnapshotKeys) {
+    delta[key] = after[key] - before[key];
+  }
+  return delta;
+};
 
 const roundNumber = (value: number): number => {
   const rounded = Number(value.toFixed(6));
@@ -3350,9 +3388,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushMicrotasks();
 
     const callsBeforeReadyRender = calls.length;
+    const instancingBeforeReadyRender = root.snapshot().gltfInstancing;
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const instancedDraws = instancedDrawCalls(readyFrameCalls);
+    const readyInstancing = gltfInstancingDelta(root.snapshot().gltfInstancing, instancingBeforeReadyRender);
 
     expect(instancedDraws).toHaveLength(1);
     expect(instancedDraws[0]?.name).toBe("drawElementsInstanced");
@@ -3366,26 +3406,87 @@ describe("WebGL renderer scene and glTF regressions", () => {
       { byteOffset: 0, floatLength: 6, floatOffset: 0 },
       { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
+    expect(readyInstancing).toEqual({
+      batchInstancesTotal: 2,
+      batchPlansBuilt: 1,
+      drawCalls: 1,
+      instancesDrawn: 2,
+      localModelUploadBytes: 32 * Float32Array.BYTES_PER_ELEMENT,
+      localModelUploadCalls: 1,
+      rootPositionUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
+      rootPositionUploadCalls: 1,
+      rootRotationUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
+      rootRotationUploadCalls: 1,
+      rootScaleUploadBytes: 6 * Float32Array.BYTES_PER_ELEMENT,
+      rootScaleUploadCalls: 1,
+    });
 
     const callsBeforeImperativeChange = calls.length;
+    const instancingBeforeImperativeChange = root.snapshot().gltfInstancing;
     leftRef.current?.position.set([-0.5, 0, 0]);
     await flushAnimationFrames(viewport.animationFrames);
     const changedFrameCalls = calls.slice(callsBeforeImperativeChange);
+    const changedInstancedDraws = instancedDrawCalls(changedFrameCalls);
+    const changedInstancing = gltfInstancingDelta(root.snapshot().gltfInstancing, instancingBeforeImperativeChange);
 
-    expect(instancedDrawCalls(changedFrameCalls)).toHaveLength(1);
+    expect(changedInstancedDraws).toHaveLength(1);
+    expect(instancedDrawInstanceCount(changedInstancedDraws[0]!)).toBe(2);
+    expect(drawCalls(changedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(changedFrameCalls)).toEqual([
       { byteOffset: 0, floatLength: 3, floatOffset: 0 },
     ]);
+    expect(bufferSubDataPayloads(changedFrameCalls).map(roundVector)).toEqual([
+      [-0.5, 0, 0],
+    ]);
+    expect(changedInstancing).toEqual({
+      batchInstancesTotal: 2,
+      batchPlansBuilt: 1,
+      drawCalls: 1,
+      instancesDrawn: 2,
+      localModelUploadBytes: 0,
+      localModelUploadCalls: 0,
+      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
+      rootPositionUploadCalls: 1,
+      rootRotationUploadBytes: 0,
+      rootRotationUploadCalls: 0,
+      rootScaleUploadBytes: 0,
+      rootScaleUploadCalls: 0,
+    });
 
     const callsBeforeSecondImperativeChange = calls.length;
+    const instancingBeforeSecondImperativeChange = root.snapshot().gltfInstancing;
     rightRef.current?.position.set([0.5, 0, 0]);
     await flushAnimationFrames(viewport.animationFrames);
     const secondChangedFrameCalls = calls.slice(callsBeforeSecondImperativeChange);
+    const secondChangedInstancedDraws = instancedDrawCalls(secondChangedFrameCalls);
+    const secondChangedInstancing = gltfInstancingDelta(
+      root.snapshot().gltfInstancing,
+      instancingBeforeSecondImperativeChange,
+    );
 
-    expect(instancedDrawCalls(secondChangedFrameCalls)).toHaveLength(1);
+    expect(secondChangedInstancedDraws).toHaveLength(1);
+    expect(instancedDrawInstanceCount(secondChangedInstancedDraws[0]!)).toBe(2);
+    expect(drawCalls(secondChangedFrameCalls)).toHaveLength(0);
     expect(bufferSubDataUploadRanges(secondChangedFrameCalls)).toEqual([
       { byteOffset: 12, floatLength: 3, floatOffset: 3 },
     ]);
+    expect(bufferSubDataPayloads(secondChangedFrameCalls).map(roundVector)).toEqual([
+      [0.5, 0, 0],
+    ]);
+    expect(secondChangedInstancing).toEqual({
+      batchInstancesTotal: 2,
+      batchPlansBuilt: 1,
+      drawCalls: 1,
+      instancesDrawn: 2,
+      localModelUploadBytes: 0,
+      localModelUploadCalls: 0,
+      rootPositionUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
+      rootPositionUploadCalls: 1,
+      rootRotationUploadBytes: 0,
+      rootRotationUploadCalls: 0,
+      rootScaleUploadBytes: 0,
+      rootScaleUploadCalls: 0,
+    });
   });
 
   it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {

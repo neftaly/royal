@@ -99,6 +99,21 @@ const fakeCanvas = (
   return canvas as unknown as FakeCanvas;
 };
 
+const zeroGltfInstancingSnapshot = {
+  batchInstancesTotal: 0,
+  batchPlansBuilt: 0,
+  drawCalls: 0,
+  instancesDrawn: 0,
+  localModelUploadBytes: 0,
+  localModelUploadCalls: 0,
+  rootPositionUploadBytes: 0,
+  rootPositionUploadCalls: 0,
+  rootRotationUploadBytes: 0,
+  rootRotationUploadCalls: 0,
+  rootScaleUploadBytes: 0,
+  rootScaleUploadCalls: 0,
+};
+
 describe("React root JSX public API", () => {
   it("renders a Royal JSX scene through the imperative root", () => {
     const canvas = fakeCanvas();
@@ -141,6 +156,7 @@ describe("React root JSX public API", () => {
       },
       disposed: false,
       frame: 1,
+      gltfInstancing: zeroGltfInstancingSnapshot,
       latestScene: {
         children: [
           expect.objectContaining({

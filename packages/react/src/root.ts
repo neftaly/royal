@@ -1,6 +1,7 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
+  type WebGlGltfInstancingSnapshot,
   type WebGlRoot,
   type WebGlRootOptions,
 } from "@royal/renderer-webgl";
@@ -27,6 +28,8 @@ export interface RoyalRendererRootSnapshot {
   readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
+  /** Renderer-owned counters for diagnostics; not scene or application state. */
+  readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
 }
 
@@ -123,6 +126,7 @@ export const createRendererRoot = (
         context: snapshot.options as RoyalRendererRootContextSnapshot,
         disposed: snapshot.disposed,
         frame: snapshot.frame,
+        gltfInstancing: snapshot.gltfInstancing,
         latestScene: snapshot.latestScene,
       };
     },
