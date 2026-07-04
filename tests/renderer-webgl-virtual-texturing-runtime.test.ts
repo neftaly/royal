@@ -14,12 +14,11 @@ import {
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import {
-  createVirtualTextureRuntimeManifest,
   encodeVirtualTexturePageTableRgba8,
   firstVirtualTexturePageUri,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
-  VirtualTextureRuntimeResource,
+  virtualTexturePageKey,
   virtualTexturePageUri,
 } from "../packages/renderer-webgl/src/virtual-texturing";
 
@@ -58,9 +57,10 @@ describe("WebGL virtual texturing runtime model", () => {
       .toBe("pages/mip-0/x0-y0.png");
   });
 
-  it("derives runtime manifest lookup data, padded pages, budgets, and base-relative page uris", () => {
+  it("preserves manifest metadata used for live VT resource allocation and page URI lookup", () => {
     const result = parseVirtualTextureManifest({
       borderTexels: 2,
+      mipCount: 3,
       pageSize: 64,
       pages: {
         entries: {
@@ -73,23 +73,16 @@ describe("WebGL virtual texturing runtime model", () => {
     });
 
     expect(result.diagnostics).toEqual([]);
-    const manifest = createVirtualTextureRuntimeManifest(result.manifest!, {
-      manifestUri: "assets/terrain/manifest.json",
-    });
-
-    expect(manifest).toEqual(expect.objectContaining({
-      baseUri: "assets/terrain",
+    expect(result.manifest).toEqual(expect.objectContaining({
       borderTexels: 2,
-      manifestUri: "assets/terrain/manifest.json",
       mipCount: 3,
-      paddedPageSize: 68,
-      physicalSlots: 4,
+      pageSize: 64,
+      physicalByteBudget: 80 * 80 * 4 * 3,
     }));
-    expect(manifest.pageByteSize).toBe(68 * 68 * 4);
-    expect(manifest.pagesByKey.get("0/0/0")).toEqual(expect.objectContaining({
-      key: "0/0/0",
-      uri: "assets/terrain/pages/0.png",
-    }));
+    expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 0, x: 0, y: 0 }))
+      .toBe("pages/0.png");
+    expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 1, x: 0, y: 0 }))
+      .toBe("pages/1.png");
   });
 
   it("parses nested research manifests and resolves URI templates", () => {
@@ -229,111 +222,22 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(table.residentSlot(fourth)).toBe(1);
   });
 
-  it("plans uploads with state transitions, caps, priority ordering, stale drops, and missing-page failures", () => {
-    const manifest = createVirtualTextureRuntimeManifest({
-      height: 256,
-      pageSize: 64,
-      pages: [
-        { id: "near", mip: 0, uri: "near.png", x: 0, y: 0 },
-        { id: "far", mip: 1, uri: "far.png", x: 0, y: 0 },
-      ],
-      physicalSlots: 4,
-      width: 256,
-    }, { baseUri: "/vt" });
-    const resource = new VirtualTextureRuntimeResource(manifest);
-
-    resource.demand([
-      { frame: 1, page: { mip: 0, x: 0, y: 0 }, priority: 10 },
-      { frame: 1, page: { mip: 1, x: 0, y: 0 }, priority: 20 },
-      { frame: 0, page: { mip: 0, x: 9, y: 9 }, priority: 30 },
-      { frame: 4, page: { mip: 0, x: 8, y: 8 }, priority: 40 },
-    ]);
-
-    const plan = resource.planUploads({
-      currentFrame: 4,
-      maxPageUploads: 2,
-      maxStaleFrames: 3,
-      maxUploadBytes: manifest.pageByteSize * 2,
-    });
-
-    expect(plan.droppedStale).toEqual(["0/9/9"]);
-    expect(plan.skippedMissing).toEqual(["0/8/8"]);
-    expect(plan.uploads.map((upload) => upload.pageKey)).toEqual(["1/0/0", "0/0/0"]);
-    expect(plan.uploads.map((upload) => upload.uri)).toEqual(["/vt/far.png", "/vt/near.png"]);
-    expect(resource.stats()).toEqual({
-      failedPages: 1,
-      loadingPages: 2,
-      requestedPages: 0,
-      residentPages: 0,
-    });
-
-    resource.markUploaded({ mip: 1, x: 0, y: 0 });
-    resource.markUploaded({ mip: 0, x: 0, y: 0 });
-
-    expect(resource.stats()).toEqual({
-      failedPages: 1,
-      loadingPages: 0,
-      requestedPages: 0,
-      residentPages: 2,
-    });
-  });
-
-  it("applies page and byte upload caps without changing queued requested state", () => {
-    const manifest = createVirtualTextureRuntimeManifest({
-      height: 128,
-      pageSize: 32,
-      pages: [
-        { id: "a", mip: 0, uri: "a.png", x: 0, y: 0 },
-        { id: "b", mip: 0, uri: "b.png", x: 1, y: 0 },
-        { id: "c", mip: 0, uri: "c.png", x: 2, y: 0 },
-      ],
-      physicalSlots: 4,
-      width: 128,
-    });
-    const resource = new VirtualTextureRuntimeResource(manifest);
-
-    resource.demand([
-      { frame: 7, page: { mip: 0, x: 0, y: 0 }, priority: 1 },
-      { frame: 7, page: { mip: 0, x: 1, y: 0 }, priority: 2 },
-      { frame: 7, page: { mip: 0, x: 2, y: 0 }, priority: 3 },
-    ]);
-
-    const plan = resource.planUploads({
-      currentFrame: 7,
-      maxPageUploads: 3,
-      maxUploadBytes: manifest.pageByteSize,
-    });
-
-    expect(plan.uploads.map((upload) => upload.pageKey)).toEqual(["0/2/0"]);
-    expect(resource.stats()).toEqual({
-      failedPages: 0,
-      loadingPages: 1,
-      requestedPages: 2,
-      residentPages: 0,
-    });
-  });
-
   it("protects resident parents during child uploads and downgrades evicted children to parent fallback entries", () => {
-    const manifest = createVirtualTextureRuntimeManifest({
-      height: 256,
-      mipCount: 3,
-      pageSize: 64,
-      pages: [],
-      physicalSlots: 2,
-      uriTemplate: "page-{mip}-{x}-{y}.png",
-      width: 256,
-    });
-    const resource = new VirtualTextureRuntimeResource(manifest);
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const parent = { mip: 1, x: 0, y: 0 };
+    const firstChild = { mip: 0, x: 0, y: 0 };
+    const secondChild = { mip: 0, x: 1, y: 0 };
+    const protectedPages = new Set([virtualTexturePageKey(parent)]);
 
-    resource.markUploaded({ mip: 1, x: 0, y: 0 });
-    resource.pageTable.takeDirtyPageTableUpdates();
-    resource.markUploaded({ mip: 0, x: 0, y: 0 });
-    resource.pageTable.takeDirtyPageTableUpdates();
-    const assignment = resource.markUploaded({ mip: 0, x: 1, y: 0 });
+    table.ensureResident(parent);
+    table.takeDirtyPageTableUpdates();
+    table.ensureResident(firstChild);
+    table.takeDirtyPageTableUpdates();
+    const assignment = table.ensureResident(secondChild, { protectedPages });
 
     expect(assignment.evicted).toEqual(expect.objectContaining({ pageKey: "0/0/0" }));
-    expect(resource.pageTable.residentSlot({ mip: 1, x: 0, y: 0 })).toBe(0);
-    expect(resource.pageTable.takeDirtyPageTableUpdates()).toEqual([
+    expect(table.residentSlot(parent)).toBe(0);
+    expect(table.takeDirtyPageTableUpdates()).toEqual([
       expect.objectContaining({
         fallbackMipOffset: 1,
         fallbackPageKey: "1/0/0",

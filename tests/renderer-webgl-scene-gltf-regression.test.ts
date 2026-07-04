@@ -1318,6 +1318,44 @@ const materialTexturePendingLodDocument = () => ({
   ],
 });
 
+const materialSecondaryTexturePendingLodDocument = () => {
+  const base = materialTexturePendingLodDocument();
+
+  return {
+    ...base,
+    extensionsRequired: ["KHR_materials_specular"],
+    extensionsUsed: ["KHR_materials_specular"],
+    materials: [
+      base.materials[0],
+      {
+        emissiveFactor: [0.1, 0.2, 0.3],
+        emissiveTexture: {
+          index: 0,
+        },
+        extensions: {
+          KHR_materials_specular: {
+            specularTexture: {
+              index: 0,
+            },
+          },
+        },
+        normalTexture: {
+          index: 0,
+        },
+        occlusionTexture: {
+          index: 0,
+        },
+        pbrMetallicRoughness: {
+          baseColorFactor: [0, 1, 0, 1],
+          metallicRoughnessTexture: {
+            index: 0,
+          },
+        },
+      },
+    ],
+  };
+};
+
 const materialSharedTextureLodDocument = () => ({
   accessors: lodAccessors(),
   asset: { version: "2.0" },
@@ -7468,7 +7506,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ).toEqual([6, 6, 3, 3]);
   });
 
-  it("keeps the loaded material LOD visible while the preferred lower texture LOD is unavailable", async () => {
+  it("draws selected material LOD fallback before binding its settled base-color texture", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -7498,23 +7536,71 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const pendingCalls = calls.slice(pendingCallsStart);
     expect(drawCalls(pendingCalls), "pending lower texture LOD should not blank the glTF").toHaveLength(1);
     expect(
-      uniform4fvPayloads(calls, "u_color").map(roundVector).at(-1),
-      "renderer should keep the loaded high material until the lower material texture is usable",
-    ).toEqual([1, 0, 0, 1]);
-
-    const failedImage = new Error("lower material LOD texture failed");
-    for (const image of ControlledImage.instances) image.rejectLoad(failedImage);
-    await flushMicrotasks();
-
-    const failedCallsStart = calls.length;
-    root.render(renderGraph(0.2));
-    const failedCalls = calls.slice(failedCallsStart);
-    expect(drawCalls(failedCalls), "failed lower texture LOD should not blank the glTF").toHaveLength(1);
+      callCount(pendingCalls, "texImage2D"),
+      "selecting a pending lower material must not upload its ordinary texture during draw",
+    ).toBe(0);
+    expect(
+      callCount(pendingCalls, "generateMipmap"),
+      "selecting a pending lower material must not generate mipmaps during draw",
+    ).toBe(0);
     expect(
       uniform4fvPayloads(calls, "u_color").map(roundVector).at(-1),
-      "renderer should keep the loaded high material after the preferred lower texture fails",
-    ).toEqual([1, 0, 0, 1]);
-    expect(root.snapshot().diagnostics.some((message) => /lod-shared\.png|texture|image/i.test(message))).toBe(true);
+      "renderer should draw the selected lower material with its solid fallback",
+    ).toEqual([0.5, 0.5, 0.5, 1]);
+
+    const settledCallsStart = calls.length;
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const settledCalls = calls.slice(settledCallsStart);
+    const uploadIndex = settledCalls.findIndex((call) => call.name === "texImage2D");
+    const drawIndex = settledCalls.findIndex((call) => drawCalls([call]).length === 1);
+    expect(uploadIndex, "settled decoded glTF image should upload through the texture cache").toBeGreaterThanOrEqual(0);
+    expect(drawIndex, "settled lower material should draw on the invalidated frame").toBeGreaterThan(uploadIndex);
+    expect(uniform1iPayloads(settledCalls, "u_useTexture").at(-1)).toBe(1);
+  });
+
+  it("draws the selected material LOD while secondary texture slots are pending", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = (scale: number) => renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version: "material-lod-secondary-textures-pending",
+      }),
+    ]);
+
+    root.render(renderGraph(1));
+    await settleLodDocumentAndBuffer(loader, materialSecondaryTexturePendingLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
+    expect(ControlledImage.instances, "secondary material textures should be staged but not settled").toHaveLength(1);
+
+    const pendingCallsStart = calls.length;
+    root.render(renderGraph(0.2));
+    const pendingCalls = calls.slice(pendingCallsStart);
+
+    expect(drawCalls(pendingCalls), "pending normal/ORM/emissive/extension textures should not block the LOD").toHaveLength(1);
+    expect(uniform4fvPayloads(pendingCalls, "u_color").map(roundVector)).toContainEqual([0, 1, 0, 1]);
+    expect(uniform1iPayloads(pendingCalls, "u_useMetallicRoughnessTexture")).not.toContain(1);
+    expect(uniform1iPayloads(pendingCalls, "u_useNormalTexture")).not.toContain(1);
+    expect(uniform1iPayloads(pendingCalls, "u_useEmissiveTexture")).not.toContain(1);
+    expect(uniform1iPayloads(pendingCalls, "u_useOcclusionTexture")).not.toContain(1);
+    expect(uniform1iPayloads(pendingCalls, "u_useSpecularTexture")).not.toContain(1);
   });
 
   it("uploads a shared glTF texture once across material MSFT_lod levels", async () => {

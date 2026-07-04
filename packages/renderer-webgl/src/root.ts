@@ -847,15 +847,9 @@ type GltfPrimitiveDrawBatchPlanCacheEntry = {
   readonly batches: GltfPrimitiveDrawBatch[];
 };
 
-type GltfPreparedTextureUpload = {
-  readonly image: LoadedTextureSource;
-  readonly texture: TextureAssetUploadRef;
-};
-
 type GltfPreparedPrimitiveMaterial = {
   readonly geometry: CpuGeometry;
   readonly material: SurfaceMaterial;
-  readonly textureUploads: readonly GltfPreparedTextureUpload[];
 };
 
 type GltfInstanceFloatBufferResource = {
@@ -2420,13 +2414,6 @@ const hystereticLodLevel = (
   return level;
 };
 
-const adjacentLodLevels = (level: number, levelCount: number): readonly number[] => {
-  const levels: number[] = [];
-  if (level > 0) levels.push(level - 1);
-  if (level + 1 < levelCount) levels.push(level + 1);
-  return levels;
-};
-
 const mat4OrientationDeterminant = (matrix: Mat4): number =>
   matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
   - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
@@ -3260,7 +3247,6 @@ class WebGlRootImpl implements WebGlRoot {
       renderInstanceKey,
       rootViewProjectionModel,
     );
-    this.#preloadAdjacentGltfNodeLodTextures(state.primitives, selectedNodeLevels);
     for (const primitive of state.primitives) {
       const nodeLod = primitive.nodeLod;
       if (nodeLod !== undefined) {
@@ -3290,14 +3276,10 @@ class WebGlRootImpl implements WebGlRoot {
           rootViewProjectionModel,
         );
         const loadedMaterial = materialSelection.material;
-        this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
         if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) {
           continue;
         }
         const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
-        for (const upload of prepared.textureUploads) {
-          this.#ensureImmediateTexture(upload.texture, upload.image);
-        }
         draws.push({
           geometry: prepared.geometry,
           ...(assetLights === undefined ? {} : { lights: assetLights }),
@@ -3653,11 +3635,6 @@ class WebGlRootImpl implements WebGlRoot {
         coverages.get(group) ?? 0,
         lod.levelCount,
         lod.thresholds,
-        (level) => {
-          const primitives = levelPrimitives.get(`${group}:${level}`) ?? [];
-          return primitives.length > 0
-            && primitives.every((primitive) => this.#isGltfPrimitiveReadyForLod(primitive));
-        },
         (level) => (levelPrimitives.get(`${group}:${level}`) ?? []).length > 0,
       );
       selected.set(group, level);
@@ -3684,10 +3661,6 @@ class WebGlRootImpl implements WebGlRoot {
       coverage,
       lod.levels.length,
       lod.thresholds,
-      (level) => {
-        const material = lod.levels[level];
-        return material !== undefined && this.#isGltfMaterialReadyForLod(material);
-      },
       (level) => lod.levels[level] !== undefined,
     );
     return { level, material: lod.levels[level] ?? primitiveMaterial.material };
@@ -3738,7 +3711,6 @@ class WebGlRootImpl implements WebGlRoot {
           : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
         surfaceTextures,
       ),
-      textureUploads: this.#gltfMaterialTextureUploads(loadedMaterial, baseColor, surfaceTextures),
     };
     primitiveCache.set(loadedMaterial, prepared);
     return prepared;
@@ -3786,12 +3758,11 @@ class WebGlRootImpl implements WebGlRoot {
     coverage: number,
     levelCount: number,
     thresholds: readonly number[],
-    isReady: (level: number) => boolean,
     isDrawable: (level: number) => boolean,
   ): number {
     const previous = this.#gltfLodSelections.get(selectionKey)?.level;
     const target = hystereticLodLevel(coverage, levelCount, thresholds, previous);
-    const selected = this.#drawableGltfLodLevel(target, previous, levelCount, isReady, isDrawable);
+    const selected = this.#drawableGltfLodLevel(target, previous, levelCount, isDrawable);
     this.#activeGltfLodSelectionKeys.add(selectionKey);
     this.#gltfLodSelections.set(selectionKey, {
       level: selected,
@@ -3803,17 +3774,12 @@ class WebGlRootImpl implements WebGlRoot {
     target: number,
     previous: number | undefined,
     levelCount: number,
-    isReady: (level: number) => boolean,
     isDrawable: (level: number) => boolean,
   ): number {
-    if (isReady(target)) return target;
+    if (isDrawable(target)) return target;
     if (previous !== undefined && previous >= 0 && previous < levelCount && isDrawable(previous)) {
       return previous;
     }
-    for (let level = 0; level < levelCount; level += 1) {
-      if (isReady(level)) return level;
-    }
-    if (isDrawable(target)) return target;
     for (let level = 0; level < levelCount; level += 1) {
       if (isDrawable(level)) return level;
     }
@@ -3824,41 +3790,6 @@ class WebGlRootImpl implements WebGlRoot {
     for (const key of this.#gltfLodSelections.keys()) {
       if (!this.#activeGltfLodSelectionKeys.has(key)) this.#gltfLodSelections.delete(key);
     }
-  }
-
-  #isGltfPrimitiveReadyForLod(primitive: LoadedGltfPrimitive): boolean {
-    const materials = primitive.materialLod?.levels ?? [primitive.material];
-    return materials.some((material) => this.#isGltfMaterialReadyForLod(material));
-  }
-
-  #isGltfMaterialReadyForLod(material: LoadedGltfMaterial): boolean {
-    return this.#isGltfMaterialTextureReady(this.#gltfMaterialTextureRef(material), material.image)
-      && this.#isGltfMaterialTextureReady(
-        this.#gltfMaterialMetallicRoughnessTextureRef(material),
-        material.metallicRoughnessImage,
-      )
-      && this.#isGltfMaterialTextureReady(
-        this.#gltfMaterialEmissiveTextureRef(material),
-        material.emissiveImage,
-      )
-      && this.#isGltfMaterialTextureReady(
-        this.#gltfMaterialNormalTextureRef(material),
-        material.normalImage,
-      )
-      && this.#isGltfMaterialTextureReady(
-        this.#gltfMaterialOcclusionTextureRef(material),
-        material.occlusionImage,
-      )
-      && this.#isGltfMaterialExtensionTexturesReady(material.extensionTextures);
-  }
-
-  #isGltfMaterialTextureReady(
-    texture: TextureAssetUploadRef | undefined,
-    image: LoadedTextureSource | undefined,
-  ): boolean {
-    if (texture === undefined) return true;
-    if (image !== undefined) return true;
-    return this.#textures.get(textureCacheKey(texture))?.uploaded === true;
   }
 
   #gltfMaterialTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
@@ -3963,117 +3894,6 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return textures;
-  }
-
-  #gltfMaterialTextureUploads(
-    material: LoadedGltfMaterial,
-    baseColor: TextureAssetUploadRef | undefined,
-    surfaceTextures: LoadedGltfSurfaceTextures,
-  ): readonly GltfPreparedTextureUpload[] {
-    const uploads: GltfPreparedTextureUpload[] = [];
-    const append = (
-      texture: TextureAssetUploadRef | undefined,
-      image: LoadedTextureSource | undefined,
-    ): void => {
-      if (texture !== undefined && image !== undefined) uploads.push({ image, texture });
-    };
-
-    append(baseColor, material.image);
-    append(surfaceTextures.metallicRoughnessTexture, material.metallicRoughnessImage);
-    append(surfaceTextures.normalTexture, material.normalImage);
-    append(surfaceTextures.emissiveTexture, material.emissiveImage);
-    append(surfaceTextures.occlusionTexture, material.occlusionImage);
-
-    const extensionTextures = material.extensionTextures;
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      append(surfaceTextures[texture.key], extensionTextures?.[texture.key]?.image);
-    }
-
-    return uploads;
-  }
-
-  #isGltfMaterialTextureSlotReady(
-    slot: LoadedGltfMaterialTextureSlot | undefined,
-    colorSpace: TextureColorSpace,
-  ): boolean {
-    return this.#isGltfMaterialTextureReady(this.#gltfTextureSlotRef(slot, colorSpace), slot?.image);
-  }
-
-  #isGltfMaterialExtensionTexturesReady(
-    textures: LoadedGltfMaterialExtensionTextures | undefined,
-  ): boolean {
-    return GLTF_MATERIAL_EXTENSION_TEXTURES.every((texture) =>
-      this.#isGltfMaterialTextureSlotReady(textures?.[texture.key], texture.colorSpace)
-    );
-  }
-
-  #preloadAdjacentGltfNodeLodTextures(
-    primitives: readonly LoadedGltfPrimitive[],
-    selectedLevels: ReadonlyMap<string, number>,
-  ): void {
-    for (const [group, level] of selectedLevels) {
-      const lod = primitives.find((primitive) => primitive.nodeLod?.group === group)?.nodeLod;
-      if (lod === undefined) continue;
-      for (const adjacentLevel of adjacentLodLevels(level, lod.levelCount)) {
-        for (const primitive of primitives) {
-          if (primitive.nodeLod?.group === group && primitive.nodeLod.level === adjacentLevel) {
-            this.#preloadGltfPrimitiveTextures(primitive);
-          }
-        }
-      }
-    }
-  }
-
-  #preloadAdjacentGltfMaterialLodTextures(
-    lod: GltfMaterialPrimitiveLod | undefined,
-    selectedLevel: number,
-  ): void {
-    if (lod === undefined) return;
-    for (const level of adjacentLodLevels(selectedLevel, lod.levels.length)) {
-      const material = lod.levels[level];
-      if (material !== undefined) this.#preloadGltfMaterialTexture(material);
-    }
-  }
-
-  #preloadGltfPrimitiveTextures(primitive: LoadedGltfPrimitive): void {
-    this.#preloadGltfMaterialTexture(primitive.material);
-    for (const material of primitive.materialLod?.levels ?? []) {
-      this.#preloadGltfMaterialTexture(material);
-    }
-    for (const variant of primitive.materialVariants ?? []) {
-      this.#preloadGltfMaterialTexture(variant.material);
-      for (const material of variant.materialLod?.levels ?? []) {
-        this.#preloadGltfMaterialTexture(material);
-      }
-    }
-  }
-
-  #preloadGltfMaterialTexture(material: LoadedGltfMaterial): void {
-    const texture = this.#gltfMaterialTextureRef(material);
-    if (texture !== undefined && material.image !== undefined) this.#ensureImmediateTexture(texture, material.image);
-    this.#ensureLoadedGltfMaterialSurfaceTextures(material, this.#gltfMaterialSurfaceTextures(material));
-  }
-
-  #ensureLoadedGltfMaterialSurfaceTextures(
-    material: LoadedGltfMaterial,
-    textures: LoadedGltfSurfaceTextures,
-  ): void {
-    this.#ensureLoadedGltfTexture(textures.metallicRoughnessTexture, material.metallicRoughnessImage);
-    this.#ensureLoadedGltfTexture(textures.normalTexture, material.normalImage);
-    this.#ensureLoadedGltfTexture(textures.emissiveTexture, material.emissiveImage);
-    this.#ensureLoadedGltfTexture(textures.occlusionTexture, material.occlusionImage);
-
-    const extensionTextures = material.extensionTextures;
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      this.#ensureLoadedGltfTexture(textures[texture.key], extensionTextures?.[texture.key]?.image);
-    }
-  }
-
-  #ensureLoadedGltfTexture(
-    texture: TextureAssetUploadRef | undefined,
-    image: LoadedTextureSource | undefined,
-  ): void {
-    if (texture !== undefined && image !== undefined) this.#ensureImmediateTexture(texture, image);
   }
 
   #drawGeometry(
@@ -6581,11 +6401,13 @@ class WebGlRootImpl implements WebGlRoot {
 
     loadImage(texture.uri).then((image) => {
       if (this.#disposed) return;
+      if (state.uploaded) return;
       state.loading = false;
       this.#uploadTexture(state, image, texture);
       this.invalidate();
     }, (error: unknown) => {
       if (this.#disposed) return;
+      if (state.uploaded) return;
       state.loading = false;
       state.error = `Texture image load failed for ${texture.uri}: ${error instanceof Error ? error.message : String(error)}`;
       this.#recordDiagnostic(state.error);
@@ -6594,19 +6416,20 @@ class WebGlRootImpl implements WebGlRoot {
     return state;
   }
 
-  #ensureImmediateTexture(texture: TextureAssetUploadRef, image: LoadedTextureSource): TextureResource {
+  #settleDecodedTextureSource(texture: TextureAssetUploadRef | undefined, image: LoadedTextureSource): void {
+    if (texture === undefined) return;
     const key = textureCacheKey(texture);
     const cached = this.#textures.get(key);
-    if (cached !== undefined && cached.uploaded) return cached;
+    if (cached !== undefined && cached.uploaded) return;
 
-    const resource: TextureResource = cached ?? {
+    const resource: TextureResource | TextureLoadState = cached ?? {
       key,
       texture: this.#createTexture(),
       uploaded: false,
     };
     this.#textures.set(key, resource);
     this.#uploadTexture(resource, image, texture);
-    return resource;
+    if ("loading" in resource) resource.loading = false;
   }
 
   #iblSpecularTextureContext(): IblSpecularTextureContext {
@@ -7487,6 +7310,29 @@ class WebGlRootImpl implements WebGlRoot {
     uri: string,
     image: LoadedTextureSource,
   ): LoadedGltfMaterial {
+    if (material.baseColorImageUri === uri) {
+      this.#settleDecodedTextureSource(this.#gltfMaterialTextureRef(material), image);
+    }
+    if (material.emissiveImageUri === uri) {
+      this.#settleDecodedTextureSource(this.#gltfMaterialEmissiveTextureRef(material), image);
+    }
+    if (material.metallicRoughnessImageUri === uri) {
+      this.#settleDecodedTextureSource(this.#gltfMaterialMetallicRoughnessTextureRef(material), image);
+    }
+    if (material.normalImageUri === uri) {
+      this.#settleDecodedTextureSource(this.#gltfMaterialNormalTextureRef(material), image);
+    }
+    if (material.occlusionImageUri === uri) {
+      this.#settleDecodedTextureSource(this.#gltfMaterialOcclusionTextureRef(material), image);
+    }
+    const existingExtensionTextures = material.extensionTextures;
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      const slot = existingExtensionTextures?.[texture.key];
+      if (slot?.imageUri === uri) {
+        this.#settleDecodedTextureSource(this.#gltfTextureSlotRef(slot, texture.colorSpace), image);
+      }
+    }
+
     const extensionTextures = this.#settleGltfMaterialExtensionTextureImages(material.extensionTextures, uri, image);
     const baseColorSvgVirtualTextureSource = material.baseColorImageUri === uri
       ? svgVirtualTextureSourceForImage(image)
