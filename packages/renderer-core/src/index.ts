@@ -36,7 +36,7 @@ export type {
   PlaneGeometryOptions
 } from './geometry';
 export { boxGeometry, planeGeometry } from './geometry';
-export type { GltfAssetBounds, GltfAssetRef, GltfInput, GltfNode, GltfOptions } from './gltf';
+export type { GltfAnimation, GltfAssetBounds, GltfAssetRef, GltfInput, GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
 export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {

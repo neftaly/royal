@@ -31,6 +31,13 @@ import {
   type GltfIndexArray,
 } from "./gltf/accessors";
 import {
+  gltfAnimationNodeTransformsAt,
+  readGltfAnimationClips,
+  selectGltfAnimationClip,
+  type GltfAnimatedNodeTransform,
+  type GltfAnimationClip,
+} from "./gltf/animation";
+import {
   decodeDataUri,
   gltfBufferViewBytes,
   loadGltfBuffers,
@@ -352,15 +359,16 @@ type VirtualTextureRuntimeState = {
 type LoadedGltfPrimitive = {
   readonly colors?: Float32Array;
   readonly indices?: GltfIndexArray;
+  readonly instanceTransforms: readonly Mat4[];
   readonly key: string;
   readonly localBounds: readonly (Bounds3 | undefined)[];
   readonly localModelDeterminants: readonly number[];
-  readonly localModelKeys: readonly string[];
   readonly localModels: readonly Mat4[];
   readonly material: LoadedGltfMaterial;
   readonly materialLod?: GltfMaterialPrimitiveLod;
   readonly materialVariants?: readonly LoadedGltfMaterialVariant[];
   readonly mode: GeometryDrawMode;
+  readonly nodePath: readonly number[];
   readonly nodeLod?: GltfNodePrimitiveLod;
   readonly normals?: Float32Array;
   readonly positions: Float32Array;
@@ -680,11 +688,13 @@ type GltfLodSelectionState = {
 };
 
 type GltfState = {
+  animations: readonly GltfAnimationClip[];
   imageBasedLight?: SurfaceImageBasedLight;
   readonly instanceKey: number;
   readonly key: string;
   error?: string;
   lights: readonly SurfaceLight[];
+  nodes: readonly GltfSceneNode[];
   primitives: readonly LoadedGltfPrimitive[];
   status: "loading" | "ready" | "error";
   variants: readonly string[];
@@ -697,6 +707,7 @@ type GltfPrimitiveDraw = {
   readonly material: SurfaceMaterial;
   readonly modelSignatureInstanceIndex: number;
   readonly modelSignatureStateKey: number;
+  readonly modelSignatureValues?: readonly number[];
   readonly rootModel: Mat4;
   readonly rootTransform: Transform | undefined;
   readonly sidedness: DrawSidedness;
@@ -811,7 +822,34 @@ const mat4FromArrayLike = (matrix: ArrayLike<number>): Mat4 => {
   ];
 };
 
-const mat4ContentKey = (matrix: Mat4): string => matrix.join(",");
+const gltfPrimitiveNodePathModel = (
+  nodes: readonly GltfSceneNode[],
+  nodePath: readonly number[],
+  animationTransforms: ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined,
+): Mat4 => {
+  let model = identityMat4();
+  for (const nodeIndex of nodePath) {
+    model = multiplyMat4(model, gltfNodeMat4(nodes[nodeIndex], animationTransforms?.get(nodeIndex)));
+  }
+
+  return model;
+};
+
+const gltfPrimitiveAnimatedLocalModels = (
+  nodes: readonly GltfSceneNode[],
+  primitive: LoadedGltfPrimitive,
+  animationTransforms: ReadonlyMap<number, GltfAnimatedNodeTransform>,
+): readonly Mat4[] => {
+  const pathModel = gltfPrimitiveNodePathModel(nodes, primitive.nodePath, animationTransforms);
+
+  return primitive.instanceTransforms.map((instanceTransform) => multiplyMat4(pathModel, instanceTransform));
+};
+
+const gltfAnimationSelectionLabel = (selection: GltfNode["animation"]): string => {
+  if (selection === undefined || selection.clip === undefined) return "default clip";
+
+  return typeof selection.clip === "number" ? `clip index ${selection.clip}` : `clip "${selection.clip}"`;
+};
 
 const gltfGeometryContentKey = ({
   colors,
@@ -884,6 +922,11 @@ const appendGltfLocalModelSignature = (
   signature: number[],
   draw: GltfPrimitiveDraw,
 ): void => {
+  if (draw.modelSignatureValues !== undefined) {
+    signature.push(...draw.modelSignatureValues);
+    return;
+  }
+
   signature.push(draw.modelSignatureStateKey, draw.modelSignatureInstanceIndex);
 };
 
@@ -2228,6 +2271,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #ownedTextures = new Set<WebGLTexture>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
+  readonly #unsupportedGltfAnimationDiagnostics = new Set<string>();
   readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
   readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
@@ -2642,6 +2686,23 @@ class WebGlRootImpl implements WebGlRoot {
     });
   }
 
+  #gltfAnimationTransforms(
+    state: GltfState,
+    node: GltfNode,
+  ): ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined {
+    if (node.animation === undefined) return undefined;
+
+    const clip = selectGltfAnimationClip(state.animations, node.animation.clip);
+    if (clip === undefined) {
+      this.#recordUnsupportedGltfAnimation(
+        `glTF ${state.key} ${gltfAnimationSelectionLabel(node.animation)} is unavailable; rendering static pose`,
+      );
+      return undefined;
+    }
+
+    return gltfAnimationNodeTransformsAt(clip, node.animation.timeSeconds);
+  }
+
   #pickGltf(
     node: GltfNode,
     ray: Ray,
@@ -2654,10 +2715,14 @@ class WebGlRootImpl implements WebGlRoot {
     const rootModel = transformMat4(this.#renderObjectTransform(node));
     const state = this.#gltf.get(`gltf:${node.asset.uri}:${node.asset.version ?? ""}`);
     if (state?.status === "ready") {
+      const animationTransforms = this.#gltfAnimationTransforms(state, node);
       let best: PickCandidate | undefined;
       for (const primitive of state.primitives) {
         if (!isPickableDrawMode(primitive.mode)) continue;
-        for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
+        const localModels = animationTransforms === undefined
+          ? primitive.localModels
+          : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
+        for (const [instanceIndex, localModel] of localModels.entries()) {
           const model = multiplyMat4(rootModel, localModel);
           if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
           const hit = this.#pickGeometry({
@@ -2672,7 +2737,7 @@ class WebGlRootImpl implements WebGlRoot {
               ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
               kind: "gltf",
               node,
-              primitiveKey: primitive.localModels.length === 1
+              primitiveKey: localModels.length === 1
                 ? primitive.key
                 : `${primitive.key}:instance:${instanceIndex}`,
             },
@@ -2899,6 +2964,7 @@ class WebGlRootImpl implements WebGlRoot {
     const rootDeterminant = mat4OrientationDeterminant(rootModel);
     const rootViewProjectionModel = multiplyMat4(projection, multiplyMat4(view, rootModel));
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
+    const animationTransforms = this.#gltfAnimationTransforms(state, node);
     const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
       state,
       renderInstanceKey,
@@ -2913,20 +2979,29 @@ class WebGlRootImpl implements WebGlRoot {
       }
 
       const primitiveMaterial = this.#gltfPrimitiveMaterialForVariant(state, node, primitive);
-      for (const [instanceIndex, localModel] of primitive.localModels.entries()) {
-        const localBounds = primitive.localBounds[instanceIndex];
+      const localModels = animationTransforms === undefined
+        ? primitive.localModels
+        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
+      const localModelDeterminants = animationTransforms === undefined
+        ? primitive.localModelDeterminants
+        : localModels.map(mat4OrientationDeterminant);
+      const localBounds = animationTransforms === undefined
+        ? primitive.localBounds
+        : localModels.map((localModel) => worldBounds(primitive.positions, localModel));
+      for (const [instanceIndex, localModel] of localModels.entries()) {
+        const instanceBounds = localBounds[instanceIndex];
         const materialSelection = this.#selectedGltfMaterial(
           state,
           renderInstanceKey,
           primitive,
           primitiveMaterial,
           instanceIndex,
-          localBounds,
+          instanceBounds,
           rootViewProjectionModel,
         );
         const loadedMaterial = materialSelection.material;
         this.#preloadAdjacentGltfMaterialLodTextures(primitiveMaterial.materialLod, materialSelection.level);
-        if (!isBoundsVisible(localBounds, rootViewProjectionModel)) {
+        if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) {
           continue;
         }
         const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
@@ -2940,11 +3015,12 @@ class WebGlRootImpl implements WebGlRoot {
           material: prepared.material,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
+          ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
           rootModel,
           rootTransform,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
-            frontFaceCcw: rootDeterminant * (primitive.localModelDeterminants[instanceIndex] ?? 1) >= 0,
+            frontFaceCcw: rootDeterminant * (localModelDeterminants[instanceIndex] ?? 1) >= 0,
           },
         });
       }
@@ -5388,9 +5464,11 @@ class WebGlRootImpl implements WebGlRoot {
     if (cached !== undefined) return cached;
 
     const state: GltfState = {
+      animations: [],
       instanceKey: this.#gltfStateInstanceKey,
       key,
       lights: [],
+      nodes: [],
       primitives: [],
       status: "loading",
       variants: [],
@@ -5420,7 +5498,9 @@ class WebGlRootImpl implements WebGlRoot {
       } else {
         state.imageBasedLight = scene.imageBasedLight;
       }
+      state.animations = readGltfAnimationClips(decodedDocument, buffers);
       state.lights = scene.lights;
+      state.nodes = decodedDocument.nodes ?? [];
       state.primitives = scene.primitives;
       state.variants = scene.variants;
       state.status = "ready";
@@ -5476,6 +5556,7 @@ class WebGlRootImpl implements WebGlRoot {
         lights,
         nodeIndex,
         identityMat4(),
+        [],
         referencedLodNodes,
         variants.length,
       );
@@ -5496,6 +5577,13 @@ class WebGlRootImpl implements WebGlRoot {
     this.#recordDiagnostic(message);
   }
 
+  #recordUnsupportedGltfAnimation(message: string): void {
+    if (this.#unsupportedGltfAnimationDiagnostics.has(message)) return;
+
+    this.#unsupportedGltfAnimationDiagnostics.add(message);
+    this.#recordDiagnostic(message);
+  }
+
   #appendGltfNodeTreePrimitives(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
@@ -5506,6 +5594,7 @@ class WebGlRootImpl implements WebGlRoot {
     lights: SurfaceLight[],
     nodeIndex: number,
     parentModel: Mat4,
+    parentPath: readonly number[],
     referencedLodNodes: ReadonlySet<number>,
     variantCount: number,
     nodeLod?: GltfNodePrimitiveLod,
@@ -5533,6 +5622,7 @@ class WebGlRootImpl implements WebGlRoot {
         lights,
         nodeIndex,
         parentModel,
+        parentPath,
         referencedLodNodes,
         variantCount,
         {
@@ -5554,6 +5644,7 @@ class WebGlRootImpl implements WebGlRoot {
           lights,
           lodNodeIndex,
           parentModel,
+          parentPath,
           referencedLodNodes,
           variantCount,
           {
@@ -5568,11 +5659,12 @@ class WebGlRootImpl implements WebGlRoot {
       return;
     }
 
+    const nodePath = [...parentPath, nodeIndex];
     const nodeModel = multiplyMat4(parentModel, gltfNodeMat4(sceneNode));
     this.#appendGltfNodeLight(document, lights, sceneNode, nodeIndex, nodeModel);
-    const localModels = this.#gltfNodeInstanceModels(document, buffers, sceneNode, nodeIndex, nodeModel);
+    const instanceTransforms = this.#gltfNodeInstanceTransforms(document, buffers, sceneNode, nodeIndex);
+    const localModels = instanceTransforms.map((instanceTransform) => multiplyMat4(nodeModel, instanceTransform));
     const localModelDeterminants = localModels.map(mat4OrientationDeterminant);
-    const localModelKeys = localModels.map(mat4ContentKey);
     const mesh = sceneNode?.mesh === undefined ? undefined : document.meshes?.[sceneNode.mesh];
     for (const [primitiveIndex, primitive] of (mesh?.primitives ?? []).entries()) {
       const dracoPrimitive = dracoPrimitives.get(primitive);
@@ -5627,15 +5719,16 @@ class WebGlRootImpl implements WebGlRoot {
       primitives.push({
         ...(colors === undefined ? {} : { colors }),
         ...(indices === undefined ? {} : { indices }),
+        instanceTransforms,
         key,
         localBounds: localModels.map((localModel) => worldBounds(positions, localModel)),
         localModelDeterminants,
-        localModelKeys,
         localModels,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
         ...(materialVariants.length === 0 ? {} : { materialVariants }),
         mode,
+        nodePath,
         ...(nodeLod === undefined ? {} : { nodeLod }),
         ...(normals === undefined ? {} : { normals }),
         positions,
@@ -5655,6 +5748,7 @@ class WebGlRootImpl implements WebGlRoot {
         lights,
         childIndex,
         nodeModel,
+        nodePath,
         referencedLodNodes,
         variantCount,
         nodeLod,
@@ -5722,15 +5816,14 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #gltfNodeInstanceModels(
+  #gltfNodeInstanceTransforms(
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
     sceneNode: GltfSceneNode,
     nodeIndex: number,
-    nodeModel: Mat4,
   ): readonly Mat4[] {
     const attributes = sceneNode.extensions?.EXT_mesh_gpu_instancing?.attributes;
-    if (attributes === undefined) return [nodeModel];
+    if (attributes === undefined) return [identityMat4()];
 
     const supportedSemantics = new Set(["ROTATION", "SCALE", "TRANSLATION"]);
     const attributeEntries = Object.entries(attributes)
@@ -5767,7 +5860,7 @@ class WebGlRootImpl implements WebGlRoot {
       : readGltfFloatAccessor(document, buffers, attributes.SCALE);
 
     return Array.from({ length: instanceCount }, (_, index) =>
-      multiplyMat4(nodeModel, gltfInstanceTransformMat4(translations, rotations, scales, index)));
+      gltfInstanceTransformMat4(translations, rotations, scales, index));
   }
 
   #readGltfMaterialVariants(

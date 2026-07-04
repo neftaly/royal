@@ -18,9 +18,15 @@ export interface GltfAssetRef {
   readonly version?: number | string;
 }
 
+export interface GltfAnimation {
+  readonly clip?: number | string;
+  readonly timeSeconds: number;
+}
+
 /** glTF asset node loaded from a source URL. */
 export interface GltfNode {
   readonly kind: 'gltf';
+  readonly animation?: GltfAnimation;
   readonly asset: GltfAssetRef;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
@@ -31,6 +37,7 @@ export interface GltfNode {
 }
 
 export interface GltfSrcOptions {
+  readonly animation?: GltfAnimation;
   readonly bounds?: GltfAssetBounds;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
@@ -58,6 +65,11 @@ const resolveAsset = (options: GltfOptions): GltfAssetRef => ({
   ...(options.version === undefined ? {} : { version: options.version })
 });
 
+const resolveAnimation = (animation: GltfAnimation): GltfAnimation => ({
+  ...(animation.clip === undefined ? {} : { clip: animation.clip }),
+  timeSeconds: animation.timeSeconds
+});
+
 export function gltf(src: string): GltfNode;
 export function gltf(options: GltfSrcOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
@@ -65,6 +77,7 @@ export function gltf(input: GltfInput): GltfNode {
   const asset = resolveAsset(options);
   const node = {
     kind: 'gltf',
+    ...(options.animation === undefined ? {} : { animation: resolveAnimation(options.animation) }),
     asset,
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),

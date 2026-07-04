@@ -1,5 +1,6 @@
 export type GltfDocument = {
   readonly accessors?: readonly GltfAccessor[];
+  readonly animations?: readonly GltfAnimation[];
   readonly bufferViews?: readonly GltfBufferView[];
   readonly buffers?: readonly GltfBuffer[];
   readonly extensions?: {
@@ -46,6 +47,22 @@ export type GltfAccessor = {
     };
   };
   readonly type: "SCALAR" | "VEC2" | "VEC3" | "VEC4";
+};
+
+export type GltfAnimation = {
+  readonly channels?: readonly {
+    readonly sampler?: number;
+    readonly target?: {
+      readonly node?: number;
+      readonly path?: string;
+    };
+  }[];
+  readonly name?: string;
+  readonly samplers?: readonly {
+    readonly input?: number;
+    readonly interpolation?: string;
+    readonly output?: number;
+  }[];
 };
 
 export type GltfBufferView = {

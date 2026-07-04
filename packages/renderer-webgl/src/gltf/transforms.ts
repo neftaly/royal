@@ -5,13 +5,17 @@ import {
   translationMat4,
   type Mat4,
 } from "../math/mat4";
+import type { GltfAnimatedNodeTransform } from "./animation";
 import type {
   GltfDocument,
   GltfSceneNode,
 } from "./schema";
 
-export const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
-  if (node?.matrix !== undefined && node.matrix.length === 16) {
+export const gltfNodeMat4 = (
+  node: GltfSceneNode | undefined,
+  animatedTransform?: GltfAnimatedNodeTransform,
+): Mat4 => {
+  if (animatedTransform === undefined && node?.matrix !== undefined && node.matrix.length === 16) {
     return [
       node.matrix[0]!, node.matrix[1]!, node.matrix[2]!, node.matrix[3]!,
       node.matrix[4]!, node.matrix[5]!, node.matrix[6]!, node.matrix[7]!,
@@ -20,8 +24,9 @@ export const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
     ];
   }
 
-  const translation = node?.translation;
-  const scale = node?.scale;
+  const translation = animatedTransform?.translation ?? node?.translation;
+  const rotation = animatedTransform?.rotation ?? node?.rotation;
+  const scale = animatedTransform?.scale ?? node?.scale;
   return multiplyMat4(
     translationMat4([
       translation?.[0] ?? 0,
@@ -29,7 +34,7 @@ export const gltfNodeMat4 = (node: GltfSceneNode | undefined): Mat4 => {
       translation?.[2] ?? 0,
     ]),
     multiplyMat4(
-      quaternionMat4(node?.rotation),
+      quaternionMat4(rotation),
       scaleMat4([
         scale?.[0] ?? 1,
         scale?.[1] ?? 1,

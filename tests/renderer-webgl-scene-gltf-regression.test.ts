@@ -58,6 +58,7 @@ const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
+const triangleAnimationBinUri = "staged-triangle-animation.bin";
 const triangleEmissiveImageUri = "staged-triangle-emissive.png";
 const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
@@ -78,6 +79,7 @@ const iblSpecularImageUris = [
   "ibl-neg-z.png",
 ] as const;
 const triangleBinByteLength = 104;
+const triangleAnimationBinByteLength = 32;
 const meshoptCompressedPositionByteLength = 56;
 const meshoptCompressedIndexByteLength = 18;
 const meshoptCompressedTriangleBinByteLength = meshoptCompressedPositionByteLength + meshoptCompressedIndexByteLength;
@@ -801,6 +803,17 @@ const triangleBin = (): ArrayBuffer => {
   return buffer;
 };
 
+const triangleAnimationBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(triangleAnimationBinByteLength);
+  new Float32Array(buffer, 0, 2).set([0, 1]);
+  new Float32Array(buffer, 8, 6).set([
+    0, 0, 0,
+    1, 0, 0,
+  ]);
+
+  return buffer;
+};
+
 const vertexColorTriangleBin = (): ArrayBuffer => {
   const bytes = new Uint8Array(triangleBinByteLength + 9);
   bytes.set(new Uint8Array(triangleBin()));
@@ -1495,6 +1508,88 @@ const solidTriangleDocument = () => ({
   samplers: [],
   textures: [],
 });
+
+const animatedParentTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const timeAccessor = base.accessors.length;
+  const translationAccessor = base.accessors.length + 1;
+  const timeBufferView = base.bufferViews.length;
+  const translationBufferView = base.bufferViews.length + 1;
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: timeBufferView,
+        componentType: 5126,
+        count: 2,
+        type: "SCALAR",
+      },
+      {
+        bufferView: translationBufferView,
+        componentType: 5126,
+        count: 2,
+        type: "VEC3",
+      },
+    ],
+    animations: [
+      {
+        channels: [
+          {
+            sampler: 0,
+            target: {
+              node: 0,
+              path: "translation",
+            },
+          },
+        ],
+        name: "slide",
+        samplers: [
+          {
+            input: timeAccessor,
+            interpolation: "LINEAR",
+            output: translationAccessor,
+          },
+        ],
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 1,
+        byteLength: 8,
+        byteOffset: 0,
+      },
+      {
+        buffer: 1,
+        byteLength: 24,
+        byteOffset: 8,
+      },
+    ],
+    buffers: [
+      ...base.buffers,
+      {
+        byteLength: triangleAnimationBinByteLength,
+        uri: triangleAnimationBinUri,
+      },
+    ],
+    nodes: [
+      {
+        children: [1],
+      },
+      {
+        mesh: 0,
+        translation: [0.25, 0, 0],
+      },
+    ],
+    scenes: [
+      {
+        nodes: [0],
+      },
+    ],
+  };
+};
 
 const vertexColorTriangleDocument = () => {
   const base = solidTriangleDocument();
@@ -5499,6 +5594,62 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0, 1, 0, 0,
       0, 0, 1, 0,
       0.5, 0, 0, 1,
+    ]);
+  });
+
+  it("applies controlled glTF node TRS animation only when requested", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const staticGraph = renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "controlled-node-animation" }),
+    ]);
+    const animatedGraph = renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({
+        animation: { clip: "slide", timeSeconds: 0.5 },
+        src: triangleGltfSrc,
+        version: "controlled-node-animation",
+      }),
+    ]);
+
+    root.render(staticGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, animatedParentTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle-animation\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleAnimationBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const callsBeforeStaticRender = calls.length;
+    root.render(staticGraph);
+    const staticFrameCalls = calls.slice(callsBeforeStaticRender);
+    const callsBeforeAnimatedRender = calls.length;
+    root.render(animatedGraph);
+    const animatedFrameCalls = calls.slice(callsBeforeAnimatedRender);
+
+    expect(drawCalls(staticFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
+      .toHaveLength(1);
+    expect(drawCalls(animatedFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
+      .toHaveLength(1);
+    expect(matrixUniformPayloads(staticFrameCalls, "u_model").map(roundVector)).toContainEqual([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.25, 0, 0, 1,
+    ]);
+    expect(matrixUniformPayloads(animatedFrameCalls, "u_model").map(roundVector)).toContainEqual([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0.75, 0, 0, 1,
     ]);
   });
 

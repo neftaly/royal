@@ -176,6 +176,42 @@ describe("renderer-core descriptor contract", () => {
     });
   });
 
+  it("preserves controlled glTF animation clips and time", () => {
+    expect(gltf({
+      animation: {
+        clip: "walk",
+        timeSeconds: 1.25,
+      },
+      src: "/models/avatar.glb",
+    })).toEqual({
+      animation: {
+        clip: "walk",
+        timeSeconds: 1.25,
+      },
+      asset: {
+        uri: "/models/avatar.glb",
+      },
+      kind: "gltf",
+      src: "/models/avatar.glb",
+    });
+
+    expect(gltf({
+      animation: {
+        timeSeconds: 0,
+      },
+      src: "/models/avatar.glb",
+    })).toEqual({
+      animation: {
+        timeSeconds: 0,
+      },
+      asset: {
+        uri: "/models/avatar.glb",
+      },
+      kind: "gltf",
+      src: "/models/avatar.glb",
+    });
+  });
+
   it("preserves directional light descriptor fields", () => {
     expect(directionalLight({
       color: [1, 0.95, 0.84, 1],

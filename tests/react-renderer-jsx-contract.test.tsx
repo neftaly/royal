@@ -187,8 +187,17 @@ describe("renderer JSX contract", () => {
 
   it("lowers model JSX to glTF descriptors", () => {
     expect(
-      <model src="/models/terrain.gltf" variant="winter" version="terrain-v1" />,
+      <model
+        animation={{ clip: "idle", timeSeconds: 2.5 }}
+        src="/models/terrain.gltf"
+        variant="winter"
+        version="terrain-v1"
+      />,
     ).toMatchObject({
+      animation: {
+        clip: "idle",
+        timeSeconds: 2.5,
+      },
       asset: {
         uri: "/models/terrain.gltf",
         version: "terrain-v1",

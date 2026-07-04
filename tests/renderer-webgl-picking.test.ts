@@ -216,6 +216,143 @@ const loadedTriangleGltfFetch = (): ReturnType<typeof vi.fn> => {
   });
 };
 
+const loadedAnimatedTriangleGltfFetch = (): ReturnType<typeof vi.fn> => {
+  const positions = new Float32Array([
+    -0.35, -0.35, 0,
+    0.35, -0.35, 0,
+    0, 0.35, 0,
+  ]);
+  const times = new Float32Array([0, 1]);
+  const translations = new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+  ]);
+  const positionBuffer = positions.buffer.slice(0);
+  const timeBuffer = times.buffer.slice(0);
+  const translationBuffer = translations.buffer.slice(0);
+
+  return vi.fn(async (url: string) => {
+    if (url === "/models/animated.gltf") {
+      return {
+        json: async () => ({
+          accessors: [
+            {
+              bufferView: 0,
+              componentType: 5126,
+              count: 3,
+              type: "VEC3",
+            },
+            {
+              bufferView: 1,
+              componentType: 5126,
+              count: 2,
+              type: "SCALAR",
+            },
+            {
+              bufferView: 2,
+              componentType: 5126,
+              count: 2,
+              type: "VEC3",
+            },
+          ],
+          animations: [
+            {
+              channels: [
+                {
+                  sampler: 0,
+                  target: {
+                    node: 0,
+                    path: "translation",
+                  },
+                },
+              ],
+              name: "slide",
+              samplers: [
+                {
+                  input: 1,
+                  output: 2,
+                },
+              ],
+            },
+          ],
+          bufferViews: [
+            {
+              buffer: 0,
+              byteLength: positionBuffer.byteLength,
+            },
+            {
+              buffer: 1,
+              byteLength: timeBuffer.byteLength,
+            },
+            {
+              buffer: 2,
+              byteLength: translationBuffer.byteLength,
+            },
+          ],
+          buffers: [
+            {
+              uri: "animated-positions.bin",
+            },
+            {
+              uri: "animated-times.bin",
+            },
+            {
+              uri: "animated-translations.bin",
+            },
+          ],
+          meshes: [
+            {
+              primitives: [
+                {
+                  attributes: {
+                    POSITION: 0,
+                  },
+                  mode: 4,
+                },
+              ],
+            },
+          ],
+          nodes: [
+            {
+              mesh: 0,
+            },
+          ],
+          scene: 0,
+          scenes: [
+            {
+              nodes: [0],
+            },
+          ],
+        }),
+        ok: true,
+      };
+    }
+
+    if (url === "/models/animated-positions.bin") {
+      return {
+        arrayBuffer: async () => positionBuffer,
+        ok: true,
+      };
+    }
+
+    if (url === "/models/animated-times.bin") {
+      return {
+        arrayBuffer: async () => timeBuffer,
+        ok: true,
+      };
+    }
+
+    if (url === "/models/animated-translations.bin") {
+      return {
+        arrayBuffer: async () => translationBuffer,
+        ok: true,
+      };
+    }
+
+    throw new Error(`unexpected fetch ${url}`);
+  });
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -279,6 +416,47 @@ describe("WebGL picking", () => {
       });
     });
     expect(root.pick({ clientX: 200, clientY: 10 })).toBeUndefined();
+  });
+
+  it("picks loaded glTF nodes at their controlled animation pose", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    vi.stubGlobal("fetch", loadedAnimatedTriangleGltfFetch());
+    const root = createWebGlRoot(fakeCanvas(fakeGl()));
+    const animatedGltf = gltf({
+      animation: {
+        clip: "slide",
+        timeSeconds: 1,
+      },
+      pickingId: "animated-gltf",
+      src: "/models/animated.gltf",
+    });
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -2,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 2,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [animatedGltf],
+        }),
+      ],
+    }));
+
+    await vi.waitFor(() => {
+      expect(root.pick({ clientX: 300, clientY: 100 })?.target).toMatchObject({
+        id: "animated-gltf",
+        kind: "gltf",
+        node: animatedGltf,
+      });
+    });
+    expect(root.pick({ clientX: 200, clientY: 100 })).toBeUndefined();
   });
 
   it("does not accept a mesh AABB hit unless the ray intersects rendered triangles", () => {
