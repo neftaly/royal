@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';
-import { readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -1722,6 +1722,7 @@ const main = async () => {
     }, null, 2));
 
     if (outputPath !== '') {
+      await mkdir(path.dirname(outputPath), { recursive: true });
       await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
       console.log(`wrote ${outputPath}`);
     }

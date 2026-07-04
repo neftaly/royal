@@ -151,11 +151,13 @@ if (requireObject(report, 'report')) {
   }
 
   if (requireObject(report.analysis, 'report.analysis')) {
-    for (const [name, requiredCounters] of [
+    for (const [rawName, rawRequiredCounters] of [
       ['heaviestGlStateRoutes', requiredSummaryCounters],
       ['heaviestUniformRoutes', ['uniformCallsPerFrame']],
       ['heaviestDrawRoutes', ['drawCallsPerFrame']],
     ]) {
+      const name = String(rawName);
+      const requiredCounters = rawRequiredCounters.map(String);
       const rows = report.analysis[name];
       if (!requireArray(rows, `report.analysis.${name}`)) continue;
       rows.forEach((row, index) => {

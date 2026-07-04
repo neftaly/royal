@@ -9,8 +9,15 @@ import type { ReactNode } from 'react';
 import { ResearchArtifacts } from './ResearchArtifacts';
 import { Shell } from './Shell';
 import { examples, firstExample, type Example } from './examples';
+import {
+  BrowserBenchmarkReporter,
+  installBrowserBenchmarkHooks,
+  isBrowserBenchmarkEnabled,
+} from './examples/BrowserBenchmarkReporter';
 
 const ExampleScreen = ({ example }: { readonly example: Example }): ReactNode => {
+  const benchmarkEnabled = isBrowserBenchmarkEnabled();
+  if (benchmarkEnabled) installBrowserBenchmarkHooks();
   const Demo = example.Component;
 
   return (
@@ -23,6 +30,7 @@ const ExampleScreen = ({ example }: { readonly example: Example }): ReactNode =>
       <header className="example-heading">
         <h1>{example.title}</h1>
       </header>
+      {benchmarkEnabled ? <BrowserBenchmarkReporter example={example} /> : null}
       <div className="example-workbench">
         <section className="demo-panel" aria-label={`${example.title} preview`}>
           <Demo />

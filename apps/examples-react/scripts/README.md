@@ -53,6 +53,24 @@ headset tab records a timeout row instead of hanging the run.
 `EXAMPLES_BENCH_CDP_TIMEOUT_MS` bounds each DevTools command and defaults high
 enough to cover the route-ready and frame-sampling windows.
 
+iPad/Safari or any browser without CDP:
+
+```sh
+pnpm --filter @royal/examples-react dev -- --host 0.0.0.0 --port 4673
+pnpm --filter @royal/examples-react bench:browser:receive
+```
+
+Open this from the device, replacing `<host-lan-ip>` with the laptop IP:
+
+```text
+http://<host-lan-ip>:4673/gltf-instancing?bench=auto&frames=120&warmup=20&post=http://<host-lan-ip>:4683/
+```
+
+The browser reporter runs inside the real example route. It records RAF frame
+stats, WebGL counters, performance resources, device metadata, and renderer
+counters where the example exposes them. Posted reports are written under
+`research/examples-benchmarks/browser-manual/`.
+
 Browser instancing fuzz rows are opt-in with
 `EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural
 instancing invariants and keep browser fuzz rows as replayed perf probes.

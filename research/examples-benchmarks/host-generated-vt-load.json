@@ -1,0 +1,599 @@
+{
+  "generatedAt": "2026-07-04T18:08:49.949Z",
+  "route": {
+    "path": "/gltf-helmet",
+    "url": "http://127.0.0.1:4773/gltf-helmet"
+  },
+  "config": {
+    "fullyLoadedStableMs": 100,
+    "readyTimeoutMs": 12000,
+    "vtFrameSampleEnabled": true,
+    "vtFrameSampleCount": 8,
+    "vtFrameSampleTimeoutMs": 10000,
+    "vtCameraDragEnabled": false,
+    "forceGeneratedVirtualTexturing": true
+  },
+  "metrics": {
+    "firstDrawMs": 2201.1,
+    "firstTextureUploadMs": 1726.2,
+    "firstTexturedFrameMs": 4431.9,
+    "textureUploadToFirstTexturedFrameMs": 2705.7,
+    "firstUsableDrawMs": 4431.9,
+    "fullyLoadedMs": 6137.8,
+    "usableToFullyLoadedMs": 1705.9,
+    "wallNavigationAndFullyLoadedMs": 6164.69,
+    "timedOut": {
+      "firstUsable": false,
+      "fullyLoaded": false
+    },
+    "gl": {
+      "bindTexture": 53,
+      "compressedTexImage2D": 0,
+      "compressedTexSubImage2D": 0,
+      "copyTexImage2D": 0,
+      "copyTexSubImage2D": 0,
+      "createTexture": 9,
+      "deleteTexture": 0,
+      "drawArrays": 0,
+      "drawArraysInstanced": 0,
+      "drawElements": 6,
+      "drawElementsInstanced": 0,
+      "generateMipmap": 5,
+      "texImage2D": 32,
+      "texStorage2D": 0,
+      "texSubImage2D": 133,
+      "textureAllocationCalls": 32,
+      "textureUploadBytesRough": 674414488,
+      "textureUploadCalls": 165,
+      "drawCalls": 6
+    },
+    "textures": {
+      "allocations": 9,
+      "allocationCalls": 32,
+      "bindTexture": 53,
+      "generateMipmap": 5,
+      "uploadBytesRough": 674414488,
+      "uploadCalls": 165,
+      "texImage2D": 32,
+      "texStorage2D": 0,
+      "texSubImage2D": 133
+    },
+    "textureResources": {
+      "imageCount": 5,
+      "imageTransferBytes": 3214724,
+      "imageDecodedBytes": 3213224
+    },
+    "vt": {
+      "manifestResourceCount": 1,
+      "manifestTransferBytes": 0,
+      "pageResourceCount": 0,
+      "pageTransferBytes": 0,
+      "generatedPagePrep": {
+        "generatedManifestUses": 1,
+        "generatedPageFailures": 0,
+        "generatedPageRasterizeMaxMs": 0.3999999761581421,
+        "generatedPageRasterizeMs": 1.0999999642372131,
+        "generatedPageRequests": 5,
+        "generatedPagesTarget": 85
+      },
+      "renderer": {
+        "atlasTextures": 1,
+        "generatedManifestUses": 1,
+        "generatedPageFailures": 0,
+        "generatedPageRasterizeMaxMs": 0.3999999761581421,
+        "generatedPageRasterizeMs": 1.0999999642372131,
+        "generatedPageRequests": 5,
+        "generatedPagesTarget": 85,
+        "manifestFailures": 0,
+        "manifestRequests": 1,
+        "manifestsReady": 1,
+        "pageTableTextures": 1,
+        "pageTableUpdates": 128,
+        "pendingPages": 0,
+        "preparedResidencyResolutions": 5,
+        "requestedPages": 5,
+        "residentPages": 5,
+        "shaderBinds": 1,
+        "unreadyDraws": 0,
+        "unsupportedDraws": 0,
+        "uploadedPageBytes": 1310720,
+        "uploadedPages": 5
+      }
+    },
+    "vtFrameSample": {
+      "cameraDrag": false,
+      "timedOut": false,
+      "requestedFrames": 8,
+      "settledFrame": 1,
+      "frameStats": {
+        "averageMs": 190.08749999850988,
+        "jitterP95MinusP50Ms": 0.7999999523162842,
+        "maxMs": 1419.699999988079,
+        "minMs": 7.300000011920929,
+        "p50Ms": 16.5,
+        "p95Ms": 17.299999952316284,
+        "p99Ms": 17.299999952316284,
+        "sampleCount": 8
+      },
+      "gl": {
+        "bindTexture": 11,
+        "compressedTexImage2D": 0,
+        "compressedTexSubImage2D": 0,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "createTexture": 0,
+        "deleteTexture": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawElements": 1,
+        "drawElementsInstanced": 0,
+        "generateMipmap": 0,
+        "texImage2D": 0,
+        "texStorage2D": 0,
+        "texSubImage2D": 17,
+        "textureAllocationCalls": 0,
+        "textureUploadBytesRough": 262208,
+        "textureUploadCalls": 17,
+        "drawCalls": 1
+      },
+      "virtualTexturing": {
+        "before": {
+          "atlasTextures": 1,
+          "generatedManifestUses": 1,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0.3999999761581421,
+          "generatedPageRasterizeMs": 1.0999999642372131,
+          "generatedPageRequests": 5,
+          "generatedPagesTarget": 85,
+          "manifestFailures": 0,
+          "manifestRequests": 1,
+          "manifestsReady": 1,
+          "pageTableTextures": 1,
+          "pageTableUpdates": 112,
+          "pendingPages": 1,
+          "preparedResidencyResolutions": 4,
+          "requestedPages": 5,
+          "residentPages": 4,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 1048576,
+          "uploadedPages": 4
+        },
+        "after": {
+          "atlasTextures": 1,
+          "generatedManifestUses": 1,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0.3999999761581421,
+          "generatedPageRasterizeMs": 1.0999999642372131,
+          "generatedPageRequests": 5,
+          "generatedPagesTarget": 85,
+          "manifestFailures": 0,
+          "manifestRequests": 1,
+          "manifestsReady": 1,
+          "pageTableTextures": 1,
+          "pageTableUpdates": 128,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 5,
+          "requestedPages": 5,
+          "residentPages": 5,
+          "shaderBinds": 1,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 1310720,
+          "uploadedPages": 5
+        },
+        "delta": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 16,
+          "pendingPages": -1,
+          "preparedResidencyResolutions": 1,
+          "requestedPages": 0,
+          "residentPages": 1,
+          "shaderBinds": 1,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 262144,
+          "uploadedPages": 1
+        },
+        "maxPendingPages": 0,
+        "framesWithPendingPages": 0
+      }
+    },
+    "heap": {
+      "afterFinalGc": {
+        "usedSize": 4494344,
+        "totalSize": 4980736,
+        "embedderHeapUsedSize": 640992,
+        "backingStorageSize": 1934819
+      },
+      "afterFullyLoaded": {
+        "usedSize": 6003564,
+        "totalSize": 11796480,
+        "embedderHeapUsedSize": 1312704,
+        "backingStorageSize": 2414624
+      },
+      "before": {
+        "usedSize": 431160,
+        "totalSize": 786432,
+        "embedderHeapUsedSize": 270264,
+        "backingStorageSize": 3504
+      },
+      "firstUsable": {
+        "usedSize": 6266424,
+        "totalSize": 10747904,
+        "embedderHeapUsedSize": 2222216,
+        "backingStorageSize": 4000140
+      },
+      "firstUsableGrowthBytes": 5835264,
+      "retainedGrowthBytes": 4063184,
+      "transientGrowthBytes": 5572404
+    },
+    "resources": {
+      "byKind": {
+        "app": {
+          "count": 3,
+          "decodedBodySize": 1243791,
+          "duration": 57.19999998807907,
+          "encodedBodySize": 356287,
+          "transferSize": 357187
+        },
+        "gltf": {
+          "count": 1,
+          "decodedBodySize": 4537,
+          "duration": 3.699999988079071,
+          "encodedBodySize": 4537,
+          "transferSize": 4837
+        },
+        "gltfBuffer": {
+          "count": 1,
+          "decodedBodySize": 558504,
+          "duration": 5.5,
+          "encodedBodySize": 558504,
+          "transferSize": 558804
+        },
+        "image": {
+          "count": 5,
+          "decodedBodySize": 3213224,
+          "duration": 85.5,
+          "encodedBodySize": 3213224,
+          "transferSize": 3214724
+        },
+        "vtManifest": {
+          "count": 1,
+          "decodedBodySize": 0,
+          "duration": 2.599999964237213,
+          "encodedBodySize": 0,
+          "transferSize": 0
+        }
+      },
+      "count": 11,
+      "slowest": [
+        {
+          "decodedBodySize": 1220227,
+          "duration": 38.5,
+          "encodedBodySize": 348428,
+          "initiatorType": "script",
+          "name": "http://127.0.0.1:4773/assets/index-DO40EMtb.js",
+          "responseEnd": 46.5,
+          "startTime": 8,
+          "transferSize": 348728
+        },
+        {
+          "decodedBodySize": 1300661,
+          "duration": 22.400000035762787,
+          "encodedBodySize": 1300661,
+          "initiatorType": "img",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/Default_metalRoughness.jpg",
+          "responseEnd": 2117.2000000476837,
+          "startTime": 2094.800000011921,
+          "transferSize": 1300961
+        },
+        {
+          "decodedBodySize": 935629,
+          "duration": 18.399999976158142,
+          "encodedBodySize": 935629,
+          "initiatorType": "img",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/Default_albedo.jpg",
+          "responseEnd": 2113.100000023842,
+          "startTime": 2094.7000000476837,
+          "transferSize": 935929
+        },
+        {
+          "decodedBodySize": 517757,
+          "duration": 17,
+          "encodedBodySize": 517757,
+          "initiatorType": "img",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/Default_normal.jpg",
+          "responseEnd": 2111.900000035763,
+          "startTime": 2094.900000035763,
+          "transferSize": 518057
+        },
+        {
+          "decodedBodySize": 361678,
+          "duration": 15.399999976158142,
+          "encodedBodySize": 361678,
+          "initiatorType": "img",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/Default_AO.jpg",
+          "responseEnd": 2110.300000011921,
+          "startTime": 2094.900000035763,
+          "transferSize": 361978
+        },
+        {
+          "decodedBodySize": 7608,
+          "duration": 14.799999952316284,
+          "encodedBodySize": 2077,
+          "initiatorType": "link",
+          "name": "http://127.0.0.1:4773/assets/index-BByO_UZA.css",
+          "responseEnd": 23,
+          "startTime": 8.200000047683716,
+          "transferSize": 2377
+        },
+        {
+          "decodedBodySize": 97499,
+          "duration": 12.300000011920929,
+          "encodedBodySize": 97499,
+          "initiatorType": "img",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/Default_emissive.jpg",
+          "responseEnd": 2107.100000023842,
+          "startTime": 2094.800000011921,
+          "transferSize": 97799
+        },
+        {
+          "decodedBodySize": 558504,
+          "duration": 5.5,
+          "encodedBodySize": 558504,
+          "initiatorType": "fetch",
+          "name": "http://127.0.0.1:4773/DamagedHelmet/DamagedHelmet.bin",
+          "responseEnd": 2076.400000035763,
+          "startTime": 2070.900000035763,
+          "transferSize": 558804
+        }
+      ],
+      "totalDecodedBodySize": 5020056,
+      "totalDuration": 154.49999994039536,
+      "totalEncodedBodySize": 4132552,
+      "totalTransferSize": 4135552
+    }
+  },
+  "page": {
+    "firstTexturedFrameSample": {
+      "colorBuckets": 72,
+      "height": 96,
+      "paintedPixels": 2288,
+      "paintedRatio": 0.2482638888888889,
+      "width": 96
+    },
+    "firstUsableSample": {
+      "colorBuckets": 72,
+      "height": 96,
+      "paintedPixels": 2288,
+      "paintedRatio": 0.2482638888888889,
+      "width": 96
+    },
+    "fullyLoadedState": {
+      "documentReadyState": "complete",
+      "renderer": {
+        "frame": 8,
+        "gltfInstancing": {
+          "batchInstancesTotal": 6,
+          "batchPlansBuilt": 2,
+          "drawCalls": 0,
+          "instancesDrawn": 0,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 0,
+          "rootPoseUploadCalls": 0,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "virtualTexturing": {
+          "atlasTextures": 1,
+          "generatedManifestUses": 1,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0.3999999761581421,
+          "generatedPageRasterizeMs": 1.0999999642372131,
+          "generatedPageRequests": 5,
+          "generatedPagesTarget": 85,
+          "manifestFailures": 0,
+          "manifestRequests": 1,
+          "manifestsReady": 1,
+          "pageTableTextures": 1,
+          "pageTableUpdates": 128,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 5,
+          "requestedPages": 5,
+          "residentPages": 5,
+          "shaderBinds": 1,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 1310720,
+          "uploadedPages": 5
+        }
+      },
+      "resourceCount": 11,
+      "resources": {
+        "byKind": {
+          "app": {
+            "count": 3,
+            "decodedBodySize": 1243791,
+            "duration": 57.19999998807907,
+            "encodedBodySize": 356287,
+            "transferSize": 357187
+          },
+          "gltf": {
+            "count": 1,
+            "decodedBodySize": 4537,
+            "duration": 3.699999988079071,
+            "encodedBodySize": 4537,
+            "transferSize": 4837
+          },
+          "gltfBuffer": {
+            "count": 1,
+            "decodedBodySize": 558504,
+            "duration": 5.5,
+            "encodedBodySize": 558504,
+            "transferSize": 558804
+          },
+          "image": {
+            "count": 5,
+            "decodedBodySize": 3213224,
+            "duration": 85.5,
+            "encodedBodySize": 3213224,
+            "transferSize": 3214724
+          },
+          "vtManifest": {
+            "count": 1,
+            "decodedBodySize": 0,
+            "duration": 2.599999964237213,
+            "encodedBodySize": 0,
+            "transferSize": 0
+          }
+        },
+        "count": 11,
+        "slowest": [
+          {
+            "decodedBodySize": 1220227,
+            "duration": 38.5,
+            "encodedBodySize": 348428,
+            "initiatorType": "script",
+            "name": "http://127.0.0.1:4773/assets/index-DO40EMtb.js",
+            "responseEnd": 46.5,
+            "startTime": 8,
+            "transferSize": 348728
+          },
+          {
+            "decodedBodySize": 1300661,
+            "duration": 22.400000035762787,
+            "encodedBodySize": 1300661,
+            "initiatorType": "img",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/Default_metalRoughness.jpg",
+            "responseEnd": 2117.2000000476837,
+            "startTime": 2094.800000011921,
+            "transferSize": 1300961
+          },
+          {
+            "decodedBodySize": 935629,
+            "duration": 18.399999976158142,
+            "encodedBodySize": 935629,
+            "initiatorType": "img",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/Default_albedo.jpg",
+            "responseEnd": 2113.100000023842,
+            "startTime": 2094.7000000476837,
+            "transferSize": 935929
+          },
+          {
+            "decodedBodySize": 517757,
+            "duration": 17,
+            "encodedBodySize": 517757,
+            "initiatorType": "img",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/Default_normal.jpg",
+            "responseEnd": 2111.900000035763,
+            "startTime": 2094.900000035763,
+            "transferSize": 518057
+          },
+          {
+            "decodedBodySize": 361678,
+            "duration": 15.399999976158142,
+            "encodedBodySize": 361678,
+            "initiatorType": "img",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/Default_AO.jpg",
+            "responseEnd": 2110.300000011921,
+            "startTime": 2094.900000035763,
+            "transferSize": 361978
+          },
+          {
+            "decodedBodySize": 7608,
+            "duration": 14.799999952316284,
+            "encodedBodySize": 2077,
+            "initiatorType": "link",
+            "name": "http://127.0.0.1:4773/assets/index-BByO_UZA.css",
+            "responseEnd": 23,
+            "startTime": 8.200000047683716,
+            "transferSize": 2377
+          },
+          {
+            "decodedBodySize": 97499,
+            "duration": 12.300000011920929,
+            "encodedBodySize": 97499,
+            "initiatorType": "img",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/Default_emissive.jpg",
+            "responseEnd": 2107.100000023842,
+            "startTime": 2094.800000011921,
+            "transferSize": 97799
+          },
+          {
+            "decodedBodySize": 558504,
+            "duration": 5.5,
+            "encodedBodySize": 558504,
+            "initiatorType": "fetch",
+            "name": "http://127.0.0.1:4773/DamagedHelmet/DamagedHelmet.bin",
+            "responseEnd": 2076.400000035763,
+            "startTime": 2070.900000035763,
+            "transferSize": 558804
+          }
+        ],
+        "totalDecodedBodySize": 5020056,
+        "totalDuration": 154.49999994039536,
+        "totalEncodedBodySize": 4132552,
+        "totalTransferSize": 4135552
+      },
+      "resourceStableForMs": 113,
+      "sample": {
+        "colorBuckets": 67,
+        "height": 96,
+        "paintedPixels": 2288,
+        "paintedRatio": 0.2482638888888889,
+        "width": 96
+      }
+    },
+    "renderer": {
+      "frame": 8,
+      "gltfInstancing": {
+        "batchInstancesTotal": 6,
+        "batchPlansBuilt": 2,
+        "drawCalls": 0,
+        "instancesDrawn": 0,
+        "localModelUploadBytes": 0,
+        "localModelUploadCalls": 0,
+        "rootPoseUploadBytes": 0,
+        "rootPoseUploadCalls": 0,
+        "rootScaleUploadBytes": 0,
+        "rootScaleUploadCalls": 0
+      },
+      "virtualTexturing": {
+        "atlasTextures": 1,
+        "generatedManifestUses": 1,
+        "generatedPageFailures": 0,
+        "generatedPageRasterizeMaxMs": 0.3999999761581421,
+        "generatedPageRasterizeMs": 1.0999999642372131,
+        "generatedPageRequests": 5,
+        "generatedPagesTarget": 85,
+        "manifestFailures": 0,
+        "manifestRequests": 1,
+        "manifestsReady": 1,
+        "pageTableTextures": 1,
+        "pageTableUpdates": 128,
+        "pendingPages": 0,
+        "preparedResidencyResolutions": 5,
+        "requestedPages": 5,
+        "residentPages": 5,
+        "shaderBinds": 1,
+        "unreadyDraws": 0,
+        "unsupportedDraws": 0,
+        "uploadedPageBytes": 1310720,
+        "uploadedPages": 5
+      }
+    }
+  }
+}
