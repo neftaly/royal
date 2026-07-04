@@ -6085,92 +6085,21 @@ class WebGlRootImpl implements WebGlRoot {
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     this.#diagnoseUnsupportedGltfMaterialExtensionTextures(material, materialIndex);
-    const baseColorTextureIndex = material?.pbrMetallicRoughness?.baseColorTexture?.index;
-    const baseColorTexture = baseColorTextureIndex === undefined ? undefined : document.textures?.[baseColorTextureIndex];
-    const baseColorImageSelection = gltfTextureImageSelection(baseColorTexture);
-    const baseColorImageIndex = baseColorImageSelection?.imageIndex;
-    const baseColorImageKind = baseColorImageSelection?.kind ?? "image";
-    const baseColorImage = baseColorImageIndex === undefined ? undefined : document.images?.[baseColorImageIndex];
-    const baseColorImageLoadKey = baseColorImage === undefined
-      ? undefined
-      : gltfImageLoadKey(assetKey, src, baseColorImageIndex, baseColorImage, baseColorImageKind);
-    const sampler = baseColorTexture === undefined
-      ? undefined
-      : gltfTextureSampler(baseColorTexture.sampler === undefined ? undefined : document.samplers?.[baseColorTexture.sampler]);
-    const metallicRoughnessTextureIndex = material?.pbrMetallicRoughness?.metallicRoughnessTexture?.index;
-    const metallicRoughnessTexture = metallicRoughnessTextureIndex === undefined
-      ? undefined
-      : document.textures?.[metallicRoughnessTextureIndex];
-    const metallicRoughnessImageSelection = gltfTextureImageSelection(metallicRoughnessTexture);
-    const metallicRoughnessImageIndex = metallicRoughnessImageSelection?.imageIndex;
-    const metallicRoughnessImageKind = metallicRoughnessImageSelection?.kind ?? "image";
-    const metallicRoughnessImage = metallicRoughnessImageIndex === undefined
-      ? undefined
-      : document.images?.[metallicRoughnessImageIndex];
-    const metallicRoughnessImageLoadKey = metallicRoughnessImage === undefined
-      ? undefined
-      : gltfImageLoadKey(
-        assetKey,
-        src,
-        metallicRoughnessImageIndex,
-        metallicRoughnessImage,
-        metallicRoughnessImageKind,
-      );
-    const metallicRoughnessSampler = metallicRoughnessTexture === undefined
-      ? undefined
-      : gltfTextureSampler(
-        metallicRoughnessTexture.sampler === undefined
-          ? undefined
-          : document.samplers?.[metallicRoughnessTexture.sampler],
-      );
-    const normalTextureIndex = material?.normalTexture?.index;
-    const normalTexture = normalTextureIndex === undefined ? undefined : document.textures?.[normalTextureIndex];
-    const normalImageSelection = gltfTextureImageSelection(normalTexture);
-    const normalImageIndex = normalImageSelection?.imageIndex;
-    const normalImageKind = normalImageSelection?.kind ?? "image";
-    const normalImage = normalImageIndex === undefined ? undefined : document.images?.[normalImageIndex];
-    const normalImageLoadKey = normalImage === undefined
-      ? undefined
-      : gltfImageLoadKey(assetKey, src, normalImageIndex, normalImage, normalImageKind);
-    const normalSampler = normalTexture === undefined
-      ? undefined
-      : gltfTextureSampler(
-        normalTexture.sampler === undefined
-          ? undefined
-          : document.samplers?.[normalTexture.sampler],
-      );
-    const emissiveTextureIndex = material?.emissiveTexture?.index;
-    const emissiveTexture = emissiveTextureIndex === undefined ? undefined : document.textures?.[emissiveTextureIndex];
-    const emissiveImageSelection = gltfTextureImageSelection(emissiveTexture);
-    const emissiveImageIndex = emissiveImageSelection?.imageIndex;
-    const emissiveImageKind = emissiveImageSelection?.kind ?? "image";
-    const emissiveImage = emissiveImageIndex === undefined ? undefined : document.images?.[emissiveImageIndex];
-    const emissiveImageLoadKey = emissiveImage === undefined
-      ? undefined
-      : gltfImageLoadKey(assetKey, src, emissiveImageIndex, emissiveImage, emissiveImageKind);
-    const emissiveSampler = emissiveTexture === undefined
-      ? undefined
-      : gltfTextureSampler(
-        emissiveTexture.sampler === undefined
-          ? undefined
-          : document.samplers?.[emissiveTexture.sampler],
-      );
-    const occlusionTextureIndex = material?.occlusionTexture?.index;
-    const occlusionTexture = occlusionTextureIndex === undefined ? undefined : document.textures?.[occlusionTextureIndex];
-    const occlusionImageSelection = gltfTextureImageSelection(occlusionTexture);
-    const occlusionImageIndex = occlusionImageSelection?.imageIndex;
-    const occlusionImageKind = occlusionImageSelection?.kind ?? "image";
-    const occlusionImage = occlusionImageIndex === undefined ? undefined : document.images?.[occlusionImageIndex];
-    const occlusionImageLoadKey = occlusionImage === undefined
-      ? undefined
-      : gltfImageLoadKey(assetKey, src, occlusionImageIndex, occlusionImage, occlusionImageKind);
-    const occlusionSampler = occlusionTexture === undefined
-      ? undefined
-      : gltfTextureSampler(
-        occlusionTexture.sampler === undefined
-          ? undefined
-          : document.samplers?.[occlusionTexture.sampler],
-      );
+    const baseColorTextureSlot = gltfMaterialTextureSlot(
+      document,
+      assetKey,
+      src,
+      material?.pbrMetallicRoughness?.baseColorTexture,
+    );
+    const metallicRoughnessTextureSlot = gltfMaterialTextureSlot(
+      document,
+      assetKey,
+      src,
+      material?.pbrMetallicRoughness?.metallicRoughnessTexture,
+    );
+    const normalTextureSlot = gltfMaterialTextureSlot(document, assetKey, src, material?.normalTexture);
+    const emissiveTextureSlot = gltfMaterialTextureSlot(document, assetKey, src, material?.emissiveTexture);
+    const occlusionTextureSlot = gltfMaterialTextureSlot(document, assetKey, src, material?.occlusionTexture);
     const color = gltfColor(material?.pbrMetallicRoughness?.baseColorFactor);
     const emissive = gltfEmissiveColor(material);
     const extensionFactors = readGltfMaterialExtensionFactors(material);
@@ -6198,73 +6127,26 @@ class WebGlRootImpl implements WebGlRoot {
     return {
       alphaMode,
       ...(alphaMode === "MASK" ? { alphaCutoff } : {}),
-      ...(baseColorImageLoadKey === undefined ? {} : { baseColorImageUri: baseColorImageLoadKey }),
-      ...(baseColorTextureIndex === undefined || baseColorImage === undefined
+      ...(baseColorTextureSlot?.imageUri === undefined ? {} : { baseColorImageUri: baseColorTextureSlot.imageUri }),
+      ...(baseColorTextureSlot?.textureUri === undefined
         ? {}
-        : {
-          baseColorTextureUri: gltfTextureIdentity(
-            assetKey,
-            src,
-            baseColorTextureIndex,
-            baseColorImageIndex,
-            baseColorImage,
-            baseColorImageKind,
-          ),
-        }),
-      ...(metallicRoughnessImageLoadKey === undefined
+        : { baseColorTextureUri: baseColorTextureSlot.textureUri }),
+      ...(metallicRoughnessTextureSlot?.imageUri === undefined
         ? {}
-        : { metallicRoughnessImageUri: metallicRoughnessImageLoadKey }),
-      ...(metallicRoughnessTextureIndex === undefined || metallicRoughnessImage === undefined
+        : { metallicRoughnessImageUri: metallicRoughnessTextureSlot.imageUri }),
+      ...(metallicRoughnessTextureSlot?.textureUri === undefined
         ? {}
-        : {
-          metallicRoughnessTextureUri: gltfTextureIdentity(
-            assetKey,
-            src,
-            metallicRoughnessTextureIndex,
-            metallicRoughnessImageIndex,
-            metallicRoughnessImage,
-            metallicRoughnessImageKind,
-          ),
-        }),
-      ...(normalImageLoadKey === undefined ? {} : { normalImageUri: normalImageLoadKey }),
-      ...(normalTextureIndex === undefined || normalImage === undefined
+        : { metallicRoughnessTextureUri: metallicRoughnessTextureSlot.textureUri }),
+      ...(normalTextureSlot?.imageUri === undefined ? {} : { normalImageUri: normalTextureSlot.imageUri }),
+      ...(normalTextureSlot?.textureUri === undefined ? {} : { normalTextureUri: normalTextureSlot.textureUri }),
+      ...(emissiveTextureSlot?.imageUri === undefined ? {} : { emissiveImageUri: emissiveTextureSlot.imageUri }),
+      ...(emissiveTextureSlot?.textureUri === undefined
         ? {}
-        : {
-          normalTextureUri: gltfTextureIdentity(
-            assetKey,
-            src,
-            normalTextureIndex,
-            normalImageIndex,
-            normalImage,
-            normalImageKind,
-          ),
-        }),
-      ...(emissiveImageLoadKey === undefined ? {} : { emissiveImageUri: emissiveImageLoadKey }),
-      ...(emissiveTextureIndex === undefined || emissiveImage === undefined
+        : { emissiveTextureUri: emissiveTextureSlot.textureUri }),
+      ...(occlusionTextureSlot?.imageUri === undefined ? {} : { occlusionImageUri: occlusionTextureSlot.imageUri }),
+      ...(occlusionTextureSlot?.textureUri === undefined
         ? {}
-        : {
-          emissiveTextureUri: gltfTextureIdentity(
-            assetKey,
-            src,
-            emissiveTextureIndex,
-            emissiveImageIndex,
-            emissiveImage,
-            emissiveImageKind,
-          ),
-        }),
-      ...(occlusionImageLoadKey === undefined ? {} : { occlusionImageUri: occlusionImageLoadKey }),
-      ...(occlusionTextureIndex === undefined || occlusionImage === undefined
-        ? {}
-        : {
-          occlusionTextureUri: gltfTextureIdentity(
-            assetKey,
-            src,
-            occlusionTextureIndex,
-            occlusionImageIndex,
-            occlusionImage,
-            occlusionImageKind,
-          ),
-        }),
+        : { occlusionTextureUri: occlusionTextureSlot.textureUri }),
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
       ...(emissiveTexCoords === undefined ? {} : { emissiveTexCoords }),
@@ -6275,11 +6157,13 @@ class WebGlRootImpl implements WebGlRoot {
       normalScale: material?.normalTexture?.scale ?? 1,
       occlusionStrength,
       roughnessFactor,
-      ...(emissiveSampler === undefined ? {} : { emissiveSampler }),
-      ...(metallicRoughnessSampler === undefined ? {} : { metallicRoughnessSampler }),
-      ...(normalSampler === undefined ? {} : { normalSampler }),
-      ...(occlusionSampler === undefined ? {} : { occlusionSampler }),
-      ...(sampler === undefined ? {} : { sampler }),
+      ...(emissiveTextureSlot?.sampler === undefined ? {} : { emissiveSampler: emissiveTextureSlot.sampler }),
+      ...(metallicRoughnessTextureSlot?.sampler === undefined
+        ? {}
+        : { metallicRoughnessSampler: metallicRoughnessTextureSlot.sampler }),
+      ...(normalTextureSlot?.sampler === undefined ? {} : { normalSampler: normalTextureSlot.sampler }),
+      ...(occlusionTextureSlot?.sampler === undefined ? {} : { occlusionSampler: occlusionTextureSlot.sampler }),
+      ...(baseColorTextureSlot?.sampler === undefined ? {} : { sampler: baseColorTextureSlot.sampler }),
       ...(texCoords === undefined ? {} : { texCoords }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
     };
