@@ -607,6 +607,17 @@ const vtManifest = (physicalSlots = 2) => ({
   virtualSize: [12, 4],
 });
 
+const vtSinglePageManifest = () => ({
+  pageSize: 4,
+  pages: {
+    entries: {
+      "m0/0/0": "pages/0-0.png",
+    },
+  },
+  physicalSlots: 1,
+  virtualSize: [4, 4],
+});
+
 const vtParentFallbackManifest = (physicalSlots = 3) => ({
   mipCount: 2,
   pageSize: 4,
@@ -766,7 +777,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const material = unlitMaterial({ texture: imageTexture("/textures/albedo.png") });
 
     root.render(renderScene(material));
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
 
     expect(imageBySrc("/textures/pages/0-0.png")).toBeDefined();
@@ -791,6 +802,49 @@ describe("WebGL renderer virtual texturing integration", () => {
     }));
     expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBeGreaterThan(1);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeDraw);
+  });
+
+  it("keeps auto sidecar VT on ordinary fallback until demanded coverage is resident", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/albedo.png") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtManifest(3)));
+    await flushMicrotasks();
+
+    imageBySrc("/textures/albedo.png")!.settleLoad();
+    imageBySrc("/textures/pages/0-0.png")!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(renderScene(material));
+
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      shaderBinds: 0,
+      uploadedPages: 1,
+    }));
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_texture: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([1]),
+    }));
+
+    imageBySrc("/textures/pages/1-0.png")!.settleLoad();
+    imageBySrc("/textures/pages/2-0.png")!.settleLoad();
+    await flushMicrotasks();
+
+    const shaderBindsBeforeCoveredDraw = root.snapshot().virtualTexturing.shaderBinds;
+    root.render(renderScene(material));
+
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      uploadedPages: 3,
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeCoveredDraw);
+    expect(uniformNames(calls)).toEqual(expect.arrayContaining([
+      "u_vtAtlas",
+      "u_vtPageTable",
+    ]));
   });
 
   it("falls back to ordinary image base color after a missing auto VT sidecar without refetching", async () => {
@@ -965,7 +1019,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       u_useVirtualTexture: expect.arrayContaining([0]),
     }));
 
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
     expect(imageBySrc("/textures/pages/0-0.png")).toBeDefined();
     imageBySrc("/textures/pages/0-0.png")!.settleLoad();

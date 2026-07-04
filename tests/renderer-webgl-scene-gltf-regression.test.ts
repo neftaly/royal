@@ -344,6 +344,7 @@ const fakeGl = (): FakeGl => {
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
+    texSubImage2D: record("texSubImage2D"),
     uniform1i: record("uniform1i"),
     uniform3f: record("uniform3f"),
     uniform3fv: record("uniform3fv"),
@@ -6606,6 +6607,62 @@ describe("WebGL renderer scene and glTF regressions", () => {
         "https://example.test/fixtures/staged-triangle.svg.vt.json",
       ]);
     expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
+  });
+
+  it("sizes generated GS_texture_svg VT residency for the source mip pyramid", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const tigerSizedSvgTexture = [
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">",
+      "<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"#c7b084\"/>",
+      "<path d=\"M128 128h768v768H128z\" fill=\"#f60\"/>",
+      "</svg>",
+    ].join("");
+
+    root.render(renderScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      gltf({ src: triangleGltfSrc, version: "svg-generated-vt-budget" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        ...triangleDocument(),
+        extensionsUsed: ["GS_texture_svg"],
+        images: [
+          { mimeType: "image/png", uri: triangleImageUri },
+          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
+        ],
+        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
+      }))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
+      responseWithText(url, tigerSizedSvgTexture, "image/svg+xml"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    for (const image of ControlledImage.instances) image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(loader.rejectPendingFetch(/staged-triangle\.svg\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(
+      calls.some((call) =>
+        call.name === "texImage2D"
+        && call.args[0] === gl.TEXTURE_2D
+        && call.args[3] === 1280
+        && call.args[4] === 1280),
+      "a 1024px generated SVG should fit its 16 + 4 + 1 page pyramid in a 5x5 atlas",
+    ).toBe(true);
   });
 
   it("preserves URI SVG asset base while normalizing viewBox-only SVG textures", async () => {

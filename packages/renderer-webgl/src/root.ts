@@ -906,7 +906,7 @@ const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
-const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOTS = 4;
+const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
 const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
 const VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME = 2;
 const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
@@ -1860,15 +1860,35 @@ const generatedSvgVirtualTextureManifest = (
   const width = Math.max(1, Math.ceil(source.width));
   const height = Math.max(1, Math.ceil(source.height));
   const pageSize = Math.min(GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
+  const physicalSlots = Math.min(
+    GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+    generatedSvgVirtualTexturePageCount(width, height, pageSize),
+  );
 
   return {
     colorSpace: "srgb",
     height,
     pageSize,
     pages: [],
-    physicalSlots: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOTS,
+    physicalSlots,
     width,
   };
+};
+
+const generatedSvgVirtualTexturePageCount = (
+  width: number,
+  height: number,
+  pageSize: number,
+): number => {
+  let pages = 0;
+  let mipWidth = Math.ceil(width / pageSize);
+  let mipHeight = Math.ceil(height / pageSize);
+  while (true) {
+    pages += Math.max(1, mipWidth) * Math.max(1, mipHeight);
+    if (mipWidth <= 1 && mipHeight <= 1) return pages;
+    mipWidth = Math.ceil(mipWidth / 2);
+    mipHeight = Math.ceil(mipHeight / 2);
+  }
 };
 
 const generatedSvgVirtualTexturePageText = (
@@ -5024,7 +5044,7 @@ class WebGlRootImpl implements WebGlRoot {
     state.stats.preparedResidencyResolutions += 1;
     if (state.status === "ready") this.#demandVirtualTexturePages(state, demandContext);
 
-    return this.#isVirtualTextureDrawable(state)
+    return this.#isAutoVirtualTextureCoverageReady(state, demandContext)
       ? { kind: "prepared-virtual", ordinaryFallback: texture, state }
       : ordinary;
   }
@@ -5717,6 +5737,11 @@ class WebGlRootImpl implements WebGlRoot {
     const assignment = pageTable.ensureResident(page, {
       protectedPages: this.#protectedVirtualTextureParentPages(manifest, page),
     });
+    if (assignment.evicted !== undefined) {
+      state.uploadedPages.delete(assignment.evicted.pageKey);
+      state.requestedPages.delete(assignment.evicted.pageKey);
+      state.loadingPages.delete(assignment.evicted.pageKey);
+    }
     const slotX = assignment.slot % resources.atlasGridColumns;
     const slotY = Math.floor(assignment.slot / resources.atlasGridColumns);
     const gl = this.#gl;
@@ -5821,6 +5846,18 @@ class WebGlRootImpl implements WebGlRoot {
       && state.resources !== undefined
       && state.pageTable !== undefined
       && state.uploadedPages.size > 0;
+  }
+
+  #isAutoVirtualTextureCoverageReady(
+    state: VirtualTextureRuntimeState,
+    context: VirtualTextureDrawDemandContext | undefined,
+  ): boolean {
+    if (!this.#isVirtualTextureDrawable(state)) return false;
+    if (context === undefined) return true;
+
+    const candidates = this.#virtualTextureDemandCandidates(state, context);
+    return candidates.length > 0
+      && candidates.every((page) => state.uploadedPages.has(virtualTexturePageKey(page)));
   }
 
   #bindVirtualTexture(
