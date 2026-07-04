@@ -1269,10 +1269,10 @@ const svgHeightPattern = /\bheight\s*=\s*(["'])(.*?)\1/iu;
 const svgXmlBasePattern = /\bxml:base\s*=\s*(["'])(.*?)\1/iu;
 const svgImageElementPattern = /<image\b[^>]*>/giu;
 const svgHrefAttributePattern = /\b((?:xlink:)?href)\s*=\s*(["'])(.*?)\2/giu;
-const svgAttributePattern = /\b([A-Za-z_:][\w:.-]*)\s*=\s*(["'])(.*?)\2/giu;
 const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)\s*(?:px|pt|pc|mm|cm|in)?\s*$/iu;
 const svgExternalReferenceMaxDepth = 8;
 const svgTextDecoder = new TextDecoder();
+const svgTextEncoder = new TextEncoder();
 
 type SvgTextureViewport = {
   readonly fromViewBox: boolean;
@@ -1286,15 +1286,10 @@ type SvgImageReferenceContext = {
   readonly depth: number;
 };
 
-type SvgImageReferenceValue =
-  | {
-    readonly kind: "data-uri";
-    readonly value: string;
-  }
-  | {
-    readonly kind: "svg";
-    readonly text: string;
-  };
+type SvgImageReferenceValue = {
+  readonly kind: "data-uri";
+  readonly value: string;
+};
 
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
@@ -1478,16 +1473,23 @@ const fetchSvgImageReferenceValue = (
       const responseUrl = absoluteSvgBaseUrl(response.url || url, baseUrl);
       const mimeType = imageMimeTypeForUrl(responseUrl, response);
       if (mimeType === "image/svg+xml") {
-        return {
-          kind: "svg",
-          text: await prepareSvgTextForImage(await response.text(), `SVG image reference ${responseUrl}`, responseUrl, {
+        const preparedText = await prepareSvgTextForImage(
+          await response.text(),
+          `SVG image reference ${responseUrl}`,
+          responseUrl,
+          {
             context: {
               active: context.active,
               cache: context.cache,
               depth: context.depth + 1,
             },
             requireViewport: false,
-          }),
+          },
+        );
+
+        return {
+          kind: "data-uri",
+          value: bytesDataUri(svgTextEncoder.encode(preparedText), "image/svg+xml"),
         };
       }
 
@@ -1501,30 +1503,6 @@ const fetchSvgImageReferenceValue = (
   })();
   context.cache.set(url, request);
   return request;
-};
-
-const svgImageAttributes = (imageTag: string): readonly (readonly [name: string, value: string])[] => {
-  const attributes: Array<readonly [string, string]> = [];
-  for (const match of imageTag.matchAll(svgAttributePattern)) {
-    const name = match[1] ?? "";
-    if (/^(?:xlink:)?href$/iu.test(name)) continue;
-    attributes.push([name, match[3] ?? ""]);
-  }
-  return attributes;
-};
-
-const inlineNestedSvgImageElement = (imageTag: string, value: SvgImageReferenceValue): string | undefined => {
-  if (value.kind !== "svg") return undefined;
-
-  const svgRoot = svgRootPattern.exec(value.text);
-  if (svgRoot === null) throw new Error("Nested SVG image reference has no root <svg> element");
-
-  let attributes = svgRoot[1] ?? "";
-  for (const [name, attributeValue] of svgImageAttributes(imageTag)) {
-    attributes = setSvgAttribute(attributes, name, attributeValue);
-  }
-
-  return `<svg${attributes}>${value.text.slice(svgRoot.index + svgRoot[0].length)}`;
 };
 
 const svgHrefValueForImageTag = (
@@ -1567,12 +1545,9 @@ const inlineSvgImageReferences = async (
     const value = svgHrefValueForImageTag(imageTag, resolved);
     if (value === undefined) return imageTag;
 
-    const nestedSvg = inlineNestedSvgImageElement(imageTag, value);
-    if (nestedSvg !== undefined) return nestedSvg;
-
     return imageTag.replace(svgHrefAttributePattern, (attribute, name: string, quote: string, href: string) => {
       const replacement = resolved.get(href);
-      return replacement?.kind === "data-uri" ? `${name}=${quote}${replacement.value}${quote}` : attribute;
+      return replacement === undefined ? attribute : `${name}=${quote}${replacement.value}${quote}`;
     });
   });
 };

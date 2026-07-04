@@ -6004,7 +6004,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(normalizedSvg).toContain("xml:base=\"https://example.test/fixtures/staged-triangle.svg\"");
     expect(normalizedSvg).toContain("x=\"10\"");
     expect(normalizedSvg).toContain("width=\"190\"");
-    expect(normalizedSvg).toContain("d=\"M1 1h8v8H1z\"");
+    expect(normalizedSvg).toContain("preserveAspectRatio=\"xMidYMid meet\"");
+    expect(normalizedSvg).toContain("href=\"data:image/svg+xml;base64,");
+    expect(normalizedSvg).not.toContain("d=\"M1 1h8v8H1z\"");
     expect(normalizedSvg).not.toContain("href=\"ghostscript-tiger.svg\"");
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
