@@ -33,8 +33,31 @@ const samplerDeclarations = {
 const samplerDeclarationCount = (source: string): number =>
   source.match(/uniform sampler(?:2D|Cube) /gu)?.length ?? 0;
 
+const virtualBaseColorFeaturePair = [
+  "baseColorVirtualTextureAtlas",
+  "baseColorVirtualTexturePageTable",
+] as const satisfies readonly SurfaceShaderTextureFeature[];
+
+const virtualBaseColorSourceInvariants = [
+  "uniform bool u_useVirtualTexture;",
+  "uniform vec2 u_vtAtlasGrid;",
+  "uniform vec2 u_vtPageTableSize;",
+  "uniform int u_vtWrapS;",
+  "uniform int u_vtWrapT;",
+  "wrapVirtualTextureUv",
+  "sampleVirtualBaseColor",
+  "tableEntry.g",
+  "fallbackMipOffset",
+  "residentPageTableSize",
+  "tableEntry.a is reserved",
+  "u_useVirtualTexture ? sampleVirtualBaseColor(v_uv)",
+] as const;
+
 const randomFeatureSet = (random: SeededRandom): ReadonlySet<SurfaceShaderTextureFeature> =>
   new Set(SURFACE_SHADER_TEXTURE_FEATURES.filter(() => random.boolean()));
+
+const hasVirtualBaseColorSource = (features: ReadonlySet<SurfaceShaderTextureFeature>): boolean =>
+  virtualBaseColorFeaturePair.every((feature) => features.has(feature));
 
 describe("surface shader variants", () => {
   it("generates sampler declarations only for enabled texture features", () => {
@@ -42,6 +65,10 @@ describe("surface shader variants", () => {
       cases: 32,
       replays: [
         { label: "empty", value: [] },
+        { label: "base-color-texture", value: ["baseColorTexture"] },
+        { label: "virtual-atlas-only", value: ["baseColorVirtualTextureAtlas"] },
+        { label: "virtual-page-table-only", value: ["baseColorVirtualTexturePageTable"] },
+        { label: "virtual-base-color", value: virtualBaseColorFeaturePair },
         { label: "full", value: SURFACE_SHADER_TEXTURE_FEATURES },
       ],
       seed: 0x5a9a_fade,
@@ -53,12 +80,17 @@ describe("surface shader variants", () => {
       const expectedKey = SURFACE_SHADER_TEXTURE_FEATURES
         .filter((feature) => features.has(feature))
         .join(",");
+      const hasVirtualBaseColor = hasVirtualBaseColorSource(features);
 
       expect(surfaceShaderFeatureKey(features), label).toBe(expectedKey);
       expect(source, label).not.toMatch(/__[A-Z0-9_]+__/u);
+      expect(source, `${label} surface lighting path`).toContain("materialDiffuseColor(baseColor.rgb)");
       expect(samplerDeclarationCount(source), label).toBe(features.size);
       for (const feature of SURFACE_SHADER_TEXTURE_FEATURES) {
         expect(source.includes(samplerDeclarations[feature]), `${label} ${feature}`).toBe(features.has(feature));
+      }
+      for (const invariant of virtualBaseColorSourceInvariants) {
+        expect(source.includes(invariant), `${label} ${invariant}`).toBe(hasVirtualBaseColor);
       }
     });
   });

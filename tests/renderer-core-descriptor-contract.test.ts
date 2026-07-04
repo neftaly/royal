@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
+  defaultImageTextureSampler,
   directionalLight,
   gltf,
   imageTexture,
@@ -121,6 +122,7 @@ describe("renderer-core descriptor contract", () => {
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
     const options = {
+      contentKey: "sha256:terrain",
       debugName: "contract terrain",
       manifestUri: "/textures/terrain.vt.json",
     } satisfies VirtualTextureAssetOptions;
@@ -129,6 +131,7 @@ describe("renderer-core descriptor contract", () => {
     expect(standardMaterial({ texture }).baseColor).toBe(texture);
     expect(unlitMaterial({ texture }).baseColor).toBe(texture);
     expect(texture).toEqual({
+      contentKey: "sha256:terrain",
       debugName: "contract terrain",
       kind: "virtual-asset",
       manifestUri: "/textures/terrain.vt.json",
@@ -172,6 +175,37 @@ describe("renderer-core descriptor contract", () => {
     })).toMatchObject({
       metallicFactor: 1,
       roughnessFactor: 0,
+    });
+  });
+
+  it("preserves explicit texture content keys for renderer-level sharing", () => {
+    expect(imageTexture({
+      contentKey: "sha256:albedo",
+      src: "/textures/albedo-a.png",
+    })).toEqual({
+      colorSpace: "srgb",
+      contentKey: "sha256:albedo",
+      kind: "asset",
+      sampler: defaultImageTextureSampler,
+      uri: "/textures/albedo-a.png",
+    });
+
+    expect(virtualTexture({
+      contentKey: "sha256:albedo-vt",
+      src: "/textures/albedo-a.vt.json",
+    })).toEqual({
+      contentKey: "sha256:albedo-vt",
+      kind: "virtual-asset",
+      manifestUri: "/textures/albedo-a.vt.json",
+    });
+
+    expect(textureAsset({
+      contentKey: "sha256:mask",
+      uri: "/textures/mask-a.ktx2",
+    })).toEqual({
+      contentKey: "sha256:mask",
+      kind: "asset",
+      uri: "/textures/mask-a.ktx2",
     });
   });
 

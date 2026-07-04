@@ -89,37 +89,64 @@ export const DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS: SurfaceMaterialExtensio
 
 const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
 
+type TextureCacheScalar = number | string;
+
+const textureCacheScalarKey = (value: TextureCacheScalar | undefined): readonly [string, TextureCacheScalar] | null =>
+  value === undefined ? null : [typeof value, value];
+
+const textureCacheTupleKey = (parts: readonly unknown[]): string =>
+  JSON.stringify(parts);
+
+const textureSourceCacheKey = (texture: TextureRef): readonly unknown[] => {
+  if ("contentKey" in texture && texture.contentKey !== undefined) {
+    return ["content", textureCacheScalarKey(texture.contentKey)];
+  }
+  switch (texture.kind) {
+    case "asset":
+      return ["uri", texture.uri];
+    case "virtual-asset":
+      return ["manifest", texture.manifestUri];
+    case "solid":
+      return ["solid", texture.color];
+  }
+};
+
 export const textureCacheKey = (texture: TextureRef): string => {
   if (texture.kind === "solid") {
-    return `solid:${texture.color.join(",")}:${texture.colorSpace ?? ""}:${texture.version ?? ""}`;
+    return textureCacheTupleKey([
+      "solid",
+      texture.color,
+      texture.colorSpace ?? null,
+      textureCacheScalarKey(texture.version),
+    ]);
   }
   if (texture.kind === "asset") {
     const sampler = texture.sampler;
     const upload = texture as TextureAssetUploadRef;
-    return [
+    return textureCacheTupleKey([
       "asset",
-      texture.uri,
-      texture.version ?? "",
-      texture.colorSpace ?? "",
-      sampler?.magFilter ?? "",
-      sampler?.minFilter ?? "",
-      sampler?.wrapS ?? "",
-      sampler?.wrapT ?? "",
-      upload.flipY === false ? "flipY:false" : "",
-    ].join(":");
+      textureSourceCacheKey(texture),
+      textureCacheScalarKey(texture.version),
+      texture.colorSpace ?? null,
+      sampler?.magFilter ?? null,
+      sampler?.minFilter ?? null,
+      sampler?.wrapS ?? null,
+      sampler?.wrapT ?? null,
+      upload.flipY === false ? false : true,
+    ]);
   }
 
   const sampler = texture.sampler;
-  return [
+  return textureCacheTupleKey([
     "virtual",
-    texture.manifestUri,
-    texture.version ?? "",
-    texture.colorSpace ?? "",
-    sampler?.magFilter ?? "",
-    sampler?.minFilter ?? "",
-    sampler?.wrapS ?? "",
-    sampler?.wrapT ?? "",
-  ].join(":");
+    textureSourceCacheKey(texture),
+    textureCacheScalarKey(texture.version),
+    texture.colorSpace ?? null,
+    sampler?.magFilter ?? null,
+    sampler?.minFilter ?? null,
+    sampler?.wrapS ?? null,
+    sampler?.wrapT ?? null,
+  ]);
 };
 
 export const materialEmissiveColor = (material: Material): Rgba =>

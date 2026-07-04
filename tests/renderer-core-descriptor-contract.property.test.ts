@@ -90,6 +90,7 @@ describe("renderer-core descriptor properties", () => {
         wrapS: random.boolean() ? "repeat" as const : "mirrored-repeat" as const,
       };
       const texture = imageTexture({
+        contentKey: `sha256:${seed.toString(16)}`,
         sampler,
         src: `/textures/${seed.toString(16)}.png`,
         version: `v${random.int(1, 1000)}`,
@@ -97,8 +98,25 @@ describe("renderer-core descriptor properties", () => {
       const material = random.boolean()
         ? standardMaterial({ texture })
         : unlitMaterial({ texture });
+      const virtualContentKey = `sha256:vt-${seed.toString(16)}`;
+      const virtualDebugName = randomString(random, "vt");
+      const virtualSampler = {
+        magFilter: sampler.magFilter,
+        wrapT: sampler.wrapS,
+      };
+      const virtual = virtualTexture({
+        contentKey: virtualContentKey,
+        debugName: virtualDebugName,
+        sampler: virtualSampler,
+        src: `/textures/${seed.toString(16)}.vt.json`,
+        version: `vt-${seed.toString(16)}`,
+      });
+      const virtualMaterial = random.boolean()
+        ? standardMaterial({ texture: virtual })
+        : unlitMaterial({ texture: virtual });
 
       expect(texture.colorSpace, `${label} image texture srgb default`).toBe("srgb");
+      expect(texture.contentKey, `${label} image texture content key preserved`).toBe(`sha256:${seed.toString(16)}`);
       expect(texture.sampler, `${label} sampler default merge`).toEqual({
         magFilter: sampler.magFilter,
         minFilter: "linear-mipmap-linear",
@@ -108,23 +126,25 @@ describe("renderer-core descriptor properties", () => {
       expect(material.baseColor, `${label} material keeps texture identity`).toBe(texture);
 
       expect(textureAsset({
+        contentKey: `sha256:asset-${seed.toString(16)}`,
         uri: `/textures/${seed.toString(16)}.ktx2`,
         version: seed,
       }), `${label} texture asset identity`).toEqual({
+        contentKey: `sha256:asset-${seed.toString(16)}`,
         kind: "asset",
         uri: `/textures/${seed.toString(16)}.ktx2`,
         version: seed,
       });
 
-      expect(virtualTexture({
-        debugName: randomString(random, "vt"),
-        src: `/textures/${seed.toString(16)}.vt.json`,
-        version: `vt-${seed.toString(16)}`,
-      }), `${label} virtual texture source alias`).toMatchObject({
+      expect(virtual, `${label} virtual texture source alias`).toMatchObject({
+        contentKey: virtualContentKey,
+        debugName: virtualDebugName,
         kind: "virtual-asset",
         manifestUri: `/textures/${seed.toString(16)}.vt.json`,
+        sampler: virtualSampler,
         version: `vt-${seed.toString(16)}`,
       });
+      expect(virtualMaterial.baseColor, `${label} material keeps virtual texture identity`).toBe(virtual);
     });
   });
 

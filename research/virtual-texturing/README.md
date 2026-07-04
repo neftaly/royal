@@ -111,7 +111,8 @@ slot inside a physical cache atlas.
 WebGL2 path:
 
 - Store page-table entries in an `RGBA8` texture first for portability:
-  physical slot x, physical slot y, resident mip delta, flags/version.
+  physical slot bytes, resident mip delta, and a reserved alpha byte. Resident
+  entries write alpha as `255`; invalid/unmapped entries remain `[0, 0, 0, 0]`.
 - Use `textureLod` only where available. The baseline fragment path can rely on
   implicit derivatives plus a page-table mip-selection helper.
 - Update dirty page-table texels with `texSubImage2D` after page uploads.
@@ -324,8 +325,9 @@ It models:
 - physical cache slots as plain data, including slot coordinates, resident page
   ids, load frames, last-use frames, and LRU replacement
 - page-table entries as plain data, including virtual-page coordinates,
-  physical slot coordinates, `RGBA8`-style encoded bytes, flags, versions, and
-  local UV remap metadata for padded pages
+  physical slot coordinates, `RGBA8`-style encoded bytes with reserved alpha
+  (`255` for resident entries, all zero for invalid/unmapped entries), debug
+  flags, debug versions, and local UV remap metadata for padded pages
 - upload and eviction events with the page-table entry each upload creates
 - a dirty-entry queue for upload and eviction texels that future renderer code
   can batch into page-table texture updates

@@ -468,16 +468,20 @@ afterEach(() => {
 });
 
 describe("WebGL renderer state and capability regressions", () => {
-  it("keeps texture cache identity distinct for matching URI/version with different sampler or colorSpace", async () => {
+  it("keeps texture cache identity distinct for matching contentKey/version with different sampler or colorSpace", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const frames = installAnimationFrameQueue();
     const loader = installTextureLoaders();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const textureCreatesBefore = countCalls(calls, "createTexture");
+    const textureUploadsBefore = countCalls(calls, "texImage2D");
     const sharedSource = "/textures/shared-albedo.png";
+    const sharedContentKey = "sha256:shared-albedo";
     const nearestSrgb = unlitMaterial({
       texture: imageTexture({
         colorSpace: "srgb",
+        contentKey: sharedContentKey,
         sampler: {
           magFilter: "nearest",
           minFilter: "nearest",
@@ -491,6 +495,7 @@ describe("WebGL renderer state and capability regressions", () => {
     const linearLinear = unlitMaterial({
       texture: imageTexture({
         colorSpace: "linear",
+        contentKey: sharedContentKey,
         sampler: {
           magFilter: "linear",
           minFilter: "linear",
@@ -506,8 +511,14 @@ describe("WebGL renderer state and capability regressions", () => {
     await settleTextureLoads(loader, frames);
 
     expect(requestedUrls(loader).filter((url) => url.includes(sharedSource))).toHaveLength(2);
-    expect(countCalls(calls, "createTexture"), "different sampler/colorSpace descriptors need separate texture resources").toBeGreaterThanOrEqual(2);
-    expect(countCalls(calls, "texImage2D"), "both texture descriptors should upload their image data").toBeGreaterThanOrEqual(2);
+    expect(
+      countCalls(calls, "createTexture") - textureCreatesBefore,
+      "different sampler/colorSpace descriptors need separate texture resources",
+    ).toBe(2);
+    expect(
+      countCalls(calls, "texImage2D") - textureUploadsBefore,
+      "both texture descriptors should upload their image data",
+    ).toBe(2);
     expect(textureUploadInternalFormats(calls)).toEqual(expect.arrayContaining([gl.SRGB8_ALPHA8, gl.RGBA]));
     expect(calls).toContainEqual({
       args: [gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 0],
@@ -519,6 +530,49 @@ describe("WebGL renderer state and capability regressions", () => {
       [gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR],
       [gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE],
     ]));
+  });
+
+  it("shares texture resources for matching content keys across different source URLs", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const frames = installAnimationFrameQueue();
+    const loader = installTextureLoaders();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const textureCreatesBefore = countCalls(calls, "createTexture");
+    const textureUploadsBefore = countCalls(calls, "texImage2D");
+    const sharedContentKey = "sha256:shared-content";
+    const sampler = {
+      magFilter: "linear" as const,
+      minFilter: "linear" as const,
+      wrapS: "clamp-to-edge" as const,
+      wrapT: "clamp-to-edge" as const,
+    };
+    const leftSource = "/textures/content-a.png";
+    const rightSource = "/textures/content-b.png";
+    const left = unlitMaterial({
+      texture: imageTexture({
+        contentKey: sharedContentKey,
+        sampler,
+        src: leftSource,
+        version: "same-version",
+      }),
+    });
+    const right = unlitMaterial({
+      texture: imageTexture({
+        contentKey: sharedContentKey,
+        sampler,
+        src: rightSource,
+        version: "same-version",
+      }),
+    });
+
+    root.render(twoMeshScene(left, right));
+    await settleTextureLoads(loader, frames);
+
+    expect(requestedUrls(loader).filter((url) => url === leftSource || url === rightSource)).toEqual([leftSource]);
+    expect(countCalls(calls, "createTexture") - textureCreatesBefore).toBe(1);
+    expect(countCalls(calls, "texImage2D") - textureUploadsBefore).toBe(1);
+    expect(textureUploadInternalFormats(calls)).toEqual(expect.arrayContaining([gl.SRGB8_ALPHA8]));
   });
 
   it("clears or safely rebinds stale UV attributes before drawing no-UV wireframe geometry", () => {

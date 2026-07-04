@@ -79,7 +79,8 @@ renderer drains on the render thread:
   variant, byte length, and padded dimensions.
 - `evictPage`: page id, old slot, and page-table downgrade or invalidation row.
 - `writePageTable`: mip, virtual page x/y, encoded bytes, resident mip delta,
-  flags, and version.
+  and reserved alpha byte state; flags/version metadata stays outside the
+  `RGBA8` entry.
 - `dropStaleRequest`: page id and reason, usually camera superseded demand.
 - `publishStats`: frame counters and rolling benchmark counters.
 
@@ -90,7 +91,8 @@ WebGL2 should start with a portable `RGBA8` page-table texture:
 - `R`: physical slot x.
 - `G`: physical slot y.
 - `B`: resident mip delta from the requested virtual mip.
-- `A`: flags/version bucket.
+- `A`: reserved. Resident entries encode this byte as `255`; invalid/unmapped
+  entries remain all-zero rows.
 
 Use one page-table mip level per virtual texture mip where practical. If table
 size or texture unit pressure makes that brittle, use a packed 2D table with an
@@ -156,8 +158,8 @@ Fragment flow:
 1. Compute desired virtual mip from derivatives.
 2. Compute virtual page x/y and in-page UV.
 3. Sample the page table at the chosen virtual mip.
-4. Decode physical slot, resident mip delta, flags, and version.
-5. If invalid, sample fixed low-mip fallback.
+4. Decode physical slot and resident mip delta; ignore the reserved alpha byte.
+5. If the entry is invalid/unmapped, sample fixed low-mip fallback.
 6. Remap in-page UV into the padded physical slot, away from border texels.
 7. Sample the physical atlas.
 

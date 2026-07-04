@@ -717,10 +717,12 @@ export const encodeVirtualTexturePageTableRgba8 = (
 ): readonly [number, number, number, number] => {
   if (update.slot === undefined) return [0, 0, 0, 0];
   const encodedSlot = update.slot + 1;
+  // A is reserved for future page-table flags/addressing. Material data belongs in atlases.
+  const reservedAlpha = 0xff;
   return [
     encodedSlot & 0xff,
     (encodedSlot >> 8) & 0xff,
     update.fallbackMipOffset ?? 0,
-    255,
+    reservedAlpha,
   ];
 };

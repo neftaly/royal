@@ -344,7 +344,7 @@ describe("WebGL virtual texturing runtime model", () => {
     ]);
   });
 
-  it("encodes RGBA8 page-table entries and keeps dirty updates incremental after init", () => {
+  it("encodes RGBA8 page-table entries with reserved alpha and keeps dirty updates incremental after init", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
     const page = { mip: 0, x: 0, y: 0 };
 
@@ -664,7 +664,11 @@ const camera = () => orthographicCamera({
 
 const renderScene = (
   material: Material,
-  options: { readonly exposure?: number; readonly toneMapping?: "aces" | "none" } = {},
+  options: {
+    readonly exposure?: number;
+    readonly planeSize?: readonly [number, number];
+    readonly toneMapping?: "aces" | "none";
+  } = {},
 ) => scene({
   children: [
     pass({
@@ -675,7 +679,7 @@ const renderScene = (
           direction: [0, 0, -1],
         }),
         mesh({
-          geometry: planeGeometry([2, 2]),
+          geometry: planeGeometry(options.planeSize ?? [2, 2]),
           material,
         }),
       ],
@@ -712,6 +716,14 @@ const vtParentFallbackManifest = (physicalSlots = 3) => ({
   },
   physicalSlots,
   virtualSize: [12, 4],
+});
+
+const vtDenseMipManifest = (physicalSlots = 4) => ({
+  mipCount: 5,
+  pageSize: 4,
+  pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
+  physicalSlots,
+  virtualSize: [64, 64],
 });
 
 const flushMicrotasks = async (): Promise<void> => {
@@ -768,14 +780,16 @@ const uploadPayload = (call: GlCall): readonly number[] => {
 const imageBySrc = (fragment: string): ControlledImage | undefined =>
   ControlledImage.instances.find((image) => image.src.includes(fragment));
 
+const settleIncompleteImages = async (): Promise<void> => {
+  for (const image of ControlledImage.instances) {
+    if (!image.complete) image.settleLoad();
+  }
+  await flushMicrotasks();
+};
+
 const uniformNames = (calls: readonly GlCall[]): readonly string[] =>
   calls
     .filter((call) => call.name === "getUniformLocation")
-    .map((call) => String(call.args[1]));
-
-const shaderSources = (calls: readonly GlCall[]): readonly string[] =>
-  calls
-    .filter((call) => call.name === "shaderSource")
     .map((call) => String(call.args[1]));
 
 const namedUniform1iValues = (calls: readonly GlCall[]): Record<string, number[]> => {
@@ -804,9 +818,6 @@ const namedUniform4fvValues = (calls: readonly GlCall[]): Record<string, number[
   return values;
 };
 
-const samplerDeclarationCount = (source: string): number =>
-  source.match(/uniform sampler(?:2D|Cube) /gu)?.length ?? 0;
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -825,10 +836,6 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/albedo.png"]);
-    expect(calls.some((call) =>
-      call.name === "shaderSource"
-      && typeof call.args[1] === "string"
-      && call.args[1].includes("u_vtPageTable"))).toBe(false);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       manifestRequests: 1,
       preparedResidencyResolutions: 1,
@@ -865,10 +872,6 @@ describe("WebGL renderer virtual texturing integration", () => {
     const shaderBindsBeforeDraw = root.snapshot().virtualTexturing.shaderBinds;
     root.render(renderScene(material));
 
-    expect(calls.some((call) =>
-      call.name === "shaderSource"
-      && typeof call.args[1] === "string"
-      && call.args[1].includes("u_vtPageTable"))).toBe(true);
     expect(uniformNames(calls)).toEqual(expect.arrayContaining([
       "u_vtAtlas",
       "u_vtPageTable",
@@ -1006,15 +1009,9 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     root.render(graph);
-    const readySource = shaderSources(calls).join("\n");
     const uniform1i = namedUniform1iValues(calls);
     const uniform4fv = namedUniform4fvValues(calls);
 
-    expect(readySource).toContain("sampleVirtualBaseColor");
-    expect(readySource).toContain("materialDiffuseColor(baseColor.rgb)");
-    expect(readySource).toContain("uniform sampler2D u_vtAtlas;");
-    expect(readySource).toContain("uniform sampler2D u_vtPageTable;");
-    expect(readySource).not.toContain("surface-vt-base-color");
     expect(uniformNames(calls)).toEqual(expect.arrayContaining([
       "u_surfaceLightCount",
       "u_toneMappingSettings",
@@ -1074,7 +1071,6 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(graph);
 
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
-    expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_useTexture: expect.arrayContaining([0]),
       u_useVirtualTexture: expect.arrayContaining([1]),
@@ -1215,6 +1211,30 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
+  it("keeps tiny screen-footprint VT demand on coarse visible mips", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }), {
+      planeSize: [0.25, 0.25],
+    });
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(4)));
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.map((image) => image.src)).toContain("/vt/pages/m4-0-0.png");
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      await settleIncompleteImages();
+      root.render(graph);
+    }
+
+    const pageRequests = ControlledImage.instances.map((image) => image.src);
+    expect(pageRequests.some((src) => src.includes("/vt/pages/m2-"))).toBe(true);
+    expect(pageRequests.some((src) => src.includes("/vt/pages/m1-") || src.includes("/vt/pages/m0-"))).toBe(false);
+  });
+
   it("expands resident parent page-table updates over covered mip-0 cells with encoded fallback offsets", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
@@ -1303,16 +1323,6 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
-    expect(calls.some((call) =>
-      call.name === "shaderSource"
-      && typeof call.args[1] === "string"
-      && call.args[1].includes("u_vtPageTable"))).toBe(true);
-    expect(calls.some((call) =>
-      call.name === "shaderSource"
-      && typeof call.args[1] === "string"
-      && call.args[1].includes("tableEntry.g")
-      && call.args[1].includes("fallbackMipOffset")
-      && call.args[1].includes("residentPageTableSize"))).toBe(true);
     expect(uniformNames(calls)).toEqual(expect.arrayContaining([
       "u_vtAtlas",
       "u_vtPageTable",
@@ -1357,12 +1367,6 @@ describe("WebGL renderer virtual texturing integration", () => {
       }),
     })));
 
-    expect(calls.some((call) =>
-      call.name === "shaderSource"
-      && typeof call.args[1] === "string"
-      && call.args[1].includes("wrapVirtualTextureUv")
-      && call.args[1].includes("u_vtWrapS")
-      && call.args[1].includes("u_vtWrapT"))).toBe(true);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_vtWrapS: expect.arrayContaining([1]),
       u_vtWrapT: expect.arrayContaining([2]),
@@ -1423,13 +1427,9 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     root.render(graph);
-    const fallbackSource = shaderSources(calls).filter((source) => source.includes("u_texture")).at(-1) ?? "";
 
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/tight.png.vt.json"]);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/tight.png"]);
-    expect(fallbackSource).toContain("uniform sampler2D u_texture;");
-    expect(fallbackSource).not.toContain("uniform sampler2D u_vtAtlas;");
-    expect(samplerDeclarationCount(fallbackSource)).toBeLessThanOrEqual(1);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_texture: expect.arrayContaining([0]),
       u_useTexture: expect.arrayContaining([1]),
@@ -1454,11 +1454,8 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     root.render(graph);
-    const fallbackSource = shaderSources(calls).at(-1) ?? "";
 
     expect(ControlledImage.instances).toHaveLength(0);
-    expect(fallbackSource).not.toContain("uniform sampler2D u_vtAtlas;");
-    expect(samplerDeclarationCount(fallbackSource)).toBeLessThanOrEqual(1);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_useTexture: expect.arrayContaining([0]),
       u_useVirtualTexture: expect.arrayContaining([0]),

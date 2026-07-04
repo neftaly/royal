@@ -20,6 +20,7 @@ export interface TextureSampler {
 }
 
 export type TextureVersion = number | string;
+export type TextureContentKey = number | string;
 
 export interface SolidTextureRef {
   readonly kind: 'solid';
@@ -31,6 +32,8 @@ export interface SolidTextureRef {
 export interface TextureAssetRef {
   readonly kind: 'asset';
   readonly colorSpace?: TextureColorSpace;
+  /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
+  readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
   readonly uri: string;
   readonly version?: TextureVersion;
@@ -39,6 +42,8 @@ export interface TextureAssetRef {
 export interface VirtualTextureAssetRef {
   readonly kind: 'virtual-asset';
   readonly colorSpace?: TextureColorSpace;
+  /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
+  readonly contentKey?: TextureContentKey;
   /** Diagnostics-only identity; renderers must not treat this as asset state. */
   readonly debugName?: string;
   readonly manifestUri: string;
@@ -56,6 +61,8 @@ export interface SolidTextureOptions {
 
 interface TextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
+  /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
+  readonly contentKey?: TextureContentKey;
   readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureVersion;
@@ -77,6 +84,8 @@ export type ImageTextureOptions = TextureAssetOptions;
 
 interface VirtualTextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
+  /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
+  readonly contentKey?: TextureContentKey;
   /** Diagnostics-only identity; not a cache key, page-table key, or render fallback. */
   readonly debugName?: string;
   readonly sampler?: TextureSampler;
@@ -121,6 +130,7 @@ export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
   return {
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
     uri,
     ...(options.version === undefined ? {} : { version: options.version })
@@ -141,6 +151,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
       ...options.sampler
     },
     src: uri,
+    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
     ...(options.version === undefined ? {} : { version: options.version })
   });
 }
@@ -151,6 +162,7 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
   return {
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
     ...(options.debugName === undefined ? {} : { debugName: options.debugName }),
     manifestUri,
     ...(options.sampler === undefined ? {} : { sampler: options.sampler }),

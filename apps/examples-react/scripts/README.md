@@ -83,3 +83,16 @@ node --check apps/examples-react/scripts/benchmark-examples.mjs
 node --check apps/examples-react/scripts/check-benchmark-report.mjs
 pnpm --filter @royal/examples-react bench:examples:instancing
 ```
+
+## glTF Load Probe
+
+`benchmark-gltf-load.mjs` is a narrow browser probe for textured glTF load
+latency. It runs `/gltf-helmet`, records first WebGL draw, first usable
+nonblank canvas draw, fully loaded resource-stable time, VT manifest/page
+resource counts, texture allocation/upload calls, rough upload bytes, and CDP
+heap growth before/after GC.
+
+```sh
+EXAMPLES_GLTF_LOAD_OUTPUT=research/gltf-load-host.json \
+pnpm --filter @royal/examples-react bench:gltf-load
+```

@@ -59,6 +59,7 @@ export type {
   TextureAssetOptions,
   TextureAssetRef,
   TextureColorSpace,
+  TextureContentKey,
   TextureRef,
   TextureVersion,
   TextureSampler,

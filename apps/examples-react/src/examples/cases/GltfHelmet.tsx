@@ -5,6 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRootOptions } from '../example-root-options';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
@@ -39,6 +40,7 @@ export const GltfHelmet = (): ReactNode => {
           />
         </pass>
       </scene>
+      <BenchmarkRendererSnapshot />
       <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );

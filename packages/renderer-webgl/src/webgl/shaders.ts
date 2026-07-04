@@ -151,6 +151,7 @@ vec4 sampleVirtualBaseColor(vec2 uv) {
   float encodedSlot = floor(tableEntry.r * 255.0 + 0.5)
     + floor(tableEntry.g * 255.0 + 0.5) * 256.0;
   float fallbackMipOffset = floor(tableEntry.b * 255.0 + 0.5);
+  // tableEntry.a is reserved for future page-table flags/addressing.
 
   if (encodedSlot < 1.0) {
     return u_color;

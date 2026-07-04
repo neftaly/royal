@@ -134,6 +134,7 @@ export type GltfImageBasedLight = {
 
 export type GltfImage = {
   readonly bufferView?: number;
+  readonly extras?: GltfContentExtras;
   readonly mimeType?: string;
   readonly uri?: string;
 };
@@ -318,6 +319,11 @@ export type GltfLodExtras = {
   readonly MSFT_screencoverage?: readonly number[];
 };
 
+export type GltfContentExtras = {
+  readonly contentKey?: number | string;
+  readonly [name: string]: unknown;
+};
+
 export type GltfScene = {
   readonly extensions?: {
     readonly EXT_lights_image_based?: {
@@ -328,6 +334,7 @@ export type GltfScene = {
 };
 
 export type GltfTexture = {
+  readonly extras?: GltfContentExtras;
   readonly extensions?: {
     readonly EXT_texture_webp?: {
       readonly source?: number;
