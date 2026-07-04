@@ -21,6 +21,19 @@ import {
   virtualTexturePageKey,
   virtualTexturePageUri,
 } from "../packages/renderer-webgl/src/virtual-texturing";
+import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+
+type FuzzPage = {
+  readonly mip: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+const fuzzPage = (random: SeededRandom): FuzzPage => ({
+  mip: random.int(0, 4),
+  x: random.int(0, 8),
+  y: random.int(0, 8),
+});
 
 describe("WebGL virtual texturing runtime model", () => {
   it("parses explicit page-entry manifests into a normalized resource model", () => {
@@ -246,6 +259,59 @@ describe("WebGL virtual texturing runtime model", () => {
       }),
       expect.objectContaining({ pageKey: "0/1/0", slot: 1 }),
     ]);
+  });
+
+  it("keeps page-table residency bounded and slot-unique under fuzzed access", () => {
+    forEachFuzzCase({
+      cases: 24,
+      seed: 0x73f8a91d,
+    }, ({ label, random }) => {
+      const slotCount = random.int(1, 9);
+      const table = new VirtualTextureAtlasPageTable({ slotCount });
+      const seenPages = new Map<string, FuzzPage>();
+
+      for (let step = 0; step < 48; step += 1) {
+        const page = fuzzPage(random);
+        const pageKey = virtualTexturePageKey(page);
+        seenPages.set(pageKey, page);
+
+        const residentBefore = [...seenPages.entries()]
+          .filter(([, candidate]) => table.residentSlot(candidate) !== undefined);
+        const protectedKeys = new Set(
+          residentBefore
+            .filter(() => random.boolean(0.35))
+            .map(([key]) => key),
+        );
+        const hadUnprotectedResident = residentBefore.some(([key]) => !protectedKeys.has(key));
+        const assignment = table.ensureResident(page, { protectedPages: protectedKeys });
+
+        expect(table.residentCount, `${label} step=${step} resident count`).toBeLessThanOrEqual(slotCount);
+        expect(table.residentSlot(page), `${label} step=${step} resident slot`).toBe(assignment.slot);
+        if (assignment.evicted !== undefined) {
+          expect(
+            protectedKeys.has(assignment.evicted.pageKey) && hadUnprotectedResident,
+            `${label} step=${step} protected eviction`,
+          ).toBe(false);
+          expect(
+            table.residentSlot(assignment.evicted.page),
+            `${label} step=${step} evicted page cleared`,
+          ).toBeUndefined();
+        }
+
+        const residentSlots = [...seenPages.values()]
+          .map((candidate) => table.residentSlot(candidate))
+          .filter((slot): slot is number => slot !== undefined);
+        expect(
+          new Set(residentSlots).size,
+          `${label} step=${step} unique resident slots`,
+        ).toBe(residentSlots.length);
+
+        table.takeDirtyPageTableUpdates();
+        const repeat = table.ensureResident(page);
+        expect(repeat.slot, `${label} step=${step} repeat slot`).toBe(assignment.slot);
+        expect(table.takeDirtyPageTableUpdates(), `${label} step=${step} repeat dirty`).toEqual([]);
+      }
+    });
   });
 
   it("encodes RGBA8 page-table entries with reserved alpha and keeps dirty updates incremental after init", () => {
