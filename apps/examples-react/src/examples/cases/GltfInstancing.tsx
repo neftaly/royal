@@ -201,7 +201,7 @@ export const GltfInstancing = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
-          <directionalLight color={[1.12, 1.06, 0.94, 1]} direction={[0.42, -0.66, -1]} />
+          <directionalLight color={[0.86, 0.82, 0.74, 1]} direction={[0.42, -0.66, -1]} />
           {instancingConfig.animate
             ? <AnimatedInstancedCubeField cubeInstances={cubeInstances} />
             : <StaticInstancedCubeField cubeInstances={cubeInstances} />}

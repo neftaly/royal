@@ -186,8 +186,8 @@ export const HudOverlay = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
-          <directionalLight color={[1.2, 1.15, 1.04, 1]} direction={[-0.48, -0.64, -0.58]} />
-          <directionalLight color={[0.35, 0.55, 0.9, 1]} direction={[0.65, -0.2, 0.46]} />
+          <directionalLight color={[0.88, 0.84, 0.76, 1]} direction={[-0.48, -0.64, -0.58]} />
+          <directionalLight color={[0.22, 0.34, 0.56, 1]} direction={[0.65, -0.2, 0.46]} />
           <mesh transform={{ position: [0, -0.78, -0.2], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[7.2, 4.8]} />
             <standardMaterial color={htmlColor('#142025')} />

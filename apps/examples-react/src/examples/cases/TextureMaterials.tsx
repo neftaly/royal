@@ -27,7 +27,7 @@ export const TextureMaterials = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
-          <directionalLight color={[1.35, 1.28, 1.16, 1]} direction={[-0.24, -0.42, -1]} />
+          <directionalLight color={[0.96, 0.92, 0.84, 1]} direction={[-0.24, -0.42, -1]} />
           <mesh
             geometry={swatchGeometry}
             texture={helmetAlbedoSrc}

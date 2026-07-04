@@ -441,7 +441,7 @@ export const WebXrVr = (): ReactNode =>
     >
       <scene>
         <pass camera={camera}>
-          <directionalLight color={[1.1, 1.04, 0.94, 1]} direction={[0.42, -0.72, -0.56]} />
+          <directionalLight color={[0.84, 0.8, 0.72, 1]} direction={[0.42, -0.72, -0.56]} />
           <mesh transform={{ position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[7.2, 7.2]} />
             <standardMaterial color={[0.42, 0.39, 0.31, 1]} />

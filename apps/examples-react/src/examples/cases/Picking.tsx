@@ -78,7 +78,6 @@ export const Picking = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
-          <directionalLight color={[1.28, 1.2, 1.05, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             geometry={backplateGeometry}
             material={active ? activeBackplateMaterial : backplateMaterial}

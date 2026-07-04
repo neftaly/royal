@@ -23,6 +23,7 @@ export const GltfHelmet = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <model
             src={helmetSrc}
             transform={{

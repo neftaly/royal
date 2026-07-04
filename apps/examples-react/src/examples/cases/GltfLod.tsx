@@ -22,7 +22,7 @@ export const GltfLod = (): ReactNode => {
     >
       <scene>
         <pass camera={orbit.camera}>
-          <directionalLight color={[1.22, 1.16, 1.05, 1]} direction={[-0.42, -0.5, -1]} />
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[-0.42, -0.5, -1]} />
           <model
             src={lodSrc}
             transform={{

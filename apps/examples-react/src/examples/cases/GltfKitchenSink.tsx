@@ -1,7 +1,6 @@
 import {
   Canvas,
   OrbitControls,
-  useFrameIndex,
   useOrbitCamera,
 } from '@royal/react';
 import { createElement, Fragment, type ReactNode } from 'react';
@@ -177,22 +176,6 @@ const createKitchenSinkInstances = (assets: readonly KitchenSinkAsset[]): readon
     });
 };
 
-const KeyLight = (): ReactNode => {
-  const frame = useFrameIndex();
-  const sweep = frame * 0.014;
-
-  return (
-    <directionalLight
-      color={[1.2, 1.12, 0.98, 1]}
-      direction={[
-        Math.cos(sweep) * 0.64,
-        -0.62,
-        -0.58 + Math.sin(sweep) * 0.34,
-      ]}
-    />
-  );
-};
-
 const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactNode => {
   const selectedAssets = assetsForKitchenSinkSet(set);
   const kitchenSinkAssets = createKitchenSinkInstances(selectedAssets);
@@ -214,8 +197,6 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
     >
       <scene>
         <pass camera={orbit.camera}>
-          <KeyLight />
-          <directionalLight color={[0.24, 0.36, 0.72, 1]} direction={[-0.55, -0.35, 0.74]} />
           {kitchenSinkAssets.map((asset) =>
             createElement(
               Fragment,

@@ -13,7 +13,7 @@ const MovingLight = (): ReactNode => {
 
   return (
     <directionalLight
-      color={[1.25, 1.18, 1.04, 1]}
+      color={[0.92, 0.88, 0.8, 1]}
       direction={[
         Math.cos(sweep) * 0.72,
         -0.82,

@@ -160,7 +160,7 @@ const smokeExpectations = {
     path: '/gltf-kitchen-sink-slow',
     absentResourceSubstrings: okKitchenSinkResourceSubstrings,
     resourceSubstrings: slowKitchenSinkResourceSubstrings,
-    minColorBuckets: 24,
+    minColorBuckets: 20,
     minPaintedRatio: 0.004,
   },
   'gltf-ghostscript-tiger-svg': {
@@ -549,8 +549,10 @@ const smokeExpression = `
     const canvas = document.querySelector('canvas');
     return {
       route: {
+        absentResourceSubstrings: smoke?.absentResourceSubstrings ?? [],
         id: routeId,
         path: routePath,
+        resourceSubstrings: smoke?.resourceSubstrings ?? [],
       },
       canvas: canvas === null ? undefined : {
         backingHeight: canvas.height,
@@ -586,6 +588,11 @@ const smokeExpression = `
   let state = await read();
   const isReady = () => {
     if (state.route.id === '') return false;
+    const resourceReady = state.route.resourceSubstrings.every((substring) =>
+      state.resourceNames.some((name) => name.includes(substring))
+    ) && state.route.absentResourceSubstrings.every((substring) =>
+      !state.resourceNames.some((name) => name.includes(substring))
+    );
     const canvasReady = state.canvas !== undefined &&
       state.canvas.backingWidth > 0 &&
       state.canvas.backingHeight > 0 &&
@@ -607,7 +614,7 @@ const smokeExpression = `
           )
         );
     }
-    return canvasReady;
+    return canvasReady && resourceReady;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -626,6 +633,12 @@ const routeCanvasReady = (route, state) => {
   if (sample.paintedPixels <= 0) return false;
   if (sample.paintedRatio < route.minPaintedRatio) return false;
   if (route.minColorBuckets !== undefined && sample.colorBuckets < route.minColorBuckets) return false;
+  for (const resourceSubstring of route.resourceSubstrings ?? []) {
+    if (!state.resourceNames?.some((name) => name.includes(resourceSubstring))) return false;
+  }
+  for (const resourceSubstring of route.absentResourceSubstrings ?? []) {
+    if (state.resourceNames?.some((name) => name.includes(resourceSubstring))) return false;
+  }
   return true;
 };
 
