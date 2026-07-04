@@ -1,4 +1,4 @@
-export type WebGlContextVersion = 1 | 2 | "unknown";
+export type WebGlContextVersion = 2;
 
 export type RendererCapabilityName =
   | "webgl2"
@@ -114,15 +114,10 @@ export type WebGlLikeContext = {
   readonly MAX_TEXTURE_IMAGE_UNITS?: number;
   readonly MAX_COMBINED_TEXTURE_IMAGE_UNITS?: number;
   readonly COMPRESSED_TEXTURE_FORMATS?: number;
-  readonly READ_BUFFER?: number;
-  readonly TEXTURE_3D?: number;
   readonly beginQuery?: unknown;
-  readonly drawBuffers?: unknown;
   readonly getExtension?: (name: string) => unknown;
   readonly getParameter?: (name: number) => unknown;
   readonly getSupportedExtensions?: () => readonly string[] | null;
-  readonly texStorage2D?: unknown;
-  readonly vertexAttribDivisor?: unknown;
 };
 
 export type WebGpuProbeInput = {
@@ -133,7 +128,6 @@ export type WebGpuProbeInput = {
 };
 
 export type RendererCapabilityProbeOptions = {
-  readonly contextVersion?: 1 | 2;
   readonly webgpu?: WebGpuProbeInput;
 };
 
@@ -185,12 +179,7 @@ const extensionCapabilities = {
     "WEBGL_compressed_texture_s3tc",
     "WEBGL_compressed_texture_s3tc_srgb",
   ],
-  depth_texture: ["WEBGL_depth_texture"],
-  draw_buffers: ["WEBGL_draw_buffers"],
-  float_texture: ["EXT_color_buffer_float", "OES_texture_float"],
   gpu_timer_query: ["EXT_disjoint_timer_query_webgl2", "EXT_disjoint_timer_query"],
-  half_float_texture: ["EXT_color_buffer_half_float", "OES_texture_half_float"],
-  instancing: ["ANGLE_instanced_arrays"],
   lose_context: ["WEBGL_lose_context"],
 } as const satisfies Partial<Record<RendererCapabilityName, readonly string[]>>;
 
@@ -257,26 +246,6 @@ const readCompressedTextureFormats = (gl: WebGlLikeContext): readonly number[] =
   return [];
 };
 
-const contextVersion = (
-  gl: WebGlLikeContext,
-  options: RendererCapabilityProbeOptions,
-): WebGlContextVersion => {
-  if (options.contextVersion !== undefined) return options.contextVersion;
-
-  const label = readStringParameter(gl, gl.VERSION);
-  if (label?.includes("WebGL 2")) return 2;
-  if (label?.includes("WebGL 1") || label?.includes("WebGL 1.0")) return 1;
-  if (hasWebGl2CoreSurface(gl)) return 2;
-  return "unknown";
-};
-
-const hasWebGl2CoreSurface = (gl: WebGlLikeContext): boolean =>
-  gl.READ_BUFFER !== undefined ||
-  gl.TEXTURE_3D !== undefined ||
-  typeof gl.beginQuery === "function" ||
-  typeof gl.drawBuffers === "function" ||
-  typeof gl.texStorage2D === "function";
-
 const supportedExtensionSet = (gl: WebGlLikeContext): Set<string> => {
   const supported = new Set(
     (gl.getSupportedExtensions?.() ?? []).filter((extension): extension is string => typeof extension === "string"),
@@ -327,7 +296,7 @@ const collectWebGlRows = (
   gl: WebGlLikeContext,
   options: RendererCapabilityProbeOptions,
 ): RendererCapabilityProbeRow[] => {
-  const version = contextVersion(gl, options);
+  const version: WebGlContextVersion = 2;
   const versionLabel = readStringParameter(gl, gl.VERSION);
   const renderer = readStringParameter(gl, gl.RENDERER);
   const shadingLanguageVersion = readStringParameter(gl, gl.SHADING_LANGUAGE_VERSION);
@@ -348,10 +317,8 @@ const collectWebGlRows = (
 
   rows.push(capabilityRow(
     "webgl2",
-    version === 2,
-    version === 2 ? "webgl2-core" : "missing",
-    undefined,
-    version === 2 ? undefined : "webgl2 is not available from the probed renderer.",
+    true,
+    "webgl2-core",
   ));
   rows.push(capabilityRow(
     "webgpu",
@@ -363,42 +330,11 @@ const collectWebGlRows = (
       : options.webgpu?.reason ?? "webgpu is not available from the current environment probe.",
   ));
 
-  const drawBuffersExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.draw_buffers);
-  rows.push(capabilityRow(
-    "draw_buffers",
-    version === 2 || drawBuffersExtension !== undefined || typeof gl.drawBuffers === "function",
-    version === 2 || typeof gl.drawBuffers === "function" ? "webgl2-core" : drawBuffersExtension ? "webgl-extension" : "missing",
-    drawBuffersExtension,
-    version === 2 || drawBuffersExtension !== undefined || typeof gl.drawBuffers === "function"
-      ? undefined
-      : missingCapabilityDetail("draw_buffers", extensionCapabilities.draw_buffers),
-  ));
+  for (const capability of ["draw_buffers", "depth_texture", "instancing", "float_texture", "half_float_texture"] as const) {
+    rows.push(capabilityRow(capability, true, "webgl2-core"));
+  }
 
-  const depthTextureExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.depth_texture);
-  rows.push(capabilityRow(
-    "depth_texture",
-    version === 2 || depthTextureExtension !== undefined || gl.TEXTURE_3D !== undefined,
-    version === 2 || gl.TEXTURE_3D !== undefined ? "webgl2-core" : depthTextureExtension ? "webgl-extension" : "missing",
-    depthTextureExtension,
-    version === 2 || depthTextureExtension !== undefined || gl.TEXTURE_3D !== undefined
-      ? undefined
-      : missingCapabilityDetail("depth_texture", extensionCapabilities.depth_texture),
-  ));
-
-  const instancingExtension = firstSupportedExtension(supportedExtensions, extensionCapabilities.instancing);
-  rows.push(capabilityRow(
-    "instancing",
-    version === 2 || instancingExtension !== undefined || typeof gl.vertexAttribDivisor === "function",
-    version === 2 || typeof gl.vertexAttribDivisor === "function"
-      ? "webgl2-core"
-      : instancingExtension ? "webgl-extension" : "missing",
-    instancingExtension,
-    version === 2 || instancingExtension !== undefined || typeof gl.vertexAttribDivisor === "function"
-      ? undefined
-      : missingCapabilityDetail("instancing", extensionCapabilities.instancing),
-  ));
-
-  for (const capability of ["gpu_timer_query", "anisotropy", "float_texture", "half_float_texture", "compressed_texture", "lose_context"] as const) {
+  for (const capability of ["gpu_timer_query", "anisotropy", "compressed_texture", "lose_context"] as const) {
     const extension = firstSupportedExtension(supportedExtensions, extensionCapabilities[capability]);
     rows.push(capabilityRow(
       capability,

@@ -25,32 +25,23 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
-  it("defaults render pass clearColor for one-shot renderers", () => {
-    expect(pass({ camera, children: [] })).toEqual({
-      camera,
-      children: [],
-      clear: "color-depth",
-      clearColor: [0, 0, 0, 0],
-      depthTest: true,
-      kind: "pass",
-    });
-  });
+  it("normalizes render pass defaults and preserves overrides", () => {
+    const cases: Array<[string, Parameters<typeof pass>[0], unknown]> = [
+      [
+        "one-shot defaults",
+        { camera, children: [] },
+        { camera, children: [], clear: "color-depth", clearColor: [0, 0, 0, 0], depthTest: true, kind: "pass" },
+      ],
+      [
+        "overlay overrides",
+        { camera, children: [], clear: "none", clearColor: [0.1, 0.2, 0.3, 1], depthTest: false },
+        { camera, children: [], clear: "none", clearColor: [0.1, 0.2, 0.3, 1], depthTest: false, kind: "pass" },
+      ],
+    ];
 
-  it("preserves render pass clear and depth options for overlays", () => {
-    expect(pass({
-      camera,
-      children: [],
-      clear: "none",
-      clearColor: [0.1, 0.2, 0.3, 1],
-      depthTest: false,
-    })).toEqual({
-      camera,
-      children: [],
-      clear: "none",
-      clearColor: [0.1, 0.2, 0.3, 1],
-      depthTest: false,
-      kind: "pass",
-    });
+    for (const [label, input, expected] of cases) {
+      expect(pass(input), label).toEqual(expected);
+    }
   });
 
   it("preserves pass environment lighting descriptors", () => {
@@ -206,61 +197,36 @@ describe("renderer-core descriptor contract", () => {
   });
 
   it("preserves selected glTF material variants by name or index", () => {
-    expect(gltf({
-      src: "/models/chair.gltf",
-      variant: "walnut",
-    })).toEqual({
-      asset: {
-        uri: "/models/chair.gltf",
-      },
-      kind: "gltf",
-      src: "/models/chair.gltf",
-      variant: "walnut",
-    });
+    const src = "/models/chair.gltf";
+    const cases: Array<[string, NonNullable<Parameters<typeof gltf>[0]["variant"]>, object]> = [
+      ["named variant", "walnut", { asset: { uri: src }, kind: "gltf", src, variant: "walnut" }],
+      ["indexed variant", 2, { kind: "gltf", variant: 2 }],
+    ];
 
-    expect(gltf({
-      src: "/models/chair.gltf",
-      variant: 2,
-    })).toMatchObject({
-      kind: "gltf",
-      variant: 2,
-    });
+    for (const [label, variant, expected] of cases) {
+      expect(gltf({ src, variant }), label).toMatchObject(expected);
+    }
   });
 
   it("preserves controlled glTF animation clips and time", () => {
-    expect(gltf({
-      animation: {
-        clip: "walk",
-        timeSeconds: 1.25,
-      },
-      src: "/models/avatar.glb",
-    })).toEqual({
-      animation: {
-        clip: "walk",
-        timeSeconds: 1.25,
-      },
-      asset: {
-        uri: "/models/avatar.glb",
-      },
-      kind: "gltf",
-      src: "/models/avatar.glb",
-    });
+    const cases: Array<[string, NonNullable<Parameters<typeof gltf>[0]["animation"]>]> = [
+      ["clip and time", { clip: "walk", timeSeconds: 1.25 }],
+      ["time only", { timeSeconds: 0 }],
+    ];
 
-    expect(gltf({
-      animation: {
-        timeSeconds: 0,
-      },
-      src: "/models/avatar.glb",
-    })).toEqual({
-      animation: {
-        timeSeconds: 0,
-      },
-      asset: {
-        uri: "/models/avatar.glb",
-      },
-      kind: "gltf",
-      src: "/models/avatar.glb",
-    });
+    for (const [label, animation] of cases) {
+      expect(gltf({
+        animation,
+        src: "/models/avatar.glb",
+      }), label).toEqual({
+        animation,
+        asset: {
+          uri: "/models/avatar.glb",
+        },
+        kind: "gltf",
+        src: "/models/avatar.glb",
+      });
+    }
   });
 
   it("preserves directional light descriptor fields", () => {

@@ -15,7 +15,6 @@ const fakeCapabilityContext = (
 ): FakeCapabilityContext => {
   const parameterQueries: number[] = [];
   const extensions = new Set([
-    "EXT_color_buffer_float",
     "EXT_texture_filter_anisotropic",
     "WEBGL_lose_context",
   ]);
@@ -24,14 +23,11 @@ const fakeCapabilityContext = (
     MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
     MAX_TEXTURE_IMAGE_UNITS: 0x8872,
     MAX_TEXTURE_SIZE: 0x0D33,
-    READ_BUFFER: 0x0C02,
     RENDERER: 0x1F01,
     SHADING_LANGUAGE_VERSION: 0x8B8C,
-    TEXTURE_3D: 0x806F,
     VENDOR: 0x1F00,
     VERSION: 0x1F02,
     beginQuery: () => undefined,
-    drawBuffers: () => undefined,
     getExtension: (name: string) => extensions.has(name) ? { name } : null,
     getParameter: (name: number) => {
       parameterQueries.push(name);
@@ -57,8 +53,6 @@ const fakeCapabilityContext = (
       }
     },
     getSupportedExtensions: () => [...extensions],
-    texStorage2D: () => undefined,
-    vertexAttribDivisor: () => undefined,
   };
 
   return { gl, parameterQueries };
@@ -109,10 +103,33 @@ describe("renderer-webgl capabilities public API", () => {
       supported: true,
     }));
     expect(result.rows).toContainEqual(expect.objectContaining({
-      capability: "float_texture",
-      extension: "EXT_color_buffer_float",
+      capability: "draw_buffers",
       kind: "renderer_capability",
-      source: "webgl-extension",
+      source: "webgl2-core",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "depth_texture",
+      kind: "renderer_capability",
+      source: "webgl2-core",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "instancing",
+      kind: "renderer_capability",
+      source: "webgl2-core",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "float_texture",
+      kind: "renderer_capability",
+      source: "webgl2-core",
+      supported: true,
+    }));
+    expect(result.rows).toContainEqual(expect.objectContaining({
+      capability: "half_float_texture",
+      kind: "renderer_capability",
+      source: "webgl2-core",
       supported: true,
     }));
     expect(result.rows).toContainEqual(expect.objectContaining({
@@ -120,11 +137,6 @@ describe("renderer-webgl capabilities public API", () => {
       extension: "WEBGL_lose_context",
       kind: "renderer_capability",
       source: "webgl-extension",
-      supported: true,
-    }));
-    expect(result.rows).toContainEqual(expect.objectContaining({
-      kind: "webgl_extension",
-      name: "EXT_color_buffer_float",
       supported: true,
     }));
     expect(result.rows).toContainEqual(expect.objectContaining({

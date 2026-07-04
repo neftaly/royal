@@ -584,7 +584,11 @@ describe("WebGL renderer state and capability regressions", () => {
       getSupportedExtensions: () => [],
     };
 
-    const result = collectRendererCapabilityRows(gl, { contextVersion: 2 });
+    const result = collectRendererCapabilityRows(gl);
+    const rendererRows = result.rows.filter(isRendererCapabilityRow);
+    const coreNames = rendererRows
+      .filter((row) => row.supported && row.source === "webgl2-core")
+      .map((row) => row.capability);
     const missingRows = result.rows.filter(isRendererCapabilityRow).filter((row) =>
       !row.supported
       && row.source === "missing");
@@ -596,11 +600,13 @@ describe("WebGL renderer state and capability regressions", () => {
 
     expect(missingNames).toEqual(expect.arrayContaining([
       "anisotropy",
-      "float_texture",
-      "half_float_texture",
       "compressed_texture",
       "lose_context",
     ]));
-    expect(detailOrDiagnosticText).toMatch(/anisotropy|float_texture|half_float_texture|compressed_texture|lose_context/i);
+    expect(coreNames).toEqual(expect.arrayContaining([
+      "float_texture",
+      "half_float_texture",
+    ]));
+    expect(detailOrDiagnosticText).toMatch(/anisotropy|compressed_texture|lose_context/i);
   });
 });
