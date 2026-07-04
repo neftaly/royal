@@ -466,7 +466,7 @@ const fakeGl = (): FakeGl => {
     clearDepth: record("clearDepth"),
     colorMask: record("colorMask"),
     compileShader: record("compileShader"),
-    copyTexImage2D: record("copyTexImage2D"),
+    copyTexSubImage2D: record("copyTexSubImage2D"),
     createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
     createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
     createShader: record("createShader", () => handle<WebGLShader>("shader")),

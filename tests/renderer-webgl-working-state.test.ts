@@ -212,6 +212,9 @@ const drawablePass = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => pass({
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
 
+const countCalls = (calls: readonly GlCall[], name: string): number =>
+  calls.filter((call) => call.name === name).length;
+
 const expectMatricesToContainClose = (
   matrices: readonly (readonly number[])[],
   expected: readonly number[],
@@ -262,6 +265,25 @@ describe("WebGL root working state contracts", () => {
     expect(canvas.width).toBe(360);
     expect(canvas.height).toBe(180);
     expect(calls).toContainEqual({ name: "viewport", args: [0, 0, 360, 180] });
+  });
+
+  it("caches GL program locations across repeated draws with the same program", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderScene = scene({ children: [drawablePass([0, 0, 0, 0])] });
+
+    root.render(renderScene);
+    const firstAttribLookups = countCalls(calls, "getAttribLocation");
+    const firstUniformLookups = countCalls(calls, "getUniformLocation");
+
+    expect(firstAttribLookups).toBeGreaterThan(0);
+    expect(firstUniformLookups).toBeGreaterThan(0);
+
+    root.render(renderScene);
+
+    expect(countCalls(calls, "getAttribLocation")).toBe(firstAttribLookups);
+    expect(countCalls(calls, "getUniformLocation")).toBe(firstUniformLookups);
+    expect(drawCalls(calls)).toHaveLength(2);
   });
 
   it("applies each pass clearColor and draws passes in scene order", () => {

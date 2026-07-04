@@ -532,6 +532,8 @@ const installBenchmarkHooks = async (session) => {
     bufferDataCalls: 0,
     bufferSubDataBytes: 0,
     bufferSubDataCalls: 0,
+    copyTexImage2D: 0,
+    copyTexSubImage2D: 0,
     drawArrays: 0,
     drawArraysInstanced: 0,
     drawElements: 0,
@@ -632,6 +634,8 @@ const installBenchmarkHooks = async (session) => {
       counters.bufferSubDataCalls += 1;
       counters.bufferSubDataBytes += byteLengthOf(args[2]);
     });
+    patch(prototype, 'copyTexImage2D', () => { counters.copyTexImage2D += 1; });
+    patch(prototype, 'copyTexSubImage2D', () => { counters.copyTexSubImage2D += 1; });
     patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
     patch(prototype, 'texSubImage2D', () => { counters.texSubImage2D += 1; });
     patch(prototype, 'useProgram', () => { counters.useProgram += 1; });
@@ -1196,6 +1200,8 @@ const routeSummary = (route) => {
   const bindBufferPerFrame = route.gl.bindBuffer / frameSampleCount;
   const bindTexturePerFrame = route.gl.bindTexture / frameSampleCount;
   const bindVertexArrayPerFrame = route.gl.bindVertexArray / frameSampleCount;
+  const copyTexImage2DPerFrame = route.gl.copyTexImage2D / frameSampleCount;
+  const copyTexSubImage2DPerFrame = route.gl.copyTexSubImage2D / frameSampleCount;
   const uniformCallsPerFrame = route.gl.uniformCalls / frameSampleCount;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
@@ -1249,6 +1255,8 @@ const routeSummary = (route) => {
     bindBufferPerFrame: round(bindBufferPerFrame),
     bindTexturePerFrame: round(bindTexturePerFrame),
     bindVertexArrayPerFrame: round(bindVertexArrayPerFrame),
+    copyTexImage2DPerFrame: round(copyTexImage2DPerFrame),
+    copyTexSubImage2DPerFrame: round(copyTexSubImage2DPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
     uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / frameSampleCount),
     setupDrawCalls: route.gl.setup?.drawCalls ?? 0,

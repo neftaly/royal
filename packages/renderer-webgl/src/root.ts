@@ -2247,6 +2247,8 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
   readonly #programs = new Map<string, ProgramResource>();
+  readonly #programAttributeLocations = new Map<WebGLProgram, Map<string, number>>();
+  readonly #programUniformLocations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
@@ -2492,10 +2494,7 @@ class WebGlRootImpl implements WebGlRoot {
       gl.deleteTexture(texture);
       this.#ownedTextures.delete(texture);
     }
-    for (const program of Array.from(this.#ownedPrograms)) {
-      gl.deleteProgram(program);
-      this.#ownedPrograms.delete(program);
-    }
+    for (const program of Array.from(this.#ownedPrograms)) this.#deleteProgram(program);
     for (const shader of Array.from(this.#ownedShaders)) {
       gl.deleteShader(shader);
       this.#ownedShaders.delete(shader);
@@ -4237,12 +4236,12 @@ class WebGlRootImpl implements WebGlRoot {
   #bindGeometryAttributes(program: WebGLProgram, geometry: GeometryResource): void {
     const gl = this.#gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, geometry.arrayBuffer);
-    const positionLocation = gl.getAttribLocation(program, "a_position");
+    const positionLocation = this.#attribLocation(program, "a_position");
     if (positionLocation >= 0) {
       gl.enableVertexAttribArray(positionLocation);
       gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
     }
-    const uvLocation = gl.getAttribLocation(program, "a_uv");
+    const uvLocation = this.#attribLocation(program, "a_uv");
     if (uvLocation >= 0) {
       if (geometry.texCoordBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.texCoordBuffer);
@@ -4252,7 +4251,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.disableVertexAttribArray(uvLocation);
       }
     }
-    const emissiveUvLocation = gl.getAttribLocation(program, "a_emissive_uv");
+    const emissiveUvLocation = this.#attribLocation(program, "a_emissive_uv");
     if (emissiveUvLocation >= 0) {
       if (geometry.emissiveTexCoordBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.emissiveTexCoordBuffer);
@@ -4263,7 +4262,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttrib2f(emissiveUvLocation, 0, 0);
       }
     }
-    const normalLocation = gl.getAttribLocation(program, "a_normal");
+    const normalLocation = this.#attribLocation(program, "a_normal");
     if (normalLocation >= 0) {
       if (geometry.normalBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
@@ -4273,7 +4272,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.disableVertexAttribArray(normalLocation);
       }
     }
-    const tangentLocation = gl.getAttribLocation(program, "a_tangent");
+    const tangentLocation = this.#attribLocation(program, "a_tangent");
     if (tangentLocation >= 0) {
       if (geometry.tangentBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.tangentBuffer);
@@ -4284,7 +4283,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
       }
     }
-    const colorLocation = gl.getAttribLocation(program, "a_color");
+    const colorLocation = this.#attribLocation(program, "a_color");
     if (colorLocation >= 0) {
       if (geometry.colorBuffer !== undefined) {
         gl.bindBuffer(gl.ARRAY_BUFFER, geometry.colorBuffer);
@@ -4615,8 +4614,7 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    const location = gl.getUniformLocation(program, "u_texture");
-    if (location !== null) gl.uniform1i(location, 0);
+    this.#uniform1i(program, "u_texture", 0);
     return true;
   }
 
@@ -5103,23 +5101,51 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
-    const location = this.#gl.getUniformLocation(program, name);
+    const location = this.#uniformLocation(program, name);
     if (location !== null) this.#gl.uniformMatrix4fv(location, false, matrix);
   }
 
   #uniformColor(program: WebGLProgram, name: string, color: Rgba): void {
-    const location = this.#gl.getUniformLocation(program, name);
+    const location = this.#uniformLocation(program, name);
     if (location !== null) this.#gl.uniform4fv(location, color);
   }
 
   #uniform1i(program: WebGLProgram, name: string, value: number): void {
-    const location = this.#gl.getUniformLocation(program, name);
+    const location = this.#uniformLocation(program, name);
     if (location !== null) this.#gl.uniform1i(location, value);
   }
 
   #uniform2fv(program: WebGLProgram, name: string, value: readonly [number, number]): void {
-    const location = this.#gl.getUniformLocation(program, name);
+    const location = this.#uniformLocation(program, name);
     if (location !== null) this.#gl.uniform2fv(location, value);
+  }
+
+  #attribLocation(program: WebGLProgram, name: string): number {
+    let locations = this.#programAttributeLocations.get(program);
+    if (locations === undefined) {
+      locations = new Map();
+      this.#programAttributeLocations.set(program, locations);
+    }
+
+    const cached = locations.get(name);
+    if (cached !== undefined) return cached;
+
+    const location = this.#gl.getAttribLocation(program, name);
+    locations.set(name, location);
+    return location;
+  }
+
+  #uniformLocation(program: WebGLProgram, name: string): WebGLUniformLocation | null {
+    let locations = this.#programUniformLocations.get(program);
+    if (locations === undefined) {
+      locations = new Map();
+      this.#programUniformLocations.set(program, locations);
+    }
+    if (locations.has(name)) return locations.get(name) ?? null;
+
+    const location = this.#gl.getUniformLocation(program, name);
+    locations.set(name, location);
+    return location;
   }
 
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
@@ -5611,10 +5637,14 @@ class WebGlRootImpl implements WebGlRoot {
     const [width, height] = viewportSize;
     const resource = this.#transmissionScreenColorTextureResource();
     const gl = this.#gl;
+    const needsAllocation = !resource.uploaded || resource.width !== width || resource.height !== height;
 
     gl.activeTexture(gl.TEXTURE0 + 1);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, width, height, 0);
+    if (needsAllocation) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
     resource.width = width;
     resource.height = height;
     resource.uploaded = true;
@@ -6561,6 +6591,8 @@ class WebGlRootImpl implements WebGlRoot {
     if (!this.#ownedPrograms.has(program)) return;
     this.#gl.deleteProgram(program);
     this.#ownedPrograms.delete(program);
+    this.#programAttributeLocations.delete(program);
+    this.#programUniformLocations.delete(program);
   }
 
   #recordDiagnostic(message: string): void {

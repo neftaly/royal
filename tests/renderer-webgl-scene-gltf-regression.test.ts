@@ -4351,8 +4351,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0.625, 0.75,
     ]);
     expect(readyFrameCalls.some((call) =>
-      call.name === "getAttribLocation" && call.args[1] === "a_emissive_uv")).toBe(true);
-    expect(readyFrameCalls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 12
       && call.args[1] === 2
@@ -4585,8 +4583,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
       1, 0, 0, 1,
       1, 0, 0, 1,
     ]);
-    expect(readyFrameCalls.some((call) =>
-      call.name === "getAttribLocation" && call.args[1] === "a_tangent")).toBe(true);
     expect(readyFrameCalls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 11
@@ -4983,7 +4979,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(readyFrameCalls).join("\n");
     const readyDrawCalls = drawCalls(readyFrameCalls);
-    const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexImage2D");
+    const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexSubImage2D");
     const drawIndexes = readyFrameCalls
       .map((call, index) => ({ call, index }))
       .filter(({ call }) => call.name === "drawArrays" || call.name === "drawElements")
@@ -4993,8 +4989,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(copyIndex).toBeGreaterThan(drawIndexes[0] ?? -1);
     expect(copyIndex).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
     expect(readyFrameCalls).toContainEqual({
-      args: [gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, defaultCanvasSize.width, defaultCanvasSize.height, 0],
-      name: "copyTexImage2D",
+      args: [gl.TEXTURE_2D, 0, gl.RGBA, defaultCanvasSize.width, defaultCanvasSize.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null],
+      name: "texImage2D",
+    });
+    expect(readyFrameCalls).toContainEqual({
+      args: [gl.TEXTURE_2D, 0, 0, 0, 0, 0, defaultCanvasSize.width, defaultCanvasSize.height],
+      name: "copyTexSubImage2D",
     });
     expect(readyFrameCalls).toContainEqual({
       args: [gl.TEXTURE0 + 1],
@@ -5014,6 +5014,19 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(sources).toContain("texture(u_transmissionScreenTexture");
     expect(sources).toContain("lit = mix(lit, transmitted, transmission);");
     expect(sources).not.toContain("u_refractionColor");
+
+    const callsBeforeStableRender = calls.length;
+    root.render(renderGraph);
+    const stableFrameCalls = calls.slice(callsBeforeStableRender);
+
+    expect(stableFrameCalls.filter((call) => call.name === "copyTexSubImage2D")).toHaveLength(1);
+    expect(stableFrameCalls.some((call) =>
+      call.name === "texImage2D"
+      && call.args[0] === gl.TEXTURE_2D
+      && call.args[1] === 0
+      && call.args[2] === gl.RGBA
+      && call.args[3] === defaultCanvasSize.width
+      && call.args[4] === defaultCanvasSize.height)).toBe(false);
   });
 
   it("renders required KHR materials transmission and volume defaults exactly", async () => {
@@ -5046,7 +5059,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(readyFrameCalls.some((call) => call.name === "copyTexImage2D")).toBe(false);
+    expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
     expect(uniform1iPayloads(readyFrameCalls, "u_useTransmissionTexture")).toContain(0);
     expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor").map(roundVector))
       .toContainEqual([1, 1, 1, 1]);
@@ -5084,7 +5097,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(readyFrameCalls).join("\n");
     const readyDrawCalls = drawCalls(readyFrameCalls);
-    const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexImage2D");
+    const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexSubImage2D");
     const drawIndexes = readyFrameCalls
       .map((call, index) => ({ call, index }))
       .filter(({ call }) => call.name === "drawArrays" || call.name === "drawElements")
@@ -5144,7 +5157,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .map(roundVector);
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(2);
-    expect(readyFrameCalls.some((call) => call.name === "copyTexImage2D")).toBe(false);
+    expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
     expect(dispersionPayloads.filter((payload) =>
       JSON.stringify(payload) === JSON.stringify([0, 0, 0, 0]))).toHaveLength(2);
     expect(transmissionVolumePayloads.filter((payload) =>
@@ -5352,7 +5365,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(readyFrameCalls.filter((call) => call.name === "copyTexImage2D")).toHaveLength(1);
+    expect(readyFrameCalls.filter((call) => call.name === "copyTexSubImage2D")).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
       .toContainEqual([0.2, 0, 0, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_transmissionVolumeFactors").map(roundVector))
@@ -5388,7 +5401,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(readyFrameCalls.filter((call) => call.name === "copyTexImage2D")).toHaveLength(1);
+    expect(readyFrameCalls.filter((call) => call.name === "copyTexSubImage2D")).toHaveLength(1);
     expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
       .toContainEqual([0.2, 0, 0, 0]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_dispersionFactors").map(roundVector))
