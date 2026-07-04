@@ -105,7 +105,7 @@ export type RendererCapabilityDiagnostic = {
   readonly key?: string | undefined;
 };
 
-export type WebGlLikeContext = {
+export type WebGlCapabilityProbeContext = {
   readonly VERSION?: number;
   readonly SHADING_LANGUAGE_VERSION?: number;
   readonly VENDOR?: number;
@@ -215,18 +215,18 @@ const compressedTextureFormatNames: Readonly<Record<number, string>> = {
   0x9273: "COMPRESSED_SIGNED_RG11_EAC",
 };
 
-const hasGlProbeSurface = (gl: WebGlLikeContext): boolean =>
+const hasGlProbeSurface = (gl: WebGlCapabilityProbeContext): boolean =>
   typeof gl.getParameter === "function" ||
   typeof gl.getSupportedExtensions === "function" ||
   typeof gl.getExtension === "function";
 
-const readStringParameter = (gl: WebGlLikeContext, parameter: number | undefined): string | undefined => {
+const readStringParameter = (gl: WebGlCapabilityProbeContext, parameter: number | undefined): string | undefined => {
   if (parameter === undefined || typeof gl.getParameter !== "function") return undefined;
   const value = gl.getParameter(parameter);
   return typeof value === "string" ? value : undefined;
 };
 
-const readNumberParameter = (gl: WebGlLikeContext, parameter: number | undefined): number | undefined => {
+const readNumberParameter = (gl: WebGlCapabilityProbeContext, parameter: number | undefined): number | undefined => {
   if (parameter === undefined || typeof gl.getParameter !== "function") return undefined;
   const value = gl.getParameter(parameter);
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -238,7 +238,7 @@ const isNumericArrayLike = (value: unknown): value is ArrayLike<number> =>
   "length" in value &&
   typeof value.length === "number";
 
-const readCompressedTextureFormats = (gl: WebGlLikeContext): readonly number[] => {
+const readCompressedTextureFormats = (gl: WebGlCapabilityProbeContext): readonly number[] => {
   if (gl.COMPRESSED_TEXTURE_FORMATS === undefined || typeof gl.getParameter !== "function") return [];
   const value = gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS);
   if (ArrayBuffer.isView(value) && isNumericArrayLike(value)) return Array.from(value);
@@ -246,7 +246,7 @@ const readCompressedTextureFormats = (gl: WebGlLikeContext): readonly number[] =
   return [];
 };
 
-const supportedExtensionSet = (gl: WebGlLikeContext): Set<string> => {
+const supportedExtensionSet = (gl: WebGlCapabilityProbeContext): Set<string> => {
   const supported = new Set(
     (gl.getSupportedExtensions?.() ?? []).filter((extension): extension is string => typeof extension === "string"),
   );
@@ -293,7 +293,7 @@ const missingCapabilityDetail = (
 };
 
 const collectWebGlRows = (
-  gl: WebGlLikeContext,
+  gl: WebGlCapabilityProbeContext,
   options: RendererCapabilityProbeOptions,
 ): RendererCapabilityProbeRow[] => {
   const versionLabel = readStringParameter(gl, gl.VERSION);
@@ -319,15 +319,17 @@ const collectWebGlRows = (
     true,
     "webgl2-core",
   ));
-  rows.push(capabilityRow(
-    "webgpu",
-    options.webgpu?.status === "available",
-    "webgpu-probe",
-    undefined,
-    options.webgpu?.status === "available"
-      ? undefined
-      : options.webgpu?.reason ?? "webgpu is not available from the current environment probe.",
-  ));
+  if (options.webgpu !== undefined) {
+    rows.push(capabilityRow(
+      "webgpu",
+      options.webgpu.status === "available",
+      "webgpu-probe",
+      undefined,
+      options.webgpu.status === "available"
+        ? undefined
+        : options.webgpu.reason ?? "webgpu is not available from the current environment probe.",
+    ));
+  }
 
   for (const capability of ["draw_buffers", "depth_texture", "instancing", "float_texture", "half_float_texture"] as const) {
     rows.push(capabilityRow(capability, true, "webgl2-core"));
@@ -392,8 +394,8 @@ const collectWebGlRows = (
   return rows;
 };
 
-export const collectRendererCapabilityRows = (
-  gl: WebGlLikeContext,
+export const probeWebGlCapabilities = (
+  gl: WebGlCapabilityProbeContext,
   options: RendererCapabilityProbeOptions = {},
 ): RendererCapabilityProbeResult => {
   if (hasGlProbeSurface(gl)) {

@@ -4,12 +4,21 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./capabilities": "./src/capabilities.ts",
-    "./webxr": "./src/webxr.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.ts",
+      "import": "./dist/capabilities.js"
+    },
+    "./webxr": {
+      "types": "./dist/webxr.d.ts",
+      "import": "./dist/webxr.js"
+    }
   },
   "files": [
     "src",

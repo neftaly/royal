@@ -206,9 +206,9 @@ describe("renderer JSX contract", () => {
     });
   });
 
-  it("lowers model JSX to glTF descriptors", () => {
+  it("lowers glTF JSX to glTF descriptors", () => {
     expect(
-      <model
+      <gltf
         animation={{ clip: "idle", timeSeconds: 2.5 }}
         src="/models/terrain.gltf"
         variant="winter"
@@ -237,7 +237,7 @@ describe("renderer JSX contract", () => {
       </mesh>
     );
     const modelDescriptor = (
-      <model
+      <gltf
         onPointerEnter={() => undefined}
         src="/models/terrain.gltf"
       />

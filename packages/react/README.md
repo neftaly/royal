@@ -51,10 +51,10 @@ export function App() {
         <pass camera={orbit.camera}>
           <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
           <mesh geometry={cube} material={red} />
-          <model src={helmetSrc} variant="display" />
+          <gltf src={helmetSrc} variant="display" />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 }
@@ -74,7 +74,7 @@ events. Royal render-object refs already invalidate the current canvas when
 their transform changes.
 
 glTF material variants from `KHR_materials_variants` can be selected with
-`gltf({ src, variant })` or `<model variant>`. Pass a variant name, or pass a
+`gltf({ src, variant })` or `<gltf variant>`. Pass a variant name, or pass a
 zero-based variant index when an asset has unnamed variants.
 
 ## Workflows

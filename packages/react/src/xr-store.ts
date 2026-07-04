@@ -337,12 +337,12 @@ export const createXrSessionStore = <Session extends object = object>(
   }));
 };
 
-export const useXrSessionStore = <Session extends object, State>(
+export const useXrSessionSelector = <Session extends object, State>(
   store: XrSessionStore<Session>,
   selector: (state: XrSessionStoreState<Session>) => State,
 ): State => useStore(store, selector);
 
-export const useRoyalXR = <Session extends object>(
+export const useXrSessionSnapshot = <Session extends object>(
   store: XrSessionStore<Session>,
 ): XrSessionSnapshot =>
-  useXrSessionStore(store, selectXrSessionSnapshot);
+  useXrSessionSelector(store, selectXrSessionSnapshot);

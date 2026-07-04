@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 const exampleEnvironment = studioEnvironment({
@@ -23,13 +23,13 @@ export const GltfHelmet = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF DamagedHelmet PBR material"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
         <pass camera={orbit.camera} environment={exampleEnvironment}>
           <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
-          <model
+          <gltf
             src={helmetSrc}
             transform={{
               position: [0, -0.08, 0],
@@ -39,7 +39,7 @@ export const GltfHelmet = (): ReactNode => {
           />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 };

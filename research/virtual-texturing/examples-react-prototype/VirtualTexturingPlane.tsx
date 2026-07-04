@@ -47,7 +47,7 @@ const maxPitch = 0.95;
 const minYaw = -1.1;
 const maxYaw = 1.1;
 
-const renderer = {
+const rootOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 const surfaceGeometry = planeGeometry({ size: [5.2, 3.4] });
@@ -170,7 +170,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
       onWheel={zoomView}
-      renderer={renderer}
+      rootOptions={rootOptions}
       data-example-maturity="lab-probe"
       data-product-demo="false"
       data-virtual-texture-active-grid={surfaceVirtualTextureProbe.activeGrid}

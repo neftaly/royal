@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 import {
   Box,
   Column,
@@ -109,8 +109,8 @@ const palette = {
 const Scout = (): ReactNode => {
   const [rotation, setRotation] = useState<EulerRads>([0.24, 0.6, 0.12]);
 
-  useFrame(({ elapsed }) => {
-    setRotation([0.24 + elapsed * 0.16, elapsed * 0.72, 0.12]);
+  useFrame(({ elapsedSeconds }) => {
+    setRotation([0.24 + elapsedSeconds * 0.16, elapsedSeconds * 0.72, 0.12]);
   });
 
   return (
@@ -185,7 +185,7 @@ export const HudOverlay = (): ReactNode => {
   return (
     <Canvas
       aria-label="HUD overlay"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
@@ -210,7 +210,7 @@ export const HudOverlay = (): ReactNode => {
         </HudPass>
       </scene>
       <OrbitControls
-        {...orbit.controls}
+        {...orbit.orbitControlsProps}
         maxDistance={12}
         minDistance={2.6}
       />

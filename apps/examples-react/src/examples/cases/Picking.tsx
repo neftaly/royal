@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 import {
   HudPass,
   HudRect,
@@ -82,7 +82,7 @@ export const Picking = (): ReactNode => {
       aria-label="Pickable helmet"
       data-royal-picking-hovered-id={hoveredId}
       data-royal-picking-readout={`Target ${readoutText}`}
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >
       <scene>
@@ -96,7 +96,7 @@ export const Picking = (): ReactNode => {
               rotation: [0, 0, 0],
             }}
           />
-          <model
+          <gltf
             onClick={() => setClicks((count) => count + 1)}
             onPointerEnter={() => setHovered(true)}
             onPointerLeave={() => setHovered(false)}
@@ -124,7 +124,7 @@ export const Picking = (): ReactNode => {
           </HudText>
         </HudPass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 };

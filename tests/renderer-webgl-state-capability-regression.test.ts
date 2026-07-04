@@ -13,9 +13,9 @@ import {
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import {
-  collectRendererCapabilityRows,
+  probeWebGlCapabilities,
   type RendererCapabilityProbeRow,
-  type WebGlLikeContext,
+  type WebGlCapabilityProbeContext,
 } from "@royal/renderer-webgl/capabilities";
 
 type GlCall = {
@@ -549,7 +549,7 @@ describe("WebGL renderer state and capability regressions", () => {
   });
 
   it("keeps probed capability diagnostics or details for missing optional WebGL capability gates", () => {
-    const gl: WebGlLikeContext = {
+    const gl: WebGlCapabilityProbeContext = {
       COMPRESSED_TEXTURE_FORMATS: 0x86A3,
       MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
       MAX_TEXTURE_IMAGE_UNITS: 0x8872,
@@ -584,7 +584,7 @@ describe("WebGL renderer state and capability regressions", () => {
       getSupportedExtensions: () => [],
     };
 
-    const result = collectRendererCapabilityRows(gl);
+    const result = probeWebGlCapabilities(gl);
     const rendererRows = result.rows.filter(isRendererCapabilityRow);
     const coreNames = rendererRows
       .filter((row) => row.supported && row.source === "webgl2-core")

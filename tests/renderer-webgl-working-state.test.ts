@@ -11,7 +11,7 @@ import {
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import {
-  createWebGlXrSessionRenderer,
+  createWebXrSessionRenderer,
   type WebGlXrFrameSnapshot,
   type WebGlXrLayerConstructor,
   type WebGlXrReferenceSpace,
@@ -534,7 +534,7 @@ describe("WebGL root working state contracts", () => {
       requestReferenceSpace: vi.fn(async () => referenceSpace),
       updateRenderState: vi.fn(),
     };
-    const layerConstructor: WebGlXrLayerConstructor = class {
+    const xrWebGLLayerConstructor: WebGlXrLayerConstructor = class {
       readonly framebuffer = framebuffer;
       constructor(
         readonly session: WebGlXrSession,
@@ -566,10 +566,10 @@ describe("WebGL root working state contracts", () => {
     });
 
     root.render(scene({ children: [drawablePass([0, 0, 0, 0])] }));
-    const renderer = await createWebGlXrSessionRenderer(root, session, {
-      layerConstructor,
+    const renderer = await createWebXrSessionRenderer(root, session, {
+      advanced: { xrWebGLLayerConstructor },
       onFrameSnapshot,
-      referenceSpaceTypes: ["local"],
+      referenceSpacePreference: ["local"],
     });
     const callsBeforeXrFrame = calls.length;
     const rendered = renderer.renderFrame({

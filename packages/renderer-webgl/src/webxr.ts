@@ -9,6 +9,13 @@ export interface WebGlXrReferenceSpace {
   readonly __royalWebGlXrReferenceSpace?: never;
 }
 
+export type WebXrReferenceSpaceType =
+  | "viewer"
+  | "local"
+  | "local-floor"
+  | "bounded-floor"
+  | "unbounded";
+
 export interface WebGlXrView {
   readonly projectionMatrix: ArrayLike<number>;
   readonly transform?: {
@@ -33,7 +40,7 @@ export interface WebGlXrLayer {
 }
 
 export interface WebGlXrSession {
-  requestReferenceSpace(type: string): Promise<WebGlXrReferenceSpace>;
+  requestReferenceSpace(type: WebXrReferenceSpaceType): Promise<WebGlXrReferenceSpace>;
   updateRenderState(state: { readonly baseLayer: WebGlXrLayer }): void | Promise<void>;
 }
 
@@ -71,11 +78,15 @@ export interface WebGlXrFrameSnapshot {
 
 export type WebGlXrFrameSnapshotCallback = (snapshot: WebGlXrFrameSnapshot) => void;
 
+export interface WebGlXrSessionRendererAdvancedOptions {
+  readonly xrWebGLLayerConstructor?: WebGlXrLayerConstructor;
+}
+
 export interface WebGlXrSessionRendererOptions {
-  readonly layerConstructor?: WebGlXrLayerConstructor;
+  readonly advanced?: WebGlXrSessionRendererAdvancedOptions;
   readonly layerOptions?: WebGlXrLayerOptions;
   readonly onFrameSnapshot?: WebGlXrFrameSnapshotCallback;
-  readonly referenceSpaceTypes?: readonly string[];
+  readonly referenceSpacePreference?: readonly WebXrReferenceSpaceType[];
 }
 
 export interface WebGlXrSessionRenderer {
@@ -101,7 +112,7 @@ const webGl2Context = (canvas: HTMLCanvasElement): WebGl2XrCompatibleContext => 
 
 const firstReferenceSpace = async (
   session: WebGlXrSession,
-  types: readonly string[],
+  types: readonly WebXrReferenceSpaceType[],
 ): Promise<WebGlXrReferenceSpace> => {
   let lastError: unknown;
   for (const type of types) {
@@ -154,7 +165,7 @@ const frameSnapshot = (
   })),
 });
 
-export const createWebGlXrSessionRenderer = async (
+export const createWebXrSessionRenderer = async (
   root: WebGlXrRenderRoot,
   session: WebGlXrSession,
   options: WebGlXrSessionRendererOptions = {},
@@ -162,7 +173,7 @@ export const createWebGlXrSessionRenderer = async (
   const gl = webGl2Context(root.canvas);
   await gl.makeXRCompatible?.();
 
-  const Layer = options.layerConstructor ?? xrLayerConstructor();
+  const Layer = options.advanced?.xrWebGLLayerConstructor ?? xrLayerConstructor();
   if (Layer === undefined) {
     throw new Error("Royal WebXR rendering requires XRWebGLLayer");
   }
@@ -171,7 +182,7 @@ export const createWebGlXrSessionRenderer = async (
   await session.updateRenderState({ baseLayer: layer });
   const referenceSpace = await firstReferenceSpace(
     session,
-    options.referenceSpaceTypes ?? DEFAULT_REFERENCE_SPACE_TYPES,
+    options.referenceSpacePreference ?? DEFAULT_REFERENCE_SPACE_TYPES,
   );
   let frameIndex = 0;
 

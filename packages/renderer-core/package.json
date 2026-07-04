@@ -4,18 +4,49 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./text": "./src/text/index.ts",
-    "./text/editable": "./src/text/editable/index.ts",
-    "./text/font": "./src/text/font.ts",
-    "./text/layout": "./src/text/layout.ts",
-    "./text/mesh": "./src/text/mesh.ts",
-    "./text/node": "./src/text/node.ts",
-    "./text/shaping": "./src/text/shaping.ts",
-    "./text/types": "./src/text/types.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internal/render-object": {
+      "types": "./dist/render-object.d.ts",
+      "import": "./dist/internal/render-object.js"
+    },
+    "./text": {
+      "types": "./dist/text/index.d.ts",
+      "import": "./dist/text.js"
+    },
+    "./text/editable": {
+      "types": "./dist/text/editable/index.d.ts",
+      "import": "./dist/text/editable.js"
+    },
+    "./text/font": {
+      "types": "./dist/text/font.d.ts",
+      "import": "./dist/text/font.js"
+    },
+    "./text/layout": {
+      "types": "./dist/text/layout.d.ts",
+      "import": "./dist/text/layout.js"
+    },
+    "./text/mesh": {
+      "types": "./dist/text/mesh.d.ts",
+      "import": "./dist/text/mesh.js"
+    },
+    "./text/node": {
+      "types": "./dist/text/node.d.ts",
+      "import": "./dist/text/node.js"
+    },
+    "./text/shaping": {
+      "types": "./dist/text/shaping.d.ts",
+      "import": "./dist/text/shaping.js"
+    },
+    "./text/types": {
+      "types": "./dist/text/types.d.ts",
+      "import": "./dist/text/types.js"
+    }
   },
   "files": [
     "src",

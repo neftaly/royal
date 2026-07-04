@@ -45,7 +45,7 @@ type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
 const CanvasRootContext = createContext<RoyalRendererRoot | null>(null);
 
-export type CanvasRendererOptions = RoyalRendererRootOptions;
+export type CanvasRootOptions = RoyalRendererRootOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
@@ -53,7 +53,7 @@ export interface CanvasProps
   /** Runtime-validated as exactly one Royal scene, plus optional React-only side-effect children. */
   readonly children: CanvasChildren;
   readonly ref?: Ref<HTMLCanvasElement>;
-  readonly renderer?: CanvasRendererOptions;
+  readonly rootOptions?: CanvasRootOptions;
 }
 
 const isReactRendererScene = (value: unknown): value is ReactNode =>
@@ -151,7 +151,7 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toCanvasRootOptions = ({ context }: CanvasRendererOptions): RoyalRendererRootOptions =>
+const toCanvasRootOptions = ({ context }: CanvasRootOptions): RoyalRendererRootOptions =>
   context === undefined ? {} : { context };
 
 const assignCanvasRef = (
@@ -268,7 +268,7 @@ export const attachCanvasPointerEventHandlers = ({
 export const Canvas = ({
   children,
   ref,
-  renderer,
+  rootOptions,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -278,9 +278,10 @@ export const Canvas = ({
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
   const { controls, sceneChild } = splitCanvasChildren(children);
-  const rendererContextAlpha = renderer?.context?.alpha;
-  const rendererContextAntialias = renderer?.context?.antialias;
-  const rendererContextPreserveDrawingBuffer = renderer?.context?.preserveDrawingBuffer;
+  const rendererContextAlpha = rootOptions?.context?.alpha;
+  const rendererContextAntialias = rootOptions?.context?.antialias;
+  const rendererContextPreserveDrawingBuffer = rootOptions?.context?.preserveDrawingBuffer;
+  const hasRootOptions = rootOptions !== undefined;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
@@ -288,18 +289,19 @@ export const Canvas = ({
   }, [ref]);
 
   const memoizedRootOptions = useMemo(
-    () => renderer === undefined
+    () => !hasRootOptions
       ? undefined
       : toCanvasRootOptions({
         context: {
           ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
           ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
-        ...(rendererContextPreserveDrawingBuffer === undefined
+          ...(rendererContextPreserveDrawingBuffer === undefined
             ? {}
             : { preserveDrawingBuffer: rendererContextPreserveDrawingBuffer }),
         },
       }),
     [
+      hasRootOptions,
       rendererContextAlpha,
       rendererContextAntialias,
       rendererContextPreserveDrawingBuffer,

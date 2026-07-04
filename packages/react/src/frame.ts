@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 export interface FrameSnapshot {
-  readonly delta: number;
+  readonly deltaMs: number;
   /** Seconds elapsed since this frame loop started. */
-  readonly elapsed: number;
-  readonly index: number;
-  readonly timestamp: number;
+  readonly elapsedSeconds: number;
+  readonly frameIndex: number;
+  readonly timestampMs: number;
 }
 
 export type FrameCallback = (frame: FrameSnapshot) => void;
@@ -69,10 +69,10 @@ export const createFrameLoop = (): FrameLoop => {
     frameIndex += 1;
     startTimestamp ??= timestamp;
     const frame = {
-      delta: lastTimestamp === undefined ? 0 : timestamp - lastTimestamp,
-      elapsed: (timestamp - startTimestamp) / 1000,
-      index: frameIndex,
-      timestamp
+      deltaMs: lastTimestamp === undefined ? 0 : timestamp - lastTimestamp,
+      elapsedSeconds: (timestamp - startTimestamp) / 1000,
+      frameIndex,
+      timestampMs: timestamp
     } satisfies FrameSnapshot;
     lastTimestamp = timestamp;
 
@@ -151,7 +151,7 @@ export const useFrameIndex = (): number => {
   const [index, setIndex] = useState(() => frameLoop.frameIndex());
 
   useFrame((frame) => {
-    setIndex(frame.index);
+    setIndex(frame.frameIndex);
   });
 
   return index;

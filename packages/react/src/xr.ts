@@ -1,5 +1,5 @@
-import type { WebGlXrFrame, WebGlXrSession } from "@royal/renderer-webgl/webxr";
-import { createWebGlXrSessionRenderer } from "@royal/renderer-webgl/webxr";
+import type { WebGlXrFrame, WebGlXrSession, WebXrReferenceSpaceType } from "@royal/renderer-webgl/webxr";
+import { createWebXrSessionRenderer } from "@royal/renderer-webgl/webxr";
 import type { RoyalRendererRoot } from "./root";
 import { webGlRootForRoyalRoot } from "./root";
 import type { XrViewport } from "./xr-store";
@@ -7,6 +7,8 @@ import type { XrViewport } from "./xr-store";
 export interface XrReferenceSpace {
   readonly __royalXrReferenceSpace?: never;
 }
+
+export type XrReferenceSpaceType = WebXrReferenceSpaceType;
 
 export interface XrView {
   readonly projectionMatrix: ArrayLike<number>;
@@ -27,7 +29,7 @@ export interface XrFrame {
 }
 
 export interface XrSession {
-  requestReferenceSpace(type: string): Promise<XrReferenceSpace>;
+  requestReferenceSpace(type: XrReferenceSpaceType): Promise<XrReferenceSpace>;
   updateRenderState(state: { readonly baseLayer: unknown }): void | Promise<void>;
 }
 
@@ -45,7 +47,7 @@ export type XrSessionRendererOptions = {
   readonly onFrameSnapshot?: (
     snapshot: XrSessionRendererFrameSnapshot,
   ) => void;
-  readonly referenceSpaceTypes?: readonly string[];
+  readonly referenceSpacePreference?: readonly XrReferenceSpaceType[];
 };
 
 export type XrSessionRenderer = {
@@ -58,7 +60,7 @@ export const createXrSessionRenderer = async (
   session: XrSession,
   options?: XrSessionRendererOptions,
 ): Promise<XrSessionRenderer> => {
-  const renderer = await createWebGlXrSessionRenderer(
+  const renderer = await createWebXrSessionRenderer(
     webGlRootForRoyalRoot(root),
     session as WebGlXrSession,
     options,
@@ -74,8 +76,8 @@ export {
   createXrSessionStore,
   selectXrSessionControlSnapshot,
   selectXrSessionSnapshot,
-  useRoyalXR,
-  useXrSessionStore,
+  useXrSessionSelector,
+  useXrSessionSnapshot,
 } from "./xr-store";
 
 export type {

@@ -113,7 +113,7 @@ renderer.
 
 | Relation | Key | Rows |
 | --- | --- | --- |
-| `rendererCapabilities` | `rootId`, `capability` | WebGL/WebGL2/WebGPU/support facts from `collectRendererCapabilityRows`. |
+| `rendererCapabilities` | `rootId`, `capability` | WebGL/WebGL2/WebGPU/support facts from `probeWebGlCapabilities`. |
 | `rendererLimits` | `rootId`, `name`, `scope` | Texture size, texture units, uniform/vector limits, compressed format support. |
 | `diagnostics` | `rootId`, `diagnosticId` | Bounded diagnostics: code, severity, relation, field/key, message, sequence, frame id. |
 | `contextEvents` | `rootId`, `eventId` | Context lost/restored, resize, DPR change, backend fallback, resource pressure. |

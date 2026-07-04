@@ -8,7 +8,7 @@ import {
 import { studioEnvironment } from '@royal/renderer-core';
 import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
 const exampleEnvironment = studioEnvironment({
@@ -99,8 +99,8 @@ const InstancedCubeAnimation = ({
   readonly cubeInstances: readonly CubeInstance[];
   readonly refs: readonly InstanceHandleRef[];
 }): null => {
-  useFrame(({ elapsed }) => {
-    const pulse = elapsed * 1.65;
+  useFrame(({ elapsedSeconds }) => {
+    const pulse = elapsedSeconds * 1.65;
 
     // Animation mutates renderer handles to avoid reconciling thousands of model elements per frame.
     for (const [index, instance] of cubeInstances.entries()) {
@@ -117,7 +117,7 @@ const InstancedCubeAnimation = ({
         ],
         rotation: [
           instance.rotation[0] + sway,
-          instance.rotation[1] + elapsed * 0.18,
+          instance.rotation[1] + elapsedSeconds * 0.18,
           instance.rotation[2] + lift * 0.32,
         ],
       });
@@ -140,7 +140,7 @@ const StaticInstancedCubeField = ({
       createElement(
         Fragment,
         { key: cubeKey(instance) },
-        <model
+        <gltf
           src={instance.src}
           transform={{
             position: instance.position,
@@ -170,7 +170,7 @@ const AnimatedInstancedCubeField = ({
         createElement(
           Fragment,
           { key: cubeKey(instance) },
-          <model
+          <gltf
             ref={refs.current[index]!}
             src={instance.src}
             transform={{
@@ -201,7 +201,7 @@ export const GltfInstancing = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF automatic instancing"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
@@ -213,7 +213,7 @@ export const GltfInstancing = (): ReactNode => {
         </pass>
       </scene>
       <BenchmarkRendererSnapshot />
-      <OrbitControls {...orbit.controls} maxDistance={24} minDistance={4} />
+      <OrbitControls {...orbit.orbitControlsProps} maxDistance={24} minDistance={4} />
     </Canvas>
   );
 };

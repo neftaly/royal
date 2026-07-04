@@ -93,7 +93,7 @@ export type TextProps = Omit<TextOptions, 'text'> & {
 export type ButtonProps = SurfaceButtonProps;
 export type InputProps = SurfaceInputProps;
 export type TextareaProps = SurfaceTextareaProps;
-export type ModelProps = GltfOptions & RoyalPointerEventProps;
+export type GltfProps = GltfOptions & RoyalPointerEventProps;
 type MeshChildren = {
   readonly geometry?: Geometry<GeometryKindValue>;
   readonly material?: Material;
@@ -103,7 +103,7 @@ type JsxProps = Partial<
   PassProps &
   MeshProps &
   TextProps &
-  ModelProps &
+  GltfProps &
   PerspectiveCameraOptions &
   OrthographicCameraOptions &
   DirectionalLightOptions &
@@ -447,8 +447,8 @@ const createIntrinsicRendererElement = (
       return directionalLight(elementProps as DirectionalLightOptions);
     case 'mesh':
       return toMesh(elementProps as MeshProps);
-    case 'model':
-      return toGltfNode(elementProps as ModelProps);
+    case 'gltf':
+      return toGltfNode(elementProps as GltfProps);
     case 'text':
       return toText(elementProps as TextProps);
     case 'boxGeometry':
@@ -534,7 +534,7 @@ export namespace JSX {
     orthographicCamera: OrthographicCameraOptions;
     directionalLight: DirectionalLightOptions;
     mesh: MeshProps;
-    model: ModelProps;
+    gltf: GltfProps;
     text: TextProps;
     boxGeometry: BoxGeometryOptions;
     planeGeometry: PlaneGeometryOptions;

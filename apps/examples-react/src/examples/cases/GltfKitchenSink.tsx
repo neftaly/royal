@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { createElement, Fragment, type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 type KitchenSinkAsset = {
   readonly bytes: number;
@@ -197,7 +197,7 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
   return (
     <Canvas
       aria-label={`glTF Kitchen Sink ${kitchenSinkSetLabel[set]} set with ${selectedAssets.length} of ${khronosKitchenSinkAssets.length} official Khronos GLB sample assets, ${selectedFixtureMiB} of ${totalFixtureMiB} MiB total`}
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
@@ -207,7 +207,7 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
             createElement(
               Fragment,
               { key: asset.name },
-              <model
+              <gltf
                 src={asset.src}
                 transform={{
                   position: asset.position,
@@ -219,7 +219,7 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
           )}
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} maxDistance={60} minDistance={9} />
+      <OrbitControls {...orbit.orbitControlsProps} maxDistance={60} minDistance={9} />
     </Canvas>
   );
 };

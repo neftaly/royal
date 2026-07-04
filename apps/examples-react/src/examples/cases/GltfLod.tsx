@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
 const exampleEnvironment = studioEnvironment({
@@ -22,13 +22,13 @@ export const GltfLod = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF MSFT_lod"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
         <pass camera={orbit.camera} environment={exampleEnvironment}>
           <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
-          <model
+          <gltf
             src={lodSrc}
             transform={{
               position: [0, 0, 0],
@@ -39,7 +39,7 @@ export const GltfLod = (): ReactNode => {
         </pass>
       </scene>
       <OrbitControls
-        {...orbit.controls}
+        {...orbit.orbitControlsProps}
         maxDistance={28}
         minDistance={2.4}
         zoomSpeed={0.00075}

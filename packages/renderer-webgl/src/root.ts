@@ -1,5 +1,4 @@
 import {
-  createRenderObjectHandle,
   type BoxGeometry,
   type DirectionalLightNode,
   type EnvironmentLight,
@@ -25,6 +24,7 @@ import {
   type UnlitMaterial,
   type Vec3,
 } from "@royal/renderer-core";
+import { createRenderObjectHandle } from "@royal/renderer-core/internal/render-object";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import {
   gltfComponentCount,

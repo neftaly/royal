@@ -53,7 +53,7 @@ export const TextFontProvider = markReactComponent(TextFontProviderComponent);
 export const TextInteractionProvider = markReactComponent(TextInteractionProviderComponent);
 export const TextSurface = markReactComponent(TextSurfaceComponent);
 
-export type { CanvasProps, CanvasRendererOptions } from './canvas';
+export type { CanvasProps, CanvasRootOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
 export type {
   ButtonProps,

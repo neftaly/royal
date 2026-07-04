@@ -7,7 +7,7 @@ import {
 import {
   type ReactNode,
 } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
@@ -26,7 +26,7 @@ export const TextureMaterials = (): ReactNode => {
   return (
     <Canvas
       aria-label="Texture materials"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
@@ -42,7 +42,7 @@ export const TextureMaterials = (): ReactNode => {
           />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 };

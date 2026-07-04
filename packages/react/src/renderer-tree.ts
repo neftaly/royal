@@ -1,9 +1,9 @@
 import {
-  createRenderObjectHandle,
   type RenderObjectHandle,
   type RenderObjectRefObject,
   type RenderRoot,
 } from '@royal/renderer-core';
+import { createRenderObjectHandle } from '@royal/renderer-core/internal/render-object';
 import { createContext, type ReactNode } from 'react';
 import ReactReconciler from 'react-reconciler';
 import {
@@ -80,7 +80,7 @@ const identityTransform = {
 const hostContext = {} as const satisfies RoyalHostContext;
 
 const isRenderObjectHostType = (type: RoyalHostType): boolean =>
-  type === 'mesh' || type === 'model';
+  type === 'mesh' || type === 'gltf';
 
 const resolveRenderObjectTransform = (
   transform: unknown,

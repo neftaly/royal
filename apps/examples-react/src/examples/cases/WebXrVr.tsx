@@ -7,7 +7,7 @@ import {
 import {
   createXrSessionRenderer,
   createXrSessionStore,
-  useXrSessionStore,
+  useXrSessionSelector,
   type XrFrame,
   type XrSession,
   type XrSessionRenderer,
@@ -15,7 +15,7 @@ import {
   type XrSessionStatus,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const camera = perspectiveCamera({
   far: 80,
@@ -158,18 +158,18 @@ const XrSessionControl = (): ReactNode => {
   }
 
   const store = storeRef.current;
-  const active = useXrSessionStore(store, (state) => state.active);
-  const available = useXrSessionStore(store, (state) => state.available);
-  const error = useXrSessionStore(store, (state) => state.error);
-  const offerStatus = useXrSessionStore(store, (state) => state.offerStatus);
-  const setOfferStatus = useXrSessionStore(store, (state) => state.setOfferStatus);
-  const status = useXrSessionStore(store, (state) => state.status);
-  const activateSession = useXrSessionStore(store, (state) => state.activateSession);
-  const beginSession = useXrSessionStore(store, (state) => state.beginSession);
-  const endSession = useXrSessionStore(store, (state) => state.endSession);
-  const failSession = useXrSessionStore(store, (state) => state.failSession);
-  const recordFrame = useXrSessionStore(store, (state) => state.recordFrame);
-  const setAvailability = useXrSessionStore(store, (state) => state.setAvailability);
+  const active = useXrSessionSelector(store, (state) => state.active);
+  const available = useXrSessionSelector(store, (state) => state.available);
+  const error = useXrSessionSelector(store, (state) => state.error);
+  const offerStatus = useXrSessionSelector(store, (state) => state.offerStatus);
+  const setOfferStatus = useXrSessionSelector(store, (state) => state.setOfferStatus);
+  const status = useXrSessionSelector(store, (state) => state.status);
+  const activateSession = useXrSessionSelector(store, (state) => state.activateSession);
+  const beginSession = useXrSessionSelector(store, (state) => state.beginSession);
+  const endSession = useXrSessionSelector(store, (state) => state.endSession);
+  const failSession = useXrSessionSelector(store, (state) => state.failSession);
+  const recordFrame = useXrSessionSelector(store, (state) => state.recordFrame);
+  const setAvailability = useXrSessionSelector(store, (state) => state.setAvailability);
   const visibleStatus = xrStatusLabel(status, error);
 
   const cleanupFrameLoop = useCallback(() => {
@@ -211,7 +211,7 @@ const XrSessionControl = (): ReactNode => {
           framebufferScaleFactor: 0.85,
         },
         onFrameSnapshot: recordFrame,
-        referenceSpaceTypes: ['local-floor', 'local'],
+        referenceSpacePreference: ['local-floor', 'local'],
       });
     } catch (error) {
       endSession();
@@ -441,7 +441,7 @@ export const WebXrVr = (): ReactNode =>
     <Canvas
       aria-label="WebXR VR"
       className="webxr-vr-canvas"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
     >
       <scene>
         <pass camera={camera} environment={exampleEnvironment}>

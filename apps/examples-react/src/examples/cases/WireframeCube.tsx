@@ -14,7 +14,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
@@ -24,11 +24,11 @@ const cubeMaterial = wireframeMaterial({
 const SpinningCube = (): ReactNode => {
   const meshRef = useRef<RenderObjectHandle | null>(null);
 
-  useFrame(({ elapsed }) => {
+  useFrame(({ elapsedSeconds }) => {
     const handle = meshRef.current;
     if (handle === null) return;
 
-    const spin = elapsed * 0.72;
+    const spin = elapsedSeconds * 0.72;
     const rotation: EulerRads = [0.42 + spin * 0.28, 0.7 + spin, 0.12];
     handle.setTransform({ rotation });
   });
@@ -53,13 +53,13 @@ export const WireframeCube = (): ReactNode => {
   });
 
   return (
-    <Canvas aria-label="Wireframe cube" renderer={exampleCanvasRenderer}>
+    <Canvas aria-label="Wireframe cube" rootOptions={exampleCanvasRootOptions}>
       <scene>
         <pass camera={orbit.camera}>
           <SpinningCube />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 };

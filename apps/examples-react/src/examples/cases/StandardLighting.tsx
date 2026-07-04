@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const exampleEnvironment = studioEnvironment({
   irradianceIntensity: 0.65,
@@ -22,7 +22,7 @@ export const StandardLighting = (): ReactNode => {
   return (
     <Canvas
       aria-label="Standard material lighting"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
@@ -46,7 +46,7 @@ export const StandardLighting = (): ReactNode => {
           </mesh>
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} />
+      <OrbitControls {...orbit.orbitControlsProps} />
     </Canvas>
   );
 };

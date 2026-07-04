@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   canvasSupportsImageMimeType,
-  collectRendererCapabilityRows,
-  type WebGlLikeContext,
+  probeWebGlCapabilities,
+  type WebGlCapabilityProbeContext,
 } from "@royal/renderer-webgl/capabilities";
 
 type FakeCapabilityContext = {
-  readonly gl: WebGlLikeContext;
+  readonly gl: WebGlCapabilityProbeContext;
   readonly parameterQueries: readonly number[];
 };
 
@@ -18,7 +18,7 @@ const fakeCapabilityContext = (
     "EXT_texture_filter_anisotropic",
     "WEBGL_lose_context",
   ]);
-  const gl: WebGlLikeContext = {
+  const gl: WebGlCapabilityProbeContext = {
     COMPRESSED_TEXTURE_FORMATS: 0x86A3,
     MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
     MAX_TEXTURE_IMAGE_UNITS: 0x8872,
@@ -78,7 +78,7 @@ describe("renderer-webgl capabilities public API", () => {
 
   it("reports probed capabilities from a fake WebGL2-like context", () => {
     const { gl, parameterQueries } = fakeCapabilityContext();
-    const result = collectRendererCapabilityRows(gl);
+    const result = probeWebGlCapabilities(gl);
 
     expect(result.rows).toContainEqual(expect.objectContaining({
       api: "webgl",
@@ -94,6 +94,10 @@ describe("renderer-webgl capabilities public API", () => {
       kind: "renderer_capability",
       source: "webgl2-core",
       supported: true,
+    }));
+    expect(result.rows).not.toContainEqual(expect.objectContaining({
+      capability: "webgpu",
+      kind: "renderer_capability",
     }));
     expect(result.rows).toContainEqual(expect.objectContaining({
       capability: "anisotropy",
@@ -174,7 +178,7 @@ describe("renderer-webgl capabilities public API", () => {
   });
 
   it("requires a WebGL-like context instead of returning stubbed rows", () => {
-    expect(() => collectRendererCapabilityRows({})).toThrow(
+    expect(() => probeWebGlCapabilities({})).toThrow(
       "Renderer capability probing requires a WebGL-like context",
     );
   });

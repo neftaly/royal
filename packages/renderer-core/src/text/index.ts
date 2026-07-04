@@ -35,4 +35,3 @@ export { layoutText } from './layout';
 export { textMesh } from './mesh';
 export { text } from './node';
 export { shapeText } from './shaping';
-export * from './editable';

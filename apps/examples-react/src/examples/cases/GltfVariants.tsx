@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
 const exampleEnvironment = studioEnvironment({
@@ -23,13 +23,13 @@ export const GltfVariants = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF KHR_materials_variants"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
         <pass camera={orbit.camera} environment={exampleEnvironment}>
           <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
-          <model
+          <gltf
             src={variantSrc}
             transform={{
               position: [-1.05, 0, 0],
@@ -37,7 +37,7 @@ export const GltfVariants = (): ReactNode => {
               scale: [0.76, 0.76, 0.76],
             }}
           />
-          <model
+          <gltf
             src={variantSrc}
             transform={{
               position: [0, 0, 0],
@@ -46,7 +46,7 @@ export const GltfVariants = (): ReactNode => {
             }}
             variant="ruby"
           />
-          <model
+          <gltf
             src={variantSrc}
             transform={{
               position: [1.05, 0, 0],
@@ -57,7 +57,7 @@ export const GltfVariants = (): ReactNode => {
           />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} maxDistance={8} minDistance={2} />
+      <OrbitControls {...orbit.orbitControlsProps} maxDistance={8} minDistance={2} />
     </Canvas>
   );
 };

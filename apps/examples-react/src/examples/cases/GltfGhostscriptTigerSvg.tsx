@@ -4,7 +4,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleCanvasRenderer } from '../example-renderer';
+import { exampleCanvasRootOptions } from '../example-root-options';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
 
@@ -21,12 +21,12 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF GS_texture_svg Ghostscript tiger card fixture"
-      renderer={exampleCanvasRenderer}
+      rootOptions={exampleCanvasRootOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
         <pass camera={orbit.camera}>
-          <model
+          <gltf
             src={tigerCardSrc}
             transform={{
               position: [0, -0.01, 0],
@@ -36,7 +36,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
           />
         </pass>
       </scene>
-      <OrbitControls {...orbit.controls} maxDistance={2.5} minDistance={0.28} />
+      <OrbitControls {...orbit.orbitControlsProps} maxDistance={2.5} minDistance={0.28} />
     </Canvas>
   );
 };

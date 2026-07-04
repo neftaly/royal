@@ -201,8 +201,8 @@ export type UseOrbitCameraOptions =
 
 export type OrbitCameraHookResult = {
   readonly camera: PerspectiveCamera;
-  readonly controls: Pick<OrbitControlsProps, "camera" | "far" | "fovY" | "near" | "store">;
   readonly getView: () => OrbitCameraView;
+  readonly orbitControlsProps: Pick<OrbitControlsProps, "camera" | "far" | "fovY" | "near" | "store">;
   readonly setView: OrbitCameraState["setView"];
   readonly store: OrbitCameraStore;
   readonly view: OrbitCameraView;
@@ -246,7 +246,7 @@ export const useOrbitCamera = ({
   }
 
   const camera = cameraRef.current;
-  const controls = useMemo(() => ({
+  const orbitControlsProps = useMemo(() => ({
     camera,
     far,
     fovY,
@@ -257,8 +257,8 @@ export const useOrbitCamera = ({
 
   return {
     camera,
-    controls,
     getView: () => cameraStore.getState().view,
+    orbitControlsProps,
     setView,
     store: cameraStore,
     get view() {

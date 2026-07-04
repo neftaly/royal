@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createXrSessionStore,
   selectXrSessionSnapshot,
-  useRoyalXR,
+  useXrSessionSnapshot,
 } from "@royal/react/xr";
 
 type TestXrSession = {
@@ -81,7 +81,7 @@ describe("React XR session store", () => {
     });
   });
 
-  it("exports an explicit-store Royal XR hook", () => {
-    expect(typeof useRoyalXR).toBe("function");
+  it("exports an explicit-store XR snapshot hook", () => {
+    expect(typeof useXrSessionSnapshot).toBe("function");
   });
 });
