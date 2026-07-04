@@ -38,9 +38,12 @@ vec2 wrapVirtualTextureUv(vec2 uv) {
 }
 
 void main() {
-  vec2 uv = wrapVirtualTextureUv(v_uv);
-  vec2 page = floor(uv * u_vtPageTableSize);
-  vec4 tableEntry = texture(u_vtPageTable, (page + vec2(0.5)) / u_vtPageTableSize);
+  vec2 wrappedUv = wrapVirtualTextureUv(v_uv);
+  vec2 pageCoord = floor(wrappedUv * u_vtPageTableSize);
+  vec4 tableEntry = texture(
+    u_vtPageTable,
+    (pageCoord + vec2(0.5)) / u_vtPageTableSize
+  );
   float encodedSlot = floor(tableEntry.r * 255.0 + 0.5)
     + floor(tableEntry.g * 255.0 + 0.5) * 256.0;
   float fallbackMipOffset = floor(tableEntry.b * 255.0 + 0.5);
@@ -51,10 +54,13 @@ void main() {
   }
 
   float slot = encodedSlot - 1.0;
-  vec2 slotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
-  vec2 residentPageTableSize = max(vec2(1.0), floor(u_vtPageTableSize / exp2(fallbackMipOffset)));
-  vec2 localUv = fract(uv * residentPageTableSize);
-  vec2 atlasUv = (slotCoord + localUv) / u_vtAtlasGrid;
+  vec2 atlasSlotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
+  vec2 residentPageTableSize = max(
+    vec2(1.0),
+    floor(u_vtPageTableSize / exp2(fallbackMipOffset))
+  );
+  vec2 localUv = fract(wrappedUv * residentPageTableSize);
+  vec2 atlasUv = (atlasSlotCoord + localUv) / u_vtAtlasGrid;
 
   outColor = texture(u_vtAtlas, atlasUv) * u_color;
 }

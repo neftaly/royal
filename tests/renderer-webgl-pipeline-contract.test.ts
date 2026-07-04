@@ -820,7 +820,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).toContain("toneMapAces");
     expect(sources).toContain("linearToSrgb");
-    expect(sources).toContain("if (!u_useIblIrradiance) {\n  return vec3(0.0);");
+    expect(sources).toContain("if (!u_useIblIrradiance) {\n    return vec3(0.0);");
     expect(sources).not.toContain("uniform sampler2D u_iblBrdfLut;");
     expect(sources).not.toContain("texture(u_iblBrdfLut");
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");

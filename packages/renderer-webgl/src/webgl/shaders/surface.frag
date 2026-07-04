@@ -27,15 +27,21 @@ uniform bool u_useIridescenceThicknessTexture;
 uniform bool u_useMaterialTransmissionTexture;
 uniform bool u_useThicknessTexture;
 uniform bool u_unlit;
+
+// Material state.
 uniform vec4 u_color;
 uniform vec4 u_alphaSettings;
 uniform vec4 u_emissiveColor;
+
+// Direct lights.
 uniform int u_surfaceLightCount;
 uniform int u_surfaceLightKind[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightColor[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightDirection[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightPosition[MAX_SURFACE_LIGHTS];
 uniform vec4 u_surfaceLightCone[MAX_SURFACE_LIGHTS];
+
+// Image-based lighting.
 uniform bool u_useIblIrradiance;
 uniform vec4 u_iblIrradianceCoefficients[9];
 uniform vec4 u_iblIrradianceSettings;
@@ -46,6 +52,7 @@ uniform vec4 u_iblSpecularSettings;
 
 __SURFACE_SAMPLER_UNIFORMS__
 
+// PBR and glTF extension factors.
 uniform vec4 u_materialPbrFactors;
 uniform vec4 u_toneMappingSettings;
 uniform vec4 u_normalTextureSettings;
@@ -82,10 +89,10 @@ vec3 toneMapAces(vec3 color) {
 
 vec3 linearToSrgb(vec3 color) {
   vec3 safeColor = clamp(color, vec3(0.0), vec3(1.0));
-  vec3 lower = safeColor * 12.92;
-  vec3 higher = 1.055 * pow(safeColor, vec3(1.0 / 2.4)) - 0.055;
+  vec3 linearSegment = safeColor * 12.92;
+  vec3 powerSegment = 1.055 * pow(safeColor, vec3(1.0 / 2.4)) - 0.055;
 
-  return mix(higher, lower, lessThanEqual(safeColor, vec3(0.0031308)));
+  return mix(powerSegment, linearSegment, lessThanEqual(safeColor, vec3(0.0031308)));
 }
 
 vec4 outputLinearColor(vec3 color, float alpha) {
@@ -225,23 +232,23 @@ vec3 materialFallbackTangent(vec3 normal) {
     return vec3(1.0, 0.0, 0.0);
   }
 
-  vec3 dp1 = dFdx(v_worldPosition);
-  vec3 dp2 = dFdy(v_worldPosition);
-  vec2 duv1 = dFdx(v_uv);
-  vec2 duv2 = dFdy(v_uv);
-  float determinant = duv1.x * duv2.y - duv1.y * duv2.x;
+  vec3 positionDx = dFdx(v_worldPosition);
+  vec3 positionDy = dFdy(v_worldPosition);
+  vec2 uvDx = dFdx(v_uv);
+  vec2 uvDy = dFdy(v_uv);
+  float determinant = uvDx.x * uvDy.y - uvDx.y * uvDy.x;
 
   if (abs(determinant) > 0.000001) {
-    vec3 rawTangent = (dp1 * duv2.y - dp2 * duv1.y) / determinant;
+    vec3 rawTangent = (positionDx * uvDy.y - positionDy * uvDx.y) / determinant;
     vec3 projectedTangent = rawTangent - normal * dot(normal, rawTangent);
     if (dot(projectedTangent, projectedTangent) > 0.0001) {
       return normalize(projectedTangent);
     }
   }
 
-  vec3 axis = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+  vec3 orthogonalAxis = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
 
-  return normalize(cross(axis, normal));
+  return normalize(cross(orthogonalAxis, normal));
 }
 
 vec3 materialGeometryTangent(vec3 normal) {
@@ -279,10 +286,10 @@ vec3 materialF90() {
 
 float materialGgxDistribution(float NdotH, float roughness) {
   float alpha = max(roughness * roughness, 0.001);
-  float alpha2 = alpha * alpha;
-  float denom = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
+  float alphaSquared = alpha * alpha;
+  float denominator = NdotH * NdotH * (alphaSquared - 1.0) + 1.0;
 
-  return alpha2 / max(PI * denom * denom, 0.0001);
+  return alphaSquared / max(PI * denominator * denominator, 0.0001);
 }
 
 vec3 materialAnisotropyDirection(vec3 normal) {
@@ -309,18 +316,18 @@ float materialAnisotropicGgxDistribution(vec3 normal, vec3 halfVector, float rou
   float alphaB = max(alpha * (1.0 - anisotropy), 0.001);
   float TdotH = dot(tangent, halfVector);
   float BdotH = dot(bitangent, halfVector);
-  float denom = TdotH * TdotH / (alphaT * alphaT)
+  float denominator = TdotH * TdotH / (alphaT * alphaT)
     + BdotH * BdotH / (alphaB * alphaB)
     + NdotH * NdotH;
 
-  return 1.0 / max(PI * alphaT * alphaB * denom * denom, 0.0001);
+  return 1.0 / max(PI * alphaT * alphaB * denominator * denominator, 0.0001);
 }
 
 float materialSmithVisibility(float NdotL, float NdotV, float roughness) {
   float alpha = max(roughness * roughness, 0.001);
-  float alpha2 = alpha * alpha;
-  float lambdaV = NdotL * sqrt(max(NdotV * NdotV * (1.0 - alpha2) + alpha2, 0.0));
-  float lambdaL = NdotV * sqrt(max(NdotL * NdotL * (1.0 - alpha2) + alpha2, 0.0));
+  float alphaSquared = alpha * alpha;
+  float lambdaV = NdotL * sqrt(max(NdotV * NdotV * (1.0 - alphaSquared) + alphaSquared, 0.0));
+  float lambdaL = NdotV * sqrt(max(NdotL * NdotL * (1.0 - alphaSquared) + alphaSquared, 0.0));
 
   return 0.5 / max(lambdaV + lambdaL, 0.0001);
 }
@@ -340,11 +347,11 @@ float materialClearcoatShininess() {
 
 float materialSheenDistribution(float NdotH) {
   float roughness = materialSheenRoughness();
-  float alphaG = max(roughness * roughness, 0.001);
-  float invR = 1.0 / alphaG;
-  float sin2h = max(1.0 - NdotH * NdotH, 0.0001);
+  float sheenRoughnessSquared = max(roughness * roughness, 0.001);
+  float inverseRoughness = 1.0 / sheenRoughnessSquared;
+  float sinThetaHSquared = max(1.0 - NdotH * NdotH, 0.0001);
 
-  return (2.0 + invR) * pow(sin2h, invR * 0.5) / (2.0 * PI);
+  return (2.0 + inverseRoughness) * pow(sinThetaHSquared, inverseRoughness * 0.5) / (2.0 * PI);
 }
 
 float materialSheenVisibility(float NdotL, float NdotV) {
@@ -359,7 +366,14 @@ float materialSheenAlbedoScale(float NdotV) {
   return clamp(1.0 - sheenStrength * mix(0.35, 0.65, roughness) * fresnelPow(NdotV), 0.0, 1.0);
 }
 
-vec3 materialSheenContribution(vec3 normal, vec3 viewDirection, vec3 lightVector, vec3 halfVector, float NdotL, vec3 lightColor) {
+vec3 materialSheenContribution(
+  vec3 normal,
+  vec3 viewDirection,
+  vec3 lightVector,
+  vec3 halfVector,
+  float NdotL,
+  vec3 lightColor
+) {
   vec3 sheenColor = materialSheenColor();
   if (maxComponent(sheenColor) <= 0.0) {
     return vec3(0.0);
@@ -420,28 +434,33 @@ float rangeAttenuation(float distanceToLight, float range) {
   }
 
   float normalizedDistance = distanceToLight / range;
-  float smoothCutoff = max(min(1.0 - normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance, 1.0), 0.0);
+  float smoothCutoff = max(
+    min(1.0 - normalizedDistance * normalizedDistance * normalizedDistance * normalizedDistance, 1.0),
+    0.0
+  );
 
   return smoothCutoff / max(distanceToLight * distanceToLight, 0.0001);
 }
 
 vec3 iblDiffuseIrradiance(vec3 normal) {
   if (!u_useIblIrradiance) {
-  return vec3(0.0);
+    return vec3(0.0);
   }
 
-  vec3 n = normalize((u_iblWorldToIbl * vec4(normal, 0.0)).xyz);
+  vec3 iblNormal = normalize((u_iblWorldToIbl * vec4(normal, 0.0)).xyz);
   vec3 irradiance = vec3(0.0);
 
   irradiance += u_iblIrradianceCoefficients[0].rgb * 0.282095;
-  irradiance += u_iblIrradianceCoefficients[1].rgb * (0.488603 * n.y);
-  irradiance += u_iblIrradianceCoefficients[2].rgb * (0.488603 * n.z);
-  irradiance += u_iblIrradianceCoefficients[3].rgb * (0.488603 * n.x);
-  irradiance += u_iblIrradianceCoefficients[4].rgb * (1.092548 * n.x * n.y);
-  irradiance += u_iblIrradianceCoefficients[5].rgb * (1.092548 * n.y * n.z);
-  irradiance += u_iblIrradianceCoefficients[6].rgb * (0.315392 * (3.0 * n.z * n.z - 1.0));
-  irradiance += u_iblIrradianceCoefficients[7].rgb * (1.092548 * n.x * n.z);
-  irradiance += u_iblIrradianceCoefficients[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
+  irradiance += u_iblIrradianceCoefficients[1].rgb * (0.488603 * iblNormal.y);
+  irradiance += u_iblIrradianceCoefficients[2].rgb * (0.488603 * iblNormal.z);
+  irradiance += u_iblIrradianceCoefficients[3].rgb * (0.488603 * iblNormal.x);
+  irradiance += u_iblIrradianceCoefficients[4].rgb * (1.092548 * iblNormal.x * iblNormal.y);
+  irradiance += u_iblIrradianceCoefficients[5].rgb * (1.092548 * iblNormal.y * iblNormal.z);
+  irradiance += u_iblIrradianceCoefficients[6].rgb * (0.315392 * (3.0 * iblNormal.z * iblNormal.z - 1.0));
+  irradiance += u_iblIrradianceCoefficients[7].rgb * (1.092548 * iblNormal.x * iblNormal.z);
+  irradiance += u_iblIrradianceCoefficients[8].rgb * (
+    0.546274 * (iblNormal.x * iblNormal.x - iblNormal.y * iblNormal.y)
+  );
 
   return max(irradiance * u_iblIrradianceSettings.y, vec3(0.0));
 }
@@ -475,22 +494,27 @@ vec3 iblSpecularRadiance(vec3 normal, vec3 viewDirection, vec3 baseColor) {
 }
 
 vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
-  int kind = u_surfaceLightKind[index];
+  int lightKind = u_surfaceLightKind[index];
   vec3 lightVector;
   float attenuation = 1.0;
 
-  if (kind == 0) {
+  if (lightKind == 0) {
     lightVector = normalize(-u_surfaceLightDirection[index].xyz);
   } else {
-    vec3 toLight = u_surfaceLightPosition[index].xyz - worldPosition;
-    float distanceToLight = length(toLight);
-    lightVector = distanceToLight <= 0.0001 ? vec3(0.0, 1.0, 0.0) : toLight / distanceToLight;
+    vec3 lightOffset = u_surfaceLightPosition[index].xyz - worldPosition;
+    float distanceToLight = length(lightOffset);
+    lightVector = distanceToLight <= 0.0001 ? vec3(0.0, 1.0, 0.0) : lightOffset / distanceToLight;
     attenuation = rangeAttenuation(distanceToLight, u_surfaceLightDirection[index].w);
 
-    if (kind == 2) {
-      float coneDot = dot(normalize(u_surfaceLightDirection[index].xyz), -lightVector);
-      float cone = clamp((coneDot - u_surfaceLightCone[index].y) / max(u_surfaceLightCone[index].x - u_surfaceLightCone[index].y, 0.001), 0.0, 1.0);
-      attenuation *= cone * cone;
+    if (lightKind == 2) {
+      float spotCosine = dot(normalize(u_surfaceLightDirection[index].xyz), -lightVector);
+      float spotAttenuation = clamp(
+        (spotCosine - u_surfaceLightCone[index].y)
+          / max(u_surfaceLightCone[index].x - u_surfaceLightCone[index].y, 0.001),
+        0.0,
+        1.0
+      );
+      attenuation *= spotAttenuation * spotAttenuation;
     }
   }
 
@@ -502,14 +526,19 @@ vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPos
   float diffuseTransmissionFactor = clamp(u_diffuseTransmissionFactors.a, 0.0, 1.0);
   vec3 diffuseTransmissionColorFactor = clamp(u_diffuseTransmissionFactors.rgb, vec3(0.0), vec3(1.0));
   vec3 diffuse = diffuseColor * (lambert / PI) * lightColor;
-  vec3 diffuseTransmission = diffuseColor * diffuseTransmissionColorFactor * diffuseTransmissionFactor * (diffuseTransmissionLambert / PI) * lightColor;
+  vec3 diffuseTransmission =
+    diffuseColor
+    * diffuseTransmissionColorFactor
+    * diffuseTransmissionFactor
+    * (diffuseTransmissionLambert / PI)
+    * lightColor;
 
   if (lambert <= 0.0) {
     return diffuse + diffuseTransmission;
   }
 
-  vec3 halfInput = lightVector + viewDirection;
-  vec3 halfVector = length(halfInput) <= 0.0001 ? normal : normalize(halfInput);
+  vec3 halfVectorInput = lightVector + viewDirection;
+  vec3 halfVector = length(halfVectorInput) <= 0.0001 ? normal : normalize(halfVectorInput);
   float NdotV = max(dot(normal, viewDirection), 0.0);
   float NdotH = max(dot(normal, halfVector), 0.0);
   float roughness = materialRoughnessFactor();
@@ -523,19 +552,19 @@ vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPos
   float distribution = materialAnisotropicGgxDistribution(normal, halfVector, roughness);
   float visibility = materialSmithVisibility(lambert, NdotV, roughness);
   vec3 specular = fresnel * min(distribution * visibility * lambert, 4.0) * lightColor;
-  vec3 material = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular + diffuseTransmission;
+  vec3 lighting = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular + diffuseTransmission;
 
-  material *= materialSheenAlbedoScale(NdotV);
-  material += materialSheenContribution(normal, viewDirection, lightVector, halfVector, lambert, lightColor);
+  lighting *= materialSheenAlbedoScale(NdotV);
+  lighting += materialSheenContribution(normal, viewDirection, lightVector, halfVector, lambert, lightColor);
 
   float clearcoat = materialClearcoatFresnel(normal, viewDirection);
   if (clearcoat <= 0.0) {
-    return material;
+    return lighting;
   }
 
   float clearcoatShape = pow(NdotH, materialClearcoatShininess()) * lambert;
 
-  return mix(material, vec3(clearcoatShape) * lightColor, clearcoat);
+  return mix(lighting, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 
 void main() {
@@ -554,12 +583,15 @@ void main() {
   }
 
   vec3 normal = materialNormal(normalize(v_normal));
-  vec3 viewInput = cameraWorldPosition() - v_worldPosition;
-  vec3 viewDirection = length(viewInput) <= 0.0001 ? normal : normalize(viewInput);
+  vec3 viewVector = cameraWorldPosition() - v_worldPosition;
+  vec3 viewDirection = length(viewVector) <= 0.0001 ? normal : normalize(viewVector);
   float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
   float occlusion = materialOcclusion();
   vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
-  vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance * occlusion * (1.0 - viewClearcoat) * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
+  vec3 lit = materialDiffuseColor(baseColor.rgb) * ambientIrradiance
+    * occlusion
+    * (1.0 - viewClearcoat)
+    * materialSheenAlbedoScale(max(dot(normal, viewDirection), 0.0));
 
   lit += iblSpecularRadiance(normal, viewDirection, baseColor.rgb) * occlusion * (1.0 - viewClearcoat);
 

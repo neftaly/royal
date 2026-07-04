@@ -55,17 +55,23 @@ vec3 rotateZ(vec3 value, float radians) {
   );
 }
 
-vec3 transformRootPoint(vec3 value) {
-  vec3 scaled = value * a_instanceScale;
-  vec3 rotated = rotateZ(rotateY(rotateX(scaled, a_instanceRotation.x), a_instanceRotation.y), a_instanceRotation.z);
+vec3 transformRootPoint(vec3 localPoint) {
+  vec3 scaled = localPoint * a_instanceScale;
+  vec3 rotated = rotateZ(
+    rotateY(rotateX(scaled, a_instanceRotation.x), a_instanceRotation.y),
+    a_instanceRotation.z
+  );
 
   return rotated + a_instancePosition;
 }
 
-vec3 transformRootVector(vec3 value) {
-  vec3 scaled = value * a_instanceScale;
+vec3 transformRootVector(vec3 localVector) {
+  vec3 scaled = localVector * a_instanceScale;
 
-  return rotateZ(rotateY(rotateX(scaled, a_instanceRotation.x), a_instanceRotation.y), a_instanceRotation.z);
+  return rotateZ(
+    rotateY(rotateX(scaled, a_instanceRotation.x), a_instanceRotation.y),
+    a_instanceRotation.z
+  );
 }
 
 void main() {
