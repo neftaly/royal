@@ -209,6 +209,7 @@ const fakeGl = (): FakeGl => {
     POINTS: 0x0000,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    SRGB8_ALPHA8: 0x8C43,
     SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
@@ -223,6 +224,7 @@ const fakeGl = (): FakeGl => {
     TRIANGLE_FAN: 0x0006,
     TRIANGLE_STRIP: 0x0005,
     TRIANGLES: 0x0004,
+    UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     UNSIGNED_BYTE: 0x1401,
     UNSIGNED_INT: 0x1405,
@@ -6236,7 +6238,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(ControlledImage.instances).toHaveLength(0);
   });
 
-  it("loads required KHR_texture_basisu base-color texture URI sources through RGBA upload", async () => {
+  it("loads required KHR_texture_basisu base-color texture URI sources through sRGB upload", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -6278,7 +6280,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(Array.from(new Uint8Array(decodeBasisuMock.mock.calls[0]?.[0] as ArrayBuffer))).toEqual(Array.from(basisuBytes));
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(calls).toContainEqual({
-      args: [gl.TEXTURE_2D, 0, gl.RGBA, 2, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
+      args: [gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, 2, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
       name: "texImage2D",
     });
   });
@@ -6326,7 +6328,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleImageUri}`))).toBe(false);
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(calls).toContainEqual({
-      args: [gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
+      args: [gl.TEXTURE_2D, 0, gl.SRGB8_ALPHA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, decodedPixels],
       name: "texImage2D",
     });
   });

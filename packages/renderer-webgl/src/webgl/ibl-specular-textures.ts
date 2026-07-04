@@ -75,9 +75,7 @@ export const uploadIblSpecularTextureIfReady = (
   const gl = context.gl;
   gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, resource.texture);
-  if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   for (const [mipIndex, mipSources] of sources.entries()) {
     const expectedSize = Math.max(1, specular.imageSize >> mipIndex);

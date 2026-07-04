@@ -11,6 +11,7 @@ export interface FrameSnapshot {
 export type FrameCallback = (frame: FrameSnapshot) => void;
 
 type FrameSubscriber = {
+  active: boolean;
   readonly callback: FrameCallback;
   readonly order: number;
   readonly priority: number;
@@ -77,7 +78,7 @@ export const createFrameLoop = (): FrameLoop => {
 
     const frameSubscribers = Array.from(subscribers);
     for (const subscriber of frameSubscribers) {
-      if (subscribers.includes(subscriber)) {
+      if (subscriber.active) {
         subscriber.callback(frame);
       }
     }
@@ -87,16 +88,20 @@ export const createFrameLoop = (): FrameLoop => {
 
   return {
     dispose: () => {
+      for (const subscriber of subscribers) {
+        subscriber.active = false;
+      }
       subscribers.length = 0;
       stop();
     },
     frameIndex: () => frameIndex,
     subscribe: (callback, priority) => {
-      const subscriber = {
+      const subscriber: FrameSubscriber = {
+        active: true,
         callback,
         order: nextSubscriberOrder,
         priority
-      } satisfies FrameSubscriber;
+      };
       nextSubscriberOrder += 1;
 
       subscribers.push(subscriber);
@@ -104,6 +109,9 @@ export const createFrameLoop = (): FrameLoop => {
       schedule();
 
       return () => {
+        if (!subscriber.active) return;
+
+        subscriber.active = false;
         const index = subscribers.indexOf(subscriber);
         if (index === -1) return;
 

@@ -1216,16 +1216,12 @@ const textureUploadInternalFormat = (
   gl: WebGL2RenderingContext,
   colorSpace: TextureColorSpace | undefined,
 ): number =>
-  colorSpace === "srgb" && typeof gl.SRGB8_ALPHA8 === "number"
+  colorSpace === "srgb"
     ? gl.SRGB8_ALPHA8
     : gl.RGBA;
 
 const disableBrowserUnpackColorConversion = (gl: WebGL2RenderingContext): void => {
-  const conversionParameter = (gl as { readonly UNPACK_COLORSPACE_CONVERSION_WEBGL?: unknown })
-    .UNPACK_COLORSPACE_CONVERSION_WEBGL;
-  if (typeof gl.pixelStorei === "function" && typeof conversionParameter === "number") {
-    gl.pixelStorei(conversionParameter, 0);
-  }
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 0);
 };
 
 const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
@@ -4195,7 +4191,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.enableVertexAttribArray(uvLocation);
         gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 0, 0);
       } else {
-        gl.disableVertexAttribArray?.(uvLocation);
+        gl.disableVertexAttribArray(uvLocation);
       }
     }
     const emissiveUvLocation = gl.getAttribLocation(program, "a_emissive_uv");
@@ -4205,7 +4201,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.enableVertexAttribArray(emissiveUvLocation);
         gl.vertexAttribPointer(emissiveUvLocation, 2, gl.FLOAT, false, 0, 0);
       } else {
-        gl.disableVertexAttribArray?.(emissiveUvLocation);
+        gl.disableVertexAttribArray(emissiveUvLocation);
         gl.vertexAttrib2f(emissiveUvLocation, 0, 0);
       }
     }
@@ -4216,7 +4212,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.enableVertexAttribArray(normalLocation);
         gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, 0, 0);
       } else {
-        gl.disableVertexAttribArray?.(normalLocation);
+        gl.disableVertexAttribArray(normalLocation);
       }
     }
     const tangentLocation = gl.getAttribLocation(program, "a_tangent");
@@ -4226,7 +4222,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.enableVertexAttribArray(tangentLocation);
         gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, 0, 0);
       } else {
-        gl.disableVertexAttribArray?.(tangentLocation);
+        gl.disableVertexAttribArray(tangentLocation);
         gl.vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
       }
     }
@@ -4237,7 +4233,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.enableVertexAttribArray(colorLocation);
         gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
       } else {
-        gl.disableVertexAttribArray?.(colorLocation);
+        gl.disableVertexAttribArray(colorLocation);
         gl.vertexAttrib4f(colorLocation, 1, 1, 1, 1);
       }
     }
@@ -4469,7 +4465,7 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     for (let location = 3; location <= 9; location += 1) {
       gl.vertexAttribDivisor(location, 0);
-      gl.disableVertexAttribArray?.(location);
+      gl.disableVertexAttribArray(location);
     }
   }
 
@@ -4880,9 +4876,7 @@ class WebGlRootImpl implements WebGlRoot {
     const slotY = Math.floor(assignment.slot / resources.atlasGridColumns);
     const gl = this.#gl;
     gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
-    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,
@@ -5596,9 +5590,7 @@ class WebGlRootImpl implements WebGlRoot {
 
     const gl = this.#gl;
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
-    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
     disableBrowserUnpackColorConversion(gl);
     const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
     if (isDecodedRgbaTexture(source)) {

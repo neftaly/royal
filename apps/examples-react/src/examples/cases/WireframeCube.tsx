@@ -1,6 +1,7 @@
 import {
   boxGeometry,
   type EulerRads,
+  type RenderObjectHandle,
   wireframeMaterial,
 } from '@royal/renderer-core';
 import {
@@ -10,7 +11,7 @@ import {
   useOrbitCamera,
 } from '@royal/react';
 import {
-  useState,
+  useRef,
   type ReactNode,
 } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
@@ -21,20 +22,25 @@ const cubeMaterial = wireframeMaterial({
 });
 
 const SpinningCube = (): ReactNode => {
-  const [rotation, setRotation] = useState<EulerRads>([0.42, 0.7, 0.12]);
+  const meshRef = useRef<RenderObjectHandle | null>(null);
 
   useFrame(({ elapsed }) => {
+    const handle = meshRef.current;
+    if (handle === null) return;
+
     const spin = elapsed * 0.72;
-    setRotation([0.42 + spin * 0.28, 0.7 + spin, 0.12]);
+    const rotation: EulerRads = [0.42 + spin * 0.28, 0.7 + spin, 0.12];
+    handle.setTransform({ rotation });
   });
 
   return (
     <mesh
+      ref={meshRef}
       geometry={cubeGeometry}
       material={cubeMaterial}
       transform={{
         position: [0, 0, 0],
-        rotation,
+        rotation: [0.42, 0.7, 0.12],
       }}
     />
   );

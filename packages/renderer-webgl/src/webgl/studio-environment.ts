@@ -106,9 +106,7 @@ export const createStudioEnvironmentSpecularTexture = (
   const texture = context.createTexture();
   gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
-  if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   for (const [mipIndex, mipSize] of STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.entries()) {
     for (let faceIndex = 0; faceIndex < 6; faceIndex += 1) {
