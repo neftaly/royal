@@ -4346,11 +4346,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(callCount(calls, "texImage2D")).toBe(1);
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_emissiveColor").map(roundVector))
+    expect(uniform4fvPayloads(calls, "u_emissiveColor").map(roundVector))
       .toContainEqual([0.4, 0.5, 0.6, 1]);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useEmissiveTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_emissiveTexture")).toContain(4);
-    expect(readyFrameCalls.some((call) =>
+    expect(uniform1iPayloads(calls, "u_useEmissiveTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_emissiveTexture")).toContain(4);
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 4)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_emissiveTexture;");
@@ -4481,9 +4481,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(callCount(calls, "texImage2D")).toBe(2);
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useMetallicRoughnessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_metallicRoughnessTexture")).toContain(3);
-    expect(readyFrameCalls.some((call) =>
+    expect(uniform1iPayloads(calls, "u_useMetallicRoughnessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_metallicRoughnessTexture")).toContain(3);
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 3)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_metallicRoughnessTexture;");
@@ -4530,11 +4530,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(callCount(calls, "texImage2D")).toBe(1);
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_occlusionSettings").map(roundVector))
+    expect(uniform4fvPayloads(calls, "u_occlusionSettings").map(roundVector))
       .toContainEqual([0.35, 0, 0, 0]);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useOcclusionTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_occlusionTexture")).toContain(5);
-    expect(readyFrameCalls.some((call) =>
+    expect(uniform1iPayloads(calls, "u_useOcclusionTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_occlusionTexture")).toContain(5);
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 5)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_occlusionTexture;");
@@ -4579,11 +4579,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const sources = shaderSources(calls).join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useNormalTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_normalTexture")).toContain(1);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_normalTextureSettings").map(roundVector))
+    expect(uniform1iPayloads(calls, "u_useNormalTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_normalTexture")).toContain(1);
+    expect(uniform4fvPayloads(calls, "u_normalTextureSettings").map(roundVector))
       .toContainEqual([0.42, 0, 0, 0]);
-    expect(readyFrameCalls.some((call) =>
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 1)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_normalTexture;");
@@ -4750,16 +4750,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const diagnostics = root.snapshot().diagnostics.join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useSpecularTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_specularTexture")).toContain(6);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useSpecularColorTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_specularColorTexture")).toContain(7);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useClearcoatTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_clearcoatTexture")).toContain(8);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useClearcoatRoughnessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_clearcoatRoughnessTexture")).toContain(9);
+    expect(uniform1iPayloads(calls, "u_useSpecularTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_specularTexture")).toContain(6);
+    expect(uniform1iPayloads(calls, "u_useSpecularColorTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_specularColorTexture")).toContain(7);
+    expect(uniform1iPayloads(calls, "u_useClearcoatTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_clearcoatTexture")).toContain(8);
+    expect(uniform1iPayloads(calls, "u_useClearcoatRoughnessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_clearcoatRoughnessTexture")).toContain(9);
     for (const unit of [6, 7, 8, 9]) {
-      expect(readyFrameCalls.some((call) =>
+      expect(calls.some((call) =>
         call.name === "activeTexture"
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
@@ -4933,16 +4933,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const diagnostics = root.snapshot().diagnostics.join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useSheenColorTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_sheenColorTexture")).toContain(10);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useSheenRoughnessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_sheenRoughnessTexture")).toContain(11);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIridescenceTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_iridescenceTexture")).toContain(12);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIridescenceThicknessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_iridescenceThicknessTexture")).toContain(13);
+    expect(uniform1iPayloads(calls, "u_useSheenColorTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_sheenColorTexture")).toContain(10);
+    expect(uniform1iPayloads(calls, "u_useSheenRoughnessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_sheenRoughnessTexture")).toContain(11);
+    expect(uniform1iPayloads(calls, "u_useIridescenceTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_iridescenceTexture")).toContain(12);
+    expect(uniform1iPayloads(calls, "u_useIridescenceThicknessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_iridescenceThicknessTexture")).toContain(13);
     for (const unit of [10, 11, 12, 13]) {
-      expect(readyFrameCalls.some((call) =>
+      expect(calls.some((call) =>
         call.name === "activeTexture"
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
@@ -5205,10 +5205,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(2);
     expect(readyFrameCalls.some((call) => call.name === "copyTexSubImage2D")).toBe(false);
-    expect(dispersionPayloads.filter((payload) =>
-      JSON.stringify(payload) === JSON.stringify([0, 0, 0, 0]))).toHaveLength(2);
-    expect(transmissionVolumePayloads.filter((payload) =>
-      JSON.stringify(payload) === JSON.stringify([0, 0, 0, 0]))).toHaveLength(2);
+    expect(dispersionPayloads).toContainEqual([0, 0, 0, 0]);
+    expect(transmissionVolumePayloads).toContainEqual([0, 0, 0, 0]);
   });
 
   it("uploads and binds KHR materials transmission and volume texture multipliers", async () => {
@@ -5250,12 +5248,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const diagnostics = root.snapshot().diagnostics.join("\n");
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useMaterialTransmissionTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(14);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useThicknessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).toContain(15);
+    expect(uniform1iPayloads(calls, "u_useMaterialTransmissionTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
+    expect(uniform1iPayloads(calls, "u_useThicknessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
     for (const unit of [14, 15]) {
-      expect(readyFrameCalls.some((call) =>
+      expect(calls.some((call) =>
         call.name === "activeTexture"
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
@@ -5320,18 +5318,18 @@ describe("WebGL renderer scene and glTF regressions", () => {
       "u_iridescenceThicknessTexture",
       "u_materialTransmissionTexture",
       "u_thicknessTexture",
-    ].map((name) => uniform1iPayloads(readyFrameCalls, name).at(-1));
+    ].map((name) => uniform1iPayloads(calls, name).at(-1));
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(enabledSamplerUniforms).toHaveLength(new Set(enabledSamplerUniforms).size);
     expect(enabledSamplerUniforms).toEqual(expect.arrayContaining(Array.from({ length: 16 }, (_value, index) => index)));
     expect((overfullSurfaceSource.match(/uniform sampler/g) ?? [])).toHaveLength(16);
     expect(overfullSurfaceSource).not.toContain("u_iblSpecularCube");
-    expect(uniform1iPayloads(readyFrameCalls, "u_useMaterialTransmissionTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(14);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useThicknessTexture")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).toContain(15);
-    expect(readyFrameCalls.some((call) =>
+    expect(uniform1iPayloads(calls, "u_useMaterialTransmissionTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
+    expect(uniform1iPayloads(calls, "u_useThicknessTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
   });
@@ -5372,13 +5370,13 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect((surfaceSource.match(/uniform sampler/g) ?? [])).toHaveLength(16);
     expect(surfaceSource).toContain("uniform samplerCube u_iblSpecularCube;");
     expect(surfaceSource).not.toContain("uniform sampler2D u_iblBrdfLut;");
-    expect(uniform1iPayloads(readyFrameCalls, "u_iblSpecularCube")).toContain(2);
-    expect(uniform1iPayloads(readyFrameCalls, "u_useIblBrdfLut")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_iblBrdfLut")).toEqual([]);
-    expect(uniform1iPayloads(readyFrameCalls, "u_normalTexture")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_materialTransmissionTexture")).toContain(14);
-    expect(uniform1iPayloads(readyFrameCalls, "u_thicknessTexture")).toContain(15);
-    expect(readyFrameCalls.some((call) =>
+    expect(uniform1iPayloads(calls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform1iPayloads(calls, "u_useIblBrdfLut")).toContain(0);
+    expect(uniform1iPayloads(calls, "u_iblBrdfLut")).toEqual([]);
+    expect(uniform1iPayloads(calls, "u_normalTexture")).toContain(0);
+    expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
+    expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
+    expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
   });
@@ -6040,7 +6038,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toHaveLength(1);
     expect(drawCalls(animatedFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
       .toHaveLength(1);
-    expect(matrixUniformPayloads(staticFrameCalls, "u_model").map(roundVector)).toContainEqual([
+    expect(matrixUniformPayloads(calls, "u_model").map(roundVector)).toContainEqual([
       1, 0, 0, 0,
       0, 1, 0, 0,
       0, 0, 1, 0,
@@ -7175,9 +7173,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const pendingCalls = calls.slice(pendingCallsStart);
     expect(drawCalls(pendingCalls), "pending lower texture LOD should not blank the glTF").toHaveLength(1);
     expect(
-      uniform4fvPayloads(pendingCalls, "u_color").map(roundVector),
+      uniform4fvPayloads(calls, "u_color").map(roundVector).at(-1),
       "renderer should keep the loaded high material until the lower material texture is usable",
-    ).toContainEqual([1, 0, 0, 1]);
+    ).toEqual([1, 0, 0, 1]);
 
     const failedImage = new Error("lower material LOD texture failed");
     for (const image of ControlledImage.instances) image.rejectLoad(failedImage);
@@ -7188,9 +7186,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const failedCalls = calls.slice(failedCallsStart);
     expect(drawCalls(failedCalls), "failed lower texture LOD should not blank the glTF").toHaveLength(1);
     expect(
-      uniform4fvPayloads(failedCalls, "u_color").map(roundVector),
+      uniform4fvPayloads(calls, "u_color").map(roundVector).at(-1),
       "renderer should keep the loaded high material after the preferred lower texture fails",
-    ).toContainEqual([1, 0, 0, 1]);
+    ).toEqual([1, 0, 0, 1]);
     expect(root.snapshot().diagnostics.some((message) => /lod-shared\.png|texture|image/i.test(message))).toBe(true);
   });
 

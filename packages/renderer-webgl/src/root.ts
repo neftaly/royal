@@ -275,6 +275,8 @@ type ProgramResource = {
   readonly vertexShader: WebGLShader;
 };
 
+type UniformValue = readonly number[];
+
 type GeometryDrawMode =
   | "line-loop"
   | "line-strip"
@@ -2301,6 +2303,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #programs = new Map<string, ProgramResource>();
   readonly #programAttributeLocations = new Map<WebGLProgram, Map<string, number>>();
   readonly #programUniformLocations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
+  readonly #programUniformValues = new Map<WebGLProgram, Map<string, UniformValue>>();
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
@@ -5199,23 +5202,83 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
+    if (this.#uniformValueCached(program, name, matrix, 16)) return;
     const location = this.#uniformLocation(program, name);
-    if (location !== null) this.#gl.uniformMatrix4fv(location, false, matrix);
+    if (location !== null) {
+      this.#gl.uniformMatrix4fv(location, false, matrix);
+      this.#cacheUniformValue(program, name, matrix, 16);
+    }
   }
 
   #uniformColor(program: WebGLProgram, name: string, color: Rgba): void {
+    if (this.#uniformValueCached(program, name, color, 4)) return;
     const location = this.#uniformLocation(program, name);
-    if (location !== null) this.#gl.uniform4fv(location, color);
+    if (location !== null) {
+      this.#gl.uniform4fv(location, color);
+      this.#cacheUniformValue(program, name, color, 4);
+    }
   }
 
   #uniform1i(program: WebGLProgram, name: string, value: number): void {
+    if (this.#uniformNumberCached(program, name, value)) return;
     const location = this.#uniformLocation(program, name);
-    if (location !== null) this.#gl.uniform1i(location, value);
+    if (location !== null) {
+      this.#gl.uniform1i(location, value);
+      this.#cacheUniformNumber(program, name, value);
+    }
   }
 
   #uniform2fv(program: WebGLProgram, name: string, value: readonly [number, number]): void {
+    if (this.#uniformValueCached(program, name, value, 2)) return;
     const location = this.#uniformLocation(program, name);
-    if (location !== null) this.#gl.uniform2fv(location, value);
+    if (location !== null) {
+      this.#gl.uniform2fv(location, value);
+      this.#cacheUniformValue(program, name, value, 2);
+    }
+  }
+
+  #uniformValueCached(
+    program: WebGLProgram,
+    name: string,
+    value: ArrayLike<number>,
+    length: number,
+  ): boolean {
+    const cached = this.#programUniformValues.get(program)?.get(name);
+    if (cached === undefined || cached.length !== length) return false;
+
+    for (let index = 0; index < length; index += 1) {
+      if (!Object.is(cached[index], value[index])) return false;
+    }
+
+    return true;
+  }
+
+  #uniformNumberCached(program: WebGLProgram, name: string, value: number): boolean {
+    const cached = this.#programUniformValues.get(program)?.get(name);
+    return cached?.length === 1 && Object.is(cached[0], value);
+  }
+
+  #cacheUniformValue(
+    program: WebGLProgram,
+    name: string,
+    value: ArrayLike<number>,
+    length: number,
+  ): void {
+    let values = this.#programUniformValues.get(program);
+    if (values === undefined) {
+      values = new Map();
+      this.#programUniformValues.set(program, values);
+    }
+    values.set(name, Array.from({ length }, (_unused, index) => value[index] as number));
+  }
+
+  #cacheUniformNumber(program: WebGLProgram, name: string, value: number): void {
+    let values = this.#programUniformValues.get(program);
+    if (values === undefined) {
+      values = new Map();
+      this.#programUniformValues.set(program, values);
+    }
+    values.set(name, [value]);
   }
 
   #attribLocation(program: WebGLProgram, name: string): number {
@@ -6691,6 +6754,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#ownedPrograms.delete(program);
     this.#programAttributeLocations.delete(program);
     this.#programUniformLocations.delete(program);
+    this.#programUniformValues.delete(program);
   }
 
   #recordDiagnostic(message: string): void {

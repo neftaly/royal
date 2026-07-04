@@ -11,6 +11,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   type Geometry,
+  type RenderNode,
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
@@ -341,6 +342,9 @@ const uniformLocationName = (value: unknown): string | undefined =>
     ? String((value as { readonly name: unknown }).name)
     : undefined;
 
+const matrixUniformPayloadsByName = (calls: readonly GlCall[], name: string): readonly (readonly number[])[] =>
+  matrixUniformPayloads(calls.filter((call) => uniformLocationName(call.args[0]) === name));
+
 const uniform4fvPayloadsByName = (calls: readonly GlCall[], name: string): readonly (readonly number[])[] =>
   uniform4fvPayloads(calls.filter((call) => uniformLocationName(call.args[0]) === name));
 
@@ -400,6 +404,28 @@ const unlitBox = (color: Rgba = [1, 1, 1, 1]) =>
   mesh({
     geometry: boxGeometry(1),
     material: unlitMaterial({ color }),
+  });
+
+const testCamera = () =>
+  orthographicCamera({
+    bottom: -1,
+    far: 10,
+    left: -1,
+    near: 0.1,
+    position: [0, 0, 4],
+    right: 1,
+    rotation: [0, 0, 0],
+    top: 1,
+  });
+
+const singlePassScene = (children: readonly RenderNode[]) =>
+  scene({
+    children: [
+      pass({
+        camera: testCamera(),
+        children,
+      }),
+    ],
   });
 
 const iblEnvironmentScene = () =>
@@ -554,6 +580,112 @@ describe("WebGL renderer pipeline contracts", () => {
     }));
 
     expect(uniform4fvPayloads(calls).map(roundVector)).toContainEqual(color);
+  });
+
+  it("skips redundant uniform uploads across repeated renders without skipping draws", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = singlePassScene([unlitBox([0.2, 0.4, 0.6, 1])]);
+
+    root.render(renderGraph);
+    const callsBeforeSecondRender = calls.length;
+    root.render(renderGraph);
+    const secondRenderCalls = calls.slice(callsBeforeSecondRender);
+
+    expect(calls.slice(0, callsBeforeSecondRender).some((call) => call.name.startsWith("uniform"))).toBe(true);
+    expect(secondRenderCalls.some((call) => call.name.startsWith("uniform"))).toBe(false);
+    expect(secondRenderCalls.some((call) => drawCallNames.has(call.name))).toBe(true);
+  });
+
+  it("uploads material uniform changes after a previous render cached different values", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(singlePassScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1], metallic: 0.1, roughness: 0.25 }),
+      }),
+    ]));
+    const callsBeforeSecondRender = calls.length;
+
+    root.render(singlePassScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1], metallic: 0.1, roughness: 0.75 }),
+      }),
+    ]));
+    const secondRenderCalls = calls.slice(callsBeforeSecondRender);
+
+    expect(uniform4fvPayloadsByName(secondRenderCalls, "u_materialPbrFactors").map(roundVector))
+      .toContainEqual([0.1, 0.75, 0, 0]);
+  });
+
+  it("uploads light uniform changes after a previous render cached different values", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(singlePassScene([
+      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
+      mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1] }),
+      }),
+    ]));
+    const callsBeforeSecondRender = calls.length;
+
+    root.render(singlePassScene([
+      directionalLight({ color: [0.25, 0.5, 0.75, 1], direction: [0, 0, -1] }),
+      mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1] }),
+      }),
+    ]));
+    const secondRenderCalls = calls.slice(callsBeforeSecondRender);
+
+    expect(uniform4fvPayloadsByName(secondRenderCalls, "u_surfaceLightColor[0]").map(roundVector))
+      .toContainEqual([0.25, 0.5, 0.75, 1]);
+  });
+
+  it("uploads model matrix changes after a previous render cached a different matrix", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(singlePassScene([
+      mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+        },
+      }),
+    ]));
+    const callsBeforeSecondRender = calls.length;
+
+    root.render(singlePassScene([
+      mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        transform: {
+          position: [0.25, 0.5, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+        },
+      }),
+    ]));
+    const secondRenderCalls = calls.slice(callsBeforeSecondRender);
+
+    expect(matrixUniformPayloadsByName(secondRenderCalls, "u_model").map(roundVector))
+      .toContainEqual([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0.25, 0.5, 0, 1,
+      ]);
   });
 
   it("uploads box vertex data before issuing a triangle draw", () => {
