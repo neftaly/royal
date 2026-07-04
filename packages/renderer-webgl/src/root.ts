@@ -57,6 +57,10 @@ import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
 import { readGltfSceneImageBasedLight } from "./gltf/image-based-light";
 import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
 import {
+  applyGltfMorphTargets,
+  gltfMorphWeights,
+} from "./gltf/morph";
+import {
   type GltfDocument,
   type GltfImage,
   type GltfLodExtras,
@@ -5681,11 +5685,22 @@ class WebGlRootImpl implements WebGlRoot {
         this.#recordDiagnostic(`glTF primitive ${nodeIndex}:${primitiveIndex} skipped: unsupported primitive mode ${primitive.mode ?? 4}`);
         continue;
       }
-      const normals = decodedAttributes?.get("NORMAL")
+      const baseNormals = decodedAttributes?.get("NORMAL")
         ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, normalAccessor));
-      const tangents = decodedAttributes?.get("TANGENT")
+      const baseTangents = decodedAttributes?.get("TANGENT")
         ?? (tangentAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, tangentAccessor));
-      const colors = gltfVertexColors(document, buffers, primitive, positions, decodedAttributes);
+      const morphed = applyGltfMorphTargets(
+        document,
+        buffers,
+        primitive,
+        gltfMorphWeights(mesh, sceneNode),
+        {
+          ...(baseNormals === undefined ? {} : { normals: baseNormals }),
+          positions,
+          ...(baseTangents === undefined ? {} : { tangents: baseTangents }),
+        },
+      );
+      const colors = gltfVertexColors(document, buffers, primitive, morphed.positions, decodedAttributes);
       const indices = dracoPrimitive?.indices
         ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
       const material = this.#readGltfMaterial(
@@ -5721,7 +5736,7 @@ class WebGlRootImpl implements WebGlRoot {
         ...(indices === undefined ? {} : { indices }),
         instanceTransforms,
         key,
-        localBounds: localModels.map((localModel) => worldBounds(positions, localModel)),
+        localBounds: localModels.map((localModel) => worldBounds(morphed.positions, localModel)),
         localModelDeterminants,
         localModels,
         material,
@@ -5730,9 +5745,9 @@ class WebGlRootImpl implements WebGlRoot {
         mode,
         nodePath,
         ...(nodeLod === undefined ? {} : { nodeLod }),
-        ...(normals === undefined ? {} : { normals }),
-        positions,
-        ...(tangents === undefined ? {} : { tangents }),
+        ...(morphed.normals === undefined ? {} : { normals: morphed.normals }),
+        positions: morphed.positions,
+        ...(morphed.tangents === undefined ? {} : { tangents: morphed.tangents }),
       });
     }
 

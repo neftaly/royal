@@ -80,6 +80,7 @@ const iblSpecularImageUris = [
 ] as const;
 const triangleBinByteLength = 104;
 const triangleAnimationBinByteLength = 32;
+const triangleMorphBinByteLength = triangleBinByteLength + 36;
 const meshoptCompressedPositionByteLength = 56;
 const meshoptCompressedIndexByteLength = 18;
 const meshoptCompressedTriangleBinByteLength = meshoptCompressedPositionByteLength + meshoptCompressedIndexByteLength;
@@ -814,6 +815,18 @@ const triangleAnimationBin = (): ArrayBuffer => {
   return buffer;
 };
 
+const morphedTriangleBin = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(triangleMorphBinByteLength);
+  new Uint8Array(buffer).set(new Uint8Array(triangleBin()));
+  new Float32Array(buffer, triangleBinByteLength, 9).set([
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1,
+  ]);
+
+  return buffer;
+};
+
 const vertexColorTriangleBin = (): ArrayBuffer => {
   const bytes = new Uint8Array(triangleBinByteLength + 9);
   bytes.set(new Uint8Array(triangleBin()));
@@ -1508,6 +1521,63 @@ const solidTriangleDocument = () => ({
   samplers: [],
   textures: [],
 });
+
+const morphedTriangleDocument = () => {
+  const base = solidTriangleDocument();
+  const baseMesh = base.meshes[0]!;
+  const basePrimitive = baseMesh.primitives[0]!;
+  const morphPositionAccessor = base.accessors.length;
+  const morphPositionBufferView = base.bufferViews.length;
+
+  return {
+    ...base,
+    accessors: [
+      ...base.accessors,
+      {
+        bufferView: morphPositionBufferView,
+        componentType: 5126,
+        count: 3,
+        type: "VEC3",
+      },
+    ],
+    bufferViews: [
+      ...base.bufferViews,
+      {
+        buffer: 0,
+        byteLength: 36,
+        byteOffset: triangleBinByteLength,
+        target: 34962,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: triangleMorphBinByteLength,
+        uri: triangleBinUri,
+      },
+    ],
+    meshes: [
+      {
+        ...baseMesh,
+        primitives: [
+          {
+            ...basePrimitive,
+            targets: [
+              {
+                POSITION: morphPositionAccessor,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    nodes: [
+      {
+        mesh: 0,
+        weights: [0.5],
+      },
+    ],
+  };
+};
 
 const animatedParentTriangleDocument = () => {
   const base = solidTriangleDocument();
@@ -3174,6 +3244,39 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(readyFrameCalls).toContainEqual({ args: [gl.CULL_FACE], name: "enable" });
     expect(readyFrameCalls).toContainEqual({ args: [gl.BACK], name: "cullFace" });
     expect(readyFrameCalls).toContainEqual({ args: [gl.CCW], name: "frontFace" });
+  });
+
+  it("applies static glTF morph target weights before uploading geometry", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "static-morph-target",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, morphedTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, morphedTriangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeReadyRender = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
+    expect(bufferDataPayloads(readyFrameCalls).map(roundVector)).toContainEqual([
+      0.5, 0.5, 0,
+      -0.5, 0, 0,
+      0.5, -0.5, 0.5,
+    ]);
   });
 
   it("draws double-sided glTF materials without face culling", async () => {

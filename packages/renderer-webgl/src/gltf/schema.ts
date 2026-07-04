@@ -267,7 +267,14 @@ export type GltfMeshPrimitive = {
   readonly indices?: number;
   readonly material?: number;
   readonly mode?: number;
-  readonly targets?: readonly unknown[];
+  readonly targets?: readonly GltfMorphTarget[];
+};
+
+export type GltfMorphTarget = {
+  readonly NORMAL?: number;
+  readonly POSITION?: number;
+  readonly TANGENT?: number;
+  readonly [semantic: string]: number | undefined;
 };
 
 export type GltfDracoMeshCompressionExtension = {
@@ -300,6 +307,7 @@ export type GltfSceneNode = {
   readonly scale?: readonly number[];
   readonly skin?: number;
   readonly translation?: readonly number[];
+  readonly weights?: readonly number[];
 };
 
 export type GltfLodExtension = {
