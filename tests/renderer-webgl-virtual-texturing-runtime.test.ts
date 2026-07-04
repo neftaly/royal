@@ -706,6 +706,16 @@ const flushMicrotasks = async (): Promise<void> => {
 const textureAllocations = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "texImage2D" && call.args.length >= 9);
 
+const textureDataUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
+  calls.filter((call) => call.name === "texImage2D" || call.name === "texSubImage2D");
+
+const textureResourceBinds = (calls: readonly GlCall[], textureTarget: number): readonly GlCall[] =>
+  calls.filter((call) =>
+    call.name === "bindTexture"
+    && call.args[0] === textureTarget
+    && call.args[1] !== null
+    && call.args[1] !== undefined);
+
 const pageUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) =>
     call.name === "texSubImage2D"
@@ -771,12 +781,19 @@ describe("WebGL renderer virtual texturing integration", () => {
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const manifestUrl = "/vt/manifest.json";
 
-    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture(manifestUrl) })));
 
-    expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/manifest.json"]);
+    expect(fetchRequests.map((request) => request.url)).toEqual([manifestUrl]);
     expect(ControlledImage.instances).toHaveLength(0);
     expect(textureAllocations(calls)).toEqual([]);
+    expect(textureDataUploads(calls)).toEqual([]);
+    expect(textureResourceBinds(calls, gl.TEXTURE_2D)).toEqual([]);
+    expect([
+      ...fetchRequests.map((request) => request.url),
+      ...ControlledImage.instances.map((image) => image.src),
+    ]).not.toContain("/vt/pages/0-0.png");
     expect(root.snapshot().virtualTexturing.manifestRequests).toBe(1);
 
     fetchRequests[0]!.resolve(responseJson(vtManifest()));

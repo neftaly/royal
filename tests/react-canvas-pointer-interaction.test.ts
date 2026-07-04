@@ -10,9 +10,11 @@ import {
   createCanvasPointerInteractionState,
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
+  type CanvasPointerInteractionAction,
   type CanvasPointerInteractionResult,
   type CanvasPointerInteractionState,
 } from "../packages/react/src/canvas-pointer-interaction";
+import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const targetNode = (id: string): MeshNode =>
   mesh({
@@ -52,6 +54,60 @@ const pressedNode = (
   state: CanvasPointerInteractionState,
   pointerId: number,
 ): MeshNode | undefined => state.pressedNodesByPointerId.get(pointerId) as MeshNode | undefined;
+
+const pointerIds = [1, 2, 7] as const;
+
+const samePressedEntriesExcept = (
+  before: CanvasPointerInteractionState,
+  after: CanvasPointerInteractionState,
+  pointerId: number,
+): boolean => {
+  const ids = new Set([
+    ...before.pressedNodesByPointerId.keys(),
+    ...after.pressedNodesByPointerId.keys(),
+  ]);
+  ids.delete(pointerId);
+
+  for (const id of ids) {
+    if (before.pressedNodesByPointerId.get(id) !== after.pressedNodesByPointerId.get(id)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const randomPicked = (
+  random: SeededRandom,
+  targets: readonly CanvasPickedPointerTarget[],
+): CanvasPickedPointerTarget | undefined =>
+  random.boolean(0.82) ? random.pick(targets) : undefined;
+
+const randomPointerAction = (
+  random: SeededRandom,
+  targets: readonly CanvasPickedPointerTarget[],
+): CanvasPointerInteractionAction => {
+  const picked = randomPicked(random, targets);
+  const pointerId = random.pick(pointerIds);
+
+  switch (random.int(0, 6)) {
+    case 0:
+    case 1:
+      return { picked, type: "pointermove" };
+    case 2:
+      return { picked, pointerId, type: "pointerdown" };
+    case 3:
+      return {
+        button: random.boolean(0.7) ? 0 : random.pick([1, 2, 3] as const),
+        picked,
+        pointerId,
+        type: "pointerup",
+      };
+    case 4:
+      return { pointerId, type: "pointercancel" };
+    default:
+      return random.boolean() ? { type: "pointerleave" } : { type: "reset" };
+  }
+};
 
 describe("React canvas pointer interaction planner", () => {
   it("orders hover dispatches for target transitions", () => {
@@ -231,5 +287,63 @@ describe("React canvas pointer interaction planner", () => {
     expect(dispatchTypes(reset)).toEqual([]);
     expect(reset.state.hoveredTarget).toBeUndefined();
     expect(reset.state.pressedNodesByPointerId.size).toBe(0);
+  });
+
+  it("preserves pointer interaction invariants across generated event sequences", () => {
+    forEachFuzzCase({ cases: 32, seed: 0xcafe_2035 }, ({ label, random }) => {
+      const nodeA = targetNode("a");
+      const nodeB = targetNode("b");
+      const targets = [
+        pickedTarget(nodeA, 1),
+        pickedTarget(nodeA, 2),
+        pickedTarget(nodeB, 3),
+        pickedTarget(nodeB, 4),
+      ];
+      let state = createCanvasPointerInteractionState();
+
+      for (let step = 0; step < 48; step += 1) {
+        const action = randomPointerAction(random, targets);
+        const before = state;
+        const expectedPressedNode = action.type === "pointerup"
+          ? before.pressedNodesByPointerId.get(action.pointerId)
+          : undefined;
+        const result = reduceCanvasPointerInteraction(before, action);
+        const types = dispatchTypes(result);
+        const detail = `${label} step=${step} action=${action.type}`;
+
+        expect(
+          result.state.hoveredTarget === undefined || targets.includes(result.state.hoveredTarget),
+          `${detail} stores at most one known hover target`,
+        ).toBe(true);
+
+        if (action.type === "pointermove" && before.hoveredTarget?.node === action.picked?.node) {
+          expect(result.state.hoveredTarget, `${detail} keeps same-node hover identity`).toBe(before.hoveredTarget);
+        }
+
+        if (action.type === "pointerdown" || action.type === "pointerup" || action.type === "pointercancel") {
+          expect(
+            samePressedEntriesExcept(before, result.state, action.pointerId),
+            `${detail} only changes matching pressed pointer`,
+          ).toBe(true);
+        } else if (action.type === "pointermove") {
+          expect(result.state.pressedNodesByPointerId, `${detail} does not change pressed pointers`).toBe(
+            before.pressedNodesByPointerId,
+          );
+        } else {
+          expect(result.state.hoveredTarget, `${detail} clears hover`).toBeUndefined();
+          expect(result.state.pressedNodesByPointerId.size, `${detail} clears pressed pointers`).toBe(0);
+        }
+
+        if (types.includes("click")) {
+          expect(action.type, `${detail} click follows pointerup`).toBe("pointerup");
+          if (action.type === "pointerup") {
+            expect(action.button, `${detail} click uses left button`).toBe(0);
+            expect(action.picked?.node, `${detail} click uses same pressed node`).toBe(expectedPressedNode);
+          }
+        }
+
+        state = result.state;
+      }
+    });
   });
 });

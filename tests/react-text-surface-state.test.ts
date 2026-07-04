@@ -6,6 +6,7 @@ import {
   editableTextCaretPlacement,
   editableTextEditorSelectedText,
   layoutEditableText,
+  type EditableTextEditorState,
   type EditableTextLayout,
   type EditableTextKeyInput,
   type EditableTextSelection,
@@ -21,11 +22,15 @@ import {
   type ActionControlRegistration,
   type TextControlRegistration,
   type TextSurfaceState,
+  type TextSurfaceStateAction,
+  type TextSurfaceStateEffect,
 } from "../packages/react/src/text/surface-state";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 import { loadTestTextFont } from "./text-font-fixture";
 
 const origin: Vec3 = [0, 0, 0];
+const textControlIds = ["field-a", "field-b", "field-c"] as const;
+const actionControlIds = ["button-a", "button-b"] as const;
 let textFont: TextFontFace;
 
 beforeAll(async () => {
@@ -210,16 +215,235 @@ const expectRegisteredTextInvariants = (
 
   const persistedSelection = state.selections.get(id);
   if (persistedSelection !== undefined) {
-    expect(control.selection).toEqual(persistedSelection);
+    expect(control.selection).toEqual(createEditableTextEditorState({
+      selection: persistedSelection,
+      text: expectedText,
+    }).selection);
   }
 
-  const scrollLine = state.scrollLines.get(id) ?? control.scrollLine;
-  expect(scrollLine).toBe(clampScrollLineFor(control, scrollLine));
-  expect(scrollLine).toBeGreaterThanOrEqual(0);
-  expect(scrollLine).toBeLessThanOrEqual(maxScrollLineFor(control));
-  expect(control.scrollLine).toBe(scrollLine);
+  expect(control.scrollLine).toBe(clampScrollLineFor(control, control.scrollLine));
+  expect(control.scrollLine).toBeGreaterThanOrEqual(0);
+  expect(control.scrollLine).toBeLessThanOrEqual(maxScrollLineFor(control));
+
+  const scrollLine = state.scrollLines.get(id);
+  if (scrollLine !== undefined) {
+    expect(scrollLine).toBe(clampScrollLineFor(control, scrollLine));
+    expect(scrollLine).toBeGreaterThanOrEqual(0);
+    expect(scrollLine).toBeLessThanOrEqual(maxScrollLineFor(control));
+  }
 
   return control;
+};
+
+const expectTextSurfaceStateInvariants = (state: TextSurfaceState): void => {
+  for (const [id, control] of state.controls) {
+    expect(id).toBe(control.id);
+    expectRegisteredTextInvariants(state, id, control.text);
+  }
+
+  for (const [id, scrollLine] of state.scrollLines) {
+    const control = state.controls.get(id);
+    expect(control).toBeDefined();
+    if (control === undefined) continue;
+
+    expect(scrollLine).toBe(clampScrollLineFor(control, scrollLine));
+  }
+
+  for (const [id, control] of state.actionControls) {
+    expect(id).toBe(control.id);
+  }
+
+  for (const selection of state.selections.values()) {
+    expect(selection.anchor).toBeGreaterThanOrEqual(0);
+    expect(selection.focus).toBeGreaterThanOrEqual(0);
+  }
+};
+
+const expectReducerEffects = (
+  before: TextSurfaceState,
+  action: TextSurfaceStateAction,
+  effects: readonly TextSurfaceStateEffect[],
+): void => {
+  if (action.type !== "editor/apply-state") {
+    expect(effects).toEqual([]);
+    return;
+  }
+
+  const control = before.controls.get(action.id);
+  expect(effects).toEqual(
+    control !== undefined && control.text !== action.editorState.text
+      ? [{ id: action.id, type: "value-change", value: action.editorState.text }]
+      : [],
+  );
+};
+
+const expectReducerPostcondition = (
+  action: TextSurfaceStateAction,
+  state: TextSurfaceState,
+): void => {
+  switch (action.type) {
+    case "text-control/register":
+      expect(state.controls.get(action.control.id)?.id).toBe(action.control.id);
+      expect(state.controls.get(action.control.id)?.scrollLine).toBe(state.scrollLines.get(action.control.id));
+      return;
+    case "text-control/unregister":
+      expect(state.controls.has(action.id)).toBe(false);
+      expect(state.scrollLines.has(action.id)).toBe(false);
+      return;
+    case "action-control/register":
+      expect(state.actionControls.get(action.control.id)).toBe(action.control);
+      return;
+    case "action-control/unregister":
+      expect(state.actionControls.has(action.id)).toBe(false);
+      return;
+    case "editor/apply-state":
+      expect(state.selections.get(action.id)).toEqual(action.editorState.selection);
+      return;
+    case "selection/clear-except":
+      for (const control of state.controls.values()) {
+        if (control.id !== action.id) {
+          expect(control.selection.anchor).toBe(control.selection.focus);
+        }
+      }
+      return;
+    case "active-text/set":
+      expect(state.activeId).toBe(action.id);
+      return;
+    case "active-action/set":
+      expect(state.activeActionId).toBe(action.id);
+      return;
+    case "menu/set":
+      expect(state.menu).toEqual(action.menu);
+      return;
+    case "menu/close":
+      expect(state.menu).toEqual(closedMenu);
+      return;
+    case "pressed-action/set":
+      expect(state.pressedAction).toEqual(action.pressedAction);
+      return;
+  }
+};
+
+const fuzzVisibleLineCount = (random: SeededRandom): number =>
+  random.pick([1, 2, 3, Number.POSITIVE_INFINITY] as const);
+
+const fuzzRegisteredTextControl = (
+  random: SeededRandom,
+  state: TextSurfaceState,
+  textValues: ReadonlyMap<string, string>,
+  id: string,
+): TextControlRegistration => {
+  const text = random.boolean(0.75)
+    ? textValues.get(id) ?? state.controls.get(id)?.text ?? fuzzText(random)
+    : fuzzText(random);
+  const layout = layoutFor(text);
+
+  return textControl({
+    id,
+    scrollLine: random.int(0, layout.lines.length + 5),
+    selected: random.boolean(0.5)
+      ? state.selections.get(id) ?? fuzzSelectionFor(random, layout)
+      : fuzzSelectionFor(random, layout),
+    text,
+    visibleLineCount: fuzzVisibleLineCount(random),
+  });
+};
+
+const fuzzEditorState = (
+  random: SeededRandom,
+  state: TextSurfaceState,
+  textValues: ReadonlyMap<string, string>,
+  id: string,
+): EditableTextEditorState => {
+  const control = state.controls.get(id);
+  if (control !== undefined && random.boolean(0.75)) {
+    return applyEditableTextEditorKeyInput(control.state, fuzzKeyInput(random), {
+      mode: control.mode,
+    }).state;
+  }
+
+  const text = random.boolean(0.65)
+    ? textValues.get(id) ?? control?.text ?? fuzzText(random)
+    : fuzzText(random);
+  const layout = layoutFor(text);
+  return createEditableTextEditorState({
+    selection: fuzzSelectionFor(random, layout),
+    text,
+  });
+};
+
+const fuzzTextSurfaceAction = (
+  random: SeededRandom,
+  state: TextSurfaceState,
+  textValues: ReadonlyMap<string, string>,
+): TextSurfaceStateAction => {
+  const textId = random.pick(textControlIds);
+  const actionId = random.pick(actionControlIds);
+
+  switch (random.int(0, 11)) {
+    case 0:
+    case 1:
+      return {
+        control: fuzzRegisteredTextControl(random, state, textValues, textId),
+        type: "text-control/register",
+      };
+    case 2:
+      return {
+        id: textId,
+        type: "text-control/unregister",
+      };
+    case 3:
+    case 4:
+      return {
+        editorState: fuzzEditorState(random, state, textValues, textId),
+        id: textId,
+        type: "editor/apply-state",
+      };
+    case 5:
+      return {
+        id: random.boolean(0.35) ? undefined : textId,
+        type: "selection/clear-except",
+      };
+    case 6:
+      return {
+        id: random.boolean(0.25) ? undefined : textId,
+        type: "active-text/set",
+      };
+    case 7:
+      return {
+        id: random.boolean(0.25) ? undefined : actionId,
+        type: "active-action/set",
+      };
+    case 8:
+      return {
+        control: actionControl(actionId),
+        type: "action-control/register",
+      };
+    case 9:
+      return random.boolean(0.5)
+        ? { id: actionId, type: "action-control/unregister" }
+        : {
+          menu: {
+            controlId: random.boolean(0.25) ? undefined : textId,
+            open: random.boolean(),
+            worldX: random.number(-4, 4),
+            worldY: random.number(-4, 4),
+          },
+          type: "menu/set",
+        };
+    default:
+      return random.boolean(0.5)
+        ? { type: "menu/close" }
+        : {
+          pressedAction: random.boolean(0.35)
+            ? undefined
+            : {
+              controlId: actionId,
+              pointerId: random.int(0, 6),
+            },
+          type: "pressed-action/set",
+        };
+  }
 };
 
 describe("React text surface state reducer", () => {
@@ -510,6 +734,44 @@ describe("React text surface state reducer", () => {
         );
         expect(registered.layout.lines).toEqual(layout.lines);
       }
+    });
+  });
+
+  it("preserves state invariants across deterministic text surface action sequences", () => {
+    forEachFuzzCase({ cases: 16, seed: 0x5a7e_51af }, ({ random }) => {
+      const textValues = new Map<string, string>();
+      let state = emptyState();
+
+      for (const id of textControlIds.slice(0, 2)) {
+        const control = fuzzRegisteredTextControl(random, state, textValues, id);
+        textValues.set(id, control.text);
+        state = reduceTextSurfaceState(state, {
+          control,
+          type: "text-control/register",
+        }).state;
+      }
+
+      expectTextSurfaceStateInvariants(state);
+
+      for (let step = 0; step < 28; step += 1) {
+        const action = fuzzTextSurfaceAction(random, state, textValues);
+        const result = reduceTextSurfaceState(state, action);
+
+        expectReducerEffects(state, action, result.effects);
+        expectReducerPostcondition(action, result.state);
+        expectTextSurfaceStateInvariants(result.state);
+
+        if (action.type === "text-control/register") {
+          textValues.set(action.control.id, action.control.text);
+        }
+        for (const effect of result.effects) {
+          textValues.set(effect.id, effect.value);
+        }
+
+        state = result.state;
+      }
+
+      expectTextSurfaceStateInvariants(state);
     });
   });
 

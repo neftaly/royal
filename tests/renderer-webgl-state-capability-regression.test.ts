@@ -7,7 +7,6 @@ import {
   pass,
   scene,
   unlitMaterial,
-  virtualTexture,
   wireframeMaterial,
   type Geometry,
   type Material,
@@ -535,72 +534,6 @@ describe("WebGL renderer state and capability regressions", () => {
       hasSafeUvCleanupBeforeDraw(calls, firstDraw ?? 0, secondDraw ?? calls.length),
       "wireframe/no-UV draws should disable a_uv, rebind it, or switch to isolated VAO state before drawing",
     ).toBe(true);
-  });
-
-  it("requests virtual texture manifests through the VT path instead of normal texture bridges", () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const loader = installTextureLoaders();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const texture = virtualTexture("/textures/terrain.vt.json");
-
-    root.render(singleMeshScene(unlitMaterial({ texture })));
-
-    expect(loader.fetchRequests.map((request) => request.url)).toEqual(["/textures/terrain.vt.json"]);
-    expect(ControlledImage.instances.map((image) => image.src)).not.toContain("/textures/terrain.vt.json");
-    expect(
-      calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
-      "virtual texture manifests should not be uploaded as normal texture data before manifest parse",
-    ).toBe(false);
-    expect(
-      calls.some((call) =>
-        call.name === "bindTexture"
-        && call.args[0] === gl.TEXTURE_2D
-        && call.args[1] !== null
-        && call.args[1] !== undefined),
-      "virtual texture manifests should not be bound as material textures",
-    ).toBe(false);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ manifestRequests: 1 }));
-  });
-
-  it("does not request manifest-only virtual texture pages as ordinary textures before manifest parse", () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const loader = installTextureLoaders();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const manifestUrl = "/textures/terrain.vt.json";
-    const pageUrl = "/textures/pages/mip-0/x0-y0.png";
-    const texture = virtualTexture({
-      colorSpace: "srgb",
-      sampler: {
-        magFilter: "linear",
-        minFilter: "linear",
-        wrapS: "clamp-to-edge",
-        wrapT: "clamp-to-edge",
-      },
-      src: manifestUrl,
-      version: "manifest-only-v1",
-    });
-
-    root.render(singleMeshScene(unlitMaterial({ texture })));
-
-    expect(requestedUrls(loader).some((url) => url.includes(manifestUrl))).toBe(true);
-    expect(requestedUrls(loader).some((url) => url.includes(pageUrl))).toBe(false);
-    expect(
-      calls.some((call) => call.name === "texImage2D" || call.name === "texSubImage2D"),
-      "manifest-only virtual textures should not upload manifest-referenced image/page data before manifest parse",
-    ).toBe(false);
-    expect(
-      calls.some((call) =>
-        call.name === "bindTexture"
-        && call.args[0] === gl.TEXTURE_2D
-        && call.args[1] !== null
-        && call.args[1] !== undefined),
-      "manifest-only virtual textures should not bind uploaded page data as material textures",
-    ).toBe(false);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ manifestRequests: 1 }));
   });
 
   it("keeps probed capability diagnostics or details for missing optional WebGL capability gates", () => {

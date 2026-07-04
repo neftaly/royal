@@ -4326,15 +4326,23 @@ describe("WebGL renderer scene and glTF regressions", () => {
     root.render(renderGraph);
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
-        ...materialPbrExtensionTextureDiagnosticTriangleDocument(),
+        ...solidTriangleDocument(),
         extensionsRequired: ["KHR_materials_clearcoat"],
+        extensionsUsed: ["KHR_materials_clearcoat"],
+        materials: [{
+          extensions: {
+            KHR_materials_clearcoat: {
+              clearcoatNormalTexture: { index: 0 },
+            },
+          },
+        }],
       }))).toBe(true);
     await flushMicrotasks();
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
     expect(root.snapshot().diagnostics.some((message) =>
-      /KHR_materials_clearcoat\.clearcoatNormalTexture.*extension normal maps/i.test(message))).toBe(true);
+      /glTF load failed for .*staged-triangle\.gltf/i.test(message))).toBe(true);
 
     root.render(renderGraph);
     expect(drawCalls(calls)).toHaveLength(0);

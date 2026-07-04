@@ -1,8 +1,10 @@
 # Examples Benchmark
 
 `benchmark-examples.mjs` builds a route-by-route browser report for the examples app.
-It records load timing, frame pacing, heap growth, WebGL draw/upload counters, and
-instancing-focused summaries for `/gltf-instancing` grid, seed, and animation cases.
+It records load timing, frame pacing, heap growth, WebGL draw/upload counters,
+low-overhead GL state counters (`useProgram`, `bindTexture`, `bindBuffer`,
+`bindVertexArray`, and uniform calls), and instancing-focused summaries for
+`/gltf-instancing` grid, seed, and animation cases.
 
 Quick host check:
 
@@ -15,6 +17,12 @@ Fuller host report:
 ```sh
 EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-host.json \
 pnpm --filter @royal/examples-react bench:examples:full
+```
+
+Check a saved report:
+
+```sh
+pnpm --filter @royal/examples-react bench:examples:check research/examples-benchmark-host.json
 ```
 
 Quest 2 report through forwarded DevTools:
@@ -58,16 +66,18 @@ found or protects the edge case. Good next targets are:
   atlas upload invalidation before adding more visual regression fixtures.
 
 Use benchmark output as a decomposition guide by sorting routes through
-`analysis.slowestRoutesByP95`, `analysis.heaviestDrawRoutes`, and the instancing
-per-1000-instance summaries. Components that move those counters independently
-are good extraction candidates; components whose counters always move together
-should stay behind one renderer-owned boundary until a benchmark row separates
-them.
+`analysis.slowestRoutesByP95`, `analysis.heaviestDrawRoutes`,
+`analysis.heaviestGlStateRoutes`, `analysis.heaviestUniformRoutes`, and the
+instancing per-1000-instance summaries. Components that move those counters
+independently are good extraction candidates; components whose counters always
+move together should stay behind one renderer-owned boundary until a benchmark
+row separates them.
 
 Focused checks:
 
 ```sh
 ROYAL_FUZZ_CASES=64 pnpm exec vitest run tests/*property*.test.ts
 node --check apps/examples-react/scripts/benchmark-examples.mjs
+node --check apps/examples-react/scripts/check-benchmark-report.mjs
 pnpm --filter @royal/examples-react bench:examples:instancing
 ```

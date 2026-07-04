@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "bench:examples": "pnpm run build && node scripts/benchmark-examples.mjs",
+    "bench:examples:check": "node scripts/check-benchmark-report.mjs",
     "bench:examples:full": "EXAMPLES_BENCH_MODE=full EXAMPLES_BENCH_INSTANCING_SWEEP=full EXAMPLES_BENCH_INSTANCING_FUZZ=1 pnpm run bench:examples",
     "bench:examples:instancing": "EXAMPLES_BENCH_ROUTE=gltf-instancing EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
     "bench:examples:quick": "EXAMPLES_BENCH_MODE=quick EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",

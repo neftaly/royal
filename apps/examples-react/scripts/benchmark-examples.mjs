@@ -348,6 +348,11 @@ const glCounterTotals = (gl) => ({
   ...gl,
   drawCalls: (gl.drawArrays ?? 0) + (gl.drawElements ?? 0) + (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
   instancedDrawCalls: (gl.drawArraysInstanced ?? 0) + (gl.drawElementsInstanced ?? 0),
+  stateChanges:
+    (gl.bindBuffer ?? 0) +
+    (gl.bindTexture ?? 0) +
+    (gl.bindVertexArray ?? 0) +
+    (gl.useProgram ?? 0),
 });
 
 const deploymentSize = async () => {
@@ -399,7 +404,45 @@ const installBenchmarkHooks = async (session) => {
     source: `
 (() => {
   const config = ${hookConfig};
+  const uniformCallNames = [
+    'uniform1f',
+    'uniform1fv',
+    'uniform1i',
+    'uniform1iv',
+    'uniform1ui',
+    'uniform1uiv',
+    'uniform2f',
+    'uniform2fv',
+    'uniform2i',
+    'uniform2iv',
+    'uniform2ui',
+    'uniform2uiv',
+    'uniform3f',
+    'uniform3fv',
+    'uniform3i',
+    'uniform3iv',
+    'uniform3ui',
+    'uniform3uiv',
+    'uniform4f',
+    'uniform4fv',
+    'uniform4i',
+    'uniform4iv',
+    'uniform4ui',
+    'uniform4uiv',
+    'uniformMatrix2fv',
+    'uniformMatrix2x3fv',
+    'uniformMatrix2x4fv',
+    'uniformMatrix3fv',
+    'uniformMatrix3x2fv',
+    'uniformMatrix3x4fv',
+    'uniformMatrix4fv',
+    'uniformMatrix4x2fv',
+    'uniformMatrix4x3fv',
+  ];
   const counters = {
+    bindBuffer: 0,
+    bindTexture: 0,
+    bindVertexArray: 0,
     bufferDataBytes: 0,
     bufferDataCalls: 0,
     bufferSubDataBytes: 0,
@@ -410,6 +453,9 @@ const installBenchmarkHooks = async (session) => {
     drawElementsInstanced: 0,
     texImage2D: 0,
     texSubImage2D: 0,
+    uniformCalls: 0,
+    uniformMatrixCalls: 0,
+    useProgram: 0,
   };
   const xr = {
     activeSession: null,
@@ -486,6 +532,9 @@ const installBenchmarkHooks = async (session) => {
     prototype[name] = wrapped;
   };
   const patchPrototype = (prototype) => {
+    patch(prototype, 'bindBuffer', () => { counters.bindBuffer += 1; });
+    patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
+    patch(prototype, 'bindVertexArray', () => { counters.bindVertexArray += 1; });
     patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; recordDraw(); });
     patch(prototype, 'drawElements', () => { counters.drawElements += 1; recordDraw(); });
     patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; recordDraw(); });
@@ -500,6 +549,13 @@ const installBenchmarkHooks = async (session) => {
     });
     patch(prototype, 'texImage2D', () => { counters.texImage2D += 1; });
     patch(prototype, 'texSubImage2D', () => { counters.texSubImage2D += 1; });
+    patch(prototype, 'useProgram', () => { counters.useProgram += 1; });
+    for (const name of uniformCallNames) {
+      patch(prototype, name, () => {
+        counters.uniformCalls += 1;
+        if (name.startsWith('uniformMatrix')) counters.uniformMatrixCalls += 1;
+      });
+    }
   };
   patchPrototype(globalThis.WebGLRenderingContext?.prototype);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype);
@@ -1032,6 +1088,12 @@ const routeSummary = (route) => {
   const drawCallsPerFrame = route.gl.drawCalls / frameSampleCount;
   const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / frameSampleCount;
   const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / frameSampleCount;
+  const stateChangesPerFrame = route.gl.stateChanges / frameSampleCount;
+  const useProgramPerFrame = route.gl.useProgram / frameSampleCount;
+  const bindBufferPerFrame = route.gl.bindBuffer / frameSampleCount;
+  const bindTexturePerFrame = route.gl.bindTexture / frameSampleCount;
+  const bindVertexArrayPerFrame = route.gl.bindVertexArray / frameSampleCount;
+  const uniformCallsPerFrame = route.gl.uniformCalls / frameSampleCount;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
@@ -1043,6 +1105,12 @@ const routeSummary = (route) => {
   const cameraDragBufferSubDataBytesPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.bufferSubDataBytes / cameraDragSampleCount;
+  const cameraDragStateChangesPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+    ? undefined
+    : route.cameraDrag.gl.stateChanges / cameraDragSampleCount;
+  const cameraDragUniformCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
+    ? undefined
+    : route.cameraDrag.gl.uniformCalls / cameraDragSampleCount;
   const hasCameraDragStats =
     typeof cameraDragFrameStats?.p95Ms === 'number' &&
     typeof cameraDragDrawCallsPerFrame === 'number';
@@ -1059,8 +1127,22 @@ const routeSummary = (route) => {
     jitterP95MinusP50Ms: round(route.frameStats.jitterP95MinusP50Ms),
     drawCallsPerFrame: round(drawCallsPerFrame),
     instancedDrawCallsPerFrame: round(instancedDrawCallsPerFrame),
+    stateChangesPerFrame: round(stateChangesPerFrame),
+    useProgramPerFrame: round(useProgramPerFrame),
+    bindBufferPerFrame: round(bindBufferPerFrame),
+    bindTexturePerFrame: round(bindTexturePerFrame),
+    bindVertexArrayPerFrame: round(bindVertexArrayPerFrame),
+    uniformCallsPerFrame: round(uniformCallsPerFrame),
+    uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / frameSampleCount),
     setupDrawCalls: route.gl.setup?.drawCalls ?? 0,
     setupInstancedDrawCalls,
+    setupStateChanges: route.gl.setup?.stateChanges ?? 0,
+    setupUseProgram: route.gl.setup?.useProgram ?? 0,
+    setupBindBuffer: route.gl.setup?.bindBuffer ?? 0,
+    setupBindTexture: route.gl.setup?.bindTexture ?? 0,
+    setupBindVertexArray: route.gl.setup?.bindVertexArray ?? 0,
+    setupUniformCalls: route.gl.setup?.uniformCalls ?? 0,
+    setupUniformMatrixCalls: route.gl.setup?.uniformMatrixCalls ?? 0,
     setupBufferDataBytes: route.gl.setup?.bufferDataBytes ?? 0,
     setupBufferSubDataBytes: route.gl.setup?.bufferSubDataBytes ?? 0,
     ...(instanceCount === undefined
@@ -1074,6 +1156,12 @@ const routeSummary = (route) => {
     ...(hasCameraDragStats
       ? {
         cameraDragDrawCallsPerFrame: round(cameraDragDrawCallsPerFrame),
+        ...(typeof cameraDragStateChangesPerFrame === 'number' && cameraDragStateChangesPerFrame !== 0
+          ? { cameraDragStateChangesPerFrame: round(cameraDragStateChangesPerFrame) }
+          : {}),
+        ...(typeof cameraDragUniformCallsPerFrame === 'number' && cameraDragUniformCallsPerFrame !== 0
+          ? { cameraDragUniformCallsPerFrame: round(cameraDragUniformCallsPerFrame) }
+          : {}),
         ...(typeof cameraDragBufferSubDataBytesPerFrame === 'number' && cameraDragBufferSubDataBytesPerFrame !== 0
           ? { cameraDragBufferSubDataBytesPerFrame: round(cameraDragBufferSubDataBytesPerFrame) }
           : {}),
@@ -1136,6 +1224,12 @@ const analyzeResults = (results) => {
       .slice(0, 8),
     heaviestDrawRoutes: [...summaries]
       .sort((left, right) => right.drawCallsPerFrame - left.drawCallsPerFrame)
+      .slice(0, 8),
+    heaviestGlStateRoutes: [...summaries]
+      .sort((left, right) => right.stateChangesPerFrame - left.stateChangesPerFrame)
+      .slice(0, 8),
+    heaviestUniformRoutes: [...summaries]
+      .sort((left, right) => right.uniformCallsPerFrame - left.uniformCallsPerFrame)
       .slice(0, 8),
     instancing: {
       comparisons: instancingComparisons(summaries),
@@ -1219,6 +1313,8 @@ const main = async () => {
       const retainedKb = result.heap.retainedGrowthBytes / 1024;
       const drawCallsPerFrame = result.gl.drawCalls / frameSampleCount;
       const instancedDrawCallsPerFrame = result.gl.instancedDrawCalls / frameSampleCount;
+      const stateChangesPerFrame = result.gl.stateChanges / frameSampleCount;
+      const uniformCallsPerFrame = result.gl.uniformCalls / frameSampleCount;
       const cameraDragFrameStats = result.cameraDrag?.frameStats;
       const cameraDragSampleCount = cameraDragFrameStats?.sampleCount ?? 0;
       const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || result.cameraDrag === undefined
@@ -1250,6 +1346,8 @@ const main = async () => {
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
         `draw/frame=${drawCallsPerFrame.toFixed(1)}`,
+        `state/frame=${stateChangesPerFrame.toFixed(1)}`,
+        `uniform/frame=${uniformCallsPerFrame.toFixed(1)}`,
         ...(instancedDrawCallsPerFrame === 0 ? [] : [`inst/frame=${instancedDrawCallsPerFrame.toFixed(1)}`]),
         ...(typeof result.gl.setup?.instancedDrawCalls === 'number' && result.gl.setup.instancedDrawCalls > 0
           ? [`setupInst=${result.gl.setup.instancedDrawCalls}`]
@@ -1299,6 +1397,8 @@ const main = async () => {
       deploymentGzipBytes: report.deployment.gzipBytes,
       routeCount: report.routes.length,
       slowestRoutesByP95: analysis.slowestRoutesByP95.slice(0, 5),
+      heaviestGlStateRoutes: analysis.heaviestGlStateRoutes.slice(0, 5),
+      heaviestUniformRoutes: analysis.heaviestUniformRoutes.slice(0, 5),
       ...(cameraDragEnabled
         ? {
           cameraDragFailures: analysis.cameraDrag.failures,
