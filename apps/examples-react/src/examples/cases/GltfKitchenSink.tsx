@@ -22,7 +22,7 @@ type KitchenSinkInstance = KitchenSinkAsset & {
 };
 
 type KitchenSinkTag = 'core' | 'extension' | 'issues' | 'pbrtest' | 'showcase' | 'testing' | 'video';
-type KitchenSinkSet = 'default' | 'full';
+type KitchenSinkSet = 'ok' | 'slow';
 
 const khronosFixtureBase = import.meta.env.BASE_URL + 'fixtures/khronos/';
 const khronosGltf = (name: string): string =>
@@ -93,22 +93,20 @@ export const khronosKitchenSinkAssets = [
   { name: 'VertexColorTest', label: 'Vertex Color Test', bytes: 26220, tags: ['core', 'testing'] },
 ] as const satisfies readonly KitchenSinkAsset[];
 
-const defaultKitchenSinkAssetNames = new Set<string>([
-  'AnimatedMorphCube',
-  'Box',
-  'BoxTextured',
-  'BoxVertexColors',
-  'CesiumMan',
-  'ClearCoatTest',
+// Classifier result for iPad A10+/Safari 17+ and Quest 2 targets.
+const inherentlySlowKitchenSinkAssetNames = new Set<string>([
+  'AlphaBlendModeTest',
+  'ClearcoatWicker',
   'CompareBaseColor',
   'CompareSpecular',
-  'Duck',
-  'Fox',
+  'GlassBrokenWindow',
   'MetalRoughSpheresNoTextures',
-  'SimpleInstancing',
-  'SunglassesKhronos',
+  'MorphStressTest',
+  'NormalTangentTest',
+  'RecursiveSkeletons',
   'TransmissionTest',
-  'Unicode❤♻Test',
+  'TransmissionThinwallTestGrid',
+  'USDShaderBallForGltf',
 ]);
 
 const assetScaleOverrides: Readonly<Record<string, number>> = {
@@ -138,15 +136,17 @@ const assetHasTag = (
   tag: KitchenSinkTag,
 ): boolean => tags.includes(tag);
 
-const kitchenSinkSetFromLocation = (): KitchenSinkSet => {
-  const params = new URL(globalThis.location.href).searchParams;
-  return params.get('set') === 'full' ? 'full' : 'default';
-};
-
 const assetsForKitchenSinkSet = (set: KitchenSinkSet): readonly KitchenSinkAsset[] =>
-  set === 'full'
-    ? khronosKitchenSinkAssets
-    : khronosKitchenSinkAssets.filter((asset) => defaultKitchenSinkAssetNames.has(asset.name));
+  khronosKitchenSinkAssets.filter((asset) =>
+    set === 'ok'
+      ? !inherentlySlowKitchenSinkAssetNames.has(asset.name)
+      : inherentlySlowKitchenSinkAssetNames.has(asset.name)
+  );
+
+const kitchenSinkSetLabel = {
+  ok: 'ok-to-render',
+  slow: 'inherently slow',
+} as const satisfies Readonly<Record<KitchenSinkSet, string>>;
 
 const columnSpacing = 3.04;
 const rowSpacing = 2.34;
@@ -193,14 +193,13 @@ const KeyLight = (): ReactNode => {
   );
 };
 
-export const GltfKitchenSink = (): ReactNode => {
-  const set = kitchenSinkSetFromLocation();
+const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactNode => {
   const selectedAssets = assetsForKitchenSinkSet(set);
   const kitchenSinkAssets = createKitchenSinkInstances(selectedAssets);
   const selectedFixtureBytes = selectedAssets.reduce((total, asset) => total + asset.bytes, 0);
   const selectedFixtureMiB = (selectedFixtureBytes / 1024 / 1024).toFixed(1);
   const orbit = useOrbitCamera({
-    distance: set === 'full' ? 29.5 : 16.8,
+    distance: selectedAssets.length > 24 ? 29.5 : 16.8,
     far: 120,
     pitch: 0.02,
     target: [0, 0, 0],
@@ -209,7 +208,7 @@ export const GltfKitchenSink = (): ReactNode => {
 
   return (
     <Canvas
-      aria-label={`glTF Kitchen Sink ${set} set with ${selectedAssets.length} of ${khronosKitchenSinkAssets.length} official Khronos GLB sample assets, ${selectedFixtureMiB} of ${totalFixtureMiB} MiB total`}
+      aria-label={`glTF Kitchen Sink ${kitchenSinkSetLabel[set]} set with ${selectedAssets.length} of ${khronosKitchenSinkAssets.length} official Khronos GLB sample assets, ${selectedFixtureMiB} of ${totalFixtureMiB} MiB total`}
       renderer={exampleCanvasRenderer}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
@@ -237,3 +236,7 @@ export const GltfKitchenSink = (): ReactNode => {
     </Canvas>
   );
 };
+
+export const GltfKitchenSink = (): ReactNode => <GltfKitchenSinkScene set="ok" />;
+
+export const GltfKitchenSinkSlow = (): ReactNode => <GltfKitchenSinkScene set="slow" />;

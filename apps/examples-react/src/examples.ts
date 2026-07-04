@@ -7,7 +7,7 @@ import { GltfInstancing } from './examples/cases/GltfInstancing';
 import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
 import { GltfLod } from './examples/cases/GltfLod';
 import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
-import { GltfKitchenSink } from './examples/cases/GltfKitchenSink';
+import { GltfKitchenSink, GltfKitchenSinkSlow } from './examples/cases/GltfKitchenSink';
 import gltfKitchenSinkSource from './examples/cases/GltfKitchenSink.tsx?raw';
 import { GltfGhostscriptTigerSvg } from './examples/cases/GltfGhostscriptTigerSvg';
 import gltfGhostscriptTigerSvgSource from './examples/cases/GltfGhostscriptTigerSvg.tsx?raw';
@@ -126,6 +126,15 @@ export const examples = [
     path: '/gltf-kitchen-sink',
     title: 'glTF Kitchen Sink',
     Component: GltfKitchenSink,
+    source: gltfKitchenSinkSource,
+    sourceFile: 'examples/cases/GltfKitchenSink.tsx',
+  },
+  {
+    id: 'gltf-kitchen-sink-slow',
+    maturity: 'product',
+    path: '/gltf-kitchen-sink-slow',
+    title: 'glTF Kitchen Sink Slow Set',
+    Component: GltfKitchenSinkSlow,
     source: gltfKitchenSinkSource,
     sourceFile: 'examples/cases/GltfKitchenSink.tsx',
   },

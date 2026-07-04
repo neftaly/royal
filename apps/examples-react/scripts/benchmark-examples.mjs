@@ -119,7 +119,7 @@ const routes = [
     sweep: 'baseline',
   }),
   { id: 'gltf-kitchen-sink', path: '/gltf-kitchen-sink' },
-  { id: 'gltf-kitchen-sink-full', path: '/gltf-kitchen-sink?set=full' },
+  { id: 'gltf-kitchen-sink-slow', path: '/gltf-kitchen-sink-slow' },
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
   { id: 'gltf-variants', path: '/gltf-variants' },
@@ -131,7 +131,7 @@ const routeMatchesBenchmarkMode = (route) => {
   if (benchmarkMode === 'labs') return route.id === 'webxr-vr';
   if (benchmarkMode === 'full') return route.id !== 'webxr-vr';
 
-  return route.id !== 'gltf-kitchen-sink-full' && route.id !== 'webxr-vr';
+  return route.id !== 'gltf-kitchen-sink-slow' && route.id !== 'webxr-vr';
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

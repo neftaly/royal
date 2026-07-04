@@ -83,29 +83,29 @@ const khronosKitchenSinkAssetNames = [
   'USDShaderBallForGltf',
   'VertexColorTest',
 ];
-const defaultKitchenSinkAssetNames = [
-  'AnimatedMorphCube',
-  'Box',
-  'BoxTextured',
-  'BoxVertexColors',
-  'CesiumMan',
-  'ClearCoatTest',
+// Classifier result for iPad A10+/Safari 17+ and Quest 2 targets.
+const inherentlySlowKitchenSinkAssetNames = [
+  'AlphaBlendModeTest',
+  'ClearcoatWicker',
   'CompareBaseColor',
   'CompareSpecular',
-  'Duck',
-  'Fox',
+  'GlassBrokenWindow',
   'MetalRoughSpheresNoTextures',
-  'SimpleInstancing',
-  'SunglassesKhronos',
+  'MorphStressTest',
+  'NormalTangentTest',
+  'RecursiveSkeletons',
   'TransmissionTest',
-  'Unicode❤♻Test',
+  'TransmissionThinwallTestGrid',
+  'USDShaderBallForGltf',
 ];
+const okKitchenSinkAssetNames = khronosKitchenSinkAssetNames
+  .filter((name) => !inherentlySlowKitchenSinkAssetNames.includes(name));
 const khronosGlbResourceSubstring = (name) => {
   const encodedName = encodeURIComponent(name);
   return `/fixtures/khronos/${encodedName}/glTF-Binary/${encodedName}.glb`;
 };
-const defaultKitchenSinkResourceSubstrings = defaultKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
-const fullKitchenSinkResourceSubstrings = khronosKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
+const okKitchenSinkResourceSubstrings = okKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
+const slowKitchenSinkResourceSubstrings = inherentlySlowKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
 
 const smokeExpectations = {
   cube: {
@@ -151,15 +151,15 @@ const smokeExpectations = {
   },
   'gltf-kitchen-sink': {
     path: '/gltf-kitchen-sink',
-    absentResourceSubstrings: fullKitchenSinkResourceSubstrings
-      .filter((resource) => !defaultKitchenSinkResourceSubstrings.includes(resource)),
-    resourceSubstrings: defaultKitchenSinkResourceSubstrings,
-    minColorBuckets: 18,
+    absentResourceSubstrings: slowKitchenSinkResourceSubstrings,
+    resourceSubstrings: okKitchenSinkResourceSubstrings,
+    minColorBuckets: 24,
     minPaintedRatio: 0.004,
   },
-  'gltf-kitchen-sink-full': {
-    path: '/gltf-kitchen-sink?set=full',
-    resourceSubstrings: fullKitchenSinkResourceSubstrings,
+  'gltf-kitchen-sink-slow': {
+    path: '/gltf-kitchen-sink-slow',
+    absentResourceSubstrings: okKitchenSinkResourceSubstrings,
+    resourceSubstrings: slowKitchenSinkResourceSubstrings,
     minColorBuckets: 24,
     minPaintedRatio: 0.004,
   },
@@ -758,7 +758,7 @@ const assertRoute = (expected, state) => {
   }
   for (const resourceSubstring of expected.absentResourceSubstrings ?? []) {
     if (state.resourceNames?.some((name) => name.includes(resourceSubstring))) {
-      failures.push(`unexpected default-route resource "${resourceSubstring}"`);
+      failures.push(`unexpected resource "${resourceSubstring}"`);
     }
   }
 
