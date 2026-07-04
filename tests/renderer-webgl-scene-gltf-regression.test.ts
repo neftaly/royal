@@ -1508,6 +1508,17 @@ const triangleDocument = () => ({
   ],
 });
 
+const triangleVirtualTextureManifest = () => ({
+  pageSize: 4,
+  pages: {
+    entries: {
+      "m0/0/0": "pages/gltf-vt-0.png",
+    },
+  },
+  physicalSlots: 1,
+  virtualSize: [4, 4],
+});
+
 const solidTriangleDocument = () => ({
   ...triangleDocument(),
   images: [],
@@ -3661,6 +3672,61 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(drawCalls(imageReadyCalls)).toHaveLength(1);
     expect(uniform1iPayloads(imageReadyCalls, "u_useTexture").at(-1)).toBe(1);
+  });
+
+  it("selects VT residency for glTF baseColorTexture after the URI sidecar page is resident", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "gltf-base-color-vt-sidecar",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "https://example.test/fixtures/staged-triangle.png",
+    ]);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
+    expect(loader.fetchRequests.filter((request) =>
+      /staged-triangle\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(1);
+    expect(loader.resolvePendingFetch(/staged-triangle\.png\.vt\.json(?:$|[?#])/, (url) =>
+      responseWithJson(url, triangleVirtualTextureManifest()))).toBe(true);
+    await flushMicrotasks();
+
+    const vtPageImage = ControlledImage.instances.find((image) => /gltf-vt-0\.png(?:$|[?#])/.test(image.src));
+    expect(vtPageImage?.src).toBe("https://example.test/fixtures/pages/gltf-vt-0.png");
+    vtPageImage?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    root.render(renderGraph);
+
+    expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
+    expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_vtAtlas")).toContain(0);
+    expect(uniform1iPayloads(calls, "u_vtPageTable")).toContain(1);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      residentPages: 1,
+      shaderBinds: expect.any(Number),
+      uploadedPages: 1,
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
   it("automatically instances matching glTF geometry across different asset URLs", async () => {

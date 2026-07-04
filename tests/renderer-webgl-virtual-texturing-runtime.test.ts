@@ -662,7 +662,10 @@ const camera = () => orthographicCamera({
   top: 1,
 });
 
-const renderScene = (material: Material) => scene({
+const renderScene = (
+  material: Material,
+  options: { readonly exposure?: number; readonly toneMapping?: "aces" | "none" } = {},
+) => scene({
   children: [
     pass({
       camera: camera(),
@@ -677,6 +680,8 @@ const renderScene = (material: Material) => scene({
         }),
       ],
       clearColor: [0, 0, 0, 0],
+      ...(options.exposure === undefined ? {} : { exposure: options.exposure }),
+      ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping }),
     }),
   ],
 });
@@ -768,6 +773,11 @@ const uniformNames = (calls: readonly GlCall[]): readonly string[] =>
     .filter((call) => call.name === "getUniformLocation")
     .map((call) => String(call.args[1]));
 
+const shaderSources = (calls: readonly GlCall[]): readonly string[] =>
+  calls
+    .filter((call) => call.name === "shaderSource")
+    .map((call) => String(call.args[1]));
+
 const namedUniform1iValues = (calls: readonly GlCall[]): Record<string, number[]> => {
   const values: Record<string, number[]> = {};
   for (const call of calls) {
@@ -778,6 +788,24 @@ const namedUniform1iValues = (calls: readonly GlCall[]): Record<string, number[]
   }
   return values;
 };
+
+const namedUniform4fvValues = (calls: readonly GlCall[]): Record<string, number[][]> => {
+  const values: Record<string, number[][]> = {};
+  for (const call of calls) {
+    if (call.name !== "uniform4fv") continue;
+    const location = call.args[0] as { readonly name?: unknown };
+    if (typeof location.name !== "string") continue;
+    const payload = call.args[1];
+    const vector = Array.isArray(payload) || ArrayBuffer.isView(payload)
+      ? Array.from(payload as ArrayLike<number>, Number)
+      : [];
+    values[location.name] = [...(values[location.name] ?? []), vector];
+  }
+  return values;
+};
+
+const samplerDeclarationCount = (source: string): number =>
+  source.match(/uniform sampler(?:2D|Cube) /gu)?.length ?? 0;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -961,6 +989,101 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.snapshot().virtualTexturing.manifestsReady).toBe(1);
   });
 
+  it("uses surface shader VT uniforms for resident standardMaterial virtualTexture base color", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = standardMaterial({
+      texture: virtualTexture({ colorSpace: "srgb", src: "/vt/manifest.json" }),
+    });
+    const graph = renderScene(material, { exposure: 1.75, toneMapping: "aces" });
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(graph);
+    const readySource = shaderSources(calls).join("\n");
+    const uniform1i = namedUniform1iValues(calls);
+    const uniform4fv = namedUniform4fvValues(calls);
+
+    expect(readySource).toContain("sampleVirtualBaseColor");
+    expect(readySource).toContain("materialDiffuseColor(baseColor.rgb)");
+    expect(readySource).toContain("uniform sampler2D u_vtAtlas;");
+    expect(readySource).toContain("uniform sampler2D u_vtPageTable;");
+    expect(readySource).not.toContain("surface-vt-base-color");
+    expect(uniformNames(calls)).toEqual(expect.arrayContaining([
+      "u_surfaceLightCount",
+      "u_toneMappingSettings",
+      "u_vtAtlas",
+      "u_vtPageTable",
+      "u_vtPageTableSize",
+      "u_vtAtlasGrid",
+    ]));
+    expect(uniform1i).toEqual(expect.objectContaining({
+      u_surfaceLightCount: expect.arrayContaining([1]),
+      u_unlit: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([0]),
+      u_useVirtualTexture: expect.arrayContaining([1]),
+      u_vtAtlas: expect.arrayContaining([0]),
+      u_vtPageTable: expect.arrayContaining([1]),
+    }));
+    expect(uniform4fv).toEqual(expect.objectContaining({
+      u_color: expect.arrayContaining([[1, 1, 1, 1]]),
+      u_toneMappingSettings: expect.arrayContaining([[1, 1.75, 0, 0]]),
+    }));
+    expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
+    expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
+      [gl.SRGB8_ALPHA8, 4, 4, 0, gl.RGBA],
+      [gl.RGBA8, 3, 1, 0, gl.RGBA],
+    ]));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+  });
+
+  it("uses ordinary standardMaterial image texture while auto sidecar loads, then VT when resident", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = standardMaterial({ texture: imageTexture("/textures/albedo.png") });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/albedo.png"]);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(graph);
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_texture: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([1]),
+      u_useVirtualTexture: expect.arrayContaining([0]),
+    }));
+
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    expect(imageBySrc("/textures/pages/0-0.png")).toBeDefined();
+    imageBySrc("/textures/pages/0-0.png")!.settleLoad();
+    await flushMicrotasks();
+
+    const shaderBindsBeforeDraw = root.snapshot().virtualTexturing.shaderBinds;
+    root.render(graph);
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/albedo.png.vt.json"]);
+    expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_useTexture: expect.arrayContaining([0]),
+      u_useVirtualTexture: expect.arrayContaining([1]),
+      u_vtAtlas: expect.arrayContaining([0]),
+      u_vtPageTable: expect.arrayContaining([1]),
+    }));
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeDraw);
+  });
+
   it("allocates private atlas and page-table textures after manifest parse", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
@@ -972,7 +1095,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
-      [gl.RGBA8, 8, 4, 0, gl.RGBA],
+      [gl.RGBA, 8, 4, 0, gl.RGBA],
       [gl.RGBA8, 3, 1, 0, gl.RGBA],
     ]));
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
@@ -1285,6 +1408,69 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.snapshot().disposed).toBe(true);
   });
 
+  it("falls back to ordinary standardMaterial image texture when auto VT lacks sampler budget", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = standardMaterial({ texture: imageTexture("/textures/tight.png") });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    ControlledImage.instances[0]!.settleLoad();
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+
+    root.render(graph);
+    const fallbackSource = shaderSources(calls).filter((source) => source.includes("u_texture")).at(-1) ?? "";
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/tight.png.vt.json"]);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/textures/tight.png"]);
+    expect(fallbackSource).toContain("uniform sampler2D u_texture;");
+    expect(fallbackSource).not.toContain("uniform sampler2D u_vtAtlas;");
+    expect(samplerDeclarationCount(fallbackSource)).toBeLessThanOrEqual(1);
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_texture: expect.arrayContaining([0]),
+      u_useTexture: expect.arrayContaining([1]),
+      u_useVirtualTexture: expect.arrayContaining([0]),
+    }));
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/tight\.png\.vt\.json/);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it("falls back to diagnostic material color when explicit VT lacks sampler budget", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = standardMaterial({ texture: virtualTexture("/vt/manifest.json") });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+
+    root.render(graph);
+    const fallbackSource = shaderSources(calls).at(-1) ?? "";
+
+    expect(ControlledImage.instances).toHaveLength(0);
+    expect(fallbackSource).not.toContain("uniform sampler2D u_vtAtlas;");
+    expect(samplerDeclarationCount(fallbackSource)).toBeLessThanOrEqual(1);
+    expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
+      u_useTexture: expect.arrayContaining([0]),
+      u_useVirtualTexture: expect.arrayContaining([0]),
+    }));
+    expect(namedUniform4fvValues(calls)).toEqual(expect.objectContaining({
+      u_color: expect.arrayContaining([[1, 0, 1, 1]]),
+    }));
+    expect(root.snapshot().diagnostics.join("\n")).toMatch(/requires at least two fragment texture units/i);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
+    expect(consoleWarn).toHaveBeenCalled();
+  });
+
   it("records unsupported capability diagnostics and rejects WebGL1 contexts explicitly", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
@@ -1308,16 +1494,16 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(() => createWebGlRoot(fakeCanvas(null))).toThrow(/webgl2/i);
   });
 
-  it("diagnoses VT materials outside the first supported path", () => {
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  it("accepts explicit standardMaterial virtualTexture as a surface base color while it loads", () => {
+    const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(renderScene(standardMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
-    expect(root.snapshot().virtualTexturing.unsupportedDraws).toBeGreaterThan(0);
-    expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBe(0);
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(/only unlit base-color virtual textures/i);
-    expect(consoleWarn).toHaveBeenCalled();
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/manifest.json"]);
+    expect(root.snapshot().virtualTexturing.unsupportedDraws).toBe(0);
+    expect(root.snapshot().virtualTexturing.preparedResidencyResolutions).toBe(1);
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/only unlit base-color virtual textures/i);
   });
 });

@@ -335,7 +335,13 @@ type TextureUnitAllocator = {
   readonly used: Set<number>;
 };
 
+type SurfaceBaseColorTextureBinding =
+  | { readonly kind: "none" }
+  | { readonly kind: "ordinary"; readonly texture: TextureAssetUploadRef }
+  | { readonly kind: "prepared-virtual"; readonly state: VirtualTextureRuntimeState };
+
 type SurfaceTextureBindingPlan = {
+  readonly baseColor: SurfaceBaseColorTextureBinding;
   readonly features: SurfaceShaderFeatures;
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
 };
@@ -385,7 +391,11 @@ type VirtualTextureRuntimeState = {
 type BaseColorTextureResidency =
   | { readonly kind: "none" }
   | { readonly kind: "ordinary"; readonly texture: TextureAssetUploadRef }
-  | { readonly kind: "prepared-virtual"; readonly state: VirtualTextureRuntimeState };
+  | {
+      readonly kind: "prepared-virtual";
+      readonly ordinaryFallback?: TextureAssetUploadRef;
+      readonly state: VirtualTextureRuntimeState;
+    };
 
 type LoadedGltfPrimitive = {
   readonly colors?: Float32Array;
@@ -842,6 +852,7 @@ type PassToneMappingState = {
 };
 
 const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
+const TEXTURE_COLOR: Rgba = [1, 1, 1, 1];
 const DEFAULT_TONE_MAPPING_STATE: PassToneMappingState = {
   exposure: 1,
   toneMapping: "none",
@@ -2336,6 +2347,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #autoVirtualTextureRefs = new Map<string, VirtualTextureRef>();
+  readonly #autoVirtualTextureManifestUris = new Map<string, string>();
   readonly #gltf = new Map<string, GltfState>();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
@@ -2592,6 +2604,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#studioEnvironmentSpecularTextures.clear();
     this.#virtualTextures.clear();
     this.#autoVirtualTextureRefs.clear();
+    this.#autoVirtualTextureManifestUris.clear();
     this.#gltf.clear();
     this.#gltfBatchPlanCache.clear();
     this.#gltfInstanceBuffers.clear();
@@ -3647,13 +3660,15 @@ class WebGlRootImpl implements WebGlRoot {
 
   #gltfMaterialTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
     if (material.baseColorTextureUri === undefined) return undefined;
-    return {
+    const texture = {
       colorSpace: "srgb",
       flipY: false,
       kind: "asset",
       ...(material.sampler === undefined ? {} : { sampler: material.sampler }),
       uri: material.baseColorTextureUri,
-    };
+    } satisfies TextureAssetUploadRef;
+    this.#registerAutoBaseColorVirtualTextureManifest(texture, material.baseColorImageUri);
+    return texture;
   }
 
   #gltfMaterialMetallicRoughnessTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
@@ -3858,11 +3873,9 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     const gl = this.#gl;
     const baseColorResidency = this.#resolveBaseColorTextureResidency(geometry, material);
-    const usePreparedVirtualTexture = baseColorResidency.kind === "prepared-virtual"
-      && this.#isVirtualTextureDrawable(baseColorResidency.state);
     const programKind: ProgramKind = material.kind === "wireframe"
       ? "wireframe"
-      : usePreparedVirtualTexture ? "surface-vt-base-color" : "surface";
+      : "surface";
     const surfaceMaterial: SurfaceMaterial | undefined =
       programKind === "surface" && material.kind !== "wireframe" ? material : undefined;
     const surfaceLights = surfaceMaterial?.kind === "standard"
@@ -3870,7 +3883,12 @@ class WebGlRootImpl implements WebGlRoot {
       : surfaceMaterial === undefined ? undefined : EMPTY_SURFACE_LIGHT_SET;
     const surfaceTexturePlan = surfaceMaterial === undefined || surfaceLights === undefined
       ? undefined
-      : this.#surfaceTextureBindingPlan(surfaceMaterial, transmissionScreenColorTexture, surfaceLights);
+      : this.#surfaceTextureBindingPlan(
+        surfaceMaterial,
+        transmissionScreenColorTexture,
+        surfaceLights,
+        baseColorResidency,
+      );
     const programResource = this.#program(programKind, surfaceTexturePlan?.features);
     const program = programResource.program;
     gl.useProgram(program);
@@ -3878,7 +3896,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformMatrix(program, "u_projection", projection);
     this.#uniformMatrix(program, "u_view", view);
     this.#uniformMatrix(program, "u_model", model);
-    this.#uniformColor(program, "u_color", materialColor(material));
+    this.#uniformColor(
+      program,
+      "u_color",
+      surfaceTexturePlan?.baseColor.kind === "prepared-virtual" ? TEXTURE_COLOR : materialColor(material),
+    );
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (surfaceTexturePlan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
       this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
@@ -3887,17 +3909,9 @@ class WebGlRootImpl implements WebGlRoot {
       this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
     }
 
-    let useTexture = false;
-    if (baseColorResidency.kind === "prepared-virtual") {
-      if (usePreparedVirtualTexture) {
-        useTexture = this.#bindVirtualTexture(program, baseColorResidency.state);
-      } else {
-        baseColorResidency.state.stats.unreadyDraws += 1;
-      }
-    } else {
-      useTexture = this.#bindOrdinaryBaseColorTexture(program, baseColorResidency, surfaceTexturePlan);
-    }
-    this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
+    const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
+    this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+    this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
 
     if (material.kind === "wireframe") gl.lineWidth?.(material.width);
@@ -3928,10 +3942,12 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     const gl = this.#gl;
     const surfaceLights = material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET;
+    const baseColorResidency = this.#resolveBaseColorTextureResidency(geometry, material);
     const surfaceTexturePlan = this.#surfaceTextureBindingPlan(
       material,
       transmissionScreenColorTexture,
       surfaceLights,
+      baseColorResidency,
     );
     const programResource = this.#program("surface-instanced-split", surfaceTexturePlan.features);
     const program = programResource.program;
@@ -3939,19 +3955,20 @@ class WebGlRootImpl implements WebGlRoot {
 
     this.#uniformMatrix(program, "u_projection", projection);
     this.#uniformMatrix(program, "u_view", view);
-    this.#uniformColor(program, "u_color", materialColor(material));
+    this.#uniformColor(
+      program,
+      "u_color",
+      surfaceTexturePlan.baseColor.kind === "prepared-virtual" ? TEXTURE_COLOR : materialColor(material),
+    );
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture, surfaceTexturePlan);
     this.#bindSurfaceToneMapping(program, toneMapping);
     this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
 
-    const useTexture = this.#bindOrdinaryBaseColorTexture(
-      program,
-      this.#resolveOrdinaryBaseColorTextureResidency(material),
-      surfaceTexturePlan,
-    );
-    this.#uniform1i(program, "u_useTexture", useTexture ? 1 : 0);
+    const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
+    this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+    this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
     this.#bindGeometryAttributes(program, geometry);
     this.#bindGltfInstanceModels(
       instanceBufferKey,
@@ -4066,78 +4083,126 @@ class WebGlRootImpl implements WebGlRoot {
     material: SurfaceMaterial,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     lightSet: SurfaceLightSet,
+    baseColorResidency: BaseColorTextureResidency,
   ): SurfaceTextureBindingPlan {
     const features = new Set<SurfaceShaderTextureFeature>();
     const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
+    const allocator = this.#surfaceTextureUnitAllocator();
     const reserveTextureUnit = (
       feature: SurfaceShaderTextureFeature,
-      allocator: TextureUnitAllocator,
       preferred: number,
-    ): void => {
+    ): number | undefined => {
       const unit = this.#allocateTextureUnit(allocator, preferred);
-      if (unit === undefined) return;
+      if (unit === undefined) return undefined;
       features.add(feature);
       textureUnits.set(feature, unit);
+      return unit;
+    };
+    const releaseTextureUnit = (feature: SurfaceShaderTextureFeature): void => {
+      const unit = textureUnits.get(feature);
+      if (unit === undefined) return;
+      textureUnits.delete(feature);
+      features.delete(feature);
+      allocator.used.delete(unit);
+    };
+    const reserveTextureUnits = (
+      requested: readonly (readonly [feature: SurfaceShaderTextureFeature, preferred: number])[],
+    ): boolean => {
+      const reserved: SurfaceShaderTextureFeature[] = [];
+      for (const [feature, preferred] of requested) {
+        if (reserveTextureUnit(feature, preferred) === undefined) {
+          for (const reservedFeature of reserved) releaseTextureUnit(reservedFeature);
+          return false;
+        }
+        reserved.push(feature);
+      }
+      return true;
     };
     const reserveMaterialTexture = (
       feature: SurfaceShaderTextureFeature,
-      allocator: TextureUnitAllocator,
       preferred: number,
       texture: TextureAssetUploadRef | undefined,
     ): void => {
       if (texture === undefined) return;
       const resource = this.#textures.get(textureCacheKey(texture));
       if (resource === undefined || !resource.uploaded) return;
-      reserveTextureUnit(feature, allocator, preferred);
+      reserveTextureUnit(feature, preferred);
+    };
+    const reserveOrdinaryBaseColor = (
+      texture: TextureAssetUploadRef,
+    ): SurfaceBaseColorTextureBinding | undefined =>
+      reserveTextureUnit("baseColorTexture", 0) === undefined
+        ? undefined
+        : { kind: "ordinary", texture };
+    const reserveVirtualBaseColor = (
+      state: VirtualTextureRuntimeState,
+    ): SurfaceBaseColorTextureBinding | undefined => {
+      if (!this.#isVirtualTextureDrawable(state)) return undefined;
+      return reserveTextureUnits([
+        ["baseColorVirtualTextureAtlas", 0],
+        ["baseColorVirtualTexturePageTable", 1],
+      ])
+        ? { kind: "prepared-virtual", state }
+        : undefined;
+    };
+    const reserveBaseColor = (): SurfaceBaseColorTextureBinding => {
+      switch (baseColorResidency.kind) {
+        case "none":
+          return { kind: "none" };
+        case "ordinary":
+          return reserveOrdinaryBaseColor(baseColorResidency.texture) ?? { kind: "none" };
+        case "prepared-virtual": {
+          const virtualBaseColor = reserveVirtualBaseColor(baseColorResidency.state);
+          if (virtualBaseColor !== undefined) return virtualBaseColor;
+          if (!this.#isVirtualTextureDrawable(baseColorResidency.state)) {
+            baseColorResidency.state.stats.unreadyDraws += 1;
+          }
+          const fallback = baseColorResidency.ordinaryFallback;
+          return fallback === undefined
+            ? { kind: "none" }
+            : reserveOrdinaryBaseColor(fallback) ?? { kind: "none" };
+        }
+      }
     };
 
-    const allocator = this.#surfaceTextureUnitAllocator();
-    if (material.baseColor.kind === "asset" && this.#maxTextureImageUnits > 0) {
-      features.add("baseColorTexture");
-      textureUnits.set("baseColorTexture", 0);
-      allocator.used.add(0);
-    }
+    const baseColor = reserveBaseColor();
     if (lightSet.specular !== undefined && IBL_SPECULAR_TEXTURE_UNIT < this.#maxTextureImageUnits) {
       features.add("iblSpecularCube");
       textureUnits.set("iblSpecularCube", IBL_SPECULAR_TEXTURE_UNIT);
       allocator.used.add(IBL_SPECULAR_TEXTURE_UNIT);
     }
     if (transmissionScreenColorTexture?.uploaded === true) {
-      reserveTextureUnit("transmissionScreenTexture", allocator, 1);
+      reserveTextureUnit("transmissionScreenTexture", 1);
     }
 
-    reserveMaterialTexture("emissiveTexture", allocator, 4, material.emissiveTexture);
+    reserveMaterialTexture("emissiveTexture", 4, material.emissiveTexture);
     reserveMaterialTexture(
       "metallicRoughnessTexture",
-      allocator,
       3,
       material.kind === "standard" ? material.metallicRoughnessTexture : undefined,
     );
     reserveMaterialTexture(
       "normalTexture",
-      allocator,
       1,
       material.kind === "standard" ? material.normalTexture : undefined,
     );
     reserveMaterialTexture(
       "occlusionTexture",
-      allocator,
       5,
       material.kind === "standard" ? material.occlusionTexture : undefined,
     );
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURE_BINDINGS) {
       reserveMaterialTexture(
         SURFACE_SHADER_FEATURE_BY_EXTENSION_TEXTURE_KEY[texture.key],
-        allocator,
         texture.textureUnit,
         material.kind === "standard" ? material[texture.key] : undefined,
       );
     }
     if (lightSet.specular !== undefined && features.has("iblSpecularCube")) {
-      reserveTextureUnit("iblBrdfLut", allocator, IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT);
+      reserveTextureUnit("iblBrdfLut", IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT);
     }
 
-    return { features, textureUnits };
+    return { baseColor, features, textureUnits };
   }
 
   #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: PassToneMappingState): void {
@@ -4817,19 +4882,39 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
+  #bindSurfaceBaseColorTexture(
+    program: WebGLProgram,
+    plan: SurfaceTextureBindingPlan | undefined,
+  ): SurfaceBaseColorTextureBinding {
+    if (plan === undefined) return { kind: "none" };
+    const binding = plan.baseColor;
+    switch (binding.kind) {
+      case "ordinary":
+        return this.#bindOrdinaryBaseColorTexture(program, binding, plan)
+          ? binding
+          : { kind: "none" };
+      case "prepared-virtual":
+        return this.#bindVirtualTexture(program, binding.state, plan)
+          ? binding
+          : { kind: "none" };
+      case "none":
+        return { kind: "none" };
+    }
+  }
+
   #bindOrdinaryBaseColorTexture(
     program: WebGLProgram,
-    residency: BaseColorTextureResidency,
-    plan?: SurfaceTextureBindingPlan,
+    binding: Extract<SurfaceBaseColorTextureBinding, { readonly kind: "ordinary" }>,
+    plan: SurfaceTextureBindingPlan,
   ): boolean {
-    if (residency.kind !== "ordinary") return false;
-    if (plan !== undefined && !plan.features.has("baseColorTexture")) return false;
-    const resource = this.#texture(residency.texture);
+    const textureUnit = plan.textureUnits.get("baseColorTexture");
+    if (textureUnit === undefined) return false;
+    const resource = this.#texture(binding.texture);
     if (!resource.uploaded) return false;
     const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, "u_texture", 0);
+    this.#uniform1i(program, "u_texture", textureUnit);
     return true;
   }
 
@@ -4854,7 +4939,7 @@ class WebGlRootImpl implements WebGlRoot {
     texture: TextureAssetUploadRef,
   ): BaseColorTextureResidency {
     const ordinary: BaseColorTextureResidency = { kind: "ordinary", texture };
-    if (material.kind !== "unlit" || geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
+    if (material.kind === "wireframe" || geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
       return ordinary;
     }
 
@@ -4871,7 +4956,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return this.#isVirtualTextureDrawable(state)
-      ? { kind: "prepared-virtual", state }
+      ? { kind: "prepared-virtual", ordinaryFallback: texture, state }
       : ordinary;
   }
 
@@ -4896,7 +4981,22 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #autoBaseColorVirtualTextureManifestUri(texture: TextureAssetUploadRef): string | undefined {
-    const uri = texture.uri.trim();
+    return this.#autoVirtualTextureManifestUris.get(textureCacheKey(texture))
+      ?? this.#autoBaseColorVirtualTextureManifestUriForUri(texture.uri);
+  }
+
+  #registerAutoBaseColorVirtualTextureManifest(
+    texture: TextureAssetUploadRef,
+    sourceUri: string | undefined,
+  ): void {
+    if (sourceUri === undefined) return;
+    const manifestUri = this.#autoBaseColorVirtualTextureManifestUriForUri(sourceUri);
+    if (manifestUri === undefined) return;
+    this.#autoVirtualTextureManifestUris.set(textureCacheKey(texture), manifestUri);
+  }
+
+  #autoBaseColorVirtualTextureManifestUriForUri(uriInput: string): string | undefined {
+    const uri = uriInput.trim();
     if (uri.length === 0) return undefined;
 
     const schemeSeparator = uri.indexOf(":");
@@ -4911,26 +5011,13 @@ class WebGlRootImpl implements WebGlRoot {
       : `${uri.slice(0, queryIndex)}.vt.json${uri.slice(queryIndex)}`;
   }
 
-  #resolveOrdinaryBaseColorTextureResidency(material: Material): BaseColorTextureResidency {
-    const texture = material.baseColor;
-    switch (texture.kind) {
-      case "solid":
-        return { kind: "none" };
-      case "asset":
-        return { kind: "ordinary", texture };
-      case "virtual-asset":
-        this.#recordUnsupportedVirtualTexture(texture, "only unlit base-color virtual textures on UV geometry are supported");
-        return { kind: "none" };
-    }
-  }
-
   #resolvePreparedVirtualTextureResidency(
     geometry: GeometryResource,
     material: Material,
     texture: VirtualTextureRef,
   ): BaseColorTextureResidency {
-    if (material.kind !== "unlit") {
-      this.#recordUnsupportedVirtualTexture(texture, "only unlit base-color virtual textures are supported");
+    if (material.kind === "wireframe") {
+      this.#recordUnsupportedVirtualTexture(texture, "virtual textures require surface materials");
       return { kind: "none" };
     }
     if (geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
@@ -5084,7 +5171,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,
-      gl.RGBA8,
+      textureUploadInternalFormat(gl, state.texture.colorSpace),
       atlasGridColumns * manifest.pageSize,
       atlasGridRows * manifest.pageSize,
       0,
@@ -5375,19 +5462,26 @@ class WebGlRootImpl implements WebGlRoot {
       && state.uploadedPages.size > 0;
   }
 
-  #bindVirtualTexture(program: WebGLProgram, state: VirtualTextureRuntimeState): boolean {
+  #bindVirtualTexture(
+    program: WebGLProgram,
+    state: VirtualTextureRuntimeState,
+    plan: SurfaceTextureBindingPlan,
+  ): boolean {
     const resources = state.resources;
     const manifest = state.manifest;
     if (resources === undefined || manifest === undefined || !this.#isVirtualTextureDrawable(state)) return false;
+    const atlasTextureUnit = plan.textureUnits.get("baseColorVirtualTextureAtlas");
+    const pageTableTextureUnit = plan.textureUnits.get("baseColorVirtualTexturePageTable");
+    if (atlasTextureUnit === undefined || pageTableTextureUnit === undefined) return false;
 
     this.#flushVirtualTexturePageTableUpdates(state);
     const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE0 + atlasTextureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
-    this.#uniform1i(program, "u_vtAtlas", 0);
-    gl.activeTexture(gl.TEXTURE0 + 1);
+    this.#uniform1i(program, "u_vtAtlas", atlasTextureUnit);
+    gl.activeTexture(gl.TEXTURE0 + pageTableTextureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
-    this.#uniform1i(program, "u_vtPageTable", 1);
+    this.#uniform1i(program, "u_vtPageTable", pageTableTextureUnit);
     this.#uniform2fv(program, "u_vtPageTableSize", [resources.pageTableWidth, resources.pageTableHeight]);
     this.#uniform2fv(program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
     this.#uniform1i(program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));

@@ -51,6 +51,7 @@ uniform bool u_useIblBrdfLut;
 uniform vec4 u_iblSpecularSettings;
 
 __SURFACE_SAMPLER_UNIFORMS__
+__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__
 
 // PBR and glTF extension factors.
 uniform vec4 u_materialPbrFactors;
@@ -72,6 +73,8 @@ uniform bool u_useTransmissionTexture;
 out vec4 outColor;
 
 const float PI = 3.141592653589793;
+
+__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__
 
 float maxComponent(vec3 value) {
   return max(max(value.r, value.g), value.b);

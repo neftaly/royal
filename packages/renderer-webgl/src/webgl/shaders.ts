@@ -2,19 +2,18 @@ import { MAX_SURFACE_LIGHTS } from "./lights";
 import surfaceFragmentTemplate from "./shaders/surface.frag";
 import surfaceVertexShaderSource from "./shaders/surface.vert";
 import surfaceInstancedSplitVertexShaderSource from "./shaders/surface-instanced-split.vert";
-import surfaceVirtualTextureBaseColorFragmentShaderSource from "./shaders/surface-vt-base-color.frag";
-import surfaceVirtualTextureBaseColorVertexShaderSource from "./shaders/surface-vt-base-color.vert";
 import wireframeFragmentShaderSource from "./shaders/wireframe.frag";
 import wireframeVertexShaderSource from "./shaders/wireframe.vert";
 
 export type ProgramKind =
   | "surface"
   | "surface-instanced-split"
-  | "surface-vt-base-color"
   | "wireframe";
 
 export const SURFACE_SHADER_TEXTURE_FEATURES = [
   "baseColorTexture",
+  "baseColorVirtualTextureAtlas",
+  "baseColorVirtualTexturePageTable",
   "emissiveTexture",
   "metallicRoughnessTexture",
   "normalTexture",
@@ -44,6 +43,10 @@ const hasSurfaceShaderFeature = (
   feature: SurfaceShaderTextureFeature,
 ): boolean => features.has(feature);
 
+const hasSurfaceShaderVirtualBaseColor = (features: SurfaceShaderFeatures): boolean =>
+  hasSurfaceShaderFeature(features, "baseColorVirtualTextureAtlas")
+  && hasSurfaceShaderFeature(features, "baseColorVirtualTexturePageTable");
+
 export const surfaceShaderFeatureKey = (features: SurfaceShaderFeatures): string =>
   SURFACE_SHADER_TEXTURE_FEATURES
     .filter((feature) => hasSurfaceShaderFeature(features, feature))
@@ -54,6 +57,8 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
     hasSurfaceShaderFeature(features, "iblSpecularCube") ? "uniform samplerCube u_iblSpecularCube;" : "",
     hasSurfaceShaderFeature(features, "iblBrdfLut") ? "uniform sampler2D u_iblBrdfLut;" : "",
     hasSurfaceShaderFeature(features, "baseColorTexture") ? "uniform sampler2D u_texture;" : "",
+    hasSurfaceShaderFeature(features, "baseColorVirtualTextureAtlas") ? "uniform sampler2D u_vtAtlas;" : "",
+    hasSurfaceShaderFeature(features, "baseColorVirtualTexturePageTable") ? "uniform sampler2D u_vtPageTable;" : "",
     hasSurfaceShaderFeature(features, "emissiveTexture") ? "uniform sampler2D u_emissiveTexture;" : "",
     hasSurfaceShaderFeature(features, "metallicRoughnessTexture")
       ? "uniform sampler2D u_metallicRoughnessTexture;"
@@ -101,6 +106,83 @@ const surfaceFeatureBlock = (
   fallback: string,
 ): string => hasSurfaceShaderFeature(features, feature) ? block : fallback;
 
+const surfaceBaseColorVirtualTextureUniforms = (features: SurfaceShaderFeatures): string =>
+  hasSurfaceShaderVirtualBaseColor(features)
+    ? `uniform bool u_useVirtualTexture;
+uniform vec2 u_vtAtlasGrid;
+uniform vec2 u_vtPageTableSize;
+uniform int u_vtWrapS;
+uniform int u_vtWrapT;`
+    : "";
+
+const surfaceBaseColorVirtualTextureFunctions = (features: SurfaceShaderFeatures): string =>
+  hasSurfaceShaderVirtualBaseColor(features)
+    ? `float wrapVirtualTextureCoord(float coord, int mode) {
+  if (mode == 1) {
+    return fract(coord);
+  }
+
+  if (mode == 2) {
+    float mirrored = mod(coord, 2.0);
+    if (mirrored < 0.0) {
+      mirrored += 2.0;
+    }
+
+    return min(mirrored <= 1.0 ? mirrored : 2.0 - mirrored, 0.999999);
+  }
+
+  return clamp(coord, 0.0, 0.999999);
+}
+
+vec2 wrapVirtualTextureUv(vec2 uv) {
+  return vec2(
+    wrapVirtualTextureCoord(uv.x, u_vtWrapS),
+    wrapVirtualTextureCoord(uv.y, u_vtWrapT)
+  );
+}
+
+vec4 sampleVirtualBaseColor(vec2 uv) {
+  vec2 wrappedUv = wrapVirtualTextureUv(uv);
+  vec2 pageCoord = floor(wrappedUv * u_vtPageTableSize);
+  vec4 tableEntry = texture(
+    u_vtPageTable,
+    (pageCoord + vec2(0.5)) / u_vtPageTableSize
+  );
+  float encodedSlot = floor(tableEntry.r * 255.0 + 0.5)
+    + floor(tableEntry.g * 255.0 + 0.5) * 256.0;
+  float fallbackMipOffset = floor(tableEntry.b * 255.0 + 0.5);
+
+  if (encodedSlot < 1.0) {
+    return u_color;
+  }
+
+  float slot = encodedSlot - 1.0;
+  vec2 atlasSlotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
+  vec2 residentPageTableSize = max(
+    vec2(1.0),
+    floor(u_vtPageTableSize / exp2(fallbackMipOffset))
+  );
+  vec2 localUv = fract(wrappedUv * residentPageTableSize);
+  vec2 atlasUv = (atlasSlotCoord + localUv) / u_vtAtlasGrid;
+
+  return texture(u_vtAtlas, atlasUv) * u_color;
+}`
+    : "";
+
+const surfaceBaseColorExpression = (features: SurfaceShaderFeatures): string => {
+  const fallback = "u_color";
+  const ordinary = surfaceTextureExpression(
+    features,
+    "baseColorTexture",
+    "u_useTexture ? texture(u_texture, v_uv) : u_color",
+    fallback,
+  );
+
+  return hasSurfaceShaderVirtualBaseColor(features)
+    ? `u_useVirtualTexture ? sampleVirtualBaseColor(v_uv) : (${ordinary})`
+    : ordinary;
+};
+
 const replaceShaderTokens = (source: string, replacements: ReadonlyMap<string, string>): string => {
   let next = source;
   for (const [token, value] of replacements) {
@@ -123,8 +205,6 @@ export const vertexShaderSource = (kind: ProgramKind): string => {
   switch (kind) {
     case "wireframe":
       return wireframeVertexShaderSource;
-    case "surface-vt-base-color":
-      return surfaceVirtualTextureBaseColorVertexShaderSource;
     case "surface-instanced-split":
       return surfaceInstancedSplitVertexShaderSource;
     case "surface":
@@ -139,8 +219,6 @@ export const fragmentShaderSource = (
   switch (kind) {
     case "wireframe":
       return wireframeFragmentShaderSource;
-    case "surface-vt-base-color":
-      return surfaceVirtualTextureBaseColorFragmentShaderSource;
     case "surface":
     case "surface-instanced-split":
       return surfaceFragmentShaderSource(surfaceFeatures);
@@ -151,6 +229,8 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
   assertNoShaderTokens(replaceShaderTokens(surfaceFragmentTemplate, new Map([
     ["__MAX_SURFACE_LIGHTS__", String(MAX_SURFACE_LIGHTS)],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
+    ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
+    ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
     ["__SPECULAR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "specularTexture",
@@ -299,10 +379,5 @@ vec3 radiance = iblDecodeSpecularRadiance(textureLod(u_iblSpecularCube, directio
 return radiance * iblSpecularBrdf(baseColor, roughness, NdotV) * u_iblSpecularSettings.y;`,
       "return vec3(0.0);",
     )],
-    ["__BASE_COLOR_EXPR__", surfaceTextureExpression(
-      features,
-      "baseColorTexture",
-      "u_useTexture ? texture(u_texture, v_uv) : u_color",
-      "u_color",
-    )],
+    ["__BASE_COLOR_EXPR__", surfaceBaseColorExpression(features)],
   ])));

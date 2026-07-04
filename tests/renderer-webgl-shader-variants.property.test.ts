@@ -9,6 +9,8 @@ import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const samplerDeclarations = {
   baseColorTexture: "uniform sampler2D u_texture;",
+  baseColorVirtualTextureAtlas: "uniform sampler2D u_vtAtlas;",
+  baseColorVirtualTexturePageTable: "uniform sampler2D u_vtPageTable;",
   emissiveTexture: "uniform sampler2D u_emissiveTexture;",
   metallicRoughnessTexture: "uniform sampler2D u_metallicRoughnessTexture;",
   normalTexture: "uniform sampler2D u_normalTexture;",

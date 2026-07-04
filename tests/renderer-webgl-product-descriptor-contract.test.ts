@@ -924,12 +924,12 @@ describe("WebGL renderer product descriptor contracts", () => {
       && drawCount(call) === 3)).toBe(true);
   });
 
-  it("draws virtual textures as an unsupported diagnostic material without public fallback colors", () => {
-    const removedFallbackColor: Rgba = [0.08, 0.1, 0.12, 1];
-    const unsupportedColor: Rgba = [1, 0, 1, 1];
+  it("accepts standard material virtual textures as surface base colors while their manifest loads", () => {
+    const loader = installGltfFixtureLoaderStubs();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const manifestUrl = "/textures/product-terrain.vt.json";
 
     expect(() => {
       root.render(renderScene([
@@ -941,10 +941,44 @@ describe("WebGL renderer product descriptor contracts", () => {
           geometry: planeGeometry(1),
           material: standardMaterial({
             texture: virtualTexture({
-              src: "/textures/product-terrain.vt.json",
+              src: manifestUrl,
               version: "contract-v1",
             }),
           }),
+        }),
+      ]));
+    }).not.toThrow();
+
+    expect(loader.fetchRequests.map((request) => request.url)).toEqual([manifestUrl]);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      manifestRequests: 1,
+      preparedResidencyResolutions: 1,
+      unsupportedDraws: 0,
+    }));
+    expect(root.snapshot().diagnostics).toEqual([]);
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 6)).toBe(true);
+  });
+
+  it("keeps virtual textures on non-surface materials diagnostic", () => {
+    const removedFallbackColor: Rgba = [0.08, 0.1, 0.12, 1];
+    const unsupportedColor: Rgba = [1, 0, 1, 1];
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const manifestUrl = "/textures/product-wire.vt.json";
+
+    expect(() => {
+      root.render(renderScene([
+        mesh({
+          geometry: planeGeometry(1),
+          material: {
+            baseColor: virtualTexture({
+              src: manifestUrl,
+              version: "contract-v1",
+            }),
+            kind: "wireframe",
+            width: 2.5,
+          },
         }),
       ]));
     }).not.toThrow();
@@ -953,9 +987,10 @@ describe("WebGL renderer product descriptor contracts", () => {
     expect(uniformVectors(calls, 4).map((values) => values.map(roundNumber))).not.toContainEqual(
       removedFallbackColor.map(roundNumber),
     );
+    expect(root.snapshot().virtualTexturing.unsupportedDraws).toBeGreaterThan(0);
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
-      /Virtual texture \/textures\/product-terrain\.vt\.json is not rendered.*first-page rendering are disabled/i,
+      /Virtual texture \/textures\/product-wire\.vt\.json is not rendered.*surface materials/i,
     ));
-    expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 6)).toBe(true);
+    expect(drawCalls(calls).some((call) => call.args[0] === gl.LINES && drawCount(call) > 0)).toBe(true);
   });
 });
