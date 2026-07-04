@@ -14,7 +14,7 @@ import type {
   TextureLimitRow,
   WebGpuProbeInput,
   WebGlExtensionRow,
-  WebGlLikeContext
+  WebGlCapabilityProbeContext
 } from '@royal/renderer-webgl/capabilities';
 
 type Mode = 'check' | 'profile';
@@ -553,13 +553,13 @@ const collectTrace = async (
 };
 
 const loadCapabilityCollector = async (): Promise<
-  (gl: WebGlLikeContext, options?: { readonly contextVersion?: 1 | 2; readonly webgpu?: WebGpuProbeInput }) => RendererCapabilityProbeResult
+  (gl: WebGlCapabilityProbeContext, options?: { readonly webgpu?: WebGpuProbeInput }) => RendererCapabilityProbeResult
 > => {
   const capabilities = await import('@royal/renderer-webgl/capabilities');
-  return capabilities.collectRendererCapabilityRows;
+  return capabilities.probeWebGlCapabilities;
 };
 
-const createCapabilityContext = (snapshot: BrowserCapabilitySnapshot): WebGlLikeContext => {
+const createCapabilityContext = (snapshot: BrowserCapabilitySnapshot): WebGlCapabilityProbeContext => {
   const constants = snapshot.constants;
 
   return {
@@ -599,7 +599,6 @@ const collectCapabilities = async (
 
   const collectRendererCapabilityRows = await loadCapabilityCollector();
   return collectRendererCapabilityRows(createCapabilityContext(snapshot), {
-    contextVersion: snapshot.version,
     webgpu: snapshot.webgpu
   });
 };

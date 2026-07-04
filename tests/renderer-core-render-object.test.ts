@@ -199,9 +199,9 @@ describe("renderer-core render object transforms", () => {
     const handle = createRenderObjectHandle(identityTransform, () => {});
 
     const firstSnapshot = handle.getTransform();
-    firstSnapshot.position[0] = 99;
-    firstSnapshot.rotation[1] = 99;
-    firstSnapshot.scale[2] = 99;
+    (firstSnapshot.position as [number, number, number])[0] = 99;
+    (firstSnapshot.rotation as [number, number, number])[1] = 99;
+    (firstSnapshot.scale as [number, number, number])[2] = 99;
 
     expect(handle.getTransform()).toEqual(identityTransform);
 
@@ -221,10 +221,10 @@ describe("renderer-core render object transforms", () => {
 
   it("keeps mutable vector argument validation", () => {
     const handle = createRenderObjectHandle(identityTransform, () => {});
+    const setPosition = handle.position.set.bind(handle.position) as unknown as (x: number, y: number) => void;
 
     expect(() => {
-      // @ts-expect-error runtime validation covers missing z for JS callers.
-      handle.position.set(1, 2);
+      setPosition(1, 2);
     }).toThrow(/expects x, y, and z/);
   });
 });

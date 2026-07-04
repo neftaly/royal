@@ -14,6 +14,9 @@
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],
+      "@royal/renderer-core/internal/render-object": [
+        "./packages/renderer-core/src/render-object.ts"
+      ],
       "@royal/renderer-core/text": [
         "./packages/renderer-core/src/text/index.ts"
       ],
