@@ -5985,7 +5985,7 @@ class WebGlRootImpl implements WebGlRoot {
     for (const update of pageTable.takeDirtyPageTableUpdates()) {
       for (const cell of this.#expandedVirtualTexturePageTableCells(resources, update)) {
         const payload = new Uint8Array(encodeVirtualTexturePageTableRgba8({
-          fallbackMipOffset: cell.fallbackMipOffset,
+          residentMip: cell.residentMip,
           ...(update.slot === undefined ? {} : { slot: update.slot }),
         }));
         gl.texSubImage2D(
@@ -6030,21 +6030,19 @@ class WebGlRootImpl implements WebGlRoot {
   #expandedVirtualTexturePageTableCells(
     resources: VirtualTextureResourceSet,
     update: VirtualTexturePageTableUpdate,
-  ): readonly { readonly fallbackMipOffset: number; readonly x: number; readonly y: number }[] {
+  ): readonly { readonly residentMip: number; readonly x: number; readonly y: number }[] {
     const coverage = 2 ** update.page.mip;
     const minX = update.page.x * coverage;
     const minY = update.page.y * coverage;
     const maxX = Math.min(resources.pageTableWidth, minX + coverage);
     const maxY = Math.min(resources.pageTableHeight, minY + coverage);
-    const fallbackMipOffset = update.slot === undefined
+    const residentMip = update.slot === undefined
       ? 0
-      : update.fallbackMipOffset === undefined
-        ? update.page.mip
-        : update.page.mip + update.fallbackMipOffset;
-    const cells: { readonly fallbackMipOffset: number; readonly x: number; readonly y: number }[] = [];
+      : update.residentMip ?? update.page.mip;
+    const cells: { readonly residentMip: number; readonly x: number; readonly y: number }[] = [];
     for (let y = minY; y < maxY; y += 1) {
       for (let x = minX; x < maxX; x += 1) {
-        cells.push({ fallbackMipOffset, x, y });
+        cells.push({ residentMip, x, y });
       }
     }
 
@@ -6107,6 +6105,12 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniform1i(program, "u_vtPageTable", pageTableTextureUnit);
     this.#uniform2fv(program, "u_vtPageTableSize", [resources.pageTableWidth, resources.pageTableHeight]);
     this.#uniform2fv(program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
+    this.#uniform2fv(program, "u_vtAtlasTexelSize", [
+      1 / (resources.atlasGridColumns * manifest.pageSize),
+      1 / (resources.atlasGridRows * manifest.pageSize),
+    ]);
+    this.#uniform1f(program, "u_vtPageSize", manifest.pageSize);
+    this.#uniform2fv(program, "u_vtVirtualSize", [manifest.width, manifest.height]);
     this.#uniform1i(program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
     this.#uniform1i(program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
     state.stats.shaderBinds += 1;
@@ -6170,6 +6174,15 @@ class WebGlRootImpl implements WebGlRoot {
     const location = this.#uniformLocation(program, name);
     if (location !== null) {
       this.#gl.uniform1i(location, value);
+      this.#cacheUniformNumber(program, name, value);
+    }
+  }
+
+  #uniform1f(program: WebGLProgram, name: string, value: number): void {
+    if (this.#uniformNumberCached(program, name, value)) return;
+    const location = this.#uniformLocation(program, name);
+    if (location !== null) {
+      this.#gl.uniform1f(location, value);
       this.#cacheUniformNumber(program, name, value);
     }
   }

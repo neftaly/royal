@@ -252,9 +252,9 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(table.residentSlot(parent)).toBe(0);
     expect(table.takeDirtyPageTableUpdates()).toEqual([
       expect.objectContaining({
-        fallbackMipOffset: 1,
         fallbackPageKey: "1/0/0",
         pageKey: "0/0/0",
+        residentMip: 1,
         slot: 0,
       }),
       expect.objectContaining({ pageKey: "0/1/0", slot: 1 }),
@@ -319,7 +319,7 @@ describe("WebGL virtual texturing runtime model", () => {
     const page = { mip: 0, x: 0, y: 0 };
 
     expect(encodeVirtualTexturePageTableRgba8({ slot: 0 })).toEqual([1, 0, 0, 255]);
-    expect(encodeVirtualTexturePageTableRgba8({ fallbackMipOffset: 2, slot: 256 })).toEqual([1, 1, 2, 255]);
+    expect(encodeVirtualTexturePageTableRgba8({ residentMip: 2, slot: 256 })).toEqual([1, 1, 2, 255]);
     expect(encodeVirtualTexturePageTableRgba8({})).toEqual([0, 0, 0, 0]);
 
     table.ensureResident(page);
@@ -520,6 +520,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     texParameteri: record("texParameteri"),
     texStorage2D: record("texStorage2D"),
     texSubImage2D: record("texSubImage2D"),
+    uniform1f: record("uniform1f"),
     uniform1i: record("uniform1i"),
     uniform2fv: record("uniform2fv"),
     uniform3fv: record("uniform3fv"),
@@ -908,6 +909,9 @@ describe("WebGL renderer virtual texturing integration", () => {
       "u_vtPageTable",
       "u_vtPageTableSize",
       "u_vtAtlasGrid",
+      "u_vtAtlasTexelSize",
+      "u_vtPageSize",
+      "u_vtVirtualSize",
     ]));
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       manifestRequests: 1,
@@ -1129,6 +1133,9 @@ describe("WebGL renderer virtual texturing integration", () => {
       "u_vtPageTable",
       "u_vtPageTableSize",
       "u_vtAtlasGrid",
+      "u_vtAtlasTexelSize",
+      "u_vtPageSize",
+      "u_vtVirtualSize",
     ]));
     expect(uniform1i).toEqual(expect.objectContaining({
       u_surfaceLightCount: expect.arrayContaining([1]),
@@ -1438,6 +1445,9 @@ describe("WebGL renderer virtual texturing integration", () => {
       "u_vtPageTable",
       "u_vtPageTableSize",
       "u_vtAtlasGrid",
+      "u_vtAtlasTexelSize",
+      "u_vtPageSize",
+      "u_vtVirtualSize",
     ]));
     expect(uniformNames(calls)).not.toContain("u_texture");
     expect(calls).toEqual(expect.arrayContaining([

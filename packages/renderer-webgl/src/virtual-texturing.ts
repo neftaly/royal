@@ -54,11 +54,11 @@ export interface VirtualTextureResidentPage extends VirtualTextureAtlasAssignmen
 }
 
 export interface VirtualTexturePageTableUpdate {
-  readonly fallbackMipOffset?: number;
   readonly fallbackPage?: VirtualTexturePageId;
   readonly fallbackPageKey?: string;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
+  readonly residentMip?: number;
   readonly slot?: number;
 }
 
@@ -454,18 +454,18 @@ export class VirtualTextureAtlasPageTable {
     const fallback = this.resolveResidentFallback(parentVirtualTexturePage(evicted.page));
     if (fallback === undefined) return { page: evicted.page, pageKey: evicted.pageKey };
     return {
-      fallbackMipOffset: fallback.page.mip - evicted.page.mip,
       fallbackPage: fallback.page,
       fallbackPageKey: fallback.pageKey,
       page: evicted.page,
       pageKey: evicted.pageKey,
+      residentMip: fallback.page.mip,
       slot: fallback.slot,
     };
   }
 }
 
 export const encodeVirtualTexturePageTableRgba8 = (
-  update: Pick<VirtualTexturePageTableUpdate, "fallbackMipOffset" | "slot">,
+  update: Pick<VirtualTexturePageTableUpdate, "residentMip" | "slot">,
 ): readonly [number, number, number, number] => {
   if (update.slot === undefined) return [0, 0, 0, 0];
   const encodedSlot = update.slot + 1;
@@ -474,7 +474,7 @@ export const encodeVirtualTexturePageTableRgba8 = (
   return [
     encodedSlot & 0xff,
     (encodedSlot >> 8) & 0xff,
-    update.fallbackMipOffset ?? 0,
+    update.residentMip ?? 0,
     reservedAlpha,
   ];
 };
