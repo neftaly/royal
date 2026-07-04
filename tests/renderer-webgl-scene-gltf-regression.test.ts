@@ -3311,6 +3311,46 @@ const installCanvasImageMimeTypeSupport = (supported: readonly string[]): void =
   });
 };
 
+const installCanvas2d = (): {
+  readonly contexts: Array<{
+    readonly clearRect: ReturnType<typeof vi.fn>;
+    readonly drawImage: ReturnType<typeof vi.fn>;
+    imageSmoothingEnabled: boolean;
+    imageSmoothingQuality: ImageSmoothingQuality;
+    readonly putImageData: ReturnType<typeof vi.fn>;
+  }>;
+} => {
+  const contexts: Array<{
+    readonly clearRect: ReturnType<typeof vi.fn>;
+    readonly drawImage: ReturnType<typeof vi.fn>;
+    imageSmoothingEnabled: boolean;
+    imageSmoothingQuality: ImageSmoothingQuality;
+    readonly putImageData: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  vi.stubGlobal("document", {
+    createElement: vi.fn((tagName: string) => {
+      if (tagName !== "canvas") throw new Error(`unexpected element ${tagName}`);
+      const context = {
+        clearRect: vi.fn(),
+        drawImage: vi.fn(),
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: "low" as ImageSmoothingQuality,
+        putImageData: vi.fn(),
+      };
+      contexts.push(context);
+
+      return {
+        height: 0,
+        getContext: vi.fn((contextId: string) => contextId === "2d" ? context : null),
+        width: 0,
+      };
+    }),
+  });
+
+  return { contexts };
+};
+
 const settleDocumentAndBuffer = async (
   loader: ReturnType<typeof installStagedGltfLoader>,
 ): Promise<void> => {
@@ -3766,6 +3806,86 @@ describe("WebGL renderer scene and glTF regressions", () => {
       uploadedPages: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+  });
+
+  it("uses generated VT for glTF raster baseColorTexture after the URI sidecar fails", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const { contexts } = installCanvas2d();
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "gltf-base-color-generated-vt-after-sidecar-failure",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const baseColorImage = ControlledImage.instances.find((image) => /staged-triangle\.png(?:$|[?#])/.test(image.src));
+    expect(baseColorImage?.src).toBe("https://example.test/fixtures/staged-triangle.png");
+    baseColorImage!.height = 512;
+    baseColorImage!.naturalHeight = 512;
+    baseColorImage!.naturalWidth = 512;
+    baseColorImage!.width = 512;
+    baseColorImage?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    root.render(renderGraph);
+
+    expect(loader.fetchRequests.filter((request) =>
+      /staged-triangle\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(1);
+    expect(loader.rejectPendingFetch(/staged-triangle\.png\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+
+    for (
+      let frame = 0;
+      frame < 8
+      && (contexts.length === 0 || root.snapshot().virtualTexturing.shaderBinds === 0);
+      frame += 1
+    ) {
+      await flushMicrotasks();
+      root.render(renderGraph);
+      await flushAnimationFrames(viewport.animationFrames);
+    }
+
+    expect(contexts[0]?.drawImage).toHaveBeenCalled();
+    expect(contexts[0]?.drawImage.mock.calls[0]).toEqual([
+      baseColorImage,
+      0,
+      0,
+      512,
+      512,
+      0,
+      0,
+      256,
+      256,
+    ]);
+    expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
+    expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      generatedPageFailures: 0,
+      generatedPagesTarget: 5,
+      manifestRequests: 1,
+      manifestsReady: 1,
+      residentPages: expect.any(Number),
+      uploadedPages: expect.any(Number),
+    }));
+    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.residentPages).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThan(0);
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/staged-triangle\.png\.vt\.json/);
   });
 
   it("shares glTF texture cache identity and auto VT for matching contentKey texture sources", async () => {

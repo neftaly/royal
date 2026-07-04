@@ -395,6 +395,29 @@ type VirtualTextureGeneratedPageSource =
   | { readonly kind: "raster"; readonly source: RasterVirtualTextureSource }
   | { readonly kind: "svg"; readonly source: SvgVirtualTextureSource };
 
+type VirtualTextureManifestSource =
+  | { readonly kind: "generated"; readonly manifestUri: string; readonly pageSource: VirtualTextureGeneratedPageSource }
+  | { readonly kind: "sidecar"; readonly manifestUri: string };
+
+type VirtualTextureFallbackTrigger =
+  | "fetch-failed"
+  | "late-generated-source"
+  | "manifest-unsupported"
+  | "parse-failed"
+  | "runtime-unsupported";
+
+type AutoVirtualTexturePlan = {
+  readonly fallback?: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>;
+  readonly fallbackTriggers: ReadonlySet<VirtualTextureFallbackTrigger>;
+  readonly primary: VirtualTextureManifestSource;
+};
+
+type AutoVirtualTexturePlanInput = {
+  readonly generatedPageSource?: VirtualTextureGeneratedPageSource;
+  readonly sidecarManifestUri?: string;
+  readonly textureKey: string;
+};
+
 type VirtualTextureRuntimeStats = {
   generatedManifestUses: number;
   generatedPageFailures: number;
@@ -414,10 +437,10 @@ type VirtualTextureRuntimeStats = {
 };
 
 type VirtualTextureRuntimeState = {
+  activeSource: VirtualTextureManifestSource;
+  autoPlan?: AutoVirtualTexturePlan;
   diagnostics: string[];
   diagnosticsEnabled: boolean;
-  generatedPageSource?: VirtualTextureGeneratedPageSource;
-  generatedPages: boolean;
   readonly key: string;
   loadingPages: Set<string>;
   manifest?: VirtualTextureManifestModel;
@@ -1927,11 +1950,48 @@ const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string
 const generatedVirtualTextureManifestUri = (key: string): string =>
   `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
 
-const isGeneratedVirtualTextureManifestUri = (uri: string): boolean =>
-  uri.startsWith(GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX);
-
 const virtualTextureNow = (): number =>
   typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+
+const AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS: ReadonlySet<VirtualTextureFallbackTrigger> = new Set([
+  "fetch-failed",
+  "late-generated-source",
+  "manifest-unsupported",
+  "parse-failed",
+  "runtime-unsupported",
+]);
+
+// Today authored sidecars are preferred when usable; generated VT remains attached
+// as a candidate so later resolution policy can choose or promote it centrally.
+const autoVirtualTexturePlan = ({
+  generatedPageSource,
+  sidecarManifestUri,
+  textureKey,
+}: AutoVirtualTexturePlanInput): AutoVirtualTexturePlan | undefined => {
+  const generatedSource = generatedPageSource === undefined
+    ? undefined
+    : {
+      kind: "generated" as const,
+      manifestUri: generatedVirtualTextureManifestUri(textureKey),
+      pageSource: generatedPageSource,
+    };
+  if (sidecarManifestUri !== undefined) {
+    return {
+      ...(generatedSource === undefined ? {} : { fallback: generatedSource }),
+      fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
+      primary: {
+        kind: "sidecar",
+        manifestUri: sidecarManifestUri,
+      },
+    };
+  }
+  if (generatedSource === undefined) return undefined;
+
+  return {
+    fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
+    primary: generatedSource,
+  };
+};
 
 const generatedVirtualTexturePageCount = (
   width: number,
@@ -5256,15 +5316,15 @@ class WebGlRootImpl implements WebGlRoot {
       return ordinary;
     }
 
-    const virtualTexture = this.#autoBaseColorVirtualTextureRef(texture);
-    if (virtualTexture === undefined) return ordinary;
-
     const textureKey = textureCacheKey(texture);
-    const generatedPageSource = this.#autoBaseColorVirtualTextureGeneratedPageSource(texture);
+    const plan = this.#autoBaseColorVirtualTexturePlan(texture);
+    if (plan === undefined) return ordinary;
+
+    const virtualTexture = this.#autoBaseColorVirtualTextureRef(texture, plan);
     const state = this.#virtualTexture(virtualTexture, {
+      autoPlan: plan,
       cacheNamespace: `auto-base-color:${textureKey}`,
       diagnosticsEnabled: false,
-      ...(generatedPageSource === undefined ? {} : { generatedPageSource }),
     });
     state.stats.preparedResidencyResolutions += 1;
     if (state.status === "ready") this.#demandVirtualTexturePages(state, demandContext);
@@ -5274,10 +5334,10 @@ class WebGlRootImpl implements WebGlRoot {
       : ordinary;
   }
 
-  #autoBaseColorVirtualTextureRef(texture: TextureAssetUploadRef): VirtualTextureRef | undefined {
-    const manifestUri = this.#autoBaseColorVirtualTextureManifestUri(texture);
-    if (manifestUri === undefined) return undefined;
-
+  #autoBaseColorVirtualTextureRef(
+    texture: TextureAssetUploadRef,
+    plan: AutoVirtualTexturePlan,
+  ): VirtualTextureRef {
     const key = `auto-base-color:${textureCacheKey(texture)}`;
     const cached = this.#autoVirtualTextureRefs.get(key);
     if (cached !== undefined) return cached;
@@ -5287,7 +5347,7 @@ class WebGlRootImpl implements WebGlRoot {
       ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
       ...(texture.contentKey === undefined ? {} : { contentKey: texture.contentKey }),
       debugName: `auto:${texture.uri}`,
-      manifestUri,
+      manifestUri: plan.primary.manifestUri,
       ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
       ...(texture.version === undefined ? {} : { version: texture.version }),
     };
@@ -5295,12 +5355,16 @@ class WebGlRootImpl implements WebGlRoot {
     return virtualTexture;
   }
 
-  #autoBaseColorVirtualTextureManifestUri(texture: TextureAssetUploadRef): string | undefined {
-    return this.#autoVirtualTextureManifestUris.get(textureCacheKey(texture))
-      ?? this.#autoBaseColorVirtualTextureManifestUriForUri(texture.uri)
-      ?? (this.#autoBaseColorVirtualTextureGeneratedPageSource(texture) === undefined
-        ? undefined
-        : generatedVirtualTextureManifestUri(textureCacheKey(texture)));
+  #autoBaseColorVirtualTexturePlan(texture: TextureAssetUploadRef): AutoVirtualTexturePlan | undefined {
+    const textureKey = textureCacheKey(texture);
+    const generatedPageSource = this.#autoBaseColorVirtualTextureGeneratedPageSource(texture);
+    const sidecarManifestUri = this.#autoVirtualTextureManifestUris.get(textureKey)
+      ?? this.#autoBaseColorVirtualTextureSidecarManifestUriForUri(texture.uri);
+    return autoVirtualTexturePlan({
+      ...(generatedPageSource === undefined ? {} : { generatedPageSource }),
+      ...(sidecarManifestUri === undefined ? {} : { sidecarManifestUri }),
+      textureKey,
+    });
   }
 
   #registerAutoBaseColorVirtualTextureManifest(
@@ -5308,7 +5372,7 @@ class WebGlRootImpl implements WebGlRoot {
     sourceUri: string | undefined,
   ): void {
     if (sourceUri === undefined) return;
-    const manifestUri = this.#autoBaseColorVirtualTextureManifestUriForUri(sourceUri);
+    const manifestUri = this.#autoBaseColorVirtualTextureSidecarManifestUriForUri(sourceUri);
     if (manifestUri === undefined) return;
     this.#autoVirtualTextureManifestUris.set(textureCacheKey(texture), manifestUri);
   }
@@ -5348,7 +5412,7 @@ class WebGlRootImpl implements WebGlRoot {
     return this.#autoVirtualTextureGeneratedPageSources.get(textureCacheKey(texture));
   }
 
-  #autoBaseColorVirtualTextureManifestUriForUri(uriInput: string): string | undefined {
+  #autoBaseColorVirtualTextureSidecarManifestUriForUri(uriInput: string): string | undefined {
     const uri = uriInput.trim();
     if (uri.length === 0) return undefined;
 
@@ -5388,9 +5452,9 @@ class WebGlRootImpl implements WebGlRoot {
   #virtualTexture(
     texture: VirtualTextureRef,
     options: {
+      readonly autoPlan?: AutoVirtualTexturePlan;
       readonly cacheNamespace?: string;
       readonly diagnosticsEnabled?: boolean;
-      readonly generatedPageSource?: VirtualTextureGeneratedPageSource;
     } = {},
   ): VirtualTextureRuntimeState {
     const diagnosticsEnabled = options.diagnosticsEnabled ?? true;
@@ -5401,18 +5465,25 @@ class WebGlRootImpl implements WebGlRoot {
     const cached = this.#virtualTextures.get(key);
     if (cached !== undefined) {
       if (diagnosticsEnabled) cached.diagnosticsEnabled = true;
-      if (options.generatedPageSource !== undefined) cached.generatedPageSource = options.generatedPageSource;
-      if (cached.status === "error" && cached.generatedPageSource !== undefined) {
-        this.#tryUseGeneratedVirtualTextureManifest(cached);
+      if (options.autoPlan !== undefined) cached.autoPlan = options.autoPlan;
+      if (
+        (cached.status === "error" || cached.status === "unsupported")
+        && cached.activeSource.kind !== "generated"
+      ) {
+        this.#fallbackVirtualTextureSource(cached, "late-generated-source");
       }
       return cached;
     }
+    const activeSource = options.autoPlan?.primary ?? {
+      kind: "sidecar" as const,
+      manifestUri: texture.manifestUri,
+    };
 
     const state: VirtualTextureRuntimeState = {
+      activeSource,
+      ...(options.autoPlan === undefined ? {} : { autoPlan: options.autoPlan }),
       diagnostics: [],
       diagnosticsEnabled,
-      ...(options.generatedPageSource === undefined ? {} : { generatedPageSource: options.generatedPageSource }),
-      generatedPages: false,
       key,
       loadingPages: new Set(),
       pendingUploads: [],
@@ -5425,7 +5496,7 @@ class WebGlRootImpl implements WebGlRoot {
         generatedPageRequests: 0,
         generatedPagesTarget: 0,
         manifestFailures: 0,
-        manifestRequests: isGeneratedVirtualTextureManifestUri(texture.manifestUri) ? 0 : 1,
+        manifestRequests: activeSource.kind === "sidecar" ? 1 : 0,
         pageTableUpdates: 0,
         preparedResidencyResolutions: 0,
         shaderBinds: 0,
@@ -5439,18 +5510,27 @@ class WebGlRootImpl implements WebGlRoot {
       uploadedPages: new Set(),
     };
     this.#virtualTextures.set(key, state);
-    if (isGeneratedVirtualTextureManifestUri(texture.manifestUri) && options.generatedPageSource !== undefined) {
-      this.#tryUseGeneratedVirtualTextureManifest(state);
-    } else {
-      void this.#loadVirtualTextureManifest(state);
-    }
+    this.#startVirtualTextureSource(state);
 
     return state;
   }
 
+  #startVirtualTextureSource(state: VirtualTextureRuntimeState): void {
+    switch (state.activeSource.kind) {
+      case "generated":
+        this.#useGeneratedVirtualTextureManifest(state, state.activeSource);
+        return;
+      case "sidecar":
+        void this.#loadVirtualTextureManifest(state);
+        return;
+    }
+  }
+
   async #loadVirtualTextureManifest(state: VirtualTextureRuntimeState): Promise<void> {
+    const source = state.activeSource;
+    if (source.kind !== "sidecar") return;
     try {
-      const response = await fetch(state.texture.manifestUri);
+      const response = await fetch(source.manifestUri);
       if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
@@ -5459,45 +5539,71 @@ class WebGlRootImpl implements WebGlRoot {
 
       const parsed = parseVirtualTextureManifest(payload);
       for (const diagnostic of parsed.diagnostics) {
-        const message = `Virtual texture ${state.texture.manifestUri}: ${diagnostic.message}`;
+        const message = `Virtual texture ${source.manifestUri}: ${diagnostic.message}`;
         if (state.diagnosticsEnabled) {
           state.diagnostics.push(message);
           this.#recordDiagnostic(message);
         }
       }
       if (parsed.manifest === undefined) {
+        if (this.#fallbackVirtualTextureSource(state, "parse-failed")) return;
         this.#failVirtualTexture(state, "manifest parse failed");
+        return;
+      }
+
+      const manifestUnsupported = parsed.diagnostics.find((diagnostic) => diagnostic.severity === "unsupported");
+      if (manifestUnsupported !== undefined) {
+        if (this.#fallbackVirtualTextureSource(state, "manifest-unsupported")) return;
+        this.#markVirtualTextureUnsupported(
+          state,
+          manifestUnsupported.message,
+        );
+        return;
+      }
+      const runtimeUnsupported = this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest);
+      if (runtimeUnsupported !== undefined) {
+        if (this.#fallbackVirtualTextureSource(state, "runtime-unsupported")) return;
+        this.#markVirtualTextureUnsupported(state, runtimeUnsupported);
         return;
       }
 
       state.manifest = parsed.manifest;
       state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
-      const unsupported = parsed.diagnostics.find((diagnostic) => diagnostic.severity === "unsupported")
-        ?? this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest);
-      if (unsupported !== undefined) {
-        this.#markVirtualTextureUnsupported(
-          state,
-          typeof unsupported === "string" ? unsupported : unsupported.message,
-        );
-        return;
-      }
-
       this.#allocateVirtualTextureResources(state, parsed.manifest);
       state.status = "ready";
       this.#demandVirtualTexturePages(state);
       this.invalidate();
     } catch (error) {
       if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
-      if (this.#tryUseGeneratedVirtualTextureManifest(state)) return;
+      if (this.#fallbackVirtualTextureSource(state, "fetch-failed")) return;
       this.#failVirtualTexture(state, error instanceof Error ? error.message : String(error));
     }
   }
 
-  #tryUseGeneratedVirtualTextureManifest(state: VirtualTextureRuntimeState): boolean {
-    const pageSource = state.generatedPageSource;
-    if (pageSource === undefined) return false;
+  #fallbackVirtualTextureSource(
+    state: VirtualTextureRuntimeState,
+    trigger: VirtualTextureFallbackTrigger,
+  ): boolean {
+    const plan = state.autoPlan;
+    if (
+      plan?.fallback === undefined
+      || state.activeSource.kind === "generated"
+      || !plan.fallbackTriggers.has(trigger)
+    ) return false;
 
-    const manifest = this.#generatedVirtualTextureManifest(pageSource);
+    state.activeSource = plan.fallback;
+    state.status = "loading";
+    delete state.manifest;
+    delete state.pageUrisByKey;
+    this.#useGeneratedVirtualTextureManifest(state, plan.fallback);
+    return true;
+  }
+
+  #useGeneratedVirtualTextureManifest(
+    state: VirtualTextureRuntimeState,
+    source: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>,
+  ): void {
+    const manifest = this.#generatedVirtualTextureManifest(source.pageSource);
     state.stats.generatedManifestUses += 1;
     state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
       manifest.width,
@@ -5505,19 +5611,17 @@ class WebGlRootImpl implements WebGlRoot {
       manifest.pageSize,
     );
     const unsupported = this.#unsupportedVirtualTextureRuntimeReason(manifest);
-    if (unsupported !== undefined) {
-      this.#markVirtualTextureUnsupported(state, unsupported);
-      return true;
-    }
-
     state.manifest = manifest;
     state.pageUrisByKey = new Map();
-    state.generatedPages = true;
+    if (unsupported !== undefined) {
+      this.#markVirtualTextureUnsupported(state, unsupported);
+      return;
+    }
+
     this.#allocateVirtualTextureResources(state, manifest);
     state.status = "ready";
     this.#demandVirtualTexturePages(state);
     this.invalidate();
-    return true;
   }
 
   #generatedVirtualTextureManifest(
@@ -5700,7 +5804,7 @@ class WebGlRootImpl implements WebGlRoot {
         candidates.set(virtualTexturePageKey(page), page);
       }
     }
-    if (manifest.uriTemplate !== undefined || state.generatedPages) {
+    if (manifest.uriTemplate !== undefined || state.activeSource.kind === "generated") {
       const mipCount = this.#virtualTextureMipCount(manifest);
       const baseWidth = Math.ceil(manifest.width / manifest.pageSize);
       const baseHeight = Math.ceil(manifest.height / manifest.pageSize);
@@ -5728,7 +5832,7 @@ class WebGlRootImpl implements WebGlRoot {
   ): boolean {
     const manifest = state.manifest;
     if (manifest === undefined) return false;
-    if (state.generatedPages && state.generatedPageSource !== undefined) return true;
+    if (state.activeSource.kind === "generated") return true;
     return virtualTexturePageUri(manifest, page, state.pageUrisByKey) !== undefined;
   }
 
@@ -5906,7 +6010,7 @@ class WebGlRootImpl implements WebGlRoot {
     }, (error: unknown) => {
       if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
       state.loadingPages.delete(pageKey);
-      const message = `Virtual texture page load failed for ${state.texture.manifestUri} ${pageKey}: ${
+      const message = `Virtual texture page load failed for ${state.activeSource.manifestUri} ${pageKey}: ${
         error instanceof Error ? error.message : String(error)
       }`;
       if (state.diagnosticsEnabled) {
@@ -5924,14 +6028,14 @@ class WebGlRootImpl implements WebGlRoot {
   ): Promise<TexImageSource> | undefined {
     const manifest = state.manifest;
     if (manifest === undefined) return undefined;
-    if (state.generatedPages && state.generatedPageSource !== undefined) {
-      return this.#generatedVirtualTexturePageImage(state, state.generatedPageSource, manifest, page);
+    if (state.activeSource.kind === "generated") {
+      return this.#generatedVirtualTexturePageImage(state, state.activeSource.pageSource, manifest, page);
     }
 
     const uri = virtualTexturePageUri(manifest, page, state.pageUrisByKey);
     return uri === undefined
       ? undefined
-      : loadImage(resolveResourceUri(state.texture.manifestUri, uri));
+      : loadImage(resolveResourceUri(state.activeSource.manifestUri, uri));
   }
 
   #generatedVirtualTexturePageImage(
@@ -6211,7 +6315,7 @@ class WebGlRootImpl implements WebGlRoot {
   #failVirtualTexture(state: VirtualTextureRuntimeState, reason: string): void {
     state.status = "error";
     state.stats.manifestFailures += 1;
-    const message = `Virtual texture ${state.texture.manifestUri} failed: ${reason}`;
+    const message = `Virtual texture ${state.activeSource.manifestUri} failed: ${reason}`;
     if (state.diagnosticsEnabled) {
       state.diagnostics.push(message);
       this.#recordDiagnostic(message);
@@ -6220,7 +6324,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #markVirtualTextureUnsupported(state: VirtualTextureRuntimeState, reason: string): void {
     state.status = "unsupported";
-    const message = `Virtual texture ${state.texture.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
+    const message = `Virtual texture ${state.activeSource.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
     if (state.diagnosticsEnabled) {
       state.stats.unsupportedDraws += 1;
       state.diagnostics.push(message);

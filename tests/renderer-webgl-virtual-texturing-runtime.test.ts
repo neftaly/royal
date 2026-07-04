@@ -1035,6 +1035,76 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
+  it("uses generated raster VT after an unusable auto sidecar", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const { contexts } = installCanvas2d();
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/unsupported-sidecar.png") });
+
+    root.render(renderScene(material));
+    ControlledImage.instances[0]!.height = 512;
+    ControlledImage.instances[0]!.naturalHeight = 512;
+    ControlledImage.instances[0]!.naturalWidth = 512;
+    ControlledImage.instances[0]!.width = 512;
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(material));
+
+    fetchRequests[0]!.resolve(responseJson({
+      pageSize: 256,
+      pages: { kind: "generated" },
+      virtualSize: [512, 512],
+    }));
+    await flushMicrotasks();
+
+    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      await flushMicrotasks();
+      root.render(renderScene(material));
+    }
+
+    expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/unsupported-sidecar.png.vt.json"]);
+    expect(contexts[0]?.drawImage).toHaveBeenCalled();
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      generatedManifestUses: 1,
+      manifestRequests: 1,
+      manifestsReady: 1,
+      uploadedPages: expect.any(Number),
+    }));
+    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(uniformNames(calls)).toEqual(expect.arrayContaining(["u_vtAtlas", "u_vtPageTable"]));
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/unsupported-sidecar\.png\.vt\.json/);
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it.skip("keeps large generated VT page preparation within the render-loop budget", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    installCanvas2d();
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: imageTexture("/textures/large-generated.png") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseStatus(404, "Not Found"));
+    await flushMicrotasks();
+    ControlledImage.instances[0]!.height = 4096;
+    ControlledImage.instances[0]!.naturalHeight = 4096;
+    ControlledImage.instances[0]!.naturalWidth = 4096;
+    ControlledImage.instances[0]!.width = 4096;
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(renderScene(material));
+
+    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.generatedPageRasterizeMaxMs).toBeLessThanOrEqual(4);
+    expect(root.snapshot().virtualTexturing.generatedPageRasterizeMs).toBeLessThanOrEqual(8);
+  });
+
   it("inserts the auto VT sidecar suffix before image asset query and hash", () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
