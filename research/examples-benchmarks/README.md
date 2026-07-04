@@ -14,5 +14,6 @@ Current baselines:
 Rejected experiments live in subfolders with their own notes so they are not
 mistaken for current baselines.
 
-Manual browser reports, such as iPad Safari runs from `?bench=1` or
-`?bench=auto`, go under `browser-manual/`.
+iPad Safari runs collected through `ios_webkit_debug_proxy` go under
+`ipad-safari/`. Treat them as device baselines only when `frameStats.complete`
+is true and `warnings` is empty or understood.

@@ -68,6 +68,7 @@ const sameVec3 = (left: Vec3, right: Vec3): boolean =>
 
 const copyVec3 = (value: Vec3): Vec3 => [value[0], value[1], value[2]];
 const copyEulerRads = (value: EulerRads): EulerRads => [value[0], value[1], value[2]];
+const transformStateSymbol: unique symbol = Symbol('royal.renderObjectTransformState');
 
 const componentIndex = {
   x: 0,
@@ -126,17 +127,19 @@ export const reduceRenderObjectTransform = (
 ): RenderObjectTransformState => {
   switch (action.type) {
     case 'set-transform': {
-      let nextState = state;
-      if (action.transform.position !== undefined) {
-        nextState = replaceRenderObjectTransformField(nextState, 'position', action.transform.position);
-      }
-      if (action.transform.rotation !== undefined) {
-        nextState = replaceRenderObjectTransformField(nextState, 'rotation', action.transform.rotation);
-      }
-      if (action.transform.scale !== undefined) {
-        nextState = replaceRenderObjectTransformField(nextState, 'scale', action.transform.scale);
-      }
-      return nextState;
+      const position = action.transform.position === undefined || sameVec3(state.position, action.transform.position)
+        ? state.position
+        : copyVec3(action.transform.position);
+      const rotation = action.transform.rotation === undefined || sameVec3(state.rotation, action.transform.rotation)
+        ? state.rotation
+        : copyEulerRads(action.transform.rotation);
+      const scale = action.transform.scale === undefined || sameVec3(state.scale, action.transform.scale)
+        ? state.scale
+        : copyVec3(action.transform.scale);
+
+      return position === state.position && rotation === state.rotation && scale === state.scale
+        ? state
+        : { position, rotation, scale };
     }
     case 'set-vector':
       return replaceRenderObjectTransformField(state, action.field, action.value);
@@ -278,6 +281,10 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
     this.#dispatch({ type: 'set-transform', transform });
   }
 
+  [transformStateSymbol](): RenderObjectTransformState {
+    return this.#state;
+  }
+
   #dispatch(action: RenderObjectTransformAction): void {
     const previousState = this.#state;
     const nextState = reduceRenderObjectTransform(this.#state, action);
@@ -296,3 +303,10 @@ export const createRenderObjectHandle = (
   transform: Transform,
   onChange: () => void,
 ): RenderObjectHandle => new MutableRenderObjectHandle(transform, onChange);
+
+export const readRenderObjectHandleTransform = (handle: RenderObjectHandle): Transform => {
+  const internal = handle as RenderObjectHandle & {
+    readonly [transformStateSymbol]?: () => RenderObjectTransformState;
+  };
+  return internal[transformStateSymbol]?.() ?? handle.getTransform();
+};

@@ -1,0 +1,284 @@
+{
+  "receivedAt": "2026-07-04T19:47:03.317Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 500.5,
+        "cssWidth": 726,
+        "height": 1001,
+        "width": 1452
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-kitchen-sink",
+      "path": "/gltf-kitchen-sink",
+      "sourceFile": "examples/cases/GltfKitchenSink.tsx",
+      "title": "glTF Kitchen Sink"
+    },
+    "frameStats": {
+      "averageMs": 703.5833333333334,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 625,
+      "maxMs": 2170,
+      "minMs": 73,
+      "p50Ms": 777,
+      "p95Ms": 1402,
+      "p99Ms": 1602,
+      "requestedSampleCount": 24,
+      "sampleCount": 24,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 30000
+    },
+    "generatedAt": "2026-07-04T19:47:03.176Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 24070,
+        "bindTexture": 14310,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 1600,
+        "bufferDataCalls": 24,
+        "bufferSubDataBytes": 1600,
+        "bufferSubDataCalls": 24,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 24,
+        "drawArrays": 24,
+        "drawArraysInstanced": 0,
+        "drawCalls": 5438,
+        "drawElements": 4846,
+        "drawElementsInstanced": 568,
+        "instancedDrawCalls": 568,
+        "nonInstancedDrawCalls": 4870,
+        "stateChanges": 43818,
+        "texImage2D": 128,
+        "texSubImage2D": 682,
+        "uniformCalls": 13214,
+        "uniformMatrixCalls": 4282,
+        "useProgram": 5438
+      },
+      "setup": {
+        "bindBuffer": 446,
+        "bindTexture": 182,
+        "bindVertexArray": 0,
+        "bufferDataBytes": 286596,
+        "bufferDataCalls": 151,
+        "bufferSubDataBytes": 1500,
+        "bufferSubDataCalls": 15,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 2,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 71,
+        "drawElements": 65,
+        "drawElementsInstanced": 6,
+        "instancedDrawCalls": 6,
+        "nonInstancedDrawCalls": 65,
+        "stateChanges": 699,
+        "texImage2D": 29,
+        "texSubImage2D": 0,
+        "uniformCalls": 321,
+        "uniformMatrixCalls": 76,
+        "useProgram": 71
+      }
+    },
+    "options": {
+      "autorun": true,
+      "frames": 24,
+      "timeoutMs": 30000,
+      "warmupFrames": 8
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 950.0000000000001,
+        "duration": 950.0000000000001,
+        "loadEventEnd": 950.0000000000001,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 150,
+        "totalDecodedBodySize": 7588,
+        "totalEncodedBodySize": 7588,
+        "totalTransferSize": 45688
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 35,
+        "gltfInstancing": {
+          "batchInstancesTotal": 11400,
+          "batchPlansBuilt": 6002,
+          "drawCalls": 685,
+          "instancesDrawn": 5399,
+          "localModelUploadBytes": 13952,
+          "localModelUploadCalls": 35,
+          "rootPoseUploadBytes": 5232,
+          "rootPoseUploadCalls": 35,
+          "rootScaleUploadBytes": 2616,
+          "rootScaleUploadCalls": 35
+        },
+        "virtualTexturing": {
+          "atlasTextures": 34,
+          "generatedManifestUses": 34,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 18,
+          "generatedPageRasterizeMs": 26.00000000000182,
+          "generatedPageRequests": 81,
+          "generatedPagesTarget": 570,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 34,
+          "pageTableTextures": 34,
+          "pageTableUpdates": 670,
+          "pendingPages": 24,
+          "preparedResidencyResolutions": 614,
+          "requestedPages": 81,
+          "residentPages": 57,
+          "shaderBinds": 359,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 14942208,
+          "uploadedPages": 57
+        }
+      },
+      "beforeFrames": {
+        "frame": 11,
+        "gltfInstancing": {
+          "batchInstancesTotal": 1872,
+          "batchPlansBuilt": 1248,
+          "drawCalls": 117,
+          "instancesDrawn": 741,
+          "localModelUploadBytes": 12928,
+          "localModelUploadCalls": 27,
+          "rootPoseUploadBytes": 4848,
+          "rootPoseUploadCalls": 27,
+          "rootScaleUploadBytes": 2424,
+          "rootScaleUploadCalls": 27
+        },
+        "virtualTexturing": {
+          "atlasTextures": 3,
+          "generatedManifestUses": 3,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 18,
+          "generatedPageRasterizeMs": 21.99999999999818,
+          "generatedPageRequests": 13,
+          "generatedPagesTarget": 69,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 3,
+          "pageTableTextures": 3,
+          "pageTableUpdates": 36,
+          "pendingPages": 4,
+          "preparedResidencyResolutions": 14,
+          "requestedPages": 13,
+          "residentPages": 9,
+          "shaderBinds": 7,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 2359296,
+          "uploadedPages": 9
+        }
+      },
+      "delta": {
+        "frame": 24,
+        "gltfInstancing": {
+          "batchInstancesTotal": 9528,
+          "batchPlansBuilt": 4754,
+          "drawCalls": 568,
+          "instancesDrawn": 4658,
+          "localModelUploadBytes": 1024,
+          "localModelUploadCalls": 8,
+          "rootPoseUploadBytes": 384,
+          "rootPoseUploadCalls": 8,
+          "rootScaleUploadBytes": 192,
+          "rootScaleUploadCalls": 8
+        },
+        "virtualTexturing": {
+          "atlasTextures": 31,
+          "generatedManifestUses": 31,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 4.000000000003638,
+          "generatedPageRequests": 68,
+          "generatedPagesTarget": 501,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 31,
+          "pageTableTextures": 31,
+          "pageTableUpdates": 634,
+          "pendingPages": 20,
+          "preparedResidencyResolutions": 600,
+          "requestedPages": 68,
+          "residentPages": 48,
+          "shaderBinds": 352,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 12582912,
+          "uploadedPages": 48
+        }
+      },
+      "setup": {
+        "frame": 3,
+        "gltfInstancing": {
+          "batchInstancesTotal": 87,
+          "batchPlansBuilt": 71,
+          "drawCalls": 6,
+          "instancesDrawn": 22,
+          "localModelUploadBytes": 960,
+          "localModelUploadCalls": 5,
+          "rootPoseUploadBytes": 360,
+          "rootPoseUploadCalls": 5,
+          "rootScaleUploadBytes": 180,
+          "rootScaleUploadCalls": 5
+        },
+        "virtualTexturing": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 0,
+          "requestedPages": 0,
+          "residentPages": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0
+        }
+      }
+    },
+    "url": "http://192.168.1.56:4673/gltf-kitchen-sink?bench=auto&frames=24&warmup=8&timeoutMs=30000&run=1783194395641",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 26470.000000000004
+  }
+}

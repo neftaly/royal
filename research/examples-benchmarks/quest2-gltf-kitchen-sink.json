@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-04T18:09:22.587Z",
+  "generatedAt": "2026-07-04T19:58:58.886Z",
   "options": {
     "frameSampleCount": 12,
     "frameWarmupCount": 4,
@@ -20,151 +20,151 @@
     "instancingFuzzCases": 4,
     "instancingSeed": 27621905,
     "instancingSweepMode": "0",
-    "managePreview": true
+    "managePreview": false
   },
   "analysis": {
     "slowestRoutesByP95": [
       {
         "id": "gltf-kitchen-sink",
         "path": "/gltf-kitchen-sink",
-        "p95Ms": 43.3,
-        "p99Ms": 43.3,
-        "maxMs": 44.7,
-        "readyMs": 5309.71,
-        "jitterP95MinusP50Ms": 7.7,
+        "p95Ms": 68.7,
+        "p99Ms": 68.7,
+        "maxMs": 132.9,
+        "readyMs": 6911.18,
+        "jitterP95MinusP50Ms": 30.2,
         "drawCallsPerFrame": 266,
         "instancedDrawCallsPerFrame": 26.83,
-        "stateChangesPerFrame": 2172.67,
+        "stateChangesPerFrame": 2165.5,
         "useProgramPerFrame": 266,
         "bindBufferPerFrame": 1082.67,
-        "bindTexturePerFrame": 824,
+        "bindTexturePerFrame": 816.83,
         "bindVertexArrayPerFrame": 0,
         "copyTexImage2DPerFrame": 0,
         "copyTexSubImage2DPerFrame": 1.17,
-        "uniformCallsPerFrame": 575.17,
-        "uniformMatrixCallsPerFrame": 206.42,
-        "setupDrawCalls": 3062,
-        "setupInstancedDrawCalls": 315,
-        "setupStateChanges": 24094,
-        "setupUseProgram": 3062,
-        "setupBindBuffer": 12956,
-        "setupBindTexture": 8076,
+        "uniformCallsPerFrame": 593.25,
+        "uniformMatrixCallsPerFrame": 208.75,
+        "setupDrawCalls": 2539,
+        "setupInstancedDrawCalls": 262,
+        "setupStateChanges": 19933,
+        "setupUseProgram": 2539,
+        "setupBindBuffer": 10814,
+        "setupBindTexture": 6580,
         "setupBindVertexArray": 0,
-        "setupUniformCalls": 8396,
-        "setupUniformMatrixCalls": 2533,
+        "setupUniformCalls": 7394,
+        "setupUniformMatrixCalls": 2121,
         "setupBufferDataBytes": 2307946,
         "setupBufferSubDataBytes": 21900,
         "bufferSubDataBytesPerFrame": 0,
-        "retainedGrowthBytes": -1458000,
-        "resourceTransferBytes": 7705475
+        "retainedGrowthBytes": -233500,
+        "resourceTransferBytes": 20222105
       }
     ],
     "heaviestDrawRoutes": [
       {
         "id": "gltf-kitchen-sink",
         "path": "/gltf-kitchen-sink",
-        "p95Ms": 43.3,
-        "p99Ms": 43.3,
-        "maxMs": 44.7,
-        "readyMs": 5309.71,
-        "jitterP95MinusP50Ms": 7.7,
+        "p95Ms": 68.7,
+        "p99Ms": 68.7,
+        "maxMs": 132.9,
+        "readyMs": 6911.18,
+        "jitterP95MinusP50Ms": 30.2,
         "drawCallsPerFrame": 266,
         "instancedDrawCallsPerFrame": 26.83,
-        "stateChangesPerFrame": 2172.67,
+        "stateChangesPerFrame": 2165.5,
         "useProgramPerFrame": 266,
         "bindBufferPerFrame": 1082.67,
-        "bindTexturePerFrame": 824,
+        "bindTexturePerFrame": 816.83,
         "bindVertexArrayPerFrame": 0,
         "copyTexImage2DPerFrame": 0,
         "copyTexSubImage2DPerFrame": 1.17,
-        "uniformCallsPerFrame": 575.17,
-        "uniformMatrixCallsPerFrame": 206.42,
-        "setupDrawCalls": 3062,
-        "setupInstancedDrawCalls": 315,
-        "setupStateChanges": 24094,
-        "setupUseProgram": 3062,
-        "setupBindBuffer": 12956,
-        "setupBindTexture": 8076,
+        "uniformCallsPerFrame": 593.25,
+        "uniformMatrixCallsPerFrame": 208.75,
+        "setupDrawCalls": 2539,
+        "setupInstancedDrawCalls": 262,
+        "setupStateChanges": 19933,
+        "setupUseProgram": 2539,
+        "setupBindBuffer": 10814,
+        "setupBindTexture": 6580,
         "setupBindVertexArray": 0,
-        "setupUniformCalls": 8396,
-        "setupUniformMatrixCalls": 2533,
+        "setupUniformCalls": 7394,
+        "setupUniformMatrixCalls": 2121,
         "setupBufferDataBytes": 2307946,
         "setupBufferSubDataBytes": 21900,
         "bufferSubDataBytesPerFrame": 0,
-        "retainedGrowthBytes": -1458000,
-        "resourceTransferBytes": 7705475
+        "retainedGrowthBytes": -233500,
+        "resourceTransferBytes": 20222105
       }
     ],
     "heaviestGlStateRoutes": [
       {
         "id": "gltf-kitchen-sink",
         "path": "/gltf-kitchen-sink",
-        "p95Ms": 43.3,
-        "p99Ms": 43.3,
-        "maxMs": 44.7,
-        "readyMs": 5309.71,
-        "jitterP95MinusP50Ms": 7.7,
+        "p95Ms": 68.7,
+        "p99Ms": 68.7,
+        "maxMs": 132.9,
+        "readyMs": 6911.18,
+        "jitterP95MinusP50Ms": 30.2,
         "drawCallsPerFrame": 266,
         "instancedDrawCallsPerFrame": 26.83,
-        "stateChangesPerFrame": 2172.67,
+        "stateChangesPerFrame": 2165.5,
         "useProgramPerFrame": 266,
         "bindBufferPerFrame": 1082.67,
-        "bindTexturePerFrame": 824,
+        "bindTexturePerFrame": 816.83,
         "bindVertexArrayPerFrame": 0,
         "copyTexImage2DPerFrame": 0,
         "copyTexSubImage2DPerFrame": 1.17,
-        "uniformCallsPerFrame": 575.17,
-        "uniformMatrixCallsPerFrame": 206.42,
-        "setupDrawCalls": 3062,
-        "setupInstancedDrawCalls": 315,
-        "setupStateChanges": 24094,
-        "setupUseProgram": 3062,
-        "setupBindBuffer": 12956,
-        "setupBindTexture": 8076,
+        "uniformCallsPerFrame": 593.25,
+        "uniformMatrixCallsPerFrame": 208.75,
+        "setupDrawCalls": 2539,
+        "setupInstancedDrawCalls": 262,
+        "setupStateChanges": 19933,
+        "setupUseProgram": 2539,
+        "setupBindBuffer": 10814,
+        "setupBindTexture": 6580,
         "setupBindVertexArray": 0,
-        "setupUniformCalls": 8396,
-        "setupUniformMatrixCalls": 2533,
+        "setupUniformCalls": 7394,
+        "setupUniformMatrixCalls": 2121,
         "setupBufferDataBytes": 2307946,
         "setupBufferSubDataBytes": 21900,
         "bufferSubDataBytesPerFrame": 0,
-        "retainedGrowthBytes": -1458000,
-        "resourceTransferBytes": 7705475
+        "retainedGrowthBytes": -233500,
+        "resourceTransferBytes": 20222105
       }
     ],
     "heaviestUniformRoutes": [
       {
         "id": "gltf-kitchen-sink",
         "path": "/gltf-kitchen-sink",
-        "p95Ms": 43.3,
-        "p99Ms": 43.3,
-        "maxMs": 44.7,
-        "readyMs": 5309.71,
-        "jitterP95MinusP50Ms": 7.7,
+        "p95Ms": 68.7,
+        "p99Ms": 68.7,
+        "maxMs": 132.9,
+        "readyMs": 6911.18,
+        "jitterP95MinusP50Ms": 30.2,
         "drawCallsPerFrame": 266,
         "instancedDrawCallsPerFrame": 26.83,
-        "stateChangesPerFrame": 2172.67,
+        "stateChangesPerFrame": 2165.5,
         "useProgramPerFrame": 266,
         "bindBufferPerFrame": 1082.67,
-        "bindTexturePerFrame": 824,
+        "bindTexturePerFrame": 816.83,
         "bindVertexArrayPerFrame": 0,
         "copyTexImage2DPerFrame": 0,
         "copyTexSubImage2DPerFrame": 1.17,
-        "uniformCallsPerFrame": 575.17,
-        "uniformMatrixCallsPerFrame": 206.42,
-        "setupDrawCalls": 3062,
-        "setupInstancedDrawCalls": 315,
-        "setupStateChanges": 24094,
-        "setupUseProgram": 3062,
-        "setupBindBuffer": 12956,
-        "setupBindTexture": 8076,
+        "uniformCallsPerFrame": 593.25,
+        "uniformMatrixCallsPerFrame": 208.75,
+        "setupDrawCalls": 2539,
+        "setupInstancedDrawCalls": 262,
+        "setupStateChanges": 19933,
+        "setupUseProgram": 2539,
+        "setupBindBuffer": 10814,
+        "setupBindTexture": 6580,
         "setupBindVertexArray": 0,
-        "setupUniformCalls": 8396,
-        "setupUniformMatrixCalls": 2533,
+        "setupUniformCalls": 7394,
+        "setupUniformMatrixCalls": 2121,
         "setupBufferDataBytes": 2307946,
         "setupBufferSubDataBytes": 21900,
         "bufferSubDataBytesPerFrame": 0,
-        "retainedGrowthBytes": -1458000,
-        "resourceTransferBytes": 7705475
+        "retainedGrowthBytes": -233500,
+        "resourceTransferBytes": 20222105
       }
     ],
     "instancing": {
@@ -220,14 +220,14 @@
         "gzipBytes": 2073
       },
       ".js": {
-        "bytes": 1245731,
+        "bytes": 1254597,
         "count": 3,
-        "gzipBytes": 357560
+        "gzipBytes": 360400
       },
       ".map": {
-        "bytes": 4725443,
+        "bytes": 4755114,
         "count": 3,
-        "gzipBytes": 942294
+        "gzipBytes": 949139
       },
       ".svg": {
         "bytes": 68999,
@@ -247,16 +247,16 @@
       ".html": {
         "bytes": 652,
         "count": 1,
-        "gzipBytes": 429
+        "gzipBytes": 427
       }
     },
     "fileCount": 170,
-    "gzipBytes": 21226153,
+    "gzipBytes": 21235836,
     "topFiles": [
       {
-        "bytes": 4623331,
-        "gzipBytes": 913987,
-        "path": "assets/index-DO40EMtb.js.map"
+        "bytes": 4653002,
+        "gzipBytes": 920833,
+        "path": "assets/index-ByHpSlw_.js.map"
       },
       {
         "bytes": 2978812,
@@ -299,9 +299,9 @@
         "path": "fixtures/khronos/ClearcoatWicker/glTF-Binary/ClearcoatWicker.glb"
       },
       {
-        "bytes": 1220227,
-        "gzipBytes": 347661,
-        "path": "assets/index-DO40EMtb.js"
+        "bytes": 1229093,
+        "gzipBytes": 350501,
+        "path": "assets/index-ByHpSlw_.js"
       },
       {
         "bytes": 1188724,
@@ -314,22 +314,22 @@
         "path": "fixtures/khronos/GlassBrokenWindow/glTF-Binary/GlassBrokenWindow.glb"
       }
     ],
-    "totalBytes": 33098151
+    "totalBytes": 33136688
   },
   "routes": [
     {
       "id": "gltf-kitchen-sink",
       "path": "/gltf-kitchen-sink",
       "ready": true,
-      "wallNavigationAndReadyMs": 5309.713942,
+      "wallNavigationAndReadyMs": 6911.184748999999,
       "frameStats": {
-        "averageMs": 36.89999999975165,
-        "jitterP95MinusP50Ms": 7.700000017881393,
-        "maxMs": 44.70000000298023,
-        "minMs": 30.900000005960464,
-        "p50Ms": 35.599999994039536,
-        "p95Ms": 43.30000001192093,
-        "p99Ms": 43.30000001192093,
+        "averageMs": 50.758333334078394,
+        "jitterP95MinusP50Ms": 30.200000002980232,
+        "maxMs": 132.8999999910593,
+        "minMs": 34.20000000298023,
+        "p50Ms": 38.5,
+        "p95Ms": 68.70000000298023,
+        "p99Ms": 68.70000000298023,
         "requestedSampleCount": 12,
         "sampleCount": 12,
         "timedOut": false,
@@ -337,7 +337,7 @@
       },
       "gl": {
         "bindBuffer": 12992,
-        "bindTexture": 9888,
+        "bindTexture": 9802,
         "bindVertexArray": 0,
         "bufferDataBytes": 0,
         "bufferDataCalls": 0,
@@ -350,35 +350,35 @@
         "drawElements": 2856,
         "drawElementsInstanced": 322,
         "texImage2D": 0,
-        "texSubImage2D": 96,
-        "uniformCalls": 6902,
-        "uniformMatrixCalls": 2477,
+        "texSubImage2D": 157,
+        "uniformCalls": 7119,
+        "uniformMatrixCalls": 2505,
         "useProgram": 3192,
         "drawCalls": 3192,
         "instancedDrawCalls": 322,
-        "stateChanges": 26072,
+        "stateChanges": 25986,
         "setup": {
-          "bindBuffer": 12956,
-          "bindTexture": 8076,
+          "bindBuffer": 10814,
+          "bindTexture": 6580,
           "bindVertexArray": 0,
           "bufferDataBytes": 2307946,
           "bufferDataCalls": 623,
           "bufferSubDataBytes": 21900,
           "bufferSubDataCalls": 105,
           "copyTexImage2D": 0,
-          "copyTexSubImage2D": 16,
-          "drawArrays": 13,
+          "copyTexSubImage2D": 14,
+          "drawArrays": 11,
           "drawArraysInstanced": 0,
-          "drawElements": 2734,
-          "drawElementsInstanced": 315,
+          "drawElements": 2266,
+          "drawElementsInstanced": 262,
           "texImage2D": 177,
-          "texSubImage2D": 363,
-          "uniformCalls": 8396,
-          "uniformMatrixCalls": 2533,
-          "useProgram": 3062,
-          "drawCalls": 3062,
-          "instancedDrawCalls": 315,
-          "stateChanges": 24094
+          "texSubImage2D": 329,
+          "uniformCalls": 7394,
+          "uniformMatrixCalls": 2121,
+          "useProgram": 2539,
+          "drawCalls": 2539,
+          "instancedDrawCalls": 262,
+          "stateChanges": 19933
         }
       },
       "renderer": {
@@ -415,10 +415,10 @@
           "gltfInstancing": {
             "available": true,
             "counters": {
-              "batchInstancesTotal": 5698,
-              "batchPlansBuilt": 1922,
-              "drawCalls": 338,
-              "instancesDrawn": 2746,
+              "batchInstancesTotal": 4827,
+              "batchPlansBuilt": 1855,
+              "drawCalls": 285,
+              "instancesDrawn": 2345,
               "localModelUploadBytes": 13952,
               "localModelUploadCalls": 35,
               "rootPoseUploadBytes": 5232,
@@ -426,41 +426,41 @@
               "rootScaleUploadBytes": 2616,
               "rootScaleUploadCalls": 35
             },
-            "rendererFrame": 20
+            "rendererFrame": 17
           }
         }
       },
       "heap": {
         "afterFinalGc": {
-          "usedSize": 7093336,
-          "totalSize": 7790592,
-          "embedderHeapUsedSize": 1001576,
-          "backingStorageSize": 8644762
+          "usedSize": 18362368,
+          "totalSize": 19308544,
+          "embedderHeapUsedSize": 1255344,
+          "backingStorageSize": 20275937
         },
         "afterFrameGc": {
-          "usedSize": 9909172,
-          "totalSize": 27189248,
-          "embedderHeapUsedSize": 1392872,
-          "backingStorageSize": 8649489
+          "usedSize": 24521212,
+          "totalSize": 38109184,
+          "embedderHeapUsedSize": 1727440,
+          "backingStorageSize": 20280902
         },
         "afterGc": {
-          "usedSize": 8551336,
-          "totalSize": 11984896,
-          "embedderHeapUsedSize": 1408088,
-          "backingStorageSize": 8644860
+          "usedSize": 18595868,
+          "totalSize": 23764992,
+          "embedderHeapUsedSize": 1742352,
+          "backingStorageSize": 20276148
         },
         "beforeGc": {
-          "usedSize": 11788888,
-          "totalSize": 26177536,
-          "embedderHeapUsedSize": 1585960,
-          "backingStorageSize": 8646716
+          "usedSize": 22254400,
+          "totalSize": 40529920,
+          "embedderHeapUsedSize": 1655784,
+          "backingStorageSize": 21948708
         },
-        "retainedGrowthBytes": -1458000,
-        "transientGrowthBytes": 1357836
+        "retainedGrowthBytes": -233500,
+        "transientGrowthBytes": 5925344
       },
       "latency": {
         "eventToNextDrawMs": null,
-        "eventToNextWindowRafMs": -3.499999991059667,
+        "eventToNextWindowRafMs": 1.0999999910591214,
         "eventToNextXrFrameMs": null,
         "measurement": "synthetic-pointer-event-to-next-observed-frame-or-draw",
         "note": "These are event-to-next-frame/draw timings, not true motion-to-photon latency."
@@ -468,117 +468,110 @@
       "warmupComplete": true,
       "performance": {
         "navigation": {
-          "domInteractive": 138.19999998807907,
-          "duration": 387.8999999910593,
-          "loadEventEnd": 387.8999999910593,
-          "requestStart": 13.699999988079071,
-          "responseEnd": 18.099999994039536,
+          "domInteractive": 70.6000000089407,
+          "duration": 904.7000000029802,
+          "loadEventEnd": 904.7000000029802,
+          "requestStart": 19.200000002980232,
+          "responseEnd": 25.900000005960464,
           "startTime": 0,
-          "transferSize": 952
+          "transferSize": 1125
         },
         "paints": {
-          "first-paint": 544,
-          "first-contentful-paint": 544
+          "first-paint": 920,
+          "first-contentful-paint": 1112
         },
         "resources": {
           "byType": {
             "script": {
-              "count": 2,
-              "decodedBodySize": 1236183,
-              "duration": 71.70000000298023,
-              "encodedBodySize": 354210,
-              "transferSize": 354810
-            },
-            "link": {
-              "count": 1,
-              "decodedBodySize": 7608,
-              "duration": 35.80000001192093,
-              "encodedBodySize": 2077,
-              "transferSize": 2377
+              "count": 148,
+              "decodedBodySize": 12829417,
+              "duration": 9112.000000104308,
+              "encodedBodySize": 12829417,
+              "transferSize": 12873817
             },
             "fetch": {
               "count": 50,
               "decodedBodySize": 7333288,
-              "duration": 6822.8999999165535,
+              "duration": 6756.099999919534,
               "encodedBodySize": 7333288,
               "transferSize": 7348288
             }
           },
-          "count": 53,
-          "totalDuration": 6930.399999931455,
-          "totalEncodedBodySize": 7689575,
-          "totalTransferSize": 7705475,
+          "count": 198,
+          "totalDuration": 15868.100000023842,
+          "totalEncodedBodySize": 20162705,
+          "totalTransferSize": 20222105,
           "slowest": [
             {
-              "decodedBodySize": 393808,
-              "duration": 188,
-              "encodedBodySize": 393808,
-              "initiatorType": "fetch",
-              "name": "http://127.0.0.1:4673/fixtures/khronos/TransmissionRoughnessTest/glTF-Binary/TransmissionRoughnessTest.glb",
-              "startTime": 502.59999999403954,
-              "transferSize": 394108
-            },
-            {
-              "decodedBodySize": 26220,
-              "duration": 186.5,
-              "encodedBodySize": 26220,
-              "initiatorType": "fetch",
-              "name": "http://127.0.0.1:4673/fixtures/khronos/VertexColorTest/glTF-Binary/VertexColorTest.glb",
-              "startTime": 505.09999999403954,
-              "transferSize": 26520
+              "decodedBodySize": 2785614,
+              "duration": 200.40000000596046,
+              "encodedBodySize": 2785614,
+              "initiatorType": "script",
+              "name": "http://127.0.0.1:4673/node_modules/.vite/deps/react-dom_client.js?v=82174f3b",
+              "startTime": 150.90000000596046,
+              "transferSize": 2785914
             },
             {
               "decodedBodySize": 388264,
-              "duration": 185.80000001192093,
+              "duration": 183.3999999910593,
               "encodedBodySize": 388264,
               "initiatorType": "fetch",
               "name": "http://127.0.0.1:4673/fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
-              "startTime": 502.19999998807907,
+              "startTime": 1058.300000011921,
               "transferSize": 388564
             },
             {
-              "decodedBodySize": 5488,
-              "duration": 182.5,
-              "encodedBodySize": 5488,
+              "decodedBodySize": 393808,
+              "duration": 181.5,
+              "encodedBodySize": 393808,
               "initiatorType": "fetch",
-              "name": "http://127.0.0.1:4673/fixtures/khronos/Unicode%E2%9D%A4%E2%99%BBTest/glTF-Binary/Unicode%E2%9D%A4%E2%99%BBTest.glb",
-              "startTime": 503.79999999701977,
-              "transferSize": 5788
-            },
-            {
-              "decodedBodySize": 3992,
-              "duration": 182.3999999910593,
-              "encodedBodySize": 3992,
-              "initiatorType": "fetch",
-              "name": "http://127.0.0.1:4673/fixtures/khronos/UnlitTest/glTF-Binary/UnlitTest.glb",
-              "startTime": 504.29999999701977,
-              "transferSize": 4292
-            },
-            {
-              "decodedBodySize": 42840,
-              "duration": 177.90000000596046,
-              "encodedBodySize": 42840,
-              "initiatorType": "fetch",
-              "name": "http://127.0.0.1:4673/fixtures/khronos/TextureSettingsTest/glTF-Binary/TextureSettingsTest.glb",
-              "startTime": 501.69999998807907,
-              "transferSize": 43140
+              "name": "http://127.0.0.1:4673/fixtures/khronos/TransmissionRoughnessTest/glTF-Binary/TransmissionRoughnessTest.glb",
+              "startTime": 1059,
+              "transferSize": 394108
             },
             {
               "decodedBodySize": 371188,
-              "duration": 177.09999999403954,
+              "duration": 179.09999999403954,
               "encodedBodySize": 371188,
               "initiatorType": "fetch",
               "name": "http://127.0.0.1:4673/fixtures/khronos/SunglassesKhronos/glTF-Binary/SunglassesKhronos.glb",
-              "startTime": 499.29999999701977,
+              "startTime": 1053.9000000059605,
               "transferSize": 371488
             },
             {
+              "decodedBodySize": 3992,
+              "duration": 177.90000000596046,
+              "encodedBodySize": 3992,
+              "initiatorType": "fetch",
+              "name": "http://127.0.0.1:4673/fixtures/khronos/UnlitTest/glTF-Binary/UnlitTest.glb",
+              "startTime": 1060.2000000029802,
+              "transferSize": 4292
+            },
+            {
+              "decodedBodySize": 5488,
+              "duration": 177.8999999910593,
+              "encodedBodySize": 5488,
+              "initiatorType": "fetch",
+              "name": "http://127.0.0.1:4673/fixtures/khronos/Unicode%E2%9D%A4%E2%99%BBTest/glTF-Binary/Unicode%E2%9D%A4%E2%99%BBTest.glb",
+              "startTime": 1059.6000000089407,
+              "transferSize": 5788
+            },
+            {
+              "decodedBodySize": 26220,
+              "duration": 177.69999998807907,
+              "encodedBodySize": 26220,
+              "initiatorType": "fetch",
+              "name": "http://127.0.0.1:4673/fixtures/khronos/VertexColorTest/glTF-Binary/VertexColorTest.glb",
+              "startTime": 1060.800000011921,
+              "transferSize": 26520
+            },
+            {
               "decodedBodySize": 223376,
-              "duration": 170.59999999403954,
+              "duration": 172.20000000298023,
               "encodedBodySize": 223376,
               "initiatorType": "fetch",
               "name": "http://127.0.0.1:4673/fixtures/khronos/SpecularTest/glTF-Binary/SpecularTest.glb",
-              "startTime": 498,
+              "startTime": 1053.2000000029802,
               "transferSize": 223676
             }
           ]

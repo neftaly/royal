@@ -53,23 +53,34 @@ headset tab records a timeout row instead of hanging the run.
 `EXAMPLES_BENCH_CDP_TIMEOUT_MS` bounds each DevTools command and defaults high
 enough to cover the route-ready and frame-sampling windows.
 
-iPad/Safari or any browser without CDP:
+iPad Safari through `ios_webkit_debug_proxy`:
 
 ```sh
 pnpm --filter @royal/examples-react dev -- --host 0.0.0.0 --port 4673
-pnpm --filter @royal/examples-react bench:browser:receive
+ios_webkit_debug_proxy -u <ipad-udid>:9323-9323 -F
 ```
 
-Open this from the device, replacing `<host-lan-ip>` with the laptop IP:
+Keep Safari open and unlocked on the iPad with Safari Web Inspector enabled.
+Then run a focused route benchmark from the host, replacing `<host-lan-ip>` with
+the laptop LAN IP reachable by the iPad:
 
-```text
-http://<host-lan-ip>:4673/gltf-instancing?bench=auto&frames=120&warmup=20&post=http://<host-lan-ip>:4683/
+```sh
+IPAD_BENCH_HOST=<host-lan-ip> \
+pnpm --filter @royal/examples-react bench:ipad-safari -- --route=/gltf-instancing --frames=24 --warmup=8
 ```
 
-The browser reporter runs inside the real example route. It records RAF frame
-stats, WebGL counters, performance resources, device metadata, and renderer
-counters where the example exposes them. Posted reports are written under
-`research/examples-benchmarks/browser-manual/`.
+Kitchen sink:
+
+```sh
+IPAD_BENCH_HOST=<host-lan-ip> \
+pnpm --filter @royal/examples-react bench:ipad-safari -- --route=/gltf-kitchen-sink --frames=24 --warmup=8
+```
+
+The script drives the existing Safari tab over the WebKit inspector protocol,
+navigates it to `?bench=auto`, waits for the in-page collector, and writes JSON
+reports under `research/examples-benchmarks/ipad-safari/`. The collector runs
+inside the real route so WebGL hooks install before the canvas initializes; it is
+not a user-facing benchmark UI.
 
 Browser instancing fuzz rows are opt-in with
 `EXAMPLES_BENCH_INSTANCING_FUZZ=1`. Prefer fast property tests for structural

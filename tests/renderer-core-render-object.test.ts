@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRenderObjectHandle,
   createRenderObjectTransformState,
+  readRenderObjectHandleTransform,
   reduceRenderObjectTransform,
   renderObjectTransformStateToTransform,
   type RenderObjectTransformState,
@@ -226,5 +227,21 @@ describe("renderer-core render object transforms", () => {
     expect(() => {
       setPosition(1, 2);
     }).toThrow(/expects x, y, and z/);
+  });
+
+  it("allows internal renderers to read handle transforms without snapshot allocation", () => {
+    const handle = createRenderObjectHandle(identityTransform, () => {});
+
+    const firstRead = readRenderObjectHandleTransform(handle);
+    const secondRead = readRenderObjectHandleTransform(handle);
+    expect(firstRead.position).toBe(secondRead.position);
+    expect(firstRead.rotation).toBe(secondRead.rotation);
+    expect(firstRead.scale).toBe(secondRead.scale);
+
+    handle.setTransform({ position: [1, 2, 3] });
+    const nextRead = readRenderObjectHandleTransform(handle);
+    expect(nextRead.position).not.toBe(firstRead.position);
+    expect(nextRead.rotation).toBe(firstRead.rotation);
+    expect(nextRead.scale).toBe(firstRead.scale);
   });
 });

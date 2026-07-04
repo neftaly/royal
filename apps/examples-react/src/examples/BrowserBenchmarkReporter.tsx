@@ -1,8 +1,6 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Example } from '../examples';
-
-type BrowserBenchmarkStatus = 'idle' | 'running' | 'done' | 'error';
 
 type BrowserBenchmarkCounters = {
   readonly bindBuffer: number;
@@ -28,6 +26,7 @@ type BrowserBenchmarkCounters = {
 type BrowserBenchmarkSnapshot = BrowserBenchmarkCounters & {
   readonly drawCalls: number;
   readonly instancedDrawCalls: number;
+  readonly nonInstancedDrawCalls: number;
   readonly stateChanges: number;
 };
 
@@ -43,6 +42,8 @@ type RendererBenchmarkSnapshot = {
 };
 
 type BrowserBenchmarkGlobal = typeof globalThis & {
+  __royalBrowserBenchmarkError?: string;
+  __royalBrowserBenchmarkReport?: BrowserBenchmarkReport;
   __royalBrowserBench?: BrowserBenchmarkApi;
   __royalExamplesRendererBenchmarkSnapshot?: () => RendererBenchmarkSnapshot | null;
 };
@@ -50,7 +51,6 @@ type BrowserBenchmarkGlobal = typeof globalThis & {
 type BrowserBenchmarkOptions = {
   readonly autorun: boolean;
   readonly frames: number;
-  readonly postUrl: string | undefined;
   readonly timeoutMs: number;
   readonly warmupFrames: number;
 };
@@ -64,7 +64,7 @@ type BrowserBenchmarkReport = {
     readonly frames: BrowserBenchmarkSnapshot;
     readonly setup: BrowserBenchmarkSnapshot;
   };
-  readonly options: Omit<BrowserBenchmarkOptions, 'postUrl'> & { readonly postUrlConfigured: boolean };
+  readonly options: BrowserBenchmarkOptions;
   readonly performance: {
     readonly navigation: Record<string, number | string | null>;
     readonly resources: {
@@ -82,6 +82,8 @@ type BrowserBenchmarkReport = {
     readonly setup: RendererBenchmarkSnapshot | null;
   };
   readonly url: string;
+  readonly warmupComplete: boolean;
+  readonly warnings: readonly string[];
   readonly wallMs: number;
 };
 
@@ -178,8 +180,7 @@ const benchmarkOptions = (): BrowserBenchmarkOptions => {
   return {
     autorun: params.get('autorun') === '1' || params.get('bench') === 'auto',
     frames: numberParam(params, 'frames', 120, 1),
-    postUrl: params.get('post') ?? undefined,
-    timeoutMs: numberParam(params, 'timeoutMs', 15_000, 100),
+    timeoutMs: numberParam(params, 'timeoutMs', 30_000, 100),
     warmupFrames: numberParam(params, 'warmup', 20, 0),
   };
 };
@@ -187,7 +188,7 @@ const benchmarkOptions = (): BrowserBenchmarkOptions => {
 export const isBrowserBenchmarkEnabled = (): boolean => {
   if (typeof globalThis.location?.href !== 'string') return false;
   const value = new URL(globalThis.location.href).searchParams.get('bench');
-  return value === '1' || value === 'true' || value === 'auto';
+  return value === 'auto';
 };
 
 const byteLengthOf = (value: unknown): number => {
@@ -217,10 +218,11 @@ const browserBenchSnapshot = (
   copyTexSubImage2D: counters.copyTexSubImage2D,
   drawArrays: counters.drawArrays,
   drawArraysInstanced: counters.drawArraysInstanced,
-  drawCalls: counters.drawArrays + counters.drawElements,
+  drawCalls: counters.drawArrays + counters.drawElements + counters.drawArraysInstanced + counters.drawElementsInstanced,
   drawElements: counters.drawElements,
   drawElementsInstanced: counters.drawElementsInstanced,
   instancedDrawCalls: counters.drawArraysInstanced + counters.drawElementsInstanced,
+  nonInstancedDrawCalls: counters.drawArrays + counters.drawElements,
   stateChanges: counters.bindBuffer + counters.bindTexture + counters.bindVertexArray + counters.useProgram,
   texImage2D: counters.texImage2D,
   texSubImage2D: counters.texSubImage2D,
@@ -322,6 +324,7 @@ const frameStats = (deltas: readonly number[], requestedSampleCount: number, tim
     sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
   return {
     averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
+    complete: sorted.length === requestedSampleCount,
     failed: sorted.length === 0,
     jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
     maxMs: sorted[sorted.length - 1] ?? 0,
@@ -331,6 +334,7 @@ const frameStats = (deltas: readonly number[], requestedSampleCount: number, tim
     p99Ms: percentile(0.99),
     requestedSampleCount,
     sampleCount: sorted.length,
+    samplesMissing: Math.max(0, requestedSampleCount - sorted.length),
     timedOut: sorted.length < requestedSampleCount,
     timeoutMs,
   };
@@ -368,16 +372,22 @@ const waitForReady = async (timeoutMs: number): Promise<boolean> => {
   return false;
 };
 
+const waitFrames = async (
+  frames: number,
+  timeoutMs: number,
+): Promise<boolean> => {
+  const deadline = performance.now() + timeoutMs;
+  for (let index = 0; index < frames; index += 1) {
+    if (await nextRaf(deadline) === null) return false;
+  }
+  return true;
+};
+
 const sampleFrames = async (
   frames: number,
-  warmupFrames: number,
   timeoutMs: number,
 ): Promise<ReturnType<typeof frameStats>> => {
   const deadline = performance.now() + timeoutMs;
-  for (let index = 0; index < warmupFrames; index += 1) {
-    if (await nextRaf(deadline) === null) return frameStats([], frames, timeoutMs);
-  }
-
   const deltas: number[] = [];
   let previous = performance.now();
   for (let index = 0; index < frames; index += 1) {
@@ -411,7 +421,17 @@ const performanceSummary = (): BrowserBenchmarkReport['performance'] => {
 
 const deviceSummary = (): BrowserBenchmarkReport['device'] => {
   const extendedNavigator = navigator as Navigator & { readonly deviceMemory?: number };
+  const canvas = document.querySelector('canvas');
+  const canvasRect = canvas?.getBoundingClientRect();
+  const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
+  const debugInfo = gl?.getExtension('WEBGL_debug_renderer_info');
   return {
+    canvas: {
+      cssHeight: canvasRect?.height ?? null,
+      cssWidth: canvasRect?.width ?? null,
+      height: canvas?.height ?? null,
+      width: canvas?.width ?? null,
+    },
     deviceMemory: extendedNavigator.deviceMemory ?? null,
     dpr: globalThis.devicePixelRatio,
     hardwareConcurrency: navigator.hardwareConcurrency,
@@ -422,16 +442,33 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
       height: globalThis.innerHeight,
       width: globalThis.innerWidth,
     },
+    webgl: gl === null || gl === undefined
+      ? null
+      : {
+          renderer: gl.getParameter(gl.RENDERER) as string,
+          shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION) as string,
+          unmaskedRenderer: debugInfo === null ? null : gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string,
+          unmaskedVendor: debugInfo === null ? null : gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string,
+          vendor: gl.getParameter(gl.VENDOR) as string,
+          version: gl.getParameter(gl.VERSION) as string,
+        },
   };
 };
 
-const postReport = async (postUrl: string, report: BrowserBenchmarkReport): Promise<void> => {
-  const response = await fetch(postUrl, {
-    body: JSON.stringify(report),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error(`POST failed: HTTP ${response.status}`);
+const benchmarkWarnings = ({
+  ready,
+  stats,
+  warmupComplete,
+}: {
+  readonly ready: boolean;
+  readonly stats: ReturnType<typeof frameStats>;
+  readonly warmupComplete: boolean;
+}): readonly string[] => {
+  const warnings: string[] = [];
+  if (!ready) warnings.push('Document/canvas readiness timed out before sampling');
+  if (!warmupComplete) warnings.push('Warmup timed out before sampling');
+  if (stats.timedOut) warnings.push(`Captured ${stats.sampleCount}/${stats.requestedSampleCount} requested frames`);
+  return warnings;
 };
 
 const runBrowserBenchmark = async (
@@ -446,11 +483,15 @@ const runBrowserBenchmark = async (
   const ready = await waitForReady(options.timeoutMs);
   const setupGl = bench.snapshot();
   const setupRenderer = rendererSnapshot();
-  const beforeFrames = rendererSnapshot();
+  const warmupComplete = await waitFrames(options.warmupFrames, options.timeoutMs);
   bench.reset();
-  const stats = await sampleFrames(options.frames, options.warmupFrames, options.timeoutMs);
+  const beforeFrames = rendererSnapshot();
+  const stats = warmupComplete
+    ? await sampleFrames(options.frames, options.timeoutMs)
+    : frameStats([], options.frames, options.timeoutMs);
   const framesGl = bench.snapshot();
   const afterFrames = rendererSnapshot();
+  const warnings = benchmarkWarnings({ ready, stats, warmupComplete });
 
   return {
     device: deviceSummary(),
@@ -469,7 +510,6 @@ const runBrowserBenchmark = async (
     options: {
       autorun: options.autorun,
       frames: options.frames,
-      postUrlConfigured: options.postUrl !== undefined,
       timeoutMs: options.timeoutMs,
       warmupFrames: options.warmupFrames,
     },
@@ -482,110 +522,33 @@ const runBrowserBenchmark = async (
       setup: setupRenderer,
     },
     url: globalThis.location.href,
+    warmupComplete,
+    warnings,
     wallMs: performance.now() - startedAt,
   };
 };
 
-const downloadReport = (example: Example, reportText: string): void => {
-  const blob = new Blob([reportText, '\n'], { type: 'application/json' });
-  const link = document.createElement('a');
-  link.download = `${example.id}-browser-benchmark.json`;
-  link.href = URL.createObjectURL(blob);
-  link.click();
-  URL.revokeObjectURL(link.href);
-};
-
-export const BrowserBenchmarkReporter = ({ example }: { readonly example: Example }): ReactNode => {
+export const BrowserBenchmarkReporter = ({ example }: { readonly example: Example }): null => {
   const options = useMemo(() => benchmarkOptions(), []);
   const autorunStarted = useRef(false);
-  const [status, setStatus] = useState<BrowserBenchmarkStatus>('idle');
-  const [message, setMessage] = useState<string>('Ready');
-  const [report, setReport] = useState<BrowserBenchmarkReport | null>(null);
-  const reportText = useMemo(() => report === null ? '' : JSON.stringify(report, null, 2), [report]);
 
   const run = useCallback(async () => {
-    setStatus('running');
-    setMessage('Running');
+    const bridge = globalThis as BrowserBenchmarkGlobal;
+    delete bridge.__royalBrowserBenchmarkError;
+    delete bridge.__royalBrowserBenchmarkReport;
     try {
       const nextReport = await runBrowserBenchmark(example, options);
-      setReport(nextReport);
-      if (options.autorun && options.postUrl !== undefined) {
-        await postReport(options.postUrl, nextReport);
-        setMessage('Posted');
-      } else {
-        setMessage('Done');
-      }
-      setStatus('done');
+      bridge.__royalBrowserBenchmarkReport = nextReport;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-      setStatus('error');
+      bridge.__royalBrowserBenchmarkError = error instanceof Error ? error.message : String(error);
     }
   }, [example, options]);
 
-  const copy = useCallback(async () => {
-    if (reportText === '') return;
-    await navigator.clipboard?.writeText(reportText);
-    setMessage('Copied');
-  }, [reportText]);
-
-  const post = useCallback(async () => {
-    if (report === null || options.postUrl === undefined) return;
-    setStatus('running');
-    try {
-      await postReport(options.postUrl, report);
-      setMessage('Posted');
-      setStatus('done');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-      setStatus('error');
-    }
-  }, [options.postUrl, report]);
-
   useEffect(() => {
-    if (!options.autorun || status !== 'idle' || autorunStarted.current) return;
+    if (!options.autorun || autorunStarted.current) return;
     autorunStarted.current = true;
     void run();
-  }, [options.autorun, run, status]);
+  }, [options.autorun, run]);
 
-  return (
-    <aside className="browser-benchmark-panel" aria-live="polite">
-      <div className="browser-benchmark-header">
-        <h2>Browser benchmark</h2>
-        <span data-status={status}>{message}</span>
-      </div>
-      <dl className="browser-benchmark-metrics">
-        <div>
-          <dt>Frames</dt>
-          <dd>{options.frames}</dd>
-        </div>
-        <div>
-          <dt>p95</dt>
-          <dd>{report === null ? '--' : `${report.frameStats.p95Ms.toFixed(1)}ms`}</dd>
-        </div>
-        <div>
-          <dt>State/frame</dt>
-          <dd>{report === null ? '--' : (report.gl.frames.stateChanges / Math.max(1, report.frameStats.sampleCount)).toFixed(1)}</dd>
-        </div>
-      </dl>
-      <div className="browser-benchmark-actions">
-        <button type="button" onClick={() => void run()} disabled={status === 'running'}>Run</button>
-        <button type="button" onClick={() => void copy()} disabled={report === null || status === 'running'}>Copy</button>
-        <button
-          type="button"
-          onClick={() => downloadReport(example, reportText)}
-          disabled={report === null || status === 'running'}
-        >
-          Download
-        </button>
-        {options.postUrl === undefined ? null : (
-          <button type="button" onClick={() => void post()} disabled={report === null || status === 'running'}>
-            Post
-          </button>
-        )}
-      </div>
-      {reportText === '' ? null : (
-        <textarea className="browser-benchmark-output" readOnly value={reportText} />
-      )}
-    </aside>
-  );
+  return null;
 };

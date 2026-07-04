@@ -25,7 +25,10 @@ import {
   type UnlitMaterial,
   type Vec3,
 } from "@royal/renderer-core";
-import { createRenderObjectHandle } from "@royal/renderer-core/internal/render-object";
+import {
+  createRenderObjectHandle,
+  readRenderObjectHandleTransform,
+} from "@royal/renderer-core/internal/render-object";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import {
   gltfComponentCount,
@@ -65,6 +68,7 @@ import {
   gltfMorphWeights,
 } from "./gltf/morph";
 import {
+  type GltfContentExtras,
   type GltfDocument,
   type GltfImage,
   type GltfLodExtras,
@@ -1422,9 +1426,7 @@ const gltfTextureIdentity = (
   return `${assetKey}:texture-index:${textureIndex}:image-index:${imageIndex ?? ""}`;
 };
 
-const gltfContentKeyFromExtras = (
-  extras: GltfImage["extras"] | GltfTexture["extras"] | undefined,
-): TextureContentKey | undefined => {
+const gltfContentKeyFromExtras = (extras: GltfContentExtras | undefined): TextureContentKey | undefined => {
   const contentKey = extras?.contentKey;
   return typeof contentKey === "number" || typeof contentKey === "string" ? contentKey : undefined;
 };
@@ -3194,7 +3196,8 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #renderObjectTransform(node: TransformableRenderNode): Transform | undefined {
-    return this.#renderObjectHandles.get(node)?.getTransform() ?? node.transform;
+    const handle = this.#renderObjectHandles.get(node);
+    return handle === undefined ? node.transform : readRenderObjectHandleTransform(handle);
   }
 
   #pickRay(input: PickInput, projection: Mat4, view: Mat4): Ray | undefined {
@@ -3773,16 +3776,14 @@ class WebGlRootImpl implements WebGlRoot {
           batch.cpuGeometry,
         );
       } else {
-        const virtualTextureModels = batch.localModels.map((localModel, index) =>
-          multiplyMat4(batch.rootModels[index]!, localModel));
         this.#drawGeometryInstanced(
           batch.geometry,
           batch.cpuGeometry,
-          virtualTextureModels,
           batch.key,
           batch.material,
           batch.localModels,
           batch.localModelSignature,
+          batch.rootModels,
           batch.rootTransforms,
           batch.rootPositionSignature,
           batch.rootRotationSignature,
@@ -4293,11 +4294,11 @@ class WebGlRootImpl implements WebGlRoot {
   #drawGeometryInstanced(
     geometry: GeometryResource,
     cpuGeometry: CpuGeometry,
-    virtualTextureModels: readonly Mat4[],
     instanceBufferKey: string,
     material: SurfaceMaterial,
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
+    rootModels: readonly Mat4[],
     rootTransforms: readonly (Transform | undefined)[],
     rootPositionSignature: readonly number[],
     rootRotationSignature: readonly number[],
@@ -4314,7 +4315,15 @@ class WebGlRootImpl implements WebGlRoot {
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
       material,
-      this.#virtualTextureDrawDemandContext(cpuGeometry, virtualTextureModels, projection, view, viewportSize),
+      this.#virtualTextureInstancedDrawDemandContext(
+        cpuGeometry,
+        material,
+        localModels,
+        rootModels,
+        projection,
+        view,
+        viewportSize,
+      ),
     );
     const surfaceTexturePlan = this.#surfaceTextureBindingPlan(
       material,
@@ -5307,6 +5316,21 @@ class WebGlRootImpl implements WebGlRoot {
       view,
       viewportSize,
     };
+  }
+
+  #virtualTextureInstancedDrawDemandContext(
+    geometry: CpuGeometry | undefined,
+    material: Material,
+    localModels: readonly Mat4[],
+    rootModels: readonly Mat4[],
+    projection: Mat4,
+    view: Mat4,
+    viewportSize: ViewportSize,
+  ): VirtualTextureDrawDemandContext | undefined {
+    if (material.baseColor.kind === "solid") return undefined;
+    if (geometry?.texCoords === undefined || geometry.mode !== "triangles" || localModels.length === 0) return undefined;
+    const models = localModels.map((localModel, index) => multiplyMat4(rootModels[index]!, localModel));
+    return this.#virtualTextureDrawDemandContext(geometry, models, projection, view, viewportSize);
   }
 
   #resolveBaseColorTextureResidency(
