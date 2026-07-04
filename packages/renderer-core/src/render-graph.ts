@@ -1,4 +1,5 @@
 import type { Camera } from './camera';
+import type { EnvironmentLight } from './environment-light';
 import type { Rgba } from './primitives';
 import type { RenderNode } from './render-node';
 
@@ -18,6 +19,7 @@ export interface RenderPass {
   readonly clear: RenderPassClear;
   readonly clearColor: Rgba;
   readonly depthTest: boolean;
+  readonly environment?: EnvironmentLight;
 }
 
 export interface RenderPassOptions {
@@ -29,6 +31,8 @@ export interface RenderPassOptions {
   readonly clearColor?: Rgba;
   /** Enables depth testing while drawing this pass. */
   readonly depthTest?: boolean;
+  /** Scene-authored image-based environment lighting for this pass. */
+  readonly environment?: EnvironmentLight;
 }
 
 /** Ordered render passes for a frame. */
@@ -49,7 +53,8 @@ export const pass = (options: RenderPassOptions): RenderPass => {
     children: options.children,
     clear: options.clear ?? 'color-depth',
     clearColor: options.clearColor ?? TRANSPARENT_BLACK,
-    depthTest: options.depthTest ?? true
+    depthTest: options.depthTest ?? true,
+    ...(options.environment === undefined ? {} : { environment: options.environment })
   };
 };
 

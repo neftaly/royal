@@ -3,10 +3,12 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
+import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const helmetEnvironment = studioEnvironment({ intensity: 1.1 });
 
 export const GltfHelmet = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -22,7 +24,7 @@ export const GltfHelmet = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} environment={helmetEnvironment}>
           <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <model
             src={helmetSrc}

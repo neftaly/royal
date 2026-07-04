@@ -8,6 +8,7 @@ import {
   pass,
   perspectiveCamera,
   standardMaterial,
+  studioEnvironment,
   textureAsset,
   type TextureRef,
   unlitMaterial,
@@ -48,6 +49,33 @@ describe("renderer-core descriptor contract", () => {
       clear: "none",
       clearColor: [0.1, 0.2, 0.3, 1],
       depthTest: false,
+      kind: "pass",
+    });
+  });
+
+  it("preserves pass environment lighting descriptors", () => {
+    const environment = studioEnvironment({
+      intensity: 1.1,
+      rotation: [0, Math.PI / 4, 0],
+    });
+
+    expect(environment).toEqual({
+      intensity: 1.1,
+      kind: "environment-light",
+      preset: "studio",
+      rotation: [0, Math.PI / 4, 0],
+    });
+    expect(pass({
+      camera,
+      children: [],
+      environment,
+    })).toEqual({
+      camera,
+      children: [],
+      clear: "color-depth",
+      clearColor: [0, 0, 0, 0],
+      depthTest: true,
+      environment,
       kind: "pass",
     });
   });

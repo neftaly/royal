@@ -76,6 +76,8 @@ export {
 } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
+export type { EnvironmentLight, EnvironmentLightPreset, StudioEnvironmentOptions } from './environment-light';
+export { studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
 export type { PickInput, PickingId, PickResult, PickTarget } from './picking';

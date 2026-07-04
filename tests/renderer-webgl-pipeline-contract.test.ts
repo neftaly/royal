@@ -8,6 +8,7 @@ import {
   perspectiveCamera,
   scene,
   standardMaterial,
+  studioEnvironment,
   unlitMaterial,
   type Geometry,
   type Rgba,
@@ -656,6 +657,55 @@ describe("WebGL renderer pipeline contracts", () => {
       && call.args[2] === gl.RGBA8
       && call.args[3] === 1
       && call.args[4] === 1)).toBe(true);
+  });
+
+  it("binds pass environment irradiance and specular cubemap without glTF IBL", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(scene({
+      children: [
+        pass({
+          camera: orthographicCamera({
+            bottom: -1,
+            far: 10,
+            left: -1,
+            near: 0.1,
+            position: [0, 0, 4],
+            right: 1,
+            rotation: [0, 0, 0],
+            top: 1,
+          }),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: standardMaterial({
+                color: [1, 1, 1, 1],
+                metallic: 1,
+                roughness: 0.4,
+              }),
+            }),
+          ],
+          environment: studioEnvironment({ intensity: 1.1 }),
+        }),
+      ],
+    }));
+
+    expect(uniform1iPayloadsByName(calls, "u_surfaceLightCount")).toContain(0);
+    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
+      .toContainEqual([1, 1.1, 0, 0]);
+    expect(uniform4fvPayloadsByName(calls, "u_iblSpecularSettings").map(roundVector))
+      .toContainEqual([1, 1.1, 2, 0]);
+    const cubeFaceUploads = calls.filter((call) =>
+      call.name === "texImage2D"
+      && Number(call.args[0]) >= gl.TEXTURE_CUBE_MAP_POSITIVE_X
+      && Number(call.args[0]) < gl.TEXTURE_CUBE_MAP_POSITIVE_X + 6);
+
+    expect(cubeFaceUploads).toHaveLength(12);
+    expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {

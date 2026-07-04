@@ -2,6 +2,7 @@ import {
   createRenderObjectHandle,
   type BoxGeometry,
   type DirectionalLightNode,
+  type EnvironmentLight,
   type EulerRads,
   type GltfNode,
   type Material,
@@ -144,7 +145,6 @@ import {
   DEFAULT_SURFACE_LIGHT_SET,
   EMPTY_SURFACE_LIGHT_SET,
   MAX_SURFACE_LIGHTS,
-  passSurfaceLightSet,
   surfaceLightSet,
   transformSurfaceIblIrradiance,
   transformSurfaceLight,
@@ -312,6 +312,12 @@ type ScreenColorTextureResource = {
   readonly texture: WebGLTexture;
   uploaded: boolean;
   width: number;
+};
+
+type StudioEnvironmentSpecularResource = {
+  readonly key: string;
+  readonly mipCount: number;
+  readonly texture: WebGLTexture;
 };
 
 type TextureLoadState = TextureResource & {
@@ -777,6 +783,35 @@ type SceneRenderView = {
 };
 
 const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
+const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
+  [0.78, 0.78, 0.82],
+  [0.05, 0.06, 0.08],
+  [0.34, 0.35, 0.38],
+  [-0.08, -0.08, -0.07],
+  [0.02, 0.02, 0.02],
+  [0.05, 0.05, 0.06],
+  [-0.18, -0.17, -0.16],
+  [-0.03, -0.03, -0.02],
+  [0.04, 0.04, 0.04],
+];
+const STUDIO_ENVIRONMENT_SPECULAR_KEY = "environment:studio:specular";
+const STUDIO_ENVIRONMENT_SPECULAR_MIPS = [
+  {
+    colors: [
+      [255, 251, 238, 255],
+      [222, 232, 255, 255],
+      [190, 202, 220, 255],
+      [116, 126, 144, 255],
+    ],
+    size: 2,
+  },
+  {
+    colors: [
+      [186, 194, 207, 255],
+    ],
+    size: 1,
+  },
+] as const;
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
@@ -790,6 +825,17 @@ const IDENTITY_TRANSFORM: Transform = {
 const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
+
+const rgbaByteData = (colors: readonly (readonly number[])[]): Uint8Array => {
+  const data = new Uint8Array(colors.length * 4);
+  let offset = 0;
+  for (const color of colors) {
+    data.set(color, offset);
+    offset += 4;
+  }
+
+  return data;
+};
 
 const hashBytes = (bytes: Uint8Array): string => {
   let hash = FNV_1A_32_OFFSET;
@@ -2254,6 +2300,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #geometry = new Map<string, GeometryResource>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
+  readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #gltf = new Map<string, GltfState>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
@@ -2412,7 +2459,7 @@ class WebGlRootImpl implements WebGlRoot {
           const projection = renderView.projection(renderPass);
           const view = renderView.view(renderPass);
           const lights = this.#directionalLights(renderPass.children);
-          const passLights = passSurfaceLightSet(lights[0]);
+          const passLights = this.#passSurfaceLightSet(lights[0], renderPass.environment);
           const viewportSize: ViewportSize = [width, height];
           const gltfDraws: GltfPrimitiveDraw[] = [];
           const flushGltfDraws = (): void => {
@@ -2428,7 +2475,7 @@ class WebGlRootImpl implements WebGlRoot {
               continue;
             }
             flushGltfDraws();
-            this.#drawNode(child, projection, view, lights[0], viewportSize, usedGeometry);
+            this.#drawNode(child, projection, view, passLights, viewportSize, usedGeometry);
           }
           flushGltfDraws();
         }
@@ -2503,6 +2550,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#programs.clear();
     this.#geometry.clear();
     this.#textures.clear();
+    this.#studioEnvironmentSpecularTextures.clear();
     this.#virtualTextures.clear();
     this.#gltf.clear();
     this.#gltfInstanceBuffers.clear();
@@ -2834,7 +2882,7 @@ class WebGlRootImpl implements WebGlRoot {
     node: RenderNode,
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
+    passLights: SurfaceLightSet | undefined,
     viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
@@ -2842,7 +2890,7 @@ class WebGlRootImpl implements WebGlRoot {
       case "directional-light":
         return;
       case "mesh":
-        this.#drawMesh(node, projection, view, light, usedGeometry);
+        this.#drawMesh(node, projection, view, passLights, usedGeometry);
         return;
       case "text":
         this.#drawText(node, projection, view, usedGeometry);
@@ -2855,7 +2903,7 @@ class WebGlRootImpl implements WebGlRoot {
             draws,
             projection,
             view,
-            passSurfaceLightSet(light),
+            passLights,
             viewportSize,
             usedGeometry,
           );
@@ -2881,20 +2929,20 @@ class WebGlRootImpl implements WebGlRoot {
     node: MeshNode,
     projection: Mat4,
     view: Mat4,
-    light: DirectionalLightNode | undefined,
+    lights: SurfaceLightSet | undefined,
     usedGeometry: Set<string>,
   ): void {
     const cpu = this.#meshGeometry(node.geometry, node.material);
     const model = transformMat4(this.#renderObjectTransform(node));
     if (!this.#isVisible(cpu.positions, model, projection, view)) return;
-    if (node.material.kind === "standard" && light === undefined) {
-      throw new Error("standardMaterial meshes require a directionalLight in the render pass");
+    if (node.material.kind === "standard" && lights === undefined) {
+      throw new Error("standardMaterial meshes require a directionalLight or environment in the render pass");
     }
     const gpu = this.#geometryResource(cpu);
     usedGeometry.add(gpu.key);
     this.#applyDrawAlphaState(node.material);
     try {
-      this.#drawGeometry(gpu, node.material, model, projection, view, passSurfaceLightSet(light), undefined);
+      this.#drawGeometry(gpu, node.material, model, projection, view, lights, undefined);
     } finally {
       this.#resetDrawAlphaState();
     }
@@ -3185,6 +3233,59 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     gl.disable(gl.CULL_FACE);
     gl.frontFace(gl.CCW);
+  }
+
+  #passSurfaceLightSet(
+    light: DirectionalLightNode | undefined,
+    environment: EnvironmentLight | undefined,
+  ): SurfaceLightSet | undefined {
+    if (light === undefined && environment === undefined) return undefined;
+    const environmentLights = environment === undefined ? undefined : this.#environmentLightSet(environment);
+
+    return surfaceLightSet(
+      light === undefined
+        ? []
+        : [{
+            color: light.color,
+            direction: light.direction,
+            kind: "directional",
+          }],
+      environmentLights?.irradiance,
+      environmentLights?.specular,
+    );
+  }
+
+  #environmentLightSet(environment: EnvironmentLight): Pick<SurfaceLightSet, "irradiance" | "specular"> {
+    switch (environment.preset) {
+      case "studio":
+        return this.#studioEnvironmentLightSet(environment);
+    }
+  }
+
+  #studioEnvironmentLightSet(environment: EnvironmentLight): Pick<SurfaceLightSet, "irradiance" | "specular"> {
+    const worldFromIbl = transformMat4({
+      position: [0, 0, 0],
+      rotation: environment.rotation,
+      scale: [1, 1, 1],
+    });
+    const worldToIbl = inverseMat4(worldFromIbl) ?? identityMat4();
+    const specular = this.#studioEnvironmentSpecularTexture();
+
+    return {
+      irradiance: {
+        coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
+        intensity: environment.intensity,
+        worldToIbl,
+      },
+      specular: {
+        encoding: "ldr",
+        intensity: environment.intensity,
+        key: specular.key,
+        mipCount: specular.mipCount,
+        texture: specular.texture,
+        worldToIbl,
+      },
+    };
   }
 
   #gltfAssetLightSet(state: GltfState, rootModel: Mat4): SurfaceLightSet | undefined {
@@ -5389,6 +5490,51 @@ class WebGlRootImpl implements WebGlRoot {
     this.#iblFallbackSpecularTexture = texture;
 
     return texture;
+  }
+
+  #studioEnvironmentSpecularTexture(): StudioEnvironmentSpecularResource {
+    const cached = this.#studioEnvironmentSpecularTextures.get(STUDIO_ENVIRONMENT_SPECULAR_KEY);
+    if (cached !== undefined) return cached;
+
+    const gl = this.#gl;
+    const texture = this.#createTexture();
+    gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+    if (typeof gl.pixelStorei === "function" && gl.UNPACK_FLIP_Y_WEBGL !== undefined) {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    }
+
+    for (const [mipIndex, mip] of STUDIO_ENVIRONMENT_SPECULAR_MIPS.entries()) {
+      const data = rgbaByteData(mip.colors);
+      for (let faceIndex = 0; faceIndex < 6; faceIndex += 1) {
+        gl.texImage2D(
+          gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex,
+          mipIndex,
+          gl.RGBA,
+          mip.size,
+          mip.size,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          data,
+        );
+      }
+    }
+
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAX_LEVEL, STUDIO_ENVIRONMENT_SPECULAR_MIPS.length - 1);
+
+    const resource = {
+      key: STUDIO_ENVIRONMENT_SPECULAR_KEY,
+      mipCount: STUDIO_ENVIRONMENT_SPECULAR_MIPS.length,
+      texture,
+    };
+    this.#studioEnvironmentSpecularTextures.set(STUDIO_ENVIRONMENT_SPECULAR_KEY, resource);
+
+    return resource;
   }
 
   #copyTransmissionScreenColorTexture(viewportSize: ViewportSize): ScreenColorTextureResource {

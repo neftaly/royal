@@ -5,6 +5,7 @@ import { jsx } from "@royal/react/renderer/jsx-runtime";
 import {
   boxGeometry,
   perspectiveCamera,
+  studioEnvironment,
   unlitMaterial,
 } from "@royal/renderer-core";
 
@@ -113,6 +114,19 @@ describe("renderer JSX contract", () => {
       clear: "none",
       clearColor: [0, 0, 0, 0],
       depthTest: false,
+      kind: "pass",
+    });
+  });
+
+  it("threads pass environment props through JSX", () => {
+    const environment = studioEnvironment({ intensity: 1.1 });
+
+    expect(
+      <pass camera={perspectiveCamera(perspectiveProps)} environment={environment} />,
+    ).toMatchObject({
+      camera: { kind: "perspective-camera" },
+      children: [],
+      environment,
       kind: "pass",
     });
   });
