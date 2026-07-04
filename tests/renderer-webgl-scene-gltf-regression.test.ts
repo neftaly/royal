@@ -3884,6 +3884,168 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeSecondGltf);
   });
 
+  it("shares glTF texture uploads for matching computed bufferView image content keys across different bins", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const matchingTriangleBinUri = "matching-triangle.bin";
+    const bufferViewImageDocument = (bufferUri: string): unknown => ({
+      ...triangleDocument(),
+      bufferViews: [
+        ...(triangleDocument().bufferViews),
+        { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
+      ],
+      buffers: [{ byteLength: triangleBinByteLength + 4, uri: bufferUri }],
+      images: [{ bufferView: 4, mimeType: "image/png" }],
+    });
+    const firstGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "computed-content-key-a",
+      }),
+    ]);
+    const secondGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: matchingTriangleGltfSrc,
+        version: "computed-content-key-b",
+      }),
+    ]);
+
+    root.render(firstGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, bufferViewImageDocument(triangleBinUri)))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.bitmapRequests).toHaveLength(1);
+    loader.bitmapRequests[0]?.resolve(fakeImageBitmap(4));
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
+
+    expect(callCount(calls, "texImage2D")).toBe(1);
+    const uploadsBeforeSecondGltf = callCount(calls, "texImage2D");
+    const bitmapRequestsBeforeSecondGltf = loader.bitmapRequests.length;
+
+    root.render(secondGraph);
+    expect(loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, bufferViewImageDocument(matchingTriangleBinUri)))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/matching-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.bitmapRequests).toHaveLength(bitmapRequestsBeforeSecondGltf + 1);
+    loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(fakeImageBitmap(4));
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => callCount(calls, "texImage2D") > uploadsBeforeSecondGltf,
+    );
+    root.render(secondGraph);
+
+    expect(
+      callCount(calls, "texImage2D"),
+      "different glTF bufferView images with identical encoded bytes should reuse the content-addressed upload",
+    ).toBe(uploadsBeforeSecondGltf);
+  });
+
+  it("keeps explicit glTF extras.contentKey ahead of computed image content keys", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const explicitContentKey = "royal-test:explicit-content-key-wins";
+    const matchingTriangleBinUri = "matching-triangle-explicit.bin";
+    const bufferViewImageDocument = (
+      bufferUri: string,
+      extras?: { readonly contentKey: string },
+    ): unknown => ({
+      ...triangleDocument(),
+      bufferViews: [
+        ...(triangleDocument().bufferViews),
+        { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
+      ],
+      buffers: [{ byteLength: triangleBinByteLength + 4, uri: bufferUri }],
+      images: [{
+        ...(extras === undefined ? {} : { extras }),
+        bufferView: 4,
+        mimeType: "image/png",
+      }],
+    });
+    const firstGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "explicit-content-key-a",
+      }),
+    ]);
+    const secondGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: matchingTriangleGltfSrc,
+        version: "explicit-content-key-b",
+      }),
+    ]);
+
+    root.render(firstGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, bufferViewImageDocument(triangleBinUri, { contentKey: explicitContentKey })))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.bitmapRequests).toHaveLength(1);
+    loader.bitmapRequests[0]?.resolve(fakeImageBitmap(4));
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
+
+    expect(callCount(calls, "texImage2D")).toBe(1);
+    const uploadsBeforeSecondGltf = callCount(calls, "texImage2D");
+    const bitmapRequestsBeforeSecondGltf = loader.bitmapRequests.length;
+
+    root.render(secondGraph);
+    expect(loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, bufferViewImageDocument(matchingTriangleBinUri)))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/matching-triangle-explicit\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.bitmapRequests).toHaveLength(bitmapRequestsBeforeSecondGltf + 1);
+    loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(fakeImageBitmap(4));
+    await flushMicrotasks();
+    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => callCount(calls, "texImage2D") >= uploadsBeforeSecondGltf + 1,
+    );
+    root.render(secondGraph);
+
+    expect(
+      callCount(calls, "texImage2D"),
+      "explicit extras.contentKey should not be replaced by the computed key for identical bytes",
+    ).toBe(uploadsBeforeSecondGltf + 1);
+  });
+
   it("automatically instances matching glTF geometry across different asset URLs", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

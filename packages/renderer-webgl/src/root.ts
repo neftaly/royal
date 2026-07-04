@@ -41,6 +41,7 @@ import {
   type GltfAnimationClip,
 } from "./gltf/animation";
 import {
+  dataUriMediaType,
   decodeDataUri,
   gltfBufferViewBytes,
   loadGltfBuffers,
@@ -540,6 +541,19 @@ type LoadedGltfMaterialTextureSlot = {
   readonly textureUri?: string;
 };
 
+type LoadedGltfImageSource = {
+  readonly contentKey?: TextureContentKey;
+  readonly image: LoadedTextureSource;
+};
+
+const loadedGltfImageSource = (
+  image: LoadedTextureSource,
+  contentKey: TextureContentKey | undefined,
+): LoadedGltfImageSource => ({
+  ...(contentKey === undefined ? {} : { contentKey }),
+  image,
+});
+
 type LoadedGltfMaterialExtensionTextures = {
   readonly clearcoatRoughnessTexture?: LoadedGltfMaterialTextureSlot;
   readonly clearcoatTexture?: LoadedGltfMaterialTextureSlot;
@@ -949,6 +963,7 @@ const IDENTITY_TRANSFORM: Transform = {
 const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
+const DJB2_XOR_OFFSET = 5381;
 
 const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => ({
   exposure: renderPass.exposure === undefined || !Number.isFinite(renderPass.exposure)
@@ -976,6 +991,9 @@ const virtualTextureDemandPageDistance = (
   return (pageCenterX - centerX) ** 2 + (pageCenterY - centerY) ** 2;
 };
 
+const hex32 = (value: number): string =>
+  value.toString(16).padStart(8, "0");
+
 const hashBytes = (bytes: Uint8Array): string => {
   let hash = FNV_1A_32_OFFSET;
   for (const byte of bytes) {
@@ -983,8 +1001,27 @@ const hashBytes = (bytes: Uint8Array): string => {
     hash = Math.imul(hash, FNV_1A_32_PRIME) >>> 0;
   }
 
-  return hash.toString(16).padStart(8, "0");
+  return hex32(hash);
 };
+
+const hashTextureBytes = (bytes: Uint8Array): string => {
+  let fnv = FNV_1A_32_OFFSET;
+  let djb = DJB2_XOR_OFFSET;
+  for (const byte of bytes) {
+    fnv ^= byte;
+    fnv = Math.imul(fnv, FNV_1A_32_PRIME) >>> 0;
+    djb = Math.imul(djb, 33) ^ byte;
+    djb >>>= 0;
+  }
+
+  return `${hex32(fnv)}${hex32(djb)}`;
+};
+
+const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
+  `royal-auto-bytes-v1:${kind}:${bytes.byteLength}:${hashTextureBytes(new Uint8Array(bytes))}`;
+
+const svgTextContentKey = (svgText: string): TextureContentKey =>
+  byteContentKey(svgTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
 
 const typedArrayContentKey = (array: ArrayBufferView | undefined): string => {
   if (array === undefined) return "none";
@@ -1505,20 +1542,16 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
   if (image.complete) onLoad();
 });
 
-const loadImageBitmapFromBufferView = (
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
-  image: GltfImage,
+const loadImageBitmapFromBytes = (
+  bytes: ArrayBuffer,
+  mimeType: string | undefined,
 ): Promise<ImageBitmap> => {
   const createBitmap = globalThis.createImageBitmap;
   if (typeof createBitmap !== "function") {
     return Promise.reject(new Error("ImageBitmap decoding is unavailable for glTF bufferView image"));
   }
-  if (image.bufferView === undefined) {
-    return Promise.reject(new Error("glTF image has no bufferView"));
-  }
-  const blob = new Blob([gltfBufferViewBytes(document, buffers, image.bufferView)], {
-    type: image.mimeType ?? "application/octet-stream",
+  const blob = new Blob([bytes], {
+    type: mimeType ?? "application/octet-stream",
   });
 
   return createBitmap(blob);
@@ -1868,19 +1901,27 @@ const svgVirtualTextureSourceForImage = (
     ? (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol]
     : undefined;
 
-const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string): Promise<HTMLImageElement> => {
+type LoadedSvgTextImage = {
+  readonly image: HTMLImageElement;
+  readonly text: string;
+};
+
+const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string): Promise<LoadedSvgTextImage> => {
   const normalizedText = await prepareSvgTextForImage(svgText, label, baseUrl);
   const viewport = svgTextureViewport(normalizedText);
   const image = await loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label);
 
-  return viewport === undefined
-    ? image
-    : attachSvgVirtualTextureSource(image, {
+  return {
+    image: viewport === undefined
+      ? image
+      : attachSvgVirtualTextureSource(image, {
       height: viewport.height,
       label,
       text: normalizedText,
       width: viewport.width,
-    });
+    }),
+    text: normalizedText,
+  };
 };
 
 const generatedVirtualTextureManifestUri = (key: string): string =>
@@ -2068,14 +2109,19 @@ const generatedRasterVirtualTexturePageImage = (
   return canvas;
 };
 
-const loadSvgUriImage = async (url: string): Promise<HTMLImageElement> => {
+const loadSvgUriImageSource = async (url: string): Promise<LoadedGltfImageSource> => {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
-  return loadSvgTextImage(
+  const label = `glTF GS_texture_svg image ${url}`;
+  const loadedImage = await loadSvgTextImage(
     await response.text(),
-    `glTF GS_texture_svg image ${url}`,
+    label,
     absoluteSvgBaseUrl(response.url || url),
+  );
+  return loadedGltfImageSource(
+    loadedImage.image,
+    svgTextContentKey(loadedImage.text),
   );
 };
 
@@ -2084,23 +2130,36 @@ const loadSvgImageSource = async (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
   image: GltfImage,
-): Promise<HTMLImageElement> => {
+): Promise<LoadedGltfImageSource> => {
   if (image.uri !== undefined) {
     if (image.uri.startsWith("data:")) {
-      const svgText = svgTextDecoder.decode(decodeDataUri(image.uri));
-      return loadSvgTextImage(svgText, `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`, absoluteSvgBaseUrl(src));
+      const bytes = decodeDataUri(image.uri);
+      const loadedImage = await loadSvgTextImage(
+        svgTextDecoder.decode(bytes),
+        `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`,
+        absoluteSvgBaseUrl(src),
+      );
+      return loadedGltfImageSource(
+        loadedImage.image,
+        svgTextContentKey(loadedImage.text),
+      );
     }
 
-    return loadSvgUriImage(resolveResourceUri(src, image.uri));
+    return loadSvgUriImageSource(resolveResourceUri(src, image.uri));
   }
   if (image.bufferView === undefined) {
     throw new Error("glTF GS_texture_svg image has no URI or bufferView");
   }
-
-  return loadSvgTextImage(
-    svgTextDecoder.decode(gltfBufferViewBytes(document, buffers, image.bufferView)),
+  const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
+  const loadedImage = await loadSvgTextImage(
+    svgTextDecoder.decode(bytes),
     `glTF GS_texture_svg bufferView ${image.bufferView}`,
     absoluteSvgBaseUrl(src),
+  );
+
+  return loadedGltfImageSource(
+    loadedImage.image,
+    svgTextContentKey(loadedImage.text),
   );
 };
 
@@ -2124,7 +2183,7 @@ const loadGltfImageSource = (
   buffers: readonly ArrayBuffer[],
   image: GltfImage,
   kind: GltfImageKind,
-): Promise<LoadedTextureSource> => {
+): Promise<LoadedGltfImageSource> => {
   if (kind === "svg") {
     return loadSvgImageSource(src, document, buffers, image);
   }
@@ -2136,12 +2195,31 @@ const loadGltfImageSource = (
         : Promise.resolve(gltfBufferViewBytes(document, buffers, image.bufferView))
       : loadBasisuBytesFromUri(src, image);
 
-    return bytes.then((buffer) => decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`));
+    return bytes.then(async (buffer) => loadedGltfImageSource(
+      await decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`),
+      byteContentKey(buffer, "KHR_texture_basisu"),
+    ));
   }
 
-  return image.uri === undefined
-    ? loadImageBitmapFromBufferView(document, buffers, image)
-    : loadImage(resolveResourceUri(src, image.uri));
+  if (image.uri !== undefined) {
+    if (image.uri.startsWith("data:")) {
+      const bytes = decodeDataUri(image.uri);
+      const contentKey = byteContentKey(
+        bytes,
+        (image.mimeType ?? dataUriMediaType(image.uri)) || "application/octet-stream",
+      );
+      return loadImageBitmapFromBytes(bytes, image.mimeType)
+        .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
+    }
+
+    return loadImage(resolveResourceUri(src, image.uri)).then((loadedImage) => ({ image: loadedImage }));
+  }
+  if (image.bufferView === undefined) return Promise.reject(new Error("glTF image has no URI or bufferView"));
+
+  const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
+  const contentKey = byteContentKey(bytes, image.mimeType ?? "application/octet-stream");
+  return loadImageBitmapFromBytes(bytes, image.mimeType)
+    .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
 };
 
 const getNodeKind = (node: RenderNode): string =>
@@ -7495,7 +7573,7 @@ class WebGlRootImpl implements WebGlRoot {
             this.#mapGltfPrimitiveMaterials(primitive, (material) =>
               this.#settleGltfMaterialImage(material, key, loadedImage)));
           if (kind === "image" && state.imageBasedLight?.specular !== undefined) {
-            this.#settleIblSpecularImage(state.imageBasedLight.specular, key, loadedImage);
+            this.#settleIblSpecularImage(state.imageBasedLight.specular, key, loadedImage.image);
           }
           this.invalidate();
         }, (error: unknown) => {
@@ -7585,24 +7663,57 @@ class WebGlRootImpl implements WebGlRoot {
   #settleGltfMaterialImage(
     material: LoadedGltfMaterial,
     uri: string,
-    image: LoadedTextureSource,
+    loadedImage: LoadedGltfImageSource,
   ): LoadedGltfMaterial {
+    const image = loadedImage.image;
+    const computedContentKey = loadedImage.contentKey;
+    const baseColorContentKey = material.baseColorContentKey ?? (
+      material.baseColorImageUri === uri ? computedContentKey : undefined
+    );
+    const emissiveContentKey = material.emissiveContentKey ?? (
+      material.emissiveImageUri === uri ? computedContentKey : undefined
+    );
+    const metallicRoughnessContentKey = material.metallicRoughnessContentKey ?? (
+      material.metallicRoughnessImageUri === uri ? computedContentKey : undefined
+    );
+    const normalContentKey = material.normalContentKey ?? (
+      material.normalImageUri === uri ? computedContentKey : undefined
+    );
+    const occlusionContentKey = material.occlusionContentKey ?? (
+      material.occlusionImageUri === uri ? computedContentKey : undefined
+    );
+    const extensionTexturesWithContentKey = computedContentKey === undefined
+      ? material.extensionTextures
+      : this.#contentKeyGltfMaterialExtensionTextureImages(
+        material.extensionTextures,
+        uri,
+        computedContentKey,
+      );
+    const contentMaterial: LoadedGltfMaterial = {
+      ...material,
+      ...(baseColorContentKey === undefined ? {} : { baseColorContentKey }),
+      ...(emissiveContentKey === undefined ? {} : { emissiveContentKey }),
+      ...(metallicRoughnessContentKey === undefined ? {} : { metallicRoughnessContentKey }),
+      ...(normalContentKey === undefined ? {} : { normalContentKey }),
+      ...(occlusionContentKey === undefined ? {} : { occlusionContentKey }),
+      ...(extensionTexturesWithContentKey === undefined ? {} : { extensionTextures: extensionTexturesWithContentKey }),
+    };
     if (material.baseColorImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialTextureRef(material), image);
+      this.#settleDecodedTextureSource(this.#gltfMaterialTextureRef(contentMaterial), image);
     }
     if (material.emissiveImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialEmissiveTextureRef(material), image);
+      this.#settleDecodedTextureSource(this.#gltfMaterialEmissiveTextureRef(contentMaterial), image);
     }
     if (material.metallicRoughnessImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialMetallicRoughnessTextureRef(material), image);
+      this.#settleDecodedTextureSource(this.#gltfMaterialMetallicRoughnessTextureRef(contentMaterial), image);
     }
     if (material.normalImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialNormalTextureRef(material), image);
+      this.#settleDecodedTextureSource(this.#gltfMaterialNormalTextureRef(contentMaterial), image);
     }
     if (material.occlusionImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialOcclusionTextureRef(material), image);
+      this.#settleDecodedTextureSource(this.#gltfMaterialOcclusionTextureRef(contentMaterial), image);
     }
-    const existingExtensionTextures = material.extensionTextures;
+    const existingExtensionTextures = contentMaterial.extensionTextures;
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       const slot = existingExtensionTextures?.[texture.key];
       if (slot?.imageUri === uri) {
@@ -7610,22 +7721,22 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
 
-    const extensionTextures = this.#settleGltfMaterialExtensionTextureImages(material.extensionTextures, uri, image);
-    const baseColorSvgVirtualTextureSource = material.baseColorImageUri === uri
+    const extensionTextures = this.#settleGltfMaterialExtensionTextureImages(contentMaterial.extensionTextures, uri, image);
+    const baseColorSvgVirtualTextureSource = contentMaterial.baseColorImageUri === uri
       ? svgVirtualTextureSourceForImage(image)
       : undefined;
     return {
-      ...material,
-      ...(material.baseColorImageUri === uri
+      ...contentMaterial,
+      ...(contentMaterial.baseColorImageUri === uri
         ? {
           ...(baseColorSvgVirtualTextureSource === undefined ? {} : { baseColorSvgVirtualTextureSource }),
           image,
         }
         : {}),
-      ...(material.emissiveImageUri === uri ? { emissiveImage: image } : {}),
-      ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
-      ...(material.normalImageUri === uri ? { normalImage: image } : {}),
-      ...(material.occlusionImageUri === uri ? { occlusionImage: image } : {}),
+      ...(contentMaterial.emissiveImageUri === uri ? { emissiveImage: image } : {}),
+      ...(contentMaterial.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
+      ...(contentMaterial.normalImageUri === uri ? { normalImage: image } : {}),
+      ...(contentMaterial.occlusionImageUri === uri ? { occlusionImage: image } : {}),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
     };
   }
@@ -7657,6 +7768,17 @@ class WebGlRootImpl implements WebGlRoot {
     );
   }
 
+  #contentKeyGltfMaterialExtensionTextureImages(
+    textures: LoadedGltfMaterialExtensionTextures | undefined,
+    uri: string,
+    contentKey: TextureContentKey,
+  ): LoadedGltfMaterialExtensionTextures | undefined {
+    return this.#mapGltfMaterialExtensionTextureSlots(
+      textures,
+      (slot) => this.#contentKeyGltfMaterialTextureSlot(slot, uri, contentKey),
+    );
+  }
+
   #settleGltfMaterialTextureSlot(
     slot: LoadedGltfMaterialTextureSlot | undefined,
     uri: string,
@@ -7664,6 +7786,15 @@ class WebGlRootImpl implements WebGlRoot {
   ): LoadedGltfMaterialTextureSlot | undefined {
     if (slot === undefined) return undefined;
     return slot.imageUri === uri ? { ...slot, image } : slot;
+  }
+
+  #contentKeyGltfMaterialTextureSlot(
+    slot: LoadedGltfMaterialTextureSlot | undefined,
+    uri: string,
+    contentKey: TextureContentKey,
+  ): LoadedGltfMaterialTextureSlot | undefined {
+    if (slot === undefined || slot.imageUri !== uri || slot.contentKey !== undefined) return slot;
+    return { ...slot, contentKey };
   }
 
   #failGltfMaterialExtensionTextureImages(

@@ -54,7 +54,7 @@ export const decodeDataUri = (uri: string): ArrayBuffer => {
   return arrayBufferFromBytes(bytes);
 };
 
-const dataUriMediaType = (uri: string): string => {
+export const dataUriMediaType = (uri: string): string => {
   const match = dataUriPattern.exec(uri);
   if (match === null) return "";
   const metadata = match[1] ?? "";
