@@ -3,6 +3,7 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
+import { studioEnvironment } from '@royal/renderer-core';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
@@ -26,6 +27,10 @@ type KitchenSinkSet = 'ok' | 'slow';
 const khronosFixtureBase = import.meta.env.BASE_URL + 'fixtures/khronos/';
 const khronosGltf = (name: string): string =>
   `${khronosFixtureBase}${name}/glTF-Binary/${name}.glb`;
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 export const khronosKitchenSinkAssets = [
   { name: 'AlphaBlendModeTest', label: 'Alpha Blend Mode Test', bytes: 2978812, tags: ['core', 'testing'] },
@@ -196,7 +201,8 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           {kitchenSinkAssets.map((asset) =>
             createElement(
               Fragment,

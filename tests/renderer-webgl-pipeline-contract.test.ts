@@ -24,6 +24,11 @@ type FakeCanvas = HTMLCanvasElement & {
   getContext: ReturnType<typeof vi.fn>;
 };
 
+type FakeGlOptions = {
+  readonly drawingBufferSize?: CanvasSize;
+  readonly maxTextureImageUnits?: number;
+};
+
 type GlCall = {
   readonly name: string;
   readonly args: readonly unknown[];
@@ -42,6 +47,9 @@ type BufferUpload = {
 const drawCallNames = new Set(["drawArrays", "drawElements"]);
 
 const defaultCanvasSize: CanvasSize = { width: 200, height: 100 };
+const baselineTextureUnitCount = 16;
+const iblBrdfLutSize = 64;
+const iblSpecularTextureUnit = 2;
 
 const roundNumber = (value: number): number => {
   const rounded = Number(value.toFixed(6));
@@ -106,8 +114,9 @@ const fakeCanvas = (
   return canvas as unknown as FakeCanvas;
 };
 
-const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
+const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
   const calls: GlCall[] = [];
+  const drawingBufferSize = options.drawingBufferSize ?? defaultCanvasSize;
   let nextHandleId = 1;
   const uniformLocations = new Map<string, WebGLUniformLocation>();
   const constants = {
@@ -235,7 +244,9 @@ const fakeGl = (drawingBufferSize: CanvasSize = defaultCanvasSize): FakeGl => {
     getError: record("getError", () => 0),
     getExtension: record("getExtension", () => null),
     getParameter: record<[number]>("getParameter", (parameter) => {
-      if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS) return 8;
+      if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS) {
+        return options.maxTextureImageUnits ?? baselineTextureUnitCount;
+      }
       if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
       return 0;
     }),
@@ -389,6 +400,41 @@ const unlitBox = (color: Rgba = [1, 1, 1, 1]) =>
   mesh({
     geometry: boxGeometry(1),
     material: unlitMaterial({ color }),
+  });
+
+const iblEnvironmentScene = () =>
+  scene({
+    children: [
+      pass({
+        camera: orthographicCamera({
+          bottom: -1,
+          far: 10,
+          left: -1,
+          near: 0.1,
+          position: [0, 0, 4],
+          right: 1,
+          rotation: [0, 0, 0],
+          top: 1,
+        }),
+        children: [
+          mesh({
+            geometry: boxGeometry(1),
+            material: standardMaterial({
+              color: [1, 1, 1, 1],
+              metallic: 1,
+              roughness: 0.4,
+            }),
+          }),
+        ],
+        environment: studioEnvironment({
+          intensity: 1.1,
+          irradianceIntensity: 0.65,
+          specularIntensity: 1.35,
+        }),
+        exposure: 0.9,
+        toneMapping: "aces",
+      }),
+    ],
   });
 
 afterEach(() => {
@@ -638,10 +684,14 @@ describe("WebGL renderer pipeline contracts", () => {
     const sources = shaderSources(calls).join("\n");
     expect(sources).toContain("uniform vec4 u_materialPbrFactors;");
     expect(sources).toContain("uniform vec4 u_toneMappingSettings;");
+    expect(sources).toContain("uniform bool u_useIblBrdfLut;");
+    expect(sources).toContain("uniform sampler2D u_iblBrdfLut;");
     expect(sources).toContain("materialGgxDistribution");
     expect(sources).toContain("toneMapAces");
     expect(sources).toContain("linearToSrgb");
     expect(sources).toContain("if (!u_useIblIrradiance) {\n  return vec3(0.0);");
+    expect(sources).toContain("if (u_useIblBrdfLut) {\n  return texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg;");
+    expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
     expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
     expect(sources).toContain("materialDiffuseColor(baseColor) * (lambert / PI) * lightColor");
     expect(sources).toContain("outColor = outputLinearColor(baseColor.rgb, baseColor.a);");
@@ -663,48 +713,25 @@ describe("WebGL renderer pipeline contracts", () => {
       && call.args[4] === 1)).toBe(true);
   });
 
-  it("binds pass environment irradiance and specular cubemap without glTF IBL", () => {
+  it("binds pass environment irradiance, specular cubemap, and BRDF LUT without glTF IBL", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
-            bottom: -1,
-            far: 10,
-            left: -1,
-            near: 0.1,
-            position: [0, 0, 4],
-            right: 1,
-            rotation: [0, 0, 0],
-            top: 1,
-          }),
-          children: [
-            mesh({
-              geometry: boxGeometry(1),
-              material: standardMaterial({
-                color: [1, 1, 1, 1],
-                metallic: 1,
-                roughness: 0.4,
-              }),
-            }),
-          ],
-          environment: studioEnvironment({
-            intensity: 1.1,
-            irradianceIntensity: 0.65,
-            specularIntensity: 1.35,
-          }),
-          exposure: 0.9,
-          toneMapping: "aces",
-        }),
-      ],
-    }));
+    root.render(iblEnvironmentScene());
 
     expect(uniform1iPayloadsByName(calls, "u_surfaceLightCount")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
-    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(2);
+    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toContain(iblSpecularTextureUnit);
+    expect(uniform1iPayloadsByName(calls, "u_useIblBrdfLut")).toContain(1);
+    const brdfLutUnits = uniform1iPayloadsByName(calls, "u_iblBrdfLut");
+    const brdfLutUnit = brdfLutUnits.find((unit) =>
+      unit > 0
+      && unit < baselineTextureUnitCount
+      && unit !== iblSpecularTextureUnit);
+    if (brdfLutUnit === undefined) {
+      throw new Error(`Expected BRDF LUT sampler to use a non-conflicting unit; got ${brdfLutUnits.join(", ")}`);
+    }
     expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
       .toContainEqual([1, 0.65, 0, 0]);
     expect(uniform4fvPayloadsByName(calls, "u_iblSpecularSettings").map(roundVector))
@@ -718,6 +745,37 @@ describe("WebGL renderer pipeline contracts", () => {
 
     expect(cubeFaceUploads).toHaveLength(24);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
+    expect(calls.some((call) =>
+      call.name === "texImage2D"
+      && call.args[0] === gl.TEXTURE_2D
+      && call.args[3] === iblBrdfLutSize
+      && call.args[4] === iblBrdfLutSize
+      && dataLength(call.args[8]) === iblBrdfLutSize * iblBrdfLutSize * 4)).toBe(true);
+    const brdfLutActiveIndex = calls.findIndex((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + brdfLutUnit);
+    expect(brdfLutActiveIndex).toBeGreaterThanOrEqual(0);
+    expect(calls.slice(brdfLutActiveIndex).some((call) =>
+      call.name === "bindTexture"
+      && call.args[0] === gl.TEXTURE_2D)).toBe(true);
+  });
+
+  it("disables the environment BRDF LUT when no texture unit is available", () => {
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(iblEnvironmentScene());
+
+    expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_useIblBrdfLut")).toContain(0);
+    expect(uniform1iPayloadsByName(calls, "u_iblBrdfLut")).toContain(0);
+    expect(calls.some((call) =>
+      call.name === "texImage2D"
+      && call.args[0] === gl.TEXTURE_2D
+      && call.args[3] === iblBrdfLutSize
+      && call.args[4] === iblBrdfLutSize)).toBe(false);
+    expect(shaderSources(calls).join("\n")).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {

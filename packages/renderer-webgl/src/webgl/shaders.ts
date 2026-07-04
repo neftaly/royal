@@ -220,8 +220,10 @@ uniform vec4 u_iblIrradianceCoefficients[9];
 uniform vec4 u_iblIrradianceSettings;
 uniform mat4 u_iblWorldToIbl;
 uniform bool u_useIblSpecular;
+uniform bool u_useIblBrdfLut;
 uniform vec4 u_iblSpecularSettings;
 uniform samplerCube u_iblSpecularCube;
+uniform sampler2D u_iblBrdfLut;
 uniform sampler2D u_texture;
 uniform sampler2D u_emissiveTexture;
 uniform sampler2D u_metallicRoughnessTexture;
@@ -585,6 +587,9 @@ if (u_iblSpecularSettings.w > 0.5) {
 return sampleValue.rgb;
 }
 vec2 iblEnvironmentBrdf(float roughness, float NdotV) {
+if (u_useIblBrdfLut) {
+  return texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg;
+}
 vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
 vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
 vec4 r = roughness * c0 + c1;

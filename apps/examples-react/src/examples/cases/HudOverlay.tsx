@@ -5,7 +5,7 @@ import {
   useFrameIndex,
   useOrbitCamera,
 } from '@royal/react';
-import { type EulerRads } from '@royal/renderer-core';
+import { studioEnvironment, type EulerRads } from '@royal/renderer-core';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
   useState,
@@ -31,6 +31,10 @@ const hudSize = {
   height: 9,
   width: 16,
 } as const;
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 type HudBoxId =
   | 'comms'
@@ -185,9 +189,8 @@ export const HudOverlay = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
-          <directionalLight color={[0.88, 0.84, 0.76, 1]} direction={[-0.48, -0.64, -0.58]} />
-          <directionalLight color={[0.22, 0.34, 0.56, 1]} direction={[0.65, -0.2, 0.46]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <mesh transform={{ position: [0, -0.78, -0.2], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[7.2, 4.8]} />
             <standardMaterial color={htmlColor('#142025')} />

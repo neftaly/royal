@@ -5,7 +5,13 @@ import type { SurfaceLightSet } from "./lights";
 export const IBL_SPECULAR_TEXTURE_UNIT = 2;
 export const IBL_IRRADIANCE_COEFFICIENT_COUNT = 9;
 
+export type IblBrdfLutTextureBinding = {
+  readonly texture: WebGLTexture;
+  readonly textureUnit: number;
+};
+
 export type SurfaceIblUniformContext = {
+  readonly brdfLutTexture: () => IblBrdfLutTextureBinding | undefined;
   readonly fallbackSpecularTexture: () => WebGLTexture;
   readonly gl: WebGL2RenderingContext;
   readonly uniform1i: (program: WebGLProgram, name: string, value: number) => void;
@@ -39,6 +45,15 @@ export const bindSurfaceIblUniforms = (
   gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, specular?.texture ?? context.fallbackSpecularTexture());
   context.uniform1i(program, "u_iblSpecularCube", IBL_SPECULAR_TEXTURE_UNIT);
+  const brdfLut = specular === undefined ? undefined : context.brdfLutTexture();
+  context.uniform1i(program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
+  if (brdfLut !== undefined) {
+    gl.activeTexture(gl.TEXTURE0 + brdfLut.textureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, brdfLut.texture);
+    context.uniform1i(program, "u_iblBrdfLut", brdfLut.textureUnit);
+  } else {
+    context.uniform1i(program, "u_iblBrdfLut", 0);
+  }
   for (let index = 0; index < IBL_IRRADIANCE_COEFFICIENT_COUNT; index += 1) {
     const coefficient = irradiance?.coefficients[index] ?? [0, 0, 0] as const;
     context.uniformColor(program, `u_iblIrradianceCoefficients[${index}]`, [

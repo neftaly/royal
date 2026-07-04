@@ -3,10 +3,15 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
+import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 export const GltfVariants = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -22,7 +27,8 @@ export const GltfVariants = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <model
             src={variantSrc}
             transform={{

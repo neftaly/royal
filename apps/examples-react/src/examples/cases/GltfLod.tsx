@@ -3,10 +3,15 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
+import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 export const GltfLod = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -21,8 +26,8 @@ export const GltfLod = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
-          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[-0.42, -0.5, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <model
             src={lodSrc}
             transform={{

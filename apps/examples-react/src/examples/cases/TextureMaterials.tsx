@@ -1,4 +1,4 @@
-import { boxGeometry } from '@royal/renderer-core';
+import { boxGeometry, studioEnvironment } from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
@@ -11,6 +11,10 @@ import { exampleCanvasRenderer } from '../example-renderer';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 export const TextureMaterials = (): ReactNode => {
   const orbit = useOrbitCamera({
@@ -26,8 +30,8 @@ export const TextureMaterials = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
-          <directionalLight color={[0.96, 0.92, 0.84, 1]} direction={[-0.24, -0.42, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             geometry={swatchGeometry}
             texture={helmetAlbedoSrc}

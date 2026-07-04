@@ -11,9 +11,9 @@ import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRenderer } from '../example-renderer';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
-const instancingEnvironment = studioEnvironment({
-  irradianceIntensity: 0.34,
-  specularIntensity: 1.1,
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
 });
 const cubeSources = [
   fixtureBase + 'instanced-cube-a.gltf',
@@ -205,8 +205,8 @@ export const GltfInstancing = (): ReactNode => {
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera} environment={instancingEnvironment}>
-          <directionalLight color={[0.86, 0.82, 0.74, 1]} direction={[0.42, -0.66, -1]} />
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           {instancingConfig.animate
             ? <AnimatedInstancedCubeField cubeInstances={cubeInstances} />
             : <StaticInstancedCubeField cubeInstances={cubeInstances} />}

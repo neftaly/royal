@@ -1,4 +1,4 @@
-import { perspectiveCamera } from '@royal/renderer-core';
+import { perspectiveCamera, studioEnvironment } from '@royal/renderer-core';
 import {
   Canvas,
   useCanvasElement,
@@ -23,6 +23,10 @@ const camera = perspectiveCamera({
   near: 0.05,
   position: [0, 1.55, 4.8],
   rotation: [-0.2, 0, 0],
+});
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
 });
 
 type BrowserXrSession = XrSession & {
@@ -440,8 +444,8 @@ export const WebXrVr = (): ReactNode =>
       renderer={exampleCanvasRenderer}
     >
       <scene>
-        <pass camera={camera}>
-          <directionalLight color={[0.84, 0.8, 0.72, 1]} direction={[0.42, -0.72, -0.56]} />
+        <pass camera={camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <mesh transform={{ position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] }}>
             <planeGeometry size={[7.2, 7.2]} />
             <standardMaterial color={[0.42, 0.39, 0.31, 1]} />

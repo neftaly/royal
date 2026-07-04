@@ -1,4 +1,9 @@
-import { planeGeometry, unlitMaterial, type GltfOptions } from '@royal/renderer-core';
+import {
+  planeGeometry,
+  studioEnvironment,
+  unlitMaterial,
+  type GltfOptions,
+} from '@royal/renderer-core';
 import {
   Canvas,
   OrbitControls,
@@ -21,6 +26,10 @@ const backplateGeometry = planeGeometry([4.4, 2.65]);
 const backplateMaterial = unlitMaterial({ color: [0.08, 0.1, 0.12, 1] });
 const activeBackplateMaterial = unlitMaterial({ color: [0.1, 0.2, 0.19, 1] });
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
+const exampleEnvironment = studioEnvironment({
+  irradianceIntensity: 0.65,
+  specularIntensity: 1.35,
+});
 
 const readoutPanel = {
   bottom: 1.18,
@@ -77,7 +86,8 @@ export const Picking = (): ReactNode => {
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >
       <scene>
-        <pass camera={orbit.camera}>
+        <pass camera={orbit.camera} environment={exampleEnvironment}>
+          <directionalLight color={[0.9, 0.86, 0.78, 1]} direction={[0.36, -0.72, -1]} />
           <mesh
             geometry={backplateGeometry}
             material={active ? activeBackplateMaterial : backplateMaterial}
