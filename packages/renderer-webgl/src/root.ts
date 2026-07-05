@@ -7016,6 +7016,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (cached !== undefined) return cached;
 
     const gl = this.#gl;
+    gl.bindVertexArray(null);
     const borrowedVertexResource = cpu.vertexBufferKey === undefined
       ? undefined
       : this.#geometry.get(cpu.vertexBufferKey);

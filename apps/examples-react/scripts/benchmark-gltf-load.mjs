@@ -31,6 +31,7 @@ const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS
 const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1';
 const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
 const forceGeneratedVirtualTexturing = process.env.EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT === '1';
+const glErrorDebugEnabled = process.env.EXAMPLES_GLTF_LOAD_GL_ERROR_DEBUG === '1';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -167,6 +168,7 @@ const installBenchmarkHooks = async (session) => {
     firstUsableMinColorBuckets: 16,
     firstUsableMinPaintedRatio: 0.01,
     firstUsableSampleSize: 96,
+    glErrorDebugEnabled,
     readyTimeoutMs,
     vtCameraDragStepPixels,
   });
@@ -204,6 +206,7 @@ const installBenchmarkHooks = async (session) => {
   let firstUsableSample = null;
   let fullyLoadedAt = null;
   let fullyLoadedState = null;
+  const glErrors = [];
 
   const raf = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
   const rafBeforeDeadline = (deadline) => new Promise((resolve) => {
@@ -266,6 +269,35 @@ const installBenchmarkHooks = async (session) => {
   const recordDraw = () => {
     if (firstDrawAt === null) firstDrawAt = performance.now();
   };
+  const bytesForIndexType = (gl, type) => {
+    if (type === gl.UNSIGNED_BYTE) return 1;
+    if (type === gl.UNSIGNED_SHORT) return 2;
+    if (type === gl.UNSIGNED_INT) return 4;
+    return 0;
+  };
+  const recordGlError = (gl, name, args) => {
+    if (config.glErrorDebugEnabled !== true || glErrors.length >= 32) return;
+    const error = gl.getError();
+    if (error === gl.NO_ERROR) return;
+    const count = Number(args[1]);
+    const type = Number(args[2]);
+    const offset = Number(args[3] ?? 0);
+    let elementBufferSize = null;
+    try {
+      elementBufferSize = gl.getBufferParameter(gl.ELEMENT_ARRAY_BUFFER, gl.BUFFER_SIZE);
+    } catch {
+      elementBufferSize = null;
+    }
+    glErrors.push({
+      count,
+      elementBufferSize,
+      error,
+      name,
+      offset,
+      requiredIndexBytes: offset + count * bytesForIndexType(gl, type),
+      type,
+    });
+  };
   const recordTextureUpload = () => {
     if (firstTextureUploadAt === null) firstTextureUploadAt = performance.now();
   };
@@ -273,8 +305,9 @@ const installBenchmarkHooks = async (session) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalGltfLoadBenchPatched === true) return;
     const wrapped = function (...args) {
-      handler(args);
-      return original.apply(this, args);
+      const result = original.apply(this, args);
+      handler(args, this);
+      return result;
     };
     Object.defineProperty(wrapped, '__royalGltfLoadBenchPatched', { value: true });
     prototype[name] = wrapped;
@@ -284,9 +317,9 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'createTexture', () => { counters.createTexture += 1; });
     patch(prototype, 'deleteTexture', () => { counters.deleteTexture += 1; });
     patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; recordDraw(); });
-    patch(prototype, 'drawElements', () => { counters.drawElements += 1; recordDraw(); });
+    patch(prototype, 'drawElements', (args, gl) => { counters.drawElements += 1; recordDraw(); recordGlError(gl, 'drawElements', args); });
     patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; recordDraw(); });
-    patch(prototype, 'drawElementsInstanced', () => { counters.drawElementsInstanced += 1; recordDraw(); });
+    patch(prototype, 'drawElementsInstanced', (args, gl) => { counters.drawElementsInstanced += 1; recordDraw(); recordGlError(gl, 'drawElementsInstanced', args); });
     patch(prototype, 'texImage2D', (args) => {
       counters.texImage2D += 1;
       counters.textureAllocationCalls += 1;
@@ -680,6 +713,7 @@ const installBenchmarkHooks = async (session) => {
         firstTextureUploadAt,
         firstUsableAt,
         firstUsableSample,
+        glErrors: [...glErrors],
         renderer: readRendererSnapshot(),
         resources: resourceSummary(),
       };
@@ -743,6 +777,75 @@ const roundedGltfLoadDiagnostics = (snapshot) => {
   };
 };
 
+const phaseValue = (asset, phase) => {
+  const value = asset?.phaseMs?.[phase];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+};
+
+const assetPhaseSummary = (asset, phase) => ({
+  key: asset.key,
+  nodeCount: asset.nodeCount,
+  primitiveCount: asset.primitiveCount,
+  status: asset.status,
+  valueMs: phaseValue(asset, phase),
+});
+
+const topAssetsByPhase = (assets, phase, limit = 8) =>
+  assets
+    .filter((asset) => phaseValue(asset, phase) !== undefined)
+    .sort((left, right) => phaseValue(right, phase) - phaseValue(left, phase))
+    .slice(0, limit)
+    .map((asset) => assetPhaseSummary(asset, phase));
+
+const topAssetsByCount = (assets, key, limit = 8) =>
+  assets
+    .filter((asset) => typeof asset[key] === 'number' && asset[key] > 0)
+    .sort((left, right) => right[key] - left[key])
+    .slice(0, limit)
+    .map((asset) => ({
+      count: asset[key],
+      imageFailures: asset.imageFailures,
+      key: asset.key,
+      nodeCount: asset.nodeCount,
+      primitiveCount: asset.primitiveCount,
+      status: asset.status,
+    }));
+
+const gltfLoadDiagnosticsSummary = (diagnostics) => {
+  if (diagnostics === null || typeof diagnostics !== 'object') return null;
+  const assets = Array.isArray(diagnostics?.assets) ? diagnostics.assets : [];
+  const totals = assets.reduce((next, asset) => ({
+    animations: next.animations + asset.animationCount,
+    imageFailures: next.imageFailures + asset.imageFailures,
+    imageLoaded: next.imageLoaded + asset.imageLoaded,
+    imageRequests: next.imageRequests + asset.imageRequests,
+    lights: next.lights + asset.lightCount,
+    nodes: next.nodes + asset.nodeCount,
+    primitives: next.primitives + asset.primitiveCount,
+    variants: next.variants + asset.variantCount,
+  }), {
+    animations: 0,
+    imageFailures: 0,
+    imageLoaded: 0,
+    imageRequests: 0,
+    lights: 0,
+    nodes: 0,
+    primitives: 0,
+    variants: 0,
+  });
+
+  return {
+    assets: assets.length,
+    errorAssets: diagnostics?.errorAssets ?? 0,
+    loadingAssets: diagnostics?.loadingAssets ?? 0,
+    sceneReadyAssets: diagnostics?.sceneReadyAssets ?? 0,
+    slowestImagesComplete: topAssetsByPhase(assets, 'imagesComplete'),
+    slowestSceneReady: topAssetsByPhase(assets, 'toSceneReady'),
+    topImageRequestAssets: topAssetsByCount(assets, 'imageRequests'),
+    totals,
+  };
+};
+
 const buildReport = ({
   afterFinalGcHeap,
   afterFullyLoadedHeap,
@@ -764,6 +867,7 @@ const buildReport = ({
   const firstTextureUploadMs = snapshot.firstTextureUploadAt;
   const firstTexturedFrameMs = snapshot.firstTexturedFrameAt;
   const rendererGltfLoadDiagnostics = snapshot.renderer?.gltfLoadDiagnostics ?? fullState.state?.renderer?.gltfLoadDiagnostics ?? null;
+  const gltfLoadDiagnostics = roundedGltfLoadDiagnostics(rendererGltfLoadDiagnostics);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -779,6 +883,7 @@ const buildReport = ({
       vtFrameSampleTimeoutMs,
       vtCameraDragEnabled,
       forceGeneratedVirtualTexturing,
+      glErrorDebugEnabled,
     },
     metrics: {
       firstDrawMs: round(firstDrawMs),
@@ -802,7 +907,9 @@ const buildReport = ({
         fullyLoaded: fullState.timedOut === true,
       },
       gl: counters,
-      gltfLoadDiagnostics: roundedGltfLoadDiagnostics(rendererGltfLoadDiagnostics),
+      glErrors: glErrorDebugEnabled && Array.isArray(snapshot.glErrors) ? snapshot.glErrors : null,
+      gltfLoadDiagnostics,
+      gltfLoadSummary: gltfLoadDiagnosticsSummary(gltfLoadDiagnostics),
       textures: {
         allocations: counters.createTexture ?? 0,
         allocationCalls: counters.textureAllocationCalls ?? 0,
@@ -859,21 +966,29 @@ const buildReport = ({
 
 const printSummary = (report) => {
   const metrics = report.metrics;
-  const firstLoadAsset = metrics.gltfLoadDiagnostics?.assets?.[0];
-  const phaseMs = firstLoadAsset?.phaseMs ?? {};
+  const summary = metrics.gltfLoadSummary;
+  const slowestScene = summary?.slowestSceneReady?.[0];
+  const slowestImages = summary?.slowestImagesComplete?.[0];
+  const shortKey = (key) => {
+    if (typeof key !== 'string') return 'n/a';
+    const name = key.split('/').pop() ?? key;
+    return name.length > 38 ? `${name.slice(0, 35)}...` : name;
+  };
+  const topPhaseText = (asset) =>
+    asset?.valueMs === undefined ? 'n/a' : `${shortKey(asset.key)}:${asset.valueMs}ms`;
   console.log(
     `gltf load ${report.route.path}: firstDraw=${metrics.firstDrawMs}ms` +
       ` firstTextureUpload=${metrics.firstTextureUploadMs ?? 'n/a'}ms` +
       ` firstTextured=${metrics.firstTexturedFrameMs ?? 'n/a'}ms` +
       ` firstUsable=${metrics.firstUsableDrawMs}ms` +
       ` fullyLoaded=${metrics.fullyLoadedMs}ms` +
-      ` toSceneReady=${phaseMs.toSceneReady ?? 'n/a'}ms` +
-      ` document=${phaseMs.document ?? 'n/a'}ms` +
-      ` buffers=${phaseMs.buffers ?? 'n/a'}ms` +
-      ` meshopt=${phaseMs.meshopt ?? 'n/a'}ms` +
-      ` draco=${phaseMs.draco ?? 'n/a'}ms` +
-      ` scene=${phaseMs.scene ?? 'n/a'}ms` +
-      ` imagesComplete=${phaseMs.imagesComplete ?? 'n/a'}ms` +
+      ` gltfAssets=${summary?.assets ?? 0}` +
+      ` sceneReadyAssets=${summary?.sceneReadyAssets ?? 0}` +
+      ` imageRequests=${summary?.totals?.imageRequests ?? 0}` +
+      ` imageLoaded=${summary?.totals?.imageLoaded ?? 0}` +
+      ` imageFailures=${summary?.totals?.imageFailures ?? 0}` +
+      ` slowScene=${topPhaseText(slowestScene)}` +
+      ` slowImages=${topPhaseText(slowestImages)}` +
       ` vtManifests=${metrics.vt.manifestResourceCount}` +
       ` vtPages=${metrics.vt.pageResourceCount}` +
       ` generatedVtPages=${metrics.vt.generatedPagePrep?.generatedPageRequests ?? 'n/a'}` +

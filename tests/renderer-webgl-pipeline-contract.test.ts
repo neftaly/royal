@@ -6,6 +6,7 @@ import {
   orthographicCamera,
   pass,
   perspectiveCamera,
+  planeGeometry,
   scene,
   standardMaterial,
   studioEnvironment,
@@ -366,6 +367,18 @@ const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
         length: dataLength(payload),
       };
     });
+
+const previousVertexArrayBind = (
+  calls: readonly GlCall[],
+  beforeIndex: number,
+): GlCall | undefined => {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const call = calls[index];
+    if (call?.name === "bindVertexArray") return call;
+  }
+
+  return undefined;
+};
 
 const shaderSources = (calls: readonly GlCall[]): readonly string[] =>
   calls
@@ -746,6 +759,28 @@ describe("WebGL renderer pipeline contracts", () => {
     if (indexedDraws.length > 0) {
       expect(bindTargets).toContain(gl.ELEMENT_ARRAY_BUFFER);
       expect(uploads.some((upload) => upload.target === gl.ELEMENT_ARRAY_BUFFER && upload.length > 0)).toBe(true);
+    }
+  });
+
+  it("uploads element buffers with the null vertex array bound", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(singlePassScene([
+      unlitBox(),
+      mesh({
+        geometry: planeGeometry(1),
+        material: unlitMaterial({ color: [0.2, 0.4, 0.7, 1] }),
+        transform: { position: [1.2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      }),
+    ]));
+
+    const elementUploadIndexes = calls.flatMap((call, index) =>
+      call.name === "bufferData" && call.args[0] === gl.ELEMENT_ARRAY_BUFFER ? [index] : []);
+
+    expect(elementUploadIndexes.length).toBeGreaterThanOrEqual(2);
+    for (const uploadIndex of elementUploadIndexes) {
+      expect(previousVertexArrayBind(calls, uploadIndex)?.args[0]).toBe(null);
     }
   });
 
