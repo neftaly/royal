@@ -796,8 +796,8 @@ const pageUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
 const pageTableUploads = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) =>
     call.name === "texSubImage2D"
-    && call.args[4] === 1
-    && call.args[5] === 1);
+    && ArrayBuffer.isView(call.args[8])
+    && !(call.args[8] instanceof DataView));
 
 const texParameterTriples = (calls: readonly GlCall[]): readonly (readonly unknown[])[] =>
   calls
@@ -820,6 +820,14 @@ const uploadPayload = (call: GlCall): readonly number[] => {
     ? Array.from(payload as Uint8Array)
     : [];
 };
+
+const pageTableUploadSummary = (call: GlCall): readonly unknown[] => [
+  call.args[2],
+  call.args[3],
+  call.args[4],
+  call.args[5],
+  uploadPayload(call),
+];
 
 const imageBySrc = (fragment: string): ControlledImage | undefined =>
   ControlledImage.instances.find((image) => image.src.includes(fragment));
@@ -1560,10 +1568,9 @@ describe("WebGL renderer virtual texturing integration", () => {
     imageBySrc("m1-0-0")?.settleLoad();
     await flushMicrotasks();
 
-    const writes = pageTableUploads(calls);
-    expect(writes.map((call) => [call.args[2], call.args[3], uploadPayload(call)])).toEqual([
-      [0, 0, [1, 0, 1, 255]],
-      [1, 0, [1, 0, 1, 255]],
+    const writes = pageTableUploads(calls).map(pageTableUploadSummary);
+    expect(writes).toEqual([
+      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
     ]);
     expect(pageUploads(calls)).toHaveLength(1);
     expect(pageUploads(calls)[0]?.args[0]).toBe(gl.TEXTURE_2D);
@@ -1584,11 +1591,10 @@ describe("WebGL renderer virtual texturing integration", () => {
     imageBySrc("m0-0-0")?.settleLoad();
     await flushMicrotasks();
 
-    const writes = pageTableUploads(calls).map((call) => [call.args[2], call.args[3], uploadPayload(call)]);
+    const writes = pageTableUploads(calls).map(pageTableUploadSummary);
     expect(writes).toEqual([
-      [0, 0, [1, 0, 1, 255]],
-      [1, 0, [1, 0, 1, 255]],
-      [0, 0, [2, 0, 0, 255]],
+      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
+      [0, 0, 1, 1, [2, 0, 0, 255]],
     ]);
   });
 
@@ -1611,13 +1617,12 @@ describe("WebGL renderer virtual texturing integration", () => {
     imageBySrc("m0-1-0")?.settleLoad();
     await flushMicrotasks();
 
-    const writes = pageTableUploads(calls).map((call) => [call.args[2], call.args[3], uploadPayload(call)]);
+    const writes = pageTableUploads(calls).map(pageTableUploadSummary);
     expect(writes).toEqual(expect.arrayContaining([
-      [0, 0, [1, 0, 1, 255]],
-      [1, 0, [1, 0, 1, 255]],
-      [0, 0, [2, 0, 0, 255]],
-      [0, 0, [1, 0, 1, 255]],
-      [1, 0, [2, 0, 0, 255]],
+      [0, 0, 2, 1, [1, 0, 1, 255, 1, 0, 1, 255]],
+      [0, 0, 1, 1, [2, 0, 0, 255]],
+      [0, 0, 1, 1, [1, 0, 1, 255]],
+      [1, 0, 1, 1, [2, 0, 0, 255]],
     ]));
   });
 

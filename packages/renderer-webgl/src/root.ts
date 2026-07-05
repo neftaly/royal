@@ -6431,24 +6431,29 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
     for (const update of pageTable.takeDirtyPageTableUpdates()) {
-      for (const cell of this.#expandedVirtualTexturePageTableCells(resources, update)) {
-        const payload = new Uint8Array(encodeVirtualTexturePageTableRgba8({
-          residentMip: cell.residentMip,
-          ...(update.slot === undefined ? {} : { slot: update.slot }),
-        }));
-        gl.texSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          cell.x,
-          cell.y,
-          1,
-          1,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          payload,
-        );
-        state.stats.pageTableUpdates += 1;
+      const region = this.#virtualTexturePageTableUpdateRegion(resources, update);
+      if (region === undefined) continue;
+      const texel = encodeVirtualTexturePageTableRgba8({
+        residentMip: region.residentMip,
+        ...(update.slot === undefined ? {} : { slot: update.slot }),
+      });
+      const cellCount = region.width * region.height;
+      const payload = new Uint8Array(cellCount * 4);
+      for (let cellIndex = 0; cellIndex < cellCount; cellIndex += 1) {
+        payload.set(texel, cellIndex * 4);
       }
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        region.x,
+        region.y,
+        region.width,
+        region.height,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        payload,
+      );
+      state.stats.pageTableUpdates += cellCount;
     }
   }
 
@@ -6475,26 +6480,28 @@ class WebGlRootImpl implements WebGlRoot {
     return protectedPages;
   }
 
-  #expandedVirtualTexturePageTableCells(
+  #virtualTexturePageTableUpdateRegion(
     resources: VirtualTextureResourceSet,
     update: VirtualTexturePageTableUpdate,
-  ): readonly { readonly residentMip: number; readonly x: number; readonly y: number }[] {
+  ): {
+    readonly height: number;
+    readonly residentMip: number;
+    readonly width: number;
+    readonly x: number;
+    readonly y: number;
+  } | undefined {
     const coverage = 2 ** update.page.mip;
     const minX = update.page.x * coverage;
     const minY = update.page.y * coverage;
     const maxX = Math.min(resources.pageTableWidth, minX + coverage);
     const maxY = Math.min(resources.pageTableHeight, minY + coverage);
+    const width = maxX - minX;
+    const height = maxY - minY;
+    if (width <= 0 || height <= 0) return undefined;
     const residentMip = update.slot === undefined
       ? 0
       : update.residentMip ?? update.page.mip;
-    const cells: { readonly residentMip: number; readonly x: number; readonly y: number }[] = [];
-    for (let y = minY; y < maxY; y += 1) {
-      for (let x = minX; x < maxX; x += 1) {
-        cells.push({ residentMip, x, y });
-      }
-    }
-
-    return cells;
+    return { height, residentMip, width, x: minX, y: minY };
   }
 
   #isVirtualTextureDrawable(state: VirtualTextureRuntimeState): boolean {
