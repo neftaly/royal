@@ -589,11 +589,12 @@ const waitForAnimationFrameWork = async (
   callbacks: FrameRequestCallback[],
   isReady: () => boolean,
 ): Promise<void> => {
-  for (let attempt = 0; attempt < 20 && !isReady(); attempt += 1) {
+  for (let attempt = 0; attempt < 80 && !isReady(); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5));
     await flushMicrotasks();
     await flushAnimationFrames(callbacks);
   }
+  expect(isReady()).toBe(true);
 };
 
 const camera = () => orthographicCamera({
@@ -735,6 +736,16 @@ const uniform1iPayloads = (
   calls
     .filter((call) => call.name === "uniform1i" && uniformLocationName(call.args[0]) === name)
     .map((call) => typeof call.args[1] === "number" ? call.args[1] : NaN);
+
+const waitForUniform1iPayload = async (
+  callbacks: FrameRequestCallback[],
+  calls: readonly GlCall[],
+  name: string,
+  value: number,
+): Promise<void> => waitForAnimationFrameWork(
+  callbacks,
+  () => uniform1iPayloads(calls, name).includes(value),
+);
 
 const uniform4fvPayloads = (
   calls: readonly GlCall[],
@@ -3746,11 +3757,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const callsBeforeImageSettle = calls.length;
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
     const imageReadyCalls = calls.slice(callsBeforeImageSettle);
 
-    expect(drawCalls(imageReadyCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(imageReadyCalls, "u_useTexture").at(-1)).toBe(1);
+    expect(drawCalls(imageReadyCalls).length).toBeGreaterThanOrEqual(1);
+    expect(uniform1iPayloads(imageReadyCalls, "u_useTexture")).toContain(1);
   });
 
   it("selects VT residency for glTF baseColorTexture after the URI sidecar page is resident", async () => {
@@ -3779,7 +3790,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
 
     expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
     expect(loader.fetchRequests.filter((request) =>
@@ -4069,10 +4080,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
     loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(fakeImageBitmap(4));
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
-    await waitForAnimationFrameWork(
-      viewport.animationFrames,
-      () => callCount(calls, "texImage2D") > uploadsBeforeSecondGltf,
-    );
     root.render(secondGraph);
 
     expect(
@@ -4938,7 +4945,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useEmissiveTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5073,7 +5080,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useMetallicRoughnessTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5122,7 +5129,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useOcclusionTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5172,7 +5179,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useNormalTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5959,7 +5966,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(ControlledImage.instances).toHaveLength(7);
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_thicknessTexture").includes(15),
+    );
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5973,11 +5983,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(surfaceSource).not.toContain("uniform sampler2D u_iblBrdfLut;");
     expect(uniform1iPayloads(calls, "u_iblSpecularCube")).toContain(2);
     expect(uniform1iPayloads(calls, "u_useIblBrdfLut")).toContain(0);
-    expect(uniform1iPayloads(calls, "u_iblBrdfLut")).toEqual([]);
+    expect(uniform1iPayloads(readyFrameCalls, "u_iblBrdfLut")).toEqual([]);
     expect(uniform1iPayloads(calls, "u_normalTexture")).toContain(0);
     expect(uniform1iPayloads(calls, "u_materialTransmissionTexture")).toContain(14);
     expect(uniform1iPayloads(calls, "u_thicknessTexture")).toContain(15);
-    expect(calls.some((call) =>
+    expect(readyFrameCalls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 16)).toBe(false);
   });
@@ -6839,7 +6849,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(await loader.objectUrlBlobs[0]?.text()).toContain("height=\"512\"");
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => calls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_2D),
+    );
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
@@ -7969,7 +7982,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const settledCallsStart = calls.length;
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
 
     const settledCalls = calls.slice(settledCallsStart);
     const uploadIndex = settledCalls.findIndex((call) => call.name === "texImage2D");
@@ -8019,6 +8032,56 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform1iPayloads(pendingCalls, "u_useEmissiveTexture")).not.toContain(1);
     expect(uniform1iPayloads(pendingCalls, "u_useOcclusionTexture")).not.toContain(1);
     expect(uniform1iPayloads(pendingCalls, "u_useSpecularTexture")).not.toContain(1);
+  });
+
+  it("budgets settled glTF ordinary texture uploads across animation frames", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [0.2, 0.2, 1],
+        },
+        version: "ordinary-texture-upload-budget",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, materialSecondaryTexturePendingLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(ControlledImage.instances, "secondary material textures should share one staged image").toHaveLength(1);
+    expect(callCount(calls, "texImage2D")).toBe(0);
+
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+
+    const uploadsBeforeFrames = callCount(calls, "texImage2D");
+    const mipmapsBeforeFrames = callCount(calls, "generateMipmap");
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(callCount(calls, "texImage2D") - uploadsBeforeFrames).toBe(1);
+    expect(callCount(calls, "generateMipmap") - mipmapsBeforeFrames).toBe(1);
+
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(callCount(calls, "texImage2D") - uploadsBeforeFrames).toBe(2);
+    expect(callCount(calls, "generateMipmap") - mipmapsBeforeFrames).toBe(2);
+
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_useSpecularTexture").includes(1)
+        && uniform1iPayloads(calls, "u_useEmissiveTexture").includes(1),
+    );
+    expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.TRIANGLES);
   });
 
   it("uploads a shared glTF texture once across material MSFT_lod levels", async () => {

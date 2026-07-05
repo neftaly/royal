@@ -385,8 +385,14 @@ type CpuGeometry = {
 
 type TextureResource = {
   readonly key: string;
+  pendingUpload?: TexturePendingUpload;
   readonly texture: WebGLTexture;
   uploaded: boolean;
+};
+
+type TexturePendingUpload = {
+  readonly source: LoadedTextureSource;
+  readonly texture: TextureAssetUploadRef;
 };
 
 type ScreenColorTextureResource = {
@@ -1072,6 +1078,7 @@ const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
 const VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME = 2;
 const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
 const VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW = 32;
+const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
@@ -2945,6 +2952,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
   readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
+  readonly #pendingTextureUploads: TextureResource[] = [];
   readonly #autoVirtualTextureRefs = new Map<string, VirtualTextureRef>();
   readonly #autoVirtualTextureManifestUris = new Map<string, string>();
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, VirtualTextureGeneratedPageSource>();
@@ -2984,6 +2992,9 @@ class WebGlRootImpl implements WebGlRoot {
   #resizeObserver: ResizeObserver | undefined;
   #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   #vertexAttribDefaults = new Map<number, VertexAttribDefaultValue>();
+  #textureUploadFrame = -1;
+  #textureUploadHead = 0;
+  #textureUploadsThisFrame = 0;
   #virtualTextureRequestFrame = -1;
   #virtualTextureRequestsThisFrame = 0;
   #virtualTextureUploadFrame = -1;
@@ -3086,6 +3097,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.depthFunc?.(gl.LEQUAL);
     gl.disable?.(gl.BLEND);
     if (options.scissor) gl.enable?.(gl.SCISSOR_TEST);
+    this.#processTextureUploads();
     this.#processVirtualTexturePageUploads();
 
     const usedGeometry = new Set<string>();
@@ -3153,7 +3165,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#releaseUnusedGltfInstanceBuffers();
     this.#pruneGltfLodSelections();
     this.#frame += 1;
-    if (this.#hasPendingVirtualTextureUploads()) this.invalidate();
+    if (this.#hasPendingTextureUploads() || this.#hasPendingVirtualTextureUploads()) this.invalidate();
   }
 
   invalidate(): void {
@@ -3222,6 +3234,8 @@ class WebGlRootImpl implements WebGlRoot {
     this.#programs.clear();
     this.#geometry.clear();
     this.#textures.clear();
+    this.#pendingTextureUploads.length = 0;
+    this.#textureUploadHead = 0;
     this.#studioEnvironmentSpecularTextures.clear();
     this.#virtualTextures.clear();
     this.#autoVirtualTextureRefs.clear();
@@ -7134,6 +7148,59 @@ class WebGlRootImpl implements WebGlRoot {
     resource.vertexArrays.clear();
   }
 
+  #queueTextureUpload(
+    resource: TextureResource,
+    source: LoadedTextureSource,
+    texture: TextureAssetUploadRef,
+  ): void {
+    if (this.#disposed || resource.uploaded || !this.#ownedTextures.has(resource.texture)) return;
+    if (resource.pendingUpload !== undefined) return;
+
+    resource.pendingUpload = { source, texture };
+    this.#pendingTextureUploads.push(resource);
+    this.invalidate();
+  }
+
+  #canUploadTexture(): boolean {
+    if (this.#textureUploadFrame !== this.#frame) {
+      this.#textureUploadFrame = this.#frame;
+      this.#textureUploadsThisFrame = 0;
+    }
+    return this.#textureUploadsThisFrame < TEXTURE_MAX_UPLOADS_PER_FRAME;
+  }
+
+  #processTextureUploads(): void {
+    while (this.#textureUploadHead < this.#pendingTextureUploads.length && this.#canUploadTexture()) {
+      const resource = this.#pendingTextureUploads[this.#textureUploadHead];
+      this.#textureUploadHead += 1;
+      if (resource === undefined) continue;
+      const pending = resource.pendingUpload;
+      if (pending === undefined) continue;
+      if (
+        this.#disposed
+        || this.#textures.get(resource.key) !== resource
+        || resource.uploaded
+        || !this.#ownedTextures.has(resource.texture)
+      ) {
+        delete resource.pendingUpload;
+        continue;
+      }
+
+      this.#uploadTexture(resource, pending.source, pending.texture);
+      delete resource.pendingUpload;
+      resource.uploaded = true;
+      this.#textureUploadsThisFrame += 1;
+    }
+    if (this.#textureUploadHead >= this.#pendingTextureUploads.length) {
+      this.#pendingTextureUploads.length = 0;
+      this.#textureUploadHead = 0;
+    }
+  }
+
+  #hasPendingTextureUploads(): boolean {
+    return this.#textureUploadHead < this.#pendingTextureUploads.length;
+  }
+
   #texture(texture: TextureAssetUploadRef): TextureResource | TextureLoadState {
     const key = textureCacheKey(texture);
     const cached = this.#textures.get(key);
@@ -7158,8 +7225,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (state.uploaded) return;
       state.loading = false;
       this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-      this.#uploadTexture(state, image, texture);
-      this.invalidate();
+      this.#queueTextureUpload(state, image, texture);
     }, (error: unknown) => {
       if (this.#disposed) return;
       if (state.uploaded) return;
@@ -7184,7 +7250,7 @@ class WebGlRootImpl implements WebGlRoot {
     };
     this.#textures.set(key, resource);
     this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-    this.#uploadTexture(resource, image, texture);
+    this.#queueTextureUpload(resource, image, texture);
     if ("loading" in resource) resource.loading = false;
   }
 
@@ -7300,7 +7366,6 @@ class WebGlRootImpl implements WebGlRoot {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, samplerConstant(gl, sampler?.wrapS, gl.CLAMP_TO_EDGE));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, samplerConstant(gl, sampler?.wrapT, gl.CLAMP_TO_EDGE));
     if (usesMipmaps(sampler?.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
-    resource.uploaded = true;
   }
 
   #gltfState(node: GltfNode): GltfState {

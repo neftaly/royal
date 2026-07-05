@@ -352,6 +352,12 @@ const flushMicrotasks = async (): Promise<void> => {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
 };
 
+const flushAnimationFrames = async (frames: FrameRequestCallback[]): Promise<void> => {
+  const queued = frames.splice(0);
+  for (const [index, callback] of queued.entries()) callback(16 + index);
+  await flushMicrotasks();
+};
+
 const settleTextureLoads = async (
   loader: ReturnType<typeof installTextureLoaders>,
   frames: FrameRequestCallback[],
@@ -361,10 +367,7 @@ const settleTextureLoads = async (
   await flushMicrotasks();
   for (const request of loader.bitmapRequests.splice(0)) request.resolve(fakeImageBitmap());
   await flushMicrotasks();
-
-  const queued = frames.splice(0);
-  for (const [index, callback] of queued.entries()) callback(16 + index);
-  await flushMicrotasks();
+  await flushAnimationFrames(frames);
 };
 
 const requestedUrls = (loader: ReturnType<typeof installTextureLoaders>): readonly string[] => [
@@ -509,6 +512,7 @@ describe("WebGL renderer state and capability regressions", () => {
 
     root.render(twoMeshScene(nearestSrgb, linearLinear));
     await settleTextureLoads(loader, frames);
+    await flushAnimationFrames(frames);
 
     expect(requestedUrls(loader).filter((url) => url.includes(sharedSource))).toHaveLength(2);
     expect(
