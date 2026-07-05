@@ -1032,12 +1032,12 @@ type GltfInstanceFloatBufferResource = {
 };
 
 type GltfInstanceVectorBufferResource = GltfInstanceFloatBufferResource & {
-  signature?: readonly number[];
+  signature?: number[];
 };
 
 type GltfInstanceRootPoseBufferResource = GltfInstanceFloatBufferResource & {
-  positionSignature?: readonly number[];
-  rotationSignature?: readonly number[];
+  positionSignature?: number[];
+  rotationSignature?: number[];
 };
 
 type GltfInstanceBufferResource = {
@@ -1045,7 +1045,7 @@ type GltfInstanceBufferResource = {
   readonly localBuffer: WebGLBuffer;
   readonly localData: Float32Array;
   localDirty: boolean;
-  localSignature?: readonly number[];
+  localSignature?: number[];
   instanceCount: number;
   readonly rootPose: GltfInstanceRootPoseBufferResource;
   readonly rootScale: GltfInstanceVectorBufferResource;
@@ -1334,6 +1334,16 @@ const sameGltfModelSignatureRange = (
   }
 
   return true;
+};
+
+const copyGltfInstanceSignature = (
+  target: number[] | undefined,
+  source: readonly number[],
+): number[] => {
+  const next = target ?? [];
+  next.length = source.length;
+  for (let index = 0; index < source.length; index += 1) next[index] = source[index]!;
+  return next;
 };
 
 const createGltfInstanceFloatBufferResource = (
@@ -5202,7 +5212,7 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.localData, 0, localFloatCount);
       this.#recordGltfInstanceLocalBufferUpload(localFloatCount);
       resource.localDirty = false;
-      resource.localSignature = [...localModelSignature];
+      resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
     } else if (localChangedRanges.length > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
       for (const range of localChangedRanges) {
@@ -5217,7 +5227,7 @@ class WebGlRootImpl implements WebGlRoot {
         );
         this.#recordGltfInstanceLocalBufferUpload(rangeFloatCount);
       }
-      resource.localSignature = [...localModelSignature];
+      resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
     }
     this.#bindGltfInstanceRootPoseBuffer(
       resource.rootPose,
@@ -5319,8 +5329,8 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
       this.#recordGltfInstanceRootPoseBufferUpload(floatCount);
       resource.dirty = false;
-      resource.positionSignature = [...nextPositionSignature];
-      resource.rotationSignature = [...nextRotationSignature];
+      resource.positionSignature = copyGltfInstanceSignature(resource.positionSignature, nextPositionSignature);
+      resource.rotationSignature = copyGltfInstanceSignature(resource.rotationSignature, nextRotationSignature);
     } else if (changedRanges.length > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       for (const range of changedRanges) {
@@ -5335,8 +5345,8 @@ class WebGlRootImpl implements WebGlRoot {
         );
         this.#recordGltfInstanceRootPoseBufferUpload(rangeFloatCount);
       }
-      resource.positionSignature = [...nextPositionSignature];
-      resource.rotationSignature = [...nextRotationSignature];
+      resource.positionSignature = copyGltfInstanceSignature(resource.positionSignature, nextPositionSignature);
+      resource.rotationSignature = copyGltfInstanceSignature(resource.rotationSignature, nextRotationSignature);
     }
   }
 
@@ -5391,7 +5401,7 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
       this.#recordGltfInstanceRootScaleBufferUpload(floatCount);
       resource.dirty = false;
-      resource.signature = [...nextSignature];
+      resource.signature = copyGltfInstanceSignature(resource.signature, nextSignature);
     } else if (changedRanges.length > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       for (const range of changedRanges) {
@@ -5406,7 +5416,7 @@ class WebGlRootImpl implements WebGlRoot {
         );
         this.#recordGltfInstanceRootScaleBufferUpload(rangeFloatCount);
       }
-      resource.signature = [...nextSignature];
+      resource.signature = copyGltfInstanceSignature(resource.signature, nextSignature);
     }
   }
 
