@@ -203,15 +203,15 @@ importers:
       '@royal/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
-      draco3dgltf:
-        specifier: ^1.5.7
-        version: 1.5.7
       gl-matrix:
         specifier: ^3.4.4
         version: 3.4.4
       meshoptimizer:
         specifier: ^1.2.0
         version: 1.2.0
+      minidraco:
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       oxlint:
         specifier: 'catalog:'
@@ -764,9 +764,6 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  draco3dgltf@1.5.7:
-    resolution: {integrity: sha512-LeqcpmoHIyYUi0z70/H3tMkGj8QhqVxq6FJGPjlzR24BNkQ6jyMheMvFKJBI0dzGZrEOUyQEmZ8axM1xRrbRiw==}
-
   earcut@3.0.2:
     resolution: {integrity: sha512-X7hshQbLyMJ/3RPhyObLARM2sNxxmRALLKx1+NVFFnQ9gKzmCrxm9+uLIAdBcvc8FNLpctqlQ2V6AE92Ol9UDQ==}
 
@@ -915,6 +912,14 @@ packages:
 
   meshoptimizer@1.2.0:
     resolution: {integrity: sha512-davRZeIJbxJrE24cwQle7ZDsxjdk/OphNOV83oX+efQinyoHY9Jcyz3MHbaoG0qySZajldGztNZ1RN/T19PZsg==}
+
+  minidraco@0.3.0:
+    resolution: {integrity: sha512-Xq2jRdht22I4RCAagtE835ogtsNks7GIFHgVPg1SXLbS0u7k9shVxYNtl4QsfaZOcvG22W7RbsGX2lckf6waJg==}
+    peerDependencies:
+      three: '>=0.170'
+    peerDependenciesMeta:
+      three:
+        optional: true
 
   nanoid@3.3.15:
     resolution: {integrity: sha512-y7Wygv/7mEOvxTuEQDB8StXdMRBWf1kR/tlhAzBRUFkB2jfcLOAxO/SHmOO2zgz1pVgK29/kyupn059/bCHdjA==}
@@ -1661,8 +1666,6 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  draco3dgltf@1.5.7: {}
-
   earcut@3.0.2: {}
 
   es-module-lexer@2.1.0: {}
@@ -1754,6 +1757,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   meshoptimizer@1.2.0: {}
+
+  minidraco@0.3.0: {}
 
   nanoid@3.3.15: {}
 

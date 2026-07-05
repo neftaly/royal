@@ -7507,7 +7507,7 @@ class WebGlRootImpl implements WebGlRoot {
       const { buffers, document: decodedDocument } = await decodeGltfMeshoptBufferViews(document, loadedBuffers);
       state.load.meshoptDecodedAt = nowMs();
       if (this.#disposed) return;
-      const dracoPrimitives = await decodeGltfDracoPrimitives(decodedDocument, buffers);
+      const dracoPrimitives = decodeGltfDracoPrimitives(decodedDocument, buffers);
       state.load.dracoDecodedAt = nowMs();
       if (this.#disposed) return;
       const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, state.key);

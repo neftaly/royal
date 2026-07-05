@@ -1,14 +1,7 @@
-import draco3dgltf, {
-  type DracoDecoder,
-  type DracoDecoderModule,
-  type DracoDecoderModuleOptions,
-  type DracoMesh,
-  type DracoPointAttribute,
-} from "draco3dgltf";
-import dracoDecoderWasmUrl from "draco3dgltf/draco_decoder_gltf.wasm?url";
-import type { GltfIndexArray } from "../accessors";
-import { gltfBufferViewBytes } from "../io";
+import { decodeDracoMesh, type Mesh } from "minidraco";
+import { gltfComponentCount, type GltfIndexArray } from "../accessors";
 import type {
+  GltfAccessor,
   GltfDocument,
   GltfDracoMeshCompressionExtension,
   GltfMeshPrimitive,
@@ -19,32 +12,14 @@ export type DecodedGltfDracoPrimitive = {
   readonly indices: GltfIndexArray;
 };
 
+const COMPONENT_BYTE = 5120;
 const COMPONENT_UNSIGNED_BYTE = 5121;
+const COMPONENT_SHORT = 5122;
 const COMPONENT_UNSIGNED_SHORT = 5123;
 const COMPONENT_UNSIGNED_INT = 5125;
 
+const COLOR_SEMANTIC_PATTERN = /^COLOR_\d+$/u;
 const TEXCOORD_SEMANTIC_PATTERN = /^TEXCOORD_\d+$/u;
-
-let decoderModulePromise: Promise<DracoDecoderModule> | undefined;
-
-const isNodeRuntime = (): boolean =>
-  typeof process === "object"
-  && process !== null
-  && typeof process.versions === "object"
-  && typeof process.versions.node === "string";
-
-const decoderModuleOptions = (): DracoDecoderModuleOptions =>
-  isNodeRuntime()
-    ? {}
-    : {
-      locateFile: (path) => path === "draco_decoder_gltf.wasm" ? dracoDecoderWasmUrl : path,
-    };
-
-const dracoDecoderModule = (): Promise<DracoDecoderModule> => {
-  decoderModulePromise ??= draco3dgltf.createDecoderModule(decoderModuleOptions());
-
-  return decoderModulePromise;
-};
 
 const assertNonNegativeInteger = (label: string, value: number): void => {
   if (!Number.isInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer`);
@@ -55,7 +30,7 @@ const compressedPrimitiveBytes = (
   buffers: readonly ArrayBuffer[],
   extension: GltfDracoMeshCompressionExtension,
   label: string,
-): ArrayBuffer => {
+): Uint8Array => {
   assertNonNegativeInteger(`${label} KHR_draco_mesh_compression bufferView`, extension.bufferView);
 
   const bufferView = document.bufferViews?.[extension.bufferView];
@@ -63,12 +38,13 @@ const compressedPrimitiveBytes = (
     throw new Error(`${label} KHR_draco_mesh_compression references missing bufferView ${extension.bufferView}`);
   }
 
-  const bytes = gltfBufferViewBytes(document, buffers, extension.bufferView);
-  if (bytes.byteLength !== bufferView.byteLength) {
+  const buffer = buffers[bufferView.buffer ?? 0];
+  const offset = bufferView.byteOffset ?? 0;
+  if (buffer === undefined || offset + bufferView.byteLength > buffer.byteLength) {
     throw new Error(`${label} KHR_draco_mesh_compression source bufferView is unavailable`);
   }
 
-  return bytes;
+  return new Uint8Array(buffer, offset, bufferView.byteLength);
 };
 
 const dracoIndexArray = (
@@ -83,150 +59,125 @@ const dracoIndexArray = (
   return pointCount <= 65535 ? new Uint16Array(count) : new Uint32Array(count);
 };
 
-const expectedComponentCount = (semantic: string): number | undefined => {
+const defaultComponentCount = (semantic: string): number | undefined => {
   if (semantic === "POSITION" || semantic === "NORMAL") return 3;
+  if (semantic === "TANGENT") return 4;
   if (TEXCOORD_SEMANTIC_PATTERN.test(semantic)) return 2;
 
   return undefined;
 };
 
-const renderableAttributeEntries = (
-  extension: GltfDracoMeshCompressionExtension,
-  label: string,
-): ReadonlyArray<readonly [string, number]> =>
-  Object.entries(extension.attributes ?? {})
-    .flatMap((entry): Array<readonly [string, number]> => {
-      const [semantic, uniqueId] = entry;
-      if (expectedComponentCount(semantic) === undefined) return [];
-      if (typeof uniqueId !== "number") {
-        throw new Error(`${label} KHR_draco_mesh_compression ${semantic} attribute must be a number`);
-      }
-      assertNonNegativeInteger(`${label} KHR_draco_mesh_compression ${semantic} attribute`, uniqueId);
-
-      return [[semantic, uniqueId]];
-    });
-
-const decodeAttribute = (
-  module: DracoDecoderModule,
-  decoder: DracoDecoder,
-  mesh: DracoMesh,
-  semantic: string,
-  uniqueId: number,
-  label: string,
+const normalizeDecodedAttributeValues = (
+  values: Float32Array,
+  accessor: GltfAccessor | undefined,
 ): Float32Array => {
-  const attribute: DracoPointAttribute = decoder.GetAttributeByUniqueId(mesh, uniqueId);
-  if (attribute.ptr === 0) {
-    throw new Error(`${label} KHR_draco_mesh_compression missing ${semantic} attribute ${uniqueId}`);
-  }
+  if (accessor?.normalized !== true) return values;
 
-  const componentCount = attribute.num_components();
-  const expected = expectedComponentCount(semantic);
-  if (expected !== undefined && componentCount !== expected) {
-    throw new Error(
-      `${label} KHR_draco_mesh_compression ${semantic} has ${componentCount} components, expected ${expected}`,
-    );
-  }
-
-  const output = new module.DracoFloat32Array();
-  try {
-    if (!decoder.GetAttributeFloatForAllPoints(mesh, attribute, output)) {
-      throw new Error(`${label} KHR_draco_mesh_compression failed to decode ${semantic}`);
-    }
-
-    const expectedSize = mesh.num_points() * componentCount;
-    if (output.size() !== expectedSize) {
-      throw new Error(`${label} KHR_draco_mesh_compression decoded invalid ${semantic} size`);
-    }
-
-    const values = new Float32Array(output.size());
-    for (let index = 0; index < values.length; index += 1) {
-      values[index] = output.GetValue(index);
-    }
-
-    return values;
-  } finally {
-    module.destroy(output);
+  switch (accessor.componentType) {
+    case COMPONENT_BYTE:
+      for (let index = 0; index < values.length; index += 1) values[index] = Math.max(values[index]! / 127, -1);
+      return values;
+    case COMPONENT_UNSIGNED_BYTE:
+      for (let index = 0; index < values.length; index += 1) values[index] = values[index]! / 255;
+      return values;
+    case COMPONENT_SHORT:
+      for (let index = 0; index < values.length; index += 1) values[index] = Math.max(values[index]! / 32767, -1);
+      return values;
+    case COMPONENT_UNSIGNED_SHORT:
+      for (let index = 0; index < values.length; index += 1) values[index] = values[index]! / 65535;
+      return values;
+    default:
+      return values;
   }
 };
 
+const decodeAttributes = (
+  document: GltfDocument,
+  primitive: GltfMeshPrimitive,
+  extension: GltfDracoMeshCompressionExtension,
+  mesh: Mesh,
+  label: string,
+): ReadonlyMap<string, Float32Array> => {
+  const attributes = new Map<string, Float32Array>();
+  const pointCount = mesh.numPoints();
+  for (const semantic in extension.attributes) {
+    const uniqueId = extension.attributes[semantic];
+    if (typeof uniqueId !== "number") {
+      throw new Error(`${label} KHR_draco_mesh_compression ${semantic} attribute must be a number`);
+    }
+    assertNonNegativeInteger(`${label} KHR_draco_mesh_compression ${semantic} attribute`, uniqueId);
+
+    const accessorIndex = primitive.attributes?.[semantic];
+    const accessor = accessorIndex === undefined ? undefined : document.accessors?.[accessorIndex];
+    const componentCount = accessor === undefined ? defaultComponentCount(semantic) : gltfComponentCount(accessor.type);
+    if (componentCount === undefined && !COLOR_SEMANTIC_PATTERN.test(semantic)) continue;
+
+    const attribute = mesh.getAttributeByUniqueId(uniqueId);
+    if (attribute === null) {
+      throw new Error(`${label} KHR_draco_mesh_compression missing ${semantic} attribute ${uniqueId}`);
+    }
+    const expectedComponentCount = componentCount ?? attribute.numComponents;
+    if (accessor !== undefined && accessor.count !== pointCount) {
+      throw new Error(
+        `${label} KHR_draco_mesh_compression ${semantic} decodes ${pointCount} points, expected ${accessor.count}`,
+      );
+    }
+    if (attribute.numComponents !== expectedComponentCount) {
+      throw new Error(
+        `${label} KHR_draco_mesh_compression ${semantic} has ${attribute.numComponents} components, expected ${expectedComponentCount}`,
+      );
+    }
+
+    const values = attribute.extractTo(Float32Array, pointCount);
+    if (values.length !== pointCount * expectedComponentCount) {
+      throw new Error(`${label} KHR_draco_mesh_compression decoded invalid ${semantic} size`);
+    }
+
+    attributes.set(semantic, normalizeDecodedAttributeValues(values, accessor));
+  }
+
+  return attributes;
+};
+
 const decodeIndices = (
-  module: DracoDecoderModule,
-  decoder: DracoDecoder,
-  mesh: DracoMesh,
+  mesh: Mesh,
   componentType: number | undefined,
 ): GltfIndexArray => {
-  const faceCount = mesh.num_faces();
-  const indices = dracoIndexArray(componentType, faceCount * 3, mesh.num_points());
-  const face = new module.DracoInt32Array();
-  try {
-    for (let faceIndex = 0; faceIndex < faceCount; faceIndex += 1) {
-      if (!decoder.GetFaceFromMesh(mesh, faceIndex, face)) {
-        throw new Error(`KHR_draco_mesh_compression failed to decode face ${faceIndex}`);
-      }
-      const offset = faceIndex * 3;
-      indices[offset] = face.GetValue(0);
-      indices[offset + 1] = face.GetValue(1);
-      indices[offset + 2] = face.GetValue(2);
-    }
-  } finally {
-    module.destroy(face);
-  }
+  const count = mesh.numFaces() * 3;
+  const indices = dracoIndexArray(componentType, count, mesh.numPoints());
+  indices.set(mesh.faces_.subarray(0, count));
 
   return indices;
 };
 
-const decodePrimitive = async (
+const decodePrimitive = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
   primitive: GltfMeshPrimitive,
   extension: GltfDracoMeshCompressionExtension,
   label: string,
-): Promise<DecodedGltfDracoPrimitive> => {
-  const module = await dracoDecoderModule();
-  const bytes = compressedPrimitiveBytes(document, buffers, extension, label);
-  const decoder = new module.Decoder();
-  const buffer = new module.DecoderBuffer();
-  const mesh = new module.Mesh();
+): DecodedGltfDracoPrimitive => {
+  let mesh: Mesh;
   try {
-    buffer.Init(new Int8Array(bytes), bytes.byteLength);
-    const geometryType = decoder.GetEncodedGeometryType(buffer);
-    if (geometryType !== module.TRIANGULAR_MESH) {
-      throw new Error(`${label} KHR_draco_mesh_compression only supports triangular meshes`);
-    }
-
-    const status = decoder.DecodeBufferToMesh(buffer, mesh);
-    try {
-      if (!status.ok()) {
-        throw new Error(`${label} KHR_draco_mesh_compression decode failed: ${status.error_msg()}`);
-      }
-    } finally {
-      module.destroy(status);
-    }
-
-    const attributes = new Map<string, Float32Array>();
-    for (const [semantic, uniqueId] of renderableAttributeEntries(extension, label)) {
-      attributes.set(semantic, decodeAttribute(module, decoder, mesh, semantic, uniqueId, label));
-    }
-
-    const componentType = primitive.indices === undefined
-      ? undefined
-      : document.accessors?.[primitive.indices]?.componentType;
-
-    return {
-      attributes,
-      indices: decodeIndices(module, decoder, mesh, componentType),
-    };
-  } finally {
-    module.destroy(mesh);
-    module.destroy(buffer);
-    module.destroy(decoder);
+    mesh = decodeDracoMesh(compressedPrimitiveBytes(document, buffers, extension, label));
+  } catch (error) {
+    throw new Error(
+      `${label} KHR_draco_mesh_compression decode failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
+
+  return {
+    attributes: decodeAttributes(document, primitive, extension, mesh, label),
+    indices: decodeIndices(mesh, primitive.indices === undefined ? undefined : document.accessors?.[primitive.indices]?.componentType),
+  };
 };
 
-export const decodeGltfDracoPrimitives = async (
+export const decodeGltfDracoPrimitives = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
-): Promise<ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive>> => {
+): ReadonlyMap<GltfMeshPrimitive, DecodedGltfDracoPrimitive> => {
   const decoded = new Map<GltfMeshPrimitive, DecodedGltfDracoPrimitive>();
   for (const [meshIndex, mesh] of (document.meshes ?? []).entries()) {
     for (const [primitiveIndex, primitive] of (mesh.primitives ?? []).entries()) {
@@ -235,7 +186,7 @@ export const decodeGltfDracoPrimitives = async (
 
       decoded.set(
         primitive,
-        await decodePrimitive(
+        decodePrimitive(
           document,
           buffers,
           primitive,
