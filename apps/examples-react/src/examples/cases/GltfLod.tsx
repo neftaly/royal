@@ -5,6 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRootOptions } from '../example-root-options';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
@@ -44,6 +45,7 @@ export const GltfLod = (): ReactNode => {
         minDistance={2.4}
         zoomSpeed={0.00075}
       />
+      <BenchmarkRendererSnapshot />
     </Canvas>
   );
 };

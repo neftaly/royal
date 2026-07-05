@@ -6,6 +6,7 @@ export type {
   WebGlRenderViewport,
   WebGlRenderViewsOptions,
   WebGlGltfInstancingSnapshot,
+  WebGlGltfLoadDiagnosticsSnapshot,
   WebGlRootSnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root";

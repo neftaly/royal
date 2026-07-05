@@ -2,6 +2,7 @@ import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlGltfInstancingSnapshot,
+  type WebGlGltfLoadDiagnosticsSnapshot,
   type WebGlRoot,
   type WebGlRootOptions,
   type WebGlVirtualTexturingSnapshot,
@@ -34,6 +35,8 @@ export interface RoyalRendererRootSnapshot {
   readonly frame: number;
   /** Renderer-owned counters for diagnostics; not scene or application state. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
+  /** Renderer-owned glTF load timing for diagnostics; not scene or application state. */
+  readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
   readonly latestScene: RenderRoot | undefined;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
@@ -126,6 +129,7 @@ export const createRendererRoot = (
         disposed: snapshot.disposed,
         frame: snapshot.frame,
         gltfInstancing: snapshot.gltfInstancing,
+        gltfLoadDiagnostics: snapshot.gltfLoadDiagnostics,
         latestScene: snapshot.latestScene,
         virtualTexturing: snapshot.virtualTexturing,
       };

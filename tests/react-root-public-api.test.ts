@@ -117,6 +117,13 @@ const zeroGltfInstancingSnapshot = {
   rootScaleUploadCalls: 0,
 };
 
+const zeroGltfLoadDiagnosticsSnapshot = {
+  assets: [],
+  errorAssets: 0,
+  loadingAssets: 0,
+  sceneReadyAssets: 0,
+};
+
 const zeroVirtualTexturingSnapshot = {
   atlasTextures: 0,
   generatedManifestUses: 0,
@@ -192,6 +199,7 @@ describe("React root public API", () => {
       disposed: false,
       frame: 0,
       gltfInstancing: zeroGltfInstancingSnapshot,
+      gltfLoadDiagnostics: zeroGltfLoadDiagnosticsSnapshot,
       latestScene: undefined,
       virtualTexturing: zeroVirtualTexturingSnapshot,
     });
@@ -209,6 +217,7 @@ describe("React root public API", () => {
       disposed: false,
       frame: 1,
       gltfInstancing: zeroGltfInstancingSnapshot,
+      gltfLoadDiagnostics: zeroGltfLoadDiagnosticsSnapshot,
       latestScene: renderRoot,
       virtualTexturing: zeroVirtualTexturingSnapshot,
     });
@@ -219,6 +228,7 @@ describe("React root public API", () => {
       disposed: true,
       frame: 1,
       gltfInstancing: zeroGltfInstancingSnapshot,
+      gltfLoadDiagnostics: zeroGltfLoadDiagnosticsSnapshot,
       latestScene: renderRoot,
       virtualTexturing: zeroVirtualTexturingSnapshot,
     });

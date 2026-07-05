@@ -566,6 +566,7 @@ const smokeExpression = `
         text: canvas?.dataset.royalPickingReadout ?? '',
       } : undefined,
       formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
+      renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,
       resources: performance.getEntriesByType('resource')
         .slice(-20)
         .map((entry) => ({
@@ -602,6 +603,13 @@ const smokeExpression = `
         state.canvas.minColorBuckets === undefined ||
         state.canvas.sample.colorBuckets >= state.canvas.minColorBuckets
       );
+    const gltfDiagnosticsReady = !state.route.id.startsWith('gltf-') ||
+      (
+        Array.isArray(state.renderer?.gltfLoadDiagnostics?.assets) &&
+        state.renderer.gltfLoadDiagnostics.assets.length > 0 &&
+        (state.renderer.gltfLoadDiagnostics.sceneReadyAssets ?? 0) > 0 &&
+        state.renderer.gltfLoadDiagnostics.assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')
+      );
     if (state.route.id === 'form-controls') {
       return state.formControls !== undefined &&
         state.formControls?.canvas?.ariaBusy !== 'true' &&
@@ -614,7 +622,7 @@ const smokeExpression = `
           )
         );
     }
-    return canvasReady && resourceReady;
+    return canvasReady && resourceReady && gltfDiagnosticsReady;
   };
 
   while (performance.now() < deadline && !isReady()) {
@@ -761,6 +769,18 @@ const assertRoute = (expected, state) => {
       if (interaction.before === interaction.hoveredId) {
         failures.push(`picking hover readout did not change from "${interaction.before}"`);
       }
+    }
+  }
+
+  if (expected.id.startsWith('gltf-')) {
+    const gltfLoadDiagnostics = state.renderer?.gltfLoadDiagnostics;
+    const assets = gltfLoadDiagnostics?.assets;
+    if (!Array.isArray(assets) || assets.length === 0) {
+      failures.push('missing glTF loading diagnostics');
+    } else if ((gltfLoadDiagnostics.sceneReadyAssets ?? 0) <= 0) {
+      failures.push('glTF load diagnostics did not report a scene-ready asset');
+    } else if (!assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')) {
+      failures.push('glTF load diagnostics missed toSceneReady phase timing');
     }
   }
 

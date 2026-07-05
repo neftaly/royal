@@ -198,12 +198,48 @@ export interface WebGlRootSnapshot {
   readonly diagnostics: readonly string[];
   readonly disposed: boolean;
   readonly frame: number;
+  /** Renderer-owned glTF load timing, intended for tests, examples benchmarks, and host diagnostics. */
+  readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
   /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
   readonly options: Required<WebGlRootOptions>;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
+
+export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
+  readonly animationCount: number;
+  readonly error?: string;
+  readonly imageFailures: number;
+  readonly imageLoaded: number;
+  readonly imageRequests: number;
+  readonly key: string;
+  readonly lightCount: number;
+  readonly nodeCount: number;
+  readonly phaseMs: {
+    readonly animations?: number;
+    readonly buffers?: number;
+    readonly document?: number;
+    readonly draco?: number;
+    readonly firstImageComplete?: number;
+    readonly imagesComplete?: number;
+    readonly meshopt?: number;
+    readonly scene?: number;
+    readonly toSceneReady?: number;
+  };
+  readonly primitiveCount: number;
+  readonly status: "loading" | "sceneReady" | "error";
+  readonly variantCount: number;
+}
+
+export interface WebGlGltfLoadDiagnosticsSnapshot {
+  readonly assets: readonly WebGlGltfLoadDiagnosticsAssetSnapshot[];
+  readonly errorAssets: number;
+  readonly loadingAssets: number;
+  readonly sceneReadyAssets: number;
+}
+
+type WebGlGltfLoadDiagnosticsPhaseKey = keyof WebGlGltfLoadDiagnosticsAssetSnapshot["phaseMs"];
 
 export interface WebGlGltfInstancingSnapshot {
   /** Transient batch plans built while grouping compatible glTF draws. */
@@ -890,6 +926,23 @@ type GltfLodSelectionState = {
   readonly level: number;
 };
 
+type GltfLoadMetrics = {
+  animationsReadAt?: number;
+  buffersLoadedAt?: number;
+  documentLoadedAt?: number;
+  dracoDecodedAt?: number;
+  firstImageSettledAt?: number;
+  imageFailures: number;
+  imageLoaded: number;
+  imageLoadStartedAt?: number;
+  imageRequests: number;
+  imagesSettledAt?: number;
+  meshoptDecodedAt?: number;
+  readyAt?: number;
+  sceneReadAt?: number;
+  readonly startedAt: number;
+};
+
 type GltfState = {
   animations: readonly GltfAnimationClip[];
   hasMaterialVariants: boolean;
@@ -899,6 +952,7 @@ type GltfState = {
   readonly key: string;
   error?: string;
   lights: readonly SurfaceLight[];
+  readonly load: GltfLoadMetrics;
   nodes: readonly GltfSceneNode[];
   primitives: readonly LoadedGltfPrimitive[];
   status: "loading" | "ready" | "error";
@@ -2386,6 +2440,11 @@ const clampedFiniteNumber = (
 const nonNegativeFiniteNumber = (value: number | undefined, fallback: number): number =>
   Math.max(0, finiteNumber(value, fallback));
 
+const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
+
+const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
+  start === undefined || end === undefined ? undefined : Math.max(0, end - start);
+
 const gltfMetallicRoughnessFactor = (value: number | undefined, fallback: number): number =>
   clampedFiniteNumber(value, fallback, 0, 1);
 
@@ -3193,6 +3252,7 @@ class WebGlRootImpl implements WebGlRoot {
       diagnostics: [...this.#diagnostics],
       disposed: this.#disposed,
       frame: this.#frame,
+      gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
       gltfInstancing: this.#gltfInstancingSnapshot(),
       latestScene: this.#latestScene,
       options: { ...this.#options },
@@ -7251,6 +7311,12 @@ class WebGlRootImpl implements WebGlRoot {
       instanceKey: this.#gltfStateInstanceKey,
       key,
       lights: [],
+      load: {
+        imageFailures: 0,
+        imageLoaded: 0,
+        imageRequests: 0,
+        startedAt: nowMs(),
+      },
       nodes: [],
       primitives: [],
       status: "loading",
@@ -7266,22 +7332,28 @@ class WebGlRootImpl implements WebGlRoot {
   async #loadGltf(src: string, state: GltfState): Promise<void> {
     try {
       const { binaryChunk, document } = await loadGltfDocument(src);
+      state.load.documentLoadedAt = nowMs();
       if (this.#disposed) return;
       assertSupportedRequiredGltfExtensions(src, document);
       if (this.#disposed) return;
       const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk);
+      state.load.buffersLoadedAt = nowMs();
       if (this.#disposed) return;
       const { buffers, document: decodedDocument } = await decodeGltfMeshoptBufferViews(document, loadedBuffers);
+      state.load.meshoptDecodedAt = nowMs();
       if (this.#disposed) return;
       const dracoPrimitives = await decodeGltfDracoPrimitives(decodedDocument, buffers);
+      state.load.dracoDecodedAt = nowMs();
       if (this.#disposed) return;
       const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, state.key);
+      state.load.sceneReadAt = nowMs();
       if (scene.imageBasedLight === undefined) {
         delete state.imageBasedLight;
       } else {
         state.imageBasedLight = scene.imageBasedLight;
       }
       state.animations = readGltfAnimationClips(decodedDocument, buffers);
+      state.load.animationsReadAt = nowMs();
       state.hasMaterialVariants = scene.hasMaterialVariants;
       state.hasNodeLod = scene.hasNodeLod;
       state.lights = scene.lights;
@@ -7289,11 +7361,13 @@ class WebGlRootImpl implements WebGlRoot {
       state.primitives = scene.primitives;
       state.variants = scene.variants;
       state.status = "ready";
+      state.load.readyAt = nowMs();
       this.invalidate();
       this.#loadGltfImages(src, decodedDocument, buffers, state);
     } catch (error) {
       if (this.#disposed) return;
       state.status = "error";
+      state.load.readyAt = nowMs();
       state.error = `glTF load failed for ${src}: ${error instanceof Error ? error.message : String(error)}`;
       this.#recordDiagnostic(state.error);
     }
@@ -7909,13 +7983,18 @@ class WebGlRootImpl implements WebGlRoot {
     state: GltfState,
   ): void {
     const usedImageKeys = this.#usedGltfImageLoadKeys(state);
+    const startedImageKeys = new Set<string>();
     for (const [imageIndex, image] of (document.images ?? []).entries()) {
       for (const kind of ["image", "basisu", "svg"] as const) {
         const key = gltfImageLoadKey(state.key, src, imageIndex, image, kind);
         if (key === undefined) continue;
         if (!usedImageKeys.has(key)) continue;
+        if (startedImageKeys.has(key)) continue;
+        startedImageKeys.add(key);
+        this.#recordGltfImageLoadStarted(state);
         loadGltfImageSource(src, document, buffers, image, kind).then((loadedImage) => {
           if (this.#disposed || state.status !== "ready") return;
+          this.#recordGltfImageLoadSettled(state, false);
           state.primitives = state.primitives.map((primitive) =>
             this.#mapGltfPrimitiveMaterials(primitive, (material) =>
               this.#settleGltfMaterialImage(material, key, loadedImage)));
@@ -7925,6 +8004,7 @@ class WebGlRootImpl implements WebGlRoot {
           this.invalidate();
         }, (error: unknown) => {
           if (this.#disposed) return;
+          this.#recordGltfImageLoadSettled(state, true);
           if (state.status === "ready") {
             state.primitives = state.primitives.map((primitive) =>
               this.#mapGltfPrimitiveMaterials(primitive, (material) =>
@@ -7934,6 +8014,22 @@ class WebGlRootImpl implements WebGlRoot {
           this.#recordDiagnostic(`glTF image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
         });
       }
+    }
+    if (state.load.imageRequests === 0) state.load.imagesSettledAt = nowMs();
+  }
+
+  #recordGltfImageLoadStarted(state: GltfState): void {
+    state.load.imageLoadStartedAt ??= nowMs();
+    state.load.imageRequests += 1;
+  }
+
+  #recordGltfImageLoadSettled(state: GltfState, failed: boolean): void {
+    const load = state.load;
+    if (failed) load.imageFailures += 1;
+    else load.imageLoaded += 1;
+    load.firstImageSettledAt ??= nowMs();
+    if (load.imageLoaded + load.imageFailures >= load.imageRequests) {
+      load.imagesSettledAt = nowMs();
     }
   }
 
@@ -8266,6 +8362,52 @@ class WebGlRootImpl implements WebGlRoot {
 
   #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
     return { ...this.#gltfInstancingCounters };
+  }
+
+  #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {
+    const assets = [...this.#gltf.values()].map((state): WebGlGltfLoadDiagnosticsAssetSnapshot => {
+      const load = state.load;
+      const phaseMs: Partial<Record<WebGlGltfLoadDiagnosticsPhaseKey, number>> = {};
+      const addPhase = (
+        key: WebGlGltfLoadDiagnosticsPhaseKey,
+        start: number | undefined,
+        end: number | undefined,
+      ): void => {
+        const duration = elapsedMs(start, end);
+        if (duration !== undefined) phaseMs[key] = duration;
+      };
+      addPhase("animations", load.sceneReadAt, load.animationsReadAt);
+      addPhase("buffers", load.documentLoadedAt, load.buffersLoadedAt);
+      addPhase("document", load.startedAt, load.documentLoadedAt);
+      addPhase("draco", load.meshoptDecodedAt, load.dracoDecodedAt);
+      addPhase("firstImageComplete", load.imageLoadStartedAt, load.firstImageSettledAt);
+      addPhase("imagesComplete", load.imageLoadStartedAt, load.imagesSettledAt);
+      addPhase("meshopt", load.buffersLoadedAt, load.meshoptDecodedAt);
+      addPhase("scene", load.dracoDecodedAt, load.sceneReadAt);
+      addPhase("toSceneReady", load.startedAt, load.readyAt);
+
+      return {
+        animationCount: state.animations.length,
+        ...(state.error === undefined ? {} : { error: state.error }),
+        imageFailures: load.imageFailures,
+        imageLoaded: load.imageLoaded,
+        imageRequests: load.imageRequests,
+        key: state.key,
+        lightCount: state.lights.length,
+        nodeCount: state.nodes.length,
+        phaseMs,
+        primitiveCount: state.primitives.length,
+        status: state.status === "ready" ? "sceneReady" : state.status,
+        variantCount: state.variants.length,
+      };
+    });
+
+    return {
+      assets,
+      errorAssets: assets.filter((asset) => asset.status === "error").length,
+      loadingAssets: assets.filter((asset) => asset.status === "loading").length,
+      sceneReadyAssets: assets.filter((asset) => asset.status === "sceneReady").length,
+    };
   }
 
   #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {

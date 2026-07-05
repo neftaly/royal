@@ -447,8 +447,8 @@ const deviceSummary = (): BrowserBenchmarkReport['device'] => {
       : {
           renderer: gl.getParameter(gl.RENDERER) as string,
           shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION) as string,
-          unmaskedRenderer: debugInfo === null ? null : gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string,
-          unmaskedVendor: debugInfo === null ? null : gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string,
+          unmaskedRenderer: debugInfo == null ? null : gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string,
+          unmaskedVendor: debugInfo == null ? null : gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string,
           vendor: gl.getParameter(gl.VENDOR) as string,
           version: gl.getParameter(gl.VERSION) as string,
         },

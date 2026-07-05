@@ -22,12 +22,36 @@ type GltfInstancingCounters = {
 type RendererRootSnapshot = {
   readonly frame?: unknown;
   readonly gltfInstancing?: unknown;
+  readonly gltfLoadDiagnostics?: unknown;
   readonly virtualTexturing?: unknown;
+};
+
+type GltfLoadDiagnosticsAsset = {
+  readonly animationCount: number;
+  readonly error?: string;
+  readonly imageFailures: number;
+  readonly imageLoaded: number;
+  readonly imageRequests: number;
+  readonly key: string;
+  readonly lightCount: number;
+  readonly nodeCount: number;
+  readonly phaseMs: Record<string, number>;
+  readonly primitiveCount: number;
+  readonly status: string;
+  readonly variantCount: number;
+};
+
+type GltfLoadDiagnosticsSnapshot = {
+  readonly assets: readonly GltfLoadDiagnosticsAsset[];
+  readonly errorAssets: number;
+  readonly loadingAssets: number;
+  readonly sceneReadyAssets: number;
 };
 
 type RendererBenchmarkSnapshot = {
   readonly frame: number;
   readonly gltfInstancing: GltfInstancingCounters | null;
+  readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
   readonly virtualTexturing: Record<string, number> | null;
 };
 
@@ -71,6 +95,65 @@ const copyNumberCounters = (value: unknown): Record<string, number> | null => {
   return Object.keys(counters).length === 0 ? null : counters;
 };
 
+const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset | null => {
+  if (!isRecord(value)) return null;
+  const phaseMs = copyNumberCounters(value.phaseMs);
+  if (
+    typeof value.animationCount !== 'number' ||
+    typeof value.imageFailures !== 'number' ||
+    typeof value.imageLoaded !== 'number' ||
+    typeof value.imageRequests !== 'number' ||
+    typeof value.key !== 'string' ||
+    typeof value.lightCount !== 'number' ||
+    typeof value.nodeCount !== 'number' ||
+    phaseMs === null ||
+    typeof value.primitiveCount !== 'number' ||
+    typeof value.status !== 'string' ||
+    typeof value.variantCount !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    animationCount: value.animationCount,
+    ...(typeof value.error === 'string' ? { error: value.error } : {}),
+    imageFailures: value.imageFailures,
+    imageLoaded: value.imageLoaded,
+    imageRequests: value.imageRequests,
+    key: value.key,
+    lightCount: value.lightCount,
+    nodeCount: value.nodeCount,
+    phaseMs,
+    primitiveCount: value.primitiveCount,
+    status: value.status,
+    variantCount: value.variantCount,
+  };
+};
+
+const copyGltfLoadDiagnosticsSnapshot = (value: unknown): GltfLoadDiagnosticsSnapshot | null => {
+  if (!isRecord(value) || !Array.isArray(value.assets)) return null;
+  if (
+    typeof value.errorAssets !== 'number' ||
+    typeof value.loadingAssets !== 'number' ||
+    typeof value.sceneReadyAssets !== 'number'
+  ) {
+    return null;
+  }
+  const assets: GltfLoadDiagnosticsAsset[] = [];
+  for (const asset of value.assets) {
+    const copied = copyGltfLoadDiagnosticsAsset(asset);
+    if (copied === null) return null;
+    assets.push(copied);
+  }
+
+  return {
+    assets,
+    errorAssets: value.errorAssets,
+    loadingAssets: value.loadingAssets,
+    sceneReadyAssets: value.sceneReadyAssets,
+  };
+};
+
 export const BenchmarkRendererSnapshot = (): ReactNode => {
   const root = useCanvasRoot();
 
@@ -87,6 +170,7 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
       return {
         frame: rootSnapshot.frame,
         gltfInstancing: copyGltfInstancingCounters(rootSnapshot.gltfInstancing),
+        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(rootSnapshot.gltfLoadDiagnostics),
         virtualTexturing: copyNumberCounters(rootSnapshot.virtualTexturing),
       };
     };

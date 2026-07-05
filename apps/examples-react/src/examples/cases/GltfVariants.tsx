@@ -5,6 +5,7 @@ import {
 } from '@royal/react';
 import { studioEnvironment } from '@royal/renderer-core';
 import { type ReactNode } from 'react';
+import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRootOptions } from '../example-root-options';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
@@ -58,6 +59,7 @@ export const GltfVariants = (): ReactNode => {
         </pass>
       </scene>
       <OrbitControls {...orbit.orbitControlsProps} maxDistance={8} minDistance={2} />
+      <BenchmarkRendererSnapshot />
     </Canvas>
   );
 };

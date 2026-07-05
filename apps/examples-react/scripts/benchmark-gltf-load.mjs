@@ -714,6 +714,35 @@ const heapGrowth = (after, before) =>
     ? after.usedSize - before.usedSize
     : undefined;
 
+const roundedGltfLoadDiagnostics = (snapshot) => {
+  if (snapshot === null || typeof snapshot !== 'object') return null;
+  const assets = Array.isArray(snapshot.assets)
+    ? snapshot.assets.map((asset) => ({
+        animationCount: asset.animationCount ?? 0,
+        ...(typeof asset.error === 'string' ? { error: asset.error } : {}),
+        imageFailures: asset.imageFailures ?? 0,
+        imageLoaded: asset.imageLoaded ?? 0,
+        imageRequests: asset.imageRequests ?? 0,
+        key: asset.key,
+        lightCount: asset.lightCount ?? 0,
+        nodeCount: asset.nodeCount ?? 0,
+        phaseMs: Object.fromEntries(
+          Object.entries(asset.phaseMs ?? {}).map(([key, value]) => [key, round(value)]),
+        ),
+        primitiveCount: asset.primitiveCount ?? 0,
+        status: asset.status,
+        variantCount: asset.variantCount ?? 0,
+      }))
+    : [];
+
+  return {
+    assets,
+    errorAssets: snapshot.errorAssets ?? 0,
+    loadingAssets: snapshot.loadingAssets ?? 0,
+    sceneReadyAssets: snapshot.sceneReadyAssets ?? 0,
+  };
+};
+
 const buildReport = ({
   afterFinalGcHeap,
   afterFullyLoadedHeap,
@@ -734,6 +763,7 @@ const buildReport = ({
   const fullyLoadedMs = snapshot.fullyLoadedAt ?? fullState.fullyLoadedAt;
   const firstTextureUploadMs = snapshot.firstTextureUploadAt;
   const firstTexturedFrameMs = snapshot.firstTexturedFrameAt;
+  const rendererGltfLoadDiagnostics = snapshot.renderer?.gltfLoadDiagnostics ?? fullState.state?.renderer?.gltfLoadDiagnostics ?? null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -772,6 +802,7 @@ const buildReport = ({
         fullyLoaded: fullState.timedOut === true,
       },
       gl: counters,
+      gltfLoadDiagnostics: roundedGltfLoadDiagnostics(rendererGltfLoadDiagnostics),
       textures: {
         allocations: counters.createTexture ?? 0,
         allocationCalls: counters.textureAllocationCalls ?? 0,
@@ -828,12 +859,21 @@ const buildReport = ({
 
 const printSummary = (report) => {
   const metrics = report.metrics;
+  const firstLoadAsset = metrics.gltfLoadDiagnostics?.assets?.[0];
+  const phaseMs = firstLoadAsset?.phaseMs ?? {};
   console.log(
     `gltf load ${report.route.path}: firstDraw=${metrics.firstDrawMs}ms` +
       ` firstTextureUpload=${metrics.firstTextureUploadMs ?? 'n/a'}ms` +
       ` firstTextured=${metrics.firstTexturedFrameMs ?? 'n/a'}ms` +
       ` firstUsable=${metrics.firstUsableDrawMs}ms` +
       ` fullyLoaded=${metrics.fullyLoadedMs}ms` +
+      ` toSceneReady=${phaseMs.toSceneReady ?? 'n/a'}ms` +
+      ` document=${phaseMs.document ?? 'n/a'}ms` +
+      ` buffers=${phaseMs.buffers ?? 'n/a'}ms` +
+      ` meshopt=${phaseMs.meshopt ?? 'n/a'}ms` +
+      ` draco=${phaseMs.draco ?? 'n/a'}ms` +
+      ` scene=${phaseMs.scene ?? 'n/a'}ms` +
+      ` imagesComplete=${phaseMs.imagesComplete ?? 'n/a'}ms` +
       ` vtManifests=${metrics.vt.manifestResourceCount}` +
       ` vtPages=${metrics.vt.pageResourceCount}` +
       ` generatedVtPages=${metrics.vt.generatedPagePrep?.generatedPageRequests ?? 'n/a'}` +

@@ -59,6 +59,13 @@ const zeroGltfInstancingSnapshot = {
   rootScaleUploadCalls: 0,
 };
 
+const zeroGltfLoadDiagnosticsSnapshot = {
+  assets: [],
+  errorAssets: 0,
+  loadingAssets: 0,
+  sceneReadyAssets: 0,
+};
+
 const zeroVirtualTexturingSnapshot = {
   atlasTextures: 0,
   generatedManifestUses: 0,
@@ -114,6 +121,7 @@ const fakeRoot = (): RoyalRendererRoot => {
       disposed: root.disposed,
       frame: root.frame,
       gltfInstancing: zeroGltfInstancingSnapshot,
+      gltfLoadDiagnostics: zeroGltfLoadDiagnosticsSnapshot,
       latestScene: root.latestScene,
       virtualTexturing: zeroVirtualTexturingSnapshot,
     })),
