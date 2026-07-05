@@ -507,6 +507,7 @@ type VirtualTextureScreenFootprint = {
 };
 
 type LoadedGltfPrimitive = {
+  readonly baseMaterial: LoadedGltfPrimitiveMaterial;
   readonly colors?: Float32Array;
   readonly indices?: GltfIndexArray;
   readonly instanceTransforms: readonly Mat4[];
@@ -599,6 +600,15 @@ const loadedGltfImageSource = (
 ): LoadedGltfImageSource => ({
   ...(contentKey === undefined ? {} : { contentKey }),
   image,
+});
+
+const loadedGltfPrimitiveBaseMaterial = (
+  material: LoadedGltfMaterial,
+  materialLod: GltfMaterialPrimitiveLod | undefined,
+): LoadedGltfPrimitiveMaterial => ({
+  material,
+  ...(materialLod === undefined ? {} : { materialLod }),
+  selectionKey: "base",
 });
 
 type LoadedGltfMaterialExtensionTextures = {
@@ -882,6 +892,8 @@ type GltfLodSelectionState = {
 
 type GltfState = {
   animations: readonly GltfAnimationClip[];
+  hasMaterialVariants: boolean;
+  hasNodeLod: boolean;
   imageBasedLight?: SurfaceImageBasedLight;
   readonly instanceKey: number;
   readonly key: string;
@@ -898,6 +910,7 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly localModel: Mat4;
   readonly material: SurfaceMaterial;
+  readonly materialBatchKey: string;
   readonly modelSignatureInstanceIndex: number;
   readonly modelSignatureStateKey: number;
   readonly modelSignatureValues?: readonly number[];
@@ -939,6 +952,7 @@ type GltfPrimitiveDrawBatchPlanCacheEntry = {
 type GltfPreparedPrimitiveMaterial = {
   readonly geometry: CpuGeometry;
   readonly material: SurfaceMaterial;
+  readonly materialBatchKey: string;
 };
 
 type GltfInstanceFloatBufferResource = {
@@ -3619,19 +3633,22 @@ class WebGlRootImpl implements WebGlRoot {
     const rootViewProjectionModel = multiplyMat4(projection, multiplyMat4(view, rootModel));
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const animationTransforms = this.#gltfAnimationTransforms(state, node);
-    const selectedNodeLevels = this.#selectedGltfNodeLodLevels(
-      state,
-      renderInstanceKey,
-      rootViewProjectionModel,
-    );
+    const selectedNodeLevels = state.hasNodeLod
+      ? this.#selectedGltfNodeLodLevels(state, renderInstanceKey, rootViewProjectionModel)
+      : undefined;
+    const selectedVariantIndex = state.hasMaterialVariants
+      ? this.#selectedGltfVariantIndex(state, node)
+      : undefined;
     for (const primitive of state.primitives) {
       const nodeLod = primitive.nodeLod;
-      if (nodeLod !== undefined) {
+      if (selectedNodeLevels !== undefined && nodeLod !== undefined) {
         const selectedLevel = selectedNodeLevels.get(nodeLod.group);
         if (selectedLevel !== nodeLod.level) continue;
       }
 
-      const primitiveMaterial = this.#gltfPrimitiveMaterialForVariant(state, node, primitive);
+      const primitiveMaterial = selectedVariantIndex === undefined
+        ? primitive.baseMaterial
+        : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
       const localModels = animationTransforms === undefined
         ? primitive.localModels
         : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
@@ -3643,16 +3660,17 @@ class WebGlRootImpl implements WebGlRoot {
         : localModels.map((localModel) => worldBounds(primitive.positions, localModel));
       for (const [instanceIndex, localModel] of localModels.entries()) {
         const instanceBounds = localBounds[instanceIndex];
-        const materialSelection = this.#selectedGltfMaterial(
-          state,
-          renderInstanceKey,
-          primitive,
-          primitiveMaterial,
-          instanceIndex,
-          instanceBounds,
-          rootViewProjectionModel,
-        );
-        const loadedMaterial = materialSelection.material;
+        const loadedMaterial = primitiveMaterial.materialLod === undefined
+          ? primitiveMaterial.material
+          : this.#selectedGltfMaterialLod(
+            state,
+            renderInstanceKey,
+            primitive,
+            primitiveMaterial,
+            instanceIndex,
+            instanceBounds,
+            rootViewProjectionModel,
+          );
         if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) {
           continue;
         }
@@ -3662,6 +3680,7 @@ class WebGlRootImpl implements WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           localModel,
           material: prepared.material,
+          materialBatchKey: prepared.materialBatchKey,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
           ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
@@ -3698,7 +3717,7 @@ class WebGlRootImpl implements WebGlRoot {
       const sidednessKey = draw.sidedness.doubleSided
         ? "double-sided"
         : draw.sidedness.frontFaceCcw ? "front-ccw" : "front-cw";
-      const batchKey = `${geometry.key}|${surfaceMaterialBatchKey(draw.material)}|${sidednessKey}|${lights.key}`;
+      const batchKey = `${geometry.key}|${draw.materialBatchKey}|${sidednessKey}|${lights.key}`;
       batchInputs.push({ draw, geometry, key: batchKey, lights });
     }
     const batches = this.#gltfPrimitiveDrawBatches(batchInputs);
@@ -4021,7 +4040,7 @@ class WebGlRootImpl implements WebGlRoot {
     return selected;
   }
 
-  #selectedGltfMaterial(
+  #selectedGltfMaterialLod(
     state: GltfState,
     renderInstanceKey: string,
     primitive: LoadedGltfPrimitive,
@@ -4029,10 +4048,9 @@ class WebGlRootImpl implements WebGlRoot {
     instanceIndex: number,
     localBounds: Bounds3 | undefined,
     rootViewProjectionModel: Mat4,
-  ): { readonly level: number; readonly material: LoadedGltfMaterial } {
+  ): LoadedGltfMaterial {
     const lod = primitiveMaterial.materialLod;
-    if (lod === undefined) return { level: 0, material: primitiveMaterial.material };
-
+    if (lod === undefined) return primitiveMaterial.material;
     const coverage = projectedBoundsScreenCoverage(localBounds, rootViewProjectionModel);
     const level = this.#selectGltfLodLevel(
       `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`,
@@ -4041,7 +4059,7 @@ class WebGlRootImpl implements WebGlRoot {
       lod.thresholds,
       (level) => lod.levels[level] !== undefined,
     );
-    return { level, material: lod.levels[level] ?? primitiveMaterial.material };
+    return lod.levels[level] ?? primitiveMaterial.material;
   }
 
   #preparedGltfPrimitiveMaterial(
@@ -4080,42 +4098,36 @@ class WebGlRootImpl implements WebGlRoot {
       ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
       ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
     };
+    const material = loadedGltfSurfaceMaterial(
+      loadedMaterial,
+      loadedMaterial.image !== undefined && baseColor !== undefined
+        ? baseColor
+        : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+      surfaceTextures,
+    );
     const prepared: GltfPreparedPrimitiveMaterial = {
       geometry,
-      material: loadedGltfSurfaceMaterial(
-        loadedMaterial,
-        loadedMaterial.image !== undefined && baseColor !== undefined
-          ? baseColor
-          : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
-        surfaceTextures,
-      ),
+      material,
+      materialBatchKey: surfaceMaterialBatchKey(material),
     };
     primitiveCache.set(loadedMaterial, prepared);
     return prepared;
   }
 
   #gltfPrimitiveMaterialForVariant(
-    state: GltfState,
-    node: GltfNode,
+    variantIndex: number,
     primitive: LoadedGltfPrimitive,
   ): LoadedGltfPrimitiveMaterial {
-    const variantIndex = this.#selectedGltfVariantIndex(state, node);
-    if (variantIndex !== undefined) {
-      const variant = primitive.materialVariants?.find((mapping) => mapping.variants.includes(variantIndex));
-      if (variant !== undefined) {
-        return {
-          material: variant.material,
-          ...(variant.materialLod === undefined ? {} : { materialLod: variant.materialLod }),
-          selectionKey: `variant:${variantIndex}`,
-        };
-      }
+    const variant = primitive.materialVariants?.find((mapping) => mapping.variants.includes(variantIndex));
+    if (variant !== undefined) {
+      return {
+        material: variant.material,
+        ...(variant.materialLod === undefined ? {} : { materialLod: variant.materialLod }),
+        selectionKey: `variant:${variantIndex}`,
+      };
     }
 
-    return {
-      material: primitive.material,
-      ...(primitive.materialLod === undefined ? {} : { materialLod: primitive.materialLod }),
-      selectionKey: "base",
-    };
+    return primitive.baseMaterial;
   }
 
   #selectedGltfVariantIndex(state: GltfState, node: GltfNode): number | undefined {
@@ -7234,6 +7246,8 @@ class WebGlRootImpl implements WebGlRoot {
 
     const state: GltfState = {
       animations: [],
+      hasMaterialVariants: false,
+      hasNodeLod: false,
       instanceKey: this.#gltfStateInstanceKey,
       key,
       lights: [],
@@ -7268,6 +7282,8 @@ class WebGlRootImpl implements WebGlRoot {
         state.imageBasedLight = scene.imageBasedLight;
       }
       state.animations = readGltfAnimationClips(decodedDocument, buffers);
+      state.hasMaterialVariants = scene.hasMaterialVariants;
+      state.hasNodeLod = scene.hasNodeLod;
       state.lights = scene.lights;
       state.nodes = decodedDocument.nodes ?? [];
       state.primitives = scene.primitives;
@@ -7290,6 +7306,8 @@ class WebGlRootImpl implements WebGlRoot {
     src: string,
     assetKey: string,
   ): {
+    readonly hasMaterialVariants: boolean;
+    readonly hasNodeLod: boolean;
     readonly imageBasedLight?: SurfaceImageBasedLight;
     readonly lights: readonly SurfaceLight[];
     readonly primitives: readonly LoadedGltfPrimitive[];
@@ -7332,6 +7350,8 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return {
+      hasMaterialVariants: primitives.some((primitive) => primitive.materialVariants !== undefined),
+      hasNodeLod: primitives.some((primitive) => primitive.nodeLod !== undefined),
       ...(imageBasedLight === undefined ? {} : { imageBasedLight }),
       lights,
       primitives,
@@ -7495,8 +7515,10 @@ class WebGlRootImpl implements WebGlRoot {
         variantCount,
         decodedAttributes,
       );
+      const baseMaterial = loadedGltfPrimitiveBaseMaterial(material, materialLod);
       const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
       primitives.push({
+        baseMaterial,
         ...(colors === undefined ? {} : { colors }),
         ...(indices === undefined ? {} : { indices }),
         instanceTransforms,
@@ -7955,17 +7977,18 @@ class WebGlRootImpl implements WebGlRoot {
     primitive: LoadedGltfPrimitive,
     mapMaterial: (material: LoadedGltfMaterial) => LoadedGltfMaterial,
   ): LoadedGltfPrimitive {
+    const material = mapMaterial(primitive.material);
+    const materialLod = primitive.materialLod === undefined
+      ? undefined
+      : {
+        ...primitive.materialLod,
+        levels: primitive.materialLod.levels.map(mapMaterial),
+      };
     return {
       ...primitive,
-      material: mapMaterial(primitive.material),
-      ...(primitive.materialLod === undefined
-        ? {}
-        : {
-          materialLod: {
-            ...primitive.materialLod,
-            levels: primitive.materialLod.levels.map(mapMaterial),
-          },
-        }),
+      baseMaterial: loadedGltfPrimitiveBaseMaterial(material, materialLod),
+      material,
+      ...(materialLod === undefined ? {} : { materialLod }),
       ...(primitive.materialVariants === undefined
         ? {}
         : {

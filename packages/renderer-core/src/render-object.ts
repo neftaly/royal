@@ -21,6 +21,14 @@ export interface RenderObjectTransformState {
   readonly scale: Vec3;
 }
 
+type MutableVec3 = [x: number, y: number, z: number];
+
+interface MutableRenderObjectTransformState {
+  readonly position: MutableVec3;
+  readonly rotation: MutableVec3;
+  readonly scale: MutableVec3;
+}
+
 export type RenderObjectTransformField = keyof RenderObjectTransformState;
 export type RenderObjectTransformComponent = 'x' | 'y' | 'z';
 
@@ -66,8 +74,8 @@ const sameVec3 = (left: Vec3, right: Vec3): boolean =>
   Object.is(left[1], right[1]) &&
   Object.is(left[2], right[2]);
 
-const copyVec3 = (value: Vec3): Vec3 => [value[0], value[1], value[2]];
-const copyEulerRads = (value: EulerRads): EulerRads => [value[0], value[1], value[2]];
+const copyVec3 = (value: Vec3): MutableVec3 => [value[0], value[1], value[2]];
+const copyEulerRads = (value: EulerRads): MutableVec3 => [value[0], value[1], value[2]];
 const transformStateSymbol: unique symbol = Symbol('royal.renderObjectTransformState');
 
 const componentIndex = {
@@ -78,11 +86,14 @@ const componentIndex = {
 
 let nextRenderObjectId = 1;
 
-export const createRenderObjectTransformState = (transform: Transform): RenderObjectTransformState => ({
+const createMutableRenderObjectTransformState = (transform: Transform): MutableRenderObjectTransformState => ({
   position: copyVec3(transform.position),
   rotation: copyEulerRads(transform.rotation),
   scale: copyVec3(transform.scale)
 });
+
+export const createRenderObjectTransformState = (transform: Transform): RenderObjectTransformState =>
+  createMutableRenderObjectTransformState(transform);
 
 export const renderObjectTransformStateToTransform = (
   state: RenderObjectTransformState
@@ -230,7 +241,7 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   readonly rotation: MutableRenderObjectVector3;
   readonly scale: MutableRenderObjectVector3;
   readonly #onChange: () => void;
-  #state: RenderObjectTransformState;
+  #state: MutableRenderObjectTransformState;
   #transformVersion = 0;
   #positionVersion = 0;
   #rotationVersion = 0;
@@ -239,7 +250,7 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   constructor(transform: Transform, onChange: () => void) {
     this.renderObjectId = nextRenderObjectId++;
     this.#onChange = onChange;
-    this.#state = createRenderObjectTransformState(transform);
+    this.#state = createMutableRenderObjectTransformState(transform);
     this.position = new MutableRenderObjectVector3(
       'position',
       () => this.#state,
