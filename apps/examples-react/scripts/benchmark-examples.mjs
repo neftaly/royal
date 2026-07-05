@@ -582,7 +582,7 @@ const installBenchmarkHooks = async (session) => {
   };
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
-  const statsFromDeltas = (deltas, requestedSampleCount = deltas.length) => {
+  const statsFromDeltas = (deltas, requestedSampleCount = deltas.length, timeoutMs = 0) => {
     const sorted = [...deltas].sort((left, right) => left - right);
     const sum = sorted.reduce((total, value) => total + value, 0);
     const percentile = (ratio) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
@@ -599,6 +599,7 @@ const installBenchmarkHooks = async (session) => {
       sampleCount: sorted.length,
       samplesMissing: Math.max(0, requestedSampleCount - sorted.length),
       timedOut: sorted.length < requestedSampleCount,
+      timeoutMs,
     };
   };
   const statsFromTimes = (times) =>
@@ -607,6 +608,7 @@ const installBenchmarkHooks = async (session) => {
     failed: true,
     reason,
     sampleCount: 0,
+    timeoutMs: 0,
     ...details,
   });
   const resolveXrWaiters = () => {
@@ -823,12 +825,13 @@ const installBenchmarkHooks = async (session) => {
     } finally {
       dispatchPointer('pointerup');
     }
-    const draw = statsFromDeltas(drawDeltas, requestedSampleCount);
+    const sampleTimeoutMs = 250;
+    const draw = statsFromDeltas(drawDeltas, requestedSampleCount, sampleTimeoutMs);
     return {
       ...draw,
       measurement: 'synthetic-camera-drag-pointermove-to-next-webgl-draw',
       note: 'Draw latency is measured at the next WebGL draw call after each synthetic drag move; RAF latency is reported separately.',
-      raf: statsFromDeltas(rafDeltas, requestedSampleCount),
+      raf: statsFromDeltas(rafDeltas, requestedSampleCount, sampleTimeoutMs),
       ...(draw.failed ? { reason: 'draw-timeout' } : {}),
     };
   };

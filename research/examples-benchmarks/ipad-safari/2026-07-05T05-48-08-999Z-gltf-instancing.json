@@ -1,0 +1,494 @@
+{
+  "receivedAt": "2026-07-05T05:48:09.335Z",
+  "report": {
+    "device": {
+      "canvas": {
+        "cssHeight": 500.5,
+        "cssWidth": 726,
+        "height": 1001,
+        "width": 1452
+      },
+      "deviceMemory": null,
+      "dpr": 2,
+      "hardwareConcurrency": 4,
+      "language": "en-NZ",
+      "platform": "MacIntel",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.14 Safari/605.1.15",
+      "viewport": {
+        "height": 954,
+        "width": 768
+      },
+      "webgl": {
+        "renderer": "WebKit WebGL",
+        "shadingLanguageVersion": "WebGL GLSL ES 3.00",
+        "unmaskedRenderer": "Apple GPU",
+        "unmaskedVendor": "Apple Inc.",
+        "vendor": "WebKit",
+        "version": "WebGL 2.0"
+      }
+    },
+    "example": {
+      "id": "gltf-instancing",
+      "path": "/gltf-instancing",
+      "sourceFile": "examples/cases/GltfInstancing.tsx",
+      "title": "glTF Auto Instancing"
+    },
+    "frameStats": {
+      "averageMs": 78.71666666666667,
+      "complete": true,
+      "failed": false,
+      "jitterP95MinusP50Ms": 11,
+      "maxMs": 118,
+      "minMs": 37,
+      "p50Ms": 77,
+      "p95Ms": 88,
+      "p99Ms": 112,
+      "requestedSampleCount": 60,
+      "sampleCount": 60,
+      "samplesMissing": 0,
+      "timedOut": false,
+      "timeoutMs": 60000
+    },
+    "generatedAt": "2026-07-05T05:48:08.999Z",
+    "gl": {
+      "frames": {
+        "bindBuffer": 180,
+        "bindTexture": 360,
+        "bindVertexArray": 180,
+        "bufferDataBytes": 0,
+        "bufferDataCalls": 0,
+        "bufferSubDataBytes": 5898240,
+        "bufferSubDataCalls": 180,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 180,
+        "drawElements": 0,
+        "drawElementsInstanced": 180,
+        "instancedDrawCalls": 180,
+        "nonInstancedDrawCalls": 0,
+        "stateChanges": 720,
+        "texImage2D": 0,
+        "texSubImage2D": 0,
+        "uniformCalls": 180,
+        "uniformMatrixCalls": 0,
+        "useProgram": 0
+      },
+      "setup": {
+        "bindBuffer": 51,
+        "bindTexture": 32,
+        "bindVertexArray": 19,
+        "bufferDataBytes": 410248,
+        "bufferDataCalls": 12,
+        "bufferSubDataBytes": 802816,
+        "bufferSubDataCalls": 21,
+        "copyTexImage2D": 0,
+        "copyTexSubImage2D": 0,
+        "drawArrays": 0,
+        "drawArraysInstanced": 0,
+        "drawCalls": 15,
+        "drawElements": 0,
+        "drawElementsInstanced": 15,
+        "instancedDrawCalls": 15,
+        "nonInstancedDrawCalls": 0,
+        "stateChanges": 103,
+        "texImage2D": 25,
+        "texSubImage2D": 0,
+        "uniformCalls": 54,
+        "uniformMatrixCalls": 3,
+        "useProgram": 1
+      }
+    },
+    "options": {
+      "autorun": true,
+      "frames": 60,
+      "timeoutMs": 60000,
+      "warmupFrames": 15
+    },
+    "performance": {
+      "navigation": {
+        "domComplete": 3943,
+        "duration": 3944,
+        "loadEventEnd": 3944,
+        "startTime": 0,
+        "type": "navigate"
+      },
+      "resources": {
+        "count": 150,
+        "totalDecodedBodySize": 12889358,
+        "totalEncodedBodySize": 12889358,
+        "totalTransferSize": 12934358
+      }
+    },
+    "ready": true,
+    "renderer": {
+      "after": {
+        "frame": 81,
+        "gltfInstancing": {
+          "batchInstancesTotal": 327680,
+          "batchPlansBuilt": 3,
+          "drawCalls": 240,
+          "instancesDrawn": 327680,
+          "localModelUploadBytes": 262144,
+          "localModelUploadCalls": 3,
+          "rootPoseUploadBytes": 7864320,
+          "rootPoseUploadCalls": 240,
+          "rootScaleUploadBytes": 49152,
+          "rootScaleUploadCalls": 3
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-a.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 141,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 141
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-b.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 132,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 6,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-c.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 138,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 3
+        },
+        "virtualTexturing": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 0,
+          "requestedPages": 0,
+          "residentPages": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0
+        }
+      },
+      "beforeFrames": {
+        "frame": 21,
+        "gltfInstancing": {
+          "batchInstancesTotal": 81920,
+          "batchPlansBuilt": 3,
+          "drawCalls": 60,
+          "instancesDrawn": 81920,
+          "localModelUploadBytes": 262144,
+          "localModelUploadCalls": 3,
+          "rootPoseUploadBytes": 1966080,
+          "rootPoseUploadCalls": 60,
+          "rootScaleUploadBytes": 49152,
+          "rootScaleUploadCalls": 3
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-a.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 141,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 141
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-b.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 132,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 6,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-c.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 138,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 3
+        },
+        "virtualTexturing": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 0,
+          "requestedPages": 0,
+          "residentPages": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0
+        }
+      },
+      "delta": {
+        "frame": 60,
+        "gltfInstancing": {
+          "batchInstancesTotal": 245760,
+          "batchPlansBuilt": 0,
+          "drawCalls": 180,
+          "instancesDrawn": 245760,
+          "localModelUploadBytes": 0,
+          "localModelUploadCalls": 0,
+          "rootPoseUploadBytes": 5898240,
+          "rootPoseUploadCalls": 180,
+          "rootScaleUploadBytes": 0,
+          "rootScaleUploadCalls": 0
+        },
+        "virtualTexturing": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 0,
+          "requestedPages": 0,
+          "residentPages": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0
+        }
+      },
+      "setup": {
+        "frame": 6,
+        "gltfInstancing": {
+          "batchInstancesTotal": 20480,
+          "batchPlansBuilt": 3,
+          "drawCalls": 15,
+          "instancesDrawn": 20480,
+          "localModelUploadBytes": 262144,
+          "localModelUploadCalls": 3,
+          "rootPoseUploadBytes": 491520,
+          "rootPoseUploadCalls": 15,
+          "rootScaleUploadBytes": 49152,
+          "rootScaleUploadCalls": 3
+        },
+        "gltfLoadDiagnostics": {
+          "assets": [
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-a.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 141,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 141
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-b.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 132,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 6,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            },
+            {
+              "animationCount": 0,
+              "imageFailures": 0,
+              "imageLoaded": 0,
+              "imageRequests": 0,
+              "key": "gltf:/fixtures/gltf-instancing/instanced-cube-c.gltf:",
+              "lightCount": 0,
+              "nodeCount": 1,
+              "phaseMs": {
+                "animations": 0,
+                "buffers": 0,
+                "document": 138,
+                "draco": 0,
+                "meshopt": 0,
+                "scene": 0,
+                "toSceneReady": 138
+              },
+              "primitiveCount": 1,
+              "status": "sceneReady",
+              "variantCount": 0
+            }
+          ],
+          "errorAssets": 0,
+          "loadingAssets": 0,
+          "sceneReadyAssets": 3
+        },
+        "virtualTexturing": {
+          "atlasTextures": 0,
+          "generatedManifestUses": 0,
+          "generatedPageFailures": 0,
+          "generatedPageRasterizeMaxMs": 0,
+          "generatedPageRasterizeMs": 0,
+          "generatedPageRequests": 0,
+          "generatedPagesTarget": 0,
+          "manifestFailures": 0,
+          "manifestRequests": 0,
+          "manifestsReady": 0,
+          "pageTableTextures": 0,
+          "pageTableUpdates": 0,
+          "pendingPages": 0,
+          "preparedResidencyResolutions": 0,
+          "requestedPages": 0,
+          "residentPages": 0,
+          "shaderBinds": 0,
+          "unreadyDraws": 0,
+          "unsupportedDraws": 0,
+          "uploadedPageBytes": 0,
+          "uploadedPages": 0
+        }
+      }
+    },
+    "url": "http://192.168.1.56:4674/gltf-instancing?bench=auto&frames=60&warmup=15&timeoutMs=60000&run=1783230478135",
+    "warmupComplete": true,
+    "warnings": [],
+    "wallMs": 6775
+  }
+}

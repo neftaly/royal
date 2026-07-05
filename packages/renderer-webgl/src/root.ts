@@ -1282,27 +1282,25 @@ const appendGltfLocalModelSignature = (
 };
 
 const appendGltfRootSignatures = (
-  signatures: {
-    readonly position: number[];
-    readonly rotation: number[];
-    readonly scale: number[];
-  },
+  positionSignature: number[],
+  rotationSignature: number[],
+  scaleSignature: number[],
   draw: GltfPrimitiveDraw,
 ): void => {
   if (draw.rootPositionSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(signatures.position, draw.rootTransform, "position");
+    appendTransformVectorSignatureValues(positionSignature, draw.rootTransform, "position");
   } else {
-    signatures.position.push(draw.rootPositionSignatureVersion);
+    positionSignature.push(draw.rootPositionSignatureVersion);
   }
   if (draw.rootRotationSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(signatures.rotation, draw.rootTransform, "rotation");
+    appendTransformVectorSignatureValues(rotationSignature, draw.rootTransform, "rotation");
   } else {
-    signatures.rotation.push(draw.rootRotationSignatureVersion);
+    rotationSignature.push(draw.rootRotationSignatureVersion);
   }
   if (draw.rootScaleSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(signatures.scale, draw.rootTransform, "scale");
+    appendTransformVectorSignatureValues(scaleSignature, draw.rootTransform, "scale");
   } else {
-    signatures.scale.push(draw.rootScaleSignatureVersion);
+    scaleSignature.push(draw.rootScaleSignatureVersion);
   }
 };
 
@@ -1410,11 +1408,12 @@ const appendGltfPrimitiveDrawBatchInput = (
 ): void => {
   const draw = input.draw;
   appendGltfLocalModelSignature(batch.localModelSignature, draw);
-  appendGltfRootSignatures({
-    position: batch.rootPositionSignature,
-    rotation: batch.rootRotationSignature,
-    scale: batch.rootScaleSignature,
-  }, draw);
+  appendGltfRootSignatures(
+    batch.rootPositionSignature,
+    batch.rootRotationSignature,
+    batch.rootScaleSignature,
+    draw,
+  );
   batch.localModels.push(draw.localModel);
   batch.rootModels.push(draw.rootModel);
   batch.rootTransforms.push(draw.rootTransform);
