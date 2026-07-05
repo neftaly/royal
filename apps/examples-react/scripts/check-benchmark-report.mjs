@@ -99,6 +99,12 @@ const requireNumber = (value, label) => {
   return false;
 };
 
+const requireString = (value, label) => {
+  if (typeof value === 'string' && value.length > 0) return true;
+  errors.push(`${label} must be a non-empty string`);
+  return false;
+};
+
 const requireBoolean = (value, label) => {
   if (typeof value === 'boolean') return true;
   errors.push(`${label} must be a boolean`);
@@ -108,6 +114,11 @@ const requireBoolean = (value, label) => {
 const requirePositiveNumber = (value, label) => {
   if (!requireNumber(value, label)) return;
   if (value <= 0) errors.push(`${label} must be greater than 0`);
+};
+
+const requireZero = (value, label) => {
+  if (!requireNumber(value, label)) return;
+  if (value !== 0) errors.push(`${label} must be 0`);
 };
 
 const rootTransformUploadBytes = (counters) =>
@@ -305,6 +316,130 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled) => {
   }
 };
 
+const isGltfLoadReport = (value) =>
+  isObject(value?.metrics) &&
+  isObject(value?.route) &&
+  isObject(value?.page) &&
+  !Array.isArray(value?.routes);
+
+const checkUsableCanvasSample = (value, label) => {
+  if (!requireObject(value, label)) return;
+  requirePositiveNumber(value.colorBuckets, `${label}.colorBuckets`);
+  requirePositiveNumber(value.height, `${label}.height`);
+  requirePositiveNumber(value.paintedPixels, `${label}.paintedPixels`);
+  requirePositiveNumber(value.paintedRatio, `${label}.paintedRatio`);
+  requirePositiveNumber(value.width, `${label}.width`);
+};
+
+const checkVtFrameSample = (value, label, { generatedVt }) => {
+  if (!requireObject(value, label)) return;
+  requireBoolean(value.timedOut, `${label}.timedOut`);
+  requirePositiveNumber(value.requestedFrames, `${label}.requestedFrames`);
+  if (requireObject(value.frameStats, `${label}.frameStats`)) {
+    requirePositiveNumber(value.frameStats.sampleCount, `${label}.frameStats.sampleCount`);
+    if (
+      value.timedOut !== true &&
+      isNumber(value.frameStats.sampleCount) &&
+      isNumber(value.requestedFrames) &&
+      value.frameStats.sampleCount !== value.requestedFrames
+    ) {
+      errors.push(`${label}.frameStats.sampleCount must match ${label}.requestedFrames`);
+    }
+    if (value.timedOut === true && isNumber(value.frameStats.sampleCount) && isNumber(value.requestedFrames)) {
+      warnings.push(
+        `${label} timed out partially after ${value.frameStats.sampleCount}/${value.requestedFrames} samples`,
+      );
+    }
+  }
+  if (requireObject(value.gl, `${label}.gl`)) {
+    requirePositiveNumber(value.gl.drawCalls, `${label}.gl.drawCalls`);
+  }
+  if (generatedVt && requireObject(value.virtualTexturing, `${label}.virtualTexturing`)) {
+    if (requireObject(value.virtualTexturing.after, `${label}.virtualTexturing.after`)) {
+      requirePositiveNumber(value.virtualTexturing.after.uploadedPages, `${label}.virtualTexturing.after.uploadedPages`);
+      requirePositiveNumber(
+        value.virtualTexturing.after.uploadedPageBytes,
+        `${label}.virtualTexturing.after.uploadedPageBytes`,
+      );
+    }
+  }
+};
+
+const checkGltfLoadReport = (report) => {
+  requireString(report.route.path, 'report.route.path');
+  requireString(report.route.url, 'report.route.url');
+
+  const metrics = report.metrics;
+  if (!requireObject(metrics, 'report.metrics')) return;
+  requirePositiveNumber(metrics.firstDrawMs, 'report.metrics.firstDrawMs');
+  requirePositiveNumber(metrics.firstTextureUploadMs, 'report.metrics.firstTextureUploadMs');
+  requirePositiveNumber(metrics.firstTexturedFrameMs, 'report.metrics.firstTexturedFrameMs');
+  requirePositiveNumber(metrics.firstUsableDrawMs, 'report.metrics.firstUsableDrawMs');
+  requirePositiveNumber(metrics.fullyLoadedMs, 'report.metrics.fullyLoadedMs');
+  requirePositiveNumber(metrics.wallNavigationAndFullyLoadedMs, 'report.metrics.wallNavigationAndFullyLoadedMs');
+  if (requireObject(metrics.timedOut, 'report.metrics.timedOut')) {
+    requireBoolean(metrics.timedOut.firstUsable, 'report.metrics.timedOut.firstUsable');
+    requireBoolean(metrics.timedOut.fullyLoaded, 'report.metrics.timedOut.fullyLoaded');
+    if (metrics.timedOut.firstUsable === true) errors.push('report.metrics.timedOut.firstUsable must be false');
+    if (metrics.timedOut.fullyLoaded === true) errors.push('report.metrics.timedOut.fullyLoaded must be false');
+  }
+
+  if (requireObject(metrics.gl, 'report.metrics.gl')) {
+    requirePositiveNumber(metrics.gl.drawCalls, 'report.metrics.gl.drawCalls');
+    requirePositiveNumber(metrics.gl.textureUploadCalls, 'report.metrics.gl.textureUploadCalls');
+    requirePositiveNumber(metrics.gl.textureUploadBytesRough, 'report.metrics.gl.textureUploadBytesRough');
+  }
+  if (requireObject(metrics.textures, 'report.metrics.textures')) {
+    requirePositiveNumber(metrics.textures.allocations, 'report.metrics.textures.allocations');
+    requirePositiveNumber(metrics.textures.allocationCalls, 'report.metrics.textures.allocationCalls');
+    requirePositiveNumber(metrics.textures.uploadBytesRough, 'report.metrics.textures.uploadBytesRough');
+    requirePositiveNumber(metrics.textures.uploadCalls, 'report.metrics.textures.uploadCalls');
+  }
+
+  if (requireObject(metrics.gltfLoadSummary, 'report.metrics.gltfLoadSummary')) {
+    requirePositiveNumber(metrics.gltfLoadSummary.assets, 'report.metrics.gltfLoadSummary.assets');
+    requirePositiveNumber(metrics.gltfLoadSummary.sceneReadyAssets, 'report.metrics.gltfLoadSummary.sceneReadyAssets');
+    requireZero(metrics.gltfLoadSummary.errorAssets, 'report.metrics.gltfLoadSummary.errorAssets');
+    requireZero(metrics.gltfLoadSummary.loadingAssets, 'report.metrics.gltfLoadSummary.loadingAssets');
+    if (requireObject(metrics.gltfLoadSummary.totals, 'report.metrics.gltfLoadSummary.totals')) {
+      requireZero(metrics.gltfLoadSummary.totals.imageFailures, 'report.metrics.gltfLoadSummary.totals.imageFailures');
+      requirePositiveNumber(metrics.gltfLoadSummary.totals.imageLoaded, 'report.metrics.gltfLoadSummary.totals.imageLoaded');
+      requirePositiveNumber(metrics.gltfLoadSummary.totals.imageRequests, 'report.metrics.gltfLoadSummary.totals.imageRequests');
+    }
+  }
+
+  if (requireObject(report.page, 'report.page')) {
+    checkUsableCanvasSample(report.page.firstTexturedFrameSample, 'report.page.firstTexturedFrameSample');
+    checkUsableCanvasSample(report.page.firstUsableSample, 'report.page.firstUsableSample');
+  }
+
+  const generatedVt = report.config?.forceGeneratedVirtualTexturing === true;
+  if (generatedVt) {
+    const generatedPagePrep = metrics.vt?.generatedPagePrep;
+    if (requireObject(generatedPagePrep, 'report.metrics.vt.generatedPagePrep')) {
+      requirePositiveNumber(generatedPagePrep.generatedManifestUses, 'report.metrics.vt.generatedPagePrep.generatedManifestUses');
+      requirePositiveNumber(generatedPagePrep.generatedPageRequests, 'report.metrics.vt.generatedPagePrep.generatedPageRequests');
+      requirePositiveNumber(generatedPagePrep.generatedPagesTarget, 'report.metrics.vt.generatedPagePrep.generatedPagesTarget');
+      requireZero(generatedPagePrep.generatedPageFailures, 'report.metrics.vt.generatedPagePrep.generatedPageFailures');
+    }
+  }
+
+  const vtRenderer = metrics.vt?.renderer;
+  if (isObject(vtRenderer)) {
+    requireZero(vtRenderer.pendingPages, 'report.metrics.vt.renderer.pendingPages');
+    requireZero(vtRenderer.generatedPageFailures, 'report.metrics.vt.renderer.generatedPageFailures');
+    requireZero(vtRenderer.unsupportedDraws, 'report.metrics.vt.renderer.unsupportedDraws');
+    if (generatedVt) {
+      requirePositiveNumber(vtRenderer.uploadedPages, 'report.metrics.vt.renderer.uploadedPages');
+      requirePositiveNumber(vtRenderer.uploadedPageBytes, 'report.metrics.vt.renderer.uploadedPageBytes');
+      requirePositiveNumber(vtRenderer.shaderBinds, 'report.metrics.vt.renderer.shaderBinds');
+    }
+  }
+  if (report.config?.vtFrameSampleEnabled === true) {
+    checkVtFrameSample(metrics.vtFrameSample, 'report.metrics.vtFrameSample', { generatedVt });
+  }
+};
+
 const parseReport = async () => {
   try {
     return JSON.parse(await readFile(reportPath, 'utf8'));
@@ -317,46 +452,50 @@ const parseReport = async () => {
 const report = await parseReport();
 
 if (requireObject(report, 'report')) {
-  const cameraDragEnabled = report.options?.cameraDragEnabled === true;
-  if (requireArray(report.routes, 'report.routes')) {
-    report.routes.forEach((route, index) => {
-      const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
-      if (!requireObject(route, routeLabel)) return;
-      checkRouteFrameEvidence(route, routeLabel);
-      if (!requireGlCounters(route.gl, `${routeLabel}.gl`)) return;
-      if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
-        requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
-      }
-      checkCameraDrag(route, routeLabel, cameraDragEnabled);
-      if (route.profile?.kind === 'gltf-instancing') {
-        checkInstancingRoute(route, routeLabel);
-      }
-    });
-  }
-
-  if (requireObject(report.analysis, 'report.analysis')) {
-    for (const [rawName, rawRequiredCounters] of [
-      ['slowestRoutesByP95', requiredVisibleSummaryCounters],
-      ['heaviestGlStateRoutes', [...requiredVisibleSummaryCounters, ...requiredSummaryCounters]],
-      ['heaviestUniformRoutes', [...requiredVisibleSummaryCounters, 'uniformCallsPerFrame']],
-      ['heaviestDrawRoutes', [...requiredVisibleSummaryCounters, 'drawCallsPerFrame']],
-    ]) {
-      const name = String(rawName);
-      const requiredCounters = rawRequiredCounters.map(String);
-      checkSummaryRows(report.analysis[name], `report.analysis.${name}`, requiredCounters);
+  if (isGltfLoadReport(report)) {
+    checkGltfLoadReport(report);
+  } else {
+    const cameraDragEnabled = report.options?.cameraDragEnabled === true;
+    if (requireArray(report.routes, 'report.routes')) {
+      report.routes.forEach((route, index) => {
+        const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
+        if (!requireObject(route, routeLabel)) return;
+        checkRouteFrameEvidence(route, routeLabel);
+        if (!requireGlCounters(route.gl, `${routeLabel}.gl`)) return;
+        if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
+          requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);
+        }
+        checkCameraDrag(route, routeLabel, cameraDragEnabled);
+        if (route.profile?.kind === 'gltf-instancing') {
+          checkInstancingRoute(route, routeLabel);
+        }
+      });
     }
-    if (cameraDragEnabled) {
-      if (requireObject(report.analysis.cameraDrag, 'report.analysis.cameraDrag')) {
-        checkSummaryRows(
-          report.analysis.cameraDrag.failures,
-          'report.analysis.cameraDrag.failures',
-          [],
-        );
-        checkSummaryRows(
-          report.analysis.cameraDrag.slowestRoutesByP95,
-          'report.analysis.cameraDrag.slowestRoutesByP95',
-          [...requiredVisibleSummaryCounters, 'cameraDragDrawP95Ms'],
-        );
+
+    if (requireObject(report.analysis, 'report.analysis')) {
+      for (const [rawName, rawRequiredCounters] of [
+        ['slowestRoutesByP95', requiredVisibleSummaryCounters],
+        ['heaviestGlStateRoutes', [...requiredVisibleSummaryCounters, ...requiredSummaryCounters]],
+        ['heaviestUniformRoutes', [...requiredVisibleSummaryCounters, 'uniformCallsPerFrame']],
+        ['heaviestDrawRoutes', [...requiredVisibleSummaryCounters, 'drawCallsPerFrame']],
+      ]) {
+        const name = String(rawName);
+        const requiredCounters = rawRequiredCounters.map(String);
+        checkSummaryRows(report.analysis[name], `report.analysis.${name}`, requiredCounters);
+      }
+      if (cameraDragEnabled) {
+        if (requireObject(report.analysis.cameraDrag, 'report.analysis.cameraDrag')) {
+          checkSummaryRows(
+            report.analysis.cameraDrag.failures,
+            'report.analysis.cameraDrag.failures',
+            [],
+          );
+          checkSummaryRows(
+            report.analysis.cameraDrag.slowestRoutesByP95,
+            'report.analysis.cameraDrag.slowestRoutesByP95',
+            [...requiredVisibleSummaryCounters, 'cameraDragDrawP95Ms'],
+          );
+        }
       }
     }
   }
