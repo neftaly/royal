@@ -6211,13 +6211,14 @@ class WebGlRootImpl implements WebGlRoot {
     let minV = Number.POSITIVE_INFINITY;
     let maxV = Number.NEGATIVE_INFINITY;
     const vertexCount = Math.min(Math.floor(context.positions.length / 3), Math.floor(context.texCoords.length / 2));
+    const projectionView = multiplyMat4(context.projection, context.view);
 
     for (let modelIndex = 0; modelIndex < modelCount; modelIndex += 1) {
       const source = context.modelSource;
       const model = source.kind === "single"
         ? source.model
         : multiplyMat4(source.rootModels[modelIndex]!, source.localModels[modelIndex]!);
-      const mvp = multiplyMat4(context.projection, multiplyMat4(context.view, model));
+      const mvp = multiplyMat4(projectionView, model);
       for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
         const positionOffset = vertexIndex * 3;
         const x = context.positions[positionOffset]!;
