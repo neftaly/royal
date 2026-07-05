@@ -278,7 +278,7 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   setTransform(transform: RenderObjectTransformUpdate): void {
-    this.#dispatch({ type: 'set-transform', transform });
+    this.#applyTransformUpdate(transform);
   }
 
   [transformStateSymbol](): RenderObjectTransformState {
@@ -286,15 +286,63 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   #dispatch(action: RenderObjectTransformAction): void {
-    const previousState = this.#state;
-    const nextState = reduceRenderObjectTransform(this.#state, action);
-    if (nextState === previousState) return;
+    switch (action.type) {
+      case 'set-transform':
+        this.#applyTransformUpdate(action.transform);
+        return;
+      case 'set-vector':
+        this.#commitSingleField(action.field, this.#applyVector(action.field, action.value));
+        return;
+      case 'set-component':
+        this.#commitSingleField(
+          action.field,
+          this.#applyComponent(action.field, action.component, action.value)
+        );
+        return;
+    }
+  }
 
-    this.#state = nextState;
+  #applyTransformUpdate(transform: RenderObjectTransformUpdate): void {
+    const positionChanged = transform.position === undefined ? false : this.#applyVector('position', transform.position);
+    const rotationChanged = transform.rotation === undefined ? false : this.#applyVector('rotation', transform.rotation);
+    const scaleChanged = transform.scale === undefined ? false : this.#applyVector('scale', transform.scale);
+    this.#commitChanges(positionChanged, rotationChanged, scaleChanged);
+  }
+
+  #applyVector(field: RenderObjectTransformField, value: Vec3): boolean {
+    const current = this.#state[field];
+    if (sameVec3(current, value)) return false;
+
+    current[0] = value[0];
+    current[1] = value[1];
+    current[2] = value[2];
+    return true;
+  }
+
+  #applyComponent(
+    field: RenderObjectTransformField,
+    component: RenderObjectTransformComponent,
+    value: number
+  ): boolean {
+    const current = this.#state[field];
+    const index = componentIndex[component];
+    if (Object.is(current[index], value)) return false;
+
+    current[index] = value;
+    return true;
+  }
+
+  #commitSingleField(field: RenderObjectTransformField, changed: boolean): void {
+    this.#commitChanges(field === 'position' && changed, field === 'rotation' && changed, field === 'scale' && changed);
+  }
+
+  #commitChanges(positionChanged: boolean, rotationChanged: boolean, scaleChanged: boolean): void {
+    if (!positionChanged && !rotationChanged && !scaleChanged) return;
+
     this.#transformVersion += 1;
-    if (nextState.position !== previousState.position) this.#positionVersion += 1;
-    if (nextState.rotation !== previousState.rotation) this.#rotationVersion += 1;
-    if (nextState.scale !== previousState.scale) this.#scaleVersion += 1;
+    if (positionChanged) this.#positionVersion += 1;
+    if (rotationChanged) this.#rotationVersion += 1;
+    if (scaleChanged) this.#scaleVersion += 1;
     this.#onChange();
   }
 }

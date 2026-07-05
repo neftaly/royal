@@ -299,6 +299,25 @@ type GeometryDrawMode =
   | "triangle-strip"
   | "triangles";
 
+type GeometryProgramVertexArrays = {
+  base?: WebGLVertexArrayObject;
+  readonly instanced: Map<string, WebGLVertexArrayObject>;
+};
+
+type VertexAttribDefaultValue =
+  | {
+    readonly size: 2;
+    readonly x: number;
+    readonly y: number;
+  }
+  | {
+    readonly size: 4;
+    readonly w: number;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
+
 type GeometryResource = {
   readonly arrayBuffer: WebGLBuffer;
   readonly borrowedVertexBufferKey?: string;
@@ -312,6 +331,7 @@ type GeometryResource = {
   readonly normalBuffer?: WebGLBuffer;
   readonly tangentBuffer?: WebGLBuffer;
   readonly texCoordBuffer?: WebGLBuffer;
+  readonly vertexArrays: Map<WebGLProgram, GeometryProgramVertexArrays>;
 };
 
 type CpuGeometry = {
@@ -882,6 +902,9 @@ type GltfPrimitiveDraw = {
   readonly modelSignatureStateKey: number;
   readonly modelSignatureValues?: readonly number[];
   readonly rootModel: Mat4;
+  readonly rootPositionSignatureVersion?: number;
+  readonly rootRotationSignatureVersion?: number;
+  readonly rootScaleSignatureVersion?: number;
   readonly rootTransform: Transform | undefined;
   readonly sidedness: DrawSidedness;
 };
@@ -1191,9 +1214,21 @@ const appendGltfRootSignatures = (
   },
   draw: GltfPrimitiveDraw,
 ): void => {
-  appendTransformVectorSignatureValues(signatures.position, draw.rootTransform, "position");
-  appendTransformVectorSignatureValues(signatures.rotation, draw.rootTransform, "rotation");
-  appendTransformVectorSignatureValues(signatures.scale, draw.rootTransform, "scale");
+  if (draw.rootPositionSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(signatures.position, draw.rootTransform, "position");
+  } else {
+    signatures.position.push(draw.rootPositionSignatureVersion);
+  }
+  if (draw.rootRotationSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(signatures.rotation, draw.rootTransform, "rotation");
+  } else {
+    signatures.rotation.push(draw.rootRotationSignatureVersion);
+  }
+  if (draw.rootScaleSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(signatures.scale, draw.rootTransform, "scale");
+  } else {
+    signatures.scale.push(draw.rootScaleSignatureVersion);
+  }
 };
 
 const gltfInstanceSignatureStride = (
@@ -2850,6 +2885,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
+  readonly #ownedVertexArrays = new Set<WebGLVertexArrayObject>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
   readonly #unsupportedGltfAnimationDiagnostics = new Set<string>();
@@ -2865,13 +2901,16 @@ class WebGlRootImpl implements WebGlRoot {
   #frame = 0;
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
+  #activeProgram: WebGLProgram | undefined;
   #iblBrdfLutTexture: WebGLTexture | undefined;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   #latestScene: RenderRoot | undefined;
   #maxTextureImageUnits = 0;
+  #renderObjectInvalidationPending = false;
   #renderScheduled = false;
   #resizeObserver: ResizeObserver | undefined;
   #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
+  #vertexAttribDefaults = new Map<number, VertexAttribDefaultValue>();
   #virtualTextureRequestFrame = -1;
   #virtualTextureRequestsThisFrame = 0;
   #virtualTextureUploadFrame = -1;
@@ -2961,6 +3000,7 @@ class WebGlRootImpl implements WebGlRoot {
     if (options.views.length === 0) return;
 
     this.#latestScene = scene;
+    this.#renderObjectInvalidationPending = false;
     if (options.syncRenderObjectRefs) this.#syncRenderObjectRefs(scene);
     this.#activeGltfBatchPlanCacheKeys = new Set();
     this.#activeGltfInstanceBufferKeys = new Set();
@@ -3047,6 +3087,13 @@ class WebGlRootImpl implements WebGlRoot {
     this.#scheduleRender();
   }
 
+  #invalidateRenderObjectMutation(): void {
+    if (this.#renderObjectInvalidationPending) return;
+
+    this.#renderObjectInvalidationPending = true;
+    this.invalidate();
+  }
+
   pick(input: PickInput): PickResult | undefined {
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
@@ -3085,6 +3132,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#disposed = true;
 
     const gl = this.#gl;
+    for (const vertexArray of Array.from(this.#ownedVertexArrays)) this.#deleteVertexArray(vertexArray);
     for (const buffer of Array.from(this.#ownedBuffers)) this.#deleteBuffer(buffer);
     for (const texture of Array.from(this.#ownedTextures)) {
       gl.deleteTexture(texture);
@@ -3096,6 +3144,8 @@ class WebGlRootImpl implements WebGlRoot {
       this.#ownedShaders.delete(shader);
     }
 
+    this.#activeProgram = undefined;
+    this.#vertexAttribDefaults.clear();
     this.#programs.clear();
     this.#geometry.clear();
     this.#textures.clear();
@@ -3168,7 +3218,7 @@ class WebGlRootImpl implements WebGlRoot {
       const handle = existingHandle ?? createRenderObjectHandle(declarativeTransform, () => {
         if (invalidation?.suppress === true) return;
 
-        this.invalidate();
+        this.#invalidateRenderObjectMutation();
       });
       binding = {
         declarativeTransform,
@@ -3562,7 +3612,8 @@ class WebGlRootImpl implements WebGlRoot {
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
 
-    const rootTransform = this.#renderObjectTransform(node);
+    const rootHandle = this.#renderObjectHandles.get(node);
+    const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
     const rootModel = transformMat4(rootTransform);
     const rootDeterminant = mat4OrientationDeterminant(rootModel);
     const rootViewProjectionModel = multiplyMat4(projection, multiplyMat4(view, rootModel));
@@ -3615,6 +3666,9 @@ class WebGlRootImpl implements WebGlRoot {
           modelSignatureStateKey: state.instanceKey,
           ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
           rootModel,
+          ...(rootHandle === undefined ? {} : { rootPositionSignatureVersion: rootHandle.positionVersion }),
+          ...(rootHandle === undefined ? {} : { rootRotationSignatureVersion: rootHandle.rotationVersion }),
+          ...(rootHandle === undefined ? {} : { rootScaleSignatureVersion: rootHandle.scaleVersion }),
           rootTransform,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
@@ -4258,7 +4312,7 @@ class WebGlRootImpl implements WebGlRoot {
       );
     const programResource = this.#program(programKind, surfaceTexturePlan?.features);
     const program = programResource.program;
-    gl.useProgram(program);
+    this.#useProgram(program);
 
     this.#uniformMatrix(program, "u_projection", projection);
     this.#uniformMatrix(program, "u_view", view);
@@ -4333,7 +4387,7 @@ class WebGlRootImpl implements WebGlRoot {
     );
     const programResource = this.#program("surface-instanced-split", surfaceTexturePlan.features);
     const program = programResource.program;
-    gl.useProgram(program);
+    this.#useProgram(program);
 
     this.#uniformMatrix(program, "u_projection", projection);
     this.#uniformMatrix(program, "u_view", view);
@@ -4351,8 +4405,7 @@ class WebGlRootImpl implements WebGlRoot {
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
     this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
     this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
-    this.#bindGeometryAttributes(program, geometry);
-    this.#bindGltfInstanceModels(
+    const instanceResource = this.#bindGltfInstanceModels(
       instanceBufferKey,
       localModels,
       localModelSignature,
@@ -4361,6 +4414,7 @@ class WebGlRootImpl implements WebGlRoot {
       rootRotationSignature,
       rootScaleSignature,
     );
+    this.#bindGltfInstancedAttributes(program, geometry, instanceBufferKey, instanceResource);
 
     const mode = webGlDrawMode(gl, geometry.mode);
     this.#gltfInstancingCounters.drawCalls += 1;
@@ -4370,8 +4424,6 @@ class WebGlRootImpl implements WebGlRoot {
     } else {
       gl.drawElementsInstanced(mode, geometry.drawCount, geometry.indexType, 0, localModels.length);
     }
-
-    this.#unbindGltfInstanceModels();
   }
 
   #bindSurfaceMaterialFactors(
@@ -4812,6 +4864,66 @@ class WebGlRootImpl implements WebGlRoot {
 
   #bindGeometryAttributes(program: WebGLProgram, geometry: GeometryResource): void {
     const gl = this.#gl;
+    gl.bindVertexArray(this.#geometryVertexArray(program, geometry));
+    this.#bindGeometryDefaultAttributeValues(program, geometry);
+  }
+
+  #bindGltfInstancedAttributes(
+    program: WebGLProgram,
+    geometry: GeometryResource,
+    instanceBufferKey: string,
+    instanceResource: GltfInstanceBufferResource,
+  ): void {
+    const gl = this.#gl;
+    gl.bindVertexArray(this.#gltfInstancedVertexArray(program, geometry, instanceBufferKey, instanceResource));
+    this.#bindGeometryDefaultAttributeValues(program, geometry);
+  }
+
+  #geometryProgramVertexArrays(
+    program: WebGLProgram,
+    geometry: GeometryResource,
+  ): GeometryProgramVertexArrays {
+    let vertexArrays = geometry.vertexArrays.get(program);
+    if (vertexArrays === undefined) {
+      vertexArrays = { instanced: new Map() };
+      geometry.vertexArrays.set(program, vertexArrays);
+    }
+    return vertexArrays;
+  }
+
+  #geometryVertexArray(program: WebGLProgram, geometry: GeometryResource): WebGLVertexArrayObject {
+    const vertexArrays = this.#geometryProgramVertexArrays(program, geometry);
+    if (vertexArrays.base !== undefined) return vertexArrays.base;
+
+    const gl = this.#gl;
+    const vertexArray = this.#createVertexArray();
+    gl.bindVertexArray(vertexArray);
+    this.#configureGeometryVertexAttributes(program, geometry);
+    vertexArrays.base = vertexArray;
+    return vertexArray;
+  }
+
+  #gltfInstancedVertexArray(
+    program: WebGLProgram,
+    geometry: GeometryResource,
+    instanceBufferKey: string,
+    instanceResource: GltfInstanceBufferResource,
+  ): WebGLVertexArrayObject {
+    const vertexArrays = this.#geometryProgramVertexArrays(program, geometry);
+    const cached = vertexArrays.instanced.get(instanceBufferKey);
+    if (cached !== undefined) return cached;
+
+    const gl = this.#gl;
+    const vertexArray = this.#createVertexArray();
+    gl.bindVertexArray(vertexArray);
+    this.#configureGeometryVertexAttributes(program, geometry);
+    this.#configureGltfInstanceVertexAttributes(instanceResource);
+    vertexArrays.instanced.set(instanceBufferKey, vertexArray);
+    return vertexArray;
+  }
+
+  #configureGeometryVertexAttributes(program: WebGLProgram, geometry: GeometryResource): void {
+    const gl = this.#gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, geometry.arrayBuffer);
     const positionLocation = this.#attribLocation(program, "a_position");
     if (positionLocation >= 0) {
@@ -4836,7 +4948,6 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttribPointer(emissiveUvLocation, 2, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray(emissiveUvLocation);
-        gl.vertexAttrib2f(emissiveUvLocation, 0, 0);
       }
     }
     const normalLocation = this.#attribLocation(program, "a_normal");
@@ -4857,7 +4968,6 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray(tangentLocation);
-        gl.vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
       }
     }
     const colorLocation = this.#attribLocation(program, "a_color");
@@ -4868,12 +4978,52 @@ class WebGlRootImpl implements WebGlRoot {
         gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
       } else {
         gl.disableVertexAttribArray(colorLocation);
-        gl.vertexAttrib4f(colorLocation, 1, 1, 1, 1);
       }
     }
     if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
+    } else {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     }
+  }
+
+  #bindGeometryDefaultAttributeValues(program: WebGLProgram, geometry: GeometryResource): void {
+    const emissiveUvLocation = this.#attribLocation(program, "a_emissive_uv");
+    if (emissiveUvLocation >= 0 && geometry.emissiveTexCoordBuffer === undefined) {
+      this.#vertexAttrib2f(emissiveUvLocation, 0, 0);
+    }
+    const tangentLocation = this.#attribLocation(program, "a_tangent");
+    if (tangentLocation >= 0 && geometry.tangentBuffer === undefined) {
+      this.#vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
+    }
+    const colorLocation = this.#attribLocation(program, "a_color");
+    if (colorLocation >= 0 && geometry.colorBuffer === undefined) {
+      this.#vertexAttrib4f(colorLocation, 1, 1, 1, 1);
+    }
+  }
+
+  #configureGltfInstanceVertexAttributes(resource: GltfInstanceBufferResource): void {
+    const gl = this.#gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
+    for (let column = 0; column < 4; column += 1) {
+      const location = 3 + column;
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 64, column * 16);
+      gl.vertexAttribDivisor(location, 1);
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, resource.rootPose.buffer);
+    gl.enableVertexAttribArray(7);
+    gl.vertexAttribPointer(7, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribDivisor(7, 1);
+    gl.enableVertexAttribArray(8);
+    gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 24, 12);
+    gl.vertexAttribDivisor(8, 1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, resource.rootScale.buffer);
+    gl.enableVertexAttribArray(9);
+    gl.vertexAttribPointer(9, 3, gl.FLOAT, false, 12, 0);
+    gl.vertexAttribDivisor(9, 1);
   }
 
   #recordGltfInstanceLocalBufferUpload(floatCount: number): void {
@@ -4899,7 +5049,7 @@ class WebGlRootImpl implements WebGlRoot {
     rootPositionSignature: readonly number[],
     rootRotationSignature: readonly number[],
     rootScaleSignature: readonly number[],
-  ): void {
+  ): GltfInstanceBufferResource {
     const gl = this.#gl;
     const instanceCount = localModels.length;
     const localFloatCount = instanceCount * 16;
@@ -4975,13 +5125,6 @@ class WebGlRootImpl implements WebGlRoot {
       }
       resource.localSignature = [...localModelSignature];
     }
-    for (let column = 0; column < 4; column += 1) {
-      const location = 3 + column;
-      gl.enableVertexAttribArray(location);
-      gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 64, column * 16);
-      gl.vertexAttribDivisor(location, 1);
-    }
-
     this.#bindGltfInstanceRootPoseBuffer(
       resource.rootPose,
       rootTransforms,
@@ -4995,11 +5138,11 @@ class WebGlRootImpl implements WebGlRoot {
       rootTransforms,
       rootScaleSignature,
       "scale",
-      9,
       previousInstanceCount,
       instanceCount,
     );
     resource.instanceCount = instanceCount;
+    return resource;
   }
 
   #bindGltfInstanceRootPoseBuffer(
@@ -5036,38 +5179,28 @@ class WebGlRootImpl implements WebGlRoot {
       || previousInstanceCount !== instanceCount;
     const changedRanges: Array<{ readonly start: number; end: number }> = [];
     let activeRange: { readonly start: number; end: number } | undefined;
-    const appendChangedRange = (transformIndex: number): void => {
-      if (activeRange !== undefined && activeRange.end === transformIndex) {
-        activeRange.end = transformIndex + 1;
-        return;
-      }
-
-      activeRange = { start: transformIndex, end: transformIndex + 1 };
-      changedRanges.push(activeRange);
-    };
 
     for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
       const positionSignatureOffset = transformIndex * (nextPositionStride ?? 0);
       const rotationSignatureOffset = transformIndex * (nextRotationStride ?? 0);
-      const positionChanged = fullUpload
+      const changed = fullUpload
         || previousPositionSignature === undefined
+        || previousRotationSignature === undefined
         || nextPositionStride === undefined
+        || nextRotationStride === undefined
         || !sameGltfModelSignatureRange(
           previousPositionSignature,
           nextPositionSignature,
           positionSignatureOffset,
           nextPositionStride,
-        );
-      const rotationChanged = fullUpload
-        || previousRotationSignature === undefined
-        || nextRotationStride === undefined
+        )
         || !sameGltfModelSignatureRange(
           previousRotationSignature,
           nextRotationSignature,
           rotationSignatureOffset,
           nextRotationStride,
         );
-      if (!positionChanged && !rotationChanged) continue;
+      if (!changed) continue;
 
       const transform = rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM;
       const offset = transformIndex * 6;
@@ -5079,7 +5212,12 @@ class WebGlRootImpl implements WebGlRoot {
       resource.data[offset + 3] = rotation[0];
       resource.data[offset + 4] = rotation[1];
       resource.data[offset + 5] = rotation[2];
-      appendChangedRange(transformIndex);
+      if (activeRange !== undefined && activeRange.end === transformIndex) {
+        activeRange.end = transformIndex + 1;
+      } else {
+        activeRange = { start: transformIndex, end: transformIndex + 1 };
+        changedRanges.push(activeRange);
+      }
     }
 
     gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
@@ -5105,13 +5243,6 @@ class WebGlRootImpl implements WebGlRoot {
       resource.positionSignature = [...nextPositionSignature];
       resource.rotationSignature = [...nextRotationSignature];
     }
-
-    gl.enableVertexAttribArray(7);
-    gl.vertexAttribPointer(7, 3, gl.FLOAT, false, 24, 0);
-    gl.vertexAttribDivisor(7, 1);
-    gl.enableVertexAttribArray(8);
-    gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 24, 12);
-    gl.vertexAttribDivisor(8, 1);
   }
 
   #bindGltfInstanceVectorBuffer(
@@ -5119,7 +5250,6 @@ class WebGlRootImpl implements WebGlRoot {
     rootTransforms: readonly (Transform | undefined)[],
     nextSignature: readonly number[],
     field: keyof Transform,
-    attributeLocation: number,
     previousInstanceCount: number,
     instanceCount: number,
   ): void {
@@ -5181,18 +5311,6 @@ class WebGlRootImpl implements WebGlRoot {
         this.#recordGltfInstanceRootScaleBufferUpload(rangeFloatCount);
       }
       resource.signature = [...nextSignature];
-    }
-
-    gl.enableVertexAttribArray(attributeLocation);
-    gl.vertexAttribPointer(attributeLocation, 3, gl.FLOAT, false, 12, 0);
-    gl.vertexAttribDivisor(attributeLocation, 1);
-  }
-
-  #unbindGltfInstanceModels(): void {
-    const gl = this.#gl;
-    for (let location = 3; location <= 9; location += 1) {
-      gl.vertexAttribDivisor(location, 0);
-      gl.disableVertexAttribArray(location);
     }
   }
 
@@ -6510,6 +6628,36 @@ class WebGlRootImpl implements WebGlRoot {
     return location;
   }
 
+  #useProgram(program: WebGLProgram): void {
+    if (this.#activeProgram === program) return;
+    this.#gl.useProgram(program);
+    this.#activeProgram = program;
+  }
+
+  #vertexAttrib2f(location: number, x: number, y: number): void {
+    const cached = this.#vertexAttribDefaults.get(location);
+    if (cached?.size === 2 && Object.is(cached.x, x) && Object.is(cached.y, y)) return;
+
+    this.#gl.vertexAttrib2f(location, x, y);
+    this.#vertexAttribDefaults.set(location, { size: 2, x, y });
+  }
+
+  #vertexAttrib4f(location: number, x: number, y: number, z: number, w: number): void {
+    const cached = this.#vertexAttribDefaults.get(location);
+    if (
+      cached?.size === 4
+      && Object.is(cached.x, x)
+      && Object.is(cached.y, y)
+      && Object.is(cached.z, z)
+      && Object.is(cached.w, w)
+    ) {
+      return;
+    }
+
+    this.#gl.vertexAttrib4f(location, x, y, z, w);
+    this.#vertexAttribDefaults.set(location, { size: 4, w, x, y, z });
+  }
+
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
     const key = features === undefined ? kind : `${kind}:${surfaceShaderFeatureKey(features)}`;
     const cached = this.#programs.get(key);
@@ -6537,8 +6685,6 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bindAttribLocation?.(program, 0, "a_position");
       gl.bindAttribLocation?.(program, 1, "a_normal");
       gl.bindAttribLocation?.(program, 2, "a_uv");
-      gl.bindAttribLocation?.(program, 10, "a_color");
-      gl.bindAttribLocation?.(program, 3, "a_instanceModel");
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         throw new Error(`WebGL program link failed: ${gl.getProgramInfoLog(program) ?? "unknown link error"}`);
@@ -6878,6 +7024,7 @@ class WebGlRootImpl implements WebGlRoot {
       ...(normalBuffer === undefined ? {} : { normalBuffer }),
       ...(tangentBuffer === undefined ? {} : { tangentBuffer }),
       ...(texCoordBuffer === undefined ? {} : { texCoordBuffer }),
+      vertexArrays: new Map(),
     };
     this.#geometry.set(cpu.key, resource);
     return resource;
@@ -6886,6 +7033,7 @@ class WebGlRootImpl implements WebGlRoot {
   #releaseUnusedGeometry(used: Set<string>): void {
     for (const [key, resource] of this.#geometry) {
       if (used.has(key)) continue;
+      this.#deleteGeometryVertexArrays(resource);
       if (resource.borrowedVertexBufferKey === undefined) {
         this.#deleteBuffer(resource.arrayBuffer);
         if (resource.colorBuffer !== undefined) this.#deleteBuffer(resource.colorBuffer);
@@ -6900,6 +7048,14 @@ class WebGlRootImpl implements WebGlRoot {
       if (resource.indexBuffer !== undefined) this.#deleteBuffer(resource.indexBuffer);
       this.#geometry.delete(key);
     }
+  }
+
+  #deleteGeometryVertexArrays(resource: GeometryResource): void {
+    for (const vertexArrays of resource.vertexArrays.values()) {
+      if (vertexArrays.base !== undefined) this.#deleteVertexArray(vertexArrays.base);
+      for (const vertexArray of vertexArrays.instanced.values()) this.#deleteVertexArray(vertexArray);
+    }
+    resource.vertexArrays.clear();
   }
 
   #texture(texture: TextureAssetUploadRef): TextureResource | TextureLoadState {
@@ -8038,6 +8194,13 @@ class WebGlRootImpl implements WebGlRoot {
     return buffer;
   }
 
+  #createVertexArray(): WebGLVertexArrayObject {
+    const vertexArray = this.#gl.createVertexArray();
+    if (vertexArray === null) throw new Error("WebGL vertex array creation failed");
+    this.#ownedVertexArrays.add(vertexArray);
+    return vertexArray;
+  }
+
   #createTexture(): WebGLTexture {
     const texture = this.#gl.createTexture();
     if (texture === null) throw new Error("WebGL texture creation failed");
@@ -8051,6 +8214,12 @@ class WebGlRootImpl implements WebGlRoot {
     this.#ownedBuffers.delete(buffer);
   }
 
+  #deleteVertexArray(vertexArray: WebGLVertexArrayObject): void {
+    if (!this.#ownedVertexArrays.has(vertexArray)) return;
+    this.#gl.deleteVertexArray(vertexArray);
+    this.#ownedVertexArrays.delete(vertexArray);
+  }
+
   #deleteShader(shader: WebGLShader): void {
     if (!this.#ownedShaders.has(shader)) return;
     this.#gl.deleteShader(shader);
@@ -8059,6 +8228,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #deleteProgram(program: WebGLProgram): void {
     if (!this.#ownedPrograms.has(program)) return;
+    if (this.#activeProgram === program) this.#activeProgram = undefined;
     this.#gl.deleteProgram(program);
     this.#ownedPrograms.delete(program);
     this.#programAttributeLocations.delete(program);

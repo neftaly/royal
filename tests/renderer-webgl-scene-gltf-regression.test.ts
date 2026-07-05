@@ -4231,14 +4231,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
       { byteOffset: 0, floatLength: 12, floatOffset: 0 },
       { byteOffset: 0, floatLength: 6, floatOffset: 0 },
     ]);
-    expect(readyFrameCalls.some((call) =>
+    expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 7
       && call.args[1] === 3
       && call.args[2] === gl.FLOAT
       && call.args[4] === 24
       && call.args[5] === 0)).toBe(true);
-    expect(readyFrameCalls.some((call) =>
+    expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 8
       && call.args[1] === 3
@@ -4997,7 +4997,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0.375, 0.5,
       0.625, 0.75,
     ]);
-    expect(readyFrameCalls.some((call) =>
+    expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 12
       && call.args[1] === 2
@@ -5230,7 +5230,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       1, 0, 0, 1,
       1, 0, 0, 1,
     ]);
-    expect(readyFrameCalls.some((call) =>
+    expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 11
       && call.args[1] === 4

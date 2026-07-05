@@ -240,8 +240,9 @@ describe("renderer-core render object transforms", () => {
 
     handle.setTransform({ position: [1, 2, 3] });
     const nextRead = readRenderObjectHandleTransform(handle);
-    expect(nextRead.position).not.toBe(firstRead.position);
+    expect(nextRead.position).toBe(firstRead.position);
     expect(nextRead.rotation).toBe(firstRead.rotation);
     expect(nextRead.scale).toBe(firstRead.scale);
+    expect(nextRead.position).toEqual([1, 2, 3]);
   });
 });

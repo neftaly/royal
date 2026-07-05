@@ -225,10 +225,12 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     getActiveAttrib: record("getActiveAttrib", () => null),
     getActiveUniform: record("getActiveUniform", () => null),
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
-      const normalized = name.toLowerCase();
-      if (normalized.includes("position")) return 0;
-      if (normalized.includes("normal")) return 1;
-      if (normalized.includes("uv") || normalized.includes("texcoord")) return 2;
+      if (name === "a_position") return 0;
+      if (name === "a_normal") return 1;
+      if (name === "a_uv") return 2;
+      if (name === "a_emissive_uv") return 10;
+      if (name === "a_tangent") return 11;
+      if (name === "a_color") return 12;
       return 0;
     }),
     getContextAttributes: record("getContextAttributes", () => ({
@@ -582,7 +584,7 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(uniform4fvPayloads(calls).map(roundVector)).toContainEqual(color);
   });
 
-  it("skips redundant uniform uploads across repeated renders without skipping draws", () => {
+  it("skips redundant uniform and program uploads across repeated renders without skipping draws", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const renderGraph = singlePassScene([unlitBox([0.2, 0.4, 0.6, 1])]);
@@ -590,11 +592,29 @@ describe("WebGL renderer pipeline contracts", () => {
     root.render(renderGraph);
     const callsBeforeSecondRender = calls.length;
     root.render(renderGraph);
+    const firstRenderCalls = calls.slice(0, callsBeforeSecondRender);
     const secondRenderCalls = calls.slice(callsBeforeSecondRender);
 
-    expect(calls.slice(0, callsBeforeSecondRender).some((call) => call.name.startsWith("uniform"))).toBe(true);
+    expect(firstRenderCalls.some((call) => call.name.startsWith("uniform"))).toBe(true);
+    expect(firstRenderCalls.some((call) => call.name === "useProgram")).toBe(true);
+    expect(firstRenderCalls.some((call) => call.name === "vertexAttrib4f")).toBe(true);
     expect(secondRenderCalls.some((call) => call.name.startsWith("uniform"))).toBe(false);
+    expect(secondRenderCalls.some((call) => call.name === "useProgram")).toBe(false);
+    expect(secondRenderCalls.some((call) => call.name === "vertexAttrib2f" || call.name === "vertexAttrib4f")).toBe(false);
     expect(secondRenderCalls.some((call) => drawCallNames.has(call.name))).toBe(true);
+  });
+
+  it("does not reserve optional or instanced attribute locations while linking programs", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(singlePassScene([unlitBox()]));
+
+    expect(calls.filter((call) => call.name === "bindAttribLocation").map((call) => call.args.slice(1))).toEqual([
+      [0, "a_position"],
+      [1, "a_normal"],
+      [2, "a_uv"],
+    ]);
   });
 
   it("uploads material uniform changes after a previous render cached different values", () => {

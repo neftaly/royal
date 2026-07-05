@@ -180,6 +180,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
     vertexAttrib4f: record("vertexAttrib4f"),
+    vertexAttribDivisor: record("vertexAttribDivisor"),
     vertexAttribPointer: record("vertexAttribPointer"),
     viewport: record("viewport"),
   } as unknown as WebGL2RenderingContext;
@@ -474,6 +475,49 @@ describe("WebGL root working state contracts", () => {
     ref.current?.position.set([2, 0, 0]);
 
     expect(frameCallbacks).toHaveLength(1);
+  });
+
+  it("coalesces imperative render object mutations before the scheduled render", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const renderScene = scene({
+      children: [
+        pass({
+          camera: camera(),
+          children: [
+            mesh({
+              geometry: boxGeometry(1),
+              material: unlitMaterial({ color: [1, 1, 1, 1] }),
+              ref,
+            }),
+          ],
+        }),
+      ],
+    });
+
+    root.render(renderScene);
+    const handle = ref.current;
+    if (handle === null) throw new Error("Expected mesh ref to be attached");
+    const initialDraws = drawCalls(calls).length;
+
+    handle.position.set([1, 0, 0]);
+    handle.rotation.set([0, 1, 0]);
+    handle.scale.set([2, 2, 2]);
+
+    expect(frameCallbacks).toHaveLength(1);
+    expect(drawCalls(calls)).toHaveLength(initialDraws);
+
+    frameCallbacks[0]?.(16);
+    expect(drawCalls(calls)).toHaveLength(initialDraws + 1);
+
+    handle.position.set([2, 0, 0]);
+    expect(frameCallbacks).toHaveLength(2);
   });
 
   it("coalesces explicit invalidations to one animation frame", () => {
