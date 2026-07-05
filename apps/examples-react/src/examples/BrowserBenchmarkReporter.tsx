@@ -204,6 +204,26 @@ const byteLengthOf = (value: unknown): number => {
   return 0;
 };
 
+const elementByteLengthOf = (value: unknown): number => {
+  if (typeof value === 'object' && value !== null && 'BYTES_PER_ELEMENT' in value) {
+    const bytesPerElement = value.BYTES_PER_ELEMENT;
+    return typeof bytesPerElement === 'number' && Number.isFinite(bytesPerElement) ? bytesPerElement : 1;
+  }
+  return 1;
+};
+
+const bufferSubDataByteLength = (args: readonly unknown[]): number => {
+  const source = args[2];
+  const sourceByteLength = byteLengthOf(source);
+  const bytesPerElement = elementByteLengthOf(source);
+  const sourceOffset = typeof args[3] === 'number' && Number.isFinite(args[3]) ? Math.max(0, args[3]) : 0;
+  const sourceLength = args[4];
+  if (typeof sourceLength === 'number' && Number.isFinite(sourceLength)) {
+    return Math.max(0, sourceLength) * bytesPerElement;
+  }
+  return Math.max(0, sourceByteLength - sourceOffset * bytesPerElement);
+};
+
 const browserBenchSnapshot = (
   counters: Record<keyof BrowserBenchmarkCounters, number>,
 ): BrowserBenchmarkSnapshot => ({
@@ -260,7 +280,7 @@ const patchPrototype = (prototype: unknown, counters: Record<keyof BrowserBenchm
   });
   patch('bufferSubData', (args) => {
     counters.bufferSubDataCalls += 1;
-    counters.bufferSubDataBytes += byteLengthOf(args[2]);
+    counters.bufferSubDataBytes += bufferSubDataByteLength(args);
   });
   patch('copyTexImage2D', () => { counters.copyTexImage2D += 1; });
   patch('copyTexSubImage2D', () => { counters.copyTexSubImage2D += 1; });

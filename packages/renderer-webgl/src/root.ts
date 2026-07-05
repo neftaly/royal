@@ -5176,13 +5176,14 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
     if (localFullUpload) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.localData, 0, localFloatCount);
       this.#recordGltfInstanceLocalBufferUpload(localFloatCount);
       resource.localDirty = false;
       resource.localSignature = [...localModelSignature];
     } else if (localChangedRanges.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
       for (const range of localChangedRanges) {
         const startFloat = range.start * 16;
         const rangeFloatCount = (range.end - range.start) * 16;
@@ -5292,14 +5293,15 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
     if (fullUpload) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
       this.#recordGltfInstanceRootPoseBufferUpload(floatCount);
       resource.dirty = false;
       resource.positionSignature = [...nextPositionSignature];
       resource.rotationSignature = [...nextRotationSignature];
     } else if (changedRanges.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       for (const range of changedRanges) {
         const startFloat = range.start * 6;
         const rangeFloatCount = (range.end - range.start) * 6;
@@ -5363,13 +5365,14 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
     if (fullUpload) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
       this.#recordGltfInstanceRootScaleBufferUpload(floatCount);
       resource.dirty = false;
       resource.signature = [...nextSignature];
     } else if (changedRanges.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
       for (const range of changedRanges) {
         const startFloat = range.start * 3;
         const rangeFloatCount = (range.end - range.start) * 3;

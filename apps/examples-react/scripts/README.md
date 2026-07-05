@@ -41,6 +41,9 @@ Check a saved report:
 pnpm --filter @royal/examples-react bench:examples:check research/examples-benchmark-host.json
 ```
 
+When run through `pnpm --filter`, relative report paths resolve from the
+directory where `pnpm` was invoked, so repo-root paths work as shown above.
+
 Quest 2 report through forwarded DevTools:
 
 ```sh

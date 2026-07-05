@@ -4474,6 +4474,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(1);
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+    expect(secondReadyFrameCalls.filter((call) => call.name === "bindBuffer")).toHaveLength(0);
     expect(secondReadyInstancing.batchPlansBuilt).toBe(0);
     expect(secondReadyInstancing.batchInstancesTotal).toBe(2);
 

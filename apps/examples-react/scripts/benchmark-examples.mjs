@@ -659,6 +659,16 @@ const installBenchmarkHooks = async (session) => {
     if (value?.length !== undefined) return value.length;
     return 0;
   };
+  const elementByteLengthOf = (value) => value?.BYTES_PER_ELEMENT ?? 1;
+  const bufferSubDataByteLength = (args) => {
+    const source = args[2];
+    const sourceByteLength = byteLengthOf(source);
+    const elementByteLength = elementByteLengthOf(source);
+    const sourceOffset = Math.max(0, Math.floor(Number(args[3]) || 0));
+    const sourceLength = args[4];
+    if (typeof sourceLength === 'number') return Math.max(0, sourceLength) * elementByteLength;
+    return Math.max(0, sourceByteLength - sourceOffset * elementByteLength);
+  };
   const patch = (prototype, name, handler) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalBenchPatched === true) return;
@@ -683,7 +693,7 @@ const installBenchmarkHooks = async (session) => {
     });
     patch(prototype, 'bufferSubData', (args) => {
       counters.bufferSubDataCalls += 1;
-      counters.bufferSubDataBytes += byteLengthOf(args[2]);
+      counters.bufferSubDataBytes += bufferSubDataByteLength(args);
     });
     patch(prototype, 'copyTexImage2D', () => { counters.copyTexImage2D += 1; });
     patch(prototype, 'copyTexSubImage2D', () => { counters.copyTexSubImage2D += 1; });
@@ -1196,7 +1206,11 @@ const collectPageMetrics = async (session, frames, options = {}) => {
       setup: glCounterTotals(setupGl),
     },
     renderer: {
-      gltfInstancing: gltfInstancingSampleMetrics(rendererAfterFrames, rendererBeforeFrames, frames),
+      gltfInstancing: gltfInstancingSampleMetrics(
+        rendererAfterFrames,
+        rendererBeforeFrames,
+        frameStats.sampleCount ?? frames,
+      ),
       setup: {
         gltfInstancing: gltfInstancingSetupMetrics(setupRenderer),
       },
@@ -1312,17 +1326,18 @@ const round = (value, digits = 2) => {
 };
 
 const routeSummary = (route) => {
-  const drawCallsPerFrame = route.gl.drawCalls / frameSampleCount;
-  const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / frameSampleCount;
-  const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / frameSampleCount;
-  const stateChangesPerFrame = route.gl.stateChanges / frameSampleCount;
-  const useProgramPerFrame = route.gl.useProgram / frameSampleCount;
-  const bindBufferPerFrame = route.gl.bindBuffer / frameSampleCount;
-  const bindTexturePerFrame = route.gl.bindTexture / frameSampleCount;
-  const bindVertexArrayPerFrame = route.gl.bindVertexArray / frameSampleCount;
-  const copyTexImage2DPerFrame = route.gl.copyTexImage2D / frameSampleCount;
-  const copyTexSubImage2DPerFrame = route.gl.copyTexSubImage2D / frameSampleCount;
-  const uniformCallsPerFrame = route.gl.uniformCalls / frameSampleCount;
+  const sampledFrameCount = route.frameStats.sampleCount > 0 ? route.frameStats.sampleCount : frameSampleCount;
+  const drawCallsPerFrame = route.gl.drawCalls / sampledFrameCount;
+  const instancedDrawCallsPerFrame = route.gl.instancedDrawCalls / sampledFrameCount;
+  const bufferSubDataBytesPerFrame = route.gl.bufferSubDataBytes / sampledFrameCount;
+  const stateChangesPerFrame = route.gl.stateChanges / sampledFrameCount;
+  const useProgramPerFrame = route.gl.useProgram / sampledFrameCount;
+  const bindBufferPerFrame = route.gl.bindBuffer / sampledFrameCount;
+  const bindTexturePerFrame = route.gl.bindTexture / sampledFrameCount;
+  const bindVertexArrayPerFrame = route.gl.bindVertexArray / sampledFrameCount;
+  const copyTexImage2DPerFrame = route.gl.copyTexImage2D / sampledFrameCount;
+  const copyTexSubImage2DPerFrame = route.gl.copyTexSubImage2D / sampledFrameCount;
+  const uniformCallsPerFrame = route.gl.uniformCalls / sampledFrameCount;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
@@ -1389,7 +1404,7 @@ const routeSummary = (route) => {
     copyTexImage2DPerFrame: round(copyTexImage2DPerFrame),
     copyTexSubImage2DPerFrame: round(copyTexSubImage2DPerFrame),
     uniformCallsPerFrame: round(uniformCallsPerFrame),
-    uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / frameSampleCount),
+    uniformMatrixCallsPerFrame: round(route.gl.uniformMatrixCalls / sampledFrameCount),
     setupDrawCalls: route.gl.setup?.drawCalls ?? 0,
     setupInstancedDrawCalls,
     setupStateChanges: route.gl.setup?.stateChanges ?? 0,
