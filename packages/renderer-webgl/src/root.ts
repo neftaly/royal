@@ -3807,7 +3807,6 @@ class WebGlRootImpl implements WebGlRoot {
       this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
 
-    const opaqueBatches: GltfPrimitiveDrawBatch[] = [];
     const blendedBatches: GltfPrimitiveDrawBatch[] = [];
     const transmissiveBatches: GltfPrimitiveDrawBatch[] = [];
     for (const batch of batches) {
@@ -3816,12 +3815,8 @@ class WebGlRootImpl implements WebGlRoot {
       } else if (isTransmissiveSurfaceMaterial(batch.material)) {
         transmissiveBatches.push(batch);
       } else {
-        opaqueBatches.push(batch);
+        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, undefined);
       }
-    }
-
-    for (const batch of opaqueBatches) {
-      this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, undefined);
     }
 
     if (transmissiveBatches.length > 0) {
@@ -6128,18 +6123,19 @@ class WebGlRootImpl implements WebGlRoot {
     targetMipPages?: readonly VirtualTexturePageId[],
   ): readonly VirtualTexturePageId[] {
     const mipCount = this.#virtualTextureMipCount(manifest);
-    const candidates = new Map<string, VirtualTexturePageId>();
+    const candidates: VirtualTexturePageId[] = [];
     for (let mip = mipCount - 1; mip >= targetMip; mip -= 1) {
       const pages = mip === targetMip && targetMipPages !== undefined
         ? targetMipPages
         : this.#virtualTexturePagesForFootprint(manifest, mip, footprint);
       for (const page of pages) {
         if (!this.#isVirtualTexturePageAvailable(state, page)) continue;
-        candidates.set(virtualTexturePageKey(page), page);
+        candidates.push(page);
+        if (candidates.length >= VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW) return candidates;
       }
     }
 
-    return [...candidates.values()].slice(0, VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW);
+    return candidates;
   }
 
   #allVirtualTextureDemandCandidates(state: VirtualTextureRuntimeState): readonly VirtualTexturePageId[] {
