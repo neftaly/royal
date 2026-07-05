@@ -14,6 +14,20 @@ Quick host check:
 pnpm --filter @royal/examples-react bench:examples:quick
 ```
 
+Focused input latency check:
+
+```sh
+pnpm --filter @royal/examples-react bench:examples:input
+```
+
+This runs the existing route benchmark on `/cube` with scripted camera drag
+enabled and reports pointermove-to-next-WebGL-draw latency as
+`cameraDragDrawP95Ms` plus RAF context as `cameraDragRafP95Ms`. Use
+`EXAMPLES_BENCH_ROUTE=gltf-helmet` or `gltf-instancing` with
+`EXAMPLES_BENCH_CAMERA_DRAG=1 pnpm --filter @royal/examples-react bench:examples`
+when you need renderer/glTF churn beside the same input metric. Do not add
+route-specific fast paths to improve these numbers.
+
 Fuller host report:
 
 ```sh

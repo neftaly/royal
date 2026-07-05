@@ -582,19 +582,23 @@ const installBenchmarkHooks = async (session) => {
   };
   const pendingDrawPulses = [];
   const pendingXrPulses = [];
-  const statsFromDeltas = (deltas) => {
+  const statsFromDeltas = (deltas, requestedSampleCount = deltas.length) => {
     const sorted = [...deltas].sort((left, right) => left - right);
     const sum = sorted.reduce((total, value) => total + value, 0);
     const percentile = (ratio) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio))] ?? 0;
     return {
       averageMs: sorted.length === 0 ? 0 : sum / sorted.length,
+      failed: sorted.length === 0,
       jitterP95MinusP50Ms: percentile(0.95) - percentile(0.5),
       maxMs: sorted[sorted.length - 1] ?? 0,
       minMs: sorted[0] ?? 0,
       p50Ms: percentile(0.5),
       p95Ms: percentile(0.95),
       p99Ms: percentile(0.99),
+      requestedSampleCount,
       sampleCount: sorted.length,
+      samplesMissing: Math.max(0, requestedSampleCount - sorted.length),
+      timedOut: sorted.length < requestedSampleCount,
     };
   };
   const statsFromTimes = (times) =>
@@ -631,6 +635,24 @@ const installBenchmarkHooks = async (session) => {
       pendingDrawPulses.shift().resolve(now);
     }
   };
+  const nextObservedDraw = (timeoutMs) =>
+    new Promise((resolve) => {
+      let settled = false;
+      const waiter = {
+        resolve(value) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutHandle);
+          resolve(value);
+        },
+      };
+      const timeoutHandle = setTimeout(() => {
+        const index = pendingDrawPulses.indexOf(waiter);
+        if (index >= 0) pendingDrawPulses.splice(index, 1);
+        waiter.resolve(null);
+      }, Math.max(1, Math.floor(Number(timeoutMs) || 1)));
+      pendingDrawPulses.push(waiter);
+    });
   const byteLengthOf = (value) => {
     if (typeof value === 'number') return value;
     if (value?.byteLength !== undefined) return value.byteLength;
@@ -714,9 +736,7 @@ const installBenchmarkHooks = async (session) => {
   const latencyPulse = async () => {
     const eventAt = performance.now();
     const timeout = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
-    const drawPromise = new Promise((resolve) => {
-      pendingDrawPulses.push({ resolve });
-    });
+    const drawPromise = nextObservedDraw(250);
     const windowRafPromise = new Promise((resolve) => {
       requestAnimationFrame((time) => resolve(time));
     });
@@ -734,7 +754,7 @@ const installBenchmarkHooks = async (session) => {
       pointerType: 'mouse',
     }));
     const [drawAt, windowRafAt, xrFrameAt] = await Promise.all([
-      Promise.race([drawPromise, timeout(250)]),
+      drawPromise,
       Promise.race([windowRafPromise, timeout(250)]),
       Promise.race([xrPromise, timeout(250)]),
     ]);
@@ -773,7 +793,8 @@ const installBenchmarkHooks = async (session) => {
       pointerId,
       pointerType: 'mouse',
     });
-    const deltas = [];
+    const drawDeltas = [];
+    const rafDeltas = [];
     const dispatchPointer = (type) => {
       canvas.dispatchEvent(new PointerEvent(type, eventOptions(type)));
     };
@@ -781,15 +802,25 @@ const installBenchmarkHooks = async (session) => {
     try {
       for (let index = 0; index < requestedSampleCount; index += 1) {
         clientX += step;
+        const drawPromise = nextObservedDraw(250);
+        const rafPromise = new Promise((resolve) => requestAnimationFrame((time) => resolve(time)));
         const eventAt = performance.now();
         dispatchPointer('pointermove');
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        deltas.push(performance.now() - eventAt);
+        const [drawAt, rafAt] = await Promise.all([drawPromise, rafPromise]);
+        if (typeof drawAt === 'number') drawDeltas.push(drawAt - eventAt);
+        if (typeof rafAt === 'number') rafDeltas.push(rafAt - eventAt);
       }
     } finally {
       dispatchPointer('pointerup');
     }
-    return statsFromDeltas(deltas);
+    const draw = statsFromDeltas(drawDeltas, requestedSampleCount);
+    return {
+      ...draw,
+      measurement: 'synthetic-camera-drag-pointermove-to-next-webgl-draw',
+      note: 'Draw latency is measured at the next WebGL draw call after each synthetic drag move; RAF latency is reported separately.',
+      raf: statsFromDeltas(rafDeltas, requestedSampleCount),
+      ...(draw.failed ? { reason: 'draw-timeout' } : {}),
+    };
   };
   if (config.fakeXrEnabled) {
     const webGl2Prototype = globalThis.WebGL2RenderingContext?.prototype;
@@ -1309,6 +1340,11 @@ const routeSummary = (route) => {
   const cameraDragUniformCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.uniformCalls / cameraDragSampleCount;
+  const cameraDragFailure = cameraDragFrameStats?.failed === true
+    ? cameraDragFrameStats.reason
+    : cameraDragFrameStats?.timedOut === true
+      ? 'partial-timeout'
+      : undefined;
   const hasCameraDragStats =
     typeof cameraDragFrameStats?.p95Ms === 'number' &&
     typeof cameraDragDrawCallsPerFrame === 'number';
@@ -1410,13 +1446,19 @@ const routeSummary = (route) => {
         ...(typeof cameraDragInstancedDrawCallsPerFrame === 'number' && cameraDragInstancedDrawCallsPerFrame !== 0
           ? { cameraDragInstancedDrawCallsPerFrame: round(cameraDragInstancedDrawCallsPerFrame) }
           : {}),
-        cameraDragP95Ms: round(cameraDragFrameStats.p95Ms),
-        cameraDragP99Ms: round(cameraDragFrameStats.p99Ms),
+        cameraDragDrawP95Ms: round(cameraDragFrameStats.p95Ms),
+        cameraDragDrawP99Ms: round(cameraDragFrameStats.p99Ms),
+        ...(typeof cameraDragFrameStats.samplesMissing === 'number' && cameraDragFrameStats.samplesMissing > 0
+          ? { cameraDragSamplesMissing: cameraDragFrameStats.samplesMissing }
+          : {}),
+        ...(typeof cameraDragFrameStats.raf?.p95Ms === 'number'
+          ? { cameraDragRafP95Ms: round(cameraDragFrameStats.raf.p95Ms) }
+          : {}),
       }
       : {}),
-    ...(cameraDragFrameStats?.failed === true
-      ? { cameraDragFailure: cameraDragFrameStats.reason }
-      : {}),
+    ...(cameraDragFailure === undefined
+      ? {}
+      : { cameraDragFailure }),
     retainedGrowthBytes: route.heap.retainedGrowthBytes,
     resourceTransferBytes: route.performance.resources.totalTransferSize,
     ...(typeof route.xr?.frameStats?.p95Ms === 'number'
@@ -1489,7 +1531,7 @@ const instancingComparisons = (summaries) => {
 const analyzeResults = (results) => {
   const summaries = results.map(routeSummary);
   const instancing = summaries.filter((route) => route.profile?.kind === 'gltf-instancing');
-  const cameraDrag = summaries.filter((route) => typeof route.cameraDragP95Ms === 'number');
+  const cameraDrag = summaries.filter((route) => typeof route.cameraDragDrawP95Ms === 'number');
   return {
     slowestRoutesByP95: [...summaries]
       .sort((left, right) => right.p95Ms - left.p95Ms)
@@ -1534,7 +1576,7 @@ const analyzeResults = (results) => {
         cameraDrag: {
           failures: summaries.filter((route) => route.cameraDragFailure !== undefined),
           slowestRoutesByP95: [...cameraDrag]
-            .sort((left, right) => right.cameraDragP95Ms - left.cameraDragP95Ms)
+            .sort((left, right) => right.cameraDragDrawP95Ms - left.cameraDragDrawP95Ms)
             .slice(0, 8),
         },
       }
@@ -1609,6 +1651,11 @@ const main = async () => {
       const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || result.cameraDrag === undefined
         ? undefined
         : result.cameraDrag.gl.drawCalls / cameraDragSampleCount;
+      const cameraDragFailure = cameraDragFrameStats?.failed === true
+        ? cameraDragFrameStats.reason
+        : cameraDragFrameStats?.timedOut === true
+          ? 'partial-timeout'
+          : undefined;
       const hasCameraDragStats =
         typeof cameraDragFrameStats?.p95Ms === 'number' &&
         typeof cameraDragDrawCallsPerFrame === 'number';
@@ -1633,11 +1680,17 @@ const main = async () => {
         ...(frameFailure === undefined ? [] : [`frames=${frameFailure}`]),
         ...(hasCameraDragStats
           ? [
-            `dragP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
+            `dragDrawP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
+            ...(typeof cameraDragFrameStats.raf?.p95Ms === 'number'
+              ? [`dragRafP95=${cameraDragFrameStats.raf.p95Ms.toFixed(1)}ms`]
+              : []),
+            ...(typeof cameraDragFrameStats.samplesMissing === 'number' && cameraDragFrameStats.samplesMissing > 0
+              ? [`dragMiss=${cameraDragFrameStats.samplesMissing}`]
+              : []),
             `dragDraw/frame=${cameraDragDrawCallsPerFrame.toFixed(1)}`,
           ]
           : []),
-        ...(cameraDragFrameStats?.failed === true ? [`drag=${cameraDragFrameStats.reason}`] : []),
+        ...(cameraDragFailure === undefined ? [] : [`drag=${cameraDragFailure}`]),
         ...(typeof xrP95 === 'number' ? [`xrP95=${xrP95.toFixed(1)}ms`] : []),
         ...(xrFrameFailure === undefined ? [] : [`xrFrames=${xrFrameFailure}`]),
         ...(result.fakeXrActivationFailure === undefined ? [] : [`xrPrepare=${result.fakeXrActivationFailure.reason}`]),
