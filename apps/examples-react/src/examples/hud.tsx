@@ -1,4 +1,4 @@
-import { type Rgba, type Vec3 } from '@royal/renderer-core';
+import { type Rgba, type Vec3 } from '@royal/react/scene';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { type ReactNode } from 'react';
 import { type FlexLayoutBox } from './flex-layout';

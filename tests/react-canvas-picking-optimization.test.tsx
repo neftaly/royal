@@ -215,6 +215,35 @@ const renderScene = (handlers: {
 );
 
 describe("React Canvas picking optimization", () => {
+  it("forwards pointer event default and propagation controls to the native event", () => {
+    const stopPropagation = vi.fn();
+    const nativeEvent = pointerEvent(1, { stopPropagation });
+    const node = {
+      geometry: boxGeometry(1),
+      kind: "mesh",
+      material: unlitMaterial({ color: [1, 0, 0, 1] }),
+    } as MeshNode;
+    const hit: PickResult = {
+      clientX: nativeEvent.clientX,
+      clientY: nativeEvent.clientY,
+      distance: 1,
+      point: [0, 0, 0],
+      target: { kind: "mesh", node },
+    };
+
+    const event = createRoyalPointerEvent({
+      hit,
+      nativeEvent,
+      type: "pointerdown",
+    });
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
   it("skips root.pick for pointer events when rendered nodes have no pointer handlers", () => {
     const canvas = fakeCanvas();
     const root = fakeRoot(canvas);

@@ -3,10 +3,10 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/renderer-core';
+import { studioEnvironment } from '@royal/react/scene';
 import { type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
 const exampleEnvironment = studioEnvironment({
@@ -24,7 +24,7 @@ export const GltfVariants = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF KHR_materials_variants"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

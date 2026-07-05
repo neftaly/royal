@@ -3,7 +3,7 @@ import {
   type EulerRads,
   type RenderObjectHandle,
   wireframeMaterial,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
@@ -14,7 +14,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
@@ -53,7 +53,7 @@ export const WireframeCube = (): ReactNode => {
   });
 
   return (
-    <Canvas aria-label="Wireframe cube" rootOptions={exampleCanvasRootOptions}>
+    <Canvas aria-label="Wireframe cube" renderer={exampleCanvasRendererOptions}>
       <scene>
         <pass camera={orbit.camera} toneMapping="none">
           <SpinningCube />

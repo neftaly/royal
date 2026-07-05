@@ -10,7 +10,7 @@ import {
   type RenderRoot,
   unlitMaterial,
   wireframeMaterial,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
@@ -33,7 +33,7 @@ import {
   type RemoteActorRenderState,
 } from './RapierPhysics.scene';
 
-const rootOptions = {
+const rendererOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 
@@ -279,7 +279,7 @@ export const RapierPhysics = (): ReactNode => {
       data-rapier-network-smoothing-offset={String(sceneState.network.smoothingOffset)}
       data-rapier-network-smoothing-ticks-remaining={String(sceneState.network.smoothingTicksRemaining)}
       data-rapier-network-snap-correction-distance={String(sceneState.network.snapCorrectionDistance)}
-      rootOptions={rootOptions}
+      renderer={rendererOptions}
       style={orbitCanvasStyle}
     >
       {scene}

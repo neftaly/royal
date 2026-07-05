@@ -1,11 +1,11 @@
-import { boxGeometry, studioEnvironment } from '@royal/renderer-core';
+import { boxGeometry, studioEnvironment } from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
 import { type ReactNode } from 'react';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const cubeGeometry = boxGeometry({ size: [1.5, 1.5, 1.5] });
 const exampleEnvironment = studioEnvironment({
@@ -20,7 +20,7 @@ export const HelloCube = (): ReactNode => {
   });
 
   return (
-    <Canvas aria-label="Lit cube" rootOptions={exampleCanvasRootOptions}>
+    <Canvas aria-label="Lit cube" renderer={exampleCanvasRendererOptions}>
       <scene>
         <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
           <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />

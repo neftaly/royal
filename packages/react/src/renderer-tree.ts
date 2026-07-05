@@ -3,14 +3,14 @@ import {
   type RenderObjectRefObject,
   type RenderRoot,
 } from '@royal/renderer-core';
-import { createRenderObjectHandle } from '@royal/renderer-core/internal/render-object';
+import { createRenderObjectHandle } from '@royal/renderer-core/render-object';
 import { createContext, type ReactNode } from 'react';
 import ReactReconciler from 'react-reconciler';
 import {
   ConcurrentRoot,
   DefaultEventPriority,
   NoEventPriority,
-} from 'react-reconciler/constants';
+} from 'react-reconciler/constants.js';
 import {
   createRendererElement,
   isRenderRootDescriptor,

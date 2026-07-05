@@ -5,10 +5,10 @@ import {
   useOrbitCamera,
   type RenderObjectHandle,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/renderer-core';
+import { studioEnvironment } from '@royal/react/scene';
 import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
 const exampleEnvironment = studioEnvironment({
@@ -201,7 +201,7 @@ export const GltfInstancing = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF automatic instancing"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

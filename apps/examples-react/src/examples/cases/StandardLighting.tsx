@@ -3,9 +3,9 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/renderer-core';
+import { studioEnvironment } from '@royal/react/scene';
 import { type ReactNode } from 'react';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const exampleEnvironment = studioEnvironment({
   irradianceIntensity: 0.46,
@@ -22,7 +22,7 @@ export const StandardLighting = (): ReactNode => {
   return (
     <Canvas
       aria-label="Standard material lighting"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

@@ -13,6 +13,7 @@ import {
   type RenderRoot,
   unlitMaterial,
 } from "@royal/renderer-core";
+import { resolveCanvasChildren } from "../packages/react/src/canvas";
 import { createRoyalRendererTree } from "../packages/react/src/renderer-tree";
 import type { RoyalRendererRoot } from "../packages/react/src/root";
 
@@ -157,6 +158,41 @@ describe("React Canvas renderer tree", () => {
     const child = Array.isArray(passChildren) ? passChildren[1] : undefined;
     expect(isReactElementLike(child)).toBe(true);
     expect(isReactElementLike(child) ? child.type : undefined).toBe(Cube);
+  });
+
+  it("resolves an explicit scene regardless of React control order", () => {
+    const Controls = () => null;
+    const controls = <Controls />;
+    const renderScene = (
+      <scene>
+        <pass>
+          <perspectiveCamera {...perspectiveProps} />
+        </pass>
+      </scene>
+    );
+
+    const resolved = resolveCanvasChildren([controls, renderScene]);
+
+    expect(resolved.sceneChild).toBe(renderScene);
+    expect(resolved.controls).toEqual([controls]);
+  });
+
+  it("requires an explicit scene when React controls sit beside a scene component", () => {
+    const Controls = () => null;
+    const SceneComponent = () => (
+      <scene>
+        <pass>
+          <perspectiveCamera {...perspectiveProps} />
+        </pass>
+      </scene>
+    );
+    const sceneComponent = <SceneComponent />;
+
+    expect(resolveCanvasChildren(sceneComponent).sceneChild).toBe(sceneComponent);
+    expect(() => resolveCanvasChildren([
+      <Controls />,
+      <SceneComponent />,
+    ])).toThrow(/explicit <scene>/);
   });
 
   it("routes surface controls through React components", () => {

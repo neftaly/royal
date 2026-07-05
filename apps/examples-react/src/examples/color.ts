@@ -1,4 +1,4 @@
-import { type Rgba } from '@royal/renderer-core';
+import { type Rgba } from '@royal/react/scene';
 
 let colorContext: CanvasRenderingContext2D | undefined;
 

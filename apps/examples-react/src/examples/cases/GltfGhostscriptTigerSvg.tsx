@@ -5,7 +5,7 @@ import {
 } from '@royal/react';
 import { type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
 
@@ -22,7 +22,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF GS_texture_svg Ghostscript tiger card fixture"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

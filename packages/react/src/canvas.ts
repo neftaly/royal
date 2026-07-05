@@ -45,7 +45,9 @@ type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
 const CanvasRootContext = createContext<RoyalRendererRoot | null>(null);
 
-export type CanvasRootOptions = RoyalRendererRootOptions;
+export type CanvasRendererOptions = RoyalRendererRootOptions;
+/** @deprecated Use CanvasRendererOptions. */
+export type CanvasRootOptions = CanvasRendererOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
@@ -53,6 +55,8 @@ export interface CanvasProps
   /** Runtime-validated as exactly one Royal scene, plus optional React-only side-effect children. */
   readonly children: CanvasChildren;
   readonly ref?: Ref<HTMLCanvasElement>;
+  readonly renderer?: CanvasRendererOptions;
+  /** @deprecated Use renderer. */
   readonly rootOptions?: CanvasRootOptions;
 }
 
@@ -89,22 +93,23 @@ const describeCanvasChild = (value: unknown): string => {
   return value === null ? "null" : typeof value;
 };
 
-const splitCanvasChildren = (
+export const resolveCanvasChildren = (
   children: CanvasChildren,
 ): {
   readonly controls: readonly ReactNode[];
   readonly sceneChild: ReactNode | RenderRoot;
 } => {
-  const sceneChildren: (ReactNode | RenderRoot)[] = [];
-  const controls: ReactNode[] = [];
+  const explicitSceneChildren: (ReactNode | RenderRoot)[] = [];
+  const implicitSceneCandidates: ReactNode[] = [];
+  const nonSceneChildren: ReactNode[] = [];
 
   for (const child of toCanvasChildArray(children)) {
-    if (
-      isRenderRootDescriptor(child) ||
-      isReactRendererScene(child) ||
-      (sceneChildren.length === 0 && isValidElement(child))
-    ) {
-      sceneChildren.push(child);
+    if (isEmptyCanvasChild(child)) {
+      continue;
+    }
+
+    if (isRenderRootDescriptor(child) || isReactRendererScene(child)) {
+      explicitSceneChildren.push(child);
       continue;
     }
 
@@ -112,21 +117,34 @@ const splitCanvasChildren = (
       throw new Error(`Canvas expects renderer scene children, not ${describeCanvasChild(child)}`);
     }
 
-    if (!isEmptyCanvasChild(child)) {
-      controls.push(child);
+    if (isValidElement(child)) {
+      implicitSceneCandidates.push(child);
     }
+
+    nonSceneChildren.push(child);
   }
 
-  if (sceneChildren.length !== 1) {
+  if (explicitSceneChildren.length > 1) {
     throw new Error("Canvas expects exactly one renderer scene child");
   }
 
-  const sceneChild = sceneChildren[0];
-  if (sceneChild === undefined) {
-    throw new Error("Canvas expects exactly one renderer scene child");
+  const explicitSceneChild = explicitSceneChildren[0];
+  if (explicitSceneChild !== undefined) {
+    return { controls: nonSceneChildren, sceneChild: explicitSceneChild };
   }
 
-  return { controls, sceneChild };
+  const implicitSceneChild = implicitSceneCandidates[0];
+  if (
+    implicitSceneChild !== undefined &&
+    implicitSceneCandidates.length === 1 &&
+    nonSceneChildren.length === 1
+  ) {
+    return { controls: [], sceneChild: implicitSceneChild };
+  }
+
+  throw new Error(
+    "Canvas expects exactly one renderer scene child. Add an explicit <scene> when rendering React controls beside a scene component.",
+  );
 };
 
 export const useCanvasElement = (): HTMLCanvasElement | null =>
@@ -151,7 +169,7 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toCanvasRootOptions = ({ context }: CanvasRootOptions): RoyalRendererRootOptions =>
+const toRendererRootOptions = ({ context }: CanvasRendererOptions): RoyalRendererRootOptions =>
   context === undefined ? {} : { context };
 
 const assignCanvasRef = (
@@ -268,6 +286,7 @@ export const attachCanvasPointerEventHandlers = ({
 export const Canvas = ({
   children,
   ref,
+  renderer,
   rootOptions,
   ...canvasProps
 }: CanvasProps): ReactNode => {
@@ -277,21 +296,22 @@ export const Canvas = ({
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
-  const { controls, sceneChild } = splitCanvasChildren(children);
-  const rendererContextAlpha = rootOptions?.context?.alpha;
-  const rendererContextAntialias = rootOptions?.context?.antialias;
-  const rendererContextPreserveDrawingBuffer = rootOptions?.context?.preserveDrawingBuffer;
-  const hasRootOptions = rootOptions !== undefined;
+  const { controls, sceneChild } = resolveCanvasChildren(children);
+  const rendererOptions = renderer ?? rootOptions;
+  const rendererContextAlpha = rendererOptions?.context?.alpha;
+  const rendererContextAntialias = rendererOptions?.context?.antialias;
+  const rendererContextPreserveDrawingBuffer = rendererOptions?.context?.preserveDrawingBuffer;
+  const hasRendererOptions = rendererOptions !== undefined;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
     assignCanvasRef(ref, canvas);
   }, [ref]);
 
-  const memoizedRootOptions = useMemo(
-    () => !hasRootOptions
+  const memoizedRendererOptions = useMemo(
+    () => !hasRendererOptions
       ? undefined
-      : toCanvasRootOptions({
+      : toRendererRootOptions({
         context: {
           ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
           ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
@@ -301,7 +321,7 @@ export const Canvas = ({
         },
       }),
     [
-      hasRootOptions,
+      hasRendererOptions,
       rendererContextAlpha,
       rendererContextAntialias,
       rendererContextPreserveDrawingBuffer,
@@ -345,7 +365,7 @@ export const Canvas = ({
 
     let root: RoyalRendererRoot;
     try {
-      root = createRendererRoot(canvas, memoizedRootOptions);
+      root = createRendererRoot(canvas, memoizedRendererOptions);
       setRootError(null);
     } catch (error) {
       setCanvasRoot(null);
@@ -358,7 +378,7 @@ export const Canvas = ({
       root.dispose();
       setCanvasRoot(null);
     };
-  }, [memoizedRootOptions]);
+  }, [memoizedRendererOptions]);
 
   useLayoutEffect(() => {
     const hasRootError = rootError !== null;

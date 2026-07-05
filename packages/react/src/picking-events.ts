@@ -114,7 +114,7 @@ export const createRoyalPointerEvent = ({
       nativeEvent.preventDefault();
     },
     stopPropagation: () => {
-      return undefined;
+      nativeEvent.stopPropagation();
     },
   };
 };

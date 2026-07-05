@@ -6,7 +6,7 @@ import {
   reduceRenderObjectTransform,
   renderObjectTransformStateToTransform,
   type RenderObjectTransformState,
-} from "@royal/renderer-core/internal/render-object";
+} from "@royal/renderer-core/render-object";
 
 const identityTransform = {
   position: [0, 0, 0],

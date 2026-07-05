@@ -3,10 +3,10 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/renderer-core';
+import { studioEnvironment } from '@royal/react/scene';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 type KitchenSinkAsset = {
   readonly bytes: number;
@@ -198,7 +198,7 @@ const GltfKitchenSinkScene = ({ set }: { readonly set: KitchenSinkSet }): ReactN
   return (
     <Canvas
       aria-label={`glTF Kitchen Sink ${kitchenSinkSetLabel[set]} set with ${selectedAssets.length} of ${khronosKitchenSinkAssets.length} official Khronos GLB sample assets, ${selectedFixtureMiB} of ${totalFixtureMiB} MiB total`}
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

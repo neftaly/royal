@@ -28,7 +28,7 @@ import {
 import {
   createRenderObjectHandle,
   readRenderObjectHandleTransform,
-} from "@royal/renderer-core/internal/render-object";
+} from "@royal/renderer-core/render-object";
 import { textMesh } from "@royal/renderer-core/text/mesh";
 import {
   gltfComponentCount,

@@ -11,9 +11,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./internal/render-object": {
+    "./render-object": {
       "types": "./dist/render-object.d.ts",
-      "import": "./dist/internal/render-object.js"
+      "import": "./dist/render-object.js"
     },
     "./text": {
       "types": "./dist/text/index.d.ts",

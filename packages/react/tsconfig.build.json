@@ -5,6 +5,7 @@
     "outDir": "dist",
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
+      "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"],
       "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"],
       "@royal/renderer-webgl/capabilities": ["../renderer-webgl/dist/capabilities.d.ts"]
     },

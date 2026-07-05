@@ -3,10 +3,10 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/renderer-core';
+import { studioEnvironment } from '@royal/react/scene';
 import { type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
 const exampleEnvironment = studioEnvironment({
@@ -23,7 +23,7 @@ export const GltfLod = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF MSFT_lod"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

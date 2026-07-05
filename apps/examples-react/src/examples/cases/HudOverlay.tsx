@@ -5,14 +5,14 @@ import {
   useFrameIndex,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment, type EulerRads } from '@royal/renderer-core';
+import { studioEnvironment, type EulerRads } from '@royal/react/scene';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
   useState,
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import {
   Box,
   Column,
@@ -185,7 +185,7 @@ export const HudOverlay = (): ReactNode => {
   return (
     <Canvas
       aria-label="HUD overlay"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

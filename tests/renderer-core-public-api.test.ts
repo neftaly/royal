@@ -17,6 +17,7 @@ import * as textFontApi from "@royal/renderer-core/text/font";
 import * as webglApi from "@royal/renderer-webgl";
 import * as reactRoyal from "@royal/react";
 import * as reactJsxRuntime from "@royal/react/jsx-runtime";
+import * as reactSceneApi from "@royal/react/scene";
 import { createTextFontFace, createTextFontFaceAsync } from "@royal/renderer-core/text/font";
 import { layoutText } from "@royal/renderer-core/text/layout";
 import { textMesh } from "@royal/renderer-core/text/mesh";
@@ -111,6 +112,14 @@ describe("renderer-core public API", () => {
     expect(reactRoyal).not.toHaveProperty("boxGeometry");
     expect(reactRoyal).not.toHaveProperty("mesh");
     expect(reactRoyal).not.toHaveProperty("text");
+  });
+
+  it("exposes scene primitives from the React scene subpath", () => {
+    expect(reactSceneApi).toHaveProperty("boxGeometry");
+    expect(reactSceneApi).toHaveProperty("mesh");
+    expect(reactSceneApi).toHaveProperty("scene");
+    expect(reactSceneApi).not.toHaveProperty("Canvas");
+    expect(reactSceneApi).not.toHaveProperty("useInvalidate");
   });
 
   it("keeps internal texture helpers out of the renderer-core barrel", () => {

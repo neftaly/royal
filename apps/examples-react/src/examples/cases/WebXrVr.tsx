@@ -1,4 +1,4 @@
-import { perspectiveCamera, studioEnvironment } from '@royal/renderer-core';
+import { perspectiveCamera, studioEnvironment } from '@royal/react/scene';
 import {
   Canvas,
   useCanvasElement,
@@ -15,7 +15,7 @@ import {
   type XrSessionStatus,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const camera = perspectiveCamera({
   far: 80,
@@ -441,7 +441,7 @@ export const WebXrVr = (): ReactNode =>
     <Canvas
       aria-label="WebXR VR"
       className="webxr-vr-canvas"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
     >
       <scene>
         <pass camera={camera} environment={exampleEnvironment} toneMapping="none">

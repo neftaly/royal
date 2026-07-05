@@ -4,7 +4,8 @@
     "composite": true,
     "outDir": "dist",
     "paths": {
-      "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"]
+      "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
+      "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"]
     },
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"

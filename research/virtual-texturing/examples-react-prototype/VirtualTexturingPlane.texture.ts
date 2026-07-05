@@ -2,7 +2,7 @@ import {
   unlitMaterial,
   virtualTexture,
   type UnlitMaterial,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 
 const surfaceSampler = {
   magFilter: 'linear',

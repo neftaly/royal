@@ -2,7 +2,7 @@
 import {
   planeGeometry,
   type RenderRoot,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 import { Canvas } from '@royal/react';
 import {
   useCallback,
@@ -47,7 +47,7 @@ const maxPitch = 0.95;
 const minYaw = -1.1;
 const maxYaw = 1.1;
 
-const rootOptions = {
+const rendererOptions = {
   context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
 } as const;
 const surfaceGeometry = planeGeometry({ size: [5.2, 3.4] });
@@ -170,7 +170,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
       onWheel={zoomView}
-      rootOptions={rootOptions}
+      renderer={rendererOptions}
       data-example-maturity="lab-probe"
       data-product-demo="false"
       data-virtual-texture-active-grid={surfaceVirtualTextureProbe.activeGrid}

@@ -1,4 +1,4 @@
-import { boxGeometry, studioEnvironment } from '@royal/renderer-core';
+import { boxGeometry, studioEnvironment } from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
@@ -7,7 +7,7 @@ import {
 import {
   type ReactNode,
 } from 'react';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
@@ -26,7 +26,7 @@ export const TextureMaterials = (): ReactNode => {
   return (
     <Canvas
       aria-label="Texture materials"
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
     >
       <scene>

@@ -18,7 +18,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     lib: {
       entry: {
         index: 'src/index.ts',
-        'internal/render-object': 'src/render-object.ts',
+        'render-object': 'src/render-object.ts',
         text: 'src/text/index.ts',
         'text/editable': 'src/text/editable/index.ts',
         'text/font': 'src/text/font.ts',
@@ -33,7 +33,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     }
   },
   '@royal/renderer-webgl': {
-    external: ['@royal/renderer-core'],
+    external: ['@royal/renderer-core', '@royal/renderer-core/render-object'],
     lib: {
       entry: {
         index: 'src/index.ts',
@@ -45,10 +45,20 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
     }
   },
   '@royal/react': {
-    external: ['@royal/renderer-core', '@royal/renderer-webgl', 'react'],
+    external: [
+      '@royal/renderer-core',
+      '@royal/renderer-core/render-object',
+      '@royal/renderer-webgl',
+      'react',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-reconciler',
+      'react-reconciler/constants.js'
+    ],
     lib: {
       entry: {
         index: 'src/index.ts',
+        scene: 'src/scene.ts',
         xr: 'src/xr.ts',
         'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
         'jsx-runtime': 'src/jsx-runtime.ts',
@@ -73,7 +83,7 @@ export const sourceAliases = [
   { find: '@royal/renderer-webgl/capabilities', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/capabilities.ts') },
   { find: '@royal/renderer-webgl/webxr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/webxr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
-  { find: '@royal/renderer-core/internal/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },
+  { find: '@royal/renderer-core/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },
   { find: '@royal/renderer-core/text/editable', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/editable/index.ts') },
   { find: '@royal/renderer-core/text/font', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/font.ts') },
   { find: '@royal/renderer-core/text/layout', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/layout.ts') },
@@ -86,6 +96,7 @@ export const sourceAliases = [
   { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
   { find: '@royal/react/renderer/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-dev-runtime.ts') },
   { find: '@royal/react/renderer/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-runtime.ts') },
+  { find: '@royal/react/scene', replacement: path.join(repoRoot, 'packages/react/src/scene.ts') },
   { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },
   { find: '@royal/renderer-core', replacement: path.join(repoRoot, 'packages/renderer-core/src/index.ts') }

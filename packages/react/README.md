@@ -4,7 +4,7 @@ React adapter for Royal. It renders Royal scene descriptors into a canvas
 without using the DOM as the scene model.
 
 Examples and documentation should import React adapter APIs from `@royal/react`
-and render graph primitives from `@royal/renderer-core`.
+and render graph primitives from `@royal/react/scene`.
 
 ## Example
 
@@ -36,7 +36,7 @@ import {
 import {
   boxGeometry,
   standardMaterial,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });

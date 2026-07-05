@@ -14,7 +14,7 @@
       "@royal/renderer-core": [
         "./packages/renderer-core/src/index.ts"
       ],
-      "@royal/renderer-core/internal/render-object": [
+      "@royal/renderer-core/render-object": [
         "./packages/renderer-core/src/render-object.ts"
       ],
       "@royal/renderer-core/text": [
@@ -52,6 +52,9 @@
       ],
       "@royal/react": [
         "./packages/react/src/index.ts"
+      ],
+      "@royal/react/scene": [
+        "./packages/react/src/scene.ts"
       ],
       "@royal/react/xr": [
         "./packages/react/src/xr.ts"

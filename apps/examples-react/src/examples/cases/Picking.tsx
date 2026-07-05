@@ -3,7 +3,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   type GltfOptions,
-} from '@royal/renderer-core';
+} from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
-import { exampleCanvasRootOptions } from '../example-root-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import {
   HudPass,
   HudRect,
@@ -82,7 +82,7 @@ export const Picking = (): ReactNode => {
       aria-label="Pickable helmet"
       data-royal-picking-hovered-id={hoveredId}
       data-royal-picking-readout={`Target ${readoutText}`}
-      rootOptions={exampleCanvasRootOptions}
+      renderer={exampleCanvasRendererOptions}
       style={{ cursor: 'pointer', touchAction: 'none' }}
     >
       <scene>
