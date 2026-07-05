@@ -530,8 +530,12 @@ type BaseColorTextureResidency =
       readonly state: VirtualTextureRuntimeState;
     };
 
+type VirtualTextureDrawDemandModelSource =
+  | { readonly kind: "composed"; readonly localModels: readonly Mat4[]; readonly rootModels: readonly Mat4[] }
+  | { readonly kind: "single"; readonly model: Mat4 };
+
 type VirtualTextureDrawDemandContext = {
-  readonly models: readonly Mat4[];
+  readonly modelSource: VirtualTextureDrawDemandModelSource;
   readonly positions: Float32Array;
   readonly projection: Mat4;
   readonly texCoords: Float32Array;
@@ -4382,7 +4386,13 @@ class WebGlRootImpl implements WebGlRoot {
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
       material,
-      this.#virtualTextureDrawDemandContext(cpuGeometry, [model], projection, view, viewportSize),
+      this.#virtualTextureDrawDemandContext(
+        cpuGeometry,
+        { kind: "single", model },
+        projection,
+        view,
+        viewportSize,
+      ),
     );
     const programKind: ProgramKind = material.kind === "wireframe"
       ? "wireframe"
@@ -5511,14 +5521,20 @@ class WebGlRootImpl implements WebGlRoot {
 
   #virtualTextureDrawDemandContext(
     geometry: CpuGeometry | undefined,
-    models: readonly Mat4[],
+    modelSource: VirtualTextureDrawDemandModelSource,
     projection: Mat4,
     view: Mat4,
     viewportSize: ViewportSize,
   ): VirtualTextureDrawDemandContext | undefined {
-    if (geometry?.texCoords === undefined || geometry.mode !== "triangles" || models.length === 0) return undefined;
+    if (
+      geometry?.texCoords === undefined
+      || geometry.mode !== "triangles"
+      || this.#virtualTextureDrawDemandModelCount(modelSource) === 0
+    ) {
+      return undefined;
+    }
     return {
-      models,
+      modelSource,
       positions: geometry.positions,
       projection,
       texCoords: geometry.texCoords,
@@ -5538,8 +5554,13 @@ class WebGlRootImpl implements WebGlRoot {
   ): VirtualTextureDrawDemandContext | undefined {
     if (material.baseColor.kind === "solid") return undefined;
     if (geometry?.texCoords === undefined || geometry.mode !== "triangles" || localModels.length === 0) return undefined;
-    const models = localModels.map((localModel, index) => multiplyMat4(rootModels[index]!, localModel));
-    return this.#virtualTextureDrawDemandContext(geometry, models, projection, view, viewportSize);
+    return this.#virtualTextureDrawDemandContext(
+      geometry,
+      { kind: "composed", localModels, rootModels },
+      projection,
+      view,
+      viewportSize,
+    );
   }
 
   #resolveBaseColorTextureResidency(
@@ -6163,11 +6184,23 @@ class WebGlRootImpl implements WebGlRoot {
     return virtualTexturePageUri(manifest, page, state.pageUrisByKey) !== undefined;
   }
 
+  #virtualTextureDrawDemandModelCount(source: VirtualTextureDrawDemandModelSource): number {
+    switch (source.kind) {
+      case "single":
+        return 1;
+      case "composed":
+        return Math.min(source.localModels.length, source.rootModels.length);
+    }
+  }
+
   #virtualTextureScreenFootprint(
     context: VirtualTextureDrawDemandContext,
   ): VirtualTextureScreenFootprint | undefined {
     const [viewportWidth, viewportHeight] = context.viewportSize;
-    if (viewportWidth <= 0 || viewportHeight <= 0 || context.positions.length === 0) return undefined;
+    const modelCount = this.#virtualTextureDrawDemandModelCount(context.modelSource);
+    if (viewportWidth <= 0 || viewportHeight <= 0 || context.positions.length === 0 || modelCount === 0) {
+      return undefined;
+    }
 
     let minScreenX = Number.POSITIVE_INFINITY;
     let maxScreenX = Number.NEGATIVE_INFINITY;
@@ -6179,7 +6212,11 @@ class WebGlRootImpl implements WebGlRoot {
     let maxV = Number.NEGATIVE_INFINITY;
     const vertexCount = Math.min(Math.floor(context.positions.length / 3), Math.floor(context.texCoords.length / 2));
 
-    for (const model of context.models) {
+    for (let modelIndex = 0; modelIndex < modelCount; modelIndex += 1) {
+      const source = context.modelSource;
+      const model = source.kind === "single"
+        ? source.model
+        : multiplyMat4(source.rootModels[modelIndex]!, source.localModels[modelIndex]!);
       const mvp = multiplyMat4(context.projection, multiplyMat4(context.view, model));
       for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
         const positionOffset = vertexIndex * 3;
