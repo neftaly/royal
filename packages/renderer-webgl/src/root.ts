@@ -548,6 +548,11 @@ type VirtualTextureScreenFootprint = {
   readonly screenWidth: number;
 };
 
+type VirtualTextureDrawDemand = {
+  readonly coverageCandidates?: readonly VirtualTexturePageId[];
+  readonly demandCandidates: readonly VirtualTexturePageId[];
+};
+
 type LoadedGltfPrimitive = {
   readonly baseMaterial: LoadedGltfPrimitiveMaterial;
   readonly colors?: Float32Array;
@@ -4643,8 +4648,6 @@ class WebGlRootImpl implements WebGlRoot {
       texture: TextureAssetUploadRef | undefined,
     ): void => {
       if (texture === undefined) return;
-      const resource = this.#textures.get(textureCacheKey(texture));
-      if (resource === undefined || !resource.uploaded) return;
       reserveTextureUnit(feature, preferred);
     };
     const reserveOrdinaryBaseColor = (
@@ -5577,9 +5580,12 @@ class WebGlRootImpl implements WebGlRoot {
       diagnosticsEnabled: false,
     });
     state.stats.preparedResidencyResolutions += 1;
-    if (state.status === "ready") this.#demandVirtualTexturePages(state, demandContext);
+    const drawDemand = state.status === "ready"
+      ? this.#virtualTextureDrawDemand(state, demandContext)
+      : undefined;
+    if (drawDemand !== undefined) this.#demandVirtualTexturePageCandidates(state, drawDemand.demandCandidates);
 
-    return this.#isAutoVirtualTextureCoverageReady(state, demandContext)
+    return this.#isAutoVirtualTextureCoverageReady(state, drawDemand)
       ? { kind: "prepared-virtual", ordinaryFallback: texture, state }
       : ordinary;
   }
@@ -6018,10 +6024,16 @@ class WebGlRootImpl implements WebGlRoot {
     state: VirtualTextureRuntimeState,
     context?: VirtualTextureDrawDemandContext,
   ): void {
+    this.#demandVirtualTexturePageCandidates(state, this.#virtualTextureDemandCandidates(state, context));
+  }
+
+  #demandVirtualTexturePageCandidates(
+    state: VirtualTextureRuntimeState,
+    candidates: readonly VirtualTexturePageId[],
+  ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
 
-    const candidates = this.#virtualTextureDemandCandidates(state, context);
     const demandBudget = Math.min(
       this.#virtualTexturePhysicalSlots(manifest),
       VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
@@ -6034,23 +6046,72 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
+  #virtualTextureDrawDemand(
+    state: VirtualTextureRuntimeState,
+    context: VirtualTextureDrawDemandContext | undefined,
+  ): VirtualTextureDrawDemand {
+    const manifest = state.manifest;
+    if (manifest === undefined) {
+      return context === undefined
+        ? { demandCandidates: [] }
+        : { coverageCandidates: [], demandCandidates: [] };
+    }
+
+    if (context === undefined) return { demandCandidates: this.#allVirtualTextureDemandCandidates(state) };
+
+    const footprint = this.#virtualTextureScreenFootprint(context);
+    if (footprint === undefined) {
+      const candidates = this.#allVirtualTextureDemandCandidates(state);
+      return { coverageCandidates: candidates, demandCandidates: candidates };
+    }
+
+    const targetMip = this.#virtualTextureTargetMip(manifest, footprint);
+    const coverageCandidates = this.#virtualTexturePagesForFootprint(manifest, targetMip, footprint)
+      .filter((page) => this.#isVirtualTexturePageAvailable(state, page));
+    return {
+      coverageCandidates,
+      demandCandidates: this.#virtualTextureDemandCandidatesForFootprint(
+        state,
+        manifest,
+        targetMip,
+        footprint,
+        coverageCandidates,
+      ),
+    };
+  }
+
   #virtualTextureDemandCandidates(
     state: VirtualTextureRuntimeState,
     context: VirtualTextureDrawDemandContext | undefined,
   ): readonly VirtualTexturePageId[] {
     const manifest = state.manifest;
     if (manifest === undefined) return [];
+    if (context === undefined) return this.#allVirtualTextureDemandCandidates(state);
 
-    const footprint = context === undefined
-      ? undefined
-      : this.#virtualTextureScreenFootprint(context);
+    const footprint = this.#virtualTextureScreenFootprint(context);
     if (footprint === undefined) return this.#allVirtualTextureDemandCandidates(state);
 
+    return this.#virtualTextureDemandCandidatesForFootprint(
+      state,
+      manifest,
+      this.#virtualTextureTargetMip(manifest, footprint),
+      footprint,
+    );
+  }
+
+  #virtualTextureDemandCandidatesForFootprint(
+    state: VirtualTextureRuntimeState,
+    manifest: VirtualTextureManifestModel,
+    targetMip: number,
+    footprint: VirtualTextureScreenFootprint,
+    targetMipPages?: readonly VirtualTexturePageId[],
+  ): readonly VirtualTexturePageId[] {
     const mipCount = this.#virtualTextureMipCount(manifest);
-    const targetMip = this.#virtualTextureTargetMip(manifest, footprint);
     const candidates = new Map<string, VirtualTexturePageId>();
     for (let mip = mipCount - 1; mip >= targetMip; mip -= 1) {
-      const pages = this.#virtualTexturePagesForFootprint(manifest, mip, footprint);
+      const pages = mip === targetMip && targetMipPages !== undefined
+        ? targetMipPages
+        : this.#virtualTexturePagesForFootprint(manifest, mip, footprint);
       for (const page of pages) {
         if (!this.#isVirtualTexturePageAvailable(state, page)) continue;
         candidates.set(virtualTexturePageKey(page), page);
@@ -6513,29 +6574,14 @@ class WebGlRootImpl implements WebGlRoot {
 
   #isAutoVirtualTextureCoverageReady(
     state: VirtualTextureRuntimeState,
-    context: VirtualTextureDrawDemandContext | undefined,
+    drawDemand: VirtualTextureDrawDemand | undefined,
   ): boolean {
     if (!this.#isVirtualTextureDrawable(state)) return false;
-    if (context === undefined) return true;
+    const candidates = drawDemand?.coverageCandidates;
+    if (candidates === undefined) return true;
 
-    const candidates = this.#virtualTextureTargetCoverageCandidates(state, context);
     return candidates.length > 0
       && candidates.every((page) => state.uploadedPages.has(virtualTexturePageKey(page)));
-  }
-
-  #virtualTextureTargetCoverageCandidates(
-    state: VirtualTextureRuntimeState,
-    context: VirtualTextureDrawDemandContext,
-  ): readonly VirtualTexturePageId[] {
-    const manifest = state.manifest;
-    if (manifest === undefined) return [];
-
-    const footprint = this.#virtualTextureScreenFootprint(context);
-    if (footprint === undefined) return this.#allVirtualTextureDemandCandidates(state);
-
-    const targetMip = this.#virtualTextureTargetMip(manifest, footprint);
-    return this.#virtualTexturePagesForFootprint(manifest, targetMip, footprint)
-      .filter((page) => this.#isVirtualTexturePageAvailable(state, page));
   }
 
   #bindVirtualTexture(

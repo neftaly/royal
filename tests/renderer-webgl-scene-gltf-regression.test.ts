@@ -4943,6 +4943,15 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle-emissive.png",
     ]);
+    const callsBeforePendingTextureRender = calls.length;
+    root.render(renderGraph);
+    const pendingTextureFrameCalls = calls.slice(callsBeforePendingTextureRender);
+    const programsAfterPendingTextureRender = callCount(calls, "createProgram");
+
+    expect(drawCalls(pendingTextureFrameCalls)).toHaveLength(1);
+    expect(uniform1iPayloads(pendingTextureFrameCalls, "u_useEmissiveTexture")).toContain(0);
+    expect(shaderSources(calls).join("\n")).toContain("uniform sampler2D u_emissiveTexture;");
+
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
     await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useEmissiveTexture", 1);
@@ -4953,6 +4962,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const sources = shaderSources(calls).join("\n");
 
     expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(callCount(calls, "createProgram")).toBe(programsAfterPendingTextureRender);
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform4fvPayloads(calls, "u_emissiveColor").map(roundVector))
       .toContainEqual([0.4, 0.5, 0.6, 1]);
