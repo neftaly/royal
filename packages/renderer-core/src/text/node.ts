@@ -5,7 +5,7 @@ export type { TextNode, TextOptions } from './types';
 
 const createTextNode = (options: TextOptions): TextNode => {
   const layout = layoutText({
-    ...(options.font === undefined ? {} : { font: options.font }),
+    font: options.font,
     ...(options.fontSize === undefined ? {} : { fontSize: options.fontSize }),
     ...(options.lineHeight === undefined ? {} : { lineHeight: options.lineHeight }),
     ...(options.origin === undefined ? {} : { origin: options.origin }),

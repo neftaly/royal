@@ -8,6 +8,14 @@ import {
 } from './text/surface';
 
 export type { PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
+export { createTextFontFace, createTextFontFaceAsync } from '@royal/renderer-core/text/font';
+export type {
+  CreateTextFontFaceOptions,
+  TextFontData,
+  TextFontDescriptor,
+  TextFontFace,
+  TextFontMetrics
+} from '@royal/renderer-core/text/font';
 export type {
   RenderObjectHandle,
   RenderObjectRef,

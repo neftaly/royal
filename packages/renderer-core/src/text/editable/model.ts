@@ -26,7 +26,7 @@ export type EditableTextLayout = {
   readonly ascender: number;
   readonly caretPlacements: readonly EditableTextCaretPlacement[];
   readonly descender: number;
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly lines: readonly EditableTextLine[];
@@ -38,7 +38,7 @@ export type EditableTextLayout = {
 };
 
 export type EditableTextLayoutOptions = {
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly maxWidth: number;
@@ -77,19 +77,19 @@ export type EditableTextHitPoint = {
 };
 
 const measureText = (
-  font: TextFontFace | undefined,
+  font: TextFontFace,
   text: string,
   fontSize: number,
   lineHeight: number,
 ): number => layoutText({
-  ...(font === undefined ? {} : { font }),
+  font,
   fontSize,
   lineHeight,
   text,
 }).metrics.width;
 
 const createTextMeasurer = (
-  font: TextFontFace | undefined,
+  font: TextFontFace,
   fontSize: number,
   lineHeight: number,
 ): ((text: string) => number) => {
@@ -208,7 +208,7 @@ export const layoutEditableText = ({
 }: EditableTextLayoutOptions): EditableTextLayout => {
   const measure = createTextMeasurer(font, fontSize, lineHeight);
   const metrics = layoutText({
-    ...(font === undefined ? {} : { font }),
+    font,
     fontSize,
     lineHeight,
     text: '',
@@ -231,7 +231,7 @@ export const layoutEditableText = ({
     ascender: metrics.ascender,
     caretPlacements,
     descender: metrics.descender,
-    ...(font === undefined ? {} : { font }),
+    font,
     fontSize,
     lineHeight,
     lines,

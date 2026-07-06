@@ -1,17 +1,20 @@
 import {
   createRendererElement,
   RendererFragment,
+  type RoyalRendererIntrinsicElements,
+  type RoyalIntrinsicElementType,
   type RoyalRendererJsxElement,
   type JSX as RoyalReactJSX,
 } from './jsx-runtime-internal';
+import type { Key } from 'react';
 export const Fragment = RendererFragment;
 
 type RendererJsxComponent = (props: never) => unknown;
-type RendererJsxElementType = keyof JSX.IntrinsicElements | RendererJsxComponent;
+type RendererJsxElementType = RoyalIntrinsicElementType | RendererJsxComponent;
 type RendererJsxFactory = (
   type: RendererJsxElementType,
   props: Record<string, unknown> | null,
-  key?: string
+  key?: Key
 ) => RoyalRendererJsxElement;
 
 export const jsx = createRendererElement as RendererJsxFactory;
@@ -24,5 +27,7 @@ export namespace JSX {
     children: {};
   }
 
-  export interface IntrinsicElements extends RoyalReactJSX.IntrinsicElements {}
+  export interface IntrinsicAttributes extends RoyalReactJSX.IntrinsicAttributes {}
+
+  export interface IntrinsicElements extends RoyalRendererIntrinsicElements {}
 }

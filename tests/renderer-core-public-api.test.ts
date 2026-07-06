@@ -100,6 +100,8 @@ describe("renderer-core public API", () => {
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
     expect(reactRoyal).toHaveProperty("Button");
     expect(reactRoyal).toHaveProperty("Canvas");
+    expect(reactRoyal).toHaveProperty("createTextFontFace");
+    expect(reactRoyal).toHaveProperty("createTextFontFaceAsync");
     expect(reactRoyal).toHaveProperty("Input");
     expect(reactRoyal).toHaveProperty("Text");
     expect(reactRoyal).toHaveProperty("Textarea");
@@ -167,8 +169,11 @@ describe("renderer-core public API", () => {
   });
 
   it("throws when text is used without a real font face", () => {
+    // @ts-expect-error font is required by the public type surface.
     expect(() => shapeText({ fontSize: 1, text: "Royal" })).toThrow(/requires a TextFontFace/);
+    // @ts-expect-error font is required by the public type surface.
     expect(() => layoutText({ fontSize: 1, text: "Royal" })).toThrow(/requires a TextFontFace/);
+    // @ts-expect-error font is required by the public type surface.
     expect(() => textNode({ color: [1, 1, 1, 1], fontSize: 1, text: "Royal" })).toThrow(/requires a TextFontFace/);
   });
 

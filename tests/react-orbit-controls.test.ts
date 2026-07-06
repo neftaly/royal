@@ -105,7 +105,6 @@ describe("OrbitControls", () => {
   it("publishes complete views from orbit camera stores", () => {
     const store = createOrbitCameraStore({
       distance: 5,
-      pitch: 0.1,
     });
     const changes: OrbitCameraView[] = [];
     const unsubscribe = store.subscribe((state) => {
@@ -114,7 +113,7 @@ describe("OrbitControls", () => {
 
     expect(store.getState().view).toEqual({
       distance: 5,
-      pitch: 0.1,
+      pitch: 0,
       target: [0, 0, 0],
       yaw: 0,
     });

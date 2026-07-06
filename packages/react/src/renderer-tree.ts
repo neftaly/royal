@@ -15,7 +15,7 @@ import {
   createRendererElement,
   isRenderRootDescriptor,
   isRoyalRendererJsxElement,
-  type JSX as RoyalReactJSX,
+  type RoyalIntrinsicElementType,
   type RoyalRendererJsxElement,
 } from './jsx-runtime-internal';
 import {
@@ -26,7 +26,7 @@ import {
 import { rendererDescriptorHostType } from './renderer-output';
 import type { RoyalRendererRoot } from './root';
 
-type RoyalHostType = keyof RoyalReactJSX.IntrinsicElements | typeof rendererDescriptorHostType;
+type RoyalHostType = RoyalIntrinsicElementType | typeof rendererDescriptorHostType;
 type RoyalHostProps = Record<string, unknown>;
 type RoyalRenderObjectTransform = Parameters<typeof createRenderObjectHandle>[0];
 type RoyalPublicInstance = RenderObjectHandle | RoyalHostInstance | RoyalTextInstance;

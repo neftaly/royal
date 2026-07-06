@@ -51,7 +51,6 @@ describe("renderer-core orbit camera API", () => {
   it("resolves sparse orbit views and camera descriptors without React state", () => {
     expect(resolveOrbitCameraView({
       distance: 5,
-      pitch: 0,
     })).toEqual({
       distance: 5,
       pitch: 0,
@@ -61,7 +60,6 @@ describe("renderer-core orbit camera API", () => {
 
     expect(orbitCameraTransform({
       distance: 5,
-      pitch: 0,
     })).toEqual({
       position: [0, 0, 5],
       rotation: [-0, -0, 0],

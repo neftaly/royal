@@ -27,7 +27,7 @@ export type TextControlRegistration = {
   readonly bounds: TextControlBounds;
   readonly copyable: boolean;
   readonly editable: boolean;
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly id: string;
   readonly layout: EditableTextLayout;
   readonly mode: TextControlMode;

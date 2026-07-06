@@ -1,6 +1,7 @@
 /** @jsxImportSource @royal/react/renderer */
 import { describe, expect, it } from "vitest";
 import type { RenderObjectHandle } from "@royal/react";
+import type { JSX as RendererDevJSX } from "@royal/react/renderer/jsx-dev-runtime";
 import { jsx } from "@royal/react/renderer/jsx-runtime";
 import {
   boxGeometry,
@@ -36,6 +37,14 @@ const orthographicBounds = {
 };
 
 describe("renderer JSX contract", () => {
+  it("exports JSX types from the renderer dev runtime", () => {
+    const attrs = { key: "scene" } satisfies RendererDevJSX.IntrinsicAttributes;
+    const props = { children: [] } satisfies RendererDevJSX.IntrinsicElements["scene"];
+
+    expect(attrs).toEqual({ key: "scene" });
+    expect(props).toEqual({ children: [] });
+  });
+
   it("defaults optional orthographic camera props for flat scenes", () => {
     expect(
       <orthographicCamera {...orthographicBounds} />,
@@ -68,9 +77,10 @@ describe("renderer JSX contract", () => {
           {undefined}
           <perspectiveCamera {...perspectiveProps} />
           {showExtraNode && (
-            <text color={[1, 1, 1, 1]}>
-              Hidden
-            </text>
+            <mesh>
+              <boxGeometry size={1} />
+              <unlitMaterial color={[1, 1, 1, 1]} />
+            </mesh>
           )}
           <mesh>
             <boxGeometry size={1} />
@@ -203,6 +213,21 @@ describe("renderer JSX contract", () => {
     ).toMatchObject({
       kind: "mesh",
       ref,
+    });
+  });
+
+  it("accepts JSX keys on renderer scene elements", () => {
+    expect(
+      <mesh key="cube">
+        <boxGeometry size={1} />
+        <unlitMaterial color={[0.2, 0.4, 0.8, 1]} />
+      </mesh>,
+    ).toMatchObject({
+      geometry: {
+        kind: "box",
+        size: [1, 1, 1],
+      },
+      kind: "mesh",
     });
   });
 

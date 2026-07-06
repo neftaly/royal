@@ -36,7 +36,8 @@ import {
   type UnlitMaterialOptions,
   type WireframeMaterialOptions
 } from '@royal/renderer-core';
-import { isValidElement, type ReactNode } from 'react';
+import { isValidElement } from 'react';
+import type { JSX as ReactJSX, Key, ReactNode } from 'react';
 import {
   Fragment as ReactFragment,
   jsx as reactJsx,
@@ -62,7 +63,6 @@ export type RoyalRendererJsxChild = ReactNode | RoyalRendererJsxElement | readon
 type ComponentOutput = ReactNode | RoyalRendererJsxElement;
 type RendererJsxChild = RoyalRendererJsxChild;
 type Component = (props: never) => RendererComponentOutput;
-type ElementType = keyof JSX.IntrinsicElements | Component;
 type ReactJsxFactory = typeof reactJsx;
 
 export type SceneProps = {
@@ -81,15 +81,48 @@ export type MeshProps = Omit<MeshOptions, 'geometry' | 'material'> & {
   readonly material?: Material;
   readonly texture?: MeshTextureInput;
 } & RoyalPointerEventProps;
-export type TextProps = Omit<TextOptions, 'text'> & {
-  readonly box?: TextSurfaceBox;
+export type RendererTextProps = Omit<TextOptions, 'text'> & {
   readonly children?: RendererJsxChild;
-  readonly copyable?: boolean;
-  readonly maxWidth?: number;
-  readonly selectable?: boolean;
-  readonly style?: TextSurfaceControlStyle;
   readonly text?: string;
 };
+type SurfaceTextActivationProps =
+  | { readonly box: TextSurfaceBox }
+  | { readonly copyable: true }
+  | { readonly selectable: true }
+  | { readonly style: TextSurfaceControlStyle };
+export type SurfaceTextElementProps = SurfaceTextProps & SurfaceTextActivationProps;
+export type TextProps = RendererTextProps | SurfaceTextElementProps;
+export type RoyalIntrinsicAttributes = ReactJSX.IntrinsicAttributes;
+type WithRoyalIntrinsicAttributes<Props> = Props & RoyalIntrinsicAttributes;
+type RoyalIntrinsicElementMap<Elements> = {
+  readonly [Name in keyof Elements]: WithRoyalIntrinsicAttributes<Elements[Name]>;
+};
+type RoyalSharedIntrinsicElements = {
+  scene: SceneProps;
+  pass: PassProps;
+  perspectiveCamera: PerspectiveCameraOptions;
+  orthographicCamera: OrthographicCameraOptions;
+  directionalLight: DirectionalLightOptions;
+  mesh: MeshProps;
+  gltf: GltfProps;
+  boxGeometry: BoxGeometryOptions;
+  planeGeometry: PlaneGeometryOptions;
+  standardMaterial: StandardMaterialOptions;
+  unlitMaterial: UnlitMaterialOptions;
+  wireframeMaterial: WireframeMaterialOptions;
+};
+type RoyalRendererIntrinsicElementProps = RoyalSharedIntrinsicElements & {
+  text: RendererTextProps;
+};
+type RoyalIntrinsicElementProps = RoyalSharedIntrinsicElements & {
+  text: TextProps;
+};
+export type RoyalRendererIntrinsicElements = RoyalIntrinsicElementMap<RoyalRendererIntrinsicElementProps>;
+export type RoyalIntrinsicElements = RoyalIntrinsicElementMap<RoyalIntrinsicElementProps>;
+export type RoyalIntrinsicElementType = keyof RoyalRendererIntrinsicElements;
+type ReactIntrinsicElements = Omit<ReactJSX.IntrinsicElements, keyof RoyalIntrinsicElements>;
+type ElementType = keyof JSX.IntrinsicElements | Component;
+type RendererElementType = RoyalIntrinsicElementType | Component;
 export type ButtonProps = SurfaceButtonProps;
 export type InputProps = SurfaceInputProps;
 export type TextareaProps = SurfaceTextareaProps;
@@ -396,8 +429,8 @@ const toMeshOptions = (
     : { ...options, transform: props.transform };
 };
 
-export const toText = (props: TextProps): RenderNode => {
-  if (props.box !== undefined) {
+export const toText = (props: RendererTextProps): RenderNode => {
+  if ('box' in props && props.box !== undefined) {
     throw new Error('text box props require the @royal/react Canvas runtime');
   }
 
@@ -407,7 +440,7 @@ export const toText = (props: TextProps): RenderNode => {
 
   return text({
     color: props.color,
-    ...(props.font === undefined ? {} : { font: props.font }),
+    font: props.font,
     ...(props.fontSize === undefined ? {} : { fontSize: props.fontSize }),
     ...(props.lineHeight === undefined ? {} : { lineHeight: props.lineHeight }),
     ...(props.origin === undefined ? {} : { origin: props.origin }),
@@ -416,9 +449,20 @@ export const toText = (props: TextProps): RenderNode => {
 };
 
 const toInteractiveText = (
-  props: TextProps,
-  key: string | undefined,
+  props: SurfaceTextElementProps,
+  key: Key | undefined,
 ): ReactNode => reactJsx(TextControl as Parameters<ReactJsxFactory>[0], props as SurfaceTextProps, key);
+
+const hasInteractiveTextProps = (props: TextProps | null): props is SurfaceTextElementProps => {
+  if (props === null) return false;
+
+  return (
+    ('selectable' in props && props.selectable === true) ||
+    ('copyable' in props && props.copyable === true) ||
+    ('box' in props && props.box !== undefined) ||
+    ('style' in props && props.style !== undefined)
+  );
+};
 
 const assertNever = (type: never): never => {
   throw new Error(
@@ -427,7 +471,7 @@ const assertNever = (type: never): never => {
 };
 
 const createIntrinsicRendererElement = (
-  type: keyof JSX.IntrinsicElements,
+  type: RoyalIntrinsicElementType,
   props: JsxProps | null
 ): RoyalRendererJsxElement => {
   const elementProps = props ?? {};
@@ -450,7 +494,7 @@ const createIntrinsicRendererElement = (
     case 'gltf':
       return toGltfNode(elementProps as GltfProps);
     case 'text':
-      return toText(elementProps as TextProps);
+      return toText(elementProps as RendererTextProps);
     case 'boxGeometry':
       return boxGeometry(elementProps as BoxGeometryOptions);
     case 'planeGeometry':
@@ -467,7 +511,7 @@ const createIntrinsicRendererElement = (
 };
 
 export const createRendererElement = (
-  type: ElementType,
+  type: RendererElementType,
   props: JsxProps | null
 ): RoyalRendererJsxElement => {
   if (typeof type === 'function') {
@@ -486,7 +530,7 @@ export const createRendererElement = (
 const createElement = (
   type: ElementType,
   props: JsxProps | null,
-  key?: string
+  key?: Key
 ): ReactNode => {
   if (typeof type === 'function') {
     const factory = reactFactoryFor(props);
@@ -494,16 +538,10 @@ const createElement = (
   }
 
   if (typeof type === 'string') {
-    if (
-      type === 'text' &&
-      (
-        (props as TextProps | null)?.selectable === true ||
-        (props as TextProps | null)?.copyable === true ||
-        (props as TextProps | null)?.box !== undefined ||
-        (props as TextProps | null)?.style !== undefined
-      )
-    ) {
-      return toInteractiveText(props as TextProps, key);
+    const textProps = props as TextProps | null;
+
+    if (type === 'text' && hasInteractiveTextProps(textProps)) {
+      return toInteractiveText(textProps, key);
     }
 
   }
@@ -527,19 +565,7 @@ export namespace JSX {
     children: {};
   }
 
-  export interface IntrinsicElements {
-    scene: SceneProps;
-    pass: PassProps;
-    perspectiveCamera: PerspectiveCameraOptions;
-    orthographicCamera: OrthographicCameraOptions;
-    directionalLight: DirectionalLightOptions;
-    mesh: MeshProps;
-    gltf: GltfProps;
-    text: TextProps;
-    boxGeometry: BoxGeometryOptions;
-    planeGeometry: PlaneGeometryOptions;
-    standardMaterial: StandardMaterialOptions;
-    unlitMaterial: UnlitMaterialOptions;
-    wireframeMaterial: WireframeMaterialOptions;
-  }
+  export interface IntrinsicAttributes extends ReactJSX.IntrinsicAttributes {}
+
+  export interface IntrinsicElements extends ReactIntrinsicElements, RoyalIntrinsicElements {}
 }

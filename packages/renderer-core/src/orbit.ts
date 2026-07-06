@@ -13,7 +13,7 @@ export type OrbitCameraView = {
 
 export type OrbitCameraViewOptions = {
   readonly distance: number;
-  readonly pitch: Rads;
+  readonly pitch?: Rads | undefined;
   readonly target?: OrbitVector3 | undefined;
   readonly yaw?: Rads | undefined;
 };
@@ -50,7 +50,7 @@ const clamp = (
 
 export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => ({
   distance: view.distance,
-  pitch: view.pitch,
+  pitch: view.pitch ?? 0,
   target: view.target ?? defaultTarget,
   yaw: view.yaw ?? 0
 });

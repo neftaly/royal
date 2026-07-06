@@ -63,7 +63,7 @@ export const layoutText = (options: LayoutTextOptions): TextLayout => {
     ];
     const shaped = shapeText({
       clusterOffset: line.start,
-      ...(options.font === undefined ? {} : { font: options.font }),
+      font: options.font,
       fontSize: font.metrics.size,
       lineHeight: font.metrics.lineHeight,
       text: line.text
@@ -109,7 +109,7 @@ export const layoutText = (options: LayoutTextOptions): TextLayout => {
     bounds,
     diagnostics,
     font,
-    ...(options.font === undefined ? {} : { fontFace: options.font }),
+    fontFace: options.font,
     lines,
     metrics: {
       height: bounds.yMax - bounds.yMin,

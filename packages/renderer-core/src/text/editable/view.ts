@@ -29,7 +29,7 @@ export interface EditableTextFragmentOptions {
   readonly caretColor?: Rgba;
   readonly caretWidth?: number;
   readonly color: Rgba;
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize: number;
   readonly lineHeight: number;
   readonly lineWindow?: EditableTextLineWindow;
@@ -159,7 +159,7 @@ const visiblePlaceholderText = (
   window: EditableTextLineWindow,
 ): string =>
   wrapEditableText({
-    ...(options.font === undefined ? {} : { font: options.font }),
+    font: options.font,
     fontSize: options.fontSize,
     lineHeight: options.lineHeight,
     maxWidth: maxWidthForMode(options.maxWidth, mode),
@@ -176,7 +176,7 @@ export const createEditableTextFragment = (
   const displayValue = textForMode(options.text, mode);
   const layoutMaxWidth = maxWidthForMode(options.maxWidth, mode);
   const layout = layoutEditableText({
-    ...(options.font === undefined ? {} : { font: options.font }),
+    font: options.font,
     fontSize: options.fontSize,
     lineHeight: options.lineHeight,
     maxWidth: layoutMaxWidth,
@@ -220,7 +220,7 @@ export const createEditableTextFragment = (
     ...selectionNodes(selectionRects, options.selectionColor ?? defaultSelectionColor, options.origin),
     text({
       color: textColor,
-      ...(options.font === undefined ? {} : { font: options.font }),
+      font: options.font,
       fontSize: options.fontSize,
       lineHeight: options.lineHeight,
       origin: options.origin,

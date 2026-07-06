@@ -13,6 +13,13 @@ type PackageConfig = {
   };
 };
 
+type PackageManifest = {
+  readonly dependencies?: Readonly<Record<string, string>>;
+  readonly name?: string;
+  readonly optionalDependencies?: Readonly<Record<string, string>>;
+  readonly peerDependencies?: Readonly<Record<string, string>>;
+};
+
 export const buildConfigsByPackageName: Record<string, PackageConfig> = {
   '@royal/renderer-core': {
     lib: {
@@ -74,7 +81,7 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
 const appPackageNames = new Set(['@royal/examples-react']);
 const reactAppPackageNames = new Set(['@royal/examples-react']);
 const fixtureAppPackageNames = new Set(['@royal/examples-react']);
-const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as { readonly name?: string };
+const manifest = JSON.parse(readFileSync('package.json', 'utf8')) as PackageManifest;
 const packageConfig = manifest.name ? buildConfigsByPackageName[manifest.name] : undefined;
 const isAppPackage = manifest.name === undefined ? false : appPackageNames.has(manifest.name);
 const repoRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -109,6 +116,28 @@ const failOnRollupWarning = (warning: string | { readonly message?: string }): n
 
 const sharedBuildOptions = { target: 'safari17', sourcemap: true, rollupOptions: { onwarn: failOnRollupWarning } };
 
+const packageDependencyNames = (packageManifest: PackageManifest): readonly string[] => [
+  ...Object.keys(packageManifest.dependencies ?? {}),
+  ...Object.keys(packageManifest.optionalDependencies ?? {}),
+  ...Object.keys(packageManifest.peerDependencies ?? {})
+];
+
+const packageExternalPredicate = (
+  packageManifest: PackageManifest,
+  config: PackageConfig
+): ((id: string) => boolean) => {
+  const externalPackageNames = new Set([
+    ...packageDependencyNames(packageManifest),
+    ...(config.external ?? [])
+  ]);
+  const externalPackagePrefixes = Array.from(externalPackageNames).map((packageName) => packageName + '/');
+
+  return (id) =>
+    id.startsWith('@royal/') ||
+    externalPackageNames.has(id) ||
+    externalPackagePrefixes.some((packageName) => id.startsWith(packageName));
+};
+
 export default ({ command, mode }: { readonly command: string; readonly mode: string }) => {
   const sharedPlugins = [glsl({ include: ['**/*.frag', '**/*.vert'], minify: mode === 'production' })];
 
@@ -134,7 +163,10 @@ export default ({ command, mode }: { readonly command: string; readonly mode: st
     build: {
       ...sharedBuildOptions,
       lib: packageConfig.lib,
-      rollupOptions: { ...sharedBuildOptions.rollupOptions, ...(packageConfig.external === undefined ? {} : { external: packageConfig.external }) }
+      rollupOptions: {
+        ...sharedBuildOptions.rollupOptions,
+        external: packageExternalPredicate(manifest, packageConfig)
+      }
     },
     resolve: { alias: sourceAliases }
   };

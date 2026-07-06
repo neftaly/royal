@@ -1,5 +1,6 @@
 /** @jsxImportSource @royal/react */
 import { describe, expect, it, vi } from "vitest";
+import type { JSX as ReactDevJSX } from "@royal/react/jsx-dev-runtime";
 import {
   Button,
   Input,
@@ -132,6 +133,24 @@ const fakeRoot = (): RoyalRendererRoot => {
 };
 
 describe("React Canvas renderer tree", () => {
+  it("types DOM and Royal scene JSX in the same React file", () => {
+    const attrs = { key: "shell" } satisfies ReactDevJSX.IntrinsicAttributes;
+    const domProps = { className: "shell" } satisfies ReactDevJSX.IntrinsicElements["div"];
+    const shell = (
+      <div {...domProps}>
+        <scene>
+          <pass>
+            <perspectiveCamera {...perspectiveProps} />
+          </pass>
+        </scene>
+      </div>
+    );
+
+    expect(attrs).toEqual({ key: "shell" });
+    expect(isReactElementLike(shell)).toBe(true);
+    expect(isReactElementLike(shell) ? shell.type : undefined).toBe("div");
+  });
+
   it("keeps renderer JSX as React elements for Canvas resolution", () => {
     const renderScene = (
       <scene>

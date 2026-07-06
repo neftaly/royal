@@ -84,7 +84,7 @@ export type TextLayout = {
   readonly bounds: TextBounds;
   readonly diagnostics: readonly TextShapingDiagnostic[];
   readonly font: TextFontDescriptor;
-  readonly fontFace?: TextFontFace;
+  readonly fontFace: TextFontFace;
   readonly lines: readonly TextLineLayout[];
   readonly metrics: TextBlockMetrics;
   readonly source: string;
@@ -113,7 +113,7 @@ export type TextMesh = {
 
 export interface ShapeTextOptions {
   readonly clusterOffset?: number;
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly text: string;
@@ -126,7 +126,7 @@ export type ShapeTextResult = {
 };
 
 export interface LayoutTextOptions {
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly origin?: Vec3;
@@ -142,7 +142,7 @@ export interface TextNode {
 
 export interface TextOptions {
   readonly color: Rgba;
-  readonly font?: TextFontFace;
+  readonly font: TextFontFace;
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly origin?: Vec3;
