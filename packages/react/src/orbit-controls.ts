@@ -527,6 +527,11 @@ export const OrbitControls = ({
   zoomSpeed,
 }: OrbitControlsProps): null => {
   const canvas = useCanvasElement();
+  const internalCameraStoreRef = useRef<OrbitCameraStore | undefined>(undefined);
+  if (camera !== undefined && store === undefined && internalCameraStoreRef.current === undefined) {
+    internalCameraStoreRef.current = createOrbitCameraStore(resolveStartingView({ defaultView, value }));
+  }
+  const controlsStore = store ?? (camera === undefined ? undefined : internalCameraStoreRef.current);
   const behaviorOptions = toBehaviorOptions({
     enabled,
     enablePan,
@@ -536,10 +541,10 @@ export const OrbitControls = ({
     maxPitch,
     minDistance,
     minPitch,
-    onChange: store === undefined && onChange === undefined
+    onChange: controlsStore === undefined && onChange === undefined
       ? undefined
       : (view) => {
-          store?.getState().setView(view);
+          controlsStore?.getState().setView(view);
           onChange?.(view);
         },
     panSpeed,
@@ -550,23 +555,23 @@ export const OrbitControls = ({
   const viewInputsRef = useRef<OrbitControlsViewInputs>({ defaultView, value });
   const controlsRef = useRef<OrbitControlsHandle | undefined>(undefined);
   const startingViewRef = useRef<OrbitCameraView | undefined>(undefined);
-  const syncOptions = useMemo(() => camera === undefined || store === undefined
+  const syncOptions = useMemo(() => camera === undefined || controlsStore === undefined
     ? undefined
     : {
         camera,
         far,
         fovY,
         near,
-        store,
-      }, [camera, far, fovY, near, store]);
+        store: controlsStore,
+      }, [camera, controlsStore, far, fovY, near]);
   behaviorOptionsRef.current = behaviorOptions;
   viewInputsRef.current = { defaultView, value };
-  startingViewRef.current ??= store?.getState().view ?? resolveStartingView(viewInputsRef.current);
+  startingViewRef.current ??= controlsStore?.getState().view ?? resolveStartingView(viewInputsRef.current);
   useOrbitCameraSync(syncOptions);
 
   useEffect(() => {
     if (canvas === null) return undefined;
-    const controlsStartingView = store?.getState().view ?? viewInputsRef.current.value ?? startingViewRef.current;
+    const controlsStartingView = controlsStore?.getState().view ?? viewInputsRef.current.value ?? startingViewRef.current;
     if (controlsStartingView === undefined) {
       throw new Error("OrbitControls expects value or defaultView");
     }
@@ -596,25 +601,30 @@ export const OrbitControls = ({
     minPitch,
     onChange,
     panSpeed,
-    store,
+    controlsStore,
     rotateSpeed,
     zoomSpeed,
   ]);
 
   useEffect(() => {
-    if (store === undefined) return undefined;
+    if (controlsStore === undefined) return undefined;
 
-    controlsRef.current?.setView(store.getState().view, { clamp: false, notify: false });
-    return store.subscribe((state) => {
+    controlsRef.current?.setView(controlsStore.getState().view, { clamp: false, notify: false });
+    return controlsStore.subscribe((state) => {
       controlsRef.current?.setView(state.view, { clamp: false, notify: false });
     });
-  }, [store]);
+  }, [controlsStore]);
 
   useEffect(() => {
     if (value === undefined) return;
 
+    if (controlsStore !== undefined) {
+      controlsStore.getState().setView(value);
+      return;
+    }
+
     controlsRef.current?.setView(value, { clamp: false, notify: false });
-  }, [value]);
+  }, [controlsStore, value]);
 
   return null;
 };
