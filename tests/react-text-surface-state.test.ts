@@ -19,6 +19,8 @@ import {
   maxScrollLineFor,
   reduceTextSurfaceState,
   scrollLineForRegisteredTextControl,
+  textControlHitBounds,
+  textControlSemantics,
   type ActionControlRegistration,
   type TextControlRegistration,
   type TextSurfaceState,
@@ -93,14 +95,15 @@ const textControl = ({
     selection: selected,
     text,
   });
+  const bounds = {
+    bottom: -1,
+    left: 0,
+    right: 10,
+    top: 1,
+  };
 
   return {
-    bounds: {
-      bottom: -1,
-      left: 0,
-      right: 10,
-      top: 1,
-    },
+    bounds,
     copyable: true,
     editable: true,
     font: textFont,
@@ -111,6 +114,14 @@ const textControl = ({
     selectable: true,
     selectedText: editableTextEditorSelectedText(state),
     selection: state.selection,
+    semantics: textControlSemantics({
+      bounds,
+      copyable: true,
+      editable: true,
+      id,
+      selectable: true,
+      text: state.text,
+    }),
     scrollLine,
     state,
     text: state.text,
@@ -206,6 +217,12 @@ const expectRegisteredTextInvariants = (
   expect(control.selection.anchor).toBeLessThanOrEqual(expectedText.length);
   expect(control.selection.focus).toBeLessThanOrEqual(expectedText.length);
   expect(control.selectedText).toBe(editableTextEditorSelectedText(control.state));
+  expect(control.semantics.id).toBe(control.id);
+  expect(control.semantics.role).toBe("textbox");
+  expect(control.semantics.controlState.value).toBe(expectedText);
+  expect(control.semantics.hitRegion?.bounds).toEqual(textControlHitBounds(control.bounds));
+  expect(control.semantics.hitRegion?.coordinateSpace).toBe("world");
+  expect(control.semantics.hitRegion?.targetId).toBe(control.id);
 
   const persistedSelection = state.selections.get(id);
   if (persistedSelection !== undefined) {
@@ -441,6 +458,46 @@ const fuzzTextSurfaceAction = (
 };
 
 describe("React text surface state reducer", () => {
+  it("builds core UI semantics for text control registrations", () => {
+    const control = textControl({
+      id: "field-semantics",
+      text: "hello",
+    });
+
+    expect(control.semantics).toMatchObject({
+      controlState: {
+        disabled: false,
+        readOnly: false,
+        required: false,
+        value: "hello",
+      },
+      focusState: {
+        focusVisible: false,
+        focusable: true,
+        focused: false,
+      },
+      hitRegion: {
+        bounds: {
+          height: 2,
+          width: 10,
+          x: 0,
+          y: 1,
+        },
+        coordinateSpace: "world",
+        id: "field-semantics:hit",
+        kind: "bounds",
+        targetId: "field-semantics",
+      },
+      id: "field-semantics",
+      inputState: {
+        active: false,
+        hovered: false,
+        pressed: false,
+      },
+      role: "textbox",
+    });
+  });
+
   it("updates editor selection and emits controlled value-change effects", () => {
     const control = textControl({ selected: selection(0), text: "hello" });
     const state: TextSurfaceState = {

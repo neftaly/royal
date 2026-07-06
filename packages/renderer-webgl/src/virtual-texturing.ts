@@ -110,6 +110,22 @@ const pageIdFromKey = (key: string): VirtualTexturePageId | undefined => {
 export const virtualTexturePageKey = (page: VirtualTexturePageId): string =>
   `${page.mip}/${page.x}/${page.y}`;
 
+export const generatedVirtualTexturePageCount = (
+  width: number,
+  height: number,
+  pageSize: number,
+): number => {
+  let pages = 0;
+  let mipWidth = Math.ceil(width / pageSize);
+  let mipHeight = Math.ceil(height / pageSize);
+  while (true) {
+    pages += Math.max(1, mipWidth) * Math.max(1, mipHeight);
+    if (mipWidth <= 1 && mipHeight <= 1) return pages;
+    mipWidth = Math.ceil(mipWidth / 2);
+    mipHeight = Math.ceil(mipHeight / 2);
+  }
+};
+
 export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTexturePageId => ({
   mip: page.mip + 1,
   x: Math.floor(page.x / 2),

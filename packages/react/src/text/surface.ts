@@ -5,6 +5,7 @@ import {
   unlitMaterial,
   type RenderNode,
   type Rgba,
+  type UiNodeSemantics,
   type Vec3,
 } from "@royal/renderer-core";
 import {
@@ -54,6 +55,7 @@ import {
   hasSelection,
   initialTextSurfaceState,
   reduceTextSurfaceState,
+  textControlSemantics,
   type ActionControlKind,
   type ActionControlRegistration,
   type PressedActionControl,
@@ -399,33 +401,20 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       }
     };
 
-    const dispatch = (action: TextSurfaceStateAction): readonly TextSurfaceStateEffect[] => {
+    const dispatch = (action: TextSurfaceStateAction): void => {
       const current = get();
       const result = reduceTextSurfaceState(current, action);
       if (result.state !== current) set(result.state);
-      return result.effects;
+      runEffects(result.effects);
     };
 
     return {
       actionControls: new Map(initialTextSurfaceState.actionControls),
       activeActionId: initialTextSurfaceState.activeActionId,
       activeId: initialTextSurfaceState.activeId,
-      applyEditorState: (id, nextState) => {
-        runEffects(dispatch({
-          editorState: nextState,
-          id,
-          type: "editor/apply-state",
-        }));
-      },
-      clearSelectionsExcept: (id) => {
-        runEffects(dispatch({
-          id,
-          type: "selection/clear-except",
-        }));
-      },
-      closeMenu: () => {
-        runEffects(dispatch({ type: "menu/close" }));
-      },
+      applyEditorState: (id, nextState) => dispatch({ editorState: nextState, id, type: "editor/apply-state" }),
+      clearSelectionsExcept: (id) => dispatch({ id, type: "selection/clear-except" }),
+      closeMenu: () => dispatch({ type: "menu/close" }),
       controls: new Map(initialTextSurfaceState.controls),
       getActionControl: (id) => get().actionControls.get(id),
       getActionControls: () => Array.from(get().actionControls.values()),
@@ -433,56 +422,16 @@ const createTextSurfaceStore = (): TextSurfaceStore => {
       getControls: () => Array.from(get().controls.values()),
       menu: initialTextSurfaceState.menu,
       pressedAction: initialTextSurfaceState.pressedAction,
-      registerActionControl: (control) => {
-        runEffects(dispatch({
-          control,
-          type: "action-control/register",
-        }));
-      },
-      registerControl: (control) => {
-        runEffects(dispatch({
-          control,
-          type: "text-control/register",
-        }));
-      },
+      registerActionControl: (control) => dispatch({ control, type: "action-control/register" }),
+      registerControl: (control) => dispatch({ control, type: "text-control/register" }),
       scrollLines: new Map(initialTextSurfaceState.scrollLines),
       selections: new Map(initialTextSurfaceState.selections),
-      setActiveActionId: (id) => {
-        runEffects(dispatch({
-          id,
-          type: "active-action/set",
-        }));
-      },
-      setActiveId: (id) => {
-        runEffects(dispatch({
-          id,
-          type: "active-text/set",
-        }));
-      },
-      setMenu: (menu) => {
-        runEffects(dispatch({
-          menu,
-          type: "menu/set",
-        }));
-      },
-      setPressedAction: (pressedAction) => {
-        runEffects(dispatch({
-          pressedAction,
-          type: "pressed-action/set",
-        }));
-      },
-      unregisterActionControl: (id) => {
-        runEffects(dispatch({
-          id,
-          type: "action-control/unregister",
-        }));
-      },
-      unregisterControl: (id) => {
-        runEffects(dispatch({
-          id,
-          type: "text-control/unregister",
-        }));
-      },
+      setActiveActionId: (id) => dispatch({ id, type: "active-action/set" }),
+      setActiveId: (id) => dispatch({ id, type: "active-text/set" }),
+      setMenu: (menu) => dispatch({ menu, type: "menu/set" }),
+      setPressedAction: (pressedAction) => dispatch({ pressedAction, type: "pressed-action/set" }),
+      unregisterActionControl: (id) => dispatch({ id, type: "action-control/unregister" }),
+      unregisterControl: (id) => dispatch({ id, type: "text-control/unregister" }),
     };
   });
 };
@@ -1315,6 +1264,7 @@ const fieldNodes = ({
   maxWidth,
   origin,
   rows,
+  semantics,
 }: {
   readonly context: TextSurfaceContextValue;
   readonly height?: number;
@@ -1322,6 +1272,7 @@ const fieldNodes = ({
   readonly maxWidth: number;
   readonly origin: Vec3;
   readonly rows: number;
+  readonly semantics?: UiNodeSemantics;
 }): readonly RenderNode[] => {
   const width = maxWidth + context.style.fieldPaddingX * 2;
   const resolvedHeight = height ?? textFieldHeight({
@@ -1334,6 +1285,7 @@ const fieldNodes = ({
     mesh({
       geometry: boxGeometry({ size: [width, resolvedHeight, 0.02] }),
       material: unlitMaterial({ color: context.style.fieldColor }),
+      ...(semantics === undefined ? {} : { semantics }),
       transform: {
         position: [
           origin[0] + maxWidth / 2,
@@ -1594,6 +1546,7 @@ const usePrimitiveRegistration = ({
 } => {
   const context = useContext(TextSurfaceContext);
   const style = context?.style ?? defaultTextStyle;
+  const active = context?.activeId === id;
   const effectiveFontSize = fontSize ?? style.fontSize;
   const effectiveLineHeight = lineHeight ?? style.lineHeight;
   const fragment = useMemo(() => createEditableTextFragment({
@@ -1607,31 +1560,45 @@ const usePrimitiveRegistration = ({
     selection: state.selection,
     text: state.text,
   }), [effectiveFontSize, effectiveLineHeight, font, maxWidth, mode, origin, state.selection, state.text, style.color]);
-  const control = useMemo<TextControlRegistration>(() => ({
-    bounds: bounds ?? controlBounds(
+  const control = useMemo<TextControlRegistration>(() => {
+    const resolvedBounds = bounds ?? controlBounds(
       origin,
       maxWidth,
       effectiveLineHeight,
       fragment.layout.lines.length,
       style.fieldPaddingX,
       style.fieldPaddingY,
-    ),
-    copyable,
-    editable,
-    font,
-    id,
-    layout: fragment.layout,
-    mode,
-    ...(onValueChange === undefined ? {} : { onValueChange }),
-    origin,
-    selectable,
-    selectedText: editableTextEditorSelectedText(state),
-    selection: state.selection,
-    scrollLine,
-    state,
-    text: state.text,
-    visibleLineCount,
-  }), [
+    );
+
+    return {
+      bounds: resolvedBounds,
+      copyable,
+      editable,
+      font,
+      id,
+      layout: fragment.layout,
+      mode,
+      ...(onValueChange === undefined ? {} : { onValueChange }),
+      origin,
+      selectable,
+      selectedText: editableTextEditorSelectedText(state),
+      selection: state.selection,
+      semantics: textControlSemantics({
+        active,
+        bounds: resolvedBounds,
+        copyable,
+        editable,
+        id,
+        selectable,
+        text: state.text,
+      }),
+      scrollLine,
+      state,
+      text: state.text,
+      visibleLineCount,
+    };
+  }, [
+    active,
     bounds,
     copyable,
     editable,
@@ -1654,7 +1621,7 @@ const usePrimitiveRegistration = ({
   useRegisterTextControl(control);
 
   return {
-    active: context?.activeId === id,
+    active,
     context,
     control,
   };
@@ -2152,6 +2119,7 @@ const TextFieldControl = ({
         maxWidth: resolvedMaxWidth,
         origin: resolvedOrigin,
         rows,
+        semantics: control.semantics,
       })),
     ...fragment.nodes,
     ...(context === undefined ? [] : menuNodes(context, control)),

@@ -12,12 +12,13 @@ import {
   NoEventPriority,
 } from 'react-reconciler/constants.js';
 import {
-  createRendererElement,
+  createRendererHostDescriptor,
+  isIgnorableRendererTextChild,
   isRenderRootDescriptor,
   isRoyalRendererJsxElement,
+  type RendererDescriptorHostChild,
   type RoyalIntrinsicElementType,
-  type RoyalRendererJsxElement,
-} from './jsx-runtime-internal';
+} from './renderer-descriptor';
 import {
   hasRoyalPointerEventHandlers,
   royalPointerEventHandlersFrom,
@@ -145,8 +146,8 @@ const removeHostChild = (
 const descriptorChildrenFor = (
   instance: RoyalHostInstance,
   pointerEventRegistry: RoyalPointerEventTargetRegistry,
-): readonly (RoyalRendererJsxElement | string)[] => {
-  const children: (RoyalRendererJsxElement | string)[] = [];
+): readonly RendererDescriptorHostChild[] => {
+  const children: RendererDescriptorHostChild[] = [];
 
   for (const child of instance.children) {
     const descriptor = toDescriptorChild(child, pointerEventRegistry, instance.type);
@@ -156,36 +157,15 @@ const descriptorChildrenFor = (
   return children;
 };
 
-const withDescriptorChildren = (
-  instance: RoyalHostInstance,
-  children: readonly (RoyalRendererJsxElement | string)[],
-): RoyalHostProps => {
-  const props = { ...instance.props };
-  delete props.children;
-  delete props.ref;
-
-  if (children.length === 1) {
-    props.children = children[0];
-  } else if (children.length > 1) {
-    props.children = children;
-  }
-
-  if (instance.renderObjectRef !== null) {
-    props.ref = instance.renderObjectRef;
-  }
-
-  return props;
-};
-
 const toDescriptorChild = (
   child: RoyalHostChild,
   pointerEventRegistry: RoyalPointerEventTargetRegistry,
   parentType?: RoyalHostType,
-): RoyalRendererJsxElement | string | undefined => {
+): RendererDescriptorHostChild | undefined => {
   if (child.hidden) return undefined;
 
   if (child.kind === 'text') {
-    if (parentType !== 'text' && child.text.trim() === '') return undefined;
+    if (isIgnorableRendererTextChild(child.text, parentType)) return undefined;
 
     return child.text;
   }
@@ -197,12 +177,11 @@ const toDescriptorChild = (
     throw new Error('Royal descriptor host expected one renderer descriptor');
   }
 
-  const descriptor = createRendererElement(
+  const descriptor = createRendererHostDescriptor(
     child.type,
-    withDescriptorChildren(
-      child,
-      descriptorChildrenFor(child, pointerEventRegistry),
-    ) as Parameters<typeof createRendererElement>[1],
+    child.props,
+    descriptorChildrenFor(child, pointerEventRegistry),
+    child.renderObjectRef,
   );
   if (
     isRenderObjectHostType(child.type) &&
@@ -227,7 +206,7 @@ const sceneFromContainer = (
   };
   const sceneChildren = container.children
     .map((child) => toDescriptorChild(child, pointerEventRegistry))
-    .filter((child): child is RoyalRendererJsxElement | string => child !== undefined);
+    .filter((child): child is RendererDescriptorHostChild => child !== undefined);
   container.hasPointerEventTargets = pointerEventRegistry.hasPointerEventTargets;
   container.pointerEventTargets = pointerEventRegistry.pointerEventTargets;
   if (sceneChildren.length === 0) return undefined;

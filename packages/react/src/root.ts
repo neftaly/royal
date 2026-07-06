@@ -1,16 +1,12 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
-  type WebGlGltfInstancingSnapshot,
-  type WebGlGltfLoadDiagnosticsSnapshot,
   type WebGlRoot,
-  type WebGlRootOptions,
-  type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
 import {
   isRenderRootDescriptor,
   type RoyalRendererJsxElement,
-} from "./jsx-runtime-internal";
+} from "./renderer-descriptor";
 
 /** WebGL context options for the Royal renderer root. */
 export interface RoyalRendererRootContextOptions {
@@ -22,9 +18,14 @@ export interface RoyalRendererRootContextOptions {
   readonly preserveDrawingBuffer?: boolean;
 }
 
-/** Options for the Royal renderer root. */
-export interface RoyalRendererRootOptions {
+/** Options passed to renderer backend roots. */
+export interface RoyalRendererBackendRootOptions {
   readonly context?: RoyalRendererRootContextOptions;
+}
+
+/** Options for the Royal renderer root. */
+export interface RoyalRendererRootOptions extends RoyalRendererBackendRootOptions {
+  readonly backend?: RoyalRendererBackendRootFactory;
 }
 
 export type RoyalRendererRootContextSnapshot = Required<RoyalRendererRootContextOptions>;
@@ -33,15 +34,30 @@ export interface RoyalRendererRootSnapshot {
   readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
-  /** Renderer-owned counters for diagnostics; not scene or application state. */
-  readonly gltfInstancing: WebGlGltfInstancingSnapshot;
-  /** Renderer-owned glTF load timing for diagnostics; not scene or application state. */
-  readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
   readonly latestScene: RenderRoot | undefined;
-  readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
 
 export type RoyalRendererRootRenderInput = RenderRoot | RoyalRendererJsxElement;
+
+export interface RoyalRendererBackendRoot {
+  readonly canvas: HTMLCanvasElement;
+  readonly context: RoyalRendererRootContextSnapshot;
+  readonly disposed: boolean;
+  readonly frame: number;
+  readonly latestScene: RenderRoot | undefined;
+  /** Backend-specific diagnostic payload. Host code must validate before use. */
+  diagnostics(): unknown;
+  dispose(): void;
+  invalidate(): void;
+  pick(input: PickInput): PickResult | undefined;
+  render(scene: RenderRoot): void;
+  snapshot(): RoyalRendererRootSnapshot;
+}
+
+export type RoyalRendererBackendRootFactory = (
+  canvas: HTMLCanvasElement,
+  options?: RoyalRendererBackendRootOptions,
+) => RoyalRendererBackendRoot;
 
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
@@ -50,6 +66,8 @@ export interface RoyalRendererRoot {
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
+  /** Renderer-specific diagnostic payload. Host code must validate before use. */
+  diagnostics(): unknown;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   /** Returns the front-most render target under a DOM client coordinate. */
@@ -67,10 +85,8 @@ type WebGlBackedRoyalRendererRoot = RoyalRendererRoot & {
   readonly [WEB_GL_ROOT]: WebGlRoot;
 };
 
-const toWebGlRootOptions = (
-  options: RoyalRendererRootOptions | undefined,
-): WebGlRootOptions | undefined => {
-  return options?.context;
+type WebGlBackedRoyalRendererBackendRoot = RoyalRendererBackendRoot & {
+  readonly [WEB_GL_ROOT]: WebGlRoot;
 };
 
 const toRenderRoot = (scene: RoyalRendererRootRenderInput): RenderRoot => {
@@ -88,14 +104,13 @@ export const webGlRootForRoyalRoot = (root: RoyalRendererRoot): WebGlRoot => {
   return webGlRoot;
 };
 
-/** Creates an imperative renderer root. */
-export const createRendererRoot = (
-  canvas: HTMLCanvasElement,
-  options?: RoyalRendererRootOptions,
-): RoyalRendererRoot => {
-  const root = createWebGlRoot(canvas, toWebGlRootOptions(options));
+const createWebGlRendererBackendRoot: RoyalRendererBackendRootFactory = (
+  canvas,
+  options,
+) => {
+  const root = createWebGlRoot(canvas, options?.context);
 
-  const royalRoot: WebGlBackedRoyalRendererRoot = {
+  return {
     [WEB_GL_ROOT]: root,
     get canvas() {
       return root.canvas;
@@ -112,6 +127,56 @@ export const createRendererRoot = (
     get latestScene() {
       return root.latestScene;
     },
+    diagnostics: () => root.snapshot(),
+    dispose: () => {
+      root.dispose();
+    },
+    invalidate: () => {
+      root.invalidate();
+    },
+    pick: (input: PickInput) => root.pick(input),
+    render: (scene: RenderRoot) => {
+      root.render(scene);
+    },
+    snapshot: () => {
+      return {
+        context: root.options as RoyalRendererRootContextSnapshot,
+        disposed: root.disposed,
+        frame: root.frame,
+        latestScene: root.latestScene,
+      };
+    },
+  } satisfies WebGlBackedRoyalRendererBackendRoot;
+};
+
+/** Creates an imperative renderer root. */
+export const createRendererRoot = (
+  canvas: HTMLCanvasElement,
+  options?: RoyalRendererRootOptions,
+): RoyalRendererRoot => {
+  const root = (options?.backend ?? createWebGlRendererBackendRoot)(
+    canvas,
+    options?.context === undefined ? undefined : { context: options.context },
+  );
+  const webGlRoot = (root as Partial<WebGlBackedRoyalRendererBackendRoot>)[WEB_GL_ROOT];
+
+  const royalRoot: RoyalRendererRoot = {
+    get canvas() {
+      return root.canvas;
+    },
+    get context() {
+      return root.context;
+    },
+    get disposed() {
+      return root.disposed;
+    },
+    get frame() {
+      return root.frame;
+    },
+    get latestScene() {
+      return root.latestScene;
+    },
+    diagnostics: () => root.diagnostics(),
     dispose: () => {
       root.dispose();
     },
@@ -123,18 +188,16 @@ export const createRendererRoot = (
       root.render(toRenderRoot(scene));
     },
     snapshot: () => {
-      const snapshot = root.snapshot();
-      return {
-        context: snapshot.options as RoyalRendererRootContextSnapshot,
-        disposed: snapshot.disposed,
-        frame: snapshot.frame,
-        gltfInstancing: snapshot.gltfInstancing,
-        gltfLoadDiagnostics: snapshot.gltfLoadDiagnostics,
-        latestScene: snapshot.latestScene,
-        virtualTexturing: snapshot.virtualTexturing,
-      };
+      return root.snapshot();
     },
   };
+  if (webGlRoot !== undefined) {
+    Object.defineProperty(royalRoot, WEB_GL_ROOT, {
+      configurable: false,
+      enumerable: false,
+      value: webGlRoot,
+    });
+  }
 
   return royalRoot;
 };

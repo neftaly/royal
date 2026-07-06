@@ -26,7 +26,7 @@ import {
   isRenderRootDescriptor,
   isRoyalRendererJsxElement,
   type RoyalRendererJsxElement,
-} from "./jsx-runtime-internal";
+} from "./renderer-descriptor";
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
@@ -169,8 +169,10 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toRendererRootOptions = ({ context }: CanvasRendererOptions): RoyalRendererRootOptions =>
-  context === undefined ? {} : { context };
+const toRendererRootOptions = ({ backend, context }: CanvasRendererOptions): RoyalRendererRootOptions => ({
+  ...(backend === undefined ? {} : { backend }),
+  ...(context === undefined ? {} : { context }),
+});
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -301,7 +303,9 @@ export const Canvas = ({
   const rendererContextAlpha = rendererOptions?.context?.alpha;
   const rendererContextAntialias = rendererOptions?.context?.antialias;
   const rendererContextPreserveDrawingBuffer = rendererOptions?.context?.preserveDrawingBuffer;
+  const rendererBackend = rendererOptions?.backend;
   const hasRendererOptions = rendererOptions !== undefined;
+  const hasRendererContext = rendererOptions?.context !== undefined;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
@@ -312,16 +316,23 @@ export const Canvas = ({
     () => !hasRendererOptions
       ? undefined
       : toRendererRootOptions({
-        context: {
-          ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
-          ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
-          ...(rendererContextPreserveDrawingBuffer === undefined
-            ? {}
-            : { preserveDrawingBuffer: rendererContextPreserveDrawingBuffer }),
-        },
+        ...(hasRendererContext
+          ? {
+            context: {
+              ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
+              ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
+              ...(rendererContextPreserveDrawingBuffer === undefined
+                ? {}
+                : { preserveDrawingBuffer: rendererContextPreserveDrawingBuffer }),
+            },
+          }
+          : {}),
+        ...(rendererBackend === undefined ? {} : { backend: rendererBackend }),
       }),
     [
+      hasRendererContext,
       hasRendererOptions,
+      rendererBackend,
       rendererContextAlpha,
       rendererContextAntialias,
       rendererContextPreserveDrawingBuffer,

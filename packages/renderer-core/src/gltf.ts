@@ -6,6 +6,7 @@ import {
 import type { Vec3 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
+import type { UiNodeSemantics } from './ui';
 
 export interface GltfAssetBounds {
   readonly max: Vec3;
@@ -30,6 +31,7 @@ export interface GltfNode {
   readonly asset: GltfAssetRef;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
+  readonly semantics?: UiNodeSemantics;
   readonly src: string;
   readonly transform?: Transform;
   /** Selected `KHR_materials_variants` variant name or index. */
@@ -43,6 +45,8 @@ export interface GltfSrcOptions {
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
+  /** Optional renderer-neutral UI semantics associated with this descriptor. */
+  readonly semantics?: UiNodeSemantics;
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
@@ -81,6 +85,7 @@ export function gltf(input: GltfInput): GltfNode {
     asset,
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
+    ...(options.semantics === undefined ? {} : { semantics: options.semantics }),
     src: asset.uri,
     ...(options.variant === undefined ? {} : { variant: options.variant })
   } satisfies Omit<GltfNode, 'transform'>;

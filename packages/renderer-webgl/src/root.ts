@@ -114,7 +114,18 @@ import {
   type LoadedTextureSource,
 } from "./texture-sources";
 import {
+  generatedSvgVirtualTextureManifest,
+  isSvgMimeType,
+  isSvgUri,
+  loadGeneratedSvgVirtualTexturePageImage,
+  loadGltfSvgTexture,
+  loadSvgTextureFromUri,
+  svgVirtualTextureSourceForImage,
+  type SvgVirtualTextureSource,
+} from "./svg-texture";
+import {
   encodeVirtualTexturePageTableRgba8,
+  generatedVirtualTexturePageCount,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
   virtualTextureExplicitPageUrisByKey,
@@ -124,6 +135,32 @@ import {
   type VirtualTexturePageId,
   type VirtualTexturePageTableUpdate,
 } from "./virtual-texturing";
+import {
+  GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
+  VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
+  VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
+  VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
+  VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME,
+  autoVirtualTexturePlan,
+  generatedRasterVirtualTextureManifest,
+  generatedRasterVirtualTexturePageImage,
+  normalizeVirtualTextureDemandUvRange,
+  virtualTextureDemandPageDistance,
+  virtualTextureNow,
+  type AutoVirtualTexturePlan,
+  type BaseColorTextureResidency,
+  type VirtualTextureFallbackTrigger,
+  type VirtualTextureDrawDemand,
+  type VirtualTextureDrawDemandContext,
+  type VirtualTextureDrawDemandModelSource,
+  type VirtualTextureGeneratedPageSource,
+  type VirtualTextureManifestSource,
+  type VirtualTextureRef,
+  type VirtualTextureResourceSet,
+  type VirtualTextureRuntimeState,
+  type VirtualTextureScreenFootprint,
+  type ViewportSize,
+} from "./virtual-texture-runtime";
 import {
   DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
   isBlendedSurfaceMaterial,
@@ -180,138 +217,32 @@ import {
   STUDIO_ENVIRONMENT_SPECULAR_KEY,
   type StudioEnvironmentSpecularResource,
 } from "./webgl/studio-environment";
+import type {
+  NormalizedWebGlRootOptions,
+  WebGlGltfInstancingSnapshot,
+  WebGlGltfLoadDiagnosticsAssetSnapshot,
+  WebGlGltfLoadDiagnosticsPhaseKey,
+  WebGlGltfLoadDiagnosticsSnapshot,
+  WebGlRoot,
+  WebGlRootOptions,
+  WebGlRootSnapshot,
+  WebGlRenderViewport,
+  WebGlRenderViewsOptions,
+  WebGlVirtualTexturingSnapshot,
+} from "./root-types";
 
-/** Renderer context options accepted by the WebGL2 backend. */
-export interface WebGlRootOptions {
-  /** @defaultValue `true` */
-  readonly alpha?: boolean;
-  /** @defaultValue `true` */
-  readonly antialias?: boolean;
-  /** @defaultValue `false` */
-  readonly preserveDrawingBuffer?: boolean;
-}
-
-type NormalizedWebGlRootOptions = Required<WebGlRootOptions>;
-
-/** Snapshot of renderer state, intended for tests and host diagnostics. */
-export interface WebGlRootSnapshot {
-  readonly diagnostics: readonly string[];
-  readonly disposed: boolean;
-  readonly frame: number;
-  /** Renderer-owned glTF load timing, intended for tests, examples benchmarks, and host diagnostics. */
-  readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
-  /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
-  readonly gltfInstancing: WebGlGltfInstancingSnapshot;
-  readonly latestScene: RenderRoot | undefined;
-  readonly options: Required<WebGlRootOptions>;
-  readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
-}
-
-export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
-  readonly animationCount: number;
-  readonly error?: string;
-  readonly imageFailures: number;
-  readonly imageLoaded: number;
-  readonly imageRequests: number;
-  readonly key: string;
-  readonly lightCount: number;
-  readonly nodeCount: number;
-  readonly phaseMs: {
-    readonly animations?: number;
-    readonly buffers?: number;
-    readonly document?: number;
-    readonly draco?: number;
-    readonly firstImageComplete?: number;
-    readonly imagesComplete?: number;
-    readonly meshopt?: number;
-    readonly scene?: number;
-    readonly toSceneReady?: number;
-  };
-  readonly primitiveCount: number;
-  readonly status: "loading" | "sceneReady" | "error";
-  readonly variantCount: number;
-}
-
-export interface WebGlGltfLoadDiagnosticsSnapshot {
-  readonly assets: readonly WebGlGltfLoadDiagnosticsAssetSnapshot[];
-  readonly errorAssets: number;
-  readonly loadingAssets: number;
-  readonly sceneReadyAssets: number;
-}
-
-type WebGlGltfLoadDiagnosticsPhaseKey = keyof WebGlGltfLoadDiagnosticsAssetSnapshot["phaseMs"];
-
-export interface WebGlGltfInstancingSnapshot {
-  /** Transient batch plans built while grouping compatible glTF draws. */
-  readonly batchPlansBuilt: number;
-  readonly batchInstancesTotal: number;
-  readonly drawCalls: number;
-  readonly instancesDrawn: number;
-  readonly localModelUploadBytes: number;
-  readonly localModelUploadCalls: number;
-  readonly rootPoseUploadBytes: number;
-  readonly rootPoseUploadCalls: number;
-  readonly rootScaleUploadBytes: number;
-  readonly rootScaleUploadCalls: number;
-}
-
-export interface WebGlVirtualTexturingSnapshot {
-  readonly atlasTextures: number;
-  readonly generatedManifestUses: number;
-  readonly generatedPageFailures: number;
-  readonly generatedPageRasterizeMaxMs: number;
-  readonly generatedPageRasterizeMs: number;
-  readonly generatedPageRequests: number;
-  readonly generatedPagesTarget: number;
-  readonly manifestFailures: number;
-  readonly manifestRequests: number;
-  readonly manifestsReady: number;
-  readonly pageTableTextures: number;
-  readonly pageTableUpdates: number;
-  readonly pendingPages: number;
-  readonly preparedResidencyResolutions: number;
-  readonly requestedPages: number;
-  readonly residentPages: number;
-  readonly shaderBinds: number;
-  readonly unreadyDraws: number;
-  readonly unsupportedDraws: number;
-  readonly uploadedPageBytes: number;
-  readonly uploadedPages: number;
-}
-
-export interface WebGlRenderViewport {
-  readonly height: number;
-  readonly width: number;
-  readonly x: number;
-  readonly y: number;
-}
-
-export interface WebGlRenderView {
-  readonly projectionMatrix: ArrayLike<number>;
-  readonly viewMatrix: ArrayLike<number>;
-  readonly viewport: WebGlRenderViewport;
-}
-
-export interface WebGlRenderViewsOptions {
-  readonly framebuffer?: WebGLFramebuffer | null;
-  readonly views: readonly WebGlRenderView[];
-}
-
-/** Imperative WebGL2 renderer root. */
-export interface WebGlRoot {
-  readonly canvas: HTMLCanvasElement;
-  readonly disposed: boolean;
-  readonly frame: number;
-  readonly latestScene: RenderRoot | undefined;
-  readonly options: Required<WebGlRootOptions>;
-  dispose(): void;
-  /** Requests one render of the latest scene on the root's active render clock. */
-  invalidate(): void;
-  pick(input: PickInput): PickResult | undefined;
-  render(scene: RenderRoot): void;
-  renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;
-  snapshot(): WebGlRootSnapshot;
-}
+export type {
+  WebGlGltfInstancingSnapshot,
+  WebGlGltfLoadDiagnosticsAssetSnapshot,
+  WebGlGltfLoadDiagnosticsSnapshot,
+  WebGlRenderView,
+  WebGlRenderViewport,
+  WebGlRenderViewsOptions,
+  WebGlRoot,
+  WebGlRootOptions,
+  WebGlRootSnapshot,
+  WebGlVirtualTexturingSnapshot,
+} from "./root-types";
 
 type PickCandidate = PickResult & {
   readonly drawOrdinal: number;
@@ -420,141 +351,6 @@ type SurfaceTextureBindingPlan = {
   readonly baseColor: SurfaceBaseColorTextureBinding;
   readonly features: SurfaceShaderFeatures;
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
-};
-
-type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
-
-type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
-
-type VirtualTextureResourceSet = {
-  readonly atlasTexture: WebGLTexture;
-  readonly atlasGridColumns: number;
-  readonly atlasGridRows: number;
-  readonly pageTableTexture: WebGLTexture;
-  readonly pageTableHeight: number;
-  readonly pageTableWidth: number;
-};
-
-type VirtualTexturePendingUpload = {
-  readonly image: TexImageSource;
-  readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
-};
-
-type SvgVirtualTextureSource = {
-  readonly height: number;
-  readonly label: string;
-  readonly text: string;
-  readonly width: number;
-};
-
-type RasterVirtualTextureSource = {
-  canvasSource?: CanvasImageSource;
-  readonly colorSpace?: TextureColorSpace;
-  readonly height: number;
-  readonly label: string;
-  readonly source: LoadedTextureSource;
-  readonly width: number;
-};
-
-type VirtualTextureGeneratedPageSource =
-  | { readonly kind: "raster"; readonly source: RasterVirtualTextureSource }
-  | { readonly kind: "svg"; readonly source: SvgVirtualTextureSource };
-
-type VirtualTextureManifestSource =
-  | { readonly kind: "generated"; readonly manifestUri: string; readonly pageSource: VirtualTextureGeneratedPageSource }
-  | { readonly kind: "sidecar"; readonly manifestUri: string };
-
-type VirtualTextureFallbackTrigger =
-  | "fetch-failed"
-  | "late-generated-source"
-  | "manifest-unsupported"
-  | "parse-failed"
-  | "runtime-unsupported";
-
-type AutoVirtualTexturePlan = {
-  readonly fallback?: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>;
-  readonly fallbackTriggers: ReadonlySet<VirtualTextureFallbackTrigger>;
-  readonly primary: VirtualTextureManifestSource;
-};
-
-type AutoVirtualTexturePlanInput = {
-  readonly generatedPageSource?: VirtualTextureGeneratedPageSource;
-  readonly sidecarManifestUri?: string;
-  readonly textureKey: string;
-};
-
-type VirtualTextureRuntimeStats = {
-  generatedManifestUses: number;
-  generatedPageFailures: number;
-  generatedPageRasterizeMaxMs: number;
-  generatedPageRasterizeMs: number;
-  generatedPageRequests: number;
-  generatedPagesTarget: number;
-  manifestFailures: number;
-  manifestRequests: number;
-  pageTableUpdates: number;
-  preparedResidencyResolutions: number;
-  shaderBinds: number;
-  unreadyDraws: number;
-  unsupportedDraws: number;
-  uploadedPageBytes: number;
-  uploadedPages: number;
-};
-
-type VirtualTextureRuntimeState = {
-  activeSource: VirtualTextureManifestSource;
-  autoPlan?: AutoVirtualTexturePlan;
-  diagnostics: string[];
-  diagnosticsEnabled: boolean;
-  readonly key: string;
-  loadingPages: Set<string>;
-  manifest?: VirtualTextureManifestModel;
-  pageUrisByKey?: ReadonlyMap<string, string>;
-  pageTable?: VirtualTextureAtlasPageTable;
-  pendingUploads: VirtualTexturePendingUpload[];
-  readonly requestedPages: Set<string>;
-  resources?: VirtualTextureResourceSet;
-  stats: VirtualTextureRuntimeStats;
-  status: VirtualTextureRuntimeStatus;
-  readonly texture: VirtualTextureRef;
-  readonly uploadedPages: Set<string>;
-};
-
-type BaseColorTextureResidency =
-  | { readonly kind: "none" }
-  | { readonly kind: "ordinary"; readonly texture: TextureAssetUploadRef }
-  | {
-      readonly kind: "prepared-virtual";
-      readonly ordinaryFallback?: TextureAssetUploadRef;
-      readonly state: VirtualTextureRuntimeState;
-    };
-
-type VirtualTextureDrawDemandModelSource =
-  | { readonly kind: "composed"; readonly localModels: readonly Mat4[]; readonly rootModels: readonly Mat4[] }
-  | { readonly kind: "single"; readonly model: Mat4 };
-
-type VirtualTextureDrawDemandContext = {
-  readonly modelSource: VirtualTextureDrawDemandModelSource;
-  readonly positions: Float32Array;
-  readonly projection: Mat4;
-  readonly texCoords: Float32Array;
-  readonly view: Mat4;
-  readonly viewportSize: ViewportSize;
-};
-
-type VirtualTextureScreenFootprint = {
-  readonly maxU: number;
-  readonly maxV: number;
-  readonly minU: number;
-  readonly minV: number;
-  readonly screenHeight: number;
-  readonly screenWidth: number;
-};
-
-type VirtualTextureDrawDemand = {
-  readonly coverageCandidates?: readonly VirtualTexturePageId[];
-  readonly demandCandidates: readonly VirtualTexturePageId[];
 };
 
 type LoadedGltfPrimitive = {
@@ -1055,8 +851,6 @@ type WebGlGltfInstancingCounters = {
   -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
 };
 
-type ViewportSize = readonly [width: number, height: number];
-
 type SceneRenderView = {
   projection(renderPass: RenderPass): Mat4;
   readonly viewport: WebGlRenderViewport;
@@ -1077,16 +871,6 @@ const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
-const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
-const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
-const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
-const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
-const GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE + 1;
-const GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX = "royal-generated-vt:";
-const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
-const VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME = 2;
-const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
-const VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW = 32;
 const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
@@ -1098,6 +882,7 @@ const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
 const DJB2_XOR_OFFSET = 5381;
+const textureTextEncoder = new TextEncoder();
 
 const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => ({
   exposure: renderPass.exposure === undefined || !Number.isFinite(renderPass.exposure)
@@ -1105,25 +890,6 @@ const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => (
     : Math.max(0, renderPass.exposure),
   toneMapping: renderPass.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
 });
-
-const normalizeVirtualTextureDemandUvRange = (
-  min: number,
-  max: number,
-): readonly [number, number] => {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
-  if (max - min >= 1 || min < 0 || max > 1) return [0, 1];
-  return [Math.max(0, min), Math.min(1, max)];
-};
-
-const virtualTextureDemandPageDistance = (
-  page: VirtualTexturePageId,
-  centerX: number,
-  centerY: number,
-): number => {
-  const pageCenterX = page.x + 0.5;
-  const pageCenterY = page.y + 0.5;
-  return (pageCenterX - centerX) ** 2 + (pageCenterY - centerY) ** 2;
-};
 
 const hex32 = (value: number): string =>
   value.toString(16).padStart(8, "0");
@@ -1155,7 +921,7 @@ const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
   `royal-auto-bytes-v1:${kind}:${bytes.byteLength}:${hashTextureBytes(new Uint8Array(bytes))}`;
 
 const svgTextContentKey = (svgText: string): TextureContentKey =>
-  byteContentKey(svgTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
+  byteContentKey(textureTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
 
 const typedArrayContentKey = (array: ArrayBufferView | undefined): string => {
   if (array === undefined) return "none";
@@ -1568,14 +1334,6 @@ const gltfTextureContentKey = (
 const gltfImageSourceUri = (src: string, image: GltfImage | undefined): string | undefined =>
   image?.uri === undefined ? undefined : resolveResourceUri(src, image.uri);
 
-const isSvgMimeType = (mimeType: string | undefined): boolean =>
-  mimeType?.toLowerCase() === "image/svg+xml";
-
-const isSvgUri = (uri: string): boolean =>
-  uri.startsWith("data:")
-    ? isSvgMimeType(dataUriMediaType(uri))
-    : /\.svg(?:$|[?#])/iu.test(uri);
-
 const gltfImageLooksSvg = (image: GltfImage | undefined): boolean => {
   if (image === undefined) return false;
   if (isSvgMimeType(image.mimeType)) return true;
@@ -1730,649 +1488,6 @@ const loadImageBitmapFromBytes = (
   return createBitmap(blob);
 };
 
-const loadImageFromBlob = async (blob: Blob, label: string): Promise<HTMLImageElement> => {
-  if (
-    typeof globalThis.URL?.createObjectURL !== "function"
-    || typeof globalThis.URL.revokeObjectURL !== "function"
-  ) {
-    throw new Error(`Object URL loading is unavailable for ${label}`);
-  }
-
-  const url = globalThis.URL.createObjectURL(blob);
-  try {
-    return await loadImage(url);
-  } finally {
-    globalThis.URL.revokeObjectURL(url);
-  }
-};
-
-const svgRootPattern = /<svg\b([^>]*)>/iu;
-const svgViewBoxPattern = /\bviewBox\s*=\s*(["'])(.*?)\1/iu;
-const svgWidthPattern = /\bwidth\s*=\s*(["'])(.*?)\1/iu;
-const svgHeightPattern = /\bheight\s*=\s*(["'])(.*?)\1/iu;
-const svgXmlBasePattern = /\bxml:base\s*=\s*(["'])(.*?)\1/iu;
-const svgImageElementPattern = /<image\b[^>]*>/giu;
-const svgHrefAttributePattern = /\b((?:xlink:)?href)\s*=\s*(["'])(.*?)\2/giu;
-const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)\s*(?:px|pt|pc|mm|cm|in)?\s*$/iu;
-const svgExternalReferenceMaxDepth = 8;
-const svgTextDecoder = new TextDecoder();
-const svgTextEncoder = new TextEncoder();
-const svgVirtualTextureSourceSymbol = Symbol("royal.svgVirtualTextureSource");
-
-type SvgTextureViewport = {
-  readonly fromViewBox: boolean;
-  readonly height: number;
-  readonly width: number;
-};
-
-type SvgVirtualTextureSourceCarrier = {
-  [svgVirtualTextureSourceSymbol]?: SvgVirtualTextureSource;
-};
-
-type SvgImageReferenceContext = {
-  readonly active: Set<string>;
-  readonly cache: Map<string, Promise<SvgImageReferenceValue>>;
-  readonly depth: number;
-};
-
-type SvgImageReferenceValue = {
-  readonly kind: "data-uri";
-  readonly value: string;
-};
-
-const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
-
-const parseSvgDimension = (value: string | undefined): number | undefined => {
-  if (value === undefined) return undefined;
-  const match = svgDimensionPattern.exec(value);
-  if (match === null) return undefined;
-  const parsed = Number.parseFloat(match[1] ?? "");
-
-  return positiveFinite(parsed) ? parsed : undefined;
-};
-
-const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => {
-  const svgRoot = svgRootPattern.exec(svgText);
-  if (svgRoot === null) return undefined;
-
-  const attributes = svgRoot[1] ?? "";
-  const width = parseSvgDimension(svgWidthPattern.exec(attributes)?.[2]);
-  const height = parseSvgDimension(svgHeightPattern.exec(attributes)?.[2]);
-  if (width !== undefined && height !== undefined) {
-    return {
-      fromViewBox: false,
-      height,
-      width,
-    };
-  }
-
-  const viewBox = svgViewBoxPattern.exec(attributes)?.[2];
-  if (viewBox !== undefined) {
-    const values = viewBox.trim().split(/[\s,]+/u).map((value) => Number(value));
-    if (
-      values.length === 4
-      && values.every((value) => Number.isFinite(value))
-      && positiveFinite(values[2] ?? Number.NaN)
-      && positiveFinite(values[3] ?? Number.NaN)
-    ) {
-      return {
-        fromViewBox: true,
-        height: values[3]!,
-        width: values[2]!,
-      };
-    }
-  }
-
-  return undefined;
-};
-
-const svgNumberAttribute = (value: number): string =>
-  Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
-
-const escapeSvgAttribute = (value: string): string =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-
-const absoluteSvgBaseUrl = (url: string, baseUrl?: string): string => {
-  try {
-    const base = globalThis.document?.baseURI ?? globalThis.location?.href;
-    return new URL(url, baseUrl ?? base).href;
-  } catch {
-    return url;
-  }
-};
-
-const svgRootBaseUrl = (attributes: string, documentBaseUrl: string): string => {
-  const authoredBase = svgXmlBasePattern.exec(attributes)?.[2];
-  return authoredBase === undefined
-    ? documentBaseUrl
-    : absoluteSvgBaseUrl(authoredBase, documentBaseUrl);
-};
-
-const svgRootBaseUrlForText = (svgText: string, documentBaseUrl: string): string => {
-  const svgRoot = svgRootPattern.exec(svgText);
-  return svgRoot === null ? documentBaseUrl : svgRootBaseUrl(svgRoot[1] ?? "", documentBaseUrl);
-};
-
-const shouldInlineSvgImageReference = (href: string): boolean =>
-  href.trim() !== ""
-  && !href.startsWith("#")
-  && !/^(?:about|blob|data|javascript|mailto):/iu.test(href);
-
-const responseContentMimeType = (response: Response): string | undefined => {
-  const header = (response as { readonly headers?: Headers }).headers?.get("content-type");
-  const mediaType = header?.split(";")[0]?.trim().toLowerCase();
-  return mediaType === "" ? undefined : mediaType;
-};
-
-const imageMimeTypeForUrl = (url: string, response: Response): string => {
-  const contentType = responseContentMimeType(response);
-  if (contentType !== undefined) return contentType;
-  if (/\.svg(?:$|[?#])/iu.test(url)) return "image/svg+xml";
-  if (/\.avif(?:$|[?#])/iu.test(url)) return "image/avif";
-  if (/\.webp(?:$|[?#])/iu.test(url)) return "image/webp";
-  if (/\.jpe?g(?:$|[?#])/iu.test(url)) return "image/jpeg";
-  if (/\.png(?:$|[?#])/iu.test(url)) return "image/png";
-  if (/\.gif(?:$|[?#])/iu.test(url)) return "image/gif";
-  return "application/octet-stream";
-};
-
-const base64Bytes = (bytes: Uint8Array): string => {
-  const encode = globalThis.btoa;
-  if (typeof encode !== "function") throw new Error("Base64 encoding is unavailable for SVG image reference");
-
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return encode(binary);
-};
-
-const bytesDataUri = (bytes: Uint8Array, mimeType: string): string =>
-  `data:${mimeType};base64,${base64Bytes(bytes)}`;
-
-const setSvgAttribute = (attributes: string, name: string, value: string): string => {
-  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s*=\\s*(["']).*?\\1`, "iu");
-  const attribute = `${name}="${escapeSvgAttribute(value)}"`;
-  if (pattern.test(attributes)) return attributes.replace(pattern, attribute);
-
-  return `${attributes} ${attribute}`;
-};
-
-const svgTextWithFiniteImageDimensions = (
-  svgText: string,
-  label: string,
-  baseUrl?: string,
-  { requireViewport = true }: { readonly requireViewport?: boolean } = {},
-): string => {
-  const viewport = svgTextureViewport(svgText);
-  if (viewport === undefined) {
-    if (!requireViewport && baseUrl === undefined) return svgText;
-    if (!requireViewport && baseUrl !== undefined) {
-      const svgRoot = svgRootPattern.exec(svgText);
-      if (svgRoot === null) return svgText;
-      const attributes = setSvgAttribute(svgRoot[1] ?? "", "xml:base", svgRootBaseUrl(svgRoot[1] ?? "", baseUrl));
-      return `${svgText.slice(0, svgRoot.index)}<svg${attributes}>${svgText.slice(svgRoot.index + svgRoot[0].length)}`;
-    }
-    throw new Error(`${label} requires a finite viewBox or finite width and height`);
-  }
-  if (!viewport.fromViewBox && baseUrl === undefined) return svgText;
-
-  const svgRoot = svgRootPattern.exec(svgText);
-  if (svgRoot === null) return svgText;
-
-  let attributes = svgRoot[1] ?? "";
-  if (viewport.fromViewBox) {
-    attributes = setSvgAttribute(attributes, "width", svgNumberAttribute(viewport.width));
-    attributes = setSvgAttribute(attributes, "height", svgNumberAttribute(viewport.height));
-  }
-  if (baseUrl !== undefined) attributes = setSvgAttribute(attributes, "xml:base", svgRootBaseUrl(attributes, baseUrl));
-
-  return `${svgText.slice(0, svgRoot.index)}<svg${attributes}>${svgText.slice(svgRoot.index + svgRoot[0].length)}`;
-};
-
-const fetchSvgImageReferenceValue = (
-  href: string,
-  baseUrl: string,
-  label: string,
-  context: SvgImageReferenceContext,
-): Promise<SvgImageReferenceValue> => {
-  if (context.depth >= svgExternalReferenceMaxDepth) {
-    return Promise.reject(new Error(`${label} exceeds nested SVG image reference depth ${svgExternalReferenceMaxDepth}`));
-  }
-
-  const url = absoluteSvgBaseUrl(href, baseUrl);
-  const cached = context.cache.get(url);
-  if (cached !== undefined) return cached;
-
-  const request = (async (): Promise<SvgImageReferenceValue> => {
-    if (context.active.has(url)) throw new Error(`${label} contains a cyclic SVG image reference to ${url}`);
-    context.active.add(url);
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-
-      const responseUrl = absoluteSvgBaseUrl(response.url || url, baseUrl);
-      const mimeType = imageMimeTypeForUrl(responseUrl, response);
-      if (mimeType === "image/svg+xml") {
-        const preparedText = await prepareSvgTextForImage(
-          await response.text(),
-          `SVG image reference ${responseUrl}`,
-          responseUrl,
-          {
-            context: {
-              active: context.active,
-              cache: context.cache,
-              depth: context.depth + 1,
-            },
-            requireViewport: false,
-          },
-        );
-
-        return {
-          kind: "data-uri",
-          value: bytesDataUri(svgTextEncoder.encode(preparedText), "image/svg+xml"),
-        };
-      }
-
-      return {
-        kind: "data-uri",
-        value: bytesDataUri(new Uint8Array(await response.arrayBuffer()), mimeType),
-      };
-    } finally {
-      context.active.delete(url);
-    }
-  })();
-  context.cache.set(url, request);
-  return request;
-};
-
-const svgHrefValueForImageTag = (
-  imageTag: string,
-  resolved: ReadonlyMap<string, SvgImageReferenceValue>,
-): SvgImageReferenceValue | undefined => {
-  for (const hrefMatch of imageTag.matchAll(svgHrefAttributePattern)) {
-    const value = resolved.get(hrefMatch[3] ?? "");
-    if (value !== undefined) return value;
-  }
-  return undefined;
-};
-
-const inlineSvgImageReferences = async (
-  svgText: string,
-  label: string,
-  baseUrl: string,
-  context: SvgImageReferenceContext,
-): Promise<string> => {
-  const rootBaseUrl = svgRootBaseUrlForText(svgText, baseUrl);
-  const replacements = new Map<string, Promise<SvgImageReferenceValue>>();
-
-  for (const imageMatch of svgText.matchAll(svgImageElementPattern)) {
-    const imageTag = imageMatch[0];
-    for (const hrefMatch of imageTag.matchAll(svgHrefAttributePattern)) {
-      const href = hrefMatch[3] ?? "";
-      if (!shouldInlineSvgImageReference(href)) continue;
-      replacements.set(href, fetchSvgImageReferenceValue(href, rootBaseUrl, label, context));
-    }
-  }
-
-  if (replacements.size === 0) return svgText;
-
-  const resolved = new Map<string, SvgImageReferenceValue>();
-  await Promise.all([...replacements].map(async ([href, value]) => {
-    resolved.set(href, await value);
-  }));
-
-  return svgText.replace(svgImageElementPattern, (imageTag) => {
-    const value = svgHrefValueForImageTag(imageTag, resolved);
-    if (value === undefined) return imageTag;
-
-    return imageTag.replace(svgHrefAttributePattern, (attribute, name: string, quote: string, href: string) => {
-      const replacement = resolved.get(href);
-      return replacement === undefined ? attribute : `${name}=${quote}${replacement.value}${quote}`;
-    });
-  });
-};
-
-const prepareSvgTextForImage = async (
-  svgText: string,
-  label: string,
-  baseUrl: string | undefined,
-  {
-    context = { active: new Set<string>(), cache: new Map<string, Promise<SvgImageReferenceValue>>(), depth: 0 },
-    requireViewport = true,
-  }: {
-    readonly context?: SvgImageReferenceContext;
-    readonly requireViewport?: boolean;
-  } = {},
-): Promise<string> => {
-  const normalizedText = svgTextWithFiniteImageDimensions(svgText, label, baseUrl, { requireViewport });
-  return baseUrl === undefined
-    ? normalizedText
-    : inlineSvgImageReferences(normalizedText, label, baseUrl, context);
-};
-
-const attachSvgVirtualTextureSource = (
-  image: HTMLImageElement,
-  source: SvgVirtualTextureSource,
-): HTMLImageElement => {
-  (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol] = source;
-  return image;
-};
-
-const svgVirtualTextureSourceForImage = (
-  image: LoadedTextureSource,
-): SvgVirtualTextureSource | undefined =>
-  typeof image === "object" && image !== null
-    ? (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol]
-    : undefined;
-
-type LoadedSvgTextImage = {
-  readonly image: HTMLImageElement;
-  readonly text: string;
-};
-
-const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string): Promise<LoadedSvgTextImage> => {
-  const normalizedText = await prepareSvgTextForImage(svgText, label, baseUrl);
-  const viewport = svgTextureViewport(normalizedText);
-  const image = await loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label);
-
-  return {
-    image: viewport === undefined
-      ? image
-      : attachSvgVirtualTextureSource(image, {
-      height: viewport.height,
-      label,
-      text: normalizedText,
-      width: viewport.width,
-    }),
-    text: normalizedText,
-  };
-};
-
-const generatedVirtualTextureManifestUri = (key: string): string =>
-  `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
-
-const virtualTextureNow = (): number =>
-  typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
-
-const AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS: ReadonlySet<VirtualTextureFallbackTrigger> = new Set([
-  "fetch-failed",
-  "late-generated-source",
-  "manifest-unsupported",
-  "parse-failed",
-  "runtime-unsupported",
-]);
-
-// Today authored sidecars are preferred when usable; generated VT remains attached
-// as a candidate so later resolution policy can choose or promote it centrally.
-const autoVirtualTexturePlan = ({
-  generatedPageSource,
-  sidecarManifestUri,
-  textureKey,
-}: AutoVirtualTexturePlanInput): AutoVirtualTexturePlan | undefined => {
-  const generatedSource = generatedPageSource === undefined
-    ? undefined
-    : {
-      kind: "generated" as const,
-      manifestUri: generatedVirtualTextureManifestUri(textureKey),
-      pageSource: generatedPageSource,
-    };
-  if (sidecarManifestUri !== undefined) {
-    return {
-      ...(generatedSource === undefined ? {} : { fallback: generatedSource }),
-      fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
-      primary: {
-        kind: "sidecar",
-        manifestUri: sidecarManifestUri,
-      },
-    };
-  }
-  if (generatedSource === undefined) return undefined;
-
-  return {
-    fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
-    primary: generatedSource,
-  };
-};
-
-const generatedVirtualTexturePageCount = (
-  width: number,
-  height: number,
-  pageSize: number,
-): number => {
-  let pages = 0;
-  let mipWidth = Math.ceil(width / pageSize);
-  let mipHeight = Math.ceil(height / pageSize);
-  while (true) {
-    pages += Math.max(1, mipWidth) * Math.max(1, mipHeight);
-    if (mipWidth <= 1 && mipHeight <= 1) return pages;
-    mipWidth = Math.ceil(mipWidth / 2);
-    mipHeight = Math.ceil(mipHeight / 2);
-  }
-};
-
-const generatedSvgVirtualTextureManifest = (
-  source: SvgVirtualTextureSource,
-): VirtualTextureManifestModel => {
-  const width = Math.max(1, Math.ceil(source.width));
-  const height = Math.max(1, Math.ceil(source.height));
-  const pageSize = Math.min(GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
-  const physicalSlots = Math.min(
-    GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    generatedVirtualTexturePageCount(width, height, pageSize),
-  );
-
-  return {
-    colorSpace: "srgb",
-    height,
-    pageSize,
-    pages: [],
-    physicalSlots,
-    width,
-  };
-};
-
-const generatedSvgVirtualTexturePageText = (
-  source: SvgVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): string => {
-  const mipScale = 2 ** page.mip;
-  const sourceX = page.x * manifest.pageSize * mipScale;
-  const sourceY = page.y * manifest.pageSize * mipScale;
-  const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
-  const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
-  const href = bytesDataUri(svgTextEncoder.encode(source.text), "image/svg+xml");
-
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.pageSize}" height="${manifest.pageSize}"`,
-    ` viewBox="${svgNumberAttribute(sourceX)} ${svgNumberAttribute(sourceY)} ${svgNumberAttribute(sourceWidth)} ${svgNumberAttribute(sourceHeight)}"`,
-    " preserveAspectRatio=\"none\">",
-    `<image href="${escapeSvgAttribute(href)}" x="0" y="0" width="${svgNumberAttribute(source.width)}"`,
-    ` height="${svgNumberAttribute(source.height)}" preserveAspectRatio="none"/>`,
-    "</svg>",
-  ].join("");
-};
-
-const loadGeneratedSvgVirtualTexturePageImage = (
-  source: SvgVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): Promise<HTMLImageElement> =>
-  loadImageFromBlob(
-    new Blob([generatedSvgVirtualTexturePageText(source, manifest, page)], { type: "image/svg+xml" }),
-    `generated SVG virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
-  );
-
-const generatedRasterVirtualTextureManifest = (
-  source: RasterVirtualTextureSource,
-): VirtualTextureManifestModel => {
-  const width = Math.max(1, Math.ceil(source.width));
-  const height = Math.max(1, Math.ceil(source.height));
-  const pageSize = Math.min(GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
-  const physicalSlots = Math.min(
-    GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    generatedVirtualTexturePageCount(width, height, pageSize),
-  );
-
-  return {
-    ...(source.colorSpace === undefined ? {} : { colorSpace: source.colorSpace }),
-    height,
-    pageSize,
-    pages: [],
-    physicalSlots,
-    width,
-  };
-};
-
-const createVirtualTextureCanvas = (
-  width: number,
-  height: number,
-  label: string,
-): HTMLCanvasElement | OffscreenCanvas => {
-  const document = globalThis.document;
-  if (typeof document?.createElement === "function") {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-
-  if (typeof globalThis.OffscreenCanvas === "function") {
-    return new globalThis.OffscreenCanvas(width, height);
-  }
-
-  throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
-};
-
-const virtualTextureCanvasContext = (
-  canvas: HTMLCanvasElement | OffscreenCanvas,
-  label: string,
-): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D => {
-  const context = canvas.getContext("2d");
-  if (context === null) throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  return context;
-};
-
-const rasterVirtualTextureCanvasSource = (
-  source: RasterVirtualTextureSource,
-): CanvasImageSource => {
-  if (source.canvasSource !== undefined) return source.canvasSource;
-  if (!isDecodedRgbaTexture(source.source)) {
-    source.canvasSource = source.source;
-    return source.canvasSource;
-  }
-
-  const canvas = createVirtualTextureCanvas(source.width, source.height, source.label);
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  if (typeof globalThis.ImageData !== "function") {
-    throw new Error(`ImageData is unavailable for ${source.label}`);
-  }
-  const imageData = new globalThis.ImageData(
-    new Uint8ClampedArray(source.source.data),
-    source.source.width,
-    source.source.height,
-  );
-  context.putImageData(imageData, 0, 0);
-  source.canvasSource = canvas;
-  return source.canvasSource;
-};
-
-const generatedRasterVirtualTexturePageImage = (
-  source: RasterVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): TexImageSource => {
-  const mipScale = 2 ** page.mip;
-  const sourceX = page.x * manifest.pageSize * mipScale;
-  const sourceY = page.y * manifest.pageSize * mipScale;
-  const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
-  const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
-  const canvas = createVirtualTextureCanvas(
-    manifest.pageSize,
-    manifest.pageSize,
-    `generated raster virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
-  );
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  context.clearRect(0, 0, manifest.pageSize, manifest.pageSize);
-  context.drawImage(
-    rasterVirtualTextureCanvasSource(source),
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    manifest.pageSize,
-    manifest.pageSize,
-  );
-  return canvas;
-};
-
-const loadSvgUriImageSource = async (url: string): Promise<LoadedGltfImageSource> => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-
-  const label = `glTF GS_texture_svg image ${url}`;
-  const loadedImage = await loadSvgTextImage(
-    await response.text(),
-    label,
-    absoluteSvgBaseUrl(response.url || url),
-  );
-  return loadedGltfImageSource(
-    loadedImage.image,
-    svgTextContentKey(loadedImage.text),
-  );
-};
-
-const loadSvgImageSource = async (
-  src: string,
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
-  image: GltfImage,
-): Promise<LoadedGltfImageSource> => {
-  if (image.uri !== undefined) {
-    if (image.uri.startsWith("data:")) {
-      const bytes = decodeDataUri(image.uri);
-      const loadedImage = await loadSvgTextImage(
-        svgTextDecoder.decode(bytes),
-        `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`,
-        absoluteSvgBaseUrl(src),
-      );
-      return loadedGltfImageSource(
-        loadedImage.image,
-        svgTextContentKey(loadedImage.text),
-      );
-    }
-
-    return loadSvgUriImageSource(resolveResourceUri(src, image.uri));
-  }
-  if (image.bufferView === undefined) {
-    throw new Error("glTF GS_texture_svg image has no URI or bufferView");
-  }
-  const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
-  const loadedImage = await loadSvgTextImage(
-    svgTextDecoder.decode(bytes),
-    `glTF GS_texture_svg bufferView ${image.bufferView}`,
-    absoluteSvgBaseUrl(src),
-  );
-
-  return loadedGltfImageSource(
-    loadedImage.image,
-    svgTextContentKey(loadedImage.text),
-  );
-};
-
 const loadBasisuBytesFromUri = async (
   src: string,
   image: GltfImage,
@@ -2395,7 +1510,11 @@ const loadGltfImageSource = (
   kind: GltfImageKind,
 ): Promise<LoadedGltfImageSource> => {
   if (kind === "svg") {
-    return loadSvgImageSource(src, document, buffers, image);
+    return loadGltfSvgTexture(src, document, buffers, image)
+      .then((loadedImage) => loadedGltfImageSource(
+        loadedImage.image,
+        svgTextContentKey(loadedImage.text),
+      ));
   }
 
   if (kind === "basisu") {
@@ -7312,7 +6431,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#textures.set(key, state);
 
     const imageSource = isSvgUri(texture.uri)
-      ? loadSvgUriImageSource(texture.uri)
+      ? loadSvgTextureFromUri(texture.uri)
         .then((loadedImage) => loadedImage.image)
       : loadImage(texture.uri);
 

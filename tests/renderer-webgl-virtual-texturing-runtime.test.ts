@@ -1077,7 +1077,13 @@ describe("WebGL renderer virtual texturing integration", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
-    const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#f60\"/></svg>";
+    const svgText = [
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" onload=\"alert(1)\">",
+      "<script>alert(1)</script>",
+      "<image href=\"javascript:alert(1)\" width=\"1\" height=\"1\"/>",
+      "<rect width=\"512\" height=\"512\" fill=\"#f60\"/>",
+      "</svg>",
+    ].join("");
 
     root.render(renderScene(material));
     expect(fetchRequests.some((request) => request.url === "/textures/plain.svg")).toBe(true);
@@ -1086,6 +1092,10 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     expect(objectUrlBlobs).toHaveLength(1);
+    const normalizedSvgText = await objectUrlBlobs[0]!.text();
+    expect(normalizedSvgText).not.toContain("<script");
+    expect(normalizedSvgText).not.toContain("onload=");
+    expect(normalizedSvgText).not.toContain("javascript:");
     expect(ControlledImage.instances[0]?.src).toBe("blob:royal-svg-texture-1");
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();

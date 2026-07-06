@@ -16,7 +16,8 @@ const createTextNode = (options: TextOptions): TextNode => {
     kind: 'text',
     color: options.color,
     diagnostics: layout.diagnostics,
-    layout
+    layout,
+    ...(options.semantics === undefined ? {} : { semantics: options.semantics })
   };
 };
 

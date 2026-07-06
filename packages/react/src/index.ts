@@ -1,6 +1,5 @@
 import { Canvas as CanvasComponent } from './canvas';
 import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
-import { markReactComponent } from './jsx-runtime-internal';
 import {
   TextFontProvider as TextFontProviderComponent,
   TextInteractionProvider as TextInteractionProviderComponent,
@@ -37,7 +36,7 @@ export {
   useOrbitCamera,
   useOrbitCameraView
 } from './orbit-controls';
-export { createRendererRoot } from './root';
+export { createRendererRoot, webGlRootForRoyalRoot } from './root';
 export {
   Button,
   Input,
@@ -55,11 +54,11 @@ export type {
   RoyalPointerEventType
 } from './picking-events';
 
-export const Canvas = markReactComponent(CanvasComponent);
-export const OrbitControls = markReactComponent(OrbitControlsComponent);
-export const TextFontProvider = markReactComponent(TextFontProviderComponent);
-export const TextInteractionProvider = markReactComponent(TextInteractionProviderComponent);
-export const TextSurface = markReactComponent(TextSurfaceComponent);
+export const Canvas = CanvasComponent;
+export const OrbitControls = OrbitControlsComponent;
+export const TextFontProvider = TextFontProviderComponent;
+export const TextInteractionProvider = TextInteractionProviderComponent;
+export const TextSurface = TextSurfaceComponent;
 
 export type { CanvasProps, CanvasRendererOptions, CanvasRootOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
@@ -106,6 +105,9 @@ export type {
   UseOrbitCameraOptions
 } from './orbit-controls';
 export type {
+  RoyalRendererBackendRoot,
+  RoyalRendererBackendRootFactory,
+  RoyalRendererBackendRootOptions,
   RoyalRendererRoot,
   RoyalRendererRootContextOptions,
   RoyalRendererRootContextSnapshot,

@@ -21,6 +21,9 @@ type GltfInstancingCounters = {
 
 type RendererRootSnapshot = {
   readonly frame?: unknown;
+};
+
+type RendererDiagnosticsSnapshot = {
   readonly gltfInstancing?: unknown;
   readonly gltfLoadDiagnostics?: unknown;
   readonly virtualTexturing?: unknown;
@@ -163,15 +166,16 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
 
     const snapshot = (): RendererBenchmarkSnapshot | null => {
       const rootSnapshot = root.snapshot() as RendererRootSnapshot;
+      const diagnostics = root.diagnostics() as RendererDiagnosticsSnapshot;
       if (typeof rootSnapshot.frame !== 'number' || !Number.isFinite(rootSnapshot.frame)) {
         return null;
       }
 
       return {
         frame: rootSnapshot.frame,
-        gltfInstancing: copyGltfInstancingCounters(rootSnapshot.gltfInstancing),
-        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(rootSnapshot.gltfLoadDiagnostics),
-        virtualTexturing: copyNumberCounters(rootSnapshot.virtualTexturing),
+        gltfInstancing: copyGltfInstancingCounters(diagnostics.gltfInstancing),
+        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoadDiagnostics),
+        virtualTexturing: copyNumberCounters(diagnostics.virtualTexturing),
       };
     };
     bridge.__royalExamplesGltfInstancingSnapshot = snapshot;

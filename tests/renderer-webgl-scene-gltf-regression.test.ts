@@ -7057,7 +7057,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
     const wrapperSvgTexture = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 210 287\" width=\"1024\" height=\"1024\">",
-      "<rect x=\"0\" y=\"0\" width=\"210\" height=\"287\" fill=\"#c7b084\"/>",
+      "<script>globalThis.__royalUnsafeSvgScript = true</script>",
+      "<rect x=\"0\" y=\"0\" width=\"210\" height=\"287\" fill=\"#c7b084\" onload=\"globalThis.__royalUnsafeSvgOnload = true\"/>",
+      "<a href=\"javascript:globalThis.__royalUnsafeSvgHref = true\"><text x=\"0\" y=\"0\">unsafe</text></a>",
       "<image href=\"ghostscript-tiger.svg\" x=\"10\" y=\"10\" width=\"190\" height=\"267\" preserveAspectRatio=\"xMidYMid meet\"/>",
       "</svg>",
     ].join("");
@@ -7106,6 +7108,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(normalizedSvg).toContain("width=\"190\"");
     expect(normalizedSvg).toContain("preserveAspectRatio=\"xMidYMid meet\"");
     expect(normalizedSvg).toContain("href=\"data:image/svg+xml;base64,");
+    expect(normalizedSvg).not.toContain("<script");
+    expect(normalizedSvg).not.toContain("onload=");
+    expect(normalizedSvg).not.toContain("javascript:");
     expect(normalizedSvg).not.toContain("d=\"M1 1h8v8H1z\"");
     expect(normalizedSvg).not.toContain("href=\"ghostscript-tiger.svg\"");
     for (const image of ControlledImage.instances) image.settleLoad();

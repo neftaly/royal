@@ -1,4 +1,5 @@
 import type { Rgba, Vec3 } from '../primitives';
+import type { UiNodeSemantics } from '../ui';
 import type { TextFontDescriptor, TextFontFace } from './font';
 
 export type TextBounds = {
@@ -138,6 +139,7 @@ export interface TextNode {
   readonly color: Rgba;
   readonly diagnostics: readonly TextShapingDiagnostic[];
   readonly layout: TextLayout;
+  readonly semantics?: UiNodeSemantics;
 }
 
 export interface TextOptions {
@@ -146,5 +148,7 @@ export interface TextOptions {
   readonly fontSize?: number;
   readonly lineHeight?: number;
   readonly origin?: Vec3;
+  /** Optional renderer-neutral UI semantics associated with this descriptor. */
+  readonly semantics?: UiNodeSemantics;
   readonly text: string;
 }

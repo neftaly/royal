@@ -11,11 +11,14 @@ import {
   standardMaterial,
   studioEnvironment,
   textureAsset,
+  text,
   type TextureRef,
   unlitMaterial,
+  uiNodeSemantics,
   virtualTexture,
   type VirtualTextureAssetOptions,
 } from "@royal/renderer-core";
+import { loadTestTextFont } from "./text-font-fixture";
 
 const camera = perspectiveCamera({
   far: 100,
@@ -118,6 +121,27 @@ describe("renderer-core descriptor contract", () => {
       pickingId: "helmet",
       src: "/models/helmet.gltf",
     });
+  });
+
+  it("preserves renderer-neutral UI semantics on render descriptors", async () => {
+    const font = await loadTestTextFont();
+    const semantics = uiNodeSemantics({ id: "field", role: "textbox" });
+
+    expect(mesh({
+      geometry: boxGeometry(1),
+      material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      semantics,
+    }).semantics).toBe(semantics);
+    expect(gltf({
+      semantics,
+      src: "/models/form.gltf",
+    }).semantics).toBe(semantics);
+    expect(text({
+      color: [1, 1, 1, 1],
+      font,
+      semantics,
+      text: "Royal",
+    }).semantics).toBe(semantics);
   });
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {

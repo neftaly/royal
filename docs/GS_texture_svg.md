@@ -1,6 +1,13 @@
 # GS_texture_svg
 
-Status: Draft Garbo Succus vendor extension.
+Status: Beta Garbo Succus vendor extension.
+
+Royal treats this as a supported beta feature in the WebGL renderer: product
+examples may use it, validation and regression tests cover the current
+behavior, and assets should include a core raster fallback. The extension name
+and exact fallback rules are not yet a stable ecosystem compatibility promise.
+Royal sanitizes SVG text before rasterization by removing script elements,
+event-handler attributes, and unsafe `javascript:` or `data:text/html` hrefs.
 
 ## Extension Name
 
@@ -173,6 +180,11 @@ rasterization. Implementations SHOULD reject or sanitize active content before
 rasterization. External image references MUST be resolved by the implementation's
 normal asset loading and origin policy. Implementations SHOULD keep SVG
 rasterization deterministic for a fixed set of resolved resources.
+
+Royal's WebGL renderer sanitizes before image decode, content-key generation,
+and generated virtual texture page creation. It strips `<script>` elements,
+inline event-handler attributes, and unsafe `javascript:` or `data:text/html`
+hrefs.
 
 ## JSON Schema
 

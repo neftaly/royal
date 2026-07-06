@@ -82,7 +82,9 @@ React scenes.
 
 `createRendererRoot(canvas)` is the lower-level host and testing escape hatch
 for code that already owns a canvas and lowered renderer descriptors. App
-examples and docs should start with `<Canvas>`.
+examples and docs should start with `<Canvas>`. React root snapshots stay
+backend-neutral; WebGL diagnostics are available through
+`webGlRootForRoyalRoot(root).snapshot()`.
 
 Royal renderer APIs stop at renderer primitives. App-specific surface
 descriptors, placement contracts, product panels, and event rows belong in
@@ -92,10 +94,12 @@ API.
 glTF support is first-class. Optional and draft features should stay isolated
 until they are useful through the public renderer and React APIs.
 
-## SVG textures (experimental)
+## SVG textures (beta)
 
-We also support `.svg` textures, with an experimental Garbo Succus GLTF extension.
-This lets the renderer show perfect textures at any resolution.
+Royal supports `.svg` texture images and the beta `GS_texture_svg` glTF
+extension. The WebGL renderer selects the SVG source when present, keeps a core
+raster fallback for non-supporting loaders, validates SVG dimensions, and
+resolves relative SVG image references before rasterization.
 
 Spec: [docs/GS_texture_svg.md](docs/GS_texture_svg.md)
 

@@ -7,8 +7,10 @@ import {
   boxGeometry,
   perspectiveCamera,
   studioEnvironment,
+  uiNodeSemantics,
   unlitMaterial,
 } from "@royal/renderer-core";
+import { loadTestTextFont } from "./text-font-fixture";
 
 const perspectiveProps = {
   far: 10,
@@ -213,6 +215,36 @@ describe("renderer JSX contract", () => {
     ).toMatchObject({
       kind: "mesh",
       ref,
+    });
+  });
+
+  it("threads renderer-neutral UI semantics through JSX descriptors", async () => {
+    const font = await loadTestTextFont();
+    const semantics = uiNodeSemantics({
+      id: "field",
+      role: "textbox",
+    });
+
+    expect(
+      <mesh semantics={semantics}>
+        <boxGeometry size={1} />
+        <unlitMaterial color={[0.2, 0.4, 0.8, 1]} />
+      </mesh>,
+    ).toMatchObject({
+      kind: "mesh",
+      semantics,
+    });
+    expect(
+      <gltf semantics={semantics} src="/models/form.gltf" />,
+    ).toMatchObject({
+      kind: "gltf",
+      semantics,
+    });
+    expect(
+      <text color={[1, 1, 1, 1]} font={font} semantics={semantics} text="Royal" />,
+    ).toMatchObject({
+      kind: "text",
+      semantics,
     });
   });
 

@@ -1,4 +1,10 @@
-import type { Vec3 } from "@royal/renderer-core";
+import {
+  uiHitRegion,
+  uiNodeSemantics,
+  type UiHitBounds,
+  type UiNodeSemantics,
+  type Vec3,
+} from "@royal/renderer-core";
 import {
   collapseEditableTextEditorSelection,
   createEditableTextEditorState,
@@ -36,6 +42,7 @@ export type TextControlRegistration = {
   readonly selectable: boolean;
   readonly selectedText: string;
   readonly selection: EditableTextSelection;
+  readonly semantics: UiNodeSemantics;
   readonly scrollLine: number;
   readonly state: EditableTextEditorState;
   readonly text: string;
@@ -159,6 +166,50 @@ export const hasSelection = (control: TextControlRegistration): boolean => {
   return range.start !== range.end;
 };
 
+export const textControlHitBounds = (bounds: TextControlBounds): UiHitBounds => ({
+  height: Math.max(0, bounds.top - bounds.bottom),
+  width: Math.max(0, bounds.right - bounds.left),
+  x: bounds.left,
+  y: bounds.top,
+});
+
+export const textControlSemantics = ({
+  active = false,
+  bounds,
+  copyable,
+  editable,
+  id,
+  selectable,
+  text,
+}: Pick<TextControlRegistration, "bounds" | "copyable" | "editable" | "id" | "selectable" | "text"> & {
+  readonly active?: boolean;
+}): UiNodeSemantics => {
+  const focusable = editable || selectable || copyable;
+
+  return uiNodeSemantics({
+    controlState: {
+      readOnly: !editable,
+      value: text,
+    },
+    focusState: {
+      focusVisible: active,
+      focusable,
+      focused: active,
+    },
+    hitRegion: uiHitRegion({
+      bounds: textControlHitBounds(bounds),
+      coordinateSpace: "world",
+      id: `${id}:hit`,
+      targetId: id,
+    }),
+    id,
+    inputState: {
+      active,
+    },
+    role: editable ? "textbox" : "text",
+  });
+};
+
 export const withSelection = (
   control: TextControlRegistration,
   nextSelection: EditableTextSelection,
@@ -243,6 +294,11 @@ const stateWith = (
   scrollLines: state.scrollLines,
   selections: state.selections,
   ...patch,
+});
+
+const stateResult = (state: TextSurfaceState): TextSurfaceStateReducerResult => ({
+  effects: [],
+  state,
 });
 
 const samePressedAction = (
@@ -411,58 +467,32 @@ export const reduceTextSurfaceState = (
 ): TextSurfaceStateReducerResult => {
   switch (action.type) {
     case "text-control/register":
-      return {
-        effects: [],
-        state: registerTextControl(state, action.control),
-      };
+      return stateResult(registerTextControl(state, action.control));
     case "text-control/unregister":
-      return {
-        effects: [],
-        state: unregisterTextControl(state, action.id),
-      };
+      return stateResult(unregisterTextControl(state, action.id));
     case "action-control/register":
-      return {
-        effects: [],
-        state: registerActionControl(state, action.control),
-      };
+      return stateResult(registerActionControl(state, action.control));
     case "action-control/unregister":
-      return {
-        effects: [],
-        state: unregisterActionControl(state, action.id),
-      };
+      return stateResult(unregisterActionControl(state, action.id));
     case "editor/apply-state":
       return applyEditorState(state, action.id, action.editorState);
     case "selection/clear-except":
-      return {
-        effects: [],
-        state: clearSelectionsExcept(state, action.id),
-      };
+      return stateResult(clearSelectionsExcept(state, action.id));
     case "active-text/set":
-      return {
-        effects: [],
-        state: state.activeId === action.id ? state : stateWith(state, { activeId: action.id }),
-      };
+      return stateResult(state.activeId === action.id ? state : stateWith(state, { activeId: action.id }));
     case "active-action/set":
-      return {
-        effects: [],
-        state: state.activeActionId === action.id ? state : stateWith(state, { activeActionId: action.id }),
-      };
+      return stateResult(
+        state.activeActionId === action.id ? state : stateWith(state, { activeActionId: action.id }),
+      );
     case "menu/set":
-      return {
-        effects: [],
-        state: sameMenuState(state.menu, action.menu) ? state : stateWith(state, { menu: action.menu }),
-      };
+      return stateResult(sameMenuState(state.menu, action.menu) ? state : stateWith(state, { menu: action.menu }));
     case "menu/close":
-      return {
-        effects: [],
-        state: sameMenuState(state.menu, closedMenu) ? state : stateWith(state, { menu: closedMenu }),
-      };
+      return stateResult(sameMenuState(state.menu, closedMenu) ? state : stateWith(state, { menu: closedMenu }));
     case "pressed-action/set":
-      return {
-        effects: [],
-        state: samePressedAction(state.pressedAction, action.pressedAction)
+      return stateResult(
+        samePressedAction(state.pressedAction, action.pressedAction)
           ? state
           : stateWith(state, { pressedAction: action.pressedAction }),
-      };
+      );
   }
 };

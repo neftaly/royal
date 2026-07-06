@@ -11,12 +11,11 @@ import {
 } from "@royal/react";
 import {
   boxGeometry,
-  type RenderRoot,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { resolveCanvasChildren } from "../packages/react/src/canvas";
 import { createRoyalRendererTree } from "../packages/react/src/renderer-tree";
-import type { RoyalRendererRoot } from "../packages/react/src/root";
+import { fakeRendererRoot } from "./react-test-fixtures";
 
 type ReactElementLike = {
   readonly $$typeof: symbol;
@@ -47,90 +46,6 @@ const Cube = () => (
     material={unlitMaterial({ color: [1, 0, 0, 1] })}
   />
 );
-
-const zeroGltfInstancingSnapshot = {
-  batchInstancesTotal: 0,
-  batchPlansBuilt: 0,
-  drawCalls: 0,
-  instancesDrawn: 0,
-  localModelUploadBytes: 0,
-  localModelUploadCalls: 0,
-  rootPoseUploadBytes: 0,
-  rootPoseUploadCalls: 0,
-  rootScaleUploadBytes: 0,
-  rootScaleUploadCalls: 0,
-};
-
-const zeroGltfLoadDiagnosticsSnapshot = {
-  assets: [],
-  errorAssets: 0,
-  loadingAssets: 0,
-  sceneReadyAssets: 0,
-};
-
-const zeroVirtualTexturingSnapshot = {
-  atlasTextures: 0,
-  generatedManifestUses: 0,
-  generatedPageFailures: 0,
-  generatedPageRasterizeMaxMs: 0,
-  generatedPageRasterizeMs: 0,
-  generatedPageRequests: 0,
-  generatedPagesTarget: 0,
-  manifestFailures: 0,
-  manifestRequests: 0,
-  manifestsReady: 0,
-  pageTableTextures: 0,
-  pageTableUpdates: 0,
-  pendingPages: 0,
-  preparedResidencyResolutions: 0,
-  requestedPages: 0,
-  residentPages: 0,
-  shaderBinds: 0,
-  unreadyDraws: 0,
-  unsupportedDraws: 0,
-  uploadedPageBytes: 0,
-  uploadedPages: 0,
-};
-
-const fakeRoot = (): RoyalRendererRoot => {
-  let frame = 0;
-  let latestScene: RenderRoot | undefined;
-  const root: RoyalRendererRoot = {
-    canvas: {} as HTMLCanvasElement,
-    context: {
-      alpha: true,
-      antialias: true,
-      preserveDrawingBuffer: false,
-    },
-    get disposed() {
-      return false;
-    },
-    get frame() {
-      return frame;
-    },
-    get latestScene() {
-      return latestScene;
-    },
-    dispose: vi.fn(),
-    invalidate: vi.fn(),
-    pick: vi.fn(() => undefined),
-    render: vi.fn((scene: RenderRoot) => {
-      latestScene = scene;
-      frame += 1;
-    }),
-    snapshot: vi.fn(() => ({
-      context: root.context,
-      disposed: root.disposed,
-      frame: root.frame,
-      gltfInstancing: zeroGltfInstancingSnapshot,
-      gltfLoadDiagnostics: zeroGltfLoadDiagnosticsSnapshot,
-      latestScene: root.latestScene,
-      virtualTexturing: zeroVirtualTexturingSnapshot,
-    })),
-  };
-
-  return root;
-};
 
 describe("React Canvas renderer tree", () => {
   it("types DOM and Royal scene JSX in the same React file", () => {
@@ -293,7 +208,7 @@ describe("React Canvas renderer tree", () => {
 
   it("does not invalidate again while syncing declarative transform props", () => {
     const tree = createRoyalRendererTree();
-    const root = fakeRoot();
+    const root = fakeRendererRoot();
     const ref: { current: RenderObjectHandle | null } = { current: null };
     const renderScene = (x: number) => (
       <scene>
@@ -320,6 +235,58 @@ describe("React Canvas renderer tree", () => {
     ref.current?.position.set([2, 0, 0]);
 
     expect(root.invalidate).toHaveBeenCalledTimes(1);
+    tree.dispose();
+  });
+
+  it("uses renderer JSX child rules when lowering Canvas descriptors", () => {
+    const tree = createRoyalRendererTree();
+    const root = fakeRendererRoot();
+    const onClick = vi.fn();
+
+    tree.setTarget(root, false);
+    tree.render(
+      <scene>
+        {" \n\t "}
+        {false}
+        <pass clear="none" depthTest={false}>
+          {"\n  "}
+          <perspectiveCamera {...perspectiveProps} />
+          {null}
+          <mesh onClick={onClick}>
+            {" \n "}
+            <boxGeometry size={[1, 2, 3]} />
+            <unlitMaterial color={[0.2, 0.4, 0.8, 1]} />
+          </mesh>
+        </pass>
+      </scene>,
+    );
+
+    expect(root.latestScene).toMatchObject({
+      children: [
+        {
+          children: [
+            {
+              geometry: { kind: "box", size: [1, 2, 3] },
+              kind: "mesh",
+              material: expect.objectContaining({ kind: "unlit" }),
+            },
+          ],
+          clear: "none",
+          depthTest: false,
+          kind: "pass",
+        },
+      ],
+      kind: "scene",
+    });
+
+    const meshNode = root.latestScene?.children[0]?.children[0];
+    expect(meshNode).toBeDefined();
+    if (meshNode === undefined) throw new Error("Expected Canvas to lower one mesh node");
+
+    expect(meshNode).not.toHaveProperty("onClick");
+    expect(tree.hasPointerEventTargets()).toBe(true);
+    expect(tree.pointerEventTarget(meshNode)?.handlers.onClick).toBe(onClick);
+
     tree.dispose();
   });
 
