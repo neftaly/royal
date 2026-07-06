@@ -4,49 +4,64 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24.12.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./render-object": {
       "types": "./dist/render-object.d.ts",
-      "import": "./dist/render-object.js"
+      "import": "./dist/render-object.js",
+      "default": "./dist/render-object.js"
     },
     "./text": {
       "types": "./dist/text/index.d.ts",
-      "import": "./dist/text.js"
+      "import": "./dist/text.js",
+      "default": "./dist/text.js"
     },
     "./text/editable": {
       "types": "./dist/text/editable/index.d.ts",
-      "import": "./dist/text/editable.js"
+      "import": "./dist/text/editable.js",
+      "default": "./dist/text/editable.js"
     },
     "./text/font": {
       "types": "./dist/text/font.d.ts",
-      "import": "./dist/text/font.js"
+      "import": "./dist/text/font.js",
+      "default": "./dist/text/font.js"
     },
     "./text/layout": {
       "types": "./dist/text/layout.d.ts",
-      "import": "./dist/text/layout.js"
+      "import": "./dist/text/layout.js",
+      "default": "./dist/text/layout.js"
     },
     "./text/mesh": {
       "types": "./dist/text/mesh.d.ts",
-      "import": "./dist/text/mesh.js"
+      "import": "./dist/text/mesh.js",
+      "default": "./dist/text/mesh.js"
     },
     "./text/node": {
       "types": "./dist/text/node.d.ts",
-      "import": "./dist/text/node.js"
+      "import": "./dist/text/node.js",
+      "default": "./dist/text/node.js"
     },
     "./text/shaping": {
       "types": "./dist/text/shaping.d.ts",
-      "import": "./dist/text/shaping.js"
+      "import": "./dist/text/shaping.js",
+      "default": "./dist/text/shaping.js"
     },
     "./text/types": {
       "types": "./dist/text/types.d.ts",
-      "import": "./dist/text/types.js"
-    }
+      "import": "./dist/text/types.js",
+      "default": "./dist/text/types.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
@@ -55,6 +70,7 @@
   "scripts": {
     "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
+    "prepack": "pnpm build",
     "test": "vitest run --root ../.. ../../tests/renderer-core-*.test.ts"
   },
   "devDependencies": {

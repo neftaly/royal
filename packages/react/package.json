@@ -4,37 +4,49 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24.12.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./scene": {
       "types": "./dist/scene.d.ts",
-      "import": "./dist/scene.js"
+      "import": "./dist/scene.js",
+      "default": "./dist/scene.js"
     },
     "./xr": {
       "types": "./dist/xr.d.ts",
-      "import": "./dist/xr.js"
+      "import": "./dist/xr.js",
+      "default": "./dist/xr.js"
     },
     "./jsx-runtime": {
       "types": "./dist/jsx-runtime.d.ts",
-      "import": "./dist/jsx-runtime.js"
+      "import": "./dist/jsx-runtime.js",
+      "default": "./dist/jsx-runtime.js"
     },
     "./jsx-dev-runtime": {
       "types": "./dist/jsx-dev-runtime.d.ts",
-      "import": "./dist/jsx-dev-runtime.js"
+      "import": "./dist/jsx-dev-runtime.js",
+      "default": "./dist/jsx-dev-runtime.js"
     },
     "./renderer/jsx-runtime": {
       "types": "./dist/renderer-jsx-runtime.d.ts",
-      "import": "./dist/renderer-jsx-runtime.js"
+      "import": "./dist/renderer-jsx-runtime.js",
+      "default": "./dist/renderer-jsx-runtime.js"
     },
     "./renderer/jsx-dev-runtime": {
       "types": "./dist/renderer-jsx-dev-runtime.d.ts",
-      "import": "./dist/renderer-jsx-dev-runtime.js"
-    }
+      "import": "./dist/renderer-jsx-dev-runtime.js",
+      "default": "./dist/renderer-jsx-dev-runtime.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
@@ -43,6 +55,7 @@
   "scripts": {
     "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
+    "prepack": "pnpm build",
     "test": "vitest run --root ../.. ../../tests/react-*.test.ts ../../tests/react-*.test.tsx"
   },
   "dependencies": {

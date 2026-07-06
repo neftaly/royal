@@ -9,12 +9,20 @@ export interface PickInput {
   readonly clientY: number;
 }
 
-export interface PickTarget {
+export interface MeshPickTarget {
   readonly id?: PickingId;
-  readonly kind: 'mesh' | 'gltf';
-  readonly node: MeshNode | GltfNode;
+  readonly kind: 'mesh';
+  readonly node: MeshNode;
+}
+
+export interface GltfPickTarget {
+  readonly id?: PickingId;
+  readonly kind: 'gltf';
+  readonly node: GltfNode;
   readonly primitiveKey?: string;
 }
+
+export type PickTarget = MeshPickTarget | GltfPickTarget;
 
 export interface PickResult {
   readonly clientX: number;

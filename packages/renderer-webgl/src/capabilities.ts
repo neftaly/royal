@@ -136,7 +136,11 @@ export type RendererCapabilityProbeResult = {
   readonly diagnostics: readonly RendererCapabilityDiagnostic[];
 };
 
-type CanvasImageMimeTypeDocument = {
+export type RendererCapabilitySummary = Readonly<Partial<Record<RendererCapabilityName, boolean>>>;
+
+type RendererCapabilityRowsInput = RendererCapabilityProbeResult | readonly RendererCapabilityProbeRow[];
+
+export type CanvasImageMimeTypeDocument = {
   readonly createElement?: (tagName: string) => {
     readonly toDataURL?: (type?: string, quality?: number) => string;
   } | null;
@@ -407,3 +411,25 @@ export const probeWebGlCapabilities = (
 
   throw new Error("Renderer capability probing requires a WebGL-like context");
 };
+
+const capabilityRowsFor = (
+  input: RendererCapabilityRowsInput,
+): readonly RendererCapabilityProbeRow[] =>
+  "rows" in input ? input.rows : input;
+
+export const rendererCapabilitySummary = (
+  input: RendererCapabilityRowsInput,
+): RendererCapabilitySummary => {
+  const summary: Partial<Record<RendererCapabilityName, boolean>> = {};
+
+  for (const row of capabilityRowsFor(input)) {
+    if (row.kind === "renderer_capability") summary[row.capability] = row.supported;
+  }
+
+  return summary;
+};
+
+export const rendererCapabilitySupported = (
+  input: RendererCapabilityRowsInput,
+  capability: RendererCapabilityName,
+): boolean => rendererCapabilitySummary(input)[capability] ?? false;

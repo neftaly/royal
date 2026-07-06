@@ -10,6 +10,9 @@ import {
   scene,
   standardMaterial,
   text,
+  type GltfPickTarget,
+  type MeshPickTarget,
+  type PickTarget,
 } from "@royal/renderer-core";
 import * as rendererCore from "@royal/renderer-core";
 import * as editableTextApi from "@royal/renderer-core/text/editable";
@@ -166,6 +169,20 @@ describe("renderer-core public API", () => {
       // @ts-expect-error WebGlRoot is a factory-created handle type, not a public constructor.
       webglApi.WebGlRoot;
     }
+  });
+
+  it("narrows pick targets by kind", () => {
+    const pickTargetKind = (target: PickTarget) => {
+      if (target.kind === "mesh") {
+        const meshTarget: MeshPickTarget = target;
+        return meshTarget.node.geometry.kind;
+      }
+
+      const gltfTarget: GltfPickTarget = target;
+      return gltfTarget.node.asset.uri;
+    };
+
+    expect(typeof pickTargetKind).toBe("function");
   });
 
   it("throws when text is used without a real font face", () => {

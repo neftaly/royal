@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   canvasSupportsImageMimeType,
   probeWebGlCapabilities,
+  rendererCapabilitySummary,
+  rendererCapabilitySupported,
+  type CanvasImageMimeTypeDocument,
   type WebGlCapabilityProbeContext,
 } from "@royal/renderer-webgl/capabilities";
 
@@ -69,7 +72,7 @@ describe("renderer-webgl capabilities public API", () => {
               : "data:image/png;base64,AA==",
         }
         : null,
-    };
+    } satisfies CanvasImageMimeTypeDocument;
 
     expect(canvasSupportsImageMimeType("image/avif", { document })).toBe(true);
     expect(canvasSupportsImageMimeType("image/jpeg", { document })).toBe(true);
@@ -175,6 +178,14 @@ describe("renderer-webgl capabilities public API", () => {
     expect(parameterQueries).toContain(gl.MAX_TEXTURE_SIZE);
     expect(parameterQueries).toContain(gl.MAX_TEXTURE_IMAGE_UNITS);
     expect(parameterQueries).toContain(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+
+    expect(rendererCapabilitySummary(result)).toMatchObject({
+      anisotropy: true,
+      compressed_texture: false,
+      webgl2: true,
+    });
+    expect(rendererCapabilitySupported(result, "anisotropy")).toBe(true);
+    expect(rendererCapabilitySupported(result.rows, "compressed_texture")).toBe(false);
   });
 
   it("requires a WebGL-like context instead of returning stubbed rows", () => {

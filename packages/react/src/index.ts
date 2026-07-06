@@ -7,7 +7,7 @@ import {
   TextSurface as TextSurfaceComponent
 } from './text/surface';
 
-export type { PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
+export type { GltfPickTarget, MeshPickTarget, PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
 export { createTextFontFace, createTextFontFaceAsync } from '@royal/renderer-core/text/font';
 export type {
   CreateTextFontFaceOptions,

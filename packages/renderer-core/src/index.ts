@@ -81,7 +81,7 @@ export type { EnvironmentLight, EnvironmentLightPreset, StudioEnvironmentOptions
 export { studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
-export type { PickInput, PickingId, PickResult, PickTarget } from './picking';
+export type { GltfPickTarget, MeshPickTarget, PickInput, PickingId, PickResult, PickTarget } from './picking';
 export type {
   RenderObjectHandle,
   RenderObjectRef,

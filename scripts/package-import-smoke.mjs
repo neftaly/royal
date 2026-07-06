@@ -49,6 +49,10 @@ for (const packageCheck of packages) {
       await import(specifier);
       console.log('ok', specifier);
     }
+    await import(${JSON.stringify(packageCheck.specifiers[0] + '/package.json')}, {
+      with: { type: 'json' }
+    });
+    console.log('ok', ${JSON.stringify(packageCheck.specifiers[0] + '/package.json')});
   `;
 
   execFileSync(process.execPath, ['--input-type=module', '-e', script], {

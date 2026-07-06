@@ -4,21 +4,29 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24.12.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./capabilities": {
       "types": "./dist/capabilities.d.ts",
-      "import": "./dist/capabilities.js"
+      "import": "./dist/capabilities.js",
+      "default": "./dist/capabilities.js"
     },
     "./webxr": {
       "types": "./dist/webxr.d.ts",
-      "import": "./dist/webxr.js"
-    }
+      "import": "./dist/webxr.js",
+      "default": "./dist/webxr.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
@@ -27,6 +35,7 @@
   "scripts": {
     "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
+    "prepack": "pnpm build",
     "test": "vitest run --root ../.. ../../tests/renderer-webgl-*.test.ts"
   },
   "dependencies": {
