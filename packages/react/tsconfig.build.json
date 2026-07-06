@@ -6,8 +6,11 @@
     "paths": {
       "@royal/renderer-core": ["../renderer-core/dist/index.d.ts"],
       "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"],
+      "@royal/renderer-core/text/editable": ["../renderer-core/dist/text/editable/index.d.ts"],
+      "@royal/renderer-core/text/font": ["../renderer-core/dist/text/font.d.ts"],
       "@royal/renderer-webgl": ["../renderer-webgl/dist/index.d.ts"],
-      "@royal/renderer-webgl/capabilities": ["../renderer-webgl/dist/capabilities.d.ts"]
+      "@royal/renderer-webgl/capabilities": ["../renderer-webgl/dist/capabilities.d.ts"],
+      "@royal/renderer-webgl/webxr": ["../renderer-webgl/dist/webxr.d.ts"]
     },
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
