@@ -3,6 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neftaly/royal.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/neftaly/royal/issues"
+  },
+  "homepage": "https://github.com/neftaly/royal/tree/main/packages/react#readme",
   "type": "module",
   "sideEffects": false,
   "engines": {
