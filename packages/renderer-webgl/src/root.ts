@@ -67,6 +67,7 @@ import {
   applyGltfMorphTargets,
   gltfMorphWeights,
 } from "./gltf/morph";
+import { generateGltfPrimitiveNormals } from "./gltf/normals";
 import {
   type GltfContentExtras,
   type GltfDocument,
@@ -6846,6 +6847,7 @@ class WebGlRootImpl implements WebGlRoot {
       const colors = gltfVertexColors(document, buffers, primitive, morphed.positions, decodedAttributes);
       const indices = dracoPrimitive?.indices
         ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
+      const normals = morphed.normals ?? generateGltfPrimitiveNormals(morphed.positions, indices, mode);
       const material = this.#readGltfMaterial(
         document,
         buffers,
@@ -6890,7 +6892,7 @@ class WebGlRootImpl implements WebGlRoot {
         mode,
         nodePath,
         ...(nodeLod === undefined ? {} : { nodeLod }),
-        ...(morphed.normals === undefined ? {} : { normals: morphed.normals }),
+        ...(normals === undefined ? {} : { normals }),
         positions: morphed.positions,
         ...(morphed.tangents === undefined ? {} : { tangents: morphed.tangents }),
       });

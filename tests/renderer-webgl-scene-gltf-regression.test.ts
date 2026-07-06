@@ -6673,7 +6673,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
   });
 
-  it("loads glTF base-color images from bufferViews", async () => {
+  it("loads glTF bufferView base-color images on primitives without normals", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -6685,15 +6685,28 @@ describe("WebGL renderer scene and glTF regressions", () => {
       gltf({ src: triangleGltfSrc, version: "buffer-view-image" }),
     ]));
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        bufferViews: [
-          ...(triangleDocument().bufferViews),
-          { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
-        ],
-        buffers: [{ byteLength: triangleBinByteLength + 4, uri: triangleBinUri }],
-        images: [{ bufferView: 4, mimeType: "image/png" }],
-      }))).toBe(true);
+      {
+        const document = triangleDocument();
+        const primitive = document.meshes[0]?.primitives[0];
+        return responseWithJson(url, {
+          ...document,
+          bufferViews: [
+            ...document.bufferViews,
+            { buffer: 0, byteLength: 4, byteOffset: triangleBinByteLength },
+          ],
+          buffers: [{ byteLength: triangleBinByteLength + 4, uri: triangleBinUri }],
+          images: [{ bufferView: 4, mimeType: "image/png" }],
+          meshes: [{
+            primitives: [{
+              ...primitive,
+              attributes: {
+                POSITION: 0,
+                TEXCOORD_0: 2,
+              },
+            }],
+          }],
+        });
+      })).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
@@ -6703,10 +6716,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     loader.bitmapRequests[0]?.resolve({} as ImageBitmap);
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
+    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
+      0, 0, 1,
+      0, 0, 1,
+      0, 0, 1,
+    ]);
   });
 
   it("loads required EXT_texture_webp base-color texture sources", async () => {
