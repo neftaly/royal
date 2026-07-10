@@ -177,6 +177,17 @@ const toPointerContact = (event: PointerEvent): PointerContact => ({
 const pointerDistance = (first: PointerContact, second: PointerContact): number =>
   Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
 
+const sameOrbitCameraView = (
+  left: OrbitCameraView,
+  right: OrbitCameraView,
+): boolean =>
+  left.distance === right.distance &&
+  left.pitch === right.pitch &&
+  left.yaw === right.yaw &&
+  left.target[0] === right.target[0] &&
+  left.target[1] === right.target[1] &&
+  left.target[2] === right.target[2];
+
 const syncOrbitPerspectiveCameraDescriptor = (
   camera: PerspectiveCamera,
   options: OrbitPerspectiveCameraOptions,
@@ -228,24 +239,12 @@ export const useOrbitCamera = ({
   }
 
   const cameraStore = store ?? defaultStoreRef.current;
-  const cameraRef = useRef<PerspectiveCamera | undefined>(undefined);
-  if (cameraRef.current === undefined) {
-    cameraRef.current = orbitPerspectiveCamera({
-      far,
-      fovY,
-      near,
-      view: cameraStore.getState().view,
-    });
-  } else {
-    syncOrbitPerspectiveCameraDescriptor(cameraRef.current, {
-      far,
-      fovY,
-      near,
-      view: cameraStore.getState().view,
-    });
-  }
-
-  const camera = cameraRef.current;
+  const camera = useMemo(() => orbitPerspectiveCamera({
+    far,
+    fovY,
+    near,
+    view: cameraStore.getState().view,
+  }), [cameraStore, far, fovY, near]);
   const orbitControlsProps = useMemo(() => ({
     camera,
     far,
@@ -314,7 +313,7 @@ export const createOrbitControls = (
   const currentPanSpeed = (): number => behaviorOptions.panSpeed ?? defaultPanSpeed;
   const currentRotateSpeed = (): number => behaviorOptions.rotateSpeed ?? defaultRotateSpeed;
   const currentZoomSpeed = (): number => behaviorOptions.zoomSpeed ?? defaultZoomSpeed;
-  let view: OrbitCameraView = resolveStartingView(options);
+  let view: OrbitCameraView = clampOrbitCameraView(resolveStartingView(options), behaviorOptions);
   let interaction: InteractionState | undefined;
   const activePointers = new Map<number, PointerContact>();
 
@@ -333,7 +332,10 @@ export const createOrbitControls = (
     }: { readonly clamp?: boolean | undefined; readonly notify?: boolean | undefined } = {},
   ): void => {
     const resolvedView = resolveOrbitCameraView(nextView);
-    view = shouldClamp ? clampView(resolvedView) : resolvedView;
+    const nextResolvedView = shouldClamp ? clampView(resolvedView) : resolvedView;
+    if (sameOrbitCameraView(view, nextResolvedView)) return;
+
+    view = nextResolvedView;
     if (notify) {
       behaviorOptions.onChange?.(view);
     }
@@ -361,6 +363,7 @@ export const createOrbitControls = (
   const startDrag = (event: PointerEvent): void => {
     if (behaviorOptions.enabled === false) return;
     if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
+    if (activePointers.size >= 2) return;
 
     activePointers.set(event.pointerId, toPointerContact(event));
     if (activePointers.size >= 2 && startPinch()) {
@@ -400,12 +403,14 @@ export const createOrbitControls = (
 
   const moveDrag = (event: PointerEvent): void => {
     if (!activePointers.has(event.pointerId)) return;
+    if (behaviorOptions.enabled === false) return;
 
     event.preventDefault();
     activePointers.set(event.pointerId, toPointerContact(event));
     if (interaction === undefined) return;
 
     if (interaction.kind === "pinch") {
+      if (behaviorOptions.enableZoom === false) return;
       const [firstPointerId, secondPointerId] = interaction.pointerIds;
       const first = activePointers.get(firstPointerId);
       const second = activePointers.get(secondPointerId);
@@ -421,6 +426,7 @@ export const createOrbitControls = (
     const deltaY = event.clientY - interaction.startY;
 
     if (interaction.mode === "orbit") {
+      if (behaviorOptions.enableRotate === false) return;
       applyView(rotateOrbitCameraView(
         interaction.startView,
         deltaX,
@@ -430,6 +436,7 @@ export const createOrbitControls = (
       return;
     }
 
+    if (behaviorOptions.enablePan === false) return;
     applyView(panOrbitCameraView(
       interaction.startView,
       deltaX,
@@ -462,13 +469,19 @@ export const createOrbitControls = (
   };
 
   const blockContextMenu = (event: MouseEvent): void => {
-    event.preventDefault();
+    if (behaviorOptions.enabled !== false && behaviorOptions.enablePan !== false) {
+      event.preventDefault();
+    }
   };
   const canvasStyle = canvas.style as CSSStyleDeclaration | undefined;
   const previousTouchAction = canvasStyle?.touchAction;
-  if (canvasStyle !== undefined) {
-    canvasStyle.touchAction = "none";
-  }
+  const updateTouchAction = (): void => {
+    if (canvasStyle === undefined) return;
+    canvasStyle.touchAction = behaviorOptions.enabled === false
+      ? previousTouchAction ?? ""
+      : "none";
+  };
+  updateTouchAction();
 
   canvas.addEventListener("contextmenu", blockContextMenu);
   canvas.addEventListener("pointercancel", endDrag);
@@ -494,7 +507,18 @@ export const createOrbitControls = (
     },
     getView: () => view,
     setOptions: (nextOptions) => {
-      behaviorOptions = toBehaviorOptions(nextOptions);
+      behaviorOptions = { ...behaviorOptions, ...nextOptions };
+      updateTouchAction();
+      const interactionDisabled = behaviorOptions.enabled === false ||
+        (interaction?.kind === "pinch" && behaviorOptions.enableZoom === false) ||
+        (interaction?.kind === "drag" && interaction.mode === "orbit" && behaviorOptions.enableRotate === false) ||
+        (interaction?.kind === "drag" && interaction.mode === "pan" && behaviorOptions.enablePan === false);
+      if (interactionDisabled) {
+        for (const pointerId of activePointers.keys()) releaseCanvasPointer(canvas, pointerId);
+        activePointers.clear();
+        interaction = undefined;
+      }
+      applyView(view);
     },
     setView: (nextView, setViewOptions) => {
       applyView(nextView, {
@@ -544,7 +568,7 @@ export const OrbitControls = ({
     onChange: controlsStore === undefined && onChange === undefined
       ? undefined
       : (view) => {
-          controlsStore?.getState().setView(view);
+          if (value === undefined) controlsStore?.getState().setView(view);
           onChange?.(view);
         },
     panSpeed,
@@ -604,6 +628,7 @@ export const OrbitControls = ({
     controlsStore,
     rotateSpeed,
     zoomSpeed,
+    value,
   ]);
 
   useEffect(() => {

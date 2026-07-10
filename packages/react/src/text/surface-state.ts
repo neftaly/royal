@@ -55,6 +55,7 @@ export type ActionControlRegistration = {
   readonly id: string;
   readonly kind: ActionControlKind;
   readonly onPress: () => void;
+  readonly semantics: UiNodeSemantics;
 };
 
 export type PressedActionControl = {
@@ -179,10 +180,12 @@ export const textControlSemantics = ({
   copyable,
   editable,
   id,
+  label,
   selectable,
   text,
 }: Pick<TextControlRegistration, "bounds" | "copyable" | "editable" | "id" | "selectable" | "text"> & {
   readonly active?: boolean;
+  readonly label?: string;
 }): UiNodeSemantics => {
   const focusable = editable || selectable || copyable;
 
@@ -206,9 +209,52 @@ export const textControlSemantics = ({
     inputState: {
       active,
     },
+    ...(label === undefined ? {} : { label }),
     role: editable ? "textbox" : "text",
   });
 };
+
+export const actionControlSemantics = ({
+  active = false,
+  bounds,
+  checked,
+  disabled,
+  id,
+  kind,
+  label,
+  pressed = false,
+  value,
+}: Pick<ActionControlRegistration, "bounds" | "disabled" | "id" | "kind"> & {
+  readonly active?: boolean;
+  readonly checked?: boolean;
+  readonly label?: string;
+  readonly pressed?: boolean;
+  readonly value?: string;
+}): UiNodeSemantics => uiNodeSemantics({
+  controlState: {
+    ...(checked === undefined ? {} : { checked }),
+    disabled,
+    ...(value === undefined ? {} : { value }),
+  },
+  focusState: {
+    focusVisible: active,
+    focusable: !disabled,
+    focused: active,
+  },
+  hitRegion: uiHitRegion({
+    bounds: textControlHitBounds(bounds),
+    coordinateSpace: "world",
+    id: `${id}:hit`,
+    targetId: id,
+  }),
+  id,
+  inputState: {
+    active,
+    pressed,
+  },
+  ...(label === undefined ? {} : { label }),
+  role: kind === "checkbox" ? "checkbox" : "button",
+});
 
 export const withSelection = (
   control: TextControlRegistration,
@@ -343,10 +389,9 @@ const registerTextControl = (
     currentControl,
     persistedScrollLine: state.scrollLines.get(control.id),
   });
-  const nextControl = {
-    ...selectedControl,
-    scrollLine,
-  };
+  const nextControl = selectedControl.scrollLine === scrollLine
+    ? selectedControl
+    : { ...selectedControl, scrollLine };
   const currentScroll = state.scrollLines.get(control.id);
 
   if (currentControl === nextControl && currentScroll === scrollLine) return state;
@@ -372,9 +417,14 @@ const unregisterTextControl = (
   nextControls.delete(id);
   const nextScrollLines = new Map(state.scrollLines);
   nextScrollLines.delete(id);
+  const nextSelections = new Map(state.selections);
+  nextSelections.delete(id);
   return stateWith(state, {
+    activeId: state.activeId === id ? undefined : state.activeId,
     controls: nextControls,
+    menu: state.menu.controlId === id ? closedMenu : state.menu,
     scrollLines: nextScrollLines,
+    selections: nextSelections,
   });
 };
 
@@ -397,7 +447,11 @@ const unregisterActionControl = (
 
   const nextControls = new Map(state.actionControls);
   nextControls.delete(id);
-  return stateWith(state, { actionControls: nextControls });
+  return stateWith(state, {
+    actionControls: nextControls,
+    activeActionId: state.activeActionId === id ? undefined : state.activeActionId,
+    pressedAction: state.pressedAction?.controlId === id ? undefined : state.pressedAction,
+  });
 };
 
 const applyEditorState = (
@@ -406,22 +460,22 @@ const applyEditorState = (
   editorState: EditableTextEditorState,
 ): TextSurfaceStateReducerResult => {
   const control = state.controls.get(id);
+  if (control === undefined) return stateResult(state);
+
   let nextState = setSelection(state, id, editorState.selection);
-  const effects = control !== undefined && control.text !== editorState.text
+  const effects = control.text !== editorState.text
     ? [{ id, type: "value-change", value: editorState.text } satisfies TextSurfaceStateEffect]
     : [];
 
-  if (control !== undefined) {
-    const scrollControl = {
-      ...control,
-      scrollLine: nextState.scrollLines.get(id) ?? control.scrollLine,
-    };
-    const nextScrollLine = scrollLineForSelection(scrollControl, editorState.selection);
-    if (nextScrollLine !== scrollControl.scrollLine) {
-      nextState = stateWith(nextState, {
-        scrollLines: new Map(nextState.scrollLines).set(id, nextScrollLine),
-      });
-    }
+  const scrollControl = {
+    ...control,
+    scrollLine: nextState.scrollLines.get(id) ?? control.scrollLine,
+  };
+  const nextScrollLine = scrollLineForSelection(scrollControl, editorState.selection);
+  if (nextScrollLine !== scrollControl.scrollLine) {
+    nextState = stateWith(nextState, {
+      scrollLines: new Map(nextState.scrollLines).set(id, nextScrollLine),
+    });
   }
 
   return {

@@ -37,13 +37,14 @@ type RoyalHostContext = Record<string, never>;
 
 type RoyalHostInstance = {
   readonly kind: 'host';
-  readonly rootContainer: RoyalRendererContainer;
   readonly renderObjectInvalidation: { suppress: boolean } | null;
   readonly renderObjectHandle: RenderObjectHandle | null;
   readonly renderObjectRef: RenderObjectRefObject | null;
   children: RoyalHostChild[];
   hidden: boolean;
   parent: RoyalHostParent | null;
+  readonly pointerEventTarget: RoyalPointerEventTarget | null;
+  pointerEventHandlers: ReturnType<typeof royalPointerEventHandlersFrom> | null;
   props: RoyalHostProps;
   type: RoyalHostType;
 };
@@ -61,9 +62,11 @@ type RoyalRendererContainer = {
   hasPointerEventTargets: boolean;
   latestScene: RenderRoot | undefined;
   pointerEventTargets: WeakMap<object, RoyalPointerEventTarget>;
+  renderInvalidationPending: boolean;
   root: RoyalRendererRoot | null;
   renderLatest(): void;
   scheduleRenderLatest(): void;
+  flushFrame(): void;
 };
 
 type RoyalPointerEventTargetRegistry = {
@@ -82,6 +85,9 @@ const hostContext = {} as const satisfies RoyalHostContext;
 
 const isRenderObjectHostType = (type: RoyalHostType): boolean =>
   type === 'mesh' || type === 'gltf';
+
+const isPointerEventHostType = (type: RoyalHostType): boolean =>
+  isRenderObjectHostType(type) || type === 'gltfInstances';
 
 const resolveRenderObjectTransform = (
   transform: unknown,
@@ -184,14 +190,16 @@ const toDescriptorChild = (
     child.renderObjectRef,
   );
   if (
-    isRenderObjectHostType(child.type) &&
+    isPointerEventHostType(child.type) &&
     hasRoyalPointerEventHandlers(child.props) &&
-    (descriptor.kind === 'mesh' || descriptor.kind === 'gltf')
+    (descriptor.kind === 'mesh' || descriptor.kind === 'gltf' || descriptor.kind === 'gltf-instances')
   ) {
     pointerEventRegistry.hasPointerEventTargets = true;
-    pointerEventRegistry.pointerEventTargets.set(descriptor, {
-      handlers: royalPointerEventHandlersFrom(child.props),
-    });
+    const pointerEventTarget = child.pointerEventTarget;
+    if (pointerEventTarget === null) {
+      throw new Error('Royal render object is missing its pointer event target');
+    }
+    pointerEventRegistry.pointerEventTargets.set(descriptor, pointerEventTarget);
   }
 
   return descriptor;
@@ -229,15 +237,34 @@ const createRendererContainer = (): RoyalRendererContainer => {
     hasPointerEventTargets: false,
     latestScene: undefined,
     pointerEventTargets: new WeakMap(),
+    renderInvalidationPending: false,
     root: null,
+    flushFrame: () => {
+      if (
+        !container.renderInvalidationPending ||
+        container.disabled ||
+        container.root === null ||
+        container.latestScene === undefined
+      ) return;
+
+      container.renderInvalidationPending = false;
+      container.root.render(container.latestScene);
+    },
     renderLatest: () => {
       if (container.disabled || container.root === null || container.latestScene === undefined) return;
 
+      container.renderInvalidationPending = false;
       container.root.render(container.latestScene);
     },
     scheduleRenderLatest: () => {
-      if (container.disabled || container.root === null || container.latestScene === undefined) return;
+      if (
+        container.renderInvalidationPending ||
+        container.disabled ||
+        container.root === null ||
+        container.latestScene === undefined
+      ) return;
 
+      container.renderInvalidationPending = true;
       container.root.invalidate();
     },
   };
@@ -264,18 +291,32 @@ const createHostInstance = (
     ? null
     : { current: renderObjectHandle };
 
-  return {
+  let instance: RoyalHostInstance;
+  const pointerEventHandlers = isPointerEventHostType(type)
+    ? royalPointerEventHandlersFrom(props)
+    : null;
+  const pointerEventTarget: RoyalPointerEventTarget | null = isPointerEventHostType(type)
+    ? {
+        get handlers() {
+          return instance.pointerEventHandlers!;
+        },
+      }
+    : null;
+  instance = {
     children: [],
     hidden: false,
     kind: 'host',
     parent: null,
+    pointerEventHandlers,
+    pointerEventTarget,
     props,
     renderObjectHandle,
     renderObjectInvalidation,
     renderObjectRef,
-    rootContainer,
     type,
   };
+
+  return instance;
 };
 
 let currentUpdatePriority = NoEventPriority;
@@ -324,6 +365,9 @@ const createReconciler = () => ReactReconciler<
   },
   commitUpdate: (instance, _type, _prevProps, nextProps) => {
     instance.props = nextProps;
+    if (instance.pointerEventHandlers !== null) {
+      instance.pointerEventHandlers = royalPointerEventHandlersFrom(nextProps);
+    }
     if (instance.renderObjectHandle !== null) {
       const invalidation = instance.renderObjectInvalidation;
       if (invalidation !== null) invalidation.suppress = true;
@@ -412,6 +456,7 @@ const reconciler: RoyalReconciler = createReconciler();
 
 export type RoyalRendererTree = {
   dispose(): void;
+  flushFrame(): void;
   hasPointerEventTargets(): boolean;
   pointerEventTarget(node: object): RoyalPointerEventTarget | undefined;
   render(children: ReactNode): void;
@@ -442,6 +487,10 @@ export const createRoyalRendererTree = (): RoyalRendererTree => {
       container.latestScene = undefined;
       container.hasPointerEventTargets = false;
       container.pointerEventTargets = new WeakMap();
+      container.renderInvalidationPending = false;
+    },
+    flushFrame: () => {
+      container.flushFrame();
     },
     hasPointerEventTargets: () => container.hasPointerEventTargets,
     pointerEventTarget: (node) => container.pointerEventTargets.get(node),

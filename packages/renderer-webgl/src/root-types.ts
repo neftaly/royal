@@ -127,7 +127,11 @@ export interface WebGlRoot {
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
   readonly options: Required<WebGlRootOptions>;
+  /** Suspends default-framebuffer scheduling until the returned release function runs. */
+  acquireExternalRenderClock(): () => void;
   dispose(): void;
+  /** Immediately renders queued demand on the caller's current frame, if any. */
+  flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   pick(input: PickInput): PickResult | undefined;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createOrbitCameraStore,
   createOrbitControls,
@@ -200,6 +200,38 @@ describe("OrbitControls", () => {
     });
     expect(controls.getView().pitch).toBeCloseTo(defaultView.pitch - 5 * 0.006);
     expect(controls.getView().yaw).toBeCloseTo(defaultView.yaw + 10 * 0.006);
+
+    controls.dispose();
+  });
+
+  it("clamps the initial view and skips unchanged notifications", () => {
+    const canvas = fakeCanvas();
+    const onChange = vi.fn();
+    const controls = createOrbitControls(canvas, {
+      defaultView: { ...defaultView, distance: 1 },
+      minDistance: 3,
+      onChange,
+    });
+
+    expect(controls.getView().distance).toBe(3);
+    controls.setView(controls.getView());
+    expect(onChange).not.toHaveBeenCalled();
+
+    controls.dispose();
+  });
+
+  it("cancels an active gesture when controls are disabled", () => {
+    const canvas = fakeCanvas();
+    const controls = createOrbitControls(canvas, { defaultView });
+
+    canvas.dispatchFakeEvent("pointerdown", pointerEvent(1, 10, 20));
+    expect(canvas.capturedPointerIds.has(1)).toBe(true);
+
+    controls.setOptions({ enabled: false });
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, 30, 40));
+
+    expect(canvas.capturedPointerIds.has(1)).toBe(false);
+    expect(controls.getView()).toEqual(defaultView);
 
     controls.dispose();
   });

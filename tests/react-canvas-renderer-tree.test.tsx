@@ -1,19 +1,22 @@
 /** @jsxImportSource @royal/react */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JSX as ReactDevJSX } from "@royal/react/jsx-dev-runtime";
 import {
   Button,
+  createGltfInstanceTransforms,
   Input,
   Text,
   Textarea,
   type RenderObjectHandle,
   textFieldHeight,
+  useFrame,
 } from "@royal/react";
 import {
   boxGeometry,
   unlitMaterial,
 } from "@royal/renderer-core";
 import { resolveCanvasChildren } from "../packages/react/src/canvas";
+import { createFrameLoop, FrameLoopContext } from "../packages/react/src/frame";
 import { createRoyalRendererTree } from "../packages/react/src/renderer-tree";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
@@ -46,6 +49,11 @@ const Cube = () => (
     material={unlitMaterial({ color: [1, 0, 0, 1] })}
   />
 );
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("React Canvas renderer tree", () => {
   it("types DOM and Royal scene JSX in the same React file", () => {
@@ -138,6 +146,7 @@ describe("React Canvas renderer tree", () => {
     );
     const input = (
       <Input
+        aria-label="Controlled input"
         onValueChange={() => undefined}
         style={style}
         value="Controlled"
@@ -238,6 +247,60 @@ describe("React Canvas renderer tree", () => {
     tree.dispose();
   });
 
+  it("flushes coalesced handle mutations on every active frame", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const tree = createRoyalRendererTree();
+    const root = fakeRendererRoot();
+    const frameLoop = createFrameLoop();
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const AnimatedMesh = () => {
+      useFrame(() => {
+        const handle = ref.current;
+        if (handle === null) return;
+        handle.position.set(handle.position.x + 1, 0, 0);
+        handle.rotation.set(0, handle.rotation.y + 1, 0);
+      });
+
+      return (
+        <mesh
+          ref={ref}
+          geometry={boxGeometry(1)}
+          material={unlitMaterial({ color: [1, 0, 0, 1] })}
+        />
+      );
+    };
+
+    tree.setTarget(root, false);
+    frameLoop.afterFrame(() => tree.flushFrame());
+    tree.render(
+      <FrameLoopContext.Provider value={frameLoop}>
+        <scene>
+          <pass>
+            <perspectiveCamera {...perspectiveProps} />
+            <AnimatedMesh />
+          </pass>
+        </scene>
+      </FrameLoopContext.Provider>,
+    );
+    expect(root.render).toHaveBeenCalledTimes(1);
+
+    for (let browserFrame = 1; browserFrame <= 3; browserFrame += 1) {
+      const callbacksAtFrameStart = frameCallbacks.splice(0);
+      expect(callbacksAtFrameStart).toHaveLength(1);
+      for (const callback of callbacksAtFrameStart) callback(browserFrame * 16);
+      expect(root.invalidate).toHaveBeenCalledTimes(browserFrame);
+      expect(root.render).toHaveBeenCalledTimes(browserFrame + 1);
+    }
+
+    frameLoop.dispose();
+    tree.dispose();
+  });
+
   it("uses renderer JSX child rules when lowering Canvas descriptors", () => {
     const tree = createRoyalRendererTree();
     const root = fakeRendererRoot();
@@ -287,6 +350,38 @@ describe("React Canvas renderer tree", () => {
     expect(tree.hasPointerEventTargets()).toBe(true);
     expect(tree.pointerEventTarget(meshNode)?.handlers.onClick).toBe(onClick);
 
+    tree.dispose();
+  });
+
+  it("lowers one bulk glTF instance resource without per-instance hosts", () => {
+    const tree = createRoyalRendererTree();
+    const root = fakeRendererRoot();
+    const onPointerMove = vi.fn();
+    const instances = createGltfInstanceTransforms({ count: 2 });
+
+    tree.setTarget(root, false);
+    tree.render(
+      <scene>
+        <pass>
+          <perspectiveCamera {...perspectiveProps} />
+          <gltfInstances
+            instances={instances}
+            onPointerMove={onPointerMove}
+            src="/bulk.gltf"
+          />
+        </pass>
+      </scene>,
+    );
+
+    const node = root.latestScene?.children[0]?.children[0];
+    expect(node).toMatchObject({
+      asset: { uri: "/bulk.gltf" },
+      instances,
+      kind: "gltf-instances",
+      src: "/bulk.gltf",
+    });
+    if (node === undefined) throw new Error("Expected one bulk glTF node");
+    expect(tree.pointerEventTarget(node)?.handlers.onPointerMove).toBe(onPointerMove);
     tree.dispose();
   });
 

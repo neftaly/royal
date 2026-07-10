@@ -1,4 +1,5 @@
 import type { GltfNode } from './gltf';
+import type { GltfInstancesNode } from './gltf-instances';
 import type { MeshNode } from './mesh';
 import type { Vec3 } from './primitives';
 
@@ -22,7 +23,15 @@ export interface GltfPickTarget {
   readonly primitiveKey?: string;
 }
 
-export type PickTarget = MeshPickTarget | GltfPickTarget;
+export interface GltfInstancesPickTarget {
+  readonly id?: PickingId;
+  readonly instanceIndex: number;
+  readonly kind: 'gltf-instances';
+  readonly node: GltfInstancesNode;
+  readonly primitiveKey?: string;
+}
+
+export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;
 
 export interface PickResult {
   readonly clientX: number;

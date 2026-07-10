@@ -6,6 +6,7 @@ import {
 } from 'react/jsx-runtime';
 import type {
   GltfProps,
+  GltfInstancesProps,
   MeshProps,
   PassProps,
   RendererTextProps,
@@ -31,6 +32,7 @@ export {
 } from './renderer-descriptor';
 export type {
   GltfProps,
+  GltfInstancesProps,
   MeshProps,
   PassProps,
   RendererTextProps,
@@ -70,6 +72,7 @@ type JsxProps = Partial<
   MeshProps &
   TextProps &
   GltfProps
+  & GltfInstancesProps
 > & Record<string, unknown>;
 
 const reactFactoryFor = (props: JsxProps | null): ReactJsxFactory =>

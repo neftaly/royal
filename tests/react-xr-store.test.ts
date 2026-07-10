@@ -78,6 +78,14 @@ describe("React XR session store", () => {
       mode: null,
       session: null,
       status: "error",
+      viewCount: 0,
+      viewports: [],
+    });
+
+    store.getState().endSession({ available: false });
+    expect(store.getState()).toMatchObject({
+      available: false,
+      status: "unavailable",
     });
   });
 

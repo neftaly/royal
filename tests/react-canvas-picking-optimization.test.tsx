@@ -199,6 +199,12 @@ describe("React Canvas picking optimization", () => {
 
     canvas.dispatchFakeEvent("pointermove", pointerEvent(1));
     canvas.dispatchFakeEvent("pointerdown", pointerEvent(1));
+    rendererTree.render(renderScene({
+      onClick,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+    }));
     canvas.dispatchFakeEvent("pointerup", pointerEvent(1));
 
     expect(root.pick).toHaveBeenCalledTimes(3);

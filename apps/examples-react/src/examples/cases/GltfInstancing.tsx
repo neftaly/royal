@@ -1,12 +1,14 @@
 import {
   Canvas,
+  createGltfInstanceTransforms,
   OrbitControls,
   useFrame,
+  useInvalidate,
   useOrbitCamera,
-  type RenderObjectHandle,
+  type GltfInstanceTransforms,
 } from '@royal/react';
 import { studioEnvironment } from '@royal/react/scene';
-import { createElement, Fragment, useMemo, useRef, type MutableRefObject, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
@@ -36,6 +38,7 @@ type CubeInstance = {
 type InstancingConfig = {
   readonly animate: boolean;
   readonly gridSize: number;
+  readonly redraw: boolean;
   readonly seed: number;
 };
 
@@ -59,6 +62,7 @@ const instancingConfigFromLocation = (): InstancingConfig => {
   return {
     animate,
     gridSize: finiteIntegerParam(params, 'grid', defaultGridSize, 1, maxBenchmarkGridSize),
+    redraw: params.get('redraw') === '1',
     seed: finiteIntegerParam(params, 'seed', 0, 0, 0xffff_ffff),
   };
 };
@@ -90,100 +94,93 @@ const createCubeInstances = ({ gridSize, seed }: InstancingConfig): readonly Cub
     };
   });
 
-type InstanceHandleRef = MutableRefObject<RenderObjectHandle | null>;
+type CubeInstanceGroup = {
+  readonly cubeInstances: readonly CubeInstance[];
+  readonly instances: GltfInstanceTransforms;
+  readonly src: string;
+};
+
+const createCubeInstanceGroups = (
+  cubeInstances: readonly CubeInstance[],
+): readonly CubeInstanceGroup[] => cubeSources.flatMap((src): readonly CubeInstanceGroup[] => {
+  const grouped = cubeInstances.filter((instance) => instance.src === src);
+  if (grouped.length === 0) return [];
+  const positions = new Float32Array(grouped.length * 3);
+  const rotations = new Float32Array(grouped.length * 3);
+  const scales = new Float32Array(grouped.length * 3);
+  for (let index = 0; index < grouped.length; index += 1) {
+    const instance = grouped[index]!;
+    const offset = index * 3;
+    positions.set(instance.position, offset);
+    rotations.set(instance.rotation, offset);
+    scales.set(instance.scale, offset);
+  }
+  return [{
+    cubeInstances: grouped,
+    instances: createGltfInstanceTransforms({
+      count: grouped.length,
+      positions,
+      rotations,
+      scales,
+    }),
+    src,
+  }];
+});
 
 const InstancedCubeAnimation = ({
-  cubeInstances,
-  refs,
+  groups,
 }: {
-  readonly cubeInstances: readonly CubeInstance[];
-  readonly refs: readonly InstanceHandleRef[];
+  readonly groups: readonly CubeInstanceGroup[];
 }): null => {
   useFrame(({ elapsedSeconds }) => {
     const pulse = elapsedSeconds * 1.65;
 
-    // Animation mutates renderer handles to avoid reconciling thousands of model elements per frame.
-    for (const [index, instance] of cubeInstances.entries()) {
-      const handle = refs[index]?.current;
-      if (handle === null || handle === undefined) continue;
-
-      const lift = Math.sin(pulse + instance.phase) * 0.18;
-      const sway = Math.cos(pulse * 0.62 + instance.phase) * 0.045;
-      handle.setTransform({
-        position: [
-          instance.position[0] + sway,
-          instance.position[1] + lift,
-          instance.position[2],
-        ],
-        rotation: [
-          instance.rotation[0] + sway,
-          instance.rotation[1] + elapsedSeconds * 0.18,
-          instance.rotation[2] + lift * 0.32,
-        ],
-      });
+    for (const group of groups) {
+      const positions = group.instances.positions;
+      const rotations = group.instances.rotations;
+      for (let index = 0; index < group.cubeInstances.length; index += 1) {
+        const instance = group.cubeInstances[index]!;
+        const offset = index * 3;
+        const lift = Math.sin(pulse + instance.phase) * 0.18;
+        const sway = Math.cos(pulse * 0.62 + instance.phase) * 0.045;
+        positions[offset] = instance.position[0] + sway;
+        positions[offset + 1] = instance.position[1] + lift;
+        positions[offset + 2] = instance.position[2];
+        rotations[offset] = instance.rotation[0] + sway;
+        rotations[offset + 1] = instance.rotation[1] + elapsedSeconds * 0.18;
+        rotations[offset + 2] = instance.rotation[2] + lift * 0.32;
+      }
+      group.instances.commitPose();
     }
   });
 
   return null;
 };
 
-const cubeKey = (instance: CubeInstance): string =>
-  `${instance.src}:${instance.position.join(',')}`;
+const ForcedRedraw = (): null => {
+  const invalidate = useInvalidate();
+  useFrame(invalidate);
+  return null;
+};
 
-const StaticInstancedCubeField = ({
-  cubeInstances,
+const InstancedCubeField = ({
+  animate,
+  groups,
 }: {
-  readonly cubeInstances: readonly CubeInstance[];
+  readonly animate: boolean;
+  readonly groups: readonly CubeInstanceGroup[];
 }): ReactNode => (
   <>
-    {cubeInstances.map((instance) =>
-      createElement(
-        Fragment,
-        { key: cubeKey(instance) },
-        <gltf
-          src={instance.src}
-          transform={{
-            position: instance.position,
-            rotation: instance.rotation,
-            scale: instance.scale,
-          }}
-        />
-      )
-    )}
+    {animate ? <InstancedCubeAnimation groups={groups} /> : null}
+    {groups.map((group) => (
+      <gltfInstances
+        key={group.src}
+        instances={group.instances}
+        src={group.src}
+      />
+    ))}
   </>
 );
-
-const AnimatedInstancedCubeField = ({
-  cubeInstances,
-}: {
-  readonly cubeInstances: readonly CubeInstance[];
-}): ReactNode => {
-  const refs = useRef(cubeInstances.map(() => ({ current: null as RenderObjectHandle | null })));
-  if (refs.current.length !== cubeInstances.length) {
-    refs.current = cubeInstances.map(() => ({ current: null as RenderObjectHandle | null }));
-  }
-
-  return (
-    <>
-      <InstancedCubeAnimation cubeInstances={cubeInstances} refs={refs.current} />
-      {cubeInstances.map((instance, index) =>
-        createElement(
-          Fragment,
-          { key: cubeKey(instance) },
-          <gltf
-            ref={refs.current[index]!}
-            src={instance.src}
-            transform={{
-              position: instance.position,
-              rotation: instance.rotation,
-              scale: instance.scale,
-            }}
-          />
-        )
-      )}
-    </>
-  );
-};
 
 export const GltfInstancing = (): ReactNode => {
   const instancingConfig = instancingConfigFromLocation();
@@ -191,6 +188,7 @@ export const GltfInstancing = (): ReactNode => {
     () => createCubeInstances(instancingConfig),
     [instancingConfig.gridSize, instancingConfig.seed],
   );
+  const groups = useMemo(() => createCubeInstanceGroups(cubeInstances), [cubeInstances]);
   const orbit = useOrbitCamera({
     distance: 11,
     pitch: -0.32,
@@ -207,12 +205,11 @@ export const GltfInstancing = (): ReactNode => {
       <scene>
         <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
           <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          {instancingConfig.animate
-            ? <AnimatedInstancedCubeField cubeInstances={cubeInstances} />
-            : <StaticInstancedCubeField cubeInstances={cubeInstances} />}
+          <InstancedCubeField animate={instancingConfig.animate} groups={groups} />
         </pass>
       </scene>
       <BenchmarkRendererSnapshot />
+      {!instancingConfig.animate && instancingConfig.redraw ? <ForcedRedraw /> : null}
       <OrbitControls {...orbit.orbitControlsProps} maxDistance={24} minDistance={4} />
     </Canvas>
   );

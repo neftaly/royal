@@ -13,6 +13,7 @@ import {
 } from "@royal/renderer-core/text/editable";
 import type { TextFontFace } from "@royal/renderer-core/text/font";
 import {
+  actionControlSemantics,
   closedMenu,
   clampScrollLineFor,
   initialTextSurfaceState,
@@ -129,18 +130,27 @@ const textControl = ({
   };
 };
 
-const actionControl = (id = "button"): ActionControlRegistration => ({
-  bounds: {
+const actionControl = (id = "button"): ActionControlRegistration => {
+  const bounds = {
     bottom: -1,
     left: 0,
     right: 1,
     top: 1,
-  },
-  disabled: false,
-  id,
-  kind: "button",
-  onPress: () => undefined,
-});
+  };
+  return {
+    bounds,
+    disabled: false,
+    id,
+    kind: "button",
+    onPress: () => undefined,
+    semantics: actionControlSemantics({
+      bounds,
+      disabled: false,
+      id,
+      kind: "button",
+    }),
+  };
+};
 
 const fuzzText = (random: SeededRandom): string => {
   const characters = ["a", "b", "c", "x", "y", "z", " ", "\n"] as const;
@@ -308,7 +318,11 @@ const expectReducerPostcondition = (
       expect(state.actionControls.has(action.id)).toBe(false);
       return;
     case "editor/apply-state":
-      expect(state.selections.get(action.id)).toEqual(action.editorState.selection);
+      if (state.controls.has(action.id)) {
+        expect(state.selections.get(action.id)).toEqual(action.editorState.selection);
+      } else {
+        expect(state.selections.has(action.id)).toBe(false);
+      }
       return;
     case "selection/clear-except":
       for (const control of state.controls.values()) {
@@ -617,7 +631,7 @@ describe("React text surface state reducer", () => {
     expect(idempotent.state).toBe(result.state);
   });
 
-  it("registers controls and unregisters text controls without dropping selections", () => {
+  it("registers controls and fully releases unregistered control state", () => {
     const text = "zero\none\ntwo\nthree";
     const selected = selection(1, 4, 0, 0);
     const control = textControl({
@@ -641,14 +655,25 @@ describe("React text surface state reducer", () => {
     expect(registered.controls.get(control.id)?.scrollLine).toBe(2);
     expect(registered.scrollLines.get(control.id)).toBe(2);
 
-    const unregistered = reduceTextSurfaceState(registered, {
+    const unregistered = reduceTextSurfaceState({
+      ...registered,
+      activeId: control.id,
+      menu: {
+        controlId: control.id,
+        open: true,
+        worldX: 1,
+        worldY: 2,
+      },
+    }, {
       id: control.id,
       type: "text-control/unregister",
     }).state;
 
     expect(unregistered.controls.has(control.id)).toBe(false);
     expect(unregistered.scrollLines.has(control.id)).toBe(false);
-    expect(unregistered.selections.get(control.id)).toEqual(selected);
+    expect(unregistered.selections.has(control.id)).toBe(false);
+    expect(unregistered.activeId).toBeUndefined();
+    expect(unregistered.menu).toEqual(closedMenu);
 
     const button = actionControl();
     const withAction = reduceTextSurfaceState(unregistered, {
@@ -657,11 +682,17 @@ describe("React text surface state reducer", () => {
     }).state;
     expect(withAction.actionControls.get(button.id)).toBe(button);
 
-    const withoutAction = reduceTextSurfaceState(withAction, {
+    const withoutAction = reduceTextSurfaceState({
+      ...withAction,
+      activeActionId: button.id,
+      pressedAction: { controlId: button.id, pointerId: 7 },
+    }, {
       id: button.id,
       type: "action-control/unregister",
     }).state;
     expect(withoutAction.actionControls.has(button.id)).toBe(false);
+    expect(withoutAction.activeActionId).toBeUndefined();
+    expect(withoutAction.pressedAction).toBeUndefined();
   });
 
   it("keeps controlled editor key updates, re-registration, and scroll windows coherent", () => {

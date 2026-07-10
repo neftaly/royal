@@ -9,8 +9,10 @@ vi.mock("../packages/renderer-webgl/src/gltf/codecs/basisu", () => ({
 
 import {
   boxGeometry,
+  createGltfInstanceTransforms,
   directionalLight,
   gltf,
+  gltfInstances,
   mesh,
   orthographicCamera,
   pass,
@@ -547,9 +549,10 @@ const installViewportInvalidationStubs = () => {
 
   return {
     animationFrames,
-    triggerViewportChange: (target: Element) => {
-      vi.stubGlobal("devicePixelRatio", 2);
-      for (const mediaQueryList of mediaQueries) mediaQueryList.dispatchEvent(new Event("change"));
+    mediaQueries,
+    triggerViewportChange: (target: Element, devicePixelRatio = 2) => {
+      vi.stubGlobal("devicePixelRatio", devicePixelRatio);
+      for (const mediaQueryList of [...mediaQueries]) mediaQueryList.dispatchEvent(new Event("change"));
       for (const observer of ControlledResizeObserver.instances) observer.trigger(target);
     },
   };
@@ -3409,9 +3412,22 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     const drawCountBeforeChange = drawCalls(calls).length;
     const scheduledBeforeChange = viewport.animationFrames.length;
+    expect(viewport.mediaQueries.map((query) => query.media)).toEqual(["(resolution: 1dppx)"]);
 
     viewport.triggerViewportChange(canvas);
     await flushMicrotasks();
+    expect(viewport.mediaQueries.map((query) => query.media)).toEqual([
+      "(resolution: 1dppx)",
+      "(resolution: 2dppx)",
+    ]);
+
+    viewport.triggerViewportChange(canvas, 3);
+    await flushMicrotasks();
+    expect(viewport.mediaQueries.map((query) => query.media)).toEqual([
+      "(resolution: 1dppx)",
+      "(resolution: 2dppx)",
+      "(resolution: 3dppx)",
+    ]);
 
     expect(
       viewport.animationFrames.length > scheduledBeforeChange || drawCalls(calls).length > drawCountBeforeChange,
@@ -4420,6 +4436,64 @@ describe("WebGL renderer scene and glTF regressions", () => {
     });
   });
 
+  it("keeps bulk instance scale stable across pose-only animation frames", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const fake = fakeGl();
+    const renderRoot = createWebGlRoot(fakeCanvas(fake.gl));
+    const instances = createGltfInstanceTransforms({
+      count: 2,
+      positions: [-0.25, 0, 0, 0.25, 0, 0],
+      scales: [0.5, 0.5, 0.5, 0.75, 0.75, 0.75],
+    });
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltfInstances({
+        instances,
+        src: triangleGltfSrc,
+        version: "bulk-pose-scale-stability",
+      }),
+    ]);
+
+    renderRoot.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    renderRoot.render(renderGraph);
+
+    for (let frame = 0; frame < 3; frame += 1) {
+      const callsBeforePose = fake.calls.length;
+      const countersBeforePose = renderRoot.snapshot().gltfInstancing;
+      instances.positions[0] = -0.3 - frame * 0.1;
+      instances.positions[3] = 0.3 + frame * 0.1;
+      instances.rotations[2] = frame * 0.1;
+      instances.rotations[5] = -frame * 0.1;
+      instances.commitPose();
+      await flushAnimationFrames(viewport.animationFrames);
+      const frameCalls = fake.calls.slice(callsBeforePose);
+      const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforePose);
+
+      expect(instancedDrawCalls(frameCalls)).toHaveLength(1);
+      expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
+        { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+      ]);
+      expect(counters.rootPoseUploadBytes).toBe(12 * Float32Array.BYTES_PER_ELEMENT);
+      expect(counters.rootPoseUploadCalls).toBe(1);
+      expect(counters.rootScaleUploadBytes).toBe(0);
+      expect(counters.rootScaleUploadCalls).toBe(0);
+      expect(Array.from(instances.scales)).toEqual([0.5, 0.5, 0.5, 0.75, 0.75, 0.75]);
+    }
+
+    renderRoot.dispose();
+  });
+
   it("renders required EXT_mesh_gpu_instancing node transforms through the instanced draw path", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
@@ -4540,7 +4614,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(expandedInstancedDraws).toHaveLength(1);
     expect(instancedDrawInstanceCount(expandedInstancedDraws[0]!)).toBe(4);
-    expect(expandedInstancing.batchPlansBuilt).toBe(1);
+    expect(expandedInstancing.batchPlansBuilt).toBe(0);
     expect(expandedInstancing.batchInstancesTotal).toBe(4);
   });
 

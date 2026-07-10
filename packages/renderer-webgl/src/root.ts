@@ -3,6 +3,8 @@ import {
   type DirectionalLightNode,
   type EnvironmentLight,
   type EulerRads,
+  type GltfInstanceTransforms,
+  type GltfInstancesNode,
   type GltfNode,
   type Material,
   type MeshNode,
@@ -24,6 +26,7 @@ import {
   type Transform,
   type UnlitMaterial,
   type Vec3,
+  subscribeGltfInstanceTransforms,
 } from "@royal/renderer-core";
 import {
   createRenderObjectHandle,
@@ -91,14 +94,17 @@ import {
   identityMat4,
   inverseMat4,
   multiplyMat4,
+  multiplyMat4Into,
   normalizeVec3,
   projectionMat4,
   transformDirection,
   transformMat4,
+  transformMat4Into,
   transformPoint,
   transformVec4,
   viewMat4,
   type Mat4,
+  type MutableMat4,
 } from "./math/mat4";
 import {
   pointOnRay,
@@ -757,6 +763,7 @@ type GltfLoadMetrics = {
 
 type GltfState = {
   animations: readonly GltfAnimationClip[];
+  hasMaterialLod: boolean;
   hasMaterialVariants: boolean;
   hasNodeLod: boolean;
   imageBasedLight?: SurfaceImageBasedLight;
@@ -769,6 +776,15 @@ type GltfState = {
   primitives: readonly LoadedGltfPrimitive[];
   status: "loading" | "ready" | "error";
   variants: readonly string[];
+};
+
+type AnyGltfNode = GltfNode | GltfInstancesNode;
+
+type GltfInstanceTransformViews = {
+  poseVersion: number;
+  readonly rootModels: MutableMat4[];
+  scaleVersion: number;
+  readonly transforms: Transform[];
 };
 
 type GltfPrimitiveDraw = {
@@ -954,7 +970,7 @@ const gltfPrimitiveNodePathModel = (
   nodePath: readonly number[],
   animationTransforms: ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined,
 ): Mat4 => {
-  let model = identityMat4();
+  let model: Mat4 = identityMat4();
   for (const nodeIndex of nodePath) {
     model = multiplyMat4(model, gltfNodeMat4(nodes[nodeIndex], animationTransforms?.get(nodeIndex)));
   }
@@ -1165,25 +1181,13 @@ const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
 
 const gltfPrimitiveDrawBatchPlanKey = (inputs: readonly GltfPrimitiveDrawBatchInput[]): string => {
   const parts: string[] = [];
-  let currentKey: string | undefined;
-  let runLength = 0;
-
-  const flushRun = (): void => {
-    if (currentKey === undefined) return;
-    parts.push(`${runLength}x${currentKey.length}:${currentKey}`);
-  };
+  const seen = new Set<string>();
 
   for (const input of inputs) {
-    if (input.key === currentKey) {
-      runLength += 1;
-      continue;
-    }
-
-    flushRun();
-    currentKey = input.key;
-    runLength = 1;
+    if (seen.has(input.key)) continue;
+    seen.add(input.key);
+    parts.push(`${input.key.length}:${input.key}`);
   }
-  flushRun();
 
   return parts.join("|");
 };
@@ -2045,7 +2049,12 @@ const isBoundsVisible = (
 ): boolean => {
   if (bounds === undefined) return false;
 
-  const outside = [true, true, true, true, true, true];
+  let left = true;
+  let right = true;
+  let bottom = true;
+  let top = true;
+  let near = true;
+  let far = true;
   for (let xIndex = 0; xIndex < 2; xIndex += 1) {
     const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
     for (let yIndex = 0; yIndex < 2; yIndex += 1) {
@@ -2060,17 +2069,17 @@ const isBoundsVisible = (
           + viewProjectionModel[14];
         const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
           + viewProjectionModel[15];
-        outside[0] &&= clipX < -clipW;
-        outside[1] &&= clipX > clipW;
-        outside[2] &&= clipY < -clipW;
-        outside[3] &&= clipY > clipW;
-        outside[4] &&= clipZ < -clipW;
-        outside[5] &&= clipZ > clipW;
+        left &&= clipX < -clipW;
+        right &&= clipX > clipW;
+        bottom &&= clipY < -clipW;
+        top &&= clipY > clipW;
+        near &&= clipZ < -clipW;
+        far &&= clipZ > clipW;
       }
     }
   }
 
-  return !outside.some(Boolean);
+  return !(left || right || bottom || top || near || far);
 };
 
 /**
@@ -2095,6 +2104,10 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #autoVirtualTextureManifestUris = new Map<string, string>();
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, VirtualTextureGeneratedPageSource>();
   readonly #gltf = new Map<string, GltfState>();
+  readonly #gltfStatesByNode = new WeakMap<AnyGltfNode, GltfState>();
+  readonly #gltfInstanceTransformViews = new WeakMap<GltfInstanceTransforms, GltfInstanceTransformViews>();
+  readonly #gltfInstanceTransformSubscriptions = new Map<GltfInstanceTransforms, () => void>();
+  readonly #gltfRootViewProjectionModel: MutableMat4 = identityMat4();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
@@ -2107,16 +2120,19 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #ownedVertexArrays = new Set<WebGLVertexArrayObject>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
+  readonly #textFontIds = new WeakMap<object, number>();
   readonly #unsupportedGltfAnimationDiagnostics = new Set<string>();
   readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
   readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
   readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
-  #activeGltfBatchPlanCacheKeys = new Set<string>();
-  #activeGltfInstanceBufferKeys = new Set<string>();
-  #activeGltfLodSelectionKeys = new Set<string>();
+  readonly #activeGltfBatchPlanCacheKeys = new Set<string>();
+  readonly #activeGltfInstanceBufferKeys = new Set<string>();
+  readonly #activeGltfLodSelectionKeys = new Set<string>();
+  readonly #usedGeometry = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   #diagnostics: string[] = [];
   #disposed = false;
+  #externalRenderClocks = 0;
   #frame = 0;
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
@@ -2126,18 +2142,25 @@ class WebGlRootImpl implements WebGlRoot {
   #latestScene: RenderRoot | undefined;
   #maxTextureImageUnits = 0;
   #renderObjectInvalidationPending = false;
-  #renderScheduled = false;
+  #renderDirty = false;
+  #renderScheduleGeneration = 0;
+  #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
   #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   #vertexAttribDefaults = new Map<number, VertexAttribDefaultValue>();
   #textureUploadFrame = -1;
   #textureUploadHead = 0;
   #textureUploadsThisFrame = 0;
+  #nextTextFontId = 1;
   #virtualTextureRequestFrame = -1;
   #virtualTextureRequestsThisFrame = 0;
   #virtualTextureUploadFrame = -1;
   #virtualTextureUploadsThisFrame = 0;
   #unsupportedVirtualTextureDraws = 0;
+  readonly #dprChangeListener = (): void => {
+    this.#watchDevicePixelRatio();
+    this.invalidate();
+  };
   readonly #viewportInvalidationListener = (): void => {
     this.invalidate();
   };
@@ -2173,6 +2196,23 @@ class WebGlRootImpl implements WebGlRoot {
 
   get options(): NormalizedWebGlRootOptions {
     return this.#options;
+  }
+
+  acquireExternalRenderClock(): () => void {
+    if (this.#disposed) {
+      throw new Error("Cannot acquire a render clock from a disposed Royal renderer root");
+    }
+
+    this.#externalRenderClocks += 1;
+    this.#scheduledRenderGeneration = 0;
+    let released = false;
+
+    return () => {
+      if (released) return;
+      released = true;
+      this.#externalRenderClocks = Math.max(0, this.#externalRenderClocks - 1);
+      if (this.#externalRenderClocks === 0) this.#scheduleRender();
+    };
   }
 
   render(scene: RenderRoot): void {
@@ -2221,12 +2261,19 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     if (options.views.length === 0) return;
 
+    // An immediate render consumes any queued demand render. The queued
+    // callback checks its generation before drawing.
+    this.#renderDirty = false;
+    this.#scheduledRenderGeneration = 0;
     this.#latestScene = scene;
     this.#renderObjectInvalidationPending = false;
-    if (options.syncRenderObjectRefs) this.#syncRenderObjectRefs(scene);
-    this.#activeGltfBatchPlanCacheKeys = new Set();
-    this.#activeGltfInstanceBufferKeys = new Set();
-    this.#activeGltfLodSelectionKeys = new Set();
+    if (options.syncRenderObjectRefs) {
+      this.#syncRenderObjectRefs(scene);
+      this.#syncGltfInstanceTransforms(scene);
+    }
+    this.#activeGltfBatchPlanCacheKeys.clear();
+    this.#activeGltfInstanceBufferKeys.clear();
+    this.#activeGltfLodSelectionKeys.clear();
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
     gl.bindFramebuffer?.(gl.FRAMEBUFFER, options.framebuffer);
@@ -2238,7 +2285,8 @@ class WebGlRootImpl implements WebGlRoot {
     this.#processTextureUploads();
     this.#processVirtualTexturePageUploads();
 
-    const usedGeometry = new Set<string>();
+    const usedGeometry = this.#usedGeometry;
+    usedGeometry.clear();
     try {
       for (const renderPass of scene.children) {
         if (renderPass.depthTest) {
@@ -2270,6 +2318,7 @@ class WebGlRootImpl implements WebGlRoot {
 
           const projection = renderView.projection(renderPass);
           const view = renderView.view(renderPass);
+          const viewProjection = multiplyMat4(projection, view);
           const lights = this.#directionalLights(renderPass.children);
           const passLights = this.#passSurfaceLightSet(lights[0], renderPass.environment);
           const toneMapping = passToneMappingState(renderPass);
@@ -2283,8 +2332,8 @@ class WebGlRootImpl implements WebGlRoot {
 
           for (const child of renderPass.children) {
             if (child.kind === "directional-light") continue;
-            if (child.kind === "gltf") {
-              this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws);
+            if (child.kind === "gltf" || child.kind === "gltf-instances") {
+              this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws, viewProjection);
               continue;
             }
             flushGltfDraws();
@@ -2307,7 +2356,20 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   invalidate(): void {
+    if (this.#disposed || this.#latestScene === undefined) return;
+
+    this.#renderDirty = true;
     this.#scheduleRender();
+  }
+
+  flushInvalidated(): void {
+    if (
+      this.#disposed
+      || !this.#renderDirty
+      || this.#externalRenderClocks > 0
+      || this.#latestScene === undefined
+    ) return;
+    this.#renderLatestScene();
   }
 
   #invalidateRenderObjectMutation(): void {
@@ -2392,11 +2454,13 @@ class WebGlRootImpl implements WebGlRoot {
       assignRenderObjectRef(ref, null);
     }
     this.#renderObjectBindings.clear();
+    for (const unsubscribe of this.#gltfInstanceTransformSubscriptions.values()) unsubscribe();
+    this.#gltfInstanceTransformSubscriptions.clear();
+    this.#renderDirty = false;
+    this.#scheduledRenderGeneration = 0;
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = undefined;
-    this.#dprMediaQuery?.removeEventListener?.("change", this.#viewportInvalidationListener);
-    this.#dprMediaQuery?.removeListener?.(this.#viewportInvalidationListener);
-    this.#dprMediaQuery = undefined;
+    this.#unwatchDevicePixelRatio();
   }
 
   snapshot(): WebGlRootSnapshot {
@@ -2427,6 +2491,27 @@ class WebGlRootImpl implements WebGlRoot {
       this.#renderObjectHandles.delete(binding.node);
       this.#renderObjectBindings.delete(ref);
       assignRenderObjectRef(ref, null);
+    }
+  }
+
+  #syncGltfInstanceTransforms(scene: RenderRoot): void {
+    const active = new Set<GltfInstanceTransforms>();
+    for (const renderPass of scene.children) {
+      for (const child of renderPass.children) {
+        if (child.kind === "gltf-instances") active.add(child.instances);
+      }
+    }
+    for (const transforms of active) {
+      if (this.#gltfInstanceTransformSubscriptions.has(transforms)) continue;
+      this.#gltfInstanceTransformSubscriptions.set(
+        transforms,
+        subscribeGltfInstanceTransforms(transforms, () => this.invalidate()),
+      );
+    }
+    for (const [transforms, unsubscribe] of this.#gltfInstanceTransformSubscriptions) {
+      if (active.has(transforms)) continue;
+      unsubscribe();
+      this.#gltfInstanceTransformSubscriptions.delete(transforms);
     }
   }
 
@@ -2522,6 +2607,11 @@ class WebGlRootImpl implements WebGlRoot {
         const nextDrawOrdinal = drawOrdinal + 1;
         return { hit, nextDrawOrdinal };
       }
+      case "gltf-instances": {
+        const hit = this.#pickGltfInstances(node, ray, projection, view, input, passOrdinal, drawOrdinal);
+        const nextDrawOrdinal = drawOrdinal + 1;
+        return { hit, nextDrawOrdinal };
+      }
       case "directional-light":
       case "text":
         return { hit: undefined, nextDrawOrdinal: drawOrdinal };
@@ -2561,7 +2651,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #gltfAnimationTransforms(
     state: GltfState,
-    node: GltfNode,
+    node: AnyGltfNode,
   ): ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined {
     if (node.animation === undefined) return undefined;
 
@@ -2623,6 +2713,56 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return undefined;
+  }
+
+  #pickGltfInstances(
+    node: GltfInstancesNode,
+    ray: Ray,
+    projection: Mat4,
+    view: Mat4,
+    input: PickInput,
+    passOrdinal: number,
+    drawOrdinal: number,
+  ): PickCandidate | undefined {
+    const state = this.#gltf.get(`gltf:${node.asset.uri}:${node.asset.version ?? ""}`);
+    if (state?.status !== "ready") return undefined;
+
+    const views = this.#gltfInstanceViews(node.instances);
+    const animationTransforms = this.#gltfAnimationTransforms(state, node);
+    let best: PickCandidate | undefined;
+    for (const primitive of state.primitives) {
+      if (!isPickableDrawMode(primitive.mode)) continue;
+      const localModels = animationTransforms === undefined
+        ? primitive.localModels
+        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
+      for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
+        const rootModel = views.rootModels[outerIndex]!;
+        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
+          const model = multiplyMat4(rootModel, localModels[instanceIndex]!);
+          if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
+          const hit = this.#pickGeometry({
+            bounds: worldBounds(primitive.positions, model),
+            drawOrdinal,
+            geometry: primitive,
+            input,
+            model,
+            passOrdinal,
+            ray,
+            target: {
+              ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+              instanceIndex: outerIndex,
+              kind: "gltf-instances",
+              node,
+              primitiveKey: localModels.length === 1
+                ? primitive.key
+                : `${primitive.key}:asset-instance:${instanceIndex}`,
+            },
+          });
+          if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+        }
+      }
+    }
+    return best;
   }
 
   #pickGeometry({
@@ -2700,11 +2840,32 @@ class WebGlRootImpl implements WebGlRoot {
       this.#resizeObserver.observe(this.#canvas);
     }
 
+    this.#watchDevicePixelRatio();
+  }
+
+  #unwatchDevicePixelRatio(): void {
+    const mediaQuery = this.#dprMediaQuery;
+    if (mediaQuery === undefined) return;
+
+    if (typeof mediaQuery.removeEventListener === "function") {
+      mediaQuery.removeEventListener("change", this.#dprChangeListener);
+    } else {
+      mediaQuery.removeListener?.(this.#dprChangeListener);
+    }
+    this.#dprMediaQuery = undefined;
+  }
+
+  #watchDevicePixelRatio(): void {
+    this.#unwatchDevicePixelRatio();
     const matchMedia = globalThis.matchMedia;
-    if (typeof matchMedia === "function") {
-      this.#dprMediaQuery = matchMedia(`(resolution: ${globalThis.devicePixelRatio ?? 1}dppx)`);
-      this.#dprMediaQuery.addEventListener?.("change", this.#viewportInvalidationListener);
-      this.#dprMediaQuery.addListener?.(this.#viewportInvalidationListener);
+    if (typeof matchMedia !== "function") return;
+
+    const mediaQuery = matchMedia(`(resolution: ${globalThis.devicePixelRatio ?? 1}dppx)`);
+    this.#dprMediaQuery = mediaQuery;
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", this.#dprChangeListener);
+    } else {
+      mediaQuery.addListener?.(this.#dprChangeListener);
     }
   }
 
@@ -2727,6 +2888,7 @@ class WebGlRootImpl implements WebGlRoot {
         this.#drawText(node, projection, view, toneMapping, viewportSize, usedGeometry);
         return;
       case "gltf":
+      case "gltf-instances":
         {
           const draws: GltfPrimitiveDraw[] = [];
           this.#appendGltfPrimitiveDraws(node, projection, view, draws);
@@ -2790,29 +2952,31 @@ class WebGlRootImpl implements WebGlRoot {
     viewportSize: ViewportSize,
     usedGeometry: Set<string>,
   ): void {
-    const mesh = textMesh(node);
-    if (mesh.vertices.length === 0 || mesh.indices.length === 0) return;
+    const geometryKey = this.#textGeometryKey(node);
+    let cpu: CpuGeometry | undefined;
+    let gpu = this.#geometry.get(geometryKey);
+    if (gpu === undefined) {
+      const mesh = textMesh(node);
+      if (mesh.vertices.length === 0 || mesh.indices.length === 0) return;
 
-    const positions = new Float32Array(mesh.vertices.length * 3);
-    const texCoords = new Float32Array(mesh.vertices.length * 2);
-    for (const [index, vertex] of mesh.vertices.entries()) {
-      positions[index * 3] = vertex.position[0];
-      positions[index * 3 + 1] = vertex.position[1];
-      positions[index * 3 + 2] = vertex.position[2];
-      texCoords[index * 2] = vertex.glyphCoord[0];
-      texCoords[index * 2 + 1] = vertex.glyphCoord[1];
+      const positions = new Float32Array(mesh.vertices.length * 3);
+      for (let index = 0; index < mesh.vertices.length; index += 1) {
+        const vertex = mesh.vertices[index]!;
+        positions[index * 3] = vertex.position[0];
+        positions[index * 3 + 1] = vertex.position[1];
+        positions[index * 3 + 2] = vertex.position[2];
+      }
+      const indices = mesh.vertices.length > 65535
+        ? new Uint32Array(mesh.indices)
+        : new Uint16Array(mesh.indices);
+      cpu = {
+        indices,
+        key: geometryKey,
+        mode: "triangles",
+        positions,
+      };
+      gpu = this.#geometryResource(cpu);
     }
-    const indices = mesh.vertices.length > 65535
-      ? new Uint32Array(mesh.indices)
-      : new Uint16Array(mesh.indices);
-    const cpu: CpuGeometry = {
-      indices,
-      key: `text:${node.layout.source}:${node.layout.font.metrics.size}:${mesh.vertices.length}:${mesh.indices.length}`,
-      mode: "triangles",
-      positions,
-      texCoords,
-    };
-    const gpu = this.#geometryResource(cpu);
     const material: UnlitMaterial = {
       baseColor: { color: node.color, kind: "solid" },
       kind: "unlit",
@@ -2826,23 +2990,54 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
+  #textGeometryKey(node: TextNode): string {
+    const layout = node.layout;
+    const face = layout.fontFace;
+    let fontId = this.#textFontIds.get(face);
+    if (fontId === undefined) {
+      fontId = this.#nextTextFontId;
+      this.#nextTextFontId += 1;
+      this.#textFontIds.set(face, fontId);
+    }
+    const origin = layout.lines[0]?.origin ?? [0, 0, 0];
+
+    return `text:${fontId}:${layout.source.length}:${layout.source}:${layout.font.metrics.size}:${layout.font.metrics.lineHeight}:${origin[0]},${origin[1]},${origin[2]}`;
+  }
+
   #appendGltfPrimitiveDraws(
-    node: GltfNode,
+    node: AnyGltfNode,
     projection: Mat4,
     view: Mat4,
     draws: GltfPrimitiveDraw[],
+    viewProjection = multiplyMat4(projection, view),
   ): void {
     const renderInstanceOrdinal = this.#gltfRenderOrdinal;
-    const renderInstanceKey = `instance:${renderInstanceOrdinal}`;
     this.#gltfRenderOrdinal += 1;
     const state = this.#gltfState(node);
     if (state.status !== "ready") return;
+    if (node.kind === "gltf-instances") {
+      this.#appendGltfInstancesPrimitiveDraws(
+        node,
+        state,
+        renderInstanceOrdinal,
+        viewProjection,
+        draws,
+      );
+      return;
+    }
+    const renderInstanceKey = state.hasNodeLod || state.hasMaterialLod
+      ? `instance:${renderInstanceOrdinal}`
+      : "";
 
     const rootHandle = this.#renderObjectHandles.get(node);
     const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
     const rootModel = transformMat4(rootTransform);
     const rootDeterminant = mat4OrientationDeterminant(rootModel);
-    const rootViewProjectionModel = multiplyMat4(projection, multiplyMat4(view, rootModel));
+    const rootViewProjectionModel = multiplyMat4Into(
+      this.#gltfRootViewProjectionModel,
+      viewProjection,
+      rootModel,
+    );
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
     const animationTransforms = this.#gltfAnimationTransforms(state, node);
     const selectedNodeLevels = state.hasNodeLod
@@ -2906,6 +3101,127 @@ class WebGlRootImpl implements WebGlRoot {
             frontFaceCcw: rootDeterminant * (localModelDeterminants[instanceIndex] ?? 1) >= 0,
           },
         });
+      }
+    }
+  }
+
+  #gltfInstanceViews(instances: GltfInstanceTransforms): GltfInstanceTransformViews {
+    let views = this.#gltfInstanceTransformViews.get(instances);
+    if (views === undefined) {
+      const transforms: Transform[] = [];
+      const rootModels: MutableMat4[] = [];
+      for (let index = 0; index < instances.count; index += 1) {
+        const offset = index * 3;
+        transforms.push({
+          position: instances.positions.subarray(offset, offset + 3) as unknown as Vec3,
+          rotation: instances.rotations.subarray(offset, offset + 3) as unknown as EulerRads,
+          scale: instances.scales.subarray(offset, offset + 3) as unknown as Vec3,
+        });
+        rootModels.push(identityMat4());
+      }
+      views = {
+        poseVersion: -1,
+        rootModels,
+        scaleVersion: -1,
+        transforms,
+      };
+      this.#gltfInstanceTransformViews.set(instances, views);
+    }
+    if (
+      views.poseVersion !== instances.poseVersion
+      || views.scaleVersion !== instances.scaleVersion
+    ) {
+      for (let index = 0; index < views.transforms.length; index += 1) {
+        transformMat4Into(views.rootModels[index]!, views.transforms[index]);
+      }
+      views.poseVersion = instances.poseVersion;
+      views.scaleVersion = instances.scaleVersion;
+    }
+    return views;
+  }
+
+  #appendGltfInstancesPrimitiveDraws(
+    node: GltfInstancesNode,
+    state: GltfState,
+    renderInstanceOrdinal: number,
+    viewProjection: Mat4,
+    draws: GltfPrimitiveDraw[],
+  ): void {
+    const views = this.#gltfInstanceViews(node.instances);
+    const animationTransforms = this.#gltfAnimationTransforms(state, node);
+    const selectedVariantIndex = state.hasMaterialVariants
+      ? this.#selectedGltfVariantIndex(state, node)
+      : undefined;
+    for (const primitive of state.primitives) {
+      const primitiveMaterial = selectedVariantIndex === undefined
+        ? primitive.baseMaterial
+        : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
+      const localModels = animationTransforms === undefined
+        ? primitive.localModels
+        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
+      const localModelDeterminants = animationTransforms === undefined
+        ? primitive.localModelDeterminants
+        : localModels.map(mat4OrientationDeterminant);
+      const localBounds = animationTransforms === undefined
+        ? primitive.localBounds
+        : localModels.map((localModel) => worldBounds(primitive.positions, localModel));
+
+      for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
+        const rootModel = views.rootModels[outerIndex]!;
+        const rootTransform = views.transforms[outerIndex]!;
+        const rootDeterminant = mat4OrientationDeterminant(rootModel);
+        const rootViewProjectionModel = multiplyMat4Into(
+          this.#gltfRootViewProjectionModel,
+          viewProjection,
+          rootModel,
+        );
+        const renderInstanceKey = `instance:${renderInstanceOrdinal}:${outerIndex}`;
+        const selectedNodeLevels = state.hasNodeLod
+          ? this.#selectedGltfNodeLodLevels(state, renderInstanceKey, rootViewProjectionModel)
+          : undefined;
+        const assetLights = this.#gltfAssetLightSet(state, rootModel);
+
+        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
+          const localModel = localModels[instanceIndex]!;
+          const instanceBounds = localBounds[instanceIndex];
+          const nodeLod = primitive.nodeLod;
+          if (selectedNodeLevels !== undefined && nodeLod !== undefined) {
+            const selectedLevel = selectedNodeLevels.get(nodeLod.group);
+            if (selectedLevel !== nodeLod.level) continue;
+          }
+          const loadedMaterial = primitiveMaterial.materialLod === undefined
+            ? primitiveMaterial.material
+            : this.#selectedGltfMaterialLod(
+              state,
+              renderInstanceKey,
+              primitive,
+              primitiveMaterial,
+              instanceIndex,
+              instanceBounds,
+              rootViewProjectionModel,
+            );
+          if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) continue;
+          const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
+          draws.push({
+            geometry: prepared.geometry,
+            ...(assetLights === undefined ? {} : { lights: assetLights }),
+            localModel,
+            material: prepared.material,
+            materialBatchKey: prepared.materialBatchKey,
+            modelSignatureInstanceIndex: instanceIndex,
+            modelSignatureStateKey: state.instanceKey,
+            ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
+            rootModel,
+            rootPositionSignatureVersion: node.instances.poseVersion,
+            rootRotationSignatureVersion: node.instances.poseVersion,
+            rootScaleSignatureVersion: node.instances.scaleVersion,
+            rootTransform,
+            sidedness: {
+              doubleSided: loadedMaterial.doubleSided,
+              frontFaceCcw: rootDeterminant * (localModelDeterminants[instanceIndex] ?? 1) >= 0,
+            },
+          });
+        }
       }
     }
   }
@@ -3337,7 +3653,7 @@ class WebGlRootImpl implements WebGlRoot {
     return primitive.baseMaterial;
   }
 
-  #selectedGltfVariantIndex(state: GltfState, node: GltfNode): number | undefined {
+  #selectedGltfVariantIndex(state: GltfState, node: AnyGltfNode): number | undefined {
     const variant = node.variant;
     if (variant === undefined) return undefined;
     if (typeof variant === "number") {
@@ -6584,13 +6900,20 @@ class WebGlRootImpl implements WebGlRoot {
     if (usesMipmaps(sampler?.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
   }
 
-  #gltfState(node: GltfNode): GltfState {
+  #gltfState(node: AnyGltfNode): GltfState {
+    const nodeState = this.#gltfStatesByNode.get(node);
+    if (nodeState !== undefined) return nodeState;
+
     const key = `gltf:${node.asset.uri}:${node.asset.version ?? ""}`;
     const cached = this.#gltf.get(key);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      this.#gltfStatesByNode.set(node, cached);
+      return cached;
+    }
 
     const state: GltfState = {
       animations: [],
+      hasMaterialLod: false,
       hasMaterialVariants: false,
       hasNodeLod: false,
       instanceKey: this.#gltfStateInstanceKey,
@@ -6609,6 +6932,7 @@ class WebGlRootImpl implements WebGlRoot {
     };
     this.#gltfStateInstanceKey += 1;
     this.#gltf.set(key, state);
+    this.#gltfStatesByNode.set(node, state);
 
     void this.#loadGltf(node.src, state);
     return state;
@@ -6639,6 +6963,7 @@ class WebGlRootImpl implements WebGlRoot {
       }
       state.animations = readGltfAnimationClips(decodedDocument, buffers);
       state.load.animationsReadAt = nowMs();
+      state.hasMaterialLod = scene.hasMaterialLod;
       state.hasMaterialVariants = scene.hasMaterialVariants;
       state.hasNodeLod = scene.hasNodeLod;
       state.lights = scene.lights;
@@ -6665,6 +6990,7 @@ class WebGlRootImpl implements WebGlRoot {
     src: string,
     assetKey: string,
   ): {
+    readonly hasMaterialLod: boolean;
     readonly hasMaterialVariants: boolean;
     readonly hasNodeLod: boolean;
     readonly imageBasedLight?: SurfaceImageBasedLight;
@@ -6709,6 +7035,9 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     return {
+      hasMaterialLod: primitives.some((primitive) =>
+        primitive.materialLod !== undefined
+        || primitive.materialVariants?.some((variant) => variant.materialLod !== undefined) === true),
       hasMaterialVariants: primitives.some((primitive) => primitive.materialVariants !== undefined),
       hasNodeLod: primitives.some((primitive) => primitive.nodeLod !== undefined),
       ...(imageBasedLight === undefined ? {} : { imageBasedLight }),
@@ -7561,18 +7890,28 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #scheduleRender(): void {
-    if (this.#disposed || this.#renderScheduled || this.#latestScene === undefined) return;
+    if (
+      this.#disposed ||
+      !this.#renderDirty ||
+      this.#externalRenderClocks > 0 ||
+      this.#scheduledRenderGeneration !== 0 ||
+      this.#latestScene === undefined
+    ) return;
     const requestFrame = globalThis.requestAnimationFrame;
-    if (typeof requestFrame !== "function") {
-      this.render(this.#latestScene);
-      return;
-    }
-
-    this.#renderScheduled = true;
-    requestFrame(() => {
-      this.#renderScheduled = false;
+    const generation = this.#renderScheduleGeneration + 1;
+    this.#renderScheduleGeneration = generation;
+    this.#scheduledRenderGeneration = generation;
+    const renderIfCurrent = (): void => {
+      if (
+        this.#scheduledRenderGeneration !== generation ||
+        !this.#renderDirty ||
+        this.#externalRenderClocks > 0
+      ) return;
+      this.#scheduledRenderGeneration = 0;
       if (!this.#disposed && this.#latestScene !== undefined) this.#renderLatestScene();
-    });
+    };
+    if (typeof requestFrame === "function") requestFrame(renderIfCurrent);
+    else queueMicrotask(renderIfCurrent);
   }
 
   #renderLatestScene(): void {

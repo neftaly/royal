@@ -2,6 +2,7 @@ import {
   boxGeometry,
   directionalLight,
   gltf,
+  gltfInstances,
   imageTexture,
   mesh,
   orthographicCamera,
@@ -19,6 +20,7 @@ import {
   type Geometry,
   type GeometryKindValue,
   type GltfOptions,
+  type GltfInstancesOptions,
   type Material,
   type MeshOptions,
   type OrthographicCameraOptions,
@@ -36,7 +38,7 @@ import {
   type UnlitMaterialOptions,
   type WireframeMaterialOptions,
 } from '@royal/renderer-core';
-import { isValidElement, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   rendererOutputToSingleDescriptor,
   type RendererComponentOutput,
@@ -77,6 +79,7 @@ export type RendererTextProps = Omit<TextOptions, 'text'> & {
 };
 
 export type GltfProps = GltfOptions & RoyalPointerEventProps;
+export type GltfInstancesProps = GltfInstancesOptions & RoyalPointerEventProps;
 
 export type RoyalRendererIntrinsicElementProps = {
   scene: SceneProps;
@@ -86,6 +89,7 @@ export type RoyalRendererIntrinsicElementProps = {
   directionalLight: DirectionalLightOptions;
   mesh: MeshProps;
   gltf: GltfProps;
+  gltfInstances: GltfInstancesProps;
   text: RendererTextProps;
   boxGeometry: BoxGeometryOptions;
   planeGeometry: PlaneGeometryOptions;
@@ -103,7 +107,8 @@ type JsxProps = Partial<
   PassProps &
   MeshProps &
   RendererTextProps &
-  GltfProps &
+    GltfProps &
+    GltfInstancesProps &
   PerspectiveCameraOptions &
   OrthographicCameraOptions &
   DirectionalLightOptions &
@@ -117,11 +122,32 @@ const descriptorKind = (value: unknown): string | undefined =>
     ? String(value.kind)
     : undefined;
 
+const rendererDescriptorKinds: ReadonlySet<string> = new Set([
+  'box',
+  'directional-light',
+  'gltf',
+  'gltf-instances',
+  'mesh',
+  'orthographic-camera',
+  'pass',
+  'perspective-camera',
+  'plane',
+  'scene',
+  'standard',
+  'text',
+  'unlit',
+  'wireframe',
+]);
+
 export const isRoyalRendererJsxElement = (value: unknown): value is RoyalRendererJsxElement =>
-  descriptorKind(value) !== undefined;
+  rendererDescriptorKinds.has(descriptorKind(value) ?? '');
 
 export const isRenderRootDescriptor = (value: unknown): value is RenderRoot =>
-  descriptorKind(value) === 'scene';
+  descriptorKind(value) === 'scene' &&
+  typeof value === 'object' &&
+  value !== null &&
+  'children' in value &&
+  Array.isArray(value.children);
 
 const isRendererJsxChildArray = (
   value: RendererJsxChild,
@@ -185,7 +211,11 @@ const describeJsxChild = (child: ComponentOutput | undefined): string => {
 
 const isRenderNode = (element: ComponentOutput): element is RenderNode => {
   const kind = descriptorKind(element);
-  return kind === 'mesh' || kind === 'gltf' || kind === 'directional-light' || kind === 'text';
+  return kind === 'mesh'
+    || kind === 'gltf'
+    || kind === 'gltf-instances'
+    || kind === 'directional-light'
+    || kind === 'text';
 };
 
 const isMaterial = (element: ComponentOutput): element is Material => {
@@ -208,7 +238,6 @@ const isRenderPass = (element: ComponentOutput): element is RenderPass =>
 const toRenderPasses = (children: RendererJsxChild): readonly RenderPass[] =>
   toStructuralArray(children).map((child) => {
     if (isRenderPass(child)) return child;
-    if (isValidElement(child)) return child as unknown as RenderPass;
 
     throw new Error(`scene children must be pass elements; received ${describeJsxChild(child)}`);
   });
@@ -222,11 +251,6 @@ const toRenderNodes = (
   for (const child of toStructuralArray(children)) {
     if (isRenderNode(child)) {
       nodes.push(child);
-      continue;
-    }
-
-    if (isValidElement(child)) {
-      nodes.push(child as unknown as RenderNode);
       continue;
     }
 
@@ -424,6 +448,8 @@ const createIntrinsicRendererElement = (
       return toMesh(elementProps as MeshProps);
     case 'gltf':
       return gltf(elementProps as GltfProps);
+    case 'gltfInstances':
+      return gltfInstances(elementProps as GltfInstancesProps);
     case 'text':
       return toText(elementProps as RendererTextProps);
     case 'boxGeometry':

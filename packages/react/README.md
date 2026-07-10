@@ -71,11 +71,43 @@ React commits render the latest descriptor graph immediately. Use
 `useInvalidate()` inside `<Canvas>` only for changes React did not commit, such
 as external store mutations, imperative animation state, or host integration
 events. Royal render-object refs already invalidate the current canvas when
-their transform changes.
+their transform changes. `useFrame()` supplies animation timing but does not
+redraw by itself: a React state commit, a render-object mutation, or an explicit
+`useInvalidate()` call requests the next render. Multiple invalidations before
+that render are coalesced.
 
 glTF material variants from `KHR_materials_variants` can be selected with
 `gltf({ src, variant })` or `<gltf variant>`. Pass a variant name, or pass a
 zero-based variant index when an asset has unnamed variants.
+
+For many copies of one asset, create one stable transform resource and render
+one `<gltfInstances>` node instead of thousands of `<gltf>` elements and refs.
+The position, rotation, and scale arrays use three consecutive numbers per
+instance. Mutate them outside React render, then commit the channel once:
+
+```tsx
+const instances = useMemo(() => createGltfInstanceTransforms({
+  count: 4096,
+  positions,
+  rotations,
+  scales,
+}), []);
+
+useFrame(({ elapsedSeconds }) => {
+  for (let index = 0; index < instances.count; index += 1) {
+    const offset = index * 3;
+    instances.rotations[offset + 1] = elapsedSeconds;
+  }
+  instances.commitPose();
+});
+
+return <gltfInstances src="/cube.gltf" instances={instances} />;
+```
+
+`commitPose()` never uploads scale data; call `commitScale()` only after scale
+changes. Bulk instance scales must be non-negative. The resource notifies every
+attached renderer root and Canvas flushes that demand at the end of the active
+frame.
 
 ## Workflows
 

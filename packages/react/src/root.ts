@@ -48,6 +48,7 @@ export interface RoyalRendererBackendRoot {
   /** Backend-specific diagnostic payload. Host code must validate before use. */
   diagnostics(): unknown;
   dispose(): void;
+  flushInvalidated?(): void;
   invalidate(): void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
@@ -68,6 +69,8 @@ export interface RoyalRendererRoot {
   readonly latestScene: RenderRoot | undefined;
   /** Renderer-specific diagnostic payload. Host code must validate before use. */
   diagnostics(): unknown;
+  /** Immediately renders queued demand on the caller's current frame, if any. */
+  flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   /** Returns the front-most render target under a DOM client coordinate. */
@@ -131,6 +134,9 @@ const createWebGlRendererBackendRoot: RoyalRendererBackendRootFactory = (
     dispose: () => {
       root.dispose();
     },
+    flushInvalidated: () => {
+      root.flushInvalidated?.();
+    },
     invalidate: () => {
       root.invalidate();
     },
@@ -179,6 +185,9 @@ export const createRendererRoot = (
     diagnostics: () => root.diagnostics(),
     dispose: () => {
       root.dispose();
+    },
+    flushInvalidated: () => {
+      root.flushInvalidated?.();
     },
     invalidate: () => {
       root.invalidate();

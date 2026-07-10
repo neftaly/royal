@@ -2,13 +2,13 @@ import {
   Canvas,
   OrbitControls,
   useFrame,
-  useFrameIndex,
   useOrbitCamera,
+  type RenderObjectHandle,
 } from '@royal/react';
-import { studioEnvironment, type EulerRads } from '@royal/react/scene';
+import { studioEnvironment } from '@royal/react/scene';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import {
-  useState,
+  useRef,
   type ReactNode,
 } from 'react';
 import { htmlColor } from '../color';
@@ -18,12 +18,12 @@ import {
   Column,
   Container,
   layoutFlex,
+  type FlexLayoutBox,
 } from '../flex-layout';
 import {
   HudPass,
   HudRect,
   HudText,
-  hudBoxWithWidth,
 } from '../hud';
 import { useAtkinsonFont } from './text-font';
 
@@ -106,18 +106,30 @@ const palette = {
   track: htmlColor('#1a2b31'),
 } as const;
 
+const updateHudFill = (
+  handle: RenderObjectHandle | null,
+  box: FlexLayoutBox,
+  fraction: number,
+): void => {
+  if (handle === null) return;
+  const width = box.width * fraction;
+  handle.position.set(box.left + width / 2, -box.top - box.height / 2, 0);
+  handle.scale.set(width, box.height, 1);
+};
+
 const Scout = (): ReactNode => {
-  const [rotation, setRotation] = useState<EulerRads>([0.24, 0.6, 0.12]);
+  const ref = useRef<RenderObjectHandle | null>(null);
 
   useFrame(({ elapsedSeconds }) => {
-    setRotation([0.24 + elapsedSeconds * 0.16, elapsedSeconds * 0.72, 0.12]);
+    ref.current?.rotation.set(0.24 + elapsedSeconds * 0.16, elapsedSeconds * 0.72, 0.12);
   });
 
   return (
     <mesh
+      ref={ref}
       transform={{
         position: [0, 0.15, 0],
-        rotation,
+        rotation: [0.24, 0.6, 0.12],
       }}
     >
       <boxGeometry size={[1.08, 1.08, 1.08]} />
@@ -131,11 +143,20 @@ const HudReadout = ({
 }: {
   readonly font: TextFontFace;
 }): ReactNode => {
-  const frame = useFrameIndex();
-  const shield = 0.68 + Math.sin(frame * 0.045) * 0.08;
-  const energy = 0.46 + Math.cos(frame * 0.038) * 0.12;
-  const shieldFill = hudBoxWithWidth(hudBoxes.shieldTrack, hudBoxes.shieldTrack.width * shield);
-  const energyFill = hudBoxWithWidth(hudBoxes.energyTrack, hudBoxes.energyTrack.width * energy);
+  const energyFillRef = useRef<RenderObjectHandle | null>(null);
+  const shieldFillRef = useRef<RenderObjectHandle | null>(null);
+  useFrame(({ frameIndex }) => {
+    updateHudFill(
+      shieldFillRef.current,
+      hudBoxes.shieldTrack,
+      0.68 + Math.sin(frameIndex * 0.045) * 0.08,
+    );
+    updateHudFill(
+      energyFillRef.current,
+      hudBoxes.energyTrack,
+      0.46 + Math.cos(frameIndex * 0.038) * 0.12,
+    );
+  });
 
   return (
     <>
@@ -143,18 +164,18 @@ const HudReadout = ({
       <HudRect box={hudBoxes.mission} color={palette.panelAlt} />
       <HudRect box={hudBoxes.comms} color={palette.panel} />
       <HudRect box={hudBoxes.shieldTrack} color={palette.track} />
-      <HudRect box={shieldFill} color={palette.shield} />
+      <HudRect ref={shieldFillRef} box={hudBoxes.shieldTrack} color={palette.shield} />
       <HudRect box={hudBoxes.energyTrack} color={palette.track} />
-      <HudRect box={energyFill} color={palette.energy} />
+      <HudRect ref={energyFillRef} box={hudBoxes.energyTrack} color={palette.energy} />
 
       <HudText box={hudBoxes.readout} color={palette.text} font={font} fontSize={0.3}>
         ROYAL HUD / T-04
       </HudText>
       <HudText box={hudBoxes.shieldLabel} color={palette.shield} font={font} fontSize={0.19}>
-        SHIELD {Math.round(shield * 100)}%
+        SHIELD // LIVE
       </HudText>
       <HudText box={hudBoxes.energyLabel} color={palette.energy} font={font} fontSize={0.19}>
-        ENERGY {Math.round(energy * 100)}%
+        ENERGY // LIVE
       </HudText>
       <HudText box={hudBoxes.missionTitle} color={palette.amber} font={font} fontSize={0.2}>
         OBJECTIVE

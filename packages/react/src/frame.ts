@@ -18,6 +18,7 @@ type FrameSubscriber = {
 };
 
 export type FrameLoop = {
+  afterFrame(callback: () => void): () => void;
   dispose(): void;
   frameIndex(): number;
   subscribe(callback: FrameCallback, priority: number): () => void;
@@ -28,6 +29,7 @@ const canUseFrameLoop = (): boolean =>
   typeof cancelAnimationFrame === 'function';
 
 export const createFrameLoop = (): FrameLoop => {
+  const afterFrameCallbacks = new Set<() => void>();
   const subscribers: FrameSubscriber[] = [];
   let animationFrame: number | undefined;
   let frameIndex = 0;
@@ -52,7 +54,11 @@ export const createFrameLoop = (): FrameLoop => {
   };
 
   const schedule = (): void => {
-    if (animationFrame !== undefined || !canUseFrameLoop()) return;
+    if (
+      subscribers.length === 0 ||
+      animationFrame !== undefined ||
+      !canUseFrameLoop()
+    ) return;
 
     animationFrame = requestAnimationFrame(runFrame);
   };
@@ -76,22 +82,36 @@ export const createFrameLoop = (): FrameLoop => {
     } satisfies FrameSnapshot;
     lastTimestamp = timestamp;
 
-    const frameSubscribers = Array.from(subscribers);
-    for (const subscriber of frameSubscribers) {
-      if (subscriber.active) {
-        subscriber.callback(frame);
-      }
-    }
-
+    // Register the next timing tick before subscribers run so one failing
+    // subscriber cannot stop the loop. Canvas flushes renderer mutations in
+    // the after-frame phase below, after every subscriber has run.
     schedule();
+    try {
+      const frameSubscribers = Array.from(subscribers);
+      for (const subscriber of frameSubscribers) {
+        if (subscriber.active) {
+          subscriber.callback(frame);
+        }
+      }
+    } finally {
+      for (const callback of afterFrameCallbacks) callback();
+    }
   };
 
   return {
+    afterFrame: (callback) => {
+      afterFrameCallbacks.add(callback);
+
+      return () => {
+        afterFrameCallbacks.delete(callback);
+      };
+    },
     dispose: () => {
       for (const subscriber of subscribers) {
         subscriber.active = false;
       }
       subscribers.length = 0;
+      afterFrameCallbacks.clear();
       stop();
     },
     frameIndex: () => frameIndex,

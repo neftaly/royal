@@ -54,35 +54,35 @@ export type XrSessionControlSnapshot<Session extends object = object> = {
 export type XrSessionStoreInitialState = Partial<XrSessionState>;
 
 export type XrSessionAvailabilityOptions = {
-  readonly mode?: XrSessionMode | null | undefined;
-  readonly status?: XrSessionStatus | undefined;
+  readonly mode?: XrSessionMode | null;
+  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionBeginOptions = {
-  readonly mode?: XrSessionMode | null | undefined;
-  readonly status?: XrSessionStatus | undefined;
+  readonly mode?: XrSessionMode | null;
+  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionActivationOptions = {
   readonly mode: XrSessionMode;
-  readonly status?: XrSessionStatus | undefined;
+  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionEndOptions = {
-  readonly available?: boolean | undefined;
-  readonly status?: XrSessionStatus | undefined;
+  readonly available?: boolean;
+  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionFailureOptions = {
-  readonly available?: boolean | undefined;
-  readonly mode?: XrSessionMode | null | undefined;
-  readonly status?: XrSessionStatus | undefined;
+  readonly available?: boolean;
+  readonly mode?: XrSessionMode | null;
+  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionFrameRecord = {
-  readonly frameIndex?: number | undefined;
-  readonly viewCount?: number | undefined;
-  readonly viewports?: readonly XrViewport[] | undefined;
+  readonly frameIndex?: number;
+  readonly viewCount?: number;
+  readonly viewports?: readonly XrViewport[];
 };
 
 export type XrSessionStoreActions<Session extends object = object> = {
@@ -91,23 +91,23 @@ export type XrSessionStoreActions<Session extends object = object> = {
     options: XrSessionActivationOptions,
   ) => void;
   readonly beginSession: (
-    session?: Session | null | undefined,
-    options?: XrSessionBeginOptions | undefined,
+    session?: Session | null,
+    options?: XrSessionBeginOptions,
   ) => void;
-  readonly endSession: (options?: XrSessionEndOptions | XrSessionStatus | undefined) => void;
+  readonly endSession: (options?: XrSessionEndOptions | XrSessionStatus) => void;
   readonly failSession: (
     error: unknown,
-    options?: XrSessionFailureOptions | undefined,
+    options?: XrSessionFailureOptions,
   ) => void;
-  readonly recordFrame: (frame?: XrSessionFrameRecord | undefined) => void;
-  readonly reset: (state?: XrSessionStoreInitialState | undefined) => void;
+  readonly recordFrame: (frame?: XrSessionFrameRecord) => void;
+  readonly reset: (state?: XrSessionStoreInitialState) => void;
   readonly setOfferStatus: (
     offerStatus: XrSessionOfferStatus,
-    offerError?: string | null | undefined,
+    offerError?: string | null,
   ) => void;
   readonly setAvailability: (
     available: boolean,
-    options?: XrSessionAvailabilityOptions | undefined,
+    options?: XrSessionAvailabilityOptions,
   ) => void;
   readonly setSnapshot: (state: XrSessionStoreInitialState) => void;
 };
@@ -284,26 +284,29 @@ export const createXrSessionStore = <Session extends object = object>(
     },
     endSession: (options = {}) => {
       const normalizedOptions = typeof options === "string" ? { status: options } : options;
-      const patch: XrSessionStorePatch<Session> = {
-        active: false,
-        error: null,
-        mode: null,
-        session: null,
-        status: normalizeXrSessionStatus(normalizedOptions.status, "available"),
-        viewCount: 0,
-        viewports: [],
-      };
-      if (normalizedOptions.available !== undefined) {
-        patch.available = normalizedOptions.available;
-      }
-      set(patch);
+      set((state) => {
+        const available = normalizedOptions.available ?? state.available;
+        return {
+          active: false,
+          available,
+          error: null,
+          mode: null,
+          session: null,
+          status: normalizeXrSessionStatus(normalizedOptions.status, availabilityStatus(available)),
+          viewCount: 0,
+          viewports: [],
+        };
+      });
     },
     failSession: (error, options = {}) => {
       const patch: XrSessionStorePatch<Session> = {
         active: false,
         error: errorMessageFromUnknown(error),
+        frameIndex: 0,
         session: null,
         status: normalizeXrSessionStatus(options.status, "error"),
+        viewCount: 0,
+        viewports: [],
       };
       if (options.available !== undefined) patch.available = options.available;
       if (options.mode !== undefined) patch.mode = options.mode;

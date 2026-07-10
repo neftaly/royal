@@ -4,7 +4,6 @@ import {
   Input,
   Textarea,
   TextFontProvider,
-  TextInteractionProvider,
   TextSurface,
   textFieldHeight,
 } from '@royal/react';
@@ -158,8 +157,7 @@ const FormControlsScene = ({
   );
 
   return (
-    <TextInteractionProvider>
-      <TextFontProvider font={font}>
+    <TextFontProvider font={font}>
         <TextSurface
           aria-label="Controlled form controls"
           style={{ cursor: 'text', touchAction: 'none' }}
@@ -270,8 +268,7 @@ const FormControlsScene = ({
             </pass>
           </scene>
         </TextSurface>
-      </TextFontProvider>
-    </TextInteractionProvider>
+    </TextFontProvider>
   );
 };
 

@@ -42,12 +42,10 @@ import {
 type CanvasChild = ReactNode | RoyalRendererJsxElement;
 type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 
-const CanvasElementContext = createContext<HTMLCanvasElement | null>(null);
-const CanvasRootContext = createContext<RoyalRendererRoot | null>(null);
+const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
+const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
 
 export type CanvasRendererOptions = RoyalRendererRootOptions;
-/** @deprecated Use CanvasRendererOptions. */
-export type CanvasRootOptions = CanvasRendererOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
@@ -56,8 +54,6 @@ export interface CanvasProps
   readonly children: CanvasChildren;
   readonly ref?: Ref<HTMLCanvasElement>;
   readonly renderer?: CanvasRendererOptions;
-  /** @deprecated Use renderer. */
-  readonly rootOptions?: CanvasRootOptions;
 }
 
 const isReactRendererScene = (value: unknown): value is ReactNode =>
@@ -147,11 +143,23 @@ export const resolveCanvasChildren = (
   );
 };
 
-export const useCanvasElement = (): HTMLCanvasElement | null =>
-  useContext(CanvasElementContext);
+export const useCanvasElement = (): HTMLCanvasElement | null => {
+  const canvas = useContext(CanvasElementContext);
+  if (canvas === undefined) {
+    throw new Error("Royal canvas hooks must be used inside Canvas");
+  }
 
-export const useCanvasRoot = (): RoyalRendererRoot | null =>
-  useContext(CanvasRootContext);
+  return canvas;
+};
+
+export const useCanvasRoot = (): RoyalRendererRoot | null => {
+  const root = useContext(CanvasRootContext);
+  if (root === undefined) {
+    throw new Error("Royal canvas hooks must be used inside Canvas");
+  }
+
+  return root;
+};
 
 /** Returns a stable callback that requests one render of the current Canvas root. */
 export const useInvalidate = (): (() => void) => {
@@ -218,7 +226,9 @@ export const attachCanvasPointerEventHandlers = ({
     if (hit === undefined) return undefined;
 
     const target = rendererTree.pointerEventTarget(hit.target.node);
-    return target === undefined ? undefined : { hit, node: hit.target.node, target };
+    return target === undefined
+      ? undefined
+      : { hit, identity: target, node: hit.target.node, target };
   };
   const applyPointerInteraction = (
     event: PointerEvent,
@@ -289,7 +299,6 @@ export const Canvas = ({
   children,
   ref,
   renderer,
-  rootOptions,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -299,7 +308,7 @@ export const Canvas = ({
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
   const [rootError, setRootError] = useState<unknown>(null);
   const { controls, sceneChild } = resolveCanvasChildren(children);
-  const rendererOptions = renderer ?? rootOptions;
+  const rendererOptions = renderer;
   const rendererContextAlpha = rendererOptions?.context?.alpha;
   const rendererContextAntialias = rendererOptions?.context?.antialias;
   const rendererContextPreserveDrawingBuffer = rendererOptions?.context?.preserveDrawingBuffer;
@@ -369,6 +378,11 @@ export const Canvas = ({
     frameLoop.dispose();
   }, [frameLoop]);
 
+  useLayoutEffect(() => frameLoop.afterFrame(() => {
+    rendererTree.flushFrame();
+    canvasRoot?.flushInvalidated();
+  }), [canvasRoot, frameLoop, rendererTree]);
+
   // React owns the canvas element; Royal owns its WebGL root.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -403,7 +417,10 @@ export const Canvas = ({
       return;
     }
 
-    rendererTree.setTarget(canvasRoot, hasRootError);
+    // Reconcile with drawing paused, then publish the latest descriptor graph
+    // exactly once. This also hands a cached scene to a newly attached root
+    // when React has no host changes to commit.
+    rendererTree.setTarget(canvasRoot, true);
     rendererTree.render(createElement(
       FrameLoopContext.Provider,
       { value: frameLoop },
@@ -417,6 +434,7 @@ export const Canvas = ({
         ),
       ),
     ));
+    rendererTree.setTarget(canvasRoot, hasRootError);
   }, [canvasElement, canvasRoot, frameLoop, rendererTree, rootError, sceneChild]);
 
   useLayoutEffect(() => {

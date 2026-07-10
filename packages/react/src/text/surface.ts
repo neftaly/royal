@@ -23,6 +23,7 @@ import {
   setEditableTextEditorSelection,
   type EditableTextCaretEndpoint,
   type EditableTextEditorState,
+  type EditableTextLayout,
   type EditableTextMenuAction,
   type EditableTextMenuCommandRect,
   type EditableTextMenuLayout,
@@ -52,6 +53,7 @@ import { canvasPointToWorld, type CanvasWorldBounds } from "../canvas-coordinate
 import { captureCanvasPointer, releaseCanvasPointer } from "../canvas-pointer";
 import { rendererOutputToReact } from "../renderer-output";
 import {
+  actionControlSemantics,
   hasSelection,
   initialTextSurfaceState,
   reduceTextSurfaceState,
@@ -149,7 +151,7 @@ export interface TextProps {
 }
 
 export interface TextFieldProps {
-  readonly ariaLabel?: string;
+  readonly "aria-label"?: string;
   readonly box?: TextSurfaceBox;
   readonly color?: Rgba;
   readonly font?: TextFontFace;
@@ -172,7 +174,7 @@ export interface TextareaProps extends TextFieldProps {
 }
 
 export interface ButtonProps {
-  readonly ariaLabel?: string;
+  readonly "aria-label"?: string;
   readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly disabled?: boolean;
@@ -185,7 +187,7 @@ export interface ButtonProps {
 }
 
 export interface CheckboxInputProps {
-  readonly ariaLabel?: string;
+  readonly "aria-label"?: string;
   readonly box?: TextSurfaceBox;
   readonly checked: boolean;
   readonly children?: ReactNode;
@@ -200,7 +202,7 @@ export interface CheckboxInputProps {
 
 export interface FileInputProps {
   readonly accept?: string;
-  readonly ariaLabel?: string;
+  readonly "aria-label"?: string;
   readonly box?: TextSurfaceBox;
   readonly capture?: "environment" | "user";
   readonly children?: ReactNode;
@@ -215,7 +217,7 @@ export interface FileInputProps {
 }
 
 export interface ColorInputProps {
-  readonly ariaLabel?: string;
+  readonly "aria-label"?: string;
   readonly box?: TextSurfaceBox;
   readonly children?: ReactNode;
   readonly disabled?: boolean;
@@ -235,8 +237,6 @@ export type InputProps =
   | TextInputProps;
 
 type ClipboardAction = EditableTextMenuAction;
-type ClipboardSource = "keyboard" | "menu";
-
 type PendingMenuCommand = {
   readonly action: ClipboardAction;
   readonly controlId: string;
@@ -339,7 +339,6 @@ export const textFieldHeight = ({
   Math.max(1, rows) * lineHeight + paddingY * 2;
 
 const TextSurfaceContext = createContext<TextSurfaceContextValue | undefined>(undefined);
-const TextInteractionStoreContext = createContext<TextSurfaceStore | undefined>(undefined);
 const TextFontContext = createContext<TextFontFace | undefined>(undefined);
 
 const menuWidth = 1.34;
@@ -460,17 +459,6 @@ const requireResolvedTextFont = (font: TextFontFace | undefined): TextFontFace =
   if (font !== undefined) return font;
 
   throw new Error("Royal text controls require a TextFontFace. Pass font or wrap them in TextFontProvider.");
-};
-
-export interface TextInteractionProviderProps {
-  readonly children: ReactNode;
-}
-
-export const TextInteractionProvider = ({
-  children,
-}: TextInteractionProviderProps): ReactNode => {
-  const store = useMemo(createTextSurfaceStore, []);
-  return createElement(TextInteractionStoreContext.Provider, { value: store }, children);
 };
 
 const emptyTextSurfaceStore = createStore<Pick<TextSurfaceStoreState, "scrollLines" | "selections">>()(() => ({
@@ -771,10 +759,8 @@ export const TextSurface = ({
   const pasteSinkRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingKeyboardPasteControlIdRef = useRef<string | undefined>(undefined);
   const pendingMenuCommandRef = useRef<PendingMenuCommand | undefined>(undefined);
-  const providedStore = useContext(TextInteractionStoreContext);
   const providedFont = useContext(TextFontContext);
-  const fallbackStore = useMemo(createTextSurfaceStore, []);
-  const store = providedStore ?? fallbackStore;
+  const store = useMemo(createTextSurfaceStore, []);
   const activeActionId = useStore(store, (state) => state.activeActionId);
   const activeId = useStore(store, (state) => state.activeId);
   const menu = useStore(store, (state) => state.menu);
@@ -866,24 +852,38 @@ export const TextSurface = ({
   const runClipboardCommand = useCallback(async (
     control: TextControlRegistration,
     action: ClipboardAction,
-    _source: ClipboardSource,
   ): Promise<void> => {
     if (action === "paste") {
       if (!control.editable) return;
       const value = await readClipboardText();
-      if (value !== undefined) store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, value));
+      const currentControl = store.getState().getControl(control.id);
+      if (value !== undefined && currentControl?.editable === true) {
+        store.getState().applyEditorState(
+          currentControl.id,
+          pasteEditableTextEditorText(currentControl.state, value),
+        );
+      }
       store.getState().closeMenu();
-      focusControl(control);
+      focusControl(currentControl);
       return;
     }
 
     if (!control.copyable || control.selectedText === "") return;
     const ok = await writeClipboardText(control.selectedText);
-    if (ok && action === "cut" && control.editable) {
-      store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, ""));
+    const currentControl = store.getState().getControl(control.id);
+    if (
+      ok &&
+      action === "cut" &&
+      currentControl?.editable === true &&
+      currentControl.state === control.state
+    ) {
+      store.getState().applyEditorState(
+        currentControl.id,
+        pasteEditableTextEditorText(currentControl.state, ""),
+      );
     }
     store.getState().closeMenu();
-    focusControl(control);
+    focusControl(currentControl);
   }, [focusControl, store]);
 
   const handlePaste = useCallback((event: ClipboardEvent<HTMLElement> | globalThis.ClipboardEvent): void => {
@@ -893,7 +893,7 @@ export const TextSurface = ({
       if (event.defaultPrevented) return;
     }
 
-    const controlId = pendingKeyboardPasteControlIdRef.current ?? activeId;
+    const controlId = pendingKeyboardPasteControlIdRef.current ?? store.getState().activeId;
     pendingKeyboardPasteControlIdRef.current = undefined;
     const control = controlId === undefined ? undefined : store.getState().getControl(controlId);
     if (control === undefined || !control.editable) return;
@@ -906,14 +906,15 @@ export const TextSurface = ({
     store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, value));
     store.getState().closeMenu();
     focusControl(control);
-  }, [activeId, focusControl, onPaste, store]);
+  }, [focusControl, onPaste, store]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement> | globalThis.KeyboardEvent): void => {
-    const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
+    const { activeActionId: currentActiveActionId, activeId: currentActiveId } = store.getState();
+    const control = currentActiveId === undefined ? undefined : store.getState().getControl(currentActiveId);
     if (control === undefined) {
-      const actionControl = activeActionId === undefined
+      const actionControl = currentActiveActionId === undefined
         ? undefined
-        : store.getState().getActionControl(activeActionId);
+        : store.getState().getActionControl(currentActiveActionId);
       if (
         actionControl !== undefined &&
         (event.key === " " || event.key === "Enter")
@@ -949,7 +950,7 @@ export const TextSurface = ({
       }
 
       event.preventDefault();
-      void runClipboardCommand(control, intent.shortcut, "keyboard");
+      void runClipboardCommand(control, intent.shortcut);
       return;
     }
 
@@ -971,7 +972,7 @@ export const TextSurface = ({
     }
 
     if (intent.type !== "enter-key") store.getState().applyEditorState(control.id, nextState);
-  }, [activateActionControl, activeActionId, activeId, focusControl, runClipboardCommand, store]);
+  }, [activateActionControl, focusControl, runClipboardCommand, store]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return;
@@ -1047,7 +1048,7 @@ export const TextSurface = ({
       pendingMenuCommandRef.current = undefined;
       event.preventDefault();
       const control = store.getState().getControl(pendingCommand.controlId);
-      if (control !== undefined) void runClipboardCommand(control, pendingCommand.action, "menu");
+      if (control !== undefined) void runClipboardCommand(control, pendingCommand.action);
       return;
     }
 
@@ -1083,7 +1084,7 @@ export const TextSurface = ({
     const [worldX, worldY] = canvasPointToWorld(event.currentTarget, bounds, event.clientX, event.clientY);
     const hit = findControlAt(event.currentTarget, event.clientX, event.clientY);
     const selectedControl = store.getState().getControls().find((candidate) => hasSelection(candidate));
-    const control = selectedControl ?? hit?.control;
+    const control = hit?.control ?? selectedControl;
     if (control === undefined) {
       store.getState().clearSelectionsExcept(undefined);
       store.getState().closeMenu();
@@ -1092,7 +1093,7 @@ export const TextSurface = ({
 
     if (!control.copyable && !control.editable) return;
 
-    const nextSelection = selectedControl !== undefined
+    const nextSelection = selectedControl?.id === control.id
       ? control.selection
       : editableTextEditorContextMenuSelection({
           layout: control.layout,
@@ -1114,10 +1115,11 @@ export const TextSurface = ({
   }, [findControlAt, focusControl, store]);
 
   const handleCompositionEnd = useCallback((event: CompositionEvent<HTMLElement> | globalThis.CompositionEvent): void => {
-    const control = activeId === undefined ? undefined : store.getState().getControl(activeId);
+    const { activeId: currentActiveId } = store.getState();
+    const control = currentActiveId === undefined ? undefined : store.getState().getControl(currentActiveId);
     if (control === undefined || !control.editable || event.data === "") return;
     store.getState().applyEditorState(control.id, pasteEditableTextEditorText(control.state, event.data));
-  }, [activeId, store]);
+  }, [store]);
 
   const handleBlur = useCallback((event: FocusEvent<HTMLElement> | globalThis.FocusEvent): void => {
     if (event.relatedTarget === canvasRef.current || event.relatedTarget === pasteSinkRef.current) return;
@@ -1128,6 +1130,19 @@ export const TextSurface = ({
     store.getState().closeMenu();
   }, [store]);
 
+  const sinkEventHandlersRef = useRef({
+    handleBlur,
+    handleCompositionEnd,
+    handleKeyDown,
+    handlePaste,
+  });
+  sinkEventHandlersRef.current = {
+    handleBlur,
+    handleCompositionEnd,
+    handleKeyDown,
+    handlePaste,
+  };
+
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null || typeof document === "undefined") return undefined;
@@ -1136,10 +1151,14 @@ export const TextSurface = ({
     configurePasteSink(sink);
     pasteSinkRef.current = sink;
 
-    const handleSinkPaste = (event: globalThis.ClipboardEvent): void => handlePaste(event);
-    const handleSinkKeyDown = (event: globalThis.KeyboardEvent): void => handleKeyDown(event);
-    const handleSinkCompositionEnd = (event: globalThis.CompositionEvent): void => handleCompositionEnd(event);
-    const handleSinkBlur = (event: globalThis.FocusEvent): void => handleBlur(event);
+    const handleSinkPaste = (event: globalThis.ClipboardEvent): void =>
+      sinkEventHandlersRef.current.handlePaste(event);
+    const handleSinkKeyDown = (event: globalThis.KeyboardEvent): void =>
+      sinkEventHandlersRef.current.handleKeyDown(event);
+    const handleSinkCompositionEnd = (event: globalThis.CompositionEvent): void =>
+      sinkEventHandlersRef.current.handleCompositionEnd(event);
+    const handleSinkBlur = (event: globalThis.FocusEvent): void =>
+      sinkEventHandlersRef.current.handleBlur(event);
 
     sink.addEventListener("paste", handleSinkPaste);
     sink.addEventListener("keydown", handleSinkKeyDown);
@@ -1155,7 +1174,7 @@ export const TextSurface = ({
       if (pasteSinkRef.current === sink) pasteSinkRef.current = null;
       sink.remove();
     };
-  }, [handleBlur, handleCompositionEnd, handleKeyDown, handlePaste]);
+  }, []);
 
   const context = useMemo<TextSurfaceContextValue>(() => ({
     activeActionId,
@@ -1236,10 +1255,13 @@ const useRegisterTextControl = (control: TextControlRegistration): void => {
   useLayoutEffect(() => {
     if (store === undefined) return undefined;
 
-    store.getState().registerControl(control);
     return () => {
       store.getState().unregisterControl(control.id);
     };
+  }, [control.id, store]);
+
+  useLayoutEffect(() => {
+    store?.getState().registerControl(control);
   }, [control, store]);
 };
 
@@ -1250,10 +1272,13 @@ const useRegisterActionControl = (control: ActionControlRegistration | undefined
   useLayoutEffect(() => {
     if (store === undefined || control === undefined) return undefined;
 
-    store.getState().registerActionControl(control);
     return () => {
       store.getState().unregisterActionControl(control.id);
     };
+  }, [control?.id, store]);
+
+  useLayoutEffect(() => {
+    if (control !== undefined) store?.getState().registerActionControl(control);
   }, [control, store]);
 };
 
@@ -1322,6 +1347,7 @@ const actionControlRect = ({
   context,
   height = box.height ?? actionControlHeight,
   inset = 0,
+  semantics,
   z = 0,
 }: {
   readonly box: TextSurfaceBox;
@@ -1329,6 +1355,7 @@ const actionControlRect = ({
   readonly context: TextSurfaceContextValue;
   readonly height?: number;
   readonly inset?: number;
+  readonly semantics?: UiNodeSemantics;
   readonly z?: number;
 }): RenderNode => {
   const left = boxWorldLeft(context.bounds, box) + inset;
@@ -1339,6 +1366,7 @@ const actionControlRect = ({
   return mesh({
     geometry: boxGeometry({ size: [width, resolvedHeight, 0.02] }),
     material: unlitMaterial({ color }),
+    ...(semantics === undefined ? {} : { semantics }),
     transform: {
       position: [
         left + width / 2,
@@ -1390,39 +1418,67 @@ const actionLabelNode = ({
 };
 
 const useActionPrimitiveRegistration = ({
+  ariaLabel,
   box,
+  checked,
   disabled,
   kind,
+  label,
   onPress,
+  value,
 }: {
+  readonly ariaLabel?: string;
   readonly box: TextSurfaceBox;
+  readonly checked?: boolean;
   readonly disabled: boolean;
   readonly kind: ActionControlKind;
+  readonly label: string;
   readonly onPress: () => void;
+  readonly value?: string;
 }): {
   readonly active: boolean;
   readonly context: TextSurfaceContextValue;
   readonly pressed: boolean;
+  readonly semantics: UiNodeSemantics;
 } => {
   const id = useId();
   const context = useContext(TextSurfaceContext);
-  const control = useMemo<ActionControlRegistration | undefined>(() => context === undefined
-    ? undefined
-    : {
-        bounds: actionControlBounds(context, box),
+  const active = context?.activeActionId === id;
+  const pressed = context?.pressedActionId === id;
+  const control = useMemo<ActionControlRegistration | undefined>(() => {
+    if (context === undefined) return undefined;
+
+    const bounds = actionControlBounds(context, box);
+    return {
+        bounds,
         disabled,
         id,
         kind,
         onPress,
-      }, [box, context, disabled, id, kind, onPress]);
+        semantics: actionControlSemantics({
+          active,
+          bounds,
+          ...(checked === undefined ? {} : { checked }),
+          disabled,
+          id,
+          kind,
+          label: ariaLabel ?? label,
+          pressed,
+          ...(value === undefined ? {} : { value }),
+        }),
+    };
+  }, [active, ariaLabel, box, checked, context, disabled, id, kind, label, onPress, pressed, value]);
 
   useRegisterActionControl(control);
-  if (context === undefined) throw new Error("Royal action control box props require a TextSurface ancestor.");
+  if (context === undefined || control === undefined) {
+    throw new Error("Royal action control box props require a TextSurface ancestor.");
+  }
 
   return {
-    active: context?.activeActionId === id,
+    active,
     context,
-    pressed: context?.pressedActionId === id,
+    pressed,
+    semantics: control.semantics,
   };
 };
 
@@ -1501,19 +1557,17 @@ const openColorPicker = ({
   input.addEventListener("input", () => {
     onValueChange?.(input.value);
   });
-  input.addEventListener("change", () => {
-    onValueChange?.(input.value);
-  }, { once: true });
   openEphemeralInput(input);
 };
 
 const usePrimitiveRegistration = ({
+  ariaLabel,
   bounds,
   copyable,
   editable,
   font,
-  fontSize,
   id,
+  layout,
   lineHeight,
   maxWidth,
   mode,
@@ -1524,12 +1578,13 @@ const usePrimitiveRegistration = ({
   state,
   visibleLineCount,
 }: {
+  readonly ariaLabel?: string;
   readonly bounds?: TextControlBounds;
   readonly copyable: boolean;
   readonly editable: boolean;
   readonly font: TextFontFace;
-  readonly fontSize?: number;
   readonly id: string;
+  readonly layout: EditableTextLayout;
   readonly lineHeight?: number;
   readonly maxWidth: number;
   readonly mode: TextControlMode;
@@ -1547,25 +1602,13 @@ const usePrimitiveRegistration = ({
   const context = useContext(TextSurfaceContext);
   const style = context?.style ?? defaultTextStyle;
   const active = context?.activeId === id;
-  const effectiveFontSize = fontSize ?? style.fontSize;
   const effectiveLineHeight = lineHeight ?? style.lineHeight;
-  const fragment = useMemo(() => createEditableTextFragment({
-    color: style.color,
-    font,
-    fontSize: effectiveFontSize,
-    lineHeight: effectiveLineHeight,
-    maxWidth,
-    mode,
-    origin,
-    selection: state.selection,
-    text: state.text,
-  }), [effectiveFontSize, effectiveLineHeight, font, maxWidth, mode, origin, state.selection, state.text, style.color]);
   const control = useMemo<TextControlRegistration>(() => {
     const resolvedBounds = bounds ?? controlBounds(
       origin,
       maxWidth,
       effectiveLineHeight,
-      fragment.layout.lines.length,
+      layout.lines.length,
       style.fieldPaddingX,
       style.fieldPaddingY,
     );
@@ -1576,7 +1619,7 @@ const usePrimitiveRegistration = ({
       editable,
       font,
       id,
-      layout: fragment.layout,
+      layout,
       mode,
       ...(onValueChange === undefined ? {} : { onValueChange }),
       origin,
@@ -1589,6 +1632,7 @@ const usePrimitiveRegistration = ({
         copyable,
         editable,
         id,
+        ...(ariaLabel === undefined ? {} : { label: ariaLabel }),
         selectable,
         text: state.text,
       }),
@@ -1599,13 +1643,14 @@ const usePrimitiveRegistration = ({
     };
   }, [
     active,
+    ariaLabel,
     bounds,
     copyable,
     editable,
     font,
-    fragment.layout,
     effectiveLineHeight,
     id,
+    layout,
     maxWidth,
     mode,
     onValueChange,
@@ -1637,6 +1682,7 @@ const buttonControlNodes = ({
   label,
   lineHeight,
   pressed,
+  semantics,
 }: {
   readonly active: boolean;
   readonly box: TextSurfaceBox;
@@ -1647,6 +1693,7 @@ const buttonControlNodes = ({
   readonly label: string;
   readonly lineHeight?: number;
   readonly pressed: boolean;
+  readonly semantics: UiNodeSemantics;
 }): readonly RenderNode[] => {
   const style = context.style;
   const effectiveFontSize = fontSize ?? style.fontSize;
@@ -1665,6 +1712,7 @@ const buttonControlNodes = ({
       color: fill,
       context,
       inset: active ? actionControlBorder : 0,
+      semantics,
     }),
     actionLabelNode({
       box,
@@ -1679,6 +1727,7 @@ const buttonControlNodes = ({
 };
 
 export const Button = ({
+  "aria-label": ariaLabel,
   box: boxProp,
   children,
   disabled = false,
@@ -1695,10 +1744,14 @@ export const Button = ({
   const handlePress = useCallback((): void => {
     onPress?.();
   }, [onPress]);
-  const { active, context, pressed } = useActionPrimitiveRegistration({
+  const disabledControl = disabled || onPress === undefined;
+  const label = labelFromChildren(children, "Button");
+  const { active, context, pressed, semantics } = useActionPrimitiveRegistration({
+    ...(ariaLabel === undefined ? {} : { ariaLabel }),
     box,
-    disabled: disabled || onPress === undefined,
+    disabled: disabledControl,
     kind: "button",
+    label,
     onPress: handlePress,
   });
 
@@ -1706,17 +1759,19 @@ export const Button = ({
     active,
     box,
     context,
-    disabled,
+    disabled: disabledControl,
     font: resolvedFont,
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
-    label: labelFromChildren(children, "Button"),
+    label,
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     pressed,
+    semantics,
   }));
 };
 
 const FileInputControl = ({
   accept,
+  "aria-label": ariaLabel,
   box: boxProp,
   capture,
   children,
@@ -1741,10 +1796,13 @@ const FileInputControl = ({
     });
   }, [accept, capture, multiple, onFilesChange]);
   const disabledControl = disabled || onFilesChange === undefined;
-  const { active, context, pressed } = useActionPrimitiveRegistration({
+  const label = labelFromChildren(children, multiple === true ? "Choose files" : "Choose file");
+  const { active, context, pressed, semantics } = useActionPrimitiveRegistration({
+    ...(ariaLabel === undefined ? {} : { ariaLabel }),
     box,
     disabled: disabledControl,
     kind: "file",
+    label,
     onPress: handlePress,
   });
 
@@ -1755,13 +1813,15 @@ const FileInputControl = ({
     disabled: disabledControl,
     font: resolvedFont,
     ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
-    label: labelFromChildren(children, multiple === true ? "Choose files" : "Choose file"),
+    label,
     ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
     pressed,
+    semantics,
   }));
 };
 
 const ColorInputControl = ({
+  "aria-label": ariaLabel,
   box: boxProp,
   children,
   disabled = false,
@@ -1782,18 +1842,22 @@ const ColorInputControl = ({
       value,
     });
   }, [onValueChange, value]);
-  const { active, context, pressed } = useActionPrimitiveRegistration({
+  const disabledControl = disabled || onValueChange === undefined;
+  const label = labelFromChildren(children, "Color");
+  const { active, context, pressed, semantics } = useActionPrimitiveRegistration({
+    ...(ariaLabel === undefined ? {} : { ariaLabel }),
     box,
-    disabled: disabled || onValueChange === undefined,
+    disabled: disabledControl,
     kind: "color",
+    label,
     onPress: handlePress,
+    value,
   });
   const style = context.style;
-  const label = labelFromChildren(children, "Color");
   const effectiveFontSize = styledFontSize ?? style.fontSize;
   const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const height = box.height ?? actionControlHeight;
-  const fill = disabled
+  const fill = disabledControl
     ? disabledControlColor
     : pressed
       ? style.caretColor
@@ -1814,10 +1878,11 @@ const ColorInputControl = ({
       color: fill,
       context,
       inset: active ? actionControlBorder : 0,
+      semantics,
     }),
     actionLabelNode({
       box,
-      color: disabled ? disabledTextColor : style.color,
+      color: disabledControl ? disabledTextColor : style.color,
       context,
       font: resolvedFont,
       fontSize: effectiveFontSize,
@@ -1826,13 +1891,14 @@ const ColorInputControl = ({
     }),
     actionControlRect({
       box: swatchBox,
-      color: disabled ? disabledTextColor : colorInputToRgba(value),
+      color: disabledControl ? disabledTextColor : colorInputToRgba(value),
       context,
     }),
   ]);
 };
 
 const CheckboxInputControl = ({
+  "aria-label": ariaLabel,
   box: boxProp,
   checked,
   children,
@@ -1850,14 +1916,18 @@ const CheckboxInputControl = ({
   const handlePress = useCallback((): void => {
     onCheckedChange?.(!checked);
   }, [checked, onCheckedChange]);
-  const { active, context, pressed } = useActionPrimitiveRegistration({
+  const disabledControl = disabled || onCheckedChange === undefined;
+  const label = textFromChildren(children);
+  const { active, context, pressed, semantics } = useActionPrimitiveRegistration({
+    ...(ariaLabel === undefined ? {} : { ariaLabel }),
     box,
-    disabled: disabled || onCheckedChange === undefined,
+    checked,
+    disabled: disabledControl,
     kind: "checkbox",
+    label: label === "" ? "Checkbox" : label,
     onPress: handlePress,
   });
   const style = context.style;
-  const label = textFromChildren(children);
   const effectiveFontSize = styledFontSize ?? style.fontSize;
   const effectiveLineHeight = styledLineHeight ?? style.lineHeight;
   const height = box.height ?? actionControlHeight;
@@ -1866,13 +1936,13 @@ const CheckboxInputControl = ({
   const squareSize = Math.max(0.18, Math.min(0.34, height - 0.12));
   const squareX = left;
   const squareY = top - (height - squareSize) / 2;
-  const fill = disabled
+  const fill = disabledControl
     ? disabledControlColor
     : checked
       ? style.caretColor
       : style.fieldColor;
   const border = active || pressed ? style.caretColor : style.placeholderColor;
-  const textColor = disabled ? disabledTextColor : style.color;
+  const textColor = disabledControl ? disabledTextColor : style.color;
   const squareBox = {
     height: squareSize,
     left: squareX - context.bounds.left,
@@ -1888,11 +1958,12 @@ const CheckboxInputControl = ({
       color: fill,
       context,
       inset: actionControlBorder,
+      semantics,
     }),
     ...(checked
       ? [
           text({
-            color: disabled ? disabledTextColor : [0.025, 0.032, 0.038, 1],
+            color: disabledControl ? disabledTextColor : [0.025, 0.032, 0.038, 1],
             font: resolvedFont,
             fontSize: squareSize * 0.68,
             lineHeight: squareSize * 0.78,
@@ -1962,28 +2033,8 @@ export const Text = ({
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
     : boxBounds(surfaceContext.bounds, box, box.height ?? effectiveLineHeight);
-  const { context, control } = usePrimitiveRegistration({
-    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
-    copyable: copyable === true || selectable === true,
-    editable: false,
-    font: resolvedFont,
-    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
-    id,
-    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
-    maxWidth: resolvedMaxWidth,
-    mode: "multiline",
-    origin: interactionOrigin,
-    selectable: interactive,
-    scrollLine,
-    state,
-    visibleLineCount,
-  });
-  if (box !== undefined && surfaceContext === undefined) {
-    throw new Error("Royal text box props require a TextSurface ancestor.");
-  }
-
-  const textColor = styledColor ?? (context?.style ?? style).color;
-  const fragment = createEditableTextFragment({
+  const textColor = styledColor ?? style.color;
+  const fragment = useMemo(() => createEditableTextFragment({
     color: textColor,
     font: resolvedFont,
     fontSize: effectiveFontSize,
@@ -1994,10 +2045,41 @@ export const Text = ({
     },
     maxWidth: resolvedMaxWidth,
     origin: resolvedOrigin,
-    selection: interactive ? state.selection : createEditableTextEditorState({ text: value }).selection,
-    selectionColor: (context?.style ?? style).selectionColor,
+    selection: state.selection,
+    selectionColor: style.selectionColor,
     text: value,
+  }), [
+    effectiveFontSize,
+    effectiveLineHeight,
+    resolvedFont,
+    resolvedMaxWidth,
+    resolvedOrigin,
+    scrollLine,
+    state.selection,
+    style.selectionColor,
+    textColor,
+    value,
+    visibleLineCount,
+  ]);
+  const { context, control } = usePrimitiveRegistration({
+    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
+    copyable: copyable === true || selectable === true,
+    editable: false,
+    font: resolvedFont,
+    id,
+    layout: fragment.layout,
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
+    maxWidth: resolvedMaxWidth,
+    mode: "multiline",
+    origin: interactionOrigin,
+    selectable: interactive,
+    scrollLine,
+    state,
+    visibleLineCount,
   });
+  if ((box !== undefined || interactive) && surfaceContext === undefined) {
+    throw new Error("Royal interactive text requires a TextSurface ancestor.");
+  }
 
   if (!interactive) {
     return rendererOutputToReact(box === undefined
@@ -2021,6 +2103,7 @@ export const Text = ({
 };
 
 const TextFieldControl = ({
+  "aria-label": ariaLabel,
   box: boxProp,
   color,
   font,
@@ -2037,7 +2120,7 @@ const TextFieldControl = ({
 }: TextFieldProps & {
   readonly mode: TextControlMode;
   readonly rows: number;
-}): readonly RenderNode[] => {
+}): ReactNode => {
   const box = resolveSurfaceBox(boxProp, primitiveStyle, mode === "single-line" ? "input" : "textarea");
   const styledColor = color ?? primitiveStyle?.color;
   const styledFontSize = fontSize ?? primitiveStyle?.fontSize;
@@ -2065,32 +2148,11 @@ const TextFieldControl = ({
   const resolvedBounds = box === undefined || surfaceContext === undefined
     ? undefined
     : boxBounds(surfaceContext.bounds, box, resolvedHeight);
-  const { active, context, control } = usePrimitiveRegistration({
-    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
-    copyable: true,
-    editable: true,
-    font: resolvedFont,
-    ...(styledFontSize === undefined ? {} : { fontSize: styledFontSize }),
-    id,
-    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
-    maxWidth: resolvedMaxWidth,
-    mode,
-    ...(onValueChange === undefined ? {} : { onValueChange }),
-    origin: interactionOrigin,
-    selectable: true,
-    scrollLine,
-    state,
-    visibleLineCount,
-  });
-  if (box !== undefined && surfaceContext === undefined) {
-    throw new Error("Royal text box props require a TextSurface ancestor.");
-  }
-
-  const style = context?.style ?? defaultTextStyle;
-  const fragment = createEditableTextFragment({
-    caretColor: style.caretColor,
-    caretWidth: style.caretWidth,
-    color: styledColor ?? style.color,
+  const active = surfaceContext?.activeId === id;
+  const fragment = useMemo(() => createEditableTextFragment({
+    caretColor: surfaceStyle.caretColor,
+    caretWidth: surfaceStyle.caretWidth,
+    color: styledColor ?? surfaceStyle.color,
     font: resolvedFont,
     fontSize: fieldFontSize,
     lineHeight: fieldLineHeight,
@@ -2102,14 +2164,54 @@ const TextFieldControl = ({
     mode,
     origin: resolvedOrigin,
     ...(placeholder === undefined ? {} : { placeholder }),
-    placeholderColor: style.placeholderColor,
+    placeholderColor: surfaceStyle.placeholderColor,
     selection: state.selection,
-    selectionColor: style.selectionColor,
+    selectionColor: surfaceStyle.selectionColor,
     showCaret: active,
     text: state.text,
+  }), [
+    active,
+    fieldFontSize,
+    fieldLineHeight,
+    mode,
+    placeholder,
+    resolvedFont,
+    resolvedMaxWidth,
+    resolvedOrigin,
+    scrollLine,
+    state.selection,
+    state.text,
+    styledColor,
+    surfaceStyle.caretColor,
+    surfaceStyle.caretWidth,
+    surfaceStyle.color,
+    surfaceStyle.placeholderColor,
+    surfaceStyle.selectionColor,
+    visibleLineCount,
+  ]);
+  const { context, control } = usePrimitiveRegistration({
+    ...(ariaLabel === undefined ? {} : { ariaLabel }),
+    ...(resolvedBounds === undefined ? {} : { bounds: resolvedBounds }),
+    copyable: true,
+    editable: onValueChange !== undefined,
+    font: resolvedFont,
+    id,
+    layout: fragment.layout,
+    ...(styledLineHeight === undefined ? {} : { lineHeight: styledLineHeight }),
+    maxWidth: resolvedMaxWidth,
+    mode,
+    ...(onValueChange === undefined ? {} : { onValueChange }),
+    origin: interactionOrigin,
+    selectable: true,
+    scrollLine,
+    state,
+    visibleLineCount,
   });
+  if (surfaceContext === undefined) {
+    throw new Error("Royal text fields require a TextSurface ancestor.");
+  }
 
-  return [
+  return rendererOutputToReact([
     ...(context === undefined
       ? []
       : fieldNodes({
@@ -2123,27 +2225,27 @@ const TextFieldControl = ({
       })),
     ...fragment.nodes,
     ...(context === undefined ? [] : menuNodes(context, control)),
-  ];
+  ]);
 };
 
 export const Input = (props: InputProps): ReactNode => {
-  if (props.type === "checkbox") return CheckboxInputControl(props);
-  if (props.type === "file") return FileInputControl(props);
-  if (props.type === "color") return ColorInputControl(props);
+  if (props.type === "checkbox") return createElement(CheckboxInputControl, props);
+  if (props.type === "file") return createElement(FileInputControl, props);
+  if (props.type === "color") return createElement(ColorInputControl, props);
 
-  return rendererOutputToReact(TextFieldControl({
+  return createElement(TextFieldControl, {
     ...props,
     mode: "single-line",
     rows: 1,
-  }));
+  });
 };
 
 export const Textarea = ({
   rows = 4,
   ...props
 }: TextareaProps): ReactNode =>
-  rendererOutputToReact(TextFieldControl({
+  createElement(TextFieldControl, {
     ...props,
     mode: "multiline",
     rows,
-  }));
+  });

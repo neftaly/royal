@@ -3,8 +3,16 @@ import type {
   Transform,
   Vec3,
 } from "@royal/renderer-core";
+import { mat4 as glMatrixMat4 } from "gl-matrix";
 
 export type Mat4 = readonly [
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number,
+];
+
+export type MutableMat4 = [
   number, number, number, number,
   number, number, number, number,
   number, number, number, number,
@@ -19,37 +27,29 @@ const IDENTITY_TRANSFORM: Transform = {
   scale: [1, 1, 1],
 };
 
-export const identityMat4 = (): Mat4 => [
+export const identityMat4 = (): MutableMat4 => [
   1, 0, 0, 0,
   0, 1, 0, 0,
   0, 0, 1, 0,
   0, 0, 0, 1,
 ];
 
-export const multiplyMat4 = (left: Mat4, right: Mat4): Mat4 => {
-  const out: [
-    number, number, number, number,
-    number, number, number, number,
-    number, number, number, number,
-    number, number, number, number,
-  ] = [
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-    0, 0, 0, 0,
-  ];
-  for (let column = 0; column < 4; column += 1) {
-    for (let row = 0; row < 4; row += 1) {
-      out[column * 4 + row] =
-        left[row]! * right[column * 4]!
-        + left[4 + row]! * right[column * 4 + 1]!
-        + left[8 + row]! * right[column * 4 + 2]!
-        + left[12 + row]! * right[column * 4 + 3]!;
-    }
-  }
-
+export const multiplyMat4Into = (
+  out: MutableMat4,
+  left: Mat4,
+  right: Mat4,
+): MutableMat4 => {
+  glMatrixMat4.multiply(out, left as MutableMat4, right as MutableMat4);
   return out;
 };
+
+export const multiplyMat4 = (left: Mat4, right: Mat4): Mat4 =>
+  multiplyMat4Into([
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+  ], left, right);
 
 export const inverseMat4 = (matrix: Mat4): Mat4 | undefined => {
   const [
@@ -192,19 +192,41 @@ export const rotationZMat4 = (radians: number): Mat4 => {
   ];
 };
 
-export const transformMat4 = (transform: Transform | undefined): Mat4 => {
+export const transformMat4Into = (
+  out: MutableMat4,
+  transform: Transform | undefined,
+): MutableMat4 => {
   const actual = transform ?? IDENTITY_TRANSFORM;
-  return multiplyMat4(
-    translationMat4(actual.position),
-    multiplyMat4(
-      rotationZMat4(actual.rotation[2]),
-      multiplyMat4(
-        rotationYMat4(actual.rotation[1]),
-        multiplyMat4(rotationXMat4(actual.rotation[0]), scaleMat4(actual.scale)),
-      ),
-    ),
-  );
+  const [rotationX, rotationY, rotationZ] = actual.rotation;
+  const cosX = Math.cos(rotationX);
+  const sinX = Math.sin(rotationX);
+  const cosY = Math.cos(rotationY);
+  const sinY = Math.sin(rotationY);
+  const cosZ = Math.cos(rotationZ);
+  const sinZ = Math.sin(rotationZ);
+  const [scaleX, scaleY, scaleZ] = actual.scale;
+
+  out[0] = cosZ * cosY * scaleX;
+  out[1] = sinZ * cosY * scaleX;
+  out[2] = -sinY * scaleX;
+  out[3] = 0;
+  out[4] = (cosZ * sinY * sinX - sinZ * cosX) * scaleY;
+  out[5] = (sinZ * sinY * sinX + cosZ * cosX) * scaleY;
+  out[6] = cosY * sinX * scaleY;
+  out[7] = 0;
+  out[8] = (cosZ * sinY * cosX + sinZ * sinX) * scaleZ;
+  out[9] = (sinZ * sinY * cosX - cosZ * sinX) * scaleZ;
+  out[10] = cosY * cosX * scaleZ;
+  out[11] = 0;
+  out[12] = actual.position[0];
+  out[13] = actual.position[1];
+  out[14] = actual.position[2];
+  out[15] = 1;
+  return out;
 };
+
+export const transformMat4 = (transform: Transform | undefined): Mat4 =>
+  transformMat4Into(identityMat4(), transform);
 
 export const quaternionMat4 = (rotation: readonly number[] | undefined): Mat4 => {
   const x = rotation?.[0] ?? 0;

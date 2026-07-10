@@ -41,6 +41,7 @@ const pickedTarget = (
 
   return {
     hit,
+    identity: node,
     node,
     target: { handlers: {} },
   };
@@ -53,7 +54,7 @@ const dispatchTypes = (
 const pressedNode = (
   state: CanvasPointerInteractionState,
   pointerId: number,
-): MeshNode | undefined => state.pressedNodesByPointerId.get(pointerId) as MeshNode | undefined;
+): MeshNode | undefined => state.pressedTargetsByPointerId.get(pointerId) as MeshNode | undefined;
 
 const pointerIds = [1, 2, 7] as const;
 
@@ -63,13 +64,13 @@ const samePressedEntriesExcept = (
   pointerId: number,
 ): boolean => {
   const ids = new Set([
-    ...before.pressedNodesByPointerId.keys(),
-    ...after.pressedNodesByPointerId.keys(),
+    ...before.pressedTargetsByPointerId.keys(),
+    ...after.pressedTargetsByPointerId.keys(),
   ]);
   ids.delete(pointerId);
 
   for (const id of ids) {
-    if (before.pressedNodesByPointerId.get(id) !== after.pressedNodesByPointerId.get(id)) {
+    if (before.pressedTargetsByPointerId.get(id) !== after.pressedTargetsByPointerId.get(id)) {
       return false;
     }
   }
@@ -142,7 +143,7 @@ describe("React canvas pointer interaction planner", () => {
     expect(result.state.hoveredTarget).toBeUndefined();
   });
 
-  it("keeps the stored hover target when moving within the same node", () => {
+  it("keeps the latest hit when moving within the same node", () => {
     const node = targetNode("a");
     const firstTarget = pickedTarget(node, 1);
     const nextTarget = pickedTarget(node, 2);
@@ -158,8 +159,7 @@ describe("React canvas pointer interaction planner", () => {
 
     expect(dispatchTypes(result)).toEqual(["pointermove"]);
     expect(result.dispatches.map((dispatch) => dispatch.picked)).toEqual([nextTarget]);
-    expect(result.state).toBe(hovered);
-    expect(result.state.hoveredTarget).toBe(firstTarget);
+    expect(result.state.hoveredTarget).toBe(nextTarget);
   });
 
   it("sets and deletes pressed nodes on pointerdown before dispatch planning", () => {
@@ -180,7 +180,7 @@ describe("React canvas pointer interaction planner", () => {
     });
 
     expect(dispatchTypes(miss)).toEqual([]);
-    expect(miss.state.pressedNodesByPointerId.has(7)).toBe(false);
+    expect(miss.state.pressedTargetsByPointerId.has(7)).toBe(false);
   });
 
   it("handles pointerup dispatch and cleanup cases", () => {
@@ -219,11 +219,11 @@ describe("React canvas pointer interaction planner", () => {
         result.dispatches.map((dispatch) => dispatch.picked),
         `${label} dispatch targets`,
       ).toEqual(dispatches.map(() => picked));
-      expect(result.state.pressedNodesByPointerId.has(1), `${label} cleanup`).toBe(false);
+      expect(result.state.pressedTargetsByPointerId.has(1), `${label} cleanup`).toBe(false);
     }
   });
 
-  it("clears hover and all pressed nodes on pointerleave", () => {
+  it("clears hover without losing presses on pointerleave", () => {
     const targetA = pickedTarget(targetNode("a"));
     const targetB = pickedTarget(targetNode("b"));
     let state = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
@@ -246,7 +246,8 @@ describe("React canvas pointer interaction planner", () => {
     expect(dispatchTypes(result)).toEqual(["pointerleave"]);
     expect(result.dispatches.map((dispatch) => dispatch.picked)).toEqual([targetA]);
     expect(result.state.hoveredTarget).toBeUndefined();
-    expect(result.state.pressedNodesByPointerId.size).toBe(0);
+    expect(pressedNode(result.state, 1)).toBe(targetA.node);
+    expect(pressedNode(result.state, 2)).toBe(targetB.node);
   });
 
   it("clears only one pressed pointer on cancel and clears all state on reset", () => {
@@ -273,13 +274,13 @@ describe("React canvas pointer interaction planner", () => {
     });
     expect(dispatchTypes(canceled)).toEqual([]);
     expect(canceled.state.hoveredTarget).toBe(targetA);
-    expect(canceled.state.pressedNodesByPointerId.has(1)).toBe(false);
+    expect(canceled.state.pressedTargetsByPointerId.has(1)).toBe(false);
     expect(pressedNode(canceled.state, 2)).toBe(targetB.node);
 
     const reset = reduceCanvasPointerInteraction(canceled.state, { type: "reset" });
     expect(dispatchTypes(reset)).toEqual([]);
     expect(reset.state.hoveredTarget).toBeUndefined();
-    expect(reset.state.pressedNodesByPointerId.size).toBe(0);
+    expect(reset.state.pressedTargetsByPointerId.size).toBe(0);
   });
 
   it("preserves pointer interaction invariants across generated event sequences", () => {
@@ -298,7 +299,7 @@ describe("React canvas pointer interaction planner", () => {
         const action = randomPointerAction(random, targets);
         const before = state;
         const expectedPressedNode = action.type === "pointerup"
-          ? before.pressedNodesByPointerId.get(action.pointerId)
+          ? before.pressedTargetsByPointerId.get(action.pointerId)
           : undefined;
         const result = reduceCanvasPointerInteraction(before, action);
         const types = dispatchTypes(result);
@@ -309,8 +310,8 @@ describe("React canvas pointer interaction planner", () => {
           `${detail} stores at most one known hover target`,
         ).toBe(true);
 
-        if (action.type === "pointermove" && before.hoveredTarget?.node === action.picked?.node) {
-          expect(result.state.hoveredTarget, `${detail} keeps same-node hover identity`).toBe(before.hoveredTarget);
+        if (action.type === "pointermove" && action.picked !== undefined) {
+          expect(result.state.hoveredTarget, `${detail} stores latest hover hit`).toBe(action.picked);
         }
 
         if (action.type === "pointerdown" || action.type === "pointerup" || action.type === "pointercancel") {
@@ -319,12 +320,17 @@ describe("React canvas pointer interaction planner", () => {
             `${detail} only changes matching pressed pointer`,
           ).toBe(true);
         } else if (action.type === "pointermove") {
-          expect(result.state.pressedNodesByPointerId, `${detail} does not change pressed pointers`).toBe(
-            before.pressedNodesByPointerId,
+          expect(result.state.pressedTargetsByPointerId, `${detail} does not change pressed pointers`).toBe(
+            before.pressedTargetsByPointerId,
+          );
+        } else if (action.type === "pointerleave") {
+          expect(result.state.hoveredTarget, `${detail} clears hover`).toBeUndefined();
+          expect(result.state.pressedTargetsByPointerId, `${detail} preserves pressed pointers`).toBe(
+            before.pressedTargetsByPointerId,
           );
         } else {
           expect(result.state.hoveredTarget, `${detail} clears hover`).toBeUndefined();
-          expect(result.state.pressedNodesByPointerId.size, `${detail} clears pressed pointers`).toBe(0);
+          expect(result.state.pressedTargetsByPointerId.size, `${detail} clears pressed pointers`).toBe(0);
         }
 
         if (types.includes("click")) {

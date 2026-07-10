@@ -1,4 +1,5 @@
 import { type Rgba, type Vec3 } from '@royal/react/scene';
+import { type RenderObjectRef } from '@royal/renderer-core';
 import { type TextFontFace } from '@royal/renderer-core/text/font';
 import { type ReactNode } from 'react';
 import { type FlexLayoutBox } from './flex-layout';
@@ -60,14 +61,20 @@ export const HudPass = ({
 export const HudRect = ({
   box,
   color,
+  ref,
   z = 0,
 }: {
   readonly box: FlexLayoutBox;
   readonly color: Rgba;
+  readonly ref?: RenderObjectRef;
   readonly z?: number;
 }): ReactNode => (
-  <mesh transform={{ position: hudBoxCenter(box, z), rotation: [0, 0, 0] }}>
-    <planeGeometry size={[box.width, box.height]} />
+  <mesh {...(ref === undefined ? {} : { ref })} transform={{
+    position: hudBoxCenter(box, z),
+    rotation: [0, 0, 0],
+    scale: [box.width, box.height, 1],
+  }}>
+    <planeGeometry size={[1, 1]} />
     <unlitMaterial color={color} />
   </mesh>
 );

@@ -14,6 +14,7 @@ const debugPort = Number(process.env.EXAMPLES_BENCH_DEBUG_PORT ?? 4674);
 const debugHost = process.env.EXAMPLES_BENCH_DEBUG_HOST?.trim() || host;
 const baseUrl = process.env.EXAMPLES_BENCH_BASE_URL?.trim() || `http://${host}:${previewPort}`;
 const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
+const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'swiftshader';
 const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
 const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
@@ -67,6 +68,12 @@ if (!new Set(['chromium', 'cdp']).has(browserMode)) {
   throw new Error(`EXAMPLES_BENCH_BROWSER must be "chromium" or "cdp", received ${JSON.stringify(browserMode)}`);
 }
 
+if (!new Set(['swiftshader', 'hardware-headed', 'hardware-headless']).has(gpuMode)) {
+  throw new Error(
+    `EXAMPLES_BENCH_GPU must be "swiftshader", "hardware-headed", or "hardware-headless", received ${JSON.stringify(gpuMode)}`,
+  );
+}
+
 if (!new Set(['0', 'quick', 'default', 'full']).has(instancingSweepMode)) {
   throw new Error(
     `EXAMPLES_BENCH_INSTANCING_SWEEP must be "0", "quick", "default", or "full", received ${JSON.stringify(instancingSweepMode)}`,
@@ -75,12 +82,13 @@ if (!new Set(['0', 'quick', 'default', 'full']).has(instancingSweepMode)) {
 
 const instancingRoute = ({ animate, grid, id, seed, sweep }) => ({
   id,
-  path: `/gltf-instancing?animate=${animate ? 1 : 0}&grid=${grid}&seed=${seed}`,
+  path: `/gltf-instancing?animate=${animate ? 1 : 0}&grid=${grid}&redraw=${animate ? 0 : 1}&seed=${seed}`,
   profile: {
     animate,
     grid,
     instanceCount: grid ** 3,
     kind: 'gltf-instancing',
+    redraw: !animate,
     seed,
     sweep,
   },
@@ -345,6 +353,31 @@ const evaluate = async (session, expression, options = {}) => {
   });
   if (result.exceptionDetails !== undefined) throw new Error(result.exceptionDetails.text);
   return result.result.value;
+};
+
+const readWebGlGpu = async (session) => evaluate(session, `
+(() => {
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl2');
+  if (gl === null) return null;
+  const debug = gl.getExtension('WEBGL_debug_renderer_info');
+  return {
+    renderer: debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)),
+    vendor: debug === null ? null : String(gl.getParameter(debug.UNMASKED_VENDOR_WEBGL)),
+    version: String(gl.getParameter(gl.VERSION)),
+  };
+})()
+`);
+
+const assertRequestedGpu = (gpu) => {
+  if (gpu === null) throw new Error('Examples benchmark could not create a WebGL2 context');
+  if (!gpuMode.startsWith('hardware-')) return;
+  if (gpu.renderer === null) {
+    throw new Error('Hardware GPU benchmark requires WEBGL_debug_renderer_info');
+  }
+  if (/SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu.renderer)) {
+    throw new Error(`Hardware GPU benchmark resolved to software rendering: ${gpu.renderer}`);
+  }
 };
 
 const spawnLogged = (command, args, options) => {
@@ -1023,9 +1056,6 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
 
 const collectPageMetrics = async (session, frames, options = {}) => {
   const { sampleXr = true } = options;
-  const beforeGc = await session.call('Runtime.getHeapUsage');
-  await session.call('HeapProfiler.collectGarbage');
-  const afterGc = await session.call('Runtime.getHeapUsage');
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
   const setupRenderer = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
   const warmupComplete = await evaluate(session, `
@@ -1049,6 +1079,9 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   return true;
 })()
 `);
+  const beforeGc = await session.call('Runtime.getHeapUsage');
+  await session.call('HeapProfiler.collectGarbage');
+  const afterGc = await session.call('Runtime.getHeapUsage');
   const rendererBeforeFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
   await evaluate(session, 'globalThis.__royalBench?.reset?.()');
   const frameStats = await evaluate(session, `
@@ -1622,12 +1655,26 @@ const main = async () => {
     ], { cwd: appRoot })
     : undefined;
   const browserArgs = [
-    '--headless=new',
     '--no-sandbox',
     '--disable-dev-shm-usage',
-    '--enable-unsafe-swiftshader',
-    '--use-gl=angle',
-    '--use-angle=swiftshader',
+    ...(gpuMode === 'hardware-headed' ? [] : ['--headless=new']),
+    ...(gpuMode === 'swiftshader'
+      ? ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader']
+      : gpuMode === 'hardware-headed'
+        ? [
+          '--ozone-platform=x11',
+          '--use-gl=angle',
+          '--use-angle=gl',
+          '--disable-software-rasterizer',
+          '--use-gpu-in-tests',
+        ]
+        : [
+          '--use-gl=angle',
+          '--use-angle=vulkan',
+          '--ignore-gpu-blocklist',
+          '--disable-software-rasterizer',
+          '--use-gpu-in-tests',
+        ]),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     ...(fakeXrEnabled ? [`--unsafely-treat-insecure-origin-as-secure=${baseUrl}`] : []),
@@ -1648,6 +1695,9 @@ const main = async () => {
     await session.call('Network.enable');
     await session.call('Performance.enable');
     await installBenchmarkHooks(session);
+    const gpu = await readWebGlGpu(session);
+    assertRequestedGpu(gpu);
+    console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
 
     const results = [];
     for (const route of selectedRoutes()) {
@@ -1741,6 +1791,7 @@ const main = async () => {
         frameSampleTimeoutMs,
         baseUrl,
         browserMode,
+        gpuMode,
         cameraDragEnabled,
         ...(cameraDragEnabled
           ? {
@@ -1765,12 +1816,14 @@ const main = async () => {
       },
       analysis,
       deployment: size,
+      gpu,
       routes: results,
     };
 
     console.log(JSON.stringify({
       deploymentBytes: report.deployment.totalBytes,
       deploymentGzipBytes: report.deployment.gzipBytes,
+      gpu: report.gpu,
       routeCount: report.routes.length,
       slowestRoutesByP95: analysis.slowestRoutesByP95.slice(0, 5),
       heaviestGlStateRoutes: analysis.heaviestGlStateRoutes.slice(0, 5),

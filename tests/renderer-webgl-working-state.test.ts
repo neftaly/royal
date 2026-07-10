@@ -668,6 +668,13 @@ describe("WebGL root working state contracts", () => {
     expect(xrCalls.filter((call) => call.name === "bindFramebuffer")[0]?.args).toEqual([gl.FRAMEBUFFER, framebuffer]);
     expect(xrCalls.filter((call) => call.name === "viewport").map((call) => call.args)).toEqual([[4, 8, 110, 90]]);
     expect(drawCalls(xrCalls)).toHaveLength(1);
+    expect(renderer.disposed).toBe(false);
+
+    renderer.dispose();
+    renderer.dispose();
+
+    expect(renderer.disposed).toBe(true);
+    expect(renderer.renderFrame({ getViewerPose: () => null })).toBe(false);
   });
 
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {

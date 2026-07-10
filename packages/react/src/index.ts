@@ -2,11 +2,23 @@ import { Canvas as CanvasComponent } from './canvas';
 import { OrbitControls as OrbitControlsComponent } from './orbit-controls';
 import {
   TextFontProvider as TextFontProviderComponent,
-  TextInteractionProvider as TextInteractionProviderComponent,
   TextSurface as TextSurfaceComponent
 } from './text/surface';
 
-export type { GltfPickTarget, MeshPickTarget, PickInput, PickingId, PickResult, PickTarget } from '@royal/renderer-core';
+export {
+  createGltfInstanceTransforms,
+} from '@royal/renderer-core';
+export type {
+  CreateGltfInstanceTransformsOptions,
+  GltfInstanceTransforms,
+  GltfInstancesPickTarget,
+  GltfPickTarget,
+  MeshPickTarget,
+  PickInput,
+  PickingId,
+  PickResult,
+  PickTarget,
+} from '@royal/renderer-core';
 export { createTextFontFace, createTextFontFaceAsync } from '@royal/renderer-core/text/font';
 export type {
   CreateTextFontFaceOptions,
@@ -57,10 +69,9 @@ export type {
 export const Canvas = CanvasComponent;
 export const OrbitControls = OrbitControlsComponent;
 export const TextFontProvider = TextFontProviderComponent;
-export const TextInteractionProvider = TextInteractionProviderComponent;
 export const TextSurface = TextSurfaceComponent;
 
-export type { CanvasProps, CanvasRendererOptions, CanvasRootOptions } from './canvas';
+export type { CanvasProps, CanvasRendererOptions } from './canvas';
 export type { CanvasWorldBounds } from './canvas-coordinate';
 export type {
   ButtonProps,
@@ -73,7 +84,6 @@ export type {
   TextFieldHeightOptions,
   TextFieldProps,
   TextInputProps,
-  TextInteractionProviderProps,
   TextInteractionStyle,
   TextSurfaceControlStyle,
   TextProps,

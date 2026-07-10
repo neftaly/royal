@@ -1223,7 +1223,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it.skip("keeps large generated VT page preparation within the render-loop budget", async () => {
+  it("keeps large generated VT page preparation within the render-loop budget", async () => {
     vi.stubGlobal("Image", ControlledImage);
     installCanvas2d();
     const fetchRequests = installFetchQueue();

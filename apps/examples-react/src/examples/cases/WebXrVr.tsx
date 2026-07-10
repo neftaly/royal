@@ -219,6 +219,7 @@ const XrSessionControl = (): ReactNode => {
       throw error;
     }
     if (root.disposed || rootRef.current !== root || store.getState().session !== session) {
+      renderer.dispose();
       endSession();
       await session.end().catch(() => undefined);
       return;
@@ -239,6 +240,7 @@ const XrSessionControl = (): ReactNode => {
         frameHandle = undefined;
       }
       session.removeEventListener('end', onEnd);
+      renderer.dispose();
       if (frameCleanupRef.current === cleanupCurrentFrameLoop) {
         frameCleanupRef.current = undefined;
       }
@@ -258,8 +260,14 @@ const XrSessionControl = (): ReactNode => {
         return;
       }
 
-      renderer.renderFrame(frame);
-      requestNextFrame();
+      try {
+        renderer.renderFrame(frame);
+        requestNextFrame();
+      } catch (error) {
+        cleanupCurrentFrameLoop();
+        failSession(error);
+        void session.end().catch(() => undefined);
+      }
     };
     const onEnd = (): void => {
       cleanupCurrentFrameLoop();
@@ -275,6 +283,7 @@ const XrSessionControl = (): ReactNode => {
     beginSession,
     cleanupFrameLoop,
     endSession,
+    failSession,
     recordFrame,
     root,
     store,

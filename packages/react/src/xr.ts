@@ -51,7 +51,9 @@ export type XrSessionRendererOptions = {
 };
 
 export type XrSessionRenderer = {
+  readonly disposed: boolean;
   readonly referenceSpace: XrReferenceSpace;
+  dispose(): void;
   renderFrame(frame: XrFrame): boolean;
 };
 
@@ -67,7 +69,13 @@ export const createXrSessionRenderer = async (
   );
 
   return {
+    get disposed() {
+      return renderer.disposed;
+    },
     referenceSpace: renderer.referenceSpace as XrReferenceSpace,
+    dispose: () => {
+      renderer.dispose();
+    },
     renderFrame: (frame) => renderer.renderFrame(frame as WebGlXrFrame),
   };
 };

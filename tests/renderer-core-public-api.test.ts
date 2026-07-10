@@ -10,6 +10,7 @@ import {
   scene,
   standardMaterial,
   text,
+  type GltfInstancesPickTarget,
   type GltfPickTarget,
   type MeshPickTarget,
   type PickTarget,
@@ -176,6 +177,11 @@ describe("renderer-core public API", () => {
       if (target.kind === "mesh") {
         const meshTarget: MeshPickTarget = target;
         return meshTarget.node.geometry.kind;
+      }
+
+      if (target.kind === "gltf-instances") {
+        const instancesTarget: GltfInstancesPickTarget = target;
+        return `${instancesTarget.node.asset.uri}:${instancesTarget.instanceIndex}`;
       }
 
       const gltfTarget: GltfPickTarget = target;

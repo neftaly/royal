@@ -161,6 +161,7 @@ export const fakeRendererRoot = ({
     },
     diagnostics: vi.fn(() => diagnostics),
     dispose: vi.fn(),
+    flushInvalidated: vi.fn(),
     invalidate: vi.fn(),
     pick: vi.fn((input: PickInput) => pick(latestScene, input)),
     render: vi.fn((scene: RenderRoot) => {

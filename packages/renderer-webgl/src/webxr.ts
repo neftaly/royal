@@ -60,6 +60,7 @@ export interface WebGlXrLayerOptions {
 export interface WebGlXrRenderRoot {
   readonly canvas: HTMLCanvasElement;
   readonly latestScene: RenderRoot | undefined;
+  acquireExternalRenderClock(): () => void;
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;
 }
 
@@ -90,8 +91,10 @@ export interface WebGlXrSessionRendererOptions {
 }
 
 export interface WebGlXrSessionRenderer {
+  readonly disposed: boolean;
   readonly layer: WebGlXrLayer;
   readonly referenceSpace: WebGlXrReferenceSpace;
+  dispose(): void;
   renderFrame(frame: WebGlXrFrame, scene?: RenderRoot): boolean;
 }
 
@@ -185,22 +188,33 @@ export const createWebXrSessionRenderer = async (
     options.referenceSpacePreference ?? DEFAULT_REFERENCE_SPACE_TYPES,
   );
   let frameIndex = 0;
+  let disposed = false;
+  const releaseRenderClock = root.acquireExternalRenderClock();
 
   return {
+    get disposed() {
+      return disposed;
+    },
     layer,
     referenceSpace,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      releaseRenderClock();
+    },
     renderFrame: (frame, scene = root.latestScene) => {
+      if (disposed) return false;
       if (scene === undefined) return false;
       const pose = frame.getViewerPose(referenceSpace);
       if (pose === null) return false;
       const views = renderViews(layer, pose);
       if (views.length === 0) return false;
-      options.onFrameSnapshot?.(frameSnapshot(frameIndex, views));
-      frameIndex += 1;
       root.renderViews(scene, {
         framebuffer: layer.framebuffer,
         views,
       });
+      options.onFrameSnapshot?.(frameSnapshot(frameIndex, views));
+      frameIndex += 1;
       return true;
     },
   };

@@ -38,6 +38,17 @@ export type {
 export { boxGeometry, planeGeometry } from './geometry';
 export type { GltfAnimation, GltfAssetBounds, GltfAssetRef, GltfInput, GltfNode, GltfOptions } from './gltf';
 export { gltf } from './gltf';
+export {
+  createGltfInstanceTransforms,
+  gltfInstances,
+  subscribeGltfInstanceTransforms,
+} from './gltf-instances';
+export type {
+  CreateGltfInstanceTransformsOptions,
+  GltfInstanceTransforms,
+  GltfInstancesNode,
+  GltfInstancesOptions,
+} from './gltf-instances';
 export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
 export type {
   Material,
@@ -81,7 +92,15 @@ export type { EnvironmentLight, EnvironmentLightPreset, StudioEnvironmentOptions
 export { studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
 export { mesh } from './mesh';
-export type { GltfPickTarget, MeshPickTarget, PickInput, PickingId, PickResult, PickTarget } from './picking';
+export type {
+  GltfInstancesPickTarget,
+  GltfPickTarget,
+  MeshPickTarget,
+  PickInput,
+  PickingId,
+  PickResult,
+  PickTarget,
+} from './picking';
 export type {
   RenderObjectHandle,
   RenderObjectRef,

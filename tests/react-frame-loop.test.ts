@@ -51,4 +51,21 @@ describe("React frame loop", () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
   });
+
+  it("keeps scheduling after a subscriber throws", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const frameLoop = createFrameLoop();
+    frameLoop.subscribe(() => {
+      throw new Error("animation failed");
+    }, 0);
+
+    expect(() => frameCallbacks[0]?.(16)).toThrow("animation failed");
+    expect(frameCallbacks).toHaveLength(2);
+  });
 });
