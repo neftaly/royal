@@ -1,4 +1,5 @@
 import type { Rgba } from './primitives';
+import { frozenRgba } from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
 
@@ -106,35 +107,52 @@ export interface VirtualTextureAssetManifestOptions extends VirtualTextureAssetB
 export type VirtualTextureAssetOptions = VirtualTextureAssetSrcOptions | VirtualTextureAssetManifestOptions;
 export type VirtualTextureInput = string | VirtualTextureAssetOptions;
 
-export const defaultImageTextureSampler: TextureSampler = {
+export const defaultImageTextureSampler: TextureSampler = Object.freeze({
   magFilter: 'linear',
   minFilter: 'linear-mipmap-linear',
   wrapS: 'clamp-to-edge',
   wrapT: 'clamp-to-edge'
+});
+
+const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined =>
+  sampler === undefined ? undefined : Object.freeze({ ...sampler });
+
+const sourceUri = (
+  src: string | undefined,
+  uri: string | undefined,
+  label: string,
+): string => {
+  if ((src === undefined) === (uri === undefined)) {
+    throw new Error(`${label} requires exactly one source`);
+  }
+  const value = src ?? uri!;
+  if (value.length === 0) throw new Error(`${label} source must not be empty`);
+  return value;
 };
 
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
-  return {
+  return Object.freeze({
     kind: 'solid',
-    color: options.color,
+    color: frozenRgba(options.color, 'solid texture color'),
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.version === undefined ? {} : { version: options.version })
-  };
+  });
 };
 
 export function textureAsset(options: TextureAssetSrcOptions): TextureAssetRef;
 export function textureAsset(options: TextureAssetUriOptions): TextureAssetRef;
 export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
-  const uri = options.src ?? options.uri;
+  const uri = sourceUri(options.src, options.uri, 'texture asset');
+  const sampler = frozenSampler(options.sampler);
 
-  return {
+  return Object.freeze({
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
-    ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
+    ...(sampler === undefined ? {} : { sampler }),
     uri,
     ...(options.version === undefined ? {} : { version: options.version })
-  };
+  });
 }
 
 export function imageTexture(src: string): TextureAssetRef;
@@ -142,7 +160,7 @@ export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
 export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {
   const options: ImageTextureOptions =
     typeof srcOrOptions === 'string' ? { src: srcOrOptions } : srcOrOptions;
-  const uri = options.src ?? options.uri;
+  const uri = sourceUri(options.src, options.uri, 'image texture');
 
   return textureAsset({
     colorSpace: options.colorSpace ?? 'srgb',
@@ -157,17 +175,18 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 }
 
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
-  const manifestUri = options.src ?? options.manifestUri;
+  const manifestUri = sourceUri(options.src, options.manifestUri, 'virtual texture');
+  const sampler = frozenSampler(options.sampler);
 
-  return {
+  return Object.freeze({
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
     ...(options.debugName === undefined ? {} : { debugName: options.debugName }),
     manifestUri,
-    ...(options.sampler === undefined ? {} : { sampler: options.sampler }),
+    ...(sampler === undefined ? {} : { sampler }),
     ...(options.version === undefined ? {} : { version: options.version })
-  };
+  });
 };
 
 export function virtualTexture(src: string): TextureRef;

@@ -1,3 +1,5 @@
+import { prepareTextureUpload } from "./imperative-state";
+
 export const IBL_BRDF_LUT_SIZE = 64;
 export const IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT = 15;
 
@@ -60,7 +62,6 @@ export const createIblBrdfLutTexture = (
   context: {
     readonly createTexture: () => WebGLTexture;
     readonly gl: WebGL2RenderingContext;
-    readonly textureUnit: number;
   },
 ): WebGLTexture => {
   const gl = context.gl;
@@ -79,7 +80,7 @@ export const createIblBrdfLutTexture = (
   }
 
   const texture = context.createTexture();
-  gl.activeTexture(gl.TEXTURE0 + context.textureUnit);
+  prepareTextureUpload(gl, false);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(
     gl.TEXTURE_2D,

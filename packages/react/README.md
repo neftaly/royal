@@ -8,8 +8,8 @@ and render graph primitives from `@royal/react/scene`.
 
 ## Example
 
-`<Canvas>` is the primary React API. It owns the canvas element, accepts exactly
-one Royal scene child, and can host React-only control components such as
+`<Canvas>` is the primary React API. It owns the canvas element, requires one
+pure Royal `scene` prop, and can host React-only control components such as
 `<OrbitControls>`.
 
 The WebGL renderer currently supports a practical glTF subset: `.gltf` and
@@ -17,17 +17,15 @@ The WebGL renderer currently supports a practical glTF subset: `.gltf` and
 hierarchies and transforms, mesh primitives with `POSITION`/`NORMAL`/selected
 `TEXCOORD_n` accessors, sparse and strided accessors, normalized integer
 attributes, `UNSIGNED_BYTE`/`UNSIGNED_SHORT`/`UNSIGNED_INT` indices, triangle
-and line drawing, base color factor/texture/sampler data, and selected required
-extensions.
+and line drawing, rigid node transforms, base color factor/texture/sampler data,
+and selected required extensions. Assets requiring skeletal or morph
+deformation fail explicitly until a prepared deformation runtime is added.
 That supported required-extension set includes meshopt-compressed bufferViews
 via `EXT_meshopt_compression` and KTX2/Basis base-color textures via
 `KHR_texture_basisu` through an RGBA8 transcode path.
-Optional `EXT_lights_image_based` diffuse irradiance is renderer groundwork
-only; assets that require the extension are rejected until specular cubemap
-sampling support lands.
+Required `KHR_animation_pointer` assets fail explicitly.
 
 ```tsx
-/** @jsxImportSource @royal/react */
 import {
   Canvas,
   OrbitControls,
@@ -35,37 +33,60 @@ import {
 } from '@royal/react';
 import {
   boxGeometry,
+  directionalLight,
+  gltf,
+  gltfInstances,
+  mesh,
+  scene,
   standardMaterial,
 } from '@royal/react/scene';
+import { useMemo } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 
 export function App() {
-  const orbit = useOrbitCamera({ distance: 5 });
+  const orbit = useOrbitCamera({ initial: { distance: 5 } });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    nodes: [
+      directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
+      mesh({ geometry: cube, material: red }),
+      gltf({ src: helmetSrc, variant: 'display' }),
+    ],
+  }), [orbit.cameraResource]);
 
   return (
-    <Canvas aria-label="Royal scene">
-      <scene>
-        <pass camera={orbit.camera}>
-          <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
-          <mesh geometry={cube} material={red} />
-          <gltf src={helmetSrc} variant="display" />
-        </pass>
-      </scene>
-      <OrbitControls {...orbit.orbitControlsProps} />
+    <Canvas
+      aria-label="Royal scene"
+      scene={renderScene}
+    >
+      <OrbitControls orbit={orbit} />
     </Canvas>
   );
 }
 ```
 
-The imperative `createRendererRoot(canvas)` path uses
-`@royal/react/renderer` as its JSX import source. It is a lower-level host and
-testing escape hatch for already-lowered Royal scenes: descriptor objects from
-`@royal/renderer-core`, Royal intrinsic JSX such as `<scene>`, or plain
-function components that return one renderer descriptor. React children,
-hooks, and controls belong under `<Canvas>`.
+`useOrbitCamera({ initial: ... })` reads `initial` once. It returns a stable,
+explicit `cameraResource`; orbit gestures stage pose values and commit them
+directly to every renderer root using the scene, without a React render or scene
+reconstruction. Use `orbit.getView()` for an imperative read, or
+`useOrbitCameraView(orbit)` only when React UI must observe the view.
+
+Camera resources expose writable `Float64Array` pose staging. Renderer roots
+continue using the last committed view until `commit()` succeeds; an unchanged
+commit is silent and preserves the version. Immutable `perspectiveCamera()` and
+`orthographicCamera()` descriptors remain the simpler path for static or
+Tarstate-derived scene snapshots.
+
+The imperative `createRendererRoot(canvas)` path accepts the same pure scene
+descriptors as `Canvas.scene`. It does not create or evaluate React elements.
+
+The main `@royal/react` JSX runtime is ordinary React. Royal does not create a
+second React root, so outer Context, ErrorBoundary, and Suspense semantics stay
+normal. Read app state in React, pass immutable snapshots to pure scene
+builders, and keep imperative frame work in control children.
 
 React commits render the latest descriptor graph immediately. Use
 `useInvalidate()` inside `<Canvas>` only for changes React did not commit, such
@@ -77,15 +98,22 @@ redraw by itself: a React state commit, a render-object mutation, or an explicit
 that render are coalesced.
 
 glTF material variants from `KHR_materials_variants` can be selected with
-`gltf({ src, variant })` or `<gltf variant>`. Pass a variant name, or pass a
-zero-based variant index when an asset has unnamed variants.
+`gltf({ src, variant })`. Pass a variant name, or pass a zero-based variant
+index when an asset has unnamed variants.
+
+Interactive nodes provide an explicit `pickingId`; React handlers live in the
+separate `Canvas.interactions` map under that ID. The ID is the logical gesture
+identity, so handler-only changes do not resubmit the scene and pointer-down/up
+and hover stay coherent across immutable scene replacement.
 
 For many copies of one asset, create one stable transform resource and render
-one `<gltfInstances>` node instead of thousands of `<gltf>` elements and refs.
+one `gltfInstances(...)` node instead of thousands of individual nodes.
 The position, rotation, and scale arrays use three consecutive numbers per
 instance. Mutate them outside React render, then commit the channel once:
 
 ```tsx
+import { createGltfInstanceTransforms } from '@royal/react/scene';
+
 const instances = useMemo(() => createGltfInstanceTransforms({
   count: 4096,
   positions,
@@ -93,21 +121,30 @@ const instances = useMemo(() => createGltfInstanceTransforms({
   scales,
 }), []);
 
-useFrame(({ elapsedSeconds }) => {
-  for (let index = 0; index < instances.count; index += 1) {
-    const offset = index * 3;
-    instances.rotations[offset + 1] = elapsedSeconds;
-  }
-  instances.commitPose();
-});
+const renderScene = useMemo(() => scene({
+  camera,
+  nodes: [gltfInstances({ src: '/cube.gltf', instances })],
+}), [camera, instances]);
 
-return <gltfInstances src="/cube.gltf" instances={instances} />;
+function InstanceAnimation() {
+  useFrame(({ elapsedSeconds }) => {
+    for (let index = 0; index < instances.count; index += 1) {
+      instances.rotations[index * 3 + 1] = elapsedSeconds;
+    }
+    instances.commitPose();
+  });
+  return null;
+}
+
+return <Canvas scene={renderScene}><InstanceAnimation /></Canvas>;
 ```
 
-`commitPose()` never uploads scale data; call `commitScale()` only after scale
-changes. Bulk instance scales must be non-negative. The resource notifies every
-attached renderer root and Canvas flushes that demand at the end of the active
-frame.
+`commitPose(start, count)` and `commitScale(start, count)` identify the exact
+logical rows changed. Royal coalesces adjacent packed uploads independently in
+every attached renderer root; commits never render React objects per instance.
+Pose values must be finite and scales must be finite and non-negative. Optional
+unique `logicalIds` remain stable picking identity when culling repacks GPU
+slots. Canvas coalesces commit invalidations at the end of the active frame.
 
 ## Workflows
 

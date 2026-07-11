@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createGltfInstanceTransforms,
-  subscribeGltfInstanceTransforms,
 } from "@royal/renderer-core";
 import { forEachFuzzCase } from "./fuzz";
 
@@ -17,7 +16,9 @@ describe("glTF instance transform properties", () => {
       const initialScales = transforms.scales.slice();
       const initialScaleVersion = transforms.scaleVersion;
       const listener = vi.fn();
-      const unsubscribe = subscribeGltfInstanceTransforms(transforms, listener);
+      const secondRootListener = vi.fn();
+      const unsubscribe = transforms.subscribe(listener);
+      const unsubscribeSecondRoot = transforms.subscribe(secondRootListener);
 
       for (let update = 0; update < 32; update += 1) {
         const instanceIndex = random.int(0, count);
@@ -35,11 +36,30 @@ describe("glTF instance transform properties", () => {
         expect(transforms.scaleVersion, label).toBe(initialScaleVersion);
       }
       expect(listener, label).toHaveBeenCalledTimes(32);
+      expect(secondRootListener, label).toHaveBeenCalledTimes(32);
+      expect(listener, label).toHaveBeenLastCalledWith('pose', expect.any(Number), 1, transforms.poseVersion);
       expect(transforms.scales, label).toEqual(initialScales);
 
       unsubscribe();
       transforms.commitPose();
       expect(listener, label).toHaveBeenCalledTimes(32);
+      expect(secondRootListener, label).toHaveBeenCalledTimes(33);
+      unsubscribeSecondRoot();
     });
+  });
+
+  it('rejects non-finite committed values and snapshots unique logical ids', () => {
+    const ids = ['left', 'right'];
+    const transforms = createGltfInstanceTransforms({ count: 2, logicalIds: ids });
+    ids[0] = 'mutated';
+    expect(transforms.logicalIds).toEqual(['left', 'right']);
+    expect(Object.isFrozen(transforms.logicalIds)).toBe(true);
+    expect(() => createGltfInstanceTransforms({ count: 2, logicalIds: ['same', 'same'] })).toThrow(/unique/);
+
+    transforms.positions[3] = Number.NaN;
+    expect(() => transforms.commitPose(1, 1)).toThrow(/finite/);
+    transforms.positions[3] = 0;
+    transforms.scales[3] = Number.POSITIVE_INFINITY;
+    expect(() => transforms.commitScale(1, 1)).toThrow(/finite and non-negative/);
   });
 });

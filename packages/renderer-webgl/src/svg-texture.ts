@@ -1,5 +1,6 @@
 import type { LoadedTextureSource } from "./texture-sources";
 import {
+  abortError,
   dataUriMediaType,
   decodeDataUri,
   gltfBufferViewBytes,
@@ -55,9 +56,10 @@ type SvgVirtualTextureSourceCarrier = {
 };
 
 type SvgImageReferenceContext = {
-  readonly active: Set<string>;
   readonly cache: Map<string, Promise<string>>;
   readonly depth: number;
+  readonly path: readonly string[];
+  readonly signal?: AbortSignal;
 };
 
 export const isSvgMimeType = (mimeType: string | undefined): boolean =>
@@ -243,40 +245,41 @@ const fetchSvgImageReferenceValue = (
   }
 
   const url = absoluteSvgBaseUrl(href, baseUrl);
+  const cycleStart = context.path.indexOf(url);
+  if (cycleStart >= 0) {
+    const cycle = [...context.path.slice(cycleStart), url].join(" -> ");
+    return Promise.reject(new Error(`${label} contains a cyclic SVG image reference: ${cycle}`));
+  }
   const cached = context.cache.get(url);
   if (cached !== undefined) return cached;
 
   const request = (async (): Promise<string> => {
-    if (context.active.has(url)) throw new Error(`${label} contains a cyclic SVG image reference to ${url}`);
-    context.active.add(url);
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    if (context.signal?.aborted === true) throw abortError();
+    const response = await fetch(url, context.signal === undefined ? undefined : { signal: context.signal });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
-      const responseUrl = absoluteSvgBaseUrl(response.url || url, baseUrl);
-      const mimeType = imageMimeTypeForUrl(responseUrl, response);
-      if (mimeType === "image/svg+xml") {
-        const preparedText = await prepareSvgTextForImage(
-          await response.text(),
-          `SVG image reference ${responseUrl}`,
-          responseUrl,
-          {
-            context: {
-              active: context.active,
-              cache: context.cache,
-              depth: context.depth + 1,
-            },
-            requireViewport: false,
+    const responseUrl = absoluteSvgBaseUrl(response.url || url, baseUrl);
+    const mimeType = imageMimeTypeForUrl(responseUrl, response);
+    if (mimeType === "image/svg+xml") {
+      const preparedText = await prepareSvgTextForImage(
+        await response.text(),
+        `SVG image reference ${responseUrl}`,
+        responseUrl,
+        {
+          context: {
+            cache: context.cache,
+            depth: context.depth + 1,
+            path: [...context.path, url],
+            ...(context.signal === undefined ? {} : { signal: context.signal }),
           },
-        );
+          requireViewport: false,
+        },
+      );
 
-        return bytesDataUri(svgTextEncoder.encode(preparedText), "image/svg+xml");
-      }
-
-      return bytesDataUri(new Uint8Array(await response.arrayBuffer()), mimeType);
-    } finally {
-      context.active.delete(url);
+      return bytesDataUri(svgTextEncoder.encode(preparedText), "image/svg+xml");
     }
+
+    return bytesDataUri(new Uint8Array(await response.arrayBuffer()), mimeType);
   })();
   context.cache.set(url, request);
   return request;
@@ -314,12 +317,12 @@ const inlineSvgImageReferences = async (
     }));
 };
 
-const prepareSvgTextForImage = async (
+export const prepareSvgTextForImage = async (
   svgText: string,
   label: string,
   baseUrl: string | undefined,
   {
-    context = { active: new Set<string>(), cache: new Map<string, Promise<string>>(), depth: 0 },
+    context = { cache: new Map<string, Promise<string>>(), depth: 0, path: [] },
     requireViewport = true,
   }: {
     readonly context?: SvgImageReferenceContext;
@@ -333,7 +336,7 @@ const prepareSvgTextForImage = async (
     : inlineSvgImageReferences(normalizedText, label, baseUrl, context);
 };
 
-const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
   if (ImageConstructor === undefined) {
     reject(new Error(`Image loading is unavailable for texture ${src}`));
@@ -342,37 +345,53 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
 
   const image = new ImageConstructor();
   image.crossOrigin = "anonymous";
+  let settled = false;
 
   const cleanup = (): void => {
     image.removeEventListener("load", onLoad);
     image.removeEventListener("error", onError);
+    signal?.removeEventListener("abort", onAbort);
+  };
+  const settle = (complete: () => void): void => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    complete();
+  };
+  const onAbort = (): void => {
+    settle(() => {
+      image.src = "";
+      reject(abortError());
+    });
   };
   const onLoad = (): void => {
     const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
     decoded.then(() => {
-      cleanup();
-      resolve(image);
+      settle(() => resolve(image));
     }, (error: unknown) => {
-      cleanup();
-      reject(error);
+      settle(() => reject(error));
     });
   };
   const onError = (event: Event): void => {
-    cleanup();
     const message = "message" in event && typeof event.message === "string"
       ? event.message
       : `Image load failed for ${src}`;
-    reject(new Error(message));
+    settle(() => reject(new Error(message)));
   };
 
   image.addEventListener("load", onLoad);
   image.addEventListener("error", onError);
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted === true) {
+    onAbort();
+    return;
+  }
   image.src = src;
 
   if (image.complete) onLoad();
 });
 
-const loadImageFromBlob = async (blob: Blob, label: string): Promise<HTMLImageElement> => {
+const loadImageFromBlob = async (blob: Blob, label: string, signal?: AbortSignal): Promise<HTMLImageElement> => {
   if (
     typeof globalThis.URL?.createObjectURL !== "function"
     || typeof globalThis.URL.revokeObjectURL !== "function"
@@ -382,7 +401,7 @@ const loadImageFromBlob = async (blob: Blob, label: string): Promise<HTMLImageEl
 
   const url = globalThis.URL.createObjectURL(blob);
   try {
-    return await loadImage(url);
+    return await loadImage(url, signal);
   } finally {
     globalThis.URL.revokeObjectURL(url);
   }
@@ -403,10 +422,22 @@ export const svgVirtualTextureSourceForImage = (
     ? (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol]
     : undefined;
 
-const loadSvgTextImage = async (svgText: string, label: string, baseUrl?: string): Promise<LoadedSvgTexture> => {
-  const normalizedText = await prepareSvgTextForImage(svgText, label, baseUrl);
+const loadSvgTextImage = async (
+  svgText: string,
+  label: string,
+  baseUrl?: string,
+  signal?: AbortSignal,
+): Promise<LoadedSvgTexture> => {
+  const normalizedText = await prepareSvgTextForImage(svgText, label, baseUrl, {
+    context: {
+      cache: new Map(),
+      depth: 0,
+      path: [],
+      ...(signal === undefined ? {} : { signal }),
+    },
+  });
   const viewport = svgTextureViewport(normalizedText);
-  const image = await loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label);
+  const image = await loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label, signal);
 
   return {
     image: viewport === undefined
@@ -468,20 +499,24 @@ export const loadGeneratedSvgVirtualTexturePageImage = (
   source: SvgVirtualTextureSource,
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
+  signal?: AbortSignal,
 ): Promise<HTMLImageElement> =>
   loadImageFromBlob(
     new Blob([generatedSvgVirtualTexturePageText(source, manifest, page)], { type: "image/svg+xml" }),
     `generated SVG virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
+    signal,
   );
 
-export const loadSvgTextureFromUri = async (url: string): Promise<LoadedSvgTexture> => {
-  const response = await fetch(url);
+export const loadSvgTextureFromUri = async (url: string, signal?: AbortSignal): Promise<LoadedSvgTexture> => {
+  if (signal?.aborted === true) throw abortError();
+  const response = await fetch(url, signal === undefined ? undefined : { signal });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
   return loadSvgTextImage(
     await response.text(),
     `glTF GS_texture_svg image ${url}`,
     absoluteSvgBaseUrl(response.url || url),
+    signal,
   );
 };
 
@@ -490,6 +525,7 @@ export const loadGltfSvgTexture = async (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
   image: GltfImage,
+  signal?: AbortSignal,
 ): Promise<LoadedSvgTexture> => {
   if (image.uri !== undefined) {
     if (image.uri.startsWith("data:")) {
@@ -498,10 +534,11 @@ export const loadGltfSvgTexture = async (
         svgTextDecoder.decode(bytes),
         `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`,
         absoluteSvgBaseUrl(src),
+        signal,
       );
     }
 
-    return loadSvgTextureFromUri(resolveResourceUri(src, image.uri));
+    return loadSvgTextureFromUri(resolveResourceUri(src, image.uri), signal);
   }
   if (image.bufferView === undefined) {
     throw new Error("glTF GS_texture_svg image has no URI or bufferView");
@@ -511,5 +548,6 @@ export const loadGltfSvgTexture = async (
     svgTextDecoder.decode(bytes),
     `glTF GS_texture_svg bufferView ${image.bufferView}`,
     absoluteSvgBaseUrl(src),
+    signal,
   );
 };

@@ -16,7 +16,9 @@ export interface RoyalPointerEvent {
   readonly nativeEvent: PointerEvent;
   readonly target: PickTarget;
   readonly type: RoyalPointerEventType;
+  /** Consumes this pointer event so canvas controls do not also act on it. */
   preventDefault(): void;
+  /** Stops native DOM bubbling; Royal scene events do not bubble. */
   stopPropagation(): void;
 }
 

@@ -5,7 +5,7 @@ import {
   type LoadedTextureSource,
 } from "../texture-sources";
 import type { SurfaceImageBasedLightSpecular } from "./lights";
-import { IBL_SPECULAR_TEXTURE_UNIT } from "./ibl-uniforms";
+import { prepareTextureUpload } from "./imperative-state";
 
 export type IblSpecularTextureResource = {
   readonly imageSize: number;
@@ -73,9 +73,8 @@ export const uploadIblSpecularTextureIfReady = (
   if (sources.some((mip) => mip.some((source) => source === undefined))) return;
 
   const gl = context.gl;
-  gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
+  prepareTextureUpload(gl, false);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, resource.texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   for (const [mipIndex, mipSources] of sources.entries()) {
     const expectedSize = Math.max(1, specular.imageSize >> mipIndex);

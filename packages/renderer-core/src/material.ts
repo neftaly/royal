@@ -1,4 +1,5 @@
 import type { Rgba } from './primitives';
+import { finiteNumber, positiveFiniteNumber } from './descriptor-values';
 import { solidTexture, type TextureRef } from './texture';
 
 export type MaterialColorInput = Rgba;
@@ -57,31 +58,33 @@ const toBaseColorTexture = (options: MaterialSurfaceOptions): TextureRef => {
   return solidTexture({ color: options.color });
 };
 
-const factor01 = (value: number | undefined, fallback: number): number =>
-  typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(1, Math.max(0, value))
-    : fallback;
+const factor01 = (value: number | undefined, fallback: number, label: string): number => {
+  if (value === undefined) return fallback;
+  finiteNumber(value, label);
+  if (value < 0 || value > 1) throw new Error(`${label} must be within 0..1`);
+  return value;
+};
 
 export const standardMaterial = (options: StandardMaterialOptions): StandardMaterial => {
-  return {
+  return Object.freeze({
     kind: 'standard',
     baseColor: toBaseColorTexture(options),
-    metallicFactor: factor01(options.metallic, 0),
-    roughnessFactor: factor01(options.roughness, 1)
-  };
+    metallicFactor: factor01(options.metallic, 0, 'standard material metallic'),
+    roughnessFactor: factor01(options.roughness, 1, 'standard material roughness')
+  });
 };
 
 export const unlitMaterial = (options: UnlitMaterialOptions): UnlitMaterial => {
-  return {
+  return Object.freeze({
     kind: 'unlit',
     baseColor: toBaseColorTexture(options)
-  };
+  });
 };
 
 export const wireframeMaterial = (options: WireframeMaterialOptions): WireframeMaterial => {
-  return {
+  return Object.freeze({
     kind: 'wireframe',
     baseColor: solidTexture({ color: options.color }),
-    width: options.width ?? 1.25
-  };
+    width: positiveFiniteNumber(options.width ?? 1.25, 'wireframe material width')
+  });
 };

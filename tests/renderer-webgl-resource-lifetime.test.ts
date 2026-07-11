@@ -4,9 +4,9 @@ import {
   imageTexture,
   mesh,
   orthographicCamera,
-  pass,
   scene,
   unlitMaterial,
+  wireframeMaterial,
   type Geometry,
   type Material,
   type Rgba,
@@ -156,12 +156,14 @@ const fakeGl = (): FakeGl => {
     bindBuffer: record("bindBuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
+    blendEquationSeparate: record("blendEquationSeparate"),
     blendFunc: record("blendFunc"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
     clear: record("clear"),
     clearColor: record("clearColor"),
     clearDepth: record("clearDepth"),
+    colorMask: record("colorMask"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => makeHandle<WebGLBuffer>("buffer")),
     createProgram: record("createProgram", () => makeHandle<WebGLProgram>("program")),
@@ -176,6 +178,7 @@ const fakeGl = (): FakeGl => {
     deleteVertexArray: record("deleteVertexArray"),
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
+    depthRange: record("depthRange"),
     detachShader: record("detachShader"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
@@ -205,6 +208,7 @@ const fakeGl = (): FakeGl => {
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
     validateProgram: record("validateProgram"),
+    vertexAttrib2f: record("vertexAttrib2f"),
     vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribDivisor: record("vertexAttribDivisor"),
     vertexAttribPointer: record("vertexAttribPointer"),
@@ -296,18 +300,14 @@ const renderScene = (
   geometry: Geometry = boxGeometry(1),
   meshMaterial: Material = material(),
 ) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children: [
-        mesh({
-          geometry,
-          material: meshMaterial,
-        }),
-      ],
-      clearColor: [0, 0, 0, 0],
+  camera: camera(),
+  nodes: [
+    mesh({
+      geometry,
+      material: meshMaterial,
     }),
   ],
+  clearColor: [0, 0, 0, 0],
 });
 
 const countEvents = (events: readonly GlEvent[], name: string): number =>
@@ -353,6 +353,30 @@ afterEach(() => {
 });
 
 describe("WebGL renderer resource lifetime contracts", () => {
+  it("bounds shader program initiation to one variant per rendered frame", () => {
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const multiVariantScene = scene({
+      camera: camera(),
+      nodes: [
+            mesh({ geometry: boxGeometry(1), material: material([0.2, 0.6, 1, 1]) }),
+            mesh({
+              geometry: boxGeometry(1),
+              material: wireframeMaterial({ color: [1, 0.8, 0.1, 1], width: 1 }),
+            }),
+      ],
+      clearColor: [0, 0, 0, 0],
+    });
+
+    root.render(multiVariantScene);
+    expect(resourceCounts(calls).createProgram, "the first frame should initiate one variant").toBe(1);
+
+    root.render(multiVariantScene);
+    expect(resourceCounts(calls).createProgram, "the next frame should drain one queued variant").toBe(2);
+
+    root.dispose();
+  });
+
   it("deletes owned programs, shaders, and buffers when disposed", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -370,6 +394,17 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(disposed.deleteProgram, "dispose should delete every program the root created").toBe(disposed.createProgram);
     expect(disposed.deleteShader, "dispose should delete every shader the root created").toBe(disposed.createShader);
     expect(disposed.deleteBuffer, "dispose should delete every buffer the root created").toBe(disposed.createBuffer);
+    const firstBufferDelete = calls.findIndex((call) => call.name === "deleteBuffer");
+    let lastVertexArrayDelete = -1;
+    for (let index = calls.length - 1; index >= 0; index -= 1) {
+      if (calls[index]?.name !== "deleteVertexArray") continue;
+      lastVertexArrayDelete = index;
+      break;
+    }
+    expect(lastVertexArrayDelete, "rendering geometry should create a vertex array to dispose").toBeGreaterThanOrEqual(0);
+    expect(firstBufferDelete, "vertex arrays must be deleted before their backing buffers").toBeGreaterThan(
+      lastVertexArrayDelete,
+    );
   });
 
   it("reuses existing GPU programs and buffers for stable repeated renders", () => {

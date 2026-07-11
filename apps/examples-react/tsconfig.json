@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "jsxImportSource": "@royal/react"
+    "jsxImportSource": "react"
   },
   "include": [
     "src",

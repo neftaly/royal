@@ -75,6 +75,20 @@ const requiredGltfInstancingCounters = [
   'rootScaleUploadCalls',
 ];
 
+const requiredPlanningCounters = ['compileNodeVisits', 'planCompiles', 'planRevision', 'sceneCommits'];
+const requiredResourceLifetimeCounters = [
+  'assetPlanCompiles',
+  'preparedAssetAcquires',
+  'preparedAssetEvents',
+  'preparedAssetReleases',
+  'preparedAssetUpdates',
+  'sceneLeaseAcquires',
+  'sceneLeaseReleases',
+  'gltfPreparationQueueHighWater',
+  'imageQueueHighWater',
+  'iblImageQueueHighWater',
+];
+
 const errors = [];
 const warnings = [];
 
@@ -114,6 +128,11 @@ const requireBoolean = (value, label) => {
 const requirePositiveNumber = (value, label) => {
   if (!requireNumber(value, label)) return;
   if (value <= 0) errors.push(`${label} must be greater than 0`);
+};
+
+const requireNonNegativeNumber = (value, label) => {
+  if (!requireNumber(value, label)) return;
+  if (value < 0) errors.push(`${label} must be at least 0`);
 };
 
 const requireZero = (value, label) => {
@@ -257,6 +276,39 @@ const checkGltfSetupEvidence = (gltfInstancing, label) => {
   }
   requireGltfInstancingCounters(gltfInstancing.counters, `${label}.counters`);
   requireNumber(gltfInstancing.rendererFrame, `${label}.rendererFrame`);
+};
+
+const checkRendererCounters = (value, label, keys, field) => {
+  if (!requireObject(value, label)) return;
+  requireBoolean(value.available, `${label}.available`);
+  if (value.available !== true) errors.push(`${label}.available must be true`);
+  const counters = value[field];
+  if (!requireObject(counters, `${label}.${field}`)) return;
+  for (const key of keys) requireNumber(counters[key], `${label}.${field}.${key}`);
+};
+
+const checkRendererCounterBridge = (route, routeLabel) => {
+  if (!requireObject(route.renderer, `${routeLabel}.renderer`)) return;
+  checkRendererCounters(route.renderer.planning, `${routeLabel}.renderer.planning`, requiredPlanningCounters, 'delta');
+  checkRendererCounters(
+    route.renderer.resourceLifetime,
+    `${routeLabel}.renderer.resourceLifetime`,
+    requiredResourceLifetimeCounters,
+    'delta',
+  );
+  if (!requireObject(route.renderer.setup, `${routeLabel}.renderer.setup`)) return;
+  checkRendererCounters(
+    route.renderer.setup.planning,
+    `${routeLabel}.renderer.setup.planning`,
+    requiredPlanningCounters,
+    'counters',
+  );
+  checkRendererCounters(
+    route.renderer.setup.resourceLifetime,
+    `${routeLabel}.renderer.setup.resourceLifetime`,
+    requiredResourceLifetimeCounters,
+    'counters',
+  );
 };
 
 const checkInstancingRoute = (route, routeLabel) => {
@@ -408,6 +460,41 @@ const checkGltfLoadReport = (report) => {
     }
   }
 
+  // Optional so reports captured before hitch sampling was introduced remain
+  // checkable. New load reports always include this independent navigation-to-
+  // ready sample; it is deliberately not a pass/fail performance gate.
+  if (metrics.loadHitches !== undefined) {
+    if (requireObject(metrics.loadHitches, 'report.metrics.loadHitches')) {
+      for (const key of ['framesOver25Ms', 'framesOver50Ms', 'framesOver100Ms']) {
+        requireNonNegativeNumber(metrics.loadHitches[key], `report.metrics.loadHitches.${key}`);
+      }
+      if (requireObject(metrics.loadHitches.frameStats, 'report.metrics.loadHitches.frameStats')) {
+        for (const key of ['averageMs', 'maxMs', 'minMs', 'p50Ms', 'p95Ms', 'p99Ms']) {
+          requirePositiveNumber(
+            metrics.loadHitches.frameStats[key],
+            `report.metrics.loadHitches.frameStats.${key}`,
+          );
+        }
+        requirePositiveNumber(
+          metrics.loadHitches.frameStats.sampleCount,
+          'report.metrics.loadHitches.frameStats.sampleCount',
+        );
+      }
+      if (requireObject(metrics.loadHitches.longTasks, 'report.metrics.loadHitches.longTasks')) {
+        requireBoolean(
+          metrics.loadHitches.longTasks.supported,
+          'report.metrics.loadHitches.longTasks.supported',
+        );
+        for (const key of ['count', 'maxMs', 'totalMs']) {
+          requireNonNegativeNumber(
+            metrics.loadHitches.longTasks[key],
+            `report.metrics.loadHitches.longTasks.${key}`,
+          );
+        }
+      }
+    }
+  }
+
   if (requireObject(report.page, 'report.page')) {
     checkUsableCanvasSample(report.page.firstTexturedFrameSample, 'report.page.firstTexturedFrameSample');
     checkUsableCanvasSample(report.page.firstUsableSample, 'report.page.firstUsableSample');
@@ -461,6 +548,7 @@ if (requireObject(report, 'report')) {
         const routeLabel = `report.routes[${index}]${typeof route?.id === 'string' ? ` (${route.id})` : ''}`;
         if (!requireObject(route, routeLabel)) return;
         checkRouteFrameEvidence(route, routeLabel);
+        checkRendererCounterBridge(route, routeLabel);
         if (!requireGlCounters(route.gl, `${routeLabel}.gl`)) return;
         if (requireObject(route.gl.setup, `${routeLabel}.gl.setup`)) {
           requireGlCounters(route.gl.setup, `${routeLabel}.gl.setup`);

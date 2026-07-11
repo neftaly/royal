@@ -13,55 +13,47 @@ Install the React facade and its React peer:
 pnpm add @royal/react react react-dom
 ```
 
-Royal scene JSX uses a custom JSX runtime. Configure it once in `tsconfig.json`
-for files that author Royal scenes:
-
-```json
-{
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "jsxImportSource": "@royal/react"
-  }
-}
-```
-
-You can also use `/** @jsxImportSource @royal/react */` at the top of a single
-file. The React runtime still delegates ordinary DOM tags such as `<div>` to
-React, so DOM JSX and Royal scene JSX can coexist in one file.
+`@royal/react` uses the ordinary React JSX runtime. Scenes are explicit pure
+data; build and memoize them separately from React controls.
 
 ```tsx
-/** @jsxImportSource @royal/react */
 import { Canvas, OrbitControls, useOrbitCamera } from '@royal/react';
-import { boxGeometry, standardMaterial } from '@royal/react/scene';
+import { boxGeometry, directionalLight, mesh, scene, standardMaterial } from '@royal/react/scene';
+import { useMemo } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
 const red = standardMaterial({ color: [1, 0, 0, 1] });
 
 export function App() {
-  const orbit = useOrbitCamera({ distance: 5 });
+  const orbit = useOrbitCamera({ initial: { distance: 5 } });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    nodes: [
+      directionalLight({ direction: [1, -2, -1], color: [1, 1, 1, 1] }),
+      mesh({ geometry: cube, material: red }),
+    ],
+  }), [orbit.cameraResource]);
 
   return (
-    <Canvas aria-label="Royal scene">
-      <scene>
-        <pass camera={orbit.camera}>
-          <directionalLight direction={[1, -2, -1]} color={[1, 1, 1, 1]} />
-          <mesh geometry={cube} material={red} />
-        </pass>
-      </scene>
-      <OrbitControls {...orbit.orbitControlsProps} />
+    <Canvas
+      aria-label="Royal scene"
+      scene={renderScene}
+    >
+      <OrbitControls orbit={orbit} />
     </Canvas>
   );
 }
 ```
 
-Use `@royal/react/renderer` only for the lower-level imperative renderer root:
+The orbit hook's `initial` view is initial-only. Its stable `cameraResource` is
+an explicit versioned resource, so controls can commit camera motion without
+causing React renders or rebuilding the scene.
 
-```tsx
-/** @jsxImportSource @royal/react/renderer */
-```
-
-That runtime returns already-lowered Royal descriptor objects and does not host
-React controls or DOM elements.
+There is no second React root. Read Context or external stores in the React
+component, then pass immutable snapshots to pure scene builders. Controls and
+imperative `useFrame` controllers remain ordinary children under `<Canvas>`.
+Interactive nodes declare a stable `pickingId`; React handlers are supplied
+separately through `Canvas.interactions` under that ID.
 
 ## Local Development
 
@@ -83,8 +75,8 @@ React scenes.
 `createRendererRoot(canvas)` is the lower-level host and testing escape hatch
 for code that already owns a canvas and lowered renderer descriptors. App
 examples and docs should start with `<Canvas>`. React root snapshots stay
-backend-neutral; WebGL diagnostics are available through
-`webGlRootForRoyalRoot(root).snapshot()`.
+backend-neutral; the imperative root exposes a bounded, backend-neutral
+`diagnostics()` payload for profiling and integration checks.
 
 Royal renderer APIs stop at renderer primitives. App-specific surface
 descriptors, placement contracts, product panels, and event rows belong in

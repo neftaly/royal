@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,8 @@ const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_SMOKE_PORT ?? 4573);
 const debugPort = Number(process.env.EXAMPLES_SMOKE_DEBUG_PORT ?? 4574);
 const baseUrl = `http://${host}:${previewPort}`;
+const gpuMode = process.env.EXAMPLES_SMOKE_GPU?.trim() || 'swiftshader';
+const routeQuery = process.env.EXAMPLES_SMOKE_QUERY?.trim() ?? '';
 const routeFilter = process.env.EXAMPLES_SMOKE_ROUTE?.trim() ?? '';
 const envNumber = (name, fallback) => {
   const raw = process.env[name];
@@ -18,94 +21,18 @@ const envNumber = (name, fallback) => {
   throw new Error(`${name} must be a finite number, received ${JSON.stringify(raw)}`);
 };
 const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
+const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
 
-const khronosKitchenSinkAssetNames = [
-  'AlphaBlendModeTest',
-  'AnimatedMorphCube',
-  'AttenuationTest',
-  'Box',
-  'BoxAnimated',
-  'BoxInterleaved',
-  'BoxTextured',
-  'BoxTexturedNonPowerOfTwo',
-  'BoxVertexColors',
-  'CesiumMan',
-  'CesiumMilkTruck',
-  'ClearCoatCarPaint',
-  'ClearCoatTest',
-  'ClearcoatWicker',
-  'CompareBaseColor',
-  'CompareClearcoat',
-  'CompareDispersion',
-  'CompareEmissiveStrength',
-  'CompareIor',
-  'CompareIridescence',
-  'CompareMetallic',
-  'CompareNormal',
-  'CompareRoughness',
-  'CompareSheen',
-  'CompareSpecular',
-  'CompareTransmission',
-  'CompareVolume',
-  'CubeVisibility',
-  'DirectionalLight',
-  'Duck',
-  'EmissiveStrengthTest',
-  'Fox',
-  'GlassBrokenWindow',
-  'InterpolationTest',
-  'IridescenceSuzanne',
-  'LightVisibility',
-  'MetalRoughSpheresNoTextures',
-  'MorphPrimitivesTest',
-  'MorphStressTest',
-  'MultiUVTest',
-  'NegativeScaleTest',
-  'NormalTangentTest',
-  'OrientationTest',
-  'PointLightIntensityTest',
-  'RecursiveSkeletons',
-  'RiggedFigure',
-  'RiggedSimple',
-  'SimpleInstancing',
-  'SpecularTest',
-  'SunglassesKhronos',
-  'TextureCoordinateTest',
-  'TextureEncodingTest',
-  'TextureLinearInterpolationTest',
-  'TextureSettingsTest',
-  'TextureTransformMultiTest',
-  'TransmissionRoughnessTest',
-  'TransmissionTest',
-  'TransmissionThinwallTestGrid',
-  'Unicode❤♻Test',
-  'UnlitTest',
-  'USDShaderBallForGltf',
-  'VertexColorTest',
-];
-// Classifier result for iPad A10+/Safari 17+ and Quest 2 targets.
-const inherentlySlowKitchenSinkAssetNames = [
-  'AlphaBlendModeTest',
-  'ClearcoatWicker',
-  'CompareBaseColor',
-  'CompareSpecular',
-  'GlassBrokenWindow',
-  'MetalRoughSpheresNoTextures',
-  'MorphStressTest',
-  'NormalTangentTest',
-  'RecursiveSkeletons',
-  'TransmissionTest',
-  'TransmissionThinwallTestGrid',
-  'USDShaderBallForGltf',
-];
-const okKitchenSinkAssetNames = khronosKitchenSinkAssetNames
-  .filter((name) => !inherentlySlowKitchenSinkAssetNames.includes(name));
-const khronosGlbResourceSubstring = (name) => {
-  const encodedName = encodeURIComponent(name);
-  return `/fixtures/khronos/${encodedName}/glTF-Binary/${encodedName}.glb`;
-};
-const okKitchenSinkResourceSubstrings = okKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
-const slowKitchenSinkResourceSubstrings = inherentlySlowKitchenSinkAssetNames.map(khronosGlbResourceSubstring);
+if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
+  throw new Error(`EXAMPLES_SMOKE_GPU must be "swiftshader" or "hardware-headless", received ${JSON.stringify(gpuMode)}`);
+}
+
+const gltfLabManifest = JSON.parse(readFileSync(
+  new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
+  'utf8',
+));
+const gltfLabCaseByName = new Map(gltfLabManifest.cases.map((entry) => [entry.name, entry]));
+const gltfLabResourceSubstring = (entry) => `/${entry.path}`;
 
 const smokeExpectations = {
   cube: {
@@ -115,10 +42,6 @@ const smokeExpectations = {
   wireframe: {
     path: '/wireframe',
     minPaintedRatio: 0.003,
-  },
-  'form-controls': {
-    path: '/form-controls',
-    minPaintedRatio: 0.01,
   },
   picking: {
     path: '/picking',
@@ -134,11 +57,6 @@ const smokeExpectations = {
     minColorBuckets: 12,
     minPaintedRatio: 0.01,
   },
-  'hud-overlay': {
-    path: '/hud-overlay',
-    minColorBuckets: 14,
-    minPaintedRatio: 0.01,
-  },
   'gltf-helmet': {
     path: '/gltf-helmet',
     minColorBuckets: 32,
@@ -149,19 +67,11 @@ const smokeExpectations = {
     minColorBuckets: 8,
     minPaintedRatio: 0.01,
   },
-  'gltf-kitchen-sink': {
-    path: '/gltf-kitchen-sink',
-    absentResourceSubstrings: slowKitchenSinkResourceSubstrings,
-    resourceSubstrings: okKitchenSinkResourceSubstrings,
-    minColorBuckets: 24,
-    minPaintedRatio: 0.004,
-  },
-  'gltf-kitchen-sink-slow': {
-    path: '/gltf-kitchen-sink-slow',
-    absentResourceSubstrings: okKitchenSinkResourceSubstrings,
-    resourceSubstrings: slowKitchenSinkResourceSubstrings,
-    minColorBuckets: 20,
-    minPaintedRatio: 0.004,
+  'gltf-lab': {
+    path: '/gltf-lab?case=Box',
+    resourceSubstrings: [gltfLabResourceSubstring(gltfLabCaseByName.get('Box'))],
+    minColorBuckets: 1,
+    minPaintedRatio: 0.0001,
   },
   'gltf-ghostscript-tiger-svg': {
     path: '/gltf-ghostscript-tiger-svg',
@@ -316,6 +226,9 @@ const evaluate = async (session, expression, options = {}) => {
 const smokeExpression = `
 (async () => {
   const smokeExpectations = ${JSON.stringify(smokeExpectations)};
+  const gltfLabPaths = ${JSON.stringify(Object.fromEntries(
+    gltfLabManifest.cases.map((entry) => [entry.name, `/${entry.path}`]),
+  ))};
   const sampleCanvas = (canvas, maxSize = 160) => {
     const width = Math.max(1, Math.min(maxSize, canvas.width));
     const height = Math.max(1, Math.min(maxSize, canvas.height));
@@ -327,6 +240,10 @@ const smokeExpression = `
     context.drawImage(canvas, 0, 0, width, height);
     const pixels = context.getImageData(0, 0, width, height).data;
     const buckets = new Set();
+    let chromaSum = 0;
+    let luminanceSum = 0;
+    let saturationSum = 0;
+    const luminances = [];
     let paintedPixels = 0;
 
     for (let index = 0; index < pixels.length; index += 4) {
@@ -336,236 +253,69 @@ const smokeExpression = `
       const green = pixels[index + 1];
       const blue = pixels[index + 2];
       paintedPixels += 1;
+      const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+      luminanceSum += luminance;
+      luminances.push(luminance);
+      const maximum = Math.max(red, green, blue);
+      const chroma = maximum - Math.min(red, green, blue);
+      chromaSum += chroma / 255;
+      saturationSum += maximum === 0 ? 0 : chroma / maximum;
       buckets.add(\`\${red >> 5}:\${green >> 5}:\${blue >> 5}:\${alpha >> 6}\`);
     }
 
+    luminances.sort((left, right) => left - right);
+    const quantile = (fraction) => luminances.length === 0
+      ? 0
+      : luminances[Math.min(luminances.length - 1, Math.floor(fraction * luminances.length))];
+
     return {
       colorBuckets: buckets.size,
+      meanPaintedChroma: paintedPixels === 0 ? 0 : chromaSum / paintedPixels,
+      meanPaintedLuminance: paintedPixels === 0 ? 0 : luminanceSum / paintedPixels,
+      meanPaintedSaturation: paintedPixels === 0 ? 0 : saturationSum / paintedPixels,
+      paintedLuminanceP25: quantile(0.25),
+      paintedLuminanceP50: quantile(0.5),
+      paintedLuminanceP75: quantile(0.75),
       paintedPixels,
       paintedRatio: paintedPixels / (width * height),
     };
   };
-  const describeDomElement = (element) => {
-    if (!(element instanceof Element)) return undefined;
-    const rect = element.getBoundingClientRect();
-    const style = window.getComputedStyle(element);
-    const name = element instanceof HTMLInputElement ||
-      element instanceof HTMLSelectElement ||
-      element instanceof HTMLTextAreaElement ||
-      element instanceof HTMLButtonElement ||
-      element instanceof HTMLFieldSetElement ||
-      element instanceof HTMLFormElement ||
-      element instanceof HTMLOutputElement
-      ? element.name
-      : element.getAttribute('name') ?? '';
-    const type = element instanceof HTMLInputElement || element instanceof HTMLButtonElement
-      ? element.type
-      : element.getAttribute('type') ?? '';
-
-    return {
-      ariaHidden: element.getAttribute('aria-hidden') ?? '',
-      ariaBusy: element.getAttribute('aria-busy') ?? '',
-      ariaLabel: element.getAttribute('aria-label') ?? '',
-      className: String(element.getAttribute('class') ?? ''),
-      contentEditable: element.getAttribute('contenteditable') ?? '',
-      disabled: element instanceof HTMLInputElement ||
-        element instanceof HTMLSelectElement ||
-        element instanceof HTMLTextAreaElement ||
-        element instanceof HTMLButtonElement ||
-        element instanceof HTMLFieldSetElement
-        ? element.disabled
-        : false,
-      display: style.display,
-      height: Number(rect.height.toFixed(2)),
-      hidden: element instanceof HTMLElement ? element.hidden : false,
-      id: element.id,
-      name,
-      role: element.getAttribute('role') ?? '',
-      tabIndex: element instanceof HTMLElement ? element.tabIndex : null,
-      tag: element.tagName.toLowerCase(),
-      type,
-      visibility: style.visibility,
-      width: Number(rect.width.toFixed(2)),
-    };
-  };
-  const describeActiveElement = () => describeDomElement(document.activeElement);
-  const probeCanvasFocus = (canvas) => {
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      return {
-        currentFocus: { ok: false, reason: 'missing canvas' },
-        focusableNow: false,
-        focusableWithTemporaryTabIndex: false,
-        hasCanvas: false,
-        temporaryFocus: undefined,
-      };
-    }
-
-    const currentAttributeTabIndex = canvas.getAttribute('tabindex');
-    const currentTabIndex = canvas.tabIndex;
-    const tryFocus = () => {
-      try {
-        canvas.focus({ preventScroll: true });
-      } catch (error) {
-        return {
-          activeElement: describeActiveElement(),
-          message: error instanceof Error ? error.message : String(error),
-          ok: false,
-          reason: 'focus threw',
-        };
-      }
-
-      return {
-        activeElement: describeActiveElement(),
-        ok: document.activeElement === canvas,
-        reason: document.activeElement === canvas ? 'focused' : 'active element did not change to canvas',
-      };
-    };
-
-    if (document.activeElement === canvas) {
-      canvas.blur();
-    }
-
-    const currentFocus = tryFocus();
-    let temporaryFocus;
-
-    if (currentFocus.ok !== true) {
-      canvas.setAttribute('tabindex', '0');
-      temporaryFocus = tryFocus();
-      if (currentAttributeTabIndex === null) {
-        canvas.removeAttribute('tabindex');
-      } else {
-        canvas.setAttribute('tabindex', currentAttributeTabIndex);
-      }
-    }
-
-    return {
-      attributeTabIndex: currentAttributeTabIndex,
-      currentFocus,
-      currentTabIndex,
-      focusableNow: currentFocus.ok === true,
-      focusableWithTemporaryTabIndex: temporaryFocus?.ok === true || currentFocus.ok === true,
-      hasCanvas: true,
-      restoredAttributeTabIndex: canvas.getAttribute('tabindex'),
-      sequentiallyFocusable: currentTabIndex >= 0,
-      temporaryFocus,
-    };
-  };
-  const readFormControlsRuntime = (canvas) => {
-    const allElements = Array.from(document.querySelectorAll('*'));
-    const domControls = Array.from(
-      document.querySelectorAll('button, fieldset, form, input, output, select, textarea'),
-    ).map(describeDomElement);
-    const contentEditableControls = allElements
-      .filter((element) =>
-        element instanceof HTMLElement &&
-        (element.getAttribute('contenteditable') !== null || element.isContentEditable)
-      )
-      .map(describeDomElement);
-    const knownHiddenBridgeSelectors = [
-      '[data-royal-text-clipboard-bridge]',
-      '.renderer-text-clipboard-bridge',
-      '[data-royal-text-context-menu]',
-      '.renderer-text-context-menu',
-      '[data-royal-text-menu-action]',
-      '[data-royal-form-bridge]',
-      '[data-royal-form-control-bridge]',
-      '[data-royal-file-input-bridge]',
-      '[data-royal-file-picker-bridge]',
-      '[data-royal-clipboard-bridge]',
-      '[data-input-file-bridge]',
-      '[data-file-input-bridge]',
-      '[data-hidden-file-input]',
-      '[data-hidden-file-picker]',
-      '[data-clipboard-bridge]',
-      '.royal-form-bridge',
-      '.royal-file-input-bridge',
-      '.royal-file-picker-bridge',
-      '.royal-clipboard-bridge',
-      '.file-input-bridge',
-      '.input-file-bridge',
-      '.hidden-file-input',
-      '.hidden-file-picker',
-      '.hidden-clipboard-textarea',
-      '.clipboard-bridge',
-    ];
-    const bridgeAttributePattern =
-      /(?:ClipboardFallback|clipboard-bridge|clipboardBridge|clipboardTextarea|hiddenClipboard|hiddenFile|hidden-file|fileInput|file-input|filePicker|file-picker|inputFileBridge|input-file-bridge|renderer-text-clipboard-bridge|renderer-text-context-menu|royal-form-bridge|royal-file-input-bridge|royal-file-picker-bridge|royal-clipboard-bridge)/i;
-    const bridgeNodes = new Map();
-    const addBridgeNode = (element, match) => {
-      const key = element;
-      const current = bridgeNodes.get(key) ?? { ...describeDomElement(element), matches: [] };
-      current.matches.push(match);
-      bridgeNodes.set(key, current);
-    };
-
-    for (const selector of knownHiddenBridgeSelectors) {
-      for (const element of document.querySelectorAll(selector)) {
-        addBridgeNode(element, selector);
-      }
-    }
-
-    for (const element of allElements) {
-      const matchedAttributes = Array.from(element.attributes)
-        .filter((attribute) => bridgeAttributePattern.test(attribute.name) ||
-          bridgeAttributePattern.test(attribute.value))
-        .map((attribute) => \`\${attribute.name}=\${attribute.value}\`);
-      if (matchedAttributes.length > 0) {
-        addBridgeNode(element, matchedAttributes.join(', '));
-      }
-    }
-
-    const canvasFocus = probeCanvasFocus(canvas);
-    const focusMode = canvasFocus.focusableNow
-      ? 'current'
-      : canvasFocus.focusableWithTemporaryTabIndex
-        ? 'temporary-tabindex'
-        : 'none';
-    const knownHiddenBridgeNodes = Array.from(bridgeNodes.values());
-
-    return {
-      canvas: canvas === undefined ? undefined : describeDomElement(canvas),
-      canvasFocus,
-      contentEditableControls,
-      domControls,
-      knownHiddenBridgeNodes,
-      summary: {
-        contentEditableCount: contentEditableControls.length,
-        domControlCount: domControls.length,
-        focusMode,
-        knownHiddenBridgeCount: knownHiddenBridgeNodes.length,
-      },
-    };
-  };
   const read = async () => {
+    globalThis.__royalExamplesRenderNow?.();
     const routePathname = window.location.pathname.replace(/\\/$/, '') || '/';
     const routePath = routePathname + window.location.search;
     const routeEntry = Object.entries(smokeExpectations).find(([, expectation]) =>
       expectation.path === routePath
     ) ?? Object.entries(smokeExpectations).find(([, expectation]) =>
-      expectation.path === routePathname
+      expectation.path.split('?')[0] === routePathname
     );
     const routeId = routeEntry?.[0] ?? '';
     const smoke = routeEntry?.[1];
+    const selectedCase = new URLSearchParams(window.location.search).get('case');
+    const selectedCasePath = selectedCase === null ? undefined : gltfLabPaths[selectedCase];
     const canvas = document.querySelector('canvas');
     return {
       route: {
-        absentResourceSubstrings: smoke?.absentResourceSubstrings ?? [],
+        absentResourceSubstrings: selectedCasePath === undefined
+          ? smoke?.absentResourceSubstrings ?? []
+          : [],
         id: routeId,
         path: routePath,
-        resourceSubstrings: smoke?.resourceSubstrings ?? [],
+        resourceSubstrings: selectedCasePath === undefined
+          ? smoke?.resourceSubstrings ?? []
+          : [selectedCasePath],
       },
       canvas: canvas === null ? undefined : {
         backingHeight: canvas.height,
         backingWidth: canvas.width,
-        minColorBuckets: smoke?.minColorBuckets,
-        minPaintedRatio: smoke?.minPaintedRatio ?? 0,
+        minColorBuckets: selectedCasePath === undefined ? smoke?.minColorBuckets : 1,
+        minPaintedRatio: selectedCasePath === undefined ? smoke?.minPaintedRatio ?? 0 : 0.0001,
         sample: sampleCanvas(canvas),
       },
       picking: routeId === 'picking' ? {
         hoveredId: canvas?.dataset.royalPickingHoveredId ?? '',
         text: canvas?.dataset.royalPickingReadout ?? '',
       } : undefined,
-      formControls: routeId === 'form-controls' ? readFormControlsRuntime(canvas ?? undefined) : undefined,
       renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,
       resources: performance.getEntriesByType('resource')
         .slice(-20)
@@ -610,18 +360,6 @@ const smokeExpression = `
         (state.renderer.gltfLoadDiagnostics.sceneReadyAssets ?? 0) > 0 &&
         state.renderer.gltfLoadDiagnostics.assets.some((asset) => typeof asset.phaseMs?.toSceneReady === 'number')
       );
-    if (state.route.id === 'form-controls') {
-      return state.formControls !== undefined &&
-        state.formControls?.canvas?.ariaBusy !== 'true' &&
-        (
-          canvasReady ||
-          (
-            state.formControls.summary.domControlCount > 0 &&
-            state.formControls.summary.contentEditableCount === 0 &&
-            state.formControls.summary.knownHiddenBridgeCount === 0
-          )
-        );
-    }
     return canvasReady && resourceReady && gltfDiagnosticsReady;
   };
 
@@ -665,6 +403,81 @@ const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
   return lastState ?? await evaluate(session, smokeExpression);
 };
 
+// A continuously animated Canvas transfers frame ownership to React's RAF loop.
+// With preserveDrawingBuffer disabled, drawImage(canvas) may then observe the
+// discarded back buffer between frames. CDP captures the composited surface,
+// which is the image a user actually sees.
+const compositedCanvasSample = async (session) => {
+  const clip = await evaluate(session, `
+    (() => {
+      const canvas = document.querySelector('canvas');
+      if (!(canvas instanceof HTMLCanvasElement)) return null;
+      const rect = canvas.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 };
+    })()
+  `);
+  if (clip === null || clip.width <= 0 || clip.height <= 0) return undefined;
+  const capture = await session.call('Page.captureScreenshot', {
+    captureBeyondViewport: false,
+    clip,
+    format: 'png',
+    fromSurface: true,
+  });
+  return evaluate(session, `
+    (async () => {
+      const response = await fetch('data:image/png;base64,${capture.data}');
+      const bitmap = await createImageBitmap(await response.blob());
+      const width = Math.max(1, Math.min(160, bitmap.width));
+      const height = Math.max(1, Math.min(160, bitmap.height));
+      const sample = document.createElement('canvas');
+      sample.width = width;
+      sample.height = height;
+      const context = sample.getContext('2d', { willReadFrequently: true });
+      if (context === null) return undefined;
+      context.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const buckets = new Set();
+      let chromaSum = 0;
+      let luminanceSum = 0;
+      let saturationSum = 0;
+      const luminances = [];
+      let paintedPixels = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const alpha = pixels[index + 3];
+        if (alpha === 0) continue;
+        const red = pixels[index];
+        const green = pixels[index + 1];
+        const blue = pixels[index + 2];
+        paintedPixels += 1;
+        const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+        luminanceSum += luminance;
+        luminances.push(luminance);
+        const maximum = Math.max(red, green, blue);
+        const chroma = maximum - Math.min(red, green, blue);
+        chromaSum += chroma / 255;
+        saturationSum += maximum === 0 ? 0 : chroma / maximum;
+        buckets.add([red >> 5, green >> 5, blue >> 5, alpha >> 6].join(':'));
+      }
+      luminances.sort((left, right) => left - right);
+      const quantile = (fraction) => luminances.length === 0
+        ? 0
+        : luminances[Math.min(luminances.length - 1, Math.floor(fraction * luminances.length))];
+      return {
+        colorBuckets: buckets.size,
+        meanPaintedChroma: paintedPixels === 0 ? 0 : chromaSum / paintedPixels,
+        meanPaintedLuminance: paintedPixels === 0 ? 0 : luminanceSum / paintedPixels,
+        meanPaintedSaturation: paintedPixels === 0 ? 0 : saturationSum / paintedPixels,
+        paintedLuminanceP25: quantile(0.25),
+        paintedLuminanceP50: quantile(0.5),
+        paintedLuminanceP75: quantile(0.75),
+        paintedPixels,
+        paintedRatio: paintedPixels / (width * height),
+      };
+    })()
+  `);
+};
+
 const assertRoute = (expected, state) => {
   const failures = [];
   if (state.route.id !== expected.id) {
@@ -689,61 +502,6 @@ const assertRoute = (expected, state) => {
       failures.push(
         `canvas color buckets ${sample.colorBuckets} < ${expected.minColorBuckets}`,
       );
-    }
-  }
-
-  if (expected.id === 'form-controls') {
-    const form = state.formControls;
-    const summarizeNode = (node) => {
-      if (node === undefined || node === null) return 'unknown node';
-      const id = node.id === '' ? '' : `#${node.id}`;
-      const name = node.name === '' ? '' : `[name="${node.name}"]`;
-      const type = node.type === '' ? '' : `[type="${node.type}"]`;
-      const matches = Array.isArray(node.matches) && node.matches.length > 0
-        ? ` (${node.matches.join(', ')})`
-        : '';
-      return `${node.tag}${id}${type}${name}${matches}`;
-    };
-    const summarizeNodes = (nodes) => nodes.slice(0, 5).map(summarizeNode).join(', ');
-
-    if (form === undefined) {
-      failures.push('form controls route missed runtime DOM inspection');
-    } else {
-      const domControlCount = form.summary?.domControlCount ?? form.domControls?.length ?? 0;
-      if ((form.summary?.contentEditableCount ?? form.contentEditableControls?.length ?? 0) !== 0) {
-        failures.push(
-          `form controls route rendered contenteditable control(s): ${
-            summarizeNodes(form.contentEditableControls ?? [])
-          }`,
-        );
-      }
-      if ((form.summary?.knownHiddenBridgeCount ?? form.knownHiddenBridgeNodes?.length ?? 0) !== 0) {
-        failures.push(
-          `form controls route rendered hidden bridge node(s): ${
-            summarizeNodes(form.knownHiddenBridgeNodes ?? [])
-          }`,
-        );
-      }
-      if (form.canvas?.ariaBusy === 'true') {
-        failures.push('form controls font-backed canvas scene stayed busy');
-      }
-      const focus = form.canvasFocus;
-      if (focus?.hasCanvas !== true) {
-        if (domControlCount <= 0) {
-          failures.push('form controls route rendered neither canvas nor DOM controls');
-        }
-      } else {
-        if ((focus.currentTabIndex ?? -1) >= 0 && focus.currentFocus?.ok !== true) {
-          failures.push(`form controls canvas tabIndex=${focus.currentTabIndex} did not receive focus`);
-        }
-        if (focus.focusableNow !== true && focus.focusableWithTemporaryTabIndex !== true) {
-          failures.push(
-            `form controls canvas could not receive focus for future form host work: ${
-              focus.temporaryFocus?.reason ?? focus.currentFocus?.reason ?? 'unknown'
-            }`,
-          );
-        }
-      }
     }
   }
 
@@ -862,8 +620,11 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
     await animationFrame();
   }
   dispatch('pointermove', emptyPoint);
-  await animationFrame();
-  const clearedId = readHoveredId();
+  let clearedId = readHoveredId();
+  for (let attempt = 0; attempt < 5 && clearedId !== 'none'; attempt += 1) {
+    await animationFrame();
+    clearedId = readHoveredId();
+  }
   if (hoveredPoint !== null) {
     dispatch('pointermove', hoveredPoint);
     await animationFrame();
@@ -872,6 +633,82 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
   await animationFrame();
 
   return { before, clearedId, hoveredId, hoveredPoint, leaveClearedId: readHoveredId() };
+})()
+`);
+
+const runContextLossSmoke = async (session) => evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas');
+  const snapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  if (canvas === null) return { status: 'error', reason: 'missing canvas' };
+  if (snapshot()?.context?.lifecycle !== 'active') {
+    return { status: 'error', reason: 'renderer context snapshot was not active before loss', snapshot: snapshot() };
+  }
+  const gl = canvas.getContext('webgl2');
+  if (gl === null) return { status: 'error', reason: 'canvas no longer returned its WebGL2 context' };
+  const extension = gl.getExtension('WEBGL_lose_context');
+  if (extension === null) return { status: 'unsupported', reason: 'WEBGL_lose_context unavailable' };
+
+  const waitFor = async (predicate, timeoutMs = 5000) => {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      const value = snapshot();
+      if (predicate(value)) return value;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return snapshot();
+  };
+  const before = snapshot();
+  extension.loseContext();
+  const lost = await waitFor((value) => value?.context?.lifecycle === 'lost');
+  if (lost?.context?.lifecycle !== 'lost') {
+    return { status: 'error', reason: 'renderer never published lost context state', before, lost };
+  }
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const settledLost = snapshot();
+  if (settledLost?.frame !== lost.frame) {
+    return { status: 'error', reason: 'one-shot demand frame advanced while context was lost', lost, settledLost };
+  }
+
+  extension.restoreContext();
+  const restored = await waitFor((value) =>
+    value?.context?.lifecycle === 'active' &&
+    value.context.restores >= before.context.restores + 1 &&
+    value.context.generation > before.context.generation
+  );
+  if (restored?.context?.lifecycle !== 'active') {
+    return { status: 'error', reason: 'renderer never returned to active context state', before, restored };
+  }
+  globalThis.__royalExamplesRenderNow?.();
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  globalThis.__royalExamplesRenderNow?.();
+
+  const sample = document.createElement('canvas');
+  sample.width = Math.max(1, Math.min(160, canvas.width));
+  sample.height = Math.max(1, Math.min(160, canvas.height));
+  const context = sample.getContext('2d', { willReadFrequently: true });
+  if (context === null) return { status: 'error', reason: '2D capture context unavailable', restored };
+  context.drawImage(canvas, 0, 0, sample.width, sample.height);
+  const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
+  let paintedPixels = 0;
+  let checksum = 0;
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3] !== 0) paintedPixels += 1;
+    checksum = (checksum + pixels[index] * 3 + pixels[index + 1] * 5 + pixels[index + 2] * 7 + pixels[index + 3]) >>> 0;
+  }
+  const afterCapture = snapshot();
+  if (paintedPixels === 0 || checksum === 0 || afterCapture?.frame <= lost.frame) {
+    return {
+      status: 'error',
+      reason: 'restored renderer did not produce a fresh usable pixel capture',
+      afterCapture,
+      checksum,
+      lost,
+      paintedPixels,
+      restored,
+    };
+  }
+  return { status: 'ok', afterCapture, before, checksum, lost, paintedPixels, restored };
 })()
 `);
 
@@ -893,9 +730,15 @@ const main = async () => {
     '--headless=new',
     '--no-sandbox',
     '--disable-dev-shm-usage',
-    '--enable-unsafe-swiftshader',
     '--use-gl=angle',
-    '--use-angle=swiftshader',
+    ...(gpuMode === 'swiftshader'
+      ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']
+      : [
+        '--use-angle=vulkan',
+        '--ignore-gpu-blocklist',
+        '--disable-software-rasterizer',
+        '--use-gpu-in-tests',
+      ]),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     'about:blank',
@@ -921,6 +764,20 @@ const main = async () => {
     await session.call('Page.enable');
     await session.call('Runtime.enable');
 
+    const gpu = await evaluate(session, `
+      (() => {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        if (gl === null) return null;
+        const debug = gl.getExtension('WEBGL_debug_renderer_info');
+        return debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
+      })()
+    `);
+    if (gpuMode === 'hardware-headless' &&
+      (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu))) {
+      throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
+    }
+    console.log(`gpu ${gpu ?? 'renderer unavailable'}`);
+
     const selectedRoutes = routeFilter === ''
       ? smokeRoutes
       : smokeRoutes.filter((route) =>
@@ -931,12 +788,42 @@ const main = async () => {
     if (selectedRoutes.length === 0) {
       throw new Error(`Examples smoke route filter did not match a route: ${routeFilter}`);
     }
+    let contextLossChecked = false;
 
     for (const route of selectedRoutes) {
+      const routeUrl = new URL(baseUrl + route.path);
+      for (const [name, value] of new URLSearchParams(routeQuery)) {
+        routeUrl.searchParams.set(name, value);
+      }
+      const selectedCaseName = routeUrl.searchParams.get('case');
+      const selectedCase = selectedCaseName === null ? undefined : gltfLabCaseByName.get(selectedCaseName);
+      if (selectedCaseName !== null && selectedCase === undefined) {
+        throw new Error(`Unknown glTF lab case: ${selectedCaseName}`);
+      }
+      if (selectedCase?.status !== undefined &&
+        selectedCase.status !== 'supported-oracle' && selectedCase.status !== 'normalized-ingestion') {
+        throw new Error(`glTF lab success smoke cannot render ${selectedCase.name}: ${selectedCase.status}`);
+      }
+      const effectiveRoute = selectedCase === undefined
+        ? { ...route, path: routeUrl.pathname + routeUrl.search }
+        : {
+          ...route,
+          absentResourceSubstrings: [],
+          minColorBuckets: 1,
+          minPaintedRatio: 0.0001,
+          path: routeUrl.pathname + routeUrl.search,
+          resourceSubstrings: [gltfLabResourceSubstring(selectedCase)],
+        };
       const routeLoaded = session.once('Page.loadEventFired');
-      await session.call('Page.navigate', { url: baseUrl + route.path });
+      await session.call('Page.navigate', { url: routeUrl.href });
       await Promise.race([routeLoaded, sleep(5_000)]);
-      let state = await waitForRouteState(session, route);
+      let state = await waitForRouteState(session, effectiveRoute);
+      if ((state.canvas?.sample?.paintedPixels ?? 0) === 0) {
+        const compositedSample = await compositedCanvasSample(session);
+        if (compositedSample !== undefined && state.canvas !== undefined) {
+          state = { ...state, canvas: { ...state.canvas, sample: compositedSample } };
+        }
+      }
       if (route.id === 'picking') {
         state = {
           ...state,
@@ -944,7 +831,7 @@ const main = async () => {
         };
       }
       try {
-        assertRoute(route, state);
+        assertRoute(effectiveRoute, state);
       } catch (error) {
         const recentConsole = consoleMessages.slice(-8).join('; ');
         const recentResources = (state.resources ?? [])
@@ -956,16 +843,24 @@ const main = async () => {
           recentResources === '' ? '' : `; resources: ${recentResources}`
         }`);
       }
+      if (contextLossSmoke && !contextLossChecked) {
+        const lifecycle = await runContextLossSmoke(session);
+        if (lifecycle.status === 'error') {
+          throw new Error(`context-loss smoke failed: ${lifecycle.reason}; ${JSON.stringify(lifecycle)}`);
+        }
+        contextLossChecked = true;
+        console.log(lifecycle.status === 'unsupported'
+          ? `skip context-loss ${lifecycle.reason}`
+          : `ok context-loss generation=${lifecycle.restored.context.generation} painted=${lifecycle.paintedPixels}`);
+      }
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
-        : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)}`;
-      const formSummary = route.id === 'form-controls' && state.formControls !== undefined
-        ? ` domControls=${state.formControls.summary.domControlCount}` +
-          ` contenteditable=${state.formControls.summary.contentEditableCount}` +
-          ` bridges=${state.formControls.summary.knownHiddenBridgeCount}` +
-          ` focus=${state.formControls.summary.focusMode}`
-        : '';
-      console.log(`ok ${route.id}${canvasSummary}${formSummary}`);
+        : ` buckets=${state.canvas.sample.colorBuckets} painted=${state.canvas.sample.paintedRatio.toFixed(3)} luma=${state.canvas.sample.meanPaintedLuminance.toFixed(3)} p25=${state.canvas.sample.paintedLuminanceP25.toFixed(3)} p50=${state.canvas.sample.paintedLuminanceP50.toFixed(3)} p75=${state.canvas.sample.paintedLuminanceP75.toFixed(3)} chroma=${state.canvas.sample.meanPaintedChroma.toFixed(3)} saturation=${state.canvas.sample.meanPaintedSaturation.toFixed(3)}`;
+      console.log(`ok ${route.id}${canvasSummary}`);
+    }
+
+    if (contextLossSmoke && !contextLossChecked) {
+      throw new Error('Context-loss smoke did not run on a selected route');
     }
 
     if (exceptions.length > 0) {

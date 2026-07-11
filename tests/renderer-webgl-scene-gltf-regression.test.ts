@@ -15,7 +15,6 @@ import {
   gltfInstances,
   mesh,
   orthographicCamera,
-  pass,
   planeGeometry,
   scene,
   standardMaterial,
@@ -60,7 +59,6 @@ const defaultCanvasSize: CanvasSize = { height: 180, width: 320 };
 const triangleGltfSrc = "https://example.test/fixtures/staged-triangle.gltf";
 const matchingTriangleGltfSrc = "https://example.test/fixtures/matching-triangle.gltf";
 const triangleBinUri = "staged-triangle.bin";
-const triangleAnimationBinUri = "staged-triangle-animation.bin";
 const triangleEmissiveImageUri = "staged-triangle-emissive.png";
 const triangleImageUri = "staged-triangle.png";
 const triangleBasisuImageUri = "staged-triangle.ktx2";
@@ -81,8 +79,6 @@ const iblSpecularImageUris = [
   "ibl-neg-z.png",
 ] as const;
 const triangleBinByteLength = 104;
-const triangleAnimationBinByteLength = 32;
-const triangleMorphBinByteLength = triangleBinByteLength + 36;
 const meshoptCompressedPositionByteLength = 56;
 const meshoptCompressedIndexByteLength = 18;
 const meshoptCompressedTriangleBinByteLength = meshoptCompressedPositionByteLength + meshoptCompressedIndexByteLength;
@@ -203,6 +199,7 @@ const fakeGl = (): FakeGl => {
     MAX_COMBINED_TEXTURE_IMAGE_UNITS: 0x8B4D,
     MAX_TEXTURE_IMAGE_UNITS: 0x8872,
     MAX_TEXTURE_SIZE: 0x0D33,
+    MAX_VERTEX_TEXTURE_IMAGE_UNITS: 0x8B4C,
     MIRRORED_REPEAT: 0x8370,
     NEAREST: 0x2600,
     NO_ERROR: 0,
@@ -211,6 +208,7 @@ const fakeGl = (): FakeGl => {
     POINTS: 0x0000,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    RGBA32F: 0x8814,
     SRGB8_ALPHA8: 0x8C43,
     SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
@@ -265,6 +263,7 @@ const fakeGl = (): FakeGl => {
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
     bindTexture: record("bindTexture"),
+    bindVertexArray: record("bindVertexArray"),
     blendFunc: record("blendFunc"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
@@ -319,10 +318,10 @@ const fakeGl = (): FakeGl => {
     getError: record("getError", () => constants.NO_ERROR),
     getExtension: record("getExtension", () => null),
     getParameter: record<[number]>("getParameter", (parameter) => {
-      if (
-        parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS
-        || parameter === constants.MAX_TEXTURE_IMAGE_UNITS
-      ) return 16;
+      if (parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS) return 32;
+      if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS || parameter === constants.MAX_VERTEX_TEXTURE_IMAGE_UNITS) {
+        return 16;
+      }
       if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
 
       return 0;
@@ -528,8 +527,11 @@ const makeMediaQueryList = (query: string): MediaQueryList => {
   return mediaQueryList;
 };
 
+let latestAnimationFrames: FrameRequestCallback[] = [];
+
 const installViewportInvalidationStubs = () => {
   const animationFrames: FrameRequestCallback[] = [];
+  latestAnimationFrames = animationFrames;
   const mediaQueries: MediaQueryList[] = [];
 
   vi.stubGlobal("devicePixelRatio", 1);
@@ -572,20 +574,50 @@ const settleKhronosEnvironmentTestIblBitmaps = async (
   loader: ReturnType<typeof installStagedGltfLoader>,
 ): Promise<void> => {
   const mipSizes = [256, 128, 64, 32, 16] as const;
-  for (let attempt = 0; attempt < 20 && loader.bitmapRequests.length < 30; attempt += 1) {
+  let settled = 0;
+  let settledImages = 0;
+  for (let attempt = 0; attempt < 80 && settled < 30; attempt += 1) {
     await flushMicrotasks();
+    await flushAnimationFrames(latestAnimationFrames);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    while (settledImages < ControlledImage.instances.length) {
+      ControlledImage.instances[settledImages]?.settleLoad();
+      settledImages += 1;
+    }
+    while (settled < loader.bitmapRequests.length) {
+      loader.bitmapRequests[settled]?.resolve(fakeImageBitmap(mipSizes[settled % mipSizes.length] ?? 16));
+      settled += 1;
+    }
   }
   expect(loader.bitmapRequests).toHaveLength(30);
-  for (const [index, request] of loader.bitmapRequests.entries()) {
-    request.resolve(fakeImageBitmap(mipSizes[index % mipSizes.length] ?? 16));
-  }
   await flushMicrotasks();
+};
+
+const settleControlledImageWave = async (expected: number): Promise<void> => {
+  let settled = 0;
+  for (let attempt = 0; attempt < 80 && settled < expected; attempt += 1) {
+    await flushMicrotasks();
+    await flushAnimationFrames(latestAnimationFrames);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    while (settled < ControlledImage.instances.length) {
+      ControlledImage.instances[settled]?.settleLoad();
+      settled += 1;
+    }
+  }
+  expect(ControlledImage.instances).toHaveLength(expected);
+  await flushMicrotasks();
+  await flushAnimationFrames(latestAnimationFrames);
 };
 
 const flushAnimationFrames = async (callbacks: FrameRequestCallback[]): Promise<void> => {
   const queued = callbacks.splice(0);
   for (const [index, callback] of queued.entries()) callback(16 + index);
   await flushMicrotasks();
+};
+
+const flushPreparedAssetBoundary = async (): Promise<void> => {
+  await flushMicrotasks();
+  await flushAnimationFrames(latestAnimationFrames);
 };
 
 const waitForAnimationFrameWork = async (
@@ -613,13 +645,9 @@ const camera = () => orthographicCamera({
 
 const renderScene = (children: readonly RenderNode[]): RenderRoot =>
   scene({
-    children: [
-      pass({
-        camera: camera(),
-        children,
-        clearColor: [0, 0, 0, 0],
-      }),
-    ],
+    camera: camera(),
+    nodes: children,
+    clearColor: [0, 0, 0, 0],
   });
 
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
@@ -815,29 +843,6 @@ const triangleBin = (): ArrayBuffer => {
     1, 1,
   ]);
   new Uint16Array(buffer, 96, 3).set([0, 1, 2]);
-
-  return buffer;
-};
-
-const triangleAnimationBin = (): ArrayBuffer => {
-  const buffer = new ArrayBuffer(triangleAnimationBinByteLength);
-  new Float32Array(buffer, 0, 2).set([0, 1]);
-  new Float32Array(buffer, 8, 6).set([
-    0, 0, 0,
-    1, 0, 0,
-  ]);
-
-  return buffer;
-};
-
-const morphedTriangleBin = (): ArrayBuffer => {
-  const buffer = new ArrayBuffer(triangleMorphBinByteLength);
-  new Uint8Array(buffer).set(new Uint8Array(triangleBin()));
-  new Float32Array(buffer, triangleBinByteLength, 9).set([
-    1, 0, 0,
-    0, 1, 0,
-    0, 0, 1,
-  ]);
 
   return buffer;
 };
@@ -1585,145 +1590,6 @@ const solidTriangleDocument = () => ({
   samplers: [],
   textures: [],
 });
-
-const morphedTriangleDocument = () => {
-  const base = solidTriangleDocument();
-  const baseMesh = base.meshes[0]!;
-  const basePrimitive = baseMesh.primitives[0]!;
-  const morphPositionAccessor = base.accessors.length;
-  const morphPositionBufferView = base.bufferViews.length;
-
-  return {
-    ...base,
-    accessors: [
-      ...base.accessors,
-      {
-        bufferView: morphPositionBufferView,
-        componentType: 5126,
-        count: 3,
-        type: "VEC3",
-      },
-    ],
-    bufferViews: [
-      ...base.bufferViews,
-      {
-        buffer: 0,
-        byteLength: 36,
-        byteOffset: triangleBinByteLength,
-        target: 34962,
-      },
-    ],
-    buffers: [
-      {
-        byteLength: triangleMorphBinByteLength,
-        uri: triangleBinUri,
-      },
-    ],
-    meshes: [
-      {
-        ...baseMesh,
-        primitives: [
-          {
-            ...basePrimitive,
-            targets: [
-              {
-                POSITION: morphPositionAccessor,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    nodes: [
-      {
-        mesh: 0,
-        weights: [0.5],
-      },
-    ],
-  };
-};
-
-const animatedParentTriangleDocument = () => {
-  const base = solidTriangleDocument();
-  const timeAccessor = base.accessors.length;
-  const translationAccessor = base.accessors.length + 1;
-  const timeBufferView = base.bufferViews.length;
-  const translationBufferView = base.bufferViews.length + 1;
-
-  return {
-    ...base,
-    accessors: [
-      ...base.accessors,
-      {
-        bufferView: timeBufferView,
-        componentType: 5126,
-        count: 2,
-        type: "SCALAR",
-      },
-      {
-        bufferView: translationBufferView,
-        componentType: 5126,
-        count: 2,
-        type: "VEC3",
-      },
-    ],
-    animations: [
-      {
-        channels: [
-          {
-            sampler: 0,
-            target: {
-              node: 0,
-              path: "translation",
-            },
-          },
-        ],
-        name: "slide",
-        samplers: [
-          {
-            input: timeAccessor,
-            interpolation: "LINEAR",
-            output: translationAccessor,
-          },
-        ],
-      },
-    ],
-    bufferViews: [
-      ...base.bufferViews,
-      {
-        buffer: 1,
-        byteLength: 8,
-        byteOffset: 0,
-      },
-      {
-        buffer: 1,
-        byteLength: 24,
-        byteOffset: 8,
-      },
-    ],
-    buffers: [
-      ...base.buffers,
-      {
-        byteLength: triangleAnimationBinByteLength,
-        uri: triangleAnimationBinUri,
-      },
-    ],
-    nodes: [
-      {
-        children: [1],
-      },
-      {
-        mesh: 0,
-        translation: [0.25, 0, 0],
-      },
-    ],
-    scenes: [
-      {
-        nodes: [0],
-      },
-    ],
-  };
-};
 
 const vertexColorTriangleDocument = () => {
   const base = solidTriangleDocument();
@@ -3488,37 +3354,38 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(readyFrameCalls).toContainEqual({ args: [gl.CCW], name: "frontFace" });
   });
 
-  it("applies static glTF morph target weights before uploading geometry", async () => {
+  it("multiplies textured glTF base color by baseColorFactor", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    installViewportInvalidationStubs();
+    const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      gltf({
-        src: triangleGltfSrc,
-        version: "static-morph-target",
-      }),
-    ]);
+    const base = triangleDocument();
+    const renderGraph = renderScene([gltf({ src: triangleGltfSrc, version: "textured-base-color-factor" })]);
 
     root.render(renderGraph);
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, morphedTriangleDocument()))).toBe(true);
+      responseWithJson(url, {
+        ...base,
+        materials: [{
+          pbrMetallicRoughness: {
+            baseColorFactor: [0.2, 0.4, 0.6, 0.8],
+            baseColorTexture: { index: 0 },
+          },
+        }],
+      }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, morphedTriangleBin()))).toBe(true);
+      responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
-
-    const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
-    const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
-    expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(bufferDataPayloads(readyFrameCalls).map(roundVector)).toContainEqual([
-      0.5, 0.5, 0,
-      -0.5, 0, 0,
-      0.5, -0.5, 0.5,
-    ]);
+    expect(ControlledImage.instances).toHaveLength(1);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
+
+    expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([0.2, 0.4, 0.6, 0.8]);
   });
 
   it("draws double-sided glTF materials without face culling", async () => {
@@ -3637,8 +3504,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(instancedDrawCalls(readyFrameCalls)).toHaveLength(0);
     expect(readyFrameCalls).toContainEqual({ args: [gl.BLEND], name: "enable" });
     expect(readyFrameCalls).toContainEqual({
-      args: [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
-      name: "blendFunc",
+      args: [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA],
+      name: "blendFuncSeparate",
     });
     expect(uniform4fvPayloads(readyFrameCalls, "u_alphaSettings").map(roundVector))
       .toEqual([[0, 0, 0, 0], [2, 0, 0, 0]]);
@@ -3687,7 +3554,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       call.name === "cullFace" && call.args[0] === gl.BACK)).toHaveLength(2);
   });
 
-  it("requires a directionalLight when drawing standardMaterial meshes", () => {
+  it("allows explicitly unlit standardMaterial meshes to render black", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
@@ -3698,7 +3565,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
           material: standardMaterial({ color: [1, 1, 1, 1] }),
         }),
       ]));
-    }).toThrow(/directionalLight/i);
+    }).not.toThrow();
   });
 
   it("draws glTF fallback geometry after buffers settle while base-color image is pending or failed", async () => {
@@ -3841,7 +3708,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({
         color: [1, 1, 1, 1],
@@ -3915,7 +3782,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/staged-triangle\.png\.vt\.json/);
   });
 
-  it("shares glTF texture cache identity and auto VT for matching contentKey texture sources", async () => {
+  it("shares glTF texture cache identity and auto VT for simultaneously leased matching contentKey sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -3937,6 +3804,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
       directionalLight({
         color: [1, 1, 1, 1],
         direction: [0, 0, -1],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "content-key-auto-vt-a",
       }),
       gltf({
         src: matchingTriangleGltfSrc,
@@ -4031,8 +3902,19 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeSecondGltf);
   });
 
-  it("shares glTF texture uploads for matching computed bufferView image content keys across different bins", async () => {
+  it("shares glTF texture uploads for simultaneously leased matching computed bufferView content", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
+    class CloseTrackedImageBitmap {
+      readonly close = vi.fn();
+      readonly height: number;
+      readonly width: number;
+
+      constructor(size: number) {
+        this.height = size;
+        this.width = size;
+      }
+    }
+    vi.stubGlobal("ImageBitmap", CloseTrackedImageBitmap);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
@@ -4063,6 +3945,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
         direction: [0, 0, -1],
       }),
       gltf({
+        src: triangleGltfSrc,
+        version: "computed-content-key-a",
+      }),
+      gltf({
         src: matchingTriangleGltfSrc,
         version: "computed-content-key-b",
       }),
@@ -4075,8 +3961,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(1);
-    loader.bitmapRequests[0]?.resolve(fakeImageBitmap(4));
+    const firstBitmap = new CloseTrackedImageBitmap(4);
+    loader.bitmapRequests[0]?.resolve(firstBitmap as unknown as ImageBitmap);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
     await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
@@ -4092,8 +3980,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/matching-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(bitmapRequestsBeforeSecondGltf + 1);
-    loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(fakeImageBitmap(4));
+    const secondBitmap = new CloseTrackedImageBitmap(4);
+    loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(secondBitmap as unknown as ImageBitmap);
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
     root.render(secondGraph);
@@ -4102,6 +3992,17 @@ describe("WebGL renderer scene and glTF regressions", () => {
       callCount(calls, "texImage2D"),
       "different glTF bufferView images with identical encoded bytes should reuse the content-addressed upload",
     ).toBe(uploadsBeforeSecondGltf);
+    expect(firstBitmap.close).toHaveBeenCalledTimes(1);
+
+    root.render(renderScene([]));
+    expect(firstBitmap.close).toHaveBeenCalledTimes(1);
+    expect(secondBitmap.close).toHaveBeenCalledTimes(1);
+    expect(root.snapshot().textureResidency).toMatchObject({
+      activeLeases: 0,
+      preparedBytes: 0,
+      preparedSources: 0,
+      resources: 0,
+    });
   });
 
   it("keeps explicit glTF extras.contentKey ahead of computed image content keys", async () => {
@@ -4156,6 +4057,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(1);
     loader.bitmapRequests[0]?.resolve(fakeImageBitmap(4));
     await flushMicrotasks();
@@ -4173,6 +4075,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/matching-triangle-explicit\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleWithImageBytes()))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(bitmapRequestsBeforeSecondGltf + 1);
     loader.bitmapRequests[bitmapRequestsBeforeSecondGltf]?.resolve(fakeImageBitmap(4));
     await flushMicrotasks();
@@ -4434,6 +4337,71 @@ describe("WebGL renderer scene and glTF regressions", () => {
       rootScaleUploadBytes: 3 * Float32Array.BYTES_PER_ELEMENT,
       rootScaleUploadCalls: 1,
     });
+
+    const deletedVertexArraysBeforeSingle = callCount(calls, "deleteVertexArray");
+    const callsBeforeSingle = calls.length;
+    rightRef.current?.position.set(100, 0, 0);
+    await flushAnimationFrames(viewport.animationFrames);
+    const singleCalls = calls.slice(callsBeforeSingle);
+    expect(instancedDrawCalls(singleCalls)).toHaveLength(0);
+    expect(drawCalls(singleCalls)).toHaveLength(1);
+    expect(callCount(calls, "deleteVertexArray")).toBeGreaterThan(deletedVertexArraysBeforeSingle);
+
+    const createdVertexArraysBeforeRebatch = callCount(calls, "createVertexArray");
+    const callsBeforeRebatch = calls.length;
+    rightRef.current?.position.set(0.75, 0, 0);
+    await flushAnimationFrames(viewport.animationFrames);
+    const rebatchCalls = calls.slice(callsBeforeRebatch);
+    expect(instancedDrawCalls(rebatchCalls)).toHaveLength(1);
+    expect(callCount(calls, "createVertexArray")).toBeGreaterThan(createdVertexArraysBeforeRebatch);
+  });
+
+  it("uploads only a committed bulk pose range in a 10k source", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const fake = fakeGl();
+    const renderRoot = createWebGlRoot(fakeCanvas(fake.gl));
+    const instances = createGltfInstanceTransforms({ count: 10_000 });
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltfInstances({
+        instances,
+        src: triangleGltfSrc,
+        version: "bulk-partial-pose-10k",
+      }),
+    ]);
+
+    renderRoot.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    renderRoot.render(renderGraph);
+
+    const callsBeforeCommit = fake.calls.length;
+    const countersBeforeCommit = renderRoot.snapshot().gltfInstancing;
+    for (let index = 477; index < 480; index += 1) {
+      instances.positions[index * 3] = index * 0.000_01;
+    }
+    instances.commitPose(477, 3);
+    await flushAnimationFrames(viewport.animationFrames);
+    const frameCalls = fake.calls.slice(callsBeforeCommit);
+    const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforeCommit);
+
+    expect(bufferSubDataUploadRanges(frameCalls)).toEqual([
+      { byteOffset: 477 * 6 * Float32Array.BYTES_PER_ELEMENT, floatLength: 18, floatOffset: 477 * 6 },
+    ]);
+    expect(counters.rootPoseUploadBytes).toBe(72);
+    expect(counters.rootPoseUploadCalls).toBe(1);
+    expect(counters.rootScaleUploadBytes).toBe(0);
+    expect(counters.rootScaleUploadCalls).toBe(0);
+    renderRoot.dispose();
   });
 
   it("keeps bulk instance scale stable across pose-only animation frames", async () => {
@@ -4490,6 +4458,64 @@ describe("WebGL renderer scene and glTF regressions", () => {
       expect(counters.rootScaleUploadCalls).toBe(0);
       expect(Array.from(instances.scales)).toEqual([0.5, 0.5, 0.5, 0.75, 0.75, 0.75]);
     }
+
+    renderRoot.dispose();
+  });
+
+  it("refreshes bulk instance scales when culling swaps equal-count visible slots", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const fake = fakeGl();
+    const renderRoot = createWebGlRoot(fakeCanvas(fake.gl));
+    const instances = createGltfInstanceTransforms({
+      count: 3,
+      positions: [-0.4, 0, 0, 100, 0, 0, 0.4, 0, 0],
+      scales: [0.5, 0.5, 0.5, 1, 1, 1, 0.75, 0.75, 0.75],
+    });
+    const renderGraph = renderScene([
+      directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      }),
+      gltfInstances({
+        instances,
+        src: triangleGltfSrc,
+        version: "bulk-equal-count-visibility-swap",
+      }),
+    ]);
+
+    renderRoot.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    renderRoot.render(renderGraph);
+
+    const callsBeforeSwap = fake.calls.length;
+    const countersBeforeSwap = renderRoot.snapshot().gltfInstancing;
+    instances.positions[0] = 100;
+    instances.positions[3] = -0.4;
+    instances.commitPose();
+    await flushAnimationFrames(viewport.animationFrames);
+    const swapCalls = fake.calls.slice(callsBeforeSwap);
+    const counters = gltfInstancingDelta(renderRoot.snapshot().gltfInstancing, countersBeforeSwap);
+
+    expect(instancedDrawCalls(swapCalls)).toHaveLength(1);
+    expect(bufferSubDataUploadRanges(swapCalls)).toEqual([
+      { byteOffset: 0, floatLength: 12, floatOffset: 0 },
+      { byteOffset: 0, floatLength: 3, floatOffset: 0 },
+    ]);
+    expect(bufferSubDataPayloads(swapCalls).map(roundVector)).toEqual([
+      [-0.4, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0],
+      [1, 1, 1],
+    ]);
+    expect(counters.rootPoseUploadBytes).toBe(12 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.rootPoseUploadCalls).toBe(1);
+    expect(counters.rootScaleUploadBytes).toBe(3 * Float32Array.BYTES_PER_ELEMENT);
+    expect(counters.rootScaleUploadCalls).toBe(1);
 
     renderRoot.dispose();
   });
@@ -4555,7 +4581,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(1);
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
-    expect(secondReadyFrameCalls.filter((call) => call.name === "bindBuffer")).toHaveLength(0);
+    expect(secondReadyFrameCalls.filter((call) =>
+      call.name === "bindBuffer" && call.args[1] !== null)).toHaveLength(0);
     expect(secondReadyInstancing.batchPlansBuilt).toBe(0);
     expect(secondReadyInstancing.batchInstancesTotal).toBe(2);
 
@@ -4692,6 +4719,25 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(instancedDrawCalls(secondReadyFrameCalls)).toHaveLength(2);
     expect(secondReadyFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+
+    const callsBeforeLightChange = calls.length;
+    const plansBeforeLightChange = root.snapshot().gltfInstancing.batchPlansBuilt;
+    root.render(renderScene([
+      directionalLight({
+        color: [0.5, 0.75, 1, 1],
+        direction: [1, 0, 0],
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        version: "ext-mesh-gpu-instancing-xr-views",
+      }),
+    ]));
+    const lightChangedFrameCalls = calls.slice(callsBeforeLightChange);
+
+    expect(instancedDrawCalls(lightChangedFrameCalls)).toHaveLength(1);
+    expect(lightChangedFrameCalls.filter((call) => call.name === "bufferData")).toHaveLength(0);
+    expect(lightChangedFrameCalls.filter((call) => call.name === "bufferSubData")).toHaveLength(0);
+    expect(root.snapshot().gltfInstancing.batchPlansBuilt).toBe(plansBeforeLightChange);
   });
 
   it("renders required KHR_lights_punctual directional, point, and spot lights without a pass light", async () => {
@@ -4720,21 +4766,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(3);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_useClusteredLights")).toContain(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[0]")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[1]")).toContain(1);
-    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightKind[2]")).toContain(2);
     expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightColor[0]").map(roundVector)).toContainEqual([1, 1, 2, 1]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightColor[1]").map(roundVector)).toContainEqual([3, 1.5, 0.75, 1]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightPosition[1]").map(roundVector)).toContainEqual([1, 2, 3, 0]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightDirection[1]").map(roundVector)).toContainEqual([0, -1, 0, 5]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightPosition[2]").map(roundVector)).toContainEqual([-1, -2, -3, 0]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightDirection[2]").map(roundVector)).toContainEqual([0, 0, -1, 6]);
-    expect(uniform4fvPayloads(readyFrameCalls, "u_surfaceLightCone[2]").map(roundVector)).toContainEqual([
-      roundNumber(Math.cos(0.1)),
-      roundNumber(Math.cos(0.5)),
-      0,
-      0,
+    const clusteredData = readyFrameCalls.find((call) =>
+      call.name === "texImage2D" && call.args[3] === 4 && call.args[4] === 2);
+    expect(numericArray(clusteredData?.args[8]).slice(0, 8).map(roundNumber)).toEqual([
+      3, 1.5, 0.75, 1, 1, 2, 3, 5,
     ]);
   });
 
@@ -4779,14 +4818,17 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform4fvPayloads(readyFrameCalls, "u_iblIrradianceCoefficients[8]").map(roundVector))
       .toContainEqual([0.432833, 0.126378, -0.004153, 0]);
     expect(sources).toContain("iblDiffuseIrradiance");
-    expect(sources).toContain("iblSpecularRadiance");
+    expect(sources).toContain("iblSpecularSample");
     expect(sources).toContain("iblDecodeSpecularRadiance");
     expect(sources).toContain("u_iblSpecularSettings.w > 0.5");
     expect(sources).toContain("iblEnvironmentBrdf");
-    expect(sources).toContain("iblSpecularBrdf");
+    expect(sources).toContain("iblGgxScattering");
+    expect(sources).toContain("iblSpecularOcclusion");
     expect(sources).toContain("textureLod(u_iblSpecularCube");
-    expect(sources).toContain("return radiance * iblSpecularBrdf(baseColor, roughness, NdotV) * u_iblSpecularSettings.y;");
-    expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * ambientIrradiance");
+    expect(sources).toContain("return radiance * u_iblSpecularSettings.y;");
+    expect(sources).toContain("+ cosineWeightedIrradiance * scattering.multi;");
+    expect(sources).toContain("iblClearcoatRadiance");
+    expect(sources).toContain("materialDiffuseColor(baseColor.rgb) * cosineWeightedIrradiance");
     expect(diagnostics).not.toMatch(/EXT_lights_image_based light 0 specularImages are ignored/i);
     const cubeFaceTargets = readyFrameCalls
       .filter((call) => call.name === "texImage2D")
@@ -4913,7 +4955,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_useIblIrradiance")).toContain(0);
-    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(1);
+    expect(uniform1iPayloads(readyFrameCalls, "u_surfaceLightCount")).toContain(0);
     expect(diagnostics).toMatch(/EXT_lights_image_based skipped: missing light 5/i);
   });
 
@@ -5014,6 +5056,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle-emissive.png",
     ]);
@@ -5023,7 +5066,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const programsAfterPendingTextureRender = callCount(calls, "createProgram");
 
     expect(drawCalls(pendingTextureFrameCalls)).toHaveLength(1);
-    expect(uniform1iPayloads(pendingTextureFrameCalls, "u_useEmissiveTexture")).toContain(0);
+    expect(uniform1iPayloads(calls, "u_useEmissiveTexture")).toContain(0);
     expect(shaderSources(calls).join("\n")).toContain("uniform sampler2D u_emissiveTexture;");
 
     ControlledImage.instances[0]?.settleLoad();
@@ -5046,7 +5089,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 4)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_emissiveTexture;");
-    expect(sources).toContain("texture(u_emissiveTexture, v_emissive_uv).rgb");
+    expect(sources).toContain("texture(u_emissiveTexture, materialTextureUv(u_emissiveUvSet");
   });
 
   it("uses glTF emissiveTexture texCoord 1 when present", async () => {
@@ -5089,13 +5132,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0.375, 0.5,
       0.625, 0.75,
     ]);
-    expect(calls.some((call) =>
-      call.name === "vertexAttribPointer"
-      && call.args[0] === 12
-      && call.args[1] === 2
-      && call.args[2] === gl.FLOAT)).toBe(true);
-    expect(sources).toContain("in vec2 a_emissive_uv;");
-    expect(sources).toContain("texture(u_emissiveTexture, v_emissive_uv).rgb");
+    expect(sources).toContain("layout(location = 11) in vec2 a_uv1;");
+    expect(uniform1iPayloads(calls, "u_emissiveUvSet")).toContain(1);
+    expect(sources).toContain("in vec2 a_uv1;");
+    expect(sources).toContain("texture(u_emissiveTexture, materialTextureUv(u_emissiveUvSet");
   });
 
   it("renders glTF metallic and roughness factors as surface uniforms", async () => {
@@ -5158,11 +5198,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await settleControlledImageWave(2);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle.png",
       "https://example.test/fixtures/staged-triangle-metallic-roughness.png",
     ]);
-    for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
     await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useMetallicRoughnessTexture", 1);
 
@@ -5179,8 +5219,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 3)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_metallicRoughnessTexture;");
-    expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).b");
-    expect(sources).toContain("texture(u_metallicRoughnessTexture, v_uv).g");
+    expect(sources).toContain("texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet");
   });
 
   it("uploads and binds glTF occlusion textures", async () => {
@@ -5208,6 +5247,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle-occlusion.png",
     ]);
@@ -5230,7 +5270,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 5)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_occlusionTexture;");
-    expect(sources).toContain("texture(u_occlusionTexture, v_uv).r");
+    expect(sources).toContain("texture(u_occlusionTexture, materialTextureUv(u_occlusionUvSet");
   });
 
   it("uploads and binds core glTF normal textures without colliding with transmission texture units", async () => {
@@ -5258,6 +5298,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle-normal.png",
     ]);
@@ -5280,7 +5321,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[0] === gl.TEXTURE0 + 1)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_normalTexture;");
     expect(sources).toContain("dFdx(v_worldPosition)");
-    expect(sources).toContain("materialNormal(normalize(v_normal))");
+    expect(sources).toContain("texture(u_normalTexture, materialTextureUv(u_normalUvSet");
   });
 
   it("uploads and binds glTF TANGENT attributes for normal mapping", async () => {
@@ -5324,7 +5365,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     ]);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 11
+      && call.args[0] === 2
       && call.args[1] === 4
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(sources).toContain("in vec4 a_tangent;");
@@ -5428,12 +5469,17 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle.png",
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_useSpecularColorTexture").includes(1)
+        && uniform1iPayloads(calls, "u_useClearcoatRoughnessTexture").includes(1),
+    );
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5456,10 +5502,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
     expect(sources).toContain("uniform sampler2D u_specularTexture;");
-    expect(sources).toContain("texture(u_specularTexture, v_uv).a");
-    expect(sources).toContain("texture(u_specularColorTexture, v_uv).rgb");
-    expect(sources).toContain("texture(u_clearcoatTexture, v_uv).r");
-    expect(sources).toContain("texture(u_clearcoatRoughnessTexture, v_uv).g");
+    expect(sources).toContain("texture(u_specularTexture, materialTextureUv(u_specularUvSet");
+    expect(sources).toContain("texture(u_specularColorTexture, materialTextureUv(u_specularColorUvSet");
+    expect(sources).toContain("texture(u_clearcoatTexture, materialTextureUv(u_clearcoatUvSet");
+    expect(sources).toContain("texture(u_clearcoatRoughnessTexture, materialTextureUv(u_clearcoatRoughnessUvSet");
     expect(diagnostics).not.toMatch(/KHR_materials_specular\.specularTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_specular\.specularColorTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatTexture.*ignored/i);
@@ -5499,6 +5545,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
         }],
       }))).toBe(true);
     await flushMicrotasks();
+    await flushPreparedAssetBoundary();
 
     expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
       .toBe(false);
@@ -5611,12 +5658,17 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle.png",
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_useSheenColorTexture").includes(1)
+        && uniform1iPayloads(calls, "u_useIridescenceThicknessTexture").includes(1),
+    );
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -5639,10 +5691,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
     expect(sources).toContain("uniform sampler2D u_sheenColorTexture;");
-    expect(sources).toContain("texture(u_sheenColorTexture, v_uv).rgb");
-    expect(sources).toContain("texture(u_sheenRoughnessTexture, v_uv).a");
-    expect(sources).toContain("texture(u_iridescenceTexture, v_uv).r");
-    expect(sources).toContain("texture(u_iridescenceThicknessTexture, v_uv).g");
+    expect(sources).toContain("texture(u_sheenColorTexture, materialTextureUv(u_sheenColorUvSet");
+    expect(sources).toContain("texture(u_sheenRoughnessTexture, materialTextureUv(u_sheenRoughnessUvSet");
+    expect(sources).toContain("texture(u_iridescenceTexture, materialTextureUv(u_iridescenceUvSet");
+    expect(sources).toContain("texture(u_iridescenceThicknessTexture, materialTextureUv(u_iridescenceThicknessUvSet");
     expect(diagnostics).not.toMatch(/KHR_materials_sheen\.sheenColorTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_sheen\.sheenRoughnessTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_iridescence\.iridescenceTexture.*ignored/i);
@@ -5713,9 +5765,14 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
-    const callsBeforeReadyRender = calls.length;
+    // The first ready frame initiates the opaque variant and retains the
+    // transmission variant for the next demand frame.
+    const callsBeforeShaderWarmup = calls.length;
     root.render(renderGraph);
+    const callsBeforeReadyRender = calls.length;
+    root.flushInvalidated();
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
+    const shaderWarmupAndReadyCalls = calls.slice(callsBeforeShaderWarmup);
     const sources = shaderSources(readyFrameCalls).join("\n");
     const readyDrawCalls = drawCalls(readyFrameCalls);
     const copyIndex = readyFrameCalls.findIndex((call) => call.name === "copyTexSubImage2D");
@@ -5727,7 +5784,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(readyDrawCalls).toHaveLength(2);
     expect(copyIndex).toBeGreaterThan(drawIndexes[0] ?? -1);
     expect(copyIndex).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
-    expect(readyFrameCalls).toContainEqual({
+    expect(shaderWarmupAndReadyCalls).toContainEqual({
       args: [gl.TEXTURE_2D, 0, gl.RGBA, defaultCanvasSize.width, defaultCanvasSize.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null],
       name: "texImage2D",
     });
@@ -5741,6 +5798,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
     });
     expect(uniform1iPayloads(readyFrameCalls, "u_useTransmissionTexture")).toContain(1);
     expect(uniform1iPayloads(readyFrameCalls, "u_transmissionScreenTexture")).toContain(1);
+    expect(uniform2fvPayloads(readyFrameCalls, "u_viewportOrigin").map(roundVector))
+      .toContainEqual([0, 0]);
     expect(uniform2fvPayloads(readyFrameCalls, "u_viewportSize").map(roundVector))
       .toContainEqual([defaultCanvasSize.width, defaultCanvasSize.height]);
     expect(uniform4fvPayloads(readyFrameCalls, "u_attenuationColorFactor").map(roundVector))
@@ -5749,9 +5808,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toContainEqual([0.65, 0.4, 2, 1]);
     expect(sources).toContain("materialVolumeAttenuation");
     expect(sources).toContain("materialTransmissionScreenColor");
-    expect(sources).toContain("gl_FragCoord.xy");
+    expect(sources).toContain("gl_FragCoord.xy - u_viewportOrigin");
     expect(sources).toContain("texture(u_transmissionScreenTexture");
-    expect(sources).toContain("lit = mix(lit, transmitted, transmission);");
+    expect(sources).toContain("lit = mix(lit, transmitted + lit * fresnel, transmission);");
+    expect(sources).toContain("mix(environmentFallback, screenSample.rgb, screenSample.a)");
     expect(sources).not.toContain("u_refractionColor");
 
     const callsBeforeStableRender = calls.length;
@@ -5766,6 +5826,38 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[2] === gl.RGBA
       && call.args[3] === defaultCanvasSize.width
       && call.args[4] === defaultCanvasSize.height)).toBe(false);
+
+    const identity = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const callsBeforeViews = calls.length;
+    root.renderViews(renderGraph, {
+      views: [
+        {
+          projectionMatrix: identity,
+          viewMatrix: identity,
+          viewport: { height: 80, width: 100, x: 11, y: 13 },
+        },
+        {
+          projectionMatrix: identity,
+          viewMatrix: identity,
+          viewport: { height: 80, width: 100, x: 127, y: 17 },
+        },
+      ],
+    });
+    const viewCalls = calls.slice(callsBeforeViews);
+    expect(viewCalls
+      .filter((call) => call.name === "copyTexSubImage2D")
+      .map((call) => call.args.slice(4, 8)))
+      .toEqual([
+        [11, 13, 100, 80],
+        [127, 17, 100, 80],
+      ]);
+    expect(uniform2fvPayloads(viewCalls, "u_viewportOrigin").map(roundVector))
+      .toEqual(expect.arrayContaining([[11, 13], [127, 17]]));
   });
 
   it("renders required KHR materials transmission and volume defaults exactly", async () => {
@@ -5831,8 +5923,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
-    const callsBeforeReadyRender = calls.length;
+    // The retained demand frame is the first one where both the opaque source
+    // and dispersive surface shaders are ready.
     root.render(renderGraph);
+    const callsBeforeReadyRender = calls.length;
+    root.flushInvalidated();
     const readyFrameCalls = calls.slice(callsBeforeReadyRender);
     const sources = shaderSources(readyFrameCalls).join("\n");
     const readyDrawCalls = drawCalls(readyFrameCalls);
@@ -5926,6 +6021,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle.png",
     ]);
@@ -5950,8 +6046,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
     }
     expect(sources).toContain("uniform sampler2D u_materialTransmissionTexture;");
-    expect(sources).toContain("texture(u_materialTransmissionTexture, v_uv).r");
-    expect(sources).toContain("texture(u_thicknessTexture, v_uv).g");
+    expect(sources).toContain("texture(u_materialTransmissionTexture, materialTextureUv(u_materialTransmissionUvSet");
+    expect(sources).toContain("texture(u_thicknessTexture, materialTextureUv(u_thicknessUvSet");
     expect(diagnostics).not.toMatch(/KHR_materials_transmission\.transmissionTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_volume\.thicknessTexture.*ignored/i);
   });
@@ -5981,12 +6077,17 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "https://example.test/fixtures/staged-triangle.png",
     ]);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_useSheenColorTexture").includes(1)
+        && uniform1iPayloads(calls, "u_useThicknessTexture").includes(1),
+    );
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
@@ -6047,9 +6148,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
 
-    expect(ControlledImage.instances).toHaveLength(7);
-    for (const image of ControlledImage.instances) image.settleLoad();
-    await flushMicrotasks();
+    await settleControlledImageWave(7);
     await waitForAnimationFrameWork(
       viewport.animationFrames,
       () => uniform1iPayloads(calls, "u_thicknessTexture").includes(15),
@@ -6229,12 +6328,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(ControlledImage.instances.some((image) => image.src.endsWith(`/${triangleVariantImageUri}`))).toBe(true);
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(callCount(calls, "texImage2D")).toBe(0);
+    const programsBeforeTextureReady = callCount(calls, "createProgram");
+    const vertexArraysBeforeTextureReady = callCount(calls, "createVertexArray");
 
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(callCount(calls, "createProgram")).toBeGreaterThan(programsBeforeTextureReady);
+    expect(callCount(calls, "createVertexArray")).toBe(vertexArraysBeforeTextureReady);
   });
 
   it("loads glTF buffers from data URIs without fetching external buffer resources", async () => {
@@ -6383,7 +6486,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, meshoptCompressedTriangleBin()))).toBe(true);
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await waitForAnimationFrameWork(viewport.animationFrames, () =>
+      drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3));
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
     expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
@@ -6628,6 +6732,18 @@ describe("WebGL renderer scene and glTF regressions", () => {
         extensionsUsed: ["KHR_texture_transform"],
         materials: [
           {
+            normalTexture: {
+              extensions: {
+                KHR_texture_transform: { offset: [0.4, 0.3], scale: [0.25, 0.5] },
+              },
+              index: 0,
+            },
+            occlusionTexture: {
+              extensions: {
+                KHR_texture_transform: { offset: [0.2, 0.1], scale: [0.5, 0.5] },
+              },
+              index: 0,
+            },
             pbrMetallicRoughness: {
               baseColorTexture: {
                 extensions: {
@@ -6635,6 +6751,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
                     offset: [0.25, 0.5],
                     scale: [0.5, 0.25],
                   },
+                },
+                index: 0,
+              },
+              metallicRoughnessTexture: {
+                extensions: {
+                  KHR_texture_transform: { offset: [0.1, 0.2], scale: [0.25, 0.25] },
                 },
                 index: 0,
               },
@@ -6649,11 +6771,16 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
-    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
-      0.5, 0.875,
-      0.25, 0.75,
-      0.75, 0.75,
-    ]);
+    expect(uniform4fvPayloads(calls, "u_baseColorUvRow0").map(roundVector))
+      .toContainEqual([0.5, 0, 0.25, 0]);
+    expect(uniform4fvPayloads(calls, "u_baseColorUvRow1").map(roundVector))
+      .toContainEqual([0, 0.25, 0.5, 0]);
+    expect(uniform4fvPayloads(calls, "u_metallicRoughnessUvRow0").map(roundVector))
+      .toContainEqual([0.25, 0, 0.1, 0]);
+    expect(uniform4fvPayloads(calls, "u_normalUvRow0").map(roundVector))
+      .toContainEqual([0.25, 0, 0.4, 0]);
+    expect(uniform4fvPayloads(calls, "u_occlusionUvRow0").map(roundVector))
+      .toContainEqual([0.5, 0, 0.2, 0]);
   });
 
   it("applies parent and child transforms when traversing glTF node hierarchies", async () => {
@@ -6688,62 +6815,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0, 1, 0, 0,
       0, 0, 1, 0,
       0.5, 0, 0, 1,
-    ]);
-  });
-
-  it("applies controlled glTF node TRS animation only when requested", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const staticGraph = renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "controlled-node-animation" }),
-    ]);
-    const animatedGraph = renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({
-        animation: { clip: "slide", timeSeconds: 0.5 },
-        src: triangleGltfSrc,
-        version: "controlled-node-animation",
-      }),
-    ]);
-
-    root.render(staticGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, animatedParentTriangleDocument()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle-animation\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleAnimationBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    const callsBeforeStaticRender = calls.length;
-    root.render(staticGraph);
-    const staticFrameCalls = calls.slice(callsBeforeStaticRender);
-    const callsBeforeAnimatedRender = calls.length;
-    root.render(animatedGraph);
-    const animatedFrameCalls = calls.slice(callsBeforeAnimatedRender);
-
-    expect(drawCalls(staticFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
-      .toHaveLength(1);
-    expect(drawCalls(animatedFrameCalls).filter((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3))
-      .toHaveLength(1);
-    expect(matrixUniformPayloads(calls, "u_model").map(roundVector)).toContainEqual([
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0.25, 0, 0, 1,
-    ]);
-    expect(matrixUniformPayloads(animatedFrameCalls, "u_model").map(roundVector)).toContainEqual([
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0.75, 0, 0, 1,
     ]);
   });
 
@@ -7763,11 +7834,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
       0, 0.501961, 0, 1,
       0, 0, 1, 1,
     ]);
-    expect(readyFrameCalls.some((call) =>
-      call.name === "getAttribLocation" && call.args[1] === "a_color")).toBe(true);
+    expect(readyFrameCalls.some((call) => call.name === "getAttribLocation")).toBe(false);
     expect(readyFrameCalls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 10
+      && call.args[0] === 12
       && call.args[1] === 4
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(sources).toContain("in vec4 a_color;");
@@ -7802,7 +7872,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
-    expect(calls.some((call) => call.name === "getAttribLocation" && call.args[1] === "a_normal")).toBe(true);
+    expect(calls.some((call) => call.name === "getAttribLocation")).toBe(false);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 1
@@ -7810,7 +7880,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 2
+      && call.args[0] === 10
       && call.args[1] === 2
       && call.args[2] === gl.FLOAT)).toBe(true);
     expect(uniform4fvPayloads(calls, "u_surfaceLightDirection[0]").map(roundVector)).toContainEqual([
@@ -7987,11 +8057,10 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3)).toBe(true);
-    expect(bufferDataPayloads(calls).map(roundVector)).toContainEqual([
-      0.5, 0.875,
-      0.25, 0.75,
-      0.75, 0.75,
-    ]);
+    expect(uniform4fvPayloads(calls, "u_baseColorUvRow0").map(roundVector))
+      .toContainEqual([0.5, 0, 0.25, 0]);
+    expect(uniform4fvPayloads(calls, "u_baseColorUvRow1").map(roundVector))
+      .toContainEqual([0, 0.25, 0.5, 0]);
   });
 
   it("keeps node-level MSFT_lod selection stable inside a threshold hysteresis band", async () => {

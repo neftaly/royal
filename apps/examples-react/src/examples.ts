@@ -1,178 +1,173 @@
 import type { ComponentType } from 'react';
-import { HelloCube } from './examples/cases/HelloCube';
-import helloCubeSource from './examples/cases/HelloCube.tsx?raw';
-import { WireframeCube } from './examples/cases/WireframeCube';
-import wireframeCubeSource from './examples/cases/WireframeCube.tsx?raw';
-import { FormControls } from './examples/cases/FormControls';
-import formControlsSource from './examples/cases/FormControls.tsx?raw';
-import { Picking } from './examples/cases/Picking';
-import pickingSource from './examples/cases/Picking.tsx?raw';
-import { TextureMaterials } from './examples/cases/TextureMaterials';
-import textureMaterialsSource from './examples/cases/TextureMaterials.tsx?raw';
-import { StandardLighting } from './examples/cases/StandardLighting';
-import standardLightingSource from './examples/cases/StandardLighting.tsx?raw';
-import { HudOverlay } from './examples/cases/HudOverlay';
-import hudOverlaySource from './examples/cases/HudOverlay.tsx?raw';
-import { GltfHelmet } from './examples/cases/GltfHelmet';
-import gltfHelmetSource from './examples/cases/GltfHelmet.tsx?raw';
-import { GltfInstancing } from './examples/cases/GltfInstancing';
-import gltfInstancingSource from './examples/cases/GltfInstancing.tsx?raw';
-import { GltfKitchenSink, GltfKitchenSinkSlow } from './examples/cases/GltfKitchenSink';
-import gltfKitchenSinkSource from './examples/cases/GltfKitchenSink.tsx?raw';
-import { GltfGhostscriptTigerSvg } from './examples/cases/GltfGhostscriptTigerSvg';
-import gltfGhostscriptTigerSvgSource from './examples/cases/GltfGhostscriptTigerSvg.tsx?raw';
-import { GltfLod } from './examples/cases/GltfLod';
-import gltfLodSource from './examples/cases/GltfLod.tsx?raw';
-import { GltfVariants } from './examples/cases/GltfVariants';
-import gltfVariantsSource from './examples/cases/GltfVariants.tsx?raw';
-import { WebXrVr } from './examples/cases/WebXrVr';
-import webXrVrSource from './examples/cases/WebXrVr.tsx?raw';
+
+export type LoadedExample = {
+  readonly Component: ComponentType;
+  readonly source: string;
+};
 
 export type Example = {
   readonly id: string;
+  readonly load: () => Promise<LoadedExample>;
   readonly maturity: 'product' | 'lab-probe';
+  readonly navigation?: boolean;
   readonly path: string;
-  readonly title: string;
-  readonly Component: ComponentType;
-  readonly source: string;
   readonly sourceFile: `examples/cases/${string}.tsx`;
+  readonly title: string;
+};
+
+type ExampleSourceModule = { readonly default: string };
+
+const exampleLoader = (
+  component: () => Promise<ComponentType>,
+  source: () => Promise<ExampleSourceModule>,
+): (() => Promise<LoadedExample>) => {
+  let pending: Promise<LoadedExample> | undefined;
+  return () => {
+    if (pending !== undefined) return pending;
+    const request = Promise.all([component(), source()])
+      .then(([Component, sourceModule]) => ({ Component, source: sourceModule.default }));
+    pending = request;
+    void request.catch(() => {
+      if (pending === request) pending = undefined;
+    });
+    return pending;
+  };
 };
 
 export const examples = [
   {
     id: 'cube',
+    load: exampleLoader(
+      () => import('./examples/cases/HelloCube').then((module) => module.HelloCube),
+      () => import('./examples/cases/HelloCube.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/cube',
-    title: 'Cube',
-    Component: HelloCube,
-    source: helloCubeSource,
     sourceFile: 'examples/cases/HelloCube.tsx',
+    title: 'Cube',
   },
   {
     id: 'wireframe',
+    load: exampleLoader(
+      () => import('./examples/cases/WireframeCube').then((module) => module.WireframeCube),
+      () => import('./examples/cases/WireframeCube.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/wireframe',
-    title: 'Wireframe',
-    Component: WireframeCube,
-    source: wireframeCubeSource,
     sourceFile: 'examples/cases/WireframeCube.tsx',
-  },
-  {
-    id: 'form-controls',
-    maturity: 'product',
-    path: '/form-controls',
-    title: 'Form Controls',
-    Component: FormControls,
-    source: formControlsSource,
-    sourceFile: 'examples/cases/FormControls.tsx',
+    title: 'Wireframe',
   },
   {
     id: 'picking',
+    load: exampleLoader(
+      () => import('./examples/cases/Picking').then((module) => module.Picking),
+      () => import('./examples/cases/Picking.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/picking',
-    title: 'Picking',
-    Component: Picking,
-    source: pickingSource,
     sourceFile: 'examples/cases/Picking.tsx',
+    title: 'Picking',
   },
   {
     id: 'texture-materials',
+    load: exampleLoader(
+      () => import('./examples/cases/TextureMaterials').then((module) => module.TextureMaterials),
+      () => import('./examples/cases/TextureMaterials.tsx?raw'),
+    ),
     maturity: 'product',
+    navigation: false,
     path: '/texture-materials',
-    title: 'Texture Materials',
-    Component: TextureMaterials,
-    source: textureMaterialsSource,
     sourceFile: 'examples/cases/TextureMaterials.tsx',
+    title: 'Texture Materials',
   },
   {
     id: 'standard-lighting',
+    load: exampleLoader(
+      () => import('./examples/cases/StandardLighting').then((module) => module.StandardLighting),
+      () => import('./examples/cases/StandardLighting.tsx?raw'),
+    ),
     maturity: 'product',
+    navigation: true,
     path: '/standard-lighting',
-    title: 'Standard Lighting',
-    Component: StandardLighting,
-    source: standardLightingSource,
     sourceFile: 'examples/cases/StandardLighting.tsx',
-  },
-  {
-    id: 'hud-overlay',
-    maturity: 'product',
-    path: '/hud-overlay',
-    title: 'HUD Overlay',
-    Component: HudOverlay,
-    source: hudOverlaySource,
-    sourceFile: 'examples/cases/HudOverlay.tsx',
+    title: 'Standard Lighting',
   },
   {
     id: 'gltf-helmet',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfHelmet').then((module) => module.GltfHelmet),
+      () => import('./examples/cases/GltfHelmet.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/gltf-helmet',
-    title: 'glTF PBR Helmet',
-    Component: GltfHelmet,
-    source: gltfHelmetSource,
     sourceFile: 'examples/cases/GltfHelmet.tsx',
+    title: 'glTF Material Showcase',
   },
   {
     id: 'gltf-instancing',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfInstancing').then((module) => module.GltfInstancing),
+      () => import('./examples/cases/GltfInstancing.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/gltf-instancing',
-    title: 'glTF Auto Instancing',
-    Component: GltfInstancing,
-    source: gltfInstancingSource,
     sourceFile: 'examples/cases/GltfInstancing.tsx',
+    title: 'glTF Auto Instancing',
   },
   {
-    id: 'gltf-kitchen-sink',
-    maturity: 'product',
-    path: '/gltf-kitchen-sink',
-    title: 'glTF Kitchen Sink',
-    Component: GltfKitchenSink,
-    source: gltfKitchenSinkSource,
-    sourceFile: 'examples/cases/GltfKitchenSink.tsx',
-  },
-  {
-    id: 'gltf-kitchen-sink-slow',
-    maturity: 'product',
-    path: '/gltf-kitchen-sink-slow',
-    title: 'glTF Kitchen Sink Slow Set',
-    Component: GltfKitchenSinkSlow,
-    source: gltfKitchenSinkSource,
-    sourceFile: 'examples/cases/GltfKitchenSink.tsx',
+    id: 'gltf-lab',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfLab').then((module) => module.GltfLab),
+      () => import('./examples/cases/GltfLab.tsx?raw'),
+    ),
+    maturity: 'lab-probe',
+    path: '/gltf-lab',
+    sourceFile: 'examples/cases/GltfLab.tsx',
+    title: 'Khronos Compatibility Lab',
   },
   {
     id: 'gltf-ghostscript-tiger-svg',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfGhostscriptTigerSvg').then((module) => module.GltfGhostscriptTigerSvg),
+      () => import('./examples/cases/GltfGhostscriptTigerSvg.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/gltf-ghostscript-tiger-svg',
-    title: 'glTF Ghostscript Tiger SVG',
-    Component: GltfGhostscriptTigerSvg,
-    source: gltfGhostscriptTigerSvgSource,
     sourceFile: 'examples/cases/GltfGhostscriptTigerSvg.tsx',
+    title: 'glTF Ghostscript Tiger SVG',
   },
   {
     id: 'gltf-lod',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfLod').then((module) => module.GltfLod),
+      () => import('./examples/cases/GltfLod.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/gltf-lod',
-    title: 'glTF MSFT_lod',
-    Component: GltfLod,
-    source: gltfLodSource,
     sourceFile: 'examples/cases/GltfLod.tsx',
+    title: 'glTF MSFT_lod',
   },
   {
     id: 'gltf-variants',
+    load: exampleLoader(
+      () => import('./examples/cases/GltfVariants').then((module) => module.GltfVariants),
+      () => import('./examples/cases/GltfVariants.tsx?raw'),
+    ),
     maturity: 'product',
     path: '/gltf-variants',
-    title: 'glTF Material Variants',
-    Component: GltfVariants,
-    source: gltfVariantsSource,
     sourceFile: 'examples/cases/GltfVariants.tsx',
+    title: 'glTF Material Variants',
   },
   {
     id: 'webxr-vr',
+    load: exampleLoader(
+      () => import('./examples/cases/WebXrVr').then((module) => module.WebXrVr),
+      () => import('./examples/cases/WebXrVr.tsx?raw'),
+    ),
     maturity: 'lab-probe',
     path: '/webxr-vr',
-    title: 'WebXR VR',
-    Component: WebXrVr,
-    source: webXrVrSource,
     sourceFile: 'examples/cases/WebXrVr.tsx',
+    title: 'WebXR VR',
   },
 ] as const satisfies readonly Example[];
 

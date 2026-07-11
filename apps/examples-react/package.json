@@ -16,19 +16,17 @@
     "bench:gltf-load:check": "node scripts/check-benchmark-report.mjs",
     "bench:ipad-safari": "node scripts/ipad-safari-benchmark.mjs",
     "build": "vite build --config vite.config.ts --logLevel warn",
+    "check:gltf-lab-manifest": "node scripts/check-gltf-lab-manifest.mjs",
     "dev": "vite --config vite.config.ts",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
     "preview": "vite preview --config vite.config.ts --host 127.0.0.1",
     "test": "pnpm exec vitest run --passWithNoTests --config vite.config.ts",
-    "test:browser": "pnpm run build && node scripts/browser-smoke.mjs"
+    "test:browser": "pnpm run build && node scripts/browser-smoke.mjs",
+    "test:browser:context-loss": "EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=cube pnpm run test:browser"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "0.19.3",
     "@royal/react": "workspace:*",
-    "@royal/renderer-core": "workspace:*",
     "@royal/renderer-webgl": "workspace:*",
-    "@tanstack/react-router": "^1.170.16",
-    "flexily": "0.7.3",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

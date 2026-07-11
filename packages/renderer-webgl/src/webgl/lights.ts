@@ -1,5 +1,4 @@
 import type {
-  DirectionalLightNode,
   Rgba,
   Vec3,
 } from "@royal/renderer-core";
@@ -11,8 +10,6 @@ import {
   transformPoint,
   type Mat4,
 } from "../math/mat4";
-
-const DEFAULT_LIGHT_COLOR: Rgba = [1, 1, 1, 1];
 
 export const DEFAULT_LIGHT_DIRECTION: Vec3 = [0, -1, 0];
 export const MAX_SURFACE_LIGHTS = 8;
@@ -31,7 +28,7 @@ export type SurfaceImageBasedLightSpecular = {
   readonly key: string;
 };
 
-export type SurfaceIblSpecularEncoding = "ldr" | "rgbd";
+export type SurfaceIblSpecularEncoding = "linear" | "rgbd";
 
 export type SurfaceIblIrradiance = {
   readonly coefficients: readonly Vec3[];
@@ -74,24 +71,23 @@ export type SurfaceSpotLight = {
 export type SurfaceLight = SurfaceDirectionalLight | SurfacePointLight | SurfaceSpotLight;
 
 export type SurfaceLightSet = {
+  readonly directionals: readonly SurfaceDirectionalLight[];
   readonly irradiance?: SurfaceIblIrradiance;
   readonly key: string;
   readonly lights: readonly SurfaceLight[];
+  readonly punctuals: readonly (SurfacePointLight | SurfaceSpotLight)[];
   readonly specular?: SurfaceIblSpecular;
 };
 
-export const DEFAULT_SURFACE_LIGHT_SET: SurfaceLightSet = {
-  key: "default",
-  lights: [{ color: DEFAULT_LIGHT_COLOR, direction: DEFAULT_LIGHT_DIRECTION, kind: "directional" }],
-};
-
 export const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
+  directionals: [],
   key: "empty",
   lights: [],
+  punctuals: [],
 };
 
 export const surfaceLightValueKey = (value: number | undefined): string =>
-  value === undefined || !Number.isFinite(value) ? "" : Number(value.toFixed(6)).toString();
+  value === undefined || !Number.isFinite(value) ? "" : Math.fround(value).toString();
 
 export const surfaceLightVectorKey = (values: readonly number[]): string =>
   values.map((value) => surfaceLightValueKey(value)).join(",");
@@ -145,48 +141,33 @@ export const surfaceLightSet = (
   irradiance?: SurfaceIblIrradiance,
   specular?: SurfaceIblSpecular,
 ): SurfaceLightSet => {
-  const useDefaultLight = lights.length === 0 && irradiance === undefined && specular === undefined;
-  const actualLights = useDefaultLight ? DEFAULT_SURFACE_LIGHT_SET.lights : lights;
-  const lightKey = useDefaultLight
-    ? "default"
-    : lights.length === 0 ? "none" : lights.map(surfaceLightKey).join("|");
+  const lightKey = lights.length === 0 ? "none" : lights.map(surfaceLightKey).join("|");
   const irradianceKey = irradiance === undefined ? "" : `|ibl:${surfaceIblIrradianceKey(irradiance)}`;
   const specularKey = specular === undefined ? "" : `|ibl-specular:${surfaceIblSpecularKey(specular)}`;
 
   return {
+    directionals: lights.filter((light): light is SurfaceDirectionalLight => light.kind === "directional"),
     ...(irradiance === undefined ? {} : { irradiance }),
     key: `${lightKey}${irradianceKey}${specularKey}`,
-    lights: actualLights,
+    lights,
+    punctuals: lights.filter((light): light is SurfacePointLight | SurfaceSpotLight => light.kind !== "directional"),
     ...(specular === undefined ? {} : { specular }),
   };
 };
 
-export const passSurfaceLightSet = (light: DirectionalLightNode | undefined): SurfaceLightSet | undefined =>
-  light === undefined
-    ? undefined
-    : surfaceLightSet([{
-        color: light.color,
-        direction: light.direction,
-        kind: "directional",
-      }]);
-
 export const combineSurfaceLightSets = (
-  passLights: SurfaceLightSet | undefined,
+  sceneLights: SurfaceLightSet | undefined,
   assetLights: SurfaceLightSet | undefined,
 ): SurfaceLightSet => {
-  if (passLights === undefined && assetLights === undefined) return DEFAULT_SURFACE_LIGHT_SET;
-  if (assetLights === undefined) return passLights ?? DEFAULT_SURFACE_LIGHT_SET;
-  if (passLights === undefined) return assetLights;
-  const lights = [...passLights.lights, ...assetLights.lights].slice(0, MAX_SURFACE_LIGHTS);
-  const irradiance = assetLights.irradiance ?? passLights.irradiance;
-  const specular = assetLights.specular ?? passLights.specular;
+  if (sceneLights === undefined && assetLights === undefined) return EMPTY_SURFACE_LIGHT_SET;
+  if (assetLights === undefined) return sceneLights ?? EMPTY_SURFACE_LIGHT_SET;
+  if (sceneLights === undefined) return assetLights;
+  const lights = [...sceneLights.lights, ...assetLights.lights];
+  const sceneHasEnvironment = sceneLights.irradiance !== undefined || sceneLights.specular !== undefined;
+  const irradiance = sceneHasEnvironment ? sceneLights.irradiance : assetLights.irradiance;
+  const specular = sceneHasEnvironment ? sceneLights.specular : assetLights.specular;
 
-  return {
-    ...(irradiance === undefined ? {} : { irradiance }),
-    ...(specular === undefined ? {} : { specular }),
-    key: `${passLights.key}|${assetLights.key}`,
-    lights,
-  };
+  return surfaceLightSet(lights, irradiance, specular);
 };
 
 export const transformSurfaceIblIrradiance = (

@@ -1,12 +1,9 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
+  type WebGlContextSnapshot,
   type WebGlRoot,
 } from "@royal/renderer-webgl";
-import {
-  isRenderRootDescriptor,
-  type RoyalRendererJsxElement,
-} from "./renderer-descriptor";
 
 /** WebGL context options for the Royal renderer root. */
 export interface RoyalRendererRootContextOptions {
@@ -14,51 +11,31 @@ export interface RoyalRendererRootContextOptions {
   readonly alpha?: boolean;
   /** @defaultValue `true` */
   readonly antialias?: boolean;
-  /** @defaultValue `false` */
-  readonly preserveDrawingBuffer?: boolean;
-}
-
-/** Options passed to renderer backend roots. */
-export interface RoyalRendererBackendRootOptions {
-  readonly context?: RoyalRendererRootContextOptions;
 }
 
 /** Options for the Royal renderer root. */
-export interface RoyalRendererRootOptions extends RoyalRendererBackendRootOptions {
-  readonly backend?: RoyalRendererBackendRootFactory;
+export interface RoyalRendererRootOptions {
+  readonly context?: RoyalRendererRootContextOptions;
 }
 
 export type RoyalRendererRootContextSnapshot = Required<RoyalRendererRootContextOptions>;
+
+export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
+
+export interface RoyalRendererRootLifecycleSnapshot {
+  readonly error?: string;
+  readonly generation: number;
+  readonly lifecycle: RoyalRendererRootLifecycle;
+}
 
 export interface RoyalRendererRootSnapshot {
   readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
-  readonly latestScene: RenderRoot | undefined;
+  readonly lifecycle: RoyalRendererRootLifecycleSnapshot;
 }
 
-export type RoyalRendererRootRenderInput = RenderRoot | RoyalRendererJsxElement;
-
-export interface RoyalRendererBackendRoot {
-  readonly canvas: HTMLCanvasElement;
-  readonly context: RoyalRendererRootContextSnapshot;
-  readonly disposed: boolean;
-  readonly frame: number;
-  readonly latestScene: RenderRoot | undefined;
-  /** Backend-specific diagnostic payload. Host code must validate before use. */
-  diagnostics(): unknown;
-  dispose(): void;
-  flushInvalidated?(): void;
-  invalidate(): void;
-  pick(input: PickInput): PickResult | undefined;
-  render(scene: RenderRoot): void;
-  snapshot(): RoyalRendererRootSnapshot;
-}
-
-export type RoyalRendererBackendRootFactory = (
-  canvas: HTMLCanvasElement,
-  options?: RoyalRendererBackendRootOptions,
-) => RoyalRendererBackendRoot;
+export type RoyalRendererRootRenderInput = RenderRoot;
 
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
@@ -66,13 +43,14 @@ export interface RoyalRendererRoot {
   readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
-  readonly latestScene: RenderRoot | undefined;
   /** Renderer-specific diagnostic payload. Host code must validate before use. */
   diagnostics(): unknown;
   /** Immediately renders queued demand on the caller's current frame, if any. */
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
+  /** Observes renderer availability without polling. Calls back immediately. */
+  observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
   /** Returns the front-most render target under a DOM client coordinate. */
   pick(input: PickInput): PickResult | undefined;
   /** Renders a complete scene into the canvas. */
@@ -84,18 +62,20 @@ export interface RoyalRendererRoot {
 
 const WEB_GL_ROOT = Symbol("Royal React WebGL root");
 
+const royalLifecycleSnapshot = (
+  snapshot: WebGlContextSnapshot,
+): RoyalRendererRootLifecycleSnapshot => Object.freeze({
+  ...(snapshot.lastError === undefined ? {} : { error: snapshot.lastError }),
+  generation: snapshot.generation,
+  lifecycle: snapshot.lifecycle === "active"
+    ? "available"
+    : snapshot.lifecycle === "disposed"
+      ? "disposed"
+      : snapshot.lastError === undefined ? "unavailable" : "failed",
+});
+
 type WebGlBackedRoyalRendererRoot = RoyalRendererRoot & {
   readonly [WEB_GL_ROOT]: WebGlRoot;
-};
-
-type WebGlBackedRoyalRendererBackendRoot = RoyalRendererBackendRoot & {
-  readonly [WEB_GL_ROOT]: WebGlRoot;
-};
-
-const toRenderRoot = (scene: RoyalRendererRootRenderInput): RenderRoot => {
-  if (isRenderRootDescriptor(scene)) return scene;
-
-  throw new Error("Royal renderer root render expects a renderer scene");
 };
 
 export const webGlRootForRoyalRoot = (root: RoyalRendererRoot): WebGlRoot => {
@@ -107,52 +87,20 @@ export const webGlRootForRoyalRoot = (root: RoyalRendererRoot): WebGlRoot => {
   return webGlRoot;
 };
 
-const createWebGlRendererBackendRoot: RoyalRendererBackendRootFactory = (
-  canvas,
-  options,
-) => {
-  const root = createWebGlRoot(canvas, options?.context);
+/** @internal Transfers demand scheduling to a React-owned frame loop. */
+export type RoyalRendererFrameClock = {
+  flushInvalidated(): void;
+  release(): void;
+};
 
+export const acquireExternalRenderClockForRoyalRoot = (
+  root: RoyalRendererRoot,
+): RoyalRendererFrameClock => {
+  const webGlRoot = webGlRootForRoyalRoot(root);
   return {
-    [WEB_GL_ROOT]: root,
-    get canvas() {
-      return root.canvas;
-    },
-    get context() {
-      return root.options as RoyalRendererRootContextSnapshot;
-    },
-    get disposed() {
-      return root.disposed;
-    },
-    get frame() {
-      return root.frame;
-    },
-    get latestScene() {
-      return root.latestScene;
-    },
-    diagnostics: () => root.snapshot(),
-    dispose: () => {
-      root.dispose();
-    },
-    flushInvalidated: () => {
-      root.flushInvalidated?.();
-    },
-    invalidate: () => {
-      root.invalidate();
-    },
-    pick: (input: PickInput) => root.pick(input),
-    render: (scene: RenderRoot) => {
-      root.render(scene);
-    },
-    snapshot: () => {
-      return {
-        context: root.options as RoyalRendererRootContextSnapshot,
-        disposed: root.disposed,
-        frame: root.frame,
-        latestScene: root.latestScene,
-      };
-    },
-  } satisfies WebGlBackedRoyalRendererBackendRoot;
+    flushInvalidated: () => webGlRoot.flushInvalidatedFromExternalClock(),
+    release: webGlRoot.acquireExternalRenderClock(),
+  };
 };
 
 /** Creates an imperative renderer root. */
@@ -160,18 +108,18 @@ export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RoyalRendererRootOptions,
 ): RoyalRendererRoot => {
-  const root = (options?.backend ?? createWebGlRendererBackendRoot)(
-    canvas,
-    options?.context === undefined ? undefined : { context: options.context },
-  );
-  const webGlRoot = (root as Partial<WebGlBackedRoyalRendererBackendRoot>)[WEB_GL_ROOT];
+  const root = createWebGlRoot(canvas, options?.context);
+  const context: RoyalRendererRootContextSnapshot = Object.freeze({
+    alpha: root.options.alpha,
+    antialias: root.options.antialias,
+  });
 
   const royalRoot: RoyalRendererRoot = {
     get canvas() {
       return root.canvas;
     },
     get context() {
-      return root.context;
+      return context;
     },
     get disposed() {
       return root.disposed;
@@ -179,34 +127,37 @@ export const createRendererRoot = (
     get frame() {
       return root.frame;
     },
-    get latestScene() {
-      return root.latestScene;
-    },
-    diagnostics: () => root.diagnostics(),
+    diagnostics: () => root.snapshot(),
     dispose: () => {
       root.dispose();
     },
     flushInvalidated: () => {
-      root.flushInvalidated?.();
+      root.flushInvalidated();
     },
     invalidate: () => {
       root.invalidate();
     },
+    observeLifecycle: (callback) => root.observeContextLifecycle((snapshot) => {
+      callback(royalLifecycleSnapshot(snapshot));
+    }),
     pick: (input: PickInput) => root.pick(input),
     render: (scene: RoyalRendererRootRenderInput) => {
-      root.render(toRenderRoot(scene));
+      root.render(scene);
     },
     snapshot: () => {
-      return root.snapshot();
+      return Object.freeze({
+        context,
+        disposed: root.disposed,
+        frame: root.frame,
+        lifecycle: royalLifecycleSnapshot(root.contextSnapshot()),
+      });
     },
   };
-  if (webGlRoot !== undefined) {
-    Object.defineProperty(royalRoot, WEB_GL_ROOT, {
-      configurable: false,
-      enumerable: false,
-      value: webGlRoot,
-    });
-  }
+  Object.defineProperty(royalRoot, WEB_GL_ROOT, {
+    configurable: false,
+    enumerable: false,
+    value: root,
+  });
 
   return royalRoot;
 };

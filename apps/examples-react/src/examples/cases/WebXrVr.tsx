@@ -1,4 +1,12 @@
-import { perspectiveCamera, studioEnvironment } from '@royal/react/scene';
+import {
+  boxGeometry,
+  directionalLight,
+  mesh,
+  perspectiveCamera,
+  planeGeometry,
+  scene,
+  standardMaterial,
+} from '@royal/react/scene';
 import {
   Canvas,
   useCanvasElement,
@@ -15,7 +23,9 @@ import {
   type XrSessionStatus,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { srgbColor } from '../color';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const camera = perspectiveCamera({
   far: 80,
@@ -24,9 +34,34 @@ const camera = perspectiveCamera({
   position: [0, 1.55, 4.8],
   rotation: [-0.2, 0, 0],
 });
-const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.46,
-  specularIntensity: 0.82,
+const renderScene = scene({
+  camera,
+  environment: showcaseEnvironment,
+  ...showcasePass,
+  nodes: [
+    directionalLight(showcaseKeyLight),
+    directionalLight(showcaseFillLight),
+    mesh({
+      geometry: planeGeometry([7.2, 7.2]),
+      material: standardMaterial({ color: srgbColor([0.42, 0.39, 0.31, 1]) }),
+      transform: { position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] },
+    }),
+    mesh({
+      geometry: boxGeometry([0.82, 0.82, 0.82]),
+      material: standardMaterial({ color: srgbColor([0.1, 0.72, 0.64, 1]) }),
+      transform: { position: [-1.25, 0.52, -1.55], rotation: [0.08, 0.46, 0.02] },
+    }),
+    mesh({
+      geometry: boxGeometry([1.12, 1.12, 1.12]),
+      material: standardMaterial({ color: srgbColor([0.9, 0.34, 0.2, 1]) }),
+      transform: { position: [0.15, 0.74, -2.1], rotation: [0.28, -0.2, 0.1] },
+    }),
+    mesh({
+      geometry: boxGeometry([0.72, 0.72, 0.72]),
+      material: standardMaterial({ color: srgbColor([0.54, 0.46, 0.9, 1]) }),
+      transform: { position: [1.45, 0.44, -1.25], rotation: [-0.16, -0.66, 0.2] },
+    }),
+  ],
 });
 
 type BrowserXrSession = XrSession & {
@@ -450,29 +485,9 @@ export const WebXrVr = (): ReactNode =>
     <Canvas
       aria-label="WebXR VR"
       className="webxr-vr-canvas"
-      renderer={exampleCanvasRendererOptions}
+      context={exampleCanvasContextOptions}
+      scene={renderScene}
     >
-      <scene>
-        <pass camera={camera} environment={exampleEnvironment} toneMapping="none">
-          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          <mesh transform={{ position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] }}>
-            <planeGeometry size={[7.2, 7.2]} />
-            <standardMaterial color={[0.42, 0.39, 0.31, 1]} />
-          </mesh>
-          <mesh transform={{ position: [-1.25, 0.52, -1.55], rotation: [0.08, 0.46, 0.02] }}>
-            <boxGeometry size={[0.82, 0.82, 0.82]} />
-            <standardMaterial color={[0.1, 0.72, 0.64, 1]} />
-          </mesh>
-          <mesh transform={{ position: [0.15, 0.74, -2.1], rotation: [0.28, -0.2, 0.1] }}>
-            <boxGeometry size={[1.12, 1.12, 1.12]} />
-            <standardMaterial color={[0.9, 0.34, 0.2, 1]} />
-          </mesh>
-          <mesh transform={{ position: [1.45, 0.44, -1.25], rotation: [-0.16, -0.66, 0.2] }}>
-            <boxGeometry size={[0.72, 0.72, 0.72]} />
-            <standardMaterial color={[0.54, 0.46, 0.9, 1]} />
-          </mesh>
-        </pass>
-      </scene>
       <XrSessionControl />
     </Canvas>,
   );

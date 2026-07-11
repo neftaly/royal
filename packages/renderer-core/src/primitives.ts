@@ -1,3 +1,5 @@
+import { frozenTransform, nonEmptyString } from './descriptor-values';
+
 export type Axis = 'x' | 'y' | 'z';
 export type AxisSign = -1 | 1;
 
@@ -45,14 +47,17 @@ export interface TransformOptions {
   readonly scale?: Vec3;
 }
 
-const identityScale: Vec3 = [1, 1, 1];
-
 export const defineCoordinateSystem = (system: CoordinateSystem): CoordinateSystem => {
   if (system.up.axis === system.forward.axis) {
     throw new Error('Coordinate system up and forward axes must differ');
   }
 
-  return system;
+  return Object.freeze({
+    forward: Object.freeze({ ...system.forward }),
+    handedness: system.handedness,
+    unit: system.unit,
+    up: Object.freeze({ ...system.up }),
+  });
 };
 
 export const zUpLeftHanded: CoordinateSystem = defineCoordinateSystem({
@@ -69,13 +74,9 @@ export const yUpRightHanded: CoordinateSystem = defineCoordinateSystem({
   up: { axis: 'y', sign: 1 }
 });
 
-export const sceneSource = (source: SceneSource): SceneSource => ({
+export const sceneSource = (source: SceneSource): SceneSource => Object.freeze({
   coordinateSystem: defineCoordinateSystem(source.coordinateSystem),
-  id: source.id
+  id: nonEmptyString(source.id, 'scene source id')
 });
 
-export const resolveTransform = (options: TransformOptions): Transform => ({
-  position: options.position,
-  rotation: options.rotation,
-  scale: options.scale ?? identityScale
-});
+export const resolveTransform = (options: TransformOptions): Transform => frozenTransform(options);

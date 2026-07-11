@@ -14,10 +14,12 @@ import {
 import {
   Canvas,
   OrbitControls,
+} from '@royal/react';
+import {
   orbitCameraTransform,
   type OrbitCameraTransform,
   type OrbitCameraView,
-} from '@royal/react';
+} from '@royal/renderer-core';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useRapierSimulation } from './rapier-react';
 import {
@@ -34,7 +36,8 @@ import {
 } from './RapierPhysics.scene';
 
 const rendererOptions = {
-  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
+  alpha: true,
+  antialias: true,
 } as const;
 
 const orbitCanvasStyle = {
@@ -279,7 +282,7 @@ export const RapierPhysics = (): ReactNode => {
       data-rapier-network-smoothing-offset={String(sceneState.network.smoothingOffset)}
       data-rapier-network-smoothing-ticks-remaining={String(sceneState.network.smoothingTicksRemaining)}
       data-rapier-network-snap-correction-distance={String(sceneState.network.snapCorrectionDistance)}
-      renderer={rendererOptions}
+      context={rendererOptions}
       style={orbitCanvasStyle}
     >
       {scene}

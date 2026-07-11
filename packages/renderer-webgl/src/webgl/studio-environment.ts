@@ -1,6 +1,6 @@
 import type { Vec3 } from "@royal/renderer-core";
-import { dotVec3, normalizeVec3 } from "../math/mat4";
-import { IBL_SPECULAR_TEXTURE_UNIT } from "./ibl-uniforms";
+import { dotVec3 } from "../math/mat4";
+import { prepareTextureUpload } from "./imperative-state";
 
 export type StudioEnvironmentSpecularResource = {
   readonly key: string;
@@ -22,7 +22,15 @@ export const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
 
 export const STUDIO_ENVIRONMENT_SPECULAR_KEY = "environment:studio:specular";
 
-const STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES = [8, 4, 2, 1] as const;
+const STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES = [32, 16, 8, 4, 2, 1] as const;
+
+const normalizedStudioDirection = (x: number, y: number, z: number): Vec3 => {
+  const inverseLength = 1 / Math.hypot(x, y, z);
+  return [x * inverseLength, y * inverseLength, z * inverseLength];
+};
+
+const STUDIO_KEY_DIRECTION = normalizedStudioDirection(-0.34, 0.62, 0.71);
+const STUDIO_STRIP_DIRECTION = normalizedStudioDirection(0.76, 0.18, 0.62);
 
 const studioEnvironmentFaceDirection = (
   faceIndex: number,
@@ -35,17 +43,17 @@ const studioEnvironmentFaceDirection = (
 
   switch (faceIndex) {
     case 0:
-      return normalizeVec3([1, -v, -u]);
+      return normalizedStudioDirection(1, -v, -u);
     case 1:
-      return normalizeVec3([-1, -v, u]);
+      return normalizedStudioDirection(-1, -v, u);
     case 2:
-      return normalizeVec3([u, 1, v]);
+      return normalizedStudioDirection(u, 1, v);
     case 3:
-      return normalizeVec3([u, -1, -v]);
+      return normalizedStudioDirection(u, -1, -v);
     case 4:
-      return normalizeVec3([u, -v, 1]);
+      return normalizedStudioDirection(u, -v, 1);
     default:
-      return normalizeVec3([-u, -v, -1]);
+      return normalizedStudioDirection(-u, -v, -1);
   }
 };
 
@@ -57,8 +65,8 @@ const studioEnvironmentRadiance = (direction: Vec3, mipIndex: number): Vec3 => {
     0.18 + sky * 0.20,
     0.21 + sky * 0.24,
   ];
-  const key = Math.pow(Math.max(0, dotVec3(direction, normalizeVec3([-0.34, 0.62, 0.71]))), 42);
-  const strip = Math.pow(Math.max(0, dotVec3(direction, normalizeVec3([0.76, 0.18, 0.62]))), 30);
+  const key = Math.pow(Math.max(0, dotVec3(direction, STUDIO_KEY_DIRECTION)), 42);
+  const strip = Math.pow(Math.max(0, dotVec3(direction, STUDIO_STRIP_DIRECTION)), 30);
   const ceiling = Math.pow(Math.max(0, direction[1]), 6);
   const raw: Vec3 = [
     base[0] + key * 1.95 + strip * 0.62 + ceiling * 0.22,
@@ -75,9 +83,9 @@ const studioEnvironmentRadiance = (direction: Vec3, mipIndex: number): Vec3 => {
   ];
 };
 
-const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): Uint8Array => {
+const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): Float32Array => {
   const size = STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES[mipIndex] ?? 1;
-  const data = new Uint8Array(size * size * 4);
+  const data = new Float32Array(size * size * 3);
   let offset = 0;
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -85,11 +93,10 @@ const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): 
         studioEnvironmentFaceDirection(faceIndex, x, y, size),
         mipIndex,
       );
-      data[offset] = Math.round(Math.min(Math.max(radiance[0], 0), 1) * 255);
-      data[offset + 1] = Math.round(Math.min(Math.max(radiance[1], 0), 1) * 255);
-      data[offset + 2] = Math.round(Math.min(Math.max(radiance[2], 0), 1) * 255);
-      data[offset + 3] = 255;
-      offset += 4;
+      data[offset] = Math.max(radiance[0], 0);
+      data[offset + 1] = Math.max(radiance[1], 0);
+      data[offset + 2] = Math.max(radiance[2], 0);
+      offset += 3;
     }
   }
 
@@ -104,9 +111,8 @@ export const createStudioEnvironmentSpecularTexture = (
 ): StudioEnvironmentSpecularResource => {
   const gl = context.gl;
   const texture = context.createTexture();
-  gl.activeTexture(gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
+  prepareTextureUpload(gl, false);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   for (const [mipIndex, mipSize] of STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.entries()) {
     for (let faceIndex = 0; faceIndex < 6; faceIndex += 1) {
@@ -114,12 +120,12 @@ export const createStudioEnvironmentSpecularTexture = (
       gl.texImage2D(
         gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex,
         mipIndex,
-        gl.RGBA,
+        gl.RGB9_E5,
         mipSize,
         mipSize,
         0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
+        gl.RGB,
+        gl.FLOAT,
         data,
       );
     }

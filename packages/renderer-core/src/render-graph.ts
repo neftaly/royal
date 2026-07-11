@@ -1,79 +1,55 @@
-import type { Camera } from './camera';
+import type { CameraSource } from './camera-resource';
+import { frozenRgba } from './descriptor-values';
 import type { EnvironmentLight } from './environment-light';
 import type { Rgba } from './primitives';
 import type { RenderNode } from './render-node';
 
-const TRANSPARENT_BLACK: Rgba = [0, 0, 0, 0];
+const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
 
-export type RenderPassClear = 'color-depth' | 'color' | 'depth' | 'none';
-export type RenderToneMapping = 'none' | 'aces';
+export type RenderToneMapping = 'linear-clamp' | 'aces-fitted' | 'pbr-neutral';
 
-export type RenderElement = Scene | RenderPass | RenderNode;
-/** Root render description accepted by renderer roots. */
-export type RenderRoot = Scene;
-
-/** One camera plus drawable scene nodes. */
-export interface RenderPass {
-  readonly kind: 'pass';
-  readonly camera: Camera;
-  readonly children: readonly RenderNode[];
-  readonly clear: RenderPassClear;
-  readonly clearColor: Rgba;
-  readonly depthTest: boolean;
-  readonly environment?: EnvironmentLight;
-  readonly exposure?: number;
-  readonly toneMapping?: RenderToneMapping;
-}
-
-export interface RenderPassOptions {
-  readonly camera: Camera;
-  readonly children: readonly RenderNode[];
-  /** Which buffers this pass clears before drawing. */
-  readonly clear?: RenderPassClear;
-  /** @defaultValue `[0, 0, 0, 0]` */
-  readonly clearColor?: Rgba;
-  /** Enables depth testing while drawing this pass. */
-  readonly depthTest?: boolean;
-  /** Scene-authored image-based environment lighting for this pass. */
-  readonly environment?: EnvironmentLight;
-  /** Linear exposure multiplier applied to lit surface output. */
-  readonly exposure?: number;
-  /** Tone mapping applied to lit surface output. Defaults to Three-style none. */
-  readonly toneMapping?: RenderToneMapping;
-}
-
-const finiteExposure = (value: number | undefined): number | undefined =>
-  value === undefined || !Number.isFinite(value) ? undefined : Math.max(0, value);
-
-/** Ordered render passes for a frame. */
-export interface Scene {
+/** Public normalized scene description accepted by renderer roots. */
+export interface RenderRoot {
   readonly kind: 'scene';
-  readonly children: readonly RenderPass[];
+  readonly camera: CameraSource;
+  readonly nodes: readonly RenderNode[];
+  readonly clearColor: Rgba;
+  readonly environment?: EnvironmentLight;
+  readonly exposureEv100?: number;
+  readonly toneMapping?: RenderToneMapping;
 }
 
 export interface SceneOptions {
-  readonly children: readonly RenderPass[];
+  readonly camera: CameraSource;
+  readonly nodes: readonly RenderNode[];
+  /** @defaultValue `[0, 0, 0, 0]` */
+  readonly clearColor?: Rgba;
+  readonly environment?: EnvironmentLight;
+  /** Camera exposure value at ISO 100. Higher values produce a darker image. */
+  readonly exposureEv100?: number;
+  /** Display transform applied to scene-linear output. */
+  readonly toneMapping?: RenderToneMapping;
 }
 
-/** Creates a render pass. */
-export const pass = (options: RenderPassOptions): RenderPass => {
-  const exposure = finiteExposure(options.exposure);
-
-  return {
-    kind: 'pass',
-    camera: options.camera,
-    children: options.children,
-    clear: options.clear ?? 'color-depth',
-    clearColor: options.clearColor ?? TRANSPARENT_BLACK,
-    depthTest: options.depthTest ?? true,
-    ...(options.environment === undefined ? {} : { environment: options.environment }),
-    ...(exposure === undefined ? {} : { exposure }),
-    ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping })
-  };
+const finiteExposureEv100 = (value: number | undefined): number | undefined => {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value)) throw new Error('scene exposureEv100 must be finite');
+  return value;
 };
 
-/** Creates a render scene. */
-export const scene = (options: SceneOptions): RenderRoot => ({
-  kind: 'scene',
-  children: options.children
-});
+/** Creates one public scene. Multipass planning remains renderer-private. */
+export const scene = (options: SceneOptions): RenderRoot => {
+  const exposureEv100 = finiteExposureEv100(options.exposureEv100);
+
+  return Object.freeze({
+    kind: 'scene',
+    camera: options.camera,
+    nodes: Object.freeze([...options.nodes]),
+    clearColor: options.clearColor === undefined
+      ? TRANSPARENT_BLACK
+      : frozenRgba(options.clearColor, 'scene clearColor'),
+    ...(options.environment === undefined ? {} : { environment: options.environment }),
+    ...(exposureEv100 === undefined ? {} : { exposureEv100 }),
+    ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping })
+  });
+};

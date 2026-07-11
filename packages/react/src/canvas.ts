@@ -1,9 +1,7 @@
-import type { RenderRoot } from "@royal/renderer-core";
-import type { PickInput, PickResult } from "@royal/renderer-core";
+import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createContext,
   createElement,
-  isValidElement,
   useCallback,
   useContext,
   useLayoutEffect,
@@ -15,133 +13,52 @@ import {
   type ReactNode,
 } from "react";
 import {
+  createCanvasPointerInteractionIdentity,
   createCanvasPointerInteractionState,
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
   type CanvasPointerInteractionState,
   type CanvasPointerInteractionAction,
 } from "./canvas-pointer-interaction";
-import { createFrameLoop, FrameLoopContext } from "./frame";
+import { createFrameLoop, FrameLoopContext, type FrameLoop } from "./frame";
 import {
-  isRenderRootDescriptor,
-  isRoyalRendererJsxElement,
-  type RoyalRendererJsxElement,
-} from "./renderer-descriptor";
+  createRoyalScenePickingIndex,
+  createRoyalScenePointerEventRegistry,
+  type CanvasInteractions,
+  type RoyalScenePointerEventRegistry,
+} from "./scene-interactions";
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
-  type RoyalPointerEventType,
 } from "./picking-events";
-import { createRoyalRendererTree, type RoyalRendererTree } from "./renderer-tree";
 import {
+  acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,
   type RoyalRendererRoot,
+  type RoyalRendererFrameClock,
+  type RoyalRendererRootLifecycleSnapshot,
+  type RoyalRendererRootContextOptions,
   type RoyalRendererRootOptions,
 } from "./root";
-
-type CanvasChild = ReactNode | RoyalRendererJsxElement;
-type CanvasChildren = CanvasChild | readonly CanvasChildren[];
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
 const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
 
-export type CanvasRendererOptions = RoyalRendererRootOptions;
+export type CanvasContextOptions = RoyalRendererRootContextOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
-  /** Runtime-validated as exactly one Royal scene, plus optional React-only side-effect children. */
-  readonly children: CanvasChildren;
+  /** Ordinary React controls and imperative controllers rendered under Canvas context. */
+  readonly children?: ReactNode;
+  /** React-owned pointer handlers keyed by stable pickingId values in the pure scene. */
+  readonly interactions?: CanvasInteractions;
   readonly ref?: Ref<HTMLCanvasElement>;
-  readonly renderer?: CanvasRendererOptions;
+  /** WebGL context creation policy. */
+  readonly context?: CanvasContextOptions;
+  /** Pure renderer data, eagerly lowered before Canvas renders. */
+  readonly scene: RenderRoot;
 }
-
-const isReactRendererScene = (value: unknown): value is ReactNode =>
-  isValidElement(value) && value.type === "scene";
-
-const isCanvasChildrenArray = (
-  value: CanvasChildren,
-): value is readonly CanvasChildren[] => Array.isArray(value);
-
-const toCanvasChildArray = (value: CanvasChildren): readonly CanvasChild[] => {
-  if (isCanvasChildrenArray(value)) {
-    return value.flatMap(toCanvasChildArray);
-  }
-
-  return [value];
-};
-
-const isEmptyCanvasChild = (value: unknown): boolean =>
-  value === null ||
-  value === undefined ||
-  typeof value === "boolean" ||
-  (typeof value === "string" && value.trim() === "");
-
-const describeCanvasChild = (value: unknown): string => {
-  if (isRoyalRendererJsxElement(value)) {
-    return `kind "${String(value.kind)}"`;
-  }
-
-  if (typeof value === "object" && value !== null && "$$typeof" in value) {
-    return "React element";
-  }
-
-  return value === null ? "null" : typeof value;
-};
-
-export const resolveCanvasChildren = (
-  children: CanvasChildren,
-): {
-  readonly controls: readonly ReactNode[];
-  readonly sceneChild: ReactNode | RenderRoot;
-} => {
-  const explicitSceneChildren: (ReactNode | RenderRoot)[] = [];
-  const implicitSceneCandidates: ReactNode[] = [];
-  const nonSceneChildren: ReactNode[] = [];
-
-  for (const child of toCanvasChildArray(children)) {
-    if (isEmptyCanvasChild(child)) {
-      continue;
-    }
-
-    if (isRenderRootDescriptor(child) || isReactRendererScene(child)) {
-      explicitSceneChildren.push(child);
-      continue;
-    }
-
-    if (isRoyalRendererJsxElement(child)) {
-      throw new Error(`Canvas expects renderer scene children, not ${describeCanvasChild(child)}`);
-    }
-
-    if (isValidElement(child)) {
-      implicitSceneCandidates.push(child);
-    }
-
-    nonSceneChildren.push(child);
-  }
-
-  if (explicitSceneChildren.length > 1) {
-    throw new Error("Canvas expects exactly one renderer scene child");
-  }
-
-  const explicitSceneChild = explicitSceneChildren[0];
-  if (explicitSceneChild !== undefined) {
-    return { controls: nonSceneChildren, sceneChild: explicitSceneChild };
-  }
-
-  const implicitSceneChild = implicitSceneCandidates[0];
-  if (
-    implicitSceneChild !== undefined &&
-    implicitSceneCandidates.length === 1 &&
-    nonSceneChildren.length === 1
-  ) {
-    return { controls: [], sceneChild: implicitSceneChild };
-  }
-
-  throw new Error(
-    "Canvas expects exactly one renderer scene child. Add an explicit <scene> when rendering React controls beside a scene component.",
-  );
-};
 
 export const useCanvasElement = (): HTMLCanvasElement | null => {
   const canvas = useContext(CanvasElementContext);
@@ -161,6 +78,19 @@ export const useCanvasRoot = (): RoyalRendererRoot | null => {
   return root;
 };
 
+/** @internal Applies renderer availability to the retained Canvas frame loop. */
+export const applyCanvasRendererLifecycle = (
+  frameLoop: FrameLoop,
+  reportError: (error: Error) => void,
+  snapshot: RoyalRendererRootLifecycleSnapshot,
+): void => {
+  const available = snapshot.lifecycle === "available";
+  frameLoop.setPaused(!available);
+  if (snapshot.lifecycle === "failed") {
+    reportError(new Error(snapshot.error ?? "Royal renderer context restoration failed"));
+  }
+};
+
 /** Returns a stable callback that requests one render of the current Canvas root. */
 export const useInvalidate = (): (() => void) => {
   const root = useCanvasRoot();
@@ -177,10 +107,7 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toRendererRootOptions = ({ backend, context }: CanvasRendererOptions): RoyalRendererRootOptions => ({
-  ...(backend === undefined ? {} : { backend }),
-  ...(context === undefined ? {} : { context }),
-});
+const toRendererRootOptions = (context: CanvasContextOptions): RoyalRendererRootOptions => ({ context });
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -200,55 +127,158 @@ export type CanvasPointerInteractionStateRef = {
   current: CanvasPointerInteractionState;
 };
 
+export type CanvasSceneInteractionsRef = {
+  current: RoyalScenePointerEventRegistry;
+};
+
+export type CanvasLastPointerEventRef = {
+  current: PointerEvent | undefined;
+};
+
 export interface CanvasPointerEventBindings {
   readonly canvas: HTMLCanvasElement;
-  readonly dispatchRoyalPointerEvent: (
-    type: RoyalPointerEventType,
-    nativeEvent: PointerEvent,
-    picked: CanvasPickedPointerTarget,
-  ) => void;
+  readonly lastPointerEventRef: CanvasLastPointerEventRef;
   readonly pointerInteractionStateRef: CanvasPointerInteractionStateRef;
-  readonly rendererTree: Pick<RoyalRendererTree, "hasPointerEventTargets" | "pointerEventTarget">;
+  readonly sceneInteractionsRef: CanvasSceneInteractionsRef;
   readonly root: Pick<RoyalRendererRoot, "pick">;
 }
 
+export const reconcileCanvasPointerInteractionScene = ({
+  lastPointerEventRef,
+  pointerInteractionStateRef,
+  sceneInteractions,
+  sceneInteractionsRef,
+}: {
+  readonly lastPointerEventRef: CanvasLastPointerEventRef;
+  readonly pointerInteractionStateRef: CanvasPointerInteractionStateRef;
+  readonly sceneInteractions: RoyalScenePointerEventRegistry;
+  readonly sceneInteractionsRef: CanvasSceneInteractionsRef;
+}): void => {
+  sceneInteractionsRef.current = sceneInteractions;
+  const hovered = pointerInteractionStateRef.current.hoveredTarget;
+  const pickingId = hovered?.identity.target;
+  if (hovered === undefined || typeof pickingId !== "string") return;
+
+  const nextTarget = sceneInteractions.pointerEventTarget(pickingId);
+  if (nextTarget !== undefined) {
+    if (nextTarget !== hovered.target) {
+      pointerInteractionStateRef.current = {
+        ...pointerInteractionStateRef.current,
+        hoveredTarget: { ...hovered, target: nextTarget },
+      };
+    }
+    return;
+  }
+
+  const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, {
+    type: "pointerleave",
+  });
+  pointerInteractionStateRef.current = result.state;
+  const nativeEvent = lastPointerEventRef.current;
+  if (nativeEvent === undefined) return;
+  for (const dispatch of result.dispatches) {
+    handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type)?.(
+      createRoyalPointerEvent({
+        hit: dispatch.picked.hit,
+        nativeEvent,
+        type: dispatch.type,
+      }),
+    );
+  }
+};
+
 export const attachCanvasPointerEventHandlers = ({
   canvas,
-  dispatchRoyalPointerEvent,
+  lastPointerEventRef,
   pointerInteractionStateRef,
-  rendererTree,
+  sceneInteractionsRef,
   root,
 }: CanvasPointerEventBindings): (() => void) => {
+  let nextPointerMoveOrder = 0;
+  let pointerMoveFrame: number | undefined;
+  const pendingPointerMoves = new Map<number, {
+    readonly event: PointerEvent;
+    readonly order: number;
+  }>();
   const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined => {
-    if (!rendererTree.hasPointerEventTargets()) return undefined;
+    const sceneInteractions = sceneInteractionsRef.current;
+    if (!sceneInteractions.hasPointerEventTargets) return undefined;
 
     const hit = root.pick(event);
     if (hit === undefined) return undefined;
 
-    const target = rendererTree.pointerEventTarget(hit.target.node);
+    const target = sceneInteractions.pointerEventTarget(hit.target.id);
     return target === undefined
       ? undefined
-      : { hit, identity: target, node: hit.target.node, target };
+      : {
+        hit,
+        identity: createCanvasPointerInteractionIdentity(hit, target),
+        node: hit.target.node,
+        target,
+      };
   };
   const applyPointerInteraction = (
     event: PointerEvent,
     action: CanvasPointerInteractionAction,
   ): void => {
+    lastPointerEventRef.current = event;
     const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, action);
     pointerInteractionStateRef.current = result.state;
     for (const dispatch of result.dispatches) {
-      dispatchRoyalPointerEvent(dispatch.type, event, dispatch.picked);
+      const handler = handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type);
+      handler?.(createRoyalPointerEvent({
+        hit: dispatch.picked.hit,
+        nativeEvent: event,
+        type: dispatch.type,
+      }));
+    }
+  };
+
+  const flushPendingPointerMoves = (): void => {
+    if (pointerMoveFrame !== undefined && typeof globalThis.cancelAnimationFrame === "function") {
+      globalThis.cancelAnimationFrame(pointerMoveFrame);
+    }
+    pointerMoveFrame = undefined;
+    const pending = Array.from(pendingPointerMoves.values())
+      .sort((left, right) => left.order - right.order);
+    pendingPointerMoves.clear();
+    for (const { event } of pending) {
+      applyPointerInteraction(event, {
+        picked: pickedTargetAt(event),
+        type: "pointermove",
+      });
     }
   };
 
   const handlePointerMove = (event: PointerEvent): void => {
-    applyPointerInteraction(event, {
-      picked: pickedTargetAt(event),
-      type: "pointermove",
+    // Active drags stay synchronous so object handlers can still consume the
+    // native move before bubble-phase camera/gesture controls. Hover-only moves
+    // are safe to collapse to the newest position for each pointer per frame.
+    if (event.buttons !== 0) {
+      flushPendingPointerMoves();
+      applyPointerInteraction(event, {
+        picked: pickedTargetAt(event),
+        type: "pointermove",
+      });
+      return;
+    }
+    if (typeof globalThis.requestAnimationFrame !== "function") {
+      applyPointerInteraction(event, {
+        picked: pickedTargetAt(event),
+        type: "pointermove",
+      });
+      return;
+    }
+    pendingPointerMoves.set(event.pointerId, {
+      event,
+      order: nextPointerMoveOrder,
     });
+    nextPointerMoveOrder += 1;
+    pointerMoveFrame ??= globalThis.requestAnimationFrame(flushPendingPointerMoves);
   };
 
   const handlePointerDown = (event: PointerEvent): void => {
+    flushPendingPointerMoves();
     applyPointerInteraction(event, {
       picked: pickedTargetAt(event),
       pointerId: event.pointerId,
@@ -257,6 +287,7 @@ export const attachCanvasPointerEventHandlers = ({
   };
 
   const handlePointerUp = (event: PointerEvent): void => {
+    flushPendingPointerMoves();
     applyPointerInteraction(event, {
       button: event.button,
       picked: pickedTargetAt(event),
@@ -266,55 +297,70 @@ export const attachCanvasPointerEventHandlers = ({
   };
 
   const handlePointerLeave = (event: PointerEvent): void => {
+    flushPendingPointerMoves();
     applyPointerInteraction(event, { type: "pointerleave" });
   };
 
   const handlePointerCancel = (event: PointerEvent): void => {
+    flushPendingPointerMoves();
     applyPointerInteraction(event, {
       pointerId: event.pointerId,
       type: "pointercancel",
     });
   };
 
-  canvas.addEventListener("pointermove", handlePointerMove);
-  canvas.addEventListener("pointerdown", handlePointerDown);
-  canvas.addEventListener("pointerup", handlePointerUp);
-  canvas.addEventListener("pointerleave", handlePointerLeave);
-  canvas.addEventListener("pointercancel", handlePointerCancel);
+  // Picking owns the capture phase so a scene handler can consume an event
+  // before bubble-phase controls, independent of listener registration order.
+  canvas.addEventListener("pointermove", handlePointerMove, true);
+  canvas.addEventListener("pointerdown", handlePointerDown, true);
+  canvas.addEventListener("pointerup", handlePointerUp, true);
+  canvas.addEventListener("pointerleave", handlePointerLeave, true);
+  canvas.addEventListener("pointercancel", handlePointerCancel, true);
   return () => {
-    canvas.removeEventListener("pointermove", handlePointerMove);
-    canvas.removeEventListener("pointerdown", handlePointerDown);
-    canvas.removeEventListener("pointerup", handlePointerUp);
-    canvas.removeEventListener("pointerleave", handlePointerLeave);
-    canvas.removeEventListener("pointercancel", handlePointerCancel);
+    if (pointerMoveFrame !== undefined && typeof globalThis.cancelAnimationFrame === "function") {
+      globalThis.cancelAnimationFrame(pointerMoveFrame);
+    }
+    pointerMoveFrame = undefined;
+    pendingPointerMoves.clear();
+    canvas.removeEventListener("pointermove", handlePointerMove, true);
+    canvas.removeEventListener("pointerdown", handlePointerDown, true);
+    canvas.removeEventListener("pointerup", handlePointerUp, true);
+    canvas.removeEventListener("pointerleave", handlePointerLeave, true);
+    canvas.removeEventListener("pointercancel", handlePointerCancel, true);
     pointerInteractionStateRef.current = reduceCanvasPointerInteraction(
       pointerInteractionStateRef.current,
       { type: "reset" },
     ).state;
+    lastPointerEventRef.current = undefined;
   };
 };
 
 /** Canvas component that renders one Royal scene child. */
 export const Canvas = ({
   children,
+  interactions,
   ref,
-  renderer,
+  context,
+  scene,
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameLoop = useMemo(() => createFrameLoop(), []);
-  const rendererTree = useMemo(() => createRoyalRendererTree(), []);
+  const rendererFrameClockRef = useRef<RoyalRendererFrameClock | undefined>(undefined);
+  const [rootError, setRootError] = useState<unknown>(null);
+  const frameLoop = useMemo(() => createFrameLoop((error) => {
+    const failure = error ?? new Error("Royal frame callback failed without an error value");
+    setRootError((current: unknown) => current ?? failure);
+  }), []);
+  const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
+  const sceneInteractions = useMemo(
+    () => createRoyalScenePointerEventRegistry(scenePickingIndex, interactions),
+    [interactions, scenePickingIndex],
+  );
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
-  const [rootError, setRootError] = useState<unknown>(null);
-  const { controls, sceneChild } = resolveCanvasChildren(children);
-  const rendererOptions = renderer;
-  const rendererContextAlpha = rendererOptions?.context?.alpha;
-  const rendererContextAntialias = rendererOptions?.context?.antialias;
-  const rendererContextPreserveDrawingBuffer = rendererOptions?.context?.preserveDrawingBuffer;
-  const rendererBackend = rendererOptions?.backend;
-  const hasRendererOptions = rendererOptions !== undefined;
-  const hasRendererContext = rendererOptions?.context !== undefined;
+  const contextAlpha = context?.alpha;
+  const contextAntialias = context?.antialias;
+  const hasContextOptions = context !== undefined;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
@@ -322,29 +368,16 @@ export const Canvas = ({
   }, [ref]);
 
   const memoizedRendererOptions = useMemo(
-    () => !hasRendererOptions
+    () => !hasContextOptions
       ? undefined
       : toRendererRootOptions({
-        ...(hasRendererContext
-          ? {
-            context: {
-              ...(rendererContextAlpha === undefined ? {} : { alpha: rendererContextAlpha }),
-              ...(rendererContextAntialias === undefined ? {} : { antialias: rendererContextAntialias }),
-              ...(rendererContextPreserveDrawingBuffer === undefined
-                ? {}
-                : { preserveDrawingBuffer: rendererContextPreserveDrawingBuffer }),
-            },
-          }
-          : {}),
-        ...(rendererBackend === undefined ? {} : { backend: rendererBackend }),
+        ...(contextAlpha === undefined ? {} : { alpha: contextAlpha }),
+        ...(contextAntialias === undefined ? {} : { antialias: contextAntialias }),
       }),
     [
-      hasRendererContext,
-      hasRendererOptions,
-      rendererBackend,
-      rendererContextAlpha,
-      rendererContextAntialias,
-      rendererContextPreserveDrawingBuffer,
+      contextAlpha,
+      contextAntialias,
+      hasContextOptions,
     ],
   );
   const canvasElementNode = createElement("canvas", {
@@ -353,35 +386,58 @@ export const Canvas = ({
   });
 
   const pointerInteractionStateRef = useRef(createCanvasPointerInteractionState());
+  const sceneInteractionsRef = useRef(sceneInteractions);
+  const lastPointerEventRef = useRef<PointerEvent | undefined>(undefined);
 
-  const dispatchRoyalPointerEvent = useCallback((
-    type: RoyalPointerEventType,
-    nativeEvent: PointerEvent,
-    picked: CanvasPickedPointerTarget,
-  ): void => {
-    const target = rendererTree.pointerEventTarget(picked.node) ?? picked.target;
-    const handler = handlerForRoyalPointerEvent(target, type);
-    if (handler === undefined) return;
-
-    handler(createRoyalPointerEvent({
-      hit: picked.hit,
-      nativeEvent,
-      type,
-    }));
-  }, [rendererTree]);
-
-  useLayoutEffect(() => () => {
-    rendererTree.dispose();
-  }, [rendererTree]);
+  useLayoutEffect(() => {
+    reconcileCanvasPointerInteractionScene({
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractions,
+      sceneInteractionsRef,
+    });
+  }, [sceneInteractions]);
 
   useLayoutEffect(() => () => {
     frameLoop.dispose();
   }, [frameLoop]);
 
   useLayoutEffect(() => frameLoop.afterFrame(() => {
-    rendererTree.flushFrame();
-    canvasRoot?.flushInvalidated();
-  }), [canvasRoot, frameLoop, rendererTree]);
+    const rendererFrameClock = rendererFrameClockRef.current;
+    if (rendererFrameClock === undefined) canvasRoot?.flushInvalidated();
+    else rendererFrameClock.flushInvalidated();
+  }), [canvasRoot, frameLoop]);
+
+  useLayoutEffect(() => {
+    if (canvasRoot === null) return undefined;
+    return canvasRoot.observeLifecycle((snapshot) => {
+      applyCanvasRendererLifecycle(frameLoop, (failure) => {
+        setRootError((current: unknown) => current ?? failure);
+      }, snapshot);
+    });
+  }, [canvasRoot, frameLoop]);
+
+  // Exactly one window-frame scheduler owns a Canvas at a time. A static
+  // Canvas leaves demand scheduling with the renderer; the first useFrame
+  // subscriber takes ownership until the active run ends.
+  useLayoutEffect(() => {
+    if (canvasRoot === null) return undefined;
+
+    const stopObserving = frameLoop.observeActivity((active) => {
+      if (active) {
+        rendererFrameClockRef.current ??= acquireExternalRenderClockForRoyalRoot(canvasRoot);
+      } else {
+        rendererFrameClockRef.current?.release();
+        rendererFrameClockRef.current = undefined;
+      }
+    });
+
+    return () => {
+      stopObserving();
+      rendererFrameClockRef.current?.release();
+      rendererFrameClockRef.current = undefined;
+    };
+  }, [canvasRoot, frameLoop]);
 
   // React owns the canvas element; Royal owns its WebGL root.
   useLayoutEffect(() => {
@@ -406,36 +462,8 @@ export const Canvas = ({
   }, [memoizedRendererOptions]);
 
   useLayoutEffect(() => {
-    const hasRootError = rootError !== null;
-
-    if (isRenderRootDescriptor(sceneChild)) {
-      rendererTree.setTarget(canvasRoot, true);
-      rendererTree.render(null);
-      if (!hasRootError && canvasRoot !== null) {
-        canvasRoot.render(sceneChild);
-      }
-      return;
-    }
-
-    // Reconcile with drawing paused, then publish the latest descriptor graph
-    // exactly once. This also hands a cached scene to a newly attached root
-    // when React has no host changes to commit.
-    rendererTree.setTarget(canvasRoot, true);
-    rendererTree.render(createElement(
-      FrameLoopContext.Provider,
-      { value: frameLoop },
-      createElement(
-        CanvasElementContext.Provider,
-        { value: canvasElement },
-        createElement(
-          CanvasRootContext.Provider,
-          { value: canvasRoot },
-          sceneChild,
-        ),
-      ),
-    ));
-    rendererTree.setTarget(canvasRoot, hasRootError);
-  }, [canvasElement, canvasRoot, frameLoop, rendererTree, rootError, sceneChild]);
+    if (rootError === null && canvasRoot !== null) canvasRoot.render(scene);
+  }, [canvasRoot, rootError, scene]);
 
   useLayoutEffect(() => {
     const canvas = canvasElement;
@@ -444,16 +472,14 @@ export const Canvas = ({
 
     return attachCanvasPointerEventHandlers({
       canvas,
-      dispatchRoyalPointerEvent,
+      lastPointerEventRef,
       pointerInteractionStateRef,
-      rendererTree,
+      sceneInteractionsRef,
       root,
     });
   }, [
     canvasElement,
     canvasRoot,
-    dispatchRoyalPointerEvent,
-    rendererTree,
   ]);
 
   if (rootError !== null) {
@@ -470,7 +496,7 @@ export const Canvas = ({
         CanvasRootContext.Provider,
         { value: canvasRoot },
         canvasElementNode,
-        ...controls,
+        children,
       ),
     ),
   );

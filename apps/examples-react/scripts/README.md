@@ -59,7 +59,7 @@ pnpm --filter @royal/examples-react bench:examples
 ```
 
 The default mode is `quick`: product routes, short frame windows, no instancing
-fuzz rows, no `gltf-kitchen-sink-slow`, and no XR lab route. Use
+fuzz rows, one manifest-selected glTF lab case, and no XR lab route. Use
 `EXAMPLES_BENCH_MODE=full` for heavier product coverage, `labs` for explicit lab
 routes such as `webxr-vr`, or `all` when you really want every route. Use
 `EXAMPLES_BENCH_ROUTE=<id-or-prefix>` to narrow the run. For Quest runs, open or
@@ -90,7 +90,7 @@ Kitchen sink:
 
 ```sh
 IPAD_BENCH_HOST=<host-lan-ip> \
-pnpm --filter @royal/examples-react bench:ipad-safari -- --route=/gltf-kitchen-sink --frames=24 --warmup=8
+pnpm --filter @royal/examples-react bench:ipad-safari -- --route='/gltf-lab?case=Box' --frames=24 --warmup=8
 ```
 
 The script drives the existing Safari tab over the WebKit inspector protocol,

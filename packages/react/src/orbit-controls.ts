@@ -5,15 +5,14 @@ import {
   resolveOrbitCameraView,
   rotateOrbitCameraView,
   zoomOrbitCameraView,
-  type PerspectiveCamera,
+  createCameraViewResource,
+  type PerspectiveCameraViewResource,
   type OrbitCameraView,
   type OrbitCameraViewOptions,
-  type OrbitPerspectiveCameraOptions,
+  type OrbitVector3,
 } from "@royal/renderer-core";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { useStore } from "zustand/react";
-import { createStore, type StoreApi } from "zustand/vanilla";
-import { useCanvasElement, useInvalidate } from "./canvas";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useCanvasElement } from "./canvas";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
 
 export {
@@ -28,13 +27,6 @@ export type {
   OrbitPerspectiveCameraOptions,
   OrbitVector3,
 } from "@royal/renderer-core";
-
-export type OrbitCameraState = {
-  readonly setView: (view: OrbitCameraViewOptions) => void;
-  readonly view: OrbitCameraView;
-};
-
-export type OrbitCameraStore = StoreApi<OrbitCameraState>;
 
 export type OrbitControlsBehaviorOptions = {
   readonly enabled?: boolean | undefined;
@@ -66,25 +58,13 @@ export type OrbitControlsOptions = {
   readonly value?: OrbitCameraViewOptions;
 } & OrbitControlsBehaviorOptions;
 
-export type OrbitControlsProps = OrbitControlsOptions & {
-  readonly camera?: PerspectiveCamera | undefined;
-  readonly far?: number | undefined;
-  readonly fovY?: number | undefined;
-  readonly near?: number | undefined;
-  readonly store?: OrbitCameraStore | undefined;
+export type OrbitControlsProps = OrbitControlsBehaviorOptions & {
+  readonly orbit: OrbitCameraController;
 };
 
 type OrbitControlsViewInputs = {
   readonly defaultView?: OrbitCameraViewOptions | undefined;
   readonly value?: OrbitCameraViewOptions | undefined;
-};
-
-type OrbitCameraSyncOptions = {
-  readonly camera: PerspectiveCamera;
-  readonly far: number;
-  readonly fovY: number;
-  readonly near: number;
-  readonly store: OrbitCameraStore;
 };
 
 type DragMode = "orbit" | "pan";
@@ -116,14 +96,6 @@ type PointerContact = {
 const defaultPanSpeed = 0.0016;
 const defaultRotateSpeed = 0.006;
 const defaultZoomSpeed = 0.0018;
-
-export const createOrbitCameraStore = (initialView: OrbitCameraViewOptions): OrbitCameraStore =>
-  createStore<OrbitCameraState>()((set) => ({
-    setView: (nextView) => {
-      set({ view: resolveOrbitCameraView(nextView) });
-    },
-    view: resolveOrbitCameraView(initialView),
-  }));
 
 const resolveStartingView = (options: OrbitControlsViewInputs): OrbitCameraView => {
   const view = options.value ?? options.defaultView;
@@ -188,121 +160,87 @@ const sameOrbitCameraView = (
   left.target[1] === right.target[1] &&
   left.target[2] === right.target[2];
 
-const syncOrbitPerspectiveCameraDescriptor = (
-  camera: PerspectiveCamera,
-  options: OrbitPerspectiveCameraOptions,
-): void => {
-  const nextCamera = orbitPerspectiveCamera(options);
-  const mutableCamera = camera as MutablePerspectiveCamera;
-  mutableCamera.position = nextCamera.position;
-  mutableCamera.rotation = nextCamera.rotation;
-  mutableCamera.fovY = nextCamera.fovY;
-  mutableCamera.near = nextCamera.near;
-  mutableCamera.far = nextCamera.far;
-};
-
-export const useOrbitCameraView = (store: OrbitCameraStore): OrbitCameraView =>
-  useStore(store, (state) => state.view);
-
-export type UseOrbitCameraOptions =
-  OrbitCameraViewOptions &
-  Partial<Omit<OrbitPerspectiveCameraOptions, "view">> & {
-    readonly store?: OrbitCameraStore | undefined;
-  };
-
-export type OrbitCameraHookResult = {
-  readonly camera: PerspectiveCamera;
+export interface OrbitCameraController {
+  readonly cameraResource: PerspectiveCameraViewResource;
   readonly getView: () => OrbitCameraView;
-  readonly orbitControlsProps: Pick<OrbitControlsProps, "camera" | "far" | "fovY" | "near" | "store">;
-  readonly setView: OrbitCameraState["setView"];
-  readonly store: OrbitCameraStore;
-  readonly view: OrbitCameraView;
+  readonly setProjection: (projection: { readonly far: number; readonly fovY: number; readonly near: number }) => void;
+  readonly setView: (view: OrbitCameraViewOptions) => void;
+  readonly subscribeView: (listener: () => void) => () => void;
+}
+
+export interface UseOrbitCameraOptions {
+  readonly initial: OrbitCameraViewOptions;
+  readonly far?: number;
+  readonly fovY?: number;
+  readonly near?: number;
+}
+
+export type OrbitCameraHookResult = OrbitCameraController;
+
+const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
+  const view = resolveOrbitCameraView(input);
+  return Object.freeze({
+    distance: view.distance,
+    pitch: view.pitch,
+    target: Object.freeze([view.target[0], view.target[1], view.target[2]]) as OrbitVector3,
+    yaw: view.yaw,
+  });
 };
 
-type MutablePerspectiveCamera = {
-  -readonly [Key in keyof PerspectiveCamera]: PerspectiveCamera[Key];
+const writeOrbitCamera = (resource: PerspectiveCameraViewResource, view: OrbitCameraView): void => {
+  const cosPitch = Math.cos(view.pitch);
+  resource.position[0] = view.target[0] - Math.sin(view.yaw) * cosPitch * view.distance;
+  resource.position[1] = view.target[1] + Math.sin(view.pitch) * view.distance;
+  resource.position[2] = view.target[2] + Math.cos(view.yaw) * cosPitch * view.distance;
+  resource.rotation[0] = -view.pitch;
+  resource.rotation[1] = -view.yaw;
+  resource.rotation[2] = 0;
+  resource.commit();
 };
+
+export const createOrbitCameraController = (
+  initial: OrbitCameraViewOptions,
+  projection: { readonly far: number; readonly fovY: number; readonly near: number },
+): OrbitCameraController => {
+  let view = stableOrbitView(initial);
+  const cameraResource = createCameraViewResource(orbitPerspectiveCamera({ ...projection, view }));
+  const setView = (next: OrbitCameraViewOptions): void => {
+    const resolved = stableOrbitView(next);
+    if (sameOrbitCameraView(view, resolved)) return;
+    view = resolved;
+    writeOrbitCamera(cameraResource, view);
+  };
+  return {
+    cameraResource,
+    getView: () => view,
+    setProjection: ({ far, fovY, near }) => {
+      cameraResource.far = far;
+      cameraResource.fovY = fovY;
+      cameraResource.near = near;
+      cameraResource.commit();
+    },
+    setView,
+    subscribeView: (listener) => cameraResource.subscribe(() => listener()),
+  };
+};
+
+export const useOrbitCameraView = (orbit: OrbitCameraController): OrbitCameraView =>
+  useSyncExternalStore(orbit.subscribeView, orbit.getView, orbit.getView);
 
 export const useOrbitCamera = ({
-  distance,
+  initial,
   far = 100,
   fovY = Math.PI / 4,
   near = 0.1,
-  pitch,
-  store,
-  target,
-  yaw,
 }: UseOrbitCameraOptions): OrbitCameraHookResult => {
-  const defaultStoreRef = useRef<OrbitCameraStore | undefined>(undefined);
-  if (defaultStoreRef.current === undefined) {
-    defaultStoreRef.current = createOrbitCameraStore({ distance, pitch, target, yaw });
+  const controllerRef = useRef<OrbitCameraController | undefined>(undefined);
+  if (controllerRef.current === undefined) {
+    controllerRef.current = createOrbitCameraController(initial, { far, fovY, near });
   }
-
-  const cameraStore = store ?? defaultStoreRef.current;
-  const camera = useMemo(() => orbitPerspectiveCamera({
-    far,
-    fovY,
-    near,
-    view: cameraStore.getState().view,
-  }), [cameraStore, far, fovY, near]);
-  const orbitControlsProps = useMemo(() => ({
-    camera,
-    far,
-    fovY,
-    near,
-    store: cameraStore,
-  }), [camera, cameraStore, far, fovY, near]);
-  const setView = cameraStore.getState().setView;
-
-  return {
-    camera,
-    getView: () => cameraStore.getState().view,
-    orbitControlsProps,
-    setView,
-    store: cameraStore,
-    get view() {
-      return cameraStore.getState().view;
-    },
-  };
-};
-
-const useOrbitCameraSync = (
-  syncOptions: OrbitCameraSyncOptions | undefined,
-): void => {
-  const invalidate = useInvalidate();
-
   useLayoutEffect(() => {
-    if (syncOptions === undefined) return undefined;
-
-    const {
-      camera,
-      far,
-      fovY,
-      near,
-      store,
-    } = syncOptions;
-    const scheduleRenderLatest = (): void => {
-      invalidate();
-    };
-    const applyView = (view: OrbitCameraView): void => {
-      syncOrbitPerspectiveCameraDescriptor(camera, {
-        far,
-        fovY,
-        near,
-        view,
-      });
-      scheduleRenderLatest();
-    };
-
-    applyView(store.getState().view);
-    const unsubscribe = store.subscribe((state) => {
-      applyView(state.view);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [invalidate, syncOptions]);
+    controllerRef.current?.setProjection({ far, fovY, near });
+  }, [far, fovY, near]);
+  return controllerRef.current;
 };
 
 export const createOrbitControls = (
@@ -361,6 +299,9 @@ export const createOrbitControls = (
   };
 
   const startDrag = (event: PointerEvent): void => {
+    // Picking handlers run first on Canvas and consume object interactions by
+    // preventing the native event. Do not start a competing camera gesture.
+    if (event.defaultPrevented) return;
     if (behaviorOptions.enabled === false) return;
     if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     if (activePointers.size >= 2) return;
@@ -402,6 +343,7 @@ export const createOrbitControls = (
   };
 
   const moveDrag = (event: PointerEvent): void => {
+    if (event.defaultPrevented) return;
     if (!activePointers.has(event.pointerId)) return;
     if (behaviorOptions.enabled === false) return;
 
@@ -462,6 +404,7 @@ export const createOrbitControls = (
   };
 
   const zoomView = (event: WheelEvent): void => {
+    if (event.defaultPrevented) return;
     if (behaviorOptions.enabled === false || behaviorOptions.enableZoom === false) return;
 
     event.preventDefault();
@@ -469,6 +412,7 @@ export const createOrbitControls = (
   };
 
   const blockContextMenu = (event: MouseEvent): void => {
+    if (event.defaultPrevented) return;
     if (behaviorOptions.enabled !== false && behaviorOptions.enablePan !== false) {
       event.preventDefault();
     }
@@ -530,32 +474,21 @@ export const createOrbitControls = (
 };
 
 export const OrbitControls = ({
-  camera,
-  defaultView,
   enabled,
   enablePan,
   enableRotate,
   enableZoom,
-  far = 100,
-  fovY = Math.PI / 4,
   maxDistance,
   maxPitch,
   minDistance,
   minPitch,
-  near = 0.1,
   onChange,
+  orbit,
   panSpeed,
-  store,
   rotateSpeed,
-  value,
   zoomSpeed,
 }: OrbitControlsProps): null => {
   const canvas = useCanvasElement();
-  const internalCameraStoreRef = useRef<OrbitCameraStore | undefined>(undefined);
-  if (camera !== undefined && store === undefined && internalCameraStoreRef.current === undefined) {
-    internalCameraStoreRef.current = createOrbitCameraStore(resolveStartingView({ defaultView, value }));
-  }
-  const controlsStore = store ?? (camera === undefined ? undefined : internalCameraStoreRef.current);
   const behaviorOptions = toBehaviorOptions({
     enabled,
     enablePan,
@@ -565,43 +498,22 @@ export const OrbitControls = ({
     maxPitch,
     minDistance,
     minPitch,
-    onChange: controlsStore === undefined && onChange === undefined
-      ? undefined
-      : (view) => {
-          if (value === undefined) controlsStore?.getState().setView(view);
-          onChange?.(view);
-        },
+    onChange: (view) => {
+      orbit.setView(view);
+      onChange?.(view);
+    },
     panSpeed,
     rotateSpeed,
     zoomSpeed,
   });
   const behaviorOptionsRef = useRef<OrbitControlsBehaviorOptions>(behaviorOptions);
-  const viewInputsRef = useRef<OrbitControlsViewInputs>({ defaultView, value });
   const controlsRef = useRef<OrbitControlsHandle | undefined>(undefined);
-  const startingViewRef = useRef<OrbitCameraView | undefined>(undefined);
-  const syncOptions = useMemo(() => camera === undefined || controlsStore === undefined
-    ? undefined
-    : {
-        camera,
-        far,
-        fovY,
-        near,
-        store: controlsStore,
-      }, [camera, controlsStore, far, fovY, near]);
   behaviorOptionsRef.current = behaviorOptions;
-  viewInputsRef.current = { defaultView, value };
-  startingViewRef.current ??= controlsStore?.getState().view ?? resolveStartingView(viewInputsRef.current);
-  useOrbitCameraSync(syncOptions);
 
   useEffect(() => {
     if (canvas === null) return undefined;
-    const controlsStartingView = controlsStore?.getState().view ?? viewInputsRef.current.value ?? startingViewRef.current;
-    if (controlsStartingView === undefined) {
-      throw new Error("OrbitControls expects value or defaultView");
-    }
-
     const controls = createOrbitControls(canvas, {
-      defaultView: controlsStartingView,
+      defaultView: orbit.getView(),
       ...behaviorOptionsRef.current,
     });
     controlsRef.current = controls;
@@ -610,7 +522,7 @@ export const OrbitControls = ({
       controls.dispose();
       controlsRef.current = undefined;
     };
-  }, [canvas]);
+  }, [canvas, orbit]);
 
   useEffect(() => {
     controlsRef.current?.setOptions(behaviorOptions);
@@ -625,31 +537,16 @@ export const OrbitControls = ({
     minPitch,
     onChange,
     panSpeed,
-    controlsStore,
     rotateSpeed,
     zoomSpeed,
-    value,
   ]);
 
   useEffect(() => {
-    if (controlsStore === undefined) return undefined;
-
-    controlsRef.current?.setView(controlsStore.getState().view, { clamp: false, notify: false });
-    return controlsStore.subscribe((state) => {
-      controlsRef.current?.setView(state.view, { clamp: false, notify: false });
+    controlsRef.current?.setView(orbit.getView(), { clamp: false, notify: false });
+    return orbit.subscribeView(() => {
+      controlsRef.current?.setView(orbit.getView(), { clamp: false, notify: false });
     });
-  }, [controlsStore]);
-
-  useEffect(() => {
-    if (value === undefined) return;
-
-    if (controlsStore !== undefined) {
-      controlsStore.getState().setView(value);
-      return;
-    }
-
-    controlsRef.current?.setView(value, { clamp: false, notify: false });
-  }, [controlsStore, value]);
+  }, [orbit]);
 
   return null;
 };

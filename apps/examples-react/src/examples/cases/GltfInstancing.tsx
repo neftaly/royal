@@ -1,22 +1,23 @@
 import {
   Canvas,
-  createGltfInstanceTransforms,
   OrbitControls,
   useFrame,
   useInvalidate,
   useOrbitCamera,
-  type GltfInstanceTransforms,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/react/scene';
+import {
+  createGltfInstanceTransforms,
+  directionalLight,
+  gltfInstances,
+  scene,
+  type GltfInstanceTransforms,
+} from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { productEnvironment, productFillLight, productKeyLight, productPass } from '../presentation';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
-const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.46,
-  specularIntensity: 0.82,
-});
 const cubeSources = [
   fixtureBase + 'instanced-cube-a.gltf',
   fixtureBase + 'instanced-cube-b.gltf',
@@ -137,7 +138,6 @@ const InstancedCubeAnimation = ({
 
     for (const group of groups) {
       const positions = group.instances.positions;
-      const rotations = group.instances.rotations;
       for (let index = 0; index < group.cubeInstances.length; index += 1) {
         const instance = group.cubeInstances[index]!;
         const offset = index * 3;
@@ -146,9 +146,6 @@ const InstancedCubeAnimation = ({
         positions[offset] = instance.position[0] + sway;
         positions[offset + 1] = instance.position[1] + lift;
         positions[offset + 2] = instance.position[2];
-        rotations[offset] = instance.rotation[0] + sway;
-        rotations[offset + 1] = instance.rotation[1] + elapsedSeconds * 0.18;
-        rotations[offset + 2] = instance.rotation[2] + lift * 0.32;
       }
       group.instances.commitPose();
     }
@@ -163,25 +160,6 @@ const ForcedRedraw = (): null => {
   return null;
 };
 
-const InstancedCubeField = ({
-  animate,
-  groups,
-}: {
-  readonly animate: boolean;
-  readonly groups: readonly CubeInstanceGroup[];
-}): ReactNode => (
-  <>
-    {animate ? <InstancedCubeAnimation groups={groups} /> : null}
-    {groups.map((group) => (
-      <gltfInstances
-        key={group.src}
-        instances={group.instances}
-        src={group.src}
-      />
-    ))}
-  </>
-);
-
 export const GltfInstancing = (): ReactNode => {
   const instancingConfig = instancingConfigFromLocation();
   const cubeInstances = useMemo(
@@ -190,27 +168,33 @@ export const GltfInstancing = (): ReactNode => {
   );
   const groups = useMemo(() => createCubeInstanceGroups(cubeInstances), [cubeInstances]);
   const orbit = useOrbitCamera({
-    distance: 11,
-    pitch: -0.32,
-    target: [0, 0, 0],
-    yaw: 0.42,
+    initial: { distance: 11, pitch: -0.32, target: [0, 0, 0], yaw: 0.42 },
   });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    environment: productEnvironment,
+    ...productPass,
+    nodes: [
+      directionalLight(productKeyLight),
+      directionalLight(productFillLight),
+      ...groups.map((group) => gltfInstances({
+        instances: group.instances,
+        src: group.src,
+      })),
+    ],
+  }), [groups, orbit.cameraResource]);
 
   return (
     <Canvas
       aria-label="glTF automatic instancing"
-      renderer={exampleCanvasRendererOptions}
+      context={exampleCanvasContextOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
+      scene={renderScene}
     >
-      <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
-          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          <InstancedCubeField animate={instancingConfig.animate} groups={groups} />
-        </pass>
-      </scene>
       <BenchmarkRendererSnapshot />
+      {instancingConfig.animate ? <InstancedCubeAnimation groups={groups} /> : null}
       {!instancingConfig.animate && instancingConfig.redraw ? <ForcedRedraw /> : null}
-      <OrbitControls {...orbit.orbitControlsProps} maxDistance={24} minDistance={4} />
+      <OrbitControls orbit={orbit} maxDistance={24} minDistance={4} />
     </Canvas>
   );
 };

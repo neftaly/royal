@@ -1,30 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRendererRoot } from "@royal/react";
+import { webGlRootForRoyalRoot } from "../packages/react/src/root";
 import {
-  createRendererRoot,
-  webGlRootForRoyalRoot,
-} from "@royal/react";
-import {
-  pass,
   perspectiveCamera,
   scene,
   type RenderRoot,
 } from "@royal/renderer-core";
 import { forEachFuzzCase } from "./fuzz";
-import { fakeCanvas, fakeRendererRoot } from "./react-test-fixtures";
+import { fakeCanvas } from "./react-test-fixtures";
 
 const emptyScene = (): RenderRoot => scene({
-  children: [
-    pass({
-      camera: perspectiveCamera({
-        far: 10,
-        fovY: Math.PI / 3,
-        near: 0.1,
-        position: [0, 0, 2],
-        rotation: [0, 0, 0],
-      }),
-      children: [],
-    }),
-  ],
+  camera: perspectiveCamera({
+    far: 10,
+    fovY: Math.PI / 3,
+    near: 0.1,
+    position: [0, 0, 2],
+    rotation: [0, 0, 0],
+  }),
+  nodes: [],
 });
 
 afterEach(() => {
@@ -38,7 +31,6 @@ describe("React root public API", () => {
     const root = createRendererRoot(canvas, {
       context: {
         alpha: false,
-        preserveDrawingBuffer: true,
       },
     });
     const renderRoot = emptyScene();
@@ -50,7 +42,7 @@ describe("React root public API", () => {
         options: {
           alpha: false,
           antialias: true,
-          preserveDrawingBuffer: true,
+          preserveDrawingBuffer: false,
         },
       },
     ]);
@@ -58,11 +50,10 @@ describe("React root public API", () => {
       context: {
         alpha: false,
         antialias: true,
-        preserveDrawingBuffer: true,
       },
       disposed: false,
       frame: 0,
-      latestScene: undefined,
+      lifecycle: { generation: 1, lifecycle: "available" },
     });
     expect(root.diagnostics()).toMatchObject({
       disposed: false,
@@ -82,13 +73,14 @@ describe("React root public API", () => {
     expect(root.context).toEqual({
       alpha: false,
       antialias: true,
-      preserveDrawingBuffer: true,
     });
+    expect(Object.isFrozen(root.context)).toBe(true);
+    expect(Object.isFrozen(root.snapshot())).toBe(true);
     expect(root.snapshot()).toEqual({
       context: root.context,
       disposed: false,
       frame: 1,
-      latestScene: renderRoot,
+      lifecycle: { generation: 1, lifecycle: "available" },
     });
 
     root.dispose();
@@ -96,7 +88,7 @@ describe("React root public API", () => {
       context: root.context,
       disposed: true,
       frame: 1,
-      latestScene: renderRoot,
+      lifecycle: { generation: 2, lifecycle: "disposed" },
     });
   });
 
@@ -112,40 +104,31 @@ describe("React root public API", () => {
     expect(webGlSnapshot).toHaveBeenCalledTimes(1);
   });
 
-  it("can wrap a non-WebGL backend root factory", () => {
+  it("maps backend context lifecycle into push-based neutral availability", () => {
     const canvas = fakeCanvas();
-    const context = {
-      alpha: true,
-      antialias: false,
-      preserveDrawingBuffer: false,
-    };
-    const diagnostics = { renderer: "custom-test" };
-    const root = createRendererRoot(canvas, {
-      backend: (backendCanvas) => fakeRendererRoot({
-        canvas: backendCanvas,
-        context,
-        diagnostics,
-      }),
+    const root = createRendererRoot(canvas);
+    const lifecycles: unknown[] = [];
+    const stop = root.observeLifecycle((snapshot) => {
+      lifecycles.push(snapshot);
+      expect(Object.isFrozen(snapshot)).toBe(true);
     });
-    const renderRoot = emptyScene();
 
-    expect(canvas.contextRequests).toEqual([]);
+    canvas.dispatchFakeEvent(
+      "webglcontextlost",
+      new Event("webglcontextlost", { cancelable: true }) as unknown as PointerEvent,
+    );
+    canvas.dispatchFakeEvent(
+      "webglcontextrestored",
+      new Event("webglcontextrestored") as unknown as PointerEvent,
+    );
 
-    root.render(renderRoot);
-
-    expect(root.context).toEqual({
-      alpha: true,
-      antialias: false,
-      preserveDrawingBuffer: false,
-    });
-    expect(root.diagnostics()).toBe(diagnostics);
-    expect(() => webGlRootForRoyalRoot(root)).toThrow("not backed by the WebGL renderer");
-    expect(root.snapshot()).toEqual({
-      context: root.context,
-      disposed: false,
-      frame: 1,
-      latestScene: renderRoot,
-    });
+    expect(lifecycles).toEqual([
+      { generation: 1, lifecycle: "available" },
+      { generation: 2, lifecycle: "unavailable" },
+      { generation: 2, lifecycle: "unavailable" },
+      { generation: 2, lifecycle: "available" },
+    ]);
+    stop();
   });
 
   it("rejects rendering after disposal", () => {

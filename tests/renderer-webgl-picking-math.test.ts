@@ -1,12 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { identityMat4 } from "../packages/renderer-webgl/src/math/mat4";
+import { identityMat4, type Mat4 } from "../packages/renderer-webgl/src/math/mat4";
 import {
+  createRayGeometryScratch,
+  isBoundsVisible,
+  nearestExactHitByLowerBound,
   rayAabbDistance,
-  rayGeometryDistance,
+  rayGeometryDistanceWithScratch,
   rayTriangleDistance,
+  transformBoundsInto,
+  worldBounds,
+  worldBoundsInto,
+  type Bounds3,
+  type MutableBounds3,
   type Ray,
 } from "../packages/renderer-webgl/src/math/picking";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
+
+const verticesVisible = (positions: Float32Array, matrix: Mat4): boolean => {
+  if (positions.length === 0) return false;
+  let left = true;
+  let right = true;
+  let bottom = true;
+  let top = true;
+  let near = true;
+  let far = true;
+  for (let index = 0; index < positions.length; index += 3) {
+    const x = positions[index]!;
+    const y = positions[index + 1]!;
+    const z = positions[index + 2]!;
+    const clipX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+    const clipY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+    const clipZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+    const clipW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+    left &&= clipX < -clipW;
+    right &&= clipX > clipW;
+    bottom &&= clipY < -clipW;
+    top &&= clipY > clipW;
+    near &&= clipZ < -clipW;
+    far &&= clipZ > clipW;
+  }
+  return !(left || right || bottom || top || near || far);
+};
 
 const expectHitDistance = (actual: number | undefined, expected: number): void => {
   expect(actual).toBeDefined();
@@ -54,7 +88,164 @@ const expectSameDistance = (actual: number | undefined, expected: number | undef
   expect(actual!).toBeCloseTo(expected);
 };
 
+const rayGeometryDistance = ({
+  indices,
+  mode = "triangles",
+  model,
+  positions,
+  ray,
+}: {
+  readonly indices?: Uint16Array | Uint32Array | Uint8Array;
+  readonly mode?: "triangle-fan" | "triangle-strip" | "triangles";
+  readonly model: Mat4;
+  readonly positions: Float32Array;
+  readonly ray: Ray;
+}): number | undefined => rayGeometryDistanceWithScratch(
+  positions,
+  indices,
+  mode,
+  model,
+  ray,
+  createRayGeometryScratch(),
+);
+
+const cornerTransformedBounds = (positions: Float32Array, model: Mat4): Bounds3 | undefined => {
+  if (positions.length < 3) return undefined;
+  const local = {
+    max: [-Infinity, -Infinity, -Infinity],
+    min: [Infinity, Infinity, Infinity],
+  } as MutableBounds3;
+  for (let index = 0; index < positions.length; index += 3) {
+    for (const axis of [0, 1, 2] as const) {
+      local.min[axis] = Math.min(local.min[axis], positions[index + axis]!);
+      local.max[axis] = Math.max(local.max[axis], positions[index + axis]!);
+    }
+  }
+
+  const result = {
+    max: [-Infinity, -Infinity, -Infinity],
+    min: [Infinity, Infinity, Infinity],
+  } as MutableBounds3;
+  for (let corner = 0; corner < 8; corner += 1) {
+    const x = (corner & 1) === 0 ? local.min[0] : local.max[0];
+    const y = (corner & 2) === 0 ? local.min[1] : local.max[1];
+    const z = (corner & 4) === 0 ? local.min[2] : local.max[2];
+    for (const axis of [0, 1, 2] as const) {
+      const value = model[axis]! * x
+        + model[axis + 4]! * y
+        + model[axis + 8]! * z
+        + model[axis + 12]!;
+      result.min[axis] = Math.min(result.min[axis], value);
+      result.max[axis] = Math.max(result.max[axis], value);
+    }
+  }
+  return result;
+};
+
+const expectBoundsClose = (actual: Bounds3 | undefined, expected: Bounds3 | undefined): void => {
+  if (expected === undefined) {
+    expect(actual).toBeUndefined();
+    return;
+  }
+  expect(actual).toBeDefined();
+  for (const axis of [0, 1, 2] as const) {
+    expect(actual!.min[axis]).toBeCloseTo(expected.min[axis], 10);
+    expect(actual!.max[axis]).toBeCloseTo(expected.max[axis], 10);
+  }
+};
+
 describe("renderer-webgl picking math", () => {
+  it("fuzzes cached local bounds against the previous vertex-plane visibility test", () => {
+    forEachFuzzCase({ cases: 128, seed: 0xc011_1de5 }, ({ label, random }) => {
+      const positions = new Float32Array(random.array(
+        random.int(1, 512) * 3,
+        () => random.number(-20, 20),
+      ));
+      const viewProjectionModel = random.array(16, () => random.number(-4, 4)) as Mat4;
+      const oldVisible = verticesVisible(positions, viewProjectionModel);
+      const boundsVisible = isBoundsVisible(worldBounds(positions, identityMat4()), viewProjectionModel);
+
+      if (oldVisible) expect(boundsVisible, label).toBe(true);
+    });
+  });
+
+  it("fuzzes allocation-free affine world bounds against transformed local-AABB corners", () => {
+    forEachFuzzCase({ cases: 96, seed: 0xaabb_1f1e }, ({ random }) => {
+      const positions = new Float32Array(random.array(random.int(1, 2_000) * 3, () => random.number(-100, 100)));
+      const model: Mat4 = [
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-3, 3), random.number(-3, 3), random.number(-3, 3), 0,
+        random.number(-1_000, 1_000), random.number(-1_000, 1_000), random.number(-1_000, 1_000), 1,
+      ];
+      const expected = cornerTransformedBounds(positions, model);
+      const out: MutableBounds3 = { max: [NaN, NaN, NaN], min: [NaN, NaN, NaN] };
+
+      expectBoundsClose(worldBounds(positions, model), expected);
+      expect(worldBoundsInto(out, positions, model)).toBe(out);
+      expectBoundsClose(out, expected);
+
+      const local = cornerTransformedBounds(positions, identityMat4())!;
+      expectBoundsClose(transformBoundsInto(out, local, model), expected);
+    });
+  });
+
+  it("preserves empty and malformed position policies", () => {
+    const out: MutableBounds3 = { max: [7, 8, 9], min: [4, 5, 6] };
+    expect(worldBoundsInto(out, new Float32Array(0), identityMat4())).toBeUndefined();
+    expect(out).toEqual({ max: [7, 8, 9], min: [4, 5, 6] });
+    expect(worldBounds(new Float32Array([1, 2]), identityMat4())).toBeUndefined();
+
+    const malformed = worldBounds(new Float32Array([1, 2, 3, 4]), identityMat4());
+    expect(malformed).toBeDefined();
+    expect([...malformed!.min, ...malformed!.max].every(Number.isNaN)).toBe(true);
+  });
+
+  it("fuzzes lower-bound pruning against exhaustive nearest-hit selection", () => {
+    forEachFuzzCase({ cases: 64, seed: 0xb04d5e1e }, ({ random }) => {
+      const candidates = random.array(random.int(1, 80), (ordinal) => {
+        const distance = random.number(0.1, 200);
+        return {
+          distance,
+          lowerBound: random.number(0, distance),
+          ordinal,
+        };
+      });
+      const expected = candidates.reduce((best, candidate) =>
+        candidate.distance < best.distance ? candidate : best);
+
+      const actual = nearestExactHitByLowerBound(
+        candidates,
+        (candidate) => candidate.lowerBound,
+        (candidate) => candidate,
+        (candidate) => candidate.distance,
+      );
+      expect(actual).toBe(expected);
+    });
+  });
+
+  it("stops exact tests once the next conservative bound is beyond the nearest hit", () => {
+    const candidates = [
+      { distance: 1, lowerBound: 0.5 },
+      ...Array.from({ length: 10_000 }, (_value, index) => ({
+        distance: index + 101,
+        lowerBound: index + 100,
+      })),
+    ];
+    let exactTests = 0;
+
+    expect(nearestExactHitByLowerBound(
+      candidates,
+      (candidate) => candidate.lowerBound,
+      (candidate) => {
+        exactTests += 1;
+        return candidate;
+      },
+      (candidate) => candidate.distance,
+    )).toBe(candidates[0]);
+    expect(exactTests).toBe(1);
+  });
+
   it("accepts a ray that lands on a shared triangle edge", () => {
     const ray: Ray = {
       direction: [0, 0, -1],

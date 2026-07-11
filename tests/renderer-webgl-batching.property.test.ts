@@ -3,7 +3,6 @@ import {
   directionalLight,
   gltf,
   orthographicCamera,
-  pass,
   scene,
   type RenderNode,
   type RenderRoot,
@@ -458,6 +457,7 @@ const fakeGl = (): FakeGl => {
     bindBuffer: record("bindBuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
+    blendEquationSeparate: record("blendEquationSeparate"),
     blendFunc: record("blendFunc"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
@@ -480,6 +480,7 @@ const fakeGl = (): FakeGl => {
     deleteVertexArray: record("deleteVertexArray"),
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
+    depthRange: record("depthRange"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
     drawArrays: record("drawArrays"),
@@ -576,13 +577,9 @@ const camera = () => orthographicCamera({
 
 const renderScene = (children: readonly RenderNode[]): RenderRoot =>
   scene({
-    children: [
-      pass({
-        camera: camera(),
-        children,
-        clearColor: [0, 0, 0, 0],
-      }),
-    ],
+    camera: camera(),
+    nodes: children,
+    clearColor: [0, 0, 0, 0],
   });
 
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>

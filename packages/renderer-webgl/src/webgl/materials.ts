@@ -10,14 +10,18 @@ import {
   surfaceLightValueKey,
   surfaceLightVectorKey,
 } from "./lights";
+import type { GltfTextureCoordinates } from "../gltf/texture-coordinates";
 
 export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset" }> & {
   readonly flipY?: boolean;
+  /** Internal dependency whose decoded source is supplied by the owning prepared asset. */
+  readonly preparedOnly?: boolean;
 };
 
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
+  readonly baseColorFactor?: Rgba;
   readonly alphaCutoff?: number;
   readonly alphaMode?: SurfaceMaterialAlphaMode;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
@@ -39,7 +43,27 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly specularColorTexture?: TextureAssetUploadRef;
   readonly specularTexture?: TextureAssetUploadRef;
   readonly thicknessTexture?: TextureAssetUploadRef;
+  readonly textureCoordinates?: SurfaceMaterialTextureCoordinates;
 };
+
+export type SurfaceMaterialTextureCoordinates = Partial<Readonly<Record<
+  | "baseColorTexture"
+  | "clearcoatRoughnessTexture"
+  | "clearcoatTexture"
+  | "emissiveTexture"
+  | "iridescenceTexture"
+  | "iridescenceThicknessTexture"
+  | "materialTransmissionTexture"
+  | "metallicRoughnessTexture"
+  | "normalTexture"
+  | "occlusionTexture"
+  | "sheenColorTexture"
+  | "sheenRoughnessTexture"
+  | "specularColorTexture"
+  | "specularTexture"
+  | "thicknessTexture",
+  GltfTextureCoordinates
+>>>;
 
 export type SurfaceMaterialExtensionFactors = {
   readonly anisotropyRotation: number;
@@ -218,6 +242,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     surfaceMaterialAlphaMode(material),
     surfaceLightValueKey(surfaceMaterialAlphaCutoff(material)),
     textureCacheKey(material.baseColor),
+    surfaceLightVectorKey(materialColor(material)),
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
     material.normalTexture === undefined ? "" : `${textureCacheKey(material.normalTexture)}:${surfaceLightValueKey(material.normalScale ?? 1)}`,
@@ -232,6 +257,12 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     material.iridescenceThicknessTexture === undefined ? "" : textureCacheKey(material.iridescenceThicknessTexture),
     material.materialTransmissionTexture === undefined ? "" : textureCacheKey(material.materialTransmissionTexture),
     material.thicknessTexture === undefined ? "" : textureCacheKey(material.thicknessTexture),
+    ...Object.entries(material.textureCoordinates ?? {}).flatMap(([key, coordinates]) => [
+      key,
+      coordinates.set,
+      ...coordinates.row0,
+      ...coordinates.row1,
+    ]),
     surfaceLightValueKey(surfaceMaterialMetallicFactor(material)),
     surfaceLightValueKey(surfaceMaterialOcclusionStrength(material)),
     surfaceLightValueKey(surfaceMaterialRoughnessFactor(material)),
@@ -240,6 +271,15 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
   ].join(":");
 
 export const materialColor = (material: Material): Rgba => {
+  if ("baseColorFactor" in material && Array.isArray(material.baseColorFactor)) {
+    const base = material.baseColor.kind === "solid" ? material.baseColor.color : [1, 1, 1, 1];
+    return [
+      (material.baseColorFactor[0] ?? 1) * (base[0] ?? 1),
+      (material.baseColorFactor[1] ?? 1) * (base[1] ?? 1),
+      (material.baseColorFactor[2] ?? 1) * (base[2] ?? 1),
+      (material.baseColorFactor[3] ?? 1) * (base[3] ?? 1),
+    ];
+  }
   const texture = material.baseColor;
   if (texture.kind === "solid") return texture.color;
   if (texture.kind === "virtual-asset") return UNSUPPORTED_VIRTUAL_TEXTURE_COLOR;

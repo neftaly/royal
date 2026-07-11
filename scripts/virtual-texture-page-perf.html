@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Royal generated VT page benchmark</title>
+<body data-royal-vt-perf="pending">
+<script type="module">
+  import {
+    generatedRasterVirtualTextureManifest,
+    generatedRasterVirtualTexturePageImage,
+  } from "/packages/renderer-webgl/src/virtual-texture-runtime.ts";
+
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = 4096;
+  sourceCanvas.height = 4096;
+  const sourceContext = sourceCanvas.getContext("2d");
+  const gradient = sourceContext.createLinearGradient(0, 0, 4096, 4096);
+  gradient.addColorStop(0, "#ef246b");
+  gradient.addColorStop(0.5, "#31a8ff");
+  gradient.addColorStop(1, "#f6dc45");
+  sourceContext.fillStyle = gradient;
+  sourceContext.fillRect(0, 0, 4096, 4096);
+
+  const source = {
+    canvasSource: sourceCanvas,
+    colorSpace: "srgb",
+    height: 4096,
+    label: "native-headless VT benchmark",
+    source: sourceCanvas,
+    width: 4096,
+  };
+  const manifest = generatedRasterVirtualTextureManifest(source);
+  const pageAt = (ordinal) => ({
+    mip: 0,
+    x: ordinal % 16,
+    y: Math.floor(ordinal / 16) % 16,
+  });
+  const generateBatch = (batchOrdinal) => {
+    const pages = [];
+    for (let page = 0; page < 4; page += 1) {
+      pages.push(generatedRasterVirtualTexturePageImage(
+        source,
+        manifest,
+        pageAt(batchOrdinal * 4 + page),
+      ));
+    }
+    return pages;
+  };
+
+  for (let warmup = 0; warmup < 16; warmup += 1) generateBatch(warmup);
+  const samples = [];
+  for (let batch = 0; batch < 128; batch += 1) {
+    const started = performance.now();
+    const pages = generateBatch(batch);
+    samples.push(performance.now() - started);
+    if (pages.length !== 4) throw new Error("generated VT batch was incomplete");
+  }
+  samples.sort((left, right) => left - right);
+
+  const report = {
+    batchPages: 4,
+    batches: samples.length,
+    maxMs: samples.at(-1),
+    medianMs: samples[Math.floor(samples.length * 0.5)],
+    p95Ms: samples[Math.floor(samples.length * 0.95)],
+    userAgent: navigator.userAgent,
+  };
+  document.body.dataset.royalVtPerf = btoa(JSON.stringify(report));
+</script>
+</body>

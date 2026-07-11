@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -18,6 +18,17 @@ const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'swiftshader';
 const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
 const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
+const gltfLabManifest = JSON.parse(readFileSync(
+  new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
+  'utf8',
+));
+const runnableGltfLabCases = gltfLabManifest.cases.filter((entry) =>
+  entry.status === 'supported-oracle' || entry.status === 'normalized-ingestion'
+);
+const gltfLabRoute = (entry) => ({
+  id: `gltf-lab-${entry.name}`,
+  path: `/gltf-lab?case=${encodeURIComponent(entry.name)}`,
+});
 
 const envInteger = (name, fallback) => {
   const raw = process.env[name];
@@ -110,11 +121,9 @@ const defaultInstancingRoute = () => ({
 const routes = [
   { id: 'cube', path: '/cube' },
   { id: 'wireframe', path: '/wireframe' },
-  { id: 'form-controls', path: '/form-controls' },
   { id: 'picking', path: '/picking' },
   { id: 'texture-materials', path: '/texture-materials' },
   { id: 'standard-lighting', path: '/standard-lighting' },
-  { id: 'hud-overlay', path: '/hud-overlay' },
   { id: 'gltf-helmet', path: '/gltf-helmet' },
   defaultInstancingRoute(),
   instancingRoute({
@@ -131,20 +140,32 @@ const routes = [
     seed: 0,
     sweep: 'baseline',
   }),
-  { id: 'gltf-kitchen-sink', path: '/gltf-kitchen-sink' },
-  { id: 'gltf-kitchen-sink-slow', path: '/gltf-kitchen-sink-slow' },
+  gltfLabRoute(runnableGltfLabCases.find((entry) => entry.name === 'Box')),
   { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
   { id: 'gltf-lod', path: '/gltf-lod' },
   { id: 'gltf-variants', path: '/gltf-variants' },
   { id: 'webxr-vr', path: '/webxr-vr' },
 ];
 
+const optInRoutes = [
+  { id: 'forward-plus-8', path: '/standard-lighting?lights=8' },
+  { id: 'forward-plus-100', path: '/standard-lighting?lights=100' },
+  { id: 'forward-plus-1000', path: '/standard-lighting?lights=1000' },
+];
+
+const gltfLabSweepRoutes = () =>
+  benchmarkMode === 'full' || benchmarkMode === 'labs' || benchmarkMode === 'all'
+    ? runnableGltfLabCases
+      .filter((entry) => entry.name !== 'Box')
+      .map(gltfLabRoute)
+    : [];
+
 const routeMatchesBenchmarkMode = (route) => {
   if (benchmarkMode === 'all') return true;
-  if (benchmarkMode === 'labs') return route.id === 'webxr-vr';
+  if (benchmarkMode === 'labs') return route.id === 'webxr-vr' || route.id.startsWith('gltf-lab-');
   if (benchmarkMode === 'full') return route.id !== 'webxr-vr';
 
-  return route.id !== 'gltf-kitchen-sink-slow' && route.id !== 'webxr-vr';
+  return route.id !== 'webxr-vr';
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -205,14 +226,18 @@ const instancingFuzzRoutes = () => {
 const selectedRoutes = () => {
   const sweepRoutes = benchmarkMode === 'labs' ? [] : instancingSweepRoutes();
   const fuzzRoutes = instancingFuzzEnabled ? instancingFuzzRoutes() : [];
+  const labRoutes = gltfLabSweepRoutes();
   const benchmarkRoutes = routes.filter(routeMatchesBenchmarkMode);
   const allRoutes = [
     ...routes,
+    ...optInRoutes,
+    ...labRoutes,
     ...sweepRoutes,
     ...fuzzRoutes,
   ];
   if (routeFilter === '') return [
     ...benchmarkRoutes,
+    ...labRoutes,
     ...sweepRoutes,
     ...fuzzRoutes,
   ];
@@ -500,6 +525,39 @@ const gltfInstancingSetupMetrics = (snapshot) => ({
   available: hasGltfInstancingCounters(snapshot),
   counters: gltfInstancingCounters(snapshot),
   rendererFrame: rendererFrame(snapshot) ?? 0,
+});
+
+const planningCounterKeys = ['compileNodeVisits', 'planCompiles', 'planRevision', 'sceneCommits'];
+const resourceLifetimeCounterKeys = [
+  'assetPlanCompiles',
+  'preparedAssetAcquires',
+  'preparedAssetEvents',
+  'preparedAssetReleases',
+  'preparedAssetUpdates',
+  'sceneLeaseAcquires',
+  'sceneLeaseReleases',
+  'gltfPreparationQueueHighWater',
+  'imageQueueHighWater',
+  'iblImageQueueHighWater',
+];
+
+const rendererCounters = (snapshot, field, keys) => Object.fromEntries(keys.map((key) => {
+  const value = snapshot?.[field]?.[key];
+  return [key, typeof value === 'number' && Number.isFinite(value) ? value : 0];
+}));
+
+const rendererCounterMetrics = (after, before, field, keys) => {
+  const afterCounters = rendererCounters(after, field, keys);
+  const beforeCounters = rendererCounters(before, field, keys);
+  return {
+    available: after?.[field] !== null || before?.[field] !== null,
+    delta: Object.fromEntries(keys.map((key) => [key, afterCounters[key] - beforeCounters[key]])),
+  };
+};
+
+const rendererCounterSetup = (snapshot, field, keys) => ({
+  available: snapshot?.[field] !== undefined && snapshot?.[field] !== null,
+  counters: rendererCounters(snapshot, field, keys),
 });
 
 const deploymentSize = async () => {
@@ -1247,8 +1305,22 @@ const collectPageMetrics = async (session, frames, options = {}) => {
         rendererBeforeFrames,
         frameStats.sampleCount ?? frames,
       ),
+      planning: rendererCounterMetrics(
+        rendererAfterFrames,
+        rendererBeforeFrames,
+        'planning',
+        planningCounterKeys,
+      ),
+      resourceLifetime: rendererCounterMetrics(
+        rendererAfterFrames,
+        rendererBeforeFrames,
+        'resourceLifetime',
+        resourceLifetimeCounterKeys,
+      ),
       setup: {
         gltfInstancing: gltfInstancingSetupMetrics(setupRenderer),
+        planning: rendererCounterSetup(setupRenderer, 'planning', planningCounterKeys),
+        resourceLifetime: rendererCounterSetup(setupRenderer, 'resourceLifetime', resourceLifetimeCounterKeys),
       },
     },
     heap: {

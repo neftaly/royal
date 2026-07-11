@@ -1,0 +1,1383 @@
+{
+  "schema": "royal.examples.gltf-compatibility.v1",
+  "source": {
+    "repository": "https://github.com/KhronosGroup/glTF-Sample-Assets",
+    "revision": "unversioned-main-snapshot",
+    "index": "Models/model-index.json"
+  },
+  "cases": [
+    {
+      "name": "AlphaBlendModeTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb",
+      "bytes": 2978812,
+      "sha256": "37c3577d143071b42dd46e9d942b157837eb25c6340112171d7faecaa987b14e",
+      "provenance": "fixtures/khronos/AlphaBlendModeTest/README.upstream.md",
+      "features": [
+        "images",
+        "tangents"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "AnimatedMorphCube",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/AnimatedMorphCube/glTF-Binary/AnimatedMorphCube.glb",
+      "bytes": 6752,
+      "sha256": "214ee56160a50dbf22543a1d66dbf860986e87f0efac3d89feac1359d0e6aeab",
+      "provenance": "fixtures/khronos/AnimatedMorphCube/README.upstream.md",
+      "features": [
+        "animations",
+        "morph-targets",
+        "tangents"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 1,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "AttenuationTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/AttenuationTest/glTF-Binary/AttenuationTest.glb",
+      "bytes": 57532,
+      "sha256": "7ca161b7f8a9e4b2ac1f7f75816b5848bb31f3b4c226c4cb731b487c8809b756",
+      "provenance": "fixtures/khronos/AttenuationTest/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "Box",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/Box/glTF-Binary/Box.glb",
+      "bytes": 1664,
+      "sha256": "ed52f7192b8311d700ac0ce80644e3852cd01537e4d62241b9acba023da3d54e",
+      "provenance": "fixtures/khronos/Box/README.upstream.md",
+      "features": [
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "BoxAnimated",
+      "status": "known-limitation",
+      "path": "fixtures/khronos/BoxAnimated/glTF-Binary/BoxAnimated.glb",
+      "bytes": 11944,
+      "sha256": "ad0d18d9a21df0d7c2bd3890e60ce69d60d39a55d9b82bacea7e77ac9e583839",
+      "provenance": "fixtures/khronos/BoxAnimated/README.upstream.md",
+      "features": [
+        "animations",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "BoxInterleaved",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/BoxInterleaved/glTF-Binary/BoxInterleaved.glb",
+      "bytes": 1632,
+      "sha256": "b2ae631f118f1d13f829cdf9d9dc0fe7cb582de20b8c51d17f81f77a1cbf290c",
+      "provenance": "fixtures/khronos/BoxInterleaved/README.upstream.md",
+      "features": [
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "BoxTextured",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/BoxTextured/glTF-Binary/BoxTextured.glb",
+      "bytes": 5956,
+      "sha256": "b510eca2e2ef33f62f9ed57d6e7ce2d10ebb2bdebc4a8e59d347719ba81abdf4",
+      "provenance": "fixtures/khronos/BoxTextured/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "BoxTexturedNonPowerOfTwo",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/BoxTexturedNonPowerOfTwo/glTF-Binary/BoxTexturedNonPowerOfTwo.glb",
+      "bytes": 4696,
+      "sha256": "624621d7885bb418ac64e99c994b45634a32c87caeefae67b06c5c0531c57115",
+      "provenance": "fixtures/khronos/BoxTexturedNonPowerOfTwo/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "BoxVertexColors",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/BoxVertexColors/glTF-Binary/BoxVertexColors.glb",
+      "bytes": 1924,
+      "sha256": "9c48227f33b0ba2fbcf23b98ebf60d1c8ae0c6e6c5281e0aa3cc58affee10382",
+      "provenance": "fixtures/khronos/BoxVertexColors/README.upstream.md",
+      "features": [
+        "interleaved-attributes",
+        "vertex-colors"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CesiumMan",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/CesiumMan/glTF-Binary/CesiumMan.glb",
+      "bytes": 438044,
+      "sha256": "b7001eaeea8254bd44773bcd247e78696d94169388fbb2a1800fc69434e777d9",
+      "provenance": "fixtures/khronos/CesiumMan/README.upstream.md",
+      "features": [
+        "animations",
+        "images",
+        "interleaved-attributes",
+        "skinning"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 1
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CesiumMilkTruck",
+      "status": "known-limitation",
+      "path": "fixtures/khronos/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb",
+      "bytes": 369980,
+      "sha256": "09371b34608116de5842d23abe260bf11acf3e1554daf334a647eb566eee5c49",
+      "provenance": "fixtures/khronos/CesiumMilkTruck/README.upstream.md",
+      "features": [
+        "animations",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.3
+      }
+    },
+    {
+      "name": "ClearCoatCarPaint",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/ClearCoatCarPaint/glTF-Binary/ClearCoatCarPaint.glb",
+      "bytes": 116948,
+      "sha256": "4d4b32f2ef6d341191f6b6d6834f2b192762c878cd25d44e6b4b14514cd4be93",
+      "provenance": "fixtures/khronos/ClearCoatCarPaint/README.upstream.md",
+      "features": [
+        "KHR_materials_clearcoat",
+        "KHR_texture_transform",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [
+        "KHR_materials_clearcoat",
+        "KHR_texture_transform"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "ClearCoatTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/ClearCoatTest/glTF-Binary/ClearCoatTest.glb",
+      "bytes": 258048,
+      "sha256": "c3a1cbe318cd043b937130af4eb83ec2ea0b03613387b1b7d769dfab4ac15948",
+      "provenance": "fixtures/khronos/ClearCoatTest/README.upstream.md",
+      "features": [
+        "KHR_materials_clearcoat",
+        "images",
+        "interleaved-attributes",
+        "tangents"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "ClearcoatWicker",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/ClearcoatWicker/glTF-Binary/ClearcoatWicker.glb",
+      "bytes": 1299752,
+      "sha256": "f162b0cd7f8e6b7cef211eec57762165a78039676b8592ce1f965e2ddb34e843",
+      "provenance": "fixtures/khronos/ClearcoatWicker/README.upstream.md",
+      "features": [
+        "KHR_materials_clearcoat",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "CompareBaseColor",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareBaseColor/glTF-Binary/CompareBaseColor.glb",
+      "bytes": 1507816,
+      "sha256": "1fd21e793652874eaa20e9c3723c508c4f1039bf8d84c09e4d0998b97691f77b",
+      "provenance": "fixtures/khronos/CompareBaseColor/README.upstream.md",
+      "features": [
+        "KHR_texture_transform",
+        "images",
+        "vertex-colors"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "CompareClearcoat",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareClearcoat/glTF-Binary/CompareClearcoat.glb",
+      "bytes": 193920,
+      "sha256": "9dc6879f797c7dd9dd1322dc6a392ff66952855f329ac5239b9c58a68f804a88",
+      "provenance": "fixtures/khronos/CompareClearcoat/README.upstream.md",
+      "features": [
+        "KHR_materials_clearcoat",
+        "KHR_materials_ior",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareDispersion",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareDispersion/glTF-Binary/CompareDispersion.glb",
+      "bytes": 60432,
+      "sha256": "1c3eff819615d7e6d06e605f728907006eb6c36ef2ead53cc328e65d38a215c4",
+      "provenance": "fixtures/khronos/CompareDispersion/README.upstream.md",
+      "features": [
+        "KHR_materials_dispersion",
+        "KHR_materials_ior",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareEmissiveStrength",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareEmissiveStrength/glTF-Binary/CompareEmissiveStrength.glb",
+      "bytes": 111796,
+      "sha256": "e40d8e1d98345ae16211814bab097307c8710f1ae4f9399fe14e01049f3e7bd8",
+      "provenance": "fixtures/khronos/CompareEmissiveStrength/README.upstream.md",
+      "features": [
+        "KHR_materials_emissive_strength",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareIor",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareIor/glTF-Binary/CompareIor.glb",
+      "bytes": 213104,
+      "sha256": "3588b4b522d2a756809b337353c017a412b9e38793b60355fdc6eb162b360019",
+      "provenance": "fixtures/khronos/CompareIor/README.upstream.md",
+      "features": [
+        "KHR_materials_ior",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareIridescence",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareIridescence/glTF-Binary/CompareIridescence.glb",
+      "bytes": 214756,
+      "sha256": "abda6e8bcb13ad04534c90bc4ce9b21e80f2d8b74ac4d911800269f0009ff073",
+      "provenance": "fixtures/khronos/CompareIridescence/README.upstream.md",
+      "features": [
+        "KHR_materials_iridescence",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareMetallic",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareMetallic/glTF-Binary/CompareMetallic.glb",
+      "bytes": 172180,
+      "sha256": "5b57f1358c886fa33736c07adad0a76e693a6cf1d7f1bae4b70533b5de119b78",
+      "provenance": "fixtures/khronos/CompareMetallic/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareNormal",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareNormal/glTF-Binary/CompareNormal.glb",
+      "bytes": 220900,
+      "sha256": "076ab65c1ed62ad3097766c0dc74e41783e5f44a0711f9b2755bde892ec5075f",
+      "provenance": "fixtures/khronos/CompareNormal/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareRoughness",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareRoughness/glTF-Binary/CompareRoughness.glb",
+      "bytes": 155660,
+      "sha256": "6b47b85d117f2e1951546e9a46bffa6cb91c8436441a1ec913feaac0f646f5b3",
+      "provenance": "fixtures/khronos/CompareRoughness/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareSheen",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareSheen/glTF-Binary/CompareSheen.glb",
+      "bytes": 883968,
+      "sha256": "70b6ab5ba8006aa71079b567783a81cfe778a11cca8abc44c45e5e0b1f4252cc",
+      "provenance": "fixtures/khronos/CompareSheen/README.upstream.md",
+      "features": [
+        "KHR_materials_sheen",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "CompareSpecular",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareSpecular/glTF-Binary/CompareSpecular.glb",
+      "bytes": 1408364,
+      "sha256": "57ea169e0b9b4a4ea1cb27980226974d0da25897445c9f29c3c817698dd923d8",
+      "provenance": "fixtures/khronos/CompareSpecular/README.upstream.md",
+      "features": [
+        "KHR_materials_specular",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "CompareTransmission",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareTransmission/glTF-Binary/CompareTransmission.glb",
+      "bytes": 357024,
+      "sha256": "012a3ace61050f4aef77b416c56b3f8f313e1fa68c9040ce3d5037f67eea484f",
+      "provenance": "fixtures/khronos/CompareTransmission/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CompareVolume",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/CompareVolume/glTF-Binary/CompareVolume.glb",
+      "bytes": 399760,
+      "sha256": "cb88f5dd70c1c2700e2a28caa5b612f4b6e8c34183d6261c681727d8bafdf7d2",
+      "provenance": "fixtures/khronos/CompareVolume/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "CubeVisibility",
+      "status": "known-limitation",
+      "path": "fixtures/khronos/CubeVisibility/glTF-Binary/CubeVisibility.glb",
+      "bytes": 3284,
+      "sha256": "a4a2863c99bf6f2f008558c995ad176979f920bd235190970fb02e1142faac41",
+      "provenance": "fixtures/khronos/CubeVisibility/README.upstream.md",
+      "features": [
+        "KHR_animation_pointer",
+        "KHR_node_visibility",
+        "animations",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [
+        "KHR_node_visibility"
+      ],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "DirectionalLight",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/DirectionalLight/glTF-Binary/DirectionalLight.glb",
+      "bytes": 453520,
+      "sha256": "82e50feb151203f431a3b43985e9f4b2a54131b61a7a8677954922630d90f3de",
+      "provenance": "fixtures/khronos/DirectionalLight/README.upstream.md",
+      "features": [
+        "KHR_lights_punctual",
+        "cameras"
+      ],
+      "extensionsRequired": [
+        "KHR_lights_punctual"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "Duck",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/Duck/glTF-Binary/Duck.glb",
+      "bytes": 120484,
+      "sha256": "65bf938f54d6073e619e76e007820bbf980cdc3dc0daec0d94830ffc4ae54ab5",
+      "provenance": "fixtures/khronos/Duck/README.upstream.md",
+      "features": [
+        "cameras",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.74
+      }
+    },
+    {
+      "name": "EmissiveStrengthTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/EmissiveStrengthTest/glTF-Binary/EmissiveStrengthTest.glb",
+      "bytes": 10668,
+      "sha256": "074898ec4c3636230faffe0cacac7403c3f6135db61f943da28ffaa88ca2a39f",
+      "provenance": "fixtures/khronos/EmissiveStrengthTest/README.upstream.md",
+      "features": [
+        "KHR_materials_emissive_strength",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "Fox",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/Fox/glTF-Binary/Fox.glb",
+      "bytes": 162852,
+      "sha256": "d97044e701822bac5a62696459b27d7b375aada5de8574ed4362edbba94771f7",
+      "provenance": "fixtures/khronos/Fox/README.upstream.md",
+      "features": [
+        "animations",
+        "images",
+        "interleaved-attributes",
+        "skinning"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 3,
+        "morphPrimitives": 0,
+        "skins": 1
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "GlassBrokenWindow",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/GlassBrokenWindow/glTF-Binary/GlassBrokenWindow.glb",
+      "bytes": 1076624,
+      "sha256": "66c4261fc0f5fe77f11a4f457b61774e5c7f43f9a382b49720cef0e128738416",
+      "provenance": "fixtures/khronos/GlassBrokenWindow/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "InterpolationTest",
+      "status": "known-limitation",
+      "path": "fixtures/khronos/InterpolationTest/glTF-Binary/InterpolationTest.glb",
+      "bytes": 7952,
+      "sha256": "a86eb331b4a083715e75fe19a1f747eac5692d5b9ff120f1eaa457c23ba72bca",
+      "provenance": "fixtures/khronos/InterpolationTest/README.upstream.md",
+      "features": [
+        "animations",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 9,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "IridescenceSuzanne",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/IridescenceSuzanne/glTF-Binary/IridescenceSuzanne.glb",
+      "bytes": 507608,
+      "sha256": "866762602d60a0942b7608bfabf4e8686a29033636224f4b55c5e56abe8abf8f",
+      "provenance": "fixtures/khronos/IridescenceSuzanne/README.upstream.md",
+      "features": [
+        "KHR_lights_punctual",
+        "KHR_materials_ior",
+        "KHR_materials_iridescence",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images"
+      ],
+      "extensionsRequired": [
+        "KHR_materials_iridescence"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "LightVisibility",
+      "status": "known-limitation",
+      "path": "fixtures/khronos/LightVisibility/glTF-Binary/LightVisibility.glb",
+      "bytes": 2940,
+      "sha256": "0295dadb5467f4b24d2ebe255c2957446e83c1eea5510e23f22fcedc96330267",
+      "provenance": "fixtures/khronos/LightVisibility/README.upstream.md",
+      "features": [
+        "KHR_animation_pointer",
+        "KHR_lights_punctual",
+        "KHR_node_visibility",
+        "animations",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [
+        "KHR_lights_punctual",
+        "KHR_node_visibility"
+      ],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "MetalRoughSpheresNoTextures",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/MetalRoughSpheresNoTextures/glTF-Binary/MetalRoughSpheresNoTextures.glb",
+      "bytes": 291316,
+      "sha256": "5e677f260ec0f366967a6e9545de2f3dab2a160e307b9bcb9d050cd2028f63f8",
+      "provenance": "fixtures/khronos/MetalRoughSpheresNoTextures/README.upstream.md",
+      "features": [
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.32
+      }
+    },
+    {
+      "name": "MorphPrimitivesTest",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/MorphPrimitivesTest/glTF-Binary/MorphPrimitivesTest.glb",
+      "bytes": 53656,
+      "sha256": "2a5ed6470aca41edc813ef5b7eecf2af53264d8e0ab9e6f32156d54245ca18cf",
+      "provenance": "fixtures/khronos/MorphPrimitivesTest/README.upstream.md",
+      "features": [
+        "images",
+        "morph-targets"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 2,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "MorphStressTest",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/MorphStressTest/glTF-Binary/MorphStressTest.glb",
+      "bytes": 575900,
+      "sha256": "005f1d9dd938c553a506d6bf3d21830fc3f2ec3a199d9332e9a625baf7342bef",
+      "provenance": "fixtures/khronos/MorphStressTest/README.upstream.md",
+      "features": [
+        "animations",
+        "images",
+        "morph-targets",
+        "multiple-uv-sets"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 3,
+        "morphPrimitives": 2,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "MultiUVTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/MultiUVTest/glTF-Binary/MultiUVTest.glb",
+      "bytes": 43004,
+      "sha256": "f5352cced402b595ab7f1e4971852fbf33cef8d22351e45caafb072e31d5008a",
+      "provenance": "fixtures/khronos/MultiUVTest/README.upstream.md",
+      "features": [
+        "cameras",
+        "images",
+        "multiple-uv-sets",
+        "tangents"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.48
+      }
+    },
+    {
+      "name": "NegativeScaleTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/NegativeScaleTest/glTF-Binary/NegativeScaleTest.glb",
+      "bytes": 62568,
+      "sha256": "ea8c41fd0630f03adcf7a5c06bf86d7b850fa510b6f07cc51eb1fccc205a50f2",
+      "provenance": "fixtures/khronos/NegativeScaleTest/README.upstream.md",
+      "features": [
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "NormalTangentTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/NormalTangentTest/glTF-Binary/NormalTangentTest.glb",
+      "bytes": 1796996,
+      "sha256": "5ac0932355ae1ea05a7485eeddcc3f1fbe56c678e00b519075feced80e9e9d6a",
+      "provenance": "fixtures/khronos/NormalTangentTest/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.28
+      }
+    },
+    {
+      "name": "OrientationTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/OrientationTest/glTF-Binary/OrientationTest.glb",
+      "bytes": 38920,
+      "sha256": "a91cf448f37de06ab61bc615e123692dd29ac185e6c69e1fdbf1cf53e41045b2",
+      "provenance": "fixtures/khronos/OrientationTest/README.upstream.md",
+      "features": [],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "PointLightIntensityTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/PointLightIntensityTest/glTF-Binary/PointLightIntensityTest.glb",
+      "bytes": 30148,
+      "sha256": "025ea8e44840a88ded75fe0665f693a14558d345c2955b054aec4edbaa23a341",
+      "provenance": "fixtures/khronos/PointLightIntensityTest/README.upstream.md",
+      "features": [
+        "KHR_lights_punctual",
+        "KHR_materials_unlit",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "RecursiveSkeletons",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/RecursiveSkeletons/glTF-Binary/RecursiveSkeletons.glb",
+      "bytes": 561620,
+      "sha256": "15fb11ee4d3b31735efe7dc776a31e8fa67568ea148a3315442970303675b641",
+      "provenance": "fixtures/khronos/RecursiveSkeletons/README.upstream.md",
+      "features": [
+        "animations",
+        "interleaved-attributes",
+        "skinning",
+        "vertex-colors"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 84
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "RiggedFigure",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/RiggedFigure/glTF-Binary/RiggedFigure.glb",
+      "bytes": 50116,
+      "sha256": "d6be85417d3e256861ee733eea6916093a7af7c79c16366181fd8abcaeb38cf5",
+      "provenance": "fixtures/khronos/RiggedFigure/README.upstream.md",
+      "features": [
+        "animations",
+        "interleaved-attributes",
+        "skinning"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 1
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "RiggedSimple",
+      "status": "parsed-unsupported",
+      "path": "fixtures/khronos/RiggedSimple/glTF-Binary/RiggedSimple.glb",
+      "bytes": 15104,
+      "sha256": "3a79dabb67bb0cd598a18d08b954d9d357c27c30672f82ef5d3f4e7fe6ca3401",
+      "provenance": "fixtures/khronos/RiggedSimple/README.upstream.md",
+      "features": [
+        "animations",
+        "interleaved-attributes",
+        "skinning"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 1,
+        "morphPrimitives": 0,
+        "skins": 1
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "SimpleInstancing",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/SimpleInstancing/glTF-Binary/SimpleInstancing.glb",
+      "bytes": 7356,
+      "sha256": "1c9425627481346a8c226118f7000db7cd7f80198e9f54331f8b664d16726f3f",
+      "provenance": "fixtures/khronos/SimpleInstancing/README.upstream.md",
+      "features": [
+        "EXT_mesh_gpu_instancing"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "SpecularTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/SpecularTest/glTF-Binary/SpecularTest.glb",
+      "bytes": 223376,
+      "sha256": "cf789c68c3ab4b74877da3c5992c612c213f9c901ed4fafbf9be362f434e48d9",
+      "provenance": "fixtures/khronos/SpecularTest/README.upstream.md",
+      "features": [
+        "KHR_materials_specular",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "SunglassesKhronos",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/SunglassesKhronos/glTF-Binary/SunglassesKhronos.glb",
+      "bytes": 371188,
+      "sha256": "25d72dd0869c99f94a3c0d6dfe0707714eca056e531f6ff77e7545719c86ab8c",
+      "provenance": "fixtures/khronos/SunglassesKhronos/README.upstream.md",
+      "features": [
+        "KHR_materials_ior",
+        "KHR_materials_iridescence",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.38
+      }
+    },
+    {
+      "name": "TextureCoordinateTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TextureCoordinateTest/glTF-Binary/TextureCoordinateTest.glb",
+      "bytes": 14232,
+      "sha256": "fe75a63a0423c9a682bf46c3045b6328ae9c55abefc9a50adf3ec1d6dc6ea3b9",
+      "provenance": "fixtures/khronos/TextureCoordinateTest/README.upstream.md",
+      "features": [
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TextureEncodingTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TextureEncodingTest/glTF-Binary/TextureEncodingTest.glb",
+      "bytes": 21612,
+      "sha256": "c2f654bdf918e3cce93db3f8d8c1b008b90d3089e756c9b38149e9306b1338f4",
+      "provenance": "fixtures/khronos/TextureEncodingTest/README.upstream.md",
+      "features": [
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TextureLinearInterpolationTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TextureLinearInterpolationTest/glTF-Binary/TextureLinearInterpolationTest.glb",
+      "bytes": 13468,
+      "sha256": "5a7d79bb138f9f732002a988298b5ba44f614064330e94f6ea8c17e38b998440",
+      "provenance": "fixtures/khronos/TextureLinearInterpolationTest/README.upstream.md",
+      "features": [
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TextureSettingsTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TextureSettingsTest/glTF-Binary/TextureSettingsTest.glb",
+      "bytes": 42840,
+      "sha256": "44013a0602cbbdcaf703905ed47cc6b6fb49f067d7de0e1a0a568a5bbfa9d769",
+      "provenance": "fixtures/khronos/TextureSettingsTest/README.upstream.md",
+      "features": [
+        "images",
+        "interleaved-attributes"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TextureTransformMultiTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TextureTransformMultiTest/glTF-Binary/TextureTransformMultiTest.glb",
+      "bytes": 388264,
+      "sha256": "569aedb53822d5721e7e06af5983348683d4b2ffb1d469338ad4f02bf6a74911",
+      "provenance": "fixtures/khronos/TextureTransformMultiTest/README.upstream.md",
+      "features": [
+        "KHR_materials_clearcoat",
+        "KHR_materials_unlit",
+        "KHR_texture_transform",
+        "images",
+        "interleaved-attributes",
+        "multiple-uv-sets",
+        "tangents"
+      ],
+      "extensionsRequired": [
+        "KHR_texture_transform"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TransmissionRoughnessTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TransmissionRoughnessTest/glTF-Binary/TransmissionRoughnessTest.glb",
+      "bytes": 393808,
+      "sha256": "43ace8f8dfe0b6148dc4668e6a768c8853ba37cf1f0fe7de76eaf0ea8e94bb73",
+      "provenance": "fixtures/khronos/TransmissionRoughnessTest/README.upstream.md",
+      "features": [
+        "KHR_materials_ior",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "TransmissionTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TransmissionTest/glTF-Binary/TransmissionTest.glb",
+      "bytes": 1473792,
+      "sha256": "dd9732dae5517f8605ad4324d78b077b969c3e8357c056280d0a4e4b67797d15",
+      "provenance": "fixtures/khronos/TransmissionTest/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "KHR_xmp",
+        "cameras",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.34
+      }
+    },
+    {
+      "name": "TransmissionThinwallTestGrid",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/TransmissionThinwallTestGrid/glTF-Binary/TransmissionThinwallTestGrid.glb",
+      "bytes": 1188724,
+      "sha256": "e4ee8e5a28f81f75ef40b264ad22725e9065470b8ee02f9a4c6fa96b669cbcc7",
+      "provenance": "fixtures/khronos/TransmissionThinwallTestGrid/README.upstream.md",
+      "features": [
+        "KHR_materials_ior",
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.32
+      }
+    },
+    {
+      "name": "Unicode❤♻Test",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/Unicode%E2%9D%A4%E2%99%BBTest/glTF-Binary/Unicode%E2%9D%A4%E2%99%BBTest.glb",
+      "bytes": 5488,
+      "sha256": "845271aea314a15d13c27ce2e5ce5b44c6b329c6b6fb93b9403e770bdfd7fbb7",
+      "provenance": "fixtures/khronos/Unicode%E2%9D%A4%E2%99%BBTest/README.upstream.md",
+      "features": [
+        "images"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "UnlitTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/UnlitTest/glTF-Binary/UnlitTest.glb",
+      "bytes": 3992,
+      "sha256": "e07b68c6fd9fbf73d372c610a681b89d6b013bdd1a506e46a411df82210a2481",
+      "provenance": "fixtures/khronos/UnlitTest/README.upstream.md",
+      "features": [
+        "KHR_materials_unlit"
+      ],
+      "extensionsRequired": [
+        "KHR_materials_unlit"
+      ],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    },
+    {
+      "name": "USDShaderBallForGltf",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/USDShaderBallForGltf/glTF-Binary/USDShaderBallForGltf.glb",
+      "bytes": 1319652,
+      "sha256": "ab123a15d70c4553adcabb16bef45587ad17e3c00da6b54640624a7287a8b52e",
+      "provenance": "fixtures/khronos/USDShaderBallForGltf/README.upstream.md",
+      "features": [
+        "KHR_materials_transmission",
+        "KHR_materials_volume",
+        "images",
+        "interleaved-attributes",
+        "tangents"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.32
+      }
+    },
+    {
+      "name": "VertexColorTest",
+      "status": "supported-oracle",
+      "path": "fixtures/khronos/VertexColorTest/glTF-Binary/VertexColorTest.glb",
+      "bytes": 26220,
+      "sha256": "58006bdcff8084339da0f6e24400160890638c16dbcb83c362ccaf150e8c6e10",
+      "provenance": "fixtures/khronos/VertexColorTest/README.upstream.md",
+      "features": [
+        "images",
+        "tangents",
+        "vertex-colors"
+      ],
+      "extensionsRequired": [],
+      "parsed": {
+        "animations": 0,
+        "morphPrimitives": 0,
+        "skins": 0
+      },
+      "presentation": {
+        "scale": 0.44
+      }
+    }
+  ]
+}

@@ -4,9 +4,12 @@ import surfaceVertexShaderSource from "./shaders/surface.vert";
 import surfaceInstancedSplitVertexShaderSource from "./shaders/surface-instanced-split.vert";
 import wireframeFragmentShaderSource from "./shaders/wireframe.frag";
 import wireframeVertexShaderSource from "./shaders/wireframe.vert";
+import postprocessFragmentShaderSource from "./shaders/postprocess.frag";
+import postprocessVertexShaderSource from "./shaders/postprocess.vert";
 
 export type ProgramKind =
   | "surface"
+  | "postprocess"
   | "surface-instanced-split"
   | "wireframe";
 
@@ -190,12 +193,12 @@ const surfaceBaseColorExpression = (features: SurfaceShaderFeatures): string => 
   const ordinary = surfaceTextureExpression(
     features,
     "baseColorTexture",
-    "u_useTexture ? texture(u_texture, v_uv) : u_color",
+    "u_useTexture ? texture(u_texture, materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1)) : u_color",
     fallback,
   );
 
   return hasSurfaceShaderVirtualBaseColor(features)
-    ? `u_useVirtualTexture ? sampleVirtualBaseColor(v_uv) : (${ordinary})`
+    ? `u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet, u_baseColorUvRow0, u_baseColorUvRow1)) : (${ordinary})`
     : ordinary;
 };
 
@@ -218,6 +221,7 @@ const assertNoShaderTokens = (source: string): string => {
 };
 
 export const vertexShaderSource = (kind: ProgramKind): string => {
+  if (kind === "postprocess") return postprocessVertexShaderSource;
   switch (kind) {
     case "wireframe":
       return wireframeVertexShaderSource;
@@ -231,98 +235,145 @@ export const vertexShaderSource = (kind: ProgramKind): string => {
 export const fragmentShaderSource = (
   kind: ProgramKind,
   surfaceFeatures: SurfaceShaderFeatures = ALL_SURFACE_SHADER_TEXTURE_FEATURES,
+  clusteredLights = false,
 ): string => {
+  if (kind === "postprocess") return postprocessFragmentShaderSource;
   switch (kind) {
     case "wireframe":
       return wireframeFragmentShaderSource;
     case "surface":
     case "surface-instanced-split":
-      return surfaceFragmentShaderSource(surfaceFeatures);
+      return surfaceFragmentShaderSource(surfaceFeatures, clusteredLights);
   }
 };
 
-const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
+const clusteredLightUniforms = `uniform highp usampler2D u_clusterGrid;
+uniform highp usampler2D u_clusterLightIndices;
+uniform highp sampler2D u_clusterLightData;
+uniform vec4 u_clusterDimensions;
+uniform vec4 u_clusterDepth;
+uniform vec2 u_clusterProjection;
+uniform vec2 u_clusterViewportOrigin;`;
+
+const clusteredLightFunctions = `uint clusteredLightIndex(uint linearIndex) {
+  uint width = uint(max(u_clusterProjection.y, 1.0));
+  return texelFetch(
+    u_clusterLightIndices,
+    ivec2(int(linearIndex % width), int(linearIndex / width)),
+    0
+  ).r;
+}
+
+vec3 clusteredLightContribution(vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
+  ivec2 tile = ivec2(floor((gl_FragCoord.xy - u_clusterViewportOrigin) / max(u_clusterDimensions.w, 1.0)));
+  tile = clamp(tile, ivec2(0), ivec2(u_clusterDimensions.xy) - ivec2(1));
+  float viewDepth = max(-(u_view * vec4(worldPosition, 1.0)).z, u_clusterDepth.z);
+  float depthCoordinate = u_clusterProjection.x > 0.5 ? viewDepth : log2(viewDepth);
+  int zSlice = int(clamp(floor(depthCoordinate * u_clusterDepth.x + u_clusterDepth.y), 0.0, u_clusterDimensions.z - 1.0));
+  int gridX = tile.x + tile.y * int(u_clusterDimensions.x);
+  uvec2 offsetAndCount = texelFetch(u_clusterGrid, ivec2(gridX, zSlice), 0).rg;
+  vec3 result = vec3(0.0);
+  for (uint entry = 0u; entry < offsetAndCount.y; entry += 1u) {
+    int lightIndex = int(clusteredLightIndex(offsetAndCount.x + entry));
+    vec4 colorAndKind = texelFetch(u_clusterLightData, ivec2(0, lightIndex), 0);
+    vec4 positionAndRange = texelFetch(u_clusterLightData, ivec2(1, lightIndex), 0);
+    vec4 directionAndInner = texelFetch(u_clusterLightData, ivec2(2, lightIndex), 0);
+    vec4 outer = texelFetch(u_clusterLightData, ivec2(3, lightIndex), 0);
+    result += lightContributionData(
+      int(colorAndKind.w + 0.5), colorAndKind.rgb, directionAndInner.xyz,
+      positionAndRange.xyz, positionAndRange.w, directionAndInner.w, outer.x,
+      normal, viewDirection, worldPosition, baseColor
+    );
+  }
+  return result;
+}`;
+
+const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredLights: boolean): string =>
   assertNoShaderTokens(replaceShaderTokens(surfaceFragmentTemplate, new Map([
     ["__MAX_SURFACE_LIGHTS__", String(MAX_SURFACE_LIGHTS)],
     ["__SURFACE_SAMPLER_UNIFORMS__", surfaceSamplerUniformDeclarations(features)],
+    ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],
+    ["__CLUSTERED_LIGHT_FUNCTIONS__", clusteredLights
+      ? clusteredLightFunctions
+      : "vec3 clusteredLightContribution(vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) { return vec3(0.0); }"],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
     ["__SPECULAR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "specularTexture",
-      "u_useSpecularTexture ? texture(u_specularTexture, v_uv).a : 1.0",
+      "u_useSpecularTexture ? texture(u_specularTexture, materialTextureUv(u_specularUvSet, u_specularUvRow0, u_specularUvRow1)).a : 1.0",
       "1.0",
     )],
     ["__SPECULAR_COLOR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "specularColorTexture",
-      "u_useSpecularColorTexture ? texture(u_specularColorTexture, v_uv).rgb : vec3(1.0)",
+      "u_useSpecularColorTexture ? texture(u_specularColorTexture, materialTextureUv(u_specularColorUvSet, u_specularColorUvRow0, u_specularColorUvRow1)).rgb : vec3(1.0)",
       "vec3(1.0)",
     )],
     ["__CLEARCOAT_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "clearcoatTexture",
-      "u_useClearcoatTexture ? texture(u_clearcoatTexture, v_uv).r : 1.0",
+      "u_useClearcoatTexture ? texture(u_clearcoatTexture, materialTextureUv(u_clearcoatUvSet, u_clearcoatUvRow0, u_clearcoatUvRow1)).r : 1.0",
       "1.0",
     )],
     ["__CLEARCOAT_ROUGHNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "clearcoatRoughnessTexture",
-      "u_useClearcoatRoughnessTexture ? texture(u_clearcoatRoughnessTexture, v_uv).g : 1.0",
+      "u_useClearcoatRoughnessTexture ? texture(u_clearcoatRoughnessTexture, materialTextureUv(u_clearcoatRoughnessUvSet, u_clearcoatRoughnessUvRow0, u_clearcoatRoughnessUvRow1)).g : 1.0",
       "1.0",
     )],
     ["__SHEEN_COLOR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "sheenColorTexture",
-      "u_useSheenColorTexture ? texture(u_sheenColorTexture, v_uv).rgb : vec3(1.0)",
+      "u_useSheenColorTexture ? texture(u_sheenColorTexture, materialTextureUv(u_sheenColorUvSet, u_sheenColorUvRow0, u_sheenColorUvRow1)).rgb : vec3(1.0)",
       "vec3(1.0)",
     )],
     ["__SHEEN_ROUGHNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "sheenRoughnessTexture",
-      "u_useSheenRoughnessTexture ? texture(u_sheenRoughnessTexture, v_uv).a : 1.0",
+      "u_useSheenRoughnessTexture ? texture(u_sheenRoughnessTexture, materialTextureUv(u_sheenRoughnessUvSet, u_sheenRoughnessUvRow0, u_sheenRoughnessUvRow1)).a : 1.0",
       "1.0",
     )],
     ["__IRIDESCENCE_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "iridescenceTexture",
-      "u_useIridescenceTexture ? texture(u_iridescenceTexture, v_uv).r : 1.0",
+      "u_useIridescenceTexture ? texture(u_iridescenceTexture, materialTextureUv(u_iridescenceUvSet, u_iridescenceUvRow0, u_iridescenceUvRow1)).r : 1.0",
       "1.0",
     )],
     ["__IRIDESCENCE_THICKNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "iridescenceThicknessTexture",
-      "u_useIridescenceThicknessTexture ? texture(u_iridescenceThicknessTexture, v_uv).g : 1.0",
+      "u_useIridescenceThicknessTexture ? texture(u_iridescenceThicknessTexture, materialTextureUv(u_iridescenceThicknessUvSet, u_iridescenceThicknessUvRow0, u_iridescenceThicknessUvRow1)).g : 1.0",
       "1.0",
     )],
     ["__MATERIAL_TRANSMISSION_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "materialTransmissionTexture",
-      "u_useMaterialTransmissionTexture ? texture(u_materialTransmissionTexture, v_uv).r : 1.0",
+      "u_useMaterialTransmissionTexture ? texture(u_materialTransmissionTexture, materialTextureUv(u_materialTransmissionUvSet, u_materialTransmissionUvRow0, u_materialTransmissionUvRow1)).r : 1.0",
       "1.0",
     )],
     ["__THICKNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "thicknessTexture",
-      "u_useThicknessTexture ? texture(u_thicknessTexture, v_uv).g : 1.0",
+      "u_useThicknessTexture ? texture(u_thicknessTexture, materialTextureUv(u_thicknessUvSet, u_thicknessUvRow0, u_thicknessUvRow1)).g : 1.0",
       "1.0",
     )],
     ["__METALLIC_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "metallicRoughnessTexture",
-      "u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, v_uv).b : 1.0",
+      "u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet, u_metallicRoughnessUvRow0, u_metallicRoughnessUvRow1)).b : 1.0",
       "1.0",
     )],
     ["__ROUGHNESS_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "metallicRoughnessTexture",
-      "u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, v_uv).g : 1.0",
+      "u_useMetallicRoughnessTexture ? texture(u_metallicRoughnessTexture, materialTextureUv(u_metallicRoughnessUvSet, u_metallicRoughnessUvRow0, u_metallicRoughnessUvRow1)).g : 1.0",
       "1.0",
     )],
     ["__EMISSIVE_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "emissiveTexture",
-      "u_useEmissiveTexture ? texture(u_emissiveTexture, v_emissive_uv).rgb : vec3(1.0)",
+      "u_useEmissiveTexture ? texture(u_emissiveTexture, materialTextureUv(u_emissiveUvSet, u_emissiveUvRow0, u_emissiveUvRow1)).rgb : vec3(1.0)",
       "vec3(1.0)",
     )],
     ["__MATERIAL_OCCLUSION_BODY__", surfaceFeatureBlock(
@@ -332,7 +383,7 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures): string =>
   return 1.0;
 }
 float strength = clamp(u_occlusionSettings.x, 0.0, 1.0);
-return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);`,
+return mix(1.0, texture(u_occlusionTexture, materialTextureUv(u_occlusionUvSet, u_occlusionUvRow0, u_occlusionUvRow1)).r, strength);`,
       "return 1.0;",
     )],
     ["__MATERIAL_NORMAL_BODY__", surfaceFeatureBlock(
@@ -341,21 +392,29 @@ return mix(1.0, texture(u_occlusionTexture, v_uv).r, strength);`,
       `if (!u_useNormalTexture) {
   return geometricNormal;
 }
-vec3 textureNormal = texture(u_normalTexture, v_uv).xyz * 2.0 - 1.0;
+vec3 textureNormal = texture(u_normalTexture, materialTextureUv(u_normalUvSet, u_normalUvRow0, u_normalUvRow1)).xyz * 2.0 - 1.0;
 textureNormal.xy *= u_normalTextureSettings.x;
 vec3 normal = normalize(geometricNormal);
+if (v_tangent.w == 0.0) {
+  return normalize(materialFallbackCotangentFrame(normal) * textureNormal);
+}
 vec3 tangent = materialGeometryTangent(normal);
-vec3 bitangent = normalize(cross(normal, tangent)) * (v_tangent.w < 0.0 ? -1.0 : 1.0);
+vec3 bitangent = normalize(cross(normal, tangent))
+  * (v_tangent.w < 0.0 ? -1.0 : 1.0)
+  * materialFaceSign();
 return normalize(tangent * textureNormal.x + bitangent * textureNormal.y + normal * textureNormal.z);`,
       "return geometricNormal;",
     )],
     ["__MATERIAL_TRANSMISSION_SCREEN_BODY__", surfaceFeatureBlock(
       features,
       "transmissionScreenTexture",
-      `vec2 screenUv = clamp(gl_FragCoord.xy / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
+      `vec2 screenUv = clamp((gl_FragCoord.xy - u_viewportOrigin) / max(u_viewportSize, vec2(1.0)), vec2(0.0), vec2(1.0));
+vec4 screenSample = texture(u_transmissionScreenTexture, screenUv);
+vec3 environmentFallback = iblDiffuseIrradiance(-normal) / PI;
+vec3 screenRadiance = mix(environmentFallback, screenSample.rgb, screenSample.a);
 float dispersion = max(u_dispersionFactors.x, 0.0);
 if (dispersion <= 0.0) {
-  return texture(u_transmissionScreenTexture, screenUv).rgb * baseColor * materialVolumeAttenuation();
+  return screenRadiance * baseColor * materialVolumeAttenuation();
 }
 vec3 iors = materialDispersionIors(u_materialExtensionFactors.y, dispersion);
 vec2 direction = materialDispersionDirection(normal, viewDirection);
@@ -365,9 +424,10 @@ vec2 redUv = clamp(screenUv - direction * max(iors.g - iors.r, 0.0) * offsetScal
 vec2 blueUv = clamp(screenUv + direction * max(iors.b - iors.g, 0.0) * offsetScale, vec2(0.0), vec2(1.0));
 vec3 transmitted = vec3(
   texture(u_transmissionScreenTexture, redUv).r,
-  texture(u_transmissionScreenTexture, screenUv).g,
+  screenRadiance.g,
   texture(u_transmissionScreenTexture, blueUv).b
 );
+transmitted = mix(environmentFallback, transmitted, screenSample.a);
 return transmitted * baseColor * materialVolumeAttenuation();`,
       "return baseColor * materialVolumeAttenuation();",
     )],
@@ -388,11 +448,9 @@ return transmitted * baseColor * materialVolumeAttenuation();`,
 vec3 reflection = normalize(reflect(-viewDirection, normal));
 vec3 direction = normalize((u_iblWorldToIbl * vec4(reflection, 0.0)).xyz);
 float mipCount = max(u_iblSpecularSettings.z, 1.0);
-float roughness = materialRoughnessFactor();
 float lod = roughness * max(mipCount - 1.0, 0.0);
-float NdotV = max(dot(normal, viewDirection), 0.0);
 vec3 radiance = iblDecodeSpecularRadiance(textureLod(u_iblSpecularCube, direction, lod));
-return radiance * iblSpecularBrdf(baseColor, roughness, NdotV) * u_iblSpecularSettings.y;`,
+return radiance * u_iblSpecularSettings.y;`,
       "return vec3(0.0);",
     )],
     ["__BASE_COLOR_EXPR__", surfaceBaseColorExpression(features)],

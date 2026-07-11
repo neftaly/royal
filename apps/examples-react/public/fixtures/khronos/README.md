@@ -1,6 +1,6 @@
 # Khronos glTF Sample Assets fixtures
 
-Official KhronosGroup/glTF-Sample-Assets models copied from raw GitHub URLs. These fixtures are used by the examples glTF Kitchen Sink route.
+Official KhronosGroup/glTF-Sample-Assets models copied from raw GitHub URLs. Supported fixtures are used by the manifest-driven glTF Lab; unsupported fixtures remain as a pinned compatibility corpus.
 
 Upstream repository: https://github.com/KhronosGroup/glTF-Sample-Assets
 Model index inspected: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/model-index.json
@@ -11,6 +11,12 @@ Model index inspected: https://raw.githubusercontent.com/KhronosGroup/glTF-Sampl
 - Keep the route broad but bounded: most selected assets are 1.5 MB or smaller; a few already-used visual regression fixtures above that limit are retained.
 - Avoid generated fixtures and avoid non-Khronos sources.
 - Skip samples whose primary value depends on renderer features not currently implemented here, or whose size would make the example route and repository unnecessarily heavy.
+
+`src/examples/gltf-lab-manifest.json` is the single generated/static inventory.
+It records local paths, byte sizes, hashes, provenance, structural feature tags,
+and retained fixtures whose parsed GLB structure requires deformation. Those
+fixtures are deliberately absent from success sweeps until that optional runtime
+returns.
 
 ## Included set
 

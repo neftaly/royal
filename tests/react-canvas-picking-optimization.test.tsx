@@ -1,7 +1,9 @@
-/** @jsxImportSource @royal/react */
 import { describe, expect, it, vi } from "vitest";
 import {
   boxGeometry,
+  mesh,
+  perspectiveCamera,
+  scene,
   unlitMaterial,
   type MeshNode,
   type PickInput,
@@ -10,17 +12,19 @@ import {
 } from "@royal/renderer-core";
 import {
   attachCanvasPointerEventHandlers,
+  reconcileCanvasPointerInteractionScene,
 } from "../packages/react/src/canvas";
-import {
-  createCanvasPointerInteractionState,
-  type CanvasPickedPointerTarget,
-} from "../packages/react/src/canvas-pointer-interaction";
+import { createCanvasPointerInteractionState } from "../packages/react/src/canvas-pointer-interaction";
 import {
   createRoyalPointerEvent,
-  handlerForRoyalPointerEvent,
-  type RoyalPointerEventType,
+  type RoyalPointerEvent,
 } from "../packages/react/src/picking-events";
-import { createRoyalRendererTree } from "../packages/react/src/renderer-tree";
+import { createOrbitControls } from "../packages/react/src/orbit-controls";
+import {
+  createRoyalScenePickingIndex,
+  createRoyalScenePointerEventRegistry,
+  type CanvasInteractions,
+} from "../packages/react/src/scene-interactions";
 import { fakeCanvas, fakeRendererRoot } from "./react-test-fixtures";
 
 const perspectiveProps = {
@@ -39,6 +43,7 @@ const pointerEvent = (
 
   return {
     button: 0,
+    buttons: 0,
     clientX: 24,
     clientY: 36,
     get defaultPrevented() {
@@ -53,7 +58,7 @@ const pointerEvent = (
 };
 
 const firstMeshNode = (scene: RenderRoot | undefined): MeshNode | undefined => {
-  const node = scene?.children[0]?.children[0];
+  const node = scene?.nodes[0];
   return node?.kind === "mesh" ? node : undefined;
 };
 
@@ -77,26 +82,81 @@ const pickFirstMesh = (
   return node === undefined ? undefined : pickResultFor(node, input);
 };
 
-const renderScene = (handlers: {
-  readonly onClick?: () => void;
-  readonly onPointerDown?: () => void;
-  readonly onPointerMove?: () => void;
-  readonly onPointerUp?: () => void;
-} = {}) => (
-  <scene>
-    <pass>
-      <perspectiveCamera {...perspectiveProps} />
-      <mesh
-        geometry={boxGeometry(1)}
-        material={unlitMaterial({ color: [1, 0, 0, 1] })}
-        pickingId="pickable"
-        {...handlers}
-      />
-    </pass>
-  </scene>
-);
+const renderScene = (): RenderRoot => scene({
+  camera: perspectiveCamera(perspectiveProps),
+  nodes: [mesh({
+    geometry: boxGeometry(1),
+    material: unlitMaterial({ color: [1, 0, 0, 1] }),
+    pickingId: "pickable",
+  })],
+});
+
+const interactions = (
+  handlers: CanvasInteractions[string],
+): CanvasInteractions => ({ pickable: handlers });
+
+const interactionRegistry = (
+  renderScene: RenderRoot,
+  handlers?: CanvasInteractions,
+) => createRoyalScenePointerEventRegistry(createRoyalScenePickingIndex(renderScene), handlers);
 
 describe("React Canvas picking optimization", () => {
+  it("coalesces pointer moves per frame and flushes the latest move before a gesture", () => {
+    const frameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextFrame = 1;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      const frame = nextFrame;
+      nextFrame += 1;
+      frameCallbacks.set(frame, callback);
+      return frame;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn((frame: number) => {
+      frameCallbacks.delete(frame);
+    }));
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const onPointerDown = vi.fn();
+    const onPointerMove = vi.fn<(event: RoyalPointerEvent) => void>();
+    const renderRoot = renderScene();
+    root.render(renderRoot);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+      sceneInteractionsRef: { current: interactionRegistry(renderRoot, interactions({ onPointerDown, onPointerMove })) },
+      root,
+    });
+
+    for (let index = 0; index < 100; index += 1) {
+      canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { clientX: index }));
+    }
+    expect(root.pick).not.toHaveBeenCalled();
+    expect(frameCallbacks.size).toBe(1);
+
+    const firstFrame = frameCallbacks.entries().next().value as
+      | [number, FrameRequestCallback]
+      | undefined;
+    expect(firstFrame).toBeDefined();
+    frameCallbacks.delete(firstFrame![0]);
+    firstFrame![1](16);
+    expect(root.pick).toHaveBeenCalledTimes(1);
+    expect(onPointerMove).toHaveBeenCalledTimes(1);
+    expect(onPointerMove.mock.calls[0]![0].clientX).toBe(99);
+
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { clientX: 120 }));
+    canvas.dispatchFakeEvent("pointerdown", pointerEvent(1, { clientX: 121 }));
+    expect(root.pick).toHaveBeenCalledTimes(3);
+    expect(onPointerMove.mock.calls[1]![0].clientX).toBe(120);
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { buttons: 1, clientX: 122 }));
+    expect(root.pick).toHaveBeenCalledTimes(4);
+    expect(onPointerMove.mock.calls[2]![0].clientX).toBe(122);
+
+    detach();
+    vi.unstubAllGlobals();
+  });
+
   it("forwards pointer event default and propagation controls to the native event", () => {
     const stopPropagation = vi.fn();
     const nativeEvent = pointerEvent(1, { stopPropagation });
@@ -129,22 +189,17 @@ describe("React Canvas picking optimization", () => {
   it("skips root.pick for pointer events when rendered nodes have no pointer handlers", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
-    const rendererTree = createRoyalRendererTree();
-    const dispatchRoyalPointerEvent = vi.fn((
-      _type: RoyalPointerEventType,
-      _nativeEvent: PointerEvent,
-      _picked: CanvasPickedPointerTarget,
-    ): void => {});
+    const renderRoot = renderScene();
+    const sceneInteractions = interactionRegistry(renderRoot);
 
-    rendererTree.setTarget(root, false);
-    rendererTree.render(renderScene());
-    expect(rendererTree.hasPointerEventTargets()).toBe(false);
+    root.render(renderRoot);
+    expect(sceneInteractions.hasPointerEventTargets).toBe(false);
 
     const detach = attachCanvasPointerEventHandlers({
       canvas,
-      dispatchRoyalPointerEvent,
+      lastPointerEventRef: { current: undefined },
       pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
-      rendererTree,
+      sceneInteractionsRef: { current: sceneInteractions },
       root,
     });
 
@@ -153,58 +208,38 @@ describe("React Canvas picking optimization", () => {
     canvas.dispatchFakeEvent("pointerup", pointerEvent(1));
 
     expect(root.pick).not.toHaveBeenCalled();
-    expect(dispatchRoyalPointerEvent).not.toHaveBeenCalled();
 
     detach();
-    rendererTree.dispose();
   });
 
   it("calls root.pick and dispatches pointer handlers when rendered nodes have handlers", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
-    const rendererTree = createRoyalRendererTree();
     const onClick = vi.fn();
     const onPointerDown = vi.fn();
     const onPointerMove = vi.fn();
     const onPointerUp = vi.fn();
-    const dispatchRoyalPointerEvent = vi.fn((
-      type: RoyalPointerEventType,
-      nativeEvent: PointerEvent,
-      picked: CanvasPickedPointerTarget,
-    ): void => {
-      const target = rendererTree.pointerEventTarget(picked.node) ?? picked.target;
-      handlerForRoyalPointerEvent(target, type)?.(createRoyalPointerEvent({
-        hit: picked.hit,
-        nativeEvent,
-        type,
-      }));
-    });
-
-    rendererTree.setTarget(root, false);
-    rendererTree.render(renderScene({
+    const renderRoot = renderScene();
+    const sceneInteractions = interactionRegistry(renderRoot, interactions({
       onClick,
       onPointerDown,
       onPointerMove,
       onPointerUp,
     }));
-    expect(rendererTree.hasPointerEventTargets()).toBe(true);
+
+    root.render(renderRoot);
+    expect(sceneInteractions.hasPointerEventTargets).toBe(true);
 
     const detach = attachCanvasPointerEventHandlers({
       canvas,
-      dispatchRoyalPointerEvent,
+      lastPointerEventRef: { current: undefined },
       pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
-      rendererTree,
+      sceneInteractionsRef: { current: sceneInteractions },
       root,
     });
 
     canvas.dispatchFakeEvent("pointermove", pointerEvent(1));
     canvas.dispatchFakeEvent("pointerdown", pointerEvent(1));
-    rendererTree.render(renderScene({
-      onClick,
-      onPointerDown,
-      onPointerMove,
-      onPointerUp,
-    }));
     canvas.dispatchFakeEvent("pointerup", pointerEvent(1));
 
     expect(root.pick).toHaveBeenCalledTimes(3);
@@ -214,6 +249,143 @@ describe("React Canvas picking optimization", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
 
     detach();
-    rendererTree.dispose();
+  });
+
+  it("consumes picked gestures before controls even when controls attach first", () => {
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const controls = createOrbitControls(canvas, {
+      defaultView: { distance: 5, pitch: 0, target: [0, 0, 0], yaw: 0 },
+    });
+    const onPointerDown = vi.fn((event: RoyalPointerEvent) => {
+      event.preventDefault();
+    });
+    const renderRoot = renderScene();
+    const sceneInteractions = interactionRegistry(renderRoot, interactions({ onPointerDown }));
+    root.render(renderRoot);
+    const detachPicking = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+      sceneInteractionsRef: { current: sceneInteractions },
+      root,
+    });
+
+    const down = pointerEvent(1, { clientX: 10, clientY: 20 });
+    canvas.dispatchFakeEvent("pointerdown", down);
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { clientX: 40, clientY: 50 }));
+
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(down.defaultPrevented).toBe(true);
+    expect(controls.getView()).toEqual({
+      distance: 5,
+      pitch: 0,
+      target: [0, 0, 0],
+      yaw: 0,
+    });
+
+    detachPicking();
+    controls.dispose();
+  });
+
+  it("keeps a pressed gesture across handler-only interaction changes without resubmitting the scene", () => {
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const oldClick = vi.fn();
+    const nextClick = vi.fn();
+    const renderRoot = renderScene();
+    const pickingIndex = createRoyalScenePickingIndex(renderRoot);
+    const oldInteractions = createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      interactions({ onClick: oldClick }),
+    );
+    const nextInteractions = createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      interactions({ onClick: nextClick }),
+    );
+    const sceneInteractionsRef = { current: oldInteractions };
+    const pointerInteractionStateRef = { current: createCanvasPointerInteractionState() };
+    const lastPointerEventRef: { current: PointerEvent | undefined } = { current: undefined };
+    root.render(renderRoot);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractionsRef,
+      root,
+    });
+
+    canvas.dispatchFakeEvent("pointerdown", pointerEvent(7));
+    sceneInteractionsRef.current = nextInteractions;
+    canvas.dispatchFakeEvent("pointerup", pointerEvent(7));
+
+    expect(oldClick).not.toHaveBeenCalled();
+    expect(nextClick).toHaveBeenCalledTimes(1);
+    expect(root.render).toHaveBeenCalledTimes(1);
+    detach();
+  });
+
+  it("requires every interaction key to identify exactly one scene node", () => {
+    const renderRoot = renderScene();
+    expect(() => interactionRegistry(renderRoot, interactions({ onClick: vi.fn() }))).not.toThrow();
+    expect(() => createRoyalScenePointerEventRegistry(
+      createRoyalScenePickingIndex(renderRoot),
+      { missing: { onClick: vi.fn() } },
+    )).toThrow(/requires one scene node/);
+
+    const node = renderRoot.nodes[0]!;
+    const duplicate = scene({
+      camera: perspectiveCamera(perspectiveProps),
+      nodes: [node, node],
+    });
+    expect(() => createRoyalScenePointerEventRegistry(
+      createRoyalScenePickingIndex(duplicate),
+      interactions({ onClick: vi.fn() }),
+    )).toThrow(/ambiguous/);
+  });
+
+  it("emits pointerleave when a hovered pickingId is removed by a scene commit", () => {
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const onPointerLeave = vi.fn();
+    const nextPointerLeave = vi.fn();
+    const interactiveScene = renderScene();
+    const emptyScene = renderScene();
+    const sceneInteractionsRef = {
+      current: interactionRegistry(interactiveScene, interactions({ onPointerLeave })),
+    };
+    const pointerInteractionStateRef = { current: createCanvasPointerInteractionState() };
+    const lastPointerEventRef: { current: PointerEvent | undefined } = { current: undefined };
+    root.render(interactiveScene);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractionsRef,
+      root,
+    });
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(8));
+
+    reconcileCanvasPointerInteractionScene({
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractions: interactionRegistry(
+        interactiveScene,
+        interactions({ onPointerLeave: nextPointerLeave }),
+      ),
+      sceneInteractionsRef,
+    });
+
+    reconcileCanvasPointerInteractionScene({
+      lastPointerEventRef,
+      pointerInteractionStateRef,
+      sceneInteractions: interactionRegistry(emptyScene),
+      sceneInteractionsRef,
+    });
+
+    expect(onPointerLeave).not.toHaveBeenCalled();
+    expect(nextPointerLeave).toHaveBeenCalledTimes(1);
+    expect(pointerInteractionStateRef.current.hoveredTarget).toBeUndefined();
+    detach();
   });
 });

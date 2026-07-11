@@ -5,6 +5,7 @@ import {
 } from "./texture-sources";
 import type { SvgVirtualTextureSource } from "./svg-texture";
 import type { Mat4 } from "./math/mat4";
+import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
   generatedVirtualTexturePageCount,
@@ -79,6 +80,7 @@ export type VirtualTexturePendingUpload = {
   readonly image: TexImageSource;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
+  readonly sourceGeneration: number;
 };
 
 export type VirtualTextureRuntimeStats = {
@@ -102,7 +104,6 @@ export type VirtualTextureRuntimeStats = {
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
   autoPlan?: AutoVirtualTexturePlan;
-  diagnostics: string[];
   diagnosticsEnabled: boolean;
   readonly key: string;
   loadingPages: Set<string>;
@@ -112,6 +113,7 @@ export type VirtualTextureRuntimeState = {
   pendingUploads: VirtualTexturePendingUpload[];
   readonly requestedPages: Set<string>;
   resources?: VirtualTextureResourceSet;
+  sourceGeneration: number;
   stats: VirtualTextureRuntimeStats;
   status: VirtualTextureRuntimeStatus;
   readonly texture: VirtualTextureRef;
@@ -136,6 +138,7 @@ export type VirtualTextureDrawDemandContext = {
   readonly positions: Float32Array;
   readonly projection: Mat4;
   readonly texCoords: Float32Array;
+  readonly textureCoordinates?: GltfTextureCoordinates;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;
 };

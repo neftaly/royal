@@ -1,5 +1,7 @@
 import {
   boxGeometry,
+  mesh,
+  scene,
   type EulerRads,
   type RenderObjectHandle,
   wireframeMaterial,
@@ -12,18 +14,22 @@ import {
 } from '@royal/react';
 import {
   useRef,
+  useMemo,
   type ReactNode,
 } from 'react';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { srgbColor } from '../color';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
-  color: [0.38, 0.85, 0.95, 1],
+  color: srgbColor([0.38, 0.85, 0.95, 1]),
 });
 
-const SpinningCube = (): ReactNode => {
-  const meshRef = useRef<RenderObjectHandle | null>(null);
-
+const SpinController = ({
+  meshRef,
+}: {
+  readonly meshRef: { current: RenderObjectHandle | null };
+}): null => {
   useFrame(({ elapsedSeconds }) => {
     const handle = meshRef.current;
     if (handle === null) return;
@@ -32,34 +38,29 @@ const SpinningCube = (): ReactNode => {
     const rotation: EulerRads = [0.42 + spin * 0.28, 0.7 + spin, 0.12];
     handle.setTransform({ rotation });
   });
-
-  return (
-    <mesh
-      ref={meshRef}
-      geometry={cubeGeometry}
-      material={cubeMaterial}
-      transform={{
-        position: [0, 0, 0],
-        rotation: [0.42, 0.7, 0.12],
-      }}
-    />
-  );
+  return null;
 };
 
 export const WireframeCube = (): ReactNode => {
+  const meshRef = useRef<RenderObjectHandle | null>(null);
   const orbit = useOrbitCamera({
-    distance: 6,
-    pitch: 0.02,
+    initial: { distance: 6, pitch: 0.02 },
   });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    toneMapping: 'linear-clamp',
+    nodes: [mesh({
+      ref: meshRef,
+      geometry: cubeGeometry,
+      material: cubeMaterial,
+      transform: { position: [0, 0, 0], rotation: [0.42, 0.7, 0.12] },
+    })],
+  }), [orbit.cameraResource]);
 
   return (
-    <Canvas aria-label="Wireframe cube" renderer={exampleCanvasRendererOptions}>
-      <scene>
-        <pass camera={orbit.camera} toneMapping="none">
-          <SpinningCube />
-        </pass>
-      </scene>
-      <OrbitControls {...orbit.orbitControlsProps} />
+    <Canvas aria-label="Wireframe cube" context={exampleCanvasContextOptions} scene={renderScene}>
+      <SpinController meshRef={meshRef} />
+      <OrbitControls orbit={orbit} />
     </Canvas>
   );
 };

@@ -3,62 +3,36 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/react/scene';
-import { type ReactNode } from 'react';
+import { gltf, scene } from '@royal/react/scene';
+import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { colorAccuratePass, interactiveCanvasStyle } from '../presentation';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
-const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.46,
-  specularIntensity: 0.82,
-});
 
 export const GltfVariants = (): ReactNode => {
   const orbit = useOrbitCamera({
-    distance: 3.8,
-    pitch: 0.04,
-    target: [0, 0, 0],
+    initial: { distance: 3.8, pitch: 0.04, target: [0, 0, 0] },
   });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    ...colorAccuratePass,
+    nodes: [
+      gltf({ src: variantSrc, transform: { position: [-1.05, 0, 0], rotation: [0, -0.16, 0], scale: [0.76, 0.76, 0.76] } }),
+      gltf({ src: variantSrc, variant: 'ruby', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [0.76, 0.76, 0.76] } }),
+      gltf({ src: variantSrc, variant: 1, transform: { position: [1.05, 0, 0], rotation: [0, 0.16, 0], scale: [0.76, 0.76, 0.76] } }),
+    ],
+  }), [orbit.cameraResource]);
 
   return (
     <Canvas
       aria-label="glTF KHR_materials_variants"
-      renderer={exampleCanvasRendererOptions}
-      style={{ cursor: 'grab', touchAction: 'none' }}
+      context={exampleCanvasContextOptions}
+      style={interactiveCanvasStyle}
+      scene={renderScene}
     >
-      <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
-          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          <gltf
-            src={variantSrc}
-            transform={{
-              position: [-1.05, 0, 0],
-              rotation: [0, -0.16, 0],
-              scale: [0.76, 0.76, 0.76],
-            }}
-          />
-          <gltf
-            src={variantSrc}
-            transform={{
-              position: [0, 0, 0],
-              rotation: [0, 0, 0],
-              scale: [0.76, 0.76, 0.76],
-            }}
-            variant="ruby"
-          />
-          <gltf
-            src={variantSrc}
-            transform={{
-              position: [1.05, 0, 0],
-              rotation: [0, 0.16, 0],
-              scale: [0.76, 0.76, 0.76],
-            }}
-            variant={1}
-          />
-        </pass>
-      </scene>
-      <OrbitControls {...orbit.orbitControlsProps} maxDistance={8} minDistance={2} />
+      <OrbitControls orbit={orbit} maxDistance={8} minDistance={2} />
       <BenchmarkRendererSnapshot />
     </Canvas>
   );

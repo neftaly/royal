@@ -3,6 +3,8 @@ import type {
   PickResult,
   RenderRoot,
 } from "@royal/renderer-core";
+import type { RendererOwnedWebGl2Context } from "./webgl/context-lane";
+import type { RendererFrameViewLane } from "./webgl/frame-view-lane";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -10,15 +12,35 @@ export interface WebGlRootOptions {
   readonly alpha?: boolean;
   /** @defaultValue `true` */
   readonly antialias?: boolean;
-  /** @defaultValue `false` */
-  readonly preserveDrawingBuffer?: boolean;
+  /** Generate virtual-texture pages from ordinary large raster textures. Explicit virtual textures remain available. @defaultValue `false` */
+  readonly generatedRasterVirtualTextures?: boolean;
 }
 
 export type NormalizedWebGlRootOptions = Required<WebGlRootOptions>;
 
+export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
+
+export interface WebGlContextSnapshot {
+  readonly generation: number;
+  readonly lastError?: string;
+  readonly lifecycle: WebGlContextLifecycle;
+  readonly losses: number;
+  readonly restores: number;
+}
+
 /** Snapshot of renderer state, intended for tests and host diagnostics. */
 export interface WebGlRootSnapshot {
+  readonly context: WebGlContextSnapshot;
   readonly diagnostics: readonly string[];
+  readonly diagnosticStats: {
+    readonly capacity: number;
+    readonly dropped: number;
+    readonly occurrences: readonly {
+      readonly count: number;
+      readonly key: string;
+    }[];
+    readonly retained: number;
+  };
   readonly disposed: boolean;
   readonly frame: number;
   /** Renderer-owned glTF load timing, intended for tests, examples benchmarks, and host diagnostics. */
@@ -27,11 +49,56 @@ export interface WebGlRootSnapshot {
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
   readonly options: Required<WebGlRootOptions>;
+  readonly planning: WebGlFramePlanningSnapshot;
+  readonly resourceLifetime: WebGlResourceLifetimeSnapshot;
+  readonly picking: WebGlPickingSnapshot;
+  readonly textureResidency: WebGlTextureResidencySnapshot;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
 }
 
+export interface WebGlResourceLifetimeSnapshot {
+  readonly assetPlanCompiles: number;
+  readonly preparedAssetAcquires: number;
+  readonly preparedAssetEvents: number;
+  readonly preparedAssetReleases: number;
+  readonly preparedAssetUpdates: number;
+  readonly sceneLeaseAcquires: number;
+  readonly sceneLeaseReleases: number;
+  readonly gltfPreparationQueueHighWater: number;
+  readonly imageQueueHighWater: number;
+  readonly iblImageQueueHighWater: number;
+}
+
+export interface WebGlFramePlanningSnapshot {
+  readonly compileNodeVisits: number;
+  readonly planCompiles: number;
+  readonly planRevision: number;
+  readonly sceneCommits: number;
+}
+
+export interface WebGlPickingSnapshot {
+  /** Highest retained lightweight candidate capacity reached by this root. */
+  readonly candidateHighWater: number;
+  /** Broad-phase candidates admitted by the most recent pick. */
+  readonly candidates: number;
+  /** Triangle-level tests run by the most recent pick. */
+  readonly exactTests: number;
+}
+
+export interface WebGlTextureResidencySnapshot {
+  /** Distinct ordinary texture identities retained by the committed scene. */
+  readonly activeLeases: number;
+  /** Total committed-scene references sharing those identities. */
+  readonly activeReferences: number;
+  /** Approximate decoded CPU bytes retained for upload/context restoration. */
+  readonly preparedBytes: number;
+  /** Distinct decoded sources retained for upload/context restoration. */
+  readonly preparedSources: number;
+  /** Ordinary WebGL texture resources, including resources awaiting upload. */
+  readonly resources: number;
+}
+
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
-  readonly animationCount: number;
   readonly error?: string;
   readonly imageFailures: number;
   readonly imageLoaded: number;
@@ -40,7 +107,6 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly lightCount: number;
   readonly nodeCount: number;
   readonly phaseMs: {
-    readonly animations?: number;
     readonly buffers?: number;
     readonly document?: number;
     readonly draco?: number;
@@ -121,19 +187,25 @@ export interface WebGlRenderViewsOptions {
 }
 
 /** Imperative WebGL2 renderer root. */
-export interface WebGlRoot {
+export interface WebGlRoot extends RendererOwnedWebGl2Context, RendererFrameViewLane {
   readonly canvas: HTMLCanvasElement;
+  readonly contextLifecycle: WebGlContextLifecycle;
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
   readonly options: Required<WebGlRootOptions>;
+  contextSnapshot(): WebGlContextSnapshot;
   /** Suspends default-framebuffer scheduling until the returned release function runs. */
   acquireExternalRenderClock(): () => void;
   dispose(): void;
   /** Immediately renders queued demand on the caller's current frame, if any. */
   flushInvalidated(): void;
+  /** Flushes demand only when exactly one external clock owns the renderer. */
+  flushInvalidatedFromExternalClock(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
+  /** Observes immutable context lifecycle transitions. Calls back immediately with the current state. */
+  observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;

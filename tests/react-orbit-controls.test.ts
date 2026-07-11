@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createOrbitCameraStore,
-  createOrbitControls,
   type OrbitCameraView,
 } from "@royal/react";
+import {
+  createOrbitCameraController,
+  createOrbitControls,
+} from "../packages/react/src/orbit-controls";
 
 type FakeEvent = Event & {
   readonly defaultPrevented: boolean;
@@ -102,42 +104,21 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
-  it("publishes complete views from orbit camera stores", () => {
-    const store = createOrbitCameraStore({
-      distance: 5,
-    });
-    const changes: OrbitCameraView[] = [];
-    const unsubscribe = store.subscribe((state) => {
-      changes.push(state.view);
-    });
+  it("publishes explicit camera resource commits without a reactive view getter", () => {
+    const orbit = createOrbitCameraController({ distance: 5 }, { far: 100, fovY: 1, near: 0.1 });
+    const listener = vi.fn();
+    orbit.subscribeView(listener);
+    const version = orbit.cameraResource.version;
 
-    expect(store.getState().view).toEqual({
-      distance: 5,
-      pitch: 0,
-      target: [0, 0, 0],
-      yaw: 0,
-    });
+    orbit.setView({ distance: 6, pitch: 0.2, target: [1, 2, 3], yaw: 0.3 });
+    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(orbit.getView()).toEqual({ distance: 6, pitch: 0.2, target: [1, 2, 3], yaw: 0.3 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(orbit).not.toHaveProperty("view");
 
-    store.getState().setView({
-      distance: 6,
-      pitch: 0.2,
-      target: [1, 2, 3],
-      yaw: 0.3,
-    });
-    unsubscribe();
-    store.getState().setView({
-      distance: 7,
-      pitch: 0.4,
-    });
-
-    expect(changes).toEqual([
-      {
-        distance: 6,
-        pitch: 0.2,
-        target: [1, 2, 3],
-        yaw: 0.3,
-      },
-    ]);
+    orbit.setView(orbit.getView());
+    expect(orbit.cameraResource.version).toBe(version + 1);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it("zooms in and out from wheel input", () => {
@@ -200,6 +181,26 @@ describe("OrbitControls", () => {
     });
     expect(controls.getView().pitch).toBeCloseTo(defaultView.pitch - 5 * 0.006);
     expect(controls.getView().yaw).toBeCloseTo(defaultView.yaw + 10 * 0.006);
+
+    controls.dispose();
+  });
+
+  it("does not compete with pointer and wheel events consumed by scene handlers", () => {
+    const canvas = fakeCanvas();
+    const onChange = vi.fn();
+    const controls = createOrbitControls(canvas, { defaultView, onChange });
+    const consumedDown = pointerEvent(1, 10, 20);
+    const consumedWheel = wheelEvent(-120);
+    consumedDown.preventDefault();
+    consumedWheel.preventDefault();
+
+    canvas.dispatchFakeEvent("pointerdown", consumedDown);
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, 30, 40));
+    canvas.dispatchFakeEvent("wheel", consumedWheel);
+
+    expect(canvas.capturedPointerIds.size).toBe(0);
+    expect(controls.getView()).toEqual(defaultView);
+    expect(onChange).not.toHaveBeenCalled();
 
     controls.dispose();
   });

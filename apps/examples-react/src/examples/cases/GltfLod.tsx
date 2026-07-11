@@ -3,44 +3,45 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { studioEnvironment } from '@royal/react/scene';
-import { type ReactNode } from 'react';
+import { directionalLight, gltf, scene } from '@royal/react/scene';
+import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const lodSrc = import.meta.env.BASE_URL + 'fixtures/gltf-lod/royal-four-step-color-lod-cube.gltf';
-const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.46,
-  specularIntensity: 0.82,
-});
 
 export const GltfLod = (): ReactNode => {
   const orbit = useOrbitCamera({
-    distance: 4.6,
-    pitch: 0.02,
+    initial: { distance: 4.6, pitch: 0.02 },
   });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    environment: showcaseEnvironment,
+    ...showcasePass,
+    nodes: [
+      directionalLight(showcaseKeyLight),
+      directionalLight(showcaseFillLight),
+      gltf({
+        src: lodSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0.18, -0.28, 0],
+          scale: [1.3, 1.3, 1.3],
+        },
+      }),
+    ],
+  }), [orbit.cameraResource]);
 
   return (
     <Canvas
       aria-label="glTF MSFT_lod"
-      renderer={exampleCanvasRendererOptions}
-      style={{ cursor: 'grab', touchAction: 'none' }}
+      context={exampleCanvasContextOptions}
+      style={interactiveCanvasStyle}
+      scene={renderScene}
     >
-      <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
-          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          <gltf
-            src={lodSrc}
-            transform={{
-              position: [0, 0, 0],
-              rotation: [0.18, -0.28, 0],
-              scale: [1.3, 1.3, 1.3],
-            }}
-          />
-        </pass>
-      </scene>
       <OrbitControls
-        {...orbit.orbitControlsProps}
+        orbit={orbit}
         maxDistance={28}
         minDistance={2.4}
         zoomSpeed={0.00075}

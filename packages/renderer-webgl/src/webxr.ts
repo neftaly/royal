@@ -1,9 +1,22 @@
 import type { RenderRoot } from "@royal/renderer-core";
 import type {
-  WebGlRenderView,
-  WebGlRenderViewsOptions,
+  WebGlContextLifecycle,
   WebGlRenderViewport,
 } from "./root";
+import {
+  appendFrameView,
+  createFrameViews,
+  resetFrameViews,
+  type FrameViews,
+} from "./frame-views";
+import {
+  rendererOwnedWebGl2Context,
+  type RendererOwnedWebGl2Context,
+} from "./webgl/context-lane";
+import {
+  rendererFrameViews,
+  type RendererFrameViewLane,
+} from "./webgl/frame-view-lane";
 
 export interface WebGlXrReferenceSpace {
   readonly __royalWebGlXrReferenceSpace?: never;
@@ -57,11 +70,10 @@ export interface WebGlXrLayerOptions {
   readonly framebufferScaleFactor?: number;
 }
 
-export interface WebGlXrRenderRoot {
-  readonly canvas: HTMLCanvasElement;
+export interface WebGlXrRenderRoot extends RendererOwnedWebGl2Context, RendererFrameViewLane {
+  readonly contextLifecycle: WebGlContextLifecycle;
   readonly latestScene: RenderRoot | undefined;
   acquireExternalRenderClock(): () => void;
-  renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;
 }
 
 export interface WebGlXrFrameSnapshotViewport {
@@ -107,12 +119,6 @@ const DEFAULT_REFERENCE_SPACE_TYPES = ["local-floor", "local"] as const;
 const xrLayerConstructor = (): WebGlXrLayerConstructor | undefined =>
   (globalThis as { readonly XRWebGLLayer?: WebGlXrLayerConstructor }).XRWebGLLayer;
 
-const webGl2Context = (canvas: HTMLCanvasElement): WebGl2XrCompatibleContext => {
-  const gl = canvas.getContext("webgl2") as WebGl2XrCompatibleContext | null;
-  if (gl === null) throw new Error("Royal WebXR rendering requires a WebGL2 context");
-  return gl;
-};
-
 const firstReferenceSpace = async (
   session: WebGlXrSession,
   types: readonly WebXrReferenceSpaceType[],
@@ -140,32 +146,42 @@ const viewMatrix = (view: WebGlXrView): ArrayLike<number> => {
   return matrix;
 };
 
-const renderViews = (
+const fillFrameViews = (
+  frameViews: FrameViews,
   layer: WebGlXrLayer,
   pose: WebGlXrViewerPose,
-): readonly WebGlRenderView[] =>
-  pose.views.flatMap((view) => {
+): void => {
+  resetFrameViews(frameViews, layer.framebuffer, true);
+  for (const view of pose.views) {
     const viewport = layer.getViewport(view);
-    if (viewport === null || viewport === undefined) return [];
-    return [{
-      projectionMatrix: view.projectionMatrix,
-      viewMatrix: viewMatrix(view),
-      viewport,
-    }];
-  });
+    if (viewport === null || viewport === undefined) continue;
+    appendFrameView(
+      frameViews,
+      view.projectionMatrix,
+      viewMatrix(view),
+      viewport.x,
+      viewport.y,
+      viewport.width,
+      viewport.height,
+    );
+  }
+};
 
 const frameSnapshot = (
   frameIndex: number,
-  views: readonly WebGlRenderView[],
+  frameViews: FrameViews,
 ): WebGlXrFrameSnapshot => ({
   frameIndex,
-  viewCount: views.length,
-  viewports: views.map(({ viewport }) => ({
-    height: viewport.height,
-    width: viewport.width,
-    x: viewport.x,
-    y: viewport.y,
-  })),
+  viewCount: frameViews.count,
+  viewports: Array.from({ length: frameViews.count }, (_value, index) => {
+    const offset = index * 4;
+    return {
+      height: frameViews.viewports[offset + 3]!,
+      width: frameViews.viewports[offset + 2]!,
+      x: frameViews.viewports[offset]!,
+      y: frameViews.viewports[offset + 1]!,
+    };
+  }),
 });
 
 export const createWebXrSessionRenderer = async (
@@ -173,8 +189,14 @@ export const createWebXrSessionRenderer = async (
   session: WebGlXrSession,
   options: WebGlXrSessionRendererOptions = {},
 ): Promise<WebGlXrSessionRenderer> => {
-  const gl = webGl2Context(root.canvas);
+  if (root.contextLifecycle !== "active") {
+    throw new Error("Royal WebXR rendering requires an active renderer-owned WebGL2 context");
+  }
+  const gl = root[rendererOwnedWebGl2Context] as WebGl2XrCompatibleContext;
   await gl.makeXRCompatible?.();
+  if (root.contextLifecycle !== "active") {
+    throw new Error("Royal WebXR renderer context became unavailable during session setup");
+  }
 
   const Layer = options.advanced?.xrWebGLLayerConstructor ?? xrLayerConstructor();
   if (Layer === undefined) {
@@ -189,6 +211,7 @@ export const createWebXrSessionRenderer = async (
   );
   let frameIndex = 0;
   let disposed = false;
+  const frameViews = createFrameViews(2);
   const releaseRenderClock = root.acquireExternalRenderClock();
 
   return {
@@ -204,16 +227,16 @@ export const createWebXrSessionRenderer = async (
     },
     renderFrame: (frame, scene = root.latestScene) => {
       if (disposed) return false;
+      if (root.contextLifecycle !== "active") return false;
       if (scene === undefined) return false;
       const pose = frame.getViewerPose(referenceSpace);
       if (pose === null) return false;
-      const views = renderViews(layer, pose);
-      if (views.length === 0) return false;
-      root.renderViews(scene, {
-        framebuffer: layer.framebuffer,
-        views,
-      });
-      options.onFrameSnapshot?.(frameSnapshot(frameIndex, views));
+      fillFrameViews(frameViews, layer, pose);
+      if (frameViews.count === 0) return false;
+      root[rendererFrameViews](scene, frameViews);
+      if (options.onFrameSnapshot !== undefined) {
+        options.onFrameSnapshot(frameSnapshot(frameIndex, frameViews));
+      }
       frameIndex += 1;
       return true;
     },

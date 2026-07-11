@@ -4,7 +4,6 @@ import {
   directionalLight,
   mesh,
   orthographicCamera,
-  pass,
   perspectiveCamera,
   planeGeometry,
   scene,
@@ -16,6 +15,8 @@ import {
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import { vertexShaderSource } from "../packages/renderer-webgl/src/webgl/shaders";
+import { VERTEX_ATTRIBUTE } from "../packages/renderer-webgl/src/webgl/vertex-attribute-abi";
 
 type CanvasSize = {
   readonly width: number;
@@ -228,9 +229,9 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
       if (name === "a_position") return 0;
       if (name === "a_normal") return 1;
-      if (name === "a_uv") return 2;
-      if (name === "a_emissive_uv") return 10;
-      if (name === "a_tangent") return 11;
+      if (name === "a_uv0") return 10;
+      if (name === "a_uv1") return 11;
+      if (name === "a_tangent") return 2;
       if (name === "a_color") return 12;
       return 0;
     }),
@@ -433,21 +434,15 @@ const testCamera = () =>
     top: 1,
   });
 
-const singlePassScene = (children: readonly RenderNode[]) =>
+const singleScene = (nodes: readonly RenderNode[]) =>
   scene({
-    children: [
-      pass({
-        camera: testCamera(),
-        children,
-      }),
-    ],
+    camera: testCamera(),
+    nodes,
   });
 
 const iblEnvironmentScene = () =>
   scene({
-    children: [
-      pass({
-        camera: orthographicCamera({
+    camera: orthographicCamera({
           bottom: -1,
           far: 10,
           left: -1,
@@ -456,8 +451,8 @@ const iblEnvironmentScene = () =>
           right: 1,
           rotation: [0, 0, 0],
           top: 1,
-        }),
-        children: [
+    }),
+    nodes: [
           mesh({
             geometry: boxGeometry(1),
             material: standardMaterial({
@@ -466,16 +461,12 @@ const iblEnvironmentScene = () =>
               roughness: 0.4,
             }),
           }),
-        ],
-        environment: studioEnvironment({
-          intensity: 1.1,
-          irradianceIntensity: 0.65,
-          specularIntensity: 1.35,
-        }),
-        exposure: 0.9,
-        toneMapping: "aces",
-      }),
     ],
+    environment: studioEnvironment({
+      radianceScaleNits: 80,
+    }),
+    exposureEv100: 0.9,
+    toneMapping: "aces-fitted",
   });
 
 afterEach(() => {
@@ -490,9 +481,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10.5,
             left: -2,
@@ -501,8 +490,8 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 2,
             rotation: [0, 0, 0],
             top: 3,
-          }),
-          children: [
+      }),
+      nodes: [
             mesh({
               geometry: boxGeometry(1),
               material: unlitMaterial({ color: [1, 1, 1, 1] }),
@@ -512,8 +501,6 @@ describe("WebGL renderer pipeline contracts", () => {
                 scale: [2, 3, 4],
               },
             }),
-          ],
-        }),
       ],
     }));
 
@@ -543,18 +530,14 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: perspectiveCamera({
+      camera: perspectiveCamera({
             far: 101,
             fovY: Math.PI / 2,
             near: 1,
             position: [0, 0, 5],
             rotation: [0, 0, 0],
-          }),
-          children: [unlitBox()],
-        }),
-      ],
+      }),
+      nodes: [unlitBox()],
     }));
 
     expectMatrixUniform(calls, [
@@ -577,9 +560,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10,
             left: -1,
@@ -588,10 +569,8 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 1,
             rotation: [0, 0, 0],
             top: 1,
-          }),
-          children: [unlitBox(color)],
-        }),
-      ],
+      }),
+      nodes: [unlitBox(color)],
     }));
 
     expect(uniform4fvPayloads(calls).map(roundVector)).toContainEqual(color);
@@ -600,7 +579,7 @@ describe("WebGL renderer pipeline contracts", () => {
   it("skips redundant uniform and program uploads across repeated renders without skipping draws", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = singlePassScene([unlitBox([0.2, 0.4, 0.6, 1])]);
+    const renderGraph = singleScene([unlitBox([0.2, 0.4, 0.6, 1])]);
 
     root.render(renderGraph);
     const callsBeforeSecondRender = calls.length;
@@ -617,24 +596,37 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(secondRenderCalls.some((call) => drawCallNames.has(call.name))).toBe(true);
   });
 
-  it("does not reserve optional or instanced attribute locations while linking programs", () => {
+  it("uses the fixed vertex attribute ABI without program-dependent binding or lookup", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(singlePassScene([unlitBox()]));
+    root.render(singleScene([unlitBox()]));
 
-    expect(calls.filter((call) => call.name === "bindAttribLocation").map((call) => call.args.slice(1))).toEqual([
-      [0, "a_position"],
-      [1, "a_normal"],
-      [2, "a_uv"],
-    ]);
+    expect(calls.some((call) => call.name === "bindAttribLocation" || call.name === "getAttribLocation")).toBe(false);
+    const surface = vertexShaderSource("surface");
+    const instanced = vertexShaderSource("surface-instanced-split");
+    const wireframe = vertexShaderSource("wireframe");
+    for (const source of [surface, instanced, wireframe]) {
+      expect(source).toContain(`layout(location = ${VERTEX_ATTRIBUTE.position}) in vec3 a_position;`);
+    }
+    expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.normal}) in vec3 a_normal;`);
+    expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.tangent}) in vec4 a_tangent;`);
+    expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.texCoord0}) in vec2 a_uv0;`);
+    expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.texCoord1}) in vec2 a_uv1;`);
+    expect(surface).toContain(`layout(location = ${VERTEX_ATTRIBUTE.color}) in vec4 a_color;`);
+    expect(instanced).toContain(
+      `layout(location = ${VERTEX_ATTRIBUTE.instanceLocalModelFirstColumn}) in mat4 a_instanceLocalModel;`,
+    );
+    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instancePosition}) in vec3 a_instancePosition;`);
+    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instanceRotation}) in vec3 a_instanceRotation;`);
+    expect(instanced).toContain(`layout(location = ${VERTEX_ATTRIBUTE.instanceScale}) in vec3 a_instanceScale;`);
   });
 
   it("uploads material uniform changes after a previous render cached different values", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       mesh({
         geometry: boxGeometry(1),
@@ -643,7 +635,7 @@ describe("WebGL renderer pipeline contracts", () => {
     ]));
     const callsBeforeSecondRender = calls.length;
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       mesh({
         geometry: boxGeometry(1),
@@ -660,7 +652,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       mesh({
         geometry: boxGeometry(1),
@@ -669,7 +661,7 @@ describe("WebGL renderer pipeline contracts", () => {
     ]));
     const callsBeforeSecondRender = calls.length;
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       directionalLight({ color: [0.25, 0.5, 0.75, 1], direction: [0, 0, -1] }),
       mesh({
         geometry: boxGeometry(1),
@@ -686,7 +678,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       mesh({
         geometry: boxGeometry(1),
         material: unlitMaterial({ color: [1, 1, 1, 1] }),
@@ -699,7 +691,7 @@ describe("WebGL renderer pipeline contracts", () => {
     ]));
     const callsBeforeSecondRender = calls.length;
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       mesh({
         geometry: boxGeometry(1),
         material: unlitMaterial({ color: [1, 1, 1, 1] }),
@@ -726,9 +718,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10,
             left: -1,
@@ -737,10 +727,8 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 1,
             rotation: [0, 0, 0],
             top: 1,
-          }),
-          children: [unlitBox()],
-        }),
-      ],
+      }),
+      nodes: [unlitBox()],
     }));
 
     const uploads = bufferUploads(calls);
@@ -766,7 +754,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
-    root.render(singlePassScene([
+    root.render(singleScene([
       unlitBox(),
       mesh({
         geometry: planeGeometry(1),
@@ -789,9 +777,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10,
             left: -1,
@@ -800,8 +786,8 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 1,
             rotation: [0, 0, 0],
             top: 1,
-          }),
-          children: [
+      }),
+      nodes: [
             directionalLight({
               color: [0.8, 0.9, 1, 1],
               direction: [0.25, -0.5, -1],
@@ -810,12 +796,10 @@ describe("WebGL renderer pipeline contracts", () => {
               geometry: boxGeometry(1),
               material: standardMaterial({ color: [1, 1, 1, 1] }),
             }),
-          ],
-        }),
       ],
     }));
 
-    expect(calls.some((call) => call.name === "getAttribLocation" && call.args[1] === "a_normal")).toBe(true);
+    expect(calls.some((call) => call.name === "getAttribLocation")).toBe(false);
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
       && call.args[0] === 1
@@ -836,9 +820,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10,
             left: -1,
@@ -847,8 +829,8 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 1,
             rotation: [0, 0, 0],
             top: 1,
-          }),
-          children: [
+      }),
+      nodes: [
             directionalLight({
               color: [1, 1, 1, 1],
               direction: [0, 0, -1],
@@ -861,8 +843,6 @@ describe("WebGL renderer pipeline contracts", () => {
                 roughness: 0.35,
               }),
             }),
-          ],
-        }),
       ],
     }));
 
@@ -881,15 +861,15 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
     expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
     expect(sources).toContain("vec3 diffuse = diffuseColor * (lambert / PI) * lightColor");
-    expect(sources).toContain("outColor = outputLinearColor(baseColor.rgb, baseColor.a);");
-    expect(sources).toContain("outColor = outputMappedColor(lit, baseColor.a);");
+    expect(sources).toContain("baseColor.rgb / max(u_toneMappingSettings.y, 0.000001)");
+    expect(sources).toContain("? vec4(lit, baseColor.a)");
     expect(sources).not.toContain("pow(roughness + 1.0, 2.0) / 8.0");
     expect(sources).not.toContain("pow(NdotH, 32.0)");
 
     expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([0, 1, 0, 0]);
+      .toContainEqual([0, 0.833333, 0, 0]);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(false);
     expect(calls.some((call) =>
       call.name === "texStorage2D"
@@ -920,17 +900,17 @@ describe("WebGL renderer pipeline contracts", () => {
       throw new Error(`Expected BRDF LUT sampler to use a non-conflicting unit; got ${brdfLutUnits.join(", ")}`);
     }
     expect(uniform4fvPayloadsByName(calls, "u_iblIrradianceSettings").map(roundVector))
-      .toContainEqual([1, 0.65, 0, 0]);
+      .toContainEqual([1, 80, 0, 0]);
     expect(uniform4fvPayloadsByName(calls, "u_iblSpecularSettings").map(roundVector))
-      .toContainEqual([1, 1.35, 4, 0]);
+      .toContainEqual([1, 80, 6, 0]);
     expect(uniform4fvPayloadsByName(calls, "u_toneMappingSettings").map(roundVector))
-      .toContainEqual([1, 0.9, 0, 0]);
+      .toContainEqual([1, 0.446572, 0, 0]);
     const cubeFaceUploads = calls.filter((call) =>
       call.name === "texImage2D"
       && Number(call.args[0]) >= gl.TEXTURE_CUBE_MAP_POSITIVE_X
       && Number(call.args[0]) < gl.TEXTURE_CUBE_MAP_POSITIVE_X + 6);
 
-    expect(cubeFaceUploads).toHaveLength(24);
+    expect(cubeFaceUploads).toHaveLength(36);
     expect(calls.some((call) => call.name === "bindTexture" && call.args[0] === gl.TEXTURE_CUBE_MAP)).toBe(true);
     expect(calls.some((call) =>
       call.name === "texImage2D"
@@ -971,9 +951,7 @@ describe("WebGL renderer pipeline contracts", () => {
     const unsupportedGeometry = { kind: "custom-pyramid" } satisfies Geometry<"custom-pyramid">;
 
     expect(() => root.render(scene({
-      children: [
-        pass({
-          camera: orthographicCamera({
+      camera: orthographicCamera({
             bottom: -1,
             far: 10,
             left: -1,
@@ -982,14 +960,12 @@ describe("WebGL renderer pipeline contracts", () => {
             right: 1,
             rotation: [0, 0, 0],
             top: 1,
-          }),
-          children: [
+      }),
+      nodes: [
             mesh({
               geometry: unsupportedGeometry,
               material: unlitMaterial({ color: [1, 1, 1, 1] }),
             }),
-          ],
-        }),
       ],
     }))).toThrow('Unsupported geometry kind "custom-pyramid"');
   });

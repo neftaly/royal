@@ -1,5 +1,6 @@
 import type {
   Camera,
+  CameraViewReadTarget,
   Transform,
   Vec3,
 } from "@royal/renderer-core";
@@ -51,50 +52,14 @@ export const multiplyMat4 = (left: Mat4, right: Mat4): Mat4 =>
     0, 0, 0, 0,
   ], left, right);
 
-export const inverseMat4 = (matrix: Mat4): Mat4 | undefined => {
-  const [
-    a00, a01, a02, a03,
-    a10, a11, a12, a13,
-    a20, a21, a22, a23,
-    a30, a31, a32, a33,
-  ] = matrix;
+export const inverseMat4Into = (
+  out: MutableMat4,
+  matrix: Mat4,
+): MutableMat4 | undefined =>
+  glMatrixMat4.invert(out, matrix as MutableMat4) === null ? undefined : out;
 
-  const b00 = a00 * a11 - a01 * a10;
-  const b01 = a00 * a12 - a02 * a10;
-  const b02 = a00 * a13 - a03 * a10;
-  const b03 = a01 * a12 - a02 * a11;
-  const b04 = a01 * a13 - a03 * a11;
-  const b05 = a02 * a13 - a03 * a12;
-  const b06 = a20 * a31 - a21 * a30;
-  const b07 = a20 * a32 - a22 * a30;
-  const b08 = a20 * a33 - a23 * a30;
-  const b09 = a21 * a32 - a22 * a31;
-  const b10 = a21 * a33 - a23 * a31;
-  const b11 = a22 * a33 - a23 * a32;
-
-  const determinant = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-  if (Math.abs(determinant) < 1e-12) return undefined;
-  const invDeterminant = 1 / determinant;
-
-  return [
-    (a11 * b11 - a12 * b10 + a13 * b09) * invDeterminant,
-    (a02 * b10 - a01 * b11 - a03 * b09) * invDeterminant,
-    (a31 * b05 - a32 * b04 + a33 * b03) * invDeterminant,
-    (a22 * b04 - a21 * b05 - a23 * b03) * invDeterminant,
-    (a12 * b08 - a10 * b11 - a13 * b07) * invDeterminant,
-    (a00 * b11 - a02 * b08 + a03 * b07) * invDeterminant,
-    (a32 * b02 - a30 * b05 - a33 * b01) * invDeterminant,
-    (a20 * b05 - a22 * b02 + a23 * b01) * invDeterminant,
-    (a10 * b10 - a11 * b08 + a13 * b06) * invDeterminant,
-    (a01 * b08 - a00 * b10 - a03 * b06) * invDeterminant,
-    (a30 * b04 - a31 * b02 + a33 * b00) * invDeterminant,
-    (a21 * b02 - a20 * b04 - a23 * b00) * invDeterminant,
-    (a11 * b07 - a10 * b09 - a12 * b06) * invDeterminant,
-    (a00 * b09 - a01 * b07 + a02 * b06) * invDeterminant,
-    (a31 * b01 - a30 * b03 - a32 * b00) * invDeterminant,
-    (a20 * b03 - a21 * b01 + a22 * b00) * invDeterminant,
-  ];
-};
+export const inverseMat4 = (matrix: Mat4): Mat4 | undefined =>
+  inverseMat4Into(identityMat4(), matrix);
 
 export const transformVec4 = (matrix: Mat4, [x, y, z, w]: Vec4): Vec4 => [
   matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
@@ -110,11 +75,9 @@ export const transformPoint = (matrix: Mat4, point: Vec3): Vec3 => {
 };
 
 export const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 => {
-  const [x, y, z] = transformVec4(matrix, [direction[0], direction[1], direction[2], 0]);
-  return normalizeVec3([x, y, z]);
-};
-
-export const normalizeVec3 = ([x, y, z]: Vec3): Vec3 => {
+  const x = matrix[0] * direction[0] + matrix[4] * direction[1] + matrix[8] * direction[2];
+  const y = matrix[1] * direction[0] + matrix[5] * direction[1] + matrix[9] * direction[2];
+  const z = matrix[2] * direction[0] + matrix[6] * direction[1] + matrix[10] * direction[2];
   const length = Math.hypot(x, y, z);
   if (length === 0) return [0, 0, -1];
 
@@ -256,7 +219,9 @@ export const quaternionMat4 = (rotation: readonly number[] | undefined): Mat4 =>
   ];
 };
 
-export const viewMat4 = (camera: Camera): Mat4 => multiplyMat4(
+type ReadableCamera = Camera | CameraViewReadTarget;
+
+export const viewMat4 = (camera: ReadableCamera): Mat4 => multiplyMat4(
   multiplyMat4(
     multiplyMat4(
       rotationXMat4(-camera.rotation[0]),
@@ -267,23 +232,46 @@ export const viewMat4 = (camera: Camera): Mat4 => multiplyMat4(
   translationMat4([-camera.position[0], -camera.position[1], -camera.position[2]]),
 );
 
-export const projectionMat4 = (camera: Camera, width: number, height: number): Mat4 => {
+export const viewMat4Into = (out: MutableMat4, camera: ReadableCamera): MutableMat4 => {
+  glMatrixMat4.identity(out);
+  glMatrixMat4.rotateX(out, out, -camera.rotation[0]!);
+  glMatrixMat4.rotateY(out, out, -camera.rotation[1]!);
+  glMatrixMat4.rotateZ(out, out, -camera.rotation[2]!);
+  const x = -camera.position[0]!;
+  const y = -camera.position[1]!;
+  const z = -camera.position[2]!;
+  out[12] = out[0] * x + out[4] * y + out[8] * z;
+  out[13] = out[1] * x + out[5] * y + out[9] * z;
+  out[14] = out[2] * x + out[6] * y + out[10] * z;
+  out[15] = 1;
+  return out;
+};
+
+export const projectionMat4Into = (
+  out: MutableMat4,
+  camera: ReadableCamera,
+  width: number,
+  height: number,
+): MutableMat4 => {
   if (camera.kind === "orthographic-camera") {
     const { bottom, far, left, near, right, top } = camera;
-    return [
-      2 / (right - left), 0, 0, 0,
-      0, 2 / (top - bottom), 0, 0,
-      0, 0, -2 / (far - near), 0,
-      -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1,
-    ];
+    out[0] = 2 / (right - left); out[1] = 0; out[2] = 0; out[3] = 0;
+    out[4] = 0; out[5] = 2 / (top - bottom); out[6] = 0; out[7] = 0;
+    out[8] = 0; out[9] = 0; out[10] = -2 / (far - near); out[11] = 0;
+    out[12] = -(right + left) / (right - left);
+    out[13] = -(top + bottom) / (top - bottom);
+    out[14] = -(far + near) / (far - near); out[15] = 1;
+    return out;
   }
 
   const aspect = width / Math.max(1, height);
   const f = 1 / Math.tan(camera.fovY / 2);
-  return [
-    f / aspect, 0, 0, 0,
-    0, f, 0, 0,
-    0, 0, (camera.far + camera.near) / (camera.near - camera.far), -1,
-    0, 0, (2 * camera.far * camera.near) / (camera.near - camera.far), 0,
-  ];
+  out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+  out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+  out[8] = 0; out[9] = 0; out[10] = (camera.far + camera.near) / (camera.near - camera.far); out[11] = -1;
+  out[12] = 0; out[13] = 0; out[14] = (2 * camera.far * camera.near) / (camera.near - camera.far); out[15] = 0;
+  return out;
 };
+
+export const projectionMat4 = (camera: ReadableCamera, width: number, height: number): Mat4 =>
+  projectionMat4Into(identityMat4(), camera, width, height);

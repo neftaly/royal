@@ -1,5 +1,9 @@
 export { createWebGlRoot } from "./root";
 export type {
+  WebGlContextSnapshot,
+  WebGlFramePlanningSnapshot,
+  WebGlResourceLifetimeSnapshot,
+  WebGlPickingSnapshot,
   WebGlRoot,
   WebGlRootOptions,
   WebGlRenderView,
@@ -9,5 +13,6 @@ export type {
   WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlGltfLoadDiagnosticsSnapshot,
   WebGlRootSnapshot,
+  WebGlTextureResidencySnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";

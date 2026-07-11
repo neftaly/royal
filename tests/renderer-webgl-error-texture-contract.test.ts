@@ -4,7 +4,6 @@ import {
   imageTexture,
   mesh,
   orthographicCamera,
-  pass,
   scene,
   unlitMaterial,
   type Material,
@@ -27,6 +26,7 @@ type GlCall = {
 };
 
 type FakeGlOptions = {
+  readonly parallelShaderCompletion?: () => boolean;
   readonly programLinkStatus?: boolean;
   readonly shaderCompileStatus?: boolean;
 };
@@ -105,6 +105,7 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     CLAMP_TO_EDGE: 0x812F,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
+    COMPLETION_STATUS_KHR: 0x91B1,
     CULL_FACE: 0x0B44,
     DEPTH_BUFFER_BIT: 0x0100,
     DEPTH_TEST: 0x0B71,
@@ -216,7 +217,10 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
       stencil: false,
     })),
     getError: record("getError", () => constants.NO_ERROR),
-    getExtension: record("getExtension", () => null),
+    getExtension: record<[string]>("getExtension", (name) =>
+      name === "KHR_parallel_shader_compile" && options.parallelShaderCompletion !== undefined
+        ? { COMPLETION_STATUS_KHR: constants.COMPLETION_STATUS_KHR }
+        : null),
     getParameter: record<[number]>("getParameter", (parameter) => {
       if (
         parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS
@@ -230,7 +234,12 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     }),
     getProgramInfoLog: record("getProgramInfoLog", () => programLinkFailure),
     getProgramParameter: record<[WebGLProgram, number]>("getProgramParameter", (_program, parameter) => {
-      if (parameter === constants.LINK_STATUS) return options.programLinkStatus ?? true;
+      if (parameter === constants.COMPLETION_STATUS_KHR) {
+        return options.parallelShaderCompletion?.() ?? true;
+      }
+      if (parameter === constants.LINK_STATUS) {
+        return (options.programLinkStatus ?? true) && (options.shaderCompileStatus ?? true);
+      }
       if (parameter === constants.ACTIVE_ATTRIBUTES || parameter === constants.ACTIVE_UNIFORMS) return 0;
 
       return true;
@@ -386,18 +395,14 @@ const camera = () => orthographicCamera({
 });
 
 const renderScene = (material: Material = unlitMaterial({ color: [1, 1, 1, 1] })) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children: [
-        mesh({
-          geometry: boxGeometry(1),
-          material,
-        }),
-      ],
-      clearColor: [0, 0, 0, 0],
+  camera: camera(),
+  nodes: [
+    mesh({
+      geometry: boxGeometry(1),
+      material,
     }),
   ],
+  clearColor: [0, 0, 0, 0],
 });
 
 const eventCount = (calls: readonly GlCall[], name: string): number =>
@@ -628,6 +633,26 @@ describe("WebGL renderer error and texture contracts", () => {
     expect(errorText).toContain(programLinkFailure);
     expect(createdResources(calls, "createProgram").length, "a program link path should create a program").toBeGreaterThan(0);
     expect(drawCount(calls), "failed program linking must not draw").toBe(0);
+    expectCreatedResourcesDeleted(calls, "createShader", "deleteShader");
+    expectCreatedResourcesDeleted(calls, "createProgram", "deleteProgram");
+  });
+
+  it("evicts and cleans a cached parallel program when completed linking fails", () => {
+    let complete = false;
+    const { calls, gl } = fakeGl({
+      parallelShaderCompletion: () => complete,
+      programLinkStatus: false,
+    });
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    expect(() => root.render(renderScene())).not.toThrow();
+    expect(deletedResources(calls, "deleteProgram")).toHaveLength(0);
+
+    complete = true;
+    const errorText = textFromUnknown(capturedThrow(() => root.render(renderScene())));
+
+    expect(errorText).toMatch(/shader compile or program link error/i);
+    expect(drawCount(calls), "failed parallel program linking must not draw").toBe(0);
     expectCreatedResourcesDeleted(calls, "createShader", "deleteShader");
     expectCreatedResourcesDeleted(calls, "createProgram", "deleteProgram");
   });

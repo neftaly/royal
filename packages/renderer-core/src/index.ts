@@ -7,6 +7,15 @@ export type {
 } from './camera';
 export { orthographicCamera, perspectiveCamera } from './camera';
 export type {
+  CameraSource,
+  CameraViewReadTarget,
+  CameraViewResource,
+  CameraViewResourceListener,
+  OrthographicCameraViewResource,
+  PerspectiveCameraViewResource
+} from './camera-resource';
+export { createCameraViewResource } from './camera-resource';
+export type {
   OrbitCameraBasis,
   OrbitCameraTransform,
   OrbitCameraView,
@@ -36,16 +45,23 @@ export type {
   PlaneGeometryOptions
 } from './geometry';
 export { boxGeometry, planeGeometry } from './geometry';
-export type { GltfAnimation, GltfAssetBounds, GltfAssetRef, GltfInput, GltfNode, GltfOptions } from './gltf';
+export type {
+  GltfAssetBounds,
+  GltfAssetRef,
+  GltfInput,
+  GltfNode,
+  GltfOptions
+} from './gltf';
 export { gltf } from './gltf';
 export {
   createGltfInstanceTransforms,
   gltfInstances,
-  subscribeGltfInstanceTransforms,
 } from './gltf-instances';
 export type {
   CreateGltfInstanceTransformsOptions,
+  GltfInstanceTransformChannel,
   GltfInstanceTransforms,
+  GltfInstanceTransformsListener,
   GltfInstancesNode,
   GltfInstancesOptions,
 } from './gltf-instances';
@@ -88,6 +104,10 @@ export {
 } from './texture';
 export type { DirectionalLightNode, DirectionalLightOptions } from './directional-light';
 export { directionalLight } from './directional-light';
+export type { PointLightNode, PointLightOptions } from './point-light';
+export { pointLight } from './point-light';
+export type { SpotLightNode, SpotLightOptions } from './spot-light';
+export { spotLight } from './spot-light';
 export type { EnvironmentLight, EnvironmentLightPreset, StudioEnvironmentOptions } from './environment-light';
 export { studioEnvironment } from './environment-light';
 export type { MeshNode, MeshOptions } from './mesh';
@@ -110,67 +130,11 @@ export type {
   RenderObjectVector3
 } from './render-object';
 export type {
-  RenderElement,
-  RenderPass,
-  RenderPassClear,
-  RenderPassOptions,
   RenderRoot,
   RenderToneMapping,
-  Scene,
   SceneOptions
 } from './render-graph';
-export { pass, scene } from './render-graph';
-export type {
-  UiCheckedState,
-  UiControlState,
-  UiControlStateOptions,
-  UiControlValue,
-  UiFocusState,
-  UiFocusStateOptions,
-  UiHitBounds,
-  UiHitRegion,
-  UiHitRegionCoordinateSpace,
-  UiHitRegionKind,
-  UiHitRegionOptions,
-  UiId,
-  UiInputState,
-  UiInputStateOptions,
-  UiNodeSemantics,
-  UiNodeSemanticsOptions,
-  UiRole
-} from './ui';
-export {
-  isUiActivatable,
-  isUiFocusable,
-  uiControlState,
-  uiFocusState,
-  uiHitRegion,
-  uiId,
-  uiInputState,
-  uiNodeSemantics
-} from './ui';
-export type {
-  UiMenuAnchor,
-  UiMenuBounds,
-  UiMenuCommand,
-  UiMenuCommandAction,
-  UiMenuCommandId,
-  UiMenuCommandOptions,
-  UiMenuCommandRect,
-  UiMenuLayout,
-  UiMenuLayoutMetrics,
-  UiMenuLayoutOptions,
-  UiMenuPoint,
-  UiMenuPosition,
-  UiMenuViewport
-} from './ui-menu';
-export {
-  layoutUiMenuCommands,
-  uiMenuCommand,
-  uiMenuCommandAt
-} from './ui-menu';
-export type { TextNode, TextOptions } from './text/types';
-export { text } from './text/node';
+export { scene } from './render-graph';
 export type {
   Axis,
   AxisDirection,

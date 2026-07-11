@@ -70,8 +70,8 @@ Keep the three layers separate:
 
 | Layer | Owns | Does not own |
 | --- | --- | --- |
-| `@royal/renderer-core` | Author-facing render descriptors: `RenderRoot`, `RenderPass`, cameras, lights, meshes, materials, text, glTF asset references, stable author ids when added. | Tarstate schemas, query evaluation, WebGL caches, GPU handles, backend diagnostics policy. |
-| `@royal/renderer-webgl` | Runtime backend state: WebGL context, programs, GPU buffers, textures, geometry/glTF/text caches, visibility packet buffers, culling loops, draw submission. | Required Tarstate dependency, full app scene graph source of truth, query execution inside draw loops. |
+| `@royal/renderer-core` | Author-facing render descriptors: `RenderRoot`, cameras, lights, meshes, PBR materials, textures, glTF asset references, and explicit picking ids. | Tarstate schemas, query evaluation, WebGL caches, GPU handles, backend diagnostics policy. |
+| `@royal/renderer-webgl` | Runtime backend state: WebGL context, programs, GPU buffers, textures, geometry/glTF caches, visibility packet buffers, culling loops, draw submission. | Required Tarstate dependency, full app scene graph source of truth, query execution inside draw loops. |
 | `@royal/tarstate-lens` | Control-plane schema, snapshots, queries, command rows, diagnostics, relation views over renderer/app events. | GPU resources, mandatory rendering model, private caches, hot per-frame typed-array ownership. |
 
 The lens observes and controls through a narrow adapter contract:
@@ -273,7 +273,7 @@ export const royalControlPlaneSchema = defineSchema({
 ```tsx
 // Non-current pseudocode sketch: controlSink, stable descriptor ids, and
 // selection commands are proposed control-plane APIs, not public exports yet.
-/** @jsxImportSource @royal/react */
+/** @jsxImportSource react */
 import { createRoyalControlPlane, royalControlQueries } from '@royal/tarstate-lens/control-plane';
 import { createRendererRoot } from '@royal/react';
 import { boxGeometry, standardMaterial } from '@royal/renderer-core';

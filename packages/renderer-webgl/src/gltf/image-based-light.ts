@@ -38,18 +38,23 @@ const gltfImageBasedLightSpecularEncoding = (
 ): SurfaceIblSpecularEncoding =>
   (image.mimeType ?? uriMimeType(image.uri))?.toLowerCase() === "image/png"
     ? "rgbd"
-    : "ldr";
+    : "linear";
 
 export const gltfImageBasedLightHasValidRotation = (light: GltfImageBasedLight): boolean =>
   light.rotation === undefined
   || (
     Array.isArray(light.rotation)
-    && light.rotation.length >= 4
-    && light.rotation.slice(0, 4).every((value) => typeof value === "number" && Number.isFinite(value))
+    && light.rotation.length === 4
+    && light.rotation.every((value) => typeof value === "number" && Number.isFinite(value))
+    && light.rotation.reduce((lengthSquared, value) => lengthSquared + value * value, 0) > 1e-12
   );
 
-export const gltfImageBasedLightRotation = (light: GltfImageBasedLight): Mat4 =>
-  quaternionMat4(gltfImageBasedLightHasValidRotation(light) ? light.rotation : undefined);
+export const gltfImageBasedLightRotation = (light: GltfImageBasedLight): Mat4 => {
+  if (!gltfImageBasedLightHasValidRotation(light)) {
+    throw new Error("glTF EXT_lights_image_based rotation must be a finite non-zero quaternion");
+  }
+  return quaternionMat4(light.rotation);
+};
 
 export const gltfImageBasedLightIntensity = (light: GltfImageBasedLight): number =>
   Math.max(0, finiteNumber(light.intensity, 1));
@@ -104,7 +109,7 @@ const readGltfImageBasedLightSpecular = (
   }
 
   const imageLoadKeys: string[][] = [];
-  let encoding: SurfaceIblSpecularEncoding = "ldr";
+  let encoding: SurfaceIblSpecularEncoding = "linear";
   for (const [mipIndex, mipImages] of specularImages.entries()) {
     if (mipImages.length !== 6) {
       diagnostics.recordUnsupportedGltfImageBasedLight(
@@ -183,10 +188,11 @@ export const readGltfSceneImageBasedLight = (
     return undefined;
   }
 
-  const specular = readGltfImageBasedLightSpecular(document, src, assetKey, sceneIndex, lightIndex, light, diagnostics);
   if (light.rotation !== undefined && !gltfImageBasedLightHasValidRotation(light)) {
-    diagnostics.recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based light ${lightIndex} has invalid rotation; using default [0, 0, 0, 1]`);
+    diagnostics.recordDiagnostic(`glTF scene ${sceneIndex} EXT_lights_image_based skipped: light ${lightIndex} rotation must be a finite non-zero quaternion`);
+    return undefined;
   }
+  const specular = readGltfImageBasedLightSpecular(document, src, assetKey, sceneIndex, lightIndex, light, diagnostics);
 
   return {
     coefficients,

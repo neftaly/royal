@@ -26,14 +26,6 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
       entry: {
         index: 'src/index.ts',
         'render-object': 'src/render-object.ts',
-        text: 'src/text/index.ts',
-        'text/editable': 'src/text/editable/index.ts',
-        'text/font': 'src/text/font.ts',
-        'text/layout': 'src/text/layout.ts',
-        'text/mesh': 'src/text/mesh.ts',
-        'text/node': 'src/text/node.ts',
-        'text/shaping': 'src/text/shaping.ts',
-        'text/types': 'src/text/types.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -56,21 +48,13 @@ export const buildConfigsByPackageName: Record<string, PackageConfig> = {
       '@royal/renderer-core',
       '@royal/renderer-core/render-object',
       '@royal/renderer-webgl',
-      'react',
-      'react/jsx-runtime',
-      'react/jsx-dev-runtime',
-      'react-reconciler',
-      'react-reconciler/constants.js'
+      'react'
     ],
     lib: {
       entry: {
         index: 'src/index.ts',
         scene: 'src/scene.ts',
-        xr: 'src/xr.ts',
-        'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
-        'jsx-runtime': 'src/jsx-runtime.ts',
-        'renderer-jsx-dev-runtime': 'src/renderer-jsx-dev-runtime.ts',
-        'renderer-jsx-runtime': 'src/renderer-jsx-runtime.ts'
+        xr: 'src/xr.ts'
       },
       formats: ['es'],
       fileName: (_format, entryName) => entryName + '.js'
@@ -91,18 +75,6 @@ export const sourceAliases = [
   { find: '@royal/renderer-webgl/webxr', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/webxr.ts') },
   { find: '@royal/renderer-webgl', replacement: path.join(repoRoot, 'packages/renderer-webgl/src/index.ts') },
   { find: '@royal/renderer-core/render-object', replacement: path.join(repoRoot, 'packages/renderer-core/src/render-object.ts') },
-  { find: '@royal/renderer-core/text/editable', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/editable/index.ts') },
-  { find: '@royal/renderer-core/text/font', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/font.ts') },
-  { find: '@royal/renderer-core/text/layout', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/layout.ts') },
-  { find: '@royal/renderer-core/text/mesh', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/mesh.ts') },
-  { find: '@royal/renderer-core/text/node', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/node.ts') },
-  { find: '@royal/renderer-core/text/shaping', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/shaping.ts') },
-  { find: '@royal/renderer-core/text/types', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/types.ts') },
-  { find: '@royal/renderer-core/text', replacement: path.join(repoRoot, 'packages/renderer-core/src/text/index.ts') },
-  { find: '@royal/react/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-dev-runtime.ts') },
-  { find: '@royal/react/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/jsx-runtime.ts') },
-  { find: '@royal/react/renderer/jsx-dev-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-dev-runtime.ts') },
-  { find: '@royal/react/renderer/jsx-runtime', replacement: path.join(repoRoot, 'packages/react/src/renderer-jsx-runtime.ts') },
   { find: '@royal/react/scene', replacement: path.join(repoRoot, 'packages/react/src/scene.ts') },
   { find: '@royal/react/xr', replacement: path.join(repoRoot, 'packages/react/src/xr.ts') },
   { find: '@royal/react', replacement: path.join(repoRoot, 'packages/react/src/index.ts') },

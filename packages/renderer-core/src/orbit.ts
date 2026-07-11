@@ -1,5 +1,6 @@
 import type { PerspectiveCamera, PerspectiveCameraOptions } from './camera';
 import { perspectiveCamera } from './camera';
+import { finiteNumber, frozenVec3, positiveFiniteNumber } from './descriptor-values';
 import type { EulerRads, Rads, Vec3 } from './primitives';
 
 export type OrbitVector3 = Vec3;
@@ -40,7 +41,15 @@ export type OrbitPerspectiveCameraOptions =
     readonly view: OrbitCameraViewOptions;
   };
 
-const defaultTarget = [0, 0, 0] as const satisfies OrbitVector3;
+const defaultTarget = frozenVec3([0, 0, 0], 'orbit target');
+
+const orbitTarget = (target: OrbitVector3 | undefined): OrbitVector3 => {
+  if (target === undefined) return defaultTarget;
+  finiteNumber(target[0], 'orbit target[0]');
+  finiteNumber(target[1], 'orbit target[1]');
+  finiteNumber(target[2], 'orbit target[2]');
+  return Object.isFrozen(target) ? target : frozenVec3(target, 'orbit target');
+};
 
 const clamp = (
   value: number,
@@ -48,24 +57,45 @@ const clamp = (
   maximum: number | undefined
 ): number => Math.min(maximum ?? Infinity, Math.max(minimum ?? -Infinity, value));
 
-export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => ({
-  distance: view.distance,
-  pitch: view.pitch ?? 0,
-  target: view.target ?? defaultTarget,
-  yaw: view.yaw ?? 0
+const finiteOptional = (value: number | undefined, label: string): number | undefined =>
+  value === undefined ? undefined : finiteNumber(value, label);
+
+const validateOrbitConstraints = (constraints: OrbitCameraViewConstraints): void => {
+  const minDistance = constraints.minDistance === undefined
+    ? undefined
+    : positiveFiniteNumber(constraints.minDistance, 'orbit minDistance');
+  const maxDistance = constraints.maxDistance === undefined
+    ? undefined
+    : positiveFiniteNumber(constraints.maxDistance, 'orbit maxDistance');
+  const minPitch = finiteOptional(constraints.minPitch, 'orbit minPitch');
+  const maxPitch = finiteOptional(constraints.maxPitch, 'orbit maxPitch');
+  if (minDistance !== undefined && maxDistance !== undefined && minDistance > maxDistance) {
+    throw new Error('orbit minDistance must not exceed maxDistance');
+  }
+  if (minPitch !== undefined && maxPitch !== undefined && minPitch > maxPitch) {
+    throw new Error('orbit minPitch must not exceed maxPitch');
+  }
+};
+
+export const resolveOrbitCameraView = (view: OrbitCameraViewOptions): OrbitCameraView => Object.freeze({
+  distance: positiveFiniteNumber(view.distance, 'orbit distance'),
+  pitch: finiteNumber(view.pitch ?? 0, 'orbit pitch'),
+  target: orbitTarget(view.target),
+  yaw: finiteNumber(view.yaw ?? 0, 'orbit yaw')
 });
 
 export const clampOrbitCameraView = (
   view: OrbitCameraViewOptions,
   constraints: OrbitCameraViewConstraints = {}
 ): OrbitCameraView => {
+  validateOrbitConstraints(constraints);
   const resolvedView = resolveOrbitCameraView(view);
 
-  return {
+  return Object.freeze({
     ...resolvedView,
     distance: clamp(resolvedView.distance, constraints.minDistance, constraints.maxDistance),
     pitch: clamp(resolvedView.pitch, constraints.minPitch, constraints.maxPitch)
-  };
+  });
 };
 
 export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis => {
@@ -75,10 +105,10 @@ export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis
   const cx = Math.cos(pitch);
   const sx = Math.sin(pitch);
 
-  return {
-    right: [cy, 0, sy],
-    up: [sx * sy, cx, -sx * cy]
-  };
+  return Object.freeze({
+    right: frozenVec3([cy, 0, sy], 'orbit right basis'),
+    up: frozenVec3([sx * sy, cx, -sx * cy], 'orbit up basis')
+  });
 };
 
 export const rotateOrbitCameraView = (
@@ -88,12 +118,15 @@ export const rotateOrbitCameraView = (
   rotateSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);
+  finiteNumber(deltaX, 'orbit rotation deltaX');
+  finiteNumber(deltaY, 'orbit rotation deltaY');
+  finiteNumber(rotateSpeed, 'orbit rotateSpeed');
 
-  return {
+  return resolveOrbitCameraView({
     ...resolvedView,
     pitch: resolvedView.pitch + deltaY * rotateSpeed,
     yaw: resolvedView.yaw + deltaX * rotateSpeed
-  };
+  });
 };
 
 export const zoomOrbitCameraView = (
@@ -102,11 +135,13 @@ export const zoomOrbitCameraView = (
   zoomSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);
+  finiteNumber(deltaPixels, 'orbit zoom deltaPixels');
+  finiteNumber(zoomSpeed, 'orbit zoomSpeed');
 
-  return {
+  return resolveOrbitCameraView({
     ...resolvedView,
     distance: resolvedView.distance * Math.exp(deltaPixels * zoomSpeed)
-  };
+  });
 };
 
 export const panOrbitCameraView = (
@@ -116,17 +151,20 @@ export const panOrbitCameraView = (
   panSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);
+  finiteNumber(deltaX, 'orbit pan deltaX');
+  finiteNumber(deltaY, 'orbit pan deltaY');
+  finiteNumber(panSpeed, 'orbit panSpeed');
   const { right, up } = orbitCameraBasis(resolvedView);
   const scale = resolvedView.distance * panSpeed;
 
-  return {
+  return resolveOrbitCameraView({
     ...resolvedView,
     target: [
       resolvedView.target[0] - right[0] * deltaX * scale + up[0] * deltaY * scale,
       resolvedView.target[1] - right[1] * deltaX * scale + up[1] * deltaY * scale,
       resolvedView.target[2] - right[2] * deltaX * scale + up[2] * deltaY * scale
     ]
-  };
+  });
 };
 
 export const orbitCameraTransform = (
@@ -135,14 +173,14 @@ export const orbitCameraTransform = (
   const { distance, pitch, target, yaw } = resolveOrbitCameraView(view);
   const cosPitch = Math.cos(pitch);
 
-  return {
-    position: [
+  return Object.freeze({
+    position: frozenVec3([
       target[0] - Math.sin(yaw) * cosPitch * distance,
       target[1] + Math.sin(pitch) * distance,
       target[2] + Math.cos(yaw) * cosPitch * distance
-    ],
-    rotation: [-pitch, -yaw, 0]
-  };
+    ], 'orbit camera position'),
+    rotation: frozenVec3([-pitch, -yaw, 0], 'orbit camera rotation') as EulerRads
+  });
 };
 
 export const orbitPerspectiveCamera = ({

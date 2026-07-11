@@ -6,19 +6,16 @@ import {
   gltf,
   imageTexture,
   mesh,
-  pass,
   perspectiveCamera,
+  scene,
   standardMaterial,
   studioEnvironment,
   textureAsset,
-  text,
   type TextureRef,
   unlitMaterial,
-  uiNodeSemantics,
   virtualTexture,
   type VirtualTextureAssetOptions,
 } from "@royal/renderer-core";
-import { loadTestTextFont } from "./text-font-fixture";
 
 const camera = perspectiveCamera({
   far: 100,
@@ -29,73 +26,45 @@ const camera = perspectiveCamera({
 });
 
 describe("renderer-core descriptor contract", () => {
-  it("normalizes render pass defaults and preserves overrides", () => {
-    const cases: Array<[string, Parameters<typeof pass>[0], unknown]> = [
-      [
-        "one-shot defaults",
-        { camera, children: [] },
-        { camera, children: [], clear: "color-depth", clearColor: [0, 0, 0, 0], depthTest: true, kind: "pass" },
-      ],
-      [
-        "overlay overrides",
-        { camera, children: [], clear: "none", clearColor: [0.1, 0.2, 0.3, 1], depthTest: false },
-        { camera, children: [], clear: "none", clearColor: [0.1, 0.2, 0.3, 1], depthTest: false, kind: "pass" },
-      ],
-    ];
-
-    for (const [label, input, expected] of cases) {
-      expect(pass(input), label).toEqual(expected);
-    }
-  });
-
-  it("preserves pass environment lighting descriptors", () => {
+  it("builds one direct scene with authored presentation", () => {
     const environment = studioEnvironment({
-      intensity: 1.1,
-      irradianceIntensity: 0.7,
+      radianceScaleNits: 80,
       rotation: [0, Math.PI / 4, 0],
-      specularIntensity: 1.35,
     });
 
     expect(environment).toEqual({
-      irradianceIntensity: 0.7,
-      intensity: 1.1,
       kind: "environment-light",
       preset: "studio",
+      radianceScaleNits: 80,
       rotation: [0, Math.PI / 4, 0],
-      specularIntensity: 1.35,
     });
-    expect(pass({
+    expect(scene({
       camera,
-      children: [],
+      nodes: [],
+      clearColor: [0.1, 0.2, 0.3, 1],
       environment,
+      exposureEv100: 1.25,
+      toneMapping: "aces-fitted",
     })).toEqual({
       camera,
-      children: [],
-      clear: "color-depth",
-      clearColor: [0, 0, 0, 0],
-      depthTest: true,
+      clearColor: [0.1, 0.2, 0.3, 1],
       environment,
-      kind: "pass",
-    });
-  });
-
-  it("preserves optional pass color mapping descriptors", () => {
-    expect(pass({
-      camera,
-      children: [],
-      exposure: 1.25,
-      toneMapping: "aces",
-    })).toMatchObject({
-      exposure: 1.25,
-      kind: "pass",
-      toneMapping: "aces",
+      exposureEv100: 1.25,
+      kind: "scene",
+      nodes: [],
+      toneMapping: "aces-fitted",
     });
 
-    expect(pass({
+    expect(() => scene({
       camera,
-      children: [],
-      exposure: Number.NaN,
-    })).not.toHaveProperty("exposure");
+      nodes: [],
+      exposureEv100: Number.NaN,
+    })).toThrow(/exposureEv100/);
+    expect(() => scene({
+      camera,
+      nodes: [],
+      clearColor: [0, Number.NaN, 0, 1],
+    })).toThrow(/clearColor.*finite/);
   });
 
   it("preserves picking ids on pickable mesh and glTF descriptors", () => {
@@ -121,27 +90,6 @@ describe("renderer-core descriptor contract", () => {
       pickingId: "helmet",
       src: "/models/helmet.gltf",
     });
-  });
-
-  it("preserves renderer-neutral UI semantics on render descriptors", async () => {
-    const font = await loadTestTextFont();
-    const semantics = uiNodeSemantics({ id: "field", role: "textbox" });
-
-    expect(mesh({
-      geometry: boxGeometry(1),
-      material: unlitMaterial({ color: [1, 1, 1, 1] }),
-      semantics,
-    }).semantics).toBe(semantics);
-    expect(gltf({
-      semantics,
-      src: "/models/form.gltf",
-    }).semantics).toBe(semantics);
-    expect(text({
-      color: [1, 1, 1, 1],
-      font,
-      semantics,
-      text: "Royal",
-    }).semantics).toBe(semantics);
   });
 
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
@@ -191,15 +139,16 @@ describe("renderer-core descriptor contract", () => {
     }
   });
 
-  it("clamps standard material PBR factors", () => {
-    expect(standardMaterial({
+  it("rejects invalid standard material PBR factors", () => {
+    expect(() => standardMaterial({
       color: [1, 1, 1, 1],
       metallic: 2,
       roughness: -1,
-    })).toMatchObject({
-      metallicFactor: 1,
-      roughnessFactor: 0,
-    });
+    })).toThrow(/within 0\.\.1/);
+    expect(() => standardMaterial({
+      color: [1, 1, 1, 1],
+      metallic: Number.NaN,
+    })).toThrow(/finite/);
   });
 
   it("preserves explicit texture content keys for renderer-level sharing", () => {
@@ -266,27 +215,6 @@ describe("renderer-core descriptor contract", () => {
     }
   });
 
-  it("preserves controlled glTF animation clips and time", () => {
-    const cases: Array<[string, NonNullable<Parameters<typeof gltf>[0]["animation"]>]> = [
-      ["clip and time", { clip: "walk", timeSeconds: 1.25 }],
-      ["time only", { timeSeconds: 0 }],
-    ];
-
-    for (const [label, animation] of cases) {
-      expect(gltf({
-        animation,
-        src: "/models/avatar.glb",
-      }), label).toEqual({
-        animation,
-        asset: {
-          uri: "/models/avatar.glb",
-        },
-        kind: "gltf",
-        src: "/models/avatar.glb",
-      });
-    }
-  });
-
   it("preserves directional light descriptor fields", () => {
     expect(directionalLight({
       color: [1, 0.95, 0.84, 1],
@@ -294,6 +222,7 @@ describe("renderer-core descriptor contract", () => {
     })).toEqual({
       color: [1, 0.95, 0.84, 1],
       direction: [0.2, -0.7, -1],
+      illuminanceLux: 1,
       kind: "directional-light",
     });
   });

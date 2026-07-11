@@ -10,9 +10,11 @@ const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_GLTF_LOAD_PORT ?? 4773);
 const debugPort = Number(process.env.EXAMPLES_GLTF_LOAD_DEBUG_PORT ?? 4774);
 const baseUrl = process.env.EXAMPLES_GLTF_LOAD_BASE_URL?.trim() || `http://${host}:${previewPort}`;
+const gpuMode = process.env.EXAMPLES_GLTF_LOAD_GPU?.trim() || 'swiftshader';
 const routePathInput = process.env.EXAMPLES_GLTF_LOAD_ROUTE?.trim() || '/gltf-helmet';
 const routePath = routePathInput.startsWith('/') ? routePathInput : `/${routePathInput}`;
 const outputPath = process.env.EXAMPLES_GLTF_LOAD_OUTPUT?.trim() ?? '';
+const cpuProfilePath = process.env.EXAMPLES_GLTF_LOAD_CPU_PROFILE?.trim() ?? '';
 const managePreview = process.env.EXAMPLES_GLTF_LOAD_PREVIEW !== '0';
 
 const envNumber = (name, fallback) => {
@@ -32,6 +34,10 @@ const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1
 const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
 const forceGeneratedVirtualTexturing = process.env.EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT === '1';
 const glErrorDebugEnabled = process.env.EXAMPLES_GLTF_LOAD_GL_ERROR_DEBUG === '1';
+
+if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
+  throw new Error(`EXAMPLES_GLTF_LOAD_GPU must be "swiftshader" or "hardware-headless", received ${JSON.stringify(gpuMode)}`);
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -141,7 +147,9 @@ const evaluate = async (session, expression, options = {}) => {
     ...options,
   });
   if (result.exceptionDetails !== undefined) {
-    throw new Error(result.exceptionDetails.text);
+    throw new Error(
+      result.exceptionDetails.exception?.description ?? result.exceptionDetails.text,
+    );
   }
   return result.result.value;
 };
@@ -165,6 +173,7 @@ const stop = async (child) => {
 
 const installBenchmarkHooks = async (session) => {
   const hookConfig = JSON.stringify({
+    glCallTimingEnabled: cpuProfilePath !== '',
     firstUsableMinColorBuckets: 16,
     firstUsableMinPaintedRatio: 0.01,
     firstUsableSampleSize: 96,
@@ -207,6 +216,43 @@ const installBenchmarkHooks = async (session) => {
   let fullyLoadedAt = null;
   let fullyLoadedState = null;
   const glErrors = [];
+  const slowGlCalls = [];
+  const loadFrameDeltas = [];
+  let loadFramePreviousAt = performance.now();
+  let loadFrameRequest = null;
+  let loadHitchSampling = true;
+  let longTaskCount = 0;
+  let longTaskMaxMs = 0;
+  let longTaskTotalMs = 0;
+  let longTaskObserver = null;
+
+  const recordLongTasks = (entries) => {
+    for (const entry of entries) {
+      const duration = Number(entry.duration);
+      if (!Number.isFinite(duration) || duration < 0) continue;
+      longTaskCount += 1;
+      longTaskTotalMs += duration;
+      longTaskMaxMs = Math.max(longTaskMaxMs, duration);
+    }
+  };
+  try {
+    longTaskObserver = new PerformanceObserver((list) => recordLongTasks(list.getEntries()));
+    longTaskObserver.observe({ type: 'longtask', buffered: true });
+  } catch {
+    longTaskObserver = null;
+  }
+  const sampleLoadFrame = () => {
+    if (!loadHitchSampling) return;
+    // Use one clock source throughout. A RAF timestamp describes the start of
+    // the browser frame and can precede performance.now() captured while this
+    // document-start script itself was running.
+    const now = performance.now();
+    const delta = now - loadFramePreviousAt;
+    if (delta > 0) loadFrameDeltas.push(delta);
+    loadFramePreviousAt = now;
+    loadFrameRequest = requestAnimationFrame(sampleLoadFrame);
+  };
+  loadFrameRequest = requestAnimationFrame(sampleLoadFrame);
 
   const raf = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
   const rafBeforeDeadline = (deadline) => new Promise((resolve) => {
@@ -301,12 +347,30 @@ const installBenchmarkHooks = async (session) => {
   const recordTextureUpload = () => {
     if (firstTextureUploadAt === null) firstTextureUploadAt = performance.now();
   };
+  const recordSlowGlCall = (name, args, durationMs) => {
+    if (config.glCallTimingEnabled !== true || durationMs < 1) return;
+    const source = sourceSize(args.at(-1));
+    slowGlCalls.push({
+      durationMs,
+      name,
+      numericArgs: args.filter((value) => typeof value === 'number').slice(0, 8),
+      ...(source === null ? {} : source),
+      ...(args.length >= 9 && typeof args[3] === 'number' && typeof args[4] === 'number'
+        ? { height: args[4], width: args[3] }
+        : {}),
+    });
+    slowGlCalls.sort((left, right) => right.durationMs - left.durationMs);
+    if (slowGlCalls.length > 32) slowGlCalls.length = 32;
+  };
   const patch = (prototype, name, handler) => {
     const original = prototype?.[name];
     if (typeof original !== 'function' || original.__royalGltfLoadBenchPatched === true) return;
     const wrapped = function (...args) {
+      const startedAt = config.glCallTimingEnabled === true ? performance.now() : 0;
       const result = original.apply(this, args);
-      handler(args, this);
+      const durationMs = config.glCallTimingEnabled === true ? performance.now() - startedAt : 0;
+      handler(args, this, durationMs);
+      recordSlowGlCall(name, args, durationMs);
       return result;
     };
     Object.defineProperty(wrapped, '__royalGltfLoadBenchPatched', { value: true });
@@ -360,13 +424,22 @@ const installBenchmarkHooks = async (session) => {
       recordTextureUpload();
     });
     patch(prototype, 'generateMipmap', () => { counters.generateMipmap += 1; });
+    patch(prototype, 'getProgramParameter', () => {});
   };
   patchPrototype(globalThis.WebGLRenderingContext?.prototype);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype);
 
-  const sampleCanvas = () => {
+  const renderBeforeCanvasReadback = () => {
+    // Demand-rendered canvases normally keep preserveDrawingBuffer disabled. A
+    // later copy may therefore see an undefined (commonly transparent) back
+    // buffer after compositing. Flush one renderer-owned demand frame so this
+    // readback observes current output without changing production settings.
+    globalThis.__royalExamplesRenderNow?.();
+  };
+  const sampleCanvas = (renderFirst = false) => {
     const canvas = document.querySelector('canvas');
     if (!(canvas instanceof HTMLCanvasElement) || canvas.width <= 0 || canvas.height <= 0) return null;
+    if (renderFirst) renderBeforeCanvasReadback();
     const width = Math.max(1, Math.min(config.firstUsableSampleSize, canvas.width));
     const height = Math.max(1, Math.min(config.firstUsableSampleSize, canvas.height));
     const sample = document.createElement('canvas');
@@ -408,14 +481,29 @@ const installBenchmarkHooks = async (session) => {
     typeof sample.paintedRatio === 'number' &&
     sample.paintedRatio >= config.firstUsableMinPaintedRatio &&
     sample.colorBuckets >= config.firstUsableMinColorBuckets;
+  const rendererGltfAssetsSettled = (renderer, requireSuccess) => {
+    const diagnostics = renderer?.gltfLoadDiagnostics;
+    if (diagnostics === undefined || diagnostics === null) return false;
+    const assets = Array.isArray(diagnostics.assets) ? diagnostics.assets : [];
+    if (assets.length === 0 || (diagnostics.loadingAssets ?? 0) !== 0) return false;
+    if (requireSuccess && (diagnostics.errorAssets ?? 0) !== 0) return false;
+    return assets.every((asset) =>
+      asset.status !== 'loading' &&
+      (!requireSuccess || asset.status === 'sceneReady') &&
+      (asset.imageLoaded ?? 0) + (asset.imageFailures ?? 0) >= (asset.imageRequests ?? 0) &&
+      (!requireSuccess || (asset.imageFailures ?? 0) === 0));
+  };
   const updateFirstUsable = () => {
-    const sample = sampleCanvas();
-    if (firstTexturedFrameAt === null && firstTextureUploadAt !== null && isUsableSample(sample)) {
+    if (firstUsableAt !== null) return true;
+    const renderer = readRendererSnapshot();
+    const assetsReady = rendererGltfAssetsSettled(renderer, true);
+    if (!assetsReady) return false;
+    const sample = sampleCanvas(assetsReady);
+    if (firstTexturedFrameAt === null && firstTextureUploadAt !== null && assetsReady && isUsableSample(sample)) {
       firstTexturedFrameAt = performance.now();
       firstTexturedFrameSample = sample;
     }
-    if (firstUsableAt !== null) return true;
-    if (!isUsableSample(sample)) return false;
+    if (firstDrawAt === null || !isUsableSample(sample)) return false;
     firstUsableAt = performance.now();
     firstUsableSample = sample;
     return true;
@@ -438,7 +526,7 @@ const installBenchmarkHooks = async (session) => {
       firstUsableAt,
       firstUsableSample,
       timedOut: true,
-      lastSample: sampleCanvas(),
+      lastSample: sampleCanvas(true),
     };
   };
   const readRendererSnapshot = () =>
@@ -534,11 +622,15 @@ const installBenchmarkHooks = async (session) => {
         stableResourceCount = resourceCount;
         stableSince = performance.now();
       }
-      const sample = sampleCanvas();
+      const renderer = readRendererSnapshot();
+      const rendererSettled = rendererGltfAssetsSettled(renderer, false);
+      const rendererReady = rendererGltfAssetsSettled(renderer, true);
+      const sample = firstUsableSample ?? sampleCanvas(rendererReady);
       const resources = resourceSummary();
       lastState = {
         documentReadyState: document.readyState,
-        renderer: readRendererSnapshot(),
+        renderer,
+        rendererSettled,
         resourceCount,
         resources,
         resourceStableForMs: performance.now() - stableSince,
@@ -546,6 +638,8 @@ const installBenchmarkHooks = async (session) => {
       };
       if (
         document.readyState === 'complete' &&
+        rendererSettled &&
+        rendererReady &&
         (firstUsableAt !== null || isUsableSample(sample)) &&
         performance.now() - stableSince >= stableMs &&
         rendererVirtualTexturingDone() &&
@@ -560,6 +654,7 @@ const installBenchmarkHooks = async (session) => {
           renderer: readRendererSnapshot(),
           resources: resourceSummary(),
         };
+        finishLoadHitchSampling();
         return {
           fullyLoadedAt,
           firstDrawAt,
@@ -571,6 +666,7 @@ const installBenchmarkHooks = async (session) => {
       }
       await delay(50);
     }
+    finishLoadHitchSampling();
     return {
       firstDrawAt,
       firstUsableAt,
@@ -596,6 +692,28 @@ const installBenchmarkHooks = async (session) => {
       sampleCount: sorted.length,
     };
   };
+  const finishLoadHitchSampling = () => {
+    if (!loadHitchSampling) return;
+    loadHitchSampling = false;
+    if (loadFrameRequest !== null) cancelAnimationFrame(loadFrameRequest);
+    loadFrameRequest = null;
+    if (longTaskObserver !== null) {
+      recordLongTasks(longTaskObserver.takeRecords());
+      longTaskObserver.disconnect();
+    }
+  };
+  const loadHitchSnapshot = () => ({
+    framesOver100Ms: loadFrameDeltas.filter((delta) => delta > 100).length,
+    framesOver25Ms: loadFrameDeltas.filter((delta) => delta > 25).length,
+    framesOver50Ms: loadFrameDeltas.filter((delta) => delta > 50).length,
+    frameStats: statsFromDeltas(loadFrameDeltas),
+    longTasks: {
+      count: longTaskCount,
+      maxMs: longTaskMaxMs,
+      supported: longTaskObserver !== null,
+      totalMs: longTaskTotalMs,
+    },
+  });
   const numberDelta = (after, before) => {
     const result = {};
     for (const [key, value] of Object.entries(after ?? {})) {
@@ -714,6 +832,8 @@ const installBenchmarkHooks = async (session) => {
         firstUsableAt,
         firstUsableSample,
         glErrors: [...glErrors],
+        slowGlCalls: [...slowGlCalls],
+        loadHitches: loadHitchSnapshot(),
         renderer: readRendererSnapshot(),
         resources: resourceSummary(),
       };
@@ -748,11 +868,30 @@ const heapGrowth = (after, before) =>
     ? after.usedSize - before.usedSize
     : undefined;
 
+const roundedLoadHitches = (snapshot) => {
+  if (snapshot === null || typeof snapshot !== 'object') return null;
+  const frameStats = snapshot.frameStats ?? {};
+  const longTasks = snapshot.longTasks ?? {};
+  return {
+    framesOver100Ms: snapshot.framesOver100Ms ?? 0,
+    framesOver25Ms: snapshot.framesOver25Ms ?? 0,
+    framesOver50Ms: snapshot.framesOver50Ms ?? 0,
+    frameStats: Object.fromEntries(
+      Object.entries(frameStats).map(([key, value]) => [key, round(value)]),
+    ),
+    longTasks: {
+      count: longTasks.count ?? 0,
+      maxMs: round(longTasks.maxMs ?? 0),
+      supported: longTasks.supported === true,
+      totalMs: round(longTasks.totalMs ?? 0),
+    },
+  };
+};
+
 const roundedGltfLoadDiagnostics = (snapshot) => {
   if (snapshot === null || typeof snapshot !== 'object') return null;
   const assets = Array.isArray(snapshot.assets)
     ? snapshot.assets.map((asset) => ({
-        animationCount: asset.animationCount ?? 0,
         ...(typeof asset.error === 'string' ? { error: asset.error } : {}),
         imageFailures: asset.imageFailures ?? 0,
         imageLoaded: asset.imageLoaded ?? 0,
@@ -815,7 +954,6 @@ const gltfLoadDiagnosticsSummary = (diagnostics) => {
   if (diagnostics === null || typeof diagnostics !== 'object') return null;
   const assets = Array.isArray(diagnostics?.assets) ? diagnostics.assets : [];
   const totals = assets.reduce((next, asset) => ({
-    animations: next.animations + asset.animationCount,
     imageFailures: next.imageFailures + asset.imageFailures,
     imageLoaded: next.imageLoaded + asset.imageLoaded,
     imageRequests: next.imageRequests + asset.imageRequests,
@@ -824,7 +962,6 @@ const gltfLoadDiagnosticsSummary = (diagnostics) => {
     primitives: next.primitives + asset.primitiveCount,
     variants: next.variants + asset.variantCount,
   }), {
-    animations: 0,
     imageFailures: 0,
     imageLoaded: 0,
     imageRequests: 0,
@@ -908,8 +1045,12 @@ const buildReport = ({
       },
       gl: counters,
       glErrors: glErrorDebugEnabled && Array.isArray(snapshot.glErrors) ? snapshot.glErrors : null,
+      slowGlCalls: Array.isArray(snapshot.slowGlCalls)
+        ? snapshot.slowGlCalls.map((call) => ({ ...call, durationMs: round(call.durationMs) }))
+        : [],
       gltfLoadDiagnostics,
       gltfLoadSummary: gltfLoadDiagnosticsSummary(gltfLoadDiagnostics),
+      loadHitches: roundedLoadHitches(snapshot.loadHitches),
       textures: {
         allocations: counters.createTexture ?? 0,
         allocationCalls: counters.textureAllocationCalls ?? 0,
@@ -994,6 +1135,9 @@ const printSummary = (report) => {
       ` generatedVtPages=${metrics.vt.generatedPagePrep?.generatedPageRequests ?? 'n/a'}` +
       ` textures=${metrics.textures.allocations}` +
       ` textureUploads=${metrics.textures.uploadCalls}` +
+      ` loadFrameP95=${metrics.loadHitches?.frameStats?.p95Ms ?? 'n/a'}ms` +
+      ` loadFrameMax=${metrics.loadHitches?.frameStats?.maxMs ?? 'n/a'}ms` +
+      ` loadLongTasks=${metrics.loadHitches?.longTasks?.count ?? 'n/a'}` +
       ` vtFrameP95=${metrics.vtFrameSample?.frameStats?.p95Ms?.toFixed?.(1) ?? 'n/a'}ms` +
       ` retainedHeap=${metrics.heap.retainedGrowthBytes ?? 'n/a'}B`,
   );
@@ -1019,9 +1163,15 @@ const main = async () => {
     '--headless=new',
     '--no-sandbox',
     '--disable-dev-shm-usage',
-    '--enable-unsafe-swiftshader',
     '--use-gl=angle',
-    '--use-angle=swiftshader',
+    ...(gpuMode === 'swiftshader'
+      ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']
+      : [
+        '--use-angle=vulkan',
+        '--ignore-gpu-blocklist',
+        '--disable-software-rasterizer',
+        '--use-gpu-in-tests',
+      ]),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     'about:blank',
@@ -1045,6 +1195,23 @@ const main = async () => {
     await session.call('Page.enable');
     await session.call('Runtime.enable');
     await session.call('HeapProfiler.enable');
+    if (cpuProfilePath !== '') {
+      await session.call('Profiler.enable');
+      await session.call('Profiler.setSamplingInterval', { interval: 100 });
+      await session.call('Profiler.start');
+    }
+    const gpu = await evaluate(session, `
+      (() => {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+        return gl === null || debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
+      })()
+    `);
+    if (gpuMode === 'hardware-headless' &&
+      (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu))) {
+      throw new Error(`Hardware GPU glTF load benchmark resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
+    }
+    console.log(`gpu ${gpu ?? 'renderer unavailable'}`);
     if (forceGeneratedVirtualTexturing) {
       await session.call('Fetch.enable', {
         patterns: [{ requestStage: 'Request', urlPattern: '*.vt.json*' }],
@@ -1082,6 +1249,7 @@ const main = async () => {
     await session.call('HeapProfiler.collectGarbage');
     const afterFinalGcHeap = await session.call('Runtime.getHeapUsage');
     const snapshot = await evaluate(session, 'globalThis.__royalGltfLoadBench.snapshot()');
+    const cpuProfile = cpuProfilePath === '' ? null : (await session.call('Profiler.stop')).profile;
 
     if (exceptions.length > 0) {
       throw new Error('Browser runtime exceptions: ' + exceptions.join('; '));
@@ -1107,6 +1275,11 @@ const main = async () => {
       await mkdir(path.dirname(outputPath), { recursive: true });
       await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`);
       console.log(`wrote ${outputPath}`);
+    }
+    if (cpuProfilePath !== '' && cpuProfile !== null) {
+      await mkdir(path.dirname(cpuProfilePath), { recursive: true });
+      await writeFile(cpuProfilePath, `${JSON.stringify(cpuProfile)}\n`);
+      console.log(`wrote ${cpuProfilePath}`);
     }
   } finally {
     session?.close();

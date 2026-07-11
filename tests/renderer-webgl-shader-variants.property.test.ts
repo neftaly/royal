@@ -3,6 +3,8 @@ import {
   fragmentShaderSource,
   surfaceShaderFeatureKey,
   SURFACE_SHADER_TEXTURE_FEATURES,
+  vertexShaderSource,
+  type ProgramKind,
   type SurfaceShaderTextureFeature,
 } from "../packages/renderer-webgl/src/webgl/shaders";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
@@ -56,7 +58,7 @@ const virtualBaseColorSourceInvariants = [
   "residentPageMax",
   "atlasLocalUv",
   "tableEntry.a is reserved",
-  "u_useVirtualTexture ? sampleVirtualBaseColor(v_uv)",
+  "u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet",
 ] as const;
 
 const randomFeatureSet = (random: SeededRandom): ReadonlySet<SurfaceShaderTextureFeature> =>
@@ -66,6 +68,26 @@ const hasVirtualBaseColorSource = (features: ReadonlySet<SurfaceShaderTextureFea
   virtualBaseColorFeaturePair.every((feature) => features.has(feature));
 
 describe("surface shader variants", () => {
+  it("keeps inverse-transpose normal and orthogonal tangent handling in every surface vertex variant", () => {
+    const surfaceKinds = [
+      "surface",
+      "surface-instanced-split",
+    ] as const satisfies readonly ProgramKind[];
+
+    for (const kind of surfaceKinds) {
+      const source = vertexShaderSource(kind);
+
+      expect(source, kind).toContain("cross(basis[1], basis[2]) * normal.x");
+      expect(source, kind).toContain("orthogonalizeSurfaceTangent(");
+      expect(source, kind).toContain("localTangentHandedness *");
+      expect(source, kind).not.toMatch(/__[A-Z0-9_]+__/u);
+      if (kind.startsWith("surface-instanced-split")) {
+        expect(source, kind).toContain("transformRootNormal(");
+        expect(source, kind).toContain("a_instanceScale.y * a_instanceScale.z * localNormal.x");
+      }
+    }
+  });
+
   it("generates sampler declarations only for enabled texture features", () => {
     forEachFuzzCase({
       cases: 32,
@@ -91,6 +113,17 @@ describe("surface shader variants", () => {
       expect(surfaceShaderFeatureKey(features), label).toBe(expectedKey);
       expect(source, label).not.toMatch(/__[A-Z0-9_]+__/u);
       expect(source, `${label} surface lighting path`).toContain("materialDiffuseColor(baseColor.rgb)");
+      expect(source, `${label} specular occlusion`).toContain("iblSpecularOcclusion(NdotV, occlusion, roughness)");
+      expect(source, `${label} single DFG evaluation`).toContain(
+        "IblGgxScattering scattering = iblGgxScattering(baseColor.rgb, environmentBrdf, NdotV);",
+      );
+      expect(source.match(/iblEnvironmentBrdf\(roughness, NdotV\)/gu)?.length, label).toBe(2);
+      expect(source, `${label} energy-conserving diffuse`).toContain(
+        "float diffuseEnergy = 1.0 - clamp(maxComponent(totalScattering), 0.0, 1.0);",
+      );
+      expect(source, `${label} multiscatter irradiance`).toContain(
+        "+ cosineWeightedIrradiance * scattering.multi",
+      );
       expect(samplerDeclarationCount(source), label).toBe(features.size);
       for (const feature of SURFACE_SHADER_TEXTURE_FEATURES) {
         expect(source.includes(samplerDeclarations[feature]), `${label} ${feature}`).toBe(features.has(feature));
@@ -98,6 +131,10 @@ describe("surface shader variants", () => {
       for (const invariant of virtualBaseColorSourceInvariants) {
         expect(source.includes(invariant), `${label} ${invariant}`).toBe(hasVirtualBaseColor);
       }
+      expect(source.includes("materialFallbackCotangentFrame(normal) * textureNormal"), label)
+        .toBe(features.has("normalTexture"));
+      expect(source.includes("texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg"), label)
+        .toBe(features.has("iblBrdfLut"));
     });
   });
 });

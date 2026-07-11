@@ -1,4 +1,4 @@
-/** @jsxImportSource @royal/react */
+/** @jsxImportSource react */
 import {
   planeGeometry,
   type RenderRoot,
@@ -48,7 +48,8 @@ const minYaw = -1.1;
 const maxYaw = 1.1;
 
 const rendererOptions = {
-  context: { alpha: true, antialias: true, preserveDrawingBuffer: true },
+  alpha: true,
+  antialias: true,
 } as const;
 const surfaceGeometry = planeGeometry({ size: [5.2, 3.4] });
 
@@ -170,7 +171,7 @@ export const VirtualTexturingPlane = (): ReactNode => {
       onPointerMove={moveDrag}
       onPointerUp={endDrag}
       onWheel={zoomView}
-      renderer={rendererOptions}
+      context={rendererOptions}
       data-example-maturity="lab-probe"
       data-product-demo="false"
       data-virtual-texture-active-grid={surfaceVirtualTextureProbe.activeGrid}

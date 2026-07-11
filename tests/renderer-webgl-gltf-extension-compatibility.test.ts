@@ -168,7 +168,7 @@ const decodedBytes = async (
 };
 
 describe("renderer-webgl glTF extension compatibility", () => {
-  it("supports required KHR_meshopt_compression without recognizing KHR_animation_pointer", () => {
+  it("supports required KHR_meshopt_compression and rejects KHR_animation_pointer", () => {
     expect(supportedGltfExtensions.has("KHR_meshopt_compression")).toBe(true);
     expect(unsupportedRequiredGltfExtensions({
       extensionsRequired: ["KHR_meshopt_compression"],
@@ -180,7 +180,18 @@ describe("renderer-webgl glTF extension compatibility", () => {
     })).toEqual(["KHR_animation_pointer"]);
     expect(() => assertSupportedRequiredGltfExtensions("animated.gltf", {
       extensionsRequired: ["KHR_animation_pointer"],
-    })).toThrow(/KHR_animation_pointer/);
+    })).toThrow(/unsupported required glTF extension.*KHR_animation_pointer/i);
+  });
+
+  it("fails explicitly for skeletal and morph deformation assets", () => {
+    expect(() => assertSupportedRequiredGltfExtensions("skinned.gltf", {
+      nodes: [{ mesh: 0, skin: 0 }],
+      skins: [{ joints: [1] }],
+    })).toThrow(/node 0.*skinned\.gltf.*unsupported skeletal deformation/i);
+
+    expect(() => assertSupportedRequiredGltfExtensions("morphed.gltf", {
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 }, targets: [{ POSITION: 1 }] }] }],
+    })).toThrow(/mesh 0 primitive 0.*morphed\.gltf.*unsupported morph deformation/i);
   });
 
   it("decodes KHR_meshopt_compression bufferViews through the meshopt decoder", async () => {

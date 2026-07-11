@@ -3,10 +3,12 @@ import {
   boxGeometry,
   mesh,
   unlitMaterial,
+  type GltfInstancesNode,
   type MeshNode,
   type PickResult,
 } from "@royal/renderer-core";
 import {
+  createCanvasPointerInteractionIdentity,
   createCanvasPointerInteractionState,
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
@@ -39,9 +41,42 @@ const pickedTarget = (
     },
   };
 
+  const target = { handlers: {} };
+
   return {
     hit,
-    identity: node,
+    identity: createCanvasPointerInteractionIdentity(hit, target),
+    node,
+    target,
+  };
+};
+
+const pickedInstance = (
+  node: GltfInstancesNode,
+  fallbackTarget: object,
+  instanceIndex: number,
+  primitiveKey = "primitive",
+  id?: string,
+  instanceId?: string,
+): CanvasPickedPointerTarget => {
+  const hit: PickResult = {
+    clientX: instanceIndex,
+    clientY: 0,
+    distance: 1,
+    point: [0, 0, 0],
+    target: {
+      ...(id === undefined ? {} : { id }),
+      ...(instanceId === undefined ? {} : { instanceId }),
+      instanceIndex,
+      kind: "gltf-instances",
+      node,
+      primitiveKey,
+    },
+  };
+
+  return {
+    hit,
+    identity: createCanvasPointerInteractionIdentity(hit, fallbackTarget),
     node,
     target: { handlers: {} },
   };
@@ -51,10 +86,10 @@ const dispatchTypes = (
   result: CanvasPointerInteractionResult,
 ): readonly string[] => result.dispatches.map((dispatch) => dispatch.type);
 
-const pressedNode = (
+const pressedIdentity = (
   state: CanvasPointerInteractionState,
   pointerId: number,
-): MeshNode | undefined => state.pressedTargetsByPointerId.get(pointerId) as MeshNode | undefined;
+) => state.pressedTargetsByPointerId.get(pointerId);
 
 const pointerIds = [1, 2, 7] as const;
 
@@ -143,10 +178,9 @@ describe("React canvas pointer interaction planner", () => {
     expect(result.state.hoveredTarget).toBeUndefined();
   });
 
-  it("keeps the latest hit when moving within the same node", () => {
-    const node = targetNode("a");
-    const firstTarget = pickedTarget(node, 1);
-    const nextTarget = pickedTarget(node, 2);
+  it("keeps the latest hit for the same explicit picking identity", () => {
+    const firstTarget = pickedTarget(targetNode("a"), 1);
+    const nextTarget = pickedTarget(targetNode("a"), 2);
     const hovered = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
       picked: firstTarget,
       type: "pointermove",
@@ -162,6 +196,60 @@ describe("React canvas pointer interaction planner", () => {
     expect(result.state.hoveredTarget).toBe(nextTarget);
   });
 
+  it("distinguishes bulk instances and primitives within one pointer target", () => {
+    const node = { kind: "gltf-instances" } as GltfInstancesNode;
+    const hostTarget = {};
+    const instance0 = pickedInstance(node, hostTarget, 0, "body", "pieces");
+    const instance1 = pickedInstance(node, hostTarget, 1, "body", "pieces");
+    const instance1Detail = pickedInstance(node, hostTarget, 1, "detail", "pieces");
+    let state = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
+      picked: instance0,
+      type: "pointermove",
+    }).state;
+
+    let result = reduceCanvasPointerInteraction(state, {
+      picked: instance1,
+      type: "pointermove",
+    });
+    expect(dispatchTypes(result)).toEqual(["pointerleave", "pointerenter", "pointermove"]);
+
+    state = result.state;
+    result = reduceCanvasPointerInteraction(state, {
+      picked: instance1Detail,
+      type: "pointermove",
+    });
+    expect(dispatchTypes(result)).toEqual(["pointerleave", "pointerenter", "pointermove"]);
+
+    state = reduceCanvasPointerInteraction(state, {
+      picked: instance1,
+      pointerId: 1,
+      type: "pointerdown",
+    }).state;
+    result = reduceCanvasPointerInteraction(state, {
+      button: 0,
+      picked: instance0,
+      pointerId: 1,
+      type: "pointerup",
+    });
+    expect(dispatchTypes(result)).toEqual(["pointerup"]);
+  });
+
+  it("keeps caller logical instance identity stable across packed index changes", () => {
+    const node = { kind: "gltf-instances" } as GltfInstancesNode;
+    const hostTarget = {};
+    const before = pickedInstance(node, hostTarget, 2, "body", "pieces", "card-17");
+    const after = pickedInstance(node, hostTarget, 9, "body", "pieces", "card-17");
+    const hovered = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
+      picked: before,
+      type: "pointermove",
+    }).state;
+    const result = reduceCanvasPointerInteraction(hovered, { picked: after, type: "pointermove" });
+
+    expect(dispatchTypes(result)).toEqual(["pointermove"]);
+    expect(after.identity).toMatchObject({ instanceId: "card-17" });
+    expect(after.identity.instanceIndex).toBeUndefined();
+  });
+
   it("sets and deletes pressed nodes on pointerdown before dispatch planning", () => {
     const target = pickedTarget(targetNode("a"));
     const down = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
@@ -171,7 +259,7 @@ describe("React canvas pointer interaction planner", () => {
     });
 
     expect(dispatchTypes(down)).toEqual(["pointerdown"]);
-    expect(pressedNode(down.state, 7)).toBe(target.node);
+    expect(pressedIdentity(down.state, 7)).toBe(target.identity);
 
     const miss = reduceCanvasPointerInteraction(down.state, {
       picked: undefined,
@@ -246,8 +334,8 @@ describe("React canvas pointer interaction planner", () => {
     expect(dispatchTypes(result)).toEqual(["pointerleave"]);
     expect(result.dispatches.map((dispatch) => dispatch.picked)).toEqual([targetA]);
     expect(result.state.hoveredTarget).toBeUndefined();
-    expect(pressedNode(result.state, 1)).toBe(targetA.node);
-    expect(pressedNode(result.state, 2)).toBe(targetB.node);
+    expect(pressedIdentity(result.state, 1)).toBe(targetA.identity);
+    expect(pressedIdentity(result.state, 2)).toBe(targetB.identity);
   });
 
   it("clears only one pressed pointer on cancel and clears all state on reset", () => {
@@ -272,10 +360,10 @@ describe("React canvas pointer interaction planner", () => {
       pointerId: 1,
       type: "pointercancel",
     });
-    expect(dispatchTypes(canceled)).toEqual([]);
-    expect(canceled.state.hoveredTarget).toBe(targetA);
+    expect(dispatchTypes(canceled)).toEqual(["pointerleave"]);
+    expect(canceled.state.hoveredTarget).toBeUndefined();
     expect(canceled.state.pressedTargetsByPointerId.has(1)).toBe(false);
-    expect(pressedNode(canceled.state, 2)).toBe(targetB.node);
+    expect(pressedIdentity(canceled.state, 2)).toBe(targetB.identity);
 
     const reset = reduceCanvasPointerInteraction(canceled.state, { type: "reset" });
     expect(dispatchTypes(reset)).toEqual([]);
@@ -298,7 +386,7 @@ describe("React canvas pointer interaction planner", () => {
       for (let step = 0; step < 48; step += 1) {
         const action = randomPointerAction(random, targets);
         const before = state;
-        const expectedPressedNode = action.type === "pointerup"
+        const expectedPressedIdentity = action.type === "pointerup"
           ? before.pressedTargetsByPointerId.get(action.pointerId)
           : undefined;
         const result = reduceCanvasPointerInteraction(before, action);
@@ -337,7 +425,9 @@ describe("React canvas pointer interaction planner", () => {
           expect(action.type, `${detail} click follows pointerup`).toBe("pointerup");
           if (action.type === "pointerup") {
             expect(action.button, `${detail} click uses left button`).toBe(0);
-            expect(action.picked?.node, `${detail} click uses same pressed node`).toBe(expectedPressedNode);
+            expect(action.picked?.identity, `${detail} click uses same pressed identity`).toEqual(
+              expectedPressedIdentity,
+            );
           }
         }
 

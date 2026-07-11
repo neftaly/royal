@@ -19,6 +19,12 @@ export const gltfComponentCount = (type: GltfAccessor["type"]): number => {
       return 3;
     case "VEC4":
       return 4;
+    case "MAT2":
+      return 4;
+    case "MAT3":
+      return 9;
+    case "MAT4":
+      return 16;
   }
 };
 

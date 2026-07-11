@@ -1,5 +1,4 @@
-import { useStore } from "zustand/react";
-import { createStore, type StoreApi } from "zustand/vanilla";
+import { useSyncExternalStore } from "react";
 
 export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
 
@@ -117,8 +116,11 @@ export type XrSessionStoreState<Session extends object = object> =
   XrSessionControlSnapshot<Session> &
   XrSessionStoreActions<Session>;
 
-export type XrSessionStore<Session extends object = object> =
-  StoreApi<XrSessionStoreState<Session>>;
+export interface XrSessionStore<Session extends object = object> {
+  getInitialState(this: void): XrSessionStoreState<Session>;
+  getState(this: void): XrSessionStoreState<Session>;
+  subscribe(this: void, listener: () => void): () => void;
+}
 
 type XrSessionStoreData<Session extends object> =
   XrSessionState & XrSessionControlSnapshot<Session>;
@@ -254,8 +256,18 @@ export const createXrSessionStore = <Session extends object = object>(
   const initialSnapshot = createXrSessionSnapshot(initialState);
   const initialData = createXrSessionStoreData<Session>(initialSnapshot);
 
-  return createStore<XrSessionStoreState<Session>>()((set) => ({
-    ...initialData,
+  const listeners = new Set<() => void>();
+  let current: XrSessionStoreState<Session>;
+  const set = (
+    patch: XrSessionStorePatch<Session>
+      | XrSessionStoreData<Session>
+      | ((state: XrSessionStoreState<Session>) => XrSessionStorePatch<Session>),
+  ): void => {
+    const resolved = typeof patch === "function" ? patch(current) : patch;
+    current = { ...current, ...resolved };
+    for (const listener of listeners) listener();
+  };
+  const actions: XrSessionStoreActions<Session> = {
     activateSession: (session, options) => {
       set({
         active: true,
@@ -337,13 +349,23 @@ export const createXrSessionStore = <Session extends object = object>(
     setSnapshot: (state) => {
       set(createXrSessionStorePatch<Session>(state));
     },
-  }));
+  };
+  current = { ...initialData, ...actions };
+  const initial = current;
+  return {
+    getInitialState: () => initial,
+    getState: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
 };
 
 export const useXrSessionSelector = <Session extends object, State>(
   store: XrSessionStore<Session>,
   selector: (state: XrSessionStoreState<Session>) => State,
-): State => useStore(store, selector);
+): State => selector(useSyncExternalStore(store.subscribe, store.getState, store.getInitialState));
 
 export const useXrSessionSnapshot = <Session extends object>(
   store: XrSessionStore<Session>,

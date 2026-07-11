@@ -242,6 +242,54 @@ canvas {
   inline-size: 100%;
 }
 
+.gltf-lab {
+  block-size: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inline-size: 100%;
+}
+
+.gltf-lab-toolbar {
+  align-items: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.gltf-lab-toolbar label,
+.gltf-lab-metadata {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.gltf-lab-toolbar select {
+  max-inline-size: min(32rem, 70vw);
+}
+
+.gltf-lab-metadata,
+.gltf-lab-load-status,
+.gltf-lab-unsupported,
+.gltf-lab-error {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.gltf-lab-load-status,
+.gltf-lab-unsupported,
+.gltf-lab-error {
+  background: var(--panel);
+  padding: 0.45rem 0.75rem;
+}
+
+.gltf-lab-error {
+  color: #d43f3f;
+}
+
 .webxr-vr-example {
   block-size: 100%;
   inline-size: 100%;

@@ -3,10 +3,10 @@ import {
   type Transform,
   type TransformOptions
 } from './primitives';
+import { frozenBounds3, nonEmptyString } from './descriptor-values';
 import type { Vec3 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
-import type { UiNodeSemantics } from './ui';
 
 export interface GltfAssetBounds {
   readonly max: Vec3;
@@ -19,19 +19,12 @@ export interface GltfAssetRef {
   readonly version?: number | string;
 }
 
-export interface GltfAnimation {
-  readonly clip?: number | string;
-  readonly timeSeconds: number;
-}
-
 /** glTF asset node loaded from a source URL. */
 export interface GltfNode {
   readonly kind: 'gltf';
-  readonly animation?: GltfAnimation;
   readonly asset: GltfAssetRef;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
-  readonly semantics?: UiNodeSemantics;
   readonly src: string;
   readonly transform?: Transform;
   /** Selected `KHR_materials_variants` variant name or index. */
@@ -39,14 +32,11 @@ export interface GltfNode {
 }
 
 export interface GltfSrcOptions {
-  readonly animation?: GltfAnimation;
   readonly bounds?: GltfAssetBounds;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
-  /** Optional renderer-neutral UI semantics associated with this descriptor. */
-  readonly semantics?: UiNodeSemantics;
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
@@ -63,34 +53,41 @@ export type GltfInput = GltfOptions | GltfSrcOptions['src'];
 const gltfOptions = (input: GltfInput): GltfOptions =>
   typeof input === 'string' ? { src: input } : input;
 
-const resolveAsset = (options: GltfOptions): GltfAssetRef => ({
-  ...(options.bounds === undefined ? {} : { bounds: options.bounds }),
-  uri: options.src,
+export const resolveGltfAsset = (options: {
+  readonly bounds?: GltfAssetBounds;
+  readonly src: string;
+  readonly version?: GltfAssetRef['version'];
+}): GltfAssetRef => Object.freeze({
+  ...(options.bounds === undefined ? {} : { bounds: frozenBounds3(options.bounds, 'glTF asset bounds') }),
+  uri: nonEmptyString(options.src, 'glTF source'),
   ...(options.version === undefined ? {} : { version: options.version })
 });
 
-const resolveAnimation = (animation: GltfAnimation): GltfAnimation => ({
-  ...(animation.clip === undefined ? {} : { clip: animation.clip }),
-  timeSeconds: animation.timeSeconds
-});
+export const validateGltfVariant = (variant: number | string | undefined): number | string | undefined => {
+  if (variant === undefined) return undefined;
+  if (typeof variant === 'string') return nonEmptyString(variant, 'glTF material variant');
+  if (!Number.isInteger(variant) || variant < 0) {
+    throw new Error('glTF material variant index must be a non-negative integer');
+  }
+  return variant;
+};
 
 export function gltf(src: string): GltfNode;
 export function gltf(options: GltfSrcOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
-  const asset = resolveAsset(options);
+  const asset = resolveGltfAsset(options);
+  const variant = validateGltfVariant(options.variant);
   const node = {
     kind: 'gltf',
-    ...(options.animation === undefined ? {} : { animation: resolveAnimation(options.animation) }),
     asset,
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
     ...(options.ref === undefined ? {} : { ref: options.ref }),
-    ...(options.semantics === undefined ? {} : { semantics: options.semantics }),
     src: asset.uri,
-    ...(options.variant === undefined ? {} : { variant: options.variant })
+    ...(variant === undefined ? {} : { variant })
   } satisfies Omit<GltfNode, 'transform'>;
 
-  return options.transform === undefined
+  return Object.freeze(options.transform === undefined
     ? node
-    : { ...node, transform: resolveTransform(options.transform) };
+    : { ...node, transform: resolveTransform(options.transform) });
 }

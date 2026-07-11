@@ -1,8 +1,5 @@
 import type { Vec3 } from "@royal/renderer-core";
-import {
-  transformPoint,
-  type Mat4,
-} from "./mat4";
+import type { Mat4 } from "./mat4";
 
 export type Ray = {
   readonly direction: Vec3;
@@ -12,6 +9,81 @@ export type Ray = {
 export type Bounds3 = {
   readonly max: Vec3;
   readonly min: Vec3;
+};
+
+export type MutableBounds3 = {
+  readonly max: [number, number, number];
+  readonly min: [number, number, number];
+};
+
+export const isBoundsVisible = (
+  bounds: Bounds3 | undefined,
+  viewProjectionModel: Mat4,
+): boolean => {
+  if (bounds === undefined) return false;
+
+  let left = true;
+  let right = true;
+  let bottom = true;
+  let top = true;
+  let near = true;
+  let far = true;
+  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
+    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
+    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
+      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
+      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
+        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
+        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
+          + viewProjectionModel[12];
+        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
+          + viewProjectionModel[13];
+        const clipZ = viewProjectionModel[2] * x + viewProjectionModel[6] * y + viewProjectionModel[10] * z
+          + viewProjectionModel[14];
+        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
+          + viewProjectionModel[15];
+        left &&= clipX < -clipW;
+        right &&= clipX > clipW;
+        bottom &&= clipY < -clipW;
+        top &&= clipY > clipW;
+        near &&= clipZ < -clipW;
+        far &&= clipZ > clipW;
+      }
+    }
+  }
+
+  return !(left || right || bottom || top || near || far);
+};
+
+/**
+ * Resolves the nearest exact hit after ordering candidates by conservative
+ * distance bounds. The lower bound permits early exit without changing exact
+ * nearest-hit or authored-order tie semantics.
+ */
+export const nearestExactHitByLowerBound = <Candidate, Hit>(
+  candidates: readonly Candidate[],
+  lowerBound: (candidate: Candidate) => number,
+  exactHit: (candidate: Candidate) => Hit | undefined,
+  hitDistance: (hit: Hit) => number,
+): Hit | undefined => {
+  const ordered = candidates
+    .map((candidate, ordinal) => ({ candidate, lowerBound: lowerBound(candidate), ordinal }))
+    .sort((left, right) => left.lowerBound - right.lowerBound || left.ordinal - right.ordinal);
+  let best: Hit | undefined;
+  let bestDistance = Infinity;
+  let bestOrdinal = Infinity;
+  for (const candidate of ordered) {
+    if (candidate.lowerBound > bestDistance) break;
+    const hit = exactHit(candidate.candidate);
+    if (hit === undefined) continue;
+    const distance = hitDistance(hit);
+    if (distance < bestDistance || (distance === bestDistance && candidate.ordinal < bestOrdinal)) {
+      best = hit;
+      bestDistance = distance;
+      bestOrdinal = candidate.ordinal;
+    }
+  }
+  return best;
 };
 
 export type RayGeometryMode = "triangle-fan" | "triangle-strip" | "triangles";
@@ -33,7 +105,44 @@ const maximumDirectionAxis = (direction: Vec3): Axis | undefined => {
   return absY > absZ ? 1 : 2;
 };
 
-export const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | undefined => {
+const transformBoundsScalarsInto = (
+  out: MutableBounds3,
+  minX: number,
+  minY: number,
+  minZ: number,
+  maxX: number,
+  maxY: number,
+  maxZ: number,
+  model: Mat4,
+): MutableBounds3 => {
+  for (let axis = 0; axis < 3; axis += 1) {
+    const x = model[axis]!;
+    const y = model[axis + 4]!;
+    const z = model[axis + 8]!;
+    const translation = model[axis + 12]!;
+    const transformedMinX = x * minX;
+    const transformedMaxX = x * maxX;
+    const transformedMinY = y * minY;
+    const transformedMaxY = y * maxY;
+    const transformedMinZ = z * minZ;
+    const transformedMaxZ = z * maxZ;
+    out.min[axis] = translation
+      + Math.min(transformedMinX, transformedMaxX)
+      + Math.min(transformedMinY, transformedMaxY)
+      + Math.min(transformedMinZ, transformedMaxZ);
+    out.max[axis] = translation
+      + Math.max(transformedMinX, transformedMaxX)
+      + Math.max(transformedMinY, transformedMaxY)
+      + Math.max(transformedMinZ, transformedMaxZ);
+  }
+  return out;
+};
+
+export const worldBoundsInto = (
+  out: MutableBounds3,
+  positions: Float32Array,
+  model: Mat4,
+): MutableBounds3 | undefined => {
   if (positions.length < 3) return undefined;
   let minX = Infinity;
   let minY = Infinity;
@@ -43,11 +152,9 @@ export const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | und
   let maxZ = -Infinity;
 
   for (let index = 0; index < positions.length; index += 3) {
-    const [x, y, z] = transformPoint(model, [
-      positions[index]!,
-      positions[index + 1]!,
-      positions[index + 2]!,
-    ]);
+    const x = positions[index]!;
+    const y = positions[index + 1]!;
+    const z = positions[index + 2]!;
     minX = Math.min(minX, x);
     minY = Math.min(minY, y);
     minZ = Math.min(minZ, z);
@@ -56,29 +163,60 @@ export const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | und
     maxZ = Math.max(maxZ, z);
   }
 
-  return {
-    max: [maxX, maxY, maxZ],
-    min: [minX, minY, minZ],
-  };
+  return transformBoundsScalarsInto(out, minX, minY, minZ, maxX, maxY, maxZ, model);
+};
+
+export const worldBounds = (positions: Float32Array, model: Mat4): Bounds3 | undefined =>
+  positions.length < 3
+    ? undefined
+    : worldBoundsInto({ max: [0, 0, 0], min: [0, 0, 0] }, positions, model);
+
+export const transformBoundsInto = (
+  out: MutableBounds3,
+  bounds: Bounds3,
+  model: Mat4,
+): MutableBounds3 => {
+  return transformBoundsScalarsInto(
+    out,
+    bounds.min[0], bounds.min[1], bounds.min[2],
+    bounds.max[0], bounds.max[1], bounds.max[2],
+    model,
+  );
 };
 
 export const rayAabbDistance = (ray: Ray, bounds: Bounds3): number | undefined => {
+  return rayAabbDistanceScalars(
+    ray,
+    bounds.min[0], bounds.min[1], bounds.min[2],
+    bounds.max[0], bounds.max[1], bounds.max[2],
+  );
+};
+
+export const rayAabbDistanceScalars = (
+  ray: Ray,
+  minX: number,
+  minY: number,
+  minZ: number,
+  maxX: number,
+  maxY: number,
+  maxZ: number,
+): number | undefined => {
   let near = 0;
   let far = Infinity;
 
   for (let axis = 0; axis < 3; axis += 1) {
     const origin = ray.origin[axis]!;
     const direction = ray.direction[axis]!;
-    const min = bounds.min[axis]!;
-    const max = bounds.max[axis]!;
+    const axisMin = axis === 0 ? minX : axis === 1 ? minY : minZ;
+    const axisMax = axis === 0 ? maxX : axis === 1 ? maxY : maxZ;
 
     if (Math.abs(direction) < 1e-8) {
-      if (origin < min || origin > max) return undefined;
+      if (origin < axisMin || origin > axisMax) return undefined;
       continue;
     }
 
-    const t1 = (min - origin) / direction;
-    const t2 = (max - origin) / direction;
+    const t1 = (axisMin - origin) / direction;
+    const t2 = (axisMax - origin) / direction;
     near = Math.max(near, Math.min(t1, t2));
     far = Math.min(far, Math.max(t1, t2));
     if (near > far) return undefined;
@@ -135,56 +273,92 @@ export const rayTriangleDistance = (
   return Number.isFinite(distance) && distance > RAY_TRIANGLE_MIN_DISTANCE ? distance : undefined;
 };
 
-const transformedVertex = (positions: Float32Array, vertexIndex: number, model: Mat4): Vec3 | undefined => {
-  const index = vertexIndex * 3;
-  if (index + 2 >= positions.length) return undefined;
-
-  return transformPoint(model, [
-    positions[index]!,
-    positions[index + 1]!,
-    positions[index + 2]!,
-  ]);
+export type RayGeometryScratch = {
+  readonly a: [number, number, number];
+  readonly b: [number, number, number];
+  readonly c: [number, number, number];
 };
 
-export const rayGeometryDistance = ({
-  indices,
-  mode = "triangles",
-  model,
-  positions,
-  ray,
-}: {
-  readonly indices?: Uint16Array | Uint32Array | Uint8Array;
-  readonly mode?: RayGeometryMode;
-  readonly model: Mat4;
-  readonly positions: Float32Array;
-  readonly ray: Ray;
-}): number | undefined => {
-  let best: number | undefined;
-  const consider = (aIndex: number, bIndex: number, cIndex: number): void => {
-    const a = transformedVertex(positions, aIndex, model);
-    const b = transformedVertex(positions, bIndex, model);
-    const c = transformedVertex(positions, cIndex, model);
-    if (a === undefined || b === undefined || c === undefined) return;
+export const createRayGeometryScratch = (): RayGeometryScratch => ({
+  a: [0, 0, 0],
+  b: [0, 0, 0],
+  c: [0, 0, 0],
+});
 
-    const distance = rayTriangleDistance(ray, a, b, c);
-    if (distance !== undefined && (best === undefined || distance < best)) best = distance;
-  };
+const transformedVertexInto = (
+  out: [number, number, number],
+  positions: Float32Array,
+  vertexIndex: number,
+  model: Mat4,
+): boolean => {
+  const index = vertexIndex * 3;
+  if (index + 2 >= positions.length) return false;
+
+  const x = positions[index]!;
+  const y = positions[index + 1]!;
+  const z = positions[index + 2]!;
+  const transformedX = model[0] * x + model[4] * y + model[8] * z + model[12];
+  const transformedY = model[1] * x + model[5] * y + model[9] * z + model[13];
+  const transformedZ = model[2] * x + model[6] * y + model[10] * z + model[14];
+  const w = model[3] * x + model[7] * y + model[11] * z + model[15];
+  const divisor = w === 0 ? 1 : w;
+  out[0] = transformedX / divisor;
+  out[1] = transformedY / divisor;
+  out[2] = transformedZ / divisor;
+  return true;
+};
+
+const transformedTriangleDistance = (
+  positions: Float32Array,
+  aIndex: number,
+  bIndex: number,
+  cIndex: number,
+  model: Mat4,
+  ray: Ray,
+  scratch: RayGeometryScratch,
+): number | undefined => {
+  if (
+    !transformedVertexInto(scratch.a, positions, aIndex, model)
+    || !transformedVertexInto(scratch.b, positions, bIndex, model)
+    || !transformedVertexInto(scratch.c, positions, cIndex, model)
+  ) return undefined;
+  return rayTriangleDistance(ray, scratch.a, scratch.b, scratch.c);
+};
+
+const nearerDistance = (best: number | undefined, candidate: number | undefined): number | undefined =>
+  candidate !== undefined && (best === undefined || candidate < best) ? candidate : best;
+
+export const rayGeometryDistanceWithScratch = (
+  positions: Float32Array,
+  indices: Uint16Array | Uint32Array | Uint8Array | undefined,
+  mode: RayGeometryMode,
+  model: Mat4,
+  ray: Ray,
+  scratch: RayGeometryScratch,
+): number | undefined => {
+  let best: number | undefined;
 
   if (indices !== undefined) {
     switch (mode) {
       case "triangle-fan":
         for (let index = 1; index + 1 < indices.length; index += 1) {
-          consider(indices[0]!, indices[index]!, indices[index + 1]!);
+          best = nearerDistance(best, transformedTriangleDistance(
+            positions, indices[0]!, indices[index]!, indices[index + 1]!, model, ray, scratch,
+          ));
         }
         break;
       case "triangle-strip":
         for (let index = 0; index + 2 < indices.length; index += 1) {
-          consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+          best = nearerDistance(best, transformedTriangleDistance(
+            positions, indices[index]!, indices[index + 1]!, indices[index + 2]!, model, ray, scratch,
+          ));
         }
         break;
       case "triangles":
         for (let index = 0; index + 2 < indices.length; index += 3) {
-          consider(indices[index]!, indices[index + 1]!, indices[index + 2]!);
+          best = nearerDistance(best, transformedTriangleDistance(
+            positions, indices[index]!, indices[index + 1]!, indices[index + 2]!, model, ray, scratch,
+          ));
         }
         break;
     }
@@ -195,17 +369,23 @@ export const rayGeometryDistance = ({
   switch (mode) {
     case "triangle-fan":
       for (let vertex = 1; vertex + 1 < vertexCount; vertex += 1) {
-        consider(0, vertex, vertex + 1);
+        best = nearerDistance(best, transformedTriangleDistance(
+          positions, 0, vertex, vertex + 1, model, ray, scratch,
+        ));
       }
       break;
     case "triangle-strip":
       for (let vertex = 0; vertex + 2 < vertexCount; vertex += 1) {
-        consider(vertex, vertex + 1, vertex + 2);
+        best = nearerDistance(best, transformedTriangleDistance(
+          positions, vertex, vertex + 1, vertex + 2, model, ray, scratch,
+        ));
       }
       break;
     case "triangles":
       for (let vertex = 0; vertex + 2 < vertexCount; vertex += 3) {
-        consider(vertex, vertex + 1, vertex + 2);
+        best = nearerDistance(best, transformedTriangleDistance(
+          positions, vertex, vertex + 1, vertex + 2, model, ray, scratch,
+        ));
       }
       break;
   }

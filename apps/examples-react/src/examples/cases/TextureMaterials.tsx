@@ -1,48 +1,46 @@
-import { boxGeometry, studioEnvironment } from '@royal/react/scene';
+import { boxGeometry, directionalLight, imageTexture, mesh, scene, standardMaterial } from '@royal/react/scene';
 import {
   Canvas,
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
 import {
+  useMemo,
   type ReactNode,
 } from 'react';
-import { exampleCanvasRendererOptions } from '../example-renderer-options';
+import { exampleCanvasContextOptions } from '../example-context-options';
+import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
 const helmetAlbedoSrc = import.meta.env.BASE_URL + 'DamagedHelmet/Default_albedo.jpg';
-const exampleEnvironment = studioEnvironment({
-  irradianceIntensity: 0.46,
-  specularIntensity: 0.82,
-});
 
 export const TextureMaterials = (): ReactNode => {
   const orbit = useOrbitCamera({
-    distance: 5.2,
-    pitch: 0.03,
-    target: [0, 0.02, 0],
+    initial: { distance: 5.2, pitch: 0.03, target: [0, 0.02, 0] },
   });
+  const renderScene = useMemo(() => scene({
+    camera: orbit.cameraResource,
+    environment: showcaseEnvironment,
+    ...showcasePass,
+    nodes: [
+      directionalLight(showcaseKeyLight),
+      directionalLight(showcaseFillLight),
+      mesh({
+        geometry: swatchGeometry,
+        material: standardMaterial({ texture: imageTexture(helmetAlbedoSrc) }),
+        transform: { position: [0, 0.02, 0], rotation: [0.24, 0.26, -0.04] },
+      }),
+    ],
+  }), [orbit.cameraResource]);
 
   return (
     <Canvas
       aria-label="Texture materials"
-      renderer={exampleCanvasRendererOptions}
-      style={{ cursor: 'grab', touchAction: 'none' }}
+      context={exampleCanvasContextOptions}
+      style={interactiveCanvasStyle}
+      scene={renderScene}
     >
-      <scene>
-        <pass camera={orbit.camera} environment={exampleEnvironment} toneMapping="none">
-          <directionalLight color={[0.58, 0.56, 0.52, 1]} direction={[0.36, -0.72, -1]} />
-          <mesh
-            geometry={swatchGeometry}
-            texture={helmetAlbedoSrc}
-            transform={{
-              position: [0, 0.02, 0],
-              rotation: [0.24, 0.26, -0.04],
-            }}
-          />
-        </pass>
-      </scene>
-      <OrbitControls {...orbit.orbitControlsProps} />
+      <OrbitControls orbit={orbit} />
     </Canvas>
   );
 };

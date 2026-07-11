@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boxGeometry,
+  createCameraViewResource,
   mesh,
   orthographicCamera,
-  pass,
   scene,
   unlitMaterial,
+  virtualTexture,
   type RenderObjectHandle,
+  type RenderRoot,
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
@@ -18,6 +20,7 @@ import {
   type WebGlXrSession,
   type WebGlXrView,
 } from "@royal/renderer-webgl/webxr";
+import { forEachFuzzCase } from "./fuzz";
 
 type CanvasSize = {
   readonly width: number;
@@ -25,6 +28,7 @@ type CanvasSize = {
 };
 
 type FakeCanvas = HTMLCanvasElement & {
+  dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored"): Event;
   setCssSize(size: CanvasSize): void;
   getContext: ReturnType<typeof vi.fn>;
 };
@@ -46,8 +50,10 @@ const fakeCanvas = (
   initialSize: CanvasSize = { width: 320, height: 180 },
 ): FakeCanvas => {
   let cssSize = initialSize;
+  const target = new EventTarget();
 
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return cssSize.height;
     },
@@ -66,10 +72,16 @@ const fakeCanvas = (
       toJSON: () => ({}),
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored") {
+      const event = new Event(type, { cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    },
     height: 0,
     setCssSize(size: CanvasSize) {
       cssSize = size;
     },
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -134,11 +146,13 @@ const fakeGl = (): FakeGl => {
     bindFramebuffer: record("bindFramebuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
+    blendEquationSeparate: record("blendEquationSeparate"),
     blendFunc: record("blendFunc"),
     bufferData: record("bufferData"),
     clear: record("clear"),
     clearColor: record("clearColor"),
     clearDepth: record("clearDepth"),
+    colorMask: record("colorMask"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => makeHandle<WebGLBuffer>()),
     createProgram: record("createProgram", () => makeHandle<WebGLProgram>()),
@@ -153,6 +167,7 @@ const fakeGl = (): FakeGl => {
     deleteVertexArray: record("deleteVertexArray"),
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
+    depthRange: record("depthRange"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
     drawArrays: record("drawArrays"),
@@ -179,6 +194,7 @@ const fakeGl = (): FakeGl => {
     uniform4fv: record("uniform4fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
+    vertexAttrib2f: record("vertexAttrib2f"),
     vertexAttrib4f: record("vertexAttrib4f"),
     vertexAttribDivisor: record("vertexAttribDivisor"),
     vertexAttribPointer: record("vertexAttribPointer"),
@@ -204,9 +220,9 @@ const cube = (color: Rgba) => mesh({
   material: unlitMaterial({ color }),
 });
 
-const drawablePass = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => pass({
+const drawableScene = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => scene({
   camera: camera(),
-  children: [cube(color)],
+  nodes: [cube(color)],
   clearColor,
 });
 
@@ -226,20 +242,229 @@ const expectMatricesToContainClose = (
   expect(hasMatrix).toBe(true);
 };
 
-const frameEvents = (calls: readonly GlCall[]): readonly string[] =>
-  calls
-    .filter((call) => call.name === "clearColor" || call.name === "drawArrays" || call.name === "drawElements")
-    .map((call) => {
-      if (call.name !== "clearColor") return "draw";
-      return `clearColor(${call.args.join(",")})`;
-    });
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("WebGL root working state contracts", () => {
+  it("invalidates every root sharing a committed camera resource and catches up after context restore", () => {
+    const scheduled: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }));
+    const first = fakeGl();
+    const second = fakeGl();
+    const firstCanvas = fakeCanvas(first.gl);
+    const secondCanvas = fakeCanvas(second.gl);
+    const firstRoot = createWebGlRoot(firstCanvas);
+    const secondRoot = createWebGlRoot(secondCanvas);
+    const cameraResource = createCameraViewResource(camera());
+    const renderScene = scene({ camera: cameraResource, nodes: [cube([1, 1, 1, 1])] });
+    firstRoot.render(renderScene);
+    secondRoot.render(renderScene);
+    expect(firstRoot.snapshot().planning).toEqual({
+      compileNodeVisits: 1,
+      planCompiles: 1,
+      planRevision: 1,
+      sceneCommits: 1,
+    });
+
+    cameraResource.position[0] = 1;
+    cameraResource.commit();
+    expect(scheduled).toHaveLength(2);
+    for (const callback of scheduled.splice(0)) callback(16);
+    expect(firstRoot.frame).toBe(2);
+    expect(secondRoot.frame).toBe(2);
+
+    firstCanvas.dispatchContextEvent("webglcontextlost");
+    cameraResource.position[0] = 2;
+    cameraResource.commit();
+    expect(scheduled).toHaveLength(1);
+    scheduled.shift()?.(32);
+    expect(firstRoot.frame).toBe(2);
+    expect(secondRoot.frame).toBe(3);
+
+    firstCanvas.dispatchContextEvent("webglcontextrestored");
+    expect(scheduled).toHaveLength(1);
+    scheduled.shift()?.(48);
+    expect(firstRoot.frame).toBe(3);
+    expect(secondRoot.frame).toBe(3);
+    expect(firstRoot.snapshot().planning.planCompiles).toBe(1);
+    expect(secondRoot.snapshot().planning.planCompiles).toBe(1);
+    firstRoot.dispose();
+    secondRoot.dispose();
+    cameraResource.position[0] = 3;
+    cameraResource.commit();
+    expect(scheduled).toHaveLength(0);
+  });
+
+  it("invalidates GPU handles without GL calls and lazily redraws after context restoration", () => {
+    const scheduled: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }));
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    const observerErrors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    root.observeContextLifecycle((snapshot) => {
+      if (snapshot.lifecycle === "lost") throw new Error("observer failure");
+    });
+    let stopSelfObserver = (): void => undefined;
+    stopSelfObserver = root.observeContextLifecycle((snapshot) => {
+      if (snapshot.lifecycle === "lost") stopSelfObserver();
+    });
+    const contextTransitions: unknown[] = [];
+    const stopObservingContext = root.observeContextLifecycle((snapshot) => {
+      contextTransitions.push(snapshot);
+      expect(Object.isFrozen(snapshot)).toBe(true);
+    });
+    const firstScene = drawableScene([0, 0, 0, 0]);
+    const retainedScene = scene({
+      camera: camera(),
+      clearColor: [0.1, 0.2, 0.3, 1],
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ texture: virtualTexture("/lost-context.vt.json") }),
+      })],
+    });
+
+    root.render(firstScene);
+    expect(root.snapshot().planning.planRevision).toBe(1);
+    const programsBeforeLoss = countCalls(calls, "createProgram");
+    const callsBeforeLoss = calls.length;
+    const loss = canvas.dispatchContextEvent("webglcontextlost");
+    const callsAtLoss = calls.length;
+
+    expect(loss.defaultPrevented).toBe(true);
+    expect(callsAtLoss).toBe(callsBeforeLoss);
+    expect(root.snapshot().context).toMatchObject({ generation: 2, lifecycle: "lost", losses: 1 });
+    root.render(retainedScene);
+    expect(root.snapshot().planning).toEqual({
+      compileNodeVisits: 2,
+      planCompiles: 2,
+      planRevision: 2,
+      sceneCommits: 2,
+    });
+    root.invalidate();
+    expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
+    expect(calls).toHaveLength(callsAtLoss);
+    expect(root.snapshot().resourceLifetime.sceneLeaseAcquires).toBe(2);
+
+    canvas.dispatchContextEvent("webglcontextrestored");
+    expect(root.snapshot().context).toMatchObject({ generation: 2, lifecycle: "active", restores: 1 });
+    expect(root.latestScene).toBe(retainedScene);
+    expect(root.snapshot().planning.planCompiles).toBe(2);
+    const restoreFrame = scheduled.at(-1);
+    expect(restoreFrame).toBeDefined();
+    restoreFrame?.(16);
+
+    expect(countCalls(calls, "createProgram")).toBeGreaterThan(programsBeforeLoss);
+    expect(drawCalls(calls)).toHaveLength(2);
+    expect(contextTransitions).toEqual([
+      expect.objectContaining({ generation: 1, lifecycle: "active" }),
+      expect.objectContaining({ generation: 2, lifecycle: "lost" }),
+      expect.objectContaining({ generation: 2, lifecycle: "restoring" }),
+      expect.objectContaining({ generation: 2, lifecycle: "active", restores: 1 }),
+    ]);
+    expect(observerErrors).toHaveBeenCalledTimes(1);
+    stopObservingContext();
+  });
+
+  it("publishes a terminal restore failure without reacquiring a different context", () => {
+    const first = fakeGl();
+    const replacement = fakeGl();
+    const canvas = fakeCanvas(first.gl);
+    const root = createWebGlRoot(canvas);
+    const transitions: unknown[] = [];
+    root.observeContextLifecycle((snapshot) => transitions.push(snapshot));
+    canvas.getContext.mockImplementationOnce(() => replacement.gl);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    canvas.dispatchContextEvent("webglcontextrestored");
+
+    expect(root.contextSnapshot()).toMatchObject({
+      generation: 2,
+      lastError: expect.stringMatching(/renderer-owned WebGL2 context/i),
+      lifecycle: "lost",
+    });
+    expect(transitions).toEqual([
+      expect.objectContaining({ lifecycle: "active" }),
+      expect.objectContaining({ lifecycle: "lost" }),
+      expect.objectContaining({ lifecycle: "restoring" }),
+      expect.objectContaining({ lastError: expect.any(String), lifecycle: "lost" }),
+    ]);
+  });
+
+  it("reports actual default context attributes and rejects explicit mismatches", () => {
+    const defaults = fakeGl();
+    (defaults.gl as WebGL2RenderingContext & {
+      getContextAttributes: () => WebGLContextAttributes;
+    }).getContextAttributes = vi.fn(() => ({ alpha: false, antialias: false }));
+    const root = createWebGlRoot(fakeCanvas(defaults.gl));
+    expect(root.options).toMatchObject({ alpha: false, antialias: false });
+
+    const explicit = fakeGl();
+    (explicit.gl as WebGL2RenderingContext & {
+      getContextAttributes: () => WebGLContextAttributes;
+    }).getContextAttributes = vi.fn(() => ({ alpha: true, antialias: false }));
+    expect(() => createWebGlRoot(fakeCanvas(explicit.gl), { antialias: true }))
+      .toThrow(/requested antialias=true.*received antialias=false/i);
+  });
+
+  it("keeps context lifecycle safe under generated loss, restore, demand, and stale-frame sequences", () => {
+    forEachFuzzCase({ cases: 48, seed: 0x63b77a21 }, ({ random }) => {
+      const scheduled: FrameRequestCallback[] = [];
+      vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+        scheduled.push(callback);
+        return scheduled.length;
+      }));
+      const { calls, gl } = fakeGl();
+      const canvas = fakeCanvas(gl);
+      const root = createWebGlRoot(canvas);
+      const renderScene = drawableScene([0, 0, 0, 0]);
+      root.render(renderScene);
+      let lifecycle: "active" | "lost" = "active";
+
+      for (let step = 0; step < 64; step += 1) {
+        const action = random.int(0, 6);
+        if (action === 0 && lifecycle === "active") {
+          const event = canvas.dispatchContextEvent("webglcontextlost");
+          expect(event.defaultPrevented).toBe(true);
+          lifecycle = "lost";
+        } else if (action === 1 && lifecycle === "lost") {
+          canvas.dispatchContextEvent("webglcontextrestored");
+          lifecycle = "active";
+        } else if (action === 2) {
+          const before = calls.length;
+          root.render(renderScene);
+          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+        } else if (action === 3) {
+          root.invalidate();
+        } else if (action === 4 && scheduled.length > 0) {
+          const before = calls.length;
+          scheduled.shift()?.(step * 16);
+          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+        } else if (action === 5) {
+          const before = calls.length;
+          root.pick({ clientX: 2, clientY: 2 });
+          if (lifecycle === "lost") expect(calls).toHaveLength(before);
+        }
+        expect(root.contextLifecycle).toBe(lifecycle);
+      }
+
+      const callsBeforeDispose = calls.length;
+      root.dispose();
+      if (lifecycle === "lost") expect(calls).toHaveLength(callsBeforeDispose);
+      canvas.dispatchContextEvent("webglcontextrestored");
+      for (const callback of scheduled) callback(2_000);
+      expect(root.snapshot().context.lifecycle).toBe("disposed");
+    });
+  });
+
   it("rejects canvases that cannot provide a WebGL2 context with a clear error", () => {
     const canvas = fakeCanvas(null);
 
@@ -252,7 +477,7 @@ describe("WebGL root working state contracts", () => {
     const { calls, gl } = fakeGl();
     const canvas = fakeCanvas(gl, { width: 320, height: 180 });
     const root = createWebGlRoot(canvas);
-    const renderScene = scene({ children: [drawablePass([0, 0, 0, 0])] });
+    const renderScene = drawableScene([0, 0, 0, 0]);
 
     root.render(renderScene);
     expect(canvas.width).toBe(640);
@@ -268,16 +493,16 @@ describe("WebGL root working state contracts", () => {
     expect(calls).toContainEqual({ name: "viewport", args: [0, 0, 360, 180] });
   });
 
-  it("caches GL program locations across repeated draws with the same program", () => {
+  it("uses fixed attributes and caches uniform locations across repeated draws", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const renderScene = scene({ children: [drawablePass([0, 0, 0, 0])] });
+    const renderScene = drawableScene([0, 0, 0, 0]);
 
     root.render(renderScene);
     const firstAttribLookups = countCalls(calls, "getAttribLocation");
     const firstUniformLookups = countCalls(calls, "getUniformLocation");
 
-    expect(firstAttribLookups).toBeGreaterThan(0);
+    expect(firstAttribLookups).toBe(0);
     expect(firstUniformLookups).toBeGreaterThan(0);
 
     root.render(renderScene);
@@ -287,41 +512,17 @@ describe("WebGL root working state contracts", () => {
     expect(drawCalls(calls)).toHaveLength(2);
   });
 
-  it("applies each pass clearColor and draws passes in scene order", () => {
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(scene({
-      children: [
-        drawablePass([0.05, 0.1, 0.15, 1], [1, 0, 0, 1]),
-        drawablePass([0.8, 0.7, 0.6, 1], [0, 0, 1, 1]),
-      ],
-    }));
-
-    expect(drawCalls(calls)).toHaveLength(2);
-    expect(frameEvents(calls)).toEqual([
-      "clearColor(0.05,0.1,0.15,1)",
-      "draw",
-      "clearColor(0.8,0.7,0.6,1)",
-      "draw",
-    ]);
-  });
-
   it("keeps regular mesh draws non-blended by default", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(scene({
-      children: [
-        pass({
-          camera: camera(),
-          children: [
+      camera: camera(),
+      nodes: [
             mesh({
               geometry: boxGeometry(1),
               material: unlitMaterial({ color: [1, 0, 0, 0.35] }),
             }),
-          ],
-        }),
       ],
     }));
 
@@ -337,57 +538,21 @@ describe("WebGL root working state contracts", () => {
     expect(calls).not.toContainEqual({ name: "depthMask", args: [false] });
   });
 
-  it("allows non-clearing overlay passes with depth testing disabled", () => {
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(scene({
-      children: [
-        drawablePass([0.05, 0.1, 0.15, 1], [1, 0, 0, 1]),
-        pass({
-          camera: camera(),
-          children: [cube([0, 1, 1, 1])],
-          clear: "none",
-          depthTest: false,
-        }),
-      ],
-    }));
-
-    expect(drawCalls(calls)).toHaveLength(2);
-    expect(calls.filter((call) => call.name === "clear")).toEqual([
-      {
-        name: "clear",
-        args: [gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT],
-      },
-    ]);
-    expect(calls).toContainEqual({ name: "disable", args: [gl.DEPTH_TEST] });
-    expect(frameEvents(calls)).toEqual([
-      "clearColor(0.05,0.1,0.15,1)",
-      "draw",
-      "draw",
-    ]);
-  });
-
-  it("accepts empty scenes and empty passes without issuing draw calls", () => {
+  it("accepts a scene with no nodes without issuing draw calls", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
     expect(() => {
-      root.render(scene({ children: [] }));
       root.render(scene({
-        children: [
-          pass({
-            camera: camera(),
-            children: [],
-          }),
-        ],
+        camera: camera(),
+        nodes: [],
       }));
     }).not.toThrow();
 
     expect(drawCalls(calls)).toHaveLength(0);
     expect(root.snapshot()).toMatchObject({
       disposed: false,
-      frame: 2,
+      frame: 1,
     });
   });
 
@@ -396,10 +561,8 @@ describe("WebGL root working state contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
     const ref: { current: RenderObjectHandle | null } = { current: null };
     const renderScene = scene({
-      children: [
-        pass({
-          camera: camera(),
-          children: [
+      camera: camera(),
+      nodes: [
             mesh({
               geometry: boxGeometry(1),
               material: unlitMaterial({ color: [1, 1, 1, 1] }),
@@ -409,8 +572,6 @@ describe("WebGL root working state contracts", () => {
                 rotation: [0, 0, 0],
               },
             }),
-          ],
-        }),
       ],
     });
 
@@ -427,12 +588,8 @@ describe("WebGL root working state contracts", () => {
     expect(drawCalls(calls)).toHaveLength(initialDraws + 1);
 
     root.render(scene({
-      children: [
-        pass({
-          camera: camera(),
-          children: [],
-        }),
-      ],
+      camera: camera(),
+      nodes: [],
     }));
 
     expect(ref.current).toBeNull();
@@ -448,10 +605,8 @@ describe("WebGL root working state contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
     const ref: { current: RenderObjectHandle | null } = { current: null };
     const renderScene = (x: number) => scene({
-      children: [
-        pass({
-          camera: camera(),
-          children: [
+      camera: camera(),
+      nodes: [
             mesh({
               geometry: boxGeometry(1),
               material: unlitMaterial({ color: [1, 1, 1, 1] }),
@@ -461,20 +616,91 @@ describe("WebGL root working state contracts", () => {
                 rotation: [0, 0, 0],
               },
             }),
-          ],
-        }),
       ],
     });
 
     root.render(renderScene(0));
-    root.render(renderScene(1));
+    const movedScene = renderScene(1);
+    root.render(movedScene);
 
     expect(frameCallbacks).toHaveLength(0);
     expect(ref.current?.position.x).toBe(1);
+    expect(root.snapshot().planning).toEqual({
+      compileNodeVisits: 2,
+      planCompiles: 2,
+      planRevision: 2,
+      sceneCommits: 2,
+    });
+
+    root.render(movedScene);
+    expect(root.snapshot().planning.planCompiles).toBe(2);
 
     ref.current?.position.set([2, 0, 0]);
 
     expect(frameCallbacks).toHaveLength(1);
+  });
+
+  it("finishes a retained-plan reconciliation after one ref callback throws", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    let failFirstAttachment = true;
+    let firstHandle: RenderObjectHandle | null = null;
+    let secondHandle: RenderObjectHandle | null = null;
+    const firstRef = (handle: RenderObjectHandle | null): void => {
+      if (handle !== null && failFirstAttachment) {
+        failFirstAttachment = false;
+        throw new Error("first ref attachment failed");
+      }
+      firstHandle = handle;
+    };
+    const committedScene = scene({
+      camera: camera(),
+      nodes: [
+        mesh({ geometry: boxGeometry(1), material: unlitMaterial({ color: [1, 0, 0, 1] }), ref: firstRef }),
+        mesh({ geometry: boxGeometry(1), material: unlitMaterial({ color: [0, 1, 0, 1] }), ref: (handle) => {
+          secondHandle = handle;
+        } }),
+      ],
+    });
+
+    expect(() => root.render(committedScene)).toThrow("first ref attachment failed");
+    expect(secondHandle).not.toBeNull();
+    expect(root.snapshot().planning.planCompiles).toBe(1);
+
+    expect(() => root.render(committedScene)).not.toThrow();
+    expect(firstHandle).not.toBeNull();
+    expect(root.snapshot().planning).toEqual({
+      compileNodeVisits: 2,
+      planCompiles: 1,
+      planRevision: 1,
+      sceneCommits: 1,
+    });
+  });
+
+  it("rejects reentrant rendering from a ref callback and retries attachment", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    let attachmentAttempts = 0;
+    let attachedHandle: RenderObjectHandle | null = null;
+    let committedScene!: RenderRoot;
+    const ref = (handle: RenderObjectHandle | null): void => {
+      attachmentAttempts += 1;
+      if (handle !== null && attachmentAttempts === 1) root.render(committedScene);
+      attachedHandle = handle;
+    };
+    committedScene = scene({
+      camera: camera(),
+      nodes: [mesh({ geometry: boxGeometry(1), material: unlitMaterial({ color: [1, 1, 1, 1] }), ref })],
+    });
+
+    expect(() => root.render(committedScene)).toThrow(
+      "Cannot render while Royal is reconciling render-object refs",
+    );
+    expect(root.snapshot().planning.planCompiles).toBe(1);
+    expect(() => root.render(committedScene)).not.toThrow();
+    expect(attachedHandle).not.toBeNull();
+    expect(attachmentAttempts).toBe(2);
+    expect(root.snapshot().planning.planCompiles).toBe(1);
   });
 
   it("coalesces imperative render object mutations before the scheduled render", () => {
@@ -487,17 +713,13 @@ describe("WebGL root working state contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
     const ref: { current: RenderObjectHandle | null } = { current: null };
     const renderScene = scene({
-      children: [
-        pass({
-          camera: camera(),
-          children: [
+      camera: camera(),
+      nodes: [
             mesh({
               geometry: boxGeometry(1),
               material: unlitMaterial({ color: [1, 1, 1, 1] }),
               ref,
             }),
-          ],
-        }),
       ],
     });
 
@@ -528,7 +750,7 @@ describe("WebGL root working state contracts", () => {
     }));
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const renderScene = scene({ children: [drawablePass([0, 0, 0, 0])] });
+    const renderScene = drawableScene([0, 0, 0, 0]);
 
     root.render(renderScene);
     const initialDraws = drawCalls(calls).length;
@@ -563,7 +785,7 @@ describe("WebGL root working state contracts", () => {
       0.25, -0.5, -2, 1,
     ];
 
-    root.renderViews(scene({ children: [drawablePass([0, 0, 0, 0])] }), {
+    root.renderViews(drawableScene([0, 0, 0, 0]), {
       framebuffer,
       views: [
         { projectionMatrix: projection, viewMatrix: view, viewport: { height: 80, width: 100, x: 0, y: 0 } },
@@ -593,20 +815,24 @@ describe("WebGL root working state contracts", () => {
 
   it("creates a WebXR session renderer that renders the latest scene through XR views", async () => {
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
     const framebuffer = makeHandle<WebGLFramebuffer>();
     const referenceSpace: WebGlXrReferenceSpace = {};
     const session: WebGlXrSession = {
       requestReferenceSpace: vi.fn(async () => referenceSpace),
       updateRenderState: vi.fn(),
     };
+    let layerContext: WebGL2RenderingContext | undefined;
     const xrWebGLLayerConstructor: WebGlXrLayerConstructor = class {
       readonly framebuffer = framebuffer;
       constructor(
         readonly session: WebGlXrSession,
         readonly context: WebGL2RenderingContext,
         readonly options?: unknown,
-      ) {}
+      ) {
+        layerContext = context;
+      }
       getViewport(view: WebGlXrView) {
         return (view as WebGlXrView & {
           readonly viewport: { readonly height: number; readonly width: number; readonly x: number; readonly y: number };
@@ -631,12 +857,22 @@ describe("WebGL root working state contracts", () => {
       snapshots.push(snapshot);
     });
 
-    root.render(scene({ children: [drawablePass([0, 0, 0, 0])] }));
+    const cameraResource = createCameraViewResource(camera());
+    root.render(scene({
+      camera: cameraResource,
+      clearColor: [0, 0, 0, 0],
+      nodes: [cube([1, 1, 1, 1])],
+    }));
+    const contextAcquisitionsBeforeXr = canvas.getContext.mock.calls.length;
     const renderer = await createWebXrSessionRenderer(root, session, {
       advanced: { xrWebGLLayerConstructor },
       onFrameSnapshot,
       referenceSpacePreference: ["local"],
     });
+    expect(canvas.getContext).toHaveBeenCalledTimes(contextAcquisitionsBeforeXr);
+    expect(layerContext).toBe(gl);
+    cameraResource.position[0] = 10_000;
+    cameraResource.commit();
     const callsBeforeXrFrame = calls.length;
     const rendered = renderer.renderFrame({
       getViewerPose: (space) => {
@@ -668,19 +904,35 @@ describe("WebGL root working state contracts", () => {
     expect(xrCalls.filter((call) => call.name === "bindFramebuffer")[0]?.args).toEqual([gl.FRAMEBUFFER, framebuffer]);
     expect(xrCalls.filter((call) => call.name === "viewport").map((call) => call.args)).toEqual([[4, 8, 110, 90]]);
     expect(drawCalls(xrCalls)).toHaveLength(1);
+    const xrMatrices = xrCalls
+      .filter((call) => call.name === "uniformMatrix4fv")
+      .map((call) => Array.from(call.args[2] as ArrayLike<number>));
+    expectMatricesToContainClose(xrMatrices, projectionMatrix);
+    expectMatricesToContainClose(xrMatrices, viewMatrix);
     expect(renderer.disposed).toBe(false);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    const callsWhileLost = calls.length;
+    expect(renderer.renderFrame({
+      getViewerPose: () => ({
+        views: [{ projectionMatrix, viewMatrix, viewport: xrViewport }],
+      }),
+    })).toBe(false);
+    expect(calls).toHaveLength(callsWhileLost);
+    expect(onFrameSnapshot).toHaveBeenCalledTimes(1);
 
     renderer.dispose();
     renderer.dispose();
 
     expect(renderer.disposed).toBe(true);
     expect(renderer.renderFrame({ getViewerPose: () => null })).toBe(false);
+    expect(calls.filter((call) => call.name === "deleteFramebuffer" && call.args[0] === framebuffer)).toHaveLength(0);
   });
 
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const renderScene = scene({ children: [] });
+    const renderScene = scene({ camera: camera(), nodes: [] });
 
     root.dispose();
 

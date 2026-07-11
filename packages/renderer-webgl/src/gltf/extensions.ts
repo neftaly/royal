@@ -60,8 +60,22 @@ export const assertSupportedRequiredGltfExtensions = (
   const unsupported = unsupportedRequiredGltfExtensions(document, supportedExtensions);
   if (unsupported.length > 0) throw new UnsupportedRequiredGltfExtensionError(src, unsupported);
   assertRequiredMaterialExtensionFeatures(src, document);
+  assertNoUnsupportedDeformation(src, document);
   assertRequiredTextureSourceExtensions(src, document);
   assertGsTextureSvgReferences(src, document);
+};
+
+const assertNoUnsupportedDeformation = (src: string, document: GltfDocument): void => {
+  const skinnedNodeIndex = (document.nodes ?? []).findIndex((node) => node.skin !== undefined);
+  if (skinnedNodeIndex >= 0) {
+    throw new Error(`glTF node ${skinnedNodeIndex} in ${src} requires unsupported skeletal deformation`);
+  }
+  for (const [meshIndex, mesh] of (document.meshes ?? []).entries()) {
+    const primitiveIndex = (mesh.primitives ?? []).findIndex((primitive) => (primitive.targets?.length ?? 0) > 0);
+    if (primitiveIndex >= 0) {
+      throw new Error(`glTF mesh ${meshIndex} primitive ${primitiveIndex} in ${src} requires unsupported morph deformation`);
+    }
+  }
 };
 
 const hasExtension = (

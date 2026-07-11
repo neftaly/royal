@@ -25,6 +25,8 @@ export interface GltfPickTarget {
 
 export interface GltfInstancesPickTarget {
   readonly id?: PickingId;
+  /** Stable caller identity when supplied by the bulk instance source. */
+  readonly instanceId?: PickingId;
   readonly instanceIndex: number;
   readonly kind: 'gltf-instances';
   readonly node: GltfInstancesNode;

@@ -9,15 +9,7 @@ const packages = [
     cwd: 'packages/renderer-core',
     specifiers: [
       '@royal/renderer-core',
-      '@royal/renderer-core/render-object',
-      '@royal/renderer-core/text',
-      '@royal/renderer-core/text/editable',
-      '@royal/renderer-core/text/font',
-      '@royal/renderer-core/text/layout',
-      '@royal/renderer-core/text/mesh',
-      '@royal/renderer-core/text/node',
-      '@royal/renderer-core/text/shaping',
-      '@royal/renderer-core/text/types'
+      '@royal/renderer-core/render-object'
     ]
   },
   {
@@ -33,11 +25,7 @@ const packages = [
     specifiers: [
       '@royal/react',
       '@royal/react/scene',
-      '@royal/react/xr',
-      '@royal/react/jsx-runtime',
-      '@royal/react/jsx-dev-runtime',
-      '@royal/react/renderer/jsx-runtime',
-      '@royal/react/renderer/jsx-dev-runtime'
+      '@royal/react/xr'
     ]
   }
 ];

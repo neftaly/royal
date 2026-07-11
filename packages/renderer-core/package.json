@@ -30,46 +30,6 @@
       "import": "./dist/render-object.js",
       "default": "./dist/render-object.js"
     },
-    "./text": {
-      "types": "./dist/text/index.d.ts",
-      "import": "./dist/text.js",
-      "default": "./dist/text.js"
-    },
-    "./text/editable": {
-      "types": "./dist/text/editable/index.d.ts",
-      "import": "./dist/text/editable.js",
-      "default": "./dist/text/editable.js"
-    },
-    "./text/font": {
-      "types": "./dist/text/font.d.ts",
-      "import": "./dist/text/font.js",
-      "default": "./dist/text/font.js"
-    },
-    "./text/layout": {
-      "types": "./dist/text/layout.d.ts",
-      "import": "./dist/text/layout.js",
-      "default": "./dist/text/layout.js"
-    },
-    "./text/mesh": {
-      "types": "./dist/text/mesh.d.ts",
-      "import": "./dist/text/mesh.js",
-      "default": "./dist/text/mesh.js"
-    },
-    "./text/node": {
-      "types": "./dist/text/node.d.ts",
-      "import": "./dist/text/node.js",
-      "default": "./dist/text/node.js"
-    },
-    "./text/shaping": {
-      "types": "./dist/text/shaping.d.ts",
-      "import": "./dist/text/shaping.js",
-      "default": "./dist/text/shaping.js"
-    },
-    "./text/types": {
-      "types": "./dist/text/types.d.ts",
-      "import": "./dist/text/types.js",
-      "default": "./dist/text/types.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -83,16 +43,10 @@
     "test": "vitest run --root ../.. ../../tests/renderer-core-*.test.ts"
   },
   "devDependencies": {
-    "@fontsource/atkinson-hyperlegible": "^5.2.8",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
-  },
-  "dependencies": {
-    "earcut": "^3.0.2",
-    "opentype.js": "^2.0.0",
-    "wawoff2": "^2.0.1"
   }
 }

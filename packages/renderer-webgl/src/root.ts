@@ -1,6 +1,25 @@
 import {
-  type BoxGeometry,
+  buildClusterGrid,
+  createClusterBuildScratch,
+  type ClusterGrid,
+  type ClusteredPunctualLight,
+} from "./webgl/clustered-lights";
+import {
+  commitClusteredLightView,
+  commitClusteredLightSnapshot,
+  markClusteredLightResourceUsed,
+  pruneClusteredLightCache,
+  selectClusteredLightResource,
+  type ClusteredLightCache,
+  type ClusteredLightResource,
+} from "./webgl/clustered-light-cache";
+import {
+  type Camera,
+  type CameraViewReadTarget,
+  type CameraViewResource,
   type DirectionalLightNode,
+  type PointLightNode,
+  type SpotLightNode,
   type EnvironmentLight,
   type EulerRads,
   type GltfInstanceTransforms,
@@ -8,11 +27,8 @@ import {
   type GltfNode,
   type Material,
   type MeshNode,
-  type PlaneGeometry,
   type PickInput,
   type PickResult,
-  type PickTarget,
-  type RenderPass,
   type RenderToneMapping,
   type RenderObjectHandle,
   type RenderObjectRef,
@@ -20,56 +36,119 @@ import {
   type RenderRoot,
   type Rgba,
   type TextureContentKey,
-  type TextNode,
   type TextureRef,
   type TextureSampler,
   type Transform,
-  type UnlitMaterial,
   type Vec3,
-  subscribeGltfInstanceTransforms,
 } from "@royal/renderer-core";
+import { VERTEX_ATTRIBUTE } from "./webgl/vertex-attribute-abi";
 import {
   createRenderObjectHandle,
   readRenderObjectHandleTransform,
 } from "@royal/renderer-core/render-object";
-import { textMesh } from "@royal/renderer-core/text/mesh";
 import {
   gltfComponentCount,
   readGltfFloatAccessor,
   readGltfIndices,
-  type GltfIndexArray,
 } from "./gltf/accessors";
 import {
-  gltfAnimationNodeTransformsAt,
-  readGltfAnimationClips,
-  selectGltfAnimationClip,
-  type GltfAnimatedNodeTransform,
-  type GltfAnimationClip,
-} from "./gltf/animation";
-import {
+  abortError,
   dataUriMediaType,
   decodeDataUri,
   gltfBufferViewBytes,
   loadGltfBuffers,
   loadGltfDocument,
   resolveResourceUri,
+  throwIfAborted,
 } from "./gltf/io";
 import { canvasSupportsImageMimeType } from "./capabilities";
+import { BoundedDiagnosticLog } from "./diagnostics";
 import {
-  decodeGltfBasisuRgba,
-} from "./gltf/codecs/basisu";
+  applyPreparedAssetEvents,
+  applyResourceDelta,
+  abortResourceArenaImageWork,
+  clearResourceArenaPreparedSources,
+  createResourceArena,
+  disposeResourceArena,
+  finishResourceArenaImageWork,
+  publishResourceArenaContentKey,
+  replaceResourceArenaImageAbortController,
+  releaseResourceArenaPreparedSource,
+  releaseResourceArenaAssetSource,
+  resourceArenaContentKeys,
+  resourceArenaHasHdrReadyAsset,
+  resourceArenaHasPendingAssetEvents,
+  resourceArenaIblSources,
+  resourceArenaPreparedSource,
+  resourceArenaPreparedSourceKeys,
+  resourceArenaPreparedSourceValues,
+  resourceArenaSourceReferenceCount,
+  rekeyPreparedAssetOrdinaryTextures,
+  retainResourceArenaAssetSource,
+  retainResourceArenaIblSource,
+  retainResourceArenaPreparedSource,
+  retainResourceArenaSourceLease,
+  resourceArenaTextureReferenceCount,
+  type PreparedAssetDependencyManifest,
+  type PreparedAssetOrdinaryTextureRekey,
+  type PreparedTextureSource,
+  type ResourceArena,
+  type ResourceArenaChanges,
+} from "./resource-arena";
 import {
-  decodeGltfDracoPrimitives,
-  type DecodedGltfDracoPrimitive,
-} from "./gltf/codecs/draco";
-import { decodeGltfMeshoptBufferViews } from "./gltf/codecs/meshopt";
+  OrdinaryTextureSourceStore,
+  type OrdinaryTextureSourceSubscription,
+} from "./ordinary-texture-source-store";
+import {
+  compileFramePlan,
+  createResourceManifestDiffScratch,
+  diffResourceManifests,
+  gltfRequestKey,
+  type FramePlan,
+  type FramePlanResourceManifest,
+  type CountedTextureDeclaration,
+  type ResourceManifestDelta,
+} from "./frame-plan";
+import {
+  directGeometryDeclaration,
+  directGeometryDeclarationKey,
+  geometryDeclarationBucketKey,
+  gltfGeometryDeclaration,
+  type CpuGeometry,
+} from "./geometry-recipes";
+import {
+  disposeVertexInputArena,
+  dropVertexInputArenaContext,
+  releaseVertexInputContextHandles,
+  releaseVertexInputGeometry,
+  releaseVertexInputInstance,
+  releaseLostVertexInputGeometry,
+  restoreVertexInputArenaContext,
+  retainVertexInputGeometry,
+  vertexInputBaseVertexArray,
+  vertexInputCompositeVertexArray,
+  vertexInputGeometry,
+  type VertexInputGeometry,
+  type VertexInputInstanceBuffers,
+} from "./vertex-input-arena";
+import { MAX_RESOURCE_ID } from "./resource-id";
+import {
+  appendFrameView,
+  copyFrameViewMatrixInto,
+  createFrameViews,
+  resetFrameViews,
+  type FrameViews,
+} from "./frame-views";
+import { rendererFrameViews } from "./webgl/frame-view-lane";
+import type { DecodedGltfDracoPrimitive } from "./gltf/codecs/draco";
+import { gltfCodecDemand } from "./gltf/codecs/demand";
 import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
+import {
+  GltfInstanceChangeTracker,
+  isPackedInstanceSlotDirty,
+} from "./gltf/instance-changes";
 import { readGltfSceneImageBasedLight } from "./gltf/image-based-light";
 import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
-import {
-  applyGltfMorphTargets,
-  gltfMorphWeights,
-} from "./gltf/morph";
 import { generateGltfPrimitiveNormals } from "./gltf/normals";
 import {
   type GltfContentExtras,
@@ -83,36 +162,58 @@ import {
   type GltfSceneNode,
   type GltfTexture,
   type GltfTextureInfo,
-  type GltfTextureTransformExtension,
 } from "./gltf/schema";
+import {
+  gltfTextureCoordinates,
+  IDENTITY_GLTF_TEXTURE_COORDINATES,
+  type GltfTextureCoordinates,
+} from "./gltf/texture-coordinates";
 import {
   gltfInstanceTransformMat4,
   gltfInstancingAttributeCount,
   gltfNodeMat4,
 } from "./gltf/transforms";
 import {
+  type GltfGeometryDrawMode,
+  type GltfLoadMetrics,
+  type GltfMaterialPrimitiveLod,
+  type GltfNodePrimitiveLod,
+  type LoadedGltfMaterial,
+  type LoadedGltfMaterialExtensionTextures,
+  type LoadedGltfMaterialTextureSlot,
+  type LoadedGltfMaterialVariant,
+  type LoadedGltfPrimitive,
+  type LoadedGltfPrimitiveMaterial,
+  type PreparedGltfAsset,
+} from "./gltf/prepared-asset";
+import { GltfPreparationScheduler } from "./gltf/preparation-scheduler";
+import {
   identityMat4,
   inverseMat4,
+  inverseMat4Into,
   multiplyMat4,
   multiplyMat4Into,
-  normalizeVec3,
-  projectionMat4,
+  projectionMat4Into,
   transformDirection,
   transformMat4,
   transformMat4Into,
   transformPoint,
-  transformVec4,
-  viewMat4,
+  viewMat4Into,
   type Mat4,
   type MutableMat4,
 } from "./math/mat4";
 import {
+  createRayGeometryScratch,
+  isBoundsVisible,
   pointOnRay,
-  rayAabbDistance,
-  rayGeometryDistance,
+  rayAabbDistanceScalars,
+  rayGeometryDistanceWithScratch,
+  transformBoundsInto,
   worldBounds,
   type Bounds3,
+  type MutableBounds3,
   type Ray,
+  type RayGeometryScratch,
   type RayGeometryMode,
 } from "./math/picking";
 import {
@@ -128,7 +229,6 @@ import {
   loadGltfSvgTexture,
   loadSvgTextureFromUri,
   svgVirtualTextureSourceForImage,
-  type SvgVirtualTextureSource,
 } from "./svg-texture";
 import {
   encodeVirtualTexturePageTableRgba8,
@@ -185,6 +285,7 @@ import {
   type SurfaceMaterial,
   type SurfaceMaterialAlphaMode,
   type SurfaceMaterialExtensionFactors,
+  type SurfaceMaterialTextureCoordinates,
   type TextureAssetUploadRef,
 } from "./webgl/materials";
 import {
@@ -195,10 +296,10 @@ import {
   surfaceShaderFeatureKey,
   vertexShaderSource,
 } from "./webgl/shaders";
+import { rendererOwnedWebGl2Context } from "./webgl/context-lane";
 import {
   combineSurfaceLightSets,
   DEFAULT_LIGHT_DIRECTION,
-  DEFAULT_SURFACE_LIGHT_SET,
   EMPTY_SURFACE_LIGHT_SET,
   MAX_SURFACE_LIGHTS,
   surfaceLightSet,
@@ -218,6 +319,7 @@ import {
 } from "./webgl/ibl-specular-textures";
 import { createIblBrdfLutTexture, IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT } from "./webgl/ibl-brdf-lut";
 import { bindSurfaceIblUniforms, IBL_SPECULAR_TEXTURE_UNIT } from "./webgl/ibl-uniforms";
+import { prepareFrameBaseline, prepareTextureUpload } from "./webgl/imperative-state";
 import {
   createStudioEnvironmentSpecularTexture,
   STUDIO_ENVIRONMENT_IRRADIANCE,
@@ -226,19 +328,24 @@ import {
 } from "./webgl/studio-environment";
 import type {
   NormalizedWebGlRootOptions,
+  WebGlContextLifecycle,
+  WebGlContextSnapshot,
   WebGlGltfInstancingSnapshot,
   WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,
+  WebGlPickingSnapshot,
   WebGlRoot,
   WebGlRootOptions,
   WebGlRootSnapshot,
-  WebGlRenderViewport,
+  WebGlTextureResidencySnapshot,
   WebGlRenderViewsOptions,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
 
 export type {
+  WebGlContextLifecycle,
+  WebGlContextSnapshot,
   WebGlGltfInstancingSnapshot,
   WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlGltfLoadDiagnosticsSnapshot,
@@ -248,95 +355,83 @@ export type {
   WebGlRoot,
   WebGlRootOptions,
   WebGlRootSnapshot,
+  WebGlTextureResidencySnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
 
 type PickCandidate = PickResult & {
   readonly drawOrdinal: number;
-  readonly passOrdinal: number;
+};
+
+type PickScratchCandidate = {
+  readonly bounds: MutableBounds3;
+  boundsDistance: number;
+  instanceIndex: number;
+  localModel?: Mat4;
+  ordinal: number;
+  outerIndex: number;
+  primitive?: LoadedGltfPrimitive;
+  rootModel?: Mat4;
 };
 
 type ProgramResource = {
   readonly fragmentShader: WebGLShader;
+  linked: boolean;
   readonly program: WebGLProgram;
   readonly vertexShader: WebGLShader;
 };
 
-type UniformValue = readonly number[];
-
-type GeometryDrawMode =
-  | "line-loop"
-  | "line-strip"
-  | "lines"
-  | "points"
-  | "triangle-fan"
-  | "triangle-strip"
-  | "triangles";
-
-type GeometryProgramVertexArrays = {
-  base?: WebGLVertexArrayObject;
-  readonly instanced: Map<string, WebGLVertexArrayObject>;
+type ProgramRequest = {
+  readonly clusteredLights: boolean;
+  readonly features: SurfaceShaderFeatures | undefined;
+  readonly key: string;
+  readonly kind: ProgramKind;
+  resource?: ProgramResource;
 };
 
-type VertexAttribDefaultValue =
-  | {
-    readonly size: 2;
-    readonly x: number;
-    readonly y: number;
-  }
-  | {
+type ParallelShaderCompileExtension = {
+  readonly COMPLETION_STATUS_KHR: number;
+};
+
+type UniformValue = readonly number[];
+
+type GeometryDrawMode = GltfGeometryDrawMode;
+
+type VertexAttribDefaultValue = {
     readonly size: 4;
     readonly w: number;
     readonly x: number;
     readonly y: number;
     readonly z: number;
-  };
-
-type GeometryResource = {
-  readonly arrayBuffer: WebGLBuffer;
-  readonly borrowedVertexBufferKey?: string;
-  readonly colorBuffer?: WebGLBuffer;
-  readonly drawCount: number;
-  readonly emissiveTexCoordBuffer?: WebGLBuffer;
-  readonly indexBuffer?: WebGLBuffer;
-  readonly indexType?: number;
-  readonly key: string;
-  readonly mode: GeometryDrawMode;
-  readonly normalBuffer?: WebGLBuffer;
-  readonly tangentBuffer?: WebGLBuffer;
-  readonly texCoordBuffer?: WebGLBuffer;
-  readonly vertexArrays: Map<WebGLProgram, GeometryProgramVertexArrays>;
 };
 
-type CpuGeometry = {
-  readonly colors?: Float32Array;
-  readonly emissiveTexCoords?: Float32Array;
-  readonly indices?: GltfIndexArray;
-  readonly key: string;
-  readonly mode: GeometryDrawMode;
-  readonly normals?: Float32Array;
-  readonly tangents?: Float32Array;
-  readonly positions: Float32Array;
-  readonly texCoords?: Float32Array;
-  readonly vertexBufferKey?: string;
-};
+type GeometryResource = VertexInputGeometry;
 
 type TextureResource = {
+  readonly generation: number;
   readonly key: string;
   pendingUpload?: TexturePendingUpload;
   readonly texture: WebGLTexture;
   uploaded: boolean;
 };
 
-type TexturePendingUpload = {
-  readonly source: LoadedTextureSource;
-  readonly texture: TextureAssetUploadRef;
-};
+type TexturePendingUpload = PreparedTextureSource;
 
 type ScreenColorTextureResource = {
   height: number;
+  hdr: boolean;
+  originX: number;
+  originY: number;
   readonly texture: WebGLTexture;
   uploaded: boolean;
+  width: number;
+};
+
+type HdrRenderTarget = {
+  readonly color: WebGLTexture;
+  readonly depth: WebGLRenderbuffer;
+  readonly framebuffer: WebGLFramebuffer;
+  height: number;
   width: number;
 };
 
@@ -346,6 +441,7 @@ type TextureLoadState = TextureResource & {
 };
 
 type TextureUnitAllocator = {
+  readonly reserveClusterUnits: boolean;
   readonly used: Set<number>;
 };
 
@@ -360,92 +456,42 @@ type SurfaceTextureBindingPlan = {
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
 };
 
-type LoadedGltfPrimitive = {
-  readonly baseMaterial: LoadedGltfPrimitiveMaterial;
-  readonly colors?: Float32Array;
-  readonly indices?: GltfIndexArray;
-  readonly instanceTransforms: readonly Mat4[];
-  readonly key: string;
-  readonly localBounds: readonly (Bounds3 | undefined)[];
-  readonly localModelDeterminants: readonly number[];
-  readonly localModels: readonly Mat4[];
-  readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
-  readonly materialVariants?: readonly LoadedGltfMaterialVariant[];
-  readonly mode: GeometryDrawMode;
-  readonly nodePath: readonly number[];
-  readonly nodeLod?: GltfNodePrimitiveLod;
-  readonly normals?: Float32Array;
-  readonly positions: Float32Array;
-  readonly tangents?: Float32Array;
-};
-
-type LoadedGltfMaterial = {
-  readonly alphaCutoff?: number;
-  readonly alphaMode: SurfaceMaterialAlphaMode;
-  readonly baseColorContentKey?: TextureContentKey;
-  readonly baseColorImageUri?: string;
-  readonly baseColorSourceUri?: string;
-  readonly baseColorSvgVirtualTextureSource?: SvgVirtualTextureSource;
-  readonly baseColorTextureUri?: string;
-  readonly color?: Rgba;
-  readonly doubleSided: boolean;
-  readonly emissive?: Rgba;
-  readonly emissiveContentKey?: TextureContentKey;
-  readonly emissiveImage?: LoadedTextureSource;
-  readonly emissiveImageFailed?: boolean;
-  readonly emissiveImageUri?: string;
-  readonly emissiveSampler?: TextureSampler;
-  readonly emissiveSourceUri?: string;
-  readonly emissiveTexCoords?: Float32Array;
-  readonly emissiveTextureUri?: string;
-  readonly image?: LoadedTextureSource;
-  readonly imageFailed?: boolean;
-  readonly extensionFactors?: SurfaceMaterialExtensionFactors;
-  readonly metallicRoughnessContentKey?: TextureContentKey;
-  readonly metallicRoughnessImage?: LoadedTextureSource;
-  readonly metallicRoughnessImageFailed?: boolean;
-  readonly metallicRoughnessImageUri?: string;
-  readonly metallicRoughnessSampler?: TextureSampler;
-  readonly metallicRoughnessSourceUri?: string;
-  readonly metallicRoughnessTextureUri?: string;
-  readonly metallicFactor?: number;
-  readonly normalContentKey?: TextureContentKey;
-  readonly normalImage?: LoadedTextureSource;
-  readonly normalImageFailed?: boolean;
-  readonly normalImageUri?: string;
-  readonly normalSampler?: TextureSampler;
-  readonly normalScale?: number;
-  readonly normalSourceUri?: string;
-  readonly normalTextureUri?: string;
-  readonly occlusionContentKey?: TextureContentKey;
-  readonly occlusionImage?: LoadedTextureSource;
-  readonly occlusionImageFailed?: boolean;
-  readonly occlusionImageUri?: string;
-  readonly occlusionSampler?: TextureSampler;
-  readonly occlusionSourceUri?: string;
-  readonly occlusionStrength?: number;
-  readonly occlusionTextureUri?: string;
-  readonly roughnessFactor?: number;
-  readonly sampler?: TextureSampler;
-  readonly texCoords?: Float32Array;
-  readonly unlit?: boolean;
-  readonly extensionTextures?: LoadedGltfMaterialExtensionTextures;
-};
-
-type LoadedGltfMaterialTextureSlot = {
-  readonly contentKey?: TextureContentKey;
-  readonly image?: LoadedTextureSource;
-  readonly imageFailed?: boolean;
-  readonly imageUri?: string;
-  readonly sampler?: TextureSampler;
-  readonly sourceUri?: string;
-  readonly textureUri?: string;
-};
-
 type LoadedGltfImageSource = {
   readonly contentKey?: TextureContentKey;
   readonly image: LoadedTextureSource;
+};
+
+type GltfBasisuCodecModule = typeof import("./gltf/codecs/basisu");
+type GltfDracoCodecModule = typeof import("./gltf/codecs/draco");
+type GltfMeshoptCodecModule = typeof import("./gltf/codecs/meshopt");
+
+type GltfCodecImports = {
+  readonly basisu?: Promise<GltfBasisuCodecModule>;
+  readonly draco?: Promise<GltfDracoCodecModule>;
+  readonly meshopt?: Promise<GltfMeshoptCodecModule>;
+};
+
+const startGltfCodecImport = <Module>(load: () => Promise<Module>): Promise<Module> => {
+  const pending = load();
+  // Buffer and image IO intentionally overlap module loading. Mark an early
+  // import failure handled until the original promise is awaited at its phase.
+  void pending.catch(() => undefined);
+  return pending;
+};
+
+const importGltfCodecs = (document: GltfDocument): GltfCodecImports => {
+  const demand = gltfCodecDemand(document);
+  return {
+    ...(demand.basisu
+      ? { basisu: startGltfCodecImport(() => import("./gltf/codecs/basisu")) }
+      : {}),
+    ...(demand.draco
+      ? { draco: startGltfCodecImport(() => import("./gltf/codecs/draco")) }
+      : {}),
+    ...(demand.meshopt
+      ? { meshopt: startGltfCodecImport(() => import("./gltf/codecs/meshopt")) }
+      : {}),
+  };
 };
 
 const loadedGltfImageSource = (
@@ -456,6 +502,16 @@ const loadedGltfImageSource = (
   image,
 });
 
+const closeLoadedTextureSource = (source: LoadedTextureSource): void => {
+  const ImageBitmapConstructor = globalThis.ImageBitmap;
+  if (typeof ImageBitmapConstructor === "function" && source instanceof ImageBitmapConstructor) source.close();
+};
+
+const closeTexImageSource = (source: TexImageSource): void => {
+  const ImageBitmapConstructor = globalThis.ImageBitmap;
+  if (typeof ImageBitmapConstructor === "function" && source instanceof ImageBitmapConstructor) source.close();
+};
+
 const loadedGltfPrimitiveBaseMaterial = (
   material: LoadedGltfMaterial,
   materialLod: GltfMaterialPrimitiveLod | undefined,
@@ -465,19 +521,6 @@ const loadedGltfPrimitiveBaseMaterial = (
   selectionKey: "base",
 });
 
-type LoadedGltfMaterialExtensionTextures = {
-  readonly clearcoatRoughnessTexture?: LoadedGltfMaterialTextureSlot;
-  readonly clearcoatTexture?: LoadedGltfMaterialTextureSlot;
-  readonly iridescenceTexture?: LoadedGltfMaterialTextureSlot;
-  readonly iridescenceThicknessTexture?: LoadedGltfMaterialTextureSlot;
-  readonly materialTransmissionTexture?: LoadedGltfMaterialTextureSlot;
-  readonly sheenColorTexture?: LoadedGltfMaterialTextureSlot;
-  readonly sheenRoughnessTexture?: LoadedGltfMaterialTextureSlot;
-  readonly specularColorTexture?: LoadedGltfMaterialTextureSlot;
-  readonly specularTexture?: LoadedGltfMaterialTextureSlot;
-  readonly thicknessTexture?: LoadedGltfMaterialTextureSlot;
-};
-
 type DrawSidedness = {
   readonly doubleSided: boolean;
   readonly frontFaceCcw: boolean;
@@ -486,30 +529,6 @@ type DrawSidedness = {
 type GltfTextureImageSelection = {
   readonly imageIndex: number;
   readonly kind: GltfImageKind;
-};
-
-type GltfNodePrimitiveLod = {
-  readonly group: string;
-  readonly level: number;
-  readonly levelCount: number;
-  readonly thresholds: readonly number[];
-};
-
-type GltfMaterialPrimitiveLod = {
-  readonly levels: readonly LoadedGltfMaterial[];
-  readonly thresholds: readonly number[];
-};
-
-type LoadedGltfMaterialVariant = {
-  readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
-  readonly variants: readonly number[];
-};
-
-type LoadedGltfPrimitiveMaterial = {
-  readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
-  readonly selectionKey: string;
 };
 
 type LoadedGltfSurfaceTextures = {
@@ -527,6 +546,7 @@ type LoadedGltfSurfaceTextures = {
   readonly specularColorTexture?: TextureAssetUploadRef;
   readonly specularTexture?: TextureAssetUploadRef;
   readonly thicknessTexture?: TextureAssetUploadRef;
+  readonly textureCoordinates?: SurfaceMaterialTextureCoordinates;
 };
 
 type TextureColorSpace = NonNullable<TextureRef["colorSpace"]>;
@@ -682,6 +702,28 @@ const SURFACE_SHADER_FEATURE_BY_EXTENSION_TEXTURE_KEY: Record<
   thicknessTexture: "thicknessTexture",
 };
 
+const SURFACE_TEXTURE_COORDINATE_BINDINGS = [
+  ["baseColorTexture", "baseColorTexture", "u_baseColorUvSet", "u_baseColorUvRow0", "u_baseColorUvRow1"],
+  ["emissiveTexture", "emissiveTexture", "u_emissiveUvSet", "u_emissiveUvRow0", "u_emissiveUvRow1"],
+  ["metallicRoughnessTexture", "metallicRoughnessTexture", "u_metallicRoughnessUvSet", "u_metallicRoughnessUvRow0", "u_metallicRoughnessUvRow1"],
+  ["normalTexture", "normalTexture", "u_normalUvSet", "u_normalUvRow0", "u_normalUvRow1"],
+  ["occlusionTexture", "occlusionTexture", "u_occlusionUvSet", "u_occlusionUvRow0", "u_occlusionUvRow1"],
+  ["specularTexture", "specularTexture", "u_specularUvSet", "u_specularUvRow0", "u_specularUvRow1"],
+  ["specularColorTexture", "specularColorTexture", "u_specularColorUvSet", "u_specularColorUvRow0", "u_specularColorUvRow1"],
+  ["clearcoatTexture", "clearcoatTexture", "u_clearcoatUvSet", "u_clearcoatUvRow0", "u_clearcoatUvRow1"],
+  ["clearcoatRoughnessTexture", "clearcoatRoughnessTexture", "u_clearcoatRoughnessUvSet", "u_clearcoatRoughnessUvRow0", "u_clearcoatRoughnessUvRow1"],
+  ["sheenColorTexture", "sheenColorTexture", "u_sheenColorUvSet", "u_sheenColorUvRow0", "u_sheenColorUvRow1"],
+  ["sheenRoughnessTexture", "sheenRoughnessTexture", "u_sheenRoughnessUvSet", "u_sheenRoughnessUvRow0", "u_sheenRoughnessUvRow1"],
+  ["iridescenceTexture", "iridescenceTexture", "u_iridescenceUvSet", "u_iridescenceUvRow0", "u_iridescenceUvRow1"],
+  ["iridescenceThicknessTexture", "iridescenceThicknessTexture", "u_iridescenceThicknessUvSet", "u_iridescenceThicknessUvRow0", "u_iridescenceThicknessUvRow1"],
+  ["materialTransmissionTexture", "materialTransmissionTexture", "u_materialTransmissionUvSet", "u_materialTransmissionUvRow0", "u_materialTransmissionUvRow1"],
+  ["thicknessTexture", "thicknessTexture", "u_thicknessUvSet", "u_thicknessUvRow0", "u_thicknessUvRow1"],
+] as const satisfies readonly (readonly [
+  SurfaceShaderTextureFeature,
+  keyof SurfaceMaterialTextureCoordinates,
+  string, string, string,
+])[];
+
 const loadedGltfSurfaceMaterial = (
   loadedMaterial: LoadedGltfMaterial,
   baseColor: TextureRef,
@@ -691,12 +733,14 @@ const loadedGltfSurfaceMaterial = (
   const extensionFactors = loadedMaterial.extensionFactors;
   const common = {
     baseColor,
+    baseColorFactor: loadedMaterial.color ?? TEXTURE_COLOR,
     alphaMode: loadedMaterial.alphaMode,
     ...(loadedMaterial.alphaMode === "MASK" ? { alphaCutoff: loadedMaterial.alphaCutoff ?? 0.5 } : {}),
     doubleSided: loadedMaterial.doubleSided,
     ...(emissive === undefined ? {} : { emissive }),
     ...(textures.emissiveTexture === undefined ? {} : { emissiveTexture: textures.emissiveTexture }),
     ...(extensionFactors === undefined ? {} : { extensionFactors }),
+    ...(textures.textureCoordinates === undefined ? {} : { textureCoordinates: textures.textureCoordinates }),
   };
   if (loadedMaterial.unlit === true) {
     return {
@@ -744,51 +788,95 @@ type GltfLodSelectionState = {
   readonly level: number;
 };
 
-type GltfLoadMetrics = {
-  animationsReadAt?: number;
-  buffersLoadedAt?: number;
-  documentLoadedAt?: number;
-  dracoDecodedAt?: number;
-  firstImageSettledAt?: number;
-  imageFailures: number;
-  imageLoaded: number;
-  imageLoadStartedAt?: number;
-  imageRequests: number;
-  imagesSettledAt?: number;
-  meshoptDecodedAt?: number;
-  readyAt?: number;
-  sceneReadAt?: number;
-  readonly startedAt: number;
-};
-
 type GltfState = {
-  animations: readonly GltfAnimationClip[];
   hasMaterialLod: boolean;
   hasMaterialVariants: boolean;
   hasNodeLod: boolean;
   imageBasedLight?: SurfaceImageBasedLight;
+  readonly imageRows: Map<string, GltfImageRow>;
   readonly instanceKey: number;
   readonly key: string;
   error?: string;
   lights: readonly SurfaceLight[];
   readonly load: GltfLoadMetrics;
-  nodes: readonly GltfSceneNode[];
+  materials: readonly LoadedGltfMaterial[];
+  nodeCount: number;
   primitives: readonly LoadedGltfPrimitive[];
   status: "loading" | "ready" | "error";
   variants: readonly string[];
 };
 
+const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMaterial[] => {
+  const materials = new Set<LoadedGltfMaterial>();
+  for (const primitive of asset.primitives) {
+    materials.add(primitive.material);
+    for (const material of primitive.materialLod?.levels ?? []) materials.add(material);
+    for (const variant of primitive.materialVariants ?? []) {
+      materials.add(variant.material);
+      for (const material of variant.materialLod?.levels ?? []) materials.add(material);
+    }
+  }
+  return [...materials];
+};
+
+type GltfImageTextureBinding = {
+  readonly baseColor: boolean;
+  readonly colorSpace: TextureColorSpace;
+  readonly contentKey?: TextureContentKey;
+  readonly count: number;
+  readonly material: LoadedGltfMaterial;
+  readonly sampler?: TextureSampler;
+  readonly sourceUri?: string;
+  readonly textureUri: string;
+};
+
+type GltfImageRow = {
+  readonly assetKey: string;
+  readonly bindings: GltfImageTextureBinding[];
+  contentKey?: TextureContentKey;
+  error?: string;
+  iblSpecular?: SurfaceImageBasedLightSpecular;
+  readonly key: string;
+  readonly materials: Set<LoadedGltfMaterial>;
+  readonly stateInstanceKey: number;
+  queued: boolean;
+  revision: number;
+  source?: LoadedTextureSource;
+  status: "error" | "pending" | "ready";
+};
+
+// Fetch and decode are currently one job. Reserve one lane for environment
+// lighting so a slow ordinary image cannot consume both A10/Quest-class lanes.
+const GLTF_IMAGE_LANE_CONCURRENCY = 1;
+
 type AnyGltfNode = GltfNode | GltfInstancesNode;
 
 type GltfInstanceTransformViews = {
-  poseVersion: number;
+  activeApplied: boolean;
+  readonly changes: GltfInstanceChangeTracker;
+  framePoseVersion: number;
+  frameScaleVersion: number;
+  matrixPoseVersion: number;
+  matrixScaleVersion: number;
   readonly rootModels: MutableMat4[];
-  scaleVersion: number;
+  readonly source: GltfInstanceTransforms;
+  readonly sourceKey: number;
   readonly transforms: Transform[];
+};
+
+type GltfInstanceTransformSubscription = {
+  readonly unsubscribe: () => void;
+  readonly views: GltfInstanceTransformViews;
+};
+
+type CameraViewResourceSubscription = {
+  readonly resource: CameraViewResource;
+  readonly unsubscribe: () => void;
 };
 
 type GltfPrimitiveDraw = {
   readonly geometry: CpuGeometry;
+  readonly geometryId: number;
   readonly lights?: SurfaceLightSet;
   readonly localModel: Mat4;
   readonly material: SurfaceMaterial;
@@ -797,9 +885,12 @@ type GltfPrimitiveDraw = {
   readonly modelSignatureStateKey: number;
   readonly modelSignatureValues?: readonly number[];
   readonly rootModel: Mat4;
+  readonly rootInstanceViews?: GltfInstanceTransformViews;
   readonly rootPositionSignatureVersion?: number;
   readonly rootRotationSignatureVersion?: number;
   readonly rootScaleSignatureVersion?: number;
+  readonly rootSignatureInstanceIndex: number;
+  readonly rootSignatureRenderInstanceOrdinal: number;
   readonly rootTransform: Transform | undefined;
   readonly sidedness: DrawSidedness;
 };
@@ -807,6 +898,7 @@ type GltfPrimitiveDraw = {
 type GltfPrimitiveDrawBatch = {
   cpuGeometry: CpuGeometry;
   geometry: GeometryResource;
+  geometryId: number;
   readonly key: string;
   lights: SurfaceLightSet;
   readonly localModelSignature: number[];
@@ -816,6 +908,8 @@ type GltfPrimitiveDrawBatch = {
   readonly rootRotationSignature: number[];
   readonly rootScaleSignature: number[];
   readonly rootModels: Mat4[];
+  readonly rootInstanceViews: Array<GltfInstanceTransformViews | undefined>;
+  readonly rootLogicalIndices: number[];
   readonly rootTransforms: Array<Transform | undefined>;
   sidedness: DrawSidedness;
 };
@@ -823,6 +917,7 @@ type GltfPrimitiveDrawBatch = {
 type GltfPrimitiveDrawBatchInput = {
   readonly draw: GltfPrimitiveDraw;
   readonly geometry: GeometryResource;
+  readonly geometryId: number;
   readonly key: string;
   readonly lights: SurfaceLightSet;
 };
@@ -833,6 +928,7 @@ type GltfPrimitiveDrawBatchPlanCacheEntry = {
 
 type GltfPreparedPrimitiveMaterial = {
   readonly geometry: CpuGeometry;
+  readonly geometryId: number;
   readonly material: SurfaceMaterial;
   readonly materialBatchKey: string;
 };
@@ -842,6 +938,7 @@ type GltfInstanceFloatBufferResource = {
   readonly buffer: WebGLBuffer;
   readonly data: Float32Array;
   dirty: boolean;
+  readonly uploadRanges: Int32Array;
 };
 
 type GltfInstanceVectorBufferResource = GltfInstanceFloatBufferResource & {
@@ -854,72 +951,119 @@ type GltfInstanceRootPoseBufferResource = GltfInstanceFloatBufferResource & {
 };
 
 type GltfInstanceBufferResource = {
+  readonly vertexInputBuffers: VertexInputInstanceBuffers;
+  readonly instanceKey: number;
   localCapacity: number;
   readonly localBuffer: WebGLBuffer;
   readonly localData: Float32Array;
   localDirty: boolean;
   localSignature?: number[];
+  readonly localUploadRanges: Int32Array;
   instanceCount: number;
+  readonly packedLogicalIndices: Int32Array;
+  readonly packedSources: Array<GltfInstanceTransformViews | undefined>;
+  readonly poseVersions: Map<GltfInstanceTransformViews, number>;
   readonly rootPose: GltfInstanceRootPoseBufferResource;
   readonly rootScale: GltfInstanceVectorBufferResource;
+  readonly scaleVersions: Map<GltfInstanceTransformViews, number>;
 };
 
 type WebGlGltfInstancingCounters = {
   -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
 };
 
-type SceneRenderView = {
-  projection(renderPass: RenderPass): Mat4;
-  readonly viewport: WebGlRenderViewport;
-  view(renderPass: RenderPass): Mat4;
-};
-type PassToneMappingState = {
+type SceneToneMappingState = {
   readonly exposure: number;
+  readonly hdrOutput: boolean;
   readonly toneMapping: RenderToneMapping;
 };
 
 const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
 const TEXTURE_COLOR: Rgba = [1, 1, 1, 1];
-const DEFAULT_TONE_MAPPING_STATE: PassToneMappingState = {
-  exposure: 1,
-  toneMapping: "none",
+const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
+  exposure: 1 / 1.2,
+  hdrOutput: false,
+  toneMapping: "linear-clamp",
+};
+const EMPTY_FRAME_PLAN_RESOURCE_MANIFEST: FramePlanResourceManifest = {
+  bulkInstances: [],
+  directGeometries: [],
+  gltfRequests: [],
+  ordinaryTextures: [],
+  renderObjectRefs: [],
+  virtualTextures: [],
 };
 const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
+const PROGRAM_MAX_LINKS_PER_FRAME = 1;
+const PROGRAM_MAX_STARTS_PER_FRAME = 1;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
   scale: [1, 1, 1],
 };
 
-const TYPED_ARRAY_CONTENT_KEYS = new WeakMap<ArrayBufferView, string>();
 const FNV_1A_32_OFFSET = 0x811c9dc5;
 const FNV_1A_32_PRIME = 0x01000193;
 const DJB2_XOR_OFFSET = 5381;
 const textureTextEncoder = new TextEncoder();
 
-const passToneMappingState = (renderPass: RenderPass): PassToneMappingState => ({
-  exposure: renderPass.exposure === undefined || !Number.isFinite(renderPass.exposure)
+const sceneToneMappingState = (
+  scene: {
+    readonly exposureEv100: number | undefined;
+    readonly toneMapping: RenderToneMapping | undefined;
+  },
+): SceneToneMappingState => ({
+  exposure: scene.exposureEv100 === undefined
     ? DEFAULT_TONE_MAPPING_STATE.exposure
-    : Math.max(0, renderPass.exposure),
-  toneMapping: renderPass.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
+    : 1 / (1.2 * 2 ** scene.exposureEv100),
+  hdrOutput: false,
+  toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
 });
+
+const compileSceneSurfaceLights = (
+  lights: readonly (DirectionalLightNode | PointLightNode | SpotLightNode)[],
+): readonly SurfaceLight[] => {
+  const scaleColor = (color: Rgba, intensity: number): Rgba => [
+    color[0] * intensity,
+    color[1] * intensity,
+    color[2] * intensity,
+    1,
+  ];
+  return lights.map((light) => {
+    switch (light.kind) {
+      case "directional-light":
+        return {
+          color: scaleColor(light.color, light.illuminanceLux),
+          direction: light.direction,
+          kind: "directional",
+        };
+      case "point-light":
+        return {
+          color: scaleColor(light.color, light.intensityCandela),
+          kind: "point",
+          position: light.position,
+          ...(light.range === undefined ? {} : { range: light.range }),
+        };
+      case "spot-light":
+        return {
+          color: scaleColor(light.color, light.intensityCandela),
+          direction: light.direction,
+          innerConeAngle: light.innerConeAngle,
+          kind: "spot",
+          outerConeAngle: light.outerConeAngle,
+          position: light.position,
+          ...(light.range === undefined ? {} : { range: light.range }),
+        };
+    }
+  });
+};
 
 const hex32 = (value: number): string =>
   value.toString(16).padStart(8, "0");
-
-const hashBytes = (bytes: Uint8Array): string => {
-  let hash = FNV_1A_32_OFFSET;
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, FNV_1A_32_PRIME) >>> 0;
-  }
-
-  return hex32(hash);
-};
 
 const hashTextureBytes = (bytes: Uint8Array): string => {
   let fnv = FNV_1A_32_OFFSET;
@@ -940,93 +1084,10 @@ const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
 const svgTextContentKey = (svgText: string): TextureContentKey =>
   byteContentKey(textureTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
 
-const typedArrayContentKey = (array: ArrayBufferView | undefined): string => {
-  if (array === undefined) return "none";
-  const cached = TYPED_ARRAY_CONTENT_KEYS.get(array);
-  if (cached !== undefined) return cached;
-
-  const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
-  const key = [
-    array.constructor.name,
-    array.byteLength,
-    hashBytes(bytes),
-  ].join(":");
-  TYPED_ARRAY_CONTENT_KEYS.set(array, key);
-  return key;
-};
-
-const mat4FromArrayLike = (matrix: ArrayLike<number>): Mat4 => {
-  if (matrix.length !== 16) throw new Error("Royal WebGL render views require 4x4 matrices");
-  return [
-    matrix[0]!, matrix[1]!, matrix[2]!, matrix[3]!,
-    matrix[4]!, matrix[5]!, matrix[6]!, matrix[7]!,
-    matrix[8]!, matrix[9]!, matrix[10]!, matrix[11]!,
-    matrix[12]!, matrix[13]!, matrix[14]!, matrix[15]!,
-  ];
-};
-
-const gltfPrimitiveNodePathModel = (
-  nodes: readonly GltfSceneNode[],
-  nodePath: readonly number[],
-  animationTransforms: ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined,
-): Mat4 => {
-  let model: Mat4 = identityMat4();
-  for (const nodeIndex of nodePath) {
-    model = multiplyMat4(model, gltfNodeMat4(nodes[nodeIndex], animationTransforms?.get(nodeIndex)));
-  }
-
-  return model;
-};
-
-const gltfPrimitiveAnimatedLocalModels = (
-  nodes: readonly GltfSceneNode[],
-  primitive: LoadedGltfPrimitive,
-  animationTransforms: ReadonlyMap<number, GltfAnimatedNodeTransform>,
-): readonly Mat4[] => {
-  const pathModel = gltfPrimitiveNodePathModel(nodes, primitive.nodePath, animationTransforms);
-
-  return primitive.instanceTransforms.map((instanceTransform) => multiplyMat4(pathModel, instanceTransform));
-};
-
-const gltfAnimationSelectionLabel = (selection: GltfNode["animation"]): string => {
-  if (selection === undefined || selection.clip === undefined) return "default clip";
-
-  return typeof selection.clip === "number" ? `clip index ${selection.clip}` : `clip "${selection.clip}"`;
-};
-
-const gltfGeometryContentKey = ({
-  colors,
-  emissiveTexCoords,
-  indices,
-  mode,
-  normals,
-  positions,
-  tangents,
-  texCoords,
-}: {
-  readonly colors?: Float32Array | undefined;
-  readonly emissiveTexCoords?: Float32Array | undefined;
-  readonly indices?: GltfIndexArray | undefined;
-  readonly mode: GeometryDrawMode;
-  readonly normals?: Float32Array | undefined;
-  readonly positions: Float32Array;
-  readonly tangents?: Float32Array | undefined;
-  readonly texCoords?: Float32Array | undefined;
-}): string => [
-  "gltf-geometry",
-  mode,
-  typedArrayContentKey(positions),
-  typedArrayContentKey(normals),
-  typedArrayContentKey(tangents),
-  typedArrayContentKey(colors),
-  typedArrayContentKey(texCoords),
-  typedArrayContentKey(emissiveTexCoords),
-  typedArrayContentKey(indices),
-].join("|");
-
 type TransformableRenderNode = GltfNode | MeshNode;
 
 type RenderObjectBinding = {
+  attached: boolean;
   declarativeTransform: Transform;
   readonly handle: RenderObjectHandle;
   readonly invalidation: { suppress: boolean } | undefined;
@@ -1051,6 +1112,15 @@ const sameTransform = (left: Transform, right: Transform): boolean =>
   sameVec3(left.position, right.position) &&
   sameVec3(left.rotation, right.rotation) &&
   sameVec3(left.scale, right.scale);
+
+const captureFirstError = (firstError: unknown, action: () => void): unknown => {
+  try {
+    action();
+  } catch (error) {
+    return firstError ?? error;
+  }
+  return firstError;
+};
 
 const appendTransformVectorSignatureValues = (
   signature: number[],
@@ -1082,17 +1152,29 @@ const appendGltfRootSignatures = (
   if (draw.rootPositionSignatureVersion === undefined) {
     appendTransformVectorSignatureValues(positionSignature, draw.rootTransform, "position");
   } else {
-    positionSignature.push(draw.rootPositionSignatureVersion);
+    positionSignature.push(
+      draw.rootPositionSignatureVersion,
+      draw.rootSignatureRenderInstanceOrdinal,
+      draw.rootSignatureInstanceIndex,
+    );
   }
   if (draw.rootRotationSignatureVersion === undefined) {
     appendTransformVectorSignatureValues(rotationSignature, draw.rootTransform, "rotation");
   } else {
-    rotationSignature.push(draw.rootRotationSignatureVersion);
+    rotationSignature.push(
+      draw.rootRotationSignatureVersion,
+      draw.rootSignatureRenderInstanceOrdinal,
+      draw.rootSignatureInstanceIndex,
+    );
   }
   if (draw.rootScaleSignatureVersion === undefined) {
     appendTransformVectorSignatureValues(scaleSignature, draw.rootTransform, "scale");
   } else {
-    scaleSignature.push(draw.rootScaleSignatureVersion);
+    scaleSignature.push(
+      draw.rootScaleSignatureVersion,
+      draw.rootSignatureRenderInstanceOrdinal,
+      draw.rootSignatureInstanceIndex,
+    );
   }
 };
 
@@ -1133,6 +1215,7 @@ const createGltfInstanceFloatBufferResource = (
   gl: WebGL2RenderingContext,
   buffer: WebGLBuffer,
   floatCount: number,
+  rangeCapacity: number,
   existing?: GltfInstanceFloatBufferResource,
 ): GltfInstanceFloatBufferResource => {
   const data = new Float32Array(floatCount);
@@ -1147,6 +1230,7 @@ const createGltfInstanceFloatBufferResource = (
     capacity: floatCount,
     data,
     dirty: true,
+    uploadRanges: new Int32Array(rangeCapacity * 2),
   };
 };
 
@@ -1156,7 +1240,7 @@ const createGltfInstanceVectorBufferResource = (
   floatCount: number,
   existing?: GltfInstanceVectorBufferResource,
 ): GltfInstanceVectorBufferResource =>
-  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, existing);
+  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, floatCount / 3, existing);
 
 const createGltfInstanceRootPoseBufferResource = (
   gl: WebGL2RenderingContext,
@@ -1164,7 +1248,7 @@ const createGltfInstanceRootPoseBufferResource = (
   floatCount: number,
   existing?: GltfInstanceRootPoseBufferResource,
 ): GltfInstanceRootPoseBufferResource =>
-  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, existing);
+  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, floatCount / 6, existing);
 
 const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   batchPlansBuilt: 0,
@@ -1206,6 +1290,8 @@ const appendGltfPrimitiveDrawBatchInput = (
   );
   batch.localModels.push(draw.localModel);
   batch.rootModels.push(draw.rootModel);
+  batch.rootInstanceViews.push(draw.rootInstanceViews);
+  batch.rootLogicalIndices.push(draw.rootSignatureInstanceIndex);
   batch.rootTransforms.push(draw.rootTransform);
 };
 
@@ -1225,7 +1311,7 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
   return {
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
-    preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
+    generatedRasterVirtualTextures: options.generatedRasterVirtualTextures ?? false,
   };
 };
 
@@ -1371,6 +1457,7 @@ const gltfMaterialTextureSlot = (
   src: string,
   textureInfo: GltfTextureInfo | undefined,
 ): LoadedGltfMaterialTextureSlot | undefined => {
+  if (textureInfo === undefined) return undefined;
   const textureIndex = textureInfo?.index;
   const texture = textureIndex === undefined ? undefined : document.textures?.[textureIndex];
   const imageSelection = gltfTextureImageSelection(texture, document.images);
@@ -1403,6 +1490,7 @@ const gltfMaterialTextureSlot = (
     ...(sampler === undefined ? {} : { sampler }),
     ...(sourceUri === undefined ? {} : { sourceUri }),
     ...(textureUri === undefined ? {} : { textureUri }),
+    coordinates: gltfTextureCoordinates(textureInfo),
   };
 };
 
@@ -1435,11 +1523,7 @@ const textureUploadInternalFormat = (
     ? gl.SRGB8_ALPHA8
     : gl.RGBA;
 
-const disableBrowserUnpackColorConversion = (gl: WebGL2RenderingContext): void => {
-  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 0);
-};
-
-const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
   if (ImageConstructor === undefined) {
     reject(new Error(`Image loading is unavailable for texture ${src}`));
@@ -1452,6 +1536,13 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
   const cleanup = (): void => {
     image.removeEventListener("load", onLoad);
     image.removeEventListener("error", onError);
+    signal?.removeEventListener("abort", onAbort);
+  };
+  const onAbort = (): void => {
+    cleanup();
+    image.src = "";
+    closeLoadedTextureSource(image);
+    reject(abortError());
   };
   const onLoad = (): void => {
     const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
@@ -1473,6 +1564,11 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
 
   image.addEventListener("load", onLoad);
   image.addEventListener("error", onError);
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted === true) {
+    onAbort();
+    return;
+  }
   image.src = src;
 
   if (image.complete) onLoad();
@@ -1481,6 +1577,7 @@ const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resol
 const loadImageBitmapFromBytes = (
   bytes: ArrayBuffer,
   mimeType: string | undefined,
+  signal?: AbortSignal,
 ): Promise<ImageBitmap> => {
   const createBitmap = globalThis.createImageBitmap;
   if (typeof createBitmap !== "function") {
@@ -1490,18 +1587,24 @@ const loadImageBitmapFromBytes = (
     type: mimeType ?? "application/octet-stream",
   });
 
-  return createBitmap(blob);
+  return createBitmap(blob).then((bitmap) => {
+    if (signal?.aborted !== true) return bitmap;
+    bitmap.close();
+    throw abortError();
+  });
 };
 
 const loadBasisuBytesFromUri = async (
   src: string,
   image: GltfImage,
+  signal?: AbortSignal,
 ): Promise<ArrayBuffer> => {
   if (image.uri === undefined) throw new Error("glTF KHR_texture_basisu image has no URI");
   if (image.uri.startsWith("data:")) return decodeDataUri(image.uri);
 
   const url = resolveResourceUri(src, image.uri);
-  const response = await fetch(url);
+  throwIfAborted(signal);
+  const response = await fetch(url, signal === undefined ? undefined : { signal });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
   return response.arrayBuffer();
@@ -1513,26 +1616,36 @@ const loadGltfImageSource = (
   buffers: readonly ArrayBuffer[],
   image: GltfImage,
   kind: GltfImageKind,
+  basisuCodec: Promise<GltfBasisuCodecModule> | undefined,
+  signal?: AbortSignal,
 ): Promise<LoadedGltfImageSource> => {
   if (kind === "svg") {
-    return loadGltfSvgTexture(src, document, buffers, image)
+    return loadGltfSvgTexture(src, document, buffers, image, signal)
       .then((loadedImage) => loadedGltfImageSource(
         loadedImage.image,
         svgTextContentKey(loadedImage.text),
-      ));
+      )).then((loadedImage) => {
+        if (signal?.aborted !== true) return loadedImage;
+        closeLoadedTextureSource(loadedImage.image);
+        throw abortError();
+      });
   }
 
   if (kind === "basisu") {
+    if (basisuCodec === undefined) {
+      return Promise.reject(new Error("glTF KHR_texture_basisu decoder was not requested"));
+    }
     const bytes = image.uri === undefined
       ? image.bufferView === undefined
         ? Promise.reject(new Error("glTF KHR_texture_basisu image has no URI or bufferView"))
         : Promise.resolve(gltfBufferViewBytes(document, buffers, image.bufferView))
-      : loadBasisuBytesFromUri(src, image);
+      : loadBasisuBytesFromUri(src, image, signal);
 
-    return bytes.then(async (buffer) => loadedGltfImageSource(
-      await decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`),
-      byteContentKey(buffer, "KHR_texture_basisu"),
-    ));
+    return Promise.all([bytes, basisuCodec]).then(async ([buffer, codec]) =>
+      loadedGltfImageSource(
+        await codec.decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`),
+        byteContentKey(buffer, "KHR_texture_basisu"),
+      ));
   }
 
   if (image.uri !== undefined) {
@@ -1542,17 +1655,17 @@ const loadGltfImageSource = (
         bytes,
         (image.mimeType ?? dataUriMediaType(image.uri)) || "application/octet-stream",
       );
-      return loadImageBitmapFromBytes(bytes, image.mimeType)
+      return loadImageBitmapFromBytes(bytes, image.mimeType, signal)
         .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
     }
 
-    return loadImage(resolveResourceUri(src, image.uri)).then((loadedImage) => ({ image: loadedImage }));
+    return loadImage(resolveResourceUri(src, image.uri), signal).then((loadedImage) => ({ image: loadedImage }));
   }
   if (image.bufferView === undefined) return Promise.reject(new Error("glTF image has no URI or bufferView"));
 
   const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
   const contentKey = byteContentKey(bytes, image.mimeType ?? "application/octet-stream");
-  return loadImageBitmapFromBytes(bytes, image.mimeType)
+  return loadImageBitmapFromBytes(bytes, image.mimeType, signal)
     .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
 };
 
@@ -1811,89 +1924,19 @@ const isPickableDrawMode = (mode: GeometryDrawMode | undefined): boolean =>
   || mode === "triangle-strip"
   || mode === "triangle-fan";
 
-const gltfBaseColorTextureInfo = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-) => materialIndex === undefined
-  ? undefined
-  : document.materials?.[materialIndex]?.pbrMetallicRoughness?.baseColorTexture;
-
-const gltfMetallicRoughnessTextureInfo = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-) => materialIndex === undefined
-  ? undefined
-  : document.materials?.[materialIndex]?.pbrMetallicRoughness?.metallicRoughnessTexture;
-
-const gltfEmissiveTextureInfo = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-) => materialIndex === undefined
-  ? undefined
-  : document.materials?.[materialIndex]?.emissiveTexture;
-
-const gltfOcclusionTextureInfo = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-) => materialIndex === undefined
-  ? undefined
-  : document.materials?.[materialIndex]?.occlusionTexture;
-
-const gltfMaterialPrimaryTextureInfo = (
-  document: GltfDocument,
-  materialIndex: number | undefined,
-): GltfTextureInfo | undefined =>
-  gltfBaseColorTextureInfo(document, materialIndex)
-    ?? gltfMetallicRoughnessTextureInfo(document, materialIndex)
-    ?? gltfEmissiveTextureInfo(document, materialIndex)
-    ?? gltfOcclusionTextureInfo(document, materialIndex);
-
-const transformGltfTexCoords = (
-  texCoords: Float32Array,
-  transform: GltfTextureTransformExtension | undefined,
-): Float32Array => {
-  if (transform === undefined) return texCoords;
-  const offsetX = transform.offset?.[0] ?? 0;
-  const offsetY = transform.offset?.[1] ?? 0;
-  const scaleX = transform.scale?.[0] ?? 1;
-  const scaleY = transform.scale?.[1] ?? 1;
-  const rotation = transform.rotation ?? 0;
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  const output = new Float32Array(texCoords.length);
-
-  for (let index = 0; index + 1 < texCoords.length; index += 2) {
-    const u = texCoords[index]! * scaleX;
-    const v = texCoords[index + 1]! * scaleY;
-    output[index] = offsetX + cos * u - sin * v;
-    output[index + 1] = offsetY + sin * u + cos * v;
-  }
-
-  return output;
-};
-
-const gltfTextureInfoTexCoords = (
+const gltfPrimitiveTexCoords = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
   primitive: GltfMeshPrimitive,
-  textureInfo: GltfTextureInfo | undefined,
+  set: 0 | 1,
   decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
 ): Float32Array | undefined => {
-  if (textureInfo?.index === undefined) return undefined;
-  const texCoordSet = textureInfo.extensions?.KHR_texture_transform?.texCoord
-    ?? textureInfo.texCoord
-    ?? 0;
-  const decodedTexCoords = decodedAttributes?.get(`TEXCOORD_${texCoordSet}`);
-  if (decodedTexCoords !== undefined) {
-    return transformGltfTexCoords(decodedTexCoords, textureInfo.extensions?.KHR_texture_transform);
-  }
-
-  const texCoordAccessor = primitive.attributes?.[`TEXCOORD_${texCoordSet}`];
+  const semantic = `TEXCOORD_${set}`;
+  const decodedTexCoords = decodedAttributes?.get(semantic);
+  if (decodedTexCoords !== undefined) return decodedTexCoords;
+  const texCoordAccessor = primitive.attributes?.[semantic];
   if (texCoordAccessor === undefined) return undefined;
-  return transformGltfTexCoords(
-    readGltfFloatAccessor(document, buffers, texCoordAccessor),
-    textureInfo.extensions?.KHR_texture_transform,
-  );
+  return readGltfFloatAccessor(document, buffers, texCoordAccessor);
 };
 
 const gltfVertexColors = (
@@ -2043,45 +2086,6 @@ const projectedBoundsScreenCoverage = (
   return clamp01((maxX - minX) * (maxY - minY));
 };
 
-const isBoundsVisible = (
-  bounds: Bounds3 | undefined,
-  viewProjectionModel: Mat4,
-): boolean => {
-  if (bounds === undefined) return false;
-
-  let left = true;
-  let right = true;
-  let bottom = true;
-  let top = true;
-  let near = true;
-  let far = true;
-  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
-    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
-    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
-      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
-      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
-        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
-        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
-          + viewProjectionModel[12];
-        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
-          + viewProjectionModel[13];
-        const clipZ = viewProjectionModel[2] * x + viewProjectionModel[6] * y + viewProjectionModel[10] * z
-          + viewProjectionModel[14];
-        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
-          + viewProjectionModel[15];
-        left &&= clipX < -clipW;
-        right &&= clipX > clipW;
-        bottom &&= clipY < -clipW;
-        top &&= clipY > clipW;
-        near &&= clipZ < -clipW;
-        far &&= clipZ > clipW;
-      }
-    }
-  }
-
-  return !(left || right || bottom || top || near || far);
-};
-
 /**
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
  * by the contracts while keeping all GPU ownership inside this root.
@@ -2090,13 +2094,45 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
-  readonly #programs = new Map<string, ProgramResource>();
-  readonly #programAttributeLocations = new Map<WebGLProgram, Map<string, number>>();
+  readonly #requestedContextOptions: WebGlRootOptions;
+  readonly #cameraView: CameraViewReadTarget = {
+    kind: 'perspective-camera',
+    position: new Float64Array(3),
+    rotation: new Float64Array(3),
+    fovY: 1,
+    left: -1,
+    right: 1,
+    bottom: -1,
+    top: 1,
+    near: 0.1,
+    far: 100,
+  };
+  #cameraViewResourceSubscription: CameraViewResourceSubscription | undefined;
+  readonly #frameViews = createFrameViews();
+  readonly #renderProjection = identityMat4();
+  readonly #renderView = identityMat4();
+  readonly #renderViewProjection = identityMat4();
+  readonly #renderViewportSize: [number, number] = [0, 0];
+  readonly #meshModel = identityMat4();
+  readonly #meshViewProjectionModel = identityMat4();
+  readonly #contextLifecycleObservers = new Set<(snapshot: WebGlContextSnapshot) => void>();
+  #parallelShaderCompile: ParallelShaderCompileExtension | undefined;
+  readonly #programs = new Map<string, ProgramRequest>();
+  readonly #pendingPrograms: ProgramRequest[] = [];
+  #pendingProgramHead = 0;
   readonly #programUniformLocations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
   readonly #programUniformValues = new Map<WebGLProgram, Map<string, UniformValue>>();
-  readonly #geometry = new Map<string, GeometryResource>();
+  readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
+  readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
+  readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
+  readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
+  readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
+  readonly #closedTextureSources = new WeakSet<object>();
   readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
+  readonly #pendingGltfImageRows: GltfImageRow[] = [];
+  readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
+  #pendingGltfImageRowHead = 0;
   readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #pendingTextureUploads: TextureResource[] = [];
@@ -2104,33 +2140,43 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #autoVirtualTextureManifestUris = new Map<string, string>();
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, VirtualTextureGeneratedPageSource>();
   readonly #gltf = new Map<string, GltfState>();
+  readonly #resourceArena: ResourceArena;
+  readonly #gltfPreparationScheduler = new GltfPreparationScheduler(2);
+  readonly #gltfImageScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY);
+  readonly #gltfIblImageScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY);
   readonly #gltfStatesByNode = new WeakMap<AnyGltfNode, GltfState>();
   readonly #gltfInstanceTransformViews = new WeakMap<GltfInstanceTransforms, GltfInstanceTransformViews>();
-  readonly #gltfInstanceTransformSubscriptions = new Map<GltfInstanceTransforms, () => void>();
+  readonly #gltfInstanceTransformSubscriptions =
+    new Map<GltfInstanceTransforms, GltfInstanceTransformSubscription>();
+  #gltfInstanceSourceKey = 1;
+  #gltfInstanceFrameActive = false;
   readonly #gltfRootViewProjectionModel: MutableMat4 = identityMat4();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
+  #nextGltfInstanceKey = 1;
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
-  readonly #gltfPreparedPrimitiveMaterials =
+  #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
+  readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
   readonly #ownedBuffers = new Set<WebGLBuffer>();
+  readonly #ownedFramebuffers = new Set<WebGLFramebuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
-  readonly #ownedVertexArrays = new Set<WebGLVertexArrayObject>();
+  readonly #ownedRenderbuffers = new Set<WebGLRenderbuffer>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
-  readonly #textFontIds = new WeakMap<object, number>();
-  readonly #unsupportedGltfAnimationDiagnostics = new Set<string>();
-  readonly #unsupportedGltfImageBasedLightDiagnostics = new Set<string>();
-  readonly #unsupportedGltfMaterialExtensionDiagnostics = new Set<string>();
-  readonly #unsupportedVirtualTextureDiagnostics = new Set<string>();
   readonly #activeGltfBatchPlanCacheKeys = new Set<string>();
   readonly #activeGltfInstanceBufferKeys = new Set<string>();
   readonly #activeGltfLodSelectionKeys = new Set<string>();
-  readonly #usedGeometry = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
-  #diagnostics: string[] = [];
+  readonly #diagnostics = new BoundedDiagnosticLog();
+  #contextError: string | undefined;
+  #contextGeneration = 1;
+  #contextLifecycle: WebGlContextLifecycle = "active";
+  #contextLosses = 0;
+  #contextNotificationVersion = 0;
+  #contextRestores = 0;
   #disposed = false;
   #externalRenderClocks = 0;
   #frame = 0;
@@ -2139,8 +2185,46 @@ class WebGlRootImpl implements WebGlRoot {
   #activeProgram: WebGLProgram | undefined;
   #iblBrdfLutTexture: WebGLTexture | undefined;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
+  #hdrRenderTarget: HdrRenderTarget | undefined;
+  #hdrSupported = false;
+  #drawingHdr = false;
+  readonly #clusteredLightResources: ClusteredLightCache = new Map();
+  readonly #clusterBuildScratch = createClusterBuildScratch();
+  #clusterGridTextureUnit = -1;
+  #clusterIndexTextureUnit = -1;
+  #clusterLightTextureUnit = -1;
+  #framePlan: FramePlan | undefined;
+  readonly #framePlanDiffScratch = createResourceManifestDiffScratch();
+  #framePlanReconciliationInProgress = false;
+  #framePlanReconciliationPending = false;
+  #framePlanReconciliationPrevious: FramePlan | undefined;
+  #framePlanSurfaceLights: readonly SurfaceLight[] = [];
+  #framePlanSurfaceLightSet: SurfaceLightSet | undefined;
   #latestScene: RenderRoot | undefined;
+  #planRevision = 0;
+  #planCompiles = 0;
+  #compileNodeVisits = 0;
+  #sceneCommits = 0;
   #maxTextureImageUnits = 0;
+  #maxTextureSize = 0;
+  readonly #pickCandidates: PickScratchCandidate[] = [];
+  #pickCandidateCount = 0;
+  #pickCandidatesThisPick = 0;
+  #pickExactTestsThisPick = 0;
+  readonly #pickHeap: number[] = [];
+  readonly #pickInverseViewProjection = identityMat4();
+  readonly #pickProjection = identityMat4();
+  readonly #pickView = identityMat4();
+  readonly #pickModel = identityMat4();
+  readonly #pickRootModel = identityMat4();
+  readonly #pickRootViewProjection = identityMat4();
+  readonly #pickRay: Ray = { direction: [0, 0, -1], origin: [0, 0, 0] };
+  readonly #pickRayGeometryScratch: RayGeometryScratch = createRayGeometryScratch();
+  readonly #pickViewProjection = identityMat4();
+  #programLinkFrame = -1;
+  #programLinksThisFrame = 0;
+  #programStartFrame = -1;
+  #programStartsThisFrame = 0;
   #renderObjectInvalidationPending = false;
   #renderDirty = false;
   #renderScheduleGeneration = 0;
@@ -2151,7 +2235,6 @@ class WebGlRootImpl implements WebGlRoot {
   #textureUploadFrame = -1;
   #textureUploadHead = 0;
   #textureUploadsThisFrame = 0;
-  #nextTextFontId = 1;
   #virtualTextureRequestFrame = -1;
   #virtualTextureRequestsThisFrame = 0;
   #virtualTextureUploadFrame = -1;
@@ -2164,26 +2247,189 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #viewportInvalidationListener = (): void => {
     this.invalidate();
   };
+  readonly #contextLostListener = (event: Event): void => {
+    event.preventDefault();
+    if (this.#contextLifecycle === "disposed" || this.#contextLifecycle === "lost") return;
+    this.#contextLifecycle = "lost";
+    this.#contextGeneration += 1;
+    this.#contextLosses += 1;
+    this.#renderDirty ||= this.#latestScene !== undefined;
+    this.#scheduledRenderGeneration = 0;
+    this.#dropGpuState(false);
+    this.#notifyContextLifecycle();
+  };
+  readonly #contextRestoredListener = (): void => {
+    if (this.#contextLifecycle !== "lost") return;
+    this.#contextLifecycle = "restoring";
+    this.#notifyContextLifecycle();
+    if (this.#contextLifecycle !== "restoring") return;
+    const restored = this.#canvas.getContext("webgl2", {
+      alpha: this.#options.alpha,
+      antialias: this.#options.antialias,
+      preserveDrawingBuffer: false,
+    }) as WebGL2RenderingContext | null;
+    if (restored === null || restored !== this.#gl) {
+      this.#contextLifecycle = "lost";
+      this.#contextError = "Royal WebGL context restoration did not return the renderer-owned WebGL2 context";
+      this.#notifyContextLifecycle();
+      return;
+    }
+    try {
+      this.#validateRestoredContextAttributes();
+      this.#probeContextCapabilities();
+      restoreVertexInputArenaContext(this.#resourceArena.vertexInputs, this.#contextGeneration);
+      this.#contextLifecycle = "active";
+      this.#contextError = undefined;
+      this.#contextRestores += 1;
+      this.#restoreVirtualTextureResources();
+      this.#renderDirty ||= this.#latestScene !== undefined;
+      this.#scheduleRender();
+      this.#notifyContextLifecycle();
+    } catch (error) {
+      this.#dropGpuState(true);
+      this.#contextLifecycle = "lost";
+      this.#contextError = error instanceof Error ? error.message : String(error);
+      this.#notifyContextLifecycle();
+    }
+  };
+  readonly #clusterTextureFactory = (): WebGLTexture => this.#createTexture();
 
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
     this.#canvas = canvas;
-    this.#options = normalizeOptions(options);
-    const gl = canvas.getContext("webgl2", this.#options) as WebGL2RenderingContext | null;
+    this.#requestedContextOptions = { ...options };
+    const requestedOptions = normalizeOptions(options);
+    this.#resourceArena = createResourceArena(
+      (request, signal) => this.#prepareGltfAsset(request.src, request.key, signal),
+      () => this.invalidate(),
+    );
+    this.#ordinaryTextureSources = new OrdinaryTextureSourceStore({
+      close: (source) => this.#closeTextureSource(source),
+      load: (request, signal) => isSvgUri(request.uri)
+        ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
+        : loadImage(request.uri, signal),
+      retain: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
+    });
+    const gl = canvas.getContext("webgl2", {
+      alpha: requestedOptions.alpha,
+      antialias: requestedOptions.antialias,
+      preserveDrawingBuffer: false,
+    }) as WebGL2RenderingContext | null;
     if (gl === null) {
       throw new Error("Royal WebGL renderer requires a WebGL2 context");
     }
     this.#gl = gl;
+    this.#options = this.#validatedContextOptions(requestedOptions);
+    this.#probeContextCapabilities();
+    restoreVertexInputArenaContext(this.#resourceArena.vertexInputs, this.#contextGeneration);
+    this.#canvas.addEventListener?.("webglcontextlost", this.#contextLostListener);
+    this.#canvas.addEventListener?.("webglcontextrestored", this.#contextRestoredListener);
+    this.#watchViewport();
+  }
+
+  #probeContextCapabilities(): void {
+    const gl = this.#gl;
+    this.#parallelShaderCompile = gl.getExtension?.("KHR_parallel_shader_compile") ?? undefined;
+    this.#hdrSupported = gl.getExtension?.("EXT_color_buffer_float") != null;
     const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
-    this.#watchViewport();
+    this.#clusterGridTextureUnit = -1;
+    this.#clusterIndexTextureUnit = -1;
+    this.#clusterLightTextureUnit = -1;
+    if (this.#maxTextureImageUnits >= 8) {
+      this.#clusterGridTextureUnit = this.#maxTextureImageUnits - 3;
+      this.#clusterIndexTextureUnit = this.#maxTextureImageUnits - 2;
+      this.#clusterLightTextureUnit = this.#maxTextureImageUnits - 1;
+    }
+    const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
+    this.#maxTextureSize = Number.isFinite(maxTextureSize) ? maxTextureSize : 0;
+  }
+
+  #validatedContextOptions(fallback: NormalizedWebGlRootOptions): NormalizedWebGlRootOptions {
+    const attributes = this.#gl.getContextAttributes?.();
+    const alpha = attributes?.alpha ?? fallback.alpha;
+    const antialias = attributes?.antialias ?? fallback.antialias;
+    if (this.#requestedContextOptions.alpha !== undefined && alpha !== this.#requestedContextOptions.alpha) {
+      throw new Error(
+        `Royal WebGL context requested alpha=${this.#requestedContextOptions.alpha} but received alpha=${alpha}`,
+      );
+    }
+    if (
+      this.#requestedContextOptions.antialias !== undefined
+      && antialias !== this.#requestedContextOptions.antialias
+    ) {
+      throw new Error(
+        `Royal WebGL context requested antialias=${this.#requestedContextOptions.antialias} but received antialias=${antialias}`,
+      );
+    }
+    return {
+      alpha,
+      antialias,
+      generatedRasterVirtualTextures: fallback.generatedRasterVirtualTextures,
+    };
+  }
+
+  #validateRestoredContextAttributes(): void {
+    const restored = this.#validatedContextOptions(this.#options);
+    if (restored.alpha !== this.#options.alpha || restored.antialias !== this.#options.antialias) {
+      throw new Error("Royal WebGL context restoration changed renderer context attributes");
+    }
+  }
+
+  #contextLifecycleSnapshot(): WebGlContextSnapshot {
+    return Object.freeze({
+      generation: this.#contextGeneration,
+      ...(this.#contextError === undefined ? {} : { lastError: this.#contextError }),
+      lifecycle: this.#contextLifecycle,
+      losses: this.#contextLosses,
+      restores: this.#contextRestores,
+    });
+  }
+
+  #notifyContextLifecycle(): void {
+    const version = this.#contextNotificationVersion + 1;
+    this.#contextNotificationVersion = version;
+    const snapshot = this.#contextLifecycleSnapshot();
+    for (const observer of this.#contextLifecycleObservers) {
+      try {
+        observer(snapshot);
+      } catch (error) {
+        console.error("Royal WebGL context lifecycle observer failed", error);
+      }
+      if (this.#contextNotificationVersion !== version) break;
+    }
   }
 
   get canvas(): HTMLCanvasElement {
     return this.#canvas;
   }
 
+  get [rendererOwnedWebGl2Context](): WebGL2RenderingContext {
+    return this.#gl;
+  }
+
   get disposed(): boolean {
     return this.#disposed;
+  }
+
+  get contextLifecycle(): WebGlContextLifecycle {
+    return this.#contextLifecycle;
+  }
+
+  contextSnapshot(): WebGlContextSnapshot {
+    return this.#contextLifecycleSnapshot();
+  }
+
+  observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void {
+    this.#contextLifecycleObservers.add(callback);
+    try {
+      callback(this.#contextLifecycleSnapshot());
+    } catch (error) {
+      this.#contextLifecycleObservers.delete(callback);
+      throw error;
+    }
+    return () => {
+      this.#contextLifecycleObservers.delete(callback);
+    };
   }
 
   get frame(): number {
@@ -2219,140 +2465,201 @@ class WebGlRootImpl implements WebGlRoot {
     if (this.#disposed) {
       throw new Error("Cannot render with a disposed Royal renderer root");
     }
+    const plan = this.#commitScene(scene);
+    if (this.#contextLifecycle !== "active") {
+      this.#retainPlanWhileContextUnavailable();
+      return;
+    }
 
     const { height, width } = this.#resize();
-    this.#renderScene(scene, {
-      framebuffer: null,
-      scissor: false,
-      syncRenderObjectRefs: true,
-      views: [{
-        projection: (renderPass) => projectionMat4(renderPass.camera, width, height),
-        view: (renderPass) => viewMat4(renderPass.camera),
-        viewport: { height, width, x: 0, y: 0 },
-      }],
-    });
+    const camera = this.#readCamera(plan.camera);
+    resetFrameViews(this.#frameViews, null, false);
+    appendFrameView(
+      this.#frameViews,
+      projectionMat4Into(this.#renderProjection, camera, width, height),
+      viewMat4Into(this.#renderView, camera),
+      0,
+      0,
+      width,
+      height,
+    );
+    this.#renderScene(plan, this.#frameViews);
   }
 
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void {
     if (this.#disposed) {
       throw new Error("Cannot render views with a disposed Royal renderer root");
     }
+    const plan = this.#commitScene(scene);
+    if (this.#contextLifecycle !== "active") {
+      this.#retainPlanWhileContextUnavailable();
+      return;
+    }
 
-    this.#renderScene(scene, {
-      framebuffer: options.framebuffer ?? null,
-      scissor: true,
-      syncRenderObjectRefs: true,
-      views: options.views.map((view) => ({
-        projection: () => mat4FromArrayLike(view.projectionMatrix),
-        view: () => mat4FromArrayLike(view.viewMatrix),
-        viewport: view.viewport,
-      })),
-    });
+    const frameViews = this.#frameViews;
+    resetFrameViews(frameViews, options.framebuffer ?? null, true);
+    for (const view of options.views) {
+      const { height, width, x, y } = view.viewport;
+      appendFrameView(frameViews, view.projectionMatrix, view.viewMatrix, x, y, width, height);
+    }
+    this.#renderScene(plan, frameViews);
   }
 
-  #renderScene(
-    scene: RenderRoot,
-    options: {
-      readonly framebuffer: WebGLFramebuffer | null;
-      readonly scissor: boolean;
-      readonly syncRenderObjectRefs: boolean;
-      readonly views: readonly SceneRenderView[];
-    },
-  ): void {
-    if (options.views.length === 0) return;
+  [rendererFrameViews](scene: RenderRoot, frameViews: FrameViews): void {
+    if (this.#disposed) {
+      throw new Error("Cannot render views with a disposed Royal renderer root");
+    }
+    const plan = this.#commitScene(scene);
+    if (this.#contextLifecycle !== "active") {
+      this.#retainPlanWhileContextUnavailable();
+      return;
+    }
+    this.#renderScene(plan, frameViews);
+  }
+
+  #renderScene(plan: FramePlan, frameViews: FrameViews): void {
+    if (this.#contextLifecycle !== "active") {
+      this.#retainPlanWhileContextUnavailable();
+      return;
+    }
+    if (frameViews.count === 0) return;
 
     // An immediate render consumes any queued demand render. The queued
     // callback checks its generation before drawing.
     this.#renderDirty = false;
     this.#scheduledRenderGeneration = 0;
-    this.#latestScene = scene;
     this.#renderObjectInvalidationPending = false;
-    if (options.syncRenderObjectRefs) {
-      this.#syncRenderObjectRefs(scene);
-      this.#syncGltfInstanceTransforms(scene);
-    }
+    this.#applyPendingResourceArenaEvents();
     this.#activeGltfBatchPlanCacheKeys.clear();
     this.#activeGltfInstanceBufferKeys.clear();
     this.#activeGltfLodSelectionKeys.clear();
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
-    gl.bindFramebuffer?.(gl.FRAMEBUFFER, options.framebuffer);
-    gl.clearDepth?.(1);
-    gl.enable?.(gl.DEPTH_TEST);
-    gl.depthFunc?.(gl.LEQUAL);
-    gl.disable?.(gl.BLEND);
-    if (options.scissor) gl.enable?.(gl.SCISSOR_TEST);
+    try {
+    gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
+    prepareFrameBaseline(gl, frameViews.scissor);
+    this.#stagePendingGltfImageRows();
     this.#processTextureUploads();
     this.#processVirtualTexturePageUploads();
 
-    const usedGeometry = this.#usedGeometry;
-    usedGeometry.clear();
+    this.#beginGltfInstanceFrame();
     try {
-      for (const renderPass of scene.children) {
-        if (renderPass.depthTest) {
-          gl.enable?.(gl.DEPTH_TEST);
-        } else {
-          gl.disable?.(gl.DEPTH_TEST);
-        }
+      const wantsHdr = this.#planWantsHdr(plan);
+      const actualWebGl2 = (
+        typeof globalThis.WebGL2RenderingContext === "function"
+        && gl instanceof globalThis.WebGL2RenderingContext
+      ) || Object.prototype.toString.call(gl) === "[object WebGL2RenderingContext]";
+      if (wantsHdr && !this.#hdrSupported && actualWebGl2) {
+        throw new Error("Royal physical lighting requires EXT_color_buffer_float");
+      }
+      const useHdr = wantsHdr && this.#hdrSupported;
+      const surfaceLights = this.#sceneSurfaceLightSet(plan.environment);
+      const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
+      for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
+        // A scene occurrence has the same resource identity in every view.
+        // Resetting the ordinal across eyes avoids duplicate instance uploads
+        // and other occurrence-owned resources in XR.
+        this.#gltfRenderOrdinal = 0;
+        gl.enable?.(gl.DEPTH_TEST);
+        const viewportOffset = viewIndex * 4;
+        const x = frameViews.viewports[viewportOffset]!;
+        const y = frameViews.viewports[viewportOffset + 1]!;
+        const width = frameViews.viewports[viewportOffset + 2]!;
+        const height = frameViews.viewports[viewportOffset + 3]!;
+        const hdrTarget = useHdr ? this.#ensureHdrRenderTarget(width, height) : undefined;
+        gl.bindFramebuffer?.(gl.FRAMEBUFFER, hdrTarget?.framebuffer ?? frameViews.framebuffer);
+        gl.viewport(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
+        if (frameViews.scissor) gl.scissor?.(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
+        this.#drawingHdr = useHdr;
+        const [r, g, b, a] = plan.clearColor;
+        gl.clearColor(r, g, b, a);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        for (const renderView of options.views) {
-          const { height, width, x, y } = renderView.viewport;
-          gl.viewport(x, y, width, height);
-          if (options.scissor) gl.scissor?.(x, y, width, height);
-          const clearMask =
-            renderPass.clear === "none"
-              ? 0
-              : renderPass.clear === "color"
-                ? gl.COLOR_BUFFER_BIT
-                : renderPass.clear === "depth"
-                  ? gl.DEPTH_BUFFER_BIT
-                  : gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT;
+        copyFrameViewMatrixInto(this.#renderProjection, frameViews.projections, viewIndex);
+        copyFrameViewMatrixInto(this.#renderView, frameViews.views, viewIndex);
+        copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
+        const projection = this.#renderProjection;
+        const view = this.#renderView;
+        const viewProjection = this.#renderViewProjection;
+        const viewportSize = this.#renderViewportSize;
+        viewportSize[0] = width;
+        viewportSize[1] = height;
+        const sourceX = useHdr ? 0 : x;
+        const sourceY = useHdr ? 0 : y;
+        const gltfDraws: GltfPrimitiveDraw[] = [];
+        const flushGltfDraws = (): void => {
+          if (gltfDraws.length === 0) return;
+          this.#drawGltfPrimitiveDraws(
+            gltfDraws,
+            projection,
+            view,
+            surfaceLights,
+            toneMapping,
+            viewportSize,
+            sourceX,
+            sourceY,
+          );
+          gltfDraws.length = 0;
+        };
 
-          if (clearMask !== 0) {
-            if (renderPass.clear === "color" || renderPass.clear === "color-depth") {
-              const [r, g, b, a] = renderPass.clearColor;
-              gl.clearColor(r, g, b, a);
-            }
-            gl.clear(clearMask);
-          }
-
-          const projection = renderView.projection(renderPass);
-          const view = renderView.view(renderPass);
-          const viewProjection = multiplyMat4(projection, view);
-          const lights = this.#directionalLights(renderPass.children);
-          const passLights = this.#passSurfaceLightSet(lights[0], renderPass.environment);
-          const toneMapping = passToneMappingState(renderPass);
-          const viewportSize: ViewportSize = [width, height];
-          const gltfDraws: GltfPrimitiveDraw[] = [];
-          const flushGltfDraws = (): void => {
-            if (gltfDraws.length === 0) return;
-            this.#drawGltfPrimitiveDraws(gltfDraws, projection, view, passLights, toneMapping, viewportSize, usedGeometry);
-            gltfDraws.length = 0;
-          };
-
-          for (const child of renderPass.children) {
-            if (child.kind === "directional-light") continue;
-            if (child.kind === "gltf" || child.kind === "gltf-instances") {
-              this.#appendGltfPrimitiveDraws(child, projection, view, gltfDraws, viewProjection);
-              continue;
-            }
-            flushGltfDraws();
-            this.#drawNode(child, projection, view, passLights, toneMapping, viewportSize, usedGeometry);
+        for (const node of plan.nodes) {
+          if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
+          if (node.kind === "gltf" || node.kind === "gltf-instances") {
+            this.#appendGltfPrimitiveDraws(node, projection, view, gltfDraws, viewProjection);
+            continue;
           }
           flushGltfDraws();
+          this.#drawNode(
+            node,
+            projection,
+            view,
+            viewProjection,
+            surfaceLights,
+            toneMapping,
+            viewportSize,
+            sourceX,
+            sourceY,
+          );
         }
+        flushGltfDraws();
+        if (hdrTarget !== undefined) {
+          this.#presentHdrRenderTarget(
+            hdrTarget,
+            frameViews.framebuffer,
+            x,
+            y,
+            width,
+            height,
+            toneMapping,
+            frameViews.scissor,
+          );
+        }
+        this.#drawingHdr = false;
       }
     } finally {
-      if (options.scissor) gl.disable?.(gl.SCISSOR_TEST);
+      this.#gltfInstanceFrameActive = false;
+      if (frameViews.scissor) gl.disable?.(gl.SCISSOR_TEST);
+      this.#drawingHdr = false;
       gl.bindFramebuffer?.(gl.FRAMEBUFFER, null);
     }
 
-    this.#releaseUnusedGeometry(usedGeometry);
     this.#releaseUnusedGltfBatchPlans();
     this.#releaseUnusedGltfInstanceBuffers();
     this.#pruneGltfLodSelections();
+    pruneClusteredLightCache(this.#clusteredLightResources, this.#frame, (texture) => {
+      this.#gl.deleteTexture(texture);
+      this.#ownedTextures.delete(texture);
+    });
     this.#frame += 1;
     if (this.#hasPendingTextureUploads() || this.#hasPendingVirtualTextureUploads()) this.invalidate();
+    } finally {
+      // The renderer exclusively owns its context, but leaving vertex-input
+      // bindings neutral makes frame teardown explicit. The EAB is VAO state,
+      // so select the default VAO before clearing it.
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    }
   }
 
   invalidate(): void {
@@ -2365,8 +2672,20 @@ class WebGlRootImpl implements WebGlRoot {
   flushInvalidated(): void {
     if (
       this.#disposed
+      || this.#contextLifecycle !== "active"
       || !this.#renderDirty
       || this.#externalRenderClocks > 0
+      || this.#latestScene === undefined
+    ) return;
+    this.#renderLatestScene();
+  }
+
+  flushInvalidatedFromExternalClock(): void {
+    if (
+      this.#disposed
+      || this.#contextLifecycle !== "active"
+      || !this.#renderDirty
+      || this.#externalRenderClocks !== 1
       || this.#latestScene === undefined
     ) return;
     this.#renderLatestScene();
@@ -2383,23 +2702,35 @@ class WebGlRootImpl implements WebGlRoot {
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
     }
-    const scene = this.#latestScene;
-    if (scene === undefined) return undefined;
+    if (this.#contextLifecycle !== "active") return undefined;
+    const plan = this.#framePlan;
+    if (plan === undefined) return undefined;
 
     const { height, width } = this.#resize();
-    let best: PickCandidate | undefined;
-    for (const [passOrdinal, renderPass] of scene.children.entries()) {
-      const projection = projectionMat4(renderPass.camera, width, height);
-      const view = viewMat4(renderPass.camera);
-      const ray = this.#pickRay(input, projection, view);
-      if (ray === undefined) continue;
+    this.#pickCandidatesThisPick = 0;
+    this.#pickExactTestsThisPick = 0;
+    const camera = this.#readCamera(plan.camera);
+    const projection = projectionMat4Into(this.#pickProjection, camera, width, height);
+    const view = viewMat4Into(this.#pickView, camera);
+    const viewProjection = multiplyMat4Into(this.#pickViewProjection, projection, view);
+    const ray = this.#pickRayInto(input, viewProjection);
+    if (ray === undefined) return undefined;
 
-      let drawOrdinal = 0;
-      for (const child of renderPass.children) {
-        const result = this.#pickNode(child, ray, projection, view, input, passOrdinal, drawOrdinal);
-        drawOrdinal = result.nextDrawOrdinal;
-        if (result.hit !== undefined && this.#isBetterPick(result.hit, best)) best = result.hit;
+    let best: PickCandidate | undefined;
+    let drawOrdinal = 0;
+    for (const node of plan.nodes) {
+      let hit: PickCandidate | undefined;
+      if (node.kind === "mesh") {
+        hit = this.#pickMesh(node, ray, viewProjection, input, drawOrdinal);
+        drawOrdinal += 1;
+      } else if (node.kind === "gltf") {
+        hit = this.#pickGltf(node, ray, viewProjection, input, drawOrdinal);
+        drawOrdinal += 1;
+      } else if (node.kind === "gltf-instances") {
+        hit = this.#pickGltfInstances(node, ray, viewProjection, input, drawOrdinal);
+        drawOrdinal += 1;
       }
+      if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
     }
 
     if (best === undefined) return undefined;
@@ -2412,28 +2743,126 @@ class WebGlRootImpl implements WebGlRoot {
     };
   }
 
-  dispose(): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
+  #retainPlanWhileContextUnavailable(): void {
+    this.#applyPendingResourceArenaEvents();
+    this.#renderDirty = true;
+    this.#renderObjectInvalidationPending = false;
+  }
 
-    const gl = this.#gl;
-    for (const vertexArray of Array.from(this.#ownedVertexArrays)) this.#deleteVertexArray(vertexArray);
-    for (const buffer of Array.from(this.#ownedBuffers)) this.#deleteBuffer(buffer);
-    for (const texture of Array.from(this.#ownedTextures)) {
-      gl.deleteTexture(texture);
-      this.#ownedTextures.delete(texture);
+  #dropGpuState(deleteResources: boolean): void {
+    for (const resource of this.#textures.values()) {
+      if (resource.pendingUpload !== undefined) {
+        this.#retainPreparedTextureUpload(resource.key, resource.pendingUpload);
+      }
     }
-    for (const program of Array.from(this.#ownedPrograms)) this.#deleteProgram(program);
-    for (const shader of Array.from(this.#ownedShaders)) {
-      gl.deleteShader(shader);
-      this.#ownedShaders.delete(shader);
+    if (deleteResources) {
+      releaseVertexInputContextHandles(this.#resourceArena.vertexInputs, this.#gl, this.#contextGeneration);
+      const gl = this.#gl;
+      for (const buffer of Array.from(this.#ownedBuffers)) gl.deleteBuffer(buffer);
+      for (const framebuffer of Array.from(this.#ownedFramebuffers)) gl.deleteFramebuffer(framebuffer);
+      for (const renderbuffer of Array.from(this.#ownedRenderbuffers)) gl.deleteRenderbuffer(renderbuffer);
+      for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
+      for (const program of Array.from(this.#ownedPrograms)) gl.deleteProgram(program);
+      for (const shader of Array.from(this.#ownedShaders)) gl.deleteShader(shader);
+    } else {
+      dropVertexInputArenaContext(this.#resourceArena.vertexInputs);
     }
+    this.#ownedBuffers.clear();
+    this.#ownedFramebuffers.clear();
+    this.#ownedRenderbuffers.clear();
+    this.#ownedTextures.clear();
+    this.#ownedPrograms.clear();
+    this.#ownedShaders.clear();
 
     this.#activeProgram = undefined;
+    this.#hdrRenderTarget = undefined;
+    this.#iblBrdfLutTexture = undefined;
+    this.#transmissionScreenColorTexture = undefined;
+    this.#drawingHdr = false;
+    this.#programs.clear();
+    this.#pendingPrograms.length = 0;
+    this.#pendingProgramHead = 0;
+    this.#programUniformLocations.clear();
+    this.#programUniformValues.clear();
+    this.#vertexAttribDefaults.clear();
+    this.#textures.clear();
+    this.#pendingTextureUploads.length = 0;
+    this.#textureUploadHead = 0;
+    this.#textureUploadFrame = -1;
+    this.#textureUploadsThisFrame = 0;
+    this.#iblSpecularTextures.clear();
+    this.#studioEnvironmentSpecularTextures.clear();
+    this.#clusteredLightResources.clear();
+    this.#gltfBatchPlanCache.clear();
+    this.#gltfInstanceBuffers.clear();
+    this.#activeGltfBatchPlanCacheKeys.clear();
+    this.#activeGltfInstanceBufferKeys.clear();
+    this.#gltfInstanceFrameActive = false;
+    this.#programLinkFrame = -1;
+    this.#programLinksThisFrame = 0;
+    this.#programStartFrame = -1;
+    this.#programStartsThisFrame = 0;
+
+    for (const state of this.#virtualTextures.values()) {
+      delete state.resources;
+      delete state.pageTable;
+      state.uploadedPages.clear();
+      state.requestedPages.clear();
+      for (const pageKey of state.loadingPages) state.requestedPages.add(pageKey);
+      for (const upload of state.pendingUploads) {
+        if (upload.sourceGeneration === state.sourceGeneration) state.requestedPages.add(upload.pageKey);
+      }
+    }
+    this.#virtualTextureRequestFrame = -1;
+    this.#virtualTextureRequestsThisFrame = 0;
+    this.#virtualTextureUploadFrame = -1;
+    this.#virtualTextureUploadsThisFrame = 0;
+  }
+
+  #restoreVirtualTextureResources(): void {
+    for (const state of this.#virtualTextures.values()) {
+      if (state.status !== "ready" || state.manifest === undefined) continue;
+      const unsupported = this.#unsupportedVirtualTextureRuntimeReason(state.manifest);
+      if (unsupported !== undefined) {
+        this.#markVirtualTextureUnsupported(state, unsupported);
+        continue;
+      }
+      this.#allocateVirtualTextureResources(state, state.manifest);
+      this.#demandVirtualTexturePages(state);
+    }
+  }
+
+  dispose(): void {
+    if (this.#framePlanReconciliationInProgress) {
+      throw new Error("Cannot dispose while Royal is reconciling render-object refs");
+    }
+    if (this.#disposed) return;
+    const canDeleteResources = this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring";
+    this.#disposed = true;
+    this.#contextLifecycle = "disposed";
+    this.#canvas.removeEventListener?.("webglcontextlost", this.#contextLostListener);
+    this.#canvas.removeEventListener?.("webglcontextrestored", this.#contextRestoredListener);
+    this.#dropGpuState(canDeleteResources);
+    this.#contextGeneration += 1;
+    this.#notifyContextLifecycle();
+    this.#contextLifecycleObservers.clear();
+
+    this.#ordinaryTextureSources.dispose();
+    this.#ordinaryTextureSourceSubscriptions.clear();
+    this.#applyResourceArenaChanges(disposeResourceArena(this.#resourceArena));
+    for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) this.#releaseOrdinaryTexture(key);
+    for (const state of this.#virtualTextures.values()) this.#releaseVirtualTextureState(state);
+    this.#virtualTextures.clear();
+    this.#activeProgram = undefined;
+    this.#hdrRenderTarget = undefined;
+    this.#clusteredLightResources.clear();
     this.#vertexAttribDefaults.clear();
     this.#programs.clear();
-    this.#geometry.clear();
+    this.#pendingPrograms.length = 0;
+    this.#pendingProgramHead = 0;
+    this.#retainedGeometryRecipes.clear();
     this.#textures.clear();
+    clearResourceArenaPreparedSources(this.#resourceArena);
     this.#pendingTextureUploads.length = 0;
     this.#textureUploadHead = 0;
     this.#studioEnvironmentSpecularTextures.clear();
@@ -2442,85 +2871,472 @@ class WebGlRootImpl implements WebGlRoot {
     this.#autoVirtualTextureManifestUris.clear();
     this.#autoVirtualTextureGeneratedPageSources.clear();
     this.#gltf.clear();
+    this.#gltfPreparationScheduler.dispose();
+    this.#gltfImageScheduler.dispose();
+    this.#gltfIblImageScheduler.dispose();
     this.#gltfBatchPlanCache.clear();
     this.#gltfInstanceBuffers.clear();
     this.#gltfLodSelections.clear();
+    this.#pendingGltfImageRows.length = 0;
+    this.#pendingGltfImageRowHead = 0;
     this.#iblBrdfLutTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
     this.#activeGltfInstanceBufferKeys.clear();
     this.#activeGltfLodSelectionKeys.clear();
+    this.#cameraViewResourceSubscription?.unsubscribe();
+    this.#cameraViewResourceSubscription = undefined;
     for (const [ref, binding] of this.#renderObjectBindings) {
       this.#renderObjectHandles.delete(binding.node);
       assignRenderObjectRef(ref, null);
     }
     this.#renderObjectBindings.clear();
-    for (const unsubscribe of this.#gltfInstanceTransformSubscriptions.values()) unsubscribe();
+    for (const subscription of this.#gltfInstanceTransformSubscriptions.values()) subscription.unsubscribe();
     this.#gltfInstanceTransformSubscriptions.clear();
     this.#renderDirty = false;
     this.#scheduledRenderGeneration = 0;
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = undefined;
     this.#unwatchDevicePixelRatio();
+    disposeVertexInputArena(this.#resourceArena.vertexInputs);
   }
 
   snapshot(): WebGlRootSnapshot {
+    const diagnostics = this.#diagnostics.snapshot();
     return {
-      diagnostics: [...this.#diagnostics],
+      context: this.#contextLifecycleSnapshot(),
+      diagnostics: diagnostics.messages,
+      diagnosticStats: {
+        capacity: diagnostics.capacity,
+        dropped: diagnostics.dropped,
+        occurrences: diagnostics.occurrences,
+        retained: diagnostics.retained,
+      },
       disposed: this.#disposed,
       frame: this.#frame,
       gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
       gltfInstancing: this.#gltfInstancingSnapshot(),
       latestScene: this.#latestScene,
       options: { ...this.#options },
+      planning: {
+        compileNodeVisits: this.#compileNodeVisits,
+        planCompiles: this.#planCompiles,
+        planRevision: this.#planRevision,
+        sceneCommits: this.#sceneCommits,
+      },
+      resourceLifetime: {
+        ...this.#resourceArena.counters,
+        gltfPreparationQueueHighWater: this.#gltfPreparationScheduler.snapshot().queueHighWater,
+        imageQueueHighWater: this.#gltfImageScheduler.snapshot().queueHighWater,
+        iblImageQueueHighWater: this.#gltfIblImageScheduler.snapshot().queueHighWater,
+      },
+      picking: this.#pickingWorkSnapshot(),
+      textureResidency: this.#textureResidencySnapshot(),
       virtualTexturing: this.#virtualTexturingSnapshot(),
     };
   }
 
-  #syncRenderObjectRefs(scene: RenderRoot): void {
-    const activeRefs = new Set<RenderObjectRef>();
+  #readCamera(source: Camera | CameraViewResource): Camera | CameraViewReadTarget {
+    if (source.kind !== 'camera-view-resource') return source;
+    source.read(this.#cameraView);
+    return this.#cameraView;
+  }
 
-    for (const renderPass of scene.children) {
-      for (const child of renderPass.children) {
-        this.#syncRenderObjectNodeRefs(child, activeRefs);
-      }
+  #commitScene(scene: RenderRoot): FramePlan {
+    if (this.#framePlanReconciliationInProgress) {
+      throw new Error("Cannot render while Royal is reconciling render-object refs");
     }
+    const previous = this.#framePlan;
+    if (this.#framePlanReconciliationPending) this.#finishFramePlanReconciliation();
+    if (previous?.scene === scene) return previous;
 
-    for (const [ref, binding] of Array.from(this.#renderObjectBindings)) {
-      if (activeRefs.has(ref)) continue;
+    const revision = this.#planRevision + 1;
+    const next = compileFramePlan(scene, revision);
+    const surfaceLights = compileSceneSurfaceLights(next.lightNodes);
+    const resourceDelta = diffResourceManifests(
+      previous?.manifest ?? EMPTY_FRAME_PLAN_RESOURCE_MANIFEST,
+      next.manifest,
+      this.#framePlanDiffScratch,
+    );
+    this.#applyResourceArenaChanges(applyResourceDelta(this.#resourceArena, resourceDelta));
+    this.#framePlan = next;
+    this.#framePlanSurfaceLights = surfaceLights;
+    this.#framePlanSurfaceLightSet = surfaceLights.length === 0 ? undefined : surfaceLightSet(surfaceLights);
+    this.#latestScene = scene;
+    this.#planRevision = revision;
+    this.#planCompiles += 1;
+    this.#compileNodeVisits += next.nodes.length;
+    this.#sceneCommits += 1;
+    this.#framePlanReconciliationPending = true;
+    this.#framePlanReconciliationPrevious = previous;
+    this.#finishFramePlanReconciliation(resourceDelta);
+    return next;
+  }
 
-      this.#renderObjectHandles.delete(binding.node);
-      this.#renderObjectBindings.delete(ref);
-      assignRenderObjectRef(ref, null);
+  #finishFramePlanReconciliation(initialDelta?: ResourceManifestDelta): void {
+    if (this.#framePlanReconciliationInProgress) {
+      throw new Error("Render-object ref reconciliation is already in progress");
+    }
+    const next = this.#framePlan;
+    if (next === undefined) return;
+    const previous = this.#framePlanReconciliationPrevious;
+    const delta = initialDelta ?? diffResourceManifests(
+      previous?.manifest ?? EMPTY_FRAME_PLAN_RESOURCE_MANIFEST,
+      next.manifest,
+      this.#framePlanDiffScratch,
+    );
+    this.#framePlanReconciliationInProgress = true;
+    try {
+      let firstError = this.#reconcileCameraViewResource(next);
+      firstError = this.#reconcileRenderObjectRefs(next, delta, firstError);
+      firstError = this.#reconcileGltfInstanceTransforms(delta, firstError);
+      if (firstError !== undefined) throw firstError;
+      this.#framePlanReconciliationPending = false;
+      this.#framePlanReconciliationPrevious = undefined;
+    } finally {
+      this.#framePlanReconciliationInProgress = false;
     }
   }
 
-  #syncGltfInstanceTransforms(scene: RenderRoot): void {
-    const active = new Set<GltfInstanceTransforms>();
-    for (const renderPass of scene.children) {
-      for (const child of renderPass.children) {
-        if (child.kind === "gltf-instances") active.add(child.instances);
+  #preparedAssetDependencyManifest(
+    asset: PreparedGltfAsset,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+    assetKey: string,
+  ): PreparedAssetDependencyManifest {
+    const geometries = asset.primitives.map((primitive, index) => {
+      const declaration = gltfGeometryDeclaration({
+        ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
+        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
+        mode: primitive.mode,
+        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
+        positions: primitive.positions,
+        ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
+        ...(primitive.texCoords0 === undefined ? {} : { texCoords0: primitive.texCoords0 }),
+        ...(primitive.texCoords1 === undefined ? {} : { texCoords1: primitive.texCoords1 }),
+      });
+      const key = JSON.stringify([
+        "gltf-geometry-owner-v1",
+        assetKey,
+        primitive.key,
+        index,
+        geometryDeclarationBucketKey(declaration),
+      ]);
+      this.#gltfPrimitiveGeometryKeys.set(primitive, key);
+      return {
+        count: 1,
+        declaration,
+        key,
+      };
+    });
+    return {
+      ...this.#materialDependencyManifest(preparedAssetMaterials(asset), contentKeys),
+      geometries,
+      iblKeys: asset.imageBasedLight?.specular === undefined
+        ? []
+        : [{ count: 1, key: asset.imageBasedLight.specular.key }],
+      wantsHdr: asset.lights.length !== 0 || asset.imageBasedLight !== undefined,
+    };
+  }
+
+  #materialDependencyManifest(
+    materials: readonly LoadedGltfMaterial[],
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+  ): PreparedAssetDependencyManifest {
+    const byKey = new Map<string, CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }>();
+    const ordinaryTextures: Array<CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }> = [];
+    for (const material of materials) {
+      for (const texture of this.#gltfMaterialTextureRefs(material, contentKeys)) {
+        const key = textureCacheKey(texture);
+        const existing = byKey.get(key);
+        if (existing === undefined) {
+          const entry = { count: 1, key, texture };
+          byKey.set(key, entry);
+          ordinaryTextures.push(entry);
+        } else {
+          existing.count += 1;
+        }
       }
     }
-    for (const transforms of active) {
-      if (this.#gltfInstanceTransformSubscriptions.has(transforms)) continue;
-      this.#gltfInstanceTransformSubscriptions.set(
-        transforms,
-        subscribeGltfInstanceTransforms(transforms, () => this.invalidate()),
-      );
+    return { geometries: [], iblKeys: [], ordinaryTextures, virtualTextures: [], wantsHdr: false };
+  }
+
+  #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
+    for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
+      retainVertexInputGeometry(this.#resourceArena.vertexInputs, { geometryId: id, recipe });
+      this.#retainedGeometryRecipes.set(key, { id, recipe });
     }
-    for (const [transforms, unsubscribe] of this.#gltfInstanceTransformSubscriptions) {
-      if (active.has(transforms)) continue;
-      unsubscribe();
-      this.#gltfInstanceTransformSubscriptions.delete(transforms);
+    for (const { id, key } of changes.releasedGeometryDeclarations) {
+      if (
+        this.#contextLifecycle === "active"
+        || this.#contextLifecycle === "restoring"
+      ) {
+        releaseVertexInputGeometry(
+          this.#resourceArena.vertexInputs,
+          this.#gl,
+          this.#contextGeneration,
+          id,
+        );
+      } else {
+        releaseLostVertexInputGeometry(this.#resourceArena.vertexInputs, id);
+      }
+      if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
+    }
+    for (const request of changes.acquiredGltfRequests) this.#ensureGltfState(request.key);
+    for (const key of changes.releasedGltfKeys) {
+      abortResourceArenaImageWork(this.#resourceArena, key);
+      this.#gltf.delete(key);
+    }
+    for (const key of changes.releasedOrdinaryTextureKeys) this.#releaseOrdinaryTexture(key);
+    for (const key of changes.releasedVirtualTextureKeys) this.#releaseVirtualTexture(key);
+    for (const key of changes.releasedIblKeys) {
+      const resource = this.#iblSpecularTextures.get(key);
+      this.#iblSpecularTextures.delete(key);
+      if (resource !== undefined && this.#ownedTextures.has(resource.texture)) {
+        this.#gl.deleteTexture(resource.texture);
+        this.#ownedTextures.delete(resource.texture);
+      }
+    }
+    for (const source of changes.releasedSources) {
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
     }
   }
 
-  #syncRenderObjectNodeRefs(node: RenderNode, activeRefs: Set<RenderObjectRef>): void {
-    if (node.kind !== "mesh" && node.kind !== "gltf") return;
+  #applyPendingResourceArenaEvents(): void {
+    if (!resourceArenaHasPendingAssetEvents(this.#resourceArena)) return;
+    const applied = applyPreparedAssetEvents(
+      this.#resourceArena,
+      (asset, contentKeys, assetKey) => this.#preparedAssetDependencyManifest(asset, contentKeys, assetKey),
+    );
+    this.#applyResourceArenaChanges(applied.changes);
+    for (const event of applied.events) {
+      const snapshot = event.snapshot;
+      const state = this.#gltf.get(snapshot.key);
+      if (state === undefined) continue;
+      if (snapshot.status === "error") {
+        state.status = "error";
+        state.error = snapshot.error;
+        state.load.readyAt = nowMs();
+        this.#recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
+        continue;
+      }
+      if (snapshot.status !== "ready") continue;
+      const asset = snapshot.asset;
+      state.hasMaterialLod = asset.hasMaterialLod;
+      state.hasMaterialVariants = asset.hasMaterialVariants;
+      state.hasNodeLod = asset.hasNodeLod;
+      if (asset.imageBasedLight === undefined) delete state.imageBasedLight;
+      else state.imageBasedLight = asset.imageBasedLight;
+      state.lights = asset.lights;
+      state.materials = preparedAssetMaterials(asset);
+      Object.assign(state.load, asset.load);
+      state.nodeCount = asset.nodeCount;
+      state.primitives = asset.primitives;
+      state.status = "ready";
+      state.variants = asset.variants;
+      const images = asset.imagePreparation;
+      if (images !== undefined) {
+        this.#loadGltfImages(images.src, images.document, images.buffers, state, images.basisuCodec);
+        this.#resourceArena.preparedAssets.detachImagePreparation(snapshot.key, snapshot.generation);
+      }
+    }
+  }
+
+  #reconcileCameraViewResource(next: FramePlan): unknown {
+    const resource = next.camera.kind === 'camera-view-resource' ? next.camera : undefined;
+    if (this.#cameraViewResourceSubscription?.resource === resource) return undefined;
+    const previousSubscription = this.#cameraViewResourceSubscription;
+    if (previousSubscription !== undefined) {
+      try {
+        previousSubscription.unsubscribe();
+      } catch (error) {
+        return error;
+      }
+      this.#cameraViewResourceSubscription = undefined;
+    }
+    let firstError: unknown;
+    if (resource !== undefined) {
+      firstError = captureFirstError(firstError, () => {
+        this.#cameraViewResourceSubscription = {
+          resource,
+          unsubscribe: resource.subscribe(() => this.invalidate()),
+        };
+      });
+    }
+    return firstError;
+  }
+
+  #reconcileRenderObjectRefs(
+    next: FramePlan,
+    delta: ResourceManifestDelta,
+    initialError: unknown,
+  ): unknown {
+    let firstError = initialError;
+    for (const row of next.renderObjectRefRows) {
+      const node = next.nodes[row.nodeIndex];
+      if (node?.kind === "mesh" || node?.kind === "gltf") {
+        firstError = captureFirstError(firstError, () => this.#syncRenderObjectNodeRef(node));
+      }
+    }
+
+    for (const row of delta.renderObjectRefs) {
+      if (row.nextCount !== 0) continue;
+      const ref = row.resource;
+      const binding = this.#renderObjectBindings.get(ref);
+      if (binding === undefined) continue;
+      try {
+        assignRenderObjectRef(ref, null);
+        this.#renderObjectHandles.delete(binding.node);
+        this.#renderObjectBindings.delete(ref);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    return firstError;
+  }
+
+  #reconcileGltfInstanceTransforms(delta: ResourceManifestDelta, initialError: unknown): unknown {
+    let firstError = initialError;
+    for (const row of delta.bulkInstances) {
+      const transforms = row.resource;
+      if (row.previousCount !== 0 || row.nextCount === 0) continue;
+      firstError = captureFirstError(firstError, () => {
+        if (this.#gltfInstanceTransformSubscriptions.has(transforms)) return;
+        const views = this.#gltfInstanceViews(transforms);
+        const unsubscribe = transforms.subscribe((channel, startIndex, count) => {
+          views.changes.commit(channel, startIndex, count);
+          this.invalidate();
+        });
+        this.#gltfInstanceTransformSubscriptions.set(transforms, { unsubscribe, views });
+      });
+    }
+    for (const row of delta.bulkInstances) {
+      if (row.nextCount !== 0) continue;
+      const transforms = row.resource;
+      const subscription = this.#gltfInstanceTransformSubscriptions.get(transforms);
+      if (subscription === undefined) continue;
+      try {
+        subscription.unsubscribe();
+        this.#gltfInstanceTransformSubscriptions.delete(transforms);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    return firstError;
+  }
+
+  #beginGltfInstanceFrame(): void {
+    this.#gltfInstanceFrameActive = true;
+    for (const subscription of this.#gltfInstanceTransformSubscriptions.values()) {
+      const views = subscription.views;
+      views.changes.beginFrame();
+      views.framePoseVersion = views.source.poseVersion;
+      views.frameScaleVersion = views.source.scaleVersion;
+      views.activeApplied = views.matrixPoseVersion === views.framePoseVersion
+        && views.matrixScaleVersion === views.frameScaleVersion;
+    }
+  }
+
+  #releaseOrdinaryTexture(key: string): void {
+    this.#releaseAutoVirtualTextures(key);
+    this.#autoVirtualTextureRefs.delete(`auto-base-color:${key}`);
+    this.#autoVirtualTextureManifestUris.delete(key);
+    this.#autoVirtualTextureGeneratedPageSources.delete(key);
+
+    const sources = new Set<LoadedTextureSource>();
+    const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
+    if (prepared !== undefined) sources.add(prepared.source);
+    releaseResourceArenaPreparedSource(this.#resourceArena, key);
+    this.#releaseOrdinaryTextureSourceSubscription(key);
+    const resource = this.#textures.get(key);
+    this.#textures.delete(key);
+    if (resource !== undefined) {
+      if (resource.pendingUpload !== undefined) sources.add(resource.pendingUpload.source);
+      delete resource.pendingUpload;
+      if (this.#ownedTextures.has(resource.texture)) {
+        this.#gl.deleteTexture(resource.texture);
+        this.#ownedTextures.delete(resource.texture);
+      }
+    }
+    for (const source of sources) {
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+    }
+  }
+
+  #releaseAutoVirtualTextures(textureKey: string): void {
+    const prefix = `auto-base-color:${textureKey}:`;
+    for (const [key, state] of this.#virtualTextures) {
+      if (!key.startsWith(prefix)) continue;
+      this.#virtualTextures.delete(key);
+      this.#releaseVirtualTextureState(state);
+    }
+  }
+
+  #releaseVirtualTexture(key: string): void {
+    const state = this.#virtualTextures.get(key);
+    if (state === undefined) return;
+    this.#virtualTextures.delete(key);
+    this.#releaseVirtualTextureState(state);
+  }
+
+  #releaseVirtualTextureState(state: VirtualTextureRuntimeState): void {
+    state.sourceGeneration += 1;
+    for (const upload of state.pendingUploads) closeTexImageSource(upload.image);
+    state.pendingUploads.length = 0;
+    state.loadingPages.clear();
+    state.requestedPages.clear();
+    state.uploadedPages.clear();
+    const resources = state.resources;
+    if (resources !== undefined) {
+      for (const texture of [resources.atlasTexture, resources.pageTableTexture]) {
+        if (!this.#ownedTextures.has(texture)) continue;
+        this.#gl.deleteTexture(texture);
+        this.#ownedTextures.delete(texture);
+      }
+    }
+    delete state.resources;
+    delete state.pageTable;
+  }
+
+  #closeTextureSource(source: LoadedTextureSource): void {
+    const identity = source as object;
+    if (this.#closedTextureSources.has(identity)) return;
+    this.#closedTextureSources.add(identity);
+    closeLoadedTextureSource(source);
+  }
+
+  #releaseOrdinaryTextureSourceSubscription(key: string): void {
+    this.#ordinaryTextureSourceSubscriptions.get(key)?.release();
+    this.#ordinaryTextureSourceSubscriptions.delete(key);
+  }
+
+  #retainPreparedTextureUpload(key: string, upload: TexturePendingUpload): void {
+    const previous = retainResourceArenaPreparedSource(this.#resourceArena, key, upload);
+    if (
+      previous !== undefined
+      && previous.source !== upload.source
+      && resourceArenaSourceReferenceCount(this.#resourceArena, previous.source) === 0
+    ) this.#closeTextureSource(previous.source);
+  }
+
+  #gltfMaterialTextureRefs(
+    material: LoadedGltfMaterial,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+  ): readonly TextureAssetUploadRef[] {
+    const refs = [
+      this.#gltfMaterialTextureRef(material, contentKeys),
+      this.#gltfMaterialEmissiveTextureRef(material, contentKeys),
+      this.#gltfMaterialMetallicRoughnessTextureRef(material, contentKeys),
+      this.#gltfMaterialNormalTextureRef(material, contentKeys),
+      this.#gltfMaterialOcclusionTextureRef(material, contentKeys),
+      ...GLTF_MATERIAL_EXTENSION_TEXTURES.map((texture) =>
+        this.#gltfTextureSlotRef(material.extensionTextures?.[texture.key], texture.colorSpace, contentKeys)),
+    ];
+    return refs.filter((ref): ref is TextureAssetUploadRef => ref !== undefined);
+  }
+
+  #syncRenderObjectNodeRef(node: TransformableRenderNode): void {
     if (node.ref === undefined) return;
 
     const ref = node.ref;
-    activeRefs.add(ref);
     const declarativeTransform = resolvedTransform(node.transform);
     let binding = this.#renderObjectBindings.get(ref);
     if (binding === undefined) {
@@ -2532,15 +3348,18 @@ class WebGlRootImpl implements WebGlRoot {
         this.#invalidateRenderObjectMutation();
       });
       binding = {
+        attached: false,
         declarativeTransform,
         handle,
         invalidation,
         node,
       };
       this.#renderObjectBindings.set(ref, binding);
+      this.#renderObjectHandles.set(node, binding.handle);
       assignRenderObjectRef(ref, binding.handle);
+      binding.attached = true;
+      return;
     } else {
-      this.#renderObjectHandles.delete(binding.node);
       if (!sameTransform(binding.declarativeTransform, declarativeTransform)) {
         if (binding.invalidation !== undefined) binding.invalidation.suppress = true;
         try {
@@ -2550,10 +3369,15 @@ class WebGlRootImpl implements WebGlRoot {
         }
         binding.declarativeTransform = declarativeTransform;
       }
+      this.#renderObjectHandles.delete(binding.node);
       binding.node = node;
     }
 
     this.#renderObjectHandles.set(node, binding.handle);
+    if (!binding.attached) {
+      assignRenderObjectRef(ref, binding.handle);
+      binding.attached = true;
+    }
   }
 
   #renderObjectTransform(node: TransformableRenderNode): Transform | undefined {
@@ -2561,7 +3385,7 @@ class WebGlRootImpl implements WebGlRoot {
     return handle === undefined ? node.transform : readRenderObjectHandleTransform(handle);
   }
 
-  #pickRay(input: PickInput, projection: Mat4, view: Mat4): Ray | undefined {
+  #pickRayInto(input: PickInput, viewProjection: Mat4): Ray | undefined {
     const rect = this.#canvas.getBoundingClientRect?.();
     const width = rect?.width ?? this.#canvas.clientWidth;
     const height = rect?.height ?? this.#canvas.clientHeight;
@@ -2569,147 +3393,103 @@ class WebGlRootImpl implements WebGlRoot {
 
     const ndcX = ((input.clientX - (rect?.left ?? 0)) / width) * 2 - 1;
     const ndcY = 1 - ((input.clientY - (rect?.top ?? 0)) / height) * 2;
-    const inverse = inverseMat4(multiplyMat4(projection, view));
+    const inverse = inverseMat4Into(this.#pickInverseViewProjection, viewProjection);
     if (inverse === undefined) return undefined;
-
-    const near = transformVec4(inverse, [ndcX, ndcY, -1, 1]);
-    const far = transformVec4(inverse, [ndcX, ndcY, 1, 1]);
-    if (near[3] === 0 || far[3] === 0) return undefined;
-
-    const origin: Vec3 = [near[0] / near[3], near[1] / near[3], near[2] / near[3]];
-    const farPoint: Vec3 = [far[0] / far[3], far[1] / far[3], far[2] / far[3]];
-    const direction = normalizeVec3([
-      farPoint[0] - origin[0],
-      farPoint[1] - origin[1],
-      farPoint[2] - origin[2],
-    ]);
-
-    return { direction, origin };
-  }
-
-  #pickNode(
-    node: RenderNode,
-    ray: Ray,
-    projection: Mat4,
-    view: Mat4,
-    input: PickInput,
-    passOrdinal: number,
-    drawOrdinal: number,
-  ): { readonly hit: PickCandidate | undefined; readonly nextDrawOrdinal: number } {
-    switch (node.kind) {
-      case "mesh": {
-        const hit = this.#pickMesh(node, ray, projection, view, input, passOrdinal, drawOrdinal);
-        const nextDrawOrdinal = drawOrdinal + 1;
-        return { hit, nextDrawOrdinal };
-      }
-      case "gltf": {
-        const hit = this.#pickGltf(node, ray, projection, view, input, passOrdinal, drawOrdinal);
-        const nextDrawOrdinal = drawOrdinal + 1;
-        return { hit, nextDrawOrdinal };
-      }
-      case "gltf-instances": {
-        const hit = this.#pickGltfInstances(node, ray, projection, view, input, passOrdinal, drawOrdinal);
-        const nextDrawOrdinal = drawOrdinal + 1;
-        return { hit, nextDrawOrdinal };
-      }
-      case "directional-light":
-      case "text":
-        return { hit: undefined, nextDrawOrdinal: drawOrdinal };
-      default:
-        return { hit: undefined, nextDrawOrdinal: drawOrdinal };
-    }
+    const nearW = inverse[3] * ndcX + inverse[7] * ndcY - inverse[11] + inverse[15];
+    const farW = inverse[3] * ndcX + inverse[7] * ndcY + inverse[11] + inverse[15];
+    if (nearW === 0 || farW === 0) return undefined;
+    const origin = this.#pickRay.origin as [number, number, number];
+    const direction = this.#pickRay.direction as [number, number, number];
+    origin[0] = (inverse[0] * ndcX + inverse[4] * ndcY - inverse[8] + inverse[12]) / nearW;
+    origin[1] = (inverse[1] * ndcX + inverse[5] * ndcY - inverse[9] + inverse[13]) / nearW;
+    origin[2] = (inverse[2] * ndcX + inverse[6] * ndcY - inverse[10] + inverse[14]) / nearW;
+    const farX = (inverse[0] * ndcX + inverse[4] * ndcY + inverse[8] + inverse[12]) / farW;
+    const farY = (inverse[1] * ndcX + inverse[5] * ndcY + inverse[9] + inverse[13]) / farW;
+    const farZ = (inverse[2] * ndcX + inverse[6] * ndcY + inverse[10] + inverse[14]) / farW;
+    const x = farX - origin[0];
+    const y = farY - origin[1];
+    const z = farZ - origin[2];
+    const length = Math.hypot(x, y, z);
+    if (length === 0 || !Number.isFinite(length)) return undefined;
+    direction[0] = x / length;
+    direction[1] = y / length;
+    direction[2] = z / length;
+    return this.#pickRay;
   }
 
   #pickMesh(
     node: MeshNode,
     ray: Ray,
-    projection: Mat4,
-    view: Mat4,
+    viewProjection: Mat4,
     input: PickInput,
-    passOrdinal: number,
     drawOrdinal: number,
   ): PickCandidate | undefined {
     const cpu = this.#meshGeometry(node.geometry, node.material);
-    const model = transformMat4(this.#renderObjectTransform(node));
-    if (!this.#isVisible(cpu.positions, model, projection, view)) return undefined;
-
-    return this.#pickGeometry({
-      bounds: worldBounds(cpu.positions, model),
-      drawOrdinal,
-      geometry: cpu,
-      input,
-      model,
-      passOrdinal,
-      ray,
-      target: {
-        ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-        kind: "mesh",
-        node,
-      },
-    });
-  }
-
-  #gltfAnimationTransforms(
-    state: GltfState,
-    node: AnyGltfNode,
-  ): ReadonlyMap<number, GltfAnimatedNodeTransform> | undefined {
-    if (node.animation === undefined) return undefined;
-
-    const clip = selectGltfAnimationClip(state.animations, node.animation.clip);
-    if (clip === undefined) {
-      this.#recordUnsupportedGltfAnimation(
-        `glTF ${state.key} ${gltfAnimationSelectionLabel(node.animation)} is unavailable; rendering static pose`,
-      );
+    if (!isPickableDrawMode(cpu.mode)) return undefined;
+    const model = transformMat4Into(this.#pickModel, this.#renderObjectTransform(node));
+    const localBounds = this.#localGeometryBounds(cpu);
+    if (localBounds === undefined) return undefined;
+    if (!isBoundsVisible(localBounds, multiplyMat4Into(this.#pickRootViewProjection, viewProjection, model))) {
       return undefined;
     }
-
-    return gltfAnimationNodeTransformsAt(clip, node.animation.timeSeconds);
+    const bounds = transformBoundsInto(
+      this.#pickCandidates[0]?.bounds ?? { max: [0, 0, 0], min: [0, 0, 0] },
+      localBounds,
+      model,
+    );
+    if (this.#pickCandidates.length === 0) {
+      this.#pickCandidates.push({
+        bounds,
+        boundsDistance: 0,
+        instanceIndex: 0,
+        ordinal: 0,
+        outerIndex: 0,
+      });
+    }
+    if (rayAabbDistanceScalars(
+      ray,
+      bounds.min[0], bounds.min[1], bounds.min[2],
+      bounds.max[0], bounds.max[1], bounds.max[2],
+    ) === undefined) return undefined;
+    this.#pickCandidatesThisPick += 1;
+    this.#pickExactTestsThisPick += 1;
+    const mode = cpu.mode === "triangle-fan" || cpu.mode === "triangle-strip" ? cpu.mode : "triangles";
+    const distance = rayGeometryDistanceWithScratch(
+      cpu.positions, cpu.indices, mode, model, ray, this.#pickRayGeometryScratch,
+    );
+    if (distance === undefined) return undefined;
+    return {
+      clientX: input.clientX,
+      clientY: input.clientY,
+      distance,
+      drawOrdinal,
+      point: pointOnRay(ray, distance),
+      target: { ...(node.pickingId === undefined ? {} : { id: node.pickingId }), kind: "mesh", node },
+    };
   }
 
   #pickGltf(
     node: GltfNode,
     ray: Ray,
-    projection: Mat4,
-    view: Mat4,
+    viewProjection: Mat4,
     input: PickInput,
-    passOrdinal: number,
     drawOrdinal: number,
   ): PickCandidate | undefined {
-    const rootModel = transformMat4(this.#renderObjectTransform(node));
-    const state = this.#gltf.get(`gltf:${node.asset.uri}:${node.asset.version ?? ""}`);
+    const rootModel = transformMat4Into(this.#pickRootModel, this.#renderObjectTransform(node));
+    const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
     if (state?.status === "ready") {
-      const animationTransforms = this.#gltfAnimationTransforms(state, node);
-      let best: PickCandidate | undefined;
+      this.#resetPickCandidates();
+      const rootViewProjection = multiplyMat4Into(this.#pickRootViewProjection, viewProjection, rootModel);
       for (const primitive of state.primitives) {
         if (!isPickableDrawMode(primitive.mode)) continue;
-        const localModels = animationTransforms === undefined
-          ? primitive.localModels
-          : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
-        for (const [instanceIndex, localModel] of localModels.entries()) {
-          const model = multiplyMat4(rootModel, localModel);
-          if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
-          const hit = this.#pickGeometry({
-            bounds: worldBounds(primitive.positions, model),
-            drawOrdinal,
-            geometry: primitive,
-            input,
-            model,
-            passOrdinal,
-            ray,
-            target: {
-              ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-              kind: "gltf",
-              node,
-              primitiveKey: localModels.length === 1
-                ? primitive.key
-                : `${primitive.key}:instance:${instanceIndex}`,
-            },
-          });
-          if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+        const localModels = primitive.localModels;
+        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
+          const localBounds = primitive.localBounds[instanceIndex];
+          if (localBounds === undefined || !isBoundsVisible(localBounds, rootViewProjection)) continue;
+          this.#addPickCandidate(localBounds, rootModel, localModels[instanceIndex]!, primitive, -1, instanceIndex, ray);
         }
       }
-
-      return best;
+      return this.#pickNearestGltfCandidate(node, ray, input, drawOrdinal);
     }
 
     return undefined;
@@ -2718,103 +3498,192 @@ class WebGlRootImpl implements WebGlRoot {
   #pickGltfInstances(
     node: GltfInstancesNode,
     ray: Ray,
-    projection: Mat4,
-    view: Mat4,
+    viewProjection: Mat4,
     input: PickInput,
-    passOrdinal: number,
     drawOrdinal: number,
   ): PickCandidate | undefined {
-    const state = this.#gltf.get(`gltf:${node.asset.uri}:${node.asset.version ?? ""}`);
+    const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
     if (state?.status !== "ready") return undefined;
 
     const views = this.#gltfInstanceViews(node.instances);
-    const animationTransforms = this.#gltfAnimationTransforms(state, node);
-    let best: PickCandidate | undefined;
+    this.#resetPickCandidates();
     for (const primitive of state.primitives) {
       if (!isPickableDrawMode(primitive.mode)) continue;
-      const localModels = animationTransforms === undefined
-        ? primitive.localModels
-        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
+      const localModels = primitive.localModels;
       for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
         const rootModel = views.rootModels[outerIndex]!;
+        const rootViewProjection = multiplyMat4Into(this.#pickRootViewProjection, viewProjection, rootModel);
         for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
-          const model = multiplyMat4(rootModel, localModels[instanceIndex]!);
-          if (!this.#isVisible(primitive.positions, model, projection, view)) continue;
-          const hit = this.#pickGeometry({
-            bounds: worldBounds(primitive.positions, model),
-            drawOrdinal,
-            geometry: primitive,
-            input,
-            model,
-            passOrdinal,
-            ray,
-            target: {
-              ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-              instanceIndex: outerIndex,
-              kind: "gltf-instances",
-              node,
-              primitiveKey: localModels.length === 1
-                ? primitive.key
-                : `${primitive.key}:asset-instance:${instanceIndex}`,
-            },
-          });
-          if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
+          const localBounds = primitive.localBounds[instanceIndex];
+          if (localBounds === undefined || !isBoundsVisible(localBounds, rootViewProjection)) continue;
+          this.#addPickCandidate(
+            localBounds, rootModel, localModels[instanceIndex]!, primitive, outerIndex, instanceIndex, ray,
+          );
         }
       }
     }
-    return best;
+    return this.#pickNearestGltfCandidate(node, ray, input, drawOrdinal);
   }
 
-  #pickGeometry({
-    bounds,
-    drawOrdinal,
-    geometry,
-    input,
-    model,
-    passOrdinal,
-    ray,
-    target,
-  }: {
-    readonly bounds: Bounds3 | undefined;
-    readonly drawOrdinal: number;
-    readonly geometry: {
-      readonly indices?: Uint16Array | Uint32Array | Uint8Array;
-      readonly mode?: GeometryDrawMode;
-      readonly positions: Float32Array;
-    };
-    readonly input: PickInput;
-    readonly model: Mat4;
-    readonly passOrdinal: number;
-    readonly ray: Ray;
-    readonly target: PickTarget;
-  }): PickCandidate | undefined {
-    if (!isPickableDrawMode(geometry.mode)) return undefined;
-    if (bounds === undefined) return undefined;
-    if (rayAabbDistance(ray, bounds) === undefined) return undefined;
-    const mode = geometry.mode as RayGeometryMode | undefined;
-    const distance = rayGeometryDistance({
-      ...(geometry.indices === undefined ? {} : { indices: geometry.indices }),
-      ...(mode === undefined ? {} : { mode }),
-      model,
-      positions: geometry.positions,
-      ray,
-    });
-    if (distance === undefined) return undefined;
+  #localGeometryBounds(geometry: CpuGeometry): Bounds3 | undefined {
+    if (this.#geometryLocalBounds.has(geometry.positions)) return this.#geometryLocalBounds.get(geometry.positions);
+    const bounds = worldBounds(geometry.positions, identityMat4());
+    this.#geometryLocalBounds.set(geometry.positions, bounds);
+    return bounds;
+  }
 
+  #resetPickCandidates(): void {
+    this.#pickCandidateCount = 0;
+    this.#pickHeap.length = 0;
+  }
+
+  #addPickCandidate(
+    localBounds: Bounds3,
+    rootModel: Mat4,
+    localModel: Mat4,
+    primitive: LoadedGltfPrimitive,
+    outerIndex: number,
+    instanceIndex: number,
+    ray: Ray,
+  ): void {
+    const index = this.#pickCandidateCount;
+    let candidate = this.#pickCandidates[index];
+    if (candidate === undefined) {
+      candidate = {
+        bounds: { max: [0, 0, 0], min: [0, 0, 0] },
+        boundsDistance: 0,
+        instanceIndex: 0,
+        ordinal: 0,
+        outerIndex: 0,
+      };
+      this.#pickCandidates.push(candidate);
+    }
+    transformBoundsInto(candidate.bounds, localBounds, rootModel);
+    const distance = rayAabbDistanceScalars(
+      ray,
+      candidate.bounds.min[0], candidate.bounds.min[1], candidate.bounds.min[2],
+      candidate.bounds.max[0], candidate.bounds.max[1], candidate.bounds.max[2],
+    );
+    if (distance === undefined) return;
+    candidate.boundsDistance = distance;
+    candidate.instanceIndex = instanceIndex;
+    candidate.localModel = localModel;
+    candidate.ordinal = index;
+    candidate.outerIndex = outerIndex;
+    candidate.primitive = primitive;
+    candidate.rootModel = rootModel;
+    this.#pickCandidateCount += 1;
+    this.#pickCandidatesThisPick += 1;
+    this.#pushPickHeap(index);
+  }
+
+  #pickCandidateBefore(leftIndex: number, rightIndex: number): boolean {
+    const left = this.#pickCandidates[leftIndex]!;
+    const right = this.#pickCandidates[rightIndex]!;
+    return left.boundsDistance < right.boundsDistance
+      || (left.boundsDistance === right.boundsDistance && left.ordinal < right.ordinal);
+  }
+
+  #pushPickHeap(candidateIndex: number): void {
+    let index = this.#pickHeap.length;
+    this.#pickHeap.push(candidateIndex);
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (!this.#pickCandidateBefore(candidateIndex, this.#pickHeap[parent]!)) break;
+      this.#pickHeap[index] = this.#pickHeap[parent]!;
+      index = parent;
+    }
+    this.#pickHeap[index] = candidateIndex;
+  }
+
+  #popPickHeap(): number | undefined {
+    const first = this.#pickHeap[0];
+    const last = this.#pickHeap.pop();
+    if (first === undefined || last === undefined || this.#pickHeap.length === 0) return first;
+    let index = 0;
+    while (true) {
+      const left = index * 2 + 1;
+      if (left >= this.#pickHeap.length) break;
+      const right = left + 1;
+      const child = right < this.#pickHeap.length
+        && this.#pickCandidateBefore(this.#pickHeap[right]!, this.#pickHeap[left]!) ? right : left;
+      if (!this.#pickCandidateBefore(this.#pickHeap[child]!, last)) break;
+      this.#pickHeap[index] = this.#pickHeap[child]!;
+      index = child;
+    }
+    this.#pickHeap[index] = last;
+    return first;
+  }
+
+  #pickNearestGltfCandidate(
+    node: GltfNode | GltfInstancesNode,
+    ray: Ray,
+    input: PickInput,
+    drawOrdinal: number,
+  ): PickCandidate | undefined {
+    let bestIndex = -1;
+    let bestDistance = Infinity;
+    let bestOrdinal = Infinity;
+    while (this.#pickHeap.length > 0) {
+      const index = this.#popPickHeap();
+      if (index === undefined) break;
+      const candidate = this.#pickCandidates[index]!;
+      if (candidate.boundsDistance > bestDistance) break;
+      const primitive = candidate.primitive;
+      const rootModel = candidate.rootModel;
+      const localModel = candidate.localModel;
+      if (primitive === undefined || rootModel === undefined || localModel === undefined) continue;
+      multiplyMat4Into(this.#pickModel, rootModel, localModel);
+      this.#pickExactTestsThisPick += 1;
+      const mode = primitive.mode as RayGeometryMode;
+      const distance = rayGeometryDistanceWithScratch(
+        primitive.positions,
+        primitive.indices,
+        mode,
+        this.#pickModel,
+        ray,
+        this.#pickRayGeometryScratch,
+      );
+      if (
+        distance !== undefined
+        && (distance < bestDistance || (distance === bestDistance && candidate.ordinal < bestOrdinal))
+      ) {
+        bestDistance = distance;
+        bestIndex = index;
+        bestOrdinal = candidate.ordinal;
+      }
+    }
+    if (bestIndex < 0) return undefined;
+    const best = this.#pickCandidates[bestIndex]!;
+    const primitive = best.primitive!;
+    const primitiveKey = primitive.localModels.length === 1
+      ? primitive.key
+      : node.kind === "gltf"
+        ? `${primitive.key}:instance:${best.instanceIndex}`
+        : `${primitive.key}:asset-instance:${best.instanceIndex}`;
     return {
       clientX: input.clientX,
       clientY: input.clientY,
-      distance,
+      distance: bestDistance,
       drawOrdinal,
-      passOrdinal,
-      point: pointOnRay(ray, distance),
-      target,
+      point: pointOnRay(ray, bestDistance),
+      target: node.kind === "gltf"
+        ? { ...(node.pickingId === undefined ? {} : { id: node.pickingId }), kind: "gltf", node, primitiveKey }
+        : {
+          ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
+          ...(node.instances.logicalIds?.[best.outerIndex] === undefined
+            ? {}
+            : { instanceId: node.instances.logicalIds[best.outerIndex] }),
+          instanceIndex: best.outerIndex,
+          kind: "gltf-instances",
+          node,
+          primitiveKey,
+        },
     };
   }
 
   #isBetterPick(candidate: PickCandidate, current: PickCandidate | undefined): boolean {
     if (current === undefined) return true;
-    if (candidate.passOrdinal !== current.passOrdinal) return candidate.passOrdinal > current.passOrdinal;
     if (candidate.distance !== current.distance) return candidate.distance < current.distance;
 
     return candidate.drawOrdinal > current.drawOrdinal;
@@ -2873,135 +3742,101 @@ class WebGlRootImpl implements WebGlRoot {
     node: RenderNode,
     projection: Mat4,
     view: Mat4,
-    passLights: SurfaceLightSet | undefined,
-    toneMapping: PassToneMappingState,
+    viewProjection: Mat4,
+    sceneLights: SurfaceLightSet | undefined,
+    toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
-    usedGeometry: Set<string>,
+    sourceX: number,
+    sourceY: number,
   ): void {
     switch (node.kind) {
       case "directional-light":
+      case "point-light":
+      case "spot-light":
         return;
       case "mesh":
-        this.#drawMesh(node, projection, view, passLights, toneMapping, viewportSize, usedGeometry);
-        return;
-      case "text":
-        this.#drawText(node, projection, view, toneMapping, viewportSize, usedGeometry);
+        this.#drawMesh(
+          node,
+          projection,
+          view,
+          viewProjection,
+          sceneLights,
+          toneMapping,
+          viewportSize,
+        );
         return;
       case "gltf":
       case "gltf-instances":
         {
           const draws: GltfPrimitiveDraw[] = [];
-          this.#appendGltfPrimitiveDraws(node, projection, view, draws);
+          this.#appendGltfPrimitiveDraws(node, projection, view, draws, viewProjection);
           this.#drawGltfPrimitiveDraws(
             draws,
             projection,
             view,
-            passLights,
+            sceneLights,
             toneMapping,
             viewportSize,
-            usedGeometry,
+            sourceX,
+            sourceY,
           );
         }
         return;
       default:
-        this.#recordDiagnostic(`Unsupported render node kind "${getNodeKind(node)}"`);
+        {
+          const kind = getNodeKind(node);
+          this.#recordDiagnostic(`Unsupported render node kind "${kind}"`, `render-node:${kind}`);
+        }
     }
   }
 
-  #directionalLights(nodes: readonly RenderNode[]): readonly DirectionalLightNode[] {
-    const lights: DirectionalLightNode[] = [];
-    for (const node of nodes) {
-      if (node.kind === "directional-light") {
-        lights.push(node);
-      }
-    }
-
-    return lights;
+  #planWantsHdr(plan: FramePlan): boolean {
+    if (
+      plan.environment !== undefined
+      || plan.exposureEv100 !== undefined
+      || plan.toneMapping === "aces-fitted"
+      || plan.toneMapping === "pbr-neutral"
+      || plan.lightNodes.length > 0
+    ) return true;
+    return resourceArenaHasHdrReadyAsset(this.#resourceArena);
   }
 
   #drawMesh(
     node: MeshNode,
     projection: Mat4,
     view: Mat4,
+    viewProjection: Mat4,
     lights: SurfaceLightSet | undefined,
-    toneMapping: PassToneMappingState,
+    toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
-    usedGeometry: Set<string>,
   ): void {
-    const cpu = this.#meshGeometry(node.geometry, node.material);
-    const model = transformMat4(this.#renderObjectTransform(node));
-    if (!this.#isVisible(cpu.positions, model, projection, view)) return;
-    if (node.material.kind === "standard" && lights === undefined) {
-      throw new Error("standardMaterial meshes require a directionalLight or environment in the render pass");
-    }
-    const gpu = this.#geometryResource(cpu);
-    usedGeometry.add(gpu.key);
+    const retainedGeometry = this.#meshGeometryRow(node.geometry, node.material);
+    const cpu = retainedGeometry.recipe;
+    const model = transformMat4Into(this.#meshModel, this.#renderObjectTransform(node));
+    const localBounds = this.#localGeometryBounds(cpu);
+    if (!isBoundsVisible(
+      localBounds,
+      multiplyMat4Into(this.#meshViewProjectionModel, viewProjection, model),
+    )) return;
+    const gpu = this.#geometryResource(retainedGeometry.id);
     this.#applyDrawAlphaState(node.material);
     try {
-      this.#drawGeometry(gpu, node.material, model, projection, view, viewportSize, lights, toneMapping, undefined, cpu);
+      this.#drawGeometry(
+        gpu,
+        retainedGeometry.id,
+        node.material,
+        model,
+        projection,
+        view,
+        viewportSize,
+        lights,
+        toneMapping,
+        undefined,
+        cpu,
+      );
     } finally {
       this.#resetDrawAlphaState();
     }
-  }
-
-  #drawText(
-    node: TextNode,
-    projection: Mat4,
-    view: Mat4,
-    toneMapping: PassToneMappingState,
-    viewportSize: ViewportSize,
-    usedGeometry: Set<string>,
-  ): void {
-    const geometryKey = this.#textGeometryKey(node);
-    let cpu: CpuGeometry | undefined;
-    let gpu = this.#geometry.get(geometryKey);
-    if (gpu === undefined) {
-      const mesh = textMesh(node);
-      if (mesh.vertices.length === 0 || mesh.indices.length === 0) return;
-
-      const positions = new Float32Array(mesh.vertices.length * 3);
-      for (let index = 0; index < mesh.vertices.length; index += 1) {
-        const vertex = mesh.vertices[index]!;
-        positions[index * 3] = vertex.position[0];
-        positions[index * 3 + 1] = vertex.position[1];
-        positions[index * 3 + 2] = vertex.position[2];
-      }
-      const indices = mesh.vertices.length > 65535
-        ? new Uint32Array(mesh.indices)
-        : new Uint16Array(mesh.indices);
-      cpu = {
-        indices,
-        key: geometryKey,
-        mode: "triangles",
-        positions,
-      };
-      gpu = this.#geometryResource(cpu);
-    }
-    const material: UnlitMaterial = {
-      baseColor: { color: node.color, kind: "solid" },
-      kind: "unlit",
-    };
-    usedGeometry.add(gpu.key);
-    this.#applyDrawAlphaState(material);
-    try {
-      this.#drawGeometry(gpu, material, identityMat4(), projection, view, viewportSize, undefined, toneMapping, undefined, cpu);
-    } finally {
-      this.#resetDrawAlphaState();
-    }
-  }
-
-  #textGeometryKey(node: TextNode): string {
-    const layout = node.layout;
-    const face = layout.fontFace;
-    let fontId = this.#textFontIds.get(face);
-    if (fontId === undefined) {
-      fontId = this.#nextTextFontId;
-      this.#nextTextFontId += 1;
-      this.#textFontIds.set(face, fontId);
-    }
-    const origin = layout.lines[0]?.origin ?? [0, 0, 0];
-
-    return `text:${fontId}:${layout.source.length}:${layout.source}:${layout.font.metrics.size}:${layout.font.metrics.lineHeight}:${origin[0]},${origin[1]},${origin[2]}`;
   }
 
   #appendGltfPrimitiveDraws(
@@ -3039,7 +3874,6 @@ class WebGlRootImpl implements WebGlRoot {
       rootModel,
     );
     const assetLights = this.#gltfAssetLightSet(state, rootModel);
-    const animationTransforms = this.#gltfAnimationTransforms(state, node);
     const selectedNodeLevels = state.hasNodeLod
       ? this.#selectedGltfNodeLodLevels(state, renderInstanceKey, rootViewProjectionModel)
       : undefined;
@@ -3056,15 +3890,9 @@ class WebGlRootImpl implements WebGlRoot {
       const primitiveMaterial = selectedVariantIndex === undefined
         ? primitive.baseMaterial
         : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const localModels = animationTransforms === undefined
-        ? primitive.localModels
-        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
-      const localModelDeterminants = animationTransforms === undefined
-        ? primitive.localModelDeterminants
-        : localModels.map(mat4OrientationDeterminant);
-      const localBounds = animationTransforms === undefined
-        ? primitive.localBounds
-        : localModels.map((localModel) => worldBounds(primitive.positions, localModel));
+      const localModels = primitive.localModels;
+      const localModelDeterminants = primitive.localModelDeterminants;
+      const localBounds = primitive.localBounds;
       for (const [instanceIndex, localModel] of localModels.entries()) {
         const instanceBounds = localBounds[instanceIndex];
         const loadedMaterial = primitiveMaterial.materialLod === undefined
@@ -3081,20 +3909,22 @@ class WebGlRootImpl implements WebGlRoot {
         if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) {
           continue;
         }
-        const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
+        const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
         draws.push({
           geometry: prepared.geometry,
+          geometryId: prepared.geometryId,
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           localModel,
           material: prepared.material,
           materialBatchKey: prepared.materialBatchKey,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
-          ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
           rootModel,
           ...(rootHandle === undefined ? {} : { rootPositionSignatureVersion: rootHandle.positionVersion }),
           ...(rootHandle === undefined ? {} : { rootRotationSignatureVersion: rootHandle.rotationVersion }),
           ...(rootHandle === undefined ? {} : { rootScaleSignatureVersion: rootHandle.scaleVersion }),
+          rootSignatureInstanceIndex: -1,
+          rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
           rootTransform,
           sidedness: {
             doubleSided: loadedMaterial.doubleSided,
@@ -3120,22 +3950,50 @@ class WebGlRootImpl implements WebGlRoot {
         rootModels.push(identityMat4());
       }
       views = {
-        poseVersion: -1,
+        activeApplied: false,
+        changes: new GltfInstanceChangeTracker(instances.count),
+        framePoseVersion: instances.poseVersion,
+        frameScaleVersion: instances.scaleVersion,
+        matrixPoseVersion: -1,
+        matrixScaleVersion: -1,
         rootModels,
-        scaleVersion: -1,
+        source: instances,
+        sourceKey: this.#gltfInstanceSourceKey++,
         transforms,
       };
       this.#gltfInstanceTransformViews.set(instances, views);
     }
-    if (
-      views.poseVersion !== instances.poseVersion
-      || views.scaleVersion !== instances.scaleVersion
+    if (this.#gltfInstanceFrameActive && !views.activeApplied) {
+      const pose = views.changes.activePose;
+      const scale = views.changes.activeScale;
+      const firstWord = Math.min(pose.minDirtyWord, scale.minDirtyWord);
+      const lastWord = Math.max(pose.maxDirtyWord, scale.maxDirtyWord);
+      for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
+        let word = pose.words[wordIndex]! | scale.words[wordIndex]!;
+        while (word !== 0) {
+          const bit = 31 - Math.clz32(word & -word);
+          const index = wordIndex * 32 + bit;
+          if (index < views.transforms.length) {
+            transformMat4Into(views.rootModels[index]!, views.transforms[index]);
+          }
+          word &= word - 1;
+        }
+      }
+      views.activeApplied = true;
+      views.matrixPoseVersion = views.framePoseVersion;
+      views.matrixScaleVersion = views.frameScaleVersion;
+    } else if (
+      !this.#gltfInstanceFrameActive
+      && (
+        views.matrixPoseVersion !== instances.poseVersion
+        || views.matrixScaleVersion !== instances.scaleVersion
+      )
     ) {
       for (let index = 0; index < views.transforms.length; index += 1) {
         transformMat4Into(views.rootModels[index]!, views.transforms[index]);
       }
-      views.poseVersion = instances.poseVersion;
-      views.scaleVersion = instances.scaleVersion;
+      views.matrixPoseVersion = instances.poseVersion;
+      views.matrixScaleVersion = instances.scaleVersion;
     }
     return views;
   }
@@ -3148,7 +4006,6 @@ class WebGlRootImpl implements WebGlRoot {
     draws: GltfPrimitiveDraw[],
   ): void {
     const views = this.#gltfInstanceViews(node.instances);
-    const animationTransforms = this.#gltfAnimationTransforms(state, node);
     const selectedVariantIndex = state.hasMaterialVariants
       ? this.#selectedGltfVariantIndex(state, node)
       : undefined;
@@ -3156,15 +4013,9 @@ class WebGlRootImpl implements WebGlRoot {
       const primitiveMaterial = selectedVariantIndex === undefined
         ? primitive.baseMaterial
         : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const localModels = animationTransforms === undefined
-        ? primitive.localModels
-        : gltfPrimitiveAnimatedLocalModels(state.nodes, primitive, animationTransforms);
-      const localModelDeterminants = animationTransforms === undefined
-        ? primitive.localModelDeterminants
-        : localModels.map(mat4OrientationDeterminant);
-      const localBounds = animationTransforms === undefined
-        ? primitive.localBounds
-        : localModels.map((localModel) => worldBounds(primitive.positions, localModel));
+      const localModels = primitive.localModels;
+      const localModelDeterminants = primitive.localModelDeterminants;
+      const localBounds = primitive.localBounds;
 
       for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
         const rootModel = views.rootModels[outerIndex]!;
@@ -3201,20 +4052,23 @@ class WebGlRootImpl implements WebGlRoot {
               rootViewProjectionModel,
             );
           if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) continue;
-          const prepared = this.#preparedGltfPrimitiveMaterial(primitive, loadedMaterial);
+          const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
           draws.push({
             geometry: prepared.geometry,
+            geometryId: prepared.geometryId,
             ...(assetLights === undefined ? {} : { lights: assetLights }),
             localModel,
             material: prepared.material,
             materialBatchKey: prepared.materialBatchKey,
             modelSignatureInstanceIndex: instanceIndex,
             modelSignatureStateKey: state.instanceKey,
-            ...(animationTransforms === undefined ? {} : { modelSignatureValues: localModel }),
             rootModel,
-            rootPositionSignatureVersion: node.instances.poseVersion,
-            rootRotationSignatureVersion: node.instances.poseVersion,
-            rootScaleSignatureVersion: node.instances.scaleVersion,
+            rootInstanceViews: views,
+            rootPositionSignatureVersion: views.sourceKey,
+            rootRotationSignatureVersion: views.sourceKey,
+            rootScaleSignatureVersion: views.sourceKey,
+            rootSignatureInstanceIndex: outerIndex,
+            rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
             rootTransform,
             sidedness: {
               doubleSided: loadedMaterial.doubleSided,
@@ -3230,23 +4084,29 @@ class WebGlRootImpl implements WebGlRoot {
     draws: readonly GltfPrimitiveDraw[],
     projection: Mat4,
     view: Mat4,
-    passLights: SurfaceLightSet | undefined,
-    toneMapping: PassToneMappingState,
+    sceneLights: SurfaceLightSet | undefined,
+    toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
-    usedGeometry: Set<string>,
+    sourceX: number,
+    sourceY: number,
   ): void {
     if (draws.length === 0) return;
 
     const batchInputs: GltfPrimitiveDrawBatchInput[] = [];
     for (const draw of draws) {
-      const geometry = this.#geometryResource(draw.geometry);
-      usedGeometry.add(geometry.key);
-      const lights = combineSurfaceLightSets(passLights, draw.lights);
+      const geometry = this.#geometryResource(draw.geometryId);
+      const lights = combineSurfaceLightSets(sceneLights, draw.lights);
       const sidednessKey = draw.sidedness.doubleSided
         ? "double-sided"
         : draw.sidedness.frontFaceCcw ? "front-ccw" : "front-cw";
-      const batchKey = `${geometry.key}|${draw.materialBatchKey}|${sidednessKey}|${lights.key}`;
-      batchInputs.push({ draw, geometry, key: batchKey, lights });
+      // Light values are uniform state, not persistent geometry identity.
+      // Asset-local lights still need a stable per-root scope because their
+      // world-space transforms differ between outer instances.
+      const lightScopeKey = draw.lights === undefined
+        ? "pass-lights"
+        : `asset-lights:${draw.modelSignatureStateKey}:${draw.rootSignatureInstanceIndex}`;
+      const batchKey = `${geometry.staticIdentityId}|${draw.materialBatchKey}|${sidednessKey}|${lightScopeKey}`;
+      batchInputs.push({ draw, geometry, geometryId: draw.geometryId, key: batchKey, lights });
     }
     const batches = this.#gltfPrimitiveDrawBatches(batchInputs);
     for (const batch of batches) {
@@ -3266,7 +4126,11 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     if (transmissiveBatches.length > 0) {
-      const screenColorTexture = this.#copyTransmissionScreenColorTexture(viewportSize);
+      const screenColorTexture = this.#copyTransmissionScreenColorTexture(
+        viewportSize,
+        sourceX,
+        sourceY,
+      );
       for (const batch of transmissiveBatches) {
         this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, screenColorTexture);
       }
@@ -3293,6 +4157,7 @@ class WebGlRootImpl implements WebGlRoot {
         batch = {
           cpuGeometry: input.draw.geometry,
           geometry: input.geometry,
+          geometryId: input.geometryId,
           key: input.key,
           lights: input.lights,
           localModelSignature: [],
@@ -3302,6 +4167,8 @@ class WebGlRootImpl implements WebGlRoot {
           rootRotationSignature: [],
           rootScaleSignature: [],
           rootModels: [],
+          rootInstanceViews: [],
+          rootLogicalIndices: [],
           rootTransforms: [],
           sidedness: input.draw.sidedness,
         };
@@ -3329,6 +4196,8 @@ class WebGlRootImpl implements WebGlRoot {
       batch.rootRotationSignature.length = 0;
       batch.rootScaleSignature.length = 0;
       batch.rootModels.length = 0;
+      batch.rootInstanceViews.length = 0;
+      batch.rootLogicalIndices.length = 0;
       batch.rootTransforms.length = 0;
       batchesByKey.set(batch.key, batch);
     }
@@ -3339,6 +4208,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (batch.localModels.length === 0) {
         batch.cpuGeometry = input.draw.geometry;
         batch.geometry = input.geometry;
+        batch.geometryId = input.geometryId;
         batch.lights = input.lights;
         batch.material = input.draw.material;
         batch.sidedness = input.draw.sidedness;
@@ -3351,7 +4221,7 @@ class WebGlRootImpl implements WebGlRoot {
     batch: GltfPrimitiveDrawBatch,
     projection: Mat4,
     view: Mat4,
-    toneMapping: PassToneMappingState,
+    toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
@@ -3361,6 +4231,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (batch.localModels.length === 1) {
         this.#drawGeometry(
           batch.geometry,
+          batch.geometryId,
           batch.material,
           multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!),
           projection,
@@ -3374,12 +4245,15 @@ class WebGlRootImpl implements WebGlRoot {
       } else {
         this.#drawGeometryInstanced(
           batch.geometry,
+          batch.geometryId,
           batch.cpuGeometry,
           batch.key,
           batch.material,
           batch.localModels,
           batch.localModelSignature,
           batch.rootModels,
+          batch.rootInstanceViews,
+          batch.rootLogicalIndices,
           batch.rootTransforms,
           batch.rootPositionSignature,
           batch.rootRotationSignature,
@@ -3402,7 +4276,11 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     if (material.kind !== "wireframe" && isBlendedSurfaceMaterial(material)) {
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      if (typeof gl.blendFuncSeparate === "function") {
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      } else {
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      }
       gl.depthMask(false);
 
       return;
@@ -3437,21 +4315,14 @@ class WebGlRootImpl implements WebGlRoot {
     gl.frontFace(gl.CCW);
   }
 
-  #passSurfaceLightSet(
-    light: DirectionalLightNode | undefined,
+  #sceneSurfaceLightSet(
     environment: EnvironmentLight | undefined,
   ): SurfaceLightSet | undefined {
-    if (light === undefined && environment === undefined) return undefined;
-    const environmentLights = environment === undefined ? undefined : this.#environmentLightSet(environment);
+    if (environment === undefined) return this.#framePlanSurfaceLightSet;
+    const environmentLights = this.#environmentLightSet(environment);
 
     return surfaceLightSet(
-      light === undefined
-        ? []
-        : [{
-            color: light.color,
-            direction: light.direction,
-            kind: "directional",
-          }],
+      this.#framePlanSurfaceLights,
       environmentLights?.irradiance,
       environmentLights?.specular,
     );
@@ -3476,12 +4347,12 @@ class WebGlRootImpl implements WebGlRoot {
     return {
       irradiance: {
         coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
-        intensity: environment.irradianceIntensity,
+        intensity: environment.radianceScaleNits,
         worldToIbl,
       },
       specular: {
-        encoding: "ldr",
-        intensity: environment.specularIntensity,
+        encoding: "linear",
+        intensity: environment.radianceScaleNits,
         key: specular.key,
         mipCount: specular.mipCount,
         texture: specular.texture,
@@ -3586,9 +4457,17 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #preparedGltfPrimitiveMaterial(
+    state: GltfState,
     primitive: LoadedGltfPrimitive,
     loadedMaterial: LoadedGltfMaterial,
   ): GltfPreparedPrimitiveMaterial {
+    let materialPrimitives = this.#gltfMaterialPrimitives.get(loadedMaterial);
+    if (materialPrimitives === undefined) {
+      materialPrimitives = new Set();
+      this.#gltfMaterialPrimitives.set(loadedMaterial, materialPrimitives);
+    }
+    materialPrimitives.add(primitive);
+
     let primitiveCache = this.#gltfPreparedPrimitiveMaterials.get(primitive);
     if (primitiveCache === undefined) {
       primitiveCache = new WeakMap();
@@ -3598,38 +4477,29 @@ class WebGlRootImpl implements WebGlRoot {
     const cached = primitiveCache.get(loadedMaterial);
     if (cached !== undefined) return cached;
 
-    const baseColor = this.#gltfMaterialTextureRef(loadedMaterial);
-    const surfaceTextures = this.#gltfMaterialSurfaceTextures(loadedMaterial);
-    const geometry: CpuGeometry = {
-      ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
-      ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
-      ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-      key: gltfGeometryContentKey({
-        ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
-        ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
-        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-        mode: primitive.mode,
-        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-        positions: primitive.positions,
-        ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
-        ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-      }),
-      mode: primitive.mode,
-      ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-      positions: primitive.positions,
-      ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
-      ...(loadedMaterial.emissiveTexCoords === undefined ? {} : { emissiveTexCoords: loadedMaterial.emissiveTexCoords }),
-      ...(loadedMaterial.texCoords === undefined ? {} : { texCoords: loadedMaterial.texCoords }),
-    };
+    const contentKeys = resourceArenaContentKeys(this.#resourceArena, state.key);
+    const baseColor = this.#gltfMaterialTextureRef(loadedMaterial, contentKeys);
+    const surfaceTextures = this.#gltfMaterialSurfaceTextures(loadedMaterial, contentKeys);
+    const geometryKey = this.#gltfPrimitiveGeometryKeys.get(primitive);
+    const retainedGeometry = geometryKey === undefined ? undefined : this.#retainedGeometryRecipes.get(geometryKey);
+    if (retainedGeometry === undefined) {
+      throw new Error(`Royal glTF primitive geometry ${primitive.key} was not semantically retained`);
+    }
     const material = loadedGltfSurfaceMaterial(
       loadedMaterial,
-      loadedMaterial.image !== undefined && baseColor !== undefined
+      loadedMaterial.baseColorTexture?.imageUri !== undefined
+        && state.imageRows.get(loadedMaterial.baseColorTexture.imageUri)?.status === "ready"
+        && baseColor !== undefined
         ? baseColor
-        : { color: loadedMaterial.color ?? DEFAULT_COLOR, kind: "solid" },
+        : {
+            color: loadedMaterial.baseColorTexture?.textureUri === undefined ? TEXTURE_COLOR : DEFAULT_COLOR,
+            kind: "solid",
+          },
       surfaceTextures,
     );
     const prepared: GltfPreparedPrimitiveMaterial = {
-      geometry,
+      geometry: retainedGeometry.recipe,
+      geometryId: retainedGeometry.id,
       material,
       materialBatchKey: surfaceMaterialBatchKey(material),
     };
@@ -3705,121 +4575,110 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #gltfMaterialTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
-    if (material.baseColorTextureUri === undefined) return undefined;
-    const texture = {
-      colorSpace: "srgb",
-      ...(material.baseColorContentKey === undefined ? {} : { contentKey: material.baseColorContentKey }),
-      flipY: false,
-      kind: "asset",
-      ...(material.sampler === undefined ? {} : { sampler: material.sampler }),
-      uri: material.baseColorTextureUri,
-    } satisfies TextureAssetUploadRef;
-    this.#registerAutoBaseColorVirtualTextureManifest(texture, material.baseColorSourceUri);
-    this.#registerAutoBaseColorVirtualTextureGeneratedPageSource(
-      texture,
-      material.baseColorSvgVirtualTextureSource === undefined
-        ? undefined
-        : { kind: "svg", source: material.baseColorSvgVirtualTextureSource },
-    );
+  #gltfMaterialTextureRef(
+    material: LoadedGltfMaterial,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+  ): TextureAssetUploadRef | undefined {
+    const slot = material.baseColorTexture;
+    const texture = this.#gltfTextureSlotRef(slot, "srgb", contentKeys);
+    if (texture === undefined) return undefined;
+    this.#registerAutoBaseColorVirtualTextureManifest(texture, slot?.sourceUri);
     return texture;
   }
 
-  #gltfMaterialMetallicRoughnessTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
-    if (material.metallicRoughnessTextureUri === undefined) return undefined;
-    return {
-      colorSpace: "linear",
-      ...(material.metallicRoughnessContentKey === undefined
-        ? {}
-        : { contentKey: material.metallicRoughnessContentKey }),
-      flipY: false,
-      kind: "asset",
-      ...(material.metallicRoughnessSampler === undefined ? {} : { sampler: material.metallicRoughnessSampler }),
-      uri: material.metallicRoughnessTextureUri,
-    };
+  #gltfMaterialMetallicRoughnessTextureRef(material: LoadedGltfMaterial, contentKeys: ReadonlyMap<string, TextureContentKey>): TextureAssetUploadRef | undefined {
+    return this.#gltfTextureSlotRef(material.metallicRoughnessTexture, "linear", contentKeys);
   }
 
-  #gltfMaterialNormalTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
-    if (material.normalTextureUri === undefined) return undefined;
-    return {
-      colorSpace: "linear",
-      ...(material.normalContentKey === undefined ? {} : { contentKey: material.normalContentKey }),
-      flipY: false,
-      kind: "asset",
-      ...(material.normalSampler === undefined ? {} : { sampler: material.normalSampler }),
-      uri: material.normalTextureUri,
-    };
+  #gltfMaterialNormalTextureRef(material: LoadedGltfMaterial, contentKeys: ReadonlyMap<string, TextureContentKey>): TextureAssetUploadRef | undefined {
+    return this.#gltfTextureSlotRef(material.normalTexture, "linear", contentKeys);
   }
 
-  #gltfMaterialEmissiveTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
-    if (material.emissiveTextureUri === undefined) return undefined;
-    return {
-      colorSpace: "srgb",
-      ...(material.emissiveContentKey === undefined ? {} : { contentKey: material.emissiveContentKey }),
-      flipY: false,
-      kind: "asset",
-      ...(material.emissiveSampler === undefined ? {} : { sampler: material.emissiveSampler }),
-      uri: material.emissiveTextureUri,
-    };
+  #gltfMaterialEmissiveTextureRef(material: LoadedGltfMaterial, contentKeys: ReadonlyMap<string, TextureContentKey>): TextureAssetUploadRef | undefined {
+    return this.#gltfTextureSlotRef(material.emissiveTexture, "srgb", contentKeys);
   }
 
-  #gltfMaterialOcclusionTextureRef(material: LoadedGltfMaterial): TextureAssetUploadRef | undefined {
-    if (material.occlusionTextureUri === undefined) return undefined;
-    return {
-      colorSpace: "linear",
-      ...(material.occlusionContentKey === undefined ? {} : { contentKey: material.occlusionContentKey }),
-      flipY: false,
-      kind: "asset",
-      ...(material.occlusionSampler === undefined ? {} : { sampler: material.occlusionSampler }),
-      uri: material.occlusionTextureUri,
-    };
+  #gltfMaterialOcclusionTextureRef(material: LoadedGltfMaterial, contentKeys: ReadonlyMap<string, TextureContentKey>): TextureAssetUploadRef | undefined {
+    return this.#gltfTextureSlotRef(material.occlusionTexture, "linear", contentKeys);
   }
 
   #gltfTextureSlotRef(
     slot: LoadedGltfMaterialTextureSlot | undefined,
     colorSpace: TextureColorSpace,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
   ): TextureAssetUploadRef | undefined {
     if (slot?.textureUri === undefined) return undefined;
     return {
       colorSpace,
-      ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
+      ...this.#gltfTextureContentKeyProps(slot.textureUri, slot.contentKey, contentKeys),
       flipY: false,
       kind: "asset",
+      preparedOnly: true,
       ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
       uri: slot.textureUri,
     };
   }
 
-  #gltfMaterialSurfaceTextures(material: LoadedGltfMaterial): LoadedGltfSurfaceTextures {
+  #gltfTextureContentKeyProps(
+    textureUri: string,
+    authored: TextureContentKey | undefined,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+  ): { readonly contentKey?: TextureContentKey } {
+    const contentKey = authored ?? contentKeys.get(textureUri);
+    return contentKey === undefined ? {} : { contentKey };
+  }
+
+  #gltfMaterialSurfaceTextures(
+    material: LoadedGltfMaterial,
+    contentKeys: ReadonlyMap<string, TextureContentKey>,
+  ): LoadedGltfSurfaceTextures {
     const extensionTextures = material.extensionTextures;
-    const textures: Partial<Record<keyof LoadedGltfSurfaceTextures, TextureAssetUploadRef>> = {};
+    const textures: { -readonly [Key in keyof Omit<LoadedGltfSurfaceTextures, "textureCoordinates">]?: TextureAssetUploadRef } = {};
+    const textureCoordinates: { -readonly [Key in keyof SurfaceMaterialTextureCoordinates]?: GltfTextureCoordinates } = {};
     const setTexture = (
-      key: keyof LoadedGltfSurfaceTextures,
+      key: keyof Omit<LoadedGltfSurfaceTextures, "textureCoordinates">,
       texture: TextureAssetUploadRef | undefined,
     ): void => {
       if (texture !== undefined) textures[key] = texture;
     };
 
-    setTexture("emissiveTexture", this.#gltfMaterialEmissiveTextureRef(material));
-    setTexture("metallicRoughnessTexture", this.#gltfMaterialMetallicRoughnessTextureRef(material));
-    setTexture("normalTexture", this.#gltfMaterialNormalTextureRef(material));
-    setTexture("occlusionTexture", this.#gltfMaterialOcclusionTextureRef(material));
+    setTexture("emissiveTexture", this.#gltfMaterialEmissiveTextureRef(material, contentKeys));
+    setTexture("metallicRoughnessTexture", this.#gltfMaterialMetallicRoughnessTextureRef(material, contentKeys));
+    setTexture("normalTexture", this.#gltfMaterialNormalTextureRef(material, contentKeys));
+    setTexture("occlusionTexture", this.#gltfMaterialOcclusionTextureRef(material, contentKeys));
+    const setCoordinates = (
+      key: keyof SurfaceMaterialTextureCoordinates,
+      slot: LoadedGltfMaterialTextureSlot | undefined,
+    ): void => {
+      if (slot !== undefined) textureCoordinates[key] = slot.coordinates;
+    };
+    setCoordinates("baseColorTexture", material.baseColorTexture);
+    setCoordinates("emissiveTexture", material.emissiveTexture);
+    setCoordinates("metallicRoughnessTexture", material.metallicRoughnessTexture);
+    setCoordinates("normalTexture", material.normalTexture);
+    setCoordinates("occlusionTexture", material.occlusionTexture);
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      setTexture(texture.key, this.#gltfTextureSlotRef(extensionTextures?.[texture.key], texture.colorSpace));
+      const slot = extensionTextures?.[texture.key];
+      setTexture(texture.key, this.#gltfTextureSlotRef(slot, texture.colorSpace, contentKeys));
+      setCoordinates(texture.key, slot);
     }
 
-    return textures;
+    return {
+      ...textures,
+      ...(Object.keys(textureCoordinates).length === 0 ? {} : { textureCoordinates }),
+    };
   }
 
   #drawGeometry(
     geometry: GeometryResource,
+    geometryId: number,
     material: Material,
     model: Mat4,
     projection: Mat4,
     view: Mat4,
     viewportSize: ViewportSize,
     lights: SurfaceLightSet | undefined,
-    toneMapping: PassToneMappingState,
+    toneMapping: SceneToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry?: CpuGeometry,
   ): void {
@@ -3829,19 +4688,18 @@ class WebGlRootImpl implements WebGlRoot {
       material,
       this.#virtualTextureDrawDemandContext(
         cpuGeometry,
+        material,
         { kind: "single", model },
         projection,
         view,
         viewportSize,
       ),
     );
-    const programKind: ProgramKind = material.kind === "wireframe"
-      ? "wireframe"
-      : "surface";
+    const programKind: ProgramKind = material.kind === "wireframe" ? "wireframe" : "surface";
     const surfaceMaterial: SurfaceMaterial | undefined =
-      programKind === "surface" && material.kind !== "wireframe" ? material : undefined;
+      material.kind !== "wireframe" ? material : undefined;
     const surfaceLights = surfaceMaterial?.kind === "standard"
-      ? lights ?? DEFAULT_SURFACE_LIGHT_SET
+      ? lights ?? EMPTY_SURFACE_LIGHT_SET
       : surfaceMaterial === undefined ? undefined : EMPTY_SURFACE_LIGHT_SET;
     const surfaceTexturePlan = surfaceMaterial === undefined || surfaceLights === undefined
       ? undefined
@@ -3851,7 +4709,9 @@ class WebGlRootImpl implements WebGlRoot {
         surfaceLights,
         baseColorResidency,
       );
-    const programResource = this.#program(programKind, surfaceTexturePlan?.features);
+    const clusteredLights = (surfaceLights?.punctuals.length ?? 0) > 0;
+    const programResource = this.#program(programKind, surfaceTexturePlan?.features, clusteredLights);
+    if (programResource === undefined) return;
     const program = programResource.program;
     this.#useProgram(program);
 
@@ -3861,20 +4721,22 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformColor(
       program,
       "u_color",
-      surfaceTexturePlan?.baseColor.kind === "prepared-virtual" ? TEXTURE_COLOR : materialColor(material),
+      surfaceTexturePlan?.baseColor.kind === "prepared-virtual"
+        ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
+        : materialColor(material),
     );
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (surfaceTexturePlan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
       this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
       this.#bindSurfaceMaterialFactors(program, surfaceMaterial, transmissionScreenColorTexture, surfaceTexturePlan);
       this.#bindSurfaceToneMapping(program, toneMapping);
-      this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
+      this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
     }
 
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
     this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
     this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
-    this.#bindGeometryAttributes(program, geometry);
+    this.#bindGeometryAttributes(geometry, geometryId);
 
     if (material.kind === "wireframe") gl.lineWidth?.(material.width);
 
@@ -3888,12 +4750,15 @@ class WebGlRootImpl implements WebGlRoot {
 
   #drawGeometryInstanced(
     geometry: GeometryResource,
+    geometryId: number,
     cpuGeometry: CpuGeometry,
     instanceBufferKey: string,
     material: SurfaceMaterial,
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
     rootModels: readonly Mat4[],
+    rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
+    rootLogicalIndices: readonly number[],
     rootTransforms: readonly (Transform | undefined)[],
     rootPositionSignature: readonly number[],
     rootRotationSignature: readonly number[],
@@ -3902,7 +4767,7 @@ class WebGlRootImpl implements WebGlRoot {
     view: Mat4,
     viewportSize: ViewportSize,
     lights: SurfaceLightSet,
-    toneMapping: PassToneMappingState,
+    toneMapping: SceneToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
     const gl = this.#gl;
@@ -3926,7 +4791,10 @@ class WebGlRootImpl implements WebGlRoot {
       surfaceLights,
       baseColorResidency,
     );
-    const programResource = this.#program("surface-instanced-split", surfaceTexturePlan.features);
+    const programKind: ProgramKind = "surface-instanced-split";
+    const clusteredLights = surfaceLights.punctuals.length > 0;
+    const programResource = this.#program(programKind, surfaceTexturePlan.features, clusteredLights);
+    if (programResource === undefined) return;
     const program = programResource.program;
     this.#useProgram(program);
 
@@ -3935,13 +4803,15 @@ class WebGlRootImpl implements WebGlRoot {
     this.#uniformColor(
       program,
       "u_color",
-      surfaceTexturePlan.baseColor.kind === "prepared-virtual" ? TEXTURE_COLOR : materialColor(material),
+      surfaceTexturePlan.baseColor.kind === "prepared-virtual"
+        ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
+        : materialColor(material),
     );
     this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
     this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
     this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture, surfaceTexturePlan);
     this.#bindSurfaceToneMapping(program, toneMapping);
-    this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan);
+    this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
 
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
     this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
@@ -3951,11 +4821,13 @@ class WebGlRootImpl implements WebGlRoot {
       localModels,
       localModelSignature,
       rootTransforms,
+      rootInstanceViews,
+      rootLogicalIndices,
       rootPositionSignature,
       rootRotationSignature,
       rootScaleSignature,
     );
-    this.#bindGltfInstancedAttributes(program, geometry, instanceBufferKey, instanceResource);
+    this.#bindGltfInstancedAttributes(geometry, geometryId, instanceResource);
 
     const mode = webGlDrawMode(gl, geometry.mode);
     this.#gltfInstancingCounters.drawCalls += 1;
@@ -4043,6 +4915,7 @@ class WebGlRootImpl implements WebGlRoot {
       hasFiniteAttenuationDistance ? 1 : 0,
     ]);
     this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
+    this.#bindSurfaceTextureCoordinates(program, material, plan);
     this.#bindEmissiveTexture(program, material, plan);
     this.#bindMetallicRoughnessTexture(program, material, plan);
     this.#bindNormalTexture(program, material, plan);
@@ -4050,8 +4923,29 @@ class WebGlRootImpl implements WebGlRoot {
     this.#bindMaterialExtensionTextures(program, material, plan);
   }
 
-  #surfaceTextureUnitAllocator(): TextureUnitAllocator {
-    return { used: new Set() };
+  #bindSurfaceTextureCoordinates(
+    program: WebGLProgram,
+    material: SurfaceMaterial,
+    plan: SurfaceTextureBindingPlan,
+  ): void {
+    for (const [feature, key, setUniform, row0Uniform, row1Uniform] of SURFACE_TEXTURE_COORDINATE_BINDINGS) {
+      const preparedCoordinates = material.textureCoordinates?.[key];
+      const active = preparedCoordinates !== undefined
+        || plan.features.has(feature)
+        || (feature === "baseColorTexture" && (
+          plan.features.has("baseColorVirtualTextureAtlas")
+          || plan.features.has("baseColorVirtualTexturePageTable")
+      ));
+      if (!active) continue;
+      const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
+      this.#uniform1i(program, setUniform, coordinates.set);
+      this.#uniformColor(program, row0Uniform, coordinates.row0);
+      this.#uniformColor(program, row1Uniform, coordinates.row1);
+    }
+  }
+
+  #surfaceTextureUnitAllocator(reserveClusterUnits: boolean): TextureUnitAllocator {
+    return { reserveClusterUnits, used: new Set() };
   }
 
   #surfaceTextureBindingPlan(
@@ -4062,7 +4956,9 @@ class WebGlRootImpl implements WebGlRoot {
   ): SurfaceTextureBindingPlan {
     const features = new Set<SurfaceShaderTextureFeature>();
     const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
-    const allocator = this.#surfaceTextureUnitAllocator();
+    const allocator = this.#surfaceTextureUnitAllocator(
+      lightSet.punctuals.length > 0,
+    );
     const reserveTextureUnit = (
       feature: SurfaceShaderTextureFeature,
       preferred: number,
@@ -4172,17 +5068,22 @@ class WebGlRootImpl implements WebGlRoot {
       );
     }
     if (lightSet.specular !== undefined && features.has("iblSpecularCube")) {
-      reserveTextureUnit("iblBrdfLut", IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT);
+      reserveTextureUnit(
+        "iblBrdfLut",
+        allocator.reserveClusterUnits && this.#clusterGridTextureUnit > 0
+          ? this.#clusterGridTextureUnit - 1
+          : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
+      );
     }
 
     return { baseColor, features, textureUnits };
   }
 
-  #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: PassToneMappingState): void {
+  #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: SceneToneMappingState): void {
     this.#uniformColor(program, "u_toneMappingSettings", [
-      toneMapping.toneMapping === "aces" ? 1 : 0,
+      toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
       toneMapping.exposure,
-      0,
+      toneMapping.hdrOutput ? 1 : 0,
       0,
     ]);
   }
@@ -4190,12 +5091,17 @@ class WebGlRootImpl implements WebGlRoot {
   #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number | undefined {
     const maxTextureImageUnits = this.#maxTextureImageUnits;
     if (maxTextureImageUnits <= 0) return undefined;
-    if (preferred < maxTextureImageUnits && !allocator.used.has(preferred)) {
+    const reservedForClusters = (unit: number): boolean => allocator.reserveClusterUnits && (
+      unit === this.#clusterGridTextureUnit
+      || unit === this.#clusterIndexTextureUnit
+      || unit === this.#clusterLightTextureUnit
+    );
+    if (preferred < maxTextureImageUnits && !reservedForClusters(preferred) && !allocator.used.has(preferred)) {
       allocator.used.add(preferred);
       return preferred;
     }
     for (let unit = 0; unit < maxTextureImageUnits; unit += 1) {
-      if (allocator.used.has(unit)) continue;
+      if (reservedForClusters(unit) || allocator.used.has(unit)) continue;
       allocator.used.add(unit);
       return unit;
     }
@@ -4343,6 +5249,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
     this.#uniform1i(program, "u_transmissionScreenTexture", textureUnit);
+    this.#uniform2fv(program, "u_viewportOrigin", [resource.originX, resource.originY]);
     this.#uniform2fv(program, "u_viewportSize", [resource.width, resource.height]);
   }
 
@@ -4350,6 +5257,9 @@ class WebGlRootImpl implements WebGlRoot {
     program: WebGLProgram,
     lightSet: SurfaceLightSet,
     plan: SurfaceTextureBindingPlan,
+    projection: Mat4,
+    view: Mat4,
+    viewportSize: ViewportSize,
   ): void {
     bindSurfaceIblUniforms({
       brdfLutTexture: () => {
@@ -4357,7 +5267,7 @@ class WebGlRootImpl implements WebGlRoot {
         if (brdfLutTextureUnit === undefined) return undefined;
 
         return {
-          texture: this.#iblBrdfLutTextureResource(brdfLutTextureUnit),
+          texture: this.#iblBrdfLutTextureResource(),
           textureUnit: brdfLutTextureUnit,
         };
       },
@@ -4367,20 +5277,21 @@ class WebGlRootImpl implements WebGlRoot {
       uniformMatrix: (uniformProgram, name, matrix) => this.#uniformMatrix(uniformProgram, name, matrix),
     }, program, lightSet);
 
-    const lights = lightSet.lights.slice(0, MAX_SURFACE_LIGHTS);
+    const lights = lightSet.directionals;
+    if (lights.length > MAX_SURFACE_LIGHTS) {
+      throw new Error(`Royal supports at most ${MAX_SURFACE_LIGHTS} directional lights per pass`);
+    }
     this.#uniform1i(program, "u_surfaceLightCount", lights.length);
 
     for (let index = 0; index < lights.length; index += 1) {
       const light = lights[index];
       if (light === undefined) continue;
 
-      const range = light.kind === "directional" ? 0 : light.range ?? 0;
-      const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
-      const position = light.kind === "directional" ? [0, 0, 0] as const : light.position;
-      const cone = light.kind === "spot"
-        ? [Math.cos(light.innerConeAngle), Math.cos(light.outerConeAngle), 0, 0] as const
-        : [1, 0, 0, 0] as const;
-      const kind = light.kind === "directional" ? 0 : light.kind === "point" ? 1 : 2;
+      const range = 0;
+      const direction = light.direction;
+      const position = [0, 0, 0] as const;
+      const cone = [1, 0, 0, 0] as const;
+      const kind = 0;
 
       this.#uniform1i(program, `u_surfaceLightKind[${index}]`, kind);
       this.#uniformColor(program, `u_surfaceLightColor[${index}]`, light.color);
@@ -4398,171 +5309,249 @@ class WebGlRootImpl implements WebGlRoot {
       ]);
       this.#uniformColor(program, `u_surfaceLightCone[${index}]`, cone);
     }
+    this.#bindClusteredLights(
+      program,
+      lightSet.punctuals,
+      projection,
+      view,
+      viewportSize,
+    );
 
   }
 
-  #bindGeometryAttributes(program: WebGLProgram, geometry: GeometryResource): void {
+  #bindClusteredLights(
+    program: WebGLProgram,
+    lights: readonly ClusteredPunctualLight[],
+    projection: Mat4,
+    view: Mat4,
+    viewportSize: ViewportSize,
+  ): void {
+    if (lights.length === 0) {
+      this.#uniform1i(program, "u_useClusteredLights", 0);
+      return;
+    }
+    if (
+      this.#clusterGridTextureUnit < 0
+      || this.#clusterIndexTextureUnit < 0
+      || this.#clusterLightTextureUnit < 0
+    ) throw new Error("Clustered Forward+ lighting requires three fragment texture units");
+    const [width, height] = viewportSize;
+    const perspective = Math.abs(projection[15]) < 0.5;
+    const near = Math.abs(perspective
+      ? projection[14] / (projection[10] - 1)
+      : (projection[14] + 1) / projection[10]);
+    const far = Math.abs(perspective
+      ? projection[14] / (projection[10] + 1)
+      : (projection[14] - 1) / projection[10]);
+    const { lightsChanged, resource, viewChanged } = selectClusteredLightResource(
+      this.#clusteredLightResources,
+      {
+        createTexture: this.#clusterTextureFactory,
+        frame: this.#frame,
+        height,
+        lights,
+        projection,
+        view,
+        width,
+      },
+    );
+    let grid = resource.grid;
+    if (lightsChanged || viewChanged) {
+      const builtGrid = buildClusterGrid({
+        camera: { far, kind: perspective ? "perspective-camera" : "orthographic-camera", near },
+        height,
+        lights,
+        projection,
+        view,
+        width,
+      }, this.#clusterBuildScratch);
+      this.#uploadClusteredLights(resource, builtGrid, lights, lightsChanged);
+      const { indices: _indices, offsetsAndCounts: _offsetsAndCounts, ...metadata } = builtGrid;
+      grid = metadata;
+      commitClusteredLightView(resource, {
+        frame: this.#frame, grid: metadata, height, projection, view, width,
+      });
+    } else {
+      markClusteredLightResourceUsed(resource, this.#frame);
+    }
+    if (grid === undefined) throw new Error("Clustered light grid was not prepared");
     const gl = this.#gl;
-    gl.bindVertexArray(this.#geometryVertexArray(program, geometry));
-    this.#bindGeometryDefaultAttributeValues(program, geometry);
+    gl.activeTexture(gl.TEXTURE0 + this.#clusterGridTextureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, resource.gridTexture);
+    gl.activeTexture(gl.TEXTURE0 + this.#clusterIndexTextureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, resource.indexTexture);
+    gl.activeTexture(gl.TEXTURE0 + this.#clusterLightTextureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, resource.lightTexture);
+    this.#uniform1i(program, "u_useClusteredLights", 1);
+    this.#uniform1i(program, "u_clusterGrid", this.#clusterGridTextureUnit);
+    this.#uniform1i(program, "u_clusterLightIndices", this.#clusterIndexTextureUnit);
+    this.#uniform1i(program, "u_clusterLightData", this.#clusterLightTextureUnit);
+    this.#uniformColor(program, "u_clusterDimensions", [
+      grid.tileCountX, grid.tileCountY, grid.zSliceCount, grid.tileSize,
+    ]);
+    this.#uniformColor(program, "u_clusterDepth", [grid.zSliceScale, grid.zSliceBias, near, 0]);
+    this.#uniform2fv(program, "u_clusterProjection", [perspective ? 0 : 1, resource.indexTextureWidth]);
+    this.#uniform2fv(program, "u_clusterViewportOrigin", [0, 0]);
+  }
+
+  #uploadClusteredLights(
+    resource: ClusteredLightResource,
+    grid: ClusterGrid,
+    lights: readonly ClusteredPunctualLight[],
+    uploadLightData: boolean,
+  ): void {
+    const gl = this.#gl;
+    if (lights.length > this.#maxTextureSize) {
+      throw new Error(`Clustered light count ${lights.length} exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
+    }
+    const gridWidth = grid.tileCountX * grid.tileCountY;
+    if (gridWidth > this.#maxTextureSize || grid.zSliceCount > this.#maxTextureSize) {
+      throw new Error(
+        `Clustered light grid ${gridWidth}x${grid.zSliceCount} exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`,
+      );
+    }
+    const configure = (unit: number, texture: WebGLTexture): void => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+    configure(this.#clusterGridTextureUnit, resource.gridTexture);
+    if (
+      resource.gridTextureWidth === gridWidth
+      && resource.gridTextureHeight === grid.zSliceCount
+      && typeof gl.texSubImage2D === "function"
+    ) {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
+        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
+      );
+    } else {
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RG32UI,
+        gridWidth, grid.zSliceCount, 0,
+        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
+      );
+      resource.gridTextureWidth = gridWidth;
+      resource.gridTextureHeight = grid.zSliceCount;
+    }
+
+    const requiredIndexCount = Math.max(1, grid.indexCount);
+    let resizedIndexTexture = false;
+    if (resource.indexData.length < requiredIndexCount) {
+      const capacity = 2 ** Math.ceil(Math.log2(requiredIndexCount));
+      resource.indexTextureWidth = Math.min(this.#maxTextureSize, capacity);
+      resource.indexTextureHeight = Math.ceil(capacity / resource.indexTextureWidth);
+      if (resource.indexTextureHeight > this.#maxTextureSize) {
+        throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
+      }
+      resource.indexData = new Uint32Array(resource.indexTextureWidth * resource.indexTextureHeight);
+      resizedIndexTexture = true;
+    }
+    if (resource.indexTextureHeight > this.#maxTextureSize) {
+      throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
+    }
+    resource.indexData.fill(0);
+    for (let index = 0; index < grid.indexCount; index += 1) {
+      resource.indexData[index] = grid.indices[index]!;
+    }
+    configure(this.#clusterIndexTextureUnit, resource.indexTexture);
+    if (!resizedIndexTexture && typeof gl.texSubImage2D === "function") {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D, 0, 0, 0, resource.indexTextureWidth, resource.indexTextureHeight,
+        gl.RED_INTEGER, gl.UNSIGNED_INT, resource.indexData,
+      );
+    } else {
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.R32UI,
+        resource.indexTextureWidth, resource.indexTextureHeight, 0,
+        gl.RED_INTEGER, gl.UNSIGNED_INT, resource.indexData,
+      );
+    }
+
+    if (!uploadLightData) return;
+    const requiredLightCount = Math.max(lights.length, 1);
+    let resizedLightTexture = false;
+    if (resource.lightTextureHeight < requiredLightCount) {
+      resource.lightTextureHeight = Math.min(
+        this.#maxTextureSize,
+        2 ** Math.ceil(Math.log2(requiredLightCount)),
+      );
+      resource.lightData = new Float32Array(resource.lightTextureHeight * 16);
+      resizedLightTexture = true;
+    } else {
+      resource.lightData.fill(0);
+    }
+    const lightData = resource.lightData;
+    for (let index = 0; index < lights.length; index += 1) {
+      const light = lights[index]!;
+      const offset = index * 16;
+      const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
+      lightData[offset] = light.color[0];
+      lightData[offset + 1] = light.color[1];
+      lightData[offset + 2] = light.color[2];
+      lightData[offset + 3] = light.kind === "point" ? 1 : 2;
+      lightData[offset + 4] = light.position[0];
+      lightData[offset + 5] = light.position[1];
+      lightData[offset + 6] = light.position[2];
+      lightData[offset + 7] = light.range ?? 0;
+      lightData[offset + 8] = direction[0];
+      lightData[offset + 9] = direction[1];
+      lightData[offset + 10] = direction[2];
+      lightData[offset + 11] = light.kind === "spot" ? Math.cos(light.innerConeAngle) : 1;
+      lightData[offset + 12] = light.kind === "spot" ? Math.cos(light.outerConeAngle) : 0;
+    }
+    configure(this.#clusterLightTextureUnit, resource.lightTexture);
+    if (!resizedLightTexture && typeof gl.texSubImage2D === "function") {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D, 0, 0, 0, 4, resource.lightTextureHeight,
+        gl.RGBA, gl.FLOAT, lightData,
+      );
+    } else {
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA32F,
+        4, resource.lightTextureHeight, 0,
+        gl.RGBA, gl.FLOAT, lightData,
+      );
+    }
+    commitClusteredLightSnapshot(resource, lights);
+  }
+
+  #bindGeometryAttributes(geometry: GeometryResource, geometryId: number): void {
+    this.#gl.bindVertexArray(vertexInputBaseVertexArray(
+      this.#resourceArena.vertexInputs,
+      this.#gl,
+      this.#contextGeneration,
+      geometryId,
+    ));
+    this.#bindGeometryDefaultAttributeValues(geometry);
   }
 
   #bindGltfInstancedAttributes(
-    program: WebGLProgram,
     geometry: GeometryResource,
-    instanceBufferKey: string,
+    geometryId: number,
     instanceResource: GltfInstanceBufferResource,
   ): void {
-    const gl = this.#gl;
-    gl.bindVertexArray(this.#gltfInstancedVertexArray(program, geometry, instanceBufferKey, instanceResource));
-    this.#bindGeometryDefaultAttributeValues(program, geometry);
+    this.#gl.bindVertexArray(vertexInputCompositeVertexArray(
+      this.#resourceArena.vertexInputs,
+      this.#gl,
+      this.#contextGeneration,
+      geometryId,
+      instanceResource.instanceKey,
+      instanceResource.vertexInputBuffers,
+    ));
+    this.#bindGeometryDefaultAttributeValues(geometry);
   }
 
-  #geometryProgramVertexArrays(
-    program: WebGLProgram,
-    geometry: GeometryResource,
-  ): GeometryProgramVertexArrays {
-    let vertexArrays = geometry.vertexArrays.get(program);
-    if (vertexArrays === undefined) {
-      vertexArrays = { instanced: new Map() };
-      geometry.vertexArrays.set(program, vertexArrays);
+  #bindGeometryDefaultAttributeValues(geometry: GeometryResource): void {
+    if (geometry.tangentBuffer === undefined) {
+      this.#vertexAttrib4f(VERTEX_ATTRIBUTE.tangent, 0, 0, 0, 0);
     }
-    return vertexArrays;
-  }
-
-  #geometryVertexArray(program: WebGLProgram, geometry: GeometryResource): WebGLVertexArrayObject {
-    const vertexArrays = this.#geometryProgramVertexArrays(program, geometry);
-    if (vertexArrays.base !== undefined) return vertexArrays.base;
-
-    const gl = this.#gl;
-    const vertexArray = this.#createVertexArray();
-    gl.bindVertexArray(vertexArray);
-    this.#configureGeometryVertexAttributes(program, geometry);
-    vertexArrays.base = vertexArray;
-    return vertexArray;
-  }
-
-  #gltfInstancedVertexArray(
-    program: WebGLProgram,
-    geometry: GeometryResource,
-    instanceBufferKey: string,
-    instanceResource: GltfInstanceBufferResource,
-  ): WebGLVertexArrayObject {
-    const vertexArrays = this.#geometryProgramVertexArrays(program, geometry);
-    const cached = vertexArrays.instanced.get(instanceBufferKey);
-    if (cached !== undefined) return cached;
-
-    const gl = this.#gl;
-    const vertexArray = this.#createVertexArray();
-    gl.bindVertexArray(vertexArray);
-    this.#configureGeometryVertexAttributes(program, geometry);
-    this.#configureGltfInstanceVertexAttributes(instanceResource);
-    vertexArrays.instanced.set(instanceBufferKey, vertexArray);
-    return vertexArray;
-  }
-
-  #configureGeometryVertexAttributes(program: WebGLProgram, geometry: GeometryResource): void {
-    const gl = this.#gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, geometry.arrayBuffer);
-    const positionLocation = this.#attribLocation(program, "a_position");
-    if (positionLocation >= 0) {
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+    if (geometry.colorBuffer === undefined) {
+      this.#vertexAttrib4f(VERTEX_ATTRIBUTE.color, 1, 1, 1, 1);
     }
-    const uvLocation = this.#attribLocation(program, "a_uv");
-    if (uvLocation >= 0) {
-      if (geometry.texCoordBuffer !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.texCoordBuffer);
-        gl.enableVertexAttribArray(uvLocation);
-        gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 0, 0);
-      } else {
-        gl.disableVertexAttribArray(uvLocation);
-      }
-    }
-    const emissiveUvLocation = this.#attribLocation(program, "a_emissive_uv");
-    if (emissiveUvLocation >= 0) {
-      if (geometry.emissiveTexCoordBuffer !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.emissiveTexCoordBuffer);
-        gl.enableVertexAttribArray(emissiveUvLocation);
-        gl.vertexAttribPointer(emissiveUvLocation, 2, gl.FLOAT, false, 0, 0);
-      } else {
-        gl.disableVertexAttribArray(emissiveUvLocation);
-      }
-    }
-    const normalLocation = this.#attribLocation(program, "a_normal");
-    if (normalLocation >= 0) {
-      if (geometry.normalBuffer !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
-        gl.enableVertexAttribArray(normalLocation);
-        gl.vertexAttribPointer(normalLocation, 3, gl.FLOAT, false, 0, 0);
-      } else {
-        gl.disableVertexAttribArray(normalLocation);
-      }
-    }
-    const tangentLocation = this.#attribLocation(program, "a_tangent");
-    if (tangentLocation >= 0) {
-      if (geometry.tangentBuffer !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.tangentBuffer);
-        gl.enableVertexAttribArray(tangentLocation);
-        gl.vertexAttribPointer(tangentLocation, 4, gl.FLOAT, false, 0, 0);
-      } else {
-        gl.disableVertexAttribArray(tangentLocation);
-      }
-    }
-    const colorLocation = this.#attribLocation(program, "a_color");
-    if (colorLocation >= 0) {
-      if (geometry.colorBuffer !== undefined) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, geometry.colorBuffer);
-        gl.enableVertexAttribArray(colorLocation);
-        gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
-      } else {
-        gl.disableVertexAttribArray(colorLocation);
-      }
-    }
-    if (geometry.indexBuffer !== undefined && geometry.indexType !== undefined) {
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
-    } else {
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-    }
-  }
-
-  #bindGeometryDefaultAttributeValues(program: WebGLProgram, geometry: GeometryResource): void {
-    const emissiveUvLocation = this.#attribLocation(program, "a_emissive_uv");
-    if (emissiveUvLocation >= 0 && geometry.emissiveTexCoordBuffer === undefined) {
-      this.#vertexAttrib2f(emissiveUvLocation, 0, 0);
-    }
-    const tangentLocation = this.#attribLocation(program, "a_tangent");
-    if (tangentLocation >= 0 && geometry.tangentBuffer === undefined) {
-      this.#vertexAttrib4f(tangentLocation, 0, 0, 0, 0);
-    }
-    const colorLocation = this.#attribLocation(program, "a_color");
-    if (colorLocation >= 0 && geometry.colorBuffer === undefined) {
-      this.#vertexAttrib4f(colorLocation, 1, 1, 1, 1);
-    }
-  }
-
-  #configureGltfInstanceVertexAttributes(resource: GltfInstanceBufferResource): void {
-    const gl = this.#gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
-    for (let column = 0; column < 4; column += 1) {
-      const location = 3 + column;
-      gl.enableVertexAttribArray(location);
-      gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 64, column * 16);
-      gl.vertexAttribDivisor(location, 1);
-    }
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.rootPose.buffer);
-    gl.enableVertexAttribArray(7);
-    gl.vertexAttribPointer(7, 3, gl.FLOAT, false, 24, 0);
-    gl.vertexAttribDivisor(7, 1);
-    gl.enableVertexAttribArray(8);
-    gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 24, 12);
-    gl.vertexAttribDivisor(8, 1);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, resource.rootScale.buffer);
-    gl.enableVertexAttribArray(9);
-    gl.vertexAttribPointer(9, 3, gl.FLOAT, false, 12, 0);
-    gl.vertexAttribDivisor(9, 1);
   }
 
   #recordGltfInstanceLocalBufferUpload(floatCount: number): void {
@@ -4585,6 +5574,8 @@ class WebGlRootImpl implements WebGlRoot {
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
     rootTransforms: readonly (Transform | undefined)[],
+    rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
+    rootLogicalIndices: readonly number[],
     rootPositionSignature: readonly number[],
     rootRotationSignature: readonly number[],
     rootScaleSignature: readonly number[],
@@ -4614,8 +5605,8 @@ class WebGlRootImpl implements WebGlRoot {
       || previousLocalStride !== nextLocalStride
       || previousLocalSignature.length !== localModelSignature.length
       || previousInstanceCount !== instanceCount;
-    const localChangedRanges: Array<{ readonly start: number; end: number }> = [];
-    let activeLocalRange: { readonly start: number; end: number } | undefined;
+    let localChangedRangeCount = 0;
+    let activeLocalRangeStart = -1;
 
     for (let modelIndex = 0; modelIndex < localModels.length; modelIndex += 1) {
       const signatureOffset = modelIndex * (nextLocalStride ?? 0);
@@ -4635,11 +5626,23 @@ class WebGlRootImpl implements WebGlRoot {
       for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
         resource.localData[offset + elementIndex] = model[elementIndex]!;
       }
-      if (activeLocalRange !== undefined && activeLocalRange.end === modelIndex) {
-        activeLocalRange.end = modelIndex + 1;
-      } else {
-        activeLocalRange = { start: modelIndex, end: modelIndex + 1 };
-        localChangedRanges.push(activeLocalRange);
+      if (activeLocalRangeStart < 0) activeLocalRangeStart = modelIndex;
+      const nextChanged = modelIndex + 1 < localModels.length && (
+        localFullUpload
+        || previousLocalSignature === undefined
+        || nextLocalStride === undefined
+        || !sameGltfModelSignatureRange(
+          previousLocalSignature,
+          localModelSignature,
+          (modelIndex + 1) * (nextLocalStride ?? 0),
+          nextLocalStride ?? 0,
+        )
+      );
+      if (!nextChanged) {
+        resource.localUploadRanges[localChangedRangeCount * 2] = activeLocalRangeStart;
+        resource.localUploadRanges[localChangedRangeCount * 2 + 1] = modelIndex + 1;
+        localChangedRangeCount += 1;
+        activeLocalRangeStart = -1;
       }
     }
 
@@ -4649,11 +5652,13 @@ class WebGlRootImpl implements WebGlRoot {
       this.#recordGltfInstanceLocalBufferUpload(localFloatCount);
       resource.localDirty = false;
       resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
-    } else if (localChangedRanges.length > 0) {
+    } else if (localChangedRangeCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
-      for (const range of localChangedRanges) {
-        const startFloat = range.start * 16;
-        const rangeFloatCount = (range.end - range.start) * 16;
+      for (let rangeIndex = 0; rangeIndex < localChangedRangeCount; rangeIndex += 1) {
+        const start = resource.localUploadRanges[rangeIndex * 2]!;
+        const end = resource.localUploadRanges[rangeIndex * 2 + 1]!;
+        const startFloat = start * 16;
+        const rangeFloatCount = (end - start) * 16;
         gl.bufferSubData(
           gl.ARRAY_BUFFER,
           startFloat * Float32Array.BYTES_PER_ELEMENT,
@@ -4668,6 +5673,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#bindGltfInstanceRootPoseBuffer(
       resource.rootPose,
       rootTransforms,
+      rootInstanceViews,
+      rootLogicalIndices,
+      resource.packedSources,
+      resource.packedLogicalIndices,
+      resource.poseVersions,
       rootPositionSignature,
       rootRotationSignature,
       previousInstanceCount,
@@ -4676,11 +5686,32 @@ class WebGlRootImpl implements WebGlRoot {
     this.#bindGltfInstanceVectorBuffer(
       resource.rootScale,
       rootTransforms,
+      rootInstanceViews,
+      rootLogicalIndices,
+      resource.packedSources,
+      resource.packedLogicalIndices,
+      resource.scaleVersions,
       rootScaleSignature,
       "scale",
       previousInstanceCount,
       instanceCount,
     );
+    for (let index = 0; index < instanceCount; index += 1) {
+      const sourceViews = rootInstanceViews[index];
+      resource.packedSources[index] = sourceViews;
+      resource.packedLogicalIndices[index] = rootLogicalIndices[index]!;
+      if (sourceViews !== undefined) {
+        resource.poseVersions.set(sourceViews, sourceViews.framePoseVersion);
+        resource.scaleVersions.set(sourceViews, sourceViews.frameScaleVersion);
+      }
+    }
+    resource.packedSources.length = instanceCount;
+    for (const sourceViews of resource.poseVersions.keys()) {
+      if (!rootInstanceViews.includes(sourceViews)) resource.poseVersions.delete(sourceViews);
+    }
+    for (const sourceViews of resource.scaleVersions.keys()) {
+      if (!rootInstanceViews.includes(sourceViews)) resource.scaleVersions.delete(sourceViews);
+    }
     resource.instanceCount = instanceCount;
     return resource;
   }
@@ -4688,6 +5719,11 @@ class WebGlRootImpl implements WebGlRoot {
   #bindGltfInstanceRootPoseBuffer(
     resource: GltfInstanceRootPoseBufferResource,
     rootTransforms: readonly (Transform | undefined)[],
+    rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
+    rootLogicalIndices: readonly number[],
+    packedSources: readonly (GltfInstanceTransformViews | undefined)[],
+    packedLogicalIndices: Int32Array,
+    poseVersions: ReadonlyMap<GltfInstanceTransformViews, number>,
     nextPositionSignature: readonly number[],
     nextRotationSignature: readonly number[],
     previousInstanceCount: number,
@@ -4717,13 +5753,22 @@ class WebGlRootImpl implements WebGlRoot {
       || previousPositionSignature.length !== nextPositionSignature.length
       || previousRotationSignature.length !== nextRotationSignature.length
       || previousInstanceCount !== instanceCount;
-    const changedRanges: Array<{ readonly start: number; end: number }> = [];
-    let activeRange: { readonly start: number; end: number } | undefined;
+    let changedRangeCount = 0;
+    let activeRangeStart = -1;
 
     for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
+      const sourceViews = rootInstanceViews[transformIndex];
+      const logicalIndex = rootLogicalIndices[transformIndex]!;
       const positionSignatureOffset = transformIndex * (nextPositionStride ?? 0);
       const rotationSignatureOffset = transformIndex * (nextRotationStride ?? 0);
       const changed = fullUpload
+        || isPackedInstanceSlotDirty(
+          sourceViews?.changes.activePose,
+          logicalIndex,
+          packedSources[transformIndex] === sourceViews,
+          packedLogicalIndices[transformIndex]!,
+          sourceViews !== undefined && poseVersions.get(sourceViews) !== sourceViews.framePoseVersion,
+        )
         || previousPositionSignature === undefined
         || previousRotationSignature === undefined
         || nextPositionStride === undefined
@@ -4740,7 +5785,15 @@ class WebGlRootImpl implements WebGlRoot {
           rotationSignatureOffset,
           nextRotationStride,
         );
-      if (!changed) continue;
+      if (!changed) {
+        if (activeRangeStart >= 0) {
+          resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
+          resource.uploadRanges[changedRangeCount * 2 + 1] = transformIndex;
+          changedRangeCount += 1;
+          activeRangeStart = -1;
+        }
+        continue;
+      }
 
       const transform = rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM;
       const offset = transformIndex * 6;
@@ -4752,12 +5805,12 @@ class WebGlRootImpl implements WebGlRoot {
       resource.data[offset + 3] = rotation[0];
       resource.data[offset + 4] = rotation[1];
       resource.data[offset + 5] = rotation[2];
-      if (activeRange !== undefined && activeRange.end === transformIndex) {
-        activeRange.end = transformIndex + 1;
-      } else {
-        activeRange = { start: transformIndex, end: transformIndex + 1 };
-        changedRanges.push(activeRange);
-      }
+      if (activeRangeStart < 0) activeRangeStart = transformIndex;
+    }
+    if (activeRangeStart >= 0) {
+      resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
+      resource.uploadRanges[changedRangeCount * 2 + 1] = rootTransforms.length;
+      changedRangeCount += 1;
     }
 
     if (fullUpload) {
@@ -4767,11 +5820,13 @@ class WebGlRootImpl implements WebGlRoot {
       resource.dirty = false;
       resource.positionSignature = copyGltfInstanceSignature(resource.positionSignature, nextPositionSignature);
       resource.rotationSignature = copyGltfInstanceSignature(resource.rotationSignature, nextRotationSignature);
-    } else if (changedRanges.length > 0) {
+    } else if (changedRangeCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      for (const range of changedRanges) {
-        const startFloat = range.start * 6;
-        const rangeFloatCount = (range.end - range.start) * 6;
+      for (let rangeIndex = 0; rangeIndex < changedRangeCount; rangeIndex += 1) {
+        const start = resource.uploadRanges[rangeIndex * 2]!;
+        const end = resource.uploadRanges[rangeIndex * 2 + 1]!;
+        const startFloat = start * 6;
+        const rangeFloatCount = (end - start) * 6;
         gl.bufferSubData(
           gl.ARRAY_BUFFER,
           startFloat * Float32Array.BYTES_PER_ELEMENT,
@@ -4789,6 +5844,11 @@ class WebGlRootImpl implements WebGlRoot {
   #bindGltfInstanceVectorBuffer(
     resource: GltfInstanceVectorBufferResource,
     rootTransforms: readonly (Transform | undefined)[],
+    rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
+    rootLogicalIndices: readonly number[],
+    packedSources: readonly (GltfInstanceTransformViews | undefined)[],
+    packedLogicalIndices: Int32Array,
+    scaleVersions: ReadonlyMap<GltfInstanceTransformViews, number>,
     nextSignature: readonly number[],
     field: keyof Transform,
     previousInstanceCount: number,
@@ -4808,28 +5868,45 @@ class WebGlRootImpl implements WebGlRoot {
       || previousStride !== nextStride
       || previousSignature.length !== nextSignature.length
       || previousInstanceCount !== instanceCount;
-    const changedRanges: Array<{ readonly start: number; end: number }> = [];
-    let activeRange: { readonly start: number; end: number } | undefined;
+    let changedRangeCount = 0;
+    let activeRangeStart = -1;
 
     for (let transformIndex = 0; transformIndex < rootTransforms.length; transformIndex += 1) {
+      const sourceViews = rootInstanceViews[transformIndex];
+      const logicalIndex = rootLogicalIndices[transformIndex]!;
       const signatureOffset = transformIndex * (nextStride ?? 0);
       const changed = fullUpload
+        || isPackedInstanceSlotDirty(
+          sourceViews?.changes.activeScale,
+          logicalIndex,
+          packedSources[transformIndex] === sourceViews,
+          packedLogicalIndices[transformIndex]!,
+          sourceViews !== undefined && scaleVersions.get(sourceViews) !== sourceViews.frameScaleVersion,
+        )
         || previousSignature === undefined
         || nextStride === undefined
         || !sameGltfModelSignatureRange(previousSignature, nextSignature, signatureOffset, nextStride);
-      if (!changed) continue;
+      if (!changed) {
+        if (activeRangeStart >= 0) {
+          resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
+          resource.uploadRanges[changedRangeCount * 2 + 1] = transformIndex;
+          changedRangeCount += 1;
+          activeRangeStart = -1;
+        }
+        continue;
+      }
 
       const value = (rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM)[field];
       const offset = transformIndex * 3;
       resource.data[offset] = value[0];
       resource.data[offset + 1] = value[1];
       resource.data[offset + 2] = value[2];
-      if (activeRange !== undefined && activeRange.end === transformIndex) {
-        activeRange.end = transformIndex + 1;
-      } else {
-        activeRange = { start: transformIndex, end: transformIndex + 1 };
-        changedRanges.push(activeRange);
-      }
+      if (activeRangeStart < 0) activeRangeStart = transformIndex;
+    }
+    if (activeRangeStart >= 0) {
+      resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
+      resource.uploadRanges[changedRangeCount * 2 + 1] = rootTransforms.length;
+      changedRangeCount += 1;
     }
 
     if (fullUpload) {
@@ -4838,11 +5915,13 @@ class WebGlRootImpl implements WebGlRoot {
       this.#recordGltfInstanceRootScaleBufferUpload(floatCount);
       resource.dirty = false;
       resource.signature = copyGltfInstanceSignature(resource.signature, nextSignature);
-    } else if (changedRanges.length > 0) {
+    } else if (changedRangeCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      for (const range of changedRanges) {
-        const startFloat = range.start * 3;
-        const rangeFloatCount = (range.end - range.start) * 3;
+      for (let rangeIndex = 0; rangeIndex < changedRangeCount; rangeIndex += 1) {
+        const start = resource.uploadRanges[rangeIndex * 2]!;
+        const end = resource.uploadRanges[rangeIndex * 2 + 1]!;
+        const startFloat = start * 3;
+        const rangeFloatCount = (end - start) * 3;
         gl.bufferSubData(
           gl.ARRAY_BUFFER,
           startFloat * Float32Array.BYTES_PER_ELEMENT,
@@ -4876,6 +5955,7 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     const localBuffer = existing?.localBuffer ?? this.#createBuffer();
     const localData = new Float32Array(requiredLocalFloatCount);
+    const localUploadRanges = new Int32Array((requiredLocalFloatCount / 16) * 2);
     if (existing !== undefined) {
       localData.set(existing.localData.subarray(0, Math.min(existing.localData.length, localData.length)));
     }
@@ -4891,15 +5971,36 @@ class WebGlRootImpl implements WebGlRoot {
       requiredRootVectorFloatCount,
       existing?.rootScale,
     );
+    const packedLogicalIndices = new Int32Array(requiredRootVectorFloatCount / 3);
+    packedLogicalIndices.fill(-1);
+    if (existing !== undefined) {
+      packedLogicalIndices.set(
+        existing.packedLogicalIndices.subarray(0, Math.min(existing.packedLogicalIndices.length, packedLogicalIndices.length)),
+      );
+    }
 
+    if (existing === undefined && this.#nextGltfInstanceKey > MAX_RESOURCE_ID) {
+      throw new Error("Royal glTF instance resource ID space is exhausted");
+    }
     const resource: GltfInstanceBufferResource = {
+      instanceKey: existing?.instanceKey ?? this.#nextGltfInstanceKey++,
+      vertexInputBuffers: existing?.vertexInputBuffers ?? {
+        localModelBuffer: localBuffer,
+        rootPoseBuffer: rootPose.buffer,
+        rootScaleBuffer: rootScale.buffer,
+      },
       localBuffer,
       localCapacity: requiredLocalFloatCount,
       localData,
       localDirty: true,
+      localUploadRanges,
       instanceCount: 0,
+      packedLogicalIndices,
+      packedSources: existing?.packedSources.slice() ?? [],
+      poseVersions: existing?.poseVersions ?? new Map(),
       rootPose,
       rootScale,
+      scaleVersions: existing?.scaleVersions ?? new Map(),
     };
     this.#gltfInstanceBuffers.set(key, resource);
 
@@ -4917,6 +6018,12 @@ class WebGlRootImpl implements WebGlRoot {
   #releaseUnusedGltfInstanceBuffers(): void {
     for (const [key, resource] of this.#gltfInstanceBuffers) {
       if (this.#activeGltfInstanceBufferKeys.has(key)) continue;
+      releaseVertexInputInstance(
+        this.#resourceArena.vertexInputs,
+        this.#gl,
+        this.#contextGeneration,
+        resource.instanceKey,
+      );
       this.#deleteBuffer(resource.localBuffer);
       this.#deleteBuffer(resource.rootPose.buffer);
       this.#deleteBuffer(resource.rootScale.buffer);
@@ -4962,23 +6069,30 @@ class WebGlRootImpl implements WebGlRoot {
 
   #virtualTextureDrawDemandContext(
     geometry: CpuGeometry | undefined,
+    material: Material,
     modelSource: VirtualTextureDrawDemandModelSource,
     projection: Mat4,
     view: Mat4,
     viewportSize: ViewportSize,
   ): VirtualTextureDrawDemandContext | undefined {
     if (
-      geometry?.texCoords === undefined
+      geometry?.texCoords0 === undefined
       || geometry.mode !== "triangles"
       || this.#virtualTextureDrawDemandModelCount(modelSource) === 0
     ) {
       return undefined;
     }
+    const baseColorCoordinates = material.kind === "wireframe"
+      ? undefined
+      : (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
     return {
       modelSource,
       positions: geometry.positions,
       projection,
-      texCoords: geometry.texCoords,
+      texCoords: baseColorCoordinates?.set === 1
+          ? geometry.texCoords1 ?? geometry.texCoords0
+          : geometry.texCoords0,
+      ...(baseColorCoordinates === undefined ? {} : { textureCoordinates: baseColorCoordinates }),
       view,
       viewportSize,
     };
@@ -4994,9 +6108,10 @@ class WebGlRootImpl implements WebGlRoot {
     viewportSize: ViewportSize,
   ): VirtualTextureDrawDemandContext | undefined {
     if (material.baseColor.kind === "solid") return undefined;
-    if (geometry?.texCoords === undefined || geometry.mode !== "triangles" || localModels.length === 0) return undefined;
+    if (geometry?.texCoords0 === undefined || geometry.mode !== "triangles" || localModels.length === 0) return undefined;
     return this.#virtualTextureDrawDemandContext(
       geometry,
+      material,
       { kind: "composed", localModels, rootModels },
       projection,
       view,
@@ -5027,7 +6142,7 @@ class WebGlRootImpl implements WebGlRoot {
     demandContext: VirtualTextureDrawDemandContext | undefined,
   ): BaseColorTextureResidency {
     const ordinary: BaseColorTextureResidency = { kind: "ordinary", texture };
-    if (material.kind === "wireframe" || geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
+    if (material.kind === "wireframe" || geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
       return ordinary;
     }
 
@@ -5107,6 +6222,7 @@ class WebGlRootImpl implements WebGlRoot {
     texture: TextureAssetUploadRef,
     source: LoadedTextureSource,
   ): void {
+    if (!this.#options.generatedRasterVirtualTextures) return;
     if (svgVirtualTextureSourceForImage(source) !== undefined) return;
 
     const [width, height] = loadedTextureSourceSize(source);
@@ -5172,7 +6288,7 @@ class WebGlRootImpl implements WebGlRoot {
       this.#recordUnsupportedVirtualTexture(texture, "virtual textures require surface materials");
       return { kind: "none" };
     }
-    if (geometry.mode !== "triangles" || geometry.texCoordBuffer === undefined) {
+    if (geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
       this.#recordUnsupportedVirtualTexture(texture, "virtual textures require triangle geometry with UVs");
       return { kind: "none" };
     }
@@ -5216,12 +6332,12 @@ class WebGlRootImpl implements WebGlRoot {
     const state: VirtualTextureRuntimeState = {
       activeSource,
       ...(options.autoPlan === undefined ? {} : { autoPlan: options.autoPlan }),
-      diagnostics: [],
       diagnosticsEnabled,
       key,
       loadingPages: new Set(),
       pendingUploads: [],
       requestedPages: new Set(),
+      sourceGeneration: 1,
       stats: {
         generatedManifestUses: 0,
         generatedPageFailures: 0,
@@ -5263,20 +6379,31 @@ class WebGlRootImpl implements WebGlRoot {
   async #loadVirtualTextureManifest(state: VirtualTextureRuntimeState): Promise<void> {
     const source = state.activeSource;
     if (source.kind !== "sidecar") return;
+    const sourceGeneration = state.sourceGeneration;
     try {
       const response = await fetch(source.manifestUri);
-      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      if (
+        this.#disposed
+        || this.#virtualTextures.get(state.key) !== state
+        || state.sourceGeneration !== sourceGeneration
+      ) return;
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 
       const payload = await response.json() as unknown;
-      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      if (
+        this.#disposed
+        || this.#virtualTextures.get(state.key) !== state
+        || state.sourceGeneration !== sourceGeneration
+      ) return;
 
       const parsed = parseVirtualTextureManifest(payload);
       for (const diagnostic of parsed.diagnostics) {
         const message = `Virtual texture ${source.manifestUri}: ${diagnostic.message}`;
         if (state.diagnosticsEnabled) {
-          state.diagnostics.push(message);
-          this.#recordDiagnostic(message);
+          this.#recordDiagnostic(
+            message,
+            `virtual-texture-manifest:${source.manifestUri}:${diagnostic.severity}:${diagnostic.message}`,
+          );
         }
       }
       if (parsed.manifest === undefined) {
@@ -5294,8 +6421,10 @@ class WebGlRootImpl implements WebGlRoot {
         );
         return;
       }
-      const runtimeUnsupported = this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest);
-      if (runtimeUnsupported !== undefined) {
+      const runtimeUnsupported = this.#contextLifecycle === "active"
+        ? this.#unsupportedVirtualTextureRuntimeReason(parsed.manifest)
+        : undefined;
+      if (this.#contextLifecycle === "active" && runtimeUnsupported !== undefined) {
         if (this.#fallbackVirtualTextureSource(state, "runtime-unsupported")) return;
         this.#markVirtualTextureUnsupported(state, runtimeUnsupported);
         return;
@@ -5303,12 +6432,18 @@ class WebGlRootImpl implements WebGlRoot {
 
       state.manifest = parsed.manifest;
       state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
-      this.#allocateVirtualTextureResources(state, parsed.manifest);
       state.status = "ready";
-      this.#demandVirtualTexturePages(state);
+      if (this.#contextLifecycle === "active") {
+        this.#allocateVirtualTextureResources(state, parsed.manifest);
+        this.#demandVirtualTexturePages(state);
+      }
       this.invalidate();
     } catch (error) {
-      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      if (
+        this.#disposed
+        || this.#virtualTextures.get(state.key) !== state
+        || state.sourceGeneration !== sourceGeneration
+      ) return;
       if (this.#fallbackVirtualTextureSource(state, "fetch-failed")) return;
       this.#failVirtualTexture(state, error instanceof Error ? error.message : String(error));
     }
@@ -5326,6 +6461,12 @@ class WebGlRootImpl implements WebGlRoot {
     ) return false;
 
     state.activeSource = plan.fallback;
+    state.sourceGeneration += 1;
+    state.loadingPages.clear();
+    state.requestedPages.clear();
+    state.uploadedPages.clear();
+    for (const upload of state.pendingUploads) closeTexImageSource(upload.image);
+    state.pendingUploads.length = 0;
     state.status = "loading";
     delete state.manifest;
     delete state.pageUrisByKey;
@@ -5344,17 +6485,21 @@ class WebGlRootImpl implements WebGlRoot {
       manifest.height,
       manifest.pageSize,
     );
-    const unsupported = this.#unsupportedVirtualTextureRuntimeReason(manifest);
     state.manifest = manifest;
     state.pageUrisByKey = new Map();
+    const unsupported = this.#contextLifecycle === "active"
+      ? this.#unsupportedVirtualTextureRuntimeReason(manifest)
+      : undefined;
     if (unsupported !== undefined) {
       this.#markVirtualTextureUnsupported(state, unsupported);
       return;
     }
 
-    this.#allocateVirtualTextureResources(state, manifest);
     state.status = "ready";
-    this.#demandVirtualTexturePages(state);
+    if (this.#contextLifecycle === "active") {
+      this.#allocateVirtualTextureResources(state, manifest);
+      this.#demandVirtualTexturePages(state);
+    }
     this.invalidate();
   }
 
@@ -5403,6 +6548,7 @@ class WebGlRootImpl implements WebGlRoot {
     state: VirtualTextureRuntimeState,
     manifest: VirtualTextureManifestModel,
   ): void {
+    if (this.#contextLifecycle !== "active") return;
     const gl = this.#gl;
     const physicalSlots = this.#virtualTexturePhysicalSlots(manifest);
     const atlasGridColumns = Math.ceil(Math.sqrt(physicalSlots));
@@ -5412,6 +6558,7 @@ class WebGlRootImpl implements WebGlRoot {
     const atlasTexture = this.#createTexture();
     const pageTableTexture = this.#createTexture();
 
+    prepareTextureUpload(gl, false);
     gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -5683,8 +6830,15 @@ class WebGlRootImpl implements WebGlRoot {
         maxScreenY = Math.max(maxScreenY, screenY);
 
         const texCoordOffset = vertexIndex * 2;
-        const u = context.texCoords[texCoordOffset]!;
-        const v = context.texCoords[texCoordOffset + 1]!;
+        const sourceU = context.texCoords[texCoordOffset]!;
+        const sourceV = context.texCoords[texCoordOffset + 1]!;
+        const coordinates = context.textureCoordinates;
+        const u = coordinates === undefined
+          ? sourceU
+          : coordinates.row0[0] * sourceU + coordinates.row0[1] * sourceV + coordinates.row0[2];
+        const v = coordinates === undefined
+          ? sourceV
+          : coordinates.row1[0] * sourceU + coordinates.row1[1] * sourceV + coordinates.row1[2];
         minU = Math.min(minU, u);
         maxU = Math.max(maxU, u);
         minV = Math.min(minV, v);
@@ -5802,27 +6956,33 @@ class WebGlRootImpl implements WebGlRoot {
 
     state.requestedPages.add(pageKey);
     state.loadingPages.add(pageKey);
+    const sourceGeneration = state.sourceGeneration;
     this.#virtualTextureRequestsThisFrame += 1;
     pageImage.then((image) => {
       if (
         this.#disposed
         || this.#virtualTextures.get(state.key) !== state
+        || state.sourceGeneration !== sourceGeneration
         || state.status !== "ready"
       ) {
+        closeTexImageSource(image);
         return;
       }
       state.loadingPages.delete(pageKey);
-      state.pendingUploads.push({ image, page, pageKey });
+      state.pendingUploads.push({ image, page, pageKey, sourceGeneration });
       this.invalidate();
     }, (error: unknown) => {
-      if (this.#disposed || this.#virtualTextures.get(state.key) !== state) return;
+      if (
+        this.#disposed
+        || this.#virtualTextures.get(state.key) !== state
+        || state.sourceGeneration !== sourceGeneration
+      ) return;
       state.loadingPages.delete(pageKey);
       const message = `Virtual texture page load failed for ${state.activeSource.manifestUri} ${pageKey}: ${
         error instanceof Error ? error.message : String(error)
       }`;
       if (state.diagnosticsEnabled) {
-        state.diagnostics.push(message);
-        this.#recordDiagnostic(message);
+        this.#recordDiagnostic(message, `virtual-texture-page:${state.activeSource.manifestUri}`);
       }
     });
 
@@ -5894,9 +7054,11 @@ class WebGlRootImpl implements WebGlRoot {
         if (
           this.#disposed
           || this.#virtualTextures.get(state.key) !== state
+          || upload.sourceGeneration !== state.sourceGeneration
           || state.status !== "ready"
           || state.uploadedPages.has(upload.pageKey)
         ) {
+          closeTexImageSource(upload.image);
           continue;
         }
 
@@ -5943,8 +7105,8 @@ class WebGlRootImpl implements WebGlRoot {
     const slotX = assignment.slot % resources.atlasGridColumns;
     const slotY = Math.floor(assignment.slot / resources.atlasGridColumns);
     const gl = this.#gl;
+    prepareTextureUpload(gl, false);
     gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,
@@ -5970,6 +7132,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     const gl = this.#gl;
+    prepareTextureUpload(gl, false);
     gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
     for (const update of pageTable.takeDirtyPageTableUpdates()) {
       const region = this.#virtualTexturePageTableUpdateRegion(resources, update);
@@ -6116,8 +7279,7 @@ class WebGlRootImpl implements WebGlRoot {
     state.stats.manifestFailures += 1;
     const message = `Virtual texture ${state.activeSource.manifestUri} failed: ${reason}`;
     if (state.diagnosticsEnabled) {
-      state.diagnostics.push(message);
-      this.#recordDiagnostic(message);
+      this.#recordDiagnostic(message, `virtual-texture-failed:${state.activeSource.manifestUri}`);
     }
   }
 
@@ -6126,8 +7288,7 @@ class WebGlRootImpl implements WebGlRoot {
     const message = `Virtual texture ${state.activeSource.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
     if (state.diagnosticsEnabled) {
       state.stats.unsupportedDraws += 1;
-      state.diagnostics.push(message);
-      this.#recordDiagnostic(message);
+      this.#recordDiagnostic(message, `virtual-texture-unsupported:${state.activeSource.manifestUri}`);
     }
     this.invalidate();
   }
@@ -6221,21 +7382,6 @@ class WebGlRootImpl implements WebGlRoot {
     values.set(name, [value]);
   }
 
-  #attribLocation(program: WebGLProgram, name: string): number {
-    let locations = this.#programAttributeLocations.get(program);
-    if (locations === undefined) {
-      locations = new Map();
-      this.#programAttributeLocations.set(program, locations);
-    }
-
-    const cached = locations.get(name);
-    if (cached !== undefined) return cached;
-
-    const location = this.#gl.getAttribLocation(program, name);
-    locations.set(name, location);
-    return location;
-  }
-
   #uniformLocation(program: WebGLProgram, name: string): WebGLUniformLocation | null {
     let locations = this.#programUniformLocations.get(program);
     if (locations === undefined) {
@@ -6255,14 +7401,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#activeProgram = program;
   }
 
-  #vertexAttrib2f(location: number, x: number, y: number): void {
-    const cached = this.#vertexAttribDefaults.get(location);
-    if (cached?.size === 2 && Object.is(cached.x, x) && Object.is(cached.y, y)) return;
-
-    this.#gl.vertexAttrib2f(location, x, y);
-    this.#vertexAttribDefaults.set(location, { size: 2, x, y });
-  }
-
   #vertexAttrib4f(location: number, x: number, y: number, z: number, w: number): void {
     const cached = this.#vertexAttribDefaults.get(location);
     if (
@@ -6279,17 +7417,118 @@ class WebGlRootImpl implements WebGlRoot {
     this.#vertexAttribDefaults.set(location, { size: 4, w, x, y, z });
   }
 
-  #program(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
-    const key = features === undefined ? kind : `${kind}:${surfaceShaderFeatureKey(features)}`;
-    const cached = this.#programs.get(key);
-    if (cached !== undefined) return cached;
-
-    const program = this.#compileProgram(kind, features);
-    this.#programs.set(key, program);
-    return program;
+  #program(
+    kind: ProgramKind,
+    features?: SurfaceShaderFeatures,
+    clusteredLights = false,
+  ): ProgramResource | undefined {
+    const key = features === undefined
+      ? kind
+      : `${kind}:${surfaceShaderFeatureKey(features)}:${clusteredLights ? "clustered" : "global"}`;
+    let request = this.#programs.get(key);
+    if (request === undefined) {
+      request = { clusteredLights, features, key, kind };
+      this.#programs.set(key, request);
+      this.#pendingPrograms.push(request);
+    }
+    this.#startPendingPrograms();
+    const resource = request.resource;
+    if (resource === undefined) {
+      this.invalidate();
+      return undefined;
+    }
+    try {
+      return this.#finishProgram(resource);
+    } catch (error) {
+      if (this.#programs.get(key) === request) this.#programs.delete(key);
+      this.#deleteProgramResource(resource);
+      throw error;
+    }
   }
 
-  #compileProgram(kind: ProgramKind, features?: SurfaceShaderFeatures): ProgramResource {
+  #startPendingPrograms(): void {
+    if (this.#programStartFrame !== this.#frame) {
+      this.#programStartFrame = this.#frame;
+      this.#programStartsThisFrame = 0;
+    }
+
+    while (
+      this.#pendingProgramHead < this.#pendingPrograms.length
+      && this.#programStartsThisFrame < PROGRAM_MAX_STARTS_PER_FRAME
+    ) {
+      const request = this.#pendingPrograms[this.#pendingProgramHead++]!;
+      if (this.#programs.get(request.key) !== request || request.resource !== undefined) continue;
+
+      this.#programStartsThisFrame += 1;
+      try {
+        request.resource = this.#compileProgram(request.kind, request.features, request.clusteredLights);
+      } catch (error) {
+        if (this.#programs.get(request.key) === request) this.#programs.delete(request.key);
+        throw error;
+      }
+    }
+
+    if (this.#pendingProgramHead < this.#pendingPrograms.length) {
+      this.invalidate();
+    } else {
+      this.#pendingPrograms.length = 0;
+      this.#pendingProgramHead = 0;
+    }
+  }
+
+  #finishProgram(resource: ProgramResource): ProgramResource | undefined {
+    if (resource.linked) return resource;
+    const parallel = this.#parallelShaderCompile;
+    if (
+      parallel !== undefined
+      && !this.#gl.getProgramParameter(resource.program, parallel.COMPLETION_STATUS_KHR)
+    ) {
+      this.invalidate();
+      return undefined;
+    }
+    if (parallel !== undefined) {
+      if (this.#programLinkFrame !== this.#frame) {
+        this.#programLinkFrame = this.#frame;
+        this.#programLinksThisFrame = 0;
+      }
+      if (this.#programLinksThisFrame >= PROGRAM_MAX_LINKS_PER_FRAME) {
+        this.invalidate();
+        return undefined;
+      }
+      this.#programLinksThisFrame += 1;
+    }
+
+    const gl = this.#gl;
+    if (!gl.getProgramParameter(resource.program, gl.LINK_STATUS)) {
+      const logs = [
+        gl.getProgramInfoLog(resource.program),
+        gl.getShaderInfoLog(resource.vertexShader),
+        gl.getShaderInfoLog(resource.fragmentShader),
+      ].filter((log): log is string => log !== null && log.trim() !== "");
+      throw new Error(
+        `WebGL shader compile or program link error: ${logs.join("\n") || "unknown driver error"}`,
+      );
+    }
+    resource.linked = true;
+    this.#releaseProgramShaders(resource);
+    return resource;
+  }
+
+  #releaseProgramShaders(resource: ProgramResource): void {
+    const gl = this.#gl;
+    for (const shader of [resource.vertexShader, resource.fragmentShader]) {
+      if (!this.#ownedShaders.has(shader)) continue;
+      if (this.#ownedPrograms.has(resource.program)) gl.detachShader?.(resource.program, shader);
+      this.#deleteShader(shader);
+    }
+  }
+
+  #deleteProgramResource(resource: ProgramResource): void {
+    this.#releaseProgramShaders(resource);
+    this.#deleteProgram(resource.program);
+  }
+
+  #compileProgram(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramResource {
     const gl = this.#gl;
     const program = gl.createProgram();
     if (program === null) throw new Error("WebGL program creation failed");
@@ -6300,18 +7539,11 @@ class WebGlRootImpl implements WebGlRoot {
 
     try {
       vertexShader = this.#compileShader(gl.VERTEX_SHADER, vertexShaderSource(kind));
-      fragmentShader = this.#compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource(kind, features));
+      fragmentShader = this.#compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource(kind, features, clusteredLights));
       gl.attachShader(program, vertexShader);
       gl.attachShader(program, fragmentShader);
-      gl.bindAttribLocation?.(program, 0, "a_position");
-      gl.bindAttribLocation?.(program, 1, "a_normal");
-      gl.bindAttribLocation?.(program, 2, "a_uv");
       gl.linkProgram(program);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        throw new Error(`WebGL program link failed: ${gl.getProgramInfoLog(program) ?? "unknown link error"}`);
-      }
-
-      return { fragmentShader, program, vertexShader };
+      return { fragmentShader, linked: false, program, vertexShader };
     } catch (error) {
       if (vertexShader !== undefined) this.#deleteShader(vertexShader);
       if (fragmentShader !== undefined) this.#deleteShader(fragmentShader);
@@ -6327,357 +7559,39 @@ class WebGlRootImpl implements WebGlRoot {
     this.#ownedShaders.add(shader);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const info = gl.getShaderInfoLog(shader) ?? "unknown compile error";
-      this.#deleteShader(shader);
-      throw new Error(`WebGL shader compile failed: ${info}`);
-    }
-
     return shader;
   }
 
 
 
+  #meshGeometryRow(
+    geometry: MeshNode["geometry"],
+    material: Material,
+  ): { readonly id: number; readonly recipe: CpuGeometry } {
+    const declaration = directGeometryDeclaration(
+      geometry,
+      material.kind === "wireframe" ? "wireframe" : "surface",
+    );
+    const key = directGeometryDeclarationKey(declaration);
+    const retained = this.#retainedGeometryRecipes.get(key);
+    if (retained === undefined) {
+      throw new Error(`Royal direct geometry ${key} was not semantically retained`);
+    }
+    return retained;
+  }
+
   #meshGeometry(geometry: MeshNode["geometry"], material: Material): CpuGeometry {
-    if (material.kind === "wireframe") return this.#wireGeometry(geometry);
-
-    switch (geometry.kind) {
-      case "box":
-        return this.#boxGeometry(geometry as BoxGeometry);
-      case "plane":
-        return this.#planeGeometry(geometry as PlaneGeometry);
-      default:
-        throw new Error(`Unsupported geometry kind "${geometry.kind}"`);
-    }
+    return this.#meshGeometryRow(geometry, material).recipe;
   }
 
-  #wireGeometry(geometry: MeshNode["geometry"]): CpuGeometry {
-    if (geometry.kind === "plane") {
-      const plane = geometry as PlaneGeometry;
-      const [width, height] = plane.size;
-      const x = width / 2;
-      const y = height / 2;
-      return {
-        indices: new Uint16Array([0, 1, 1, 2, 2, 3, 3, 0]),
-        key: `wire:plane:${width},${height}`,
-        mode: "lines",
-        positions: new Float32Array([
-          -x, -y, 0,
-          x, -y, 0,
-          x, y, 0,
-          -x, y, 0,
-        ]),
-        texCoords: new Float32Array([
-          0, 0,
-          1, 0,
-          1, 1,
-          0, 1,
-        ]),
-      };
-    }
-    if (geometry.kind === "box") {
-      const box = geometry as BoxGeometry;
-      const [width, height, depth] = box.size;
-      const x = width / 2;
-      const y = height / 2;
-      const z = depth / 2;
-      return {
-        indices: new Uint16Array([
-          0, 1, 1, 2, 2, 3, 3, 0,
-          4, 5, 5, 6, 6, 7, 7, 4,
-          0, 4, 1, 5, 2, 6, 3, 7,
-        ]),
-        key: `wire:box:${width},${height},${depth}`,
-        mode: "lines",
-        positions: new Float32Array([
-          -x, -y, z,
-          x, -y, z,
-          x, y, z,
-          -x, y, z,
-          -x, -y, -z,
-          x, -y, -z,
-          x, y, -z,
-          -x, y, -z,
-        ]),
-      };
-    }
 
-    throw new Error(`Unsupported geometry kind "${geometry.kind}"`);
-  }
-
-  #planeGeometry(geometry: PlaneGeometry): CpuGeometry {
-    const [width, height] = geometry.size;
-    const x = width / 2;
-    const y = height / 2;
-    return {
-        indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
-        key: `plane:${width},${height}`,
-        mode: "triangles",
-        normals: new Float32Array([
-          0, 0, 1,
-          0, 0, 1,
-          0, 0, 1,
-          0, 0, 1,
-        ]),
-        positions: new Float32Array([
-          -x, -y, 0,
-          x, -y, 0,
-          x, y, 0,
-          -x, y, 0,
-        ]),
-        texCoords: new Float32Array([
-          0, 0,
-          1, 0,
-          1, 1,
-          0, 1,
-        ]),
-      };
-  }
-
-  #boxGeometry(geometry: BoxGeometry): CpuGeometry {
-    const [width, height, depth] = geometry.size;
-    const x = width / 2;
-    const y = height / 2;
-    const z = depth / 2;
-    return {
-      indices: new Uint16Array([
-        0, 1, 2, 0, 2, 3,
-        4, 5, 6, 4, 6, 7,
-        8, 9, 10, 8, 10, 11,
-        12, 13, 14, 12, 14, 15,
-        16, 17, 18, 16, 18, 19,
-        20, 21, 22, 20, 22, 23,
-      ]),
-      key: `box:${width},${height},${depth}`,
-      mode: "triangles",
-      normals: new Float32Array([
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, 1,
-        0, 0, -1,
-        0, 0, -1,
-        0, 0, -1,
-        0, 0, -1,
-        -1, 0, 0,
-        -1, 0, 0,
-        -1, 0, 0,
-        -1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        1, 0, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, -1, 0,
-        0, -1, 0,
-        0, -1, 0,
-        0, -1, 0,
-      ]),
-      positions: new Float32Array([
-        -x, -y, z,
-        x, -y, z,
-        x, y, z,
-        -x, y, z,
-        x, -y, -z,
-        -x, -y, -z,
-        -x, y, -z,
-        x, y, -z,
-        -x, -y, -z,
-        -x, -y, z,
-        -x, y, z,
-        -x, y, -z,
-        x, -y, z,
-        x, -y, -z,
-        x, y, -z,
-        x, y, z,
-        -x, y, z,
-        x, y, z,
-        x, y, -z,
-        -x, y, -z,
-        -x, -y, -z,
-        x, -y, -z,
-        x, -y, z,
-        -x, -y, z,
-      ]),
-      texCoords: new Float32Array([
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-        0, 0,
-        1, 0,
-        1, 1,
-        0, 1,
-      ]),
-    };
-  }
-
-  #isVisible(
-    positions: Float32Array,
-    model: Mat4,
-    projection: Mat4,
-    view: Mat4,
-  ): boolean {
-    if (positions.length === 0) return false;
-
-    const mvp = multiplyMat4(projection, multiplyMat4(view, model));
-    const outside = [true, true, true, true, true, true];
-    for (let index = 0; index < positions.length; index += 3) {
-      const x = positions[index]!;
-      const y = positions[index + 1]!;
-      const z = positions[index + 2]!;
-      const clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
-      const clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
-      const clipZ = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
-      const clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
-      outside[0] &&= clipX < -clipW;
-      outside[1] &&= clipX > clipW;
-      outside[2] &&= clipY < -clipW;
-      outside[3] &&= clipY > clipW;
-      outside[4] &&= clipZ < -clipW;
-      outside[5] &&= clipZ > clipW;
-    }
-
-    return !outside.some(Boolean);
-  }
-
-  #geometryResource(cpu: CpuGeometry): GeometryResource {
-    const cached = this.#geometry.get(cpu.key);
-    if (cached !== undefined) return cached;
-
-    const gl = this.#gl;
-    gl.bindVertexArray(null);
-    const borrowedVertexResource = cpu.vertexBufferKey === undefined
-      ? undefined
-      : this.#geometry.get(cpu.vertexBufferKey);
-    const arrayBuffer = borrowedVertexResource?.arrayBuffer ?? this.#createBuffer();
-    if (borrowedVertexResource === undefined) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.positions, gl.STATIC_DRAW);
-    }
-
-    let normalBuffer: WebGLBuffer | undefined;
-    if (borrowedVertexResource !== undefined) {
-      normalBuffer = borrowedVertexResource.normalBuffer;
-    } else if (cpu.normals !== undefined) {
-      normalBuffer = this.#createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.normals, gl.STATIC_DRAW);
-    }
-
-    let texCoordBuffer: WebGLBuffer | undefined;
-    if (borrowedVertexResource !== undefined) {
-      texCoordBuffer = borrowedVertexResource.texCoordBuffer;
-    } else if (cpu.texCoords !== undefined) {
-      texCoordBuffer = this.#createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.texCoords, gl.STATIC_DRAW);
-    }
-
-    let emissiveTexCoordBuffer: WebGLBuffer | undefined;
-    if (borrowedVertexResource !== undefined) {
-      emissiveTexCoordBuffer = borrowedVertexResource.emissiveTexCoordBuffer;
-    } else if (cpu.emissiveTexCoords !== undefined) {
-      emissiveTexCoordBuffer = this.#createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, emissiveTexCoordBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.emissiveTexCoords, gl.STATIC_DRAW);
-    } else {
-      emissiveTexCoordBuffer = texCoordBuffer;
-    }
-
-    let tangentBuffer: WebGLBuffer | undefined;
-    if (borrowedVertexResource !== undefined) {
-      tangentBuffer = borrowedVertexResource.tangentBuffer;
-    } else if (cpu.tangents !== undefined) {
-      tangentBuffer = this.#createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, tangentBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.tangents, gl.STATIC_DRAW);
-    }
-
-    let colorBuffer: WebGLBuffer | undefined;
-    if (borrowedVertexResource !== undefined) {
-      colorBuffer = borrowedVertexResource.colorBuffer;
-    } else if (cpu.colors !== undefined) {
-      colorBuffer = this.#createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, cpu.colors, gl.STATIC_DRAW);
-    }
-
-    let indexBuffer: WebGLBuffer | undefined;
-    let indexType: number | undefined;
-    if (cpu.indices !== undefined) {
-      indexBuffer = this.#createBuffer();
-      indexType = cpu.indices instanceof Uint32Array
-        ? gl.UNSIGNED_INT
-        : cpu.indices instanceof Uint8Array ? gl.UNSIGNED_BYTE : gl.UNSIGNED_SHORT;
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cpu.indices, gl.STATIC_DRAW);
-    }
-
-    const resource: GeometryResource = {
-      arrayBuffer,
-      ...(borrowedVertexResource === undefined ? {} : { borrowedVertexBufferKey: borrowedVertexResource.key }),
-      ...(colorBuffer === undefined ? {} : { colorBuffer }),
-      drawCount: cpu.indices?.length ?? cpu.positions.length / 3,
-      ...(emissiveTexCoordBuffer === undefined ? {} : { emissiveTexCoordBuffer }),
-      ...(indexBuffer === undefined ? {} : { indexBuffer }),
-      ...(indexType === undefined ? {} : { indexType }),
-      key: cpu.key,
-      mode: cpu.mode,
-      ...(normalBuffer === undefined ? {} : { normalBuffer }),
-      ...(tangentBuffer === undefined ? {} : { tangentBuffer }),
-      ...(texCoordBuffer === undefined ? {} : { texCoordBuffer }),
-      vertexArrays: new Map(),
-    };
-    this.#geometry.set(cpu.key, resource);
-    return resource;
-  }
-
-  #releaseUnusedGeometry(used: Set<string>): void {
-    for (const [key, resource] of this.#geometry) {
-      if (used.has(key)) continue;
-      this.#deleteGeometryVertexArrays(resource);
-      if (resource.borrowedVertexBufferKey === undefined) {
-        this.#deleteBuffer(resource.arrayBuffer);
-        if (resource.colorBuffer !== undefined) this.#deleteBuffer(resource.colorBuffer);
-        if (
-          resource.emissiveTexCoordBuffer !== undefined
-          && resource.emissiveTexCoordBuffer !== resource.texCoordBuffer
-        ) this.#deleteBuffer(resource.emissiveTexCoordBuffer);
-        if (resource.normalBuffer !== undefined) this.#deleteBuffer(resource.normalBuffer);
-        if (resource.tangentBuffer !== undefined) this.#deleteBuffer(resource.tangentBuffer);
-        if (resource.texCoordBuffer !== undefined) this.#deleteBuffer(resource.texCoordBuffer);
-      }
-      if (resource.indexBuffer !== undefined) this.#deleteBuffer(resource.indexBuffer);
-      this.#geometry.delete(key);
-    }
-  }
-
-  #deleteGeometryVertexArrays(resource: GeometryResource): void {
-    for (const vertexArrays of resource.vertexArrays.values()) {
-      if (vertexArrays.base !== undefined) this.#deleteVertexArray(vertexArrays.base);
-      for (const vertexArray of vertexArrays.instanced.values()) this.#deleteVertexArray(vertexArray);
-    }
-    resource.vertexArrays.clear();
+  #geometryResource(geometryId: number): GeometryResource {
+    return vertexInputGeometry(
+      this.#resourceArena.vertexInputs,
+      this.#gl,
+      this.#contextGeneration,
+      geometryId,
+    );
   }
 
   #queueTextureUpload(
@@ -6685,7 +7599,14 @@ class WebGlRootImpl implements WebGlRoot {
     source: LoadedTextureSource,
     texture: TextureAssetUploadRef,
   ): void {
-    if (this.#disposed || resource.uploaded || !this.#ownedTextures.has(resource.texture)) return;
+    this.#retainPreparedTextureUpload(resource.key, { source, texture });
+    if (
+      this.#disposed
+      || this.#contextLifecycle !== "active"
+      || resource.generation !== this.#contextGeneration
+      || resource.uploaded
+      || !this.#ownedTextures.has(resource.texture)
+    ) return;
     if (resource.pendingUpload !== undefined) return;
 
     resource.pendingUpload = { source, texture };
@@ -6710,16 +7631,20 @@ class WebGlRootImpl implements WebGlRoot {
       if (pending === undefined) continue;
       if (
         this.#disposed
+        || this.#contextLifecycle !== "active"
+        || resource.generation !== this.#contextGeneration
         || this.#textures.get(resource.key) !== resource
         || resource.uploaded
         || !this.#ownedTextures.has(resource.texture)
       ) {
         delete resource.pendingUpload;
+        if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
         continue;
       }
 
       this.#uploadTexture(resource, pending.source, pending.texture);
       delete resource.pendingUpload;
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
       resource.uploaded = true;
       this.#textureUploadsThisFrame += 1;
     }
@@ -6739,32 +7664,47 @@ class WebGlRootImpl implements WebGlRoot {
     if (cached !== undefined) return cached;
 
     const glTexture = this.#createTexture();
+    const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
     const state: TextureLoadState = {
+      generation: this.#contextGeneration,
       key,
-      loading: true,
+      loading: prepared === undefined,
       texture: glTexture,
       uploaded: false,
     };
     this.#textures.set(key, state);
 
-    const imageSource = isSvgUri(texture.uri)
-      ? loadSvgTextureFromUri(texture.uri)
-        .then((loadedImage) => loadedImage.image)
-      : loadImage(texture.uri);
+    if (prepared !== undefined) {
+      this.#queueTextureUpload(state, prepared.source, prepared.texture);
+      return state;
+    }
+    if (texture.preparedOnly === true) return state;
 
-    imageSource.then((image) => {
-      if (this.#disposed) return;
-      if (state.uploaded) return;
+    const subscription = this.#ordinaryTextureSources.acquire(texture, (result) => {
+      if (result.kind === "error") {
+        if (this.#disposed || state.uploaded) return;
+        state.loading = false;
+        state.error = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
+        this.#recordDiagnostic(state.error, `texture-image:${key}`);
+        return;
+      }
+      const image = result.source;
+      if (this.#disposed) {
+        return;
+      }
       state.loading = false;
       this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-      this.#queueTextureUpload(state, image, texture);
-    }, (error: unknown) => {
-      if (this.#disposed) return;
-      if (state.uploaded) return;
-      state.loading = false;
-      state.error = `Texture image load failed for ${texture.uri}: ${error instanceof Error ? error.message : String(error)}`;
-      this.#recordDiagnostic(state.error);
+      if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) {
+        return;
+      }
+      this.#retainPreparedTextureUpload(key, { source: image, texture });
+      if (this.#contextLifecycle !== "active") return;
+      const current = this.#textures.get(key);
+      if (current === state && state.generation === this.#contextGeneration) {
+        if (!state.uploaded) this.#queueTextureUpload(state, image, texture);
+      }
     });
+    this.#ordinaryTextureSourceSubscriptions.set(key, subscription);
 
     return state;
   }
@@ -6772,16 +7712,24 @@ class WebGlRootImpl implements WebGlRoot {
   #settleDecodedTextureSource(texture: TextureAssetUploadRef | undefined, image: LoadedTextureSource): void {
     if (texture === undefined) return;
     const key = textureCacheKey(texture);
+    if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) return;
     const cached = this.#textures.get(key);
+    if (cached?.pendingUpload !== undefined && cached.pendingUpload.source !== image) delete cached.pendingUpload;
+    // A prepared asset source supersedes equivalent direct URI work. Keeping
+    // that job alive would retain a redundant decode until scene removal.
+    this.#releaseOrdinaryTextureSourceSubscription(key);
+    this.#retainPreparedTextureUpload(key, { source: image, texture });
+    this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
+    if (this.#contextLifecycle !== "active") return;
     if (cached !== undefined && cached.uploaded) return;
 
     const resource: TextureResource | TextureLoadState = cached ?? {
+      generation: this.#contextGeneration,
       key,
       texture: this.#createTexture(),
       uploaded: false,
     };
     this.#textures.set(key, resource);
-    this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
     this.#queueTextureUpload(resource, image, texture);
     if ("loading" in resource) resource.loading = false;
   }
@@ -6790,7 +7738,7 @@ class WebGlRootImpl implements WebGlRoot {
     return {
       createTexture: () => this.#createTexture(),
       gl: this.#gl,
-      isDisposed: () => this.#disposed,
+      isDisposed: () => this.#disposed || this.#contextLifecycle !== "active",
       isTextureOwned: (texture) => this.#ownedTextures.has(texture),
       recordUnsupportedGltfImageBasedLight: (message) => this.#recordUnsupportedGltfImageBasedLight(message),
       textures: this.#iblSpecularTextures,
@@ -6798,7 +7746,14 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
-    return ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
+    const resource = ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
+    const prepared = resourceArenaIblSources(this.#resourceArena, specular.key);
+    if (prepared !== undefined) {
+      for (const [key, source] of prepared) resource.sources.set(key, source);
+      // The first ensure could not upload before the prepared sources were copied.
+      return ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
+    }
+    return resource;
   }
 
   #settleIblSpecularImage(
@@ -6806,16 +7761,23 @@ class WebGlRootImpl implements WebGlRoot {
     key: string,
     image: LoadedTextureSource,
   ): void {
-    settleIblSpecularImage(this.#iblSpecularTextureContext(), specular, key, image);
+    const previous = retainResourceArenaIblSource(this.#resourceArena, specular.key, key, image);
+    if (
+      previous !== undefined
+      && previous !== image
+      && resourceArenaSourceReferenceCount(this.#resourceArena, previous) === 0
+    ) this.#closeTextureSource(previous);
+    if (this.#contextLifecycle === "active") {
+      settleIblSpecularImage(this.#iblSpecularTextureContext(), specular, key, image);
+    }
   }
 
-  #iblBrdfLutTextureResource(textureUnit: number): WebGLTexture {
+  #iblBrdfLutTextureResource(): WebGLTexture {
     if (this.#iblBrdfLutTexture !== undefined) return this.#iblBrdfLutTexture;
 
     const texture = createIblBrdfLutTexture({
       createTexture: () => this.#createTexture(),
       gl: this.#gl,
-      textureUnit,
     });
     this.#iblBrdfLutTexture = texture;
 
@@ -6835,20 +7797,40 @@ class WebGlRootImpl implements WebGlRoot {
     return resource;
   }
 
-  #copyTransmissionScreenColorTexture(viewportSize: ViewportSize): ScreenColorTextureResource {
+  #copyTransmissionScreenColorTexture(
+    viewportSize: ViewportSize,
+    sourceX: number,
+    sourceY: number,
+  ): ScreenColorTextureResource {
     const [width, height] = viewportSize;
     const resource = this.#transmissionScreenColorTextureResource();
     const gl = this.#gl;
-    const needsAllocation = !resource.uploaded || resource.width !== width || resource.height !== height;
+    const needsAllocation = !resource.uploaded
+      || resource.width !== width
+      || resource.height !== height
+      || resource.hdr !== this.#drawingHdr;
 
     gl.activeTexture(gl.TEXTURE0 + 1);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
     if (needsAllocation) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        this.#drawingHdr ? gl.RGBA16F : gl.RGBA,
+        width,
+        height,
+        0,
+        gl.RGBA,
+        this.#drawingHdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE,
+        null,
+      );
     }
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, sourceX, sourceY, width, height);
     resource.width = width;
     resource.height = height;
+    resource.hdr = this.#drawingHdr;
+    resource.originX = sourceX;
+    resource.originY = sourceY;
     resource.uploaded = true;
 
     return resource;
@@ -6868,6 +7850,9 @@ class WebGlRootImpl implements WebGlRoot {
 
     this.#transmissionScreenColorTexture = {
       height: 0,
+      hdr: false,
+      originX: 0,
+      originY: 0,
       texture,
       uploaded: false,
       width: 0,
@@ -6883,9 +7868,8 @@ class WebGlRootImpl implements WebGlRoot {
     if (this.#disposed || !this.#ownedTextures.has(resource.texture)) return;
 
     const gl = this.#gl;
+    prepareTextureUpload(gl, texture.flipY ?? true);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, texture.flipY ?? true);
-    disableBrowserUnpackColorConversion(gl);
     const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
     if (isDecodedRgbaTexture(source)) {
       gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
@@ -6902,21 +7886,30 @@ class WebGlRootImpl implements WebGlRoot {
 
   #gltfState(node: AnyGltfNode): GltfState {
     const nodeState = this.#gltfStatesByNode.get(node);
-    if (nodeState !== undefined) return nodeState;
+    if (nodeState !== undefined && this.#gltf.get(nodeState.key) === nodeState) return nodeState;
 
-    const key = `gltf:${node.asset.uri}:${node.asset.version ?? ""}`;
+    const key = gltfRequestKey(node.asset.uri, node.asset.version);
     const cached = this.#gltf.get(key);
     if (cached !== undefined) {
       this.#gltfStatesByNode.set(node, cached);
       return cached;
     }
 
+    const state = this.#gltf.get(key);
+    if (state === undefined) throw new Error(`retained glTF request ${key} has no semantic arena state`);
+    this.#gltfStatesByNode.set(node, state);
+    return state;
+  }
+
+  #ensureGltfState(key: string): GltfState {
+    const existing = this.#gltf.get(key);
+    if (existing !== undefined) return existing;
     const state: GltfState = {
-      animations: [],
       hasMaterialLod: false,
       hasMaterialVariants: false,
       hasNodeLod: false,
       instanceKey: this.#gltfStateInstanceKey,
+      imageRows: new Map(),
       key,
       lights: [],
       load: {
@@ -6925,61 +7918,82 @@ class WebGlRootImpl implements WebGlRoot {
         imageRequests: 0,
         startedAt: nowMs(),
       },
-      nodes: [],
+      materials: [],
+      nodeCount: 0,
       primitives: [],
       status: "loading",
       variants: [],
     };
     this.#gltfStateInstanceKey += 1;
     this.#gltf.set(key, state);
-    this.#gltfStatesByNode.set(node, state);
-
-    void this.#loadGltf(node.src, state);
     return state;
   }
 
-  async #loadGltf(src: string, state: GltfState): Promise<void> {
+  async #prepareGltfAsset(
+    src: string,
+    assetKey: string,
+    signal: AbortSignal,
+  ): Promise<PreparedGltfAsset> {
+    return this.#gltfPreparationScheduler.run(
+      signal,
+      () => this.#prepareGltfAssetAdmitted(src, assetKey, signal),
+    );
+  }
+
+  async #prepareGltfAssetAdmitted(
+    src: string,
+    assetKey: string,
+    signal: AbortSignal,
+  ): Promise<PreparedGltfAsset> {
+    const load: GltfLoadMetrics = {
+      imageFailures: 0,
+      imageLoaded: 0,
+      imageRequests: 0,
+      startedAt: nowMs(),
+    };
     try {
-      const { binaryChunk, document } = await loadGltfDocument(src);
-      state.load.documentLoadedAt = nowMs();
-      if (this.#disposed) return;
+      const { binaryChunk, document } = await loadGltfDocument(src, signal);
+      load.documentLoadedAt = nowMs();
+      throwIfAborted(signal);
       assertSupportedRequiredGltfExtensions(src, document);
-      if (this.#disposed) return;
-      const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk);
-      state.load.buffersLoadedAt = nowMs();
-      if (this.#disposed) return;
-      const { buffers, document: decodedDocument } = await decodeGltfMeshoptBufferViews(document, loadedBuffers);
-      state.load.meshoptDecodedAt = nowMs();
-      if (this.#disposed) return;
-      const dracoPrimitives = decodeGltfDracoPrimitives(decodedDocument, buffers);
-      state.load.dracoDecodedAt = nowMs();
-      if (this.#disposed) return;
-      const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, state.key);
-      state.load.sceneReadAt = nowMs();
-      if (scene.imageBasedLight === undefined) {
-        delete state.imageBasedLight;
-      } else {
-        state.imageBasedLight = scene.imageBasedLight;
-      }
-      state.animations = readGltfAnimationClips(decodedDocument, buffers);
-      state.load.animationsReadAt = nowMs();
-      state.hasMaterialLod = scene.hasMaterialLod;
-      state.hasMaterialVariants = scene.hasMaterialVariants;
-      state.hasNodeLod = scene.hasNodeLod;
-      state.lights = scene.lights;
-      state.nodes = decodedDocument.nodes ?? [];
-      state.primitives = scene.primitives;
-      state.variants = scene.variants;
-      state.status = "ready";
-      state.load.readyAt = nowMs();
-      this.invalidate();
-      this.#loadGltfImages(src, decodedDocument, buffers, state);
+      throwIfAborted(signal);
+      const codecs = importGltfCodecs(document);
+      const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk, signal);
+      load.buffersLoadedAt = nowMs();
+      throwIfAborted(signal);
+      const { buffers, document: decodedDocument } = codecs.meshopt === undefined
+          ? { buffers: loadedBuffers, document }
+          : await (await codecs.meshopt).decodeGltfMeshoptBufferViews(document, loadedBuffers);
+        load.meshoptDecodedAt = nowMs();
+        throwIfAborted(signal);
+        const dracoPrimitives = codecs.draco === undefined
+          ? new Map<GltfMeshPrimitive, DecodedGltfDracoPrimitive>()
+          : (await codecs.draco).decodeGltfDracoPrimitives(decodedDocument, buffers);
+        load.dracoDecodedAt = nowMs();
+        throwIfAborted(signal);
+        const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, assetKey);
+        load.sceneReadAt = nowMs();
+        load.readyAt = nowMs();
+      return {
+          hasMaterialLod: scene.hasMaterialLod,
+          hasMaterialVariants: scene.hasMaterialVariants,
+          hasNodeLod: scene.hasNodeLod,
+          ...(scene.imageBasedLight === undefined ? {} : { imageBasedLight: scene.imageBasedLight }),
+          imagePreparation: {
+            ...(codecs.basisu === undefined ? {} : { basisuCodec: codecs.basisu }),
+            buffers,
+            document: decodedDocument,
+            src,
+          },
+          lights: scene.lights,
+          load,
+          nodeCount: decodedDocument.nodes?.length ?? 0,
+          primitives: scene.primitives,
+          variants: scene.variants,
+      };
     } catch (error) {
-      if (this.#disposed) return;
-      state.status = "error";
-      state.load.readyAt = nowMs();
-      state.error = `glTF load failed for ${src}: ${error instanceof Error ? error.message : String(error)}`;
-      this.#recordDiagnostic(state.error);
+      load.readyAt = nowMs();
+      throw error;
     }
   }
 
@@ -7048,17 +8062,7 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #recordUnsupportedGltfImageBasedLight(message: string): void {
-    if (this.#unsupportedGltfImageBasedLightDiagnostics.has(message)) return;
-
-    this.#unsupportedGltfImageBasedLightDiagnostics.add(message);
-    this.#recordDiagnostic(message);
-  }
-
-  #recordUnsupportedGltfAnimation(message: string): void {
-    if (this.#unsupportedGltfAnimationDiagnostics.has(message)) return;
-
-    this.#unsupportedGltfAnimationDiagnostics.add(message);
-    this.#recordDiagnostic(message);
+    this.#recordDiagnostic(message, `gltf-image-based-light:${message}`);
   }
 
   #appendGltfNodeTreePrimitives(
@@ -7155,54 +8159,41 @@ class WebGlRootImpl implements WebGlRoot {
       if (positions === undefined) continue;
       const mode = gltfPrimitiveMode(primitive.mode);
       if (mode === undefined) {
-        this.#recordDiagnostic(`glTF primitive ${nodeIndex}:${primitiveIndex} skipped: unsupported primitive mode ${primitive.mode ?? 4}`);
+        const unsupportedMode = primitive.mode ?? 4;
+        this.#recordDiagnostic(
+          `glTF primitive ${nodeIndex}:${primitiveIndex} skipped: unsupported primitive mode ${unsupportedMode}`,
+          `gltf-primitive-mode:${assetKey}:${unsupportedMode}`,
+        );
         continue;
       }
       const baseNormals = decodedAttributes?.get("NORMAL")
         ?? (normalAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, normalAccessor));
       const baseTangents = decodedAttributes?.get("TANGENT")
         ?? (tangentAccessor === undefined ? undefined : readGltfFloatAccessor(document, buffers, tangentAccessor));
-      const morphed = applyGltfMorphTargets(
-        document,
-        buffers,
-        primitive,
-        gltfMorphWeights(mesh, sceneNode),
-        {
-          ...(baseNormals === undefined ? {} : { normals: baseNormals }),
-          positions,
-          ...(baseTangents === undefined ? {} : { tangents: baseTangents }),
-        },
-      );
-      const colors = gltfVertexColors(document, buffers, primitive, morphed.positions, decodedAttributes);
+      const colors = gltfVertexColors(document, buffers, primitive, positions, decodedAttributes);
+      const texCoords0 = gltfPrimitiveTexCoords(document, buffers, primitive, 0, decodedAttributes);
+      const texCoords1 = gltfPrimitiveTexCoords(document, buffers, primitive, 1, decodedAttributes);
       const indices = dracoPrimitive?.indices
         ?? (indexAccessor === undefined ? undefined : readGltfIndices(document, buffers, indexAccessor));
-      const normals = morphed.normals ?? generateGltfPrimitiveNormals(morphed.positions, indices, mode);
+      const normals = baseNormals ?? generateGltfPrimitiveNormals(positions, indices, mode);
       const material = this.#readGltfMaterial(
         document,
-        buffers,
         src,
         assetKey,
         primitive.material,
-        primitive,
-        decodedAttributes,
       );
       const materialLod = this.#readGltfMaterialLod(
         document,
-        buffers,
         src,
         assetKey,
         primitive.material,
-        primitive,
-        decodedAttributes,
       );
       const materialVariants = this.#readGltfMaterialVariants(
         document,
-        buffers,
         src,
         assetKey,
         primitive,
         variantCount,
-        decodedAttributes,
       );
       const baseMaterial = loadedGltfPrimitiveBaseMaterial(material, materialLod);
       const key = `node:${nodeIndex}:primitive:${primitiveIndex}`;
@@ -7212,18 +8203,22 @@ class WebGlRootImpl implements WebGlRoot {
         ...(indices === undefined ? {} : { indices }),
         instanceTransforms,
         key,
-        localBounds: localModels.map((localModel) => worldBounds(morphed.positions, localModel)),
+        localBounds: localModels.map((localModel) => worldBounds(positions, localModel)),
         localModelDeterminants,
         localModels,
         material,
         ...(materialLod === undefined ? {} : { materialLod }),
         ...(materialVariants.length === 0 ? {} : { materialVariants }),
         mode,
+        meshNodeIndex: nodeIndex,
         nodePath,
         ...(nodeLod === undefined ? {} : { nodeLod }),
         ...(normals === undefined ? {} : { normals }),
-        positions: morphed.positions,
-        ...(morphed.tangents === undefined ? {} : { tangents: morphed.tangents }),
+        objectBounds: worldBounds(positions, identityMat4()),
+        positions,
+        ...(baseTangents === undefined ? {} : { tangents: baseTangents }),
+        ...(texCoords0 === undefined ? {} : { texCoords0 }),
+        ...(texCoords1 === undefined ? {} : { texCoords1 }),
       });
     }
 
@@ -7317,21 +8312,20 @@ class WebGlRootImpl implements WebGlRoot {
     if (attributes === undefined) return [identityMat4()];
 
     const supportedSemantics = new Set(["ROTATION", "SCALE", "TRANSLATION"]);
-    const attributeEntries = Object.entries(attributes)
-      .filter((entry): entry is [string, number] =>
-        typeof entry[1] === "number" && Number.isInteger(entry[1]) && entry[1] >= 0);
-    const counts = attributeEntries
-      .map(([, accessorIndex]) => gltfInstancingAttributeCount(document, accessorIndex))
-      .filter((count): count is number => count !== undefined && Number.isFinite(count));
-    if (counts.length === 0) {
-      this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing skipped: no instance attribute accessors`);
-      return [];
+    const rawAttributeEntries = Object.entries(attributes);
+    if (rawAttributeEntries.length === 0) throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing has no attributes`);
+    for (const [semantic, accessorIndex] of rawAttributeEntries) {
+      if (typeof accessorIndex !== "number" || !Number.isInteger(accessorIndex) || accessorIndex < 0
+        || document.accessors?.[accessorIndex] === undefined) {
+        throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ${semantic} references invalid accessor ${accessorIndex}`);
+      }
     }
-
-    const instanceCount = Math.min(...counts);
-    if (new Set(counts).size > 1) {
-      this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing has mismatched attribute counts; using ${instanceCount} instances`);
+    const attributeEntries = rawAttributeEntries as [string, number][];
+    const counts = attributeEntries.map(([, accessorIndex]) => gltfInstancingAttributeCount(document, accessorIndex)!);
+    if (new Set(counts).size !== 1) {
+      throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing attributes must have matching counts`);
     }
+    const instanceCount = counts[0]!;
 
     const unsupportedSemantics = attributeEntries
       .map(([semantic]) => semantic)
@@ -7339,6 +8333,24 @@ class WebGlRootImpl implements WebGlRoot {
     if (unsupportedSemantics.length > 0) {
       this.#recordDiagnostic(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ignored custom attributes: ${unsupportedSemantics.join(", ")}`);
     }
+
+    const validateTransformAccessor = (semantic: "ROTATION" | "SCALE" | "TRANSLATION"): void => {
+      const accessorIndex = attributes[semantic];
+      if (accessorIndex === undefined) return;
+      const accessor = document.accessors![accessorIndex]!;
+      const valid = semantic === "ROTATION"
+        ? accessor.type === "VEC4" && (
+          accessor.componentType === 5126
+          || ((accessor.componentType === 5120 || accessor.componentType === 5122) && accessor.normalized === true)
+        )
+        : accessor.type === "VEC3" && accessor.componentType === 5126 && accessor.normalized !== true;
+      if (!valid) {
+        throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ${semantic} has an invalid accessor format`);
+      }
+    };
+    validateTransformAccessor("TRANSLATION");
+    validateTransformAccessor("ROTATION");
+    validateTransformAccessor("SCALE");
 
     const translations = attributes.TRANSLATION === undefined
       ? undefined
@@ -7350,18 +8362,32 @@ class WebGlRootImpl implements WebGlRoot {
       ? undefined
       : readGltfFloatAccessor(document, buffers, attributes.SCALE);
 
+    for (const [semantic, values] of [["TRANSLATION", translations], ["ROTATION", rotations], ["SCALE", scales]] as const) {
+      if (values !== undefined && values.some((value) => !Number.isFinite(value))) {
+        throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ${semantic} contains non-finite values`);
+      }
+    }
+    if (rotations !== undefined) {
+      for (let index = 0; index < instanceCount; index += 1) {
+        const offset = index * 4;
+        const lengthSquared = rotations[offset]! ** 2 + rotations[offset + 1]! ** 2
+          + rotations[offset + 2]! ** 2 + rotations[offset + 3]! ** 2;
+        if (!(lengthSquared > 1e-12)) {
+          throw new Error(`glTF node ${nodeIndex} EXT_mesh_gpu_instancing ROTATION ${index} is a zero quaternion`);
+        }
+      }
+    }
+
     return Array.from({ length: instanceCount }, (_, index) =>
       gltfInstanceTransformMat4(translations, rotations, scales, index));
   }
 
   #readGltfMaterialVariants(
     document: GltfDocument,
-    buffers: readonly ArrayBuffer[],
     src: string,
     assetKey: string,
     primitive: GltfMeshPrimitive,
     variantCount: number,
-    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): readonly LoadedGltfMaterialVariant[] {
     return (primitive.extensions?.KHR_materials_variants?.mappings ?? [])
       .map((mapping): LoadedGltfMaterialVariant | undefined => {
@@ -7380,21 +8406,15 @@ class WebGlRootImpl implements WebGlRoot {
 
         const material = this.#readGltfMaterial(
           document,
-          buffers,
           src,
           assetKey,
           materialIndex,
-          primitive,
-          decodedAttributes,
         );
         const materialLod = this.#readGltfMaterialLod(
           document,
-          buffers,
           src,
           assetKey,
           materialIndex,
-          primitive,
-          decodedAttributes,
         );
 
         return {
@@ -7450,20 +8470,14 @@ class WebGlRootImpl implements WebGlRoot {
   ): void {
     const materialLabel = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
     const message = `glTF ${materialLabel} ${field} is ignored: ${reason}`;
-    if (this.#unsupportedGltfMaterialExtensionDiagnostics.has(message)) return;
-
-    this.#unsupportedGltfMaterialExtensionDiagnostics.add(message);
-    this.#recordDiagnostic(message);
+    this.#recordDiagnostic(message, `gltf-material-extension:${field}`);
   }
 
   #readGltfMaterial(
     document: GltfDocument,
-    buffers: readonly ArrayBuffer[],
     src: string,
     assetKey: string,
     materialIndex: number | undefined,
-    primitive: GltfMeshPrimitive,
-    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): LoadedGltfMaterial {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     this.#diagnoseUnsupportedGltfMaterialExtensionTextures(material, materialIndex);
@@ -7491,61 +8505,16 @@ class WebGlRootImpl implements WebGlRoot {
     const roughnessFactor = gltfMetallicRoughnessFactor(material?.pbrMetallicRoughness?.roughnessFactor, 1);
     const alphaMode = gltfMaterialAlphaMode(material?.alphaMode);
     const alphaCutoff = gltfMaterialAlphaCutoff(material?.alphaCutoff);
-    const texCoords = gltfTextureInfoTexCoords(
-      document,
-      buffers,
-      primitive,
-      gltfMaterialPrimaryTextureInfo(document, materialIndex),
-      decodedAttributes,
-    );
-    const emissiveTexCoords = gltfTextureInfoTexCoords(
-      document,
-      buffers,
-      primitive,
-      material?.emissiveTexture,
-      decodedAttributes,
-    );
-
     return {
       alphaMode,
       ...(alphaMode === "MASK" ? { alphaCutoff } : {}),
-      ...(baseColorTextureSlot?.contentKey === undefined ? {} : { baseColorContentKey: baseColorTextureSlot.contentKey }),
-      ...(baseColorTextureSlot?.imageUri === undefined ? {} : { baseColorImageUri: baseColorTextureSlot.imageUri }),
-      ...(baseColorTextureSlot?.sourceUri === undefined ? {} : { baseColorSourceUri: baseColorTextureSlot.sourceUri }),
-      ...(baseColorTextureSlot?.textureUri === undefined
-        ? {}
-        : { baseColorTextureUri: baseColorTextureSlot.textureUri }),
-      ...(metallicRoughnessTextureSlot?.contentKey === undefined
-        ? {}
-        : { metallicRoughnessContentKey: metallicRoughnessTextureSlot.contentKey }),
-      ...(metallicRoughnessTextureSlot?.imageUri === undefined
-        ? {}
-        : { metallicRoughnessImageUri: metallicRoughnessTextureSlot.imageUri }),
-      ...(metallicRoughnessTextureSlot?.sourceUri === undefined
-        ? {}
-        : { metallicRoughnessSourceUri: metallicRoughnessTextureSlot.sourceUri }),
-      ...(metallicRoughnessTextureSlot?.textureUri === undefined
-        ? {}
-        : { metallicRoughnessTextureUri: metallicRoughnessTextureSlot.textureUri }),
-      ...(normalTextureSlot?.contentKey === undefined ? {} : { normalContentKey: normalTextureSlot.contentKey }),
-      ...(normalTextureSlot?.imageUri === undefined ? {} : { normalImageUri: normalTextureSlot.imageUri }),
-      ...(normalTextureSlot?.sourceUri === undefined ? {} : { normalSourceUri: normalTextureSlot.sourceUri }),
-      ...(normalTextureSlot?.textureUri === undefined ? {} : { normalTextureUri: normalTextureSlot.textureUri }),
-      ...(emissiveTextureSlot?.contentKey === undefined ? {} : { emissiveContentKey: emissiveTextureSlot.contentKey }),
-      ...(emissiveTextureSlot?.imageUri === undefined ? {} : { emissiveImageUri: emissiveTextureSlot.imageUri }),
-      ...(emissiveTextureSlot?.sourceUri === undefined ? {} : { emissiveSourceUri: emissiveTextureSlot.sourceUri }),
-      ...(emissiveTextureSlot?.textureUri === undefined
-        ? {}
-        : { emissiveTextureUri: emissiveTextureSlot.textureUri }),
-      ...(occlusionTextureSlot?.contentKey === undefined ? {} : { occlusionContentKey: occlusionTextureSlot.contentKey }),
-      ...(occlusionTextureSlot?.imageUri === undefined ? {} : { occlusionImageUri: occlusionTextureSlot.imageUri }),
-      ...(occlusionTextureSlot?.sourceUri === undefined ? {} : { occlusionSourceUri: occlusionTextureSlot.sourceUri }),
-      ...(occlusionTextureSlot?.textureUri === undefined
-        ? {}
-        : { occlusionTextureUri: occlusionTextureSlot.textureUri }),
+      ...(baseColorTextureSlot === undefined ? {} : { baseColorTexture: baseColorTextureSlot }),
+      ...(emissiveTextureSlot === undefined ? {} : { emissiveTexture: emissiveTextureSlot }),
+      ...(metallicRoughnessTextureSlot === undefined ? {} : { metallicRoughnessTexture: metallicRoughnessTextureSlot }),
+      ...(normalTextureSlot === undefined ? {} : { normalTexture: normalTextureSlot }),
+      ...(occlusionTextureSlot === undefined ? {} : { occlusionTexture: occlusionTextureSlot }),
       ...(color === undefined ? {} : { color }),
       ...(emissive === undefined ? {} : { emissive }),
-      ...(emissiveTexCoords === undefined ? {} : { emissiveTexCoords }),
       ...(extensionFactors === undefined ? {} : { extensionFactors }),
       ...(extensionTextures === undefined ? {} : { extensionTextures }),
       doubleSided: material?.doubleSided === true,
@@ -7553,26 +8522,16 @@ class WebGlRootImpl implements WebGlRoot {
       normalScale: material?.normalTexture?.scale ?? 1,
       occlusionStrength,
       roughnessFactor,
-      ...(emissiveTextureSlot?.sampler === undefined ? {} : { emissiveSampler: emissiveTextureSlot.sampler }),
-      ...(metallicRoughnessTextureSlot?.sampler === undefined
-        ? {}
-        : { metallicRoughnessSampler: metallicRoughnessTextureSlot.sampler }),
-      ...(normalTextureSlot?.sampler === undefined ? {} : { normalSampler: normalTextureSlot.sampler }),
-      ...(occlusionTextureSlot?.sampler === undefined ? {} : { occlusionSampler: occlusionTextureSlot.sampler }),
-      ...(baseColorTextureSlot?.sampler === undefined ? {} : { sampler: baseColorTextureSlot.sampler }),
-      ...(texCoords === undefined ? {} : { texCoords }),
+      ...(materialIndex === undefined ? {} : { sourceMaterialIndex: materialIndex }),
       ...(material?.extensions?.KHR_materials_unlit === undefined ? {} : { unlit: true }),
     };
   }
 
   #readGltfMaterialLod(
     document: GltfDocument,
-    buffers: readonly ArrayBuffer[],
     src: string,
     assetKey: string,
     materialIndex: number | undefined,
-    primitive: GltfMeshPrimitive,
-    decodedAttributes: ReadonlyMap<string, Float32Array> | undefined,
   ): GltfMaterialPrimitiveLod | undefined {
     const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
     const lodIds = (material?.extensions?.MSFT_lod?.ids ?? [])
@@ -7580,9 +8539,9 @@ class WebGlRootImpl implements WebGlRoot {
     if (materialIndex === undefined || lodIds.length === 0) return undefined;
 
     const levels = [
-      this.#readGltfMaterial(document, buffers, src, assetKey, materialIndex, primitive, decodedAttributes),
+      this.#readGltfMaterial(document, src, assetKey, materialIndex),
       ...lodIds.map((id) =>
-        this.#readGltfMaterial(document, buffers, src, assetKey, id, primitive, decodedAttributes)),
+        this.#readGltfMaterial(document, src, assetKey, id)),
     ];
 
     return {
@@ -7591,14 +8550,99 @@ class WebGlRootImpl implements WebGlRoot {
     };
   }
 
+  #initializeGltfImageRows(state: GltfState): void {
+    const iblRows = new Map<string, SurfaceImageBasedLightSpecular>();
+    const specular = state.imageBasedLight?.specular;
+    if (specular !== undefined) {
+      for (const mip of specular.imageLoadKeys) {
+        for (const key of mip) iblRows.set(key, specular);
+      }
+    }
+    for (const key of this.#usedGltfImageLoadKeys(state)) {
+      const iblSpecular = iblRows.get(key);
+      const row: GltfImageRow = {
+        assetKey: state.key,
+        bindings: [],
+        ...(iblSpecular === undefined ? {} : { iblSpecular }),
+        key,
+        materials: new Set(),
+        stateInstanceKey: state.instanceKey,
+        queued: false,
+        revision: 0,
+        status: "pending",
+      };
+      state.imageRows.set(key, row);
+    }
+
+    const bind = (
+      imageUri: string | undefined,
+      binding: Omit<GltfImageTextureBinding, "count" | "material">,
+      material: LoadedGltfMaterial,
+    ): void => {
+      if (imageUri === undefined) return;
+      const row = state.imageRows.get(imageUri);
+      if (row === undefined) return;
+      row.materials.add(material);
+      row.bindings.push({ ...binding, count: 1, material });
+    };
+    for (const material of state.materials) {
+      const baseColor = material.baseColorTexture;
+      if (baseColor?.textureUri !== undefined) bind(baseColor.imageUri, {
+        baseColor: true,
+        colorSpace: "srgb",
+        ...(baseColor.contentKey === undefined ? {} : { contentKey: baseColor.contentKey }),
+        ...(baseColor.sampler === undefined ? {} : { sampler: baseColor.sampler }),
+        ...(baseColor.sourceUri === undefined ? {} : { sourceUri: baseColor.sourceUri }),
+        textureUri: baseColor.textureUri,
+      }, material);
+      const emissive = material.emissiveTexture;
+      if (emissive?.textureUri !== undefined) bind(emissive.imageUri, {
+        baseColor: false,
+        colorSpace: "srgb",
+        ...(emissive.contentKey === undefined ? {} : { contentKey: emissive.contentKey }),
+        ...(emissive.sampler === undefined ? {} : { sampler: emissive.sampler }),
+        ...(emissive.sourceUri === undefined ? {} : { sourceUri: emissive.sourceUri }),
+        textureUri: emissive.textureUri,
+      }, material);
+      for (const slot of [material.metallicRoughnessTexture, material.normalTexture, material.occlusionTexture]) {
+        if (slot?.textureUri === undefined) continue;
+        bind(slot.imageUri, {
+          baseColor: false,
+          colorSpace: "linear",
+          ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
+          ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
+          ...(slot.sourceUri === undefined ? {} : { sourceUri: slot.sourceUri }),
+          textureUri: slot.textureUri,
+        }, material);
+      }
+      for (const definition of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+        const slot = material.extensionTextures?.[definition.key];
+        if (slot?.textureUri === undefined) continue;
+        bind(slot.imageUri, {
+          baseColor: false,
+          colorSpace: definition.colorSpace,
+          ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
+          ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
+          ...(slot.sourceUri === undefined ? {} : { sourceUri: slot.sourceUri }),
+          textureUri: slot.textureUri,
+        }, material);
+      }
+    }
+  }
+
   #loadGltfImages(
     src: string,
     document: GltfDocument,
     buffers: readonly ArrayBuffer[],
     state: GltfState,
+    basisuCodec: Promise<GltfBasisuCodecModule> | undefined,
   ): void {
+    this.#initializeGltfImageRows(state);
+    const controller = replaceResourceArenaImageAbortController(this.#resourceArena, state.key);
     const usedImageKeys = this.#usedGltfImageLoadKeys(state);
     const startedImageKeys = new Set<string>();
+    const ordinaryJobs: Array<{ readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }> = [];
+    const iblJobs: Array<{ readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }> = [];
     for (const [imageIndex, image] of (document.images ?? []).entries()) {
       for (const kind of ["image", "basisu", "svg"] as const) {
         const key = gltfImageLoadKey(state.key, src, imageIndex, image, kind);
@@ -7607,30 +8651,91 @@ class WebGlRootImpl implements WebGlRoot {
         if (startedImageKeys.has(key)) continue;
         startedImageKeys.add(key);
         this.#recordGltfImageLoadStarted(state);
-        loadGltfImageSource(src, document, buffers, image, kind).then((loadedImage) => {
-          if (this.#disposed || state.status !== "ready") return;
+        const row = state.imageRows.get(key);
+        if (row === undefined) continue;
+        (row.iblSpecular === undefined ? ordinaryJobs : iblJobs).push({ imageIndex, key, kind });
+      }
+    }
+    const pump = (
+      jobs: readonly { readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }[],
+      scheduler: GltfPreparationScheduler,
+    ): void => {
+      let index = 0;
+      const next = (): void => {
+        if (controller.signal.aborted || index >= jobs.length) return;
+        const job = jobs[index++]!;
+        const image = document.images?.[job.imageIndex];
+        const row = state.imageRows.get(job.key);
+        if (image === undefined || row === undefined) {
+          next();
+          return;
+        }
+        scheduler.run(controller.signal, () =>
+          loadGltfImageSource(src, document, buffers, image, job.kind, basisuCodec, controller.signal)).then((loadedImage) => {
+          if (
+            this.#disposed
+            || state.status !== "ready"
+            || this.#gltf.get(state.key) !== state
+            || state.imageRows.get(job.key) !== row
+          ) {
+            this.#closeTextureSource(loadedImage.image);
+            return;
+          }
           this.#recordGltfImageLoadSettled(state, false);
-          state.primitives = state.primitives.map((primitive) =>
-            this.#mapGltfPrimitiveMaterials(primitive, (material) =>
-              this.#settleGltfMaterialImage(material, key, loadedImage)));
-          if (kind === "image" && state.imageBasedLight?.specular !== undefined) {
-            this.#settleIblSpecularImage(state.imageBasedLight.specular, key, loadedImage.image);
+          const previousSource = retainResourceArenaAssetSource(
+            this.#resourceArena,
+            state.key,
+            row.key,
+            loadedImage.image,
+          );
+          if (
+            previousSource !== undefined
+            && previousSource !== loadedImage.image
+            && resourceArenaSourceReferenceCount(this.#resourceArena, previousSource) === 0
+          ) this.#closeTextureSource(previousSource);
+          row.source = loadedImage.image;
+          row.status = "ready";
+          row.revision += 1;
+          if (loadedImage.contentKey !== undefined) {
+            row.contentKey = loadedImage.contentKey;
+            for (const binding of row.bindings) {
+              if (binding.contentKey === undefined) {
+                publishResourceArenaContentKey(
+                  this.#resourceArena,
+                  state.key,
+                  binding.textureUri,
+                  loadedImage.contentKey,
+                );
+              }
+            }
+          }
+          if (!row.queued) {
+            row.queued = true;
+            this.#pendingGltfImageRows.push(row);
           }
           this.invalidate();
         }, (error: unknown) => {
-          if (this.#disposed) return;
+          if (
+            this.#disposed
+            || this.#gltf.get(state.key) !== state
+            || state.imageRows.get(job.key) !== row
+          ) return;
           this.#recordGltfImageLoadSettled(state, true);
-          if (state.status === "ready") {
-            state.primitives = state.primitives.map((primitive) =>
-              this.#mapGltfPrimitiveMaterials(primitive, (material) =>
-                this.#failGltfMaterialImage(material, key)));
-            this.invalidate();
-          }
-          this.#recordDiagnostic(`glTF image load failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
-        });
-      }
+          row.error = error instanceof Error ? error.message : String(error);
+          row.status = "error";
+          row.revision += 1;
+          this.invalidate();
+          this.#recordDiagnostic(`glTF image load failed for ${job.key}: ${row.error}`);
+        }).finally(next);
+      };
+      next();
+    };
+    pump(ordinaryJobs, this.#gltfImageScheduler);
+    pump(iblJobs, this.#gltfIblImageScheduler);
+    if (state.load.imageRequests === 0) {
+      state.load.imagesSettledAt = nowMs();
+      finishResourceArenaImageWork(this.#resourceArena, state.key);
     }
-    if (state.load.imageRequests === 0) state.load.imagesSettledAt = nowMs();
   }
 
   #recordGltfImageLoadStarted(state: GltfState): void {
@@ -7645,6 +8750,7 @@ class WebGlRootImpl implements WebGlRoot {
     load.firstImageSettledAt ??= nowMs();
     if (load.imageLoaded + load.imageFailures >= load.imageRequests) {
       load.imagesSettledAt = nowMs();
+      finishResourceArenaImageWork(this.#resourceArena, state.key);
     }
   }
 
@@ -7666,11 +8772,13 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #addGltfMaterialImageLoadKeys(keys: Set<string>, material: LoadedGltfMaterial): void {
-    if (material.baseColorImageUri !== undefined) keys.add(material.baseColorImageUri);
-    if (material.emissiveImageUri !== undefined) keys.add(material.emissiveImageUri);
-    if (material.metallicRoughnessImageUri !== undefined) keys.add(material.metallicRoughnessImageUri);
-    if (material.normalImageUri !== undefined) keys.add(material.normalImageUri);
-    if (material.occlusionImageUri !== undefined) keys.add(material.occlusionImageUri);
+    for (const slot of [
+      material.baseColorTexture,
+      material.emissiveTexture,
+      material.metallicRoughnessTexture,
+      material.normalTexture,
+      material.occlusionTexture,
+    ]) this.#addGltfMaterialTextureSlotImageLoadKey(keys, slot);
     const extensionTextures = material.extensionTextures;
     for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
       this.#addGltfMaterialTextureSlotImageLoadKey(keys, extensionTextures?.[texture.key]);
@@ -7684,214 +8792,103 @@ class WebGlRootImpl implements WebGlRoot {
     if (slot?.imageUri !== undefined) keys.add(slot.imageUri);
   }
 
-  #mapGltfPrimitiveMaterials(
-    primitive: LoadedGltfPrimitive,
-    mapMaterial: (material: LoadedGltfMaterial) => LoadedGltfMaterial,
-  ): LoadedGltfPrimitive {
-    const material = mapMaterial(primitive.material);
-    const materialLod = primitive.materialLod === undefined
-      ? undefined
-      : {
-        ...primitive.materialLod,
-        levels: primitive.materialLod.levels.map(mapMaterial),
-      };
-    return {
-      ...primitive,
-      baseMaterial: loadedGltfPrimitiveBaseMaterial(material, materialLod),
-      material,
-      ...(materialLod === undefined ? {} : { materialLod }),
-      ...(primitive.materialVariants === undefined
-        ? {}
-        : {
-          materialVariants: primitive.materialVariants.map((variant) => ({
-            ...variant,
-            material: mapMaterial(variant.material),
-            ...(variant.materialLod === undefined
-              ? {}
-              : {
-                materialLod: {
-                  ...variant.materialLod,
-                  levels: variant.materialLod.levels.map(mapMaterial),
-                },
-              }),
-          })),
-        }),
-    };
-  }
-
-  #settleGltfMaterialImage(
-    material: LoadedGltfMaterial,
-    uri: string,
-    loadedImage: LoadedGltfImageSource,
-  ): LoadedGltfMaterial {
-    const image = loadedImage.image;
-    const computedContentKey = loadedImage.contentKey;
-    const baseColorContentKey = material.baseColorContentKey ?? (
-      material.baseColorImageUri === uri ? computedContentKey : undefined
-    );
-    const emissiveContentKey = material.emissiveContentKey ?? (
-      material.emissiveImageUri === uri ? computedContentKey : undefined
-    );
-    const metallicRoughnessContentKey = material.metallicRoughnessContentKey ?? (
-      material.metallicRoughnessImageUri === uri ? computedContentKey : undefined
-    );
-    const normalContentKey = material.normalContentKey ?? (
-      material.normalImageUri === uri ? computedContentKey : undefined
-    );
-    const occlusionContentKey = material.occlusionContentKey ?? (
-      material.occlusionImageUri === uri ? computedContentKey : undefined
-    );
-    const extensionTexturesWithContentKey = computedContentKey === undefined
-      ? material.extensionTextures
-      : this.#contentKeyGltfMaterialExtensionTextureImages(
-        material.extensionTextures,
-        uri,
-        computedContentKey,
-      );
-    const contentMaterial: LoadedGltfMaterial = {
-      ...material,
-      ...(baseColorContentKey === undefined ? {} : { baseColorContentKey }),
-      ...(emissiveContentKey === undefined ? {} : { emissiveContentKey }),
-      ...(metallicRoughnessContentKey === undefined ? {} : { metallicRoughnessContentKey }),
-      ...(normalContentKey === undefined ? {} : { normalContentKey }),
-      ...(occlusionContentKey === undefined ? {} : { occlusionContentKey }),
-      ...(extensionTexturesWithContentKey === undefined ? {} : { extensionTextures: extensionTexturesWithContentKey }),
-    };
-    if (material.baseColorImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialTextureRef(contentMaterial), image);
-    }
-    if (material.emissiveImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialEmissiveTextureRef(contentMaterial), image);
-    }
-    if (material.metallicRoughnessImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialMetallicRoughnessTextureRef(contentMaterial), image);
-    }
-    if (material.normalImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialNormalTextureRef(contentMaterial), image);
-    }
-    if (material.occlusionImageUri === uri) {
-      this.#settleDecodedTextureSource(this.#gltfMaterialOcclusionTextureRef(contentMaterial), image);
-    }
-    const existingExtensionTextures = contentMaterial.extensionTextures;
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      const slot = existingExtensionTextures?.[texture.key];
-      if (slot?.imageUri === uri) {
-        this.#settleDecodedTextureSource(this.#gltfTextureSlotRef(slot, texture.colorSpace), image);
+  #stagePendingGltfImageRows(): void {
+    if (this.#pendingGltfImageRowHead >= this.#pendingGltfImageRows.length) return;
+    const rekeysByAsset = this.#pendingGltfTextureRekeys;
+    rekeysByAsset.clear();
+    for (let index = this.#pendingGltfImageRowHead; index < this.#pendingGltfImageRows.length; index += 1) {
+      const row = this.#pendingGltfImageRows[index];
+      if (row?.status !== "ready" || row.contentKey === undefined || row.source === undefined) continue;
+      const state = this.#gltf.get(row.assetKey);
+      if (
+        state === undefined
+        || state.instanceKey !== row.stateInstanceKey
+        || state.imageRows.get(row.key) !== row
+      ) continue;
+      let rekeys = rekeysByAsset.get(row.assetKey);
+      if (rekeys === undefined) {
+        rekeys = [];
+        rekeysByAsset.set(row.assetKey, rekeys);
+      }
+      for (const binding of row.bindings) {
+        if (binding.contentKey !== undefined) continue;
+        const previousTexture: TextureAssetUploadRef = {
+          colorSpace: binding.colorSpace,
+          flipY: false,
+          kind: "asset",
+          ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
+          uri: binding.textureUri,
+        };
+        const nextTexture: TextureAssetUploadRef = { ...previousTexture, contentKey: row.contentKey };
+        rekeys.push({
+          next: { count: binding.count, key: textureCacheKey(nextTexture), texture: nextTexture },
+          previous: { count: binding.count, key: textureCacheKey(previousTexture), texture: previousTexture },
+        });
       }
     }
-
-    const extensionTextures = this.#settleGltfMaterialExtensionTextureImages(contentMaterial.extensionTextures, uri, image);
-    const baseColorSvgVirtualTextureSource = contentMaterial.baseColorImageUri === uri
-      ? svgVirtualTextureSourceForImage(image)
-      : undefined;
-    return {
-      ...contentMaterial,
-      ...(contentMaterial.baseColorImageUri === uri
-        ? {
-          ...(baseColorSvgVirtualTextureSource === undefined ? {} : { baseColorSvgVirtualTextureSource }),
-          image,
-        }
-        : {}),
-      ...(contentMaterial.emissiveImageUri === uri ? { emissiveImage: image } : {}),
-      ...(contentMaterial.metallicRoughnessImageUri === uri ? { metallicRoughnessImage: image } : {}),
-      ...(contentMaterial.normalImageUri === uri ? { normalImage: image } : {}),
-      ...(contentMaterial.occlusionImageUri === uri ? { occlusionImage: image } : {}),
-      ...(extensionTextures === undefined ? {} : { extensionTextures }),
-    };
-  }
-
-  #failGltfMaterialImage(
-    material: LoadedGltfMaterial,
-    uri: string,
-  ): LoadedGltfMaterial {
-    const extensionTextures = this.#failGltfMaterialExtensionTextureImages(material.extensionTextures, uri);
-    return {
-      ...material,
-      ...(material.baseColorImageUri === uri ? { imageFailed: true } : {}),
-      ...(material.emissiveImageUri === uri ? { emissiveImageFailed: true } : {}),
-      ...(material.metallicRoughnessImageUri === uri ? { metallicRoughnessImageFailed: true } : {}),
-      ...(material.normalImageUri === uri ? { normalImageFailed: true } : {}),
-      ...(material.occlusionImageUri === uri ? { occlusionImageFailed: true } : {}),
-      ...(extensionTextures === undefined ? {} : { extensionTextures }),
-    };
-  }
-
-  #settleGltfMaterialExtensionTextureImages(
-    textures: LoadedGltfMaterialExtensionTextures | undefined,
-    uri: string,
-    image: LoadedTextureSource,
-  ): LoadedGltfMaterialExtensionTextures | undefined {
-    return this.#mapGltfMaterialExtensionTextureSlots(
-      textures,
-      (slot) => this.#settleGltfMaterialTextureSlot(slot, uri, image),
-    );
-  }
-
-  #contentKeyGltfMaterialExtensionTextureImages(
-    textures: LoadedGltfMaterialExtensionTextures | undefined,
-    uri: string,
-    contentKey: TextureContentKey,
-  ): LoadedGltfMaterialExtensionTextures | undefined {
-    return this.#mapGltfMaterialExtensionTextureSlots(
-      textures,
-      (slot) => this.#contentKeyGltfMaterialTextureSlot(slot, uri, contentKey),
-    );
-  }
-
-  #settleGltfMaterialTextureSlot(
-    slot: LoadedGltfMaterialTextureSlot | undefined,
-    uri: string,
-    image: LoadedTextureSource,
-  ): LoadedGltfMaterialTextureSlot | undefined {
-    if (slot === undefined) return undefined;
-    return slot.imageUri === uri ? { ...slot, image } : slot;
-  }
-
-  #contentKeyGltfMaterialTextureSlot(
-    slot: LoadedGltfMaterialTextureSlot | undefined,
-    uri: string,
-    contentKey: TextureContentKey,
-  ): LoadedGltfMaterialTextureSlot | undefined {
-    if (slot === undefined || slot.imageUri !== uri || slot.contentKey !== undefined) return slot;
-    return { ...slot, contentKey };
-  }
-
-  #failGltfMaterialExtensionTextureImages(
-    textures: LoadedGltfMaterialExtensionTextures | undefined,
-    uri: string,
-  ): LoadedGltfMaterialExtensionTextures | undefined {
-    return this.#mapGltfMaterialExtensionTextureSlots(
-      textures,
-      (slot) => this.#failGltfMaterialTextureSlot(slot, uri),
-    );
-  }
-
-  #mapGltfMaterialExtensionTextureSlots(
-    textures: LoadedGltfMaterialExtensionTextures | undefined,
-    mapSlot: (slot: LoadedGltfMaterialTextureSlot | undefined) => LoadedGltfMaterialTextureSlot | undefined,
-  ): LoadedGltfMaterialExtensionTextures | undefined {
-    if (textures === undefined) return undefined;
-
-    const mapped: Partial<Record<keyof LoadedGltfMaterialExtensionTextures, LoadedGltfMaterialTextureSlot>> = {};
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      const slot = mapSlot(textures[texture.key]);
-      if (slot !== undefined) mapped[texture.key] = slot;
+    for (const [key, rekeys] of rekeysByAsset) {
+      this.#applyResourceArenaChanges(rekeyPreparedAssetOrdinaryTextures(this.#resourceArena, key, rekeys));
     }
+    while (this.#pendingGltfImageRowHead < this.#pendingGltfImageRows.length) {
+      const row = this.#pendingGltfImageRows[this.#pendingGltfImageRowHead];
+      this.#pendingGltfImageRowHead += 1;
+      if (row === undefined) continue;
+      row.queued = false;
+      const state = this.#gltf.get(row.assetKey);
+      if (
+        state === undefined
+        || state.instanceKey !== row.stateInstanceKey
+        || state.imageRows.get(row.key) !== row
+        || row.status !== "ready"
+        || row.source === undefined
+      ) {
+        if (row.source !== undefined) {
+          const source = row.source;
+          delete row.source;
+          releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
+          if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+        }
+        continue;
+      }
+      const source = row.source;
 
-    return mapped;
-  }
-
-  #failGltfMaterialTextureSlot(
-    slot: LoadedGltfMaterialTextureSlot | undefined,
-    uri: string,
-  ): LoadedGltfMaterialTextureSlot | undefined {
-    if (slot === undefined) return undefined;
-    return slot.imageUri === uri ? { ...slot, imageFailed: true } : slot;
+      for (const binding of row.bindings) {
+        const contentKey = binding.contentKey ?? row.contentKey;
+        const texture: TextureAssetUploadRef = {
+          colorSpace: binding.colorSpace,
+          ...(contentKey === undefined ? {} : { contentKey }),
+          flipY: false,
+          kind: "asset",
+          ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
+          uri: binding.textureUri,
+        };
+        if (binding.baseColor) {
+          this.#registerAutoBaseColorVirtualTextureManifest(texture, binding.sourceUri);
+        }
+        this.#settleDecodedTextureSource(texture, source);
+      }
+      if (row.iblSpecular !== undefined) {
+        this.#settleIblSpecularImage(row.iblSpecular, row.key, source);
+      }
+      if (row.bindings.length === 0 && row.iblSpecular === undefined) this.#closeTextureSource(source);
+      delete row.source;
+      releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+      for (const material of row.materials) {
+        for (const primitive of this.#gltfMaterialPrimitives.get(material) ?? []) {
+          this.#gltfPreparedPrimitiveMaterials.get(primitive)?.delete(material);
+        }
+      }
+    }
+    this.#pendingGltfImageRows.length = 0;
+    this.#pendingGltfImageRowHead = 0;
+    rekeysByAsset.clear();
   }
 
   #scheduleRender(): void {
     if (
       this.#disposed ||
+      this.#contextLifecycle !== "active" ||
       !this.#renderDirty ||
       this.#externalRenderClocks > 0 ||
       this.#scheduledRenderGeneration !== 0 ||
@@ -7899,36 +8896,43 @@ class WebGlRootImpl implements WebGlRoot {
     ) return;
     const requestFrame = globalThis.requestAnimationFrame;
     const generation = this.#renderScheduleGeneration + 1;
+    const contextGeneration = this.#contextGeneration;
     this.#renderScheduleGeneration = generation;
     this.#scheduledRenderGeneration = generation;
     const renderIfCurrent = (): void => {
       if (
         this.#scheduledRenderGeneration !== generation ||
+        this.#contextGeneration !== contextGeneration ||
+        this.#contextLifecycle !== "active" ||
         !this.#renderDirty ||
         this.#externalRenderClocks > 0
       ) return;
       this.#scheduledRenderGeneration = 0;
-      if (!this.#disposed && this.#latestScene !== undefined) this.#renderLatestScene();
+      if (!this.#disposed && this.#contextLifecycle === "active" && this.#latestScene !== undefined) {
+        this.#renderLatestScene();
+      }
     };
     if (typeof requestFrame === "function") requestFrame(renderIfCurrent);
     else queueMicrotask(renderIfCurrent);
   }
 
   #renderLatestScene(): void {
-    const scene = this.#latestScene;
-    if (scene === undefined) return;
+    const plan = this.#framePlan;
+    if (plan === undefined) return;
 
     const { height, width } = this.#resize();
-    this.#renderScene(scene, {
-      framebuffer: null,
-      scissor: false,
-      syncRenderObjectRefs: false,
-      views: [{
-        projection: (renderPass) => projectionMat4(renderPass.camera, width, height),
-        view: (renderPass) => viewMat4(renderPass.camera),
-        viewport: { height, width, x: 0, y: 0 },
-      }],
-    });
+    const camera = this.#readCamera(plan.camera);
+    resetFrameViews(this.#frameViews, null, false);
+    appendFrameView(
+      this.#frameViews,
+      projectionMat4Into(this.#renderProjection, camera, width, height),
+      viewMat4Into(this.#renderView, camera),
+      0,
+      0,
+      width,
+      height,
+    );
+    this.#renderScene(plan, this.#frameViews);
   }
 
   #createBuffer(): WebGLBuffer {
@@ -7938,11 +8942,92 @@ class WebGlRootImpl implements WebGlRoot {
     return buffer;
   }
 
-  #createVertexArray(): WebGLVertexArrayObject {
-    const vertexArray = this.#gl.createVertexArray();
-    if (vertexArray === null) throw new Error("WebGL vertex array creation failed");
-    this.#ownedVertexArrays.add(vertexArray);
-    return vertexArray;
+  #createFramebuffer(): WebGLFramebuffer {
+    const framebuffer = this.#gl.createFramebuffer();
+    if (framebuffer === null) throw new Error("WebGL framebuffer creation failed");
+    this.#ownedFramebuffers.add(framebuffer);
+    return framebuffer;
+  }
+
+  #createRenderbuffer(): WebGLRenderbuffer {
+    const renderbuffer = this.#gl.createRenderbuffer();
+    if (renderbuffer === null) throw new Error("WebGL renderbuffer creation failed");
+    this.#ownedRenderbuffers.add(renderbuffer);
+    return renderbuffer;
+  }
+
+  #ensureHdrRenderTarget(width: number, height: number): HdrRenderTarget {
+    const gl = this.#gl;
+    let target = this.#hdrRenderTarget;
+    if (target === undefined) {
+      target = {
+        color: this.#createTexture(),
+        depth: this.#createRenderbuffer(),
+        framebuffer: this.#createFramebuffer(),
+        height: 0,
+        width: 0,
+      };
+      this.#hdrRenderTarget = target;
+    }
+    if (target.width === width && target.height === height) return target;
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, target.color);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+
+    gl.bindRenderbuffer(gl.RENDERBUFFER, target.depth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.color, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, target.depth);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      throw new Error("Royal physical lighting requires a complete RGBA16F HDR framebuffer");
+    }
+    // The color attachment cannot remain visible to surface samplers while its
+    // framebuffer is drawn. This matters on the target's first frame, before
+    // the postprocess presentation path has had a chance to unbind it.
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    target.width = width;
+    target.height = height;
+    return target;
+  }
+
+  #presentHdrRenderTarget(
+    target: HdrRenderTarget,
+    destination: WebGLFramebuffer | null,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    toneMapping: SceneToneMappingState,
+    scissor: boolean,
+  ): void {
+    const gl = this.#gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, destination);
+    gl.viewport(x, y, width, height);
+    if (scissor) gl.scissor(x, y, width, height);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    const programResource = this.#program("postprocess");
+    if (programResource === undefined) return;
+    const program = programResource.program;
+    this.#useProgram(program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, target.color);
+    this.#uniform1i(program, "u_hdrColor", 0);
+    const transform = this.#uniformLocation(program, "u_displayTransform");
+    if (transform !== null) gl.uniform2f(
+      transform,
+      toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
+      toneMapping.exposure,
+    );
+    gl.bindVertexArray(null);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   #createTexture(): WebGLTexture {
@@ -7958,12 +9043,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#ownedBuffers.delete(buffer);
   }
 
-  #deleteVertexArray(vertexArray: WebGLVertexArrayObject): void {
-    if (!this.#ownedVertexArrays.has(vertexArray)) return;
-    this.#gl.deleteVertexArray(vertexArray);
-    this.#ownedVertexArrays.delete(vertexArray);
-  }
-
   #deleteShader(shader: WebGLShader): void {
     if (!this.#ownedShaders.has(shader)) return;
     this.#gl.deleteShader(shader);
@@ -7975,18 +9054,25 @@ class WebGlRootImpl implements WebGlRoot {
     if (this.#activeProgram === program) this.#activeProgram = undefined;
     this.#gl.deleteProgram(program);
     this.#ownedPrograms.delete(program);
-    this.#programAttributeLocations.delete(program);
     this.#programUniformLocations.delete(program);
     this.#programUniformValues.delete(program);
   }
 
-  #recordDiagnostic(message: string): void {
-    this.#diagnostics = [...this.#diagnostics, message];
-    console.warn(message);
+  #recordDiagnostic(message: string, key = message): void {
+    const result = this.#diagnostics.record(key, message);
+    if (result === "appended") console.warn(this.#diagnostics.latestMessage);
   }
 
   #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
     return { ...this.#gltfInstancingCounters };
+  }
+
+  #pickingWorkSnapshot(): WebGlPickingSnapshot {
+    return {
+      candidateHighWater: this.#pickCandidates.length,
+      candidates: this.#pickCandidatesThisPick,
+      exactTests: this.#pickExactTestsThisPick,
+    };
   }
 
   #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {
@@ -8001,7 +9087,6 @@ class WebGlRootImpl implements WebGlRoot {
         const duration = elapsedMs(start, end);
         if (duration !== undefined) phaseMs[key] = duration;
       };
-      addPhase("animations", load.sceneReadAt, load.animationsReadAt);
       addPhase("buffers", load.documentLoadedAt, load.buffersLoadedAt);
       addPhase("document", load.startedAt, load.documentLoadedAt);
       addPhase("draco", load.meshoptDecodedAt, load.dracoDecodedAt);
@@ -8012,14 +9097,13 @@ class WebGlRootImpl implements WebGlRoot {
       addPhase("toSceneReady", load.startedAt, load.readyAt);
 
       return {
-        animationCount: state.animations.length,
         ...(state.error === undefined ? {} : { error: state.error }),
         imageFailures: load.imageFailures,
         imageLoaded: load.imageLoaded,
         imageRequests: load.imageRequests,
         key: state.key,
         lightCount: state.lights.length,
-        nodeCount: state.nodes.length,
+        nodeCount: state.nodeCount,
         phaseMs,
         primitiveCount: state.primitives.length,
         status: state.status === "ready" ? "sceneReady" : state.status,
@@ -8032,6 +9116,34 @@ class WebGlRootImpl implements WebGlRoot {
       errorAssets: assets.filter((asset) => asset.status === "error").length,
       loadingAssets: assets.filter((asset) => asset.status === "loading").length,
       sceneReadyAssets: assets.filter((asset) => asset.status === "sceneReady").length,
+    };
+  }
+
+  #textureResidencySnapshot(): WebGlTextureResidencySnapshot {
+    const sources = new Set<LoadedTextureSource>();
+    for (const prepared of resourceArenaPreparedSourceValues(this.#resourceArena)) {
+      sources.add(prepared.source);
+    }
+    let preparedBytes = 0;
+    for (const source of sources) {
+      if (isDecodedRgbaTexture(source)) preparedBytes += source.data.byteLength;
+      else {
+        const [width, height] = loadedTextureSourceSize(source);
+        if (Number.isFinite(width) && Number.isFinite(height)) {
+          preparedBytes += Math.max(0, Math.ceil(width)) * Math.max(0, Math.ceil(height)) * 4;
+        }
+      }
+    }
+    let activeReferences = 0;
+    for (const declaration of this.#resourceArena.ordinaryTextures.values()) {
+      activeReferences += declaration.sceneReferences + declaration.assetReferences;
+    }
+    return {
+      activeLeases: this.#resourceArena.ordinaryTextures.size,
+      activeReferences,
+      preparedBytes,
+      preparedSources: sources.size,
+      resources: this.#textures.size,
     };
   }
 
@@ -8112,9 +9224,7 @@ class WebGlRootImpl implements WebGlRoot {
   #recordUnsupportedVirtualTexture(texture: VirtualTextureRef, reason: string): void {
     this.#unsupportedVirtualTextureDraws += 1;
     const message = `Virtual texture ${texture.manifestUri} is not rendered: ${reason}. Preview and first-page rendering are disabled.`;
-    if (this.#unsupportedVirtualTextureDiagnostics.has(message)) return;
-    this.#unsupportedVirtualTextureDiagnostics.add(message);
-    this.#recordDiagnostic(message);
+    this.#recordDiagnostic(message, `virtual-texture-draw:${texture.manifestUri}:${reason}`);
   }
 }
 

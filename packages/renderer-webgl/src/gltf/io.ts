@@ -1,5 +1,10 @@
 import type { GltfDocument } from "./schema";
 
+export const abortError = (): DOMException => new DOMException("The operation was aborted", "AbortError");
+export const throwIfAborted = (signal: AbortSignal | undefined): void => {
+  if (signal?.aborted === true) throw abortError();
+};
+
 export type GltfDocumentPayload = {
   readonly binaryChunk?: ArrayBuffer;
   readonly document: GltfDocument;
@@ -137,12 +142,13 @@ export const parseGltfDocumentBytes = (src: string, buffer: ArrayBuffer, content
   };
 };
 
-export const loadGltfDocument = async (src: string): Promise<GltfDocumentPayload> => {
+export const loadGltfDocument = async (src: string, signal?: AbortSignal): Promise<GltfDocumentPayload> => {
+  throwIfAborted(signal);
   if (src.startsWith("data:")) {
     return parseGltfDocumentBytes(src, decodeDataUri(src), dataUriMediaType(src));
   }
 
-  const response = await fetch(src);
+  const response = await fetch(src, signal === undefined ? undefined : { signal });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   const contentType = responseContentType(response);
   if (isGlbSource(src, contentType)) {
@@ -155,7 +161,7 @@ export const loadGltfDocument = async (src: string): Promise<GltfDocumentPayload
 };
 
 const bufferSlice = (buffer: ArrayBuffer, byteLength: number | undefined): ArrayBuffer => {
-  if (byteLength === undefined || byteLength >= buffer.byteLength) return buffer.slice(0);
+  if (byteLength === undefined || byteLength >= buffer.byteLength) return buffer;
 
   return buffer.slice(0, byteLength);
 };
@@ -178,8 +184,10 @@ export const loadGltfBuffers = async (
   src: string,
   document: GltfDocument,
   binaryChunk: ArrayBuffer | undefined,
+  signal?: AbortSignal,
 ): Promise<readonly ArrayBuffer[]> =>
   Promise.all((document.buffers ?? []).map(async (buffer, index) => {
+    throwIfAborted(signal);
     if (buffer.uri === undefined) {
       if (index === 0 && binaryChunk !== undefined) return bufferSlice(binaryChunk, buffer.byteLength);
 
@@ -187,8 +195,13 @@ export const loadGltfBuffers = async (
     }
     if (buffer.uri.startsWith("data:")) return bufferSlice(decodeDataUri(buffer.uri), buffer.byteLength);
 
-    const bufferResponse = await fetch(resolveResourceUri(src, buffer.uri));
+    const bufferResponse = await fetch(
+      resolveResourceUri(src, buffer.uri),
+      signal === undefined ? undefined : { signal },
+    );
     if (!bufferResponse.ok) throw new Error(`${bufferResponse.status} ${bufferResponse.statusText}`);
 
-    return bufferSlice(await bufferResponse.arrayBuffer(), buffer.byteLength);
+    const bytes = await bufferResponse.arrayBuffer();
+    throwIfAborted(signal);
+    return bufferSlice(bytes, buffer.byteLength);
   }));

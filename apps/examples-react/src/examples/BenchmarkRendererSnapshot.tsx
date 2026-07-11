@@ -3,6 +3,7 @@ import { useLayoutEffect, type ReactNode } from 'react';
 
 type RendererSnapshotBridge = typeof globalThis & {
   __royalExamplesGltfInstancingSnapshot?: () => RendererBenchmarkSnapshot | null;
+  __royalExamplesRenderNow?: () => void;
   __royalExamplesRendererBenchmarkSnapshot?: () => RendererBenchmarkSnapshot | null;
 };
 
@@ -24,13 +25,15 @@ type RendererRootSnapshot = {
 };
 
 type RendererDiagnosticsSnapshot = {
+  readonly context?: unknown;
   readonly gltfInstancing?: unknown;
   readonly gltfLoadDiagnostics?: unknown;
+  readonly planning?: unknown;
+  readonly resourceLifetime?: unknown;
   readonly virtualTexturing?: unknown;
 };
 
 type GltfLoadDiagnosticsAsset = {
-  readonly animationCount: number;
   readonly error?: string;
   readonly imageFailures: number;
   readonly imageLoaded: number;
@@ -52,10 +55,21 @@ type GltfLoadDiagnosticsSnapshot = {
 };
 
 type RendererBenchmarkSnapshot = {
+  readonly context: RendererContextSnapshot | null;
   readonly frame: number;
   readonly gltfInstancing: GltfInstancingCounters | null;
   readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
+  readonly planning: Record<string, number> | null;
+  readonly resourceLifetime: Record<string, number> | null;
   readonly virtualTexturing: Record<string, number> | null;
+};
+
+type RendererContextSnapshot = {
+  readonly generation: number;
+  readonly lastError?: string;
+  readonly lifecycle: 'active' | 'disposed' | 'lost' | 'restoring';
+  readonly losses: number;
+  readonly restores: number;
 };
 
 const gltfInstancingCounterKeys = [
@@ -98,11 +112,32 @@ const copyNumberCounters = (value: unknown): Record<string, number> | null => {
   return Object.keys(counters).length === 0 ? null : counters;
 };
 
+const copyRendererContextSnapshot = (value: unknown): RendererContextSnapshot | null => {
+  if (!isRecord(value)) return null;
+  const lifecycle = value.lifecycle;
+  if (
+    typeof value.generation !== 'number' ||
+    !Number.isFinite(value.generation) ||
+    (lifecycle !== 'active' && lifecycle !== 'disposed' && lifecycle !== 'lost' && lifecycle !== 'restoring') ||
+    typeof value.losses !== 'number' ||
+    !Number.isFinite(value.losses) ||
+    typeof value.restores !== 'number' ||
+    !Number.isFinite(value.restores)
+  ) return null;
+
+  return {
+    generation: value.generation,
+    ...(typeof value.lastError === 'string' ? { lastError: value.lastError } : {}),
+    lifecycle,
+    losses: value.losses,
+    restores: value.restores,
+  };
+};
+
 const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset | null => {
   if (!isRecord(value)) return null;
   const phaseMs = copyNumberCounters(value.phaseMs);
   if (
-    typeof value.animationCount !== 'number' ||
     typeof value.imageFailures !== 'number' ||
     typeof value.imageLoaded !== 'number' ||
     typeof value.imageRequests !== 'number' ||
@@ -118,7 +153,6 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
   }
 
   return {
-    animationCount: value.animationCount,
     ...(typeof value.error === 'string' ? { error: value.error } : {}),
     imageFailures: value.imageFailures,
     imageLoaded: value.imageLoaded,
@@ -172,18 +206,29 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
       }
 
       return {
+        context: copyRendererContextSnapshot(diagnostics.context),
         frame: rootSnapshot.frame,
         gltfInstancing: copyGltfInstancingCounters(diagnostics.gltfInstancing),
         gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoadDiagnostics),
+        planning: copyNumberCounters(diagnostics.planning),
+        resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),
         virtualTexturing: copyNumberCounters(diagnostics.virtualTexturing),
       };
     };
+    const renderNow = (): void => {
+      root.invalidate();
+      root.flushInvalidated();
+    };
     bridge.__royalExamplesGltfInstancingSnapshot = snapshot;
+    bridge.__royalExamplesRenderNow = renderNow;
     bridge.__royalExamplesRendererBenchmarkSnapshot = snapshot;
 
     return () => {
       if (bridge.__royalExamplesGltfInstancingSnapshot === snapshot) {
         delete bridge.__royalExamplesGltfInstancingSnapshot;
+      }
+      if (bridge.__royalExamplesRenderNow === renderNow) {
+        delete bridge.__royalExamplesRenderNow;
       }
       if (bridge.__royalExamplesRendererBenchmarkSnapshot === snapshot) {
         delete bridge.__royalExamplesRendererBenchmarkSnapshot;

@@ -4,7 +4,6 @@ import {
   imageTexture,
   mesh,
   orthographicCamera,
-  pass,
   scene,
   unlitMaterial,
   wireframeMaterial,
@@ -45,7 +44,7 @@ type BitmapRequest = {
 };
 
 const canvasSize = { height: 180, width: 320 };
-const uvLocation = 2;
+const uvLocations = [10, 11] as const;
 
 const handle = <Handle>(kind: string, id: number): Handle =>
   ({ id, kind }) as Handle;
@@ -173,7 +172,8 @@ const fakeGl = (): FakeGl => {
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
-      if (name === "a_uv") return uvLocation;
+      if (name === "a_uv0") return uvLocations[0];
+      if (name === "a_uv1") return uvLocations[1];
       if (name === "a_position") return 0;
 
       return 1;
@@ -390,22 +390,14 @@ const singleMeshScene = (
   material: Material,
   geometry: Geometry = boxGeometry(1),
 ) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children: [
-        mesh({ geometry, material }),
-      ],
-      clearColor: [0, 0, 0, 0],
-    }),
-  ],
+  camera: camera(),
+  nodes: [mesh({ geometry, material })],
+  clearColor: [0, 0, 0, 0],
 });
 
 const twoMeshScene = (left: Material, right: Material) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children: [
+  camera: camera(),
+  nodes: [
         mesh({
           geometry: boxGeometry(1),
           material: left,
@@ -416,10 +408,8 @@ const twoMeshScene = (left: Material, right: Material) => scene({
           material: right,
           transform: { position: [0.4, 0, 0], rotation: [0, 0, 0] },
         }),
-      ],
-      clearColor: [0, 0, 0, 0],
-    }),
   ],
+  clearColor: [0, 0, 0, 0],
 });
 
 const callsNamed = (calls: readonly GlCall[], name: string): readonly GlCall[] =>
@@ -443,12 +433,12 @@ const textureUploadInternalFormats = (calls: readonly GlCall[]): readonly unknow
 const hasSafeUvCleanupBeforeDraw = (calls: readonly GlCall[], start: number, end: number): boolean => {
   const betweenDraws = calls.slice(start + 1, end);
 
-  return betweenDraws.some((call) =>
-    call.name === "disableVertexAttribArray" && call.args[0] === uvLocation)
-    || betweenDraws.some((call) =>
-      call.name === "vertexAttribPointer" && call.args[0] === uvLocation)
-    || betweenDraws.some((call) =>
-      call.name === "bindVertexArray" && call.args[0] !== null && call.args[0] !== undefined);
+  if (betweenDraws.some((call) =>
+    call.name === "bindVertexArray" && call.args[0] !== null && call.args[0] !== undefined)) return true;
+
+  return uvLocations.every((location) => betweenDraws.some((call) =>
+    (call.name === "disableVertexAttribArray" || call.name === "vertexAttribPointer")
+    && call.args[0] === location));
 };
 
 const missingCapabilityText = (value: unknown): readonly string[] => {
@@ -514,7 +504,10 @@ describe("WebGL renderer state and capability regressions", () => {
     await settleTextureLoads(loader, frames);
     await flushAnimationFrames(frames);
 
-    expect(requestedUrls(loader).filter((url) => url.includes(sharedSource))).toHaveLength(2);
+    expect(
+      requestedUrls(loader).filter((url) => url.includes(sharedSource)),
+      "upload variants should share one decoded source job",
+    ).toHaveLength(1);
     expect(
       countCalls(calls, "createTexture") - textureCreatesBefore,
       "different sampler/colorSpace descriptors need separate texture resources",
@@ -589,8 +582,12 @@ describe("WebGL renderer state and capability regressions", () => {
       texture: imageTexture("/textures/uv-grid.png"),
     })));
     expect(calls).toContainEqual(expect.objectContaining({
-      args: expect.arrayContaining([uvLocation]),
+      args: expect.arrayContaining([uvLocations[0]]),
       name: "enableVertexAttribArray",
+    }));
+    expect(calls).toContainEqual(expect.objectContaining({
+      args: expect.arrayContaining([uvLocations[1]]),
+      name: "disableVertexAttribArray",
     }));
 
     root.render(singleMeshScene(wireframeMaterial({ color: [1, 1, 1, 1] }), boxGeometry(1)));
@@ -602,7 +599,7 @@ describe("WebGL renderer state and capability regressions", () => {
     expect(secondDraw).toBeDefined();
     expect(
       hasSafeUvCleanupBeforeDraw(calls, firstDraw ?? 0, secondDraw ?? calls.length),
-      "wireframe/no-UV draws should disable a_uv, rebind it, or switch to isolated VAO state before drawing",
+      "wireframe/no-UV draws should reset both raw UV sets or switch to isolated VAO state before drawing",
     ).toBe(true);
   });
 

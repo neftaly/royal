@@ -7,7 +7,6 @@ import {
 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
-import type { UiNodeSemantics } from './ui';
 
 /** Geometry plus material, with an optional transform. */
 export interface MeshNode {
@@ -16,7 +15,6 @@ export interface MeshNode {
   readonly material: Material;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
-  readonly semantics?: UiNodeSemantics;
   readonly transform?: Transform;
 }
 
@@ -27,8 +25,6 @@ export interface MeshOptions {
   readonly pickingId?: PickingId;
   /** Optional imperative handle populated by renderer roots. */
   readonly ref?: RenderObjectRef;
-  /** Optional renderer-neutral UI semantics associated with this descriptor. */
-  readonly semantics?: UiNodeSemantics;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
 }
@@ -39,11 +35,10 @@ export const mesh = (options: MeshOptions): MeshNode => {
     geometry: options.geometry,
     material: options.material,
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
-    ...(options.ref === undefined ? {} : { ref: options.ref }),
-    ...(options.semantics === undefined ? {} : { semantics: options.semantics })
+    ...(options.ref === undefined ? {} : { ref: options.ref })
   } satisfies Omit<MeshNode, 'transform'>;
 
-  return options.transform === undefined
+  return Object.freeze(options.transform === undefined
     ? node
-    : { ...node, transform: resolveTransform(options.transform) };
+    : { ...node, transform: resolveTransform(options.transform) });
 };

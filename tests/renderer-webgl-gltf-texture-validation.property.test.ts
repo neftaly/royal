@@ -4,7 +4,11 @@ import {
   unsupportedRequiredGltfExtensions,
 } from "../packages/renderer-webgl/src/gltf/extensions";
 import { gltfImageLoadKey, type GltfImageKind } from "../packages/renderer-webgl/src/gltf/image-keys";
-import type { GltfDocument, GltfImage, GltfTexture } from "../packages/renderer-webgl/src/gltf/schema";
+import type { GltfDocument, GltfImage, GltfTexture, GltfTextureInfo } from "../packages/renderer-webgl/src/gltf/schema";
+import {
+  gltfTextureCoordinates,
+  transformGltfTextureCoordinates,
+} from "../packages/renderer-webgl/src/gltf/texture-coordinates";
 import { forEachFuzzCase, type FuzzReplay, type SeededRandom } from "./fuzz";
 
 const textureSourceExtensions = [
@@ -103,6 +107,45 @@ const documentWithConflictingTextureSource = (
     ...(textureIndex === conflictIndex ? { source: 0 } : {}),
     ...(textureIndex === conflictIndex ? { extensions: extensionBlock(extension, 0) } : {}),
   })),
+});
+
+describe("glTF material texture coordinate preparation", () => {
+  it("matches the KHR_texture_transform affine definition across both retained UV sets", () => {
+    forEachFuzzCase({ cases: 128, seed: 0x7e8c_00ad }, ({ label, random }) => {
+      const offset = [random.number(-4, 4), random.number(-4, 4)] as const;
+      const scale = [random.number(-3, 3), random.number(-3, 3)] as const;
+      const rotation = random.number(-Math.PI * 4, Math.PI * 4);
+      const set = random.boolean() ? 0 : 1;
+      const u = random.number(-2, 2);
+      const v = random.number(-2, 2);
+      const textureInfo: GltfTextureInfo = {
+        extensions: { KHR_texture_transform: { offset, rotation, scale, texCoord: set } },
+        index: 0,
+      };
+      const prepared = gltfTextureCoordinates(textureInfo);
+      const actual = transformGltfTextureCoordinates(prepared, u, v);
+      const scaledU = u * scale[0];
+      const scaledV = v * scale[1];
+      const expected = [
+        offset[0] + Math.cos(rotation) * scaledU - Math.sin(rotation) * scaledV,
+        offset[1] + Math.sin(rotation) * scaledU + Math.cos(rotation) * scaledV,
+      ];
+
+      expect(prepared.set, label).toBe(set);
+      expect(actual[0], label).toBeCloseTo(expected[0]!, 12);
+      expect(actual[1], label).toBeCloseTo(expected[1]!, 12);
+    });
+  });
+
+  it("rejects unsupported sets and malformed authored affine values", () => {
+    expect(() => gltfTextureCoordinates({ index: 0, texCoord: 2 })).toThrow(/TEXCOORD_2/u);
+    expect(() => gltfTextureCoordinates({ index: 0, extensions: {
+      KHR_texture_transform: { offset: [Number.NaN, 0] },
+    } })).toThrow(/offset\.x must be finite/u);
+    expect(() => gltfTextureCoordinates({ index: 0, extensions: {
+      KHR_texture_transform: { rotation: Number.POSITIVE_INFINITY },
+    } })).toThrow(/rotation must be finite/u);
+  });
 });
 
 const randomSvgImage = (random: SeededRandom): GltfImage => {

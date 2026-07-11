@@ -4,11 +4,9 @@ import {
   gltf,
   mesh,
   orthographicCamera,
-  pass,
   planeGeometry,
   scene,
   standardMaterial,
-  text,
   unlitMaterial,
   virtualTexture,
   wireframeMaterial,
@@ -16,7 +14,6 @@ import {
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
-import { loadTestTextFont } from "./text-font-fixture";
 
 type CanvasSize = {
   readonly width: number;
@@ -385,13 +382,9 @@ const renderScene = (
   children: readonly RenderNode[],
   clearColor: Rgba = [0, 0, 0, 0],
 ) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children,
-      clearColor,
-    }),
-  ],
+  camera: camera(),
+  nodes: children,
+  clearColor,
 });
 
 const drawCalls = (calls: readonly GlCall[]): readonly DrawCall[] =>
@@ -839,30 +832,6 @@ describe("WebGL renderer product descriptor contracts", () => {
     expectUniformVector(calls, materialColor);
     expectUniformVector(calls, lightColor);
     expectUniformVector(calls, [...lightDirection, 0]);
-  });
-
-  it("uploads and draws text nodes as triangle geometry", async () => {
-    const font = await loadTestTextFont();
-    const color: Rgba = [0.95, 0.2, 0.1, 1];
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(renderScene([
-      text({
-        color,
-        font,
-        fontSize: 0.75,
-        origin: [-0.5, -0.25, 0],
-        text: "A",
-      }),
-    ]));
-
-    expect(bufferUploads(calls).some((upload) => upload.target === gl.ARRAY_BUFFER && upload.length > 0)).toBe(true);
-    expect(drawCalls(calls).some((call) =>
-      call.args[0] === gl.TRIANGLES
-      && drawCount(call) > 0
-      && drawCount(call) % 3 === 0)).toBe(true);
-    expectUniformVector(calls, color);
   });
 
   it("fetches, uploads, and draws the documented narrow glTF subset after resources settle", async () => {

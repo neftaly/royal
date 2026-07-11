@@ -1,6 +1,7 @@
 export type GltfDocument = {
   readonly accessors?: readonly GltfAccessor[];
-  readonly animations?: readonly GltfAnimation[];
+  /** Parsed only for feature classification; Royal does not evaluate clips. */
+  readonly animations?: readonly unknown[];
   readonly bufferViews?: readonly GltfBufferView[];
   readonly buffers?: readonly GltfBuffer[];
   readonly extensions?: {
@@ -25,6 +26,8 @@ export type GltfDocument = {
   readonly samplers?: readonly GltfSampler[];
   readonly scene?: number;
   readonly scenes?: readonly GltfScene[];
+  /** Parsed only so deformed assets can fail explicitly before preparation. */
+  readonly skins?: readonly unknown[];
   readonly textures?: readonly GltfTexture[];
 };
 
@@ -46,23 +49,7 @@ export type GltfAccessor = {
       readonly byteOffset?: number;
     };
   };
-  readonly type: "SCALAR" | "VEC2" | "VEC3" | "VEC4";
-};
-
-export type GltfAnimation = {
-  readonly channels?: readonly {
-    readonly sampler?: number;
-    readonly target?: {
-      readonly node?: number;
-      readonly path?: string;
-    };
-  }[];
-  readonly name?: string;
-  readonly samplers?: readonly {
-    readonly input?: number;
-    readonly interpolation?: string;
-    readonly output?: number;
-  }[];
+  readonly type: "SCALAR" | "VEC2" | "VEC3" | "VEC4" | "MAT2" | "MAT3" | "MAT4";
 };
 
 export type GltfBufferView = {
@@ -249,10 +236,14 @@ export type GltfMesh = {
 export type GltfMeshPrimitive = {
   readonly attributes?: {
     readonly COLOR_0?: number;
+    readonly JOINTS_0?: number;
+    readonly JOINTS_1?: number;
     readonly NORMAL?: number;
     readonly POSITION?: number;
     readonly TANGENT?: number;
     readonly TEXCOORD_0?: number;
+    readonly WEIGHTS_0?: number;
+    readonly WEIGHTS_1?: number;
     readonly [semantic: string]: number | undefined;
   };
   readonly extensions?: {

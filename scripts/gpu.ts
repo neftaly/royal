@@ -73,11 +73,14 @@ const chromiumArgs = (userDataDir: string): readonly string[] => [
   '--headless=new',
   '--remote-debugging-port=0',
   `--user-data-dir=${userDataDir}`,
+  '--no-sandbox',
+  '--disable-dev-shm-usage',
   '--use-gl=angle',
-  '--use-angle=default',
+  '--use-angle=vulkan',
   '--enable-gpu',
   '--ignore-gpu-blocklist',
   '--disable-software-rasterizer',
+  '--use-gpu-in-tests',
   '--disable-background-timer-throttling',
   '--disable-renderer-backgrounding',
   '--no-first-run',
@@ -177,7 +180,7 @@ const parseArgs = (): {
   let browserPath = process.env.CHROMIUM_BIN ?? '/usr/bin/chromium';
   let out = path.join(tmpdir(), `royal-gpu-profile-${Date.now()}.json`);
   let settleMs = 0;
-  let url = 'http://127.0.0.1:5173/hello-cube';
+  let url = 'http://127.0.0.1:5173/cube';
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -294,7 +297,12 @@ const openPage = async (
   const loaded = cdp.waitFor('Page.loadEventFired', sessionId);
   await cdp.send('Page.navigate', { url }, sessionId);
   await loaded;
-  await cdp.send('Runtime.evaluate', {
+  const ready = await cdp.send<{
+    readonly exceptionDetails?: {
+      readonly exception?: { readonly description?: string };
+      readonly text?: string;
+    };
+  }>('Runtime.evaluate', {
     awaitPromise: true,
     expression: `new Promise((resolve, reject) => {
       const started = performance.now();
@@ -315,6 +323,13 @@ const openPage = async (
       wait();
     })`
   }, sessionId);
+  if (ready.exceptionDetails !== undefined) {
+    throw new Error(
+      ready.exceptionDetails.exception?.description
+      ?? ready.exceptionDetails.text
+      ?? 'Failed while waiting for canvas draw',
+    );
+  }
 
   return { sessionId };
 };
@@ -707,8 +722,19 @@ const main = async (): Promise<void> => {
 
     cdp.socket.close();
   } finally {
-    browser.kill();
-    rmSync(userDataDir, { force: true, recursive: true });
+    if (browser.exitCode === null) {
+      const exited = new Promise<void>((resolve) => {
+        browser.once('exit', () => resolve());
+      });
+      browser.kill();
+      await exited;
+    }
+    rmSync(userDataDir, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 50
+    });
   }
 };
 

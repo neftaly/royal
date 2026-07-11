@@ -17,30 +17,6 @@
       "@royal/renderer-core/render-object": [
         "./packages/renderer-core/src/render-object.ts"
       ],
-      "@royal/renderer-core/text": [
-        "./packages/renderer-core/src/text/index.ts"
-      ],
-      "@royal/renderer-core/text/editable": [
-        "./packages/renderer-core/src/text/editable/index.ts"
-      ],
-      "@royal/renderer-core/text/font": [
-        "./packages/renderer-core/src/text/font.ts"
-      ],
-      "@royal/renderer-core/text/layout": [
-        "./packages/renderer-core/src/text/layout.ts"
-      ],
-      "@royal/renderer-core/text/mesh": [
-        "./packages/renderer-core/src/text/mesh.ts"
-      ],
-      "@royal/renderer-core/text/node": [
-        "./packages/renderer-core/src/text/node.ts"
-      ],
-      "@royal/renderer-core/text/shaping": [
-        "./packages/renderer-core/src/text/shaping.ts"
-      ],
-      "@royal/renderer-core/text/types": [
-        "./packages/renderer-core/src/text/types.ts"
-      ],
       "@royal/renderer-webgl": [
         "./packages/renderer-webgl/src/index.ts"
       ],
@@ -58,23 +34,11 @@
       ],
       "@royal/react/xr": [
         "./packages/react/src/xr.ts"
-      ],
-      "@royal/react/jsx-dev-runtime": [
-        "./packages/react/src/jsx-dev-runtime.ts"
-      ],
-      "@royal/react/jsx-runtime": [
-        "./packages/react/src/jsx-runtime.ts"
-      ],
-      "@royal/react/renderer/jsx-dev-runtime": [
-        "./packages/react/src/renderer-jsx-dev-runtime.ts"
-      ],
-      "@royal/react/renderer/jsx-runtime": [
-        "./packages/react/src/renderer-jsx-runtime.ts"
       ]
     },
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "@royal/react",
+    "jsxImportSource": "react",
     "noEmit": true,
     "types": [
       "node",

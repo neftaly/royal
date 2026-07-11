@@ -4,7 +4,6 @@ import {
   imageTexture,
   mesh,
   orthographicCamera,
-  pass,
   planeGeometry,
   scene,
   standardMaterial,
@@ -13,6 +12,10 @@ import {
   type Material,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
+import {
+  VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
+  VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
+} from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import {
   encodeVirtualTexturePageTableRgba8,
   firstVirtualTexturePageUri,
@@ -337,6 +340,7 @@ type CanvasSize = {
 };
 
 type FakeCanvas = HTMLCanvasElement & {
+  dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored"): Event;
   getContext: ReturnType<typeof vi.fn>;
 };
 
@@ -361,7 +365,9 @@ const fakeCanvas = (
   gl: WebGL2RenderingContext | null,
   size: CanvasSize = { height: 128, width: 128 },
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -380,7 +386,13 @@ const fakeCanvas = (
       toJSON: () => ({}),
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored") {
+      const event = new Event(type, { cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    },
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -471,11 +483,13 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     bindBuffer: record("bindBuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
+    blendEquationSeparate: record("blendEquationSeparate"),
     blendFunc: record("blendFunc"),
     bufferData: record("bufferData"),
     clear: record("clear"),
     clearColor: record("clearColor"),
     clearDepth: record("clearDepth"),
+    colorMask: record("colorMask"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
     createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
@@ -489,6 +503,7 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     deleteVertexArray: record("deleteVertexArray"),
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
+    depthRange: record("depthRange"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
     drawElements: record("drawElements"),
@@ -698,29 +713,25 @@ const camera = () => orthographicCamera({
 const renderScene = (
   material: Material,
   options: {
-    readonly exposure?: number;
+    readonly exposureEv100?: number;
     readonly planeSize?: readonly [number, number];
-    readonly toneMapping?: "aces" | "none";
+    readonly toneMapping?: "aces-fitted" | "linear-clamp" | "pbr-neutral";
   } = {},
 ) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children: [
-        directionalLight({
-          color: [1, 1, 1, 1],
-          direction: [0, 0, -1],
-        }),
-        mesh({
-          geometry: planeGeometry(options.planeSize ?? [2, 2]),
-          material,
-        }),
-      ],
-      clearColor: [0, 0, 0, 0],
-      ...(options.exposure === undefined ? {} : { exposure: options.exposure }),
-      ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping }),
+  camera: camera(),
+  nodes: [
+    directionalLight({
+      color: [1, 1, 1, 1],
+      direction: [0, 0, -1],
+    }),
+    mesh({
+      geometry: planeGeometry(options.planeSize ?? [2, 2]),
+      material,
     }),
   ],
+  clearColor: [0, 0, 0, 0],
+  ...(options.exposureEv100 === undefined ? {} : { exposureEv100: options.exposureEv100 }),
+  ...(options.toneMapping === undefined ? {} : { toneMapping: options.toneMapping }),
 });
 
 const vtManifest = (physicalSlots = 2) => ({
@@ -877,6 +888,48 @@ afterEach(() => {
 });
 
 describe("WebGL renderer virtual texturing integration", () => {
+  it("drops false VT residency and refills retained manifest resources after context restoration", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    const material = unlitMaterial({ texture: imageTexture("/textures/restored-vt.png") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    imageBySrc("/textures/pages/0-0.png")!.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(material));
+    expect(root.snapshot().virtualTexturing.residentPages).toBe(1);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    const callsAtLoss = calls.length;
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      atlasTextures: 0,
+      pageTableTextures: 0,
+      residentPages: 0,
+    });
+    root.render(renderScene(material));
+    expect(calls).toHaveLength(callsAtLoss);
+
+    canvas.dispatchContextEvent("webglcontextrestored");
+    const restoredPage = ControlledImage.instances
+      .filter((image) => image.src.includes("/textures/pages/0-0.png"))
+      .at(-1);
+    expect(restoredPage).toBeDefined();
+    restoredPage?.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(material));
+
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      atlasTextures: 1,
+      pageTableTextures: 1,
+      residentPages: 1,
+    });
+  });
+
   it("renders ordinary image base color while an auto VT sidecar manifest is loading", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
@@ -993,7 +1046,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/no-sidecar.png") });
 
     root.render(renderScene(material));
@@ -1184,7 +1237,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/unsupported-sidecar.png") });
 
     root.render(renderScene(material));
@@ -1223,12 +1276,12 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it("keeps large generated VT page preparation within the render-loop budget", async () => {
+  it("bounds large generated VT page preparation work per frame", async () => {
     vi.stubGlobal("Image", ControlledImage);
-    installCanvas2d();
+    const { canvases, contexts } = installCanvas2d();
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/large-generated.png") });
 
     root.render(renderScene(material));
@@ -1243,9 +1296,19 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(renderScene(material));
 
-    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
-    expect(root.snapshot().virtualTexturing.generatedPageRasterizeMaxMs).toBeLessThanOrEqual(4);
-    expect(root.snapshot().virtualTexturing.generatedPageRasterizeMs).toBeLessThanOrEqual(8);
+    const generatedPageRequests = root.snapshot().virtualTexturing.generatedPageRequests;
+    expect(generatedPageRequests).toBeGreaterThan(0);
+    expect(generatedPageRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME);
+    expect(generatedPageRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS);
+    expect(canvases).toHaveLength(generatedPageRequests);
+    expect(contexts).toHaveLength(generatedPageRequests);
+    for (const canvas of canvases) {
+      expect(canvas).toEqual(expect.objectContaining({ height: 256, width: 256 }));
+    }
+    for (const context of contexts) {
+      expect(context.clearRect).toHaveBeenCalledTimes(1);
+      expect(context.drawImage).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("inserts the auto VT sidecar suffix before image asset query and hash", () => {
@@ -1327,7 +1390,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const material = standardMaterial({
       texture: virtualTexture({ colorSpace: "srgb", src: "/vt/manifest.json" }),
     });
-    const graph = renderScene(material, { exposure: 1.75, toneMapping: "aces" });
+    const graph = renderScene(material, { exposureEv100: 1.75, toneMapping: "aces-fitted" });
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
@@ -1360,7 +1423,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     }));
     expect(uniform4fv).toEqual(expect.objectContaining({
       u_color: expect.arrayContaining([[1, 1, 1, 1]]),
-      u_toneMappingSettings: expect.arrayContaining([[1, 1.75, 0, 0]]),
+      u_toneMappingSettings: expect.arrayContaining([[1, 1 / (1.2 * (2 ** 1.75)), 0, 0]]),
     }));
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([

@@ -1,39 +1,59 @@
 /** @jsxImportSource react */
-import { Link, Outlet } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { examples } from './examples';
+import { exampleHref } from './route-path';
 
-const Sidebar = (): ReactNode => (
-  <aside className="examples-sidebar">
-    <Link className="examples-brand" to="/">
-      Royal 👑 examples
-    </Link>
-    <nav className="examples-nav" aria-label="Examples">
-      <ul>
-        {examples.map((example) => (
-          <li key={example.id}>
-            <Link
-              to={example.path}
-              activeProps={{ className: 'examples-link active' }}
-              className="examples-link"
-              data-example-id={example.id}
-              data-example-nav-link=""
-              data-example-route={example.path}
-            >
-              {example.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  </aside>
-);
+type RouteLinkProps = {
+  readonly ariaCurrent?: 'page' | undefined;
+  readonly children: ReactNode;
+  readonly className: string;
+  readonly navigate: (path: string) => void;
+  readonly path: string;
+} & Readonly<Record<`data-${string}`, string>>;
 
-export const Shell = (): ReactNode => (
+const RouteLink = ({ ariaCurrent, children, className, navigate, path, ...data }: RouteLinkProps): ReactNode => {
+  const follow = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(path);
+  };
+  return <a {...data} aria-current={ariaCurrent} className={className} href={exampleHref(path)} onClick={follow}>{children}</a>;
+};
+
+export const Shell = ({
+  children,
+  currentPath,
+  navigate,
+}: {
+  readonly children: ReactNode;
+  readonly currentPath: string | undefined;
+  readonly navigate: (path: string) => void;
+}): ReactNode => (
   <main className="examples-shell">
-    <Sidebar />
-    <div className="examples-main">
-      <Outlet />
-    </div>
+    <aside className="examples-sidebar">
+      <RouteLink className="examples-brand" navigate={navigate} path="/">
+        Royal 👑 examples
+      </RouteLink>
+      <nav className="examples-nav" aria-label="Examples">
+        <ul>
+          {examples.filter((example) => !('navigation' in example) || example.navigation !== false).map((example) => (
+            <li key={example.id}>
+              <RouteLink
+                ariaCurrent={currentPath === example.path ? 'page' : undefined}
+                className={`examples-link${currentPath === example.path ? ' active' : ''}`}
+                data-example-id={example.id}
+                data-example-nav-link=""
+                data-example-route={example.path}
+                navigate={navigate}
+                path={example.path}
+              >
+                {example.title}
+              </RouteLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+    <div className="examples-main">{children}</div>
   </main>
 );

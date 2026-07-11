@@ -79,6 +79,18 @@ describe("renderer-core orbit camera API", () => {
     });
   });
 
+  it("copies and freezes orbit view inputs", () => {
+    const target: [number, number, number] = [1, 2, 3];
+    const view = resolveOrbitCameraView({ distance: 5, target });
+    target[0] = 9;
+
+    expect(view.target).toEqual([1, 2, 3]);
+    expect(Object.isFrozen(view)).toBe(true);
+    expect(Object.isFrozen(view.target)).toBe(true);
+    expect(Object.isFrozen(orbitCameraBasis(view))).toBe(true);
+    expect(Object.isFrozen(orbitCameraTransform(view))).toBe(true);
+  });
+
   it("clamps orbit view limits as a pure transition", () => {
     expect(clampOrbitCameraView({
       distance: 20,
@@ -186,6 +198,26 @@ describe("renderer-core orbit camera API", () => {
     })).toEqual({
       right: [1, 0, 0],
       up: [0, 1, -0],
+    });
+  });
+
+  it("rejects non-finite orbit inputs and inverted constraints", () => {
+    forEachFuzzCase({ cases: 16, seed: 0x0b17_bad }, ({ label, random }) => {
+      const invalid = random.pick([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]);
+      expect(() => resolveOrbitCameraView({ distance: invalid }), `${label} view`).toThrow(/finite/);
+      expect(() => resolveOrbitCameraView({ distance: 1, target: [0, invalid, 0] }), `${label} target`)
+        .toThrow(/finite/);
+      expect(() => clampOrbitCameraView(defaultView, {
+        maxDistance: 1,
+        minDistance: 2,
+      }), `${label} distance constraints`).toThrow(/must not exceed/);
+      expect(() => clampOrbitCameraView(defaultView, {
+        maxPitch: -1,
+        minPitch: 1,
+      }), `${label} pitch constraints`).toThrow(/must not exceed/);
+      expect(() => rotateOrbitCameraView(defaultView, invalid, 0, 1), `${label} rotate`).toThrow(/finite/);
+      expect(() => zoomOrbitCameraView(defaultView, 1, invalid), `${label} zoom`).toThrow(/finite/);
+      expect(() => panOrbitCameraView(defaultView, 0, invalid, 1), `${label} pan`).toThrow(/finite/);
     });
   });
 });

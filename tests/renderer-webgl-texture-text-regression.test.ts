@@ -4,15 +4,13 @@ import {
   imageTexture,
   mesh,
   orthographicCamera,
-  pass,
   scene,
-  text,
   unlitMaterial,
   type RenderNode,
   type Rgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
-import { loadTestTextFont } from "./text-font-fixture";
+import { SeededRandom } from "./fuzz";
 
 type CanvasSize = {
   readonly width: number;
@@ -20,6 +18,7 @@ type CanvasSize = {
 };
 
 type FakeCanvas = HTMLCanvasElement & {
+  dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored"): Event;
   getContext: ReturnType<typeof vi.fn>;
 };
 
@@ -34,10 +33,6 @@ type FakeGl = {
   readonly gl: WebGL2RenderingContext;
 };
 
-type DrawCall = GlCall & {
-  readonly name: "drawArrays" | "drawElements";
-};
-
 type BufferUpload = {
   readonly index: number;
   readonly length: number;
@@ -50,7 +45,9 @@ const fakeCanvas = (
   gl: WebGL2RenderingContext,
   size: CanvasSize = defaultCanvasSize,
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -69,7 +66,13 @@ const fakeCanvas = (
       toJSON: () => ({}),
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored") {
+      const event = new Event(type, { cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    },
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -290,6 +293,7 @@ class ControlledImage {
   static readonly instances: ControlledImage[] = [];
 
   complete = false;
+  readonly close = vi.fn();
   crossOrigin: string | null = null;
   height = 4;
   naturalHeight = 4;
@@ -366,13 +370,9 @@ const renderScene = (
   children: readonly RenderNode[],
   clearColor: Rgba = [0, 0, 0, 0],
 ) => scene({
-  children: [
-    pass({
-      camera: camera(),
-      children,
-      clearColor,
-    }),
-  ],
+  camera: camera(),
+  nodes: children,
+  clearColor,
 });
 
 const flushMicrotasks = async (): Promise<void> => {
@@ -423,12 +423,6 @@ const bufferUploads = (calls: readonly GlCall[]): readonly BufferUpload[] =>
     }];
   });
 
-const drawCalls = (calls: readonly GlCall[]): readonly DrawCall[] =>
-  calls.filter((call): call is DrawCall => call.name === "drawArrays" || call.name === "drawElements");
-
-const drawCount = (call: DrawCall): number =>
-  call.name === "drawArrays" ? Number(call.args[2]) : Number(call.args[1]);
-
 const texturePixelUploadIndexes = (calls: readonly GlCall[]): readonly number[] => {
   const textureStorageIndex = calls.findIndex((call) => call.name === "texStorage2D");
 
@@ -447,6 +441,56 @@ afterEach(() => {
 });
 
 describe("WebGL texture, box UV, and text geometry regressions", () => {
+  it("retains a decoded image that settles across context loss and uploads it after restoration", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const animationFrames = installAnimationFrameQueue();
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    const texturedScene = renderScene([
+      mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ texture: imageTexture("/textures/restored.png") }),
+      }),
+    ]);
+
+    root.render(texturedScene);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(animationFrames);
+    expect(texturePixelUploadIndexes(calls)).not.toHaveLength(0);
+    expect(root.snapshot().textureResidency).toMatchObject({
+      activeLeases: 1,
+      preparedBytes: 4 * 4 * 4,
+      preparedSources: 1,
+      resources: 1,
+    });
+    canvas.dispatchContextEvent("webglcontextlost");
+    const callsAtLoss = calls.length;
+    await flushAnimationFrames(animationFrames);
+    expect(calls).toHaveLength(callsAtLoss);
+    expect(root.snapshot().textureResidency).toMatchObject({
+      activeLeases: 1,
+      preparedBytes: 4 * 4 * 4,
+      preparedSources: 1,
+      resources: 0,
+    });
+
+    canvas.dispatchContextEvent("webglcontextrestored");
+    await flushAnimationFrames(animationFrames);
+    await flushAnimationFrames(animationFrames);
+
+    expect(root.snapshot().context.lifecycle).toBe("active");
+    expect(root.snapshot().textureResidency).toMatchObject({
+      activeLeases: 1,
+      preparedBytes: 4 * 4 * 4,
+      preparedSources: 1,
+      resources: 1,
+    });
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(texturePixelUploadIndexes(calls).some((index) => index >= callsAtLoss)).toBe(true);
+  });
+
   it("generates mipmaps after uploading a default imageTexture asset", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const animationFrames = installAnimationFrameQueue();
@@ -477,6 +521,133 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     );
   });
 
+  it("leases shared decoded textures only while the committed scene references them", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const animationFrames = installAnimationFrameQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const sharedTexture = imageTexture({
+      contentKey: "shared-card-art",
+      src: "/textures/card-front.png",
+    });
+    const sharedMaterial = unlitMaterial({ texture: sharedTexture });
+
+    root.render(renderScene([
+      mesh({ geometry: boxGeometry(1), material: sharedMaterial }),
+      mesh({ geometry: boxGeometry(1), material: sharedMaterial }),
+    ]));
+    expect(root.snapshot().textureResidency).toMatchObject({
+      activeLeases: 1,
+      activeReferences: 2,
+      preparedBytes: 0,
+      preparedSources: 0,
+      resources: 1,
+    });
+
+    const image = ControlledImage.instances[0]!;
+    image.settleLoad();
+    await flushMicrotasks();
+    await flushAnimationFrames(animationFrames);
+    expect(root.snapshot().textureResidency).toEqual({
+      activeLeases: 1,
+      activeReferences: 2,
+      preparedBytes: 4 * 4 * 4,
+      preparedSources: 1,
+      resources: 1,
+    });
+
+    const deletesBeforeRelease = calls.filter((call) => call.name === "deleteTexture").length;
+    root.render(renderScene([]));
+    expect(root.snapshot().textureResidency).toEqual({
+      activeLeases: 0,
+      activeReferences: 0,
+      preparedBytes: 0,
+      preparedSources: 0,
+      resources: 0,
+    });
+    expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(deletesBeforeRelease + 1);
+    expect(image.close).toHaveBeenCalledTimes(1);
+
+    root.render(renderScene([]));
+    expect(image.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps texture residency bounded across randomized committed-scene churn", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const animationFrames = installAnimationFrameQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const random = new SeededRandom(0x7e57_cafe);
+    const textures = Array.from({ length: 4 }, (_value, index) => imageTexture({
+      contentKey: `fuzz-texture-${index}`,
+      src: `/textures/fuzz-${index}.png`,
+    }));
+
+    for (let step = 0; step < 32; step += 1) {
+      const references = textures.map(() => random.int(0, 4));
+      const nodes = references.flatMap((count, textureIndex) =>
+        Array.from({ length: count }, () => mesh({
+          geometry: boxGeometry(1),
+          material: unlitMaterial({ texture: textures[textureIndex]! }),
+        })));
+      root.render(renderScene(nodes));
+      for (const image of ControlledImage.instances) {
+        if (!image.complete) image.settleLoad();
+      }
+      await flushMicrotasks();
+      await flushAnimationFrames(animationFrames);
+
+      const activeLeases = references.filter((count) => count > 0).length;
+      const activeReferences = references.reduce((sum, count) => sum + count, 0);
+      expect(root.snapshot().textureResidency, `step ${step}`).toEqual({
+        activeLeases,
+        activeReferences,
+        preparedBytes: activeLeases * 4 * 4 * 4,
+        preparedSources: activeLeases,
+        resources: activeLeases,
+      });
+    }
+
+    root.render(renderScene([]));
+    expect(root.snapshot().textureResidency).toEqual({
+      activeLeases: 0,
+      activeReferences: 0,
+      preparedBytes: 0,
+      preparedSources: 0,
+      resources: 0,
+    });
+    for (const image of ControlledImage.instances) expect(image.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not resurrect a texture whose load settles after its last lease", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(renderScene([
+      mesh({
+        geometry: boxGeometry(1),
+        material: unlitMaterial({ texture: imageTexture("/textures/late.png") }),
+      }),
+    ]));
+    const image = ControlledImage.instances[0]!;
+
+    root.render(renderScene([]));
+    image.settleLoad();
+    await flushMicrotasks();
+
+    expect(image.close).toHaveBeenCalledTimes(1);
+    expect(root.snapshot().textureResidency).toEqual({
+      activeLeases: 0,
+      activeReferences: 0,
+      preparedBytes: 0,
+      preparedSources: 0,
+      resources: 0,
+    });
+  });
+
   it("uploads per-face box positions and UVs for textured cube sampling", () => {
     vi.stubGlobal("Image", ControlledImage);
     const { calls, gl } = fakeGl();
@@ -499,35 +670,8 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     expect(uvUpload, "a textured box should upload at least 24 UV coordinates").toBeDefined();
     expect(calls.some((call) =>
       call.name === "vertexAttribPointer"
-      && call.args[0] === 2
+      && call.args[0] === 10
       && call.args[1] === 2)).toBe(true);
   });
 
-  it("draws text from glyph mesh geometry instead of a single layout quad", async () => {
-    const font = await loadTestTextFont();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(renderScene([
-      text({
-        color: [0.95, 0.2, 0.1, 1],
-        font,
-        fontSize: 0.75,
-        origin: [-0.5, -0.25, 0],
-        text: "A",
-      }),
-    ]));
-
-    const uploads = bufferUploads(calls);
-    const positionUpload = uploads.find((upload) => upload.target === gl.ARRAY_BUFFER && upload.length > 12);
-    const indexUpload = uploads.find((upload) => upload.target === gl.ELEMENT_ARRAY_BUFFER && upload.length > 6);
-    const glyphDraw = drawCalls(calls).find((call) =>
-      call.args[0] === gl.TRIANGLES
-      && drawCount(call) > 6
-      && drawCount(call) % 3 === 0);
-
-    expect(positionUpload, "text glyph meshes should upload more than one quad worth of positions").toBeDefined();
-    expect(indexUpload, "text glyph meshes should upload more than one quad worth of indices").toBeDefined();
-    expect(glyphDraw, "text glyph meshes should draw more than the six indices used by a layout quad").toBeDefined();
-  });
 });
