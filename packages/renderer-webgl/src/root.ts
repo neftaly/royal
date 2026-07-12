@@ -69,6 +69,7 @@ import {
   abortResourceArenaImageWork,
   clearResourceArenaPreparedSources,
   createResourceArena,
+  detachResourceArenaImagePreparation,
   disposeResourceArena,
   finishResourceArenaImageWork,
   publishResourceArenaContentKey,
@@ -76,9 +77,11 @@ import {
   releaseResourceArenaPreparedSource,
   releaseResourceArenaAssetSource,
   resourceArenaContentKeys,
+  resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
-  resourceArenaIblSources,
+  copyResourceArenaIblSources,
+  resourceArenaOrdinaryTextureResidencySnapshot,
   resourceArenaPreparedSource,
   resourceArenaPreparedSourceKeys,
   resourceArenaPreparedSourceValues,
@@ -117,6 +120,7 @@ import {
   type CpuGeometry,
 } from "./geometry-recipes";
 import {
+  createVertexInputArena,
   disposeVertexInputArena,
   dropVertexInputArenaContext,
   releaseVertexInputContextHandles,
@@ -129,6 +133,7 @@ import {
   vertexInputCompositeVertexArray,
   vertexInputGeometry,
   type VertexInputGeometry,
+  type VertexInputArena,
   type VertexInputInstanceBuffers,
 } from "./vertex-input-arena";
 import { MAX_RESOURCE_ID } from "./resource-id";
@@ -2141,6 +2146,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, VirtualTextureGeneratedPageSource>();
   readonly #gltf = new Map<string, GltfState>();
   readonly #resourceArena: ResourceArena;
+  readonly #vertexInputs: VertexInputArena = createVertexInputArena();
   readonly #gltfPreparationScheduler = new GltfPreparationScheduler(2);
   readonly #gltfImageScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY);
   readonly #gltfIblImageScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY);
@@ -2277,7 +2283,7 @@ class WebGlRootImpl implements WebGlRoot {
     try {
       this.#validateRestoredContextAttributes();
       this.#probeContextCapabilities();
-      restoreVertexInputArenaContext(this.#resourceArena.vertexInputs, this.#contextGeneration);
+      restoreVertexInputArenaContext(this.#vertexInputs, this.#contextGeneration);
       this.#contextLifecycle = "active";
       this.#contextError = undefined;
       this.#contextRestores += 1;
@@ -2320,7 +2326,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gl = gl;
     this.#options = this.#validatedContextOptions(requestedOptions);
     this.#probeContextCapabilities();
-    restoreVertexInputArenaContext(this.#resourceArena.vertexInputs, this.#contextGeneration);
+    restoreVertexInputArenaContext(this.#vertexInputs, this.#contextGeneration);
     this.#canvas.addEventListener?.("webglcontextlost", this.#contextLostListener);
     this.#canvas.addEventListener?.("webglcontextrestored", this.#contextRestoredListener);
     this.#watchViewport();
@@ -2756,7 +2762,7 @@ class WebGlRootImpl implements WebGlRoot {
       }
     }
     if (deleteResources) {
-      releaseVertexInputContextHandles(this.#resourceArena.vertexInputs, this.#gl, this.#contextGeneration);
+      releaseVertexInputContextHandles(this.#vertexInputs, this.#gl, this.#contextGeneration);
       const gl = this.#gl;
       for (const buffer of Array.from(this.#ownedBuffers)) gl.deleteBuffer(buffer);
       for (const framebuffer of Array.from(this.#ownedFramebuffers)) gl.deleteFramebuffer(framebuffer);
@@ -2765,7 +2771,7 @@ class WebGlRootImpl implements WebGlRoot {
       for (const program of Array.from(this.#ownedPrograms)) gl.deleteProgram(program);
       for (const shader of Array.from(this.#ownedShaders)) gl.deleteShader(shader);
     } else {
-      dropVertexInputArenaContext(this.#resourceArena.vertexInputs);
+      dropVertexInputArenaContext(this.#vertexInputs);
     }
     this.#ownedBuffers.clear();
     this.#ownedFramebuffers.clear();
@@ -2897,7 +2903,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = undefined;
     this.#unwatchDevicePixelRatio();
-    disposeVertexInputArena(this.#resourceArena.vertexInputs);
+    disposeVertexInputArena(this.#vertexInputs);
   }
 
   snapshot(): WebGlRootSnapshot {
@@ -2924,7 +2930,7 @@ class WebGlRootImpl implements WebGlRoot {
         sceneCommits: this.#sceneCommits,
       },
       resourceLifetime: {
-        ...this.#resourceArena.counters,
+        ...resourceArenaCountersSnapshot(this.#resourceArena),
         gltfPreparationQueueHighWater: this.#gltfPreparationScheduler.snapshot().queueHighWater,
         imageQueueHighWater: this.#gltfImageScheduler.snapshot().queueHighWater,
         iblImageQueueHighWater: this.#gltfIblImageScheduler.snapshot().queueHighWater,
@@ -3061,7 +3067,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
     for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
-      retainVertexInputGeometry(this.#resourceArena.vertexInputs, { geometryId: id, recipe });
+      retainVertexInputGeometry(this.#vertexInputs, { geometryId: id, recipe });
       this.#retainedGeometryRecipes.set(key, { id, recipe });
     }
     for (const { id, key } of changes.releasedGeometryDeclarations) {
@@ -3070,13 +3076,13 @@ class WebGlRootImpl implements WebGlRoot {
         || this.#contextLifecycle === "restoring"
       ) {
         releaseVertexInputGeometry(
-          this.#resourceArena.vertexInputs,
+          this.#vertexInputs,
           this.#gl,
           this.#contextGeneration,
           id,
         );
       } else {
-        releaseLostVertexInputGeometry(this.#resourceArena.vertexInputs, id);
+        releaseLostVertexInputGeometry(this.#vertexInputs, id);
       }
       if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
     }
@@ -3135,7 +3141,7 @@ class WebGlRootImpl implements WebGlRoot {
       const images = asset.imagePreparation;
       if (images !== undefined) {
         this.#loadGltfImages(images.src, images.document, images.buffers, state, images.basisuCodec);
-        this.#resourceArena.preparedAssets.detachImagePreparation(snapshot.key, snapshot.generation);
+        detachResourceArenaImagePreparation(this.#resourceArena, snapshot.key, snapshot.generation);
       }
     }
   }
@@ -5521,7 +5527,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #bindGeometryAttributes(geometry: GeometryResource, geometryId: number): void {
     this.#gl.bindVertexArray(vertexInputBaseVertexArray(
-      this.#resourceArena.vertexInputs,
+      this.#vertexInputs,
       this.#gl,
       this.#contextGeneration,
       geometryId,
@@ -5535,7 +5541,7 @@ class WebGlRootImpl implements WebGlRoot {
     instanceResource: GltfInstanceBufferResource,
   ): void {
     this.#gl.bindVertexArray(vertexInputCompositeVertexArray(
-      this.#resourceArena.vertexInputs,
+      this.#vertexInputs,
       this.#gl,
       this.#contextGeneration,
       geometryId,
@@ -6019,7 +6025,7 @@ class WebGlRootImpl implements WebGlRoot {
     for (const [key, resource] of this.#gltfInstanceBuffers) {
       if (this.#activeGltfInstanceBufferKeys.has(key)) continue;
       releaseVertexInputInstance(
-        this.#resourceArena.vertexInputs,
+        this.#vertexInputs,
         this.#gl,
         this.#contextGeneration,
         resource.instanceKey,
@@ -7587,7 +7593,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #geometryResource(geometryId: number): GeometryResource {
     return vertexInputGeometry(
-      this.#resourceArena.vertexInputs,
+      this.#vertexInputs,
       this.#gl,
       this.#contextGeneration,
       geometryId,
@@ -7747,9 +7753,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
     const resource = ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
-    const prepared = resourceArenaIblSources(this.#resourceArena, specular.key);
-    if (prepared !== undefined) {
-      for (const [key, source] of prepared) resource.sources.set(key, source);
+    if (copyResourceArenaIblSources(this.#resourceArena, specular.key, resource.sources)) {
       // The first ensure could not upload before the prepared sources were copied.
       return ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
     }
@@ -9134,13 +9138,10 @@ class WebGlRootImpl implements WebGlRoot {
         }
       }
     }
-    let activeReferences = 0;
-    for (const declaration of this.#resourceArena.ordinaryTextures.values()) {
-      activeReferences += declaration.sceneReferences + declaration.assetReferences;
-    }
+    const ordinary = resourceArenaOrdinaryTextureResidencySnapshot(this.#resourceArena);
     return {
-      activeLeases: this.#resourceArena.ordinaryTextures.size,
-      activeReferences,
+      activeLeases: ordinary.activeLeases,
+      activeReferences: ordinary.activeReferences,
       preparedBytes,
       preparedSources: sources.size,
       resources: this.#textures.size,

@@ -6,7 +6,6 @@ import {
   gltfRequestKey,
   type FramePlanResourceManifest,
 } from "../packages/renderer-webgl/src/frame-plan";
-import { MAX_FRAME_PACKET_RESOURCE_ID } from "../packages/renderer-webgl/src/frame-packets";
 import {
   directGeometryDeclaration,
   directGeometryDeclarationKey,
@@ -22,7 +21,8 @@ import {
   resourceArenaContentKeys,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
-  resourceArenaIblSources,
+  resourceArenaIblSourceCount,
+  resourceArenaSnapshot,
   resourceArenaSourceReferenceCount,
   retainResourceArenaAssetSource,
   retainResourceArenaIblSource,
@@ -32,7 +32,9 @@ import {
 } from "../packages/renderer-webgl/src/resource-arena";
 import type { PreparedGltfAsset } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
+import { claimMonotonicId, MAX_RESOURCE_ID } from "../packages/renderer-webgl/src/resource-id";
 import {
+  createVertexInputArena,
   releaseLostVertexInputGeometry,
   retainVertexInputGeometry,
   vertexInputArenaSnapshot,
@@ -60,18 +62,49 @@ const emptyAsset = (): PreparedGltfAsset => ({
 });
 
 const replayGeometryChanges = (
-  arena: ReturnType<typeof createResourceArena>,
+  vertexInputs: ReturnType<typeof createVertexInputArena>,
   changes: ReturnType<typeof applyResourceDelta>,
 ): void => {
   for (const acquired of changes.acquiredGeometryDeclarations) {
-    retainVertexInputGeometry(arena.vertexInputs, { geometryId: acquired.id, recipe: acquired.recipe });
+    retainVertexInputGeometry(vertexInputs, { geometryId: acquired.id, recipe: acquired.recipe });
   }
   for (const released of changes.releasedGeometryDeclarations) {
-    releaseLostVertexInputGeometry(arena.vertexInputs, released.id);
+    releaseLostVertexInputGeometry(vertexInputs, released.id);
   }
 };
 
 describe("semantic resource arena properties", () => {
+  it("guards production monotonic identity boundaries without mutable arena hooks", () => {
+    expect(claimMonotonicId(MAX_RESOURCE_ID, MAX_RESOURCE_ID, "resource")).toBe(MAX_RESOURCE_ID);
+    expect(() => claimMonotonicId(MAX_RESOURCE_ID + 1, MAX_RESOURCE_ID, "resource"))
+      .toThrow(/ID space is exhausted/);
+    expect(claimMonotonicId(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, "static identity"))
+      .toBe(Number.MAX_SAFE_INTEGER);
+    expect(() => claimMonotonicId(Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER, "static identity"))
+      .toThrow(/ID space is exhausted/);
+  });
+
+  it("returns detached diagnostic snapshots", () => {
+    const arena = createResourceArena(async () => emptyAsset(), () => undefined);
+    const declaration = directGeometryDeclaration(boxGeometry([1, 2, 3]), "surface");
+    applyResourceDelta(arena, diffResourceManifests(emptyManifest(), {
+      ...emptyManifest(),
+      directGeometries: [{ count: 1, declaration, key: directGeometryDeclarationKey(declaration) }],
+    }, createResourceManifestDiffScratch()));
+    const first = resourceArenaSnapshot(arena);
+    const row = first.geometries.get(directGeometryDeclarationKey(declaration))!;
+    const retainedPosition = row.recipe.positions[0]!;
+    row.recipe.positions[0] = retainedPosition + 100;
+    first.geometries.clear();
+    first.counters.sceneLeaseAcquires = -1;
+
+    const second = resourceArenaSnapshot(arena);
+    expect(second.geometries.get(directGeometryDeclarationKey(declaration))?.recipe.positions[0])
+      .toBe(retainedPosition);
+    expect(second.geometries.size).toBe(1);
+    expect(second.counters.sceneLeaseAcquires).toBe(1);
+  });
+
   it("preflights cross-asset geometry collisions before committing a prepared batch", async () => {
     const resolvers: Array<(asset: PreparedGltfAsset) => void> = [];
     const arena = createResourceArena(() => new Promise((resolve) => resolvers.push(resolve)), () => undefined);
@@ -105,14 +138,15 @@ describe("semantic resource arena properties", () => {
       virtualTextures: [],
       wantsHdr: false,
     }))).toThrow(/geometry identity collision/);
-    expect(arena.geometries.size).toBe(0);
-    expect(arena.counters.preparedAssetEvents).toBe(0);
-    expect(arena.counters.assetPlanCompiles).toBe(0);
+    expect(resourceArenaSnapshot(arena).geometries.size).toBe(0);
+    expect(resourceArenaSnapshot(arena).counters.preparedAssetEvents).toBe(0);
+    expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBe(0);
     expect(resourceArenaHasPendingAssetEvents(arena)).toBe(true);
   });
 
   it("fuzzes counted geometry changes replayed into the vertex-input semantic boundary", () => {
     const arena = createResourceArena(async () => emptyAsset(), () => undefined);
+    const vertexInputs = createVertexInputArena();
     const scratch = createResourceManifestDiffScratch();
     const random = new SeededRandom(0x4e11_cafe);
     let current = emptyManifest();
@@ -128,18 +162,18 @@ describe("semantic resource arena properties", () => {
       });
       const next = { ...emptyManifest(), directGeometries };
       const changes = applyResourceDelta(arena, diffResourceManifests(current, next, scratch));
-      replayGeometryChanges(arena, changes);
+      replayGeometryChanges(vertexInputs, changes);
       current = next;
-      expect(vertexInputArenaSnapshot(arena.vertexInputs).semanticGeometryCount).toBe(arena.geometries.size);
-      expect(new Set([...arena.geometries.values()].map((row) => row.id))).toEqual(
-        new Set(arena.vertexInputs.semantics.keys()),
+      expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(resourceArenaSnapshot(arena).geometries.size);
+      expect(new Set([...resourceArenaSnapshot(arena).geometries.values()].map((row) => row.id))).toEqual(
+        vertexInputArenaSnapshot(vertexInputs).semanticGeometryIds,
       );
     }
-    replayGeometryChanges(arena, applyResourceDelta(
+    replayGeometryChanges(vertexInputs, applyResourceDelta(
       arena,
       diffResourceManifests(current, emptyManifest(), scratch),
     ));
-    expect(vertexInputArenaSnapshot(arena.vertexInputs).semanticGeometryCount).toBe(0);
+    expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(0);
   });
 
   it("fuzzes stale generations, interleaved publication, dependency revisions, and disposal", async () => {
@@ -185,7 +219,7 @@ describe("semantic resource arena properties", () => {
         const result = applyResourceDelta(arena, diffResourceManifests(current, next, scratch));
         current = next;
         if (live) {
-          const declaration = arena.gltfRequests.get(key)!;
+          const declaration = resourceArenaSnapshot(arena).gltfRequests.get(key)!;
           const job = jobs[jobs.length - 1]!;
           if (job.generation < 0) job.generation = declaration.generation;
         } else expect(resourceArenaContentKeys(arena, key).size).toBe(0);
@@ -229,18 +263,18 @@ describe("semantic resource arena properties", () => {
       };
       const drain = () => applyPreparedAssetEvents(arena, compileManifest);
       const assertConserved = () => {
-        for (const declaration of arena.gltfRequests.values()) {
+        for (const declaration of resourceArenaSnapshot(arena).gltfRequests.values()) {
           expect(declaration.count).toBeGreaterThan(0);
           expect(declaration.plan?.generation ?? declaration.generation).toBe(declaration.generation);
           for (const entry of declaration.plan?.ordinaryTextures.values() ?? []) expect(entry.key).toBeTypeOf("string");
           for (const entry of declaration.plan?.virtualTextures ?? []) expect(entry.key).toBeTypeOf("string");
         }
-        for (const declaration of [...arena.ordinaryTextures.values(), ...arena.virtualTextures.values()]) {
+        for (const declaration of [...resourceArenaSnapshot(arena).ordinaryTextures.values(), ...resourceArenaSnapshot(arena).virtualTextures.values()]) {
           expect(declaration.sceneReferences).toBeGreaterThanOrEqual(0);
           expect(declaration.assetReferences).toBeGreaterThanOrEqual(0);
           expect(declaration.sceneReferences + declaration.assetReferences).toBeGreaterThan(0);
         }
-        for (const geometry of arena.geometries.values()) {
+        for (const geometry of resourceArenaSnapshot(arena).geometries.values()) {
           expect(geometry.sceneReferences).toBeGreaterThanOrEqual(0);
           expect(geometry.assetReferences).toBeGreaterThanOrEqual(0);
           expect(geometry.sceneReferences + geometry.assetReferences).toBeGreaterThan(0);
@@ -249,39 +283,39 @@ describe("semantic resource arena properties", () => {
         const countSource = (source: LoadedTextureSource) => {
           expectedSourceReferences.set(source, (expectedSourceReferences.get(source) ?? 0) + 1);
         };
-        for (const sources of arena.assetSources.values()) for (const source of sources.values()) countSource(source);
-        for (const sources of arena.iblSources.values()) for (const source of sources.values()) countSource(source);
-        for (const prepared of arena.preparedSources.values()) countSource(prepared.source);
-        expect(arena.sourceReferences.size).toBe(expectedSourceReferences.size);
+        for (const sources of resourceArenaSnapshot(arena).assetSources.values()) for (const source of sources.values()) countSource(source);
+        for (const sources of resourceArenaSnapshot(arena).iblSources.values()) for (const source of sources.values()) countSource(source);
+        for (const prepared of resourceArenaSnapshot(arena).preparedSources.values()) countSource(prepared.source);
+        expect(resourceArenaSnapshot(arena).sourceReferences.size).toBe(expectedSourceReferences.size);
         for (const [source, count] of expectedSourceReferences) {
           expect(resourceArenaSourceReferenceCount(arena, source)).toBe(count);
         }
-        const plannedHdr = [...arena.gltfRequests.values()].filter((entry) => entry.plan?.wantsHdr).length;
-        expect(arena.hdrReadyAssetCount).toBe(plannedHdr);
+        const plannedHdr = [...resourceArenaSnapshot(arena).gltfRequests.values()].filter((entry) => entry.plan?.wantsHdr).length;
+        expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(plannedHdr);
         expect(resourceArenaHasHdrReadyAsset(arena)).toBe(plannedHdr > 0);
-        const liveSceneLeases = [...arena.gltfRequests.values()].reduce((sum, entry) => sum + entry.count, 0)
-          + [...arena.ordinaryTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
-          + [...arena.virtualTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
-          + [...arena.geometries.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0);
-        expect(arena.counters.sceneLeaseAcquires - arena.counters.sceneLeaseReleases).toBe(liveSceneLeases);
-        expect(arena.counters.preparedAssetAcquires - arena.counters.preparedAssetReleases)
-          .toBe(arena.gltfRequests.size);
-        expect(arena.counters.preparedAssetEvents).toBeLessThanOrEqual(wakes);
-        expect(arena.counters.assetPlanCompiles).toBeLessThanOrEqual(arena.counters.preparedAssetUpdates);
+        const liveSceneLeases = [...resourceArenaSnapshot(arena).gltfRequests.values()].reduce((sum, entry) => sum + entry.count, 0)
+          + [...resourceArenaSnapshot(arena).ordinaryTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
+          + [...resourceArenaSnapshot(arena).virtualTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
+          + [...resourceArenaSnapshot(arena).geometries.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0);
+        expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires - resourceArenaSnapshot(arena).counters.sceneLeaseReleases).toBe(liveSceneLeases);
+        expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires - resourceArenaSnapshot(arena).counters.preparedAssetReleases)
+          .toBe(resourceArenaSnapshot(arena).gltfRequests.size);
+        expect(resourceArenaSnapshot(arena).counters.preparedAssetEvents).toBeLessThanOrEqual(wakes);
+        expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBeLessThanOrEqual(resourceArenaSnapshot(arena).counters.preparedAssetUpdates);
       };
       const settle = async (job: PendingJob, ready: boolean, releaseBeforePublish = false) => {
         if (job.settled) return;
         job.settled = true;
         const wakeBefore = wakes;
-        const wasCurrent = arena.gltfRequests.get(key)?.generation === job.generation;
+        const wasCurrent = resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation === job.generation;
         if (ready) {
           const asset = emptyAsset();
           assetJobIds.set(asset, job.id);
           job.resolve(asset);
         } else job.reject(new Error(`failure-${job.id}`));
         if (releaseBeforePublish && current === liveManifest) setLive(false);
-        const remainsCurrent = wasCurrent && arena.gltfRequests.get(key)?.generation === job.generation;
-        const alreadyPending = arena.pendingAssetKeySet.has(key);
+        const remainsCurrent = wasCurrent && resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation === job.generation;
+        const alreadyPending = resourceArenaSnapshot(arena).pendingAssetKeySet.has(key);
         await flushPublications();
         expect(wakes - wakeBefore).toBe(remainsCurrent && !alreadyPending ? 1 : 0);
       };
@@ -296,7 +330,7 @@ describe("semantic resource arena properties", () => {
       const replacementJob = jobs[1]!;
       await settle(staleJob, random.boolean());
       expect(drain().events).toHaveLength(0);
-      expect(arena.gltfRequests.get(key)?.generation).toBe(replacementJob.generation);
+      expect(resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation).toBe(replacementJob.generation);
 
       for (let step = 0; step < 36; step += 1) {
         const action = random.int(0, 9);
@@ -309,7 +343,7 @@ describe("semantic resource arena properties", () => {
           }
         } else if (action === 3) {
           const result = drain();
-          const declaration = arena.gltfRequests.get(key);
+          const declaration = resourceArenaSnapshot(arena).gltfRequests.get(key);
           for (const event of result.events) {
             expect(event.snapshot.generation).toBe(declaration?.generation);
             if (event.snapshot.status === "ready") {
@@ -319,25 +353,25 @@ describe("semantic resource arena properties", () => {
               expect(declaration?.plan?.sourceRevision).toBe(event.snapshot.revision);
             }
           }
-        } else if (action === 4 && arena.gltfRequests.get(key)?.plan !== undefined) {
+        } else if (action === 4 && resourceArenaSnapshot(arena).gltfRequests.get(key)?.plan !== undefined) {
           const revision = `${caseIndex}-${step}`;
-          const plan = arena.gltfRequests.get(key)!.plan!;
+          const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
           const previousDependencyRevision = plan.dependencyRevision;
           const previousSourceRevision = plan.sourceRevision;
           publishResourceArenaContentKey(arena, key, "/decoded.png", `decoded:${revision}`);
           updatePreparedAssetManifest(arena, key, dependencyManifest(revision, random.boolean()));
           expect(resourceArenaContentKeys(arena, key).get("/decoded.png")).toBe(`decoded:${revision}`);
-          const updatedPlan = arena.gltfRequests.get(key)!.plan!;
+          const updatedPlan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
           expect(updatedPlan.dependencyRevision).toBe(previousDependencyRevision + 1);
           expect(updatedPlan.sourceRevision).toBe(previousSourceRevision);
-        } else if (action === 5 && arena.gltfRequests.has(key)) {
+        } else if (action === 5 && resourceArenaSnapshot(arena).gltfRequests.has(key)) {
           const source = { fuzzSource: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
           retainResourceArenaAssetSource(arena, key, `slot:${step % 3}`, source);
-        } else if (action === 6 && arena.iblReferences.size > 0) {
-          const iblKey = random.pick([...arena.iblReferences.keys()]);
+        } else if (action === 6 && resourceArenaSnapshot(arena).iblReferences.size > 0) {
+          const iblKey = random.pick([...resourceArenaSnapshot(arena).iblReferences.keys()]);
           const source = { fuzzIbl: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
           retainResourceArenaIblSource(arena, iblKey, `face:${step % 2}`, source);
-          expect(resourceArenaIblSources(arena, iblKey)?.size).toBeGreaterThan(0);
+          expect(resourceArenaIblSourceCount(arena, iblKey)).toBeGreaterThan(0);
         } else if (action === 7) {
           const source = { fuzzPrepared: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
           retainResourceArenaPreparedSource(arena, `prepared:${step % 2}`, {
@@ -345,7 +379,7 @@ describe("semantic resource arena properties", () => {
             texture: imageTexture({ src: `/prepared-${step}.png` }),
           });
         } else if (action === 8) {
-          const plan = arena.gltfRequests.get(key)?.plan;
+          const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)?.plan;
           const previous = [...(plan?.ordinaryTextures.values() ?? [])].slice(0, 2);
           if (previous.length > 0) {
             const merged = {
@@ -354,7 +388,7 @@ describe("semantic resource arena properties", () => {
               texture: imageTexture({ contentKey: `merged:${caseIndex}:${step}`, src: `/merged-${step}.png` }),
             };
             if (random.boolean(0.2)) {
-              const texturesBefore = [...arena.ordinaryTextures.entries()].map(([entryKey, entry]) => [
+              const texturesBefore = [...resourceArenaSnapshot(arena).ordinaryTextures.entries()].map(([entryKey, entry]) => [
                 entryKey, entry.assetReferences, entry.sceneReferences,
               ]);
               const planBefore = [...plan!.ordinaryTextures.entries()].map(([entryKey, entry]) => [entryKey, entry.count]);
@@ -362,7 +396,7 @@ describe("semantic resource arena properties", () => {
                 next: { ...merged, count: previous[0]!.count + 1 },
                 previous: { ...previous[0]!, count: previous[0]!.count + 1 },
               }])).toThrow(/exceeds retained references/);
-              expect([...arena.ordinaryTextures.entries()].map(([entryKey, entry]) => [
+              expect([...resourceArenaSnapshot(arena).ordinaryTextures.entries()].map(([entryKey, entry]) => [
                 entryKey, entry.assetReferences, entry.sceneReferences,
               ])).toEqual(texturesBefore);
               expect([...plan!.ordinaryTextures.entries()].map(([entryKey, entry]) => [entryKey, entry.count]))
@@ -374,9 +408,10 @@ describe("semantic resource arena properties", () => {
                 next: { ...merged, count: entry.count },
                 previous: entry,
               })));
-              expect(plan!.dependencyRevision).toBe(previousDependencyRevision + 1);
-              expect(plan!.sourceRevision).toBe(previousSourceRevision);
-              expect(plan!.ordinaryTextures.get(merged.key)?.count)
+              const updatedPlan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
+              expect(updatedPlan.dependencyRevision).toBe(previousDependencyRevision + 1);
+              expect(updatedPlan.sourceRevision).toBe(previousSourceRevision);
+              expect(updatedPlan.ordinaryTextures.get(merged.key)?.count)
                 .toBe(previous.reduce((sum, entry) => sum + entry.count, 0));
             }
           }
@@ -385,7 +420,7 @@ describe("semantic resource arena properties", () => {
       }
 
       // Resolve every outstanding job in a random status/order. Aborted stale
-      // jobs may still settle; neither status may become visible in the arena.
+      // jobs may still settle; neither status may become visible in the resourceArenaSnapshot(arena).
       const unsettled = [...jobs];
       for (let index = unsettled.length - 1; index > 0; index -= 1) {
         const swapIndex = random.int(0, index + 1);
@@ -395,19 +430,19 @@ describe("semantic resource arena properties", () => {
         await settle(job, random.boolean());
         const result = drain();
         for (const event of result.events) {
-          expect(event.snapshot.generation).toBe(arena.gltfRequests.get(key)?.generation);
+          expect(event.snapshot.generation).toBe(resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation);
         }
       }
       const disposed = disposeResourceArena(arena);
       expect(new Set(disposed.releasedSources).size).toBe(disposed.releasedSources.length);
-      expect(arena.gltfRequests.size).toBe(0);
-      expect(arena.ordinaryTextures.size).toBe(0);
-      expect(arena.virtualTextures.size).toBe(0);
-      expect(arena.geometries.size).toBe(0);
-      expect(arena.sourceReferences.size).toBe(0);
-      expect(arena.hdrReadyAssetCount).toBe(0);
-      expect(arena.counters.preparedAssetAcquires).toBe(arena.counters.preparedAssetReleases);
-      expect(arena.counters.sceneLeaseAcquires).toBe(arena.counters.sceneLeaseReleases);
+      expect(resourceArenaSnapshot(arena).gltfRequests.size).toBe(0);
+      expect(resourceArenaSnapshot(arena).ordinaryTextures.size).toBe(0);
+      expect(resourceArenaSnapshot(arena).virtualTextures.size).toBe(0);
+      expect(resourceArenaSnapshot(arena).geometries.size).toBe(0);
+      expect(resourceArenaSnapshot(arena).sourceReferences.size).toBe(0);
+      expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(0);
+      expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires).toBe(resourceArenaSnapshot(arena).counters.preparedAssetReleases);
+      expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires).toBe(resourceArenaSnapshot(arena).counters.sceneLeaseReleases);
       await flushPublications();
     }
   });
@@ -424,7 +459,7 @@ describe("semantic resource arena properties", () => {
     const next = { ...emptyManifest(), gltfRequests: [request] };
     applyResourceDelta(arena, diffResourceManifests(emptyManifest(), next, createResourceManifestDiffScratch()));
     expect(loads).toBe(1);
-    expect(arena.gltfRequests.get(request.key)?.count).toBe(100);
+    expect(resourceArenaSnapshot(arena).gltfRequests.get(request.key)?.count).toBe(100);
     resolve(emptyAsset());
     await Promise.resolve();
     await Promise.resolve();
@@ -442,11 +477,11 @@ describe("semantic resource arena properties", () => {
     }));
     expect(applied.events).toHaveLength(1);
     expect(wakes).toBe(1);
-    expect(arena.counters.assetPlanCompiles).toBe(1);
-    expect(arena.hdrReadyAssetCount).toBe(0);
+    expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBe(1);
+    expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(0);
     expect(resourceArenaHasHdrReadyAsset(arena)).toBe(false);
-    const retainedGeometry = arena.geometries.get(geometryOwnerKey)?.recipe;
-    const retainedGeometryId = arena.geometries.get(geometryOwnerKey)?.id;
+    const retainedGeometry = resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe;
+    const retainedGeometryId = resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.id;
     expect(retainedGeometry).toBeDefined();
     expect(retainedGeometryId).toBeTypeOf("number");
     updatePreparedAssetManifest(arena, request.key, {
@@ -463,8 +498,8 @@ describe("semantic resource arena properties", () => {
       virtualTextures: [],
       wantsHdr: false,
     });
-    expect(arena.geometries.get(geometryOwnerKey)?.recipe).toBe(retainedGeometry);
-    expect(arena.geometries.get(geometryOwnerKey)?.id).toBe(retainedGeometryId);
+    expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe).toEqual(retainedGeometry);
+    expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.id).toBe(retainedGeometryId);
     const duplicateGeometry = {
       count: 1,
       declaration: initialGeometry,
@@ -477,7 +512,7 @@ describe("semantic resource arena properties", () => {
       virtualTextures: [],
       wantsHdr: false,
     })).toThrow(/duplicate key/);
-    expect(arena.geometries.get(geometryOwnerKey)?.recipe).toBe(retainedGeometry);
+    expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe).toEqual(retainedGeometry);
     expect(() => updatePreparedAssetManifest(arena, request.key, {
       geometries: [{
         count: 1,
@@ -492,9 +527,9 @@ describe("semantic resource arena properties", () => {
       virtualTextures: [],
       wantsHdr: false,
     })).toThrow(/geometry identity collision/);
-    expect(arena.geometries.get(geometryOwnerKey)?.recipe).toBe(retainedGeometry);
+    expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe).toEqual(retainedGeometry);
     for (const invalidCount of [0, -1, 1.5]) {
-      const dependencyRevision = arena.gltfRequests.get(request.key)?.plan?.dependencyRevision;
+      const dependencyRevision = resourceArenaSnapshot(arena).gltfRequests.get(request.key)?.plan?.dependencyRevision;
       expect(() => updatePreparedAssetManifest(arena, request.key, {
         geometries: [{ count: invalidCount, declaration: initialGeometry, key: "geometry-owner:invalid-count" }],
         iblKeys: [],
@@ -502,11 +537,11 @@ describe("semantic resource arena properties", () => {
         virtualTextures: [],
         wantsHdr: false,
       })).toThrow(/positive safe integer/);
-      expect(arena.geometries.get(geometryOwnerKey)?.recipe).toBe(retainedGeometry);
-      expect(arena.geometries.has("geometry-owner:invalid-count")).toBe(false);
-      expect(arena.gltfRequests.get(request.key)?.plan?.dependencyRevision).toBe(dependencyRevision);
+      expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe).toEqual(retainedGeometry);
+      expect(resourceArenaSnapshot(arena).geometries.has("geometry-owner:invalid-count")).toBe(false);
+      expect(resourceArenaSnapshot(arena).gltfRequests.get(request.key)?.plan?.dependencyRevision).toBe(dependencyRevision);
     }
-    const dependencyRevisionBeforeLaterFailure = arena.gltfRequests.get(request.key)?.plan?.dependencyRevision;
+    const dependencyRevisionBeforeLaterFailure = resourceArenaSnapshot(arena).gltfRequests.get(request.key)?.plan?.dependencyRevision;
     expect(() => updatePreparedAssetManifest(arena, request.key, {
       geometries: [{
         count: 1,
@@ -521,11 +556,11 @@ describe("semantic resource arena properties", () => {
       virtualTextures: [],
       wantsHdr: true,
     })).toThrow(/positive safe integer/);
-    expect(arena.geometries.get(geometryOwnerKey)?.recipe).toBe(retainedGeometry);
-    expect(arena.geometries.has("geometry-owner:must-not-commit")).toBe(false);
-    expect(arena.gltfRequests.get(request.key)?.plan?.dependencyRevision)
+    expect(resourceArenaSnapshot(arena).geometries.get(geometryOwnerKey)?.recipe).toEqual(retainedGeometry);
+    expect(resourceArenaSnapshot(arena).geometries.has("geometry-owner:must-not-commit")).toBe(false);
+    expect(resourceArenaSnapshot(arena).gltfRequests.get(request.key)?.plan?.dependencyRevision)
       .toBe(dependencyRevisionBeforeLaterFailure);
-    expect(arena.hdrReadyAssetCount).toBe(0);
+    expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(0);
     const replacementGeometryKey = "geometry-owner:shared:primitive:0:changed-content";
     const geometryChanges = updatePreparedAssetManifest(arena, request.key, {
       geometries: [{
@@ -545,9 +580,9 @@ describe("semantic resource arena properties", () => {
     expect(geometryChanges.releasedGeometryDeclarations[0]?.id).toBe(retainedGeometryId);
     expect(geometryChanges.acquiredGeometryDeclarations.map((entry) => entry.key))
       .toEqual([replacementGeometryKey]);
-    expect(arena.geometries.has(geometryOwnerKey)).toBe(false);
-    expect(arena.geometries.has(replacementGeometryKey)).toBe(true);
-    expect(arena.geometries.get(replacementGeometryKey)!.id).toBeGreaterThan(retainedGeometryId!);
+    expect(resourceArenaSnapshot(arena).geometries.has(geometryOwnerKey)).toBe(false);
+    expect(resourceArenaSnapshot(arena).geometries.has(replacementGeometryKey)).toBe(true);
+    expect(resourceArenaSnapshot(arena).geometries.get(replacementGeometryKey)!.id).toBeGreaterThan(retainedGeometryId!);
     publishResourceArenaContentKey(arena, request.key, "/texture.png", "decoded-texture");
     expect(resourceArenaContentKeys(arena, request.key).get("/texture.png")).toBe("decoded-texture");
     updatePreparedAssetManifest(arena, request.key, {
@@ -569,35 +604,8 @@ describe("semantic resource arena properties", () => {
     expect(disposed.releasedSources).toEqual([source]);
     expect(resourceArenaSourceReferenceCount(arena, source)).toBe(0);
     expect(resourceArenaHasHdrReadyAsset(arena)).toBe(false);
-    expect(arena.counters.preparedAssetAcquires).toBe(arena.counters.preparedAssetReleases);
-    expect(arena.counters.sceneLeaseAcquires).toBe(arena.counters.sceneLeaseReleases);
+    expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires).toBe(resourceArenaSnapshot(arena).counters.preparedAssetReleases);
+    expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires).toBe(resourceArenaSnapshot(arena).counters.sceneLeaseReleases);
 
-    const boundaryArena = createResourceArena(async () => emptyAsset(), () => undefined);
-    boundaryArena.nextGeometryId = MAX_FRAME_PACKET_RESOURCE_ID;
-    const boundaryDeclaration = directGeometryDeclaration(boxGeometry([9, 8, 7]), "surface");
-    const boundaryKey = directGeometryDeclarationKey(boundaryDeclaration);
-    const boundaryManifest = {
-      ...emptyManifest(),
-      directGeometries: [{ count: 1, declaration: boundaryDeclaration, key: boundaryKey }],
-    };
-    const boundaryScratch = createResourceManifestDiffScratch();
-    const boundaryAcquire = applyResourceDelta(
-      boundaryArena,
-      diffResourceManifests(emptyManifest(), boundaryManifest, boundaryScratch),
-    );
-    replayGeometryChanges(boundaryArena, boundaryAcquire);
-    expect(boundaryAcquire.acquiredGeometryDeclarations[0]?.id).toBe(MAX_FRAME_PACKET_RESOURCE_ID);
-    replayGeometryChanges(boundaryArena, applyResourceDelta(
-      boundaryArena,
-      diffResourceManifests(boundaryManifest, emptyManifest(), boundaryScratch),
-    ));
-    const exhaustedDeclaration = directGeometryDeclaration(boxGeometry([9, 8, 6]), "surface");
-    const exhaustedKey = directGeometryDeclarationKey(exhaustedDeclaration);
-    expect(() => applyResourceDelta(boundaryArena, diffResourceManifests(emptyManifest(), {
-      ...emptyManifest(),
-      directGeometries: [{ count: 1, declaration: exhaustedDeclaration, key: exhaustedKey }],
-    }, boundaryScratch))).toThrow(/ID space is exhausted/);
-    expect(boundaryArena.geometries.size).toBe(0);
-    expect(vertexInputArenaSnapshot(boundaryArena.vertexInputs).semanticGeometryCount).toBe(0);
   });
 });

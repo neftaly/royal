@@ -1,5 +1,5 @@
 import type { CpuGeometry } from "./geometry-recipes";
-import { MAX_RESOURCE_ID } from "./resource-id";
+import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
   findVerifiedGeometry,
   GEOMETRY_BUCKET_COMPARISON_LIMIT,
@@ -40,6 +40,8 @@ export interface VertexInputArenaSnapshot {
   readonly compositeVertexArrayCount: number;
   readonly contextGeneration?: number;
   readonly instanceGeometryEdges: ReadonlyMap<number, ReadonlySet<number>>;
+  readonly identityBucketSizes: ReadonlyMap<string, number>;
+  readonly semanticGeometryIds: ReadonlySet<number>;
   readonly semanticGeometryCount: number;
   readonly staticGeometryCount: number;
 }
@@ -65,7 +67,14 @@ type SemanticGeometry = {
   staticGeometry?: StaticGeometry;
 };
 
+declare const vertexInputArenaAuthority: unique symbol;
+
+/** Explicit authority token; only this module can inspect or mutate its state. */
 export interface VertexInputArena {
+  readonly [vertexInputArenaAuthority]: "VertexInputArena";
+}
+
+interface VertexInputArenaState {
   contextDropped: boolean;
   contextGeneration?: number;
   readonly geometryBuckets: Map<string, StaticGeometry[]>;
@@ -84,7 +93,7 @@ export const createVertexInputArena = (): VertexInputArena => ({
   nextStaticIdentityId: 1,
   semantics: new Map(),
   staticGeometries: new Set(),
-});
+} as unknown as VertexInputArena);
 
 const validSerial = (value: number, label: string): void => {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label} ${value}`);
@@ -100,15 +109,16 @@ export const retainVertexInputGeometry = (
   arena: VertexInputArena,
   row: VertexInputSemanticRow,
 ): void => {
+  const state = arena as unknown as VertexInputArenaState;
   validGeometryId(row.geometryId);
-  const current = arena.semantics.get(row.geometryId);
+  const current = state.semantics.get(row.geometryId);
   if (current !== undefined) {
     if (!sameGeometryBytes(current.recipe, row.recipe)) {
       throw new Error(`Vertex-input geometry ID ${row.geometryId} changed recipe bytes`);
     }
     return;
   }
-  arena.semantics.set(row.geometryId, {
+  state.semantics.set(row.geometryId, {
     geometryId: row.geometryId,
     instanceKeys: new Set(),
     recipe: row.recipe,
@@ -189,32 +199,32 @@ const uploadStaticGeometry = (
   }
 };
 
-const forgetContextHandles = (arena: VertexInputArena, dropped: boolean): void => {
-  for (const semantic of arena.semantics.values()) {
+const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): void => {
+  for (const semantic of state.semantics.values()) {
     semantic.instanceKeys.clear();
     delete semantic.staticGeometry;
   }
-  arena.geometryBuckets.clear();
-  arena.instanceBuffers.clear();
-  arena.instanceGeometryIds.clear();
-  arena.nextStaticIdentityId = 1;
-  arena.staticGeometries.clear();
-  delete arena.contextGeneration;
-  arena.contextDropped = dropped;
+  state.geometryBuckets.clear();
+  state.instanceBuffers.clear();
+  state.instanceGeometryIds.clear();
+  state.nextStaticIdentityId = 1;
+  state.staticGeometries.clear();
+  delete state.contextGeneration;
+  state.contextDropped = dropped;
 };
 
-const requireContextGeneration = (arena: VertexInputArena, contextGeneration: number): void => {
+const requireContextGeneration = (state: VertexInputArenaState, contextGeneration: number): void => {
   validSerial(contextGeneration, "context generation");
-  if (arena.contextGeneration === undefined) {
-    if (arena.contextDropped) {
+  if (state.contextGeneration === undefined) {
+    if (state.contextDropped) {
       throw new Error("Vertex-input context was dropped; restore it explicitly before resolving GPU handles");
     }
-    arena.contextGeneration = contextGeneration;
+    state.contextGeneration = contextGeneration;
     return;
   }
-  if (arena.contextGeneration !== contextGeneration) {
+  if (state.contextGeneration !== contextGeneration) {
     throw new Error(
-      `Vertex-input context generation mismatch: active ${arena.contextGeneration}, received ${contextGeneration}`,
+      `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
     );
   }
 };
@@ -223,39 +233,42 @@ export const restoreVertexInputArenaContext = (
   arena: VertexInputArena,
   contextGeneration: number,
 ): void => {
+  const state = arena as unknown as VertexInputArenaState;
   validSerial(contextGeneration, "context generation");
-  if (arena.contextGeneration === contextGeneration) return;
-  if (arena.contextGeneration !== undefined) {
+  if (state.contextGeneration === contextGeneration) return;
+  if (state.contextGeneration !== undefined) {
     throw new Error(
-      `Cannot restore vertex-input generation ${contextGeneration} while generation ${arena.contextGeneration} is active`,
+      `Cannot restore vertex-input generation ${contextGeneration} while generation ${state.contextGeneration} is active`,
     );
   }
-  arena.contextDropped = false;
-  arena.contextGeneration = contextGeneration;
+  state.contextDropped = false;
+  state.contextGeneration = contextGeneration;
 };
 
 const resolveStaticGeometry = (
-  arena: VertexInputArena,
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   contextGeneration: number,
   semantic: SemanticGeometry,
 ): StaticGeometry => {
-  requireContextGeneration(arena, contextGeneration);
+  requireContextGeneration(state, contextGeneration);
   if (semantic.staticGeometry !== undefined) return semantic.staticGeometry;
-  const bucket = arena.geometryBuckets.get(semantic.recipe.bucketKey);
+  const bucket = state.geometryBuckets.get(semantic.recipe.bucketKey);
   let resource = bucket === undefined
     ? undefined
     : findVerifiedGeometry(bucket, semantic.recipe, GEOMETRY_BUCKET_COMPARISON_LIMIT);
   if (resource === undefined) {
-    if (arena.nextStaticIdentityId > Number.MAX_SAFE_INTEGER) {
-      throw new Error("Vertex-input static identity ID space is exhausted");
-    }
-    resource = uploadStaticGeometry(gl, semantic.recipe, arena.nextStaticIdentityId);
-    arena.nextStaticIdentityId += 1;
-    arena.staticGeometries.add(resource);
+    const id = claimMonotonicId(
+      state.nextStaticIdentityId,
+      Number.MAX_SAFE_INTEGER,
+      "Vertex-input static identity",
+    );
+    resource = uploadStaticGeometry(gl, semantic.recipe, id);
+    state.nextStaticIdentityId = id + 1;
+    state.staticGeometries.add(resource);
     if ((bucket?.length ?? 0) < GEOMETRY_BUCKET_COMPARISON_LIMIT) {
       resource.joinedIdentityBucket = true;
-      if (bucket === undefined) arena.geometryBuckets.set(semantic.recipe.bucketKey, [resource]);
+      if (bucket === undefined) state.geometryBuckets.set(semantic.recipe.bucketKey, [resource]);
       else bucket.push(resource);
     }
   }
@@ -270,9 +283,10 @@ export const vertexInputGeometry = (
   contextGeneration: number,
   geometryId: number,
 ): VertexInputGeometry => {
-  const semantic = arena.semantics.get(geometryId);
+  const state = arena as unknown as VertexInputArenaState;
+  const semantic = state.semantics.get(geometryId);
   if (semantic === undefined) throw new Error(`Vertex-input geometry ID ${geometryId} is not retained`);
-  return resolveStaticGeometry(arena, gl, contextGeneration, semantic);
+  return resolveStaticGeometry(state, gl, contextGeneration, semantic);
 };
 
 const configureStaticAttributes = (gl: WebGL2RenderingContext, geometry: StaticGeometry): void => {
@@ -303,9 +317,10 @@ export const vertexInputBaseVertexArray = (
   contextGeneration: number,
   geometryId: number,
 ): WebGLVertexArrayObject => {
-  const semantic = arena.semantics.get(geometryId);
+  const state = arena as unknown as VertexInputArenaState;
+  const semantic = state.semantics.get(geometryId);
   if (semantic === undefined) throw new Error(`Vertex-input geometry ID ${geometryId} is not retained`);
-  const geometry = resolveStaticGeometry(arena, gl, contextGeneration, semantic);
+  const geometry = resolveStaticGeometry(state, gl, contextGeneration, semantic);
   if (geometry.baseVertexArray !== undefined) return geometry.baseVertexArray;
   const vertexArray = createVertexArray(gl);
   try {
@@ -355,11 +370,12 @@ export const vertexInputCompositeVertexArray = (
   instanceKey: number,
   buffers: VertexInputInstanceBuffers,
 ): WebGLVertexArrayObject => {
+  const state = arena as unknown as VertexInputArenaState;
   validSerial(instanceKey, "instance key");
-  const semantic = arena.semantics.get(geometryId);
+  const semantic = state.semantics.get(geometryId);
   if (semantic === undefined) throw new Error(`Vertex-input geometry ID ${geometryId} is not retained`);
-  const geometry = resolveStaticGeometry(arena, gl, contextGeneration, semantic);
-  const retainedBuffers = arena.instanceBuffers.get(instanceKey);
+  const geometry = resolveStaticGeometry(state, gl, contextGeneration, semantic);
+  const retainedBuffers = state.instanceBuffers.get(instanceKey);
   if (retainedBuffers !== undefined && !sameInstanceBuffers(retainedBuffers, buffers)) {
     throw new Error(`Vertex-input instance key ${instanceKey} changed fixed ABI buffers`);
   }
@@ -368,10 +384,10 @@ export const vertexInputCompositeVertexArray = (
     if (!sameInstanceBuffers(cached.buffers, buffers)) {
       throw new Error(`Vertex-input instance key ${instanceKey} changed fixed ABI buffers`);
     }
-    let ids = arena.instanceGeometryIds.get(instanceKey);
+    let ids = state.instanceGeometryIds.get(instanceKey);
     if (ids === undefined) {
       ids = new Set();
-      arena.instanceGeometryIds.set(instanceKey, ids);
+      state.instanceGeometryIds.set(instanceKey, ids);
     }
     if (!ids.has(geometryId)) {
       ids.add(geometryId);
@@ -386,11 +402,11 @@ export const vertexInputCompositeVertexArray = (
     configureStaticAttributes(gl, geometry);
     configureInstanceAttributes(gl, buffers);
     geometry.compositeVertexArrays.set(instanceKey, { buffers, geometryReferenceCount: 1, vertexArray });
-    arena.instanceBuffers.set(instanceKey, buffers);
-    let ids = arena.instanceGeometryIds.get(instanceKey);
+    state.instanceBuffers.set(instanceKey, buffers);
+    let ids = state.instanceGeometryIds.get(instanceKey);
     if (ids === undefined) {
       ids = new Set();
-      arena.instanceGeometryIds.set(instanceKey, ids);
+      state.instanceGeometryIds.set(instanceKey, ids);
     }
     ids.add(geometryId);
     semantic.instanceKeys.add(instanceKey);
@@ -417,7 +433,7 @@ const deleteStaticBuffers = (gl: WebGL2RenderingContext, geometry: StaticGeometr
 };
 
 const removeStaticGeometry = (
-  arena: VertexInputArena,
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   geometry: StaticGeometry,
 ): void => {
@@ -428,13 +444,13 @@ const removeStaticGeometry = (
     delete geometry.baseVertexArray;
   }
   deleteStaticBuffers(gl, geometry);
-  const bucket = geometry.joinedIdentityBucket ? arena.geometryBuckets.get(geometry.bucketKey) : undefined;
+  const bucket = geometry.joinedIdentityBucket ? state.geometryBuckets.get(geometry.bucketKey) : undefined;
   if (bucket !== undefined) {
     const index = bucket.indexOf(geometry);
     if (index >= 0) bucket.splice(index, 1);
-    if (bucket.length === 0) arena.geometryBuckets.delete(geometry.bucketKey);
+    if (bucket.length === 0) state.geometryBuckets.delete(geometry.bucketKey);
   }
-  arena.staticGeometries.delete(geometry);
+  state.staticGeometries.delete(geometry);
 };
 
 export const releaseVertexInputInstance = (
@@ -443,18 +459,19 @@ export const releaseVertexInputInstance = (
   contextGeneration: number,
   instanceKey: number,
 ): void => {
+  const state = arena as unknown as VertexInputArenaState;
   validSerial(contextGeneration, "context generation");
-  if (arena.contextGeneration === undefined) return;
-  if (arena.contextGeneration !== contextGeneration) {
+  if (state.contextGeneration === undefined) return;
+  if (state.contextGeneration !== contextGeneration) {
     throw new Error(
-      `Vertex-input context generation mismatch: active ${arena.contextGeneration}, received ${contextGeneration}`,
+      `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
     );
   }
-  const ids = arena.instanceGeometryIds.get(instanceKey);
+  const ids = state.instanceGeometryIds.get(instanceKey);
   if (ids === undefined) return;
   const geometries = new Set<StaticGeometry>();
   for (const id of ids) {
-    const semantic = arena.semantics.get(id);
+    const semantic = state.semantics.get(id);
     semantic?.instanceKeys.delete(instanceKey);
     const geometry = semantic?.staticGeometry;
     if (geometry !== undefined) geometries.add(geometry);
@@ -464,8 +481,8 @@ export const releaseVertexInputInstance = (
     if (composite !== undefined) gl.deleteVertexArray(composite.vertexArray);
     geometry.compositeVertexArrays.delete(instanceKey);
   }
-  arena.instanceGeometryIds.delete(instanceKey);
-  arena.instanceBuffers.delete(instanceKey);
+  state.instanceGeometryIds.delete(instanceKey);
+  state.instanceBuffers.delete(instanceKey);
   unbindVertexInput(gl);
 };
 
@@ -475,26 +492,27 @@ export const releaseVertexInputGeometry = (
   contextGeneration: number,
   geometryId: number,
 ): void => {
-  const semantic = arena.semantics.get(geometryId);
+  const state = arena as unknown as VertexInputArenaState;
+  const semantic = state.semantics.get(geometryId);
   if (semantic === undefined) return;
   validSerial(contextGeneration, "context generation");
-  if (arena.contextGeneration === undefined) {
+  if (state.contextGeneration === undefined) {
     throw new Error("Lost-context geometry release must use releaseLostVertexInputGeometry");
   }
-  if (arena.contextGeneration !== contextGeneration) {
+  if (state.contextGeneration !== contextGeneration) {
     throw new Error(
-      `Vertex-input context generation mismatch: active ${arena.contextGeneration}, received ${contextGeneration}`,
+      `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
     );
   }
   const geometry = semantic.staticGeometry;
   if (geometry !== undefined) {
     geometry.geometryIds.delete(geometryId);
     for (const instanceKey of semantic.instanceKeys) {
-      const ids = arena.instanceGeometryIds.get(instanceKey);
+      const ids = state.instanceGeometryIds.get(instanceKey);
       if (ids === undefined || !ids.delete(geometryId)) continue;
       if (ids.size === 0) {
-        arena.instanceGeometryIds.delete(instanceKey);
-        arena.instanceBuffers.delete(instanceKey);
+        state.instanceGeometryIds.delete(instanceKey);
+        state.instanceBuffers.delete(instanceKey);
       }
       const composite = geometry.compositeVertexArrays.get(instanceKey);
       if (composite !== undefined) {
@@ -508,38 +526,39 @@ export const releaseVertexInputGeometry = (
         }
       }
     }
-    if (geometry.geometryIds.size === 0) removeStaticGeometry(arena, gl, geometry);
+    if (geometry.geometryIds.size === 0) removeStaticGeometry(state, gl, geometry);
     unbindVertexInput(gl);
   }
-  arena.semantics.delete(geometryId);
+  state.semantics.delete(geometryId);
 };
 
 export const releaseLostVertexInputGeometry = (
   arena: VertexInputArena,
   geometryId: number,
 ): void => {
+  const state = arena as unknown as VertexInputArenaState;
   validGeometryId(geometryId);
-  if (arena.contextGeneration !== undefined) {
+  if (state.contextGeneration !== undefined) {
     throw new Error("GL-free geometry release requires a dropped vertex-input context");
   }
-  arena.semantics.delete(geometryId);
+  state.semantics.delete(geometryId);
 };
 
-export const releaseVertexInputContextHandles = (
-  arena: VertexInputArena,
+const releaseContextHandles = (
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   contextGeneration: number,
 ): void => {
   validSerial(contextGeneration, "context generation");
-  if (arena.contextGeneration === undefined) return;
-  if (arena.contextGeneration !== contextGeneration) {
+  if (state.contextGeneration === undefined) return;
+  if (state.contextGeneration !== contextGeneration) {
     throw new Error(
-      `Vertex-input context generation mismatch: active ${arena.contextGeneration}, received ${contextGeneration}`,
+      `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
     );
   }
   // Global ordering is deliberate: no static buffer is deleted while any VAO
   // owned by this arena can still retain it as ELEMENT_ARRAY_BUFFER state.
-  for (const geometry of arena.staticGeometries) {
+  for (const geometry of state.staticGeometries) {
     for (const composite of geometry.compositeVertexArrays.values()) gl.deleteVertexArray(composite.vertexArray);
     geometry.compositeVertexArrays.clear();
     if (geometry.baseVertexArray !== undefined) {
@@ -547,13 +566,23 @@ export const releaseVertexInputContextHandles = (
       delete geometry.baseVertexArray;
     }
   }
-  for (const geometry of arena.staticGeometries) deleteStaticBuffers(gl, geometry);
+  for (const geometry of state.staticGeometries) deleteStaticBuffers(gl, geometry);
   unbindVertexInput(gl);
-  forgetContextHandles(arena, false);
+  forgetContextHandles(state, false);
+};
+
+export const releaseVertexInputContextHandles = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+): void => {
+  const state = arena as unknown as VertexInputArenaState;
+  releaseContextHandles(state, gl, contextGeneration);
 };
 
 export const dropVertexInputArenaContext = (arena: VertexInputArena): void => {
-  forgetContextHandles(arena, true);
+  const state = arena as unknown as VertexInputArenaState;
+  forgetContextHandles(state, true);
 };
 
 export const disposeVertexInputArena = (
@@ -561,35 +590,41 @@ export const disposeVertexInputArena = (
   gl?: WebGL2RenderingContext,
   contextGeneration?: number,
 ): void => {
+  const state = arena as unknown as VertexInputArenaState;
   if ((gl === undefined) !== (contextGeneration === undefined)) {
     throw new Error("Vertex-input disposal requires both gl and contextGeneration, or neither");
   }
   if (gl !== undefined && contextGeneration !== undefined) {
-    releaseVertexInputContextHandles(arena, gl, contextGeneration);
+    releaseContextHandles(state, gl, contextGeneration);
   } else {
-    if (arena.contextGeneration !== undefined) {
+    if (state.contextGeneration !== undefined) {
       throw new Error("Active vertex-input disposal requires gl and contextGeneration");
     }
-    dropVertexInputArenaContext(arena);
+    forgetContextHandles(state, true);
   }
-  arena.semantics.clear();
+  state.semantics.clear();
 };
 
 export const vertexInputArenaSnapshot = (arena: VertexInputArena): VertexInputArenaSnapshot => {
+  const state = arena as unknown as VertexInputArenaState;
   let bases = 0;
   let composites = 0;
-  for (const geometry of arena.staticGeometries) {
+  for (const geometry of state.staticGeometries) {
     if (geometry.baseVertexArray !== undefined) bases += 1;
     composites += geometry.compositeVertexArrays.size;
   }
   return {
     baseVertexArrayCount: bases,
     compositeVertexArrayCount: composites,
-    ...(arena.contextGeneration === undefined ? {} : { contextGeneration: arena.contextGeneration }),
-    instanceGeometryEdges: new Map(
-      [...arena.instanceGeometryIds].map(([key, ids]) => [key, new Set(ids)]),
+    ...(state.contextGeneration === undefined ? {} : { contextGeneration: state.contextGeneration }),
+    identityBucketSizes: new Map(
+      [...state.geometryBuckets].map(([key, geometries]) => [key, geometries.length]),
     ),
-    semanticGeometryCount: arena.semantics.size,
-    staticGeometryCount: arena.staticGeometries.size,
+    instanceGeometryEdges: new Map(
+      [...state.instanceGeometryIds].map(([key, ids]) => [key, new Set(ids)]),
+    ),
+    semanticGeometryCount: state.semantics.size,
+    semanticGeometryIds: new Set(state.semantics.keys()),
+    staticGeometryCount: state.staticGeometries.size,
   };
 };

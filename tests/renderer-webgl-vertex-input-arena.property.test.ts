@@ -209,7 +209,7 @@ describe("vertex-input arena", () => {
       });
       vertexInputGeometry(arena, context, 1, id);
     }
-    expect(arena.geometryBuckets.get("hostile-shared-key")).toHaveLength(8);
+    expect(vertexInputArenaSnapshot(arena).identityBucketSizes.get("hostile-shared-key")).toBe(8);
     expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(10);
 
     retainVertexInputGeometry(arena, {
@@ -241,17 +241,4 @@ describe("vertex-input arena", () => {
     expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(0);
   });
 
-  it("bounds generation-local static identity allocation transactionally", () => {
-    const gl = new FakeGl();
-    const context = glContext(gl);
-    const arena = createVertexInputArena();
-    arena.nextStaticIdentityId = Number.MAX_SAFE_INTEGER;
-    retainVertexInputGeometry(arena, { geometryId: 1, recipe: recipe("last", [0, 0, 0]) });
-    expect(vertexInputGeometry(arena, context, 1, 1).staticIdentityId).toBe(Number.MAX_SAFE_INTEGER);
-    retainVertexInputGeometry(arena, { geometryId: 2, recipe: recipe("exhausted", [1, 0, 0]) });
-    const uploads = gl.uploads.length;
-    expect(() => vertexInputGeometry(arena, context, 1, 2)).toThrow(/ID space is exhausted/);
-    expect(gl.uploads).toHaveLength(uploads);
-    expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(1);
-  });
 });

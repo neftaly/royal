@@ -5,7 +5,7 @@ import type {
   CountedTextureDeclaration,
   ResourceManifestDelta,
 } from "./frame-plan";
-import { MAX_RESOURCE_ID } from "./resource-id";
+import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
   normalizeGeometryDeclaration,
   type CpuGeometry,
@@ -20,7 +20,6 @@ import {
 } from "./gltf/prepared-asset";
 import type { LoadedTextureSource } from "./texture-sources";
 import { sameGeometryBytes } from "./webgl/geometry-identity";
-import { createVertexInputArena, type VertexInputArena } from "./vertex-input-arena";
 
 export interface PreparedTextureSource {
   readonly source: LoadedTextureSource;
@@ -103,12 +102,124 @@ export interface ResourceArenaCounters {
   sceneLeaseReleases: number;
 }
 
+export interface ResourceArenaOrdinaryTextureResidencySnapshot {
+  readonly activeLeases: number;
+  readonly activeReferences: number;
+}
+
+/** Cold diagnostic/property view. Every container and mutable row is detached. */
+export const resourceArenaSnapshot = (arena: ResourceArena) => {
+  const state = arena as unknown as ResourceArenaState;
+  const copyGeometryArray = <Array extends Float32Array | Uint8Array | Uint16Array | Uint32Array>(
+    value: Array | undefined,
+  ): Array | undefined => value?.slice() as Array | undefined;
+  const copyGeometry = (geometry: CpuGeometry): CpuGeometry => ({
+    ...geometry,
+    ...(geometry.colors === undefined ? {} : { colors: copyGeometryArray(geometry.colors)! }),
+    ...(geometry.indices === undefined ? {} : { indices: copyGeometryArray(geometry.indices)! }),
+    ...(geometry.normals === undefined ? {} : { normals: copyGeometryArray(geometry.normals)! }),
+    positions: geometry.positions.slice(),
+    ...(geometry.tangents === undefined ? {} : { tangents: copyGeometryArray(geometry.tangents)! }),
+    ...(geometry.texCoords0 === undefined ? {} : { texCoords0: copyGeometryArray(geometry.texCoords0)! }),
+    ...(geometry.texCoords1 === undefined ? {} : { texCoords1: copyGeometryArray(geometry.texCoords1)! }),
+  });
+  const copyTexture = <Texture extends TextureAssetRef | VirtualTextureAssetRef>(texture: Texture): Texture => ({
+    ...texture,
+    ...(texture.sampler === undefined ? {} : { sampler: { ...texture.sampler } }),
+  }) as Texture;
+  const copyGeometryDeclaration = (declaration: GeometryDeclaration): GeometryDeclaration => {
+    if (declaration.kind === "direct-geometry") {
+      return {
+        ...declaration,
+        geometry: {
+          ...declaration.geometry,
+          size: [...declaration.geometry.size],
+        },
+      } as GeometryDeclaration;
+    }
+    return {
+      ...declaration,
+      ...(declaration.colors === undefined ? {} : { colors: copyGeometryArray(declaration.colors)! }),
+      ...(declaration.indices === undefined ? {} : { indices: copyGeometryArray(declaration.indices)! }),
+      ...(declaration.normals === undefined ? {} : { normals: copyGeometryArray(declaration.normals)! }),
+      positions: declaration.positions.slice(),
+      ...(declaration.tangents === undefined ? {} : { tangents: copyGeometryArray(declaration.tangents)! }),
+      ...(declaration.texCoords0 === undefined ? {} : { texCoords0: copyGeometryArray(declaration.texCoords0)! }),
+      ...(declaration.texCoords1 === undefined ? {} : { texCoords1: copyGeometryArray(declaration.texCoords1)! }),
+    };
+  };
+  const copySources = (sources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>) =>
+    new Map([...sources].map(([key, rows]) => [key, new Map(rows)]));
+  return {
+    assetSources: copySources(state.assetSources),
+    contentKeysByAsset: new Map(
+      [...state.contentKeysByAsset].map(([key, rows]) => [key, new Map(rows)]),
+    ),
+    counters: { ...state.counters },
+    geometries: new Map([...state.geometries].map(([key, row]) => [key, {
+      ...row,
+      declaration: copyGeometryDeclaration(row.declaration),
+      recipe: copyGeometry(row.recipe),
+    }])),
+    gltfRequests: new Map([...state.gltfRequests].map(([key, row]) => [key, {
+      count: row.count,
+      generation: row.generation,
+      key: row.key,
+      plan: row.plan === undefined ? undefined : {
+        ...row.plan,
+        geometries: new Map([...row.plan.geometries].map(([entryKey, entry]) => [entryKey, {
+          ...entry,
+          declaration: copyGeometryDeclaration(entry.declaration),
+        }])),
+        iblKeys: row.plan.iblKeys.map((entry) => ({ ...entry })),
+        ordinaryTextures: new Map(
+          [...row.plan.ordinaryTextures].map(([entryKey, entry]) => [entryKey, {
+            ...entry,
+            texture: copyTexture(entry.texture),
+          }]),
+        ),
+        virtualTextures: row.plan.virtualTextures.map((entry) => ({
+          ...entry,
+          texture: copyTexture(entry.texture),
+        })),
+      },
+      sourceUri: row.sourceUri,
+    }])),
+    hdrReadyAssetCount: state.hdrReadyAssetCount,
+    iblReferences: new Map(state.iblReferences),
+    iblSources: copySources(state.iblSources),
+    ordinaryTextures: new Map([...state.ordinaryTextures].map(([key, row]) => [key, {
+      ...row,
+      texture: copyTexture(row.texture),
+    }])),
+    pendingAssetKeySet: new Set(state.pendingAssetKeySet),
+    preparedSources: new Map(
+      [...state.preparedSources].map(([key, row]) => [key, {
+        ...row,
+        texture: copyTexture(row.texture),
+      }]),
+    ),
+    sourceReferences: new Map(state.sourceReferences),
+    virtualTextures: new Map([...state.virtualTextures].map(([key, row]) => [key, {
+      ...row,
+      texture: copyTexture(row.texture),
+    }])),
+  };
+};
+
+declare const resourceArenaAuthority: unique symbol;
+
+/** Explicit authority token; only this module can inspect or mutate its state. */
 export interface ResourceArena {
+  readonly [resourceArenaAuthority]: "ResourceArena";
+}
+
+interface ResourceArenaState {
   readonly assetSources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>;
   readonly counters: ResourceArenaCounters;
   readonly contentKeysByAsset: ReadonlyMap<string, ReadonlyMap<string, TextureContentKey>>;
   readonly gltfRequests: Map<string, GltfRequestDeclaration>;
-  readonly geometries: Map<string, ResourceArenaGeometryRow>;
+  readonly geometries: Map<string, MutableResourceArenaGeometryRow>;
   hdrReadyAssetCount: number;
   readonly imageAbortControllers: ReadonlyMap<string, AbortController>;
   readonly iblReferences: Map<string, number>;
@@ -120,11 +231,10 @@ export interface ResourceArena {
   readonly preparedSources: ReadonlyMap<string, PreparedTextureSource>;
   readonly sourceReferences: ReadonlyMap<LoadedTextureSource, number>;
   readonly virtualTextures: Map<string, TextureDeclaration<VirtualTextureAssetRef>>;
-  readonly vertexInputs: VertexInputArena;
   readonly wake: () => void;
 }
 
-export type ResourceArenaGeometryRow = {
+type MutableResourceArenaGeometryRow = {
   assetReferences: number;
   readonly declaration: GeometryDeclaration;
   readonly id: number;
@@ -157,19 +267,19 @@ export interface PreparedAssetArenaEvent {
 }
 
 const arenaImageAbortControllers = (arena: ResourceArena): Map<string, AbortController> => {
-  return arena.imageAbortControllers as Map<string, AbortController>;
+  return (arena as unknown as ResourceArenaState).imageAbortControllers as Map<string, AbortController>;
 };
 const arenaPreparedSources = (arena: ResourceArena): Map<string, PreparedTextureSource> => {
-  return arena.preparedSources as Map<string, PreparedTextureSource>;
+  return (arena as unknown as ResourceArenaState).preparedSources as Map<string, PreparedTextureSource>;
 };
 const arenaSourceReferences = (arena: ResourceArena): Map<LoadedTextureSource, number> =>
-  arena.sourceReferences as Map<LoadedTextureSource, number>;
+  (arena as unknown as ResourceArenaState).sourceReferences as Map<LoadedTextureSource, number>;
 const arenaIblSources = (arena: ResourceArena): Map<string, Map<string, LoadedTextureSource>> =>
-  arena.iblSources as Map<string, Map<string, LoadedTextureSource>>;
+  (arena as unknown as ResourceArenaState).iblSources as Map<string, Map<string, LoadedTextureSource>>;
 const arenaAssetSources = (arena: ResourceArena): Map<string, Map<string, LoadedTextureSource>> =>
-  arena.assetSources as Map<string, Map<string, LoadedTextureSource>>;
+  (arena as unknown as ResourceArenaState).assetSources as Map<string, Map<string, LoadedTextureSource>>;
 const arenaContentKeys = (arena: ResourceArena): Map<string, Map<string, TextureContentKey>> =>
-  arena.contentKeysByAsset as Map<string, Map<string, TextureContentKey>>;
+  (arena as unknown as ResourceArenaState).contentKeysByAsset as Map<string, Map<string, TextureContentKey>>;
 
 const retainSource = (arena: ResourceArena, source: LoadedTextureSource): void => {
   const references = arenaSourceReferences(arena);
@@ -201,13 +311,14 @@ const changes = (): MutableResourceArenaChanges => ({
 });
 
 const finalizeChanges = (arena: ResourceArena, result: MutableResourceArenaChanges): ResourceArenaChanges => {
+  const state = arena as unknown as ResourceArenaState;
   for (let index = result.releasedOrdinaryTextureKeys.length - 1; index >= 0; index -= 1) {
-    if (arena.ordinaryTextures.has(result.releasedOrdinaryTextureKeys[index]!)) {
+    if (state.ordinaryTextures.has(result.releasedOrdinaryTextureKeys[index]!)) {
       result.releasedOrdinaryTextureKeys.splice(index, 1);
     }
   }
   for (let index = result.releasedVirtualTextureKeys.length - 1; index >= 0; index -= 1) {
-    if (arena.virtualTextures.has(result.releasedVirtualTextureKeys[index]!)) {
+    if (state.virtualTextures.has(result.releasedVirtualTextureKeys[index]!)) {
       result.releasedVirtualTextureKeys.splice(index, 1);
     }
   }
@@ -245,7 +356,8 @@ const validateDependencyManifest = (
 
 const assertGeometryIdCapacity = (arena: ResourceArena, acquisitionCount: number): void => {
   if (acquisitionCount <= 0) return;
-  const remaining = MAX_RESOURCE_ID - arena.nextGeometryId + 1;
+  const state = arena as unknown as ResourceArenaState;
+  const remaining = MAX_RESOURCE_ID - state.nextGeometryId + 1;
   if (acquisitionCount > remaining) throw new Error("resource arena geometry ID space is exhausted");
 };
 
@@ -256,13 +368,14 @@ const geometryAcquisitionCount = (
     readonly previous: Iterable<CountedGeometryDeclaration>;
   }[],
 ): number => {
+  const state = arena as unknown as ResourceArenaState;
   const references = new Map<string, number>();
   const recipes = new Map<string, CpuGeometry>();
   const referenceCount = (key: string): number => {
     const cached = references.get(key);
     if (cached !== undefined) return cached;
-    const state = arena.geometries.get(key);
-    const count = state === undefined ? 0 : state.assetReferences + state.sceneReferences;
+    const geometry = state.geometries.get(key);
+    const count = geometry === undefined ? 0 : geometry.assetReferences + geometry.sceneReferences;
     references.set(key, count);
     return count;
   };
@@ -273,7 +386,7 @@ const geometryAcquisitionCount = (
     for (const entry of transition.next) {
       const candidate = normalizeGeometryDeclaration(entry.declaration);
       const previousReferences = referenceCount(entry.key);
-      const retainedRecipe = recipes.get(entry.key) ?? arena.geometries.get(entry.key)?.recipe;
+      const retainedRecipe = recipes.get(entry.key) ?? state.geometries.get(entry.key)?.recipe;
       if (previousReferences > 0 && retainedRecipe !== undefined && !sameGeometryBytes(retainedRecipe, candidate)) {
         throw new Error(`resource arena geometry identity collision for ${entry.key}`);
       }
@@ -294,9 +407,10 @@ const geometryAcquisitionCount = (
 };
 
 const adjustHdrReadyAssetCount = (arena: ResourceArena, delta: -1 | 1): void => {
-  const next = arena.hdrReadyAssetCount + delta;
+  const state = arena as unknown as ResourceArenaState;
+  const next = state.hdrReadyAssetCount + delta;
   if (next < 0) throw new Error("resource arena HDR-ready asset count became negative");
-  arena.hdrReadyAssetCount = next;
+  state.hdrReadyAssetCount = next;
 };
 
 const EMPTY_CHANGES: ResourceArenaChanges = Object.freeze({
@@ -318,7 +432,7 @@ export const createResourceArena = (
   load: PrepareGltfAssetJob,
   wake: () => void,
 ): ResourceArena => {
-  let arena: ResourceArena;
+  let arena: ResourceArenaState;
   // The subscription callback below is the sole wake path. Store-level change
   // notification would wake a second time for the same published revision.
   const preparedAssets = new PreparedGltfAssetStore(load, () => undefined);
@@ -347,16 +461,16 @@ export const createResourceArena = (
     preparedSources: new Map(),
     sourceReferences: new Map(),
     virtualTextures: new Map(),
-    vertexInputs: createVertexInputArena(),
     wake,
   };
-  return arena;
+  return arena as unknown as ResourceArena;
 };
 
 const enqueuePreparedAsset = (arena: ResourceArena, key: string): void => {
-  if (arena.pendingAssetKeySet.has(key)) return;
-  arena.pendingAssetKeySet.add(key);
-  arena.wake();
+  const state = arena as unknown as ResourceArenaState;
+  if (state.pendingAssetKeySet.has(key)) return;
+  state.pendingAssetKeySet.add(key);
+  state.wake();
 };
 
 const applyTextureSceneDelta = <Texture>(
@@ -386,28 +500,28 @@ const applyGeometrySceneDelta = (
   row: import("./frame-plan").CountedKeyDelta<CountedDirectGeometryDeclaration>,
   result: MutableResourceArenaChanges,
 ): void => {
-  let state = arena.geometries.get(row.key);
-  if (state === undefined) {
+  const arenaState = arena as unknown as ResourceArenaState;
+  let geometry = arenaState.geometries.get(row.key);
+  if (geometry === undefined) {
     if (row.delta <= 0) throw new Error(`resource arena geometry ${row.key} released before acquisition`);
-    if (arena.nextGeometryId > MAX_RESOURCE_ID) {
-      throw new Error("resource arena geometry ID space is exhausted");
-    }
-    state = {
+    const id = claimMonotonicId(arenaState.nextGeometryId, MAX_RESOURCE_ID, "resource arena geometry");
+    arenaState.nextGeometryId = id + 1;
+    geometry = {
       assetReferences: 0,
       declaration: row.resource.declaration,
-      id: arena.nextGeometryId++,
+      id,
       key: row.key,
       recipe: normalizeGeometryDeclaration(row.resource.declaration),
       sceneReferences: 0,
     };
-    arena.geometries.set(row.key, state);
-    result.acquiredGeometryDeclarations.push({ id: state.id, key: state.key, recipe: state.recipe });
+    arenaState.geometries.set(row.key, geometry);
+    result.acquiredGeometryDeclarations.push({ id: geometry.id, key: geometry.key, recipe: geometry.recipe });
   }
-  state.sceneReferences += row.delta;
-  if (state.sceneReferences < 0) throw new Error(`resource arena geometry ${row.key} has negative scene references`);
-  if (state.sceneReferences + state.assetReferences === 0) {
-    arena.geometries.delete(row.key);
-    result.releasedGeometryDeclarations.push({ id: state.id, key: row.key });
+  geometry.sceneReferences += row.delta;
+  if (geometry.sceneReferences < 0) throw new Error(`resource arena geometry ${row.key} has negative scene references`);
+  if (geometry.sceneReferences + geometry.assetReferences === 0) {
+    arenaState.geometries.delete(row.key);
+    result.releasedGeometryDeclarations.push({ id: geometry.id, key: row.key });
   }
 };
 
@@ -415,6 +529,7 @@ export const applyResourceDelta = (
   arena: ResourceArena,
   delta: ResourceManifestDelta,
 ): ResourceArenaChanges => {
+  const state = arena as unknown as ResourceArenaState;
   const validateCountedDelta = (
     key: string,
     label: string,
@@ -434,7 +549,7 @@ export const applyResourceDelta = (
   for (const row of delta.gltfRequests) {
     if (gltfKeys.has(row.key)) throw new Error(`resource arena glTF delta contains duplicate key ${row.key}`);
     gltfKeys.add(row.key);
-    const retained = arena.gltfRequests.get(row.key);
+    const retained = state.gltfRequests.get(row.key);
     validateCountedDelta(row.key, "glTF", row.delta, row.nextCount, retained?.count ?? 0);
     if (retained === undefined && row.delta < 0) {
       throw new Error(`resource arena glTF ${row.key} released before acquisition`);
@@ -448,16 +563,16 @@ export const applyResourceDelta = (
   for (const row of delta.directGeometries) {
     if (directKeys.has(row.key)) throw new Error(`resource arena direct geometry delta contains duplicate key ${row.key}`);
     directKeys.add(row.key);
-    const state = arena.geometries.get(row.key);
-    validateCountedDelta(row.key, "direct geometry", row.delta, row.nextCount, state?.sceneReferences ?? 0);
-    if (state === undefined) {
+    const geometry = state.geometries.get(row.key);
+    validateCountedDelta(row.key, "direct geometry", row.delta, row.nextCount, geometry?.sceneReferences ?? 0);
+    if (geometry === undefined) {
       if (row.delta < 0) throw new Error(`resource arena geometry ${row.key} released before acquisition`);
       directGeometryAcquisitions += 1;
-    } else if (state.sceneReferences + row.delta < 0) {
+    } else if (geometry.sceneReferences + row.delta < 0) {
       throw new Error(`resource arena geometry ${row.key} has negative scene references`);
     } else {
       const candidate = normalizeGeometryDeclaration(row.resource.declaration);
-      if (!sameGeometryBytes(state.recipe, candidate)) {
+      if (!sameGeometryBytes(geometry.recipe, candidate)) {
         throw new Error(`resource arena geometry identity collision for ${row.key}`);
       }
     }
@@ -478,17 +593,17 @@ export const applyResourceDelta = (
       }
     }
   };
-  validateTextureRows(delta.ordinaryTextures, arena.ordinaryTextures, "ordinary texture");
-  validateTextureRows(delta.virtualTextures, arena.virtualTextures, "virtual texture");
+  validateTextureRows(delta.ordinaryTextures, state.ordinaryTextures, "ordinary texture");
+  validateTextureRows(delta.virtualTextures, state.virtualTextures, "virtual texture");
   assertGeometryIdCapacity(arena, directGeometryAcquisitions);
   const result = changes();
   for (const row of delta.gltfRequests) {
     const request = row.resource;
-    let declaration = arena.gltfRequests.get(row.key);
+    let declaration = state.gltfRequests.get(row.key);
     if (declaration === undefined) {
       if (row.delta <= 0) throw new Error(`resource arena glTF ${row.key} released before acquisition`);
       let subscription!: PreparedGltfAssetSubscription;
-      subscription = arena.preparedAssets.request(
+      subscription = state.preparedAssets.request(
         { key: row.key, src: request.sourceUri },
         () => enqueuePreparedAsset(arena, row.key),
       );
@@ -500,42 +615,42 @@ export const applyResourceDelta = (
         sourceUri: request.sourceUri,
         subscription,
       };
-      arena.gltfRequests.set(row.key, declaration);
-      arena.counters.preparedAssetAcquires += 1;
-      arena.counters.sceneLeaseAcquires += row.nextCount;
+      state.gltfRequests.set(row.key, declaration);
+      state.counters.preparedAssetAcquires += 1;
+      state.counters.sceneLeaseAcquires += row.nextCount;
       result.acquiredGltfRequests.push(request);
       continue;
     }
-    arena.counters.sceneLeaseAcquires += Math.max(0, row.delta);
-    arena.counters.sceneLeaseReleases += Math.max(0, -row.delta);
+    state.counters.sceneLeaseAcquires += Math.max(0, row.delta);
+    state.counters.sceneLeaseReleases += Math.max(0, -row.delta);
     declaration.count = row.nextCount;
     if (row.nextCount !== 0) continue;
     releaseAssetPlan(arena, declaration, result);
     releaseAssetSources(arena, declaration.key, result.releasedSources);
     declaration.subscription.release();
-    arena.gltfRequests.delete(row.key);
+    state.gltfRequests.delete(row.key);
     arenaContentKeys(arena).delete(row.key);
-    arena.pendingAssetKeySet.delete(row.key);
-    arena.counters.preparedAssetReleases += 1;
+    state.pendingAssetKeySet.delete(row.key);
+    state.counters.preparedAssetReleases += 1;
     result.releasedGltfKeys.push(row.key);
   }
   for (const row of delta.directGeometries) {
-    arena.counters.sceneLeaseAcquires += Math.max(0, row.delta);
-    arena.counters.sceneLeaseReleases += Math.max(0, -row.delta);
+    state.counters.sceneLeaseAcquires += Math.max(0, row.delta);
+    state.counters.sceneLeaseReleases += Math.max(0, -row.delta);
     applyGeometrySceneDelta(arena, row, result);
   }
   for (const row of delta.ordinaryTextures) {
-    arena.counters.sceneLeaseAcquires += Math.max(0, row.delta);
-    arena.counters.sceneLeaseReleases += Math.max(0, -row.delta);
+    state.counters.sceneLeaseAcquires += Math.max(0, row.delta);
+    state.counters.sceneLeaseReleases += Math.max(0, -row.delta);
     applyTextureSceneDelta(
-      arena.ordinaryTextures, row.key, row.delta, row.resource.texture, result.releasedOrdinaryTextureKeys,
+      state.ordinaryTextures, row.key, row.delta, row.resource.texture, result.releasedOrdinaryTextureKeys,
     );
   }
   for (const row of delta.virtualTextures) {
-    arena.counters.sceneLeaseAcquires += Math.max(0, row.delta);
-    arena.counters.sceneLeaseReleases += Math.max(0, -row.delta);
+    state.counters.sceneLeaseAcquires += Math.max(0, row.delta);
+    state.counters.sceneLeaseReleases += Math.max(0, -row.delta);
     applyTextureSceneDelta(
-      arena.virtualTextures, row.key, row.delta, row.resource.texture, result.releasedVirtualTextureKeys,
+      state.virtualTextures, row.key, row.delta, row.resource.texture, result.releasedVirtualTextureKeys,
     );
   }
   return finalizeChanges(arena, result);
@@ -587,6 +702,7 @@ const applyAssetGeometryDelta = (
   next: Iterable<CountedGeometryDeclaration>,
   result: MutableResourceArenaChanges,
 ): void => {
+  const arenaState = arena as unknown as ResourceArenaState;
   const previousEntries = [...previous];
   const nextEntries = [...next];
   const previousKeys = uniqueCountedKeys(previousEntries, "previous geometry manifest");
@@ -597,7 +713,7 @@ const applyAssetGeometryDelta = (
   for (const entry of previousEntries) {
     const nextEntry = nextByKey.get(entry.key);
     if (nextEntry === undefined || nextEntry.declaration === entry.declaration) continue;
-    const retained = arena.geometries.get(entry.key);
+    const retained = arenaState.geometries.get(entry.key);
     if (retained === undefined) throw new Error(`resource arena asset geometry ${entry.key} is missing`);
     const candidate = normalizeGeometryDeclaration(nextEntry.declaration);
     if (!sameGeometryBytes(retained.recipe, candidate)) {
@@ -607,7 +723,7 @@ const applyAssetGeometryDelta = (
   for (const entry of nextEntries) {
     if (previousKeys.has(entry.key)) continue;
     const candidate = normalizeGeometryDeclaration(entry.declaration);
-    const retained = arena.geometries.get(entry.key);
+    const retained = arenaState.geometries.get(entry.key);
     if (retained !== undefined && !sameGeometryBytes(retained.recipe, candidate)) {
       throw new Error(`resource arena geometry identity collision for ${entry.key}`);
     }
@@ -620,34 +736,33 @@ const applyAssetGeometryDelta = (
     const delta = (nextEntry?.count ?? 0) - entry.count;
     seen.add(entry.key);
     if (delta === 0) continue;
-    const state = arena.geometries.get(entry.key);
-    if (state === undefined) throw new Error(`resource arena asset geometry ${entry.key} is missing`);
-    state.assetReferences += delta;
-    if (state.assetReferences < 0) throw new Error(`resource arena geometry ${entry.key} has negative asset references`);
-    if (state.assetReferences + state.sceneReferences === 0) {
-      arena.geometries.delete(entry.key);
-      result.releasedGeometryDeclarations.push({ id: state.id, key: entry.key });
+    const geometry = arenaState.geometries.get(entry.key);
+    if (geometry === undefined) throw new Error(`resource arena asset geometry ${entry.key} is missing`);
+    geometry.assetReferences += delta;
+    if (geometry.assetReferences < 0) throw new Error(`resource arena geometry ${entry.key} has negative asset references`);
+    if (geometry.assetReferences + geometry.sceneReferences === 0) {
+      arenaState.geometries.delete(entry.key);
+      result.releasedGeometryDeclarations.push({ id: geometry.id, key: entry.key });
     }
   }
   for (const entry of nextEntries) {
     if (seen.has(entry.key)) continue;
-    const state = arena.geometries.get(entry.key);
-    if (state === undefined) {
-      if (arena.nextGeometryId > MAX_RESOURCE_ID) {
-        throw new Error("resource arena geometry ID space is exhausted");
-      }
-      const created: ResourceArenaGeometryRow = {
+    const geometry = arenaState.geometries.get(entry.key);
+    if (geometry === undefined) {
+      const id = claimMonotonicId(arenaState.nextGeometryId, MAX_RESOURCE_ID, "resource arena geometry");
+      arenaState.nextGeometryId = id + 1;
+      const created: MutableResourceArenaGeometryRow = {
         assetReferences: entry.count,
         declaration: entry.declaration,
-        id: arena.nextGeometryId++,
+        id,
         key: entry.key,
         recipe: normalizedNewRecipes.get(entry.key)!,
         sceneReferences: 0,
       };
-      arena.geometries.set(entry.key, created);
+      arenaState.geometries.set(entry.key, created);
       result.acquiredGeometryDeclarations.push({ id: created.id, key: entry.key, recipe: created.recipe });
     } else {
-      state.assetReferences += entry.count;
+      geometry.assetReferences += entry.count;
     }
   }
 };
@@ -686,16 +801,17 @@ const applyAssetIblDelta = (
   next: readonly { readonly count: number; readonly key: string }[],
   result: MutableResourceArenaChanges,
 ): void => {
+  const state = arena as unknown as ResourceArenaState;
   const nextCounts = new Map(next.map((entry) => [entry.key, entry.count]));
   const seen = new Set<string>();
   for (const entry of previous) {
     const nextCount = nextCounts.get(entry.key) ?? 0;
     seen.add(entry.key);
-    const total = (arena.iblReferences.get(entry.key) ?? 0) + nextCount - entry.count;
+    const total = (state.iblReferences.get(entry.key) ?? 0) + nextCount - entry.count;
     if (total < 0) throw new Error(`resource arena IBL ${entry.key} has negative references`);
-    if (total > 0) arena.iblReferences.set(entry.key, total);
+    if (total > 0) state.iblReferences.set(entry.key, total);
     else {
-      arena.iblReferences.delete(entry.key);
+      state.iblReferences.delete(entry.key);
       result.releasedIblKeys.push(entry.key);
       const sources = arenaIblSources(arena).get(entry.key);
       arenaIblSources(arena).delete(entry.key);
@@ -706,7 +822,7 @@ const applyAssetIblDelta = (
   }
   for (const entry of next) {
     if (seen.has(entry.key)) continue;
-    arena.iblReferences.set(entry.key, (arena.iblReferences.get(entry.key) ?? 0) + entry.count);
+    state.iblReferences.set(entry.key, (state.iblReferences.get(entry.key) ?? 0) + entry.count);
   }
 };
 
@@ -715,13 +831,14 @@ const releaseAssetPlan = (
   declaration: GltfRequestDeclaration,
   result: MutableResourceArenaChanges,
 ): void => {
+  const state = arena as unknown as ResourceArenaState;
   const previous = declaration.plan;
   if (previous === undefined) return;
   if (previous.wantsHdr) adjustHdrReadyAssetCount(arena, -1);
   applyAssetIblDelta(arena, previous.iblKeys, [], result);
   applyAssetGeometryDelta(arena, previous.geometries.values(), [], result);
-  applyAssetTextureDelta(arena.ordinaryTextures, previous.ordinaryTextures.values(), [], result.releasedOrdinaryTextureKeys);
-  applyAssetTextureDelta(arena.virtualTextures, previous.virtualTextures, [], result.releasedVirtualTextureKeys);
+  applyAssetTextureDelta(state.ordinaryTextures, previous.ordinaryTextures.values(), [], result.releasedOrdinaryTextureKeys);
+  applyAssetTextureDelta(state.virtualTextures, previous.virtualTextures, [], result.releasedVirtualTextureKeys);
   declaration.plan = undefined;
 };
 
@@ -745,10 +862,11 @@ export const applyPreparedAssetEvents = (
     assetKey: string,
   ) => PreparedAssetDependencyManifest,
 ): { readonly changes: ResourceArenaChanges; readonly events: readonly PreparedAssetArenaEvent[] } => {
-  if (arena.pendingAssetKeySet.size === 0) return EMPTY_PREPARED_ASSET_EVENTS;
+  const state = arena as unknown as ResourceArenaState;
+  if (state.pendingAssetKeySet.size === 0) return EMPTY_PREPARED_ASSET_EVENTS;
   const result = changes();
   const events: PreparedAssetArenaEvent[] = [];
-  const pendingKeys = [...arena.pendingAssetKeySet];
+  const pendingKeys = [...state.pendingAssetKeySet];
   const stagedEvents: PreparedAssetArenaEvent[] = [];
   const sourceRevisionUpdates: Array<{
     readonly declaration: GltfRequestDeclaration;
@@ -760,7 +878,7 @@ export const applyPreparedAssetEvents = (
     readonly snapshot: PreparedGltfAssetSnapshot & { readonly status: "ready" };
   }> = [];
   for (const key of pendingKeys) {
-    const declaration = arena.gltfRequests.get(key);
+    const declaration = state.gltfRequests.get(key);
     if (declaration === undefined) continue;
     const snapshot = declaration.subscription.getSnapshot();
     if (snapshot.generation !== declaration.generation) continue;
@@ -774,7 +892,7 @@ export const applyPreparedAssetEvents = (
       sourceRevisionUpdates.push({ declaration, revision: snapshot.revision });
       continue;
     }
-    const manifest = compileManifest(snapshot.asset, arena.contentKeysByAsset.get(key) ?? EMPTY_CONTENT_KEYS, key);
+    const manifest = compileManifest(snapshot.asset, state.contentKeysByAsset.get(key) ?? EMPTY_CONTENT_KEYS, key);
     validateDependencyManifest(manifest, `prepared asset ${key}`);
     planUpdates.push({ declaration, manifest, snapshot });
   }
@@ -786,9 +904,9 @@ export const applyPreparedAssetEvents = (
     })),
   ));
 
-  for (const key of pendingKeys) arena.pendingAssetKeySet.delete(key);
+  for (const key of pendingKeys) state.pendingAssetKeySet.delete(key);
   for (const event of stagedEvents) {
-    arena.counters.preparedAssetEvents += 1;
+    state.counters.preparedAssetEvents += 1;
     events.push(event);
   }
   for (const { declaration, revision } of sourceRevisionUpdates) {
@@ -802,13 +920,13 @@ export const applyPreparedAssetEvents = (
     }
     applyAssetIblDelta(arena, previous?.iblKeys ?? [], manifest.iblKeys, result);
     applyAssetTextureDelta(
-      arena.ordinaryTextures,
+      state.ordinaryTextures,
       previous?.ordinaryTextures.values() ?? [],
       manifest.ordinaryTextures,
       result.releasedOrdinaryTextureKeys,
     );
     applyAssetTextureDelta(
-      arena.virtualTextures,
+      state.virtualTextures,
       previous?.virtualTextures ?? [],
       manifest.virtualTextures,
       result.releasedVirtualTextureKeys,
@@ -823,8 +941,8 @@ export const applyPreparedAssetEvents = (
       virtualTextures: manifest.virtualTextures,
       wantsHdr: manifest.wantsHdr,
     };
-    arena.counters.assetPlanCompiles += 1;
-    arena.counters.preparedAssetUpdates += 1;
+    state.counters.assetPlanCompiles += 1;
+    state.counters.preparedAssetUpdates += 1;
   }
   return { changes: finalizeChanges(arena, result), events };
 };
@@ -832,15 +950,33 @@ export const applyPreparedAssetEvents = (
 const EMPTY_CONTENT_KEYS: ReadonlyMap<string, TextureContentKey> = new Map();
 
 export const resourceArenaHasPendingAssetEvents = (arena: ResourceArena): boolean =>
-  arena.pendingAssetKeySet.size !== 0;
+  (arena as unknown as ResourceArenaState).pendingAssetKeySet.size !== 0;
 
 export const resourceArenaHasHdrReadyAsset = (arena: ResourceArena): boolean =>
-  arena.hdrReadyAssetCount > 0;
+  (arena as unknown as ResourceArenaState).hdrReadyAssetCount > 0;
 
-export const resourceArenaGeometry = (
+export const resourceArenaCountersSnapshot = (arena: ResourceArena): Readonly<ResourceArenaCounters> => ({
+  ...(arena as unknown as ResourceArenaState).counters,
+});
+
+export const detachResourceArenaImagePreparation = (
   arena: ResourceArena,
   key: string,
-): ResourceArenaGeometryRow | undefined => arena.geometries.get(key);
+  generation: number,
+): void => {
+  (arena as unknown as ResourceArenaState).preparedAssets.detachImagePreparation(key, generation);
+};
+
+export const resourceArenaOrdinaryTextureResidencySnapshot = (
+  arena: ResourceArena,
+): ResourceArenaOrdinaryTextureResidencySnapshot => {
+  const ordinaryTextures = (arena as unknown as ResourceArenaState).ordinaryTextures;
+  let activeReferences = 0;
+  for (const declaration of ordinaryTextures.values()) {
+    activeReferences += declaration.sceneReferences + declaration.assetReferences;
+  }
+  return { activeLeases: ordinaryTextures.size, activeReferences };
+};
 
 export const publishResourceArenaContentKey = (
   arena: ResourceArena,
@@ -859,12 +995,14 @@ export const publishResourceArenaContentKey = (
 export const resourceArenaContentKeys = (
   arena: ResourceArena,
   assetKey: string,
-): ReadonlyMap<string, TextureContentKey> => arena.contentKeysByAsset.get(assetKey) ?? EMPTY_CONTENT_KEYS;
+): ReadonlyMap<string, TextureContentKey> => new Map(
+  (arena as unknown as ResourceArenaState).contentKeysByAsset.get(assetKey) ?? EMPTY_CONTENT_KEYS,
+);
 
 export const resourceArenaTextureReferenceCount = (arena: ResourceArena, key: string): number => {
-  const ordinary = arena.ordinaryTextures.get(key);
+  const ordinary = (arena as unknown as ResourceArenaState).ordinaryTextures.get(key);
   if (ordinary !== undefined) return ordinary.sceneReferences + ordinary.assetReferences;
-  const virtual = arena.virtualTextures.get(key);
+  const virtual = (arena as unknown as ResourceArenaState).virtualTextures.get(key);
   return virtual === undefined ? 0 : virtual.sceneReferences + virtual.assetReferences;
 };
 
@@ -931,12 +1069,12 @@ export const clearResourceArenaPreparedSources = (arena: ResourceArena): void =>
 };
 
 export const resourceArenaSourceReferenceCount = (arena: ResourceArena, source: LoadedTextureSource): number =>
-  arena.sourceReferences.get(source) ?? 0;
+  (arena as unknown as ResourceArenaState).sourceReferences.get(source) ?? 0;
 
 /**
  * Retains a decoded source for an owner whose lifetime is not represented by a
  * prepared texture, glTF asset, or IBL row. The token keeps that ownership
- * explicit without adding another keyed ownership table to the arena.
+ * explicit without adding another keyed ownership table to the arena state.
  */
 export const retainResourceArenaSourceLease = (
   arena: ResourceArena,
@@ -1008,18 +1146,31 @@ export const retainResourceArenaIblSource = (
   return previous;
 };
 
-export const resourceArenaIblSources = (
+export const copyResourceArenaIblSources = (
   arena: ResourceArena,
   iblKey: string,
-): ReadonlyMap<string, LoadedTextureSource> | undefined => arena.iblSources.get(iblKey);
+  target: Map<string, LoadedTextureSource>,
+): boolean => {
+  const state = arena as unknown as ResourceArenaState;
+  const sources = state.iblSources.get(iblKey);
+  if (sources === undefined) return false;
+  for (const [key, source] of sources) target.set(key, source);
+  return true;
+};
+
+export const resourceArenaIblSourceCount = (arena: ResourceArena, iblKey: string): number => {
+  const state = arena as unknown as ResourceArenaState;
+  return state.iblSources.get(iblKey)?.size ?? 0;
+};
 
 export const updatePreparedAssetManifest = (
   arena: ResourceArena,
   key: string,
   manifest: PreparedAssetDependencyManifest,
 ): ResourceArenaChanges => {
+  const state = arena as unknown as ResourceArenaState;
   const result = changes();
-  const declaration = arena.gltfRequests.get(key);
+  const declaration = state.gltfRequests.get(key);
   if (declaration === undefined || declaration.plan === undefined) return result;
   validateDependencyManifest(manifest, `prepared asset ${key}`);
   assertGeometryIdCapacity(arena, geometryAcquisitionCount(arena, [{
@@ -1036,14 +1187,14 @@ export const updatePreparedAssetManifest = (
     adjustHdrReadyAssetCount(arena, manifest.wantsHdr ? 1 : -1);
   }
   applyAssetTextureDelta(
-    arena.ordinaryTextures,
+    state.ordinaryTextures,
     declaration.plan.ordinaryTextures.values(),
     manifest.ordinaryTextures,
     result.releasedOrdinaryTextureKeys,
   );
   applyAssetIblDelta(arena, declaration.plan.iblKeys, manifest.iblKeys, result);
   applyAssetTextureDelta(
-    arena.virtualTextures,
+    state.virtualTextures,
     declaration.plan.virtualTextures,
     manifest.virtualTextures,
     result.releasedVirtualTextureKeys,
@@ -1058,8 +1209,8 @@ export const updatePreparedAssetManifest = (
     virtualTextures: manifest.virtualTextures,
     wantsHdr: manifest.wantsHdr,
   };
-  arena.counters.assetPlanCompiles += 1;
-  arena.counters.preparedAssetUpdates += 1;
+  state.counters.assetPlanCompiles += 1;
+  state.counters.preparedAssetUpdates += 1;
   return finalizeChanges(arena, result);
 };
 
@@ -1070,7 +1221,8 @@ export const rekeyPreparedAssetOrdinaryTextures = (
   rekeys: readonly PreparedAssetOrdinaryTextureRekey[],
 ): ResourceArenaChanges => {
   if (rekeys.length === 0) return EMPTY_CHANGES;
-  const declaration = arena.gltfRequests.get(key);
+  const state = arena as unknown as ResourceArenaState;
+  const declaration = state.gltfRequests.get(key);
   const plan = declaration?.plan;
   if (plan === undefined) return EMPTY_CHANGES;
 
@@ -1103,34 +1255,35 @@ export const rekeyPreparedAssetOrdinaryTextures = (
     if (nextEntry === undefined) plan.ordinaryTextures.set(next.key, { ...next });
     else nextEntry.count += next.count;
 
-    applyAssetTextureReferenceDelta(arena.ordinaryTextures, previous, -previous.count, released);
-    applyAssetTextureReferenceDelta(arena.ordinaryTextures, next, next.count, released);
+    applyAssetTextureReferenceDelta(state.ordinaryTextures, previous, -previous.count, released);
+    applyAssetTextureReferenceDelta(state.ordinaryTextures, next, next.count, released);
   }
   plan.dependencyRevision += 1;
-  arena.counters.preparedAssetUpdates += 1;
+  state.counters.preparedAssetUpdates += 1;
   return finalizeChanges(arena, { ...changes(), releasedOrdinaryTextureKeys: released });
 };
 
 export const disposeResourceArena = (arena: ResourceArena): ResourceArenaChanges => {
+  const state = arena as unknown as ResourceArenaState;
   const result = changes();
-  for (const declaration of arena.gltfRequests.values()) {
-    arena.counters.sceneLeaseReleases += declaration.count;
-    arena.counters.preparedAssetReleases += 1;
+  for (const declaration of state.gltfRequests.values()) {
+    state.counters.sceneLeaseReleases += declaration.count;
+    state.counters.preparedAssetReleases += 1;
     releaseAssetPlan(arena, declaration, result);
     releaseAssetSources(arena, declaration.key, result.releasedSources);
     declaration.subscription.release();
     result.releasedGltfKeys.push(declaration.key);
   }
-  for (const key of arena.ordinaryTextures.keys()) result.releasedOrdinaryTextureKeys.push(key);
-  for (const key of arena.virtualTextures.keys()) result.releasedVirtualTextureKeys.push(key);
-  for (const [key, state] of arena.geometries) {
-    arena.counters.sceneLeaseReleases += state.sceneReferences;
-    result.releasedGeometryDeclarations.push({ id: state.id, key });
+  for (const key of state.ordinaryTextures.keys()) result.releasedOrdinaryTextureKeys.push(key);
+  for (const key of state.virtualTextures.keys()) result.releasedVirtualTextureKeys.push(key);
+  for (const [key, geometry] of state.geometries) {
+    state.counters.sceneLeaseReleases += geometry.sceneReferences;
+    result.releasedGeometryDeclarations.push({ id: geometry.id, key });
   }
-  arena.geometries.clear();
-  arena.gltfRequests.clear();
+  state.geometries.clear();
+  state.gltfRequests.clear();
   arenaContentKeys(arena).clear();
-  arena.hdrReadyAssetCount = 0;
+  state.hdrReadyAssetCount = 0;
   for (const [assetKey] of arenaAssetSources(arena)) {
     releaseAssetSources(arena, assetKey, result.releasedSources);
   }
@@ -1146,22 +1299,22 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaChanges
     }
   }
   arenaIblSources(arena).clear();
-  arena.iblReferences.clear();
-  if (arena.sourceReferences.size !== 0) {
+  state.iblReferences.clear();
+  if (state.sourceReferences.size !== 0) {
     throw new Error("resource arena disposed with unowned source references");
   }
   const controllers = arenaImageAbortControllers(arena);
   for (const controller of controllers.values()) controller.abort();
   controllers.clear();
-  for (const declaration of arena.ordinaryTextures.values()) {
-    arena.counters.sceneLeaseReleases += declaration.sceneReferences;
+  for (const declaration of state.ordinaryTextures.values()) {
+    state.counters.sceneLeaseReleases += declaration.sceneReferences;
   }
-  for (const declaration of arena.virtualTextures.values()) {
-    arena.counters.sceneLeaseReleases += declaration.sceneReferences;
+  for (const declaration of state.virtualTextures.values()) {
+    state.counters.sceneLeaseReleases += declaration.sceneReferences;
   }
-  arena.ordinaryTextures.clear();
-  arena.virtualTextures.clear();
-  arena.pendingAssetKeySet.clear();
-  arena.preparedAssets.dispose();
+  state.ordinaryTextures.clear();
+  state.virtualTextures.clear();
+  state.pendingAssetKeySet.clear();
+  state.preparedAssets.dispose();
   return result;
 };
