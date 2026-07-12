@@ -103,14 +103,10 @@ const studioEnvironmentSpecularMipData = (mipIndex: number, faceIndex: number): 
   return data;
 };
 
-export const createStudioEnvironmentSpecularTexture = (
-  context: {
-    readonly createTexture: () => WebGLTexture;
-    readonly gl: WebGL2RenderingContext;
-  },
+export const uploadStudioEnvironmentSpecularTexture = (
+  gl: WebGL2RenderingContext,
+  texture: WebGLTexture,
 ): StudioEnvironmentSpecularResource => {
-  const gl = context.gl;
-  const texture = context.createTexture();
   prepareTextureUpload(gl, false);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
 

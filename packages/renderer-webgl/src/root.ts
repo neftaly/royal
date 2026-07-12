@@ -74,7 +74,7 @@ import {
   resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
-  copyResourceArenaIblSources,
+  resourceArenaIblSources,
   resourceArenaOrdinaryTextureResidencySnapshot,
   resourceArenaPreparedSource,
   resourceArenaPreparedSourceKeys,
@@ -406,19 +406,23 @@ import {
   type SurfaceLightSet,
 } from "./webgl/lights";
 import {
-  ensureIblSpecularTexture,
-  settleIblSpecularImage,
-  type IblSpecularTextureContext,
+  bindSurfaceIbl,
+  createIblTextureArena,
+  dropIblTextureContext,
+  ensureGltfIblSpecularTexture,
+  ensureStudioEnvironmentSpecularTexture,
+  IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
+  IBL_SPECULAR_TEXTURE_UNIT,
+  markGltfIblSpecularTextureDirty,
+  releaseGltfIblSpecularTexture,
+  releaseIblTextureContextHandles,
   type IblSpecularTextureResource,
-} from "./webgl/ibl-specular-textures";
-import { createIblBrdfLutTexture, IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT } from "./webgl/ibl-brdf-lut";
-import { bindSurfaceIblUniforms, IBL_SPECULAR_TEXTURE_UNIT } from "./webgl/ibl-uniforms";
+  type IblTextureArena,
+  type StudioEnvironmentSpecularResource,
+} from "./webgl/ibl-texture-arena";
 import { prepareFrameBaseline, prepareTextureUpload } from "./webgl/imperative-state";
 import {
-  createStudioEnvironmentSpecularTexture,
   STUDIO_ENVIRONMENT_IRRADIANCE,
-  STUDIO_ENVIRONMENT_SPECULAR_KEY,
-  type StudioEnvironmentSpecularResource,
 } from "./webgl/studio-environment";
 import type {
   NormalizedWebGlRootOptions,
@@ -986,6 +990,7 @@ const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
+const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
@@ -1935,11 +1940,9 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
   readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
   readonly #closedTextureSources = new WeakSet<object>();
-  readonly #iblSpecularTextures = new Map<string, IblSpecularTextureResource>();
   readonly #pendingGltfImageRows: GltfImageRow[] = [];
   readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
   #pendingGltfImageRowHead = 0;
-  readonly #studioEnvironmentSpecularTextures = new Map<string, StudioEnvironmentSpecularResource>();
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #pendingTextureUploads: TextureResource[] = [];
   readonly #autoVirtualTextureRefs = new Map<string, VirtualTextureRef>();
@@ -2018,7 +2021,7 @@ class WebGlRootImpl implements WebGlRoot {
   #frame = 0;
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
-  #iblBrdfLutTexture: WebGLTexture | undefined;
+  readonly #iblTextures: IblTextureArena;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena();
   #hdrSupported = false;
@@ -2142,6 +2145,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
     this.#gl = gl;
     this.#clusteredLights = createClusteredLightArena(gl);
+    this.#iblTextures = createIblTextureArena(gl);
     this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
@@ -2615,23 +2619,22 @@ class WebGlRootImpl implements WebGlRoot {
       releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
       releaseProgramArenaContextHandles(this.#programArena);
       releaseClusteredLightContextHandles(this.#clusteredLights);
+      releaseIblTextureContextHandles(this.#iblTextures);
       for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
     } else {
       dropVertexInputArenaContext(this.#vertexInputs);
       dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
       dropProgramArenaContext(this.#programArena);
       dropClusteredLightContext(this.#clusteredLights);
+      dropIblTextureContext(this.#iblTextures);
     }
     this.#ownedTextures.clear();
-    this.#iblBrdfLutTexture = undefined;
     clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#textures.clear();
     this.#pendingTextureUploads.length = 0;
     this.#textureUploadHead = 0;
     this.#textureUploadFrame = -1;
     this.#textureUploadsThisFrame = 0;
-    this.#iblSpecularTextures.clear();
-    this.#studioEnvironmentSpecularTextures.clear();
     this.#gltfBatches.length = 0;
     this.#gltfLiveBatchCount = 0;
     clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
@@ -2694,7 +2697,6 @@ class WebGlRootImpl implements WebGlRoot {
     clearResourceArenaPreparedSources(this.#resourceArena);
     this.#pendingTextureUploads.length = 0;
     this.#textureUploadHead = 0;
-    this.#studioEnvironmentSpecularTextures.clear();
     this.#virtualTextures.clear();
     this.#autoVirtualTextureRefs.clear();
     this.#autoVirtualTextureManifestUris.clear();
@@ -2715,7 +2717,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfLightScopeIdCount = 0;
     this.#pendingGltfImageRows.length = 0;
     this.#pendingGltfImageRowHead = 0;
-    this.#iblBrdfLutTexture = undefined;
     this.#cameraViewResourceSubscription?.unsubscribe();
     this.#cameraViewResourceSubscription = undefined;
     for (const [ref, binding] of this.#renderObjectBindings) {
@@ -3038,17 +3039,18 @@ class WebGlRootImpl implements WebGlRoot {
     }
     for (const key of changes.releasedOrdinaryTextureKeys) this.#releaseOrdinaryTexture(key);
     for (const key of changes.releasedVirtualTextureKeys) this.#releaseVirtualTexture(key);
+    let iblReleaseError: unknown;
     for (const key of changes.releasedIblKeys) {
-      const resource = this.#iblSpecularTextures.get(key);
-      this.#iblSpecularTextures.delete(key);
-      if (resource !== undefined && this.#ownedTextures.has(resource.texture)) {
-        this.#gl.deleteTexture(resource.texture);
-        this.#ownedTextures.delete(resource.texture);
+      try {
+        releaseGltfIblSpecularTexture(this.#iblTextures, key);
+      } catch (error) {
+        iblReleaseError ??= error;
       }
     }
     for (const source of changes.releasedSources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
     }
+    if (iblReleaseError !== undefined) throw iblReleaseError;
   }
 
   #applyPendingResourceArenaEvents(): void {
@@ -5547,21 +5549,13 @@ class WebGlRootImpl implements WebGlRoot {
     view: Mat4,
     viewportSize: ViewportSize,
   ): void {
-    bindSurfaceIblUniforms({
-      brdfLutTexture: () => {
-        const brdfLutTextureUnit = plan.textureUnits.get("iblBrdfLut");
-        if (brdfLutTextureUnit === undefined) return undefined;
-
-        return {
-          texture: this.#iblBrdfLutTextureResource(),
-          textureUnit: brdfLutTextureUnit,
-        };
-      },
-      gl: this.#gl,
-      uniform1i: (uniformProgram, name, value) => uniform1i(this.#programArena, uniformProgram, name, value),
-      uniformColor: (uniformProgram, name, color) => uniformColor(this.#programArena, uniformProgram, name, color),
-      uniformMatrix: (uniformProgram, name, matrix) => uniformMatrix(this.#programArena, uniformProgram, name, matrix),
-    }, program, lightSet);
+    bindSurfaceIbl(
+      this.#iblTextures,
+      this.#programArena,
+      program,
+      lightSet,
+      plan.textureUnits.get("iblBrdfLut"),
+    );
 
     const lights = lightSet.directionals;
     if (lights.length > MAX_SURFACE_LIGHTS) {
@@ -7070,23 +7064,16 @@ class WebGlRootImpl implements WebGlRoot {
     if ("loading" in resource) resource.loading = false;
   }
 
-  #iblSpecularTextureContext(): IblSpecularTextureContext {
-    return {
-      createTexture: () => this.#createTexture(),
-      gl: this.#gl,
-      isDisposed: () => this.#disposed || this.#contextLifecycle !== "active",
-      isTextureOwned: (texture) => this.#ownedTextures.has(texture),
-      recordUnsupportedGltfImageBasedLight: (message) => this.#recordUnsupportedGltfImageBasedLight(message),
-      textures: this.#iblSpecularTextures,
-    };
-  }
-
   #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
-    const resource = ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
-    if (copyResourceArenaIblSources(this.#resourceArena, specular.key, resource.sources)) {
-      // The first ensure could not upload before the prepared sources were copied.
-      return ensureIblSpecularTexture(this.#iblSpecularTextureContext(), specular);
+    const resource = ensureGltfIblSpecularTexture(
+      this.#iblTextures,
+      specular,
+      resourceArenaIblSources(this.#resourceArena, specular.key) ?? EMPTY_IBL_SOURCES,
+    );
+    if (resource.unsupportedMessage !== undefined) {
+      this.#recordUnsupportedGltfImageBasedLight(resource.unsupportedMessage);
     }
+    if (resource.uploadError !== undefined) throw resource.uploadError;
     return resource;
   }
 
@@ -7096,39 +7083,41 @@ class WebGlRootImpl implements WebGlRoot {
     image: LoadedTextureSource,
   ): void {
     const previous = retainResourceArenaIblSource(this.#resourceArena, specular.key, key, image);
+    markGltfIblSpecularTextureDirty(this.#iblTextures, specular.key);
     if (
       previous !== undefined
       && previous !== image
       && resourceArenaSourceReferenceCount(this.#resourceArena, previous) === 0
     ) this.#closeTextureSource(previous);
-    if (this.#contextLifecycle === "active") {
-      settleIblSpecularImage(this.#iblSpecularTextureContext(), specular, key, image);
+    if (this.#contextLifecycle !== "active") return;
+    try {
+      const resource = ensureGltfIblSpecularTexture(
+        this.#iblTextures,
+        specular,
+        resourceArenaIblSources(this.#resourceArena, specular.key) ?? EMPTY_IBL_SOURCES,
+      );
+      if (resource.unsupportedMessage !== undefined) {
+        this.#recordUnsupportedGltfImageBasedLight(resource.unsupportedMessage);
+      }
+      const uploadError = resource.uploadError;
+      if (uploadError === undefined) return;
+      const uploadErrorMessage = uploadError instanceof Error
+        ? uploadError.message
+        : typeof uploadError === "string" ? uploadError : "unknown driver error";
+      this.#recordDiagnostic(
+        `glTF image-based light upload failed: ${uploadErrorMessage}`,
+        `gltf-image-based-light-upload:${specular.key}`,
+      );
+    } catch (error) {
+      this.#recordDiagnostic(
+        `glTF image-based light upload failed: ${error instanceof Error ? error.message : String(error)}`,
+        `gltf-image-based-light-upload:${specular.key}`,
+      );
     }
   }
 
-  #iblBrdfLutTextureResource(): WebGLTexture {
-    if (this.#iblBrdfLutTexture !== undefined) return this.#iblBrdfLutTexture;
-
-    const texture = createIblBrdfLutTexture({
-      createTexture: () => this.#createTexture(),
-      gl: this.#gl,
-    });
-    this.#iblBrdfLutTexture = texture;
-
-    return texture;
-  }
-
   #studioEnvironmentSpecularTexture(): StudioEnvironmentSpecularResource {
-    const cached = this.#studioEnvironmentSpecularTextures.get(STUDIO_ENVIRONMENT_SPECULAR_KEY);
-    if (cached !== undefined) return cached;
-
-    const resource = createStudioEnvironmentSpecularTexture({
-      createTexture: () => this.#createTexture(),
-      gl: this.#gl,
-    });
-    this.#studioEnvironmentSpecularTextures.set(STUDIO_ENVIRONMENT_SPECULAR_KEY, resource);
-
-    return resource;
+    return ensureStudioEnvironmentSpecularTexture(this.#iblTextures);
   }
 
   #uploadTexture(

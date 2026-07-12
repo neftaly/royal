@@ -1146,17 +1146,12 @@ export const retainResourceArenaIblSource = (
   return previous;
 };
 
-export const copyResourceArenaIblSources = (
+/** Borrowed read-only view; ResourceArena retains and closes every returned source. */
+export const resourceArenaIblSources = (
   arena: ResourceArena,
   iblKey: string,
-  target: Map<string, LoadedTextureSource>,
-): boolean => {
-  const state = arena as unknown as ResourceArenaState;
-  const sources = state.iblSources.get(iblKey);
-  if (sources === undefined) return false;
-  for (const [key, source] of sources) target.set(key, source);
-  return true;
-};
+): ReadonlyMap<string, LoadedTextureSource> | undefined =>
+  (arena as unknown as ResourceArenaState).iblSources.get(iblKey);
 
 export const resourceArenaIblSourceCount = (arena: ResourceArena, iblKey: string): number => {
   const state = arena as unknown as ResourceArenaState;

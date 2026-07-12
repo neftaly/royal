@@ -98,21 +98,31 @@ glTF draw collection.
   allocation metadata publish transactionally: partial triples roll back, GPU
   capacities change only after successful allocation, and failed deletions
   remain owned for retry.
+  IBL GPU ownership is extracted into a separate opaque arena. glTF specular
+  cubemaps, the studio cubemap, the BRDF LUT, lazy publication, fixed/allocated
+  texture-unit binding, and active-versus-lost teardown no longer live in root.
+  `ResourceArena` remains the sole decoded-source lease and closing authority;
+  the IBL arena borrows a narrow read-only source view and retains no images.
+  Cubemap faces validate atomically before upload, replacements dirty the
+  retained handle for a full reupload, staged GPU faults become bounded
+  diagnostics so row leases finalize, and render-time retry remains fail-closed.
+  The former IBL callback-context modules and their per-draw closure object are
+  deleted.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 461 workspace tests, typecheck, build,
+- The current checkpoint passes 469 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Extract IBL light binding and texture/virtual-texture binding ownership.
-   Then move the surface draw kernel and compose it with the numeric packet,
-   instance, target, program, geometry, and clustered-light arenas into the
-   real callback-free executor. Move or delete remaining active-resource scans
-   and pruning paths with their owning families.
+1. Extract texture/virtual-texture binding ownership. Then move the surface draw
+   kernel and compose it with the numeric packet, instance, target, program,
+   geometry, clustered-light, and IBL arenas into the real callback-free
+   executor. Move or delete remaining active-resource scans and pruning paths
+   with their owning families.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.

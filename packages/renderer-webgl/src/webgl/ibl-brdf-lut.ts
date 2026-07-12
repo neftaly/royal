@@ -58,13 +58,10 @@ const integrateBrdf = (roughness: number, ndotv: number): readonly [number, numb
   return [scale / sampleCount, bias / sampleCount];
 };
 
-export const createIblBrdfLutTexture = (
-  context: {
-    readonly createTexture: () => WebGLTexture;
-    readonly gl: WebGL2RenderingContext;
-  },
-): WebGLTexture => {
-  const gl = context.gl;
+export const uploadIblBrdfLutTexture = (
+  gl: WebGL2RenderingContext,
+  texture: WebGLTexture,
+): void => {
   const data = new Uint8Array(IBL_BRDF_LUT_SIZE * IBL_BRDF_LUT_SIZE * 4);
   for (let y = 0; y < IBL_BRDF_LUT_SIZE; y += 1) {
     const roughness = (y + 0.5) / IBL_BRDF_LUT_SIZE;
@@ -79,7 +76,6 @@ export const createIblBrdfLutTexture = (
     }
   }
 
-  const texture = context.createTexture();
   prepareTextureUpload(gl, false);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(
@@ -97,6 +93,4 @@ export const createIblBrdfLutTexture = (
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-  return texture;
 };
