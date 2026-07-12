@@ -512,6 +512,14 @@ type TextureUnitAllocator = {
   readonly used: Set<number>;
 };
 
+type VirtualTexturePageUploadResult =
+  | { readonly kind: "not-uploaded" }
+  | {
+      readonly kind: "uploaded";
+      readonly pageTableError: unknown;
+      readonly pageTableErrorPresent: boolean;
+    };
+
 type SurfaceBaseColorTextureBinding =
   | { readonly kind: "none" }
   | { readonly kind: "ordinary"; readonly texture: TextureAssetUploadRef }
@@ -6679,7 +6687,7 @@ class WebGlRootImpl implements WebGlRoot {
   #processVirtualTexturePageUploads(): void {
     for (const state of this.#virtualTextures.values()) {
       while (state.pendingUploads.length > 0 && this.#canUploadVirtualTexturePage()) {
-        const upload = state.pendingUploads.shift();
+        const upload = state.pendingUploads[0];
         if (upload === undefined) break;
         if (
           this.#disposed
@@ -6688,12 +6696,25 @@ class WebGlRootImpl implements WebGlRoot {
           || state.status !== "ready"
           || state.uploadedPages.has(upload.pageKey)
         ) {
+          state.pendingUploads.shift();
           closeTexImageSource(upload.image);
           continue;
         }
 
-        this.#uploadVirtualTexturePage(state, upload.page, upload.image);
+        const uploadResult = this.#uploadVirtualTexturePage(state, upload.page, upload.image);
+        if (uploadResult.kind === "not-uploaded") break;
+        state.pendingUploads.shift();
+        let closeError: unknown;
+        let closeErrorPresent = false;
+        try {
+          closeTexImageSource(upload.image);
+        } catch (error) {
+          closeError = error;
+          closeErrorPresent = true;
+        }
         this.#virtualTextureUploadsThisFrame += 1;
+        if (uploadResult.pageTableErrorPresent) throw uploadResult.pageTableError;
+        if (closeErrorPresent) throw closeError;
       }
       if (!this.#canUploadVirtualTexturePage()) break;
     }
@@ -6701,7 +6722,15 @@ class WebGlRootImpl implements WebGlRoot {
 
   #hasPendingVirtualTextureUploads(): boolean {
     for (const state of this.#virtualTextures.values()) {
-      if (state.pendingUploads.length > 0) return true;
+      const resources = state.resources;
+      if (
+        state.pendingUploads.length > 0
+        && state.manifest !== undefined
+        && state.pageTable !== undefined
+        && resources !== undefined
+        && ownsTexture(this.#textureHandles, resources.atlasTexture)
+        && ownsTexture(this.#textureHandles, resources.pageTableTexture)
+      ) return true;
     }
     return false;
   }
@@ -6710,7 +6739,7 @@ class WebGlRootImpl implements WebGlRoot {
     state: VirtualTextureRuntimeState,
     page: VirtualTexturePageId,
     image: TexImageSource,
-  ): void {
+  ): VirtualTexturePageUploadResult {
     const manifest = state.manifest;
     const resources = state.resources;
     const pageTable = state.pageTable;
@@ -6721,17 +6750,13 @@ class WebGlRootImpl implements WebGlRoot {
       || !ownsTexture(this.#textureHandles, resources.atlasTexture)
       || !ownsTexture(this.#textureHandles, resources.pageTableTexture)
     ) {
-      return;
+      return { kind: "not-uploaded" };
     }
 
-    const assignment = pageTable.ensureResident(page, {
+    const transaction = pageTable.planResident(page, {
       protectedPages: this.#protectedVirtualTextureParentPages(manifest, page),
     });
-    if (assignment.evicted !== undefined) {
-      state.uploadedPages.delete(assignment.evicted.pageKey);
-      state.requestedPages.delete(assignment.evicted.pageKey);
-      state.loadingPages.delete(assignment.evicted.pageKey);
-    }
+    const assignment = transaction.assignment;
     const slotX = assignment.slot % resources.atlasGridColumns;
     const slotY = Math.floor(assignment.slot / resources.atlasGridColumns);
     const gl = this.#gl;
@@ -6748,10 +6773,21 @@ class WebGlRootImpl implements WebGlRoot {
       gl.UNSIGNED_BYTE,
       image,
     );
+    pageTable.commitResident(transaction);
+    if (assignment.evicted !== undefined) {
+      state.uploadedPages.delete(assignment.evicted.pageKey);
+      state.requestedPages.delete(assignment.evicted.pageKey);
+      state.loadingPages.delete(assignment.evicted.pageKey);
+    }
     state.uploadedPages.add(virtualTexturePageKey(page));
     state.stats.uploadedPageBytes += manifest.pageSize * manifest.pageSize * 4;
     state.stats.uploadedPages += 1;
-    this.#flushVirtualTexturePageTableUpdates(state);
+    try {
+      this.#flushVirtualTexturePageTableUpdates(state);
+      return { kind: "uploaded", pageTableError: undefined, pageTableErrorPresent: false };
+    } catch (error) {
+      return { kind: "uploaded", pageTableError: error, pageTableErrorPresent: true };
+    }
   }
 
   #flushVirtualTexturePageTableUpdates(state: VirtualTextureRuntimeState): void {
@@ -6768,9 +6804,14 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     prepareTextureUpload(gl, false);
     gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
-    for (const update of pageTable.takeDirtyPageTableUpdates()) {
+    while (pageTable.dirtyPageTableUpdateCount > 0) {
+      const update = pageTable.dirtyPageTableUpdate(0);
+      if (update === undefined) break;
       const region = this.#virtualTexturePageTableUpdateRegion(resources, update);
-      if (region === undefined) continue;
+      if (region === undefined) {
+        pageTable.commitDirtyPageTableUpdate();
+        continue;
+      }
       const texel = encodeVirtualTexturePageTableRgba8({
         residentMip: region.residentMip,
         ...(update.slot === undefined ? {} : { slot: update.slot }),
@@ -6791,6 +6832,7 @@ class WebGlRootImpl implements WebGlRoot {
         gl.UNSIGNED_BYTE,
         payload,
       );
+      pageTable.commitDirtyPageTableUpdate();
       state.stats.pageTableUpdates += cellCount;
     }
   }

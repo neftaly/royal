@@ -62,6 +62,26 @@ export interface VirtualTexturePageTableUpdate {
   readonly slot?: number;
 }
 
+declare const residentTransactionAuthority: unique symbol;
+
+export interface VirtualTextureResidentTransaction {
+  readonly assignment: VirtualTextureAtlasAssignment;
+  readonly [residentTransactionAuthority]: "VirtualTextureResidentTransaction";
+}
+
+type MutableVirtualTextureResidentTransaction = {
+  readonly assignment: VirtualTextureAtlasAssignment;
+  readonly baseRevision: number;
+  readonly clearedReferenceSlots: ReadonlySet<number>;
+  readonly clockHand: number;
+  committed: boolean;
+  readonly fallbackRecord?: VirtualTextureResidentPage;
+  readonly freeSlot?: number;
+  readonly owner: VirtualTextureAtlasPageTable;
+};
+
+const EMPTY_TEXTURE_SLOT_SET: ReadonlySet<number> = new Set<number>();
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -349,10 +369,12 @@ export const firstVirtualTexturePageUri = (
 
 export class VirtualTextureAtlasPageTable {
   readonly #dirty: VirtualTexturePageTableUpdate[] = [];
+  #dirtyHead = 0;
   readonly #freeSlots: number[];
   readonly #recordsByPage = new Map<string, VirtualTextureResidentPage>();
   readonly #recordsBySlot = new Map<number, VirtualTextureResidentPage>();
   #clockHand = 0;
+  #revision = 0;
 
   constructor(options: VirtualTextureAtlasPageTableOptions) {
     if (!isPositiveInteger(options.slotCount)) {
@@ -373,31 +395,84 @@ export class VirtualTextureAtlasPageTable {
     page: VirtualTexturePageId,
     options: { readonly protectedPages?: ReadonlySet<string> } = {},
   ): VirtualTextureAtlasAssignment {
+    const transaction = this.planResident(page, options);
+    this.commitResident(transaction);
+    return transaction.assignment;
+  }
+
+  planResident(
+    page: VirtualTexturePageId,
+    options: { readonly protectedPages?: ReadonlySet<string> } = {},
+  ): VirtualTextureResidentTransaction {
     const pageKey = virtualTexturePageKey(page);
     const existing = this.#recordsByPage.get(pageKey);
     if (existing !== undefined) {
       const touched = { ...existing, referenceBit: true };
-      this.#setRecord(touched);
-      return touched;
+      return {
+        assignment: touched,
+        baseRevision: this.#revision,
+        clearedReferenceSlots: EMPTY_TEXTURE_SLOT_SET,
+        clockHand: this.#clockHand,
+        committed: false,
+        fallbackRecord: existing,
+        owner: this,
+      } as unknown as VirtualTextureResidentTransaction;
     }
-
-    const { evicted, slot } = this.#allocateSlot(options.protectedPages);
-    if (evicted !== undefined) {
-      this.#recordsByPage.delete(evicted.pageKey);
-      this.#recordsBySlot.delete(evicted.slot);
-      this.#dirty.push(this.#downgradeOrInvalidate(evicted));
-    }
-
-    const record: VirtualTextureResidentPage = {
+    const allocation = this.#planSlot(options.protectedPages);
+    const evicted = allocation.evicted;
+    const fallbackRecord = evicted === undefined ? undefined : this.#residentFallbackRecord(
+      parentVirtualTexturePage(evicted.page),
+      evicted.pageKey,
+    );
+    const assignment: VirtualTextureAtlasAssignment = {
       ...(evicted === undefined ? {} : { evicted }),
       page,
       pageKey,
-      referenceBit: true,
-      slot,
+      slot: allocation.slot,
     };
+    return {
+      assignment,
+      baseRevision: this.#revision,
+      clearedReferenceSlots: allocation.clearedReferenceSlots,
+      clockHand: allocation.clockHand,
+      committed: false,
+      ...(fallbackRecord === undefined ? {} : { fallbackRecord }),
+      ...(allocation.freeSlot === undefined ? {} : { freeSlot: allocation.freeSlot }),
+      owner: this,
+    } as unknown as VirtualTextureResidentTransaction;
+  }
+
+  commitResident(transaction: VirtualTextureResidentTransaction): void {
+    const mutable = transaction as unknown as MutableVirtualTextureResidentTransaction;
+    if (mutable.owner !== this) throw new Error("Virtual texture resident transaction belongs to another page table");
+    if (mutable.committed) throw new Error("Virtual texture resident transaction was already committed");
+    if (mutable.baseRevision !== this.#revision) throw new Error("Virtual texture resident transaction is stale");
+    mutable.committed = true;
+    const assignment = mutable.assignment;
+    const existing = this.#recordsByPage.get(assignment.pageKey);
+    if (existing !== undefined) {
+      this.#setRecord({ ...existing, referenceBit: true });
+      this.#revision += 1;
+      return;
+    }
+    if (mutable.freeSlot !== undefined) {
+      const shifted = this.#freeSlots.shift();
+      if (shifted !== mutable.freeSlot) throw new Error("Virtual texture resident transaction free slot changed");
+    }
+    for (const slot of mutable.clearedReferenceSlots) {
+      const current = this.#recordsBySlot.get(slot);
+      if (current !== undefined) this.#setRecord({ ...current, referenceBit: false });
+    }
+    this.#clockHand = mutable.clockHand;
+    if (assignment.evicted !== undefined) {
+      this.#recordsByPage.delete(assignment.evicted.pageKey);
+      this.#recordsBySlot.delete(assignment.evicted.slot);
+      this.#dirty.push(this.#fallbackUpdate(assignment.evicted, mutable.fallbackRecord));
+    }
+    const record: VirtualTextureResidentPage = { ...assignment, referenceBit: true };
     this.#setRecord(record);
-    this.#dirty.push({ page, pageKey, slot });
-    return record;
+    this.#dirty.push({ page: assignment.page, pageKey: assignment.pageKey, slot: assignment.slot });
+    this.#revision += 1;
   }
 
   residentSlot(page: VirtualTexturePageId): number | undefined {
@@ -416,6 +491,7 @@ export class VirtualTextureAtlasPageTable {
       if (record !== undefined) {
         const touched = { ...record, referenceBit: true };
         this.#setRecord(touched);
+        this.#revision += 1;
         return touched;
       }
       page = parentVirtualTexturePage(page);
@@ -424,41 +500,75 @@ export class VirtualTextureAtlasPageTable {
   }
 
   takeDirtyPageTableUpdates(): readonly VirtualTexturePageTableUpdate[] {
-    const updates = this.#dirty.slice();
+    const updates = this.#dirty.slice(this.#dirtyHead);
     this.#dirty.length = 0;
+    this.#dirtyHead = 0;
     return updates;
   }
 
-  #allocateSlot(protectedPages: ReadonlySet<string> | undefined): { readonly evicted?: VirtualTextureResidentPage; readonly slot: number } {
-    const freeSlot = this.#freeSlots.shift();
-    if (freeSlot !== undefined) return { slot: freeSlot };
+  get dirtyPageTableUpdateCount(): number {
+    return this.#dirty.length - this.#dirtyHead;
+  }
 
-    const slotCount = this.slotCount;
-    for (let attempts = 0; attempts < slotCount * 3; attempts += 1) {
-      const slot = this.#clockHand;
-      this.#clockHand = (this.#clockHand + 1) % slotCount;
-      const record = this.#recordsBySlot.get(slot);
-      if (record === undefined) return { slot };
-      if (protectedPages?.has(record.pageKey)) continue;
-      if (record.referenceBit) {
-        this.#setRecord({ ...record, referenceBit: false });
-        continue;
-      }
-      return { evicted: record, slot };
+  dirtyPageTableUpdate(index: number): VirtualTexturePageTableUpdate | undefined {
+    if (!Number.isSafeInteger(index) || index < 0) return undefined;
+    return this.#dirty[this.#dirtyHead + index];
+  }
+
+  commitDirtyPageTableUpdate(): void {
+    if (this.#dirtyHead >= this.#dirty.length) {
+      throw new Error("Virtual texture page table has no dirty update to commit");
+    }
+    this.#dirtyHead += 1;
+    if (this.#dirtyHead === this.#dirty.length) {
+      this.#dirty.length = 0;
+      this.#dirtyHead = 0;
+    }
+  }
+
+
+  #planSlot(protectedPages: ReadonlySet<string> | undefined): {
+    readonly clearedReferenceSlots: ReadonlySet<number>;
+    readonly clockHand: number;
+    readonly evicted?: VirtualTextureResidentPage;
+    readonly freeSlot?: number;
+    readonly slot: number;
+  } {
+    const freeSlot = this.#freeSlots[0];
+    if (freeSlot !== undefined) {
+      return { clearedReferenceSlots: EMPTY_TEXTURE_SLOT_SET, clockHand: this.#clockHand, freeSlot, slot: freeSlot };
     }
 
-    const fallbackSlot = this.#clockHand;
-    this.#clockHand = (this.#clockHand + 1) % slotCount;
+    const clearedReferenceSlots = new Set<number>();
+    const slotCount = this.slotCount;
+    let clockHand = this.#clockHand;
+    for (let attempts = 0; attempts < slotCount * 3; attempts += 1) {
+      const slot = clockHand;
+      clockHand = (clockHand + 1) % slotCount;
+      const record = this.#recordsBySlot.get(slot);
+      if (record === undefined) return { clearedReferenceSlots, clockHand, slot };
+      if (protectedPages?.has(record.pageKey)) continue;
+      if (record.referenceBit && !clearedReferenceSlots.has(record.slot)) {
+        clearedReferenceSlots.add(record.slot);
+        continue;
+      }
+      return { clearedReferenceSlots, clockHand, evicted: record, slot };
+    }
+
+    const fallbackSlot = clockHand;
+    clockHand = (clockHand + 1) % slotCount;
     const evicted = this.#recordsBySlot.get(fallbackSlot);
     if (evicted !== undefined && protectedPages?.has(evicted.pageKey)) {
       for (let slot = 0; slot < slotCount; slot += 1) {
         const record = this.#recordsBySlot.get(slot);
         if (record !== undefined && !protectedPages.has(record.pageKey)) {
-          return { evicted: record, slot };
+          return { clearedReferenceSlots, clockHand, evicted: record, slot };
         }
       }
     }
-    return evicted === undefined ? { slot: fallbackSlot } : { evicted, slot: fallbackSlot };
+    return evicted === undefined
+      ? { clearedReferenceSlots, clockHand, slot: fallbackSlot }
+      : { clearedReferenceSlots, clockHand, evicted, slot: fallbackSlot };
   }
 
   #setRecord(record: VirtualTextureResidentPage): void {
@@ -466,9 +576,27 @@ export class VirtualTextureAtlasPageTable {
     this.#recordsBySlot.set(record.slot, record);
   }
 
-  #downgradeOrInvalidate(evicted: VirtualTextureResidentPage): VirtualTexturePageTableUpdate {
-    const fallback = this.resolveResidentFallback(parentVirtualTexturePage(evicted.page));
+  #residentFallbackRecord(
+    requested: VirtualTexturePageId,
+    excludedPageKey: string,
+  ): VirtualTextureResidentPage | undefined {
+    let page = requested;
+    const maxMip = requested.mip + 32;
+    while (page.mip <= maxMip) {
+      const record = this.#recordsByPage.get(virtualTexturePageKey(page));
+      if (record !== undefined && record.pageKey !== excludedPageKey) return record;
+      page = parentVirtualTexturePage(page);
+    }
+    return undefined;
+  }
+
+  #fallbackUpdate(
+    evicted: VirtualTextureResidentPage,
+    fallback: VirtualTextureResidentPage | undefined,
+  ): VirtualTexturePageTableUpdate {
     if (fallback === undefined) return { page: evicted.page, pageKey: evicted.pageKey };
+    const current = this.#recordsByPage.get(fallback.pageKey);
+    if (current !== undefined) this.#setRecord({ ...current, referenceBit: true });
     return {
       fallbackPage: fallback.page,
       fallbackPageKey: fallback.pageKey,

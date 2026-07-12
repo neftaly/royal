@@ -194,6 +194,141 @@ describe("WebGL virtual texturing runtime model", () => {
     ]);
   });
 
+  it("publishes resident assignment only after an explicit transaction commit", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const page = { mip: 0, x: 0, y: 0 };
+    const transaction = table.planResident(page);
+
+    expect(transaction.assignment).toEqual(expect.objectContaining({ pageKey: "0/0/0", slot: 0 }));
+    expect(table.residentSlot(page)).toBeUndefined();
+    expect(table.residentCount).toBe(0);
+    expect(table.dirtyPageTableUpdateCount).toBe(0);
+
+    table.commitResident(transaction);
+    expect(table.residentSlot(page)).toBe(0);
+    expect(table.residentCount).toBe(1);
+    expect(table.dirtyPageTableUpdate(0)).toEqual({ page, pageKey: "0/0/0", slot: 0 });
+  });
+
+  it("leaves a planned assignment unpublished when the atlas upload fails", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 1 });
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 1, y: 0 };
+    table.ensureResident(first);
+    table.takeDirtyPageTableUpdates();
+
+    const failedUpload = table.planResident(second);
+    expect(failedUpload.assignment.evicted?.pageKey).toBe("0/0/0");
+    expect(() => {
+      throw new Error("atlas upload failure");
+    }).toThrow(/atlas upload failure/);
+
+    expect(table.residentSlot(first)).toBe(0);
+    expect(table.residentSlot(second)).toBeUndefined();
+    expect(table.dirtyPageTableUpdateCount).toBe(0);
+
+    const retry = table.planResident(second);
+    expect(retry.assignment).toEqual(failedUpload.assignment);
+    table.commitResident(retry);
+    expect(table.residentSlot(first)).toBeUndefined();
+    expect(table.residentSlot(second)).toBe(0);
+  });
+
+  it("peeks dirty updates allocation-free and acknowledges only successful page-table writes", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 1, y: 0 };
+    table.ensureResident(first);
+    table.ensureResident(second);
+
+    const firstUpdate = table.dirtyPageTableUpdate(0);
+    expect(firstUpdate).toEqual({ page: first, pageKey: "0/0/0", slot: 0 });
+    expect(table.dirtyPageTableUpdate(0)).toBe(firstUpdate);
+    expect(table.dirtyPageTableUpdateCount).toBe(2);
+
+    // A failed write does not acknowledge or reorder the front update.
+    expect(table.dirtyPageTableUpdate(0)).toBe(firstUpdate);
+    expect(table.dirtyPageTableUpdateCount).toBe(2);
+
+    table.commitDirtyPageTableUpdate();
+    expect(table.dirtyPageTableUpdate(0)).toEqual({ page: second, pageKey: "0/1/0", slot: 1 });
+    expect(table.dirtyPageTableUpdateCount).toBe(1);
+    table.commitDirtyPageTableUpdate();
+    expect(table.dirtyPageTableUpdateCount).toBe(0);
+    expect(table.dirtyPageTableUpdate(0)).toBeUndefined();
+    expect(() => table.commitDirtyPageTableUpdate()).toThrow(/no dirty update/);
+  });
+
+  it("keeps a planned resident transaction valid while acknowledging an older dirty update", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 1, y: 0 };
+    table.ensureResident(first);
+
+    const transaction = table.planResident(second);
+    table.commitDirtyPageTableUpdate();
+    expect(() => table.commitResident(transaction)).not.toThrow();
+    expect(table.residentSlot(second)).toBe(1);
+    expect(table.dirtyPageTableUpdate(0)).toEqual({ page: second, pageKey: "0/1/0", slot: 1 });
+  });
+
+  it("rejects foreign, stale, and already committed resident transactions", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const foreign = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const first = table.planResident({ mip: 0, x: 0, y: 0 });
+    const stale = table.planResident({ mip: 0, x: 1, y: 0 });
+    expect(() => foreign.commitResident(first)).toThrow(/another page table/);
+    table.commitResident(first);
+    expect(() => table.commitResident(first)).toThrow(/already committed/);
+    expect(() => table.commitResident(stale)).toThrow(/stale/);
+  });
+
+  it("returns a touched existing assignment after the second-chance clock cleared its reference bit", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 1, y: 0 };
+    const third = { mip: 0, x: 2, y: 0 };
+    table.ensureResident(first);
+    table.ensureResident(second);
+    table.takeDirtyPageTableUpdates();
+    table.ensureResident(third);
+    table.takeDirtyPageTableUpdates();
+
+    const touch = table.planResident(second);
+    expect(touch.assignment).toEqual(expect.objectContaining({
+      pageKey: "0/1/0",
+      referenceBit: true,
+      slot: 1,
+    }));
+    table.commitResident(touch);
+    expect(table.ensureResident(second)).toEqual(expect.objectContaining({ referenceBit: true, slot: 1 }));
+  });
+
+  it("matches immediate assignment behavior across committed transactional fuzz", () => {
+    forEachFuzzCase({ cases: 12, seed: 0x4f12c7a1 }, ({ label, random }) => {
+      const slotCount = random.int(1, 8);
+      const immediate = new VirtualTextureAtlasPageTable({ slotCount });
+      const transactional = new VirtualTextureAtlasPageTable({ slotCount });
+      const seen = new Map<string, FuzzPage>();
+      for (let step = 0; step < 40; step += 1) {
+        const page = fuzzPage(random);
+        seen.set(virtualTexturePageKey(page), page);
+        const resident = [...seen.entries()].filter(([, candidate]) => immediate.residentSlot(candidate) !== undefined);
+        const protectedPages = new Set(resident.filter(() => random.boolean(0.3)).map(([key]) => key));
+        const expected = immediate.ensureResident(page, { protectedPages });
+        const transaction = transactional.planResident(page, { protectedPages });
+        expect(transaction.assignment, `${label} step=${step} assignment`).toEqual(expected);
+        transactional.commitResident(transaction);
+        for (const [key, candidate] of seen) {
+          expect(transactional.residentSlot(candidate), `${label} step=${step} slot ${key}`)
+            .toBe(immediate.residentSlot(candidate));
+        }
+        expect(transactional.takeDirtyPageTableUpdates(), `${label} step=${step} dirty`)
+          .toEqual(immediate.takeDirtyPageTableUpdates());
+      }
+    });
+  });
+
   it("selects the nearest resident parent fallback for missing pages", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 4 });
     const parent = { mip: 1, x: 1, y: 1 };
@@ -403,7 +538,12 @@ const fakeCanvas = (
   return canvas as unknown as FakeCanvas;
 };
 
-const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxTextureSize?: number } = {}): FakeGl => {
+const fakeGl = (options: {
+  readonly atlasUploadFailure?: { enabled: boolean };
+  readonly maxTextureImageUnits?: number;
+  readonly maxTextureSize?: number;
+  readonly pageTableUploadFailure?: { enabled: boolean; error?: unknown };
+} = {}): FakeGl => {
   const calls: GlCall[] = [];
   let nextHandleId = 1;
   const uniforms = new Map<string, WebGLUniformLocation>();
@@ -537,7 +677,18 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
     texStorage2D: record("texStorage2D"),
-    texSubImage2D: record("texSubImage2D"),
+    texSubImage2D: record<readonly unknown[]>("texSubImage2D", (...args) => {
+      const payload = args[8];
+      const pageTableUpload = ArrayBuffer.isView(payload) && !(payload instanceof DataView);
+      if (pageTableUpload && options.pageTableUploadFailure?.enabled === true) {
+        throw "error" in options.pageTableUploadFailure
+          ? options.pageTableUploadFailure.error
+          : new Error("page table upload failure");
+      }
+      if (!pageTableUpload && options.atlasUploadFailure?.enabled === true) {
+        throw new Error("atlas upload failure");
+      }
+    }),
     uniform1f: record("uniform1f"),
     uniform1i: record("uniform1i"),
     uniform2fv: record("uniform2fv"),
@@ -559,6 +710,8 @@ const fakeGl = (options: { readonly maxTextureImageUnits?: number; readonly maxT
 
 class ControlledImage {
   static readonly instances: ControlledImage[] = [];
+  static closeCalls = 0;
+  static closeError: unknown;
 
   complete = false;
   crossOrigin: string | null = null;
@@ -595,6 +748,11 @@ class ControlledImage {
     return new Promise((resolve) => {
       this.#decodeResolvers.push(resolve);
     });
+  }
+
+  close(): void {
+    ControlledImage.closeCalls += 1;
+    if (ControlledImage.closeError !== undefined) throw ControlledImage.closeError;
   }
 
   removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
@@ -885,9 +1043,45 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   ControlledImage.instances.splice(0);
+  ControlledImage.closeCalls = 0;
+  ControlledImage.closeError = undefined;
 });
 
 describe("WebGL renderer virtual texturing integration", () => {
+  it("keeps retained pending pages dormant without physical resources and uploads once after explicit restore", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    expect(pageUploads(calls)).toHaveLength(0);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    const wakesWhileBlocked = requestAnimationFrame.mock.calls.length;
+    root.render(graph);
+    root.render(graph);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesWhileBlocked);
+    expect(pageUploads(calls)).toHaveLength(0);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, residentPages: 0 });
+
+    canvas.dispatchContextEvent("webglcontextrestored");
+    expect(requestAnimationFrame.mock.calls.length).toBeGreaterThan(wakesWhileBlocked);
+    root.render(graph);
+    expect(pageUploads(calls)).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, residentPages: 1 });
+    root.render(graph);
+    expect(pageUploads(calls)).toHaveLength(1);
+  });
+
   it("drops false VT residency and refills retained manifest resources after context restoration", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
@@ -1574,6 +1768,107 @@ describe("WebGL renderer virtual texturing integration", () => {
       residentPages: 2,
       uploadedPages: 2,
     }));
+  });
+
+  it("retains the pending page without self-waking or publishing residency across persistent atlas faults", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const atlasUploadFailure = { enabled: false };
+    const { gl } = fakeGl({ atlasUploadFailure });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    const wakesBeforeFailure = requestAnimationFrame.mock.calls.length;
+
+    atlasUploadFailure.enabled = true;
+    expect(() => root.render(graph)).toThrow(/atlas upload failure/);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 0, uploadedPages: 0 });
+    expect(() => root.render(graph)).toThrow(/atlas upload failure/);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 0, uploadedPages: 0 });
+
+    atlasUploadFailure.enabled = false;
+    root.render(graph);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+  });
+
+  it("retries only dirty page-table work without self-waking or repeating the committed atlas upload", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const pageTableUploadFailure = { enabled: false };
+    const { calls, gl } = fakeGl({ pageTableUploadFailure });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    const wakesBeforeFailure = requestAnimationFrame.mock.calls.length;
+
+    pageTableUploadFailure.enabled = true;
+    expect(() => root.render(graph)).toThrow(/page table upload failure/);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+    expect(pageUploads(calls)).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+    expect(() => root.render(graph)).toThrow(/page table upload failure/);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+    expect(pageUploads(calls)).toHaveLength(1);
+
+    pageTableUploadFailure.enabled = false;
+    root.render(graph);
+    expect(pageUploads(calls)).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing.pageTableUpdates).toBeGreaterThan(0);
+  });
+
+  it("charges committed atlas work and preserves an undefined page-table throw ahead of image-close failure", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const pageTableUploadFailure: { enabled: boolean; error?: unknown } = { enabled: false };
+    const { calls, gl } = fakeGl({ pageTableUploadFailure });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    pageTableUploadFailure.enabled = true;
+    pageTableUploadFailure.error = undefined;
+    ControlledImage.closeError = new Error("close failure");
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+
+    let threw = false;
+    let caught: unknown = "not-thrown";
+    try {
+      root.render(graph);
+    } catch (error) {
+      threw = true;
+      caught = error;
+    }
+    expect(threw).toBe(true);
+    expect(caught).toBeUndefined();
+    expect(ControlledImage.closeCalls).toBe(1);
+    expect(pageUploads(calls)).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+
+    pageTableUploadFailure.enabled = false;
+    ControlledImage.closeError = undefined;
+    root.render(graph);
+    expect(pageUploads(calls)).toHaveLength(1);
   });
 
   it("requests coarsest resident parent pages before mip-0 children", async () => {

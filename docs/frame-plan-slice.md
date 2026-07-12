@@ -129,17 +129,24 @@ glTF draw collection.
   texture, while an in-flight decode keeps one subscription and resolves the
   current generation on settlement. Persistent GPU faults retain work without
   self-scheduling a tight retry loop.
+  Virtual-texture publication is now retry-safe ahead of its full arena
+  extraction. Atlas residency uses explicit plan/commit transactions, page-table
+  dirty rows are acknowledged only after successful GPU writes, and atlas
+  failures leave residency unpublished. Committed uploads close their source
+  exactly once and retain failed page-table rows for table-only retry. Missing or
+  lost GPU resources retain queued work without creating a requestAnimationFrame
+  self-loop; an explicit restore wakes the queue.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 486 workspace tests, typecheck, build,
+- The current checkpoint passes 497 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Extract ordinary/virtual-texture GPU residency and binding ownership. Then
+1. Extract virtual-texture GPU residency and ordinary/virtual binding ownership. Then
    move the surface draw kernel and compose it with the numeric packet,
    instance, target, program, geometry, clustered-light, IBL, and texture-handle
    arenas into the real callback-free executor. Move or delete remaining
