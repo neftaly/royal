@@ -42,38 +42,38 @@ slice described below.
   boundary guard without public allocator mutation hooks.
 - Shared-view LOD selection now runs as a retained node-then-material prepass:
   all visible views contribute, each dense group finalizes once, and legacy
-  submission consumes one frame-global level per group. `FramePackets` now
-  retain multi-predicate LOD requirements and concatenated per-view ranges, but
-  the root does not yet build the retained numeric candidate catalog. The
-  current draw path remains the differential oracle for that next slice.
+  submission consumes one frame-global level per group. `FramePackets` retain
+  multi-predicate LOD requirements and concatenated per-view ranges. The root
+  now builds a plan-scoped numeric glTF candidate catalog with retained bounds,
+  material, local-model, and root-source tables; asynchronously ready or
+  replaced assets patch only their reverse-mapped occurrence spans. Per-view
+  numeric culling drives selected ranges while the current draw path remains a
+  strict semantic differential oracle.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 393 workspace tests, typecheck, build,
+- The current checkpoint passes 416 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Build the retained numeric packet candidate catalog and emit its per-view
-   selected ranges using the finalized shared-view LOD requirements. Preserve
-   the old draw path only as a differential oracle.
-2. Make packet output drive batching and submission, extract the real executor,
+1. Make packet output drive batching and submission, extract the real executor,
    and delete transient glTF draw arrays, string batch caches, active-resource
    scans, frame-end pruning paths, and the corresponding root methods.
-3. Compile the private render DAG and add minimal typed `Primitive` and effect
+2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.
-4. Finish the paused hardware glTF-load/compatibility-lab hitch and long-task
+3. Finish the paused hardware glTF-load/compatibility-lab hitch and long-task
    benchmark. Measure cold and warm Helmet loading, 4,096-instance p50/p95,
    capacity growth, and steady heap slope without adding unstable CI limits.
-5. Recheck the visual oracles: Helmet, material variants, transparent output,
+4. Recheck the visual oracles: Helmet, material variants, transparent output,
    SVG color accuracy, and representative Khronos material/compatibility cases.
    Then validate Safari 17 on iPad A10+ and Quest 2.
-6. Keep animation and morphing deferred until a product use case exists; retain
+5. Keep animation and morphing deferred until a product use case exists; retain
    only the eventual minimal imperative control boundary in the architecture.
-7. Keep occlusion, meshlets/impostors, particles, and large-world streaming as
+6. Keep occlusion, meshlets/impostors, particles, and large-world streaming as
    measured private research until packet/executor data identifies a concrete
    bottleneck. Outdoor mixed building/forest scenes remain design pressure, not
    immediate public API.

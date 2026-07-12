@@ -9,6 +9,7 @@ vi.mock("../packages/renderer-webgl/src/gltf/codecs/basisu", () => ({
 
 import {
   boxGeometry,
+  createCameraViewResource,
   createGltfInstanceTransforms,
   directionalLight,
   gltf,
@@ -3308,6 +3309,110 @@ afterEach(() => {
 });
 
 describe("WebGL renderer scene and glTF regressions", () => {
+  it("fills a retained loading occurrence without rebuilding on camera frames", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const cameraView = createCameraViewResource(camera());
+    const renderGraph = scene({
+      camera: cameraView,
+      clearColor: [0, 0, 0, 0],
+      nodes: [
+        gltf({ src: triangleGltfSrc, version: "packet-shared-readiness" }),
+      ],
+    });
+
+    root.render(renderGraph);
+    expect(drawCalls(calls), "loading packet occurrence ranges must remain empty").toHaveLength(0);
+    await settleDocumentAndBuffer(loader);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => drawCalls(calls).length === 1,
+    );
+    expect(drawCalls(calls), "the ready event must fill its reverse-mapped occurrence").toHaveLength(1);
+
+    const planning = root.snapshot().planning;
+    const callsBeforeCameraFrame = calls.length;
+    cameraView.position[0] = 0.1;
+    cameraView.commit();
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(drawCalls(calls.slice(callsBeforeCameraFrame))).toHaveLength(1);
+    expect(root.snapshot().planning, "camera-only frames must retain the compiled packet topology").toEqual(planning);
+  });
+
+  it("appends every occurrence of one ready request across direct-mesh ordering segments", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({ src: triangleGltfSrc, version: "packet-shared-segments" }),
+      mesh({ geometry: planeGeometry(0.25), material: unlitMaterial({ color: [1, 1, 1, 1] }) }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0.25, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        version: "packet-shared-segments",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(drawCalls(calls), "only the direct mesh draws while both packet ranges are loading").toHaveLength(1);
+    await settleDocumentAndBuffer(loader);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => drawCalls(calls).length === 4);
+    expect(drawCalls(calls).slice(-3).map((call) => call.args[0])).toEqual([
+      gl.TRIANGLES,
+      gl.TRIANGLES,
+      gl.TRIANGLES,
+    ]);
+  });
+
+  it("ignores a stale loading asset completion after replacing its frame plan", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const oldGraph = renderScene([gltf({ src: triangleGltfSrc, version: "packet-stale-old" })]);
+    const nextGraph = renderScene([gltf({ src: triangleGltfSrc, version: "packet-stale-next" })]);
+
+    root.render(oldGraph);
+    root.render(nextGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, triangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(drawCalls(calls), "the released plan's completion must not populate the replacement slot")
+      .toHaveLength(0);
+
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, triangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => drawCalls(calls).length === 1);
+    expect(drawCalls(calls)).toHaveLength(1);
+  });
+
+  it("matches retained local sidedness with a negative ordinary glTF root scale", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([gltf({
+      src: triangleGltfSrc,
+      transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [-1, 1, 1] },
+      version: "packet-negative-root",
+    })]);
+
+    root.render(renderGraph);
+    await settleDocumentAndBuffer(loader);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => drawCalls(calls).length === 1);
+    expect(calls.filter((call) => call.name === "frontFace").map((call) => call.args[0])).toContain(gl.CW);
+  });
+
   it("schedules a follow-up render when only DPR changes", async () => {
     const viewport = installViewportInvalidationStubs();
     const { calls, gl } = fakeGl();
