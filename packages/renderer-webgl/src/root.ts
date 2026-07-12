@@ -2103,7 +2103,6 @@ class WebGlRootImpl implements WebGlRoot {
     new Map<GltfInstanceTransforms, GltfInstanceTransformSubscription>();
   #gltfInstanceSourceKey = 1;
   #gltfInstanceFrameActive = false;
-  readonly #gltfRootViewProjectionModel: MutableMat4 = identityMat4();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
   #sharedViewLodSelections: SharedViewLodSelections = createSharedViewLodSelections();
@@ -2607,8 +2606,6 @@ class WebGlRootImpl implements WebGlRoot {
             surfaceLights,
             toneMapping,
             viewportSize,
-            sourceX,
-            sourceY,
           );
         }
         flushGltfDraws();
@@ -3907,8 +3904,6 @@ class WebGlRootImpl implements WebGlRoot {
     sceneLights: SurfaceLightSet | undefined,
     toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
-    sourceX: number,
-    sourceY: number,
   ): void {
     switch (node.kind) {
       case "directional-light":
@@ -3925,23 +3920,6 @@ class WebGlRootImpl implements WebGlRoot {
           toneMapping,
           viewportSize,
         );
-        return;
-      case "gltf":
-      case "gltf-instances":
-        {
-          const draws: GltfPrimitiveDraw[] = [];
-          this.#appendGltfPrimitiveDraws(node, projection, view, draws, viewProjection);
-          this.#drawGltfPrimitiveDraws(
-            draws,
-            projection,
-            view,
-            sceneLights,
-            toneMapping,
-            viewportSize,
-            sourceX,
-            sourceY,
-          );
-        }
         return;
       default:
         {
@@ -3997,102 +3975,6 @@ class WebGlRootImpl implements WebGlRoot {
       );
     } finally {
       this.#resetDrawAlphaState();
-    }
-  }
-
-  #appendGltfPrimitiveDraws(
-    node: AnyGltfNode,
-    projection: Mat4,
-    view: Mat4,
-    draws: GltfPrimitiveDraw[],
-    viewProjection = multiplyMat4(projection, view),
-  ): void {
-    const renderInstanceOrdinal = this.#gltfRenderOrdinal;
-    this.#gltfRenderOrdinal += 1;
-    const state = this.#gltfState(node);
-    if (state.status !== "ready") return;
-    if (node.kind === "gltf-instances") {
-      this.#appendGltfInstancesPrimitiveDraws(
-        node,
-        state,
-        renderInstanceOrdinal,
-        viewProjection,
-        draws,
-      );
-      return;
-    }
-    const renderInstanceKey = state.hasNodeLod || state.hasMaterialLod
-      ? `instance:${renderInstanceOrdinal}`
-      : "";
-
-    const rootHandle = this.#renderObjectHandles.get(node);
-    const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
-    const rootModel = transformMat4(rootTransform);
-    const rootDeterminant = mat4OrientationDeterminant(rootModel);
-    const rootViewProjectionModel = multiplyMat4Into(
-      this.#gltfRootViewProjectionModel,
-      viewProjection,
-      rootModel,
-    );
-    const assetLights = this.#gltfAssetLightSet(state, rootModel);
-    const selectedNodeLevels = state.hasNodeLod
-      ? this.#selectedGltfNodeLodLevels(state, renderInstanceKey, rootViewProjectionModel)
-      : undefined;
-    const selectedVariantIndex = state.hasMaterialVariants
-      ? this.#selectedGltfVariantIndex(state, node)
-      : undefined;
-    for (const primitive of state.primitives) {
-      const nodeLod = primitive.nodeLod;
-      if (selectedNodeLevels !== undefined && nodeLod !== undefined) {
-        const selectedLevel = selectedNodeLevels.get(nodeLod.group);
-        if (selectedLevel !== nodeLod.level) continue;
-      }
-
-      const primitiveMaterial = selectedVariantIndex === undefined
-        ? primitive.baseMaterial
-        : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const localModels = primitive.localModels;
-      const localModelDeterminants = primitive.localModelDeterminants;
-      const localBounds = primitive.localBounds;
-      for (const [instanceIndex, localModel] of localModels.entries()) {
-        const instanceBounds = localBounds[instanceIndex];
-        const loadedMaterial = primitiveMaterial.materialLod === undefined
-          ? primitiveMaterial.material
-          : this.#selectedGltfMaterialLod(
-            state,
-            renderInstanceKey,
-            primitive,
-            primitiveMaterial,
-            instanceIndex,
-            instanceBounds,
-            rootViewProjectionModel,
-          );
-        if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) {
-          continue;
-        }
-        const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
-        draws.push({
-          geometry: prepared.geometry,
-          geometryId: prepared.geometryId,
-          ...(assetLights === undefined ? {} : { lights: assetLights }),
-          localModel,
-          material: prepared.material,
-          materialBatchKey: prepared.materialBatchKey,
-          modelSignatureInstanceIndex: instanceIndex,
-          modelSignatureStateKey: state.instanceKey,
-          rootModel,
-          ...(rootHandle === undefined ? {} : { rootPositionSignatureVersion: rootHandle.positionVersion }),
-          ...(rootHandle === undefined ? {} : { rootRotationSignatureVersion: rootHandle.rotationVersion }),
-          ...(rootHandle === undefined ? {} : { rootScaleSignatureVersion: rootHandle.scaleVersion }),
-          rootSignatureInstanceIndex: -1,
-          rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
-          rootTransform,
-          sidedness: {
-            doubleSided: loadedMaterial.doubleSided,
-            frontFaceCcw: rootDeterminant * (localModelDeterminants[instanceIndex] ?? 1) >= 0,
-          },
-        });
-      }
     }
   }
 
@@ -4295,88 +4177,6 @@ class WebGlRootImpl implements WebGlRoot {
       views.matrixScaleVersion = instances.scaleVersion;
     }
     return views;
-  }
-
-  #appendGltfInstancesPrimitiveDraws(
-    node: GltfInstancesNode,
-    state: GltfState,
-    renderInstanceOrdinal: number,
-    viewProjection: Mat4,
-    draws: GltfPrimitiveDraw[],
-  ): void {
-    const views = this.#gltfInstanceViews(node.instances);
-    const selectedVariantIndex = state.hasMaterialVariants
-      ? this.#selectedGltfVariantIndex(state, node)
-      : undefined;
-    for (const primitive of state.primitives) {
-      const primitiveMaterial = selectedVariantIndex === undefined
-        ? primitive.baseMaterial
-        : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const localModels = primitive.localModels;
-      const localModelDeterminants = primitive.localModelDeterminants;
-      const localBounds = primitive.localBounds;
-
-      for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
-        const rootModel = views.rootModels[outerIndex]!;
-        const rootTransform = views.transforms[outerIndex]!;
-        const rootDeterminant = mat4OrientationDeterminant(rootModel);
-        const rootViewProjectionModel = multiplyMat4Into(
-          this.#gltfRootViewProjectionModel,
-          viewProjection,
-          rootModel,
-        );
-        const renderInstanceKey = `instance:${renderInstanceOrdinal}:${outerIndex}`;
-        const selectedNodeLevels = state.hasNodeLod
-          ? this.#selectedGltfNodeLodLevels(state, renderInstanceKey, rootViewProjectionModel)
-          : undefined;
-        const assetLights = this.#gltfAssetLightSet(state, rootModel);
-
-        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
-          const localModel = localModels[instanceIndex]!;
-          const instanceBounds = localBounds[instanceIndex];
-          const nodeLod = primitive.nodeLod;
-          if (selectedNodeLevels !== undefined && nodeLod !== undefined) {
-            const selectedLevel = selectedNodeLevels.get(nodeLod.group);
-            if (selectedLevel !== nodeLod.level) continue;
-          }
-          const loadedMaterial = primitiveMaterial.materialLod === undefined
-            ? primitiveMaterial.material
-            : this.#selectedGltfMaterialLod(
-              state,
-              renderInstanceKey,
-              primitive,
-              primitiveMaterial,
-              instanceIndex,
-              instanceBounds,
-              rootViewProjectionModel,
-            );
-          if (!isBoundsVisible(instanceBounds, rootViewProjectionModel)) continue;
-          const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
-          draws.push({
-            geometry: prepared.geometry,
-            geometryId: prepared.geometryId,
-            ...(assetLights === undefined ? {} : { lights: assetLights }),
-            localModel,
-            material: prepared.material,
-            materialBatchKey: prepared.materialBatchKey,
-            modelSignatureInstanceIndex: instanceIndex,
-            modelSignatureStateKey: state.instanceKey,
-            rootModel,
-            rootInstanceViews: views,
-            rootPositionSignatureVersion: views.sourceKey,
-            rootRotationSignatureVersion: views.sourceKey,
-            rootScaleSignatureVersion: views.sourceKey,
-            rootSignatureInstanceIndex: outerIndex,
-            rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
-            rootTransform,
-            sidedness: {
-              doubleSided: loadedMaterial.doubleSided,
-              frontFaceCcw: rootDeterminant * (localModelDeterminants[instanceIndex] ?? 1) >= 0,
-            },
-          });
-        }
-      }
-    }
   }
 
   #drawGltfPrimitiveDraws(
@@ -5022,44 +4822,6 @@ class WebGlRootImpl implements WebGlRoot {
     instanceIndex: number,
   ): string {
     return `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`;
-  }
-
-  #selectedGltfNodeLodLevels(
-    state: GltfState,
-    renderInstanceKey: string,
-    _rootViewProjectionModel: Mat4,
-  ): Map<string, number> {
-    const selected = new Map<string, number>();
-    for (const primitive of state.primitives) {
-      const lod = primitive.nodeLod;
-      if (lod === undefined) continue;
-      const selectionKey = `${state.key}:${renderInstanceKey}:node:${lod.group}`;
-      const level = this.#sharedViewSelectedLodLevel(selectionKey);
-      if (level !== undefined) selected.set(lod.group, level);
-    }
-
-    return selected;
-  }
-
-  #selectedGltfMaterialLod(
-    state: GltfState,
-    renderInstanceKey: string,
-    primitive: LoadedGltfPrimitive,
-    primitiveMaterial: LoadedGltfPrimitiveMaterial,
-    instanceIndex: number,
-    _localBounds: Bounds3 | undefined,
-    _rootViewProjectionModel: Mat4,
-  ): LoadedGltfMaterial {
-    const lod = primitiveMaterial.materialLod;
-    if (lod === undefined) return primitiveMaterial.material;
-    const level = this.#sharedViewSelectedLodLevel(this.#gltfMaterialLodSelectionKey(
-      state,
-      renderInstanceKey,
-      primitive,
-      primitiveMaterial,
-      instanceIndex,
-    )) ?? lod.levels.length - 1;
-    return lod.levels[level] ?? primitiveMaterial.material;
   }
 
   #preparedGltfPrimitiveMaterial(
