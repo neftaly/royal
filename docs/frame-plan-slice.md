@@ -53,12 +53,16 @@ glTF draw collection.
   into the established batching/submission backend. Publication failures fail
   closed so packet ranges and resolver state cannot describe mixed asset
   generations. The duplicate legacy collector is no longer used by the main
-  frame path.
+  frame path and has been deleted. A pure retained packet-submission workspace
+  now defines the next boundary: packet-authoritative numeric rows, exact
+  geometry/material batch identities, root/material/light provenance, dense
+  view sequencing, and frame-global canonical runtime bindings. It owns no GL
+  handles and imports no root or lifecycle code.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 416 workspace tests, typecheck, build,
+- The current checkpoint passes 422 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
