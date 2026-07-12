@@ -1,4 +1,4 @@
-import { boxGeometry, imageTexture, virtualTexture, type TextureContentKey, type VirtualTextureAssetRef } from "@royal/renderer-core";
+import { boxGeometry, imageTexture } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   createResourceManifestDiffScratch,
@@ -21,11 +21,9 @@ import {
   resourceArenaContentKeys,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
-  resourceArenaIblSourceCount,
   resourceArenaSnapshot,
   resourceArenaSourceReferenceCount,
   retainResourceArenaAssetSource,
-  retainResourceArenaIblSource,
   retainResourceArenaPreparedSource,
   type PreparedAssetDependencyManifest,
   updatePreparedAssetManifest,
@@ -39,8 +37,7 @@ import {
   retainVertexInputGeometry,
   vertexInputArenaSnapshot,
 } from "../packages/renderer-webgl/src/vertex-input-arena";
-import { fuzzCaseCount, SeededRandom } from "./fuzz";
-
+import { fuzzCaseCount, runFuzzTraces, SeededRandom } from "./fuzz";
 const emptyManifest = (): FramePlanResourceManifest => ({
   bulkInstances: [],
   directGeometries: [],
@@ -49,7 +46,6 @@ const emptyManifest = (): FramePlanResourceManifest => ({
   renderObjectRefs: [],
   virtualTextures: [],
 });
-
 const emptyAsset = (): PreparedGltfAsset => ({
   hasMaterialLod: false,
   hasMaterialVariants: false,
@@ -60,7 +56,6 @@ const emptyAsset = (): PreparedGltfAsset => ({
   primitives: [],
   variants: [],
 });
-
 const replayGeometryChanges = (
   vertexInputs: ReturnType<typeof createVertexInputArena>,
   changes: ReturnType<typeof applyResourceDelta>,
@@ -72,8 +67,40 @@ const replayGeometryChanges = (
     releaseLostVertexInputGeometry(vertexInputs, released.id);
   }
 };
-
 describe("semantic resource arena properties", () => {
+  it("finishes every disposal phase while preserving changes and the first normalized failure", () => {
+    const arena = createResourceArena(() => new Promise(() => undefined), () => undefined);
+    const request = { count: 1, key: gltfRequestKey("/fault.gltf", 0), sourceUri: "/fault.gltf" };
+    applyResourceDelta(arena, diffResourceManifests(
+      emptyManifest(),
+      { ...emptyManifest(), gltfRequests: [request] },
+      createResourceManifestDiffScratch(),
+    ));
+
+    const state = arena as unknown as {
+      readonly gltfRequests: Map<string, { subscription: { release(): void } }>;
+      readonly imageAbortControllers: Map<string, { abort(): void }>;
+      readonly preparedAssets: { dispose(): void };
+      readonly sourceReferences: Map<LoadedTextureSource, number>;
+    };
+    state.gltfRequests.get(request.key)!.subscription.release = () => { throw "subscription failure"; };
+    state.sourceReferences.set({} as LoadedTextureSource, 1);
+    state.imageAbortControllers.set("image", {
+      abort: () => { throw new Error("abort failure"); },
+    });
+    state.preparedAssets.dispose = () => { throw new Error("store failure"); };
+
+    const result = disposeResourceArena(arena);
+    expect(result.kind).toBe("failed");
+    if (result.kind !== "failed") throw new Error("expected disposal failure");
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error.message).toBe("subscription failure");
+    expect(result.changes.releasedGltfKeys).toEqual([request.key]);
+    expect(state.gltfRequests.size).toBe(0);
+    expect(state.imageAbortControllers.size).toBe(0);
+    expect(state.sourceReferences.size).toBe(0);
+  });
+
   it("guards production monotonic identity boundaries without mutable arena hooks", () => {
     expect(claimMonotonicId(MAX_RESOURCE_ID, MAX_RESOURCE_ID, "resource")).toBe(MAX_RESOURCE_ID);
     expect(() => claimMonotonicId(MAX_RESOURCE_ID + 1, MAX_RESOURCE_ID, "resource"))
@@ -83,7 +110,6 @@ describe("semantic resource arena properties", () => {
     expect(() => claimMonotonicId(Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER, "static identity"))
       .toThrow(/ID space is exhausted/);
   });
-
   it("returns detached diagnostic snapshots", () => {
     const arena = createResourceArena(async () => emptyAsset(), () => undefined);
     const declaration = directGeometryDeclaration(boxGeometry([1, 2, 3]), "surface");
@@ -97,14 +123,12 @@ describe("semantic resource arena properties", () => {
     row.recipe.positions[0] = retainedPosition + 100;
     first.geometries.clear();
     first.counters.sceneLeaseAcquires = -1;
-
     const second = resourceArenaSnapshot(arena);
     expect(second.geometries.get(directGeometryDeclarationKey(declaration))?.recipe.positions[0])
       .toBe(retainedPosition);
     expect(second.geometries.size).toBe(1);
     expect(second.counters.sceneLeaseAcquires).toBe(1);
   });
-
   it("preflights cross-asset geometry collisions before committing a prepared batch", async () => {
     const resolvers: Array<(asset: PreparedGltfAsset) => void> = [];
     const arena = createResourceArena(() => new Promise((resolve) => resolvers.push(resolve)), () => undefined);
@@ -143,7 +167,6 @@ describe("semantic resource arena properties", () => {
     expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBe(0);
     expect(resourceArenaHasPendingAssetEvents(arena)).toBe(true);
   });
-
   it("fuzzes counted geometry changes replayed into the vertex-input semantic boundary", () => {
     const arena = createResourceArena(async () => emptyAsset(), () => undefined);
     const vertexInputs = createVertexInputArena();
@@ -175,278 +198,153 @@ describe("semantic resource arena properties", () => {
     ));
     expect(vertexInputArenaSnapshot(vertexInputs).semanticGeometryCount).toBe(0);
   });
-
-  it("fuzzes stale generations, interleaved publication, dependency revisions, and disposal", async () => {
-    const cases = fuzzCaseCount(48);
-    for (let caseIndex = 0; caseIndex < cases; caseIndex += 1) {
-      const random = new SeededRandom((0xa2e4_1e4f ^ Math.imul(caseIndex + 1, 0x9e37_79b9)) >>> 0);
-      type PendingJob = {
-        generation: number;
-        readonly id: number;
-        reject(error: Error): void;
-        resolve(asset: PreparedGltfAsset): void;
-        settled: boolean;
-        readonly signal: AbortSignal;
-      };
-      const jobs: PendingJob[] = [];
-      const assetJobIds = new WeakMap<PreparedGltfAsset, number>();
-      let wakes = 0;
-      const arena = createResourceArena((_request, signal) => new Promise((resolve, reject) => {
-        const job: PendingJob = {
-          generation: -1,
-          id: jobs.length,
-          reject,
-          resolve,
-          settled: false,
-          signal,
-        };
-        jobs.push(job);
-      }), () => { wakes += 1; });
-      const scratch = createResourceManifestDiffScratch();
-      const key = gltfRequestKey("/racy.gltf", 0);
-      const request = { count: 1, key, sourceUri: "/racy.gltf" };
-      const directDeclaration = directGeometryDeclaration(boxGeometry([1, 2, 3]), "surface");
-      const directKey = directGeometryDeclarationKey(directDeclaration);
-      const liveManifest = {
-        ...emptyManifest(),
-        directGeometries: [{ count: 2, declaration: directDeclaration, key: directKey }],
-        gltfRequests: [request],
-      };
-      let current = emptyManifest();
-
-      const setLive = (live: boolean) => {
-        const next = live ? liveManifest : emptyManifest();
-        const result = applyResourceDelta(arena, diffResourceManifests(current, next, scratch));
-        current = next;
-        if (live) {
-          const declaration = resourceArenaSnapshot(arena).gltfRequests.get(key)!;
-          const job = jobs[jobs.length - 1]!;
-          if (job.generation < 0) job.generation = declaration.generation;
-        } else expect(resourceArenaContentKeys(arena, key).size).toBe(0);
-        return result;
-      };
-      const dependencyManifest = (
-        suffix: string,
-        wantsHdr: boolean,
-      ): PreparedAssetDependencyManifest => ({
-        geometries: [{
-          count: 1,
-          declaration: gltfGeometryDeclaration({
-            mode: "triangles",
-            positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, Number.parseInt(suffix, 10) || 0]),
-          }),
-          key: `geometry-owner:${suffix}`,
-        }],
-        iblKeys: wantsHdr ? [{ count: 1, key: `ibl:${suffix}` }] : [],
-        ordinaryTextures: [0, 1].map((slot) => ({
-          count: 1,
-          key: `ordinary:${suffix}:${slot}`,
-          texture: imageTexture({ contentKey: `content:${suffix}:${slot}`, src: `/texture-${suffix}-${slot}.png` }),
-        })),
-        virtualTextures: random.boolean(0.25) ? [{
-          count: 1,
-          key: `virtual:${suffix}`,
-          texture: virtualTexture({ contentKey: `vt:${suffix}`, src: `/texture-${suffix}.json` }) as VirtualTextureAssetRef,
-        }] : [],
-        wantsHdr,
-      });
-      const compileManifest = (asset: PreparedGltfAsset, contentKeys: ReadonlyMap<string, TextureContentKey>) => {
-        const jobId = assetJobIds.get(asset);
-        if (jobId === undefined) throw new Error("ready asset was not produced by this fuzz run");
-        const published = contentKeys.get("/decoded.png");
-        return dependencyManifest(`${jobId}:${published ?? "initial"}`, (jobId & 1) === 0);
-      };
-      const flushPublications = async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      };
-      const drain = () => applyPreparedAssetEvents(arena, compileManifest);
-      const assertConserved = () => {
-        for (const declaration of resourceArenaSnapshot(arena).gltfRequests.values()) {
-          expect(declaration.count).toBeGreaterThan(0);
-          expect(declaration.plan?.generation ?? declaration.generation).toBe(declaration.generation);
-          for (const entry of declaration.plan?.ordinaryTextures.values() ?? []) expect(entry.key).toBeTypeOf("string");
-          for (const entry of declaration.plan?.virtualTextures ?? []) expect(entry.key).toBeTypeOf("string");
-        }
-        for (const declaration of [...resourceArenaSnapshot(arena).ordinaryTextures.values(), ...resourceArenaSnapshot(arena).virtualTextures.values()]) {
-          expect(declaration.sceneReferences).toBeGreaterThanOrEqual(0);
-          expect(declaration.assetReferences).toBeGreaterThanOrEqual(0);
-          expect(declaration.sceneReferences + declaration.assetReferences).toBeGreaterThan(0);
-        }
-        for (const geometry of resourceArenaSnapshot(arena).geometries.values()) {
-          expect(geometry.sceneReferences).toBeGreaterThanOrEqual(0);
-          expect(geometry.assetReferences).toBeGreaterThanOrEqual(0);
-          expect(geometry.sceneReferences + geometry.assetReferences).toBeGreaterThan(0);
-        }
-        const expectedSourceReferences = new Map<LoadedTextureSource, number>();
-        const countSource = (source: LoadedTextureSource) => {
-          expectedSourceReferences.set(source, (expectedSourceReferences.get(source) ?? 0) + 1);
-        };
-        for (const sources of resourceArenaSnapshot(arena).assetSources.values()) for (const source of sources.values()) countSource(source);
-        for (const sources of resourceArenaSnapshot(arena).iblSources.values()) for (const source of sources.values()) countSource(source);
-        for (const prepared of resourceArenaSnapshot(arena).preparedSources.values()) countSource(prepared.source);
-        expect(resourceArenaSnapshot(arena).sourceReferences.size).toBe(expectedSourceReferences.size);
-        for (const [source, count] of expectedSourceReferences) {
-          expect(resourceArenaSourceReferenceCount(arena, source)).toBe(count);
-        }
-        const plannedHdr = [...resourceArenaSnapshot(arena).gltfRequests.values()].filter((entry) => entry.plan?.wantsHdr).length;
-        expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(plannedHdr);
-        expect(resourceArenaHasHdrReadyAsset(arena)).toBe(plannedHdr > 0);
-        const liveSceneLeases = [...resourceArenaSnapshot(arena).gltfRequests.values()].reduce((sum, entry) => sum + entry.count, 0)
-          + [...resourceArenaSnapshot(arena).ordinaryTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
-          + [...resourceArenaSnapshot(arena).virtualTextures.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0)
-          + [...resourceArenaSnapshot(arena).geometries.values()].reduce((sum, entry) => sum + entry.sceneReferences, 0);
-        expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires - resourceArenaSnapshot(arena).counters.sceneLeaseReleases).toBe(liveSceneLeases);
-        expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires - resourceArenaSnapshot(arena).counters.preparedAssetReleases)
-          .toBe(resourceArenaSnapshot(arena).gltfRequests.size);
-        expect(resourceArenaSnapshot(arena).counters.preparedAssetEvents).toBeLessThanOrEqual(wakes);
-        expect(resourceArenaSnapshot(arena).counters.assetPlanCompiles).toBeLessThanOrEqual(resourceArenaSnapshot(arena).counters.preparedAssetUpdates);
-      };
-      const settle = async (job: PendingJob, ready: boolean, releaseBeforePublish = false) => {
-        if (job.settled) return;
-        job.settled = true;
-        const wakeBefore = wakes;
-        const wasCurrent = resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation === job.generation;
-        if (ready) {
+  it("fuzzes generation, dependency, source, and disposal lifecycles from replayable traces", async () => {
+    type Op =
+      | { readonly kind: "live"; readonly value: boolean }
+      | { readonly index: number; readonly kind: "settle"; readonly ready: boolean }
+      | { readonly kind: "drain" }
+      | { readonly kind: "replace"; readonly revision: number }
+      | { readonly kind: "rekey"; readonly revision: number }
+      | { readonly kind: "retain"; readonly slot: number; readonly token: number }
+      | { readonly kind: "dispose" };
+    await runFuzzTraces<Op>({
+      cases: 12,
+      operation: (random, step) => {
+        const action = random.int(0, 10);
+        if (action < 3) return { kind: "live", value: random.boolean() };
+        if (action < 6) return { index: random.int(0, 16), kind: "settle", ready: random.boolean(0.75) };
+        if (action === 6) return { kind: "drain" };
+        if (action < 8) return { kind: "replace", revision: step };
+        if (action === 8) return { kind: "rekey", revision: step };
+        if (action === 9) return { kind: "retain", slot: random.int(0, 3), token: step };
+        return { kind: "dispose" };
+      },
+      replayEnvName: "ROYAL_RESOURCE_ARENA_REPLAY",
+      replays: [{
+        label: "aba-stale-completion",
+        value: [
+          { kind: "live", value: true }, { kind: "live", value: false }, { kind: "live", value: true },
+          { index: 0, kind: "settle", ready: true }, { kind: "drain" },
+          { index: 1, kind: "settle", ready: true }, { kind: "drain" },
+          { kind: "replace", revision: 1 }, { kind: "rekey", revision: 2 },
+          { kind: "retain", slot: 0, token: 1 },
+          { kind: "retain", slot: 0, token: 2 }, { kind: "dispose" },
+        ],
+      }],
+      run: async (trace, label) => {
+        type Job = { readonly asset: PreparedGltfAsset; generation: number; readonly id: number;
+          readonly reject: (error: Error) => void; readonly resolve: (asset: PreparedGltfAsset) => void; settled: boolean };
+        const jobs: Job[] = [];
+        const assetIds = new WeakMap<PreparedGltfAsset, number>();
+        let wakes = 0;
+        const arena = createResourceArena(() => new Promise((resolve, reject) => {
           const asset = emptyAsset();
-          assetJobIds.set(asset, job.id);
-          job.resolve(asset);
-        } else job.reject(new Error(`failure-${job.id}`));
-        if (releaseBeforePublish && current === liveManifest) setLive(false);
-        const remainsCurrent = wasCurrent && resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation === job.generation;
-        const alreadyPending = resourceArenaSnapshot(arena).pendingAssetKeySet.has(key);
-        await flushPublications();
-        expect(wakes - wakeBefore).toBe(remainsCurrent && !alreadyPending ? 1 : 0);
-      };
-
-      // Every case contains the essential ABA race: generation 1 completes only
-      // after generation 2 owns the same semantic key.
-      setLive(true);
-      const staleJob = jobs[0]!;
-      setLive(false);
-      expect(staleJob.signal.aborted).toBe(true);
-      setLive(true);
-      const replacementJob = jobs[1]!;
-      await settle(staleJob, random.boolean());
-      expect(drain().events).toHaveLength(0);
-      expect(resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation).toBe(replacementJob.generation);
-
-      for (let step = 0; step < 36; step += 1) {
-        const action = random.int(0, 9);
-        if (action === 0 && current === liveManifest) setLive(false);
-        else if (action === 1 && current !== liveManifest) setLive(true);
-        else if (action === 2) {
-          const candidates = jobs.filter((job) => !job.settled);
-          if (candidates.length > 0) {
-            await settle(random.pick(candidates), random.boolean(0.7), random.boolean(0.2));
+          const job = { asset, generation: -1, id: jobs.length, reject, resolve, settled: false };
+          jobs.push(job);
+          assetIds.set(asset, job.id);
+        }), () => { wakes += 1; });
+        const scratch = createResourceManifestDiffScratch();
+        const key = gltfRequestKey("/trace.gltf", 0);
+        const request = { count: 1, key, sourceUri: "/trace.gltf" };
+        const manifest = { ...emptyManifest(), gltfRequests: [request] };
+        let live = false;
+        let disposed = false;
+        let nextGeneration = 1;
+        let generation: number | undefined;
+        let dependencyKey: string | undefined;
+        const sourceSlots = new Map<number, LoadedTextureSource>();
+        const sourceCounts = new Map<LoadedTextureSource, number>();
+        const dependencies = (suffix: string): PreparedAssetDependencyManifest => ({
+          geometries: [], iblKeys: [],
+          ordinaryTextures: [{ count: 1, key: `ordinary:${suffix}`,
+            texture: imageTexture({ contentKey: `content:${suffix}`, src: `/texture-${suffix}.png` }) }],
+          virtualTextures: [], wantsHdr: false,
+        });
+        const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
+        const assertModel = (step: number) => {
+          const snapshot = resourceArenaSnapshot(arena);
+          expect(snapshot.gltfRequests.size, `${label} step=${step} requests`).toBe(live && !disposed ? 1 : 0);
+          if (live && !disposed) {
+            const row = snapshot.gltfRequests.get(key)!;
+            expect(row.generation).toBe(generation);
+            expect(row.plan === undefined ? undefined : [...row.plan.ordinaryTextures.keys()])
+              .toEqual(dependencyKey === undefined ? undefined : [dependencyKey]);
           }
-        } else if (action === 3) {
-          const result = drain();
-          const declaration = resourceArenaSnapshot(arena).gltfRequests.get(key);
-          for (const event of result.events) {
-            expect(event.snapshot.generation).toBe(declaration?.generation);
-            if (event.snapshot.status === "ready") {
-              expect(assetJobIds.get(event.snapshot.asset)).toBe(
-                jobs.find((job) => job.generation === declaration?.generation)?.id,
-              );
-              expect(declaration?.plan?.sourceRevision).toBe(event.snapshot.revision);
+          expect(snapshot.sourceReferences.size).toBe(sourceCounts.size);
+          for (const [source, count] of sourceCounts) expect(resourceArenaSourceReferenceCount(arena, source)).toBe(count);
+          expect(snapshot.counters.preparedAssetAcquires - snapshot.counters.preparedAssetReleases)
+            .toBe(snapshot.gltfRequests.size);
+          expect(snapshot.counters.preparedAssetEvents).toBeLessThanOrEqual(wakes);
+        };
+        for (const [step, op] of trace.entries()) {
+          if (op.kind === "live" && !disposed && op.value !== live) {
+            applyResourceDelta(arena, diffResourceManifests(live ? manifest : emptyManifest(), op.value ? manifest : emptyManifest(), scratch));
+            live = op.value;
+            dependencyKey = undefined;
+            if (live) {
+              generation = nextGeneration++;
+              jobs.at(-1)!.generation = generation;
+            } else {
+              generation = undefined;
+              sourceSlots.clear();
+              sourceCounts.clear();
+              expect(resourceArenaContentKeys(arena, key)).toEqual(new Map());
             }
-          }
-        } else if (action === 4 && resourceArenaSnapshot(arena).gltfRequests.get(key)?.plan !== undefined) {
-          const revision = `${caseIndex}-${step}`;
-          const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
-          const previousDependencyRevision = plan.dependencyRevision;
-          const previousSourceRevision = plan.sourceRevision;
-          publishResourceArenaContentKey(arena, key, "/decoded.png", `decoded:${revision}`);
-          updatePreparedAssetManifest(arena, key, dependencyManifest(revision, random.boolean()));
-          expect(resourceArenaContentKeys(arena, key).get("/decoded.png")).toBe(`decoded:${revision}`);
-          const updatedPlan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
-          expect(updatedPlan.dependencyRevision).toBe(previousDependencyRevision + 1);
-          expect(updatedPlan.sourceRevision).toBe(previousSourceRevision);
-        } else if (action === 5 && resourceArenaSnapshot(arena).gltfRequests.has(key)) {
-          const source = { fuzzSource: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
-          retainResourceArenaAssetSource(arena, key, `slot:${step % 3}`, source);
-        } else if (action === 6 && resourceArenaSnapshot(arena).iblReferences.size > 0) {
-          const iblKey = random.pick([...resourceArenaSnapshot(arena).iblReferences.keys()]);
-          const source = { fuzzIbl: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
-          retainResourceArenaIblSource(arena, iblKey, `face:${step % 2}`, source);
-          expect(resourceArenaIblSourceCount(arena, iblKey)).toBeGreaterThan(0);
-        } else if (action === 7) {
-          const source = { fuzzPrepared: `${caseIndex}:${step}` } as unknown as LoadedTextureSource;
-          retainResourceArenaPreparedSource(arena, `prepared:${step % 2}`, {
-            source,
-            texture: imageTexture({ src: `/prepared-${step}.png` }),
-          });
-        } else if (action === 8) {
-          const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)?.plan;
-          const previous = [...(plan?.ordinaryTextures.values() ?? [])].slice(0, 2);
-          if (previous.length > 0) {
+          } else if (op.kind === "settle" && jobs.length > 0) {
+            const job = jobs[op.index % jobs.length]!;
+            if (!job.settled) {
+              job.settled = true;
+              if (op.ready) job.resolve(job.asset); else job.reject(new Error(`failure-${job.id}`));
+              await flush();
+            }
+          } else if (op.kind === "drain" && !disposed) {
+            const applied = applyPreparedAssetEvents(arena, (asset) => dependencies(String(assetIds.get(asset))));
+            for (const event of applied.events) {
+              expect(event.snapshot.generation).toBe(generation);
+              if (event.snapshot.status === "ready") dependencyKey = `ordinary:${assetIds.get(event.snapshot.asset)}`;
+            }
+          } else if (op.kind === "replace" && live && !disposed && dependencyKey !== undefined) {
+            const previousRevision = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!.dependencyRevision;
+            dependencyKey = `ordinary:replacement-${op.revision}`;
+            updatePreparedAssetManifest(arena, key, dependencies(`replacement-${op.revision}`));
+            expect(resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!.dependencyRevision).toBe(previousRevision + 1);
+          } else if (op.kind === "rekey" && live && !disposed && dependencyKey !== undefined) {
+            const plan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
+            const previous = [...plan.ordinaryTextures.values()];
             const merged = {
               count: 1,
-              key: `ordinary:merged:${caseIndex}:${step}`,
-              texture: imageTexture({ contentKey: `merged:${caseIndex}:${step}`, src: `/merged-${step}.png` }),
+              key: `ordinary:rekey-${op.revision}`,
+              texture: imageTexture({ contentKey: `rekey-${op.revision}`, src: `/rekey-${op.revision}.png` }),
             };
-            if (random.boolean(0.2)) {
-              const texturesBefore = [...resourceArenaSnapshot(arena).ordinaryTextures.entries()].map(([entryKey, entry]) => [
-                entryKey, entry.assetReferences, entry.sceneReferences,
-              ]);
-              const planBefore = [...plan!.ordinaryTextures.entries()].map(([entryKey, entry]) => [entryKey, entry.count]);
-              expect(() => rekeyPreparedAssetOrdinaryTextures(arena, key, [{
-                next: { ...merged, count: previous[0]!.count + 1 },
-                previous: { ...previous[0]!, count: previous[0]!.count + 1 },
-              }])).toThrow(/exceeds retained references/);
-              expect([...resourceArenaSnapshot(arena).ordinaryTextures.entries()].map(([entryKey, entry]) => [
-                entryKey, entry.assetReferences, entry.sceneReferences,
-              ])).toEqual(texturesBefore);
-              expect([...plan!.ordinaryTextures.entries()].map(([entryKey, entry]) => [entryKey, entry.count]))
-                .toEqual(planBefore);
-            } else {
-              const previousDependencyRevision = plan!.dependencyRevision;
-              const previousSourceRevision = plan!.sourceRevision;
-              rekeyPreparedAssetOrdinaryTextures(arena, key, previous.map((entry) => ({
-                next: { ...merged, count: entry.count },
-                previous: entry,
-              })));
-              const updatedPlan = resourceArenaSnapshot(arena).gltfRequests.get(key)!.plan!;
-              expect(updatedPlan.dependencyRevision).toBe(previousDependencyRevision + 1);
-              expect(updatedPlan.sourceRevision).toBe(previousSourceRevision);
-              expect(updatedPlan.ordinaryTextures.get(merged.key)?.count)
-                .toBe(previous.reduce((sum, entry) => sum + entry.count, 0));
-            }
+            rekeyPreparedAssetOrdinaryTextures(arena, key, previous.map((row) => ({
+              next: { ...merged, count: row.count },
+              previous: row,
+            })));
+            dependencyKey = merged.key;
+          } else if (op.kind === "retain" && !disposed) {
+            const source = { token: op.token } as unknown as LoadedTextureSource;
+            const previous = sourceSlots.get(op.slot);
+            expect(retainResourceArenaAssetSource(arena, key, `slot:${op.slot}`, source)).toBe(previous);
+            if (previous !== undefined) sourceCounts.delete(previous);
+            sourceSlots.set(op.slot, source);
+            sourceCounts.set(source, 1);
+          } else if (op.kind === "dispose" && !disposed) {
+            disposed = true;
+            expect(new Set(disposeResourceArena(arena).changes.releasedSources)).toEqual(new Set(sourceCounts.keys()));
+            sourceCounts.clear();
+            live = false;
+            generation = undefined;
+            dependencyKey = undefined;
           }
+          await flush();
+          assertModel(step);
         }
-        assertConserved();
-      }
-
-      // Resolve every outstanding job in a random status/order. Aborted stale
-      // jobs may still settle; neither status may become visible in the resourceArenaSnapshot(arena).
-      const unsettled = [...jobs];
-      for (let index = unsettled.length - 1; index > 0; index -= 1) {
-        const swapIndex = random.int(0, index + 1);
-        [unsettled[index], unsettled[swapIndex]] = [unsettled[swapIndex]!, unsettled[index]!];
-      }
-      for (const job of unsettled) {
-        await settle(job, random.boolean());
-        const result = drain();
-        for (const event of result.events) {
-          expect(event.snapshot.generation).toBe(resourceArenaSnapshot(arena).gltfRequests.get(key)?.generation);
-        }
-      }
-      const disposed = disposeResourceArena(arena);
-      expect(new Set(disposed.releasedSources).size).toBe(disposed.releasedSources.length);
-      expect(resourceArenaSnapshot(arena).gltfRequests.size).toBe(0);
-      expect(resourceArenaSnapshot(arena).ordinaryTextures.size).toBe(0);
-      expect(resourceArenaSnapshot(arena).virtualTextures.size).toBe(0);
-      expect(resourceArenaSnapshot(arena).geometries.size).toBe(0);
-      expect(resourceArenaSnapshot(arena).sourceReferences.size).toBe(0);
-      expect(resourceArenaSnapshot(arena).hdrReadyAssetCount).toBe(0);
-      expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires).toBe(resourceArenaSnapshot(arena).counters.preparedAssetReleases);
-      expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires).toBe(resourceArenaSnapshot(arena).counters.sceneLeaseReleases);
-      await flushPublications();
-    }
+        if (!disposed) disposeResourceArena(arena);
+      },
+      seed: 0xa2e4_1e4f,
+      steps: 48,
+    });
   });
-
   it("coalesces N occurrences into one prepared request and one asset dependency edge", async () => {
     let resolve!: (asset: PreparedGltfAsset) => void;
     let loads = 0;
@@ -601,11 +499,10 @@ describe("semantic resource arena properties", () => {
     });
     expect(resourceArenaSourceReferenceCount(arena, source)).toBe(2);
     const disposed = disposeResourceArena(arena);
-    expect(disposed.releasedSources).toEqual([source]);
+    expect(disposed.changes.releasedSources).toEqual([source]);
     expect(resourceArenaSourceReferenceCount(arena, source)).toBe(0);
     expect(resourceArenaHasHdrReadyAsset(arena)).toBe(false);
     expect(resourceArenaSnapshot(arena).counters.preparedAssetAcquires).toBe(resourceArenaSnapshot(arena).counters.preparedAssetReleases);
     expect(resourceArenaSnapshot(arena).counters.sceneLeaseAcquires).toBe(resourceArenaSnapshot(arena).counters.sceneLeaseReleases);
-
   });
 });

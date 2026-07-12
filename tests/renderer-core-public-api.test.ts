@@ -7,10 +7,13 @@ import {
   perspectiveCamera,
   scene,
   standardMaterial,
+  textureAsset,
+  virtualTexture,
   type GltfInstancesPickTarget,
   type GltfPickTarget,
   type MeshPickTarget,
   type PickTarget,
+  type VirtualTextureAssetRef,
 } from "@royal/renderer-core";
 import * as rendererCore from "@royal/renderer-core";
 import * as webglApi from "@royal/renderer-webgl";
@@ -71,6 +74,16 @@ describe("renderer-core public API", () => {
     });
   });
 
+  it("preserves public texture orientation and narrows virtual textures", () => {
+    expect(textureAsset({ flipY: false, src: "/mask.png" })).toMatchObject({ flipY: false });
+    expect(imageTexture({ flipY: false, src: "/albedo.png" })).toMatchObject({ flipY: false });
+    const virtual: VirtualTextureAssetRef = virtualTexture({
+      flipY: false,
+      src: "/terrain.vt.json",
+    });
+    expect(virtual).toMatchObject({ flipY: false, kind: "virtual-asset" });
+  });
+
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
     expect(Object.keys(reactRoyal).sort()).toEqual([
       "Canvas",
@@ -90,9 +103,17 @@ describe("renderer-core public API", () => {
     expect(reactSceneApi).toHaveProperty("boxGeometry");
     expect(reactSceneApi).toHaveProperty("mesh");
     expect(reactSceneApi).toHaveProperty("scene");
+    expect(reactSceneApi).toHaveProperty("solidTexture");
+    expect(reactSceneApi).toHaveProperty("textureAsset");
     expect(reactSceneApi).not.toHaveProperty("pass");
     expect(reactSceneApi).not.toHaveProperty("Canvas");
     expect(reactSceneApi).not.toHaveProperty("useInvalidate");
+
+    const solid: import("@royal/react/scene").SolidTextureRef =
+      reactSceneApi.solidTexture({ color: [1, 0, 0, 1] });
+    const asset: import("@royal/react/scene").TextureAssetRef =
+      reactSceneApi.textureAsset({ src: "/albedo.png" });
+    expect([solid.kind, asset.kind]).toEqual(["solid", "asset"]);
   });
 
   it("keeps internal texture helpers out of the renderer-core barrel", () => {
@@ -109,6 +130,11 @@ describe("renderer-core public API", () => {
     expect(webglApi).not.toHaveProperty("WebGlRoot");
 
     if (false) {
+      const root: import("@royal/renderer-webgl").WebGlRoot = webglApi.createWebGlRoot(
+        null as unknown as HTMLCanvasElement,
+      );
+      const samePublicType: ReturnType<typeof webglApi.createWebGlRoot> = root;
+      void samePublicType;
       // @ts-expect-error WebGlRoot is a factory-created handle type, not a public constructor.
       webglApi.WebGlRoot;
     }

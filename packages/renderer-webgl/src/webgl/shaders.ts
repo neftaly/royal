@@ -117,6 +117,7 @@ uniform vec2 u_vtAtlasTexelSize;
 uniform vec2 u_vtPageTableSize;
 uniform float u_vtPageSize;
 uniform vec2 u_vtVirtualSize;
+uniform bool u_vtFlipY;
 uniform int u_vtWrapS;
 uniform int u_vtWrapT;`
     : "";
@@ -148,7 +149,8 @@ vec2 wrapVirtualTextureUv(vec2 uv) {
 }
 
 vec4 sampleVirtualBaseColor(vec2 uv) {
-  vec2 wrappedUv = wrapVirtualTextureUv(uv);
+  vec2 orientedUv = vec2(uv.x, u_vtFlipY ? 1.0 - uv.y : uv.y);
+  vec2 wrappedUv = wrapVirtualTextureUv(orientedUv);
   vec2 sourceTexel = wrappedUv * u_vtVirtualSize;
   vec2 pageCoord = min(
     floor(sourceTexel / u_vtPageSize),

@@ -10,7 +10,6 @@ import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
   generatedVirtualTexturePageCount,
   virtualTexturePageKey,
-  type VirtualTextureAtlasPageTable,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
@@ -18,19 +17,13 @@ import {
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
 const GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX = "royal-generated-vt:";
-const AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS: ReadonlySet<VirtualTextureFallbackTrigger> = new Set([
-  "fetch-failed",
-  "late-generated-source",
-  "manifest-unsupported",
-  "parse-failed",
-  "runtime-unsupported",
-]);
 
 export const GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE + 1;
 export const VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME = 4;
-export const VIRTUAL_TEXTURE_MAX_PAGE_UPLOADS_PER_FRAME = 2;
 export const VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS = 4;
 export const VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW = 32;
+export const VIRTUAL_TEXTURE_MAX_PAGE_LOAD_RETRIES = 2;
+export const VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS = 50;
 
 export type ViewportSize = readonly [width: number, height: number];
 export type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-asset" }>;
@@ -52,36 +45,9 @@ export type VirtualTextureManifestSource =
   | { readonly kind: "generated"; readonly manifestUri: string; readonly pageSource: VirtualTextureGeneratedPageSource }
   | { readonly kind: "sidecar"; readonly manifestUri: string };
 
-export type VirtualTextureFallbackTrigger =
-  | "fetch-failed"
-  | "late-generated-source"
-  | "manifest-unsupported"
-  | "parse-failed"
-  | "runtime-unsupported";
-
-export type AutoVirtualTexturePlan = {
-  readonly fallback?: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>;
-  readonly fallbackTriggers: ReadonlySet<VirtualTextureFallbackTrigger>;
-  readonly primary: VirtualTextureManifestSource;
-};
+export type GeneratedVirtualTextureSource = Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>;
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
-
-export type VirtualTextureResourceSet = {
-  readonly atlasTexture: WebGLTexture;
-  readonly atlasGridColumns: number;
-  readonly atlasGridRows: number;
-  readonly pageTableTexture: WebGLTexture;
-  readonly pageTableHeight: number;
-  readonly pageTableWidth: number;
-};
-
-export type VirtualTexturePendingUpload = {
-  readonly image: TexImageSource;
-  readonly page: VirtualTexturePageId;
-  readonly pageKey: string;
-  readonly sourceGeneration: number;
-};
 
 export type VirtualTextureRuntimeStats = {
   generatedManifestUses: number;
@@ -91,33 +57,31 @@ export type VirtualTextureRuntimeStats = {
   generatedPageRequests: number;
   generatedPagesTarget: number;
   manifestFailures: number;
+  gpuAdmissionFailures: number;
+  pageLoadFailures: number;
   manifestRequests: number;
-  pageTableUpdates: number;
   preparedResidencyResolutions: number;
   shaderBinds: number;
   unreadyDraws: number;
   unsupportedDraws: number;
-  uploadedPageBytes: number;
-  uploadedPages: number;
 };
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
-  autoPlan?: AutoVirtualTexturePlan;
   diagnosticsEnabled: boolean;
+  readonly desiredPageKeys: Set<string>;
+  readonly desiredPages: VirtualTexturePageId[];
   readonly key: string;
   loadingPages: Set<string>;
+  readonly pageRetryAttempts: Map<string, number>;
+  readonly pageRetryTimers: Map<string, ReturnType<typeof setTimeout>>;
   manifest?: VirtualTextureManifestModel;
   pageUrisByKey?: ReadonlyMap<string, string>;
-  pageTable?: VirtualTextureAtlasPageTable;
-  pendingUploads: VirtualTexturePendingUpload[];
   readonly requestedPages: Set<string>;
-  resources?: VirtualTextureResourceSet;
   sourceGeneration: number;
   stats: VirtualTextureRuntimeStats;
   status: VirtualTextureRuntimeStatus;
   readonly texture: VirtualTextureRef;
-  readonly uploadedPages: Set<string>;
 };
 
 export type BaseColorTextureResidency =
@@ -157,12 +121,6 @@ export type VirtualTextureDrawDemand = {
   readonly demandCandidates: readonly VirtualTexturePageId[];
 };
 
-type AutoVirtualTexturePlanInput = {
-  readonly generatedPageSource?: VirtualTextureGeneratedPageSource;
-  readonly sidecarManifestUri?: string;
-  readonly textureKey: string;
-};
-
 export const normalizeVirtualTextureDemandUvRange = (
   min: number,
   max: number,
@@ -171,6 +129,12 @@ export const normalizeVirtualTextureDemandUvRange = (
   if (max - min >= 1 || min < 0 || max > 1) return [0, 1];
   return [Math.max(0, min), Math.min(1, max)];
 };
+
+export const orientVirtualTextureDemandVRange = (
+  minV: number,
+  maxV: number,
+  flipY: boolean,
+): readonly [number, number] => flipY ? [1 - maxV, 1 - minV] : [minV, maxV];
 
 export const virtualTextureDemandPageDistance = (
   page: VirtualTexturePageId,
@@ -188,37 +152,14 @@ const generatedVirtualTextureManifestUri = (key: string): string =>
 export const virtualTextureNow = (): number =>
   typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 
-// Today authored sidecars are preferred when usable; generated VT remains attached
-// as a candidate so later resolution policy can choose or promote it centrally.
-export const autoVirtualTexturePlan = ({
-  generatedPageSource,
-  sidecarManifestUri,
-  textureKey,
-}: AutoVirtualTexturePlanInput): AutoVirtualTexturePlan | undefined => {
-  const generatedSource = generatedPageSource === undefined
-    ? undefined
-    : {
-      kind: "generated" as const,
-      manifestUri: generatedVirtualTextureManifestUri(textureKey),
-      pageSource: generatedPageSource,
-    };
-  if (sidecarManifestUri !== undefined) {
-    return {
-      ...(generatedSource === undefined ? {} : { fallback: generatedSource }),
-      fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
-      primary: {
-        kind: "sidecar",
-        manifestUri: sidecarManifestUri,
-      },
-    };
-  }
-  if (generatedSource === undefined) return undefined;
-
-  return {
-    fallbackTriggers: AUTO_VIRTUAL_TEXTURE_GENERATED_FALLBACK_TRIGGERS,
-    primary: generatedSource,
-  };
-};
+export const generatedVirtualTextureSource = (
+  textureKey: string,
+  pageSource: VirtualTextureGeneratedPageSource,
+): GeneratedVirtualTextureSource => ({
+  kind: "generated",
+  manifestUri: generatedVirtualTextureManifestUri(textureKey),
+  pageSource,
+});
 
 export const generatedRasterVirtualTextureManifest = (
   source: RasterVirtualTextureSource,

@@ -1,6 +1,7 @@
 import type { RenderRoot } from "@royal/renderer-core";
 import type {
   WebGlContextLifecycle,
+  WebGlRoot,
   WebGlRenderViewport,
 } from "./root";
 import {
@@ -185,10 +186,19 @@ const frameSnapshot = (
 });
 
 export const createWebXrSessionRenderer = async (
-  root: WebGlXrRenderRoot,
+  publicRoot: WebGlRoot | WebGlXrRenderRoot,
   session: WebGlXrSession,
   options: WebGlXrSessionRendererOptions = {},
 ): Promise<WebGlXrSessionRenderer> => {
+  if (
+    !(rendererOwnedWebGl2Context in publicRoot)
+    || !(rendererFrameViews in publicRoot)
+  ) {
+    throw new Error(
+      "Royal WebXR rendering requires a Royal WebGL root with renderer-owned context and frame-view capabilities",
+    );
+  }
+  const root = publicRoot as WebGlXrRenderRoot;
   if (root.contextLifecycle !== "active") {
     throw new Error("Royal WebXR rendering requires an active renderer-owned WebGL2 context");
   }

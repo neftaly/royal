@@ -258,6 +258,10 @@ export interface ResourceArenaChanges {
   readonly releasedVirtualTextureKeys: readonly string[];
 }
 
+export type ResourceArenaDisposalResult =
+  | { readonly changes: ResourceArenaChanges; readonly kind: "disposed" }
+  | { readonly changes: ResourceArenaChanges; readonly error: Error; readonly kind: "failed" };
+
 type MutableResourceArenaChanges = {
   -readonly [Key in keyof ResourceArenaChanges]: Array<ResourceArenaChanges[Key][number]>;
 };
@@ -1258,15 +1262,25 @@ export const rekeyPreparedAssetOrdinaryTextures = (
   return finalizeChanges(arena, { ...changes(), releasedOrdinaryTextureKeys: released });
 };
 
-export const disposeResourceArena = (arena: ResourceArena): ResourceArenaChanges => {
+export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposalResult => {
   const state = arena as unknown as ResourceArenaState;
   const result = changes();
+  let firstFailure: unknown;
+  let failed = false;
+  const finish = (operation: () => void): void => {
+    try {
+      operation();
+    } catch (error) {
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  };
   for (const declaration of state.gltfRequests.values()) {
     state.counters.sceneLeaseReleases += declaration.count;
     state.counters.preparedAssetReleases += 1;
-    releaseAssetPlan(arena, declaration, result);
-    releaseAssetSources(arena, declaration.key, result.releasedSources);
-    declaration.subscription.release();
+    finish(() => releaseAssetPlan(arena, declaration, result));
+    finish(() => releaseAssetSources(arena, declaration.key, result.releasedSources));
+    finish(() => declaration.subscription.release());
     result.releasedGltfKeys.push(declaration.key);
   }
   for (const key of state.ordinaryTextures.keys()) result.releasedOrdinaryTextureKeys.push(key);
@@ -1280,26 +1294,31 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaChanges
   arenaContentKeys(arena).clear();
   state.hdrReadyAssetCount = 0;
   for (const [assetKey] of arenaAssetSources(arena)) {
-    releaseAssetSources(arena, assetKey, result.releasedSources);
+    finish(() => releaseAssetSources(arena, assetKey, result.releasedSources));
   }
   const preparedSources = arenaPreparedSources(arena);
   for (const prepared of preparedSources.values()) {
-    if (releaseSource(arena, prepared.source)) result.releasedSources.push(prepared.source);
+    finish(() => {
+      if (releaseSource(arena, prepared.source)) result.releasedSources.push(prepared.source);
+    });
   }
   preparedSources.clear();
   for (const [iblKey, sources] of arenaIblSources(arena)) {
     result.releasedIblKeys.push(iblKey);
     for (const source of sources.values()) {
-      if (releaseSource(arena, source)) result.releasedSources.push(source);
+      finish(() => {
+        if (releaseSource(arena, source)) result.releasedSources.push(source);
+      });
     }
   }
   arenaIblSources(arena).clear();
   state.iblReferences.clear();
   if (state.sourceReferences.size !== 0) {
-    throw new Error("resource arena disposed with unowned source references");
+    finish(() => { throw new Error("resource arena disposed with unowned source references"); });
   }
+  arenaSourceReferences(arena).clear();
   const controllers = arenaImageAbortControllers(arena);
-  for (const controller of controllers.values()) controller.abort();
+  for (const controller of controllers.values()) finish(() => controller.abort());
   controllers.clear();
   for (const declaration of state.ordinaryTextures.values()) {
     state.counters.sceneLeaseReleases += declaration.sceneReferences;
@@ -1310,6 +1329,12 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaChanges
   state.ordinaryTextures.clear();
   state.virtualTextures.clear();
   state.pendingAssetKeySet.clear();
-  state.preparedAssets.dispose();
-  return result;
+  finish(() => state.preparedAssets.dispose());
+  const arenaChanges = result as ResourceArenaChanges;
+  if (!failed) return { changes: arenaChanges, kind: "disposed" };
+  return {
+    changes: arenaChanges,
+    error: firstFailure instanceof Error ? firstFailure : new Error(String(firstFailure)),
+    kind: "failed",
+  };
 };

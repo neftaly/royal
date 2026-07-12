@@ -7,17 +7,12 @@ export interface VirtualTexturePageId {
 }
 
 export interface VirtualTexturePageEntry extends VirtualTexturePageId {
-  readonly height?: number;
-  readonly id: string;
-  readonly uri?: string;
-  readonly width?: number;
+  readonly uri: string;
 }
 
 export interface VirtualTextureManifestModel {
-  readonly borderTexels?: number;
   readonly colorSpace?: TextureColorSpace;
   readonly height: number;
-  readonly id?: string;
   readonly mipCount?: number;
   readonly pageSize: number;
   readonly pages: readonly VirtualTexturePageEntry[];
@@ -91,44 +86,38 @@ const isPositiveInteger = (value: unknown): value is number =>
 const isNonNegativeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
-const readNonNegativeInteger = (value: unknown): number | undefined =>
-  isNonNegativeInteger(value) ? value : undefined;
-
 const readDimensions = (value: unknown): readonly [number, number] | undefined => {
-  if (isPositiveInteger(value)) return [value, value];
-  if (!Array.isArray(value) || value.length < 2) return undefined;
+  if (!Array.isArray(value) || value.length !== 2) return undefined;
 
   const width = value[0];
   const height = value[1];
   return isPositiveInteger(width) && isPositiveInteger(height) ? [width, height] : undefined;
 };
 
-const readWidthHeight = (value: Record<string, unknown>): readonly [number, number] | undefined => {
-  const width = value.width ?? value.textureWidth;
-  const height = value.height ?? value.textureHeight;
-  return isPositiveInteger(width) && isPositiveInteger(height) ? [width, height] : undefined;
-};
-
 const readColorSpace = (value: unknown): TextureColorSpace | undefined =>
   value === "linear" || value === "srgb" ? value : undefined;
 
-const pageIdFromKey = (key: string): VirtualTexturePageId | undefined => {
-  const match = /^(?:mip-?|m)?(\d+)\/(\d+)\/(\d+)$/.exec(key)
-    ?? /^mip-(\d+)\/x(\d+)-y(\d+)$/.exec(key)
-    ?? /^page:(\d+):(\d+):(\d+)$/.exec(key);
-  if (match === null) return undefined;
-
-  const [, mipText, xText, yText] = match;
-  const mip = Number(mipText);
-  const x = Number(xText);
-  const y = Number(yText);
-  return isNonNegativeInteger(mip) && isNonNegativeInteger(x) && isNonNegativeInteger(y)
-    ? { mip, x, y }
-    : undefined;
-};
-
 export const virtualTexturePageKey = (page: VirtualTexturePageId): string =>
   `${page.mip}/${page.x}/${page.y}`;
+
+export const virtualTextureMipDimension = (baseDimension: number, mip: number): number =>
+  Math.max(1, Math.ceil(baseDimension / (2 ** mip)));
+
+export const derivedVirtualTextureMipCount = (
+  width: number,
+  height: number,
+  pageSize: number,
+): number => {
+  let mipWidth = Math.ceil(width / pageSize);
+  let mipHeight = Math.ceil(height / pageSize);
+  let mipCount = 1;
+  while (mipWidth > 1 || mipHeight > 1) {
+    mipWidth = Math.ceil(mipWidth / 2);
+    mipHeight = Math.ceil(mipHeight / 2);
+    mipCount += 1;
+  }
+  return mipCount;
+};
 
 export const generatedVirtualTexturePageCount = (
   width: number,
@@ -154,91 +143,37 @@ export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTex
 
 const readPageEntry = (
   value: unknown,
-  fallbackKey: string | undefined,
 ): VirtualTexturePageEntry | undefined => {
-  if (typeof value === "string") {
-    if (fallbackKey === undefined) return undefined;
-    const page = pageIdFromKey(fallbackKey);
-    return page === undefined
-      ? undefined
-      : { ...page, id: fallbackKey, uri: value };
-  }
   if (!isRecord(value)) return undefined;
 
   const mip = value.mip;
   const x = value.x;
   const y = value.y;
-  const fallbackPage = fallbackKey === undefined ? undefined : pageIdFromKey(fallbackKey);
   const page = isNonNegativeInteger(mip) && isNonNegativeInteger(x) && isNonNegativeInteger(y)
     ? { mip, x, y }
-    : fallbackPage;
+    : undefined;
   if (page === undefined) return undefined;
 
-  const id = typeof value.id === "string" && value.id.length > 0
-    ? value.id
-    : fallbackKey ?? virtualTexturePageKey(page);
   const uri = typeof value.uri === "string" && value.uri.length > 0 ? value.uri : undefined;
-  const width = isPositiveInteger(value.width) ? value.width : undefined;
-  const height = isPositiveInteger(value.height) ? value.height : undefined;
+  if (uri === undefined) return undefined;
 
   return {
     ...page,
-    id,
-    ...(height === undefined ? {} : { height }),
-    ...(uri === undefined ? {} : { uri }),
-    ...(width === undefined ? {} : { width }),
+    uri,
   };
 };
 
-const readPageEntries = (pages: unknown): readonly VirtualTexturePageEntry[] => {
-  if (Array.isArray(pages)) {
-    return pages.flatMap((entry) => {
-      const page = readPageEntry(entry, undefined);
-      return page === undefined ? [] : [page];
-    });
-  }
-  if (!isRecord(pages)) return [];
-
-  const entries = pages.entries;
-  if (Array.isArray(entries)) {
-    return entries.flatMap((entry) => {
-      const page = readPageEntry(entry, undefined);
-      return page === undefined ? [] : [page];
-    });
-  }
-  if (!isRecord(entries)) return [];
-
-  return Object.entries(entries).flatMap(([key, entry]) => {
-    const page = readPageEntry(entry, key);
-    return page === undefined ? [] : [page];
-  });
-};
-
-const readUriTemplate = (root: Record<string, unknown>, pages: unknown): string | undefined => {
+const readUriTemplate = (pages: unknown): string | undefined => {
   if (isRecord(pages) && typeof pages.uriTemplate === "string" && pages.uriTemplate.length > 0) {
     return pages.uriTemplate;
   }
-  const variants = root.variants;
-  if (!Array.isArray(variants)) return undefined;
-
-  for (const variant of variants) {
-    if (isRecord(variant) && typeof variant.uriTemplate === "string" && variant.uriTemplate.length > 0) {
-      return variant.uriTemplate;
-    }
-  }
   return undefined;
-};
-
-const manifestPayload = (input: unknown): Record<string, unknown> | undefined => {
-  if (!isRecord(input)) return undefined;
-  return isRecord(input.virtualTexture) ? input.virtualTexture : input;
 };
 
 export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManifestParseResult => {
   const diagnostics: VirtualTextureManifestDiagnostic[] = [];
   const root = isRecord(input) ? input : undefined;
-  const payload = manifestPayload(input);
-  if (root === undefined || payload === undefined) {
+  if (root === undefined) {
     return {
       diagnostics: [{
         code: "vt.manifest.invalid",
@@ -247,16 +182,23 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       }],
     };
   }
+  if (root.contractVersion !== 1) {
+    return { diagnostics: [{
+      code: "vt.manifest.contractVersion",
+      message: "Virtual texture manifest contractVersion must be 1.",
+      severity: "error",
+    }] };
+  }
 
-  const dimensions = readDimensions(payload.virtualSize)
-    ?? readDimensions(payload.dimensions)
-    ?? readWidthHeight(payload);
-  const pageSize = isPositiveInteger(payload.pageSize)
-    ? payload.pageSize
-    : isPositiveInteger(payload.usableTileSize)
-      ? payload.usableTileSize
-      : undefined;
-  const borderTexels = readNonNegativeInteger(payload.borderTexels ?? payload.border ?? payload.tileBorder);
+  const dimensions = readDimensions(root.virtualSize);
+  const pageSize = isPositiveInteger(root.pageSize) ? root.pageSize : undefined;
+  if (root.borderTexels !== undefined && root.borderTexels !== 0) {
+    diagnostics.push({
+      code: "vt.manifest.borderTexels",
+      message: "Virtual texture manifest borderTexels must be zero when present.",
+      severity: "unsupported",
+    });
+  }
   if (dimensions === undefined) {
     diagnostics.push({
       code: "vt.manifest.dimensions",
@@ -272,16 +214,15 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     });
   }
 
-  const pages = root.pages ?? payload.pages;
-  const entries = readPageEntries(pages);
-  const uriTemplate = readUriTemplate(root, pages);
-  if (isRecord(pages) && pages.kind === "generated") {
-    diagnostics.push({
-      code: "vt.pages.generated",
-      message: "Generated virtual texture pages parse as metadata but are not uploadable runtime pages yet.",
-      severity: "unsupported",
-    });
-  }
+  const pages = root.pages;
+  const rawEntries = isRecord(pages) ? pages.entries : undefined;
+  const entries = Array.isArray(rawEntries)
+    ? rawEntries.flatMap((entry) => {
+      const page = readPageEntry(entry);
+      return page === undefined ? [] : [page];
+    })
+    : [];
+  const uriTemplate = readUriTemplate(pages);
   if (entries.length === 0 && uriTemplate === undefined) {
     diagnostics.push({
       code: "vt.pages.empty",
@@ -295,31 +236,92 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
   }
 
   const [width, height] = dimensions;
-  const colorSpace = readColorSpace(payload.colorSpace);
-  const id = typeof root.id === "string" && root.id.length > 0
-    ? root.id
-    : typeof root.assetId === "string" && root.assetId.length > 0
-      ? root.assetId
-      : undefined;
-  const mipCount = isPositiveInteger(payload.mipCount) ? payload.mipCount : undefined;
-  const physicalSlots = isPositiveInteger(root.physicalSlots)
-    ? root.physicalSlots
-    : isRecord(root.demoBudget) && isPositiveInteger(root.demoBudget.cacheSlots)
-      ? root.demoBudget.cacheSlots
-      : undefined;
-  const physicalByteBudget = isPositiveInteger(root.physicalByteBudget)
-    ? root.physicalByteBudget
-    : isRecord(root.demoBudget) && isPositiveInteger(root.demoBudget.byteBudget)
-      ? root.demoBudget.byteBudget
-      : undefined;
+  const derivedMipCount = derivedVirtualTextureMipCount(width, height, pageSize);
+  const colorSpace = readColorSpace(root.colorSpace);
+  const explicitMipCount = root.mipCount;
+  const mipCount = isPositiveInteger(explicitMipCount) && explicitMipCount <= derivedMipCount
+    ? explicitMipCount
+    : undefined;
+  if (explicitMipCount !== undefined && mipCount === undefined) {
+    diagnostics.push({
+      code: "vt.manifest.mipCount",
+      message: `Virtual texture manifest mipCount must be an integer from 1 through ${derivedMipCount}.`,
+      severity: "error",
+    });
+    return { diagnostics };
+  }
+  const physicalSlots = isPositiveInteger(root.physicalSlots) ? root.physicalSlots : undefined;
+  const physicalByteBudget = isPositiveInteger(root.physicalByteBudget) ? root.physicalByteBudget : undefined;
+  if (root.colorSpace !== undefined && colorSpace === undefined) {
+    diagnostics.push({
+      code: "vt.manifest.colorSpace",
+      message: "Virtual texture manifest colorSpace must be linear or srgb when present.",
+      severity: "error",
+    });
+  }
+  if (root.physicalSlots !== undefined && physicalSlots === undefined) {
+    diagnostics.push({
+      code: "vt.manifest.physicalSlots",
+      message: "Virtual texture manifest physicalSlots must be a positive integer when present.",
+      severity: "error",
+    });
+  }
+  if (root.physicalByteBudget !== undefined && physicalByteBudget === undefined) {
+    diagnostics.push({
+      code: "vt.manifest.physicalByteBudget",
+      message: "Virtual texture manifest physicalByteBudget must be a positive integer when present.",
+      severity: "error",
+    });
+  }
+  if (rawEntries !== undefined && !Array.isArray(rawEntries)) {
+    diagnostics.push({
+      code: "vt.pages.entries",
+      message: "Virtual texture manifest pages.entries must be an array when present.",
+      severity: "error",
+    });
+  }
+  const effectiveMipCount = mipCount ?? derivedMipCount;
+  const pageKeys = new Set<string>();
+  if (Array.isArray(rawEntries)) {
+    for (const [index, entry] of rawEntries.entries()) {
+      const page = readPageEntry(entry);
+      if (page === undefined) {
+        diagnostics.push({
+          code: "vt.pages.entry",
+          message: `Virtual texture manifest page entry ${index} is malformed.`,
+          severity: "error",
+        });
+        continue;
+      }
+      const mipWidth = virtualTextureMipDimension(Math.ceil(width / pageSize), page.mip);
+      const mipHeight = virtualTextureMipDimension(Math.ceil(height / pageSize), page.mip);
+      if (page.mip >= effectiveMipCount || page.x >= mipWidth || page.y >= mipHeight) {
+        diagnostics.push({
+          code: "vt.pages.bounds",
+          message: `Virtual texture manifest page entry ${index} is outside its declared mip grid.`,
+          severity: "error",
+        });
+      }
+      const key = virtualTexturePageKey(page);
+      if (pageKeys.has(key)) {
+        diagnostics.push({
+          code: "vt.pages.duplicate",
+          message: `Virtual texture manifest contains duplicate page key ${key}.`,
+          severity: "error",
+        });
+      }
+      pageKeys.add(key);
+    }
+  }
+  if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return { diagnostics };
+  }
 
   return {
     diagnostics,
     manifest: {
-      ...(borderTexels === undefined ? {} : { borderTexels }),
       ...(colorSpace === undefined ? {} : { colorSpace }),
       height,
-      ...(id === undefined ? {} : { id }),
       ...(mipCount === undefined ? {} : { mipCount }),
       pageSize,
       pages: entries,
@@ -336,7 +338,7 @@ export const virtualTextureExplicitPageUrisByKey = (
 ): ReadonlyMap<string, string> => {
   const pageUrisByKey = new Map<string, string>();
   for (const page of manifest.pages) {
-    if (page.uri !== undefined) pageUrisByKey.set(virtualTexturePageKey(page), page.uri);
+    pageUrisByKey.set(virtualTexturePageKey(page), page.uri);
   }
   return pageUrisByKey;
 };
@@ -604,6 +606,9 @@ export const encodeVirtualTexturePageTableRgba8 = (
   update: Pick<VirtualTexturePageTableUpdate, "residentMip" | "slot">,
 ): readonly [number, number, number, number] => {
   if (update.slot === undefined) return [0, 0, 0, 0];
+  if (!Number.isSafeInteger(update.slot) || update.slot < 0 || update.slot >= 65_535) {
+    throw new Error("Virtual texture page-table slot must be an integer from 0 through 65534.");
+  }
   const encodedSlot = update.slot + 1;
   // A is reserved for future page-table flags/addressing. Material data belongs in atlases.
   const reservedAlpha = 0xff;

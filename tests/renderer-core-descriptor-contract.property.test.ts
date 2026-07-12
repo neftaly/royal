@@ -117,14 +117,12 @@ describe("renderer-core descriptor properties", () => {
         ? standardMaterial({ texture })
         : unlitMaterial({ texture });
       const virtualContentKey = `sha256:vt-${seed.toString(16)}`;
-      const virtualDebugName = randomString(random, "vt");
       const virtualSampler = {
         magFilter: sampler.magFilter,
         wrapT: sampler.wrapS,
       };
       const virtual = virtualTexture({
         contentKey: virtualContentKey,
-        debugName: virtualDebugName,
         sampler: virtualSampler,
         src: `/textures/${seed.toString(16)}.vt.json`,
         version: `vt-${seed.toString(16)}`,
@@ -156,7 +154,6 @@ describe("renderer-core descriptor properties", () => {
 
       expect(virtual, `${label} virtual texture source alias`).toMatchObject({
         contentKey: virtualContentKey,
-        debugName: virtualDebugName,
         kind: "virtual-asset",
         manifestUri: `/textures/${seed.toString(16)}.vt.json`,
         sampler: virtualSampler,

@@ -3,8 +3,6 @@ import type {
   PickResult,
   RenderRoot,
 } from "@royal/renderer-core";
-import type { RendererOwnedWebGl2Context } from "./webgl/context-lane";
-import type { RendererFrameViewLane } from "./webgl/frame-view-lane";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -14,6 +12,8 @@ export interface WebGlRootOptions {
   readonly antialias?: boolean;
   /** Generate virtual-texture pages from ordinary large raster textures. Explicit virtual textures remain available. @defaultValue `false` */
   readonly generatedRasterVirtualTextures?: boolean;
+  /** Global physical GPU byte budget for virtual-texture atlases and page tables. @defaultValue `67108864` */
+  readonly virtualTexturePhysicalByteBudget?: number;
 }
 
 export type NormalizedWebGlRootOptions = Required<WebGlRootOptions>;
@@ -153,11 +153,16 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly generatedPageRequests: number;
   readonly generatedPagesTarget: number;
   readonly manifestFailures: number;
+  readonly gpuAdmissionFailures: number;
+  readonly pageLoadFailures: number;
   readonly manifestRequests: number;
   readonly manifestsReady: number;
   readonly pageTableTextures: number;
   readonly pageTableUpdates: number;
   readonly pendingPages: number;
+  readonly physicalAllocatedBytes: number;
+  readonly physicalBudgetBytes: number;
+  readonly physicalQuarantinedBytes: number;
   readonly preparedResidencyResolutions: number;
   readonly requestedPages: number;
   readonly residentPages: number;
@@ -187,7 +192,7 @@ export interface WebGlRenderViewsOptions {
 }
 
 /** Imperative WebGL2 renderer root. */
-export interface WebGlRoot extends RendererOwnedWebGl2Context, RendererFrameViewLane {
+export interface WebGlRoot {
   readonly canvas: HTMLCanvasElement;
   readonly contextLifecycle: WebGlContextLifecycle;
   readonly disposed: boolean;

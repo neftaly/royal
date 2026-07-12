@@ -95,7 +95,6 @@ describe("renderer-core descriptor contract", () => {
   it("keeps virtual textures as texture refs without public preview fallbacks", () => {
     const options = {
       contentKey: "sha256:terrain",
-      debugName: "contract terrain",
       manifestUri: "/textures/terrain.vt.json",
     } satisfies VirtualTextureAssetOptions;
     const texture: TextureRef = virtualTexture(options);
@@ -104,7 +103,6 @@ describe("renderer-core descriptor contract", () => {
     expect(unlitMaterial({ texture }).baseColor).toBe(texture);
     expect(texture).toEqual({
       contentKey: "sha256:terrain",
-      debugName: "contract terrain",
       kind: "virtual-asset",
       manifestUri: "/textures/terrain.vt.json",
     });

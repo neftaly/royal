@@ -1615,17 +1615,6 @@ const triangleDocument = () => ({
   ],
 });
 
-const triangleVirtualTextureManifest = () => ({
-  pageSize: 4,
-  pages: {
-    entries: {
-      "m0/0/0": "pages/gltf-vt-0.png",
-    },
-  },
-  physicalSlots: 1,
-  virtualSize: [4, 4],
-});
-
 const solidTriangleDocument = () => ({
   ...triangleDocument(),
   images: [],
@@ -3800,62 +3789,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(uniform1iPayloads(imageReadyCalls, "u_useTexture")).toContain(1);
   });
 
-  it("selects VT residency for glTF baseColorTexture after the URI sidecar page is resident", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const renderGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "gltf-base-color-vt-sidecar",
-      }),
-    ]);
-
-    root.render(renderGraph);
-    await settleDocumentAndBuffer(loader);
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
-      "https://example.test/fixtures/staged-triangle.png",
-    ]);
-    ControlledImage.instances[0]?.settleLoad();
-    await flushMicrotasks();
-    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
-
-    expect(uniform1iPayloads(calls, "u_useTexture")).toContain(1);
-    expect(loader.fetchRequests.filter((request) =>
-      /staged-triangle\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(1);
-    expect(loader.resolvePendingFetch(/staged-triangle\.png\.vt\.json(?:$|[?#])/, (url) =>
-      responseWithJson(url, triangleVirtualTextureManifest()))).toBe(true);
-    await flushMicrotasks();
-
-    const vtPageImage = ControlledImage.instances.find((image) => /gltf-vt-0\.png(?:$|[?#])/.test(image.src));
-    expect(vtPageImage?.src).toBe("https://example.test/fixtures/pages/gltf-vt-0.png");
-    vtPageImage?.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    root.render(renderGraph);
-
-    expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
-    expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
-    expect(uniform1iPayloads(calls, "u_vtAtlas")).toContain(0);
-    expect(uniform1iPayloads(calls, "u_vtPageTable")).toContain(1);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      residentPages: 1,
-      shaderBinds: expect.any(Number),
-      uploadedPages: 1,
-    }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-  });
-
-  it("uses generated VT for glTF raster baseColorTexture after the URI sidecar fails", async () => {
+  it("uses opted-in generated VT for glTF raster baseColorTexture without manifest probing", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const { contexts } = installCanvas2d();
     const viewport = installViewportInvalidationStubs();
@@ -3869,7 +3803,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       }),
       gltf({
         src: triangleGltfSrc,
-        version: "gltf-base-color-generated-vt-after-sidecar-failure",
+        version: "gltf-base-color-generated-vt",
       }),
     ]);
 
@@ -3888,11 +3822,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
     root.render(renderGraph);
 
-    expect(loader.fetchRequests.filter((request) =>
-      /staged-triangle\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(1);
-    expect(loader.rejectPendingFetch(/staged-triangle\.png\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
 
     for (
       let frame = 0;
@@ -3923,7 +3853,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
       generatedManifestUses: 1,
       generatedPageFailures: 0,
       generatedPagesTarget: 5,
-      manifestRequests: 1,
+      manifestRequests: 0,
       manifestsReady: 1,
       residentPages: expect.any(Number),
       uploadedPages: expect.any(Number),
@@ -3932,127 +3862,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().virtualTexturing.residentPages).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThan(0);
-    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/staged-triangle\.png\.vt\.json/);
-  });
-
-  it("shares glTF texture cache identity and auto VT for simultaneously leased matching contentKey sources", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-    const sharedContentKey = "royal-test:shared-gltf-base-color";
-    const matchingImageUri = "matching-triangle-albedo.png";
-    const firstGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "content-key-auto-vt-a",
-      }),
-    ]);
-    const secondGraph = renderScene([
-      directionalLight({
-        color: [1, 1, 1, 1],
-        direction: [0, 0, -1],
-      }),
-      gltf({
-        src: triangleGltfSrc,
-        version: "content-key-auto-vt-a",
-      }),
-      gltf({
-        src: matchingTriangleGltfSrc,
-        version: "content-key-auto-vt-b",
-      }),
-    ]);
-
-    root.render(firstGraph);
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        images: [
-          { extras: { contentKey: sharedContentKey }, mimeType: "image/png", uri: triangleImageUri },
-        ],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
-      "https://example.test/fixtures/staged-triangle.png",
-    ]);
-    for (const image of ControlledImage.instances) image.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(callCount(calls, "texImage2D"), "matching contentKey should upload ordinary image content once")
-      .toBe(1);
-    expect(loader.fetchRequests.filter((request) =>
-      /staged-triangle\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(1);
-    expect(loader.fetchRequests.filter((request) =>
-      /matching-triangle-albedo\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(0);
-    expect(loader.resolvePendingFetch(/staged-triangle\.png\.vt\.json(?:$|[?#])/, (url) =>
-      responseWithJson(url, triangleVirtualTextureManifest()))).toBe(true);
-    await flushMicrotasks();
-
-    const vtPageImage = ControlledImage.instances.find((image) => /gltf-vt-0\.png(?:$|[?#])/.test(image.src));
-    expect(vtPageImage?.src).toBe("https://example.test/fixtures/pages/gltf-vt-0.png");
-    vtPageImage?.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    root.render(firstGraph);
-
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      manifestRequests: 1,
-      residentPages: 1,
-      uploadedPages: 1,
-    }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-    expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
-
-    const texImage2dBeforeSecondGltf = callCount(calls, "texImage2D");
-    const shaderBindsBeforeSecondGltf = root.snapshot().virtualTexturing.shaderBinds;
-
-    root.render(secondGraph);
-    expect(loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        images: [
-          { mimeType: "image/png", uri: matchingImageUri },
-        ],
-        textures: [
-          { extras: { contentKey: sharedContentKey }, sampler: 0, source: 0 },
-        ],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(ControlledImage.instances.map((image) => image.src)).toContain(
-      "https://example.test/fixtures/matching-triangle-albedo.png",
-    );
-    ControlledImage.instances.find((image) => image.src.endsWith(`/${matchingImageUri}`))?.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    root.render(secondGraph);
-
-    expect(callCount(calls, "texImage2D")).toBe(texImage2dBeforeSecondGltf);
-    expect(loader.fetchRequests.filter((request) =>
-      /matching-triangle-albedo\.png\.vt\.json(?:$|[?#])/.test(request.url))).toHaveLength(0);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      manifestRequests: 1,
-      residentPages: 1,
-      uploadedPages: 1,
-    }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(shaderBindsBeforeSecondGltf);
   });
 
   it("shares glTF texture uploads for simultaneously leased matching computed bufferView content", async () => {
@@ -7311,53 +7120,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(calls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_2D)).toBe(true);
   });
 
-  it("derives auto VT sidecar URI from the resolved GS_texture_svg source URI", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
-
-    root.render(renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "svg-texture-auto-vt-sidecar" }),
-    ]));
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
-        images: [
-          { mimeType: "image/png", uri: triangleImageUri },
-          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
-        ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
-      responseWithText(url, triangleSvgTexture, "image/svg+xml"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(ControlledImage.instances).toHaveLength(1);
-    expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);
-    ControlledImage.instances[0]?.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(loader.fetchRequests
-      .filter((request) => request.url.includes(".vt.json"))
-      .map((request) => request.url)).toEqual([
-        "https://example.test/fixtures/staged-triangle.svg.vt.json",
-      ]);
-    expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
-  });
-
-  it("uses SVG VT sidecar and generated fallback for plain glTF .svg image sources", async () => {
+  it("uses opted-in generated VT for plain glTF .svg image sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     vi.stubGlobal("document", {
       createElement: vi.fn(() => {
@@ -7367,7 +7130,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       gltf({ src: triangleGltfSrc, version: "plain-svg-texture-auto-vt" }),
@@ -7399,15 +7162,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
     root.render(renderGraph);
 
-    expect(loader.fetchRequests
-      .filter((request) => request.url.includes(".vt.json"))
-      .map((request) => request.url)).toEqual([
-        "https://example.test/fixtures/staged-triangle.svg.vt.json",
-      ]);
+    expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
     expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
-    expect(loader.rejectPendingFetch(/staged-triangle\.svg\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
 
     for (
       let frame = 0;
@@ -7432,7 +7188,6 @@ describe("WebGL renderer scene and glTF regressions", () => {
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/staged-triangle\.svg\.vt\.json/);
   });
 
   it("sizes generated GS_texture_svg VT residency for the source mip pyramid", async () => {
@@ -7440,7 +7195,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl));
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
     const tigerSizedSvgTexture = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">",
       "<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"#c7b084\"/>",
@@ -7477,9 +7232,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
 
-    expect(loader.rejectPendingFetch(/staged-triangle\.svg\.vt\.json(?:$|[?#])/, new Error("no sidecar"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
 
     expect(
       calls.some((call) =>

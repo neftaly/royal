@@ -35,6 +35,8 @@ export interface TextureAssetRef {
   readonly colorSpace?: TextureColorSpace;
   /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
   readonly contentKey?: TextureContentKey;
+  /** Flip the decoded image vertically during upload. @defaultValue `true` */
+  readonly flipY?: boolean;
   readonly sampler?: TextureSampler;
   readonly uri: string;
   readonly version?: TextureVersion;
@@ -45,8 +47,8 @@ export interface VirtualTextureAssetRef {
   readonly colorSpace?: TextureColorSpace;
   /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
   readonly contentKey?: TextureContentKey;
-  /** Diagnostics-only identity; renderers must not treat this as asset state. */
-  readonly debugName?: string;
+  /** Flip authored UV Y before virtual page lookup. @defaultValue `true` */
+  readonly flipY?: boolean;
   readonly manifestUri: string;
   readonly sampler?: TextureSampler;
   readonly version?: TextureVersion;
@@ -64,6 +66,8 @@ interface TextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
   /** Stable decoded-content identity supplied by the asset layer for cross-URI sharing. */
   readonly contentKey?: TextureContentKey;
+  /** Flip the decoded image vertically during upload. @defaultValue `true` */
+  readonly flipY?: boolean;
   readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureVersion;
@@ -87,8 +91,8 @@ interface VirtualTextureAssetBaseOptions {
   readonly colorSpace?: TextureColorSpace;
   /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
   readonly contentKey?: TextureContentKey;
-  /** Diagnostics-only identity; not a cache key, page-table key, or render fallback. */
-  readonly debugName?: string;
+  /** Flip authored UV Y before virtual page lookup. @defaultValue `true` */
+  readonly flipY?: boolean;
   readonly sampler?: TextureSampler;
   /** Preferred asset version override for cache keys. */
   readonly version?: TextureVersion;
@@ -149,6 +153,7 @@ export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
+    ...(options.flipY === undefined ? {} : { flipY: options.flipY }),
     ...(sampler === undefined ? {} : { sampler }),
     uri,
     ...(options.version === undefined ? {} : { version: options.version })
@@ -170,6 +175,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
     },
     src: uri,
     ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
+    ...(options.flipY === undefined ? {} : { flipY: options.flipY }),
     ...(options.version === undefined ? {} : { version: options.version })
   });
 }
@@ -182,15 +188,15 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
-    ...(options.debugName === undefined ? {} : { debugName: options.debugName }),
+    ...(options.flipY === undefined ? {} : { flipY: options.flipY }),
     manifestUri,
     ...(sampler === undefined ? {} : { sampler }),
     ...(options.version === undefined ? {} : { version: options.version })
   });
 };
 
-export function virtualTexture(src: string): TextureRef;
-export function virtualTexture(options: VirtualTextureAssetOptions): TextureRef;
-export function virtualTexture(input: VirtualTextureInput): TextureRef {
+export function virtualTexture(src: string): VirtualTextureAssetRef;
+export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
+export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {
   return virtualTextureAsset(typeof input === 'string' ? { src: input } : input);
 }

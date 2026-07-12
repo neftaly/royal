@@ -129,25 +129,34 @@ glTF draw collection.
   texture, while an in-flight decode keeps one subscription and resolves the
   current generation on settlement. Persistent GPU faults retain work without
   self-scheduling a tight retry loop.
-  Virtual-texture publication is now retry-safe ahead of its full arena
-  extraction. Atlas residency uses explicit plan/commit transactions, page-table
-  dirty rows are acknowledged only after successful GPU writes, and atlas
-  failures leave residency unpublished. Committed uploads close their source
-  exactly once and retain failed page-table rows for table-only retry. Missing or
-  lost GPU resources retain queued work without creating a requestAnimationFrame
-  self-loop; an explicit restore wakes the queue.
+  Virtual-texture GPU ownership is now fully extracted. One opaque arena owns
+  paired atlas/page-table handles, transactional residency, bounded chunked
+  table writes, fair decoded-page scheduling, binding, context generations,
+  and indexed completion/discard outcomes. Root retains manifest, demand,
+  fetch/decode, image closing, diagnostic, wrap, and uniform policy only; it no
+  longer holds raw VT handles, page tables, resident/pending sets, allocation or
+  upload counters, sampler/filter commands, or GPU statistics. A normalized
+  64-MiB default global physical budget uses exact padded-atlas plus page-table
+  accounting, manifest byte caps, and dormant fair re-admission. Failed handle
+  deletion remains conservatively charged until context reset. Atlas residency
+  uses explicit plan/commit transactions, table dirty rows acknowledge only
+  successful bounded writes, committed images close exactly once, and lost
+  resources retain decoded rows without a requestAnimationFrame self-loop.
+  Capacity-bounded desired working sets and rotating post-draw request drains
+  prevent fixed-order starvation and stable-camera eviction churn. Explicit VT
+  UVs default to image-compatible Y orientation, auto VT inherits ordinary
+  upload orientation, and CPU footprint demand mirrors the shader transform.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 497 workspace tests, typecheck, build,
+- The current checkpoint passes the workspace test suite, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Extract virtual-texture GPU residency and ordinary/virtual binding ownership. Then
-   move the surface draw kernel and compose it with the numeric packet,
+1. Move the surface draw kernel and compose it with the numeric packet,
    instance, target, program, geometry, clustered-light, IBL, and texture-handle
    arenas into the real callback-free executor. Move or delete remaining
    active-resource scans and pruning paths with their owning families.

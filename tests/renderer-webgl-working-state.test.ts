@@ -534,7 +534,7 @@ describe("WebGL root working state contracts", () => {
     expect(canvas.getContext.mock.calls.some((call) => call[0] === "webgl2")).toBe(true);
   });
 
-  it("preserves a primary render failure while attempting every GL normalization", () => {
+  it("preserves a primary render failure while completing the logical epilogue and every GL normalization", () => {
     const { gl } = fakeGl();
     const primaryFailure = new Error("primary render failure");
     vi.mocked(gl.clear).mockImplementation(() => {
@@ -559,6 +559,7 @@ describe("WebGL root working state contracts", () => {
 
     expect(thrownPresent).toBe(true);
     expect(thrown).toBe(primaryFailure);
+    expect(root.frame).toBe(1);
     expect(gl.bindVertexArray).toHaveBeenCalledWith(null);
     expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
     expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
@@ -584,15 +585,31 @@ describe("WebGL root working state contracts", () => {
     expect(thrown).toBeUndefined();
   });
 
-  it("normalizes framebuffer and vertex input after a pre-frame render failure", () => {
+  it("attempts later epilogue and normalization phases after body and early-epilogue failures", () => {
     const { gl } = fakeGl();
     const primaryFailure = new Error("baseline preparation failed");
     vi.mocked(gl.clearDepth).mockImplementation(() => {
       throw primaryFailure;
     });
+    let nullFramebufferBindings = 0;
+    vi.mocked(gl.bindFramebuffer).mockImplementation((_target, framebuffer) => {
+      if (framebuffer === null && ++nullFramebufferBindings > 1) {
+        throw new Error("framebuffer normalization failed");
+      }
+    });
+    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
+      if (vertexArray === null) throw undefined;
+    });
+    vi.mocked(gl.bindBuffer).mockImplementation((_target, buffer) => {
+      if (buffer === null) throw new Error("buffer normalization failed");
+    });
     const root = createWebGlRoot(fakeCanvas(gl));
 
     expect(() => root.render(drawableScene([0, 0, 0, 0]))).toThrow(primaryFailure);
+    // Baseline preparation failed before the instance-buffer frame began, so
+    // unused-batch release also fails. The later frame/budget advance and all
+    // GL normalization operations must nevertheless still run.
+    expect(root.frame).toBe(1);
     expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(gl.FRAMEBUFFER, null);
     expect(gl.bindVertexArray).toHaveBeenLastCalledWith(null);
     expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
@@ -624,6 +641,27 @@ describe("WebGL root working state contracts", () => {
     expect(gl.deleteProgram).toHaveBeenCalled();
     expect(root.disposed).toBe(true);
     expect(root.contextLifecycle).toBe("disposed");
+  });
+
+  it("preserves listener-removal precedence while completing later disposal phases", () => {
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    root.render(drawableScene([0, 0, 0, 0]));
+    const primaryFailure = new Error("listener removal failed");
+    let removalCount = 0;
+    vi.spyOn(canvas, "removeEventListener").mockImplementation(() => {
+      removalCount += 1;
+      if (removalCount === 1) throw primaryFailure;
+    });
+    vi.mocked(gl.deleteProgram).mockImplementation(() => {
+      throw new Error("later program cleanup failed");
+    });
+
+    expect(() => root.dispose()).toThrow(primaryFailure);
+    expect(removalCount).toBe(2);
+    expect(gl.deleteProgram).toHaveBeenCalled();
+    expect(root.disposed).toBe(true);
   });
 
   it("updates the canvas backing store and viewport from CSS size and DPR each frame", () => {
@@ -1003,6 +1041,21 @@ describe("WebGL root working state contracts", () => {
       .map((call) => Array.from(call.args[2] as ArrayLike<number>));
     expectMatricesToContainClose(uniformMatrices, projection);
     expectMatricesToContainClose(uniformMatrices, view);
+  });
+
+  it("rejects a public WebGlRoot-shaped value without private XR capabilities", async () => {
+    const publicOnlyRoot = {
+      contextLifecycle: "active",
+    } as Parameters<typeof createWebXrSessionRenderer>[0];
+    const session: WebGlXrSession = {
+      requestReferenceSpace: vi.fn(),
+      updateRenderState: vi.fn(),
+    };
+
+    await expect(createWebXrSessionRenderer(publicOnlyRoot, session)).rejects.toThrow(
+      "requires a Royal WebGL root with renderer-owned context and frame-view capabilities",
+    );
+    expect(session.updateRenderState).not.toHaveBeenCalled();
   });
 
   it("creates a WebXR session renderer that renders the latest scene through XR views", async () => {

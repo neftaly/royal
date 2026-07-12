@@ -170,6 +170,7 @@ export const textureCacheKey = (texture: TextureRef): string => {
     sampler?.minFilter ?? null,
     sampler?.wrapS ?? null,
     sampler?.wrapT ?? null,
+    texture.flipY ?? true,
   ]);
 };
 
