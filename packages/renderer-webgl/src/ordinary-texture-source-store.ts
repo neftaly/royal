@@ -9,7 +9,11 @@ export interface OrdinaryTextureSourceRequest {
 }
 
 export type OrdinaryTextureSourceResult =
-  | { readonly kind: "ready"; readonly source: LoadedTextureSource }
+  | {
+    readonly kind: "ready";
+    /** Borrowed until this subscriber releases; ownership and closing remain with the store. */
+    readonly source: LoadedTextureSource;
+  }
   | { readonly error: unknown; readonly kind: "error" };
 
 export interface OrdinaryTextureSourceSubscription {
@@ -35,6 +39,11 @@ type SourceJob = {
   source?: LoadedTextureSource;
 };
 
+type CapturedError = {
+  error: unknown;
+  present: boolean;
+};
+
 const identityPart = (value: TextureContentKey | TextureVersion): readonly [string, string] =>
   [typeof value, String(value)];
 
@@ -54,6 +63,7 @@ export class OrdinaryTextureSourceStore {
   readonly #load: (request: OrdinaryTextureSourceRequest, signal: AbortSignal) => Promise<LoadedTextureSource>;
   readonly #retain: (source: LoadedTextureSource) => ResourceArenaSourceLease;
   #aborts = 0;
+  #disposed = false;
   #failures = 0;
   #nextListener = 1;
   #starts = 0;
@@ -74,6 +84,7 @@ export class OrdinaryTextureSourceStore {
     request: OrdinaryTextureSourceRequest,
     listener: (result: OrdinaryTextureSourceResult) => void,
   ): OrdinaryTextureSourceSubscription {
+    if (this.#disposed) throw new Error("OrdinaryTextureSourceStore is disposed");
     const key = ordinaryTextureSourceKey(request);
     let job = this.#jobs.get(key);
     let start = false;
@@ -89,7 +100,7 @@ export class OrdinaryTextureSourceStore {
     job.listeners.set(listenerKey, listener);
     this.#subscribers += 1;
     if (start) this.#start(job, request);
-    if (job.result !== undefined) listener(job.result);
+    if (!start && job.result !== undefined) this.#notifyListener(listener, job.result);
 
     let released = false;
     return {
@@ -106,23 +117,36 @@ export class OrdinaryTextureSourceStore {
           this.#aborts += 1;
           return;
         }
-        if (current.source !== undefined && current.lease?.release() === true) this.#close(current.source);
+        this.#releaseSource(current);
       },
     };
   }
 
   dispose(): void {
-    for (const job of this.#jobs.values()) {
-      this.#subscribers -= job.listeners.size;
+    if (this.#disposed) return;
+    this.#disposed = true;
+    const jobs = [...this.#jobs.values()];
+    this.#jobs.clear();
+    this.#subscribers = 0;
+    const firstError: CapturedError = { error: undefined, present: false };
+    for (const job of jobs) {
       job.listeners.clear();
       if (!job.settled) {
-        job.controller.abort();
+        try {
+          job.controller.abort();
+        } catch (error) {
+          this.#captureFirstError(firstError, error);
+        }
         this.#aborts += 1;
-      } else if (job.source !== undefined && job.lease?.release() === true) {
-        this.#close(job.source);
+      } else {
+        try {
+          this.#releaseSource(job);
+        } catch (error) {
+          this.#captureFirstError(firstError, error);
+        }
       }
     }
-    this.#jobs.clear();
+    if (firstError.present) throw firstError.error;
   }
 
   snapshot(): OrdinaryTextureSourceStoreSnapshot {
@@ -139,29 +163,90 @@ export class OrdinaryTextureSourceStore {
   #start(job: SourceJob, request: OrdinaryTextureSourceRequest): void {
     let pending: Promise<LoadedTextureSource>;
     try {
-      pending = this.#load(request, job.controller.signal);
+      pending = Promise.resolve(this.#load(request, job.controller.signal));
     } catch (error) {
       pending = Promise.reject(error);
     }
     pending.then((source) => {
       if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) {
-        this.#close(source);
+        try {
+          this.#close(source);
+        } catch {
+          // A stale completion has no remaining observer to receive cleanup failures.
+        }
         return;
       }
-      job.settled = true;
+      let lease: ResourceArenaSourceLease;
+      try {
+        lease = this.#retain(source);
+      } catch (error) {
+        try {
+          this.#close(source);
+        } catch {
+          // The retain failure remains the settlement cause; close was still attempted.
+        }
+        if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) return;
+        this.#settleError(job, error);
+        return;
+      }
+      if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) {
+        try {
+          if (lease.release()) this.#close(source);
+        } catch {
+          // Re-entrant teardown detached the job; ownership unwind was still attempted.
+        }
+        return;
+      }
+      job.lease = lease;
       job.source = source;
-      job.lease = this.#retain(source);
+      job.settled = true;
       this.#successes += 1;
       const result: OrdinaryTextureSourceResult = { kind: "ready", source };
       job.result = result;
-      for (const listener of job.listeners.values()) listener(result);
+      this.#notify(job, result);
     }, (error: unknown) => {
       if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) return;
-      job.settled = true;
-      this.#failures += 1;
-      const result: OrdinaryTextureSourceResult = { error, kind: "error" };
-      job.result = result;
-      for (const listener of job.listeners.values()) listener(result);
+      this.#settleError(job, error);
     });
+  }
+
+  #captureFirstError(captured: CapturedError, error: unknown): void {
+    if (captured.present) return;
+    captured.error = error;
+    captured.present = true;
+  }
+
+  #notify(job: SourceJob, result: OrdinaryTextureSourceResult): void {
+    const listeners = [...job.listeners.entries()];
+    for (const [key, listener] of listeners) {
+      if (job.listeners.has(key)) this.#notifyListener(listener, result);
+    }
+  }
+
+  #notifyListener(
+    listener: (result: OrdinaryTextureSourceResult) => void,
+    result: OrdinaryTextureSourceResult,
+  ): void {
+    try {
+      listener(result);
+    } catch {
+      // Subscribers observe borrowed results; one callback cannot disrupt store ownership or peers.
+    }
+  }
+
+  #releaseSource(job: SourceJob): void {
+    const lease = job.lease;
+    const source = job.source;
+    delete job.lease;
+    delete job.source;
+    if (lease !== undefined && source !== undefined && lease.release()) this.#close(source);
+  }
+
+  #settleError(job: SourceJob, error: unknown): void {
+    job.settled = true;
+    this.#failures += 1;
+    const result: OrdinaryTextureSourceResult = { error, kind: "error" };
+    job.result = result;
+    this.#notify(job, result);
   }
 }
