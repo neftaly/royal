@@ -73,20 +73,25 @@ glTF draw collection.
   successful-frame pruning, context restoration, and upload counters now share
   one authority. Root retains only transform subscriptions, batch signatures,
   program readiness, VAO/default-attribute binding, and draw submission.
+  HDR color/depth/framebuffer and transmission-copy targets are likewise owned
+  by an opaque surface render-target arena with atomic resize/copy publication,
+  partial-creation recovery, and explicit active-versus-lost context teardown.
+  HDR presentation and transmission shader/texture-unit policy remain in root.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 440 workspace tests, typecheck, build,
+- The current checkpoint passes 446 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Move the surface draw kernel, transmission target, and HDR target out of
-   `root.ts`, then compose them with the numeric packet and instance arenas into
-   the real callback-free executor. Move or delete the remaining
-   active-resource scans and frame-end pruning paths with their owning families.
+1. Extract complete program/uniform ownership, followed by clustered/IBL light
+   binding and texture/virtual-texture binding ownership. Then move the surface
+   draw kernel and compose it with the numeric packet, instance, and target
+   arenas into the real callback-free executor. Move or delete remaining
+   active-resource scans and pruning paths with their owning families.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.

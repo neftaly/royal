@@ -143,6 +143,15 @@ import {
   releaseUnusedGltfInstanceBuffers,
 } from "./gltf-instance-buffer-arena";
 import {
+  copyTransmissionScreenColorTexture,
+  createSurfaceRenderTargetArena,
+  dropSurfaceRenderTargetArenaContext,
+  ensureHdrRenderTarget,
+  releaseSurfaceRenderTargetContextHandles,
+  type HdrRenderTarget,
+  type ScreenColorTextureResource,
+} from "./surface-render-target-arena";
+import {
   appendFrameView,
   copyFrameViewMatrixInto,
   createFrameViews,
@@ -489,24 +498,6 @@ type TextureResource = {
 };
 
 type TexturePendingUpload = PreparedTextureSource;
-
-type ScreenColorTextureResource = {
-  height: number;
-  hdr: boolean;
-  originX: number;
-  originY: number;
-  readonly texture: WebGLTexture;
-  uploaded: boolean;
-  width: number;
-};
-
-type HdrRenderTarget = {
-  readonly color: WebGLTexture;
-  readonly depth: WebGLRenderbuffer;
-  readonly framebuffer: WebGLFramebuffer;
-  height: number;
-  width: number;
-};
 
 type TextureLoadState = TextureResource & {
   error?: string;
@@ -2053,11 +2044,9 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
-  readonly #ownedFramebuffers = new Set<WebGLFramebuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
-  readonly #ownedRenderbuffers = new Set<WebGLRenderbuffer>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
   #dprMediaQuery: MediaQueryList | undefined;
@@ -2076,9 +2065,8 @@ class WebGlRootImpl implements WebGlRoot {
   #activeProgram: WebGLProgram | undefined;
   #iblBrdfLutTexture: WebGLTexture | undefined;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
-  #hdrRenderTarget: HdrRenderTarget | undefined;
+  readonly #surfaceRenderTargets = createSurfaceRenderTargetArena();
   #hdrSupported = false;
-  #drawingHdr = false;
   readonly #clusteredLightResources: ClusteredLightCache = new Map();
   readonly #clusterBuildScratch = createClusterBuildScratch();
   #clusterGridTextureUnit = -1;
@@ -2121,7 +2109,6 @@ class WebGlRootImpl implements WebGlRoot {
   #renderScheduleGeneration = 0;
   #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
-  #transmissionScreenColorTexture: ScreenColorTextureResource | undefined;
   #vertexAttribDefaults = new Map<number, VertexAttribDefaultValue>();
   #textureUploadFrame = -1;
   #textureUploadHead = 0;
@@ -2463,11 +2450,12 @@ class WebGlRootImpl implements WebGlRoot {
         const y = frameViews.viewports[viewportOffset + 1]!;
         const width = frameViews.viewports[viewportOffset + 2]!;
         const height = frameViews.viewports[viewportOffset + 3]!;
-        const hdrTarget = useHdr ? this.#ensureHdrRenderTarget(width, height) : undefined;
+        const hdrTarget = useHdr
+          ? ensureHdrRenderTarget(this.#surfaceRenderTargets, gl, width, height)
+          : undefined;
         gl.bindFramebuffer?.(gl.FRAMEBUFFER, hdrTarget?.framebuffer ?? frameViews.framebuffer);
         gl.viewport(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
         if (frameViews.scissor) gl.scissor?.(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
-        this.#drawingHdr = useHdr;
         const [r, g, b, a] = plan.clearColor;
         gl.clearColor(r, g, b, a);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -2563,12 +2551,10 @@ class WebGlRootImpl implements WebGlRoot {
             frameViews.scissor,
           );
         }
-        this.#drawingHdr = false;
       }
     } finally {
       this.#gltfInstanceFrameActive = false;
       if (frameViews.scissor) gl.disable?.(gl.SCISSOR_TEST);
-      this.#drawingHdr = false;
       gl.bindFramebuffer?.(gl.FRAMEBUFFER, null);
     }
 
@@ -2685,25 +2671,20 @@ class WebGlRootImpl implements WebGlRoot {
     if (deleteResources) {
       releaseVertexInputContextHandles(this.#vertexInputs, this.#gl, this.#contextGeneration);
       const gl = this.#gl;
-      for (const framebuffer of Array.from(this.#ownedFramebuffers)) gl.deleteFramebuffer(framebuffer);
-      for (const renderbuffer of Array.from(this.#ownedRenderbuffers)) gl.deleteRenderbuffer(renderbuffer);
+      releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
       for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
       for (const program of Array.from(this.#ownedPrograms)) gl.deleteProgram(program);
       for (const shader of Array.from(this.#ownedShaders)) gl.deleteShader(shader);
     } else {
       dropVertexInputArenaContext(this.#vertexInputs);
+      dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
     }
-    this.#ownedFramebuffers.clear();
-    this.#ownedRenderbuffers.clear();
     this.#ownedTextures.clear();
     this.#ownedPrograms.clear();
     this.#ownedShaders.clear();
 
     this.#activeProgram = undefined;
-    this.#hdrRenderTarget = undefined;
     this.#iblBrdfLutTexture = undefined;
-    this.#transmissionScreenColorTexture = undefined;
-    this.#drawingHdr = false;
     this.#programs.clear();
     this.#pendingPrograms.length = 0;
     this.#pendingProgramHead = 0;
@@ -2778,7 +2759,6 @@ class WebGlRootImpl implements WebGlRoot {
     for (const state of this.#virtualTextures.values()) this.#releaseVirtualTextureState(state);
     this.#virtualTextures.clear();
     this.#activeProgram = undefined;
-    this.#hdrRenderTarget = undefined;
     this.#clusteredLightResources.clear();
     this.#vertexAttribDefaults.clear();
     this.#programs.clear();
@@ -2812,7 +2792,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#pendingGltfImageRows.length = 0;
     this.#pendingGltfImageRowHead = 0;
     this.#iblBrdfLutTexture = undefined;
-    this.#transmissionScreenColorTexture = undefined;
     this.#cameraViewResourceSubscription?.unsubscribe();
     this.#cameraViewResourceSubscription = undefined;
     for (const [ref, binding] of this.#renderObjectBindings) {
@@ -4230,10 +4209,14 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     if (groups.transmissiveBatchCount > 0) {
-      const screenColorTexture = this.#copyTransmissionScreenColorTexture(
-        viewportSize,
+      const screenColorTexture = copyTransmissionScreenColorTexture(
+        this.#surfaceRenderTargets,
+        this.#gl,
+        viewportSize[0],
+        viewportSize[1],
         sourceX,
         sourceY,
+        toneMapping.hdrOutput,
       );
       for (let index = 0; index < groups.transmissiveBatchCount; index += 1) {
         this.#drawGltfPrimitiveDrawBatch(
@@ -7718,69 +7701,6 @@ class WebGlRootImpl implements WebGlRoot {
     return resource;
   }
 
-  #copyTransmissionScreenColorTexture(
-    viewportSize: ViewportSize,
-    sourceX: number,
-    sourceY: number,
-  ): ScreenColorTextureResource {
-    const [width, height] = viewportSize;
-    const resource = this.#transmissionScreenColorTextureResource();
-    const gl = this.#gl;
-    const needsAllocation = !resource.uploaded
-      || resource.width !== width
-      || resource.height !== height
-      || resource.hdr !== this.#drawingHdr;
-
-    gl.activeTexture(gl.TEXTURE0 + 1);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    if (needsAllocation) {
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        this.#drawingHdr ? gl.RGBA16F : gl.RGBA,
-        width,
-        height,
-        0,
-        gl.RGBA,
-        this.#drawingHdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE,
-        null,
-      );
-    }
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, sourceX, sourceY, width, height);
-    resource.width = width;
-    resource.height = height;
-    resource.hdr = this.#drawingHdr;
-    resource.originX = sourceX;
-    resource.originY = sourceY;
-    resource.uploaded = true;
-
-    return resource;
-  }
-
-  #transmissionScreenColorTextureResource(): ScreenColorTextureResource {
-    if (this.#transmissionScreenColorTexture !== undefined) return this.#transmissionScreenColorTexture;
-
-    const gl = this.#gl;
-    const texture = this.#createTexture();
-    gl.activeTexture(gl.TEXTURE0 + 1);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    this.#transmissionScreenColorTexture = {
-      height: 0,
-      hdr: false,
-      originX: 0,
-      originY: 0,
-      texture,
-      uploaded: false,
-      width: 0,
-    };
-    return this.#transmissionScreenColorTexture;
-  }
-
   #uploadTexture(
     resource: TextureResource,
     source: LoadedTextureSource,
@@ -8854,60 +8774,6 @@ class WebGlRootImpl implements WebGlRoot {
       height,
     );
     this.#renderScene(plan, this.#frameViews);
-  }
-
-  #createFramebuffer(): WebGLFramebuffer {
-    const framebuffer = this.#gl.createFramebuffer();
-    if (framebuffer === null) throw new Error("WebGL framebuffer creation failed");
-    this.#ownedFramebuffers.add(framebuffer);
-    return framebuffer;
-  }
-
-  #createRenderbuffer(): WebGLRenderbuffer {
-    const renderbuffer = this.#gl.createRenderbuffer();
-    if (renderbuffer === null) throw new Error("WebGL renderbuffer creation failed");
-    this.#ownedRenderbuffers.add(renderbuffer);
-    return renderbuffer;
-  }
-
-  #ensureHdrRenderTarget(width: number, height: number): HdrRenderTarget {
-    const gl = this.#gl;
-    let target = this.#hdrRenderTarget;
-    if (target === undefined) {
-      target = {
-        color: this.#createTexture(),
-        depth: this.#createRenderbuffer(),
-        framebuffer: this.#createFramebuffer(),
-        height: 0,
-        width: 0,
-      };
-      this.#hdrRenderTarget = target;
-    }
-    if (target.width === width && target.height === height) return target;
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, target.color);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
-
-    gl.bindRenderbuffer(gl.RENDERBUFFER, target.depth);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target.color, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, target.depth);
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-      throw new Error("Royal physical lighting requires a complete RGBA16F HDR framebuffer");
-    }
-    // The color attachment cannot remain visible to surface samplers while its
-    // framebuffer is drawn. This matters on the target's first frame, before
-    // the postprocess presentation path has had a chance to unbind it.
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    target.width = width;
-    target.height = height;
-    return target;
   }
 
   #presentHdrRenderTarget(
