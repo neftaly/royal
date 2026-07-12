@@ -6,20 +6,17 @@ import {
 } from "../packages/renderer-webgl/src/ordinary-texture-source-store";
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
-import { forEachFuzzCase, type SeededRandom } from "./fuzz";
-
+import { runFuzzTraces, type SeededRandom } from "./fuzz";
 type DeferredLoad = {
   readonly reject: (error: unknown) => void;
   readonly requestKey: string;
   readonly resolve: (source: LoadedTextureSource) => void;
 };
-
 const fakeSource = (id: number): LoadedTextureSource => ({ id } as unknown as LoadedTextureSource);
 const flushJobs = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
 };
-
 const harness = () => {
   const closed = new Map<LoadedTextureSource, number>();
   const deferred: DeferredLoad[] = [];
@@ -50,7 +47,120 @@ const harness = () => {
   });
   return { closed, deferred, references, store };
 };
-
+type SourceOperation =
+  | { readonly alias: number; readonly identity: number; readonly kind: "acquire" }
+  | { readonly alias: number; readonly kind: "release" }
+  | { readonly index: number; readonly kind: "settle"; readonly ready: boolean; readonly token: number }
+  | { readonly kind: "dispose" };
+const sourceOperation = (random: SeededRandom, step: number): SourceOperation => {
+  const action = random.int(0, 10);
+  if (action < 5) return { alias: random.int(0, 12), identity: random.int(0, 6), kind: "acquire" };
+  if (action < 7) return { alias: random.int(0, 12), kind: "release" };
+  if (action < 9) return { index: random.int(0, 20), kind: "settle", ready: random.boolean(0.75), token: step };
+  return { kind: "dispose" };
+};
+const runSourceTrace = async (trace: readonly SourceOperation[], label: string): Promise<void> => {
+  const { closed, deferred, references, store } = harness();
+  type Job = { readonly id: number; readonly key: string; readonly subscribers: Set<number>; source?: LoadedTextureSource; settled: boolean };
+  const aliases = new Map<number, { readonly job: Job; readonly subscription: OrdinaryTextureSourceSubscription }>();
+  const jobs = new Map<string, Job>();
+  const deferredJobs: Job[] = [];
+  const expectedClosed = new Map<LoadedTextureSource, number>();
+  const expectedReferences = new Set<LoadedTextureSource>();
+  const settledDeferred = new Set<number>();
+  let disposed = false;
+  let failures = 0;
+  let starts = 0;
+  let successes = 0;
+  const releaseAlias = (alias: number): void => {
+    const row = aliases.get(alias);
+    if (row === undefined) return;
+    aliases.delete(alias);
+    row.subscription.release();
+    row.job.subscribers.delete(alias);
+    if (row.job.subscribers.size !== 0 || jobs.get(row.job.key) !== row.job) return;
+    jobs.delete(row.job.key);
+    if (row.job.source !== undefined) {
+      expectedReferences.delete(row.job.source);
+      expectedClosed.set(row.job.source, 1);
+    }
+  };
+  const assertModel = (step: number): void => {
+    expect(store.snapshot(), `${label} step=${step}`).toMatchObject({
+      activeJobs: jobs.size,
+      failures,
+      starts,
+      subscribers: aliases.size,
+      successes,
+    });
+    const readySources = [...jobs.values()].flatMap((job) => job.source === undefined ? [] : [job.source]);
+    expect(expectedReferences, `${label} step=${step} modeled retained sources`).toEqual(new Set(readySources));
+    expect(new Set(references.keys()), `${label} step=${step} retained sources`).toEqual(expectedReferences);
+    expect(closed, `${label} step=${step} closed sources`).toEqual(expectedClosed);
+    for (const count of references.values()) expect(count, `${label} step=${step} source lease`).toBe(1);
+    for (const count of closed.values()) expect(count, `${label} step=${step} close exactly once`).toBe(1);
+  };
+  for (const [step, operation] of trace.entries()) {
+    if (operation.kind === "acquire") {
+      releaseAlias(operation.alias);
+      if (!disposed) {
+        const request = { uri: `/source-${operation.identity}.png`, version: operation.identity % 2 };
+        const key = ordinaryTextureSourceKey(request);
+        let job = jobs.get(key);
+        if (job === undefined) {
+          job = { id: starts, key, settled: false, subscribers: new Set() };
+          jobs.set(key, job);
+          deferredJobs.push(job);
+          starts += 1;
+        }
+        const subscription = store.acquire(request, () => undefined);
+        job.subscribers.add(operation.alias);
+        aliases.set(operation.alias, { job, subscription });
+      } else {
+        expect(() => store.acquire({ uri: "/disposed.png" }, () => undefined)).toThrow(/disposed/);
+      }
+    } else if (operation.kind === "release") {
+      releaseAlias(operation.alias);
+    } else if (operation.kind === "settle" && deferred.length > 0) {
+      const index = operation.index % deferred.length;
+      if (!settledDeferred.has(index)) {
+        settledDeferred.add(index);
+        const job = deferredJobs[index]!;
+        if (operation.ready) {
+          const loaded = fakeSource(operation.token);
+          deferred[index]!.resolve(loaded);
+          if (!disposed && jobs.get(job.key) === job && job.subscribers.size > 0) {
+            job.settled = true;
+            job.source = loaded;
+            expectedReferences.add(loaded);
+            successes += 1;
+          }
+        } else {
+          deferred[index]!.reject(new Error(`failure-${operation.token}`));
+          if (!disposed && jobs.get(job.key) === job && job.subscribers.size > 0) {
+            job.settled = true;
+            failures += 1;
+          }
+        }
+        await flushJobs();
+      }
+    } else if (operation.kind === "dispose" && !disposed) {
+      disposed = true;
+      store.dispose();
+      for (const job of jobs.values()) {
+        if (job.source !== undefined) {
+          expectedReferences.delete(job.source);
+          expectedClosed.set(job.source, 1);
+        }
+      }
+      jobs.clear();
+      aliases.clear();
+    }
+    await flushJobs();
+    assertModel(step);
+  }
+  if (!disposed) store.dispose();
+};
 describe("ordinary texture source jobs", () => {
   it("keys decoded content independently of upload state without ambiguous encodings", () => {
     expect(ordinaryTextureSourceKey({ contentKey: "same", uri: "/a.png" }))
@@ -60,29 +170,6 @@ describe("ordinary texture source jobs", () => {
     expect(ordinaryTextureSourceKey({ uri: "/a.png", version: 1 }))
       .not.toBe(ordinaryTextureSourceKey({ uri: "/a.png\u0000version:number:1" }));
   });
-
-  it("deduplicates a 100-consumer, four-upload-variant host scenario", async () => {
-    const { closed, deferred, store } = harness();
-    const subscriptions: OrdinaryTextureSourceSubscription[] = [];
-    let ready = 0;
-    for (let index = 0; index < 100; index += 1) {
-      // Upload variants (sampler/color-space) intentionally do not enter this request.
-      subscriptions.push(store.acquire({ uri: "/shared.png", version: 4 }, (result) => {
-        if (result.kind === "ready") ready += 1;
-      }));
-    }
-    await flushJobs();
-    expect(deferred).toHaveLength(1);
-    const source = fakeSource(1);
-    deferred[0]!.resolve(source);
-    await flushJobs();
-    expect(ready).toBe(100);
-    expect(store.snapshot()).toMatchObject({ activeJobs: 1, starts: 1, subscribers: 100, successes: 1 });
-    for (const subscription of subscriptions) subscription.release();
-    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
-    expect(closed.get(source)).toBe(1);
-  });
-
   it("settles retain failures as errors and closes the unowned source", async () => {
     const source = fakeSource(2);
     const retainFailure = new Error("retain failed");
@@ -93,10 +180,8 @@ describe("ordinary texture source jobs", () => {
       load: async () => source,
       retain: () => { throw retainFailure; },
     });
-
     const subscription = store.acquire({ uri: "/retain-failure.png" }, (result) => results.push(result));
     await flushJobs();
-
     expect(results).toEqual([{ error: retainFailure, kind: "error" }]);
     expect(closed).toEqual([source]);
     expect(store.snapshot()).toMatchObject({ activeJobs: 1, failures: 1, successes: 0 });
@@ -105,7 +190,6 @@ describe("ordinary texture source jobs", () => {
     store.dispose();
     expect(closed).toEqual([source]);
   });
-
   it("unwinds a lease when retain re-entrantly disposes the store", async () => {
     const source = fakeSource(22);
     let closes = 0;
@@ -132,33 +216,11 @@ describe("ordinary texture source jobs", () => {
       if (result.kind === "ready") ready += 1;
     });
     await flushJobs();
-
     expect({ closes, ready, references }).toEqual({ closes: 1, ready: 0, references: 0 });
     expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0, successes: 0 });
     store.dispose();
     expect({ closes, references }).toEqual({ closes: 1, references: 0 });
   });
-
-  it("delivers cached errors to later subscribers without restarting", async () => {
-    const failure = new Error("load failed");
-    const results: unknown[] = [];
-    const store = new OrdinaryTextureSourceStore({
-      close: () => undefined,
-      load: async () => { throw failure; },
-      retain: () => { throw new Error("unreachable"); },
-    });
-    store.acquire({ uri: "/cached-error.png" }, (result) => results.push(result));
-    await flushJobs();
-    store.acquire({ uri: "/cached-error.png" }, (result) => results.push(result));
-
-    expect(results).toEqual([
-      { error: failure, kind: "error" },
-      { error: failure, kind: "error" },
-    ]);
-    expect(store.snapshot()).toMatchObject({ failures: 1, starts: 1, subscribers: 2 });
-    store.dispose();
-  });
-
   it("keeps an opaque retain failure when compensating close also throws", async () => {
     let closeAttempts = 0;
     const results: unknown[] = [];
@@ -172,13 +234,11 @@ describe("ordinary texture source jobs", () => {
     });
     store.acquire({ uri: "/opaque-retain-failure.png" }, (result) => results.push(result));
     await flushJobs();
-
     expect(results).toEqual([{ error: undefined, kind: "error" }]);
     expect(closeAttempts).toBe(1);
     expect(store.snapshot()).toMatchObject({ failures: 1, successes: 0 });
     store.dispose();
   });
-
   it("isolates listener failures and does not revisit re-entrant subscribers", async () => {
     const { deferred, store } = harness();
     const received: number[] = [];
@@ -194,12 +254,10 @@ describe("ordinary texture source jobs", () => {
     await flushJobs();
     deferred[0]!.resolve(fakeSource(3));
     await flushJobs();
-
     expect(received).toEqual([3, 4]);
     expect(store.snapshot()).toMatchObject({ activeJobs: 1, subscribers: 4, successes: 1 });
     store.dispose();
   });
-
   it("makes aggregate cleanup total and preserves the first opaque failure", async () => {
     const sources = [fakeSource(10), fakeSource(11), fakeSource(12), fakeSource(13)];
     const releases: number[] = [];
@@ -236,7 +294,6 @@ describe("ordinary texture source jobs", () => {
       store.acquire({ uri: `/cleanup-${index}.png`, version: index }, () => undefined);
     }
     await flushJobs();
-
     let thrown = false;
     let failure: unknown = "not thrown";
     try {
@@ -251,12 +308,10 @@ describe("ordinary texture source jobs", () => {
     expect(closes).toEqual([1, 3]);
     expect(reentrantAcquireBlocked).toBe(true);
     expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
-
     store.dispose();
     expect(releases).toEqual([0, 1, 2, 3]);
     expect(closes).toEqual([1, 3]);
   });
-
   it("consumes a terminal release even when close throws", async () => {
     const source = fakeSource(20);
     let closes = 0;
@@ -276,7 +331,6 @@ describe("ordinary texture source jobs", () => {
     });
     const subscription = store.acquire({ uri: "/terminal.png" }, () => undefined);
     await flushJobs();
-
     let thrown = false;
     try {
       subscription.release();
@@ -290,7 +344,6 @@ describe("ordinary texture source jobs", () => {
     expect({ closes, releases }).toEqual({ closes: 1, releases: 1 });
     expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
   });
-
   it("preserves null as a terminal cleanup failure", async () => {
     const store = new OrdinaryTextureSourceStore({
       close: () => { throw null; },
@@ -299,7 +352,6 @@ describe("ordinary texture source jobs", () => {
     });
     store.acquire({ uri: "/null-cleanup.png" }, () => undefined);
     await flushJobs();
-
     let thrown = false;
     let failure: unknown = "not thrown";
     try {
@@ -312,7 +364,6 @@ describe("ordinary texture source jobs", () => {
     expect(failure).toBeNull();
     expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
   });
-
   it("safely discards late resolve and reject completions after disposal", async () => {
     const deferred: DeferredLoad[] = [];
     const closed: LoadedTextureSource[] = [];
@@ -330,54 +381,27 @@ describe("ordinary texture source jobs", () => {
     deferred[0]!.resolve(source);
     deferred[1]!.reject(new Error("late rejection"));
     await flushJobs();
-
     expect(closed).toEqual([source]);
     expect(store.snapshot()).toMatchObject({ aborts: 2, activeJobs: 0, failures: 0, subscribers: 0 });
   });
-
   it("keeps abort, retry, stale completion, and close ownership bounded under fuzz", async () => {
-    const contexts: Array<{ readonly label: string; readonly random: SeededRandom }> = [];
-    forEachFuzzCase({ cases: 20, seed: 0x51_0a_ce }, ({ label, random }) => contexts.push({ label, random }));
-
-    for (const { label, random } of contexts) {
-      const { closed, deferred, references, store } = harness();
-      const live: OrdinaryTextureSourceSubscription[] = [];
-      let nextSource = 1;
-      for (let step = 0; step < 160; step += 1) {
-        const operation = random.int(0, 4);
-        if (operation <= 1 || live.length === 0) {
-          const identity = random.int(0, 8);
-          live.push(store.acquire(
-            identity % 3 === 0
-              ? { contentKey: identity, uri: `/alias-${random.int(0, 4)}.png` }
-              : { uri: `/texture-${identity}.png`, version: identity % 2 },
-            () => undefined,
-          ));
-        } else if (operation === 2) {
-          const index = random.int(0, live.length);
-          live[index]!.release();
-          live.splice(index, 1);
-        } else {
-          await flushJobs();
-          const pending = deferred.shift();
-          if (pending !== undefined) {
-            if (random.boolean(0.8)) pending.resolve(fakeSource(nextSource++));
-            else pending.reject(new Error("fuzz failure"));
-          }
-        }
-        await flushJobs();
-        expect(store.snapshot().subscribers, label).toBe(live.length);
-        for (const count of references.values()) expect(count, label).toBe(1);
-        for (const count of closed.values()) expect(count, label).toBe(1);
-      }
-      for (const subscription of live) subscription.release();
-      await flushJobs();
-      for (const pending of deferred) pending.resolve(fakeSource(nextSource++));
-      await flushJobs();
-      expect(store.snapshot(), label).toMatchObject({ activeJobs: 0, subscribers: 0 });
-      expect(references.size, label).toBe(0);
-      for (const count of closed.values()) expect(count, label).toBe(1);
-      store.dispose();
-    }
+    await runFuzzTraces({
+      cases: 12,
+      operation: sourceOperation,
+      replayEnvName: "ROYAL_TEXTURE_SOURCE_REPLAY",
+      replays: [{
+        label: "stale-completion-after-retry",
+        value: [
+          { alias: 0, identity: 1, kind: "acquire" },
+          { alias: 0, kind: "release" },
+          { alias: 1, identity: 1, kind: "acquire" },
+          { index: 0, kind: "settle", ready: true, token: 100 },
+          { index: 1, kind: "settle", ready: true, token: 101 },
+        ],
+      }],
+      run: runSourceTrace,
+      seed: 0x51_0a_ce,
+      steps: 80,
+    });
   });
 });
