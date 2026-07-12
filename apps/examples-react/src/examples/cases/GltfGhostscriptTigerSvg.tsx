@@ -37,7 +37,7 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
       scene={renderScene}
     >
       <BenchmarkRendererSnapshot />
-      <OrbitControls orbit={orbit} maxDistance={2.5} minDistance={0.28} />
+      <OrbitControls orbit={orbit} maxDistance={2.5} minDistance={0.1} />
     </Canvas>
   );
 };

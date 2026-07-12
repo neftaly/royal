@@ -32,7 +32,6 @@ const vtFrameSampleCount = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAMES', 60);
 const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS', 10_000);
 const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1';
 const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
-const forceGeneratedVirtualTexturing = process.env.EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT === '1';
 const glErrorDebugEnabled = process.env.EXAMPLES_GLTF_LOAD_GL_ERROR_DEBUG === '1';
 
 if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
@@ -1212,17 +1211,6 @@ const main = async () => {
       throw new Error(`Hardware GPU glTF load benchmark resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
     }
     console.log(`gpu ${gpu ?? 'renderer unavailable'}`);
-    if (forceGeneratedVirtualTexturing) {
-      await session.call('Fetch.enable', {
-        patterns: [{ requestStage: 'Request', urlPattern: '*.vt.json*' }],
-      });
-      session.on('Fetch.requestPaused', (event) => {
-        void session.call('Fetch.failRequest', {
-          errorReason: 'Failed',
-          requestId: event.requestId,
-        });
-      });
-    }
     await installBenchmarkHooks(session);
     await session.call('HeapProfiler.collectGarbage');
     const beforeHeap = await session.call('Runtime.getHeapUsage');

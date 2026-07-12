@@ -81,6 +81,17 @@ export const examples = [
     title: 'Texture Materials',
   },
   {
+    id: 'virtual-texture-stress',
+    load: exampleLoader(
+      () => import('./examples/cases/VirtualTextureStress').then((module) => module.VirtualTextureStress),
+      () => import('./examples/cases/VirtualTextureStress.tsx?raw'),
+    ),
+    maturity: 'lab-probe',
+    path: '/virtual-texture-stress',
+    sourceFile: 'examples/cases/VirtualTextureStress.tsx',
+    title: 'Virtual Texture Stress',
+  },
+  {
     id: 'standard-lighting',
     load: exampleLoader(
       () => import('./examples/cases/StandardLighting').then((module) => module.StandardLighting),

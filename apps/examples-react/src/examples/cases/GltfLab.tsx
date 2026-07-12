@@ -105,7 +105,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
     >
       <BenchmarkRendererSnapshot />
       <GltfLabLoadStatus src={src} />
-      <OrbitControls orbit={orbit} maxDistance={60} minDistance={1} />
+      <OrbitControls orbit={orbit} maxDistance={60} minDistance={0.1} />
     </Canvas>
   );
 };

@@ -11,7 +11,7 @@
     "bench:examples:instancing": "EXAMPLES_BENCH_ROUTE=gltf-instancing EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
     "bench:examples:input": "EXAMPLES_BENCH_ROUTE=cube EXAMPLES_BENCH_CAMERA_DRAG=1 EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
     "bench:examples:quick": "EXAMPLES_BENCH_MODE=quick EXAMPLES_BENCH_INSTANCING_SWEEP=quick EXAMPLES_BENCH_FRAMES=24 EXAMPLES_BENCH_WARMUP_FRAMES=8 pnpm run bench:examples",
-    "bench:auto-vt-load": "EXAMPLES_GLTF_LOAD_ROUTE=/gltf-helmet EXAMPLES_GLTF_LOAD_VT_FRAME_SAMPLE=1 EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT=1 pnpm run bench:gltf-load",
+    "bench:auto-vt-load": "EXAMPLES_GLTF_LOAD_ROUTE=/gltf-helmet EXAMPLES_GLTF_LOAD_VT_FRAME_SAMPLE=1 pnpm run bench:gltf-load",
     "bench:gltf-load": "pnpm run build && node scripts/benchmark-gltf-load.mjs",
     "bench:gltf-load:check": "node scripts/check-benchmark-report.mjs",
     "bench:ipad-safari": "node scripts/ipad-safari-benchmark.mjs",

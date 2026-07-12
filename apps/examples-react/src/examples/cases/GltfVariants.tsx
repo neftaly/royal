@@ -32,7 +32,7 @@ export const GltfVariants = (): ReactNode => {
       style={interactiveCanvasStyle}
       scene={renderScene}
     >
-      <OrbitControls orbit={orbit} maxDistance={8} minDistance={2} />
+      <OrbitControls orbit={orbit} maxDistance={8} minDistance={0.1} />
       <BenchmarkRendererSnapshot />
     </Canvas>
   );

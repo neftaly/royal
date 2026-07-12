@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<rect width="512" height="512" fill="#2c6787"/><path d="M0 128H512M0 256H512M0 384H512M128 0V512M256 0V512M384 0V512" stroke="#fff" stroke-opacity=".12" stroke-width="3"/>
+<rect x="10" y="10" width="492" height="492" rx="20" fill="none" stroke="#fff4cf" stroke-width="8"/>
+<text x="256" y="72" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="44" font-weight="900">NE • MAP</text>
+<text x="256" y="258" text-anchor="middle" fill="#fff" font-family="ui-monospace,monospace" font-size="54" font-weight="900">M0  5,3</text>
+
+
+
+</svg>

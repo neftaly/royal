@@ -123,6 +123,7 @@ const routes = [
   { id: 'wireframe', path: '/wireframe' },
   { id: 'picking', path: '/picking' },
   { id: 'texture-materials', path: '/texture-materials' },
+  { id: 'virtual-texture-stress', path: '/virtual-texture-stress' },
   { id: 'standard-lighting', path: '/standard-lighting' },
   { id: 'gltf-helmet', path: '/gltf-helmet' },
   defaultInstancingRoute(),

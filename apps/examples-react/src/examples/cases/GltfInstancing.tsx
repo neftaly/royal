@@ -194,7 +194,7 @@ export const GltfInstancing = (): ReactNode => {
       <BenchmarkRendererSnapshot />
       {instancingConfig.animate ? <InstancedCubeAnimation groups={groups} /> : null}
       {!instancingConfig.animate && instancingConfig.redraw ? <ForcedRedraw /> : null}
-      <OrbitControls orbit={orbit} maxDistance={24} minDistance={4} />
+      <OrbitControls orbit={orbit} maxDistance={24} minDistance={0.1} />
     </Canvas>
   );
 };

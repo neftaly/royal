@@ -52,6 +52,15 @@ const smokeExpectations = {
     path: '/texture-materials',
     minPaintedRatio: 0.01,
   },
+  'virtual-texture-stress': {
+    path: '/virtual-texture-stress',
+    resourceSubstrings: [
+      '/fixtures/virtual-texture-stress/map.vt.json',
+      '/fixtures/virtual-texture-stress/map-pages/m3-0-0.svg',
+    ],
+    minColorBuckets: 8,
+    minPaintedRatio: 0.02,
+  },
   'standard-lighting': {
     path: '/standard-lighting',
     minColorBuckets: 12,
@@ -408,6 +417,14 @@ const waitForRouteState = async (session, route, timeoutMs = 10_000) => {
 // discarded back buffer between frames. CDP captures the composited surface,
 // which is the image a user actually sees.
 const compositedCanvasSample = async (session) => {
+  await evaluate(session, `
+    (async () => {
+      await globalThis.__royalExamplesRenderNow?.();
+      for (let frame = 0; frame < 2; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    })()
+  `);
   const clip = await evaluate(session, `
     (() => {
       const canvas = document.querySelector('canvas');
@@ -421,7 +438,7 @@ const compositedCanvasSample = async (session) => {
     captureBeyondViewport: false,
     clip,
     format: 'png',
-    fromSurface: true,
+    fromSurface: false,
   });
   return evaluate(session, `
     (async () => {
@@ -530,6 +547,31 @@ const assertRoute = (expected, state) => {
     }
   }
 
+  if (expected.id === 'virtual-texture-stress') {
+    const interaction = state.virtualTextureInteraction;
+    if (interaction === undefined) {
+      failures.push('virtual texture route missed focus interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`virtual texture interaction smoke failed: ${interaction.error}`);
+    } else {
+      const expectedTargets = [[0, 0], [-2, 2], [2, 2], [-2, -2], [2, -2], [0, 0]];
+      if (!interaction.presets?.every((preset, index) =>
+        preset.settled === true
+        && Math.abs(preset.targetX - expectedTargets[index][0]) < 0.01
+        && Math.abs(preset.targetY - expectedTargets[index][1]) < 0.01)) {
+        failures.push('virtual texture map presets did not center and settle in Overview/NW/NE/SW/SE/Overview order');
+      }
+      if ((interaction.presets?.[1]?.pageCount ?? 0) <= (interaction.presets?.[0]?.pageCount ?? 0)) {
+        failures.push('virtual texture map focus did not request finer public pages');
+      }
+      for (const page of ['m2-0-0.svg', 'm2-1-0.svg', 'm2-0-1.svg', 'm2-1-1.svg']) {
+        if (!interaction.pageUrls?.some((url) => url.includes('/map-pages/' + page))) {
+          failures.push(`virtual texture map missed expected oriented region page "${page}"`);
+        }
+      }
+    }
+  }
+
   if (expected.id.startsWith('gltf-')) {
     const gltfLoadDiagnostics = state.renderer?.gltfLoadDiagnostics;
     const assets = gltfLoadDiagnostics?.assets;
@@ -633,6 +675,47 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
   await animationFrame();
 
   return { before, clearedId, hoveredId, hoveredPoint, leaveClearedId: readHoveredId() };
+})()
+`);
+
+const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas');
+  if (canvas === null) return { error: 'missing virtual texture canvas' };
+  const buttons = [...document.querySelectorAll('.vt-stress-actions button')];
+  if (buttons.length !== 5 || buttons.some((button) => !(button instanceof HTMLButtonElement))) {
+    return { error: 'missing virtual texture camera presets' };
+  }
+  const pageUrls = () => performance.getEntriesByType('resource')
+    .map((entry) => entry.name)
+    .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
+  const waitForConvergence = async () => {
+    const deadline = performance.now() + 8000;
+    let currentPages = pageUrls().length;
+    let lastPages = -1;
+    let stableFrames = 0;
+    while (performance.now() < deadline && stableFrames < 8) {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      currentPages = pageUrls().length;
+      if (currentPages === lastPages) stableFrames += 1;
+      else stableFrames = 0;
+      lastPages = currentPages;
+    }
+    return {
+      pageCount: currentPages,
+      settled: stableFrames >= 8,
+      targetX: Number(canvas.dataset.mapTargetX),
+      targetY: Number(canvas.dataset.mapTargetY),
+    };
+  };
+  const presets = [await waitForConvergence()];
+  for (const button of buttons.slice(1)) {
+    button.click();
+    presets.push(await waitForConvergence());
+  }
+  buttons[0].click();
+  presets.push(await waitForConvergence());
+  return { pageUrls: pageUrls(), presets };
 })()
 `);
 
@@ -828,6 +911,17 @@ const main = async () => {
         state = {
           ...state,
           pickingInteraction: await runPickingInteractionSmoke(session),
+        };
+      }
+      if (route.id === 'virtual-texture-stress') {
+        const virtualTextureInteraction = await runVirtualTextureInteractionSmoke(session);
+        const refreshedSample = await compositedCanvasSample(session);
+        state = {
+          ...state,
+          ...(refreshedSample === undefined || state.canvas === undefined
+            ? {}
+            : { canvas: { ...state.canvas, sample: refreshedSample } }),
+          virtualTextureInteraction,
         };
       }
       try {

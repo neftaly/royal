@@ -242,6 +242,78 @@ canvas {
   inline-size: 100%;
 }
 
+.vt-stress {
+  block-size: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  inline-size: 100%;
+}
+
+.vt-stress-toolbar {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel), transparent 4%);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.7rem 0.8rem;
+}
+
+.vt-stress-toolbar > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.vt-stress-summary {
+  align-items: center;
+  display: flex !important;
+  gap: 0.65rem;
+}
+
+.vt-stress-summary img {
+  background: #13202a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex: none;
+}
+
+.vt-stress-toolbar .vt-stress-actions {
+  display: flex;
+  flex: none;
+  gap: 0.35rem;
+}
+
+.vt-stress-toolbar strong {
+  font-size: 0.82rem;
+}
+
+.vt-stress-toolbar span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.vt-stress-toolbar button {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  flex: none;
+  font-size: 0.76rem;
+  font-weight: 650;
+  padding: 0.42rem 0.65rem;
+}
+
+.vt-stress-toolbar button:hover {
+  border-color: var(--accent);
+}
+
+.vt-stress-canvas {
+  min-block-size: 0;
+}
+
 .gltf-lab {
   block-size: 100%;
   display: grid;

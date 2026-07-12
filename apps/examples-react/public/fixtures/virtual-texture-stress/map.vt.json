@@ -1,0 +1,12 @@
+{
+  "contractVersion": 1,
+  "virtualSize": [4096, 4096],
+  "pageSize": 512,
+  "mipCount": 4,
+  "colorSpace": "srgb",
+  "physicalSlots": 24,
+  "physicalByteBudget": 26214656,
+  "pages": {
+    "uriTemplate": "map-pages/m{mip}-{x}-{y}.svg"
+  }
+}

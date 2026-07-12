@@ -58,6 +58,21 @@ EXAMPLES_BENCH_OUTPUT=research/examples-benchmark-quest2.json \
 pnpm --filter @royal/examples-react bench:examples
 ```
 
+On Quest Browser 148 the standard `@chrome_devtools_remote` socket is still
+used, but it exists only while the Browser process is active. If port 9222 is
+empty, keep a normal page visible in the headset and diagnose before forwarding:
+
+```sh
+pnpm quest:browser sockets
+QUEST_DEVTOOLS_PORT=9222 pnpm quest:browser forward
+pnpm quest:browser tabs
+```
+
+`forward` now verifies both the abstract socket and `/json/list`; it no longer
+reports success for a missing or inactive socket. Logcat is useful for Browser
+process/crash diagnosis, but page `console` output and benchmark control travel
+over CDP or the in-page benchmark bridge rather than Android logcat.
+
 The default mode is `quick`: product routes, short frame windows, no instancing
 fuzz rows, one manifest-selected glTF lab case, and no XR lab route. Use
 `EXAMPLES_BENCH_MODE=full` for heavier product coverage, `labs` for explicit lab
@@ -73,11 +88,18 @@ enough to cover the route-ready and frame-sampling windows.
 iPad Safari through `ios_webkit_debug_proxy`:
 
 ```sh
-pnpm --filter @royal/examples-react dev -- --host 0.0.0.0 --port 4673
+pnpm --dir apps/examples-react exec vite --config vite.config.ts --host 0.0.0.0 --port 4673
 ios_webkit_debug_proxy -u <ipad-udid>:9323-9323 -F
 ```
 
 Keep Safari open and unlocked on the iPad with Safari Web Inspector enabled.
+Verify the proxy before running a benchmark; `/json` must contain a
+`webSocketDebuggerUrl` rather than an empty page list:
+
+```sh
+curl -sS http://127.0.0.1:9323/json
+```
+
 Then run a focused route benchmark from the host, replacing `<host-lan-ip>` with
 the laptop LAN IP reachable by the iPad:
 
@@ -168,10 +190,8 @@ EXAMPLES_GLTF_LOAD_VT_FRAMES=90 \
 pnpm --filter @royal/examples-react bench:auto-vt-load
 ```
 
-`bench:auto-vt-load` sets `EXAMPLES_GLTF_LOAD_FORCE_GENERATED_VT=1`, which
-fails `.vt.json` sidecar requests through DevTools so the renderer exercises its
-generated raster VT fallback. Clear that variable when measuring authored
-sidecar manifests.
+`bench:auto-vt-load` measures the examples app's explicit generated-raster VT
+policy. It does not intercept requests or depend on authored manifests.
 
 These are measurement reports, not CI thresholds. Prefer comparing saved JSON
 reports across commits or devices.
