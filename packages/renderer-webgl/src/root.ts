@@ -135,6 +135,15 @@ import {
   type GeometryDrawArena,
 } from "./webgl/geometry-draw-arena";
 import {
+  createOwnedTexture,
+  createTextureHandleArena,
+  dropTextureHandleContext,
+  ownsTexture,
+  releaseOwnedTexture,
+  releaseTextureHandleContextHandles,
+  type TextureHandleArena,
+} from "./webgl/texture-handle-arena";
+import {
   beginGltfInstanceBufferArenaFrame,
   bindGltfInstanceBuffer,
   clearGltfInstanceBufferArena,
@@ -2005,7 +2014,7 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
-  readonly #ownedTextures = new Set<WebGLTexture>();
+  readonly #textureHandles: TextureHandleArena;
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
   #dprMediaQuery: MediaQueryList | undefined;
@@ -2114,9 +2123,17 @@ class WebGlRootImpl implements WebGlRoot {
       this.#scheduleRender();
       this.#notifyContextLifecycle();
     } catch (error) {
-      this.#dropGpuState(true);
+      let dropError: unknown;
+      try {
+        this.#dropGpuState(true);
+      } catch (caught) {
+        dropError = caught;
+      }
       this.#contextLifecycle = "lost";
-      this.#contextError = error instanceof Error ? error.message : String(error);
+      const restoreMessage = error instanceof Error ? error.message : String(error);
+      this.#contextError = dropError instanceof Error
+        ? `${restoreMessage}; GPU cleanup also failed: ${dropError.message}`
+        : restoreMessage;
       this.#notifyContextLifecycle();
     }
   };
@@ -2146,6 +2163,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gl = gl;
     this.#clusteredLights = createClusteredLightArena(gl);
     this.#iblTextures = createIblTextureArena(gl);
+    this.#textureHandles = createTextureHandleArena(gl);
     this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
@@ -2608,27 +2626,38 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #dropGpuState(deleteResources: boolean): void {
+    let releaseError: unknown;
     for (const resource of this.#textures.values()) {
       if (resource.pendingUpload !== undefined) {
         this.#retainPreparedTextureUpload(resource.key, resource.pendingUpload);
       }
     }
     if (deleteResources) {
-      releaseVertexInputContextHandles(this.#vertexInputs, this.#gl, this.#contextGeneration);
       const gl = this.#gl;
-      releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
-      releaseProgramArenaContextHandles(this.#programArena);
-      releaseClusteredLightContextHandles(this.#clusteredLights);
-      releaseIblTextureContextHandles(this.#iblTextures);
-      for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
-    } else {
-      dropVertexInputArenaContext(this.#vertexInputs);
-      dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
-      dropProgramArenaContext(this.#programArena);
-      dropClusteredLightContext(this.#clusteredLights);
-      dropIblTextureContext(this.#iblTextures);
+      releaseError = captureFirstError(releaseError, () => {
+        releaseVertexInputContextHandles(this.#vertexInputs, gl, this.#contextGeneration);
+      });
+      releaseError = captureFirstError(releaseError, () => {
+        releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
+      });
+      releaseError = captureFirstError(releaseError, () => releaseProgramArenaContextHandles(this.#programArena));
+      releaseError = captureFirstError(releaseError, () => {
+        releaseClusteredLightContextHandles(this.#clusteredLights);
+      });
+      releaseError = captureFirstError(releaseError, () => releaseIblTextureContextHandles(this.#iblTextures));
+      releaseError = captureFirstError(releaseError, () => {
+        releaseTextureHandleContextHandles(this.#textureHandles);
+      });
     }
-    this.#ownedTextures.clear();
+    // Active release APIs retain failed handles for direct retry. Root teardown
+    // is terminal for this context generation, so always normalize every arena
+    // after all release attempts before reporting the first driver failure.
+    dropVertexInputArenaContext(this.#vertexInputs);
+    dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
+    dropProgramArenaContext(this.#programArena);
+    dropClusteredLightContext(this.#clusteredLights);
+    dropIblTextureContext(this.#iblTextures);
+    dropTextureHandleContext(this.#textureHandles);
     clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#textures.clear();
     this.#pendingTextureUploads.length = 0;
@@ -2654,6 +2683,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#virtualTextureRequestsThisFrame = 0;
     this.#virtualTextureUploadFrame = -1;
     this.#virtualTextureUploadsThisFrame = 0;
+    if (releaseError !== undefined) throw releaseError;
   }
 
   #restoreVirtualTextureResources(): void {
@@ -2679,7 +2709,12 @@ class WebGlRootImpl implements WebGlRoot {
     this.#contextLifecycle = "disposed";
     this.#canvas.removeEventListener?.("webglcontextlost", this.#contextLostListener);
     this.#canvas.removeEventListener?.("webglcontextrestored", this.#contextRestoredListener);
-    this.#dropGpuState(canDeleteResources);
+    let gpuDropError: unknown;
+    try {
+      this.#dropGpuState(canDeleteResources);
+    } catch (error) {
+      gpuDropError = error;
+    }
     this.#contextGeneration += 1;
     this.#notifyContextLifecycle();
     this.#contextLifecycleObservers.clear();
@@ -2732,6 +2767,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#resizeObserver = undefined;
     this.#unwatchDevicePixelRatio();
     disposeVertexInputArena(this.#vertexInputs);
+    if (gpuDropError !== undefined) throw gpuDropError;
   }
 
   snapshot(): WebGlRootSnapshot {
@@ -3037,20 +3073,23 @@ class WebGlRootImpl implements WebGlRoot {
       abortResourceArenaImageWork(this.#resourceArena, key);
       this.#gltf.delete(key);
     }
-    for (const key of changes.releasedOrdinaryTextureKeys) this.#releaseOrdinaryTexture(key);
-    for (const key of changes.releasedVirtualTextureKeys) this.#releaseVirtualTexture(key);
-    let iblReleaseError: unknown;
+    let textureReleaseError: unknown;
+    for (const key of changes.releasedOrdinaryTextureKeys) {
+      textureReleaseError = captureFirstError(textureReleaseError, () => this.#releaseOrdinaryTexture(key));
+    }
+    for (const key of changes.releasedVirtualTextureKeys) {
+      textureReleaseError = captureFirstError(textureReleaseError, () => this.#releaseVirtualTexture(key));
+    }
     for (const key of changes.releasedIblKeys) {
-      try {
+      textureReleaseError = captureFirstError(textureReleaseError, () => {
         releaseGltfIblSpecularTexture(this.#iblTextures, key);
-      } catch (error) {
-        iblReleaseError ??= error;
-      }
+      });
     }
     for (const source of changes.releasedSources) {
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
+      textureReleaseError = captureFirstError(textureReleaseError, () => this.#closeTextureSource(source));
     }
-    if (iblReleaseError !== undefined) throw iblReleaseError;
+    if (textureReleaseError !== undefined) throw textureReleaseError;
   }
 
   #applyPendingResourceArenaEvents(): void {
@@ -3244,7 +3283,12 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #releaseOrdinaryTexture(key: string): void {
-    this.#releaseAutoVirtualTextures(key);
+    let releaseError: unknown;
+    try {
+      this.#releaseAutoVirtualTextures(key);
+    } catch (error) {
+      releaseError = error;
+    }
     this.#autoVirtualTextureRefs.delete(`auto-base-color:${key}`);
     this.#autoVirtualTextureManifestUris.delete(key);
     this.#autoVirtualTextureGeneratedPageSources.delete(key);
@@ -3259,23 +3303,36 @@ class WebGlRootImpl implements WebGlRoot {
     if (resource !== undefined) {
       if (resource.pendingUpload !== undefined) sources.add(resource.pendingUpload.source);
       delete resource.pendingUpload;
-      if (this.#ownedTextures.has(resource.texture)) {
-        this.#gl.deleteTexture(resource.texture);
-        this.#ownedTextures.delete(resource.texture);
+      try {
+        releaseOwnedTexture(this.#textureHandles, resource.texture);
+      } catch (error) {
+        releaseError ??= error;
       }
     }
     for (const source of sources) {
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
+      try {
+        this.#closeTextureSource(source);
+      } catch (error) {
+        releaseError ??= error;
+      }
     }
+    if (releaseError !== undefined) throw releaseError;
   }
 
   #releaseAutoVirtualTextures(textureKey: string): void {
     const prefix = `auto-base-color:${textureKey}:`;
+    let releaseError: unknown;
     for (const [key, state] of this.#virtualTextures) {
       if (!key.startsWith(prefix)) continue;
       this.#virtualTextures.delete(key);
-      this.#releaseVirtualTextureState(state);
+      try {
+        this.#releaseVirtualTextureState(state);
+      } catch (error) {
+        releaseError ??= error;
+      }
     }
+    if (releaseError !== undefined) throw releaseError;
   }
 
   #releaseVirtualTexture(key: string): void {
@@ -3293,15 +3350,19 @@ class WebGlRootImpl implements WebGlRoot {
     state.requestedPages.clear();
     state.uploadedPages.clear();
     const resources = state.resources;
+    let releaseError: unknown;
     if (resources !== undefined) {
       for (const texture of [resources.atlasTexture, resources.pageTableTexture]) {
-        if (!this.#ownedTextures.has(texture)) continue;
-        this.#gl.deleteTexture(texture);
-        this.#ownedTextures.delete(texture);
+        try {
+          releaseOwnedTexture(this.#textureHandles, texture);
+        } catch (error) {
+          releaseError ??= error;
+        }
       }
     }
     delete state.resources;
     delete state.pageTable;
+    if (releaseError !== undefined) throw releaseError;
   }
 
   #closeTextureSource(source: LoadedTextureSource): void {
@@ -6148,52 +6209,65 @@ class WebGlRootImpl implements WebGlRoot {
     const atlasGridRows = Math.ceil(physicalSlots / atlasGridColumns);
     const pageTableWidth = Math.ceil(manifest.width / manifest.pageSize);
     const pageTableHeight = Math.ceil(manifest.height / manifest.pageSize);
-    const atlasTexture = this.#createTexture();
-    const pageTableTexture = this.#createTexture();
+    let atlasTexture: WebGLTexture | undefined;
+    let pageTableTexture: WebGLTexture | undefined;
+    try {
+      atlasTexture = createOwnedTexture(this.#textureHandles);
+      pageTableTexture = createOwnedTexture(this.#textureHandles);
 
-    prepareTextureUpload(gl, false);
-    gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      textureUploadInternalFormat(gl, state.texture.colorSpace),
-      atlasGridColumns * manifest.pageSize,
-      atlasGridRows * manifest.pageSize,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null,
-    );
-    this.#setVirtualTextureSampler(
-      this.#virtualTextureAtlasMagFilter(state.texture.sampler),
-      this.#virtualTextureAtlasMinFilter(state.texture.sampler),
-      gl.CLAMP_TO_EDGE,
-      gl.CLAMP_TO_EDGE,
-    );
+      prepareTextureUpload(gl, false);
+      gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        textureUploadInternalFormat(gl, state.texture.colorSpace),
+        atlasGridColumns * manifest.pageSize,
+        atlasGridRows * manifest.pageSize,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        null,
+      );
+      this.#setVirtualTextureSampler(
+        this.#virtualTextureAtlasMagFilter(state.texture.sampler),
+        this.#virtualTextureAtlasMinFilter(state.texture.sampler),
+        gl.CLAMP_TO_EDGE,
+        gl.CLAMP_TO_EDGE,
+      );
 
-    gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA8,
-      pageTableWidth,
-      pageTableHeight,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      new Uint8Array(pageTableWidth * pageTableHeight * 4),
-    );
-    this.#setVirtualTextureSampler(gl.NEAREST, gl.NEAREST, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA8,
+        pageTableWidth,
+        pageTableHeight,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        new Uint8Array(pageTableWidth * pageTableHeight * 4),
+      );
+      this.#setVirtualTextureSampler(gl.NEAREST, gl.NEAREST, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE);
 
-    state.pageTable = new VirtualTextureAtlasPageTable({ slotCount: physicalSlots });
-    state.resources = {
-      atlasGridColumns,
-      atlasGridRows,
-      atlasTexture,
-      pageTableHeight,
-      pageTableTexture,
-      pageTableWidth,
-    };
+      const pageTable = new VirtualTextureAtlasPageTable({ slotCount: physicalSlots });
+      state.pageTable = pageTable;
+      state.resources = {
+        atlasGridColumns,
+        atlasGridRows,
+        atlasTexture,
+        pageTableHeight,
+        pageTableTexture,
+        pageTableWidth,
+      };
+    } catch (error) {
+      if (pageTableTexture !== undefined) {
+        try { releaseOwnedTexture(this.#textureHandles, pageTableTexture); } catch { /* Retry during context release. */ }
+      }
+      if (atlasTexture !== undefined) {
+        try { releaseOwnedTexture(this.#textureHandles, atlasTexture); } catch { /* Retry during context release. */ }
+      }
+      throw error;
+    }
   }
 
   #setVirtualTextureSampler(magFilter: number, minFilter: number, wrapS: number, wrapT: number): void {
@@ -6681,8 +6755,8 @@ class WebGlRootImpl implements WebGlRoot {
       manifest === undefined
       || resources === undefined
       || pageTable === undefined
-      || !this.#ownedTextures.has(resources.atlasTexture)
-      || !this.#ownedTextures.has(resources.pageTableTexture)
+      || !ownsTexture(this.#textureHandles, resources.atlasTexture)
+      || !ownsTexture(this.#textureHandles, resources.pageTableTexture)
     ) {
       return;
     }
@@ -6720,7 +6794,11 @@ class WebGlRootImpl implements WebGlRoot {
   #flushVirtualTexturePageTableUpdates(state: VirtualTextureRuntimeState): void {
     const resources = state.resources;
     const pageTable = state.pageTable;
-    if (resources === undefined || pageTable === undefined || !this.#ownedTextures.has(resources.pageTableTexture)) {
+    if (
+      resources === undefined
+      || pageTable === undefined
+      || !ownsTexture(this.#textureHandles, resources.pageTableTexture)
+    ) {
       return;
     }
 
@@ -6935,7 +7013,7 @@ class WebGlRootImpl implements WebGlRoot {
       || this.#contextLifecycle !== "active"
       || resource.generation !== this.#contextGeneration
       || resource.uploaded
-      || !this.#ownedTextures.has(resource.texture)
+      || !ownsTexture(this.#textureHandles, resource.texture)
     ) return;
     if (resource.pendingUpload !== undefined) return;
 
@@ -6965,7 +7043,7 @@ class WebGlRootImpl implements WebGlRoot {
         || resource.generation !== this.#contextGeneration
         || this.#textures.get(resource.key) !== resource
         || resource.uploaded
-        || !this.#ownedTextures.has(resource.texture)
+        || !ownsTexture(this.#textureHandles, resource.texture)
       ) {
         delete resource.pendingUpload;
         if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
@@ -6993,7 +7071,7 @@ class WebGlRootImpl implements WebGlRoot {
     const cached = this.#textures.get(key);
     if (cached !== undefined) return cached;
 
-    const glTexture = this.#createTexture();
+    const glTexture = createOwnedTexture(this.#textureHandles);
     const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
     const state: TextureLoadState = {
       generation: this.#contextGeneration,
@@ -7056,7 +7134,7 @@ class WebGlRootImpl implements WebGlRoot {
     const resource: TextureResource | TextureLoadState = cached ?? {
       generation: this.#contextGeneration,
       key,
-      texture: this.#createTexture(),
+      texture: createOwnedTexture(this.#textureHandles),
       uploaded: false,
     };
     this.#textures.set(key, resource);
@@ -7125,7 +7203,7 @@ class WebGlRootImpl implements WebGlRoot {
     source: LoadedTextureSource,
     texture: TextureAssetUploadRef,
   ): void {
-    if (this.#disposed || !this.#ownedTextures.has(resource.texture)) return;
+    if (this.#disposed || !ownsTexture(this.#textureHandles, resource.texture)) return;
 
     const gl = this.#gl;
     prepareTextureUpload(gl, texture.flipY ?? true);
@@ -8228,13 +8306,6 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindVertexArray(null);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindTexture(gl.TEXTURE_2D, null);
-  }
-
-  #createTexture(): WebGLTexture {
-    const texture = this.#gl.createTexture();
-    if (texture === null) throw new Error("WebGL texture creation failed");
-    this.#ownedTextures.add(texture);
-    return texture;
   }
 
   #recordDiagnostic(message: string, key = message): void {

@@ -108,21 +108,28 @@ glTF draw collection.
   diagnostics so row leases finalize, and render-time retry remains fail-closed.
   The former IBL callback-context modules and their per-draw closure object are
   deleted.
+  The remaining ordinary and virtual-texture WebGL handles are owned by a
+  generic opaque texture-handle arena. Root no longer creates, tracks, checks,
+  or deletes raw textures. VT atlas/page-table allocation publishes as one
+  transaction with rollback; ordinary and VT release complete source/state
+  cleanup before surfacing deletion faults. Global teardown attempt-releases
+  every GPU authority, then normalizes each arena to a dropped context
+  generation before completing semantic cleanup.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 469 workspace tests, typecheck, build,
+- The current checkpoint passes 474 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Extract texture/virtual-texture binding ownership. Then move the surface draw
-   kernel and compose it with the numeric packet, instance, target, program,
-   geometry, clustered-light, and IBL arenas into the real callback-free
-   executor. Move or delete remaining active-resource scans and pruning paths
-   with their owning families.
+1. Extract ordinary/virtual-texture GPU residency and binding ownership. Then
+   move the surface draw kernel and compose it with the numeric packet,
+   instance, target, program, geometry, clustered-light, IBL, and texture-handle
+   arenas into the real callback-free executor. Move or delete remaining
+   active-resource scans and pruning paths with their owning families.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.
