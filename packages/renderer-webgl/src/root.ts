@@ -371,13 +371,27 @@ import {
   type TextureAssetUploadRef,
 } from "./webgl/materials";
 import {
+  type ProgramKind,
   type SurfaceShaderFeatures,
   type SurfaceShaderTextureFeature,
-  type ProgramKind,
-  fragmentShaderSource,
-  surfaceShaderFeatureKey,
-  vertexShaderSource,
 } from "./webgl/shaders";
+import {
+  configureProgramArenaParallelCompile,
+  consumeProgramArenaWake,
+  createProgramArena,
+  dropProgramArenaContext,
+  releaseProgramArenaContextHandles,
+  requestProgram,
+  uniform1f,
+  uniform1i,
+  uniform2f,
+  uniform2fv,
+  uniformColor,
+  uniformMatrix,
+  useProgram,
+  type ProgramArena,
+  type ProgramArenaResource,
+} from "./webgl/program-arena";
 import { rendererOwnedWebGl2Context } from "./webgl/context-lane";
 import {
   combineSurfaceLightSets,
@@ -455,27 +469,6 @@ type PickScratchCandidate = {
   primitive?: LoadedGltfPrimitive;
   rootModel?: Mat4;
 };
-
-type ProgramResource = {
-  readonly fragmentShader: WebGLShader;
-  linked: boolean;
-  readonly program: WebGLProgram;
-  readonly vertexShader: WebGLShader;
-};
-
-type ProgramRequest = {
-  readonly clusteredLights: boolean;
-  readonly features: SurfaceShaderFeatures | undefined;
-  readonly key: string;
-  readonly kind: ProgramKind;
-  resource?: ProgramResource;
-};
-
-type ParallelShaderCompileExtension = {
-  readonly COMPLETION_STATUS_KHR: number;
-};
-
-type UniformValue = readonly number[];
 
 type GeometryDrawMode = GltfGeometryDrawMode;
 
@@ -1003,8 +996,6 @@ const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
 const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
-const PROGRAM_MAX_LINKS_PER_FRAME = 1;
-const PROGRAM_MAX_STARTS_PER_FRAME = 1;
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
   rotation: [0, 0, 0],
@@ -1963,12 +1954,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
   readonly #contextLifecycleObservers = new Set<(snapshot: WebGlContextSnapshot) => void>();
-  #parallelShaderCompile: ParallelShaderCompileExtension | undefined;
-  readonly #programs = new Map<string, ProgramRequest>();
-  readonly #pendingPrograms: ProgramRequest[] = [];
-  #pendingProgramHead = 0;
-  readonly #programUniformLocations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
-  readonly #programUniformValues = new Map<WebGLProgram, Map<string, UniformValue>>();
+  readonly #programArena: ProgramArena;
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
@@ -2044,8 +2030,6 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
-  readonly #ownedPrograms = new Set<WebGLProgram>();
-  readonly #ownedShaders = new Set<WebGLShader>();
   readonly #ownedTextures = new Set<WebGLTexture>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
@@ -2062,7 +2046,6 @@ class WebGlRootImpl implements WebGlRoot {
   #frame = 0;
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
-  #activeProgram: WebGLProgram | undefined;
   #iblBrdfLutTexture: WebGLTexture | undefined;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena();
@@ -2100,10 +2083,6 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #pickRay: Ray = { direction: [0, 0, -1], origin: [0, 0, 0] };
   readonly #pickRayGeometryScratch: RayGeometryScratch = createRayGeometryScratch();
   readonly #pickViewProjection = identityMat4();
-  #programLinkFrame = -1;
-  #programLinksThisFrame = 0;
-  #programStartFrame = -1;
-  #programStartsThisFrame = 0;
   #renderObjectInvalidationPending = false;
   #renderDirty = false;
   #renderScheduleGeneration = 0;
@@ -2196,6 +2175,7 @@ class WebGlRootImpl implements WebGlRoot {
       throw new Error("Royal WebGL renderer requires a WebGL2 context");
     }
     this.#gl = gl;
+    this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
     this.#probeContextCapabilities();
     restoreVertexInputArenaContext(this.#vertexInputs, this.#contextGeneration);
@@ -2206,7 +2186,10 @@ class WebGlRootImpl implements WebGlRoot {
 
   #probeContextCapabilities(): void {
     const gl = this.#gl;
-    this.#parallelShaderCompile = gl.getExtension?.("KHR_parallel_shader_compile") ?? undefined;
+    configureProgramArenaParallelCompile(
+      this.#programArena,
+      gl.getExtension?.("KHR_parallel_shader_compile") ?? undefined,
+    );
     this.#hdrSupported = gl.getExtension?.("EXT_color_buffer_float") != null;
     const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
@@ -2672,24 +2655,15 @@ class WebGlRootImpl implements WebGlRoot {
       releaseVertexInputContextHandles(this.#vertexInputs, this.#gl, this.#contextGeneration);
       const gl = this.#gl;
       releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
+      releaseProgramArenaContextHandles(this.#programArena);
       for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
-      for (const program of Array.from(this.#ownedPrograms)) gl.deleteProgram(program);
-      for (const shader of Array.from(this.#ownedShaders)) gl.deleteShader(shader);
     } else {
       dropVertexInputArenaContext(this.#vertexInputs);
       dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
+      dropProgramArenaContext(this.#programArena);
     }
     this.#ownedTextures.clear();
-    this.#ownedPrograms.clear();
-    this.#ownedShaders.clear();
-
-    this.#activeProgram = undefined;
     this.#iblBrdfLutTexture = undefined;
-    this.#programs.clear();
-    this.#pendingPrograms.length = 0;
-    this.#pendingProgramHead = 0;
-    this.#programUniformLocations.clear();
-    this.#programUniformValues.clear();
     this.#vertexAttribDefaults.clear();
     this.#textures.clear();
     this.#pendingTextureUploads.length = 0;
@@ -2703,10 +2677,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfLiveBatchCount = 0;
     clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
     this.#gltfInstanceFrameActive = false;
-    this.#programLinkFrame = -1;
-    this.#programLinksThisFrame = 0;
-    this.#programStartFrame = -1;
-    this.#programStartsThisFrame = 0;
 
     for (const state of this.#virtualTextures.values()) {
       delete state.resources;
@@ -2758,12 +2728,8 @@ class WebGlRootImpl implements WebGlRoot {
     for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) this.#releaseOrdinaryTexture(key);
     for (const state of this.#virtualTextures.values()) this.#releaseVirtualTextureState(state);
     this.#virtualTextures.clear();
-    this.#activeProgram = undefined;
     this.#clusteredLightResources.clear();
     this.#vertexAttribDefaults.clear();
-    this.#programs.clear();
-    this.#pendingPrograms.length = 0;
-    this.#pendingProgramHead = 0;
     this.#retainedGeometryRecipes.clear();
     this.#gltfPacketPrimitivesByGeometryId.clear();
     this.#textures.clear();
@@ -5072,29 +5038,30 @@ class WebGlRootImpl implements WebGlRoot {
     const programResource = this.#program(programKind, surfaceTexturePlan?.features, clusteredLights);
     if (programResource === undefined) return;
     const program = programResource.program;
-    this.#useProgram(program);
+    useProgram(this.#programArena, program);
 
-    this.#uniformMatrix(program, "u_projection", projection);
-    this.#uniformMatrix(program, "u_view", view);
-    this.#uniformMatrix(program, "u_model", model);
-    this.#uniformColor(
+    uniformMatrix(this.#programArena, program, "u_projection", projection);
+    uniformMatrix(this.#programArena, program, "u_view", view);
+    uniformMatrix(this.#programArena, program, "u_model", model);
+    uniformColor(
+      this.#programArena,
       program,
       "u_color",
       surfaceTexturePlan?.baseColor.kind === "prepared-virtual"
         ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
         : materialColor(material),
     );
-    this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
+    uniform1i(this.#programArena, program, "u_unlit", material.kind === "standard" ? 0 : 1);
     if (surfaceTexturePlan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
-      this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
+      uniformColor(this.#programArena, program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
       this.#bindSurfaceMaterialFactors(program, surfaceMaterial, transmissionScreenColorTexture, surfaceTexturePlan);
       this.#bindSurfaceToneMapping(program, toneMapping);
       this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
     }
 
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
-    this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
-    this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
+    uniform1i(this.#programArena, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+    uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
     this.#bindGeometryAttributes(geometry, geometryId);
 
     if (material.kind === "wireframe") gl.lineWidth?.(material.width);
@@ -5155,26 +5122,27 @@ class WebGlRootImpl implements WebGlRoot {
     const programResource = this.#program(programKind, surfaceTexturePlan.features, clusteredLights);
     if (programResource === undefined) return;
     const program = programResource.program;
-    this.#useProgram(program);
+    useProgram(this.#programArena, program);
 
-    this.#uniformMatrix(program, "u_projection", projection);
-    this.#uniformMatrix(program, "u_view", view);
-    this.#uniformColor(
+    uniformMatrix(this.#programArena, program, "u_projection", projection);
+    uniformMatrix(this.#programArena, program, "u_view", view);
+    uniformColor(
+      this.#programArena,
       program,
       "u_color",
       surfaceTexturePlan.baseColor.kind === "prepared-virtual"
         ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
         : materialColor(material),
     );
-    this.#uniformColor(program, "u_emissiveColor", materialEmissiveColor(material));
-    this.#uniform1i(program, "u_unlit", material.kind === "standard" ? 0 : 1);
+    uniformColor(this.#programArena, program, "u_emissiveColor", materialEmissiveColor(material));
+    uniform1i(this.#programArena, program, "u_unlit", material.kind === "standard" ? 0 : 1);
     this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture, surfaceTexturePlan);
     this.#bindSurfaceToneMapping(program, toneMapping);
     this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
 
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
-    this.#uniform1i(program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
-    this.#uniform1i(program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
+    uniform1i(this.#programArena, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
+    uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
     const instanceAllocation = bindGltfInstanceBuffer(
       this.#gltfInstanceBufferArena,
       this.#gl,
@@ -5211,67 +5179,67 @@ class WebGlRootImpl implements WebGlRoot {
     const factors = surfaceMaterialExtensionFactors(material);
     const alphaMode = surfaceMaterialAlphaMode(material);
     const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
-    this.#uniformColor(program, "u_alphaSettings", [
+    uniformColor(this.#programArena, program, "u_alphaSettings", [
       alphaMode === "MASK" ? 1 : alphaMode === "BLEND" ? 2 : 0,
       surfaceMaterialAlphaCutoff(material),
       0,
       0,
     ]);
-    this.#uniformColor(program, "u_materialPbrFactors", [
+    uniformColor(this.#programArena, program, "u_materialPbrFactors", [
       surfaceMaterialMetallicFactor(material),
       surfaceMaterialRoughnessFactor(material),
       0,
       0,
     ]);
-    this.#uniformColor(program, "u_specularColorFactor", [
+    uniformColor(this.#programArena, program, "u_specularColorFactor", [
       factors.specularColorFactor[0],
       factors.specularColorFactor[1],
       factors.specularColorFactor[2],
       1,
     ]);
-    this.#uniformColor(program, "u_materialExtensionFactors", [
+    uniformColor(this.#programArena, program, "u_materialExtensionFactors", [
       factors.specularFactor,
       factors.ior,
       factors.clearcoatFactor,
       factors.clearcoatRoughnessFactor,
     ]);
-    this.#uniformColor(program, "u_anisotropyFactors", [
+    uniformColor(this.#programArena, program, "u_anisotropyFactors", [
       factors.anisotropyStrength,
       factors.anisotropyRotation,
       0,
       0,
     ]);
-    this.#uniformColor(program, "u_diffuseTransmissionFactors", [
+    uniformColor(this.#programArena, program, "u_diffuseTransmissionFactors", [
       factors.diffuseTransmissionColorFactor[0],
       factors.diffuseTransmissionColorFactor[1],
       factors.diffuseTransmissionColorFactor[2],
       factors.diffuseTransmissionFactor,
     ]);
-    this.#uniformColor(program, "u_sheenColorFactor", [
+    uniformColor(this.#programArena, program, "u_sheenColorFactor", [
       factors.sheenColorFactor[0],
       factors.sheenColorFactor[1],
       factors.sheenColorFactor[2],
       factors.sheenRoughnessFactor,
     ]);
-    this.#uniformColor(program, "u_iridescenceFactors", [
+    uniformColor(this.#programArena, program, "u_iridescenceFactors", [
       factors.iridescenceFactor,
       factors.iridescenceIor,
       factors.iridescenceThicknessMinimum,
       factors.iridescenceThicknessMaximum,
     ]);
-    this.#uniformColor(program, "u_dispersionFactors", [
+    uniformColor(this.#programArena, program, "u_dispersionFactors", [
       factors.dispersionFactor,
       0,
       0,
       0,
     ]);
-    this.#uniformColor(program, "u_attenuationColorFactor", [
+    uniformColor(this.#programArena, program, "u_attenuationColorFactor", [
       factors.attenuationColor[0],
       factors.attenuationColor[1],
       factors.attenuationColor[2],
       1,
     ]);
-    this.#uniformColor(program, "u_transmissionVolumeFactors", [
+    uniformColor(this.#programArena, program, "u_transmissionVolumeFactors", [
       factors.transmissionFactor,
       factors.thicknessFactor,
       hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
@@ -5301,9 +5269,9 @@ class WebGlRootImpl implements WebGlRoot {
       ));
       if (!active) continue;
       const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
-      this.#uniform1i(program, setUniform, coordinates.set);
-      this.#uniformColor(program, row0Uniform, coordinates.row0);
-      this.#uniformColor(program, row1Uniform, coordinates.row1);
+      uniform1i(this.#programArena, program, setUniform, coordinates.set);
+      uniformColor(this.#programArena, program, row0Uniform, coordinates.row0);
+      uniformColor(this.#programArena, program, row1Uniform, coordinates.row1);
     }
   }
 
@@ -5443,7 +5411,7 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: SceneToneMappingState): void {
-    this.#uniformColor(program, "u_toneMappingSettings", [
+    uniformColor(this.#programArena, program, "u_toneMappingSettings", [
       toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
       toneMapping.exposure,
       toneMapping.hdrOutput ? 1 : 0,
@@ -5507,7 +5475,7 @@ class WebGlRootImpl implements WebGlRoot {
     material: SurfaceMaterial,
     plan: SurfaceTextureBindingPlan,
   ): void {
-    this.#uniformColor(program, "u_normalTextureSettings", [
+    uniformColor(this.#programArena, program, "u_normalTextureSettings", [
       material.kind === "standard" ? material.normalScale ?? 1 : 1,
       0,
       0,
@@ -5528,7 +5496,7 @@ class WebGlRootImpl implements WebGlRoot {
     material: SurfaceMaterial,
     plan: SurfaceTextureBindingPlan,
   ): void {
-    this.#uniformColor(program, "u_occlusionSettings", [
+    uniformColor(this.#programArena, program, "u_occlusionSettings", [
       surfaceMaterialOcclusionStrength(material),
       0,
       0,
@@ -5570,26 +5538,26 @@ class WebGlRootImpl implements WebGlRoot {
     plan: SurfaceTextureBindingPlan,
   ): void {
     if (texture === undefined) {
-      this.#uniform1i(program, useUniform, 0);
+      uniform1i(this.#programArena, program, useUniform, 0);
       return;
     }
 
     const resource = this.#textures.get(textureCacheKey(texture));
     if (resource === undefined || !resource.uploaded) {
-      this.#uniform1i(program, useUniform, 0);
+      uniform1i(this.#programArena, program, useUniform, 0);
       return;
     }
 
     const gl = this.#gl;
     const allocatedUnit = plan.textureUnits.get(feature);
     if (allocatedUnit === undefined) {
-      this.#uniform1i(program, useUniform, 0);
+      uniform1i(this.#programArena, program, useUniform, 0);
       return;
     }
     gl.activeTexture(gl.TEXTURE0 + allocatedUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, samplerUniform, allocatedUnit);
-    this.#uniform1i(program, useUniform, 1);
+    uniform1i(this.#programArena, program, samplerUniform, allocatedUnit);
+    uniform1i(this.#programArena, program, useUniform, 1);
   }
 
   #bindTransmissionScreenColorTexture(
@@ -5598,22 +5566,22 @@ class WebGlRootImpl implements WebGlRoot {
     plan: SurfaceTextureBindingPlan,
   ): void {
     if (resource === undefined || !resource.uploaded) {
-      this.#uniform1i(program, "u_useTransmissionTexture", 0);
+      uniform1i(this.#programArena, program, "u_useTransmissionTexture", 0);
       return;
     }
 
     const gl = this.#gl;
     const textureUnit = plan.textureUnits.get("transmissionScreenTexture");
     if (textureUnit === undefined) {
-      this.#uniform1i(program, "u_useTransmissionTexture", 0);
+      uniform1i(this.#programArena, program, "u_useTransmissionTexture", 0);
       return;
     }
-    this.#uniform1i(program, "u_useTransmissionTexture", 1);
+    uniform1i(this.#programArena, program, "u_useTransmissionTexture", 1);
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, "u_transmissionScreenTexture", textureUnit);
-    this.#uniform2fv(program, "u_viewportOrigin", [resource.originX, resource.originY]);
-    this.#uniform2fv(program, "u_viewportSize", [resource.width, resource.height]);
+    uniform1i(this.#programArena, program, "u_transmissionScreenTexture", textureUnit);
+    uniform2fv(this.#programArena, program, "u_viewportOrigin", [resource.originX, resource.originY]);
+    uniform2fv(this.#programArena, program, "u_viewportSize", [resource.width, resource.height]);
   }
 
   #bindSurfaceLights(
@@ -5635,16 +5603,16 @@ class WebGlRootImpl implements WebGlRoot {
         };
       },
       gl: this.#gl,
-      uniform1i: (uniformProgram, name, value) => this.#uniform1i(uniformProgram, name, value),
-      uniformColor: (uniformProgram, name, color) => this.#uniformColor(uniformProgram, name, color),
-      uniformMatrix: (uniformProgram, name, matrix) => this.#uniformMatrix(uniformProgram, name, matrix),
+      uniform1i: (uniformProgram, name, value) => uniform1i(this.#programArena, uniformProgram, name, value),
+      uniformColor: (uniformProgram, name, color) => uniformColor(this.#programArena, uniformProgram, name, color),
+      uniformMatrix: (uniformProgram, name, matrix) => uniformMatrix(this.#programArena, uniformProgram, name, matrix),
     }, program, lightSet);
 
     const lights = lightSet.directionals;
     if (lights.length > MAX_SURFACE_LIGHTS) {
       throw new Error(`Royal supports at most ${MAX_SURFACE_LIGHTS} directional lights per pass`);
     }
-    this.#uniform1i(program, "u_surfaceLightCount", lights.length);
+    uniform1i(this.#programArena, program, "u_surfaceLightCount", lights.length);
 
     for (let index = 0; index < lights.length; index += 1) {
       const light = lights[index];
@@ -5656,21 +5624,21 @@ class WebGlRootImpl implements WebGlRoot {
       const cone = [1, 0, 0, 0] as const;
       const kind = 0;
 
-      this.#uniform1i(program, `u_surfaceLightKind[${index}]`, kind);
-      this.#uniformColor(program, `u_surfaceLightColor[${index}]`, light.color);
-      this.#uniformColor(program, `u_surfaceLightDirection[${index}]`, [
+      uniform1i(this.#programArena, program, `u_surfaceLightKind[${index}]`, kind);
+      uniformColor(this.#programArena, program, `u_surfaceLightColor[${index}]`, light.color);
+      uniformColor(this.#programArena, program, `u_surfaceLightDirection[${index}]`, [
         direction[0],
         direction[1],
         direction[2],
         range,
       ]);
-      this.#uniformColor(program, `u_surfaceLightPosition[${index}]`, [
+      uniformColor(this.#programArena, program, `u_surfaceLightPosition[${index}]`, [
         position[0],
         position[1],
         position[2],
         0,
       ]);
-      this.#uniformColor(program, `u_surfaceLightCone[${index}]`, cone);
+      uniformColor(this.#programArena, program, `u_surfaceLightCone[${index}]`, cone);
     }
     this.#bindClusteredLights(
       program,
@@ -5690,7 +5658,7 @@ class WebGlRootImpl implements WebGlRoot {
     viewportSize: ViewportSize,
   ): void {
     if (lights.length === 0) {
-      this.#uniform1i(program, "u_useClusteredLights", 0);
+      uniform1i(this.#programArena, program, "u_useClusteredLights", 0);
       return;
     }
     if (
@@ -5745,16 +5713,16 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindTexture(gl.TEXTURE_2D, resource.indexTexture);
     gl.activeTexture(gl.TEXTURE0 + this.#clusterLightTextureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.lightTexture);
-    this.#uniform1i(program, "u_useClusteredLights", 1);
-    this.#uniform1i(program, "u_clusterGrid", this.#clusterGridTextureUnit);
-    this.#uniform1i(program, "u_clusterLightIndices", this.#clusterIndexTextureUnit);
-    this.#uniform1i(program, "u_clusterLightData", this.#clusterLightTextureUnit);
-    this.#uniformColor(program, "u_clusterDimensions", [
+    uniform1i(this.#programArena, program, "u_useClusteredLights", 1);
+    uniform1i(this.#programArena, program, "u_clusterGrid", this.#clusterGridTextureUnit);
+    uniform1i(this.#programArena, program, "u_clusterLightIndices", this.#clusterIndexTextureUnit);
+    uniform1i(this.#programArena, program, "u_clusterLightData", this.#clusterLightTextureUnit);
+    uniformColor(this.#programArena, program, "u_clusterDimensions", [
       grid.tileCountX, grid.tileCountY, grid.zSliceCount, grid.tileSize,
     ]);
-    this.#uniformColor(program, "u_clusterDepth", [grid.zSliceScale, grid.zSliceBias, near, 0]);
-    this.#uniform2fv(program, "u_clusterProjection", [perspective ? 0 : 1, resource.indexTextureWidth]);
-    this.#uniform2fv(program, "u_clusterViewportOrigin", [0, 0]);
+    uniformColor(this.#programArena, program, "u_clusterDepth", [grid.zSliceScale, grid.zSliceBias, near, 0]);
+    uniform2fv(this.#programArena, program, "u_clusterProjection", [perspective ? 0 : 1, resource.indexTextureWidth]);
+    uniform2fv(this.#programArena, program, "u_clusterViewportOrigin", [0, 0]);
   }
 
   #uploadClusteredLights(
@@ -5969,7 +5937,7 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    this.#uniform1i(program, "u_texture", textureUnit);
+    uniform1i(this.#programArena, program, "u_texture", textureUnit);
     return true;
   }
 
@@ -7149,20 +7117,20 @@ class WebGlRootImpl implements WebGlRoot {
     const gl = this.#gl;
     gl.activeTexture(gl.TEXTURE0 + atlasTextureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resources.atlasTexture);
-    this.#uniform1i(program, "u_vtAtlas", atlasTextureUnit);
+    uniform1i(this.#programArena, program, "u_vtAtlas", atlasTextureUnit);
     gl.activeTexture(gl.TEXTURE0 + pageTableTextureUnit);
     gl.bindTexture(gl.TEXTURE_2D, resources.pageTableTexture);
-    this.#uniform1i(program, "u_vtPageTable", pageTableTextureUnit);
-    this.#uniform2fv(program, "u_vtPageTableSize", [resources.pageTableWidth, resources.pageTableHeight]);
-    this.#uniform2fv(program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
-    this.#uniform2fv(program, "u_vtAtlasTexelSize", [
+    uniform1i(this.#programArena, program, "u_vtPageTable", pageTableTextureUnit);
+    uniform2fv(this.#programArena, program, "u_vtPageTableSize", [resources.pageTableWidth, resources.pageTableHeight]);
+    uniform2fv(this.#programArena, program, "u_vtAtlasGrid", [resources.atlasGridColumns, resources.atlasGridRows]);
+    uniform2fv(this.#programArena, program, "u_vtAtlasTexelSize", [
       1 / (resources.atlasGridColumns * manifest.pageSize),
       1 / (resources.atlasGridRows * manifest.pageSize),
     ]);
-    this.#uniform1f(program, "u_vtPageSize", manifest.pageSize);
-    this.#uniform2fv(program, "u_vtVirtualSize", [manifest.width, manifest.height]);
-    this.#uniform1i(program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
-    this.#uniform1i(program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
+    uniform1f(this.#programArena, program, "u_vtPageSize", manifest.pageSize);
+    uniform2fv(this.#programArena, program, "u_vtVirtualSize", [manifest.width, manifest.height]);
+    uniform1i(this.#programArena, program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
+    uniform1i(this.#programArena, program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
     state.stats.shaderBinds += 1;
 
     return true;
@@ -7199,112 +7167,12 @@ class WebGlRootImpl implements WebGlRoot {
     this.invalidate();
   }
 
-  #uniformMatrix(program: WebGLProgram, name: string, matrix: Mat4): void {
-    if (this.#uniformValueCached(program, name, matrix, 16)) return;
-    const location = this.#uniformLocation(program, name);
-    if (location !== null) {
-      this.#gl.uniformMatrix4fv(location, false, matrix);
-      this.#cacheUniformValue(program, name, matrix, 16);
+  #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {
+    try {
+      return requestProgram(this.#programArena, this.#frame, kind, features, clusteredLights);
+    } finally {
+      if (consumeProgramArenaWake(this.#programArena)) this.invalidate();
     }
-  }
-
-  #uniformColor(program: WebGLProgram, name: string, color: Rgba): void {
-    if (this.#uniformValueCached(program, name, color, 4)) return;
-    const location = this.#uniformLocation(program, name);
-    if (location !== null) {
-      this.#gl.uniform4fv(location, color);
-      this.#cacheUniformValue(program, name, color, 4);
-    }
-  }
-
-  #uniform1i(program: WebGLProgram, name: string, value: number): void {
-    if (this.#uniformNumberCached(program, name, value)) return;
-    const location = this.#uniformLocation(program, name);
-    if (location !== null) {
-      this.#gl.uniform1i(location, value);
-      this.#cacheUniformNumber(program, name, value);
-    }
-  }
-
-  #uniform1f(program: WebGLProgram, name: string, value: number): void {
-    if (this.#uniformNumberCached(program, name, value)) return;
-    const location = this.#uniformLocation(program, name);
-    if (location !== null) {
-      this.#gl.uniform1f(location, value);
-      this.#cacheUniformNumber(program, name, value);
-    }
-  }
-
-  #uniform2fv(program: WebGLProgram, name: string, value: readonly [number, number]): void {
-    if (this.#uniformValueCached(program, name, value, 2)) return;
-    const location = this.#uniformLocation(program, name);
-    if (location !== null) {
-      this.#gl.uniform2fv(location, value);
-      this.#cacheUniformValue(program, name, value, 2);
-    }
-  }
-
-  #uniformValueCached(
-    program: WebGLProgram,
-    name: string,
-    value: ArrayLike<number>,
-    length: number,
-  ): boolean {
-    const cached = this.#programUniformValues.get(program)?.get(name);
-    if (cached === undefined || cached.length !== length) return false;
-
-    for (let index = 0; index < length; index += 1) {
-      if (!Object.is(cached[index], value[index])) return false;
-    }
-
-    return true;
-  }
-
-  #uniformNumberCached(program: WebGLProgram, name: string, value: number): boolean {
-    const cached = this.#programUniformValues.get(program)?.get(name);
-    return cached?.length === 1 && Object.is(cached[0], value);
-  }
-
-  #cacheUniformValue(
-    program: WebGLProgram,
-    name: string,
-    value: ArrayLike<number>,
-    length: number,
-  ): void {
-    let values = this.#programUniformValues.get(program);
-    if (values === undefined) {
-      values = new Map();
-      this.#programUniformValues.set(program, values);
-    }
-    values.set(name, Array.from({ length }, (_unused, index) => value[index] as number));
-  }
-
-  #cacheUniformNumber(program: WebGLProgram, name: string, value: number): void {
-    let values = this.#programUniformValues.get(program);
-    if (values === undefined) {
-      values = new Map();
-      this.#programUniformValues.set(program, values);
-    }
-    values.set(name, [value]);
-  }
-
-  #uniformLocation(program: WebGLProgram, name: string): WebGLUniformLocation | null {
-    let locations = this.#programUniformLocations.get(program);
-    if (locations === undefined) {
-      locations = new Map();
-      this.#programUniformLocations.set(program, locations);
-    }
-    if (locations.has(name)) return locations.get(name) ?? null;
-
-    const location = this.#gl.getUniformLocation(program, name);
-    locations.set(name, location);
-    return location;
-  }
-
-  #useProgram(program: WebGLProgram): void {
-    if (this.#activeProgram === program) return;
-    this.#gl.useProgram(program);
-    this.#activeProgram = program;
   }
 
   #vertexAttrib4f(location: number, x: number, y: number, z: number, w: number): void {
@@ -7322,153 +7190,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gl.vertexAttrib4f(location, x, y, z, w);
     this.#vertexAttribDefaults.set(location, { size: 4, w, x, y, z });
   }
-
-  #program(
-    kind: ProgramKind,
-    features?: SurfaceShaderFeatures,
-    clusteredLights = false,
-  ): ProgramResource | undefined {
-    const key = features === undefined
-      ? kind
-      : `${kind}:${surfaceShaderFeatureKey(features)}:${clusteredLights ? "clustered" : "global"}`;
-    let request = this.#programs.get(key);
-    if (request === undefined) {
-      request = { clusteredLights, features, key, kind };
-      this.#programs.set(key, request);
-      this.#pendingPrograms.push(request);
-    }
-    this.#startPendingPrograms();
-    const resource = request.resource;
-    if (resource === undefined) {
-      this.invalidate();
-      return undefined;
-    }
-    try {
-      return this.#finishProgram(resource);
-    } catch (error) {
-      if (this.#programs.get(key) === request) this.#programs.delete(key);
-      this.#deleteProgramResource(resource);
-      throw error;
-    }
-  }
-
-  #startPendingPrograms(): void {
-    if (this.#programStartFrame !== this.#frame) {
-      this.#programStartFrame = this.#frame;
-      this.#programStartsThisFrame = 0;
-    }
-
-    while (
-      this.#pendingProgramHead < this.#pendingPrograms.length
-      && this.#programStartsThisFrame < PROGRAM_MAX_STARTS_PER_FRAME
-    ) {
-      const request = this.#pendingPrograms[this.#pendingProgramHead++]!;
-      if (this.#programs.get(request.key) !== request || request.resource !== undefined) continue;
-
-      this.#programStartsThisFrame += 1;
-      try {
-        request.resource = this.#compileProgram(request.kind, request.features, request.clusteredLights);
-      } catch (error) {
-        if (this.#programs.get(request.key) === request) this.#programs.delete(request.key);
-        throw error;
-      }
-    }
-
-    if (this.#pendingProgramHead < this.#pendingPrograms.length) {
-      this.invalidate();
-    } else {
-      this.#pendingPrograms.length = 0;
-      this.#pendingProgramHead = 0;
-    }
-  }
-
-  #finishProgram(resource: ProgramResource): ProgramResource | undefined {
-    if (resource.linked) return resource;
-    const parallel = this.#parallelShaderCompile;
-    if (
-      parallel !== undefined
-      && !this.#gl.getProgramParameter(resource.program, parallel.COMPLETION_STATUS_KHR)
-    ) {
-      this.invalidate();
-      return undefined;
-    }
-    if (parallel !== undefined) {
-      if (this.#programLinkFrame !== this.#frame) {
-        this.#programLinkFrame = this.#frame;
-        this.#programLinksThisFrame = 0;
-      }
-      if (this.#programLinksThisFrame >= PROGRAM_MAX_LINKS_PER_FRAME) {
-        this.invalidate();
-        return undefined;
-      }
-      this.#programLinksThisFrame += 1;
-    }
-
-    const gl = this.#gl;
-    if (!gl.getProgramParameter(resource.program, gl.LINK_STATUS)) {
-      const logs = [
-        gl.getProgramInfoLog(resource.program),
-        gl.getShaderInfoLog(resource.vertexShader),
-        gl.getShaderInfoLog(resource.fragmentShader),
-      ].filter((log): log is string => log !== null && log.trim() !== "");
-      throw new Error(
-        `WebGL shader compile or program link error: ${logs.join("\n") || "unknown driver error"}`,
-      );
-    }
-    resource.linked = true;
-    this.#releaseProgramShaders(resource);
-    return resource;
-  }
-
-  #releaseProgramShaders(resource: ProgramResource): void {
-    const gl = this.#gl;
-    for (const shader of [resource.vertexShader, resource.fragmentShader]) {
-      if (!this.#ownedShaders.has(shader)) continue;
-      if (this.#ownedPrograms.has(resource.program)) gl.detachShader?.(resource.program, shader);
-      this.#deleteShader(shader);
-    }
-  }
-
-  #deleteProgramResource(resource: ProgramResource): void {
-    this.#releaseProgramShaders(resource);
-    this.#deleteProgram(resource.program);
-  }
-
-  #compileProgram(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramResource {
-    const gl = this.#gl;
-    const program = gl.createProgram();
-    if (program === null) throw new Error("WebGL program creation failed");
-    this.#ownedPrograms.add(program);
-
-    let vertexShader: WebGLShader | undefined;
-    let fragmentShader: WebGLShader | undefined;
-
-    try {
-      vertexShader = this.#compileShader(gl.VERTEX_SHADER, vertexShaderSource(kind));
-      fragmentShader = this.#compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource(kind, features, clusteredLights));
-      gl.attachShader(program, vertexShader);
-      gl.attachShader(program, fragmentShader);
-      gl.linkProgram(program);
-      return { fragmentShader, linked: false, program, vertexShader };
-    } catch (error) {
-      if (vertexShader !== undefined) this.#deleteShader(vertexShader);
-      if (fragmentShader !== undefined) this.#deleteShader(fragmentShader);
-      this.#deleteProgram(program);
-      throw error;
-    }
-  }
-
-  #compileShader(type: number, source: string): WebGLShader {
-    const gl = this.#gl;
-    const shader = gl.createShader(type);
-    if (shader === null) throw new Error("WebGL shader creation failed");
-    this.#ownedShaders.add(shader);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    return shader;
-  }
-
-
 
   #meshGeometryRow(
     geometry: MeshNode["geometry"],
@@ -8795,13 +8516,14 @@ class WebGlRootImpl implements WebGlRoot {
     const programResource = this.#program("postprocess");
     if (programResource === undefined) return;
     const program = programResource.program;
-    this.#useProgram(program);
+    useProgram(this.#programArena, program);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, target.color);
-    this.#uniform1i(program, "u_hdrColor", 0);
-    const transform = this.#uniformLocation(program, "u_displayTransform");
-    if (transform !== null) gl.uniform2f(
-      transform,
+    uniform1i(this.#programArena, program, "u_hdrColor", 0);
+    uniform2f(
+      this.#programArena,
+      program,
+      "u_displayTransform",
       toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
       toneMapping.exposure,
     );
@@ -8815,21 +8537,6 @@ class WebGlRootImpl implements WebGlRoot {
     if (texture === null) throw new Error("WebGL texture creation failed");
     this.#ownedTextures.add(texture);
     return texture;
-  }
-
-  #deleteShader(shader: WebGLShader): void {
-    if (!this.#ownedShaders.has(shader)) return;
-    this.#gl.deleteShader(shader);
-    this.#ownedShaders.delete(shader);
-  }
-
-  #deleteProgram(program: WebGLProgram): void {
-    if (!this.#ownedPrograms.has(program)) return;
-    if (this.#activeProgram === program) this.#activeProgram = undefined;
-    this.#gl.deleteProgram(program);
-    this.#ownedPrograms.delete(program);
-    this.#programUniformLocations.delete(program);
-    this.#programUniformValues.delete(program);
   }
 
   #recordDiagnostic(message: string, key = message): void {
