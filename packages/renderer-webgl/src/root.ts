@@ -1127,13 +1127,23 @@ const sameTransform = (left: Transform, right: Transform): boolean =>
   sameVec3(left.rotation, right.rotation) &&
   sameVec3(left.scale, right.scale);
 
-const captureFirstError = (firstError: unknown, action: () => void): unknown => {
+type CapturedFailure = { readonly value: unknown };
+
+const captureFailure = (action: () => void): CapturedFailure | undefined => {
   try {
     action();
-  } catch (error) {
-    return firstError ?? error;
+    return undefined;
+  } catch (value) {
+    return { value };
   }
-  return firstError;
+};
+
+const captureFirstFailure = (
+  firstFailure: CapturedFailure | undefined,
+  action: () => void,
+): CapturedFailure | undefined => {
+  const nextFailure = captureFailure(action);
+  return firstFailure ?? nextFailure;
 };
 
 const appendTransformVectorSignatureValues = (
@@ -2059,8 +2069,9 @@ class WebGlRootImpl implements WebGlRoot {
     this.#contextLosses += 1;
     this.#renderDirty ||= this.#latestScene !== undefined;
     this.#scheduledRenderGeneration = 0;
-    this.#dropGpuState(false);
+    const cleanupFailure = captureFailure(() => this.#dropGpuState(false));
     this.#notifyContextLifecycle();
+    if (cleanupFailure !== undefined) throw cleanupFailure.value;
   };
   readonly #contextRestoredListener = (): void => {
     if (this.#contextLifecycle !== "lost") return;
@@ -2091,17 +2102,14 @@ class WebGlRootImpl implements WebGlRoot {
       this.#scheduleRender();
       this.#notifyContextLifecycle();
     } catch (error) {
-      let dropError: unknown;
-      try {
-        this.#dropGpuState(true);
-      } catch (caught) {
-        dropError = caught;
-      }
+      const dropFailure = captureFailure(() => this.#dropGpuState(true));
       this.#contextLifecycle = "lost";
       const restoreMessage = error instanceof Error ? error.message : String(error);
-      this.#contextError = dropError instanceof Error
-        ? `${restoreMessage}; GPU cleanup also failed: ${dropError.message}`
-        : restoreMessage;
+      this.#contextError = dropFailure === undefined
+        ? restoreMessage
+        : `${restoreMessage}; GPU cleanup also failed: ${
+          dropFailure.value instanceof Error ? dropFailure.value.message : String(dropFailure.value)
+        }`;
       this.#notifyContextLifecycle();
     }
   };
@@ -2345,6 +2353,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#applyPendingResourceArenaEvents();
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
+    let renderFailure: CapturedFailure | undefined;
     try {
     gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
     prepareFrameBaseline(gl, frameViews.scissor);
@@ -2353,7 +2362,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#processVirtualTexturePageUploads();
 
     this.#beginGltfInstanceFrame();
-    try {
       const wantsHdr = this.#planWantsHdr(plan);
       const actualWebGl2 = (
         typeof globalThis.WebGL2RenderingContext === "function"
@@ -2487,12 +2495,6 @@ class WebGlRootImpl implements WebGlRoot {
           );
         }
       }
-    } finally {
-      this.#gltfInstanceFrameActive = false;
-      if (frameViews.scissor) gl.disable?.(gl.SCISSOR_TEST);
-      gl.bindFramebuffer?.(gl.FRAMEBUFFER, null);
-    }
-
     this.#releaseUnusedGltfBatchResources();
     endClusteredLightFrame(this.#clusteredLights, this.#frame);
     this.#frame += 1;
@@ -2500,14 +2502,35 @@ class WebGlRootImpl implements WebGlRoot {
       ordinaryTextureGpuHasPendingUploads(this.#ordinaryTextureGpu)
       || this.#hasPendingVirtualTextureUploads()
     ) this.invalidate();
-    } finally {
-      // The renderer exclusively owns its context, but leaving vertex-input
-      // bindings neutral makes frame teardown explicit. The EAB is VAO state,
-      // so select the default VAO before clearing it.
-      gl.bindVertexArray(null);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    } catch (value) {
+      renderFailure = { value };
     }
+    this.#gltfInstanceFrameActive = false;
+    // The renderer exclusively owns its context, but leaving vertex-input
+    // bindings neutral makes frame teardown explicit. The EAB is VAO state,
+    // so select the default VAO before clearing it.
+    let normalizationFailure: CapturedFailure | undefined;
+    if (frameViews.scissor) {
+      normalizationFailure = captureFirstFailure(
+        normalizationFailure,
+        () => gl.disable?.(gl.SCISSOR_TEST),
+      );
+    }
+    normalizationFailure = captureFirstFailure(
+      normalizationFailure,
+      () => gl.bindFramebuffer?.(gl.FRAMEBUFFER, null),
+    );
+    normalizationFailure = captureFirstFailure(normalizationFailure, () => gl.bindVertexArray(null));
+    normalizationFailure = captureFirstFailure(
+      normalizationFailure,
+      () => gl.bindBuffer(gl.ARRAY_BUFFER, null),
+    );
+    normalizationFailure = captureFirstFailure(
+      normalizationFailure,
+      () => gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null),
+    );
+    if (renderFailure !== undefined) throw renderFailure.value;
+    if (normalizationFailure !== undefined) throw normalizationFailure.value;
   }
 
   invalidate(): void {
@@ -2598,56 +2621,62 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #dropGpuState(deleteResources: boolean): void {
-    let releaseError: unknown;
-    dropOrdinaryTextureGpuContext(this.#ordinaryTextureGpu);
-    releaseError = captureFirstError(releaseError, () => this.#consumeOrdinaryTextureGpuOutcomes());
+    let releaseFailure = captureFailure(() => dropOrdinaryTextureGpuContext(this.#ordinaryTextureGpu));
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeOrdinaryTextureGpuOutcomes());
     if (deleteResources) {
       const gl = this.#gl;
-      releaseError = captureFirstError(releaseError, () => {
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseVertexInputContextHandles(this.#vertexInputs, gl, this.#contextGeneration);
       });
-      releaseError = captureFirstError(releaseError, () => {
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
       });
-      releaseError = captureFirstError(releaseError, () => releaseProgramArenaContextHandles(this.#programArena));
-      releaseError = captureFirstError(releaseError, () => {
+      releaseFailure = captureFirstFailure(releaseFailure, () => releaseProgramArenaContextHandles(this.#programArena));
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseClusteredLightContextHandles(this.#clusteredLights);
       });
-      releaseError = captureFirstError(releaseError, () => releaseIblTextureContextHandles(this.#iblTextures));
-      releaseError = captureFirstError(releaseError, () => {
+      releaseFailure = captureFirstFailure(releaseFailure, () => releaseIblTextureContextHandles(this.#iblTextures));
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseTextureHandleContextHandles(this.#textureHandles);
       });
     }
     // Active release APIs retain failed handles for direct retry. Root teardown
     // is terminal for this context generation, so always normalize every arena
     // after all release attempts before reporting the first driver failure.
-    dropVertexInputArenaContext(this.#vertexInputs);
-    dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
-    dropProgramArenaContext(this.#programArena);
-    dropClusteredLightContext(this.#clusteredLights);
-    dropIblTextureContext(this.#iblTextures);
-    dropTextureHandleContext(this.#textureHandles);
-    clearGeometryDrawArenaContext(this.#geometryDrawArena);
+    releaseFailure = captureFirstFailure(releaseFailure, () => dropVertexInputArenaContext(this.#vertexInputs));
+    releaseFailure = captureFirstFailure(releaseFailure, () => {
+      dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
+    });
+    releaseFailure = captureFirstFailure(releaseFailure, () => dropProgramArenaContext(this.#programArena));
+    releaseFailure = captureFirstFailure(releaseFailure, () => dropClusteredLightContext(this.#clusteredLights));
+    releaseFailure = captureFirstFailure(releaseFailure, () => dropIblTextureContext(this.#iblTextures));
+    releaseFailure = captureFirstFailure(releaseFailure, () => dropTextureHandleContext(this.#textureHandles));
+    releaseFailure = captureFirstFailure(releaseFailure, () => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#gltfBatches.length = 0;
     this.#gltfLiveBatchCount = 0;
-    clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
+    releaseFailure = captureFirstFailure(releaseFailure, () => {
+      clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
+    });
     this.#gltfInstanceFrameActive = false;
 
     for (const state of this.#virtualTextures.values()) {
       delete state.resources;
       delete state.pageTable;
-      state.uploadedPages.clear();
-      state.requestedPages.clear();
-      for (const pageKey of state.loadingPages) state.requestedPages.add(pageKey);
+      releaseFailure = captureFirstFailure(releaseFailure, () => state.uploadedPages.clear());
+      releaseFailure = captureFirstFailure(releaseFailure, () => state.requestedPages.clear());
+      for (const pageKey of state.loadingPages) {
+        releaseFailure = captureFirstFailure(releaseFailure, () => state.requestedPages.add(pageKey));
+      }
       for (const upload of state.pendingUploads) {
-        if (upload.sourceGeneration === state.sourceGeneration) state.requestedPages.add(upload.pageKey);
+        if (upload.sourceGeneration !== state.sourceGeneration) continue;
+        releaseFailure = captureFirstFailure(releaseFailure, () => state.requestedPages.add(upload.pageKey));
       }
     }
     this.#virtualTextureRequestFrame = -1;
     this.#virtualTextureRequestsThisFrame = 0;
     this.#virtualTextureUploadFrame = -1;
     this.#virtualTextureUploadsThisFrame = 0;
-    if (releaseError !== undefined) throw releaseError;
+    if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
   #restoreVirtualTextureResources(): void {
@@ -2687,12 +2716,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#contextLifecycle = "disposed";
     this.#canvas.removeEventListener?.("webglcontextlost", this.#contextLostListener);
     this.#canvas.removeEventListener?.("webglcontextrestored", this.#contextRestoredListener);
-    let gpuDropError: unknown;
-    try {
-      this.#dropGpuState(canDeleteResources);
-    } catch (error) {
-      gpuDropError = error;
-    }
+    const gpuDropFailure = captureFailure(() => this.#dropGpuState(canDeleteResources));
     this.#contextGeneration += 1;
     this.#notifyContextLifecycle();
     this.#contextLifecycleObservers.clear();
@@ -2742,7 +2766,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#resizeObserver = undefined;
     this.#unwatchDevicePixelRatio();
     disposeVertexInputArena(this.#vertexInputs);
-    if (gpuDropError !== undefined) throw gpuDropError;
+    if (gpuDropFailure !== undefined) throw gpuDropFailure.value;
   }
 
   snapshot(): WebGlRootSnapshot {
@@ -2948,10 +2972,10 @@ class WebGlRootImpl implements WebGlRoot {
     );
     this.#framePlanReconciliationInProgress = true;
     try {
-      let firstError = this.#reconcileCameraViewResource(next);
-      firstError = this.#reconcileRenderObjectRefs(next, delta, firstError);
-      firstError = this.#reconcileGltfInstanceTransforms(delta, firstError);
-      if (firstError !== undefined) throw firstError;
+      let firstFailure = this.#reconcileCameraViewResource(next);
+      firstFailure = this.#reconcileRenderObjectRefs(next, delta, firstFailure);
+      firstFailure = this.#reconcileGltfInstanceTransforms(delta, firstFailure);
+      if (firstFailure !== undefined) throw firstFailure.value;
       this.#framePlanReconciliationPending = false;
       this.#framePlanReconciliationPrevious = undefined;
     } finally {
@@ -3048,23 +3072,26 @@ class WebGlRootImpl implements WebGlRoot {
       abortResourceArenaImageWork(this.#resourceArena, key);
       this.#gltf.delete(key);
     }
-    let textureReleaseError: unknown;
+    let textureReleaseFailure: CapturedFailure | undefined;
     for (const key of changes.releasedOrdinaryTextureKeys) {
-      textureReleaseError = captureFirstError(textureReleaseError, () => this.#releaseOrdinaryTexture(key));
+      textureReleaseFailure = captureFirstFailure(
+        textureReleaseFailure,
+        () => this.#releaseOrdinaryTexture(key),
+      );
     }
     for (const key of changes.releasedVirtualTextureKeys) {
-      textureReleaseError = captureFirstError(textureReleaseError, () => this.#releaseVirtualTexture(key));
+      textureReleaseFailure = captureFirstFailure(textureReleaseFailure, () => this.#releaseVirtualTexture(key));
     }
     for (const key of changes.releasedIblKeys) {
-      textureReleaseError = captureFirstError(textureReleaseError, () => {
+      textureReleaseFailure = captureFirstFailure(textureReleaseFailure, () => {
         releaseGltfIblSpecularTexture(this.#iblTextures, key);
       });
     }
     for (const source of changes.releasedSources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      textureReleaseError = captureFirstError(textureReleaseError, () => this.#closeTextureSource(source));
+      textureReleaseFailure = captureFirstFailure(textureReleaseFailure, () => this.#closeTextureSource(source));
     }
-    if (textureReleaseError !== undefined) throw textureReleaseError;
+    if (textureReleaseFailure !== undefined) throw textureReleaseFailure.value;
   }
 
   #applyPendingResourceArenaEvents(): void {
@@ -3162,40 +3189,40 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #reconcileCameraViewResource(next: FramePlan): unknown {
+  #reconcileCameraViewResource(next: FramePlan): CapturedFailure | undefined {
     const resource = next.camera.kind === 'camera-view-resource' ? next.camera : undefined;
     if (this.#cameraViewResourceSubscription?.resource === resource) return undefined;
     const previousSubscription = this.#cameraViewResourceSubscription;
     if (previousSubscription !== undefined) {
       try {
         previousSubscription.unsubscribe();
-      } catch (error) {
-        return error;
+      } catch (value) {
+        return { value };
       }
       this.#cameraViewResourceSubscription = undefined;
     }
-    let firstError: unknown;
+    let firstFailure: CapturedFailure | undefined;
     if (resource !== undefined) {
-      firstError = captureFirstError(firstError, () => {
+      firstFailure = captureFirstFailure(firstFailure, () => {
         this.#cameraViewResourceSubscription = {
           resource,
           unsubscribe: resource.subscribe(() => this.invalidate()),
         };
       });
     }
-    return firstError;
+    return firstFailure;
   }
 
   #reconcileRenderObjectRefs(
     next: FramePlan,
     delta: ResourceManifestDelta,
-    initialError: unknown,
-  ): unknown {
-    let firstError = initialError;
+    initialFailure: CapturedFailure | undefined,
+  ): CapturedFailure | undefined {
+    let firstFailure = initialFailure;
     for (const row of next.renderObjectRefRows) {
       const node = next.nodes[row.nodeIndex];
       if (node?.kind === "mesh" || node?.kind === "gltf") {
-        firstError = captureFirstError(firstError, () => this.#syncRenderObjectNodeRef(node));
+        firstFailure = captureFirstFailure(firstFailure, () => this.#syncRenderObjectNodeRef(node));
       }
     }
 
@@ -3204,23 +3231,24 @@ class WebGlRootImpl implements WebGlRoot {
       const ref = row.resource;
       const binding = this.#renderObjectBindings.get(ref);
       if (binding === undefined) continue;
-      try {
+      firstFailure = captureFirstFailure(firstFailure, () => {
         assignRenderObjectRef(ref, null);
         this.#renderObjectHandles.delete(binding.node);
         this.#renderObjectBindings.delete(ref);
-      } catch (error) {
-        firstError ??= error;
-      }
+      });
     }
-    return firstError;
+    return firstFailure;
   }
 
-  #reconcileGltfInstanceTransforms(delta: ResourceManifestDelta, initialError: unknown): unknown {
-    let firstError = initialError;
+  #reconcileGltfInstanceTransforms(
+    delta: ResourceManifestDelta,
+    initialFailure: CapturedFailure | undefined,
+  ): CapturedFailure | undefined {
+    let firstFailure = initialFailure;
     for (const row of delta.bulkInstances) {
       const transforms = row.resource;
       if (row.previousCount !== 0 || row.nextCount === 0) continue;
-      firstError = captureFirstError(firstError, () => {
+      firstFailure = captureFirstFailure(firstFailure, () => {
         if (this.#gltfInstanceTransformSubscriptions.has(transforms)) return;
         const views = this.#gltfInstanceViews(transforms);
         const unsubscribe = transforms.subscribe((channel, startIndex, count) => {
@@ -3235,14 +3263,12 @@ class WebGlRootImpl implements WebGlRoot {
       const transforms = row.resource;
       const subscription = this.#gltfInstanceTransformSubscriptions.get(transforms);
       if (subscription === undefined) continue;
-      try {
+      firstFailure = captureFirstFailure(firstFailure, () => {
         subscription.unsubscribe();
         this.#gltfInstanceTransformSubscriptions.delete(transforms);
-      } catch (error) {
-        firstError ??= error;
-      }
+      });
     }
-    return firstError;
+    return firstFailure;
   }
 
   #beginGltfInstanceFrame(): void {
@@ -3258,12 +3284,7 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #releaseOrdinaryTexture(key: string): void {
-    let releaseError: unknown;
-    try {
-      this.#releaseAutoVirtualTextures(key);
-    } catch (error) {
-      releaseError = error;
-    }
+    let releaseFailure = captureFailure(() => this.#releaseAutoVirtualTextures(key));
     this.#autoVirtualTextureRefs.delete(`auto-base-color:${key}`);
     this.#autoVirtualTextureManifestUris.delete(key);
     this.#autoVirtualTextureGeneratedPageSources.delete(key);
@@ -3274,36 +3295,26 @@ class WebGlRootImpl implements WebGlRoot {
     releaseResourceArenaPreparedSource(this.#resourceArena, key);
     this.#releaseOrdinaryTextureSourceSubscription(key);
     const gpuRelease = releaseOrdinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-    releaseError ??= gpuRelease.releaseError;
-    try {
-      this.#consumeOrdinaryTextureGpuOutcomes();
-    } catch (error) {
-      releaseError ??= error;
+    if ("releaseError" in gpuRelease) {
+      releaseFailure ??= { value: gpuRelease.releaseError };
     }
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeOrdinaryTextureGpuOutcomes());
     for (const source of sources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      try {
-        this.#closeTextureSource(source);
-      } catch (error) {
-        releaseError ??= error;
-      }
+      releaseFailure = captureFirstFailure(releaseFailure, () => this.#closeTextureSource(source));
     }
-    if (releaseError !== undefined) throw releaseError;
+    if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
   #releaseAutoVirtualTextures(textureKey: string): void {
     const prefix = `auto-base-color:${textureKey}:`;
-    let releaseError: unknown;
+    let releaseFailure: CapturedFailure | undefined;
     for (const [key, state] of this.#virtualTextures) {
       if (!key.startsWith(prefix)) continue;
       this.#virtualTextures.delete(key);
-      try {
-        this.#releaseVirtualTextureState(state);
-      } catch (error) {
-        releaseError ??= error;
-      }
+      releaseFailure = captureFirstFailure(releaseFailure, () => this.#releaseVirtualTextureState(state));
     }
-    if (releaseError !== undefined) throw releaseError;
+    if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
   #releaseVirtualTexture(key: string): void {
@@ -3315,25 +3326,26 @@ class WebGlRootImpl implements WebGlRoot {
 
   #releaseVirtualTextureState(state: VirtualTextureRuntimeState): void {
     state.sourceGeneration += 1;
-    for (const upload of state.pendingUploads) closeTexImageSource(upload.image);
+    let releaseFailure: CapturedFailure | undefined;
+    for (const upload of state.pendingUploads) {
+      releaseFailure = captureFirstFailure(releaseFailure, () => closeTexImageSource(upload.image));
+    }
     state.pendingUploads.length = 0;
     state.loadingPages.clear();
     state.requestedPages.clear();
     state.uploadedPages.clear();
     const resources = state.resources;
-    let releaseError: unknown;
     if (resources !== undefined) {
       for (const texture of [resources.atlasTexture, resources.pageTableTexture]) {
-        try {
-          releaseOwnedTexture(this.#textureHandles, texture);
-        } catch (error) {
-          releaseError ??= error;
-        }
+        releaseFailure = captureFirstFailure(
+          releaseFailure,
+          () => releaseOwnedTexture(this.#textureHandles, texture),
+        );
       }
     }
     delete state.resources;
     delete state.pageTable;
-    if (releaseError !== undefined) throw releaseError;
+    if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
   #closeTextureSource(source: LoadedTextureSource): void {
@@ -6616,6 +6628,7 @@ class WebGlRootImpl implements WebGlRoot {
         || state.sourceGeneration !== sourceGeneration
       ) return;
       state.loadingPages.delete(pageKey);
+      state.requestedPages.delete(pageKey);
       const message = `Virtual texture page load failed for ${state.activeSource.manifestUri} ${pageKey}: ${
         error instanceof Error ? error.message : String(error)
       }`;
@@ -7008,22 +7021,22 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #consumeOrdinaryTextureGpuOutcomes(): void {
-    let firstError: unknown;
+    let firstFailure: CapturedFailure | undefined;
     const outcomeCount = ordinaryTextureGpuOutcomeCount(this.#ordinaryTextureGpu);
     for (let outcomeIndex = 0; outcomeIndex < outcomeCount; outcomeIndex += 1) {
       const outcome = ordinaryTextureGpuOutcome(this.#ordinaryTextureGpu, outcomeIndex);
       if (outcome === undefined) continue;
       if (outcome.kind === "retained") {
-        firstError = captureFirstError(firstError, () => {
+        firstFailure = captureFirstFailure(firstFailure, () => {
           this.#retainPreparedTextureUpload(outcome.key, outcome.upload);
         });
         continue;
       }
       if (resourceArenaSourceReferenceCount(this.#resourceArena, outcome.upload.source) !== 0) continue;
-      firstError = captureFirstError(firstError, () => this.#closeTextureSource(outcome.upload.source));
+      firstFailure = captureFirstFailure(firstFailure, () => this.#closeTextureSource(outcome.upload.source));
     }
     clearOrdinaryTextureGpuOutcomes(this.#ordinaryTextureGpu);
-    if (firstError !== undefined) throw firstError;
+    if (firstFailure !== undefined) throw firstFailure.value;
   }
 
   #queueOrdinaryTextureUpload(
@@ -7043,25 +7056,17 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #processOrdinaryTextureUploads(): void {
-    let processError: unknown;
-    try {
+    const processFailure = captureFailure(() => {
       processOrdinaryTextureUploads(
         this.#ordinaryTextureGpu,
         this.#frame,
         this.#contextGeneration,
       );
-    } catch (error) {
-      processError = error;
-    }
-    let outcomeError: unknown;
-    try {
-      this.#consumeOrdinaryTextureGpuOutcomes();
-    } catch (error) {
-      outcomeError = error;
-    }
+    });
+    const outcomeFailure = captureFailure(() => this.#consumeOrdinaryTextureGpuOutcomes());
     if (consumeOrdinaryTextureGpuWake(this.#ordinaryTextureGpu)) this.invalidate();
-    if (processError !== undefined) throw processError;
-    if (outcomeError !== undefined) throw outcomeError;
+    if (processFailure !== undefined) throw processFailure.value;
+    if (outcomeFailure !== undefined) throw outcomeFailure.value;
   }
 
   #texture(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {

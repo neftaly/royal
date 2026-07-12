@@ -29,6 +29,11 @@ type CanvasSize = {
 
 type FakeCanvas = HTMLCanvasElement & {
   dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored"): Event;
+  invokeContextEvent(type: "webglcontextlost" | "webglcontextrestored"): {
+    readonly event: Event;
+    readonly failure: unknown;
+    readonly failurePresent: boolean;
+  };
   setCssSize(size: CanvasSize): void;
   getContext: ReturnType<typeof vi.fn>;
 };
@@ -51,9 +56,15 @@ const fakeCanvas = (
 ): FakeCanvas => {
   let cssSize = initialSize;
   const target = new EventTarget();
+  const contextListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
   const canvas = {
-    addEventListener: target.addEventListener.bind(target),
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      target.addEventListener(type, listener);
+      const listeners = contextListeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+      listeners.add(listener);
+      contextListeners.set(type, listeners);
+    },
     get clientHeight() {
       return cssSize.height;
     },
@@ -77,11 +88,30 @@ const fakeCanvas = (
       target.dispatchEvent(event);
       return event;
     },
+    invokeContextEvent(type: "webglcontextlost" | "webglcontextrestored") {
+      const event = new Event(type, { cancelable: true });
+      let failure: unknown;
+      let failurePresent = false;
+      for (const listener of contextListeners.get(type) ?? []) {
+        try {
+          if (typeof listener === "function") listener.call(canvas, event);
+          else listener.handleEvent(event);
+        } catch (value) {
+          failure = value;
+          failurePresent = true;
+          break;
+        }
+      }
+      return { event, failure, failurePresent };
+    },
     height: 0,
     setCssSize(size: CanvasSize) {
       cssSize = size;
     },
-    removeEventListener: target.removeEventListener.bind(target),
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      target.removeEventListener(type, listener);
+      contextListeners.get(type)?.delete(listener);
+    },
     width: 0,
   };
 
@@ -399,6 +429,38 @@ describe("WebGL root working state contracts", () => {
     ]);
   });
 
+  it("publishes context loss exactly once and preserves opaque cleanup failure", () => {
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    const transitions: string[] = [];
+    root.observeContextLifecycle((snapshot) => transitions.push(snapshot.lifecycle));
+    const originalClear = Set.prototype.clear;
+    let injectFailure = true;
+    let clearCalls = 0;
+    vi.spyOn(Set.prototype, "clear").mockImplementation(function (this: Set<unknown>) {
+      clearCalls += 1;
+      originalClear.call(this);
+      if (injectFailure) {
+        injectFailure = false;
+        throw undefined;
+      }
+    });
+
+    const firstLoss = canvas.invokeContextEvent("webglcontextlost");
+
+    expect(firstLoss.event.defaultPrevented).toBe(true);
+    expect(firstLoss.failurePresent).toBe(true);
+    expect(firstLoss.failure).toBeUndefined();
+    expect(root.contextLifecycle).toBe("lost");
+    expect(transitions).toEqual(["active", "lost"]);
+    expect(clearCalls).toBeGreaterThan(1);
+
+    const duplicateLoss = canvas.invokeContextEvent("webglcontextlost");
+    expect(duplicateLoss.failurePresent).toBe(false);
+    expect(transitions).toEqual(["active", "lost"]);
+  });
+
   it("reports actual default context attributes and rejects explicit mismatches", () => {
     const defaults = fakeGl();
     (defaults.gl as WebGL2RenderingContext & {
@@ -470,6 +532,98 @@ describe("WebGL root working state contracts", () => {
 
     expect(() => createWebGlRoot(canvas)).toThrow(/WebGL2 context/i);
     expect(canvas.getContext.mock.calls.some((call) => call[0] === "webgl2")).toBe(true);
+  });
+
+  it("preserves a primary render failure while attempting every GL normalization", () => {
+    const { gl } = fakeGl();
+    const primaryFailure = new Error("primary render failure");
+    vi.mocked(gl.clear).mockImplementation(() => {
+      throw primaryFailure;
+    });
+    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
+      if (vertexArray === null) throw undefined;
+    });
+    vi.mocked(gl.bindBuffer).mockImplementation((_target, buffer) => {
+      if (buffer === null) throw new Error("secondary normalization failure");
+    });
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    let thrownPresent = false;
+    let thrown: unknown;
+    try {
+      root.render(drawableScene([0, 0, 0, 0]));
+    } catch (value) {
+      thrownPresent = true;
+      thrown = value;
+    }
+
+    expect(thrownPresent).toBe(true);
+    expect(thrown).toBe(primaryFailure);
+    expect(gl.bindVertexArray).toHaveBeenCalledWith(null);
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
+  });
+
+  it("preserves an opaque undefined GL normalization failure", () => {
+    const { gl } = fakeGl();
+    vi.mocked(gl.bindVertexArray).mockImplementation((vertexArray) => {
+      if (vertexArray === null) throw undefined;
+    });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    let thrownPresent = false;
+    let thrown: unknown = "not thrown";
+
+    try {
+      root.render(drawableScene([0, 0, 0, 0]));
+    } catch (value) {
+      thrownPresent = true;
+      thrown = value;
+    }
+
+    expect(thrownPresent).toBe(true);
+    expect(thrown).toBeUndefined();
+  });
+
+  it("normalizes framebuffer and vertex input after a pre-frame render failure", () => {
+    const { gl } = fakeGl();
+    const primaryFailure = new Error("baseline preparation failed");
+    vi.mocked(gl.clearDepth).mockImplementation(() => {
+      throw primaryFailure;
+    });
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    expect(() => root.render(drawableScene([0, 0, 0, 0]))).toThrow(primaryFailure);
+    expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(gl.FRAMEBUFFER, null);
+    expect(gl.bindVertexArray).toHaveBeenLastCalledWith(null);
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, null);
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, null);
+  });
+
+  it("preserves an opaque dispose failure while attempting later GPU authorities", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(drawableScene([0, 0, 0, 0]));
+    vi.mocked(gl.deleteBuffer).mockImplementation(() => {
+      throw undefined;
+    });
+    vi.mocked(gl.deleteProgram).mockImplementation(() => {
+      throw new Error("later program cleanup failed");
+    });
+    let failurePresent = false;
+    let failure: unknown = "not thrown";
+
+    try {
+      root.dispose();
+    } catch (value) {
+      failurePresent = true;
+      failure = value;
+    }
+
+    expect(failurePresent).toBe(true);
+    expect(failure).toBeUndefined();
+    expect(gl.deleteProgram).toHaveBeenCalled();
+    expect(root.disposed).toBe(true);
+    expect(root.contextLifecycle).toBe("disposed");
   });
 
   it("updates the canvas backing store and viewport from CSS size and DPR each frame", () => {
@@ -675,6 +829,44 @@ describe("WebGL root working state contracts", () => {
       planRevision: 1,
       sceneCommits: 1,
     });
+  });
+
+  it("preserves opaque ref failures while completing later reconciliation work", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    let secondHandle: RenderObjectHandle | null = null;
+    const committedScene = scene({
+      camera: camera(),
+      nodes: [
+        mesh({
+          geometry: boxGeometry(1),
+          material: unlitMaterial({ color: [1, 0, 0, 1] }),
+          ref: (handle) => {
+            if (handle !== null) throw undefined;
+          },
+        }),
+        mesh({
+          geometry: boxGeometry(1),
+          material: unlitMaterial({ color: [0, 1, 0, 1] }),
+          ref: (handle) => {
+            secondHandle = handle;
+          },
+        }),
+      ],
+    });
+    let failurePresent = false;
+    let failure: unknown = "not thrown";
+
+    try {
+      root.render(committedScene);
+    } catch (value) {
+      failurePresent = true;
+      failure = value;
+    }
+
+    expect(failurePresent).toBe(true);
+    expect(failure).toBeUndefined();
+    expect(secondHandle).not.toBeNull();
   });
 
   it("rejects reentrant rendering from a ref callback and retries attachment", () => {

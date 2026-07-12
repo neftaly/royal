@@ -770,6 +770,17 @@ class ControlledImage {
     }
     for (const resolve of this.#decodeResolvers.splice(0)) resolve();
   }
+
+  settleError(): void {
+    this.onerror?.call(this as unknown as HTMLImageElement, new Event("error"));
+    for (const listener of this.#listeners.get("error") ?? []) {
+      if (typeof listener === "function") {
+        listener.call(this, new Event("error"));
+      } else {
+        listener.handleEvent(new Event("error"));
+      }
+    }
+  }
 }
 
 const installFetchQueue = (): FetchRequest[] => {
@@ -1767,6 +1778,33 @@ describe("WebGL renderer virtual texturing integration", () => {
       residentPages: 2,
       uploadedPages: 2,
     }));
+  });
+
+  it("allows explicit demand to retry a rejected VT page without self-waking", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(1);
+    const wakesBeforeFailure = requestAnimationFrame.mock.calls.length;
+
+    ControlledImage.instances[0]!.settleError();
+    await flushMicrotasks();
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+
+    root.render(graph);
+    expect(ControlledImage.instances).toHaveLength(2);
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
   });
 
   it("retains the pending page without self-waking or publishing residency across persistent atlas faults", async () => {
