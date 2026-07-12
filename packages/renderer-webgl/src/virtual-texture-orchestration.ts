@@ -34,6 +34,28 @@ export interface VirtualTextureRequestPlan {
   readonly scheduler: VirtualTextureRequestSchedulerState;
 }
 
+type MutableVirtualTextureRequestGrant = {
+  key: string;
+  page: VirtualTexturePageId;
+};
+
+export interface VirtualTextureRequestPlanningWorkspace {
+  readonly grants: MutableVirtualTextureRequestGrant[];
+  readonly nextPageIndices: number[];
+  readonly plan: { grants: readonly VirtualTextureRequestGrant[]; scheduler: VirtualTextureRequestSchedulerState };
+  readonly simulatedInFlight: number[];
+}
+
+export const createVirtualTextureRequestPlanningWorkspace = (): VirtualTextureRequestPlanningWorkspace => {
+  const grants: MutableVirtualTextureRequestGrant[] = [];
+  return {
+    grants,
+    nextPageIndices: [],
+    plan: { grants, scheduler: createVirtualTextureRequestScheduler() },
+    simulatedInFlight: [],
+  };
+};
+
 export const createVirtualTextureRequestScheduler = (): VirtualTextureRequestSchedulerState => ({
   cursor: 0,
   frame: -1,
@@ -41,6 +63,13 @@ export const createVirtualTextureRequestScheduler = (): VirtualTextureRequestSch
 });
 
 export const resetVirtualTextureRequestScheduler = createVirtualTextureRequestScheduler;
+
+export const virtualTextureRequestBudgetAvailable = (
+  scheduler: VirtualTextureRequestSchedulerState,
+  frame: number,
+  maxGrantsPerFrame: number,
+): boolean => scheduler.frame !== frame
+  || scheduler.grantsThisFrame < Math.max(0, Math.floor(maxGrantsPerFrame));
 
 export const beginVirtualTextureRequestFrame = (
   scheduler: VirtualTextureRequestSchedulerState,
@@ -62,13 +91,12 @@ export const beginVirtualTextureRequestFrame = (
 
 const requestablePageIndex = (
   resource: VirtualTextureRequestResourceSnapshot,
-  grantedPageIndices: ReadonlySet<number>,
+  startIndex: number,
 ): number | undefined => {
-  for (let index = 0; index < resource.pages.length; index += 1) {
+  for (let index = startIndex; index < resource.pages.length; index += 1) {
     const page = resource.pages[index];
     if (
       page !== undefined
-      && !grantedPageIndices.has(index)
       && !page.claimed
       && !page.resident
       && !page.retryBlocked
@@ -89,6 +117,24 @@ export const planVirtualTexturePageRequests = (
     readonly maxGrantsPerFrame: number;
     readonly maxInFlightPerResource: number;
   },
+): VirtualTextureRequestPlan => planVirtualTexturePageRequestsInto(
+  createVirtualTextureRequestPlanningWorkspace(),
+  scheduler,
+  frame,
+  resources,
+  options,
+);
+
+/** Allocation-reusing variant whose returned plan remains valid until the next call with the workspace. */
+export const planVirtualTexturePageRequestsInto = (
+  workspace: VirtualTextureRequestPlanningWorkspace,
+  scheduler: VirtualTextureRequestSchedulerState,
+  frame: number,
+  resources: readonly VirtualTextureRequestResourceSnapshot[],
+  options: {
+    readonly maxGrantsPerFrame: number;
+    readonly maxInFlightPerResource: number;
+  },
 ): VirtualTextureRequestPlan => {
   const current = beginVirtualTextureRequestFrame(scheduler, frame);
   const hasEnabledResources = resources.some((resource) => resource.enabled);
@@ -99,16 +145,22 @@ export const planVirtualTexturePageRequests = (
     ? Math.max(0, options.maxInFlightPerResource)
     : 0;
   if (!hasEnabledResources || current.grantsThisFrame >= maxGrants || maxInFlight === 0) {
-    return {
-      grants: [],
-      scheduler: current,
-    };
+    workspace.grants.length = 0;
+    workspace.plan.scheduler = current;
+    return workspace.plan;
   }
 
-  const simulatedInFlight = resources.map((resource) =>
-    Math.max(0, resource.loadingPages) + Math.max(0, resource.pendingUploads));
-  const grantedPageIndices = resources.map(() => new Set<number>());
-  const grants: VirtualTextureRequestGrant[] = [];
+  const simulatedInFlight = workspace.simulatedInFlight;
+  const nextPageIndices = workspace.nextPageIndices;
+  simulatedInFlight.length = resources.length;
+  nextPageIndices.length = resources.length;
+  for (let index = 0; index < resources.length; index += 1) {
+    const resource = resources[index]!;
+    simulatedInFlight[index] = Math.max(0, resource.loadingPages) + Math.max(0, resource.pendingUploads);
+    nextPageIndices[index] = 0;
+  }
+  const grants = workspace.grants;
+  let grantCount = 0;
   const anchoredCursor = current.nextResourceKey === undefined
     ? -1
     : resources.findIndex((resource) => resource.key === current.nextResourceKey);
@@ -129,7 +181,7 @@ export const planVirtualTexturePageRequests = (
       scansWithoutProgress += 1;
       continue;
     }
-    const pageIndex = requestablePageIndex(resource, grantedPageIndices[resourceIndex]!);
+    const pageIndex = requestablePageIndex(resource, nextPageIndices[resourceIndex] ?? 0);
     if (pageIndex === undefined) {
       scansWithoutProgress += 1;
       continue;
@@ -137,60 +189,28 @@ export const planVirtualTexturePageRequests = (
     const page = resource.pages[pageIndex];
     if (page === undefined) throw new Error("Virtual texture request page snapshot changed during planning");
 
-    grantedPageIndices[resourceIndex]!.add(pageIndex);
+    nextPageIndices[resourceIndex] = pageIndex + 1;
     simulatedInFlight[resourceIndex] = (simulatedInFlight[resourceIndex] ?? 0) + 1;
-    grants.push({ key: resource.key, page: page.page });
+    let grant = grants[grantCount];
+    if (grant === undefined) {
+      grant = { key: resource.key, page: page.page };
+      grants.push(grant);
+    } else {
+      grant.key = resource.key;
+      grant.page = page.page;
+    }
+    grantCount += 1;
     grantsThisFrame += 1;
     scansWithoutProgress = 0;
   }
 
   const nextResourceKey = resources[cursor]?.key;
-  return {
-    grants,
-    scheduler: {
-      cursor,
-      frame,
-      grantsThisFrame,
-      ...(nextResourceKey === undefined ? {} : { nextResourceKey }),
-    },
+  grants.length = grantCount;
+  workspace.plan.scheduler = {
+    cursor,
+    frame,
+    grantsThisFrame,
+    ...(nextResourceKey === undefined ? {} : { nextResourceKey }),
   };
+  return workspace.plan;
 };
-
-export type VirtualTexturePageRetryState =
-  | { readonly attempts: number; readonly kind: "eligible" }
-  | { readonly attempts: number; readonly delayMs: number; readonly kind: "scheduled" }
-  | { readonly attempts: number; readonly kind: "terminal" };
-
-export const createVirtualTexturePageRetryState = (): VirtualTexturePageRetryState => ({
-  attempts: 0,
-  kind: "eligible",
-});
-
-export const failVirtualTexturePageRetry = (
-  state: VirtualTexturePageRetryState,
-  options: { readonly baseDelayMs: number; readonly maxRetries: number },
-): VirtualTexturePageRetryState => {
-  if (state.kind === "terminal") return state;
-  const maxRetries = Number.isSafeInteger(options.maxRetries) ? Math.max(0, options.maxRetries) : 0;
-  if (state.attempts >= maxRetries) return { attempts: state.attempts, kind: "terminal" };
-  const baseDelayMs = Number.isFinite(options.baseDelayMs) ? Math.max(0, options.baseDelayMs) : 0;
-  return {
-    attempts: state.attempts + 1,
-    delayMs: baseDelayMs * (2 ** state.attempts),
-    kind: "scheduled",
-  };
-};
-
-export const elapseVirtualTexturePageRetry = (
-  state: VirtualTexturePageRetryState,
-): VirtualTexturePageRetryState => state.kind === "scheduled"
-  ? { attempts: state.attempts, kind: "eligible" }
-  : state;
-
-export const terminateVirtualTexturePageRetry = (
-  state: VirtualTexturePageRetryState,
-): VirtualTexturePageRetryState => state.kind === "terminal"
-  ? state
-  : { attempts: state.attempts, kind: "terminal" };
-
-export const resetVirtualTexturePageRetry = createVirtualTexturePageRetryState;

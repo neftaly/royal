@@ -571,15 +571,6 @@ export const virtualTextureGpuResource = (
 ): VirtualTextureGpuResource | undefined =>
   stateOf(arena).resources.get(key) as unknown as VirtualTextureGpuResource | undefined;
 
-export const virtualTextureGpuPendingPageKey = (
-  resource: VirtualTextureGpuResource,
-  index: number,
-): string | undefined => {
-  if (!Number.isSafeInteger(index) || index < 0) return undefined;
-  const mutable = mutableResource(resource);
-  return mutable.pendingUploads[mutable.pendingHead + index]?.pageKey;
-};
-
 /** Fairly retries dormant logical resources after budget or context availability changes. */
 export const retryVirtualTextureGpuAdmissions = (
   arena: VirtualTextureGpuArena,

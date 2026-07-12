@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   beginVirtualTextureRequestFrame,
-  createVirtualTexturePageRetryState,
+  createVirtualTextureRequestPlanningWorkspace,
   createVirtualTextureRequestScheduler,
-  elapseVirtualTexturePageRetry,
-  failVirtualTexturePageRetry,
   planVirtualTexturePageRequests,
-  resetVirtualTexturePageRetry,
+  planVirtualTexturePageRequestsInto,
   resetVirtualTextureRequestScheduler,
-  terminateVirtualTexturePageRetry,
+  virtualTextureRequestBudgetAvailable,
   type VirtualTextureRequestResourceSnapshot,
 } from "../packages/renderer-webgl/src/virtual-texture-orchestration";
 
@@ -35,6 +33,127 @@ const resource = (
 const options = { maxGrantsPerFrame: 4, maxInFlightPerResource: 4 } as const;
 
 describe("virtual texture pure request orchestration", () => {
+  it("matches the allocating planner when using a reusable workspace", () => {
+    const resources = [
+      resource("a", 3),
+      resource("blocked", 2, { loadingPages: 4 }),
+      resource("b", 3, {
+        pages: [
+          { claimed: true, page: { mip: 0, x: 0, y: 0 }, resident: false, retryBlocked: false },
+          { claimed: false, page: { mip: 0, x: 1, y: 0 }, resident: false, retryBlocked: false },
+          { claimed: false, page: { mip: 0, x: 2, y: 0 }, resident: false, retryBlocked: false },
+        ],
+      }),
+    ];
+    const scheduler = createVirtualTextureRequestScheduler();
+    const expected = planVirtualTexturePageRequests(scheduler, 7, resources, options);
+    const actual = planVirtualTexturePageRequestsInto(
+      createVirtualTextureRequestPlanningWorkspace(),
+      scheduler,
+      7,
+      resources,
+      options,
+    );
+
+    expect(actual).toEqual(expected);
+  });
+
+  it("reuses grant objects across equally sized plans", () => {
+    const workspace = createVirtualTextureRequestPlanningWorkspace();
+    const resources = [resource("a", 3), resource("b", 3)];
+    const first = planVirtualTexturePageRequestsInto(
+      workspace,
+      createVirtualTextureRequestScheduler(),
+      0,
+      resources,
+      { maxGrantsPerFrame: 2, maxInFlightPerResource: 4 },
+    );
+    const firstPlan = first;
+    const firstGrant = first.grants[0];
+    const secondGrant = first.grants[1];
+    const second = planVirtualTexturePageRequestsInto(
+      workspace,
+      first.scheduler,
+      1,
+      resources,
+      { maxGrantsPerFrame: 2, maxInFlightPerResource: 4 },
+    );
+
+    expect(second).toBe(firstPlan);
+    expect(second.grants[0]).toBe(firstGrant);
+    expect(second.grants[1]).toBe(secondGrant);
+  });
+
+  it("truncates reused grant storage after smaller and empty plans", () => {
+    const workspace = createVirtualTextureRequestPlanningWorkspace();
+    const resources = [resource("a", 4), resource("b", 4), resource("c", 4)];
+    const first = planVirtualTexturePageRequestsInto(
+      workspace,
+      createVirtualTextureRequestScheduler(),
+      0,
+      resources,
+      { maxGrantsPerFrame: 3, maxInFlightPerResource: 4 },
+    );
+    expect(first.grants).toHaveLength(3);
+
+    const smaller = planVirtualTexturePageRequestsInto(
+      workspace,
+      first.scheduler,
+      1,
+      resources,
+      { maxGrantsPerFrame: 1, maxInFlightPerResource: 4 },
+    );
+    expect(smaller.grants).toHaveLength(1);
+    expect(smaller.grants.map((grant) => grant.key)).toEqual(["a"]);
+
+    const empty = planVirtualTexturePageRequestsInto(
+      workspace,
+      smaller.scheduler,
+      2,
+      resources.map((entry) => ({ ...entry, enabled: false })),
+      options,
+    );
+    expect(empty.grants).toEqual([]);
+    expect(workspace.grants).toHaveLength(0);
+  });
+
+  it("keeps keyed fairness when a reusable workspace sees reordered resources", () => {
+    const workspace = createVirtualTextureRequestPlanningWorkspace();
+    const initialOrder = [resource("a", 2), resource("b", 2), resource("c", 2)];
+    const first = planVirtualTexturePageRequestsInto(
+      workspace,
+      createVirtualTextureRequestScheduler(),
+      0,
+      initialOrder,
+      { maxGrantsPerFrame: 2, maxInFlightPerResource: 4 },
+    );
+    expect(first.grants.map((grant) => grant.key)).toEqual(["a", "b"]);
+    expect(first.scheduler.nextResourceKey).toBe("c");
+
+    const reordered = [initialOrder[1]!, initialOrder[2]!, initialOrder[0]!];
+    const second = planVirtualTexturePageRequestsInto(
+      workspace,
+      first.scheduler,
+      1,
+      reordered,
+      { maxGrantsPerFrame: 1, maxInFlightPerResource: 4 },
+    );
+    expect(second.grants.map((grant) => grant.key)).toEqual(["c"]);
+    expect(second.scheduler.nextResourceKey).toBe("a");
+  });
+
+  it("reports exhausted same-frame request budgets before snapshot materialization", () => {
+    expect(virtualTextureRequestBudgetAvailable({
+      cursor: 0,
+      frame: 4,
+      grantsThisFrame: 4,
+    }, 4, 4)).toBe(false);
+    expect(virtualTextureRequestBudgetAvailable({
+      cursor: 0,
+      frame: 4,
+      grantsThisFrame: 4,
+    }, 5, 4)).toBe(true);
+  });
   it("rotates round-robin grants across a fixed resource order and across frames", () => {
     const resources = Array.from({ length: 5 }, (_value, index) => resource(String(index), 5));
     const first = planVirtualTexturePageRequests(createVirtualTextureRequestScheduler(), 10, resources, options);
@@ -167,20 +286,4 @@ describe("virtual texture pure request orchestration", () => {
     expect(resetVirtualTextureRequestScheduler()).not.toBe(active);
   });
 
-  it("represents eligible, scheduled, elapsed, and terminal retry states without timer handles", () => {
-    const retryOptions = { baseDelayMs: 50, maxRetries: 2 };
-    const initial = createVirtualTexturePageRetryState();
-    expect(initial).toEqual({ attempts: 0, kind: "eligible" });
-    const first = failVirtualTexturePageRetry(initial, retryOptions);
-    expect(first).toEqual({ attempts: 1, delayMs: 50, kind: "scheduled" });
-    const firstElapsed = elapseVirtualTexturePageRetry(first);
-    expect(firstElapsed).toEqual({ attempts: 1, kind: "eligible" });
-    const second = failVirtualTexturePageRetry(firstElapsed, retryOptions);
-    expect(second).toEqual({ attempts: 2, delayMs: 100, kind: "scheduled" });
-    const terminal = failVirtualTexturePageRetry(elapseVirtualTexturePageRetry(second), retryOptions);
-    expect(terminal).toEqual({ attempts: 2, kind: "terminal" });
-    expect(failVirtualTexturePageRetry(terminal, retryOptions)).toBe(terminal);
-    expect(terminateVirtualTexturePageRetry(firstElapsed)).toEqual({ attempts: 1, kind: "terminal" });
-    expect(resetVirtualTexturePageRetry()).toEqual(initial);
-  });
 });

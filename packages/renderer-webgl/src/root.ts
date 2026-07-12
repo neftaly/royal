@@ -178,7 +178,6 @@ import {
   virtualTextureGpuHasActionableUploads,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
-  virtualTextureGpuPendingPageKey,
   virtualTextureGpuResource,
   virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
@@ -398,18 +397,34 @@ import {
   selectVirtualTextureWorkingSet,
   virtualTextureDemandMipCount,
   virtualTextureDemandModelCount,
-  type VirtualTextureDemandSubmission,
 } from "./virtual-texture-demand";
 import {
-  createVirtualTexturePageRetryState,
+  advanceVirtualTextureFrameDemand,
+  beginVirtualTextureFrameDemand,
+  createVirtualTextureFrameDemandWorkspace,
+  finalizeVirtualTextureFrameDemand,
+  resetVirtualTextureFrameDemand,
+  submitVirtualTextureFrameDemand,
+  type VirtualTextureFrameDemandCommit,
+} from "./virtual-texture-frame-demand";
+import {
   createVirtualTextureRequestScheduler,
-  elapseVirtualTexturePageRetry,
-  failVirtualTexturePageRetry,
-  planVirtualTexturePageRequests,
+  createVirtualTextureRequestPlanningWorkspace,
+  planVirtualTexturePageRequestsInto,
   resetVirtualTextureRequestScheduler,
+  virtualTextureRequestBudgetAvailable,
+  type VirtualTextureRequestPageSnapshot,
   type VirtualTextureRequestResourceSnapshot,
   type VirtualTextureRequestSchedulerState,
 } from "./virtual-texture-orchestration";
+import {
+  reduceVirtualTexturePageLifecycle,
+  virtualTexturePageLifecycleClaimed,
+  virtualTexturePageLifecycleLoading,
+  virtualTexturePageLifecycleRetryBlocked,
+  type VirtualTexturePageLifecycleEvent,
+  type VirtualTexturePageLifecycleTransition,
+} from "./virtual-texture-page-lifecycle";
 import {
   DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
   isBlendedSurfaceMaterial,
@@ -1149,6 +1164,16 @@ const sameTransform = (left: Transform, right: Transform): boolean =>
   sameVec3(left.scale, right.scale);
 
 type CapturedFailure = { readonly value: unknown };
+
+type MutableVirtualTextureRequestPageSnapshot = {
+  -readonly [Key in keyof VirtualTextureRequestPageSnapshot]: VirtualTextureRequestPageSnapshot[Key];
+};
+
+type MutableVirtualTextureRequestResourceSnapshot = Omit<{
+  -readonly [Key in keyof VirtualTextureRequestResourceSnapshot]: VirtualTextureRequestResourceSnapshot[Key];
+}, "pages"> & {
+  pages: MutableVirtualTextureRequestPageSnapshot[];
+};
 
 const captureFailure = (action: () => void): CapturedFailure | undefined => {
   try {
@@ -2081,12 +2106,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #geometryDrawArena: GeometryDrawArena;
   #virtualTextureRequestScheduler: VirtualTextureRequestSchedulerState =
     createVirtualTextureRequestScheduler();
+  readonly #virtualTextureRequestPlanning = createVirtualTextureRequestPlanningWorkspace();
+  readonly #virtualTextureRequestResources: MutableVirtualTextureRequestResourceSnapshot[] = [];
+  readonly #virtualTextureRequestResourcePool: MutableVirtualTextureRequestResourceSnapshot[] = [];
   #virtualTextureRequestDrainScheduled = false;
-  #virtualTextureDemandCollectionActive = false;
-  readonly #virtualTextureFrameDemand = new Map<
+  readonly #virtualTextureFrameDemand =
+    createVirtualTextureFrameDemandWorkspace<VirtualTextureRuntimeState>();
+  readonly #virtualTextureFrameCommits = new Map<
     VirtualTextureRuntimeState,
-    VirtualTextureDemandSubmission[]
+    VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
   >();
+  readonly #virtualTextureDemandPublicationStates: VirtualTextureRuntimeState[] = [];
+  readonly #virtualTextureDemandPublicationCommits: Array<
+    VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState> | undefined
+  > = [];
+  #virtualTextureDemandViewIndex = 0;
   readonly #virtualTextureDemandCursors = new WeakMap<VirtualTextureRuntimeState, number>();
   #unsupportedVirtualTextureDraws = 0;
   readonly #dprChangeListener = (): void => {
@@ -2393,8 +2427,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
-    this.#virtualTextureDemandCollectionActive = true;
-    this.#virtualTextureFrameDemand.clear();
+    beginVirtualTextureFrameDemand(this.#virtualTextureFrameDemand);
     try {
     gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
     prepareFrameBaseline(gl, frameViews.scissor);
@@ -2422,6 +2455,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       beginGltfPacketBatchRegistryFrame(this.#gltfPacketBatchRegistry);
       beginGltfInstanceBufferArenaFrame(this.#gltfInstanceBufferArena);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
+        this.#virtualTextureDemandViewIndex = viewIndex;
         // A scene occurrence has the same resource identity in every view.
         // Resetting the ordinal across eyes avoids duplicate instance uploads
         // and other occurrence-owned resources in XR.
@@ -2719,25 +2753,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
     for (const state of this.#virtualTextures.values()) {
       for (const timer of state.pageRetryTimers.values()) clearTimeout(timer);
       state.pageRetryTimers.clear();
-      state.pageRetryStates.clear();
-      releaseFailure = captureFirstFailure(releaseFailure, () => state.outstandingPageKeys.clear());
-      for (const pageKey of state.loadingPages) {
-        releaseFailure = captureFirstFailure(releaseFailure, () => state.outstandingPageKeys.add(pageKey));
-      }
-      const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-      if (resource === undefined) continue;
-      const pendingCount = virtualTextureGpuResourceSnapshot(resource).pendingUploads;
-      for (let index = 0; index < pendingCount; index += 1) {
-        const pageKey = virtualTextureGpuPendingPageKey(resource, index);
-        if (pageKey !== undefined) {
-          releaseFailure = captureFirstFailure(releaseFailure, () => state.outstandingPageKeys.add(pageKey));
-        }
+      for (const pageKey of state.pageLifecycles.keys()) {
+        releaseFailure = captureFirstFailure(releaseFailure, () => {
+          this.#transitionVirtualTexturePage(state, pageKey, { kind: "context-lost" });
+        });
       }
     }
     this.#virtualTextureRequestScheduler = resetVirtualTextureRequestScheduler();
+    this.#virtualTextureRequestResources.length = 0;
+    this.#virtualTextureRequestResourcePool.length = 0;
     this.#virtualTextureRequestDrainScheduled = false;
-    this.#virtualTextureDemandCollectionActive = false;
-    this.#virtualTextureFrameDemand.clear();
+    resetVirtualTextureFrameDemand(this.#virtualTextureFrameDemand);
     if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
@@ -3405,14 +3431,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let releaseFailure: CapturedFailure | undefined;
     releaseFailure = captureFirstFailure(releaseFailure, () => state.manifestAbortController?.abort());
     delete state.manifestAbortController;
-    state.loadingPages.clear();
     for (const timer of state.pageRetryTimers.values()) clearTimeout(timer);
     state.pageRetryTimers.clear();
-    state.pageRetryStates.clear();
-    state.outstandingPageKeys.clear();
+    for (const pageKey of state.pageLifecycles.keys()) {
+      this.#transitionVirtualTexturePage(state, pageKey, { kind: "release" });
+    }
     state.desiredPageKeys.clear();
+    state.desiredPageKeysScratch.clear();
     state.desiredPages.length = 0;
-    this.#virtualTextureFrameDemand.delete(state);
+    state.desiredPagesScratch.length = 0;
+    this.#virtualTextureFrameDemand.resources.delete(state);
+    this.#virtualTextureFrameDemand.preferenceCursors.delete(state);
     this.#virtualTextureDemandCursors.delete(state);
     const release = releaseVirtualTextureGpuResource(this.#virtualTextureGpu, state.key);
     releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeVirtualTextureGpuOutcomes());
@@ -6085,12 +6114,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       demandPublished: false,
       diagnosticsEnabled,
       desiredPageKeys: new Set(),
+      desiredPageKeysScratch: new Set(),
       desiredPages: [],
+      desiredPagesScratch: [],
       key,
-      loadingPages: new Set(),
-      pageRetryStates: new Map(),
+      pageLifecycles: new Map(),
       pageRetryTimers: new Map(),
-      outstandingPageKeys: new Set(),
       sourceGeneration: 1,
       stats: {
         generatedManifestUses: 0,
@@ -6234,7 +6263,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state.status = "ready";
     if (this.#contextLifecycle === "active") {
       if (!this.#ensureVirtualTextureGpuResource(state, manifest)) return;
-      if (!this.#virtualTextureDemandCollectionActive) this.#demandVirtualTexturePages(state);
+      if (!this.#virtualTextureFrameDemand.active) this.#demandVirtualTexturePages(state);
     }
     this.invalidate();
   }
@@ -6316,11 +6345,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
-    if (this.#virtualTextureDemandCollectionActive) {
-      const submissions = this.#virtualTextureFrameDemand.get(state) ?? [];
-      submissions.push({ candidates, preferTargetMip });
-      this.#virtualTextureFrameDemand.set(state, submissions);
-      this.#scheduleVirtualTextureRequestDrain();
+    if (this.#virtualTextureFrameDemand.active) {
+      submitVirtualTextureFrameDemand(
+        this.#virtualTextureFrameDemand,
+        state,
+        this.#virtualTextureDemandViewIndex,
+        { candidates, preferTargetMip },
+      );
       return;
     }
     this.#applyVirtualTextureDemand(
@@ -6337,69 +6368,117 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return gpu?.effectiveSlots ?? manifest.physicalSlots ?? 4;
   }
 
-  #applyVirtualTextureDemand(
+  #prepareVirtualTextureDemand(
     state: VirtualTextureRuntimeState,
     workingCandidates: readonly VirtualTexturePageId[],
-  ): void {
+  ): boolean {
+    const manifest = state.manifest;
+    if (manifest === undefined || state.status !== "ready") return false;
+    const desiredPageKeys = state.desiredPageKeysScratch;
+    const desiredPages = state.desiredPagesScratch;
+    desiredPageKeys.clear();
+    desiredPages.length = 0;
+    for (const page of workingCandidates) {
+      const pageKey = virtualTexturePageKey(page);
+      if (desiredPageKeys.has(pageKey)) continue;
+      desiredPageKeys.add(pageKey);
+      desiredPages.push(page);
+    }
+    return true;
+  }
+
+  #commitPreparedVirtualTextureDemand(state: VirtualTextureRuntimeState): void {
+    const previousPageKeys = state.desiredPageKeys;
+    const previousPages = state.desiredPages;
+    state.desiredPageKeys = state.desiredPageKeysScratch;
+    state.desiredPages = state.desiredPagesScratch;
+    state.desiredPageKeysScratch = previousPageKeys;
+    state.desiredPagesScratch = previousPages;
+    state.demandPublished = true;
+    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
+    if (resource !== undefined) {
+      setVirtualTextureGpuDesiredPageKeys(this.#virtualTextureGpu, resource, state.desiredPageKeys);
+    }
+  }
+
+  #touchPublishedVirtualTextureDemand(state: VirtualTextureRuntimeState): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
-    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-    const desiredPageKeys = new Set<string>();
-    const desiredPages: VirtualTexturePageId[] = [];
-    for (const page of workingCandidates) {
+    for (const page of state.desiredPages) {
       touchVirtualTextureGpuResidency(
         this.#virtualTextureGpu,
         state.key,
         page,
         virtualTextureDemandMipCount(manifest) - 1,
       );
-      const pageKey = virtualTexturePageKey(page);
-      if (desiredPageKeys.has(pageKey)) continue;
-      desiredPageKeys.add(pageKey);
-      desiredPages.push(page);
     }
-    state.desiredPageKeys = desiredPageKeys;
-    state.desiredPages = desiredPages;
-    state.demandPublished = true;
-    if (resource !== undefined) {
-      setVirtualTextureGpuDesiredPageKeys(this.#virtualTextureGpu, resource, state.desiredPageKeys);
-    }
-    this.#consumeVirtualTextureGpuOutcomes();
+  }
+
+  #applyVirtualTextureDemand(
+    state: VirtualTextureRuntimeState,
+    workingCandidates: readonly VirtualTexturePageId[],
+  ): void {
+    if (!this.#prepareVirtualTextureDemand(state, workingCandidates)) return;
+    this.#commitPreparedVirtualTextureDemand(state);
+    this.#touchPublishedVirtualTextureDemand(state);
+    const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
     this.#scheduleVirtualTextureRequestDrain();
+    if (closeFailure !== undefined) throw closeFailure.value;
   }
 
   #finalizeVirtualTextureFrameDemand(commit: boolean): void {
-    this.#virtualTextureDemandCollectionActive = false;
-    if (!commit) {
-      this.#virtualTextureFrameDemand.clear();
-      return;
+    const commits = finalizeVirtualTextureFrameDemand(
+      this.#virtualTextureFrameDemand,
+      commit,
+      (state) => this.#virtualTextureDemandCursors.get(state) ?? 0,
+    );
+    if (!commit) return;
+    const commitsByState = this.#virtualTextureFrameCommits;
+    commitsByState.clear();
+    for (const entry of commits) commitsByState.set(entry.resource, entry);
+    const publicationStates = this.#virtualTextureDemandPublicationStates;
+    const publicationCommits = this.#virtualTextureDemandPublicationCommits;
+    publicationStates.length = 0;
+    publicationCommits.length = 0;
+    for (const state of this.#virtualTextures.values()) {
+      const entry = commitsByState.get(state);
+      const submissions = entry?.submissions ?? [];
+      const pages = selectVirtualTextureFrameWorkingSet(
+        submissions,
+        this.#virtualTextureDemandCapacity(state),
+        entry?.startSubmission ?? 0,
+      );
+      if (!this.#prepareVirtualTextureDemand(state, pages)) continue;
+      publicationStates.push(state);
+      publicationCommits.push(entry);
     }
-    let finalizeFailure: CapturedFailure | undefined;
-    try {
-      for (const state of this.#virtualTextures.values()) {
-        const submissions = this.#virtualTextureFrameDemand.get(state) ?? [];
-        finalizeFailure = captureFirstFailure(
-          finalizeFailure,
-          () => {
-            const cursor = this.#virtualTextureDemandCursors.get(state) ?? 0;
-            this.#applyVirtualTextureDemand(
-              state,
-              selectVirtualTextureFrameWorkingSet(
-                submissions,
-                this.#virtualTextureDemandCapacity(state),
-                cursor,
-              ),
-            );
-            if (submissions.length > 1) {
-              this.#virtualTextureDemandCursors.set(state, (cursor + 1) % submissions.length);
-            }
-          },
-        );
+    let commitFailure: CapturedFailure | undefined;
+    for (const state of publicationStates) {
+      commitFailure = captureFirstFailure(
+        commitFailure,
+        () => this.#commitPreparedVirtualTextureDemand(state),
+      );
+    }
+    for (const state of publicationStates) {
+      commitFailure = captureFirstFailure(
+        commitFailure,
+        () => this.#touchPublishedVirtualTextureDemand(state),
+      );
+    }
+    for (let index = 0; index < publicationStates.length; index += 1) {
+      const entry = publicationCommits[index];
+      if (entry !== undefined && entry.submissions.length > 1) {
+        this.#virtualTextureDemandCursors.set(publicationStates[index]!, entry.nextStartSubmission);
       }
-    } finally {
-      this.#virtualTextureFrameDemand.clear();
+      if (entry !== undefined) advanceVirtualTextureFrameDemand(this.#virtualTextureFrameDemand, entry);
     }
-    if (finalizeFailure !== undefined) throw finalizeFailure.value;
+    const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
+    this.#scheduleVirtualTextureRequestDrain();
+    commitsByState.clear();
+    publicationStates.length = 0;
+    publicationCommits.length = 0;
+    if (commitFailure !== undefined) throw commitFailure.value;
+    if (closeFailure !== undefined) throw closeFailure.value;
   }
 
   #virtualTextureDrawDemand(
@@ -6422,13 +6501,31 @@ class WebGlRootImpl implements InternalWebGlRoot {
     });
   }
 
+  #transitionVirtualTexturePage(
+    state: VirtualTextureRuntimeState,
+    pageKey: string,
+    event: VirtualTexturePageLifecycleEvent,
+  ): VirtualTexturePageLifecycleTransition {
+    const transition = reduceVirtualTexturePageLifecycle(
+      state.pageLifecycles.get(pageKey),
+      event,
+      {
+        retryBaseDelayMs: VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS,
+        retryLimit: VIRTUAL_TEXTURE_MAX_PAGE_LOAD_RETRIES,
+      },
+    );
+    if (transition.state === undefined) state.pageLifecycles.delete(pageKey);
+    else state.pageLifecycles.set(pageKey, transition.state);
+    return transition;
+  }
+
   #requestVirtualTexturePage(state: VirtualTextureRuntimeState, page: VirtualTexturePageId): boolean {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return false;
     const pageKey = virtualTexturePageKey(page);
+    const lifecycle = state.pageLifecycles.get(pageKey);
     if (
-      state.outstandingPageKeys.has(pageKey)
-      || state.loadingPages.has(pageKey)
+      (lifecycle !== undefined && lifecycle.kind !== "eligible")
       || virtualTextureGpuExactResidency(this.#virtualTextureGpu, state.key, page) !== undefined
     ) {
       return false;
@@ -6437,8 +6534,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const pageImage = this.#virtualTexturePageImage(state, page);
     if (pageImage === undefined) return false;
 
-    state.outstandingPageKeys.add(pageKey);
-    state.loadingPages.add(pageKey);
+    this.#transitionVirtualTexturePage(state, pageKey, { kind: "grant" });
     const sourceGeneration = state.sourceGeneration;
     pageImage.then((image) => {
       if (
@@ -6447,13 +6543,20 @@ class WebGlRootImpl implements InternalWebGlRoot {
         || state.sourceGeneration !== sourceGeneration
         || state.status !== "ready"
       ) {
+        if (this.#virtualTextures.get(state.key) === state) {
+          this.#transitionVirtualTexturePage(state, pageKey, {
+            disposition: "discarded",
+            kind: "decoded",
+          });
+        }
         this.#closeVirtualTextureImageAsync(image);
         return;
       }
-      state.loadingPages.delete(pageKey);
-      state.pageRetryStates.delete(pageKey);
       if (!state.desiredPageKeys.has(pageKey)) {
-        state.outstandingPageKeys.delete(pageKey);
+        this.#transitionVirtualTexturePage(state, pageKey, {
+          disposition: "discarded",
+          kind: "decoded",
+        });
         this.#closeVirtualTextureImageAsync(image);
         this.#scheduleVirtualTextureRequestDrain();
         return;
@@ -6478,12 +6581,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
             ? candidate.videoHeight
             : candidate.height;
         if (width !== manifest.pageSize || height !== manifest.pageSize) {
-          state.outstandingPageKeys.delete(pageKey);
           // The decoded resource cannot become valid by retrying the same URI.
           // Keep it terminally dormant while allowing other desired pages to drain.
-          state.pageRetryStates.set(pageKey, {
-            attempts: VIRTUAL_TEXTURE_MAX_PAGE_LOAD_RETRIES,
-            kind: "terminal",
+          this.#transitionVirtualTexturePage(state, pageKey, {
+            disposition: "invalid",
+            kind: "decoded",
           });
           state.stats.pageLoadFailures += 1;
           if (state.diagnosticsEnabled) {
@@ -6507,11 +6609,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
         sourceGeneration,
       })
       ) {
-        state.outstandingPageKeys.delete(pageKey);
+        this.#transitionVirtualTexturePage(state, pageKey, {
+          disposition: "discarded",
+          kind: "decoded",
+        });
         this.#scheduleVirtualTextureRequestDrain();
         this.#closeVirtualTextureImageAsync(image);
         return;
       }
+      this.#transitionVirtualTexturePage(state, pageKey, {
+        disposition: "queued",
+        kind: "decoded",
+      });
       if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
     }, (error: unknown) => {
       if (
@@ -6519,8 +6628,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         || this.#virtualTextures.get(state.key) !== state
         || state.sourceGeneration !== sourceGeneration
       ) return;
-      state.loadingPages.delete(pageKey);
-      state.outstandingPageKeys.delete(pageKey);
+      const retry = this.#transitionVirtualTexturePage(state, pageKey, { kind: "load-rejected" });
       state.stats.pageLoadFailures += 1;
       const message = `Virtual texture page load failed for ${state.activeSource.manifestUri} ${pageKey}: ${
         error instanceof Error ? error.message : String(error)
@@ -6528,23 +6636,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (state.diagnosticsEnabled) {
         this.#recordDiagnostic(message, `virtual-texture-page:${state.activeSource.manifestUri}`);
       }
-      if (this.#contextLifecycle !== "active") return;
+      if (this.#contextLifecycle !== "active") {
+        this.#transitionVirtualTexturePage(state, pageKey, { kind: "context-lost" });
+        return;
+      }
       // Let unrelated desired pages consume the freed in-flight slot now. This
       // page becomes eligible only after an explicit delayed wake, and retries
       // are capped so a persistently broken source becomes dormant.
       this.#scheduleVirtualTextureRequestDrain();
-      const retry = failVirtualTexturePageRetry(
-        state.pageRetryStates.get(pageKey) ?? createVirtualTexturePageRetryState(),
-        {
-          baseDelayMs: VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS,
-          maxRetries: VIRTUAL_TEXTURE_MAX_PAGE_LOAD_RETRIES,
-        },
-      );
-      state.pageRetryStates.set(pageKey, retry);
-      if (retry.kind !== "scheduled") return;
+      if (retry.retryDelayMs === undefined) return;
       const timer = setTimeout(() => {
         state.pageRetryTimers.delete(pageKey);
-        state.pageRetryStates.set(pageKey, elapseVirtualTexturePageRetry(retry));
+        this.#transitionVirtualTexturePage(state, pageKey, { kind: "retry-elapsed" });
         if (
           this.#disposed
           || this.#contextLifecycle !== "active"
@@ -6555,7 +6658,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         ) return;
         this.invalidate();
         this.#scheduleVirtualTextureRequestDrain();
-      }, retry.delayMs);
+      }, retry.retryDelayMs);
       state.pageRetryTimers.set(pageKey, timer);
     });
 
@@ -6573,31 +6676,59 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #drainVirtualTexturePageRequests(): void {
-    const statesByKey = new Map<string, VirtualTextureRuntimeState>();
-    const resources: VirtualTextureRequestResourceSnapshot[] = [];
+    if (!virtualTextureRequestBudgetAvailable(
+      this.#virtualTextureRequestScheduler,
+      this.#frame,
+      VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
+    )) return;
+    const resources = this.#virtualTextureRequestResources;
+    resources.length = 0;
+    let resourceIndex = 0;
     for (const state of this.#virtualTextures.values()) {
       const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
       const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-      statesByKey.set(state.key, state);
-      resources.push({
-        allocated: gpu?.allocated ?? false,
-        effectiveSlots: gpu?.effectiveSlots ?? 0,
-        enabled: state.status === "ready" && state.desiredPages.length > 0,
-        key: state.key,
-        loadingPages: state.loadingPages.size,
-        pages: state.desiredPages.map((page) => {
-          const pageKey = virtualTexturePageKey(page);
-          return {
-            claimed: state.outstandingPageKeys.has(pageKey) || state.loadingPages.has(pageKey),
-            page,
-            resident: virtualTextureGpuExactResidency(this.#virtualTextureGpu, state.key, page) !== undefined,
-            retryBlocked: (state.pageRetryStates.get(pageKey)?.kind ?? "eligible") !== "eligible",
-          };
-        }),
-        pendingUploads: gpu?.pendingUploads ?? 0,
-      });
+      let loadingPages = 0;
+      for (const lifecycle of state.pageLifecycles.values()) {
+        if (virtualTexturePageLifecycleLoading(lifecycle)) loadingPages += 1;
+      }
+      let snapshot = this.#virtualTextureRequestResourcePool[resourceIndex];
+      if (snapshot === undefined) {
+        snapshot = {
+          allocated: false,
+          effectiveSlots: 0,
+          enabled: false,
+          key: "",
+          loadingPages: 0,
+          pages: [],
+          pendingUploads: 0,
+        };
+        this.#virtualTextureRequestResourcePool.push(snapshot);
+      }
+      snapshot.allocated = gpu?.allocated ?? false;
+      snapshot.effectiveSlots = gpu?.effectiveSlots ?? 0;
+      snapshot.enabled = state.status === "ready" && state.desiredPages.length > 0;
+      snapshot.key = state.key;
+      snapshot.loadingPages = loadingPages;
+      snapshot.pendingUploads = gpu?.pendingUploads ?? 0;
+      for (let pageIndex = 0; pageIndex < state.desiredPages.length; pageIndex += 1) {
+        const page = state.desiredPages[pageIndex]!;
+        const pageKey = virtualTexturePageKey(page);
+        let pageSnapshot = snapshot.pages[pageIndex];
+        if (pageSnapshot === undefined) {
+          pageSnapshot = { claimed: false, page, resident: false, retryBlocked: false };
+          snapshot.pages.push(pageSnapshot);
+        }
+        pageSnapshot.claimed = virtualTexturePageLifecycleClaimed(state.pageLifecycles.get(pageKey));
+        pageSnapshot.page = page;
+        pageSnapshot.resident = virtualTextureGpuExactResidency(this.#virtualTextureGpu, state.key, page) !== undefined;
+        pageSnapshot.retryBlocked = virtualTexturePageLifecycleRetryBlocked(state.pageLifecycles.get(pageKey));
+      }
+      snapshot.pages.length = state.desiredPages.length;
+      resources.push(snapshot);
+      resourceIndex += 1;
     }
-    const plan = planVirtualTexturePageRequests(
+    const plan = planVirtualTexturePageRequestsInto(
+      this.#virtualTextureRequestPlanning,
       this.#virtualTextureRequestScheduler,
       this.#frame,
       resources,
@@ -6610,8 +6741,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // source cannot start, so execution never refunds scheduling opportunity.
     this.#virtualTextureRequestScheduler = plan.scheduler;
     for (const grant of plan.grants) {
-      const state = statesByKey.get(grant.key);
+      const state = this.#virtualTextures.get(grant.key);
       if (state !== undefined) this.#requestVirtualTexturePage(state, grant.page);
+    }
+    resources.length = 0;
+    if (this.#virtualTextureRequestResourcePool.length > 64) {
+      this.#virtualTextureRequestResourcePool.length = 64;
     }
   }
 
@@ -6823,12 +6958,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (outcome === undefined) continue;
       const state = this.#virtualTextures.get(outcome.key);
       if (state !== undefined && outcome.upload.sourceGeneration === state.sourceGeneration) {
-        state.outstandingPageKeys.delete(outcome.upload.pageKey);
-        state.loadingPages.delete(outcome.upload.pageKey);
-        if (outcome.kind === "completed" && outcome.evictedPageKey !== undefined) {
-          state.outstandingPageKeys.delete(outcome.evictedPageKey);
-          state.loadingPages.delete(outcome.evictedPageKey);
-        }
+        this.#transitionVirtualTexturePage(state, outcome.upload.pageKey, { kind: "gpu-settled" });
       }
       firstFailure = captureFirstFailure(firstFailure, () => {
         this.#closeVirtualTextureImage(outcome.upload.image);
@@ -8220,9 +8350,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
       pageLoadFailures += state.stats.pageLoadFailures;
       if (state.status === "ready") manifestsReady += 1;
       pageTableUpdates += gpu?.pageTableUpdates ?? 0;
-      pendingPages += state.loadingPages.size + (gpu?.pendingUploads ?? 0);
+      let loadingPages = 0;
+      let outstandingPages = 0;
+      for (const lifecycle of state.pageLifecycles.values()) {
+        if (virtualTexturePageLifecycleLoading(lifecycle)) loadingPages += 1;
+        if (virtualTexturePageLifecycleClaimed(lifecycle)) outstandingPages += 1;
+      }
+      pendingPages += loadingPages + (gpu?.pendingUploads ?? 0);
       preparedResidencyResolutions += state.stats.preparedResidencyResolutions;
-      outstandingPageRequests += state.outstandingPageKeys.size;
+      outstandingPageRequests += outstandingPages;
       residentPages += gpu?.residentPages ?? 0;
       shaderBinds += state.stats.shaderBinds;
       unreadyDraws += state.stats.unreadyDraws;

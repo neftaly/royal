@@ -310,7 +310,35 @@ export const selectVirtualTextureWorkingSet = (
 export interface VirtualTextureDemandSubmission {
   readonly candidates: readonly VirtualTexturePageId[];
   readonly preferTargetMip: boolean;
+  readonly preferredCandidates?: readonly VirtualTexturePageId[];
 }
+
+const selectVirtualTextureSubmissionWorkingSet = (
+  submission: VirtualTextureDemandSubmission,
+  capacity: number,
+): readonly VirtualTexturePageId[] => {
+  if (submission.preferredCandidates === undefined) {
+    return selectVirtualTextureWorkingSet(
+      submission.candidates,
+      capacity,
+      submission.preferTargetMip,
+    );
+  }
+  const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
+  if (!submission.preferTargetMip || boundedCapacity <= 1) {
+    return submission.candidates.slice(0, boundedCapacity === 0 ? 0 : 1);
+  }
+  const selected = submission.candidates.length === 0 ? [] : [submission.candidates[0]!];
+  const selectedKeys = new Set(selected.map(virtualTexturePageKey));
+  for (const page of submission.preferredCandidates) {
+    if (selected.length >= boundedCapacity) break;
+    const key = virtualTexturePageKey(page);
+    if (selectedKeys.has(key)) continue;
+    selectedKeys.add(key);
+    selected.push(page);
+  }
+  return selected;
+};
 
 const commonCoarsePage = (
   queues: readonly (readonly VirtualTexturePageId[])[],
@@ -340,20 +368,12 @@ export const selectVirtualTextureFrameWorkingSet = (
   if (boundedCapacity === 0 || submissions.length === 0) return [];
   if (submissions.length === 1) {
     const submission = submissions[0]!;
-    return selectVirtualTextureWorkingSet(
-      submission.candidates,
-      boundedCapacity,
-      submission.preferTargetMip,
-    );
+    return selectVirtualTextureSubmissionWorkingSet(submission, boundedCapacity);
   }
 
   const queues = submissions
     .map((submission, submissionIndex) => ({
-      queue: selectVirtualTextureWorkingSet(
-        submission.candidates,
-        boundedCapacity,
-        submission.preferTargetMip,
-      ),
+      queue: selectVirtualTextureSubmissionWorkingSet(submission, boundedCapacity),
       submissionIndex,
     }))
     .filter((entry) => entry.queue.length > 0);
