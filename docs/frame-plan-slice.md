@@ -115,11 +115,16 @@ glTF draw collection.
   cleanup before surfacing deletion faults. Global teardown attempt-releases
   every GPU authority, then normalizes each arena to a dropped context
   generation before completing semantic cleanup.
+  Ordinary 2D texture upload commands are isolated in a stateless leaf kernel:
+  pixel-store preparation, decoded/DOM `texImage2D` overloads, linear/sRGB
+  formats, sampler mapping/defaults, and mipmap policy no longer live in root.
+  VT allocation reuses the same pure format selector while its paired resource
+  transaction remains with the future VT GPU arena.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 474 workspace tests, typecheck, build,
+- The current checkpoint passes 479 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 

@@ -431,6 +431,10 @@ import {
 } from "./webgl/ibl-texture-arena";
 import { prepareFrameBaseline, prepareTextureUpload } from "./webgl/imperative-state";
 import {
+  textureUploadInternalFormat,
+  uploadTexture,
+} from "./webgl/texture-upload";
+import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
 import type {
@@ -1199,35 +1203,6 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
   };
 };
 
-const samplerConstant = (
-  gl: WebGL2RenderingContext,
-  value: string | undefined,
-  fallback: number,
-): number => {
-  switch (value) {
-    case "clamp-to-edge":
-      return gl.CLAMP_TO_EDGE;
-    case "linear":
-      return gl.LINEAR;
-    case "linear-mipmap-linear":
-      return gl.LINEAR_MIPMAP_LINEAR;
-    case "linear-mipmap-nearest":
-      return gl.LINEAR_MIPMAP_NEAREST;
-    case "mirrored-repeat":
-      return gl.MIRRORED_REPEAT;
-    case "nearest":
-      return gl.NEAREST;
-    case "nearest-mipmap-linear":
-      return gl.NEAREST_MIPMAP_LINEAR;
-    case "nearest-mipmap-nearest":
-      return gl.NEAREST_MIPMAP_NEAREST;
-    case "repeat":
-      return gl.REPEAT;
-    default:
-      return fallback;
-  }
-};
-
 const gltfSamplerMagFilter = (value: number | undefined): NonNullable<TextureSampler["magFilter"]> => {
   switch (value) {
     case 9728:
@@ -1392,20 +1367,6 @@ const gltfMaterialExtensionTextureSlots = (
 
   return Object.keys(slots).length === 0 ? undefined : slots;
 };
-
-const usesMipmaps = (value: string | undefined): boolean =>
-  value === "linear-mipmap-linear"
-  || value === "linear-mipmap-nearest"
-  || value === "nearest-mipmap-linear"
-  || value === "nearest-mipmap-nearest";
-
-const textureUploadInternalFormat = (
-  gl: WebGL2RenderingContext,
-  colorSpace: TextureColorSpace | undefined,
-): number =>
-  colorSpace === "srgb"
-    ? gl.SRGB8_ALPHA8
-    : gl.RGBA;
 
 const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;
@@ -7050,7 +7011,7 @@ class WebGlRootImpl implements WebGlRoot {
         continue;
       }
 
-      this.#uploadTexture(resource, pending.source, pending.texture);
+      uploadTexture(this.#gl, resource.texture, pending.source, pending.texture);
       delete resource.pendingUpload;
       if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
       resource.uploaded = true;
@@ -7196,30 +7157,6 @@ class WebGlRootImpl implements WebGlRoot {
 
   #studioEnvironmentSpecularTexture(): StudioEnvironmentSpecularResource {
     return ensureStudioEnvironmentSpecularTexture(this.#iblTextures);
-  }
-
-  #uploadTexture(
-    resource: TextureResource,
-    source: LoadedTextureSource,
-    texture: TextureAssetUploadRef,
-  ): void {
-    if (this.#disposed || !ownsTexture(this.#textureHandles, resource.texture)) return;
-
-    const gl = this.#gl;
-    prepareTextureUpload(gl, texture.flipY ?? true);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
-    if (isDecodedRgbaTexture(source)) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    }
-    const sampler = texture.sampler;
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, samplerConstant(gl, sampler?.magFilter, gl.LINEAR));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, samplerConstant(gl, sampler?.minFilter, gl.LINEAR));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, samplerConstant(gl, sampler?.wrapS, gl.CLAMP_TO_EDGE));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, samplerConstant(gl, sampler?.wrapT, gl.CLAMP_TO_EDGE));
-    if (usesMipmaps(sampler?.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
   }
 
   #gltfState(node: AnyGltfNode): GltfState {
