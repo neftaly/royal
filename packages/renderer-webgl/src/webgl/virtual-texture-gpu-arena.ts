@@ -40,6 +40,11 @@ export interface VirtualTextureGpuResource {
 
 export interface VirtualTextureGpuResourceOptions {
   readonly atlasMagFilter?: "linear" | "nearest";
+  /**
+   * Logical texture minification filter. The physical atlas has one mip level,
+   * so mipmapped variants use their leading `linear`/`nearest` component for
+   * within-page filtering; virtual mip selection is performed by the page table.
+   */
   readonly atlasMinFilter?:
     | "linear"
     | "linear-mipmap-linear"
@@ -58,7 +63,10 @@ export interface VirtualTextureGpuPendingUpload {
   readonly image: TexImageSource;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
-  /** Current working-set pages that should not be displaced by this upload. */
+  /**
+   * @deprecated Publish current protection with
+   * `setVirtualTextureGpuDesiredPageKeys`; per-upload snapshots are ignored.
+   */
   readonly protectedPageKeys?: readonly string[];
   readonly sourceGeneration: number;
 }
@@ -172,6 +180,8 @@ type MutableResource = {
   admission: VirtualTextureGpuAdmissionResult;
   allocation?: PhysicalAllocation;
   desiredGeneration: number;
+  readonly desiredPageKeys: Set<string>;
+  desiredPageKeysPublished: boolean;
   readonly key: string;
   inFlightUpload?: {
     readonly assignment: VirtualTextureAtlasAssignment;
@@ -426,6 +436,8 @@ const allocate = (
     setSampler(
       gl,
       resource.options.atlasMagFilter === "nearest" ? WEBGL_NEAREST : WEBGL_LINEAR,
+      // Virtual LOD comes from the page table; the single-level atlas retains
+      // only the filter's leading within-page minification component.
       resource.options.atlasMinFilter?.startsWith("nearest") === true ? WEBGL_NEAREST : WEBGL_LINEAR,
     );
     gl.bindTexture(gl.TEXTURE_2D, pageTableTexture);
@@ -497,6 +509,8 @@ export const admitVirtualTextureGpuResource = (
     resource = {
       admission,
       desiredGeneration: generation,
+      desiredPageKeys: new Set(),
+      desiredPageKeysPublished: false,
       key,
       visibleAssignments: new Map(),
       options,
@@ -525,6 +539,11 @@ export const admitVirtualTextureGpuResource = (
     if (created) {
       state.resources.delete(key);
       removeResourceOrder(state, resource);
+    } else {
+      // Allocation failure is terminal for this root-side source epoch. Leaving
+      // it eligible for automatic readmission could later consume physical
+      // budget after the owner has already transitioned the VT to an error.
+      resource.readmissionBlocked = true;
     }
     return { error, kind: "failed" };
   }
@@ -660,6 +679,7 @@ export const queueVirtualTextureGpuUpload = (
   // False leaves image ownership with the caller; only an indexed outcome transfers it back.
   if (
     upload.sourceGeneration !== mutable.options.sourceGeneration
+    || (mutable.desiredPageKeysPublished && !mutable.desiredPageKeys.has(upload.pageKey))
     || !validVirtualTexturePage(mutable.options.manifest, upload.page)
     || upload.pageKey !== virtualTexturePageKey(upload.page)
     || allocation?.pageTable.residentSlot(upload.page) !== undefined
@@ -669,6 +689,42 @@ export const queueVirtualTextureGpuUpload = (
   }
   mutable.pendingUploads.push(upload);
   if (allocation !== undefined) state.wakeRequested = true;
+  return true;
+};
+
+/**
+ * Publishes the resource's latest desired working set and returns ownership of
+ * obsolete queued images through ordinary discarded outcomes. An upload whose
+ * atlas/page-table transaction has started remains owned until it completes or
+ * the resource is released.
+ */
+export const setVirtualTextureGpuDesiredPageKeys = (
+  arena: VirtualTextureGpuArena,
+  resource: VirtualTextureGpuResource,
+  pageKeys: ReadonlySet<string>,
+): boolean => {
+  const state = stateOf(arena);
+  const mutable = mutableResource(resource);
+  if (state.resources.get(mutable.key) !== mutable) return false;
+
+  mutable.desiredPageKeys.clear();
+  for (const pageKey of pageKeys) mutable.desiredPageKeys.add(pageKey);
+  mutable.desiredPageKeysPublished = true;
+
+  const firstCancelable = mutable.pendingHead + (mutable.inFlightUpload === undefined ? 0 : 1);
+  let writeIndex = firstCancelable;
+  for (let readIndex = firstCancelable; readIndex < mutable.pendingUploads.length; readIndex += 1) {
+    const upload = mutable.pendingUploads[readIndex];
+    if (upload === undefined) continue;
+    if (mutable.desiredPageKeys.has(upload.pageKey)) {
+      mutable.pendingUploads[writeIndex] = upload;
+      writeIndex += 1;
+    } else {
+      publish(state, mutable, "discarded", upload);
+    }
+  }
+  mutable.pendingUploads.length = writeIndex;
+  compactPending(mutable);
   return true;
 };
 
@@ -749,7 +805,7 @@ const flushPageTable = (
 const protectedUploadPages = (
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
-  workingSet: readonly string[] | undefined,
+  workingSet: ReadonlySet<string>,
 ): ReadonlySet<string> => {
   const protectedPages = new Set(workingSet);
   const maxMip = manifest.mipCount
@@ -811,7 +867,7 @@ const uploadOne = (
     protectedPages: protectedUploadPages(
       resource.options.manifest,
       upload.page,
-      upload.protectedPageKeys,
+      resource.desiredPageKeys,
     ),
   });
   const assignment = transaction.assignment;

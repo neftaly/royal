@@ -517,6 +517,7 @@ type FakeGl = {
 type FetchRequest = {
   readonly reject: (reason?: unknown) => void;
   readonly resolve: (value: Response) => void;
+  readonly signal?: AbortSignal;
   readonly url: string;
 };
 
@@ -716,6 +717,7 @@ const fakeGl = (options: {
     }),
     uniform1f: record("uniform1f"),
     uniform1i: record("uniform1i"),
+    uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform3fv: record("uniform3fv"),
     uniform4fv: record("uniform4fv"),
@@ -811,10 +813,11 @@ class ControlledImage {
 
 const installFetchQueue = (): FetchRequest[] => {
   const requests: FetchRequest[] = [];
-  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => new Promise<Response>((resolve, reject) => {
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
     requests.push({
       reject,
       resolve,
+      ...(init?.signal === undefined || init.signal === null ? {} : { signal: init.signal }),
       url: typeof input === "string" ? input : input instanceof URL ? input.toString() : String(input),
     });
   })));
@@ -1133,6 +1136,18 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(jsonRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(parseRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(gpuRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 0, gpuAdmissionFailures: 1 });
+  });
+
+  it("aborts an abandoned authored manifest request on root disposal", () => {
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/pending.json") })));
+    expect(fetchRequests[0]?.signal?.aborted).toBe(false);
+
+    root.dispose();
+    expect(fetchRequests[0]?.signal?.aborted).toBe(true);
   });
 
   it("uses the shared ceil-derived mip grid for NPOT root demand", async () => {
@@ -1482,9 +1497,11 @@ describe("WebGL renderer virtual texturing integration", () => {
     const graph = renderScene(material, { exposureEv100: 1.75, toneMapping: "aces-fitted" });
 
     root.render(graph);
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
-    ControlledImage.instances[0]!.settleLoad();
+    root.render(graph);
+    await flushMicrotasks();
+    for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
 
     root.render(graph);
@@ -1517,12 +1534,12 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
       [gl.SRGB8_ALPHA8, 4, 4, 0, gl.RGBA],
-      [gl.RGBA8, 3, 1, 0, gl.RGBA],
+      [gl.RGBA8, 1, 1, 0, gl.RGBA],
     ]));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
-  it("keeps VT physical textures clamped, collapses atlas mip filters, and never generates atlas mipmaps", async () => {
+  it("uses a mipmapped filter's leading component on the single-level VT atlas", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
@@ -1561,7 +1578,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(calls.some((call) => call.name === "generateMipmap")).toBe(false);
   });
 
-  it("collapses nearest mipmap min filters to nearest for the VT atlas", async () => {
+  it("uses nearest within-page filtering for nearest-prefixed logical min filters", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const { calls, gl } = fakeGl();
@@ -1655,7 +1672,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     vi.useRealTimers();
   });
 
-  it("drains another desired VT page immediately when a page load rejects", async () => {
+  it("keeps the per-frame VT request-start budget monotonic after a rejection", async () => {
     vi.stubGlobal("Image", ControlledImage);
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     const fetchRequests = installFetchQueue();
@@ -1670,6 +1687,9 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(ControlledImage.instances).toHaveLength(4);
 
     ControlledImage.instances[0]!.settleError();
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(4);
+    root.render(renderVirtualTextureMaterials(materials));
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(5);
     expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, manifestFailures: 0 });
@@ -1738,10 +1758,18 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
     await flushMicrotasks();
+    // Replace the context-free bootstrap with the page selected by the real
+    // draw before exercising upload failure. The bootstrap image is stale once
+    // frame demand commits and should not be the page under retry.
+    root.render(graph);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    const demandedPage = ControlledImage.instances.at(-1)!;
+    const closesBeforeDemandedUpload = ControlledImage.closeCalls;
     pageTableUploadFailure.enabled = true;
     pageTableUploadFailure.error = undefined;
     ControlledImage.closeError = new Error("close failure");
-    ControlledImage.instances[0]?.settleLoad();
+    demandedPage.settleLoad();
     await flushMicrotasks();
 
     let threw = false;
@@ -1754,15 +1782,102 @@ describe("WebGL renderer virtual texturing integration", () => {
     }
     expect(threw).toBe(true);
     expect(caught).toBeUndefined();
-    expect(ControlledImage.closeCalls).toBe(0);
+    expect(ControlledImage.closeCalls).toBe(closesBeforeDemandedUpload);
     expect(pageUploads(calls)).toHaveLength(1);
     expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 0, uploadedPages: 0 });
 
     pageTableUploadFailure.enabled = false;
     expect(() => root.render(graph)).toThrow(ControlledImage.closeError);
-    expect(ControlledImage.closeCalls).toBe(1);
+    expect(ControlledImage.closeCalls).toBe(closesBeforeDemandedUpload + 1);
     expect(pageUploads(calls)).toHaveLength(1);
     expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+  });
+
+  it("retains the last committed VT demand when a frame fails before drawing", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+
+    // Commit draw-derived demand, then retire the now-stale context-free
+    // bootstrap so the selected page becomes the active request.
+    root.render(graph);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    const demandedPage = ControlledImage.instances.at(-1)!;
+    expect(demandedPage.src).toContain("/vt/pages/1-0.png");
+
+    const renderFailure = new Error("frame setup failure");
+    vi.mocked(gl.clear).mockImplementationOnce(() => {
+      throw renderFailure;
+    });
+    expect(() => root.render(graph)).toThrow(renderFailure);
+
+    demandedPage.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+
+    expect(pageUploads(calls)).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      outstandingPageRequests: 0,
+      residentPages: 1,
+      uploadedPages: 1,
+    });
+  });
+
+  it("clears outstanding ownership when demand discards a queued page even if image close throws", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/manifest.json") });
+    const visibleGraph = renderScene(material);
+
+    root.render(visibleGraph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    root.render(visibleGraph);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    const demandedPage = ControlledImage.instances.at(-1)!;
+    demandedPage.settleLoad();
+    await flushMicrotasks();
+    const imagesBeforeDiscard = ControlledImage.instances.length;
+    expect(demandedPage.src).toContain("/vt/pages/1-0.png");
+    expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(1);
+
+    ControlledImage.closeError = new Error("discard close failure");
+    expect(() => root.renderViews(visibleGraph, {
+      views: [{
+        projectionMatrix: [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1,
+        ],
+        viewMatrix: [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          10, 0, 0, 1,
+        ],
+        viewport: { height: 256, width: 256, x: 0, y: 0 },
+      }],
+    })).not.toThrow();
+    expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(0);
+
+    ControlledImage.closeError = undefined;
+    root.render(visibleGraph);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(imagesBeforeDiscard + 1);
+    expect(ControlledImage.instances.at(-1)?.src).toBe(demandedPage.src);
   });
 
   it("requests coarsest resident parent pages before mip-0 children", async () => {
@@ -1959,9 +2074,11 @@ describe("WebGL renderer virtual texturing integration", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
-    ControlledImage.instances[0]!.settleLoad();
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
+    await flushMicrotasks();
+    ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
@@ -1998,9 +2115,19 @@ describe("WebGL renderer virtual texturing integration", () => {
         src: "/vt/manifest.json",
       }),
     })));
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
-    ControlledImage.instances[0]!.settleLoad();
+    root.render(renderScene(unlitMaterial({
+      texture: virtualTexture({
+        sampler: {
+          wrapS: "repeat",
+          wrapT: "mirrored-repeat",
+        },
+        src: "/vt/manifest.json",
+      }),
+    })));
+    await flushMicrotasks();
+    ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
 
     root.render(renderScene(unlitMaterial({
@@ -2026,9 +2153,11 @@ describe("WebGL renderer virtual texturing integration", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
-    ControlledImage.instances[0]!.settleLoad();
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
+    await flushMicrotasks();
+    ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
@@ -2049,9 +2178,11 @@ describe("WebGL renderer virtual texturing integration", () => {
     });
 
     root.render(renderScene(material));
-    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
-    ControlledImage.instances[0]!.settleLoad();
+    root.render(renderScene(material));
+    await flushMicrotasks();
+    ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
     root.render(renderScene(material));
     expect(namedUniform1iValues(calls).u_vtFlipY).toContain(0);
@@ -2075,6 +2206,47 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(pageUploads(calls)).toHaveLength(beforeDisposeUploads);
     expect(calls.filter((call) => call.name === "deleteTexture")).toHaveLength(2);
     expect(root.snapshot().disposed).toBe(true);
+  });
+
+  it("retries retained VT image close ownership on repeated dispose", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
+    await flushMicrotasks();
+    root.render(graph);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    expect(ControlledImage.instances.length).toBeGreaterThan(1);
+    const demandedPage = ControlledImage.instances.at(-1)!;
+    expect(demandedPage.src).toContain("/vt/pages/1-0.png");
+    demandedPage.settleLoad();
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      outstandingPageRequests: 1,
+      pendingPages: 1,
+    });
+
+    const closesBeforeDispose = ControlledImage.closeCalls;
+    ControlledImage.closeError = new Error("dispose close failure");
+    expect(() => root.dispose()).toThrow(ControlledImage.closeError);
+    expect(ControlledImage.closeCalls).toBeGreaterThan(closesBeforeDispose);
+    const closesAfterFailedDispose = ControlledImage.closeCalls;
+    expect(root.snapshot().disposed).toBe(true);
+
+    ControlledImage.closeError = undefined;
+    expect(() => root.dispose()).not.toThrow();
+    expect(ControlledImage.closeCalls).toBeGreaterThan(closesAfterFailedDispose);
+    const closesAfterSuccessfulRetry = ControlledImage.closeCalls;
+
+    root.dispose();
+    expect(ControlledImage.closeCalls).toBe(closesAfterSuccessfulRetry);
   });
 
   it("falls back to diagnostic material color when explicit VT lacks sampler budget", async () => {

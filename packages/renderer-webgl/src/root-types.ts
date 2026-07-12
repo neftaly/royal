@@ -164,7 +164,9 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly physicalBudgetBytes: number;
   readonly physicalQuarantinedBytes: number;
   readonly preparedResidencyResolutions: number;
+  /** @deprecated Use `outstandingPageRequests`. */
   readonly requestedPages: number;
+  readonly outstandingPageRequests: number;
   readonly residentPages: number;
   readonly shaderBinds: number;
   readonly unreadyDraws: number;

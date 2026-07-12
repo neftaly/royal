@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { VirtualTextureManifestModel, VirtualTexturePageId } from
   "../packages/renderer-webgl/src/virtual-texturing";
 import {
+  admitVirtualTextureGpuResource,
   bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
   consumeVirtualTextureGpuWake,
@@ -13,6 +14,7 @@ import {
   queueVirtualTextureGpuUpload,
   releaseVirtualTextureGpuResource,
   retryVirtualTextureGpuAdmissions,
+  setVirtualTextureGpuDesiredPageKeys,
   touchVirtualTextureGpuResidency,
   virtualTextureGpuArenaSnapshot,
   virtualTextureGpuAdmission,
@@ -402,6 +404,32 @@ describe("virtual texture GPU arena", () => {
     expect(retryVirtualTextureGpuAdmissions(arena, 1)).toEqual([]);
   });
 
+  it("terminally blocks an existing resource after direct admission allocation fails", () => {
+    const { arena, gl, handles } = setup(200);
+    ensureVirtualTextureGpuResource(arena, "active", 1, options());
+    const dormant = ensureVirtualTextureGpuResource(arena, "dormant", 1, options());
+    releaseVirtualTextureGpuResource(arena, "active");
+    const fault = new Error("direct readmission allocation fault");
+    gl.failNextOperation(fault);
+
+    expect(admitVirtualTextureGpuResource(arena, "dormant", 1, options())).toEqual({
+      error: fault,
+      kind: "failed",
+    });
+    expect(virtualTextureGpuResourceSnapshot(dormant)).toMatchObject({ allocated: false });
+    expect(virtualTextureGpuArenaSnapshot(arena)).toMatchObject({
+      allocatedBytes: 0,
+      chargedBytes: 0,
+    });
+    expect(textureHandleArenaSnapshot(handles).ownedTextureCount).toBe(0);
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(false);
+    expect(retryVirtualTextureGpuAdmissions(arena, 1)).toEqual([]);
+    expect(virtualTextureGpuArenaSnapshot(arena)).toMatchObject({
+      allocatedBytes: 0,
+      chargedBytes: 0,
+    });
+  });
+
   it("zeros global accounting on context drop and admits retained demand on restore", () => {
     const { arena, handles } = setup(200);
     ensureVirtualTextureGpuResource(arena, "a", 1, options());
@@ -622,14 +650,78 @@ describe("virtual texture GPU arena", () => {
     const replacement = { mip: 0, x: 3, y: 0 };
     queueVirtualTextureGpuUpload(arena, resource, {
       ...upload(replacement, 4),
-      protectedPageKeys: ["0/0/0", "0/1/0"],
+      // Deprecated upload-local protection is deliberately contradictory;
+      // the resource's latest desired set is authoritative.
+      protectedPageKeys: ["0/2/0"],
     });
+    expect(setVirtualTextureGpuDesiredPageKeys(
+      arena,
+      resource,
+      new Set(["0/0/0", "0/1/0", "0/3/0"]),
+    )).toBe(true);
     processVirtualTextureGpuUploads(arena, 3);
 
     expect(virtualTextureGpuExactResidency(arena, "a", first)).toBeDefined();
     expect(virtualTextureGpuExactResidency(arena, "a", second)).toBeDefined();
     expect(virtualTextureGpuExactResidency(arena, "a", evictable)).toBeUndefined();
     expect(virtualTextureGpuExactResidency(arena, "a", replacement)).toBeDefined();
+  });
+
+  it("cancels obsolete queued uploads through exactly one discard outcome", () => {
+    const { arena } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    const obsolete = upload({ mip: 0, x: 0, y: 0 }, 1);
+    const desired = upload({ mip: 0, x: 1, y: 0 }, 2);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([obsolete.pageKey, desired.pageKey]));
+    queueVirtualTextureGpuUpload(arena, resource, obsolete);
+    queueVirtualTextureGpuUpload(arena, resource, desired);
+
+    expect(setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([desired.pageKey]))).toBe(true);
+    expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(1);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({
+      key: "a",
+      kind: "discarded",
+      upload: obsolete,
+    });
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([desired.pageKey]));
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+
+    processVirtualTextureGpuUploads(arena, 1);
+    expect(virtualTextureGpuOutcome(arena, 1)).toEqual({
+      key: "a",
+      kind: "completed",
+      upload: desired,
+    });
+  });
+
+  it("retains an in-flight upload while canceling later queued work", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    const inFlight = upload({ mip: 0, x: 0, y: 0 }, 1);
+    const queued = upload({ mip: 0, x: 1, y: 0 }, 2);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([inFlight.pageKey, queued.pageKey]));
+    queueVirtualTextureGpuUpload(arena, resource, inFlight);
+    queueVirtualTextureGpuUpload(arena, resource, queued);
+    // Atlas succeeds and the page-table publication fails, leaving the first
+    // upload transaction in flight.
+    gl.failOperationAfter(2);
+    expect(() => processVirtualTextureGpuUploads(arena, 1)).toThrow(/operation fault/);
+
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set());
+    expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(1);
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({
+      key: "a",
+      kind: "discarded",
+      upload: queued,
+    });
+    flushVirtualTextureGpuPageTables(arena);
+    expect(virtualTextureGpuOutcome(arena, 1)).toEqual({
+      key: "a",
+      kind: "completed",
+      upload: inFlight,
+    });
+    expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(0);
   });
 
   it("matches clock fallback behavior when every resident slot is protected", () => {
@@ -661,6 +753,7 @@ describe("virtual texture GPU arena", () => {
     const { arena, gl, handles } = setup();
     const first = ensureVirtualTextureGpuResource(arena, "a", 1, options());
     const pending = upload({ mip: 0, x: 0, y: 0 }, 7);
+    setVirtualTextureGpuDesiredPageKeys(arena, first, new Set([pending.pageKey]));
     queueVirtualTextureGpuUpload(arena, first, pending);
     consumeVirtualTextureGpuWake(arena);
     dropVirtualTextureGpuContext(arena);

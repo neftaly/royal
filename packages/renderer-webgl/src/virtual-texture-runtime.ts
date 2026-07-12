@@ -13,6 +13,7 @@ import {
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
+import type { VirtualTexturePageRetryState } from "./virtual-texture-orchestration";
 
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
@@ -68,16 +69,19 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
+  demandPublished: boolean;
   diagnosticsEnabled: boolean;
-  readonly desiredPageKeys: Set<string>;
-  readonly desiredPages: VirtualTexturePageId[];
+  desiredPageKeys: Set<string>;
+  desiredPages: VirtualTexturePageId[];
   readonly key: string;
   loadingPages: Set<string>;
-  readonly pageRetryAttempts: Map<string, number>;
+  manifestAbortController?: AbortController;
+  readonly pageRetryStates: Map<string, VirtualTexturePageRetryState>;
   readonly pageRetryTimers: Map<string, ReturnType<typeof setTimeout>>;
   manifest?: VirtualTextureManifestModel;
   pageUrisByKey?: ReadonlyMap<string, string>;
-  readonly requestedPages: Set<string>;
+  /** Page loads or decoded uploads that have not yet produced a terminal GPU outcome. */
+  readonly outstandingPageKeys: Set<string>;
   sourceGeneration: number;
   stats: VirtualTextureRuntimeStats;
   status: VirtualTextureRuntimeStatus;
