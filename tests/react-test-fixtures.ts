@@ -179,6 +179,8 @@ export const fakeRendererRoot = ({
   context = {
     alpha: true,
     antialias: true,
+    generatedRasterVirtualTextures: false,
+    virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
   },
   diagnostics = {},
   pick = () => undefined,

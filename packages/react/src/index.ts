@@ -7,6 +7,21 @@ export {
 } from './canvas';
 export type { CanvasContextOptions, CanvasProps } from './canvas';
 export type { CanvasInteractions } from './scene-interactions';
+export type {
+  SolidTextureOptions,
+  SolidTextureRef,
+  TextureAssetOptions,
+  TextureAssetRef,
+  TextureColorSpace,
+  TextureContentKey,
+  TextureRef,
+  TextureSampler,
+  TextureSamplerFilter,
+  TextureSamplerWrap,
+  TextureVersion,
+  VirtualTextureAssetOptions,
+  VirtualTextureAssetRef,
+} from '@royal/renderer-core';
 
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';

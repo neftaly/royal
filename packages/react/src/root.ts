@@ -11,6 +11,10 @@ export interface RoyalRendererRootContextOptions {
   readonly alpha?: boolean;
   /** @defaultValue `true` */
   readonly antialias?: boolean;
+  /** Generate VT pages for ordinary large raster textures. @defaultValue `false` */
+  readonly generatedRasterVirtualTextures?: boolean;
+  /** Global physical byte budget shared by virtual textures. @defaultValue `67108864` */
+  readonly virtualTexturePhysicalByteBudget?: number;
 }
 
 /** Options for the Royal renderer root. */
@@ -112,6 +116,8 @@ export const createRendererRoot = (
   const context: RoyalRendererRootContextSnapshot = Object.freeze({
     alpha: root.options.alpha,
     antialias: root.options.antialias,
+    generatedRasterVirtualTextures: root.options.generatedRasterVirtualTextures,
+    virtualTexturePhysicalByteBudget: root.options.virtualTexturePhysicalByteBudget,
   });
 
   const royalRoot: RoyalRendererRoot = {

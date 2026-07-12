@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { CanvasProps } from '@royal/react';
+import type {
+  CanvasProps,
+  TextureAssetRef,
+  TextureColorSpace,
+  TextureSampler,
+  VirtualTextureAssetRef,
+} from '@royal/react';
 import { perspectiveCamera, scene } from '@royal/react/scene';
 
 const renderScene = scene({
@@ -23,5 +29,28 @@ describe('Canvas public scene boundary', () => {
     expect(dom).toMatchObject({ type: 'div' });
     expect(props.scene.kind).toBe('scene');
     expect(invalid.scene).toBe(dom);
+  });
+
+  it('accepts VT root policy through Canvas context', () => {
+    const context = {
+      generatedRasterVirtualTextures: true,
+      virtualTexturePhysicalByteBudget: 32 * 1024 * 1024,
+    } satisfies NonNullable<CanvasProps['context']>;
+
+    const props = { context, scene: renderScene } satisfies CanvasProps;
+    expect(props.context).toEqual(context);
+  });
+
+  it('re-exports concrete public texture types', () => {
+    const colorSpace: TextureColorSpace = 'srgb';
+    const sampler: TextureSampler = { wrapS: 'repeat' };
+    const ordinary: TextureAssetRef = { colorSpace, kind: 'asset', sampler, uri: '/map.png' };
+    const virtual: VirtualTextureAssetRef = {
+      colorSpace,
+      kind: 'virtual-asset',
+      manifestUri: '/map.vt.json',
+      sampler,
+    };
+    expect([ordinary.kind, virtual.kind]).toEqual(['asset', 'virtual-asset']);
   });
 });

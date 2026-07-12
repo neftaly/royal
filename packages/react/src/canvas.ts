@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type MutableRefObject,
   type Ref,
   type ReactNode,
 } from "react";
@@ -91,6 +92,15 @@ export const applyCanvasRendererLifecycle = (
   }
 };
 
+/** @internal Releases Canvas ownership before entering fallible renderer cleanup. */
+export const disposeCanvasRendererRoot = (
+  rootRef: MutableRefObject<RoyalRendererRoot | null>,
+  root: RoyalRendererRoot,
+): void => {
+  if (rootRef.current === root) rootRef.current = null;
+  root.dispose();
+};
+
 /** Returns a stable callback that requests one render of the current Canvas root. */
 export const useInvalidate = (): (() => void) => {
   const root = useCanvasRoot();
@@ -107,7 +117,34 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
     root?.pick(input), [root]);
 };
 
-const toRendererRootOptions = (context: CanvasContextOptions): RoyalRendererRootOptions => ({ context });
+/** @internal Normalizes semantically empty Canvas context options. */
+export const normalizeCanvasRendererOptions = (
+  context: CanvasContextOptions | undefined,
+): RoyalRendererRootOptions | undefined => {
+  const alpha = context?.alpha;
+  const antialias = context?.antialias;
+  const generatedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const virtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
+  if (
+    alpha === undefined
+    && antialias === undefined
+    && generatedRasterVirtualTextures === undefined
+    && virtualTexturePhysicalByteBudget === undefined
+  ) return undefined;
+
+  return {
+    context: {
+      ...(alpha === undefined ? {} : { alpha }),
+      ...(antialias === undefined ? {} : { antialias }),
+      ...(generatedRasterVirtualTextures === undefined
+        ? {}
+        : { generatedRasterVirtualTextures }),
+      ...(virtualTexturePhysicalByteBudget === undefined
+        ? {}
+        : { virtualTexturePhysicalByteBudget }),
+    },
+  };
+};
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -345,6 +382,7 @@ export const Canvas = ({
   ...canvasProps
 }: CanvasProps): ReactNode => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRootRef = useRef<RoyalRendererRoot | null>(null);
   const rendererFrameClockRef = useRef<RoyalRendererFrameClock | undefined>(undefined);
   const [rootError, setRootError] = useState<unknown>(null);
   const frameLoop = useMemo(() => createFrameLoop((error) => {
@@ -360,7 +398,8 @@ export const Canvas = ({
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
   const contextAlpha = context?.alpha;
   const contextAntialias = context?.antialias;
-  const hasContextOptions = context !== undefined;
+  const contextGeneratedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const contextVirtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
@@ -368,16 +407,21 @@ export const Canvas = ({
   }, [ref]);
 
   const memoizedRendererOptions = useMemo(
-    () => !hasContextOptions
-      ? undefined
-      : toRendererRootOptions({
-        ...(contextAlpha === undefined ? {} : { alpha: contextAlpha }),
-        ...(contextAntialias === undefined ? {} : { antialias: contextAntialias }),
-      }),
+    () => normalizeCanvasRendererOptions({
+      ...(contextAlpha === undefined ? {} : { alpha: contextAlpha }),
+      ...(contextAntialias === undefined ? {} : { antialias: contextAntialias }),
+      ...(contextGeneratedRasterVirtualTextures === undefined
+        ? {}
+        : { generatedRasterVirtualTextures: contextGeneratedRasterVirtualTextures }),
+      ...(contextVirtualTexturePhysicalByteBudget === undefined
+        ? {}
+        : { virtualTexturePhysicalByteBudget: contextVirtualTexturePhysicalByteBudget }),
+    }),
     [
       contextAlpha,
       contextAntialias,
-      hasContextOptions,
+      contextGeneratedRasterVirtualTextures,
+      contextVirtualTexturePhysicalByteBudget,
     ],
   );
   const canvasElementNode = createElement("canvas", {
@@ -447,8 +491,10 @@ export const Canvas = ({
     let root: RoyalRendererRoot;
     try {
       root = createRendererRoot(canvas, memoizedRendererOptions);
+      rendererRootRef.current = root;
       setRootError(null);
     } catch (error) {
+      rendererRootRef.current = null;
       setCanvasRoot(null);
       setRootError(error);
       return undefined;
@@ -456,8 +502,7 @@ export const Canvas = ({
     setCanvasRoot(root);
 
     return () => {
-      root.dispose();
-      setCanvasRoot(null);
+      disposeCanvasRendererRoot(rendererRootRef, root);
     };
   }, [memoizedRendererOptions]);
 

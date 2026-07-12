@@ -31,6 +31,8 @@ describe("React root public API", () => {
     const root = createRendererRoot(canvas, {
       context: {
         alpha: false,
+        generatedRasterVirtualTextures: true,
+        virtualTexturePhysicalByteBudget: 1024,
       },
     });
     const renderRoot = emptyScene();
@@ -50,6 +52,8 @@ describe("React root public API", () => {
       context: {
         alpha: false,
         antialias: true,
+        generatedRasterVirtualTextures: true,
+        virtualTexturePhysicalByteBudget: 1024,
       },
       disposed: false,
       frame: 0,
@@ -66,6 +70,10 @@ describe("React root public API", () => {
       gltfInstancing: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });
+    expect(webGlRootForRoyalRoot(root).options).toMatchObject({
+      generatedRasterVirtualTextures: true,
+      virtualTexturePhysicalByteBudget: 1024,
+    });
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
 
     root.render(renderRoot);
@@ -73,6 +81,8 @@ describe("React root public API", () => {
     expect(root.context).toEqual({
       alpha: false,
       antialias: true,
+      generatedRasterVirtualTextures: true,
+      virtualTexturePhysicalByteBudget: 1024,
     });
     expect(Object.isFrozen(root.context)).toBe(true);
     expect(Object.isFrozen(root.snapshot())).toBe(true);
