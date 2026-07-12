@@ -61,11 +61,13 @@ glTF draw collection.
   matrices, and transient batch-input objects are deleted. Retained batch slots
   receive local matrices directly from packet tables and preserve exact warm
   upload signatures. The workspace owns no GL handles and imports no root or
-  lifecycle code. A pure root-lifetime numeric batch registry and separate
-  segment grouping authority are also validated: exact four-lane identities,
+  lifecycle code. A root-lifetime numeric batch registry and separate segment
+  grouping authority now drive the live backend: exact four-lane identities,
   render-class provenance, frame touch unions, first-seen class/member order,
-  bounded open-address hashing, and generation-stamped fail-closed results are
-  ready to replace the remaining string batch-plan backend.
+  bounded open-address hashing, and generation-stamped fail-closed results.
+  Stable numeric IDs own retained batch objects and instance-buffer identity;
+  the string batch-plan key/cache, grouping `Set`/`Map`, temporary class arrays,
+  and their frame-end scan are deleted.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
@@ -76,13 +78,10 @@ glTF draw collection.
 
 Resume in this order:
 
-1. Wire the retained numeric batch registry/grouping authority into root batch
-   objects and instance-buffer identity, deleting the remaining string
-   batch-plan key/cache, refresh `Map`, and transient render-class arrays. Then
-   move complete instance-buffer, surface draw, transmission,
-   and HDR ownership families out of `root.ts` and extract the real
-   callback-free executor. Delete active-resource scans and frame-end pruning
-   paths as each owning family moves.
+1. Move the complete numeric instance-buffer family, surface draw kernel,
+   transmission target, and HDR target out of `root.ts`, then compose them into
+   the real callback-free executor. Move or delete the remaining active-resource
+   scans and frame-end pruning paths with their owning families.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.

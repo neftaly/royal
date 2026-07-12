@@ -253,6 +253,17 @@ import {
   type GltfPacketSubmissionWorkspace,
 } from "./gltf-packet-submission-workspace";
 import {
+  assertGltfPacketBatchSegmentGroupsCurrent,
+  beginGltfPacketBatchRegistryFrame,
+  clearGltfPacketBatchRegistry,
+  clearGltfPacketBatchSegmentGroups,
+  createGltfPacketBatchRegistry,
+  createGltfPacketBatchSegmentGroups,
+  groupGltfPacketSubmissionSegment,
+  type GltfPacketBatchRegistry,
+  type GltfPacketBatchSegmentGroups,
+} from "./gltf-packet-batch-registry";
+import {
   identityMat4,
   inverseMat4,
   inverseMat4Into,
@@ -336,7 +347,6 @@ import {
 import {
   DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS,
   isBlendedSurfaceMaterial,
-  isTransmissiveSurfaceMaterial,
   materialColor,
   materialEmissiveColor,
   surfaceMaterialAlphaCutoff,
@@ -954,7 +964,7 @@ type GltfPrimitiveDrawBatch = {
   cpuGeometry: CpuGeometry;
   geometry: GeometryResource;
   geometryId: number;
-  readonly key: string;
+  readonly key: number;
   lights: SurfaceLightSet;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
@@ -968,10 +978,6 @@ type GltfPrimitiveDrawBatch = {
   readonly rootLogicalIndices: number[];
   readonly rootTransforms: Array<Transform | undefined>;
   sidedness: DrawSidedness;
-};
-
-type GltfPrimitiveDrawBatchPlanCacheEntry = {
-  readonly batches: GltfPrimitiveDrawBatch[];
 };
 
 type GltfPreparedPrimitiveMaterial = {
@@ -2058,8 +2064,8 @@ class WebGlRootImpl implements WebGlRoot {
     new Map<GltfInstanceTransforms, GltfInstanceTransformSubscription>();
   #gltfInstanceSourceKey = 1;
   #gltfInstanceFrameActive = false;
-  readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
-  readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
+  readonly #gltfBatches: Array<GltfPrimitiveDrawBatch | undefined> = [];
+  readonly #gltfInstanceBuffers = new Map<number, GltfInstanceBufferResource>();
   #sharedViewLodSelections: SharedViewLodSelections = createSharedViewLodSelections();
   readonly #sharedViewLodSelectionIds = new Map<string, number>();
   #sharedViewLodSelectionIdCount = 0;
@@ -2082,6 +2088,16 @@ class WebGlRootImpl implements WebGlRoot {
     GltfPacketRootBinding,
     SurfaceLightSet
   > = createGltfPacketSubmissionWorkspace();
+  readonly #gltfPacketBatchRegistry: GltfPacketBatchRegistry = createGltfPacketBatchRegistry();
+  readonly #gltfPacketBatchSegmentGroups: GltfPacketBatchSegmentGroups = createGltfPacketBatchSegmentGroups();
+  #gltfLiveBatchIds = new Uint32Array(1);
+  #gltfLiveBatchCount = 0;
+  #gltfInstanceActiveEpochs = new Uint32Array(1);
+  #gltfInstanceActiveEpoch = 0;
+  #gltfActiveInstanceBufferIds = new Uint32Array(1);
+  #gltfActiveInstanceBufferCount = 0;
+  #gltfLiveInstanceBufferIds = new Uint32Array(1);
+  #gltfLiveInstanceBufferCount = 0;
   readonly #gltfMaterialBatchClassIds = new Map<string, number>();
   #gltfMaterialBatchClassIdCount = 0;
   readonly #gltfLightScopeIds = new Map<string, number>();
@@ -2106,8 +2122,6 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #ownedRenderbuffers = new Set<WebGLRenderbuffer>();
   readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
-  readonly #activeGltfBatchPlanCacheKeys = new Set<string>();
-  readonly #activeGltfInstanceBufferKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #contextError: string | undefined;
@@ -2469,8 +2483,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#scheduledRenderGeneration = 0;
     this.#renderObjectInvalidationPending = false;
     this.#applyPendingResourceArenaEvents();
-    this.#activeGltfBatchPlanCacheKeys.clear();
-    this.#activeGltfInstanceBufferKeys.clear();
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
     try {
@@ -2500,6 +2512,8 @@ class WebGlRootImpl implements WebGlRoot {
         plan.revision,
         this.#gltfPacketTopology.catalog,
       );
+      beginGltfPacketBatchRegistryFrame(this.#gltfPacketBatchRegistry);
+      this.#beginGltfInstanceBufferFrame();
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         // A scene occurrence has the same resource identity in every view.
         // Resetting the ordinal across eyes avoids duplicate instance uploads
@@ -2620,8 +2634,7 @@ class WebGlRootImpl implements WebGlRoot {
       gl.bindFramebuffer?.(gl.FRAMEBUFFER, null);
     }
 
-    this.#releaseUnusedGltfBatchPlans();
-    this.#releaseUnusedGltfInstanceBuffers();
+    this.#releaseUnusedGltfBatchResources();
     pruneClusteredLightCache(this.#clusteredLightResources, this.#frame, (texture) => {
       this.#gl.deleteTexture(texture);
       this.#ownedTextures.delete(texture);
@@ -2767,9 +2780,9 @@ class WebGlRootImpl implements WebGlRoot {
     this.#iblSpecularTextures.clear();
     this.#studioEnvironmentSpecularTextures.clear();
     this.#clusteredLightResources.clear();
-    this.#gltfBatchPlanCache.clear();
-    this.#activeGltfBatchPlanCacheKeys.clear();
-    this.#activeGltfInstanceBufferKeys.clear();
+    this.#gltfBatches.length = 0;
+    this.#gltfLiveBatchCount = 0;
+    clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
     this.#gltfInstanceFrameActive = false;
     this.#programLinkFrame = -1;
     this.#programLinksThisFrame = 0;
@@ -2848,8 +2861,13 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfPreparationScheduler.dispose();
     this.#gltfImageScheduler.dispose();
     this.#gltfIblImageScheduler.dispose();
-    this.#gltfBatchPlanCache.clear();
+    this.#gltfBatches.length = 0;
     this.#gltfInstanceBuffers.clear();
+    this.#gltfLiveBatchCount = 0;
+    this.#gltfActiveInstanceBufferCount = 0;
+    this.#gltfLiveInstanceBufferCount = 0;
+    clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
+    clearGltfPacketBatchRegistry(this.#gltfPacketBatchRegistry);
     clearGltfPacketSubmissionWorkspace(this.#gltfPacketSubmissionWorkspace);
     this.#gltfMaterialBatchClassIds.clear();
     this.#gltfMaterialBatchClassIdCount = 0;
@@ -2859,7 +2877,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#pendingGltfImageRowHead = 0;
     this.#iblBrdfLutTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
-    this.#activeGltfInstanceBufferKeys.clear();
     this.#cameraViewResourceSubscription?.unsubscribe();
     this.#cameraViewResourceSubscription = undefined;
     for (const [ref, binding] of this.#renderObjectBindings) {
@@ -4242,77 +4259,90 @@ class WebGlRootImpl implements WebGlRoot {
     sourceY: number,
   ): void {
     if (this.#gltfPacketSubmissionWorkspace.count === 0) return;
-    const batches = this.#gltfPrimitiveDrawBatches(sceneLights);
-    for (const batch of batches) {
+    const plan = this.#framePlan!;
+    const catalog = this.#gltfPacketTopology.catalog;
+    groupGltfPacketSubmissionSegment(
+      this.#gltfPacketBatchRegistry,
+      this.#gltfPacketBatchSegmentGroups,
+      this.#gltfPacketSubmissionWorkspace,
+      plan.revision,
+      catalog,
+    );
+    assertGltfPacketBatchSegmentGroupsCurrent(
+      this.#gltfPacketBatchRegistry,
+      this.#gltfPacketBatchSegmentGroups,
+      this.#gltfPacketSubmissionWorkspace,
+      plan.revision,
+      catalog,
+    );
+    this.#prepareGltfPacketBatches(sceneLights);
+    const groups = this.#gltfPacketBatchSegmentGroups;
+    for (let index = 0; index < groups.activeBatchCount; index += 1) {
+      const batch = this.#gltfBatches[groups.activeBatchIds[index]!]!;
       this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
 
-    const blendedBatches: GltfPrimitiveDrawBatch[] = [];
-    const transmissiveBatches: GltfPrimitiveDrawBatch[] = [];
-    for (const batch of batches) {
-      if (isBlendedSurfaceMaterial(batch.material)) {
-        blendedBatches.push(batch);
-      } else if (isTransmissiveSurfaceMaterial(batch.material)) {
-        transmissiveBatches.push(batch);
-      } else {
-        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, undefined);
-      }
+    for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
+      this.#drawGltfPrimitiveDrawBatch(
+        this.#gltfBatches[groups.opaqueBatchIds[index]!]!,
+        projection,
+        view,
+        toneMapping,
+        viewportSize,
+        undefined,
+      );
     }
 
-    if (transmissiveBatches.length > 0) {
+    if (groups.transmissiveBatchCount > 0) {
       const screenColorTexture = this.#copyTransmissionScreenColorTexture(
         viewportSize,
         sourceX,
         sourceY,
       );
-      for (const batch of transmissiveBatches) {
-        this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, screenColorTexture);
+      for (let index = 0; index < groups.transmissiveBatchCount; index += 1) {
+        this.#drawGltfPrimitiveDrawBatch(
+          this.#gltfBatches[groups.transmissiveBatchIds[index]!]!,
+          projection,
+          view,
+          toneMapping,
+          viewportSize,
+          screenColorTexture,
+        );
       }
     }
-    for (const batch of blendedBatches) {
-      this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, undefined);
+    for (let index = 0; index < groups.blendedBatchCount; index += 1) {
+      this.#drawGltfPrimitiveDrawBatch(
+        this.#gltfBatches[groups.blendedBatchIds[index]!]!,
+        projection,
+        view,
+        toneMapping,
+        viewportSize,
+        undefined,
+      );
     }
   }
 
-  #gltfSubmissionBatchKey(index: number): string {
+  #prepareGltfPacketBatches(sceneLights: SurfaceLightSet | undefined): void {
     const workspace = this.#gltfPacketSubmissionWorkspace;
-    return `${workspace.geometryIdentityIds[index]}|${workspace.materialBatchClassIds[index]}|${workspace.sidedness[index]}|${workspace.lightScopeIds[index]}`;
-  }
-
-  #gltfPrimitiveDrawBatches(sceneLights: SurfaceLightSet | undefined): readonly GltfPrimitiveDrawBatch[] {
-    const workspace = this.#gltfPacketSubmissionWorkspace;
-    const parts: string[] = [];
-    const seen = new Set<string>();
-    for (let index = 0; index < workspace.count; index += 1) {
-      const key = this.#gltfSubmissionBatchKey(index);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      parts.push(`${key.length}:${key}`);
-    }
-    const planKey = parts.join("|");
-    this.#activeGltfBatchPlanCacheKeys.add(planKey);
-    const cached = this.#gltfBatchPlanCache.get(planKey);
-    if (cached !== undefined) {
-      this.#refreshGltfPrimitiveDrawBatchPlan(cached.batches, sceneLights);
-      return cached.batches;
-    }
-
-    const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
-    for (let index = 0; index < workspace.count; index += 1) {
-      const key = this.#gltfSubmissionBatchKey(index);
-      let batch = batchesByKey.get(key);
+    const groups = this.#gltfPacketBatchSegmentGroups;
+    for (let activeIndex = 0; activeIndex < groups.activeBatchCount; activeIndex += 1) {
+      const batchId = groups.activeBatchIds[activeIndex]!;
+      const memberFirst = groups.batchMemberFirsts[batchId]!;
+      const memberCount = groups.batchCounts[batchId]!;
+      const firstIndex = groups.memberIndices[memberFirst]!;
+      let batch = this.#gltfBatches[batchId];
       if (batch === undefined) {
-        const geometryId = workspace.geometryIds[index]!;
+        const geometryId = workspace.geometryIds[firstIndex]!;
         const geometry = this.#geometryResource(geometryId);
-        const material = workspace.materialBindings[workspace.materialBindingIds[index]!]!;
-        const assetLights = workspace.lightBindingIds[index] === NO_FRAME_PACKET_ID
+        const material = workspace.materialBindings[workspace.materialBindingIds[firstIndex]!]!;
+        const assetLights = workspace.lightBindingIds[firstIndex] === NO_FRAME_PACKET_ID
           ? undefined
-          : workspace.lightBindings[workspace.lightBindingIds[index]!]!;
+          : workspace.lightBindings[workspace.lightBindingIds[firstIndex]!]!;
         batch = {
           cpuGeometry: geometry.source,
           geometry,
           geometryId,
-          key,
+          key: batchId,
           lights: combineSurfaceLightSets(sceneLights, assetLights),
           localModelSignature: [],
           localModels: [],
@@ -4326,28 +4356,20 @@ class WebGlRootImpl implements WebGlRoot {
           rootLogicalIndices: [],
           rootTransforms: [],
           sidedness: {
-            doubleSided: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-            frontFaceCcw: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
+            doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
+            frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
           },
         };
-        batchesByKey.set(key, batch);
+        if (this.#gltfLiveBatchIds.length <= this.#gltfLiveBatchCount) {
+          const ids = new Uint32Array(this.#gltfLiveBatchIds.length * 2);
+          ids.set(this.#gltfLiveBatchIds);
+          this.#gltfLiveBatchIds = ids;
+        }
+        this.#gltfBatches[batchId] = batch;
+        this.#gltfLiveBatchIds[this.#gltfLiveBatchCount] = batchId;
+        this.#gltfLiveBatchCount += 1;
+        this.#gltfInstancingCounters.batchPlansBuilt += 1;
       }
-      this.#appendGltfWorkspaceSubmissionToBatch(batch, index);
-    }
-
-    const batches = Array.from(batchesByKey.values());
-    this.#gltfBatchPlanCache.set(planKey, { batches });
-    this.#gltfInstancingCounters.batchPlansBuilt += batches.length;
-
-    return batches;
-  }
-
-  #refreshGltfPrimitiveDrawBatchPlan(
-    batches: readonly GltfPrimitiveDrawBatch[],
-    sceneLights: SurfaceLightSet | undefined,
-  ): void {
-    const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
-    for (const batch of batches) {
       batch.localModelSignature.length = 0;
       batch.localModels.length = 0;
       batch.rootPositionSignature.length = 0;
@@ -4357,31 +4379,27 @@ class WebGlRootImpl implements WebGlRoot {
       batch.rootInstanceViews.length = 0;
       batch.rootLogicalIndices.length = 0;
       batch.rootTransforms.length = 0;
-      batchesByKey.set(batch.key, batch);
-    }
-
-    const workspace = this.#gltfPacketSubmissionWorkspace;
-    for (let index = 0; index < workspace.count; index += 1) {
-      const batch = batchesByKey.get(this.#gltfSubmissionBatchKey(index));
-      if (batch === undefined) continue;
-      if (batch.localModels.length === 0) {
-        const geometryId = workspace.geometryIds[index]!;
-        const geometry = this.#geometryResource(geometryId);
-        const material = workspace.materialBindings[workspace.materialBindingIds[index]!]!;
-        const assetLights = workspace.lightBindingIds[index] === NO_FRAME_PACKET_ID
-          ? undefined
-          : workspace.lightBindings[workspace.lightBindingIds[index]!]!;
-        batch.cpuGeometry = geometry.source;
-        batch.geometry = geometry;
-        batch.geometryId = geometryId;
-        batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
-        batch.material = material.material;
-        batch.sidedness = {
-          doubleSided: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-          frontFaceCcw: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
-        };
+      const geometryId = workspace.geometryIds[firstIndex]!;
+      const geometry = this.#geometryResource(geometryId);
+      const material = workspace.materialBindings[workspace.materialBindingIds[firstIndex]!]!;
+      const assetLights = workspace.lightBindingIds[firstIndex] === NO_FRAME_PACKET_ID
+        ? undefined
+        : workspace.lightBindings[workspace.lightBindingIds[firstIndex]!]!;
+      batch.cpuGeometry = geometry.source;
+      batch.geometry = geometry;
+      batch.geometryId = geometryId;
+      batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
+      batch.material = material.material;
+      batch.sidedness = {
+        doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
+        frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
+      };
+      for (let memberOffset = 0; memberOffset < memberCount; memberOffset += 1) {
+        this.#appendGltfWorkspaceSubmissionToBatch(
+          batch,
+          groups.memberIndices[memberFirst + memberOffset]!,
+        );
       }
-      this.#appendGltfWorkspaceSubmissionToBatch(batch, index);
     }
   }
 
@@ -5174,7 +5192,7 @@ class WebGlRootImpl implements WebGlRoot {
     geometry: GeometryResource,
     geometryId: number,
     cpuGeometry: CpuGeometry,
-    instanceBufferKey: string,
+    instanceBufferKey: number,
     material: SurfaceMaterial,
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
@@ -5991,7 +6009,7 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #bindGltfInstanceModels(
-    key: string,
+    key: number,
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
     rootTransforms: readonly (Transform | undefined)[],
@@ -6324,10 +6342,43 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #gltfInstanceBufferResource(key: string): GltfInstanceBufferResource {
-    this.#activeGltfInstanceBufferKeys.add(key);
+  #beginGltfInstanceBufferFrame(): void {
+    this.#gltfInstanceActiveEpoch = (this.#gltfInstanceActiveEpoch + 1) >>> 0;
+    if (this.#gltfInstanceActiveEpoch === 0) {
+      this.#gltfInstanceActiveEpochs.fill(0);
+      this.#gltfInstanceActiveEpoch = 1;
+    }
+    this.#gltfActiveInstanceBufferCount = 0;
+  }
+
+  #touchGltfInstanceBuffer(key: number): void {
+    if (this.#gltfInstanceActiveEpochs.length <= key) {
+      let capacity = this.#gltfInstanceActiveEpochs.length;
+      while (capacity <= key) capacity *= 2;
+      const epochs = new Uint32Array(capacity);
+      epochs.set(this.#gltfInstanceActiveEpochs);
+      this.#gltfInstanceActiveEpochs = epochs;
+    }
+    if (this.#gltfInstanceActiveEpochs[key] === this.#gltfInstanceActiveEpoch) return;
+    this.#gltfInstanceActiveEpochs[key] = this.#gltfInstanceActiveEpoch;
+    if (this.#gltfActiveInstanceBufferIds.length <= this.#gltfActiveInstanceBufferCount) {
+      const ids = new Uint32Array(this.#gltfActiveInstanceBufferIds.length * 2);
+      ids.set(this.#gltfActiveInstanceBufferIds);
+      this.#gltfActiveInstanceBufferIds = ids;
+    }
+    this.#gltfActiveInstanceBufferIds[this.#gltfActiveInstanceBufferCount] = key;
+    this.#gltfActiveInstanceBufferCount += 1;
+  }
+
+  #gltfInstanceBufferResource(key: number): GltfInstanceBufferResource {
+    this.#touchGltfInstanceBuffer(key);
     const existing = this.#gltfInstanceBuffers.get(key);
     if (existing !== undefined) return existing;
+    if (this.#gltfLiveInstanceBufferIds.length <= this.#gltfLiveInstanceBufferCount) {
+      const ids = new Uint32Array(this.#gltfLiveInstanceBufferIds.length * 2);
+      ids.set(this.#gltfLiveInstanceBufferIds);
+      this.#gltfLiveInstanceBufferIds = ids;
+    }
     const packedLogicalIndices = new Int32Array();
     packedLogicalIndices.fill(-1);
     const resource: GltfInstanceBufferResource = {
@@ -6341,26 +6392,47 @@ class WebGlRootImpl implements WebGlRoot {
       scaleVersions: new Map(),
     };
     this.#gltfInstanceBuffers.set(key, resource);
+    this.#gltfLiveInstanceBufferIds[this.#gltfLiveInstanceBufferCount] = key;
+    this.#gltfLiveInstanceBufferCount += 1;
     return resource;
   }
 
-  #releaseUnusedGltfBatchPlans(): void {
-    for (const key of this.#gltfBatchPlanCache.keys()) {
-      if (!this.#activeGltfBatchPlanCacheKeys.has(key)) this.#gltfBatchPlanCache.delete(key);
+  #releaseUnusedGltfBatchResources(): void {
+    const registry = this.#gltfPacketBatchRegistry;
+    for (let index = 0; index < this.#gltfLiveBatchCount; index += 1) {
+      const batchId = this.#gltfLiveBatchIds[index]!;
+      if (registry.batchTouchedEpochs[batchId] === registry.frameEpoch) continue;
+      this.#gltfBatches[batchId] = undefined;
     }
-  }
-
-  #releaseUnusedGltfInstanceBuffers(): void {
-    for (const [key, resource] of this.#gltfInstanceBuffers) {
-      if (this.#activeGltfInstanceBufferKeys.has(key)) continue;
+    for (let index = 0; index < this.#gltfLiveInstanceBufferCount; index += 1) {
+      const batchId = this.#gltfLiveInstanceBufferIds[index]!;
+      if (this.#gltfInstanceActiveEpochs[batchId] === this.#gltfInstanceActiveEpoch) continue;
+      const resource = this.#gltfInstanceBuffers.get(batchId);
+      if (resource === undefined) continue;
       releaseVertexInputInstanceAllocation(
         this.#vertexInputs,
         this.#gl,
         this.#contextGeneration,
         resource.allocation,
       );
-      this.#gltfInstanceBuffers.delete(key);
+      this.#gltfInstanceBuffers.delete(batchId);
     }
+    if (this.#gltfLiveBatchIds.length < registry.touchedBatchCount) {
+      let capacity = this.#gltfLiveBatchIds.length;
+      while (capacity < registry.touchedBatchCount) capacity *= 2;
+      this.#gltfLiveBatchIds = new Uint32Array(capacity);
+    }
+    this.#gltfLiveBatchIds.set(registry.touchedBatchIds.subarray(0, registry.touchedBatchCount));
+    this.#gltfLiveBatchCount = registry.touchedBatchCount;
+    if (this.#gltfLiveInstanceBufferIds.length < this.#gltfActiveInstanceBufferCount) {
+      let capacity = this.#gltfLiveInstanceBufferIds.length;
+      while (capacity < this.#gltfActiveInstanceBufferCount) capacity *= 2;
+      this.#gltfLiveInstanceBufferIds = new Uint32Array(capacity);
+    }
+    this.#gltfLiveInstanceBufferIds.set(
+      this.#gltfActiveInstanceBufferIds.subarray(0, this.#gltfActiveInstanceBufferCount),
+    );
+    this.#gltfLiveInstanceBufferCount = this.#gltfActiveInstanceBufferCount;
   }
 
   #bindSurfaceBaseColorTexture(
