@@ -250,7 +250,10 @@ const fakeGl = (): FakeGl => {
     name: string,
     implementation?: (...args: Arguments) => unknown,
   ) => vi.fn((...args: Arguments) => {
-    calls.push({ args, name });
+    const recordedArgs = name === "bufferSubData" && args[2] instanceof Float32Array
+      ? args.map((value, index) => index === 2 ? Float32Array.from(args[2] as Float32Array) : value)
+      : args;
+    calls.push({ args: recordedArgs as Arguments, name });
 
     return implementation?.(...args);
   });
@@ -4890,6 +4893,77 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().gltfInstancing.batchPlansBuilt).toBe(plansBeforeLightChange);
   });
 
+  it("refreshes equal-count bulk membership independently for asymmetric XR views", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const instances = createGltfInstanceTransforms({
+      count: 3,
+      positions: [-1.5, 0, 0, 0, 0, 0, 1.5, 0, 0],
+    });
+    const renderGraph = renderScene([
+      gltfInstances({
+        instances,
+        src: triangleGltfSrc,
+        version: "bulk-asymmetric-xr-membership",
+      }),
+    ]);
+    const projectionMatrix = [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const xrViews = [
+      {
+        projectionMatrix,
+        viewMatrix: [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          1, 0, 0, 1,
+        ],
+        viewport: { height: 80, width: 100, x: 0, y: 0 },
+      },
+      {
+        projectionMatrix,
+        viewMatrix: [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          -1, 0, 0, 1,
+        ],
+        viewport: { height: 80, width: 100, x: 100, y: 0 },
+      },
+    ];
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    const callsBeforeViews = calls.length;
+    root.renderViews(renderGraph, { views: xrViews });
+    const viewCalls = calls.slice(callsBeforeViews);
+    const instancedDraws = instancedDrawCalls(viewCalls);
+    const posePayloads = bufferSubDataPayloads(viewCalls)
+      .filter((payload) => payload.length === 12)
+      .map(roundVector);
+
+    expect(instancedDraws).toHaveLength(2);
+    expect(instancedDraws.map(instancedDrawInstanceCount)).toEqual([2, 2]);
+    expect(posePayloads).toEqual([
+      [-1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 1.5, 0, 0, 0, 0, 0],
+    ]);
+    root.dispose();
+  });
+
   it("renders required KHR_lights_punctual directional, point, and spot lights without a pass light", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
@@ -6008,6 +6082,60 @@ describe("WebGL renderer scene and glTF regressions", () => {
       ]);
     expect(uniform2fvPayloads(viewCalls, "u_viewportOrigin").map(roundVector))
       .toEqual(expect.arrayContaining([[11, 13], [127, 17]]));
+  });
+
+  it("takes an independent transmission screen copy on each side of a direct-mesh barrier", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({
+        src: triangleGltfSrc,
+        version: "transmission-segment-barrier",
+      }),
+      mesh({
+        geometry: planeGeometry(0.1),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+      }),
+      gltf({
+        src: triangleGltfSrc,
+        transform: { position: [0.25, 0, 0], rotation: [0, 0, 0] },
+        version: "transmission-segment-barrier",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, materialTransmissionVolumeTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+
+    root.render(renderGraph);
+    root.flushInvalidated();
+    const callsBeforeReadyFrame = calls.length;
+    root.render(renderGraph);
+    const readyFrameCalls = calls.slice(callsBeforeReadyFrame);
+    const orderedSubmissionCalls = readyFrameCalls.filter((call) =>
+      call.name === "drawArrays"
+      || call.name === "drawElements"
+      || call.name === "copyTexSubImage2D");
+
+    expect(drawCalls(readyFrameCalls)).toHaveLength(5);
+    expect(readyFrameCalls.filter((call) => call.name === "copyTexSubImage2D")).toHaveLength(2);
+    expect(orderedSubmissionCalls.map((call) => call.name)).toEqual([
+      "drawElements",
+      "copyTexSubImage2D",
+      "drawElements",
+      "drawElements",
+      "drawElements",
+      "copyTexSubImage2D",
+      "drawElements",
+    ]);
+    root.dispose();
   });
 
   it("renders required KHR materials transmission and volume defaults exactly", async () => {

@@ -229,6 +229,8 @@ import {
   endSelectedFramePacketView,
   FRAME_PACKET_SIDEDNESS,
   framePacketLodRequirementsMatch,
+  NO_FRAME_PACKET_ID,
+  type FramePacketRenderClass,
   type SelectedFramePackets,
 } from "./frame-packets";
 import {
@@ -238,6 +240,18 @@ import {
   resolvePacketMaterial,
   type MutablePacketRootSourceRow,
 } from "./packet-resource-tables";
+import {
+  appendGltfPacketSubmission,
+  clearGltfPacketSubmissionWorkspace,
+  createGltfPacketSubmissionWorkspace,
+  resetGltfPacketSubmissionWorkspaceForFrame,
+  resetGltfPacketSubmissionWorkspaceForSegment,
+  resetGltfPacketSubmissionWorkspaceForView,
+  retainGltfPacketSubmissionLightBinding,
+  retainGltfPacketSubmissionMaterialBinding,
+  retainGltfPacketSubmissionRootBinding,
+  type GltfPacketSubmissionWorkspace,
+} from "./gltf-packet-submission-workspace";
 import {
   identityMat4,
   inverseMat4,
@@ -921,16 +935,11 @@ type CameraViewResourceSubscription = {
   readonly unsubscribe: () => void;
 };
 
-type GltfPrimitiveDraw = {
-  readonly geometry: CpuGeometry;
-  readonly geometryId: number;
-  readonly lights?: SurfaceLightSet;
-  readonly localModel: Mat4;
+type GltfPacketMaterialBinding = {
   readonly material: SurfaceMaterial;
-  readonly materialBatchKey: string;
-  readonly modelSignatureInstanceIndex: number;
-  readonly modelSignatureStateKey: number;
-  readonly modelSignatureValues?: readonly number[];
+};
+
+type GltfPacketRootBinding = {
   readonly rootModel: Mat4;
   readonly rootInstanceViews?: GltfInstanceTransformViews;
   readonly rootPositionSignatureVersion?: number;
@@ -939,7 +948,6 @@ type GltfPrimitiveDraw = {
   readonly rootSignatureInstanceIndex: number;
   readonly rootSignatureRenderInstanceOrdinal: number;
   readonly rootTransform: Transform | undefined;
-  readonly sidedness: DrawSidedness;
 };
 
 type GltfPrimitiveDrawBatch = {
@@ -950,6 +958,7 @@ type GltfPrimitiveDrawBatch = {
   lights: SurfaceLightSet;
   readonly localModelSignature: number[];
   readonly localModels: Mat4[];
+  readonly localModelSlots: MutableMat4[];
   material: SurfaceMaterial;
   readonly rootPositionSignature: number[];
   readonly rootRotationSignature: number[];
@@ -961,23 +970,13 @@ type GltfPrimitiveDrawBatch = {
   sidedness: DrawSidedness;
 };
 
-type GltfPrimitiveDrawBatchInput = {
-  readonly draw: GltfPrimitiveDraw;
-  readonly geometry: GeometryResource;
-  readonly geometryId: number;
-  readonly key: string;
-  readonly lights: SurfaceLightSet;
-};
-
 type GltfPrimitiveDrawBatchPlanCacheEntry = {
   readonly batches: GltfPrimitiveDrawBatch[];
 };
 
 type GltfPreparedPrimitiveMaterial = {
-  readonly geometry: CpuGeometry;
-  readonly geometryId: number;
   readonly material: SurfaceMaterial;
-  readonly materialBatchKey: string;
+  readonly materialBatchClassId: number;
 };
 
 type GltfInstanceVectorBufferState = {
@@ -1163,49 +1162,37 @@ const appendTransformVectorSignatureValues = (
   signature.push(resolved[field][0], resolved[field][1], resolved[field][2]);
 };
 
-const appendGltfLocalModelSignature = (
-  signature: number[],
-  draw: GltfPrimitiveDraw,
-): void => {
-  if (draw.modelSignatureValues !== undefined) {
-    signature.push(...draw.modelSignatureValues);
-    return;
-  }
-
-  signature.push(draw.modelSignatureStateKey, draw.modelSignatureInstanceIndex);
-};
-
 const appendGltfRootSignatures = (
   positionSignature: number[],
   rotationSignature: number[],
   scaleSignature: number[],
-  draw: GltfPrimitiveDraw,
+  root: GltfPacketRootBinding,
 ): void => {
-  if (draw.rootPositionSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(positionSignature, draw.rootTransform, "position");
+  if (root.rootPositionSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(positionSignature, root.rootTransform, "position");
   } else {
     positionSignature.push(
-      draw.rootPositionSignatureVersion,
-      draw.rootSignatureRenderInstanceOrdinal,
-      draw.rootSignatureInstanceIndex,
+      root.rootPositionSignatureVersion,
+      root.rootSignatureRenderInstanceOrdinal,
+      root.rootSignatureInstanceIndex,
     );
   }
-  if (draw.rootRotationSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(rotationSignature, draw.rootTransform, "rotation");
+  if (root.rootRotationSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(rotationSignature, root.rootTransform, "rotation");
   } else {
     rotationSignature.push(
-      draw.rootRotationSignatureVersion,
-      draw.rootSignatureRenderInstanceOrdinal,
-      draw.rootSignatureInstanceIndex,
+      root.rootRotationSignatureVersion,
+      root.rootSignatureRenderInstanceOrdinal,
+      root.rootSignatureInstanceIndex,
     );
   }
-  if (draw.rootScaleSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(scaleSignature, draw.rootTransform, "scale");
+  if (root.rootScaleSignatureVersion === undefined) {
+    appendTransformVectorSignatureValues(scaleSignature, root.rootTransform, "scale");
   } else {
     scaleSignature.push(
-      draw.rootScaleSignatureVersion,
-      draw.rootSignatureRenderInstanceOrdinal,
-      draw.rootSignatureInstanceIndex,
+      root.rootScaleSignatureVersion,
+      root.rootSignatureRenderInstanceOrdinal,
+      root.rootSignatureInstanceIndex,
     );
   }
 };
@@ -1255,38 +1242,6 @@ const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
-
-const gltfPrimitiveDrawBatchPlanKey = (inputs: readonly GltfPrimitiveDrawBatchInput[]): string => {
-  const parts: string[] = [];
-  const seen = new Set<string>();
-
-  for (const input of inputs) {
-    if (seen.has(input.key)) continue;
-    seen.add(input.key);
-    parts.push(`${input.key.length}:${input.key}`);
-  }
-
-  return parts.join("|");
-};
-
-const appendGltfPrimitiveDrawBatchInput = (
-  batch: GltfPrimitiveDrawBatch,
-  input: GltfPrimitiveDrawBatchInput,
-): void => {
-  const draw = input.draw;
-  appendGltfLocalModelSignature(batch.localModelSignature, draw);
-  appendGltfRootSignatures(
-    batch.rootPositionSignature,
-    batch.rootRotationSignature,
-    batch.rootScaleSignature,
-    draw,
-  );
-  batch.localModels.push(draw.localModel);
-  batch.rootModels.push(draw.rootModel);
-  batch.rootInstanceViews.push(draw.rootInstanceViews);
-  batch.rootLogicalIndices.push(draw.rootSignatureInstanceIndex);
-  batch.rootTransforms.push(draw.rootTransform);
-};
 
 const assignRenderObjectRef = (
   ref: RenderObjectRef,
@@ -2122,6 +2077,15 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #selectedGltfFramePackets: SelectedFramePackets = createSelectedFramePackets(
     this.#gltfPacketTopology.catalog,
   );
+  readonly #gltfPacketSubmissionWorkspace: GltfPacketSubmissionWorkspace<
+    GltfPacketMaterialBinding,
+    GltfPacketRootBinding,
+    SurfaceLightSet
+  > = createGltfPacketSubmissionWorkspace();
+  readonly #gltfMaterialBatchClassIds = new Map<string, number>();
+  #gltfMaterialBatchClassIdCount = 0;
+  readonly #gltfLightScopeIds = new Map<string, number>();
+  #gltfLightScopeIdCount = 0;
   readonly #gltfPacketOccurrenceIndicesByRequestKey = new Map<string, number[]>();
   readonly #gltfPacketBoundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
   readonly #gltfPacketLocalModelScratch: MutableMat4 = identityMat4();
@@ -2531,6 +2495,11 @@ class WebGlRootImpl implements WebGlRoot {
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
       this.#prepareSharedViewGltfLodSelections(plan, frameViews);
       this.#selectGltfFramePackets(plan, frameViews);
+      resetGltfPacketSubmissionWorkspaceForFrame(
+        this.#gltfPacketSubmissionWorkspace,
+        plan.revision,
+        this.#gltfPacketTopology.catalog,
+      );
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         // A scene occurrence has the same resource identity in every view.
         // Resetting the ordinal across eyes avoids duplicate instance uploads
@@ -2562,14 +2531,18 @@ class WebGlRootImpl implements WebGlRoot {
         viewportSize[1] = height;
         const sourceX = useHdr ? 0 : x;
         const sourceY = useHdr ? 0 : y;
-        const gltfDraws: GltfPrimitiveDraw[] = [];
+        resetGltfPacketSubmissionWorkspaceForView(
+          this.#gltfPacketSubmissionWorkspace,
+          plan.revision,
+          this.#gltfPacketTopology.catalog,
+          viewIndex,
+        );
         let packetCursor = this.#selectedGltfFramePackets.viewFirsts[viewIndex]!;
         const packetEnd = packetCursor
           + this.#selectedGltfFramePackets.viewCounts[viewIndex]!;
-        const flushGltfDraws = (): void => {
-          if (gltfDraws.length === 0) return;
-          this.#drawGltfPrimitiveDraws(
-            gltfDraws,
+        const flushGltfPacketSubmissions = (): void => {
+          if (this.#gltfPacketSubmissionWorkspace.count === 0) return;
+          this.#drawGltfPacketSubmissions(
             projection,
             view,
             surfaceLights,
@@ -2578,26 +2551,40 @@ class WebGlRootImpl implements WebGlRoot {
             sourceX,
             sourceY,
           );
-          gltfDraws.length = 0;
+          resetGltfPacketSubmissionWorkspaceForSegment(
+            this.#gltfPacketSubmissionWorkspace,
+            plan.revision,
+            this.#gltfPacketTopology.catalog,
+            this.#gltfPacketSubmissionWorkspace.segment,
+          );
         };
 
         for (let nodeIndex = 0; nodeIndex < plan.nodes.length; nodeIndex += 1) {
           const node = plan.nodes[nodeIndex]!;
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
           if (node.kind === "gltf" || node.kind === "gltf-instances") {
+            const orderingSegment = plan.orderSegments[nodeIndex]!;
+            if (this.#gltfPacketSubmissionWorkspace.segment !== orderingSegment) {
+              flushGltfPacketSubmissions();
+              resetGltfPacketSubmissionWorkspaceForSegment(
+                this.#gltfPacketSubmissionWorkspace,
+                plan.revision,
+                this.#gltfPacketTopology.catalog,
+                orderingSegment,
+              );
+            }
             const renderInstanceOrdinal = this.#gltfRenderOrdinal;
             this.#gltfRenderOrdinal += 1;
             packetCursor = this.#appendSelectedGltfPacketDrawsForNode(
               node,
               nodeIndex,
               renderInstanceOrdinal,
-              gltfDraws,
               packetCursor,
               packetEnd,
             );
             continue;
           }
-          flushGltfDraws();
+          flushGltfPacketSubmissions();
           this.#drawNode(
             node,
             projection,
@@ -2608,7 +2595,7 @@ class WebGlRootImpl implements WebGlRoot {
             viewportSize,
           );
         }
-        flushGltfDraws();
+        flushGltfPacketSubmissions();
         if (packetCursor !== packetEnd) {
           throw new Error("Royal retained glTF packet selection contains draws outside the frame plan");
         }
@@ -2863,6 +2850,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfIblImageScheduler.dispose();
     this.#gltfBatchPlanCache.clear();
     this.#gltfInstanceBuffers.clear();
+    clearGltfPacketSubmissionWorkspace(this.#gltfPacketSubmissionWorkspace);
+    this.#gltfMaterialBatchClassIds.clear();
+    this.#gltfMaterialBatchClassIdCount = 0;
+    this.#gltfLightScopeIds.clear();
+    this.#gltfLightScopeIdCount = 0;
     this.#pendingGltfImageRows.length = 0;
     this.#pendingGltfImageRowHead = 0;
     this.#iblBrdfLutTexture = undefined;
@@ -3982,7 +3974,6 @@ class WebGlRootImpl implements WebGlRoot {
     node: AnyGltfNode,
     nodeIndex: number,
     renderInstanceOrdinal: number,
-    draws: GltfPrimitiveDraw[],
     packetCursor: number,
     packetEnd: number,
   ): number {
@@ -4016,9 +4007,12 @@ class WebGlRootImpl implements WebGlRoot {
     const ordinaryAssetLights = ordinaryRootModel === undefined
       ? undefined
       : this.#gltfAssetLightSet(state, ordinaryRootModel);
+    const ordinaryLightScopeId = ordinaryAssetLights === undefined
+      ? 0
+      : this.#gltfLightScopeId(state.instanceKey, renderInstanceOrdinal, 0);
     const instanceAssetLights = instanceViews === undefined
       ? undefined
-      : new Map<number, SurfaceLightSet | undefined>();
+      : new Map<number, { readonly lights: SurfaceLightSet | undefined; readonly scopeId: number }>();
     let cursor = packetCursor;
 
     while (cursor < packetEnd) {
@@ -4055,12 +4049,12 @@ class WebGlRootImpl implements WebGlRoot {
         catalog.materialIds[packetIndex]!,
       );
       const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
+      const geometry = this.#geometryResource(geometryId);
       const localDeterminant = readPacketLocalModelInto(
         topology.resources,
         catalog.localModelIds[packetIndex]!,
         this.#gltfPacketLocalModelScratch,
       );
-      const localModel = Array.from(this.#gltfPacketLocalModelScratch) as unknown as Mat4;
       const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
       const rootTransform = instanceViews?.transforms[outerIndex] ?? ordinaryRootTransform;
       if (rootModel === undefined) {
@@ -4069,51 +4063,110 @@ class WebGlRootImpl implements WebGlRoot {
       const rootDeterminant = mat4OrientationDeterminant(rootModel);
       const packetSidedness = catalog.sidedness[packetIndex]!;
       let assetLights = ordinaryAssetLights;
+      let lightScopeId = ordinaryLightScopeId;
       if (instanceAssetLights !== undefined) {
-        if (instanceAssetLights.has(outerIndex)) {
-          assetLights = instanceAssetLights.get(outerIndex);
+        const cachedLights = instanceAssetLights.get(outerIndex);
+        if (cachedLights !== undefined) {
+          assetLights = cachedLights.lights;
+          lightScopeId = cachedLights.scopeId;
         } else {
           assetLights = this.#gltfAssetLightSet(state, rootModel);
-          instanceAssetLights.set(outerIndex, assetLights);
+          lightScopeId = assetLights === undefined
+            ? 0
+            : this.#gltfLightScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
+          instanceAssetLights.set(outerIndex, { lights: assetLights, scopeId: lightScopeId });
         }
       }
-      draws.push({
-        geometry: prepared.geometry,
-        geometryId,
-        ...(assetLights === undefined ? {} : { lights: assetLights }),
-        localModel,
-        material: prepared.material,
-        materialBatchKey: prepared.materialBatchKey,
-        modelSignatureInstanceIndex: -1,
-        modelSignatureStateKey: state.instanceKey,
-        modelSignatureValues: localModel,
-        rootModel,
-        ...(instanceViews === undefined ? {} : { rootInstanceViews: instanceViews }),
-        ...(instanceViews !== undefined
-          ? {
-              rootPositionSignatureVersion: instanceViews.sourceKey,
-              rootRotationSignatureVersion: instanceViews.sourceKey,
-              rootScaleSignatureVersion: instanceViews.sourceKey,
-            }
-          : rootHandle === undefined
-            ? {}
-            : {
-                rootPositionSignatureVersion: rootHandle.positionVersion,
-                rootRotationSignatureVersion: rootHandle.rotationVersion,
-                rootScaleSignatureVersion: rootHandle.scaleVersion,
-              }),
-        rootSignatureInstanceIndex: instanceViews === undefined ? -1 : outerIndex,
-        rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
-        rootTransform,
-        sidedness: {
-          doubleSided: (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-          frontFaceCcw: rootDeterminant * localDeterminant >= 0,
+      const materialBindingId = retainGltfPacketSubmissionMaterialBinding(
+        this.#gltfPacketSubmissionWorkspace,
+        this.#framePlan!.revision,
+        catalog,
+        catalog.materialIds[packetIndex]!,
+        prepared.materialBatchClassId,
+        { material: prepared.material },
+      );
+      const rootBindingId = retainGltfPacketSubmissionRootBinding(
+        this.#gltfPacketSubmissionWorkspace,
+        this.#framePlan!.revision,
+        catalog,
+        catalog.rootSourceIds[packetIndex]!,
+        outerIndex,
+        lightScopeId,
+        {
+          rootModel,
+          ...(instanceViews === undefined ? {} : { rootInstanceViews: instanceViews }),
+          ...(instanceViews !== undefined
+            ? {
+                rootPositionSignatureVersion: instanceViews.sourceKey,
+                rootRotationSignatureVersion: instanceViews.sourceKey,
+                rootScaleSignatureVersion: instanceViews.sourceKey,
+              }
+            : rootHandle === undefined
+              ? {}
+              : {
+                  rootPositionSignatureVersion: rootHandle.positionVersion,
+                  rootRotationSignatureVersion: rootHandle.rotationVersion,
+                  rootScaleSignatureVersion: rootHandle.scaleVersion,
+                }),
+          rootSignatureInstanceIndex: instanceViews === undefined ? -1 : outerIndex,
+          rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
+          rootTransform,
         },
-      });
+      );
+      const lightBindingId = assetLights === undefined
+        ? NO_FRAME_PACKET_ID
+        : retainGltfPacketSubmissionLightBinding(
+            this.#gltfPacketSubmissionWorkspace,
+            this.#framePlan!.revision,
+            catalog,
+            lightScopeId,
+            assetLights,
+          );
+      appendGltfPacketSubmission(
+        this.#gltfPacketSubmissionWorkspace,
+        this.#framePlan!.revision,
+        catalog,
+        {
+          geometryId,
+          geometryIdentityId: geometry.staticIdentityId,
+          lightBindingId,
+          lightScopeId,
+          localModelId: catalog.localModelIds[packetIndex]!,
+          materialBindingId,
+          packetIndex,
+          renderClass: catalog.renderClasses[packetIndex]! as FramePacketRenderClass,
+          rootBindingId,
+          sidedness: (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
+            | (rootDeterminant * localDeterminant >= 0 ? FRAME_PACKET_SIDEDNESS.frontFaceCcw : 0),
+        },
+      );
       cursor += 1;
     }
 
     return cursor;
+  }
+
+  #gltfMaterialBatchClassId(key: string): number {
+    const existing = this.#gltfMaterialBatchClassIds.get(key);
+    if (existing !== undefined) return existing;
+    this.#gltfMaterialBatchClassIdCount += 1;
+    if (!Number.isSafeInteger(this.#gltfMaterialBatchClassIdCount)) {
+      throw new Error("Royal glTF material batch-class ID space is exhausted");
+    }
+    this.#gltfMaterialBatchClassIds.set(key, this.#gltfMaterialBatchClassIdCount);
+    return this.#gltfMaterialBatchClassIdCount;
+  }
+
+  #gltfLightScopeId(stateKey: number, renderInstanceOrdinal: number, outerIndex: number): number {
+    const key = `${stateKey}:${renderInstanceOrdinal}:${outerIndex}`;
+    const existing = this.#gltfLightScopeIds.get(key);
+    if (existing !== undefined) return existing;
+    this.#gltfLightScopeIdCount += 1;
+    if (!Number.isSafeInteger(this.#gltfLightScopeIdCount)) {
+      throw new Error("Royal glTF light-scope ID space is exhausted");
+    }
+    this.#gltfLightScopeIds.set(key, this.#gltfLightScopeIdCount);
+    return this.#gltfLightScopeIdCount;
   }
 
   #gltfInstanceViews(instances: GltfInstanceTransforms): GltfInstanceTransformViews {
@@ -4179,8 +4232,7 @@ class WebGlRootImpl implements WebGlRoot {
     return views;
   }
 
-  #drawGltfPrimitiveDraws(
-    draws: readonly GltfPrimitiveDraw[],
+  #drawGltfPacketSubmissions(
     projection: Mat4,
     view: Mat4,
     sceneLights: SurfaceLightSet | undefined,
@@ -4189,25 +4241,8 @@ class WebGlRootImpl implements WebGlRoot {
     sourceX: number,
     sourceY: number,
   ): void {
-    if (draws.length === 0) return;
-
-    const batchInputs: GltfPrimitiveDrawBatchInput[] = [];
-    for (const draw of draws) {
-      const geometry = this.#geometryResource(draw.geometryId);
-      const lights = combineSurfaceLightSets(sceneLights, draw.lights);
-      const sidednessKey = draw.sidedness.doubleSided
-        ? "double-sided"
-        : draw.sidedness.frontFaceCcw ? "front-ccw" : "front-cw";
-      // Light values are uniform state, not persistent geometry identity.
-      // Asset-local lights still need a stable per-root scope because their
-      // world-space transforms differ between outer instances.
-      const lightScopeKey = draw.lights === undefined
-        ? "pass-lights"
-        : `asset-lights:${draw.modelSignatureStateKey}:${draw.rootSignatureRenderInstanceOrdinal}:${draw.rootSignatureInstanceIndex}`;
-      const batchKey = `${geometry.staticIdentityId}|${draw.materialBatchKey}|${sidednessKey}|${lightScopeKey}`;
-      batchInputs.push({ draw, geometry, geometryId: draw.geometryId, key: batchKey, lights });
-    }
-    const batches = this.#gltfPrimitiveDrawBatches(batchInputs);
+    if (this.#gltfPacketSubmissionWorkspace.count === 0) return;
+    const batches = this.#gltfPrimitiveDrawBatches(sceneLights);
     for (const batch of batches) {
       this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
@@ -4239,29 +4274,50 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #gltfPrimitiveDrawBatches(inputs: readonly GltfPrimitiveDrawBatchInput[]): readonly GltfPrimitiveDrawBatch[] {
-    const planKey = gltfPrimitiveDrawBatchPlanKey(inputs);
+  #gltfSubmissionBatchKey(index: number): string {
+    const workspace = this.#gltfPacketSubmissionWorkspace;
+    return `${workspace.geometryIdentityIds[index]}|${workspace.materialBatchClassIds[index]}|${workspace.sidedness[index]}|${workspace.lightScopeIds[index]}`;
+  }
+
+  #gltfPrimitiveDrawBatches(sceneLights: SurfaceLightSet | undefined): readonly GltfPrimitiveDrawBatch[] {
+    const workspace = this.#gltfPacketSubmissionWorkspace;
+    const parts: string[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < workspace.count; index += 1) {
+      const key = this.#gltfSubmissionBatchKey(index);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      parts.push(`${key.length}:${key}`);
+    }
+    const planKey = parts.join("|");
     this.#activeGltfBatchPlanCacheKeys.add(planKey);
     const cached = this.#gltfBatchPlanCache.get(planKey);
     if (cached !== undefined) {
-      this.#refreshGltfPrimitiveDrawBatchPlan(cached.batches, inputs);
-
+      this.#refreshGltfPrimitiveDrawBatchPlan(cached.batches, sceneLights);
       return cached.batches;
     }
 
     const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
-    for (const input of inputs) {
-      let batch = batchesByKey.get(input.key);
+    for (let index = 0; index < workspace.count; index += 1) {
+      const key = this.#gltfSubmissionBatchKey(index);
+      let batch = batchesByKey.get(key);
       if (batch === undefined) {
+        const geometryId = workspace.geometryIds[index]!;
+        const geometry = this.#geometryResource(geometryId);
+        const material = workspace.materialBindings[workspace.materialBindingIds[index]!]!;
+        const assetLights = workspace.lightBindingIds[index] === NO_FRAME_PACKET_ID
+          ? undefined
+          : workspace.lightBindings[workspace.lightBindingIds[index]!]!;
         batch = {
-          cpuGeometry: input.draw.geometry,
-          geometry: input.geometry,
-          geometryId: input.geometryId,
-          key: input.key,
-          lights: input.lights,
+          cpuGeometry: geometry.source,
+          geometry,
+          geometryId,
+          key,
+          lights: combineSurfaceLightSets(sceneLights, assetLights),
           localModelSignature: [],
           localModels: [],
-          material: input.draw.material,
+          localModelSlots: [],
+          material: material.material,
           rootPositionSignature: [],
           rootRotationSignature: [],
           rootScaleSignature: [],
@@ -4269,11 +4325,14 @@ class WebGlRootImpl implements WebGlRoot {
           rootInstanceViews: [],
           rootLogicalIndices: [],
           rootTransforms: [],
-          sidedness: input.draw.sidedness,
+          sidedness: {
+            doubleSided: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
+            frontFaceCcw: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
+          },
         };
-        batchesByKey.set(input.key, batch);
+        batchesByKey.set(key, batch);
       }
-      appendGltfPrimitiveDrawBatchInput(batch, input);
+      this.#appendGltfWorkspaceSubmissionToBatch(batch, index);
     }
 
     const batches = Array.from(batchesByKey.values());
@@ -4285,7 +4344,7 @@ class WebGlRootImpl implements WebGlRoot {
 
   #refreshGltfPrimitiveDrawBatchPlan(
     batches: readonly GltfPrimitiveDrawBatch[],
-    inputs: readonly GltfPrimitiveDrawBatchInput[],
+    sceneLights: SurfaceLightSet | undefined,
   ): void {
     const batchesByKey = new Map<string, GltfPrimitiveDrawBatch>();
     for (const batch of batches) {
@@ -4301,19 +4360,59 @@ class WebGlRootImpl implements WebGlRoot {
       batchesByKey.set(batch.key, batch);
     }
 
-    for (const input of inputs) {
-      const batch = batchesByKey.get(input.key);
+    const workspace = this.#gltfPacketSubmissionWorkspace;
+    for (let index = 0; index < workspace.count; index += 1) {
+      const batch = batchesByKey.get(this.#gltfSubmissionBatchKey(index));
       if (batch === undefined) continue;
       if (batch.localModels.length === 0) {
-        batch.cpuGeometry = input.draw.geometry;
-        batch.geometry = input.geometry;
-        batch.geometryId = input.geometryId;
-        batch.lights = input.lights;
-        batch.material = input.draw.material;
-        batch.sidedness = input.draw.sidedness;
+        const geometryId = workspace.geometryIds[index]!;
+        const geometry = this.#geometryResource(geometryId);
+        const material = workspace.materialBindings[workspace.materialBindingIds[index]!]!;
+        const assetLights = workspace.lightBindingIds[index] === NO_FRAME_PACKET_ID
+          ? undefined
+          : workspace.lightBindings[workspace.lightBindingIds[index]!]!;
+        batch.cpuGeometry = geometry.source;
+        batch.geometry = geometry;
+        batch.geometryId = geometryId;
+        batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
+        batch.material = material.material;
+        batch.sidedness = {
+          doubleSided: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
+          frontFaceCcw: (workspace.sidedness[index]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
+        };
       }
-      appendGltfPrimitiveDrawBatchInput(batch, input);
+      this.#appendGltfWorkspaceSubmissionToBatch(batch, index);
     }
+  }
+
+  #appendGltfWorkspaceSubmissionToBatch(batch: GltfPrimitiveDrawBatch, index: number): void {
+    const workspace = this.#gltfPacketSubmissionWorkspace;
+    const root = workspace.rootBindings[workspace.rootBindingIds[index]!]!;
+    const localModelIndex = batch.localModels.length;
+    let localModel = batch.localModelSlots[localModelIndex];
+    if (localModel === undefined) {
+      localModel = identityMat4();
+      batch.localModelSlots.push(localModel);
+    }
+    readPacketLocalModelInto(
+      this.#gltfPacketTopology.resources,
+      workspace.localModelIds[index]!,
+      localModel,
+    );
+    for (let component = 0; component < 16; component += 1) {
+      batch.localModelSignature.push(localModel[component]!);
+    }
+    appendGltfRootSignatures(
+      batch.rootPositionSignature,
+      batch.rootRotationSignature,
+      batch.rootScaleSignature,
+      root,
+    );
+    batch.localModels.push(localModel);
+    batch.rootModels.push(root.rootModel);
+    batch.rootInstanceViews.push(root.rootInstanceViews);
+    batch.rootLogicalIndices.push(root.rootSignatureInstanceIndex);
+    batch.rootTransforms.push(root.rootTransform);
   }
 
   #drawGltfPrimitiveDrawBatch(
@@ -4848,11 +4947,6 @@ class WebGlRootImpl implements WebGlRoot {
     const contentKeys = resourceArenaContentKeys(this.#resourceArena, state.key);
     const baseColor = this.#gltfMaterialTextureRef(loadedMaterial, contentKeys);
     const surfaceTextures = this.#gltfMaterialSurfaceTextures(loadedMaterial, contentKeys);
-    const geometryKey = this.#gltfPrimitiveGeometryKeys.get(primitive);
-    const retainedGeometry = geometryKey === undefined ? undefined : this.#retainedGeometryRecipes.get(geometryKey);
-    if (retainedGeometry === undefined) {
-      throw new Error(`Royal glTF primitive geometry ${primitive.key} was not semantically retained`);
-    }
     const material = loadedGltfSurfaceMaterial(
       loadedMaterial,
       loadedMaterial.baseColorTexture?.imageUri !== undefined
@@ -4865,11 +4959,10 @@ class WebGlRootImpl implements WebGlRoot {
           },
       surfaceTextures,
     );
+    const materialBatchKey = surfaceMaterialBatchKey(material);
     const prepared: GltfPreparedPrimitiveMaterial = {
-      geometry: retainedGeometry.recipe,
-      geometryId: retainedGeometry.id,
       material,
-      materialBatchKey: surfaceMaterialBatchKey(material),
+      materialBatchClassId: this.#gltfMaterialBatchClassId(materialBatchKey),
     };
     primitiveCache.set(loadedMaterial, prepared);
     return prepared;

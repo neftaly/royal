@@ -227,6 +227,22 @@ const clearBindings = <M, R, L>(workspace: WorkspaceState<M, R, L>): void => {
   workspace.lightBindingIdsByScope.clear();
 };
 
+/** Releases live semantic bindings and invalidates the workspace while retaining numeric capacity. */
+export const clearGltfPacketSubmissionWorkspace = <M, R, L>(
+  workspace: GltfPacketSubmissionWorkspace<M, R, L>,
+): void => {
+  const state = workspace as WorkspaceState<M, R, L>;
+  clearBindings(state);
+  state.catalog = undefined;
+  state.catalogRevision = 0;
+  state.count = 0;
+  state.frameActive = false;
+  state.nextViewIndex = 0;
+  state.planRevision = 0;
+  state.segment = -1;
+  state.viewIndex = -1;
+};
+
 export const resetGltfPacketSubmissionWorkspaceForFrame = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
   planRevision: number,

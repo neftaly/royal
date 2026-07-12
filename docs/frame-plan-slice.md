@@ -54,26 +54,30 @@ glTF draw collection.
   closed so packet ranges and resolver state cannot describe mixed asset
   generations. The duplicate legacy collector is no longer used by the main
   frame path and has been deleted. A pure retained packet-submission workspace
-  now defines the next boundary: packet-authoritative numeric rows, exact
-  geometry/material batch identities, root/material/light provenance, dense
-  view sequencing, and frame-global canonical runtime bindings. It owns no GL
-  handles and imports no root or lifecycle code.
+  now drives the established GPU batch backend with packet-authoritative numeric
+  rows, exact geometry/material batch identities, root/material/light
+  provenance, dense view sequencing, and frame-global canonical runtime
+  bindings. Per-view draw arrays, per-packet draw objects, copied packet
+  matrices, and transient batch-input objects are deleted. Retained batch slots
+  receive local matrices directly from packet tables and preserve exact warm
+  upload signatures. The workspace owns no GL handles and imports no root or
+  lifecycle code.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 422 workspace tests, typecheck, build,
+- The current checkpoint passes 425 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Replace the remaining transient glTF draw and batch inputs with retained
-   numeric packet-submission rows. Then move complete instance-buffer, surface
-   draw, transmission, and HDR ownership families out of `root.ts` and extract
-   the real callback-free executor. Delete the string batch caches,
-   active-resource scans, frame-end pruning paths, and legacy collector methods
-   as each owning family moves.
+1. Replace the remaining string batch-plan key/cache, refresh `Map`, and
+   render-class arrays with retained numeric grouping over the packet submission
+   workspace. Then move complete instance-buffer, surface draw, transmission,
+   and HDR ownership families out of `root.ts` and extract the real
+   callback-free executor. Delete active-resource scans and frame-end pruning
+   paths as each owning family moves.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.

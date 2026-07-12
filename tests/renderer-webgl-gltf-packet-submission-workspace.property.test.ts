@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendGltfPacketSubmission,
   assertGltfPacketSubmissionWorkspaceCurrent,
+  clearGltfPacketSubmissionWorkspace,
   createGltfPacketSubmissionWorkspace,
   readGltfPacketSubmissionInto,
   resetGltfPacketSubmissionWorkspaceForFrame,
@@ -324,5 +325,37 @@ describe("glTF packet submission workspace", () => {
     expect(metadata.batchId).toBe(42);
     expect(() => writeGltfPacketSubmissionBatchId(workspace, 7, catalog, 0, NO_FRAME_PACKET_ID))
       .toThrow(/resource ID/);
+  });
+
+  it("clears live bindings and validity while retaining allocated numeric capacity", () => {
+    const workspace = createGltfPacketSubmissionWorkspace<object, object, object>();
+    const catalog = begin(workspace);
+    const material = {};
+    const root = {};
+    const light = {};
+    const materialId = retainGltfPacketSubmissionMaterialBinding(workspace, 7, catalog, 0, 10, material);
+    const rootId = retainGltfPacketSubmissionRootBinding(workspace, 7, catalog, 0, 0, 7_000, root);
+    const lightId = retainGltfPacketSubmissionLightBinding(workspace, 7, catalog, 7_000, light);
+    appendGltfPacketSubmission(workspace, 7, catalog, row(0, 100, materialId, rootId, lightId));
+    const capacity = workspace.capacity;
+    clearGltfPacketSubmissionWorkspace(workspace);
+    expect(workspace).toMatchObject({
+      catalog: undefined,
+      catalogRevision: 0,
+      count: 0,
+      frameActive: false,
+      materialBindingCount: 0,
+      nextViewIndex: 0,
+      planRevision: 0,
+      rootBindingCount: 0,
+      segment: -1,
+      viewIndex: -1,
+    });
+    expect(workspace.lightBindingCount).toBe(0);
+    expect(workspace.materialBindings[materialId]).toBeUndefined();
+    expect(workspace.rootBindings[rootId]).toBeUndefined();
+    expect(workspace.lightBindings[lightId]).toBeUndefined();
+    expect(workspace.capacity).toBe(capacity);
+    expect(() => assertGltfPacketSubmissionWorkspaceCurrent(workspace, 7, catalog)).toThrow(/stale/);
   });
 });
