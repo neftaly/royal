@@ -45,6 +45,8 @@ export type SharedViewLodSelections = {
   finalizationEpochs: Uint32Array;
   maximumCoverages: Float64Array;
   observationEpochs: Uint32Array;
+  /** Current epoch only when finalization produced a level usable by packets. */
+  selectionEpochs: Uint32Array;
   selectedLevels: Uint32Array;
 };
 
@@ -65,6 +67,7 @@ export const createSharedViewLodSelections = (capacity = 1): SharedViewLodSelect
     finalizationEpochs: new Uint32Array(normalized),
     maximumCoverages: new Float64Array(normalized),
     observationEpochs: new Uint32Array(normalized),
+    selectionEpochs: new Uint32Array(normalized),
     selectedLevels,
   };
 };
@@ -92,16 +95,19 @@ export const reserveSharedViewLodSelections = (
   const finalizationEpochs = new Uint32Array(capacity);
   const maximumCoverages = new Float64Array(capacity);
   const observationEpochs = new Uint32Array(capacity);
+  const selectionEpochs = new Uint32Array(capacity);
   const selectedLevels = new Uint32Array(capacity);
   finalizationEpochs.set(selections.finalizationEpochs);
   maximumCoverages.set(selections.maximumCoverages);
   observationEpochs.set(selections.observationEpochs);
+  selectionEpochs.set(selections.selectionEpochs);
   selectedLevels.fill(NO_SHARED_VIEW_LOD_LEVEL);
   selectedLevels.set(selections.selectedLevels);
   selections.capacity = capacity;
   selections.finalizationEpochs = finalizationEpochs;
   selections.maximumCoverages = maximumCoverages;
   selections.observationEpochs = observationEpochs;
+  selections.selectionEpochs = selectionEpochs;
   selections.selectedLevels = selectedLevels;
 };
 
@@ -110,6 +116,7 @@ export const beginSharedViewLodSelections = (selections: SharedViewLodSelections
   if (selections.epoch === 0xffff_ffff) {
     selections.finalizationEpochs.fill(0);
     selections.observationEpochs.fill(0);
+    selections.selectionEpochs.fill(0);
     selections.epoch = 1;
   } else {
     selections.epoch += 1;
@@ -217,7 +224,37 @@ export const finalizeSharedViewLodSelection = (
   const target = sharedViewHystereticLodLevel(selections.maximumCoverages[index]!, metadata, previous);
   const selected = drawableLevel(metadata, target, previous);
   selections.selectedLevels[index] = selected;
+  selections.selectionEpochs[index] = selections.epoch;
   return selected;
+};
+
+/** Finalizes an unobserved selection to an exact visible drawable level. */
+export const finalizeUnobservedSharedViewLodFallback = (
+  selections: SharedViewLodSelections,
+  id: number,
+  metadata: SharedViewLodMetadata,
+  fallbackLevel: number,
+): number => {
+  const index = selectionId(selections, id);
+  if (selections.epoch === 0) throw new Error("Royal shared-view LOD fallback requires an active epoch");
+  if (selections.finalizationEpochs[index] === selections.epoch) {
+    throw new Error("Royal shared-view LOD selection was finalized twice in one epoch");
+  }
+  if (selections.observationEpochs[index] === selections.epoch) {
+    throw new Error("Royal shared-view LOD fallback requires an unobserved selection");
+  }
+  if (
+    !Number.isSafeInteger(fallbackLevel)
+    || fallbackLevel < 0
+    || fallbackLevel >= metadata.levelCount
+    || !drawable(metadata, fallbackLevel)
+  ) {
+    throw new Error("Royal shared-view LOD fallback must be a drawable metadata level");
+  }
+  selections.finalizationEpochs[index] = selections.epoch;
+  selections.selectedLevels[index] = fallbackLevel;
+  selections.selectionEpochs[index] = selections.epoch;
+  return fallbackLevel;
 };
 
 export const sharedViewLodWasObserved = (

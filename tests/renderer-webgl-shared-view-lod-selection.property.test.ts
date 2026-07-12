@@ -4,6 +4,7 @@ import {
   beginSharedViewLodSelections,
   createSharedViewLodSelections,
   finalizeSharedViewLodSelection,
+  finalizeUnobservedSharedViewLodFallback,
   NO_SHARED_VIEW_LOD_LEVEL,
   observeSharedViewLodCoverage,
   reserveSharedViewLodSelections,
@@ -134,18 +135,41 @@ describe("retained shared-view LOD selection", () => {
     beginSharedViewLodSelections(selections);
     observeSharedViewLodCoverage(selections, 0, 0.8);
     expect(finalizeSharedViewLodSelection(selections, 0, lod)).toBe(0);
+    expect(selections.selectionEpochs[0]).toBe(selections.epoch);
     expect(() => finalizeSharedViewLodSelection(selections, 0, lod)).toThrow(/finalized twice/);
 
     beginSharedViewLodSelections(selections);
     expect(sharedViewLodWasObserved(selections, 0)).toBe(false);
     expect(finalizeSharedViewLodSelection(selections, 0, lod)).toBeUndefined();
     expect(sharedViewLodSelectedLevel(selections, 0)).toBe(0);
+    expect(selections.selectionEpochs[0]).not.toBe(selections.epoch);
     expect(() => observeSharedViewLodCoverage(selections, 1, 0.5)).toThrow(/reserved capacity/);
 
     reserveSharedViewLodSelections(selections, 4_096);
     expect(selections.capacity).toBe(4_096);
     expect(selections.selectedLevels[0]).toBe(0);
     expect(selections.selectedLevels[1]).toBe(NO_SHARED_VIEW_LOD_LEVEL);
+  });
+
+  it("finalizes an unobserved selection to the exact validated drawable fallback level", () => {
+    const selections = createSharedViewLodSelections();
+    const lod = metadata([0.4, 0.2, 0], [true, true, true]);
+
+    beginSharedViewLodSelections(selections);
+    expect(finalizeUnobservedSharedViewLodFallback(selections, 0, lod, 1)).toBe(1);
+    expect(sharedViewLodSelectedLevel(selections, 0)).toBe(1);
+    expect(selections.selectionEpochs[0]).toBe(selections.epoch);
+    expect(() => finalizeSharedViewLodSelection(selections, 0, lod)).toThrow(/finalized twice/);
+
+    beginSharedViewLodSelections(selections);
+    observeSharedViewLodCoverage(selections, 0, 0.9);
+    expect(() => finalizeUnobservedSharedViewLodFallback(selections, 0, lod, 2))
+      .toThrow(/unobserved/);
+
+    const partiallyDrawable = metadata([0.4, 0.2, 0], [true, false, true]);
+    beginSharedViewLodSelections(selections);
+    expect(() => finalizeUnobservedSharedViewLodFallback(selections, 0, partiallyDrawable, 1))
+      .toThrow(/drawable metadata level/);
   });
 
   it("rejects invalid prepared metadata before the hot path", () => {
@@ -165,6 +189,7 @@ describe("retained shared-view LOD selection", () => {
       finalizationEpochs: selections.finalizationEpochs,
       maximumCoverages: selections.maximumCoverages,
       observationEpochs: selections.observationEpochs,
+      selectionEpochs: selections.selectionEpochs,
       selectedLevels: selections.selectedLevels,
     };
     const started = performance.now();
@@ -180,6 +205,7 @@ describe("retained shared-view LOD selection", () => {
     expect(selections.finalizationEpochs).toBe(buffers.finalizationEpochs);
     expect(selections.maximumCoverages).toBe(buffers.maximumCoverages);
     expect(selections.observationEpochs).toBe(buffers.observationEpochs);
+    expect(selections.selectionEpochs).toBe(buffers.selectionEpochs);
     expect(selections.selectedLevels).toBe(buffers.selectedLevels);
     expect(elapsedMs).toBeGreaterThan(0);
   });

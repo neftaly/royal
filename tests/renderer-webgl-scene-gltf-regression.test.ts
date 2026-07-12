@@ -673,6 +673,35 @@ const callCount = (calls: readonly GlCall[], name: string): number =>
 const lodScaleForCoverage = (coverage: number): number =>
   Math.sqrt(coverage / 0.5625);
 
+const lodStereoViews = (reverse = false) => {
+  const identity = [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ];
+  const lowScale = lodScaleForCoverage(0.1);
+  const lowProjection = [
+    lowScale, 0, 0, 0,
+    0, lowScale, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ];
+  const views = [
+    {
+      projectionMatrix: identity,
+      viewMatrix: identity,
+      viewport: { height: 80, width: 100, x: 0, y: 0 },
+    },
+    {
+      projectionMatrix: lowProjection,
+      viewMatrix: identity,
+      viewport: { height: 80, width: 100, x: 100, y: 0 },
+    },
+  ];
+  return reverse ? views.reverse() : views;
+};
+
 const isNumericArrayLike = (value: unknown): value is ArrayLike<number> =>
   ArrayBuffer.isView(value)
     && !(value instanceof DataView)
@@ -1207,6 +1236,22 @@ const nodeLodDocument = () => ({
     },
   ],
 });
+
+const nodeLodSeparatedBoundsDocument = () => {
+  const document = nodeLodDocument();
+  return {
+    ...document,
+    nodes: [
+      {
+        ...document.nodes[0],
+        translation: [10, 0, 0],
+      },
+      {
+        ...document.nodes[1],
+      },
+    ],
+  };
+};
 
 const materialLodDocument = () => ({
   accessors: lodAccessors(),
@@ -7968,6 +8013,93 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(drawCount(lowDraws[0]!), "low coverage should select the referenced three-index LOD1 triangle").toBe(3);
   });
 
+  it("draws a large visible lower node LOD on its first frame when LOD0 is outside every view", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({ src: lodGltfSrc, version: "node-lod-visible-fallback" }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, nodeLodSeparatedBoundsDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    const readyDraws = drawCalls(calls);
+    expect(readyDraws, "a visible lower LOD must prevent first-frame blanking").not.toHaveLength(0);
+    expect(drawCount(readyDraws.at(-1)!)).toBe(3);
+  });
+
+  it("shares the highest visible node LOD coverage across stereo views independent of view order", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({ src: lodGltfSrc, version: "node-lod-stereo" }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, nodeLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    for (const reverse of [false, true]) {
+      const callsBeforeViews = calls.length;
+      root.renderViews(renderGraph, { views: lodStereoViews(reverse) });
+      const draws = drawCalls(calls.slice(callsBeforeViews));
+      expect(draws, `both stereo views should draw in ${reverse ? "reverse" : "forward"} order`)
+        .toHaveLength(2);
+      expect(draws.map(drawCount), "the higher-coverage eye should select LOD0 for both eyes")
+        .toEqual([6, 6]);
+    }
+  });
+
+  it("preserves the prior shared node LOD while its group is invisible in every view", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const highScale = lodScaleForCoverage(0.205);
+    const renderGraph = renderScene([
+      gltf({
+        ref,
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [highScale, highScale, 1],
+        },
+        version: "node-lod-invisible-retention",
+      }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, nodeLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+    expect(drawCount(drawCalls(calls).at(-1)!)).toBe(6);
+
+    if (ref.current === null) throw new Error("Expected glTF render-object ref to be attached");
+    ref.current.position.x = 10;
+    const callsBeforeInvisible = calls.length;
+    root.renderViews(renderGraph, { views: lodStereoViews() });
+    expect(drawCalls(calls.slice(callsBeforeInvisible))).toHaveLength(0);
+
+    const returnScale = lodScaleForCoverage(0.198);
+    ref.current.position.x = 0;
+    ref.current.scale.x = returnScale;
+    ref.current.scale.y = returnScale;
+    const callsBeforeReturn = calls.length;
+    root.render(renderGraph);
+    const returnedDraws = drawCalls(calls.slice(callsBeforeReturn));
+    expect(returnedDraws).toHaveLength(1);
+    expect(drawCount(returnedDraws[0]!), "an all-invisible frame must not demote retained LOD0").toBe(6);
+  });
+
   it("selects material-level MSFT_lod variants from screen coverage", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
@@ -8002,6 +8134,32 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     const lowColors = uniform4fvPayloads(low.calls, "u_color").map(roundVector);
     expect(lowColors).toContainEqual([0, 0, 1, 1]);
+  });
+
+  it("shares material LOD selection across stereo views independent of view order", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const renderGraph = renderScene([
+      gltf({ src: lodGltfSrc, version: "material-lod-stereo" }),
+    ]);
+
+    root.render(renderGraph);
+    await settleLodDocumentAndBuffer(loader, materialLodDocument());
+    await flushAnimationFrames(viewport.animationFrames);
+
+    for (const reverse of [false, true]) {
+      const callsBeforeViews = calls.length;
+      root.renderViews(renderGraph, { views: lodStereoViews(reverse) });
+      const viewCalls = calls.slice(callsBeforeViews);
+      expect(drawCalls(viewCalls)).toHaveLength(2);
+      expect(
+        uniform4fvPayloads(viewCalls, "u_color").map(roundVector),
+        "a lower-coverage eye must not mutate the finalized shared material LOD",
+      ).not.toContainEqual([0, 0, 1, 1]);
+    }
   });
 
   it("uses selected material LOD texture transforms for glTF texcoords", async () => {
@@ -8069,20 +8227,27 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
+    const initialScale = lodScaleForCoverage(0.205);
+    const ref: { current: RenderObjectHandle | null } = { current: null };
+    const graph = renderScene([
+      gltf({
+        src: lodGltfSrc,
+        ref,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [initialScale, initialScale, 1],
+        },
+        version: "node-lod-hysteresis",
+      }),
+    ]);
     const renderGraph = (coverage: number) => {
-      const scale = lodScaleForCoverage(coverage);
-
-      return renderScene([
-        gltf({
-          src: lodGltfSrc,
-          transform: {
-            position: [0, 0, 0],
-            rotation: [0, 0, 0],
-            scale: [scale, scale, 1],
-          },
-          version: "node-lod-hysteresis",
-        }),
-      ]);
+      const value = lodScaleForCoverage(coverage);
+      if (ref.current !== null) {
+        ref.current.scale.x = value;
+        ref.current.scale.y = value;
+      }
+      return graph;
     };
     const renderSelectedCount = (coverage: number): number => {
       const drawsBeforeRender = drawCalls(calls).length;

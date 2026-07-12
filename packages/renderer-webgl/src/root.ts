@@ -197,6 +197,19 @@ import {
 } from "./gltf/prepared-asset";
 import { GltfPreparationScheduler } from "./gltf/preparation-scheduler";
 import {
+  beginSharedViewLodSelections,
+  createSharedViewLodSelections,
+  finalizeSharedViewLodSelection,
+  finalizeUnobservedSharedViewLodFallback,
+  observeSharedViewLodCoverage,
+  reserveSharedViewLodSelections,
+  sharedViewLodSelectedLevel,
+  sharedViewLodWasObserved,
+  validateSharedViewLodMetadata,
+  type SharedViewLodMetadata,
+  type SharedViewLodSelections,
+} from "./gltf/shared-view-lod-selection";
+import {
   identityMat4,
   inverseMat4,
   inverseMat4Into,
@@ -793,10 +806,6 @@ const loadedGltfSurfaceMaterial = (
   };
 };
 
-type GltfLodSelectionState = {
-  readonly level: number;
-};
-
 type GltfState = {
   hasMaterialLod: boolean;
   hasMaterialVariants: boolean;
@@ -988,7 +997,6 @@ const EMPTY_FRAME_PLAN_RESOURCE_MANIFEST: FramePlanResourceManifest = {
   renderObjectRefs: [],
   virtualTextures: [],
 };
-const GLTF_LOD_HYSTERESIS_RATIO = 0.15;
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
@@ -1953,48 +1961,6 @@ const gltfLodThresholds = (
   return thresholds;
 };
 
-const selectedLodLevel = (
-  coverage: number,
-  levelCount: number,
-  thresholds: readonly number[],
-): number | undefined => {
-  for (let level = 0; level < levelCount; level += 1) {
-    if (coverage >= (thresholds[level] ?? fallbackLodThreshold(level, levelCount))) return level;
-  }
-
-  return undefined;
-};
-
-const hystereticLodLevel = (
-  coverage: number,
-  levelCount: number,
-  thresholds: readonly number[],
-  previousLevel: number | undefined,
-): number => {
-  const stateless = selectedLodLevel(coverage, levelCount, thresholds) ?? levelCount - 1;
-  if (
-    previousLevel === undefined
-    || previousLevel < 0
-    || previousLevel >= levelCount
-  ) {
-    return stateless;
-  }
-
-  let level = previousLevel;
-  while (level > 0) {
-    const threshold = thresholds[level - 1] ?? fallbackLodThreshold(level - 1, levelCount);
-    if (coverage < Math.min(1, threshold * (1 + GLTF_LOD_HYSTERESIS_RATIO))) break;
-    level -= 1;
-  }
-  while (level < levelCount - 1) {
-    const threshold = thresholds[level] ?? fallbackLodThreshold(level, levelCount);
-    if (coverage >= threshold * (1 - GLTF_LOD_HYSTERESIS_RATIO)) break;
-    level += 1;
-  }
-
-  return level;
-};
-
 const mat4OrientationDeterminant = (matrix: Mat4): number =>
   matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
   - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
@@ -2110,7 +2076,20 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #gltfRootViewProjectionModel: MutableMat4 = identityMat4();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
-  readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
+  #sharedViewLodSelections: SharedViewLodSelections = createSharedViewLodSelections();
+  readonly #sharedViewLodSelectionIds = new Map<string, number>();
+  readonly #sharedViewLodMetadata = new Map<string, SharedViewLodMetadata>();
+  #sharedViewLodMetadataById: SharedViewLodMetadata[] = [];
+  #sharedViewLodTouchEpochs = new Uint32Array(1);
+  #sharedViewLodTouchPhases = new Uint8Array(1);
+  #sharedViewNodeLodFallbackEpochs = new Uint32Array(1);
+  #sharedViewNodeLodFallbackLevels = new Uint32Array(1);
+  #sharedViewNodeLodIds = new Uint32Array(1);
+  #sharedViewMaterialLodIds = new Uint32Array(1);
+  #sharedViewNodeLodCount = 0;
+  #sharedViewMaterialLodCount = 0;
+  readonly #sharedViewLodRootModel = identityMat4();
+  readonly #sharedViewLodRootViewProjection = identityMat4();
   #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
@@ -2123,7 +2102,6 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
   readonly #activeGltfBatchPlanCacheKeys = new Set<string>();
   readonly #activeGltfInstanceBufferKeys = new Set<string>();
-  readonly #activeGltfLodSelectionKeys = new Set<string>();
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #contextError: string | undefined;
@@ -2487,7 +2465,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#applyPendingResourceArenaEvents();
     this.#activeGltfBatchPlanCacheKeys.clear();
     this.#activeGltfInstanceBufferKeys.clear();
-    this.#activeGltfLodSelectionKeys.clear();
     this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
     try {
@@ -2510,6 +2487,7 @@ class WebGlRootImpl implements WebGlRoot {
       const useHdr = wantsHdr && this.#hdrSupported;
       const surfaceLights = this.#sceneSurfaceLightSet(plan.environment);
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
+      this.#prepareSharedViewGltfLodSelections(plan, frameViews);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         // A scene occurrence has the same resource identity in every view.
         // Resetting the ordinal across eyes avoids duplicate instance uploads
@@ -2600,7 +2578,6 @@ class WebGlRootImpl implements WebGlRoot {
 
     this.#releaseUnusedGltfBatchPlans();
     this.#releaseUnusedGltfInstanceBuffers();
-    this.#pruneGltfLodSelections();
     pruneClusteredLightCache(this.#clusteredLightResources, this.#frame, (texture) => {
       this.#gl.deleteTexture(texture);
       this.#ownedTextures.delete(texture);
@@ -2828,13 +2805,11 @@ class WebGlRootImpl implements WebGlRoot {
     this.#gltfIblImageScheduler.dispose();
     this.#gltfBatchPlanCache.clear();
     this.#gltfInstanceBuffers.clear();
-    this.#gltfLodSelections.clear();
     this.#pendingGltfImageRows.length = 0;
     this.#pendingGltfImageRowHead = 0;
     this.#iblBrdfLutTexture = undefined;
     this.#transmissionScreenColorTexture = undefined;
     this.#activeGltfInstanceBufferKeys.clear();
-    this.#activeGltfLodSelectionKeys.clear();
     this.#cameraViewResourceSubscription?.unsubscribe();
     this.#cameraViewResourceSubscription = undefined;
     for (const [ref, binding] of this.#renderObjectBindings) {
@@ -2911,6 +2886,18 @@ class WebGlRootImpl implements WebGlRoot {
     );
     this.#applyResourceArenaChanges(applyResourceDelta(this.#resourceArena, resourceDelta));
     this.#framePlan = next;
+    this.#sharedViewLodSelectionIds.clear();
+    this.#sharedViewLodMetadata.clear();
+    this.#sharedViewLodMetadataById = [];
+    this.#sharedViewLodSelections = createSharedViewLodSelections();
+    this.#sharedViewLodTouchEpochs = new Uint32Array(1);
+    this.#sharedViewLodTouchPhases = new Uint8Array(1);
+    this.#sharedViewNodeLodFallbackEpochs = new Uint32Array(1);
+    this.#sharedViewNodeLodFallbackLevels = new Uint32Array(1);
+    this.#sharedViewNodeLodIds = new Uint32Array(1);
+    this.#sharedViewMaterialLodIds = new Uint32Array(1);
+    this.#sharedViewNodeLodCount = 0;
+    this.#sharedViewMaterialLodCount = 0;
     this.#framePlanSurfaceLights = surfaceLights;
     this.#framePlanSurfaceLightSet = surfaceLights.length === 0 ? undefined : surfaceLightSet(surfaceLights);
     this.#latestScene = scene;
@@ -4347,40 +4334,285 @@ class WebGlRootImpl implements WebGlRoot {
     };
   }
 
+  #prepareSharedViewGltfLodSelections(plan: FramePlan, frameViews: FrameViews): void {
+    const previousEpoch = this.#sharedViewLodSelections.epoch;
+    const epoch = beginSharedViewLodSelections(this.#sharedViewLodSelections);
+    if (epoch <= previousEpoch) {
+      this.#sharedViewLodTouchEpochs.fill(0);
+      this.#sharedViewLodTouchPhases.fill(0);
+      this.#sharedViewNodeLodFallbackEpochs.fill(0);
+    }
+    this.#sharedViewNodeLodCount = 0;
+    this.#sharedViewMaterialLodCount = 0;
+
+    for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
+      copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
+      this.#visitGltfLodRoots(plan, this.#renderViewProjection, 1);
+    }
+    this.#finalizeSharedViewNodeLodSelections();
+
+    for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
+      copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
+      this.#visitGltfLodRoots(plan, this.#renderViewProjection, 2);
+    }
+    this.#finalizeSharedViewLodSelections(this.#sharedViewMaterialLodIds, this.#sharedViewMaterialLodCount);
+  }
+
+  #visitGltfLodRoots(
+    plan: FramePlan,
+    viewProjection: Mat4,
+    phase: 1 | 2,
+  ): void {
+    let renderInstanceOrdinal = 0;
+    for (const planNode of plan.nodes) {
+      if (planNode.kind !== "gltf" && planNode.kind !== "gltf-instances") continue;
+      const node = planNode;
+      const ordinal = renderInstanceOrdinal;
+      renderInstanceOrdinal += 1;
+      const state = this.#gltfState(node);
+      if (state.status !== "ready" || (!state.hasNodeLod && !state.hasMaterialLod)) continue;
+      if (node.kind === "gltf-instances") {
+        const views = this.#gltfInstanceViews(node.instances);
+        for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
+          const rootModel = views.rootModels[outerIndex]!;
+          multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, rootModel);
+          this.#observeSharedViewGltfLodRoot(
+            state, node, `instance:${ordinal}:${outerIndex}`, this.#sharedViewLodRootViewProjection, phase,
+          );
+        }
+        continue;
+      }
+      const rootHandle = this.#renderObjectHandles.get(node);
+      const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
+      transformMat4Into(this.#sharedViewLodRootModel, rootTransform);
+      multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, this.#sharedViewLodRootModel);
+      this.#observeSharedViewGltfLodRoot(
+        state, node, `instance:${ordinal}`, this.#sharedViewLodRootViewProjection, phase,
+      );
+    }
+  }
+
+  #observeSharedViewGltfLodRoot(
+    state: GltfState,
+    node: AnyGltfNode,
+    renderInstanceKey: string,
+    rootViewProjectionModel: Mat4,
+    phase: 1 | 2,
+  ): void {
+    const selectedVariantIndex = phase === 2 && state.hasMaterialVariants
+      ? this.#selectedGltfVariantIndex(state, node)
+      : undefined;
+    for (const primitive of state.primitives) {
+      const nodeLod = primitive.nodeLod;
+      if (phase === 1) {
+        if (nodeLod === undefined) continue;
+        const selectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
+        const id = this.#sharedViewNodeLodSelectionId(state, selectionKey, nodeLod);
+        this.#touchSharedViewLodSelection(id, phase);
+        if (nodeLod.level !== 0) {
+          for (const bounds of primitive.localBounds) {
+            if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
+            this.#observeSharedViewNodeLodFallback(id, nodeLod.level);
+          }
+          continue;
+        }
+        for (const bounds of primitive.localBounds) {
+          if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
+          observeSharedViewLodCoverage(
+            this.#sharedViewLodSelections,
+            id,
+            projectedBoundsScreenCoverage(bounds, rootViewProjectionModel),
+          );
+        }
+        continue;
+      }
+      if (nodeLod !== undefined) {
+        const nodeSelectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
+        if (this.#sharedViewSelectedLodLevel(nodeSelectionKey) !== nodeLod.level) continue;
+      }
+      const primitiveMaterial = selectedVariantIndex === undefined
+        ? primitive.baseMaterial
+        : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
+      const materialLod = primitiveMaterial.materialLod;
+      if (materialLod === undefined) continue;
+      for (let instanceIndex = 0; instanceIndex < primitive.localBounds.length; instanceIndex += 1) {
+        const bounds = primitive.localBounds[instanceIndex];
+        if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
+        const selectionKey = this.#gltfMaterialLodSelectionKey(
+          state, renderInstanceKey, primitive, primitiveMaterial, instanceIndex,
+        );
+        const id = this.#sharedViewMaterialLodSelectionId(selectionKey, materialLod);
+        this.#touchSharedViewLodSelection(id, phase);
+        observeSharedViewLodCoverage(
+          this.#sharedViewLodSelections,
+          id,
+          projectedBoundsScreenCoverage(bounds, rootViewProjectionModel),
+        );
+      }
+    }
+  }
+
+  #sharedViewNodeLodSelectionId(
+    state: GltfState,
+    selectionKey: string,
+    lod: GltfNodePrimitiveLod,
+  ): number {
+    const metadataKey = `${state.key}:node:${lod.group}`;
+    let metadata = this.#sharedViewLodMetadata.get(metadataKey);
+    if (metadata === undefined) {
+      const drawableLevels = new Uint8Array(lod.levelCount);
+      for (const primitive of state.primitives) {
+        if (primitive.nodeLod?.group === lod.group) drawableLevels[primitive.nodeLod.level] = 1;
+      }
+      metadata = validateSharedViewLodMetadata({
+        drawableLevels,
+        levelCount: lod.levelCount,
+        offset: 0,
+        thresholds: Float64Array.from(lod.thresholds),
+      });
+      this.#sharedViewLodMetadata.set(metadataKey, metadata);
+    }
+    return this.#sharedViewLodSelectionId(selectionKey, metadata);
+  }
+
+  #sharedViewMaterialLodSelectionId(
+    selectionKey: string,
+    lod: GltfMaterialPrimitiveLod,
+  ): number {
+    const metadataKey = `material:${lod.thresholds.join(",")}:${lod.levels.length}`;
+    let metadata = this.#sharedViewLodMetadata.get(metadataKey);
+    if (metadata === undefined) {
+      metadata = validateSharedViewLodMetadata({
+        drawableLevels: new Uint8Array(lod.levels.length).fill(1),
+        levelCount: lod.levels.length,
+        offset: 0,
+        thresholds: Float64Array.from(lod.thresholds),
+      });
+      this.#sharedViewLodMetadata.set(metadataKey, metadata);
+    }
+    return this.#sharedViewLodSelectionId(selectionKey, metadata);
+  }
+
+  #sharedViewLodSelectionId(selectionKey: string, metadata: SharedViewLodMetadata): number {
+    const existing = this.#sharedViewLodSelectionIds.get(selectionKey);
+    if (existing !== undefined) return existing;
+    const id = this.#sharedViewLodSelectionIds.size;
+    reserveSharedViewLodSelections(this.#sharedViewLodSelections, id + 1);
+    this.#reserveSharedViewLodScratch(id + 1);
+    this.#sharedViewLodSelectionIds.set(selectionKey, id);
+    this.#sharedViewLodMetadataById[id] = metadata;
+    return id;
+  }
+
+  #reserveSharedViewLodScratch(minimumCapacity: number): void {
+    if (minimumCapacity <= this.#sharedViewLodTouchEpochs.length) return;
+    const capacity = this.#sharedViewLodSelections.capacity;
+    const touchEpochs = new Uint32Array(capacity);
+    touchEpochs.set(this.#sharedViewLodTouchEpochs);
+    this.#sharedViewLodTouchEpochs = touchEpochs;
+    const touchPhases = new Uint8Array(capacity);
+    touchPhases.set(this.#sharedViewLodTouchPhases);
+    this.#sharedViewLodTouchPhases = touchPhases;
+    const fallbackEpochs = new Uint32Array(capacity);
+    fallbackEpochs.set(this.#sharedViewNodeLodFallbackEpochs);
+    this.#sharedViewNodeLodFallbackEpochs = fallbackEpochs;
+    const fallbackLevels = new Uint32Array(capacity);
+    fallbackLevels.set(this.#sharedViewNodeLodFallbackLevels);
+    this.#sharedViewNodeLodFallbackLevels = fallbackLevels;
+    const nodeIds = new Uint32Array(capacity);
+    nodeIds.set(this.#sharedViewNodeLodIds);
+    this.#sharedViewNodeLodIds = nodeIds;
+    const materialIds = new Uint32Array(capacity);
+    materialIds.set(this.#sharedViewMaterialLodIds);
+    this.#sharedViewMaterialLodIds = materialIds;
+  }
+
+  #observeSharedViewNodeLodFallback(id: number, level: number): void {
+    const epoch = this.#sharedViewLodSelections.epoch;
+    if (this.#sharedViewNodeLodFallbackEpochs[id] !== epoch) {
+      this.#sharedViewNodeLodFallbackEpochs[id] = epoch;
+      this.#sharedViewNodeLodFallbackLevels[id] = level;
+      return;
+    }
+    if (level < this.#sharedViewNodeLodFallbackLevels[id]!) {
+      this.#sharedViewNodeLodFallbackLevels[id] = level;
+    }
+  }
+
+  #finalizeSharedViewNodeLodSelections(): void {
+    const epoch = this.#sharedViewLodSelections.epoch;
+    for (let index = 0; index < this.#sharedViewNodeLodCount; index += 1) {
+      const id = this.#sharedViewNodeLodIds[index]!;
+      const metadata = this.#sharedViewLodMetadataById[id];
+      if (metadata === undefined) throw new Error("Royal shared-view LOD selection is missing metadata");
+      if (
+        !sharedViewLodWasObserved(this.#sharedViewLodSelections, id)
+        && this.#sharedViewNodeLodFallbackEpochs[id] === epoch
+      ) {
+        // LOD0 coverage remains authoritative. With no visible LOD0 in any
+        // view, select the finest visible drawable lower member exactly.
+        finalizeUnobservedSharedViewLodFallback(
+          this.#sharedViewLodSelections,
+          id,
+          metadata,
+          this.#sharedViewNodeLodFallbackLevels[id]!,
+        );
+      } else {
+        finalizeSharedViewLodSelection(this.#sharedViewLodSelections, id, metadata);
+      }
+    }
+  }
+
+  #touchSharedViewLodSelection(id: number, phase: 1 | 2): void {
+    const epoch = this.#sharedViewLodSelections.epoch;
+    if (this.#sharedViewLodTouchEpochs[id] === epoch && this.#sharedViewLodTouchPhases[id] === phase) return;
+    this.#sharedViewLodTouchEpochs[id] = epoch;
+    this.#sharedViewLodTouchPhases[id] = phase;
+    if (phase === 1) {
+      this.#sharedViewNodeLodIds[this.#sharedViewNodeLodCount] = id;
+      this.#sharedViewNodeLodCount += 1;
+    } else {
+      this.#sharedViewMaterialLodIds[this.#sharedViewMaterialLodCount] = id;
+      this.#sharedViewMaterialLodCount += 1;
+    }
+  }
+
+  #finalizeSharedViewLodSelections(ids: Uint32Array, count: number): void {
+    for (let index = 0; index < count; index += 1) {
+      const id = ids[index]!;
+      const metadata = this.#sharedViewLodMetadataById[id];
+      if (metadata === undefined) throw new Error("Royal shared-view LOD selection is missing metadata");
+      finalizeSharedViewLodSelection(this.#sharedViewLodSelections, id, metadata);
+    }
+  }
+
+  #sharedViewSelectedLodLevel(selectionKey: string): number | undefined {
+    const id = this.#sharedViewLodSelectionIds.get(selectionKey);
+    return id === undefined ? undefined : sharedViewLodSelectedLevel(this.#sharedViewLodSelections, id);
+  }
+
+  #gltfMaterialLodSelectionKey(
+    state: GltfState,
+    renderInstanceKey: string,
+    primitive: LoadedGltfPrimitive,
+    primitiveMaterial: LoadedGltfPrimitiveMaterial,
+    instanceIndex: number,
+  ): string {
+    return `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`;
+  }
+
   #selectedGltfNodeLodLevels(
     state: GltfState,
     renderInstanceKey: string,
-    rootViewProjectionModel: Mat4,
+    _rootViewProjectionModel: Mat4,
   ): Map<string, number> {
-    const coverages = new Map<string, number>();
-    const lods = new Map<string, GltfNodePrimitiveLod>();
-    const levelPrimitives = new Map<string, LoadedGltfPrimitive[]>();
-
+    const selected = new Map<string, number>();
     for (const primitive of state.primitives) {
       const lod = primitive.nodeLod;
       if (lod === undefined) continue;
-      lods.set(lod.group, lod);
-      const levelKey = `${lod.group}:${lod.level}`;
-      levelPrimitives.set(levelKey, [...(levelPrimitives.get(levelKey) ?? []), primitive]);
-      if (lod.level !== 0) continue;
-
-      for (const localBounds of primitive.localBounds) {
-        const coverage = projectedBoundsScreenCoverage(localBounds, rootViewProjectionModel);
-        coverages.set(lod.group, Math.max(coverages.get(lod.group) ?? 0, coverage));
-      }
-    }
-
-    const selected = new Map<string, number>();
-    for (const [group, lod] of lods) {
-      const selectionKey = `${state.key}:${renderInstanceKey}:node:${group}`;
-      const level = this.#selectGltfLodLevel(
-        selectionKey,
-        coverages.get(group) ?? 0,
-        lod.levelCount,
-        lod.thresholds,
-        (level) => (levelPrimitives.get(`${group}:${level}`) ?? []).length > 0,
-      );
-      selected.set(group, level);
+      const selectionKey = `${state.key}:${renderInstanceKey}:node:${lod.group}`;
+      const level = this.#sharedViewSelectedLodLevel(selectionKey);
+      if (level !== undefined) selected.set(lod.group, level);
     }
 
     return selected;
@@ -4392,19 +4624,18 @@ class WebGlRootImpl implements WebGlRoot {
     primitive: LoadedGltfPrimitive,
     primitiveMaterial: LoadedGltfPrimitiveMaterial,
     instanceIndex: number,
-    localBounds: Bounds3 | undefined,
-    rootViewProjectionModel: Mat4,
+    _localBounds: Bounds3 | undefined,
+    _rootViewProjectionModel: Mat4,
   ): LoadedGltfMaterial {
     const lod = primitiveMaterial.materialLod;
     if (lod === undefined) return primitiveMaterial.material;
-    const coverage = projectedBoundsScreenCoverage(localBounds, rootViewProjectionModel);
-    const level = this.#selectGltfLodLevel(
-      `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`,
-      coverage,
-      lod.levels.length,
-      lod.thresholds,
-      (level) => lod.levels[level] !== undefined,
-    );
+    const level = this.#sharedViewSelectedLodLevel(this.#gltfMaterialLodSelectionKey(
+      state,
+      renderInstanceKey,
+      primitive,
+      primitiveMaterial,
+      instanceIndex,
+    )) ?? lod.levels.length - 1;
     return lod.levels[level] ?? primitiveMaterial.material;
   }
 
@@ -4486,45 +4717,6 @@ class WebGlRootImpl implements WebGlRoot {
 
     const index = state.variants.indexOf(variant);
     return index === -1 ? undefined : index;
-  }
-
-  #selectGltfLodLevel(
-    selectionKey: string,
-    coverage: number,
-    levelCount: number,
-    thresholds: readonly number[],
-    isDrawable: (level: number) => boolean,
-  ): number {
-    const previous = this.#gltfLodSelections.get(selectionKey)?.level;
-    const target = hystereticLodLevel(coverage, levelCount, thresholds, previous);
-    const selected = this.#drawableGltfLodLevel(target, previous, levelCount, isDrawable);
-    this.#activeGltfLodSelectionKeys.add(selectionKey);
-    this.#gltfLodSelections.set(selectionKey, {
-      level: selected,
-    });
-    return selected;
-  }
-
-  #drawableGltfLodLevel(
-    target: number,
-    previous: number | undefined,
-    levelCount: number,
-    isDrawable: (level: number) => boolean,
-  ): number {
-    if (isDrawable(target)) return target;
-    if (previous !== undefined && previous >= 0 && previous < levelCount && isDrawable(previous)) {
-      return previous;
-    }
-    for (let level = 0; level < levelCount; level += 1) {
-      if (isDrawable(level)) return level;
-    }
-    return target;
-  }
-
-  #pruneGltfLodSelections(): void {
-    for (const key of this.#gltfLodSelections.keys()) {
-      if (!this.#activeGltfLodSelectionKeys.has(key)) this.#gltfLodSelections.delete(key);
-    }
   }
 
   #gltfMaterialTextureRef(

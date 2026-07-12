@@ -40,22 +40,25 @@ slice described below.
   or exposes WebGL state. Root diagnostics use narrow copied snapshots rather
   than mutable arena maps or rows. Both arenas use the same pure monotonic-ID
   boundary guard without public allocator mutation hooks.
-- `FramePackets` and shared-view LOD selection exist as pure retained kernels,
-  but do not yet drive submission. The current draw path remains their
-  differential oracle.
+- Shared-view LOD selection now runs as a retained node-then-material prepass:
+  all visible views contribute, each dense group finalizes once, and legacy
+  submission consumes one frame-global level per group. `FramePackets` now
+  retain multi-predicate LOD requirements and concatenated per-view ranges, but
+  the root does not yet build the retained numeric candidate catalog. The
+  current draw path remains the differential oracle for that next slice.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 381 workspace tests, typecheck, build,
+- The current checkpoint passes 393 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Integrate the retained two-pass shared-view LOD/visibility selector with
-   `FramePackets`: observe all views, finalize each group once, then emit
-   per-view packet ranges. Preserve the old path only as a differential oracle.
+1. Build the retained numeric packet candidate catalog and emit its per-view
+   selected ranges using the finalized shared-view LOD requirements. Preserve
+   the old draw path only as a differential oracle.
 2. Make packet output drive batching and submission, extract the real executor,
    and delete transient glTF draw arrays, string batch caches, active-resource
    scans, frame-end pruning paths, and the corresponding root methods.
