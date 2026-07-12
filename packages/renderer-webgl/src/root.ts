@@ -41,7 +41,6 @@ import {
   type Transform,
   type Vec3,
 } from "@royal/renderer-core";
-import { VERTEX_ATTRIBUTE } from "./webgl/vertex-attribute-abi";
 import {
   createRenderObjectHandle,
   readRenderObjectHandleTransform,
@@ -128,13 +127,18 @@ import {
   releaseLostVertexInputGeometry,
   restoreVertexInputArenaContext,
   retainVertexInputGeometry,
-  vertexInputBaseVertexArray,
-  vertexInputCompositeVertexArrayForInstance,
   vertexInputGeometry,
   type VertexInputGeometry,
   type VertexInputArena,
-  type VertexInputInstanceAllocation,
 } from "./vertex-input-arena";
+import {
+  clearGeometryDrawArenaContext,
+  createGeometryDrawArena,
+  drawGeometry,
+  prepareGeometryInstancedDraw,
+  submitGeometryInstancedDraw,
+  type GeometryDrawArena,
+} from "./webgl/geometry-draw-arena";
 import {
   beginGltfInstanceBufferArenaFrame,
   bindGltfInstanceBuffer,
@@ -471,14 +475,6 @@ type PickScratchCandidate = {
 };
 
 type GeometryDrawMode = GltfGeometryDrawMode;
-
-type VertexAttribDefaultValue = {
-    readonly size: 4;
-    readonly w: number;
-    readonly x: number;
-    readonly y: number;
-    readonly z: number;
-};
 
 type GeometryResource = VertexInputGeometry;
 
@@ -1779,24 +1775,6 @@ const gltfPrimitiveMode = (mode: number | undefined): GeometryDrawMode | undefin
   }
 };
 
-const webGlDrawMode = (gl: WebGL2RenderingContext, mode: GeometryDrawMode): number => {
-  switch (mode) {
-    case "line-loop":
-      return gl.LINE_LOOP;
-    case "line-strip":
-      return gl.LINE_STRIP;
-    case "lines":
-      return gl.LINES;
-    case "points":
-      return gl.POINTS;
-    case "triangle-fan":
-      return gl.TRIANGLE_FAN;
-    case "triangle-strip":
-      return gl.TRIANGLE_STRIP;
-    case "triangles":
-      return gl.TRIANGLES;
-  }
-};
 
 const isPickableDrawMode = (mode: GeometryDrawMode | undefined): boolean =>
   mode === undefined
@@ -2088,7 +2066,7 @@ class WebGlRootImpl implements WebGlRoot {
   #renderScheduleGeneration = 0;
   #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
-  #vertexAttribDefaults = new Map<number, VertexAttribDefaultValue>();
+  readonly #geometryDrawArena: GeometryDrawArena;
   #textureUploadFrame = -1;
   #textureUploadHead = 0;
   #textureUploadsThisFrame = 0;
@@ -2175,6 +2153,7 @@ class WebGlRootImpl implements WebGlRoot {
       throw new Error("Royal WebGL renderer requires a WebGL2 context");
     }
     this.#gl = gl;
+    this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
     this.#probeContextCapabilities();
@@ -2664,7 +2643,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
     this.#ownedTextures.clear();
     this.#iblBrdfLutTexture = undefined;
-    this.#vertexAttribDefaults.clear();
+    clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#textures.clear();
     this.#pendingTextureUploads.length = 0;
     this.#textureUploadHead = 0;
@@ -2729,7 +2708,7 @@ class WebGlRootImpl implements WebGlRoot {
     for (const state of this.#virtualTextures.values()) this.#releaseVirtualTextureState(state);
     this.#virtualTextures.clear();
     this.#clusteredLightResources.clear();
-    this.#vertexAttribDefaults.clear();
+    clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#retainedGeometryRecipes.clear();
     this.#gltfPacketPrimitivesByGeometryId.clear();
     this.#textures.clear();
@@ -5007,7 +4986,6 @@ class WebGlRootImpl implements WebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry?: CpuGeometry,
   ): void {
-    const gl = this.#gl;
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
       material,
@@ -5062,16 +5040,13 @@ class WebGlRootImpl implements WebGlRoot {
     const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
     uniform1i(this.#programArena, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
     uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
-    this.#bindGeometryAttributes(geometry, geometryId);
-
-    if (material.kind === "wireframe") gl.lineWidth?.(material.width);
-
-    const mode = webGlDrawMode(gl, geometry.mode);
-    if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
-      gl.drawArrays(mode, 0, geometry.drawCount);
-    } else {
-      gl.drawElements(mode, geometry.drawCount, geometry.indexType, 0);
-    }
+    drawGeometry(
+      this.#geometryDrawArena,
+      this.#contextGeneration,
+      geometryId,
+      geometry,
+      material.kind === "wireframe" ? material.width : undefined,
+    );
   }
 
   #drawGeometryInstanced(
@@ -5096,7 +5071,6 @@ class WebGlRootImpl implements WebGlRoot {
     toneMapping: SceneToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
-    const gl = this.#gl;
     const surfaceLights = material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET;
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
@@ -5158,16 +5132,16 @@ class WebGlRootImpl implements WebGlRoot {
       rootScaleSignature,
       this.#gltfInstancingCounters,
     );
-    this.#bindGltfInstancedAttributes(geometry, geometryId, instanceAllocation);
-
-    const mode = webGlDrawMode(gl, geometry.mode);
+    prepareGeometryInstancedDraw(
+      this.#geometryDrawArena,
+      this.#contextGeneration,
+      geometryId,
+      geometry,
+      instanceAllocation,
+    );
     this.#gltfInstancingCounters.drawCalls += 1;
     this.#gltfInstancingCounters.instancesDrawn += localModels.length;
-    if (geometry.indexBuffer === undefined || geometry.indexType === undefined) {
-      gl.drawArraysInstanced(mode, 0, geometry.drawCount, localModels.length);
-    } else {
-      gl.drawElementsInstanced(mode, geometry.drawCount, geometry.indexType, 0, localModels.length);
-    }
+    submitGeometryInstancedDraw(this.#geometryDrawArena, geometry, localModels.length);
   }
 
   #bindSurfaceMaterialFactors(
@@ -5848,40 +5822,6 @@ class WebGlRootImpl implements WebGlRoot {
       );
     }
     commitClusteredLightSnapshot(resource, lights);
-  }
-
-  #bindGeometryAttributes(geometry: GeometryResource, geometryId: number): void {
-    this.#gl.bindVertexArray(vertexInputBaseVertexArray(
-      this.#vertexInputs,
-      this.#gl,
-      this.#contextGeneration,
-      geometryId,
-    ));
-    this.#bindGeometryDefaultAttributeValues(geometry);
-  }
-
-  #bindGltfInstancedAttributes(
-    geometry: GeometryResource,
-    geometryId: number,
-    instanceAllocation: VertexInputInstanceAllocation,
-  ): void {
-    this.#gl.bindVertexArray(vertexInputCompositeVertexArrayForInstance(
-      this.#vertexInputs,
-      this.#gl,
-      this.#contextGeneration,
-      geometryId,
-      instanceAllocation,
-    ));
-    this.#bindGeometryDefaultAttributeValues(geometry);
-  }
-
-  #bindGeometryDefaultAttributeValues(geometry: GeometryResource): void {
-    if (geometry.tangentBuffer === undefined) {
-      this.#vertexAttrib4f(VERTEX_ATTRIBUTE.tangent, 0, 0, 0, 0);
-    }
-    if (geometry.colorBuffer === undefined) {
-      this.#vertexAttrib4f(VERTEX_ATTRIBUTE.color, 1, 1, 1, 1);
-    }
   }
 
   #releaseUnusedGltfBatchResources(): void {
@@ -7173,22 +7113,6 @@ class WebGlRootImpl implements WebGlRoot {
     } finally {
       if (consumeProgramArenaWake(this.#programArena)) this.invalidate();
     }
-  }
-
-  #vertexAttrib4f(location: number, x: number, y: number, z: number, w: number): void {
-    const cached = this.#vertexAttribDefaults.get(location);
-    if (
-      cached?.size === 4
-      && Object.is(cached.x, x)
-      && Object.is(cached.y, y)
-      && Object.is(cached.z, z)
-      && Object.is(cached.w, w)
-    ) {
-      return;
-    }
-
-    this.#gl.vertexAttrib4f(location, x, y, z, w);
-    this.#vertexAttribDefaults.set(location, { size: 4, w, x, y, z });
   }
 
   #meshGeometryRow(

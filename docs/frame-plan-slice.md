@@ -72,7 +72,7 @@ glTF draw collection.
   scale signatures, partial uploads, activity epochs, failed-frame retention,
   successful-frame pruning, context restoration, and upload counters now share
   one authority. Root retains only transform subscriptions, batch signatures,
-  program readiness, VAO/default-attribute binding, and draw submission.
+  program readiness, and surface policy.
   HDR color/depth/framebuffer and transmission-copy targets are likewise owned
   by an opaque surface render-target arena with atomic resize/copy publication,
   partial-creation recovery, and explicit active-versus-lost context teardown.
@@ -85,11 +85,17 @@ glTF draw collection.
   retry, HDR display-transform uniforms, and all surface uniform calls use this
   single authority; direct program/shader/uniform-cache ownership is deleted
   from root.
+  Geometry submission is also isolated behind an opaque draw arena that borrows
+  `VertexInputArena`: base/composite VAO selection, missing tangent/color
+  defaults, exact draw-mode mapping, wireframe width ordering, and indexed or
+  non-indexed single/instanced dispatch no longer live in root. The split
+  instanced prepare/submit seam preserves root counter ordering without a
+  callback or direct GL draw authority.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 451 workspace tests, typecheck, build,
+- The current checkpoint passes 454 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
