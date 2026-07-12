@@ -30,8 +30,11 @@ slice described below.
   loop renders on demand and does not continuously redraw unchanged scenes.
 - Geometry declarations have stable semantic resource IDs. `VertexInputArena`
   owns verified static-buffer deduplication, base and instanced VAOs, reverse
-  instance edges, context loss/restoration, and ordered teardown. The duplicate
-  root geometry cache and per-frame used-geometry sweep are deleted.
+  instance edges, the complete three-stream instance-buffer family, context
+  loss/restoration, and ordered teardown. Instance capacity growth, retained
+  staging, partial uploads, failure recovery, and VAO-before-buffer deletion
+  now share one authority. The duplicate root geometry cache, root buffer
+  bookkeeping, and per-frame used-geometry sweep are deleted.
 - `ResourceArena` and `VertexInputArena` are opaque, explicitly passed state
   tokens and sibling authorities. The semantic arena no longer imports, owns,
   or exposes WebGL state. Root diagnostics use narrow copied snapshots rather
@@ -44,34 +47,30 @@ slice described below.
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 375 workspace tests, typecheck, build,
+- The current checkpoint passes 381 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Move the root-owned instance-buffer family into `VertexInputArena`, including
-   creation, capacity growth, partial uploads, context restoration, and
-   deletion. This removes the remaining cross-owner VAO-before-buffer ordering
-   obligation and its root bookkeeping.
-2. Integrate the retained two-pass shared-view LOD/visibility selector with
+1. Integrate the retained two-pass shared-view LOD/visibility selector with
    `FramePackets`: observe all views, finalize each group once, then emit
    per-view packet ranges. Preserve the old path only as a differential oracle.
-3. Make packet output drive batching and submission, extract the real executor,
+2. Make packet output drive batching and submission, extract the real executor,
    and delete transient glTF draw arrays, string batch caches, active-resource
    scans, frame-end pruning paths, and the corresponding root methods.
-4. Compile the private render DAG and add minimal typed `Primitive` and effect
+3. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.
-5. Finish the paused hardware glTF-load/compatibility-lab hitch and long-task
+4. Finish the paused hardware glTF-load/compatibility-lab hitch and long-task
    benchmark. Measure cold and warm Helmet loading, 4,096-instance p50/p95,
    capacity growth, and steady heap slope without adding unstable CI limits.
-6. Recheck the visual oracles: Helmet, material variants, transparent output,
+5. Recheck the visual oracles: Helmet, material variants, transparent output,
    SVG color accuracy, and representative Khronos material/compatibility cases.
    Then validate Safari 17 on iPad A10+ and Quest 2.
-7. Keep animation and morphing deferred until a product use case exists; retain
+6. Keep animation and morphing deferred until a product use case exists; retain
    only the eventual minimal imperative control boundary in the architecture.
-8. Keep occlusion, meshlets/impostors, particles, and large-world streaming as
+7. Keep occlusion, meshlets/impostors, particles, and large-world streaming as
    measured private research until packet/executor data identifies a concrete
    bottleneck. Outdoor mixed building/forest scenes remain design pressure, not
    immediate public API.

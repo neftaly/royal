@@ -12,10 +12,34 @@ export interface VertexInputSemanticRow {
   readonly recipe: CpuGeometry;
 }
 
-export interface VertexInputInstanceBuffers {
+interface VertexInputInstanceBuffers {
   readonly localModelBuffer: WebGLBuffer;
   readonly rootPoseBuffer: WebGLBuffer;
   readonly rootScaleBuffer: WebGLBuffer;
+}
+
+declare const vertexInputInstanceAuthority: unique symbol;
+
+/** Opaque semantic allocation for the fixed glTF instance-attribute ABI. */
+export interface VertexInputInstanceAllocation {
+  readonly [vertexInputInstanceAuthority]: "VertexInputInstanceAllocation";
+}
+
+export type VertexInputInstanceLane = "localModels" | "rootPoses" | "rootScales";
+
+export interface VertexInputInstanceStaging {
+  /** True when preparation requires callers to repopulate every active lane element. */
+  readonly forceFull: boolean;
+  readonly localModels: Float32Array;
+  /** Reusable packed [start, end) instance pairs, consumed one lane at a time. */
+  readonly ranges: Int32Array;
+  readonly rootPoses: Float32Array;
+  readonly rootScales: Float32Array;
+}
+
+export interface VertexInputInstanceLaneUploadStats {
+  readonly bytes: number;
+  readonly calls: number;
 }
 
 export interface VertexInputGeometry {
@@ -40,6 +64,8 @@ export interface VertexInputArenaSnapshot {
   readonly compositeVertexArrayCount: number;
   readonly contextGeneration?: number;
   readonly instanceGeometryEdges: ReadonlyMap<number, ReadonlySet<number>>;
+  readonly instanceAllocationCount: number;
+  readonly instanceAllocationIds: ReadonlySet<number>;
   readonly identityBucketSizes: ReadonlyMap<string, number>;
   readonly semanticGeometryIds: ReadonlySet<number>;
   readonly semanticGeometryCount: number;
@@ -67,6 +93,38 @@ type SemanticGeometry = {
   staticGeometry?: StaticGeometry;
 };
 
+type InstanceAllocationToken = {
+  readonly id: number;
+};
+
+type OwnedInstanceAllocation = {
+  readonly allocation: InstanceAllocationToken;
+  bufferCapacity: number;
+  buffers?: VertexInputInstanceBuffers;
+  capacity: number;
+  instanceCount: number;
+  localModelsDirty: boolean;
+  readonly localModelsStats: MutableInstanceLaneUploadStats;
+  rootPosesDirty: boolean;
+  readonly rootPosesStats: MutableInstanceLaneUploadStats;
+  rootScalesDirty: boolean;
+  readonly rootScalesStats: MutableInstanceLaneUploadStats;
+  readonly staging: MutableInstanceStaging;
+};
+
+type MutableInstanceStaging = {
+  forceFull: boolean;
+  localModels: Float32Array;
+  ranges: Int32Array;
+  rootPoses: Float32Array;
+  rootScales: Float32Array;
+};
+
+type MutableInstanceLaneUploadStats = {
+  bytes: number;
+  calls: number;
+};
+
 declare const vertexInputArenaAuthority: unique symbol;
 
 /** Explicit authority token; only this module can inspect or mutate its state. */
@@ -80,7 +138,9 @@ interface VertexInputArenaState {
   readonly geometryBuckets: Map<string, StaticGeometry[]>;
   readonly instanceBuffers: Map<number, VertexInputInstanceBuffers>;
   readonly instanceGeometryIds: Map<number, Set<number>>;
+  nextInstanceId: number;
   nextStaticIdentityId: number;
+  readonly ownedInstances: Map<number, OwnedInstanceAllocation>;
   readonly semantics: Map<number, SemanticGeometry>;
   readonly staticGeometries: Set<StaticGeometry>;
 }
@@ -90,7 +150,9 @@ export const createVertexInputArena = (): VertexInputArena => ({
   geometryBuckets: new Map(),
   instanceBuffers: new Map(),
   instanceGeometryIds: new Map(),
+  nextInstanceId: 1,
   nextStaticIdentityId: 1,
+  ownedInstances: new Map(),
   semantics: new Map(),
   staticGeometries: new Set(),
 } as unknown as VertexInputArena);
@@ -103,6 +165,51 @@ const validGeometryId = (value: number): void => {
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_RESOURCE_ID) {
     throw new Error(`Invalid geometry ID ${value}; expected an unsigned 32-bit resource ID`);
   }
+};
+
+const instanceAllocation = (
+  state: VertexInputArenaState,
+  allocation: VertexInputInstanceAllocation,
+): OwnedInstanceAllocation => {
+  const token = allocation as unknown as InstanceAllocationToken;
+  const resource = state.ownedInstances.get(token.id);
+  if (resource === undefined || resource.allocation !== token) {
+    throw new Error("Vertex-input instance allocation is not owned by this arena");
+  }
+  return resource;
+};
+
+export const createVertexInputInstanceAllocation = (
+  arena: VertexInputArena,
+): VertexInputInstanceAllocation => {
+  const state = arena as unknown as VertexInputArenaState;
+  const id = claimMonotonicId(
+    state.nextInstanceId,
+    MAX_RESOURCE_ID,
+    "Vertex-input instance allocation",
+  );
+  const allocation: InstanceAllocationToken = { id };
+  state.nextInstanceId = id + 1;
+  state.ownedInstances.set(id, {
+    allocation,
+    bufferCapacity: 0,
+    capacity: 0,
+    instanceCount: 0,
+    localModelsDirty: true,
+    localModelsStats: { bytes: 0, calls: 0 },
+    rootPosesDirty: true,
+    rootPosesStats: { bytes: 0, calls: 0 },
+    rootScalesDirty: true,
+    rootScalesStats: { bytes: 0, calls: 0 },
+    staging: {
+      forceFull: true,
+      localModels: new Float32Array(),
+      ranges: new Int32Array(),
+      rootPoses: new Float32Array(),
+      rootScales: new Float32Array(),
+    },
+  });
+  return allocation as unknown as VertexInputInstanceAllocation;
 };
 
 export const retainVertexInputGeometry = (
@@ -207,6 +314,14 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.geometryBuckets.clear();
   state.instanceBuffers.clear();
   state.instanceGeometryIds.clear();
+  for (const resource of state.ownedInstances.values()) {
+    resource.bufferCapacity = 0;
+    delete resource.buffers;
+    resource.localModelsDirty = true;
+    resource.rootPosesDirty = true;
+    resource.rootScalesDirty = true;
+    resource.staging.forceFull = true;
+  }
   state.nextStaticIdentityId = 1;
   state.staticGeometries.clear();
   delete state.contextGeneration;
@@ -226,6 +341,199 @@ const requireContextGeneration = (state: VertexInputArenaState, contextGeneratio
     throw new Error(
       `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
     );
+  }
+};
+
+const createOwnedInstanceBuffers = (
+  gl: WebGL2RenderingContext,
+  capacity: number,
+): VertexInputInstanceBuffers => {
+  const owned: WebGLBuffer[] = [];
+  const create = (floatsPerInstance: number): WebGLBuffer => {
+    const buffer = createBuffer(gl);
+    owned.push(buffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      capacity * floatsPerInstance * Float32Array.BYTES_PER_ELEMENT,
+      gl.DYNAMIC_DRAW,
+    );
+    return buffer;
+  };
+  try {
+    return {
+      localModelBuffer: create(16),
+      rootPoseBuffer: create(6),
+      rootScaleBuffer: create(3),
+    };
+  } catch (error) {
+    for (const buffer of owned) gl.deleteBuffer(buffer);
+    throw error;
+  } finally {
+    unbindVertexInput(gl);
+  }
+};
+
+const resizeOwnedInstanceBuffers = (
+  gl: WebGL2RenderingContext,
+  buffers: VertexInputInstanceBuffers,
+  capacity: number,
+): void => {
+  try {
+    for (const [buffer, floatsPerInstance] of [
+      [buffers.localModelBuffer, 16],
+      [buffers.rootPoseBuffer, 6],
+      [buffers.rootScaleBuffer, 3],
+    ] as const) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        capacity * floatsPerInstance * Float32Array.BYTES_PER_ELEMENT,
+        gl.DYNAMIC_DRAW,
+      );
+    }
+  } finally {
+    unbindVertexInput(gl);
+  }
+};
+
+const markAllInstanceLanesDirty = (resource: OwnedInstanceAllocation): void => {
+  resource.localModelsDirty = true;
+  resource.rootPosesDirty = true;
+  resource.rootScalesDirty = true;
+  resource.staging.forceFull = true;
+};
+
+export const prepareVertexInputInstance = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  allocation: VertexInputInstanceAllocation,
+  instanceCount: number,
+): VertexInputInstanceStaging => {
+  const state = arena as unknown as VertexInputArenaState;
+  requireContextGeneration(state, contextGeneration);
+  const resource = instanceAllocation(state, allocation);
+  validSerial(instanceCount, "instance count");
+  const countChanged = resource.instanceCount !== instanceCount;
+  const grew = instanceCount > resource.capacity;
+  if (grew || countChanged || resource.buffers === undefined) markAllInstanceLanesDirty(resource);
+  if (grew) {
+    const localModels = new Float32Array(instanceCount * 16);
+    const rootPoses = new Float32Array(instanceCount * 6);
+    const rootScales = new Float32Array(instanceCount * 3);
+    const ranges = new Int32Array(instanceCount * 2);
+    localModels.set(resource.staging.localModels.subarray(0, resource.instanceCount * 16));
+    rootPoses.set(resource.staging.rootPoses.subarray(0, resource.instanceCount * 6));
+    rootScales.set(resource.staging.rootScales.subarray(0, resource.instanceCount * 3));
+    const previousBuffers = resource.buffers;
+    if (previousBuffers === undefined) {
+      resource.buffers = createOwnedInstanceBuffers(gl, instanceCount);
+    } else {
+      resizeOwnedInstanceBuffers(gl, previousBuffers, instanceCount);
+    }
+    resource.bufferCapacity = instanceCount;
+    resource.capacity = instanceCount;
+    resource.staging.localModels = localModels;
+    resource.staging.rootPoses = rootPoses;
+    resource.staging.rootScales = rootScales;
+    resource.staging.ranges = ranges;
+  } else if (resource.buffers === undefined) {
+    resource.buffers = createOwnedInstanceBuffers(gl, resource.capacity);
+    resource.bufferCapacity = resource.capacity;
+  }
+  resource.instanceCount = instanceCount;
+  resource.staging.forceFull = resource.localModelsDirty
+    || resource.rootPosesDirty
+    || resource.rootScalesDirty;
+  return resource.staging;
+};
+
+export const uploadVertexInputInstanceLane = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  allocation: VertexInputInstanceAllocation,
+  lane: VertexInputInstanceLane,
+  rangeCount: number,
+): VertexInputInstanceLaneUploadStats => {
+  const state = arena as unknown as VertexInputArenaState;
+  requireContextGeneration(state, contextGeneration);
+  const resource = instanceAllocation(state, allocation);
+  validSerial(rangeCount, "instance upload range count");
+  if (rangeCount * 2 > resource.staging.ranges.length) {
+    throw new Error(`Invalid instance upload range count ${rangeCount}`);
+  }
+  let buffer: WebGLBuffer | undefined;
+  let data: Float32Array;
+  let stride: number;
+  let forceFull: boolean;
+  let stats: MutableInstanceLaneUploadStats;
+  if (lane === "localModels") {
+    buffer = resource.buffers?.localModelBuffer;
+    data = resource.staging.localModels;
+    stride = 16;
+    forceFull = resource.localModelsDirty;
+    stats = resource.localModelsStats;
+  } else if (lane === "rootPoses") {
+    buffer = resource.buffers?.rootPoseBuffer;
+    data = resource.staging.rootPoses;
+    stride = 6;
+    forceFull = resource.rootPosesDirty;
+    stats = resource.rootPosesStats;
+  } else {
+    buffer = resource.buffers?.rootScaleBuffer;
+    data = resource.staging.rootScales;
+    stride = 3;
+    forceFull = resource.rootScalesDirty;
+    stats = resource.rootScalesStats;
+  }
+  if (buffer === undefined) throw new Error("Vertex-input instance must be prepared before upload");
+  const actualRangeCount = forceFull ? (resource.instanceCount === 0 ? 0 : 1) : rangeCount;
+  let previousEnd = 0;
+  for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
+    const start = forceFull ? 0 : resource.staging.ranges[rangeIndex * 2]!;
+    const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+      || start < previousEnd || start < 0 || end <= start || end > resource.instanceCount) {
+      throw new Error(`Invalid ${lane} upload range [${start}, ${end})`);
+    }
+    previousEnd = end;
+  }
+  let bytes = 0;
+  try {
+    if (actualRangeCount > 0) gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
+      const start = forceFull ? 0 : resource.staging.ranges[rangeIndex * 2]!;
+      const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
+      const sourceOffset = start * stride;
+      const floatCount = (end - start) * stride;
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER,
+        sourceOffset * Float32Array.BYTES_PER_ELEMENT,
+        data,
+        sourceOffset,
+        floatCount,
+      );
+      bytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
+    }
+    if (lane === "localModels") resource.localModelsDirty = false;
+    else if (lane === "rootPoses") resource.rootPosesDirty = false;
+    else resource.rootScalesDirty = false;
+    resource.staging.forceFull = resource.localModelsDirty
+      || resource.rootPosesDirty
+      || resource.rootScalesDirty;
+    stats.bytes = bytes;
+    stats.calls = actualRangeCount;
+    return stats;
+  } catch (error) {
+    if (lane === "localModels") resource.localModelsDirty = true;
+    else if (lane === "rootPoses") resource.rootPosesDirty = true;
+    else resource.rootScalesDirty = true;
+    resource.staging.forceFull = true;
+    throw error;
+  } finally {
+    unbindVertexInput(gl);
   }
 };
 
@@ -362,7 +670,7 @@ const configureInstanceAttributes = (gl: WebGL2RenderingContext, buffers: Vertex
   gl.vertexAttribDivisor(VERTEX_ATTRIBUTE.instanceScale, 1);
 };
 
-export const vertexInputCompositeVertexArray = (
+const vertexInputCompositeVertexArray = (
   arena: VertexInputArena,
   gl: WebGL2RenderingContext,
   contextGeneration: number,
@@ -419,6 +727,36 @@ export const vertexInputCompositeVertexArray = (
   }
 };
 
+/** Resolves a composite VAO using the three buffers owned by an opaque allocation. */
+export const vertexInputCompositeVertexArrayForInstance = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  geometryId: number,
+  allocation: VertexInputInstanceAllocation,
+): WebGLVertexArrayObject => {
+  const state = arena as unknown as VertexInputArenaState;
+  const resource = instanceAllocation(state, allocation);
+  if (resource.buffers === undefined
+    || resource.localModelsDirty || resource.rootPosesDirty || resource.rootScalesDirty) {
+    prepareVertexInputInstance(arena, gl, contextGeneration, allocation, resource.instanceCount);
+    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "localModels", 0);
+    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "rootPoses", 0);
+    uploadVertexInputInstanceLane(arena, gl, contextGeneration, allocation, "rootScales", 0);
+  } else {
+    requireContextGeneration(state, contextGeneration);
+  }
+  if (resource.buffers === undefined) throw new Error("Vertex-input instance buffers were not created");
+  return vertexInputCompositeVertexArray(
+    arena,
+    gl,
+    contextGeneration,
+    geometryId,
+    resource.allocation.id,
+    resource.buffers,
+  );
+};
+
 const deleteStaticBuffers = (gl: WebGL2RenderingContext, geometry: StaticGeometry): void => {
   const buffers = new Set<WebGLBuffer>([
     geometry.arrayBuffer,
@@ -453,7 +791,7 @@ const removeStaticGeometry = (
   state.staticGeometries.delete(geometry);
 };
 
-export const releaseVertexInputInstance = (
+const releaseVertexInputInstance = (
   arena: VertexInputArena,
   gl: WebGL2RenderingContext,
   contextGeneration: number,
@@ -484,6 +822,45 @@ export const releaseVertexInputInstance = (
   state.instanceGeometryIds.delete(instanceKey);
   state.instanceBuffers.delete(instanceKey);
   unbindVertexInput(gl);
+};
+
+const deleteOwnedInstanceBuffers = (
+  gl: WebGL2RenderingContext,
+  resource: OwnedInstanceAllocation,
+): void => {
+  if (resource.buffers === undefined) return;
+  gl.deleteBuffer(resource.buffers.localModelBuffer);
+  gl.deleteBuffer(resource.buffers.rootPoseBuffer);
+  gl.deleteBuffer(resource.buffers.rootScaleBuffer);
+  resource.bufferCapacity = 0;
+  delete resource.buffers;
+};
+
+export const releaseVertexInputInstanceAllocation = (
+  arena: VertexInputArena,
+  gl: WebGL2RenderingContext,
+  contextGeneration: number,
+  allocation: VertexInputInstanceAllocation,
+): void => {
+  const state = arena as unknown as VertexInputArenaState;
+  const resource = instanceAllocation(state, allocation);
+  requireContextGeneration(state, contextGeneration);
+  releaseVertexInputInstance(arena, gl, contextGeneration, resource.allocation.id);
+  deleteOwnedInstanceBuffers(gl, resource);
+  state.ownedInstances.delete(resource.allocation.id);
+  unbindVertexInput(gl);
+};
+
+export const releaseLostVertexInputInstanceAllocation = (
+  arena: VertexInputArena,
+  allocation: VertexInputInstanceAllocation,
+): void => {
+  const state = arena as unknown as VertexInputArenaState;
+  const resource = instanceAllocation(state, allocation);
+  if (state.contextGeneration !== undefined) {
+    throw new Error("GL-free instance release requires a dropped vertex-input context");
+  }
+  state.ownedInstances.delete(resource.allocation.id);
 };
 
 export const releaseVertexInputGeometry = (
@@ -567,6 +944,7 @@ const releaseContextHandles = (
     }
   }
   for (const geometry of state.staticGeometries) deleteStaticBuffers(gl, geometry);
+  for (const resource of state.ownedInstances.values()) deleteOwnedInstanceBuffers(gl, resource);
   unbindVertexInput(gl);
   forgetContextHandles(state, false);
 };
@@ -603,6 +981,7 @@ export const disposeVertexInputArena = (
     forgetContextHandles(state, true);
   }
   state.semantics.clear();
+  state.ownedInstances.clear();
 };
 
 export const vertexInputArenaSnapshot = (arena: VertexInputArena): VertexInputArenaSnapshot => {
@@ -623,6 +1002,8 @@ export const vertexInputArenaSnapshot = (arena: VertexInputArena): VertexInputAr
     instanceGeometryEdges: new Map(
       [...state.instanceGeometryIds].map(([key, ids]) => [key, new Set(ids)]),
     ),
+    instanceAllocationCount: state.ownedInstances.size,
+    instanceAllocationIds: new Set(state.ownedInstances.keys()),
     semanticGeometryCount: state.semantics.size,
     semanticGeometryIds: new Set(state.semantics.keys()),
     staticGeometryCount: state.staticGeometries.size,

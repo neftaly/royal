@@ -120,23 +120,27 @@ import {
   type CpuGeometry,
 } from "./geometry-recipes";
 import {
+  createVertexInputInstanceAllocation,
   createVertexInputArena,
   disposeVertexInputArena,
   dropVertexInputArenaContext,
+  prepareVertexInputInstance,
   releaseVertexInputContextHandles,
   releaseVertexInputGeometry,
-  releaseVertexInputInstance,
+  releaseVertexInputInstanceAllocation,
   releaseLostVertexInputGeometry,
   restoreVertexInputArenaContext,
   retainVertexInputGeometry,
+  uploadVertexInputInstanceLane,
   vertexInputBaseVertexArray,
-  vertexInputCompositeVertexArray,
+  vertexInputCompositeVertexArrayForInstance,
   vertexInputGeometry,
   type VertexInputGeometry,
   type VertexInputArena,
-  type VertexInputInstanceBuffers,
+  type VertexInputInstanceAllocation,
+  type VertexInputInstanceLaneUploadStats,
+  type VertexInputInstanceStaging,
 } from "./vertex-input-arena";
-import { MAX_RESOURCE_ID } from "./resource-id";
 import {
   appendFrameView,
   copyFrameViewMatrixInto,
@@ -938,38 +942,24 @@ type GltfPreparedPrimitiveMaterial = {
   readonly materialBatchKey: string;
 };
 
-type GltfInstanceFloatBufferResource = {
-  capacity: number;
-  readonly buffer: WebGLBuffer;
-  readonly data: Float32Array;
-  dirty: boolean;
-  readonly uploadRanges: Int32Array;
-};
-
-type GltfInstanceVectorBufferResource = GltfInstanceFloatBufferResource & {
+type GltfInstanceVectorBufferState = {
   signature?: number[];
 };
 
-type GltfInstanceRootPoseBufferResource = GltfInstanceFloatBufferResource & {
+type GltfInstanceRootPoseBufferState = {
   positionSignature?: number[];
   rotationSignature?: number[];
 };
 
 type GltfInstanceBufferResource = {
-  readonly vertexInputBuffers: VertexInputInstanceBuffers;
-  readonly instanceKey: number;
-  localCapacity: number;
-  readonly localBuffer: WebGLBuffer;
-  readonly localData: Float32Array;
-  localDirty: boolean;
+  readonly allocation: VertexInputInstanceAllocation;
   localSignature?: number[];
-  readonly localUploadRanges: Int32Array;
   instanceCount: number;
-  readonly packedLogicalIndices: Int32Array;
+  packedLogicalIndices: Int32Array;
   readonly packedSources: Array<GltfInstanceTransformViews | undefined>;
   readonly poseVersions: Map<GltfInstanceTransformViews, number>;
-  readonly rootPose: GltfInstanceRootPoseBufferResource;
-  readonly rootScale: GltfInstanceVectorBufferResource;
+  readonly rootPose: GltfInstanceRootPoseBufferState;
+  readonly rootScale: GltfInstanceVectorBufferState;
   readonly scaleVersions: Map<GltfInstanceTransformViews, number>;
 };
 
@@ -1215,45 +1205,6 @@ const copyGltfInstanceSignature = (
   for (let index = 0; index < source.length; index += 1) next[index] = source[index]!;
   return next;
 };
-
-const createGltfInstanceFloatBufferResource = (
-  gl: WebGL2RenderingContext,
-  buffer: WebGLBuffer,
-  floatCount: number,
-  rangeCapacity: number,
-  existing?: GltfInstanceFloatBufferResource,
-): GltfInstanceFloatBufferResource => {
-  const data = new Float32Array(floatCount);
-  if (existing !== undefined) {
-    data.set(existing.data.subarray(0, Math.min(existing.data.length, data.length)));
-  }
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, floatCount * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
-  return {
-    buffer,
-    capacity: floatCount,
-    data,
-    dirty: true,
-    uploadRanges: new Int32Array(rangeCapacity * 2),
-  };
-};
-
-const createGltfInstanceVectorBufferResource = (
-  gl: WebGL2RenderingContext,
-  buffer: WebGLBuffer,
-  floatCount: number,
-  existing?: GltfInstanceVectorBufferResource,
-): GltfInstanceVectorBufferResource =>
-  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, floatCount / 3, existing);
-
-const createGltfInstanceRootPoseBufferResource = (
-  gl: WebGL2RenderingContext,
-  buffer: WebGLBuffer,
-  floatCount: number,
-  existing?: GltfInstanceRootPoseBufferResource,
-): GltfInstanceRootPoseBufferResource =>
-  createGltfInstanceFloatBufferResource(gl, buffer, floatCount, floatCount / 6, existing);
 
 const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   batchPlansBuilt: 0,
@@ -2159,12 +2110,10 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #gltfRootViewProjectionModel: MutableMat4 = identityMat4();
   readonly #gltfBatchPlanCache = new Map<string, GltfPrimitiveDrawBatchPlanCacheEntry>();
   readonly #gltfInstanceBuffers = new Map<string, GltfInstanceBufferResource>();
-  #nextGltfInstanceKey = 1;
   readonly #gltfLodSelections = new Map<string, GltfLodSelectionState>();
   #gltfPreparedPrimitiveMaterials =
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
-  readonly #ownedBuffers = new Set<WebGLBuffer>();
   readonly #ownedFramebuffers = new Set<WebGLFramebuffer>();
   readonly #ownedPrograms = new Set<WebGLProgram>();
   readonly #ownedShaders = new Set<WebGLShader>();
@@ -2764,7 +2713,6 @@ class WebGlRootImpl implements WebGlRoot {
     if (deleteResources) {
       releaseVertexInputContextHandles(this.#vertexInputs, this.#gl, this.#contextGeneration);
       const gl = this.#gl;
-      for (const buffer of Array.from(this.#ownedBuffers)) gl.deleteBuffer(buffer);
       for (const framebuffer of Array.from(this.#ownedFramebuffers)) gl.deleteFramebuffer(framebuffer);
       for (const renderbuffer of Array.from(this.#ownedRenderbuffers)) gl.deleteRenderbuffer(renderbuffer);
       for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
@@ -2773,7 +2721,6 @@ class WebGlRootImpl implements WebGlRoot {
     } else {
       dropVertexInputArenaContext(this.#vertexInputs);
     }
-    this.#ownedBuffers.clear();
     this.#ownedFramebuffers.clear();
     this.#ownedRenderbuffers.clear();
     this.#ownedTextures.clear();
@@ -2800,7 +2747,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#studioEnvironmentSpecularTextures.clear();
     this.#clusteredLightResources.clear();
     this.#gltfBatchPlanCache.clear();
-    this.#gltfInstanceBuffers.clear();
     this.#activeGltfBatchPlanCacheKeys.clear();
     this.#activeGltfInstanceBufferKeys.clear();
     this.#gltfInstanceFrameActive = false;
@@ -5540,13 +5486,12 @@ class WebGlRootImpl implements WebGlRoot {
     geometryId: number,
     instanceResource: GltfInstanceBufferResource,
   ): void {
-    this.#gl.bindVertexArray(vertexInputCompositeVertexArray(
+    this.#gl.bindVertexArray(vertexInputCompositeVertexArrayForInstance(
       this.#vertexInputs,
       this.#gl,
       this.#contextGeneration,
       geometryId,
-      instanceResource.instanceKey,
-      instanceResource.vertexInputBuffers,
+      instanceResource.allocation,
     ));
     this.#bindGeometryDefaultAttributeValues(geometry);
   }
@@ -5560,19 +5505,19 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
-  #recordGltfInstanceLocalBufferUpload(floatCount: number): void {
-    this.#gltfInstancingCounters.localModelUploadCalls += 1;
-    this.#gltfInstancingCounters.localModelUploadBytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
+  #recordGltfInstanceLocalBufferUpload(stats: VertexInputInstanceLaneUploadStats): void {
+    this.#gltfInstancingCounters.localModelUploadCalls += stats.calls;
+    this.#gltfInstancingCounters.localModelUploadBytes += stats.bytes;
   }
 
-  #recordGltfInstanceRootScaleBufferUpload(floatCount: number): void {
-    this.#gltfInstancingCounters.rootScaleUploadCalls += 1;
-    this.#gltfInstancingCounters.rootScaleUploadBytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
+  #recordGltfInstanceRootScaleBufferUpload(stats: VertexInputInstanceLaneUploadStats): void {
+    this.#gltfInstancingCounters.rootScaleUploadCalls += stats.calls;
+    this.#gltfInstancingCounters.rootScaleUploadBytes += stats.bytes;
   }
 
-  #recordGltfInstanceRootPoseBufferUpload(floatCount: number): void {
-    this.#gltfInstancingCounters.rootPoseUploadCalls += 1;
-    this.#gltfInstancingCounters.rootPoseUploadBytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
+  #recordGltfInstanceRootPoseBufferUpload(stats: VertexInputInstanceLaneUploadStats): void {
+    this.#gltfInstancingCounters.rootPoseUploadCalls += stats.calls;
+    this.#gltfInstancingCounters.rootPoseUploadBytes += stats.bytes;
   }
 
   #bindGltfInstanceModels(
@@ -5586,16 +5531,20 @@ class WebGlRootImpl implements WebGlRoot {
     rootRotationSignature: readonly number[],
     rootScaleSignature: readonly number[],
   ): GltfInstanceBufferResource {
-    const gl = this.#gl;
     const instanceCount = localModels.length;
-    const localFloatCount = instanceCount * 16;
-    const rootVectorFloatCount = instanceCount * 3;
-    const rootPoseFloatCount = instanceCount * 6;
-    const resource = this.#gltfInstanceBufferResource(
-      key,
-      localFloatCount,
-      rootPoseFloatCount,
-      rootVectorFloatCount,
+    const resource = this.#gltfInstanceBufferResource(key);
+    if (resource.packedLogicalIndices.length < instanceCount) {
+      const packedLogicalIndices = new Int32Array(instanceCount);
+      packedLogicalIndices.fill(-1);
+      packedLogicalIndices.set(resource.packedLogicalIndices);
+      resource.packedLogicalIndices = packedLogicalIndices;
+    }
+    const staging = prepareVertexInputInstance(
+      this.#vertexInputs,
+      this.#gl,
+      this.#contextGeneration,
+      resource.allocation,
+      instanceCount,
     );
     const previousInstanceCount = resource.instanceCount;
 
@@ -5604,7 +5553,7 @@ class WebGlRootImpl implements WebGlRoot {
       ? undefined
       : gltfInstanceSignatureStride(previousInstanceCount, previousLocalSignature);
     const nextLocalStride = gltfInstanceSignatureStride(instanceCount, localModelSignature);
-    const localFullUpload = resource.localDirty
+    const localFullUpload = staging.forceFull
       || previousLocalSignature === undefined
       || previousLocalStride === undefined
       || nextLocalStride === undefined
@@ -5630,7 +5579,7 @@ class WebGlRootImpl implements WebGlRoot {
       const model = localModels[modelIndex]!;
       const offset = modelIndex * 16;
       for (let elementIndex = 0; elementIndex < 16; elementIndex += 1) {
-        resource.localData[offset + elementIndex] = model[elementIndex]!;
+        staging.localModels[offset + elementIndex] = model[elementIndex]!;
       }
       if (activeLocalRangeStart < 0) activeLocalRangeStart = modelIndex;
       const nextChanged = modelIndex + 1 < localModels.length && (
@@ -5645,38 +5594,27 @@ class WebGlRootImpl implements WebGlRoot {
         )
       );
       if (!nextChanged) {
-        resource.localUploadRanges[localChangedRangeCount * 2] = activeLocalRangeStart;
-        resource.localUploadRanges[localChangedRangeCount * 2 + 1] = modelIndex + 1;
+        staging.ranges[localChangedRangeCount * 2] = activeLocalRangeStart;
+        staging.ranges[localChangedRangeCount * 2 + 1] = modelIndex + 1;
         localChangedRangeCount += 1;
         activeLocalRangeStart = -1;
       }
     }
 
-    if (localFullUpload) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.localData, 0, localFloatCount);
-      this.#recordGltfInstanceLocalBufferUpload(localFloatCount);
-      resource.localDirty = false;
-      resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
-    } else if (localChangedRangeCount > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.localBuffer);
-      for (let rangeIndex = 0; rangeIndex < localChangedRangeCount; rangeIndex += 1) {
-        const start = resource.localUploadRanges[rangeIndex * 2]!;
-        const end = resource.localUploadRanges[rangeIndex * 2 + 1]!;
-        const startFloat = start * 16;
-        const rangeFloatCount = (end - start) * 16;
-        gl.bufferSubData(
-          gl.ARRAY_BUFFER,
-          startFloat * Float32Array.BYTES_PER_ELEMENT,
-          resource.localData,
-          startFloat,
-          rangeFloatCount,
-        );
-        this.#recordGltfInstanceLocalBufferUpload(rangeFloatCount);
-      }
+    if (localFullUpload || localChangedRangeCount > 0) {
+      this.#recordGltfInstanceLocalBufferUpload(uploadVertexInputInstanceLane(
+        this.#vertexInputs,
+        this.#gl,
+        this.#contextGeneration,
+        resource.allocation,
+        "localModels",
+        localChangedRangeCount,
+      ));
       resource.localSignature = copyGltfInstanceSignature(resource.localSignature, localModelSignature);
     }
     this.#bindGltfInstanceRootPoseBuffer(
+      resource.allocation,
+      staging,
       resource.rootPose,
       rootTransforms,
       rootInstanceViews,
@@ -5690,6 +5628,8 @@ class WebGlRootImpl implements WebGlRoot {
       instanceCount,
     );
     this.#bindGltfInstanceVectorBuffer(
+      resource.allocation,
+      staging,
       resource.rootScale,
       rootTransforms,
       rootInstanceViews,
@@ -5723,7 +5663,9 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #bindGltfInstanceRootPoseBuffer(
-    resource: GltfInstanceRootPoseBufferResource,
+    allocation: VertexInputInstanceAllocation,
+    staging: VertexInputInstanceStaging,
+    resource: GltfInstanceRootPoseBufferState,
     rootTransforms: readonly (Transform | undefined)[],
     rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
     rootLogicalIndices: readonly number[],
@@ -5735,8 +5677,6 @@ class WebGlRootImpl implements WebGlRoot {
     previousInstanceCount: number,
     instanceCount: number,
   ): void {
-    const gl = this.#gl;
-    const floatCount = instanceCount * 6;
     const previousPositionSignature = resource.positionSignature;
     const previousRotationSignature = resource.rotationSignature;
     const previousPositionStride = previousPositionSignature === undefined
@@ -5747,7 +5687,7 @@ class WebGlRootImpl implements WebGlRoot {
       : gltfInstanceSignatureStride(previousInstanceCount, previousRotationSignature);
     const nextPositionStride = gltfInstanceSignatureStride(instanceCount, nextPositionSignature);
     const nextRotationStride = gltfInstanceSignatureStride(instanceCount, nextRotationSignature);
-    const fullUpload = resource.dirty
+    const fullUpload = staging.forceFull
       || previousPositionSignature === undefined
       || previousRotationSignature === undefined
       || previousPositionStride === undefined
@@ -5793,8 +5733,8 @@ class WebGlRootImpl implements WebGlRoot {
         );
       if (!changed) {
         if (activeRangeStart >= 0) {
-          resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
-          resource.uploadRanges[changedRangeCount * 2 + 1] = transformIndex;
+          staging.ranges[changedRangeCount * 2] = activeRangeStart;
+          staging.ranges[changedRangeCount * 2 + 1] = transformIndex;
           changedRangeCount += 1;
           activeRangeStart = -1;
         }
@@ -5805,50 +5745,38 @@ class WebGlRootImpl implements WebGlRoot {
       const offset = transformIndex * 6;
       const position = transform.position;
       const rotation = transform.rotation;
-      resource.data[offset] = position[0];
-      resource.data[offset + 1] = position[1];
-      resource.data[offset + 2] = position[2];
-      resource.data[offset + 3] = rotation[0];
-      resource.data[offset + 4] = rotation[1];
-      resource.data[offset + 5] = rotation[2];
+      staging.rootPoses[offset] = position[0];
+      staging.rootPoses[offset + 1] = position[1];
+      staging.rootPoses[offset + 2] = position[2];
+      staging.rootPoses[offset + 3] = rotation[0];
+      staging.rootPoses[offset + 4] = rotation[1];
+      staging.rootPoses[offset + 5] = rotation[2];
       if (activeRangeStart < 0) activeRangeStart = transformIndex;
     }
     if (activeRangeStart >= 0) {
-      resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
-      resource.uploadRanges[changedRangeCount * 2 + 1] = rootTransforms.length;
+      staging.ranges[changedRangeCount * 2] = activeRangeStart;
+      staging.ranges[changedRangeCount * 2 + 1] = rootTransforms.length;
       changedRangeCount += 1;
     }
 
-    if (fullUpload) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
-      this.#recordGltfInstanceRootPoseBufferUpload(floatCount);
-      resource.dirty = false;
-      resource.positionSignature = copyGltfInstanceSignature(resource.positionSignature, nextPositionSignature);
-      resource.rotationSignature = copyGltfInstanceSignature(resource.rotationSignature, nextRotationSignature);
-    } else if (changedRangeCount > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      for (let rangeIndex = 0; rangeIndex < changedRangeCount; rangeIndex += 1) {
-        const start = resource.uploadRanges[rangeIndex * 2]!;
-        const end = resource.uploadRanges[rangeIndex * 2 + 1]!;
-        const startFloat = start * 6;
-        const rangeFloatCount = (end - start) * 6;
-        gl.bufferSubData(
-          gl.ARRAY_BUFFER,
-          startFloat * Float32Array.BYTES_PER_ELEMENT,
-          resource.data,
-          startFloat,
-          rangeFloatCount,
-        );
-        this.#recordGltfInstanceRootPoseBufferUpload(rangeFloatCount);
-      }
+    if (fullUpload || changedRangeCount > 0) {
+      this.#recordGltfInstanceRootPoseBufferUpload(uploadVertexInputInstanceLane(
+        this.#vertexInputs,
+        this.#gl,
+        this.#contextGeneration,
+        allocation,
+        "rootPoses",
+        changedRangeCount,
+      ));
       resource.positionSignature = copyGltfInstanceSignature(resource.positionSignature, nextPositionSignature);
       resource.rotationSignature = copyGltfInstanceSignature(resource.rotationSignature, nextRotationSignature);
     }
   }
 
   #bindGltfInstanceVectorBuffer(
-    resource: GltfInstanceVectorBufferResource,
+    allocation: VertexInputInstanceAllocation,
+    staging: VertexInputInstanceStaging,
+    resource: GltfInstanceVectorBufferState,
     rootTransforms: readonly (Transform | undefined)[],
     rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
     rootLogicalIndices: readonly number[],
@@ -5860,14 +5788,12 @@ class WebGlRootImpl implements WebGlRoot {
     previousInstanceCount: number,
     instanceCount: number,
   ): void {
-    const gl = this.#gl;
-    const floatCount = instanceCount * 3;
     const previousSignature = resource.signature;
     const previousStride = previousSignature === undefined
       ? undefined
       : gltfInstanceSignatureStride(previousInstanceCount, previousSignature);
     const nextStride = gltfInstanceSignatureStride(instanceCount, nextSignature);
-    const fullUpload = resource.dirty
+    const fullUpload = staging.forceFull
       || previousSignature === undefined
       || previousStride === undefined
       || nextStride === undefined
@@ -5894,8 +5820,8 @@ class WebGlRootImpl implements WebGlRoot {
         || !sameGltfModelSignatureRange(previousSignature, nextSignature, signatureOffset, nextStride);
       if (!changed) {
         if (activeRangeStart >= 0) {
-          resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
-          resource.uploadRanges[changedRangeCount * 2 + 1] = transformIndex;
+          staging.ranges[changedRangeCount * 2] = activeRangeStart;
+          staging.ranges[changedRangeCount * 2 + 1] = transformIndex;
           changedRangeCount += 1;
           activeRangeStart = -1;
         }
@@ -5904,114 +5830,47 @@ class WebGlRootImpl implements WebGlRoot {
 
       const value = (rootTransforms[transformIndex] ?? IDENTITY_TRANSFORM)[field];
       const offset = transformIndex * 3;
-      resource.data[offset] = value[0];
-      resource.data[offset + 1] = value[1];
-      resource.data[offset + 2] = value[2];
+      staging.rootScales[offset] = value[0];
+      staging.rootScales[offset + 1] = value[1];
+      staging.rootScales[offset + 2] = value[2];
       if (activeRangeStart < 0) activeRangeStart = transformIndex;
     }
     if (activeRangeStart >= 0) {
-      resource.uploadRanges[changedRangeCount * 2] = activeRangeStart;
-      resource.uploadRanges[changedRangeCount * 2 + 1] = rootTransforms.length;
+      staging.ranges[changedRangeCount * 2] = activeRangeStart;
+      staging.ranges[changedRangeCount * 2 + 1] = rootTransforms.length;
       changedRangeCount += 1;
     }
 
-    if (fullUpload) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, resource.data, 0, floatCount);
-      this.#recordGltfInstanceRootScaleBufferUpload(floatCount);
-      resource.dirty = false;
-      resource.signature = copyGltfInstanceSignature(resource.signature, nextSignature);
-    } else if (changedRangeCount > 0) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, resource.buffer);
-      for (let rangeIndex = 0; rangeIndex < changedRangeCount; rangeIndex += 1) {
-        const start = resource.uploadRanges[rangeIndex * 2]!;
-        const end = resource.uploadRanges[rangeIndex * 2 + 1]!;
-        const startFloat = start * 3;
-        const rangeFloatCount = (end - start) * 3;
-        gl.bufferSubData(
-          gl.ARRAY_BUFFER,
-          startFloat * Float32Array.BYTES_PER_ELEMENT,
-          resource.data,
-          startFloat,
-          rangeFloatCount,
-        );
-        this.#recordGltfInstanceRootScaleBufferUpload(rangeFloatCount);
-      }
+    if (fullUpload || changedRangeCount > 0) {
+      this.#recordGltfInstanceRootScaleBufferUpload(uploadVertexInputInstanceLane(
+        this.#vertexInputs,
+        this.#gl,
+        this.#contextGeneration,
+        allocation,
+        "rootScales",
+        changedRangeCount,
+      ));
       resource.signature = copyGltfInstanceSignature(resource.signature, nextSignature);
     }
   }
 
-  #gltfInstanceBufferResource(
-    key: string,
-    requiredLocalFloatCount: number,
-    requiredRootPoseFloatCount: number,
-    requiredRootVectorFloatCount: number,
-  ): GltfInstanceBufferResource {
+  #gltfInstanceBufferResource(key: string): GltfInstanceBufferResource {
     this.#activeGltfInstanceBufferKeys.add(key);
     const existing = this.#gltfInstanceBuffers.get(key);
-    if (
-      existing !== undefined
-      && existing.localCapacity >= requiredLocalFloatCount
-      && existing.rootPose.capacity >= requiredRootPoseFloatCount
-      && existing.rootScale.capacity >= requiredRootVectorFloatCount
-    ) {
-      return existing;
-    }
-
-    const gl = this.#gl;
-    const localBuffer = existing?.localBuffer ?? this.#createBuffer();
-    const localData = new Float32Array(requiredLocalFloatCount);
-    const localUploadRanges = new Int32Array((requiredLocalFloatCount / 16) * 2);
-    if (existing !== undefined) {
-      localData.set(existing.localData.subarray(0, Math.min(existing.localData.length, localData.length)));
-    }
-    const rootPose = createGltfInstanceRootPoseBufferResource(
-      gl,
-      existing?.rootPose.buffer ?? this.#createBuffer(),
-      requiredRootPoseFloatCount,
-      existing?.rootPose,
-    );
-    const rootScale = createGltfInstanceVectorBufferResource(
-      gl,
-      existing?.rootScale.buffer ?? this.#createBuffer(),
-      requiredRootVectorFloatCount,
-      existing?.rootScale,
-    );
-    const packedLogicalIndices = new Int32Array(requiredRootVectorFloatCount / 3);
+    if (existing !== undefined) return existing;
+    const packedLogicalIndices = new Int32Array();
     packedLogicalIndices.fill(-1);
-    if (existing !== undefined) {
-      packedLogicalIndices.set(
-        existing.packedLogicalIndices.subarray(0, Math.min(existing.packedLogicalIndices.length, packedLogicalIndices.length)),
-      );
-    }
-
-    if (existing === undefined && this.#nextGltfInstanceKey > MAX_RESOURCE_ID) {
-      throw new Error("Royal glTF instance resource ID space is exhausted");
-    }
     const resource: GltfInstanceBufferResource = {
-      instanceKey: existing?.instanceKey ?? this.#nextGltfInstanceKey++,
-      vertexInputBuffers: existing?.vertexInputBuffers ?? {
-        localModelBuffer: localBuffer,
-        rootPoseBuffer: rootPose.buffer,
-        rootScaleBuffer: rootScale.buffer,
-      },
-      localBuffer,
-      localCapacity: requiredLocalFloatCount,
-      localData,
-      localDirty: true,
-      localUploadRanges,
+      allocation: createVertexInputInstanceAllocation(this.#vertexInputs),
       instanceCount: 0,
       packedLogicalIndices,
-      packedSources: existing?.packedSources.slice() ?? [],
-      poseVersions: existing?.poseVersions ?? new Map(),
-      rootPose,
-      rootScale,
-      scaleVersions: existing?.scaleVersions ?? new Map(),
+      packedSources: [],
+      poseVersions: new Map(),
+      rootPose: {},
+      rootScale: {},
+      scaleVersions: new Map(),
     };
     this.#gltfInstanceBuffers.set(key, resource);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, localBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, requiredLocalFloatCount * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
     return resource;
   }
 
@@ -6024,15 +5883,12 @@ class WebGlRootImpl implements WebGlRoot {
   #releaseUnusedGltfInstanceBuffers(): void {
     for (const [key, resource] of this.#gltfInstanceBuffers) {
       if (this.#activeGltfInstanceBufferKeys.has(key)) continue;
-      releaseVertexInputInstance(
+      releaseVertexInputInstanceAllocation(
         this.#vertexInputs,
         this.#gl,
         this.#contextGeneration,
-        resource.instanceKey,
+        resource.allocation,
       );
-      this.#deleteBuffer(resource.localBuffer);
-      this.#deleteBuffer(resource.rootPose.buffer);
-      this.#deleteBuffer(resource.rootScale.buffer);
       this.#gltfInstanceBuffers.delete(key);
     }
   }
@@ -8939,13 +8795,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#renderScene(plan, this.#frameViews);
   }
 
-  #createBuffer(): WebGLBuffer {
-    const buffer = this.#gl.createBuffer();
-    if (buffer === null) throw new Error("WebGL buffer creation failed");
-    this.#ownedBuffers.add(buffer);
-    return buffer;
-  }
-
   #createFramebuffer(): WebGLFramebuffer {
     const framebuffer = this.#gl.createFramebuffer();
     if (framebuffer === null) throw new Error("WebGL framebuffer creation failed");
@@ -9039,12 +8888,6 @@ class WebGlRootImpl implements WebGlRoot {
     if (texture === null) throw new Error("WebGL texture creation failed");
     this.#ownedTextures.add(texture);
     return texture;
-  }
-
-  #deleteBuffer(buffer: WebGLBuffer): void {
-    if (!this.#ownedBuffers.has(buffer)) return;
-    this.#gl.deleteBuffer(buffer);
-    this.#ownedBuffers.delete(buffer);
   }
 
   #deleteShader(shader: WebGLShader): void {
