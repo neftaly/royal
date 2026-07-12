@@ -19,9 +19,10 @@ public packet API.
 
 ## Working Checkpoint: 2026-07-12
 
-The repository is at a validated intermediate boundary. Commit `06dc526` is
-the preceding architectural checkpoint; this checkpoint adds the arena-opacity
-slice described below.
+The repository is at a validated intermediate boundary. The arena-opacity,
+vertex-input instance ownership, and retained packet-candidate slices are
+checkpointed; the current slice makes those selected packets authoritative for
+glTF draw collection.
 
 - Landing 1 is active: retained `FramePlan` commits feed counted semantic
   changes into `ResourceArena`; async asset and image work is reconciled at an
@@ -41,14 +42,18 @@ slice described below.
   than mutable arena maps or rows. Both arenas use the same pure monotonic-ID
   boundary guard without public allocator mutation hooks.
 - Shared-view LOD selection now runs as a retained node-then-material prepass:
-  all visible views contribute, each dense group finalizes once, and legacy
+  all visible views contribute, each dense group finalizes once, and packet
   submission consumes one frame-global level per group. `FramePackets` retain
   multi-predicate LOD requirements and concatenated per-view ranges. The root
   now builds a plan-scoped numeric glTF candidate catalog with retained bounds,
   material, local-model, and root-source tables; asynchronously ready or
   replaced assets patch only their reverse-mapped occurrence spans. Per-view
-  numeric culling drives selected ranges while the current draw path remains a
-  strict semantic differential oracle.
+  numeric culling drives selected ranges, and those ranges now directly resolve
+  late-bound prepared materials, roots, local matrices, lights, and sidedness
+  into the established batching/submission backend. Publication failures fail
+  closed so packet ranges and resolver state cannot describe mixed asset
+  generations. The duplicate legacy collector is no longer used by the main
+  frame path.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
@@ -59,9 +64,12 @@ slice described below.
 
 Resume in this order:
 
-1. Make packet output drive batching and submission, extract the real executor,
-   and delete transient glTF draw arrays, string batch caches, active-resource
-   scans, frame-end pruning paths, and the corresponding root methods.
+1. Replace the remaining transient glTF draw and batch inputs with retained
+   numeric packet-submission rows. Then move complete instance-buffer, surface
+   draw, transmission, and HDR ownership families out of `root.ts` and extract
+   the real callback-free executor. Delete the string batch caches,
+   active-resource scans, frame-end pruning paths, and legacy collector methods
+   as each owning family moves.
 2. Compile the private render DAG and add minimal typed `Primitive` and effect
    descriptors for custom PBR shaders and multipass postprocessing. Do not add
    raw GL callbacks or a public generic render graph.

@@ -11,7 +11,7 @@ export interface PacketRootSourceRow {
   readonly kind: number;
   /** Index within the occurrence's outer source (for example, a primitive index). */
   readonly outerIndex: number;
-  /** Dense occurrence index in the currently committed frame plan. */
+  /** Source node index in the currently committed frame plan; it may be sparse among packet occurrences. */
   readonly planOccurrenceIndex: number;
 }
 

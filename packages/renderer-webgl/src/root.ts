@@ -227,10 +227,8 @@ import {
   beginSelectedFramePacketViews,
   createSelectedFramePackets,
   endSelectedFramePacketView,
-  FRAME_PACKET_RENDER_CLASS,
   FRAME_PACKET_SIDEDNESS,
   framePacketLodRequirementsMatch,
-  NO_FRAME_PACKET_ID,
   type SelectedFramePackets,
 } from "./frame-packets";
 import {
@@ -929,11 +927,6 @@ type GltfPrimitiveDraw = {
   readonly lights?: SurfaceLightSet;
   readonly localModel: Mat4;
   readonly material: SurfaceMaterial;
-  readonly packetBounds: Bounds3 | undefined;
-  readonly packetMaterial: LoadedGltfMaterial;
-  readonly packetOrderingSegment: number;
-  readonly packetPlanOccurrenceIndex: number;
-  readonly packetRootSourceKind: number;
   readonly materialBatchKey: string;
   readonly modelSignatureInstanceIndex: number;
   readonly modelSignatureStateKey: number;
@@ -2083,6 +2076,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
+  readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
   readonly #textures = new Map<string, TextureResource | TextureLoadState>();
   readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
   readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
@@ -2570,8 +2564,8 @@ class WebGlRootImpl implements WebGlRoot {
         const sourceX = useHdr ? 0 : x;
         const sourceY = useHdr ? 0 : y;
         const gltfDraws: GltfPrimitiveDraw[] = [];
-        let packetOracleCursor = this.#selectedGltfFramePackets.viewFirsts[viewIndex]!;
-        const packetOracleEnd = packetOracleCursor
+        let packetCursor = this.#selectedGltfFramePackets.viewFirsts[viewIndex]!;
+        const packetEnd = packetCursor
           + this.#selectedGltfFramePackets.viewCounts[viewIndex]!;
         const flushGltfDraws = (): void => {
           if (gltfDraws.length === 0) return;
@@ -2588,16 +2582,19 @@ class WebGlRootImpl implements WebGlRoot {
           gltfDraws.length = 0;
         };
 
-        for (const node of plan.nodes) {
+        for (let nodeIndex = 0; nodeIndex < plan.nodes.length; nodeIndex += 1) {
+          const node = plan.nodes[nodeIndex]!;
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
           if (node.kind === "gltf" || node.kind === "gltf-instances") {
-            const firstDraw = gltfDraws.length;
-            this.#appendGltfPrimitiveDraws(node, projection, view, gltfDraws, viewProjection);
-            packetOracleCursor = this.#assertGltfPacketDraws(
+            const renderInstanceOrdinal = this.#gltfRenderOrdinal;
+            this.#gltfRenderOrdinal += 1;
+            packetCursor = this.#appendSelectedGltfPacketDrawsForNode(
+              node,
+              nodeIndex,
+              renderInstanceOrdinal,
               gltfDraws,
-              firstDraw,
-              packetOracleCursor,
-              packetOracleEnd,
+              packetCursor,
+              packetEnd,
             );
             continue;
           }
@@ -2615,8 +2612,8 @@ class WebGlRootImpl implements WebGlRoot {
           );
         }
         flushGltfDraws();
-        if (packetOracleCursor !== packetOracleEnd) {
-          throw new Error("Royal retained glTF packet selection omitted legacy draws");
+        if (packetCursor !== packetEnd) {
+          throw new Error("Royal retained glTF packet selection contains draws outside the frame plan");
         }
         if (hdrTarget !== undefined) {
           this.#presentHdrRenderTarget(
@@ -2853,6 +2850,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#pendingPrograms.length = 0;
     this.#pendingProgramHead = 0;
     this.#retainedGeometryRecipes.clear();
+    this.#gltfPacketPrimitivesByGeometryId.clear();
     this.#textures.clear();
     clearResourceArenaPreparedSources(this.#resourceArena);
     this.#pendingTextureUploads.length = 0;
@@ -2993,6 +2991,7 @@ class WebGlRootImpl implements WebGlRoot {
       if (retainedGeometry === undefined) {
         throw new Error(`Royal glTF primitive geometry ${primitive.key} was not retained for packets`);
       }
+      this.#gltfPacketPrimitivesByGeometryId.set(retainedGeometry.id, primitive);
       const primitiveMaterial = selectedVariantIndex === undefined
         ? primitive.baseMaterial
         : this.#gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
@@ -3063,6 +3062,7 @@ class WebGlRootImpl implements WebGlRoot {
   }
 
   #rebuildGltfPacketTopology(plan: FramePlan): void {
+    this.#gltfPacketPrimitivesByGeometryId.clear();
     this.#gltfPacketOccurrenceIndicesByRequestKey.clear();
     for (let index = 0; index < plan.gltfRequestRows.length; index += 1) {
       const key = plan.gltfRequestRows[index]!.requestKey;
@@ -3184,6 +3184,7 @@ class WebGlRootImpl implements WebGlRoot {
         releaseLostVertexInputGeometry(this.#vertexInputs, id);
       }
       if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
+      this.#gltfPacketPrimitivesByGeometryId.delete(id);
     }
     for (const request of changes.acquiredGltfRequests) this.#ensureGltfState(request.key);
     for (const key of changes.releasedGltfKeys) {
@@ -3252,21 +3253,44 @@ class WebGlRootImpl implements WebGlRoot {
       state.variants = asset.variants;
       const plan = this.#framePlan;
       if (plan !== undefined) {
-        for (const occurrenceIndex of this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? []) {
-          const topologyStatus = this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex];
-          if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.loading) {
-            appendReadyGltfPacketOccurrence(
-              this.#gltfPacketTopology,
-              plan.revision,
-              this.#gltfPacketOccurrence(plan, occurrenceIndex),
-            );
-          } else if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.ready) {
-            replaceReadyGltfPacketOccurrence(
-              this.#gltfPacketTopology,
-              plan.revision,
-              this.#gltfPacketOccurrence(plan, occurrenceIndex),
-            );
+        const occurrenceIndices = this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? [];
+        try {
+          for (const occurrenceIndex of occurrenceIndices) {
+            const topologyStatus = this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex];
+            if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.loading) {
+              appendReadyGltfPacketOccurrence(
+                this.#gltfPacketTopology,
+                plan.revision,
+                this.#gltfPacketOccurrence(plan, occurrenceIndex),
+              );
+            } else if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.ready) {
+              replaceReadyGltfPacketOccurrence(
+                this.#gltfPacketTopology,
+                plan.revision,
+                this.#gltfPacketOccurrence(plan, occurrenceIndex),
+              );
+            }
           }
+        } catch (error) {
+          // Asset state and the packet resolver bridge must never describe
+          // different generations. If publication fails, make every range for
+          // this request unreachable instead of retaining a mixed generation.
+          for (const occurrenceIndex of occurrenceIndices) {
+            if (
+              this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex]
+              === GLTF_PACKET_OCCURRENCE_STATUS.ready
+            ) {
+              clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
+            }
+          }
+          state.status = "error";
+          state.error = error instanceof Error ? error.message : String(error);
+          state.load.readyAt = nowMs();
+          this.#recordDiagnostic(state.error, `gltf-packets:${state.key}`);
+          if (asset.imagePreparation !== undefined) {
+            detachResourceArenaImagePreparation(this.#resourceArena, snapshot.key, snapshot.generation);
+          }
+          continue;
         }
       }
       const images = asset.imagePreparation;
@@ -4053,13 +4077,6 @@ class WebGlRootImpl implements WebGlRoot {
           ...(assetLights === undefined ? {} : { lights: assetLights }),
           localModel,
           material: prepared.material,
-          packetBounds: instanceBounds,
-          packetMaterial: loadedMaterial,
-          packetOrderingSegment: this.#framePlan!.orderSegments[
-            this.#framePlan!.gltfRequestRows[renderInstanceOrdinal]!.nodeIndex
-          ]!,
-          packetPlanOccurrenceIndex: this.#framePlan!.gltfRequestRows[renderInstanceOrdinal]!.nodeIndex,
-          packetRootSourceKind: GLTF_PACKET_ROOT_SOURCE_KIND.gltf,
           materialBatchKey: prepared.materialBatchKey,
           modelSignatureInstanceIndex: instanceIndex,
           modelSignatureStateKey: state.instanceKey,
@@ -4077,6 +4094,144 @@ class WebGlRootImpl implements WebGlRoot {
         });
       }
     }
+  }
+
+  #appendSelectedGltfPacketDrawsForNode(
+    node: AnyGltfNode,
+    nodeIndex: number,
+    renderInstanceOrdinal: number,
+    draws: GltfPrimitiveDraw[],
+    packetCursor: number,
+    packetEnd: number,
+  ): number {
+    const topology = this.#gltfPacketTopology;
+    const catalog = topology.catalog;
+    const selected = this.#selectedGltfFramePackets;
+    if (packetCursor >= packetEnd) return packetCursor;
+    const firstPacketIndex = selected.orderedPacketIndices[packetCursor]!;
+    readPacketRootSourceInto(
+      topology.resources,
+      catalog.rootSourceIds[firstPacketIndex]!,
+      this.#gltfPacketRootSourceScratch,
+    );
+    if (this.#gltfPacketRootSourceScratch.planOccurrenceIndex !== nodeIndex) {
+      if (this.#gltfPacketRootSourceScratch.planOccurrenceIndex < nodeIndex) {
+        throw new Error("Royal retained glTF packet selection is not in frame-plan order");
+      }
+      return packetCursor;
+    }
+    const state = this.#gltfState(node);
+    const instanceViews = node.kind === "gltf-instances"
+      ? this.#gltfInstanceViews(node.instances)
+      : undefined;
+    const rootHandle = node.kind === "gltf" ? this.#renderObjectHandles.get(node) : undefined;
+    const ordinaryRootTransform = node.kind === "gltf"
+      ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
+      : undefined;
+    const ordinaryRootModel = node.kind === "gltf"
+      ? transformMat4(ordinaryRootTransform)
+      : undefined;
+    const ordinaryAssetLights = ordinaryRootModel === undefined
+      ? undefined
+      : this.#gltfAssetLightSet(state, ordinaryRootModel);
+    const instanceAssetLights = instanceViews === undefined
+      ? undefined
+      : new Map<number, SurfaceLightSet | undefined>();
+    let cursor = packetCursor;
+
+    while (cursor < packetEnd) {
+      const packetIndex = selected.orderedPacketIndices[cursor]!;
+      readPacketRootSourceInto(
+        topology.resources,
+        catalog.rootSourceIds[packetIndex]!,
+        this.#gltfPacketRootSourceScratch,
+      );
+      const source = this.#gltfPacketRootSourceScratch;
+      if (source.planOccurrenceIndex !== nodeIndex) {
+        if (source.planOccurrenceIndex < nodeIndex) {
+          throw new Error("Royal retained glTF packet selection is not in frame-plan order");
+        }
+        break;
+      }
+      const expectedKind = node.kind === "gltf"
+        ? GLTF_PACKET_ROOT_SOURCE_KIND.gltf
+        : GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances;
+      if (source.kind !== expectedKind) {
+        throw new Error("Royal retained glTF packet root kind diverged from the frame plan");
+      }
+      const outerIndex = catalog.instanceFirsts[packetIndex]!;
+      if (source.outerIndex !== outerIndex || catalog.instanceCounts[packetIndex] !== 1) {
+        throw new Error("Royal retained glTF packet instance source is invalid");
+      }
+      const geometryId = catalog.geometryIds[packetIndex]!;
+      const primitive = this.#gltfPacketPrimitivesByGeometryId.get(geometryId);
+      if (primitive === undefined) {
+        throw new Error(`Royal retained glTF packet geometry ${geometryId} has no prepared primitive`);
+      }
+      const loadedMaterial = resolvePacketMaterial(
+        topology.resources,
+        catalog.materialIds[packetIndex]!,
+      );
+      const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
+      const localDeterminant = readPacketLocalModelInto(
+        topology.resources,
+        catalog.localModelIds[packetIndex]!,
+        this.#gltfPacketLocalModelScratch,
+      );
+      const localModel = Array.from(this.#gltfPacketLocalModelScratch) as unknown as Mat4;
+      const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
+      const rootTransform = instanceViews?.transforms[outerIndex] ?? ordinaryRootTransform;
+      if (rootModel === undefined) {
+        throw new Error("Royal retained glTF packet root source has no current transform");
+      }
+      const rootDeterminant = mat4OrientationDeterminant(rootModel);
+      const packetSidedness = catalog.sidedness[packetIndex]!;
+      let assetLights = ordinaryAssetLights;
+      if (instanceAssetLights !== undefined) {
+        if (instanceAssetLights.has(outerIndex)) {
+          assetLights = instanceAssetLights.get(outerIndex);
+        } else {
+          assetLights = this.#gltfAssetLightSet(state, rootModel);
+          instanceAssetLights.set(outerIndex, assetLights);
+        }
+      }
+      draws.push({
+        geometry: prepared.geometry,
+        geometryId,
+        ...(assetLights === undefined ? {} : { lights: assetLights }),
+        localModel,
+        material: prepared.material,
+        materialBatchKey: prepared.materialBatchKey,
+        modelSignatureInstanceIndex: -1,
+        modelSignatureStateKey: state.instanceKey,
+        modelSignatureValues: localModel,
+        rootModel,
+        ...(instanceViews === undefined ? {} : { rootInstanceViews: instanceViews }),
+        ...(instanceViews !== undefined
+          ? {
+              rootPositionSignatureVersion: instanceViews.sourceKey,
+              rootRotationSignatureVersion: instanceViews.sourceKey,
+              rootScaleSignatureVersion: instanceViews.sourceKey,
+            }
+          : rootHandle === undefined
+            ? {}
+            : {
+                rootPositionSignatureVersion: rootHandle.positionVersion,
+                rootRotationSignatureVersion: rootHandle.rotationVersion,
+                rootScaleSignatureVersion: rootHandle.scaleVersion,
+              }),
+        rootSignatureInstanceIndex: instanceViews === undefined ? -1 : outerIndex,
+        rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
+        rootTransform,
+        sidedness: {
+          doubleSided: (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
+          frontFaceCcw: rootDeterminant * localDeterminant >= 0,
+        },
+      });
+      cursor += 1;
+    }
+
+    return cursor;
   }
 
   #gltfInstanceViews(instances: GltfInstanceTransforms): GltfInstanceTransformViews {
@@ -4203,13 +4358,6 @@ class WebGlRootImpl implements WebGlRoot {
             ...(assetLights === undefined ? {} : { lights: assetLights }),
             localModel,
             material: prepared.material,
-            packetBounds: instanceBounds,
-            packetMaterial: loadedMaterial,
-            packetOrderingSegment: this.#framePlan!.orderSegments[
-              this.#framePlan!.gltfRequestRows[renderInstanceOrdinal]!.nodeIndex
-            ]!,
-            packetPlanOccurrenceIndex: this.#framePlan!.gltfRequestRows[renderInstanceOrdinal]!.nodeIndex,
-            packetRootSourceKind: GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances,
             materialBatchKey: prepared.materialBatchKey,
             modelSignatureInstanceIndex: instanceIndex,
             modelSignatureStateKey: state.instanceKey,
@@ -4255,7 +4403,7 @@ class WebGlRootImpl implements WebGlRoot {
       // world-space transforms differ between outer instances.
       const lightScopeKey = draw.lights === undefined
         ? "pass-lights"
-        : `asset-lights:${draw.modelSignatureStateKey}:${draw.rootSignatureInstanceIndex}`;
+        : `asset-lights:${draw.modelSignatureStateKey}:${draw.rootSignatureRenderInstanceOrdinal}:${draw.rootSignatureInstanceIndex}`;
       const batchKey = `${geometry.staticIdentityId}|${draw.materialBatchKey}|${sidednessKey}|${lightScopeKey}`;
       batchInputs.push({ draw, geometry, geometryId: draw.geometryId, key: batchKey, lights });
     }
@@ -4289,97 +4437,6 @@ class WebGlRootImpl implements WebGlRoot {
     for (const batch of blendedBatches) {
       this.#drawGltfPrimitiveDrawBatch(batch, projection, view, toneMapping, viewportSize, undefined);
     }
-  }
-
-  #assertGltfPacketDraws(
-    draws: readonly GltfPrimitiveDraw[],
-    firstDraw: number,
-    packetCursor: number,
-    packetEnd: number,
-  ): number {
-    const topology = this.#gltfPacketTopology;
-    const selected = this.#selectedGltfFramePackets;
-    let cursor = packetCursor;
-    for (let drawIndex = firstDraw; drawIndex < draws.length; drawIndex += 1) {
-      if (cursor >= packetEnd) {
-        throw new Error("Royal retained glTF packet selection admitted fewer draws than legacy selection");
-      }
-      const packetIndex = selected.orderedPacketIndices[cursor]!;
-      const draw = draws[drawIndex]!;
-      readPacketRootSourceInto(
-        topology.resources,
-        topology.catalog.rootSourceIds[packetIndex]!,
-        this.#gltfPacketRootSourceScratch,
-      );
-      const packetHasBounds = readPacketBoundsInto(
-        topology.resources,
-        topology.catalog.boundsIds[packetIndex]!,
-        this.#gltfPacketBoundsScratch,
-      );
-      let boundsMatch = packetHasBounds === (draw.packetBounds !== undefined);
-      if (packetHasBounds && draw.packetBounds !== undefined) {
-        for (let component = 0; component < 3; component += 1) {
-          if (
-            !Number.isFinite(this.#gltfPacketBoundsScratch.min[component])
-            || !Number.isFinite(this.#gltfPacketBoundsScratch.max[component])
-            || this.#gltfPacketBoundsScratch.min[component] !== draw.packetBounds.min[component]
-            || this.#gltfPacketBoundsScratch.max[component] !== draw.packetBounds.max[component]
-          ) {
-            boundsMatch = false;
-            break;
-          }
-        }
-      }
-      const packetLocalDeterminant = readPacketLocalModelInto(
-        topology.resources,
-        topology.catalog.localModelIds[packetIndex]!,
-        this.#gltfPacketLocalModelScratch,
-      );
-      let localModelMatches = true;
-      for (let component = 0; component < 16; component += 1) {
-        if (
-          !Number.isFinite(this.#gltfPacketLocalModelScratch[component])
-          || !Number.isFinite(draw.localModel[component])
-          || this.#gltfPacketLocalModelScratch[component] !== draw.localModel[component]
-        ) {
-          localModelMatches = false;
-          break;
-        }
-      }
-      const expectedSidedness = (draw.packetMaterial.doubleSided ? FRAME_PACKET_SIDEDNESS.doubleSided : 0)
-        | (packetLocalDeterminant >= 0 ? FRAME_PACKET_SIDEDNESS.frontFaceCcw : 0);
-      const expectedRenderClass = draw.packetMaterial.alphaMode === "BLEND"
-        ? FRAME_PACKET_RENDER_CLASS.blended
-        : (draw.packetMaterial.extensionFactors?.transmissionFactor ?? 0) > 0
-          ? FRAME_PACKET_RENDER_CLASS.transmissive
-          : FRAME_PACKET_RENDER_CLASS.opaque;
-      const expectedOuterIndex = draw.rootSignatureInstanceIndex < 0 ? 0 : draw.rootSignatureInstanceIndex;
-      const expectedFinalFrontFaceCcw = mat4OrientationDeterminant(draw.rootModel) * packetLocalDeterminant >= 0;
-      if (
-        topology.catalog.geometryIds[packetIndex] !== draw.geometryId
-        || resolvePacketMaterial(
-          topology.resources,
-          topology.catalog.materialIds[packetIndex]!,
-        ) !== draw.packetMaterial
-        || topology.catalog.instanceCounts[packetIndex] !== 1
-        || topology.catalog.instanceFirsts[packetIndex] !== expectedOuterIndex
-        || topology.catalog.instanceStreamIds[packetIndex] !== NO_FRAME_PACKET_ID
-        || topology.catalog.orderingSegments[packetIndex] !== draw.packetOrderingSegment
-        || topology.catalog.renderClasses[packetIndex] !== expectedRenderClass
-        || topology.catalog.sidedness[packetIndex] !== expectedSidedness
-        || this.#gltfPacketRootSourceScratch.kind !== draw.packetRootSourceKind
-        || this.#gltfPacketRootSourceScratch.outerIndex !== expectedOuterIndex
-        || this.#gltfPacketRootSourceScratch.planOccurrenceIndex !== draw.packetPlanOccurrenceIndex
-        || draw.sidedness.doubleSided !== draw.packetMaterial.doubleSided
-        || draw.sidedness.frontFaceCcw !== expectedFinalFrontFaceCcw
-        || !boundsMatch
-        || !localModelMatches
-      ) {
-        throw new Error("Royal retained glTF packet selection diverged from legacy draw order");
-      }
-      cursor += 1;
-    }
-    return cursor;
   }
 
   #gltfPrimitiveDrawBatches(inputs: readonly GltfPrimitiveDrawBatchInput[]): readonly GltfPrimitiveDrawBatch[] {
