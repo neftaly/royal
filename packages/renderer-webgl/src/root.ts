@@ -1,18 +1,13 @@
 import {
-  buildClusterGrid,
-  createClusterBuildScratch,
-  type ClusterGrid,
-  type ClusteredPunctualLight,
-} from "./webgl/clustered-lights";
-import {
-  commitClusteredLightView,
-  commitClusteredLightSnapshot,
-  markClusteredLightResourceUsed,
-  pruneClusteredLightCache,
-  selectClusteredLightResource,
-  type ClusteredLightCache,
-  type ClusteredLightResource,
-} from "./webgl/clustered-light-cache";
+  bindClusteredLights,
+  clusteredLightTextureUnits,
+  configureClusteredLightArena,
+  createClusteredLightArena,
+  dropClusteredLightContext,
+  endClusteredLightFrame,
+  releaseClusteredLightContextHandles,
+  type ClusteredLightArena,
+} from "./webgl/clustered-light-arena";
 import {
   type Camera,
   type CameraViewReadTarget,
@@ -399,7 +394,6 @@ import {
 import { rendererOwnedWebGl2Context } from "./webgl/context-lane";
 import {
   combineSurfaceLightSets,
-  DEFAULT_LIGHT_DIRECTION,
   EMPTY_SURFACE_LIGHT_SET,
   MAX_SURFACE_LIGHTS,
   surfaceLightSet,
@@ -2028,11 +2022,7 @@ class WebGlRootImpl implements WebGlRoot {
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena();
   #hdrSupported = false;
-  readonly #clusteredLightResources: ClusteredLightCache = new Map();
-  readonly #clusterBuildScratch = createClusterBuildScratch();
-  #clusterGridTextureUnit = -1;
-  #clusterIndexTextureUnit = -1;
-  #clusterLightTextureUnit = -1;
+  readonly #clusteredLights: ClusteredLightArena;
   #framePlan: FramePlan | undefined;
   readonly #framePlanDiffScratch = createResourceManifestDiffScratch();
   #framePlanReconciliationInProgress = false;
@@ -2127,8 +2117,6 @@ class WebGlRootImpl implements WebGlRoot {
       this.#notifyContextLifecycle();
     }
   };
-  readonly #clusterTextureFactory = (): WebGLTexture => this.#createTexture();
-
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
     this.#canvas = canvas;
     this.#requestedContextOptions = { ...options };
@@ -2153,6 +2141,7 @@ class WebGlRootImpl implements WebGlRoot {
       throw new Error("Royal WebGL renderer requires a WebGL2 context");
     }
     this.#gl = gl;
+    this.#clusteredLights = createClusteredLightArena(gl);
     this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
@@ -2172,16 +2161,9 @@ class WebGlRootImpl implements WebGlRoot {
     this.#hdrSupported = gl.getExtension?.("EXT_color_buffer_float") != null;
     const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
-    this.#clusterGridTextureUnit = -1;
-    this.#clusterIndexTextureUnit = -1;
-    this.#clusterLightTextureUnit = -1;
-    if (this.#maxTextureImageUnits >= 8) {
-      this.#clusterGridTextureUnit = this.#maxTextureImageUnits - 3;
-      this.#clusterIndexTextureUnit = this.#maxTextureImageUnits - 2;
-      this.#clusterLightTextureUnit = this.#maxTextureImageUnits - 1;
-    }
     const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
     this.#maxTextureSize = Number.isFinite(maxTextureSize) ? maxTextureSize : 0;
+    configureClusteredLightArena(this.#clusteredLights, this.#maxTextureImageUnits, this.#maxTextureSize);
   }
 
   #validatedContextOptions(fallback: NormalizedWebGlRootOptions): NormalizedWebGlRootOptions {
@@ -2521,10 +2503,7 @@ class WebGlRootImpl implements WebGlRoot {
     }
 
     this.#releaseUnusedGltfBatchResources();
-    pruneClusteredLightCache(this.#clusteredLightResources, this.#frame, (texture) => {
-      this.#gl.deleteTexture(texture);
-      this.#ownedTextures.delete(texture);
-    });
+    endClusteredLightFrame(this.#clusteredLights, this.#frame);
     this.#frame += 1;
     if (this.#hasPendingTextureUploads() || this.#hasPendingVirtualTextureUploads()) this.invalidate();
     } finally {
@@ -2635,11 +2614,13 @@ class WebGlRootImpl implements WebGlRoot {
       const gl = this.#gl;
       releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
       releaseProgramArenaContextHandles(this.#programArena);
+      releaseClusteredLightContextHandles(this.#clusteredLights);
       for (const texture of Array.from(this.#ownedTextures)) gl.deleteTexture(texture);
     } else {
       dropVertexInputArenaContext(this.#vertexInputs);
       dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
       dropProgramArenaContext(this.#programArena);
+      dropClusteredLightContext(this.#clusteredLights);
     }
     this.#ownedTextures.clear();
     this.#iblBrdfLutTexture = undefined;
@@ -2651,7 +2632,6 @@ class WebGlRootImpl implements WebGlRoot {
     this.#textureUploadsThisFrame = 0;
     this.#iblSpecularTextures.clear();
     this.#studioEnvironmentSpecularTextures.clear();
-    this.#clusteredLightResources.clear();
     this.#gltfBatches.length = 0;
     this.#gltfLiveBatchCount = 0;
     clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
@@ -2707,7 +2687,6 @@ class WebGlRootImpl implements WebGlRoot {
     for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) this.#releaseOrdinaryTexture(key);
     for (const state of this.#virtualTextures.values()) this.#releaseVirtualTextureState(state);
     this.#virtualTextures.clear();
-    this.#clusteredLightResources.clear();
     clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#retainedGeometryRecipes.clear();
     this.#gltfPacketPrimitivesByGeometryId.clear();
@@ -5373,10 +5352,11 @@ class WebGlRootImpl implements WebGlRoot {
       );
     }
     if (lightSet.specular !== undefined && features.has("iblSpecularCube")) {
+      const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
       reserveTextureUnit(
         "iblBrdfLut",
-        allocator.reserveClusterUnits && this.#clusterGridTextureUnit > 0
-          ? this.#clusterGridTextureUnit - 1
+        allocator.reserveClusterUnits && clusterUnits.grid > 0
+          ? clusterUnits.grid - 1
           : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
       );
     }
@@ -5395,11 +5375,12 @@ class WebGlRootImpl implements WebGlRoot {
 
   #allocateTextureUnit(allocator: TextureUnitAllocator, preferred: number): number | undefined {
     const maxTextureImageUnits = this.#maxTextureImageUnits;
+    const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
     if (maxTextureImageUnits <= 0) return undefined;
     const reservedForClusters = (unit: number): boolean => allocator.reserveClusterUnits && (
-      unit === this.#clusterGridTextureUnit
-      || unit === this.#clusterIndexTextureUnit
-      || unit === this.#clusterLightTextureUnit
+      unit === clusterUnits.grid
+      || unit === clusterUnits.indices
+      || unit === clusterUnits.lights
     );
     if (preferred < maxTextureImageUnits && !reservedForClusters(preferred) && !allocator.used.has(preferred)) {
       allocator.used.add(preferred);
@@ -5614,214 +5595,18 @@ class WebGlRootImpl implements WebGlRoot {
       ]);
       uniformColor(this.#programArena, program, `u_surfaceLightCone[${index}]`, cone);
     }
-    this.#bindClusteredLights(
+    bindClusteredLights(
+      this.#clusteredLights,
+      this.#programArena,
       program,
       lightSet.punctuals,
       projection,
       view,
-      viewportSize,
+      viewportSize[0],
+      viewportSize[1],
+      this.#frame,
     );
 
-  }
-
-  #bindClusteredLights(
-    program: WebGLProgram,
-    lights: readonly ClusteredPunctualLight[],
-    projection: Mat4,
-    view: Mat4,
-    viewportSize: ViewportSize,
-  ): void {
-    if (lights.length === 0) {
-      uniform1i(this.#programArena, program, "u_useClusteredLights", 0);
-      return;
-    }
-    if (
-      this.#clusterGridTextureUnit < 0
-      || this.#clusterIndexTextureUnit < 0
-      || this.#clusterLightTextureUnit < 0
-    ) throw new Error("Clustered Forward+ lighting requires three fragment texture units");
-    const [width, height] = viewportSize;
-    const perspective = Math.abs(projection[15]) < 0.5;
-    const near = Math.abs(perspective
-      ? projection[14] / (projection[10] - 1)
-      : (projection[14] + 1) / projection[10]);
-    const far = Math.abs(perspective
-      ? projection[14] / (projection[10] + 1)
-      : (projection[14] - 1) / projection[10]);
-    const { lightsChanged, resource, viewChanged } = selectClusteredLightResource(
-      this.#clusteredLightResources,
-      {
-        createTexture: this.#clusterTextureFactory,
-        frame: this.#frame,
-        height,
-        lights,
-        projection,
-        view,
-        width,
-      },
-    );
-    let grid = resource.grid;
-    if (lightsChanged || viewChanged) {
-      const builtGrid = buildClusterGrid({
-        camera: { far, kind: perspective ? "perspective-camera" : "orthographic-camera", near },
-        height,
-        lights,
-        projection,
-        view,
-        width,
-      }, this.#clusterBuildScratch);
-      this.#uploadClusteredLights(resource, builtGrid, lights, lightsChanged);
-      const { indices: _indices, offsetsAndCounts: _offsetsAndCounts, ...metadata } = builtGrid;
-      grid = metadata;
-      commitClusteredLightView(resource, {
-        frame: this.#frame, grid: metadata, height, projection, view, width,
-      });
-    } else {
-      markClusteredLightResourceUsed(resource, this.#frame);
-    }
-    if (grid === undefined) throw new Error("Clustered light grid was not prepared");
-    const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + this.#clusterGridTextureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, resource.gridTexture);
-    gl.activeTexture(gl.TEXTURE0 + this.#clusterIndexTextureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, resource.indexTexture);
-    gl.activeTexture(gl.TEXTURE0 + this.#clusterLightTextureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, resource.lightTexture);
-    uniform1i(this.#programArena, program, "u_useClusteredLights", 1);
-    uniform1i(this.#programArena, program, "u_clusterGrid", this.#clusterGridTextureUnit);
-    uniform1i(this.#programArena, program, "u_clusterLightIndices", this.#clusterIndexTextureUnit);
-    uniform1i(this.#programArena, program, "u_clusterLightData", this.#clusterLightTextureUnit);
-    uniformColor(this.#programArena, program, "u_clusterDimensions", [
-      grid.tileCountX, grid.tileCountY, grid.zSliceCount, grid.tileSize,
-    ]);
-    uniformColor(this.#programArena, program, "u_clusterDepth", [grid.zSliceScale, grid.zSliceBias, near, 0]);
-    uniform2fv(this.#programArena, program, "u_clusterProjection", [perspective ? 0 : 1, resource.indexTextureWidth]);
-    uniform2fv(this.#programArena, program, "u_clusterViewportOrigin", [0, 0]);
-  }
-
-  #uploadClusteredLights(
-    resource: ClusteredLightResource,
-    grid: ClusterGrid,
-    lights: readonly ClusteredPunctualLight[],
-    uploadLightData: boolean,
-  ): void {
-    const gl = this.#gl;
-    if (lights.length > this.#maxTextureSize) {
-      throw new Error(`Clustered light count ${lights.length} exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
-    }
-    const gridWidth = grid.tileCountX * grid.tileCountY;
-    if (gridWidth > this.#maxTextureSize || grid.zSliceCount > this.#maxTextureSize) {
-      throw new Error(
-        `Clustered light grid ${gridWidth}x${grid.zSliceCount} exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`,
-      );
-    }
-    const configure = (unit: number, texture: WebGLTexture): void => {
-      gl.activeTexture(gl.TEXTURE0 + unit);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    };
-    configure(this.#clusterGridTextureUnit, resource.gridTexture);
-    if (
-      resource.gridTextureWidth === gridWidth
-      && resource.gridTextureHeight === grid.zSliceCount
-      && typeof gl.texSubImage2D === "function"
-    ) {
-      gl.texSubImage2D(
-        gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
-        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
-      );
-    } else {
-      gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.RG32UI,
-        gridWidth, grid.zSliceCount, 0,
-        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
-      );
-      resource.gridTextureWidth = gridWidth;
-      resource.gridTextureHeight = grid.zSliceCount;
-    }
-
-    const requiredIndexCount = Math.max(1, grid.indexCount);
-    let resizedIndexTexture = false;
-    if (resource.indexData.length < requiredIndexCount) {
-      const capacity = 2 ** Math.ceil(Math.log2(requiredIndexCount));
-      resource.indexTextureWidth = Math.min(this.#maxTextureSize, capacity);
-      resource.indexTextureHeight = Math.ceil(capacity / resource.indexTextureWidth);
-      if (resource.indexTextureHeight > this.#maxTextureSize) {
-        throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
-      }
-      resource.indexData = new Uint32Array(resource.indexTextureWidth * resource.indexTextureHeight);
-      resizedIndexTexture = true;
-    }
-    if (resource.indexTextureHeight > this.#maxTextureSize) {
-      throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${this.#maxTextureSize}`);
-    }
-    resource.indexData.fill(0);
-    for (let index = 0; index < grid.indexCount; index += 1) {
-      resource.indexData[index] = grid.indices[index]!;
-    }
-    configure(this.#clusterIndexTextureUnit, resource.indexTexture);
-    if (!resizedIndexTexture && typeof gl.texSubImage2D === "function") {
-      gl.texSubImage2D(
-        gl.TEXTURE_2D, 0, 0, 0, resource.indexTextureWidth, resource.indexTextureHeight,
-        gl.RED_INTEGER, gl.UNSIGNED_INT, resource.indexData,
-      );
-    } else {
-      gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.R32UI,
-        resource.indexTextureWidth, resource.indexTextureHeight, 0,
-        gl.RED_INTEGER, gl.UNSIGNED_INT, resource.indexData,
-      );
-    }
-
-    if (!uploadLightData) return;
-    const requiredLightCount = Math.max(lights.length, 1);
-    let resizedLightTexture = false;
-    if (resource.lightTextureHeight < requiredLightCount) {
-      resource.lightTextureHeight = Math.min(
-        this.#maxTextureSize,
-        2 ** Math.ceil(Math.log2(requiredLightCount)),
-      );
-      resource.lightData = new Float32Array(resource.lightTextureHeight * 16);
-      resizedLightTexture = true;
-    } else {
-      resource.lightData.fill(0);
-    }
-    const lightData = resource.lightData;
-    for (let index = 0; index < lights.length; index += 1) {
-      const light = lights[index]!;
-      const offset = index * 16;
-      const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
-      lightData[offset] = light.color[0];
-      lightData[offset + 1] = light.color[1];
-      lightData[offset + 2] = light.color[2];
-      lightData[offset + 3] = light.kind === "point" ? 1 : 2;
-      lightData[offset + 4] = light.position[0];
-      lightData[offset + 5] = light.position[1];
-      lightData[offset + 6] = light.position[2];
-      lightData[offset + 7] = light.range ?? 0;
-      lightData[offset + 8] = direction[0];
-      lightData[offset + 9] = direction[1];
-      lightData[offset + 10] = direction[2];
-      lightData[offset + 11] = light.kind === "spot" ? Math.cos(light.innerConeAngle) : 1;
-      lightData[offset + 12] = light.kind === "spot" ? Math.cos(light.outerConeAngle) : 0;
-    }
-    configure(this.#clusterLightTextureUnit, resource.lightTexture);
-    if (!resizedLightTexture && typeof gl.texSubImage2D === "function") {
-      gl.texSubImage2D(
-        gl.TEXTURE_2D, 0, 0, 0, 4, resource.lightTextureHeight,
-        gl.RGBA, gl.FLOAT, lightData,
-      );
-    } else {
-      gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.RGBA32F,
-        4, resource.lightTextureHeight, 0,
-        gl.RGBA, gl.FLOAT, lightData,
-      );
-    }
-    commitClusteredLightSnapshot(resource, lights);
   }
 
   #releaseUnusedGltfBatchResources(): void {
