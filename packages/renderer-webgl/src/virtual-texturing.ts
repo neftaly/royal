@@ -359,14 +359,6 @@ export const virtualTexturePageUri = (
     .replaceAll("{key}", key);
 };
 
-export const firstVirtualTexturePageUri = (
-  manifest: VirtualTextureManifestModel,
-): string | undefined => {
-  const firstEntry = manifest.pages.find((entry) => entry.uri !== undefined);
-  if (firstEntry?.uri !== undefined) return firstEntry.uri;
-  return virtualTexturePageUri(manifest, { mip: 0, x: 0, y: 0 });
-};
-
 export class VirtualTextureAtlasPageTable {
   readonly #dirty: VirtualTexturePageTableUpdate[] = [];
   #dirtyHead = 0;

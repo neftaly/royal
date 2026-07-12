@@ -188,9 +188,6 @@ export const surfaceMaterialExtensionFactors = (
 ): SurfaceMaterialExtensionFactors =>
   material.extensionFactors ?? DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS;
 
-export const isTransmissiveSurfaceMaterial = (material: SurfaceMaterial): boolean =>
-  material.kind === "standard" && surfaceMaterialExtensionFactors(material).transmissionFactor > 0;
-
 export const surfaceMaterialAlphaMode = (material: SurfaceMaterial): SurfaceMaterialAlphaMode =>
   material.alphaMode ?? "OPAQUE";
 

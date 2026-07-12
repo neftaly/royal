@@ -73,7 +73,6 @@ export type SurfaceLight = SurfaceDirectionalLight | SurfacePointLight | Surface
 export type SurfaceLightSet = {
   readonly directionals: readonly SurfaceDirectionalLight[];
   readonly irradiance?: SurfaceIblIrradiance;
-  readonly key: string;
   readonly lights: readonly SurfaceLight[];
   readonly punctuals: readonly (SurfacePointLight | SurfaceSpotLight)[];
   readonly specular?: SurfaceIblSpecular;
@@ -81,7 +80,6 @@ export type SurfaceLightSet = {
 
 export const EMPTY_SURFACE_LIGHT_SET: SurfaceLightSet = {
   directionals: [],
-  key: "empty",
   lights: [],
   punctuals: [],
 };
@@ -92,63 +90,14 @@ export const surfaceLightValueKey = (value: number | undefined): string =>
 export const surfaceLightVectorKey = (values: readonly number[]): string =>
   values.map((value) => surfaceLightValueKey(value)).join(",");
 
-const surfaceIblIrradianceKey = (irradiance: SurfaceIblIrradiance): string =>
-  [
-    surfaceLightValueKey(irradiance.intensity),
-    ...irradiance.coefficients.map((coefficient) => surfaceLightVectorKey(coefficient)),
-    surfaceLightVectorKey(irradiance.worldToIbl),
-  ].join(":");
-
-const surfaceIblSpecularKey = (specular: SurfaceIblSpecular): string =>
-  [
-    specular.key,
-    specular.encoding,
-    surfaceLightValueKey(specular.intensity),
-    surfaceLightValueKey(specular.mipCount),
-    surfaceLightVectorKey(specular.worldToIbl),
-  ].join(":");
-
-const surfaceLightKey = (light: SurfaceLight): string => {
-  switch (light.kind) {
-    case "directional":
-      return [
-        "directional",
-        surfaceLightVectorKey(light.color),
-        surfaceLightVectorKey(light.direction),
-      ].join(":");
-    case "point":
-      return [
-        "point",
-        surfaceLightVectorKey(light.color),
-        surfaceLightVectorKey(light.position),
-        surfaceLightValueKey(light.range),
-      ].join(":");
-    case "spot":
-      return [
-        "spot",
-        surfaceLightVectorKey(light.color),
-        surfaceLightVectorKey(light.position),
-        surfaceLightVectorKey(light.direction),
-        surfaceLightValueKey(light.range),
-        surfaceLightValueKey(light.innerConeAngle),
-        surfaceLightValueKey(light.outerConeAngle),
-      ].join(":");
-  }
-};
-
 export const surfaceLightSet = (
   lights: readonly SurfaceLight[],
   irradiance?: SurfaceIblIrradiance,
   specular?: SurfaceIblSpecular,
 ): SurfaceLightSet => {
-  const lightKey = lights.length === 0 ? "none" : lights.map(surfaceLightKey).join("|");
-  const irradianceKey = irradiance === undefined ? "" : `|ibl:${surfaceIblIrradianceKey(irradiance)}`;
-  const specularKey = specular === undefined ? "" : `|ibl-specular:${surfaceIblSpecularKey(specular)}`;
-
   return {
     directionals: lights.filter((light): light is SurfaceDirectionalLight => light.kind === "directional"),
     ...(irradiance === undefined ? {} : { irradiance }),
-    key: `${lightKey}${irradianceKey}${specularKey}`,
     lights,
     punctuals: lights.filter((light): light is SurfacePointLight | SurfaceSpotLight => light.kind !== "directional"),
     ...(specular === undefined ? {} : { specular }),

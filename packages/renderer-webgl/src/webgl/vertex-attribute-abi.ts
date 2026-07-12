@@ -18,5 +18,3 @@ export const VERTEX_ATTRIBUTE = Object.freeze({
   texCoord1: 11,
   color: 12,
 } as const);
-
-export const VERTEX_ATTRIBUTE_COUNT = 13;

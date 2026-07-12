@@ -1,8 +1,7 @@
-import { MAX_RESOURCE_ID, NO_RESOURCE_ID } from "./resource-id";
+import { NO_RESOURCE_ID } from "./resource-id";
 
 /** Sentinel stored for an absent optional packet resource ID. */
 export const NO_FRAME_PACKET_ID = NO_RESOURCE_ID;
-export const MAX_FRAME_PACKET_RESOURCE_ID = MAX_RESOURCE_ID;
 
 export const FRAME_PACKET_RENDER_CLASS = Object.freeze({
   opaque: 0,

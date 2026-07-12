@@ -18,7 +18,6 @@ import {
 } from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import {
   encodeVirtualTexturePageTableRgba8,
-  firstVirtualTexturePageUri,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
   virtualTexturePageKey,
@@ -69,7 +68,7 @@ describe("WebGL virtual texturing runtime model", () => {
       { id: "m0/0/0", mip: 0, uri: "pages/mip-0/x0-y0.png", x: 0, y: 0 },
       { height: 64, id: "m1/0/0", mip: 1, uri: "pages/mip-1/x0-y0.png", width: 64, x: 0, y: 0 },
     ]);
-    expect(result.manifest === undefined ? undefined : firstVirtualTexturePageUri(result.manifest))
+    expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 0, x: 0, y: 0 }))
       .toBe("pages/mip-0/x0-y0.png");
   });
 
@@ -141,7 +140,7 @@ describe("WebGL virtual texturing runtime model", () => {
       pageSize: 64,
       width: 256,
     }));
-    expect(result.manifest === undefined ? undefined : firstVirtualTexturePageUri(result.manifest))
+    expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 0, x: 0, y: 0 }))
       .toBe("pages/m0/0/0.png");
   });
 
@@ -170,7 +169,7 @@ describe("WebGL virtual texturing runtime model", () => {
       expect.objectContaining({ code: "vt.pages.generated", severity: "unsupported" }),
       expect.objectContaining({ code: "vt.pages.empty", severity: "unsupported" }),
     ]);
-    expect(result.manifest === undefined ? undefined : firstVirtualTexturePageUri(result.manifest)).toBeUndefined();
+    expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 0, x: 0, y: 0 })).toBeUndefined();
   });
 
   it("tracks page to atlas slot mappings and dirty page-table updates incrementally", () => {

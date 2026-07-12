@@ -183,7 +183,7 @@ describe("IBL texture arena", () => {
     expect(ensureStudioEnvironmentSpecularTexture(arena)).toBe(studio);
     expect(calls(gl, "texImage2D")).toHaveLength(36);
     const lightSet: SurfaceLightSet = {
-      directionals: [], key: "ibl", lights: [], punctuals: [],
+      directionals: [], lights: [], punctuals: [],
       specular: { encoding: "linear", intensity: 1, key: studio.key, mipCount: studio.mipCount, texture: studio.texture, worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
     };
     bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, undefined);

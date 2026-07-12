@@ -84,29 +84,8 @@ export const transformDirection = (matrix: Mat4, direction: Vec3): Vec3 => {
   return [x / length, y / length, z / length];
 };
 
-export const subtractVec3 = (left: Vec3, right: Vec3): Vec3 => [
-  left[0] - right[0],
-  left[1] - right[1],
-  left[2] - right[2],
-];
-
-export const crossVec3 = (left: Vec3, right: Vec3): Vec3 => [
-  left[1] * right[2] - left[2] * right[1],
-  left[2] * right[0] - left[0] * right[2],
-  left[0] * right[1] - left[1] * right[0],
-];
-
 export const dotVec3 = (left: Vec3, right: Vec3): number =>
   left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
-
-export const orientationPreservingMat4 = (matrix: Mat4): boolean => {
-  const determinant =
-    matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
-    - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
-    + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
-
-  return determinant >= 0;
-};
 
 export const translationMat4 = ([x, y, z]: Vec3): Mat4 => [
   1, 0, 0, 0,
