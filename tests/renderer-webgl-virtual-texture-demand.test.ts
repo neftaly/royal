@@ -89,13 +89,15 @@ describe("virtual texture pure demand planning", () => {
       crossingProjection as unknown as Mat4,
     );
     expect(projectVirtualTextureScreenFootprint(crossing, true)).toEqual({ kind: "indeterminate" });
-    expect(planVirtualTextureDrawDemand({
+    const demand = planVirtualTextureDrawDemand({
       context: crossing,
       flipY: true,
       generated: true,
       limit: 3,
       manifest: manifest(),
-    }).demandCandidates).toEqual(planVirtualTextureBootstrapDemand({
+    });
+    expect(demand.coverageCandidates).toEqual([]);
+    expect(demand.demandCandidates).toEqual(planVirtualTextureBootstrapDemand({
       generated: true,
       manifest: manifest(),
     }, 3));

@@ -3,6 +3,7 @@ import {
   createWebGlRoot,
   type WebGlContextSnapshot,
   type WebGlRoot,
+  type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 
 /** WebGL context options for the Royal renderer root. */
@@ -47,8 +48,8 @@ export interface RoyalRendererRoot {
   readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
-  /** Renderer-specific diagnostic payload. Host code must validate before use. */
-  diagnostics(): unknown;
+  /** Typed WebGL diagnostics, including virtual-texture residency and request counters. */
+  diagnostics(): WebGlRootSnapshot;
   /** Immediately renders queued demand on the caller's current frame, if any. */
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */

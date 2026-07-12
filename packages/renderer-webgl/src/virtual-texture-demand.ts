@@ -269,7 +269,10 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
   if (projection.kind === "not-visible") return { coverageCandidates: [], demandCandidates: [] };
   if (projection.kind === "indeterminate") {
     const fallback = planVirtualTextureBootstrapDemand(input, limit);
-    return { coverageCandidates: fallback, demandCandidates: fallback };
+    // Bootstrap is safe for explicit VT progress, but it does not prove exact
+    // visible coverage. Auto-VT callers must retain their ordinary texture
+    // fallback until projection produces a determinate footprint.
+    return { coverageCandidates: [], demandCandidates: fallback };
   }
   const targetMip = virtualTextureTargetMip(input.manifest, projection.footprint);
   const coverageCandidates = virtualTexturePagesForFootprint(input.manifest, targetMip, projection.footprint)

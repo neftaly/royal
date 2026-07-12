@@ -479,7 +479,8 @@ describe("virtual texture GPU arena", () => {
     }
     expect(caught).toBe(true);
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
-      dirtyPageTableUpdates: 0,
+      // The unpublished mapping remains staged for the phaseful retry.
+      dirtyPageTableUpdates: 1,
       pendingUploads: 1,
       residentPages: 0,
     });
@@ -535,7 +536,7 @@ describe("virtual texture GPU arena", () => {
     processVirtualTextureGpuUploads(arena, 1);
     clearVirtualTextureGpuOutcomes(arena);
     queueVirtualTextureGpuUpload(arena, resource, upload(replacement, 2));
-    // Atlas + eviction fallback row succeed; replacement row fails.
+    // Eviction fallback + atlas succeed; replacement row fails.
     gl.failOperationAfter(3);
     expect(() => processVirtualTextureGpuUploads(arena, 2)).toThrow(/operation fault/);
     expect(virtualTextureGpuResourceSnapshot(resource).dirtyPageTableUpdates).toBe(1);
@@ -548,6 +549,75 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuOutcome(arena, 0)).toMatchObject({
       evictedPageKey: "1/0/0",
       kind: "completed",
+    });
+  });
+
+  it("invalidates an evicted mapping before overwriting its atlas slot and publishing the replacement", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options({ physicalSlots: 1 }));
+    const evicted = upload({ mip: 1, x: 0, y: 0 }, 1);
+    const replacement = upload({ mip: 0, x: 1, y: 1 }, 2);
+    queueVirtualTextureGpuUpload(arena, resource, evicted);
+    processVirtualTextureGpuUploads(arena, 1);
+    clearVirtualTextureGpuOutcomes(arena);
+    const replacementStart = gl.subUploads.length;
+
+    queueVirtualTextureGpuUpload(arena, resource, replacement);
+    processVirtualTextureGpuUploads(arena, 2);
+
+    const replacementUploads = gl.subUploads.slice(replacementStart);
+    expect(replacementUploads.map(({ serial }) => serial)).toEqual([
+      2, // Invalidate the old page-table mapping.
+      1, // The slot is now safe to overwrite in the atlas.
+      2, // Publish the replacement page-table mapping.
+    ]);
+    expect(replacementUploads[1]?.source).toBe(replacement.image);
+    expect(virtualTextureGpuExactResidency(arena, "a", evicted.page)).toBeUndefined();
+    expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({
+      evictedPageKey: evicted.pageKey,
+      key: "a",
+      kind: "completed",
+      upload: replacement,
+    });
+  });
+
+  it.each([
+    ["invalidation", 1],
+    ["atlas overwrite", 2],
+    ["replacement publication", 3],
+  ] as const)("retries safely after an eviction %s failure", (_phase, operationOffset) => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options({ physicalSlots: 1 }));
+    const evicted = upload({ mip: 1, x: 0, y: 0 }, 1);
+    const replacement = upload({ mip: 0, x: 1, y: 1 }, 2);
+    queueVirtualTextureGpuUpload(arena, resource, evicted);
+    processVirtualTextureGpuUploads(arena, 1);
+    clearVirtualTextureGpuOutcomes(arena);
+    const replacementStart = gl.subUploads.length;
+
+    queueVirtualTextureGpuUpload(arena, resource, replacement);
+    gl.failOperationAfter(operationOffset);
+    expect(() => processVirtualTextureGpuUploads(arena, 2)).toThrow(/operation fault/);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(0);
+    expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeUndefined();
+
+    processVirtualTextureGpuUploads(arena, 2);
+
+    expect(gl.subUploads.slice(replacementStart).map(({ serial }) => serial)).toEqual([2, 1, 2]);
+    expect(gl.subUploads
+      .slice(replacementStart)
+      .filter(({ serial, source }) => serial === 1 && source === replacement.image)).toHaveLength(1);
+    expect(virtualTextureGpuExactResidency(arena, "a", evicted.page)).toBeUndefined();
+    expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
+    expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(0);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({
+      evictedPageKey: evicted.pageKey,
+      key: "a",
+      kind: "completed",
+      upload: replacement,
     });
   });
 

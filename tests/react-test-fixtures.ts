@@ -201,7 +201,7 @@ export const fakeRendererRoot = ({
     get frame() {
       return frame;
     },
-    diagnostics: vi.fn(() => diagnostics),
+    diagnostics: vi.fn(() => diagnostics as ReturnType<RoyalRendererRoot["diagnostics"]>),
     dispose: vi.fn(),
     flushInvalidated: vi.fn(),
     invalidate: vi.fn(),
