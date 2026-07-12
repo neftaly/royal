@@ -61,20 +61,25 @@ glTF draw collection.
   matrices, and transient batch-input objects are deleted. Retained batch slots
   receive local matrices directly from packet tables and preserve exact warm
   upload signatures. The workspace owns no GL handles and imports no root or
-  lifecycle code.
+  lifecycle code. A pure root-lifetime numeric batch registry and separate
+  segment grouping authority are also validated: exact four-lane identities,
+  render-class provenance, frame touch unions, first-seen class/member order,
+  bounded open-address hashing, and generation-stamped fail-closed results are
+  ready to replace the remaining string batch-plan backend.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 425 workspace tests, typecheck, build,
+- The current checkpoint passes 435 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
 Resume in this order:
 
-1. Replace the remaining string batch-plan key/cache, refresh `Map`, and
-   render-class arrays with retained numeric grouping over the packet submission
-   workspace. Then move complete instance-buffer, surface draw, transmission,
+1. Wire the retained numeric batch registry/grouping authority into root batch
+   objects and instance-buffer identity, deleting the remaining string
+   batch-plan key/cache, refresh `Map`, and transient render-class arrays. Then
+   move complete instance-buffer, surface draw, transmission,
    and HDR ownership families out of `root.ts` and extract the real
    callback-free executor. Delete active-resource scans and frame-end pruning
    paths as each owning family moves.

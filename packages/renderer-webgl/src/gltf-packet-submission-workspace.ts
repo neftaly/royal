@@ -74,6 +74,7 @@ export interface GltfPacketSubmissionWorkspace<MaterialBinding, RootBinding, Lig
   rootBindingSourceIds: Uint32Array;
   rootBindings: Array<RootBinding | undefined>;
   segment: number;
+  segmentRevision: number;
   sidedness: Uint8Array;
   viewIndex: number;
 }
@@ -190,6 +191,7 @@ export const createGltfPacketSubmissionWorkspace = <MaterialBinding, RootBinding
     rootBindingSourceIds: new Uint32Array(bindings),
     rootBindings: Array.from<RootBinding | undefined>({ length: bindings }),
     segment: -1,
+    segmentRevision: 0,
     sidedness: new Uint8Array(rows),
     viewIndex: -1,
   } as WorkspaceState<MaterialBinding, RootBinding, LightBinding>;
@@ -227,6 +229,13 @@ const clearBindings = <M, R, L>(workspace: WorkspaceState<M, R, L>): void => {
   workspace.lightBindingIdsByScope.clear();
 };
 
+const advanceSegmentRevision = <M, R, L>(workspace: GltfPacketSubmissionWorkspace<M, R, L>): void => {
+  if (workspace.segmentRevision === Number.MAX_SAFE_INTEGER) {
+    throw new Error("Royal glTF packet submission segment revision is exhausted");
+  }
+  workspace.segmentRevision += 1;
+};
+
 /** Releases live semantic bindings and invalidates the workspace while retaining numeric capacity. */
 export const clearGltfPacketSubmissionWorkspace = <M, R, L>(
   workspace: GltfPacketSubmissionWorkspace<M, R, L>,
@@ -240,6 +249,7 @@ export const clearGltfPacketSubmissionWorkspace = <M, R, L>(
   state.nextViewIndex = 0;
   state.planRevision = 0;
   state.segment = -1;
+  state.segmentRevision = 0;
   state.viewIndex = -1;
 };
 
@@ -257,6 +267,7 @@ export const resetGltfPacketSubmissionWorkspaceForFrame = <M, R, L>(
   state.nextViewIndex = 0;
   state.viewIndex = -1;
   state.segment = -1;
+  advanceSegmentRevision(state);
   clearBindings(state);
 };
 
@@ -275,6 +286,7 @@ export const resetGltfPacketSubmissionWorkspaceForView = <M, R, L>(
   workspace.nextViewIndex += 1;
   workspace.segment = -1;
   workspace.count = 0;
+  advanceSegmentRevision(workspace);
 };
 
 export const resetGltfPacketSubmissionWorkspaceForSegment = <M, R, L>(
@@ -289,6 +301,7 @@ export const resetGltfPacketSubmissionWorkspaceForSegment = <M, R, L>(
   }
   workspace.segment = uint32(orderingSegment, "ordering segment");
   workspace.count = 0;
+  advanceSegmentRevision(workspace);
 };
 
 const activeView = <M, R, L>(
@@ -525,6 +538,7 @@ export const appendGltfPacketSubmission = <M, R, L>(
   workspace.rootBindingIds[index] = rootBindingId;
   workspace.sidedness[index] = normalizedSidedness;
   workspace.count = index + 1;
+  advanceSegmentRevision(workspace);
   return index;
 };
 
