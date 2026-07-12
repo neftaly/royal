@@ -144,6 +144,25 @@ import {
   type TextureHandleArena,
 } from "./webgl/texture-handle-arena";
 import {
+  consumeOrdinaryTextureGpuWake,
+  clearOrdinaryTextureGpuOutcomes,
+  createOrdinaryTextureGpuArena,
+  discardOrdinaryTexturePendingUpload,
+  dropOrdinaryTextureGpuContext,
+  ensureOrdinaryTextureGpuResource,
+  ordinaryTextureGpuHasPendingUploads,
+  ordinaryTextureGpuOutcome,
+  ordinaryTextureGpuOutcomeCount,
+  ordinaryTextureGpuPendingUpload,
+  ordinaryTextureGpuResource,
+  ordinaryTextureGpuResourceCount,
+  processOrdinaryTextureUploads,
+  queueOrdinaryTextureUpload,
+  releaseOrdinaryTextureGpuResource,
+  type OrdinaryTextureGpuArena,
+  type OrdinaryTextureGpuResource,
+} from "./webgl/ordinary-texture-gpu-arena";
+import {
   beginGltfInstanceBufferArenaFrame,
   bindGltfInstanceBuffer,
   clearGltfInstanceBufferArena,
@@ -432,7 +451,6 @@ import {
 import { prepareFrameBaseline, prepareTextureUpload } from "./webgl/imperative-state";
 import {
   textureUploadInternalFormat,
-  uploadTexture,
 } from "./webgl/texture-upload";
 import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
@@ -488,21 +506,6 @@ type PickScratchCandidate = {
 type GeometryDrawMode = GltfGeometryDrawMode;
 
 type GeometryResource = VertexInputGeometry;
-
-type TextureResource = {
-  readonly generation: number;
-  readonly key: string;
-  pendingUpload?: TexturePendingUpload;
-  readonly texture: WebGLTexture;
-  uploaded: boolean;
-};
-
-type TexturePendingUpload = PreparedTextureSource;
-
-type TextureLoadState = TextureResource & {
-  error?: string;
-  loading: boolean;
-};
 
 type TextureUnitAllocator = {
   readonly reserveClusterUnits: boolean;
@@ -1002,7 +1005,6 @@ const EMPTY_FRAME_PLAN_RESOURCE_MANIFEST: FramePlanResourceManifest = {
 const VT_WRAP_CLAMP_TO_EDGE = 0;
 const VT_WRAP_REPEAT = 1;
 const VT_WRAP_MIRRORED_REPEAT = 2;
-const TEXTURE_MAX_UPLOADS_PER_FRAME = 1;
 const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
@@ -1906,7 +1908,7 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
-  readonly #textures = new Map<string, TextureResource | TextureLoadState>();
+  readonly #ordinaryTextureGpu: OrdinaryTextureGpuArena;
   readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
   readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
   readonly #closedTextureSources = new WeakSet<object>();
@@ -1914,7 +1916,6 @@ class WebGlRootImpl implements WebGlRoot {
   readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
   #pendingGltfImageRowHead = 0;
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
-  readonly #pendingTextureUploads: TextureResource[] = [];
   readonly #autoVirtualTextureRefs = new Map<string, VirtualTextureRef>();
   readonly #autoVirtualTextureManifestUris = new Map<string, string>();
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, VirtualTextureGeneratedPageSource>();
@@ -2030,9 +2031,6 @@ class WebGlRootImpl implements WebGlRoot {
   #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
   readonly #geometryDrawArena: GeometryDrawArena;
-  #textureUploadFrame = -1;
-  #textureUploadHead = 0;
-  #textureUploadsThisFrame = 0;
   #virtualTextureRequestFrame = -1;
   #virtualTextureRequestsThisFrame = 0;
   #virtualTextureUploadFrame = -1;
@@ -2079,6 +2077,7 @@ class WebGlRootImpl implements WebGlRoot {
       this.#contextLifecycle = "active";
       this.#contextError = undefined;
       this.#contextRestores += 1;
+      this.#restoreOrdinaryTextureResources();
       this.#restoreVirtualTextureResources();
       this.#renderDirty ||= this.#latestScene !== undefined;
       this.#scheduleRender();
@@ -2125,6 +2124,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#clusteredLights = createClusteredLightArena(gl);
     this.#iblTextures = createIblTextureArena(gl);
     this.#textureHandles = createTextureHandleArena(gl);
+    this.#ordinaryTextureGpu = createOrdinaryTextureGpuArena(gl, this.#textureHandles);
     this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
     this.#options = this.#validatedContextOptions(requestedOptions);
@@ -2341,7 +2341,7 @@ class WebGlRootImpl implements WebGlRoot {
     gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
     prepareFrameBaseline(gl, frameViews.scissor);
     this.#stagePendingGltfImageRows();
-    this.#processTextureUploads();
+    this.#processOrdinaryTextureUploads();
     this.#processVirtualTexturePageUploads();
 
     this.#beginGltfInstanceFrame();
@@ -2488,7 +2488,10 @@ class WebGlRootImpl implements WebGlRoot {
     this.#releaseUnusedGltfBatchResources();
     endClusteredLightFrame(this.#clusteredLights, this.#frame);
     this.#frame += 1;
-    if (this.#hasPendingTextureUploads() || this.#hasPendingVirtualTextureUploads()) this.invalidate();
+    if (
+      ordinaryTextureGpuHasPendingUploads(this.#ordinaryTextureGpu)
+      || this.#hasPendingVirtualTextureUploads()
+    ) this.invalidate();
     } finally {
       // The renderer exclusively owns its context, but leaving vertex-input
       // bindings neutral makes frame teardown explicit. The EAB is VAO state,
@@ -2588,11 +2591,8 @@ class WebGlRootImpl implements WebGlRoot {
 
   #dropGpuState(deleteResources: boolean): void {
     let releaseError: unknown;
-    for (const resource of this.#textures.values()) {
-      if (resource.pendingUpload !== undefined) {
-        this.#retainPreparedTextureUpload(resource.key, resource.pendingUpload);
-      }
-    }
+    dropOrdinaryTextureGpuContext(this.#ordinaryTextureGpu);
+    releaseError = captureFirstError(releaseError, () => this.#consumeOrdinaryTextureGpuOutcomes());
     if (deleteResources) {
       const gl = this.#gl;
       releaseError = captureFirstError(releaseError, () => {
@@ -2620,11 +2620,6 @@ class WebGlRootImpl implements WebGlRoot {
     dropIblTextureContext(this.#iblTextures);
     dropTextureHandleContext(this.#textureHandles);
     clearGeometryDrawArenaContext(this.#geometryDrawArena);
-    this.#textures.clear();
-    this.#pendingTextureUploads.length = 0;
-    this.#textureUploadHead = 0;
-    this.#textureUploadFrame = -1;
-    this.#textureUploadsThisFrame = 0;
     this.#gltfBatches.length = 0;
     this.#gltfLiveBatchCount = 0;
     clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
@@ -2660,6 +2655,20 @@ class WebGlRootImpl implements WebGlRoot {
     }
   }
 
+  #restoreOrdinaryTextureResources(): void {
+    for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) {
+      if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) continue;
+      const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
+      if (prepared === undefined) continue;
+      const resource = ensureOrdinaryTextureGpuResource(
+        this.#ordinaryTextureGpu,
+        key,
+        this.#contextGeneration,
+      );
+      this.#queueOrdinaryTextureUpload(resource, prepared.source, prepared.texture);
+    }
+  }
+
   dispose(): void {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
@@ -2689,10 +2698,7 @@ class WebGlRootImpl implements WebGlRoot {
     clearGeometryDrawArenaContext(this.#geometryDrawArena);
     this.#retainedGeometryRecipes.clear();
     this.#gltfPacketPrimitivesByGeometryId.clear();
-    this.#textures.clear();
     clearResourceArenaPreparedSources(this.#resourceArena);
-    this.#pendingTextureUploads.length = 0;
-    this.#textureUploadHead = 0;
     this.#virtualTextures.clear();
     this.#autoVirtualTextureRefs.clear();
     this.#autoVirtualTextureManifestUris.clear();
@@ -3259,16 +3265,12 @@ class WebGlRootImpl implements WebGlRoot {
     if (prepared !== undefined) sources.add(prepared.source);
     releaseResourceArenaPreparedSource(this.#resourceArena, key);
     this.#releaseOrdinaryTextureSourceSubscription(key);
-    const resource = this.#textures.get(key);
-    this.#textures.delete(key);
-    if (resource !== undefined) {
-      if (resource.pendingUpload !== undefined) sources.add(resource.pendingUpload.source);
-      delete resource.pendingUpload;
-      try {
-        releaseOwnedTexture(this.#textureHandles, resource.texture);
-      } catch (error) {
-        releaseError ??= error;
-      }
+    const gpuRelease = releaseOrdinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
+    releaseError ??= gpuRelease.releaseError;
+    try {
+      this.#consumeOrdinaryTextureGpuOutcomes();
+    } catch (error) {
+      releaseError ??= error;
     }
     for (const source of sources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
@@ -3338,7 +3340,7 @@ class WebGlRootImpl implements WebGlRoot {
     this.#ordinaryTextureSourceSubscriptions.delete(key);
   }
 
-  #retainPreparedTextureUpload(key: string, upload: TexturePendingUpload): void {
+  #retainPreparedTextureUpload(key: string, upload: PreparedTextureSource): void {
     const previous = retainResourceArenaPreparedSource(this.#resourceArena, key, upload);
     if (
       previous !== undefined
@@ -5521,8 +5523,8 @@ class WebGlRootImpl implements WebGlRoot {
       return;
     }
 
-    const resource = this.#textures.get(textureCacheKey(texture));
-    if (resource === undefined || !resource.uploaded) {
+    const resource = this.#texture(texture);
+    if (!resource.uploaded) {
       uniform1i(this.#programArena, program, useUniform, 0);
       return;
     }
@@ -6963,8 +6965,27 @@ class WebGlRootImpl implements WebGlRoot {
     );
   }
 
-  #queueTextureUpload(
-    resource: TextureResource,
+  #consumeOrdinaryTextureGpuOutcomes(): void {
+    let firstError: unknown;
+    const outcomeCount = ordinaryTextureGpuOutcomeCount(this.#ordinaryTextureGpu);
+    for (let outcomeIndex = 0; outcomeIndex < outcomeCount; outcomeIndex += 1) {
+      const outcome = ordinaryTextureGpuOutcome(this.#ordinaryTextureGpu, outcomeIndex);
+      if (outcome === undefined) continue;
+      if (outcome.kind === "retained") {
+        firstError = captureFirstError(firstError, () => {
+          this.#retainPreparedTextureUpload(outcome.key, outcome.upload);
+        });
+        continue;
+      }
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, outcome.upload.source) !== 0) continue;
+      firstError = captureFirstError(firstError, () => this.#closeTextureSource(outcome.upload.source));
+    }
+    clearOrdinaryTextureGpuOutcomes(this.#ordinaryTextureGpu);
+    if (firstError !== undefined) throw firstError;
+  }
+
+  #queueOrdinaryTextureUpload(
+    resource: OrdinaryTextureGpuResource,
     source: LoadedTextureSource,
     texture: TextureAssetUploadRef,
   ): void {
@@ -6974,116 +6995,90 @@ class WebGlRootImpl implements WebGlRoot {
       || this.#contextLifecycle !== "active"
       || resource.generation !== this.#contextGeneration
       || resource.uploaded
-      || !ownsTexture(this.#textureHandles, resource.texture)
     ) return;
-    if (resource.pendingUpload !== undefined) return;
-
-    resource.pendingUpload = { source, texture };
-    this.#pendingTextureUploads.push(resource);
-    this.invalidate();
+    queueOrdinaryTextureUpload(this.#ordinaryTextureGpu, resource, { source, texture });
+    if (consumeOrdinaryTextureGpuWake(this.#ordinaryTextureGpu)) this.invalidate();
   }
 
-  #canUploadTexture(): boolean {
-    if (this.#textureUploadFrame !== this.#frame) {
-      this.#textureUploadFrame = this.#frame;
-      this.#textureUploadsThisFrame = 0;
+  #processOrdinaryTextureUploads(): void {
+    let processError: unknown;
+    try {
+      processOrdinaryTextureUploads(
+        this.#ordinaryTextureGpu,
+        this.#frame,
+        this.#contextGeneration,
+      );
+    } catch (error) {
+      processError = error;
     }
-    return this.#textureUploadsThisFrame < TEXTURE_MAX_UPLOADS_PER_FRAME;
-  }
-
-  #processTextureUploads(): void {
-    while (this.#textureUploadHead < this.#pendingTextureUploads.length && this.#canUploadTexture()) {
-      const resource = this.#pendingTextureUploads[this.#textureUploadHead];
-      this.#textureUploadHead += 1;
-      if (resource === undefined) continue;
-      const pending = resource.pendingUpload;
-      if (pending === undefined) continue;
-      if (
-        this.#disposed
-        || this.#contextLifecycle !== "active"
-        || resource.generation !== this.#contextGeneration
-        || this.#textures.get(resource.key) !== resource
-        || resource.uploaded
-        || !ownsTexture(this.#textureHandles, resource.texture)
-      ) {
-        delete resource.pendingUpload;
-        if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
-        continue;
-      }
-
-      uploadTexture(this.#gl, resource.texture, pending.source, pending.texture);
-      delete resource.pendingUpload;
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, pending.source) === 0) this.#closeTextureSource(pending.source);
-      resource.uploaded = true;
-      this.#textureUploadsThisFrame += 1;
+    let outcomeError: unknown;
+    try {
+      this.#consumeOrdinaryTextureGpuOutcomes();
+    } catch (error) {
+      outcomeError = error;
     }
-    if (this.#textureUploadHead >= this.#pendingTextureUploads.length) {
-      this.#pendingTextureUploads.length = 0;
-      this.#textureUploadHead = 0;
-    }
+    if (consumeOrdinaryTextureGpuWake(this.#ordinaryTextureGpu)) this.invalidate();
+    if (processError !== undefined) throw processError;
+    if (outcomeError !== undefined) throw outcomeError;
   }
 
-  #hasPendingTextureUploads(): boolean {
-    return this.#textureUploadHead < this.#pendingTextureUploads.length;
-  }
-
-  #texture(texture: TextureAssetUploadRef): TextureResource | TextureLoadState {
+  #texture(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {
     const key = textureCacheKey(texture);
-    const cached = this.#textures.get(key);
+    const cached = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
     if (cached !== undefined) return cached;
 
-    const glTexture = createOwnedTexture(this.#textureHandles);
     const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
-    const state: TextureLoadState = {
-      generation: this.#contextGeneration,
+    const resource = ensureOrdinaryTextureGpuResource(
+      this.#ordinaryTextureGpu,
       key,
-      loading: prepared === undefined,
-      texture: glTexture,
-      uploaded: false,
-    };
-    this.#textures.set(key, state);
+      this.#contextGeneration,
+    );
 
     if (prepared !== undefined) {
-      this.#queueTextureUpload(state, prepared.source, prepared.texture);
-      return state;
+      this.#queueOrdinaryTextureUpload(resource, prepared.source, prepared.texture);
+      return resource;
     }
-    if (texture.preparedOnly === true) return state;
+    if (texture.preparedOnly === true) return resource;
+    if (this.#ordinaryTextureSourceSubscriptions.has(key)) return resource;
 
     const subscription = this.#ordinaryTextureSources.acquire(texture, (result) => {
       if (result.kind === "error") {
-        if (this.#disposed || state.uploaded) return;
-        state.loading = false;
-        state.error = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
-        this.#recordDiagnostic(state.error, `texture-image:${key}`);
+        const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
+        if (this.#disposed || current?.uploaded === true) return;
+        const message = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
+        this.#recordDiagnostic(message, `texture-image:${key}`);
         return;
       }
       const image = result.source;
       if (this.#disposed) {
         return;
       }
-      state.loading = false;
       this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
       if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) {
         return;
       }
       this.#retainPreparedTextureUpload(key, { source: image, texture });
       if (this.#contextLifecycle !== "active") return;
-      const current = this.#textures.get(key);
-      if (current === state && state.generation === this.#contextGeneration) {
-        if (!state.uploaded) this.#queueTextureUpload(state, image, texture);
+      const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
+      if (current !== undefined && current.generation === this.#contextGeneration) {
+        if (!current.uploaded) this.#queueOrdinaryTextureUpload(current, image, texture);
       }
     });
     this.#ordinaryTextureSourceSubscriptions.set(key, subscription);
 
-    return state;
+    return resource;
   }
 
   #settleDecodedTextureSource(texture: TextureAssetUploadRef | undefined, image: LoadedTextureSource): void {
     if (texture === undefined) return;
     const key = textureCacheKey(texture);
     if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) return;
-    const cached = this.#textures.get(key);
-    if (cached?.pendingUpload !== undefined && cached.pendingUpload.source !== image) delete cached.pendingUpload;
+    const cached = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
+    const cachedPending = cached === undefined ? undefined : ordinaryTextureGpuPendingUpload(cached);
+    if (cached !== undefined && cachedPending !== undefined && cachedPending.source !== image) {
+      discardOrdinaryTexturePendingUpload(this.#ordinaryTextureGpu, cached);
+      this.#consumeOrdinaryTextureGpuOutcomes();
+    }
     // A prepared asset source supersedes equivalent direct URI work. Keeping
     // that job alive would retain a redundant decode until scene removal.
     this.#releaseOrdinaryTextureSourceSubscription(key);
@@ -7092,15 +7087,12 @@ class WebGlRootImpl implements WebGlRoot {
     if (this.#contextLifecycle !== "active") return;
     if (cached !== undefined && cached.uploaded) return;
 
-    const resource: TextureResource | TextureLoadState = cached ?? {
-      generation: this.#contextGeneration,
+    const resource = cached ?? ensureOrdinaryTextureGpuResource(
+      this.#ordinaryTextureGpu,
       key,
-      texture: createOwnedTexture(this.#textureHandles),
-      uploaded: false,
-    };
-    this.#textures.set(key, resource);
-    this.#queueTextureUpload(resource, image, texture);
-    if ("loading" in resource) resource.loading = false;
+      this.#contextGeneration,
+    );
+    this.#queueOrdinaryTextureUpload(resource, image, texture);
   }
 
   #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
@@ -8327,7 +8319,7 @@ class WebGlRootImpl implements WebGlRoot {
       activeReferences: ordinary.activeReferences,
       preparedBytes,
       preparedSources: sources.size,
-      resources: this.#textures.size,
+      resources: ordinaryTextureGpuResourceCount(this.#ordinaryTextureGpu),
     };
   }
 

@@ -120,11 +120,20 @@ glTF draw collection.
   formats, sampler mapping/defaults, and mipmap policy no longer live in root.
   VT allocation reuses the same pure format selector while its paired resource
   transaction remains with the future VT GPU arena.
+  Ordinary texture GPU residency now has its own opaque arena: generation-local
+  handles, resource identity, the retained one-success-per-frame upload queue,
+  sticky scheduling, retry-safe failure state, completion/discard/retention
+  outcomes, release, context drop, and residency count are removed from root.
+  Root remains the sole source/subscription/lease/closing and diagnostic policy
+  owner. Restore proactively recreates every actively referenced prepared
+  texture, while an in-flight decode keeps one subscription and resolves the
+  current generation on settlement. Persistent GPU faults retain work without
+  self-scheduling a tight retry loop.
 - The imperative WebGL shell now establishes an explicit frame baseline and a
   complete unpack contract for ordinary, virtual-texture, and IBL uploads.
   Royal exclusively owns its WebGL2 context; no raw-GL callback fallback is
   implied.
-- The current checkpoint passes 479 workspace tests, typecheck, build,
+- The current checkpoint passes 486 workspace tests, typecheck, build,
   package-import smoke, strict lint, and diff checking. The preceding checkpoint
   also passed a headless NVIDIA T500 ANGLE/Vulkan WebGL2 smoke.
 
