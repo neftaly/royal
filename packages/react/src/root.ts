@@ -14,15 +14,17 @@ export interface RoyalRendererRootContextOptions {
   /** Request browser-provided WebGL antialiasing. Actual support is device-dependent. @defaultValue `true` */
   readonly antialias?: boolean;
   /**
-   * Generate virtual-texture pages for eligible ordinary image textures, including
-   * large raster images and SVG sources. Authored `virtualTexture(...)` manifests
-   * do not require this option.
+   * Generate VTs for ordinary base-color image textures used by triangle
+   * geometry with `TEXCOORD_0`. SVG sources are not subject to the raster size
+   * threshold; decoded raster sources qualify when their longest dimension is
+   * at least 257 px. The ordinary texture remains active until generated
+   * coverage is ready. Authored `virtualTexture(...)` resources are unaffected.
    * @defaultValue `false`
    */
-  readonly generatedRasterVirtualTextures?: boolean;
+  readonly generatedImageVirtualTextures?: boolean;
   /**
    * Logical virtual texels per authored SVG CSS pixel. Used only when
-   * `generatedRasterVirtualTextures` is true. Must be finite and in `(0, 16]`.
+   * `generatedImageVirtualTextures` is true. Must be finite and in `(0, 16]`.
    * It controls close-zoom texture detail without changing layout or world size;
    * generated dimensions preserve aspect ratio and are capped at 16384 logical
    * texels on their longest side. SVG viewBox coordinates are not raster pixels.
@@ -149,7 +151,7 @@ export const createRendererRoot = (
   const context: RoyalRendererRootContextSnapshot = Object.freeze({
     alpha: root.options.alpha,
     antialias: root.options.antialias,
-    generatedRasterVirtualTextures: root.options.generatedRasterVirtualTextures,
+    generatedImageVirtualTextures: root.options.generatedImageVirtualTextures,
     generatedSvgVirtualTextureRasterDensity: root.options.generatedSvgVirtualTextureRasterDensity,
     ...(root.options.resourceGovernorPolicy === undefined
       ? {}

@@ -2002,7 +2002,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const { canvases, contexts } = installCanvas2d();
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/generated.png") });
 
     root.render(renderScene(material));
@@ -2081,7 +2081,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     });
     const { gl } = fakeGl();
     const canvas = fakeCanvas(gl);
-    const root = createWebGlRoot(canvas, { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
     const svgText = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" onload=\"alert(1)\">",
@@ -2161,7 +2161,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       }),
     });
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#0af\"/></svg>";
     const svgUri = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
     const material = unlitMaterial({ texture: imageTexture(svgUri) });
@@ -2197,7 +2197,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const { canvases, contexts } = installCanvas2d();
     installFetchQueue();
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/large-generated.png") });
 
     root.render(renderScene(material));
@@ -3523,7 +3523,7 @@ describe("WebGL renderer virtual texturing integration", () => {
   it("freezes normalized root options", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      generatedRasterVirtualTextures: true,
+      generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
       virtualTexturePhysicalByteBudget: 123_456,
     });
@@ -3532,7 +3532,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.options).toMatchObject({
       alpha: true,
       antialias: true,
-      generatedRasterVirtualTextures: true,
+      generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
       virtualTexturePhysicalByteBudget: 123_456,
     });

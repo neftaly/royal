@@ -1344,7 +1344,7 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
   return Object.freeze({
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
-    generatedRasterVirtualTextures: options.generatedRasterVirtualTextures ?? false,
+    generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
     generatedSvgVirtualTextureRasterDensity,
     ...(options.resourceGovernorPolicy === undefined
       ? {}
@@ -2471,7 +2471,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return Object.freeze({
       alpha,
       antialias,
-      generatedRasterVirtualTextures: fallback.generatedRasterVirtualTextures,
+      generatedImageVirtualTextures: fallback.generatedImageVirtualTextures,
       generatedSvgVirtualTextureRasterDensity: fallback.generatedSvgVirtualTextureRasterDensity,
       ...(fallback.resourceGovernorPolicy === undefined
         ? {}
@@ -6413,7 +6413,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     texture: TextureAssetUploadRef,
     source: LoadedTextureSource,
   ): void {
-    if (!this.#options.generatedRasterVirtualTextures) return;
+    if (!this.#options.generatedImageVirtualTextures) return;
     if (svgVirtualTextureSourceForImage(source) !== undefined) return;
 
     const [width, height] = loadedTextureSourceSize(source);
@@ -6435,7 +6435,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     texture: TextureAssetUploadRef,
     source: LoadedTextureSource,
   ): void {
-    if (!this.#options.generatedRasterVirtualTextures) return;
+    if (!this.#options.generatedImageVirtualTextures) return;
     const svgSource = svgVirtualTextureSourceForImage(source);
     if (svgSource !== undefined) {
       this.#registerAutoBaseColorVirtualTextureGeneratedPageSource(texture, {

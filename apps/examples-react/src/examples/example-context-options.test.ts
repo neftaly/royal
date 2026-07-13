@@ -10,7 +10,7 @@ describe('exampleCanvasContextOptionsForSearch', () => {
     (search) => {
       expect(exampleCanvasContextOptionsForSearch(search)).toEqual({
         alpha: true,
-        generatedRasterVirtualTextures: true,
+        generatedImageVirtualTextures: true,
       });
     },
   );
@@ -22,7 +22,7 @@ describe('exampleCanvasContextOptionsForSearch', () => {
 
     expect(context.resourceGovernorPolicy).toBe(mobileExampleResourceGovernorPolicy);
     expect(context.alpha).toBe(true);
-    expect(context.generatedRasterVirtualTextures).toBe(true);
+    expect(context.generatedImageVirtualTextures).toBe(true);
   });
 
   it('keeps mandatory floors within the global constrained capacities', () => {

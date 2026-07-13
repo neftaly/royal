@@ -40,7 +40,7 @@ describe('Canvas public scene boundary', () => {
 
   it('accepts VT root policy through Canvas context', () => {
     const context = {
-      generatedRasterVirtualTextures: true,
+      generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
       virtualTexturePhysicalByteBudget: 32 * 1024 * 1024,
     } satisfies NonNullable<CanvasProps['context']>;

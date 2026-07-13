@@ -93,7 +93,7 @@ describe("React root public API", () => {
     const root = createRendererRoot(canvas, {
       context: {
         alpha: false,
-        generatedRasterVirtualTextures: true,
+        generatedImageVirtualTextures: true,
         virtualTexturePhysicalByteBudget: 1024,
       },
     });
@@ -114,7 +114,7 @@ describe("React root public API", () => {
       context: {
         alpha: false,
         antialias: true,
-        generatedRasterVirtualTextures: true,
+        generatedImageVirtualTextures: true,
         generatedSvgVirtualTextureRasterDensity: 4,
         virtualTexturePhysicalByteBudget: 1024,
       },
@@ -136,7 +136,7 @@ describe("React root public API", () => {
       virtualTexturing: expect.any(Object),
     });
     expect(webGlRootForRoyalRoot(root).options).toMatchObject({
-      generatedRasterVirtualTextures: true,
+      generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
       virtualTexturePhysicalByteBudget: 1024,
     });
@@ -147,7 +147,7 @@ describe("React root public API", () => {
     expect(root.context).toEqual({
       alpha: false,
       antialias: true,
-      generatedRasterVirtualTextures: true,
+      generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
       virtualTexturePhysicalByteBudget: 1024,
     });

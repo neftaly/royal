@@ -2,12 +2,17 @@
 
 Royal has two deliberately separate virtual-texture entry points. Use
 `virtualTexture('/terrain.vt.json')` for authored data. To let the renderer
-generate pages from ordinary large raster images, explicitly set
-`generatedRasterVirtualTextures: true` in the React `Canvas.context` or
+generate VTs for ordinary base-color image textures used by triangle geometry
+with `TEXCOORD_0`, explicitly set
+`generatedImageVirtualTextures: true` in the React `Canvas.context` or
 `createRendererRoot(..., { context: ... })`. The default is `false`; Royal does
-not probe for a hidden `imageUri + '.vt.json'` sidecar.
+not probe for a hidden `imageUri + '.vt.json'` sidecar. SVG sources are not
+subject to the raster size threshold; decoded raster sources qualify when their
+longest dimension is at least 257 px. The ordinary texture remains active until
+generated coverage is ready. Authored `virtualTexture(...)` resources are
+unaffected.
 
-Eligible SVG image textures use that same generated-VT path. Their close-zoom
+Generated SVG image VTs use that same path. Their close-zoom
 detail is controlled by `generatedSvgVirtualTextureRasterDensity`, measured in
 logical mip-0 texels per authored SVG CSS pixel (96 CSS pixels per inch). It
 defaults to `4`, accepts finite values in `(0, 16]`, preserves aspect ratio, and
@@ -73,7 +78,7 @@ Explicit virtual textures request visible fine pages and retain resident parent
 mips as fallback. Until a requested child is ready, sampling may therefore be
 coarser but remains defined when a parent is resident. Missing pages, a failed
 page decode, or insufficient residency do not synthesize an unrelated authored
-asset. Automatically generated raster VT is more conservative: the ordinary,
+asset. An automatically generated image VT is more conservative: the ordinary,
 sharp texture remains active until the exact visible generated pages are
 resident.
 

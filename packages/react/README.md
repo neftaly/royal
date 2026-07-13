@@ -93,7 +93,7 @@ renderer root.
 ```tsx
 <Canvas
   context={{
-    generatedRasterVirtualTextures: true,
+    generatedImageVirtualTextures: true,
     generatedSvgVirtualTextureRasterDensity: 4,
     virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
   }}
@@ -103,10 +103,12 @@ renderer root.
 
 - `alpha` and `antialias` both default to `true` and are requests made when the
   WebGL context is created.
-- `generatedRasterVirtualTextures` defaults to `false`. Enable it to generate
-  virtual pages for eligible ordinary image textures, including large raster
-  images and SVG sources. Authored `virtualTexture(...)` manifests work without
-  it.
+- `generatedImageVirtualTextures` defaults to `false`. Enable it to generate
+  VTs for ordinary base-color image textures used by triangle geometry with
+  `TEXCOORD_0`. SVG sources are not subject to the raster size threshold;
+  decoded raster sources qualify when their longest dimension is at least 257
+  px. The ordinary texture remains active until generated coverage is ready.
+  Authored `virtualTexture(...)` resources are unaffected.
 - `generatedSvgVirtualTextureRasterDensity` is the number of logical virtual
   texels per authored SVG CSS pixel. It defaults to `4`, accepts values greater
   than zero through `16`, and only has an effect when generated virtual textures

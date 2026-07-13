@@ -3842,7 +3842,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({
         color: [1, 1, 1, 1],
@@ -7177,7 +7177,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
       gltf({ src: triangleGltfSrc, version: "plain-svg-texture-auto-vt" }),
@@ -7242,7 +7242,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const tigerSizedSvgTexture = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">",
       "<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"#c7b084\"/>",

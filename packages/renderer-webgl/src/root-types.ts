@@ -12,17 +12,20 @@ export interface WebGlRootOptions {
   /** @defaultValue `true` */
   readonly antialias?: boolean;
   /**
-   * Generate virtual-texture pages for eligible raster and SVG image textures.
-   * This does not affect textures created with `virtualTexture`, which are always explicit VTs.
+   * Generate VTs for ordinary base-color image textures used by triangle
+   * geometry with `TEXCOORD_0`. SVG sources are not subject to the raster size
+   * threshold; decoded raster sources qualify when their longest dimension is
+   * at least 257 px. The ordinary texture remains active until generated
+   * coverage is ready. Authored `virtualTexture(...)` resources are unaffected.
    * @defaultValue `false`
    */
-  readonly generatedRasterVirtualTextures?: boolean;
+  readonly generatedImageVirtualTextures?: boolean;
   /**
    * Maximum mip-0 detail for generated SVG VTs, in logical texels per authored
    * SVG CSS pixel. This changes close-zoom texture detail, not layout or world size.
    * Must be finite and in `(0, 16]`; generated dimensions preserve aspect ratio
    * and are capped at 16384 logical texels on their longest side. Only used when
-   * `generatedRasterVirtualTextures` is enabled.
+   * `generatedImageVirtualTextures` is enabled.
    * @defaultValue `4`
    */
   readonly generatedSvgVirtualTextureRasterDensity?: number;

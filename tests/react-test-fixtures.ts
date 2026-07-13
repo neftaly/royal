@@ -179,7 +179,7 @@ export const fakeRendererRoot = ({
   context = {
     alpha: true,
     antialias: true,
-    generatedRasterVirtualTextures: false,
+    generatedImageVirtualTextures: false,
     generatedSvgVirtualTextureRasterDensity: 4,
     virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
   },

@@ -50,7 +50,7 @@ export const mobileExampleResourceGovernorPolicy = {
 
 const defaultExampleCanvasContextOptions = {
   alpha: true,
-  generatedRasterVirtualTextures: true,
+  generatedImageVirtualTextures: true,
 } as const satisfies CanvasContextOptions;
 
 export const exampleCanvasContextOptionsForSearch = (
