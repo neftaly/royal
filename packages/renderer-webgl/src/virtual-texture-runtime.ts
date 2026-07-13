@@ -6,6 +6,7 @@ import {
 import type { SvgVirtualTextureSource } from "./svg-texture";
 import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
+import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-provider";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
   generatedVirtualTextureManifest,
@@ -117,11 +118,9 @@ export type VirtualTextureDrawDemandModelSource =
   | { readonly kind: "single"; readonly model: Mat4 };
 
 export type VirtualTextureDrawDemandContext = {
-  readonly indices?: Uint8Array | Uint16Array | Uint32Array;
   readonly modelSource: VirtualTextureDrawDemandModelSource;
-  readonly positions: Float32Array;
   readonly projection: Mat4;
-  readonly texCoords: Float32Array;
+  readonly provider: VirtualTextureCoverageProvider;
   readonly textureCoordinates?: GltfTextureCoordinates;
   readonly view: Mat4;
   readonly viewportSize: ViewportSize;

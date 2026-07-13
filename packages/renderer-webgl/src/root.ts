@@ -385,6 +385,12 @@ import {
   virtualTextureDemandModelCount,
 } from "./virtual-texture-demand";
 import {
+  cachedVirtualTextureCoverageProvider,
+  clearVirtualTextureCoverageProviderCache,
+  createVirtualTextureCoverageProviderCache,
+  releaseVirtualTextureCoverageProviders,
+} from "./virtual-texture-coverage-cache";
+import {
   advanceVirtualTextureFrameDemand,
   beginVirtualTextureFrameDemand,
   createVirtualTextureFrameDemandWorkspace,
@@ -1306,6 +1312,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #programArena: ProgramArena;
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
+  /** Prepared CPU coverage survives WebGL context loss and follows semantic geometry ownership. */
+  readonly #virtualTextureCoverageProviders = createVirtualTextureCoverageProviderCache();
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
@@ -2384,6 +2392,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#virtualTextures.clear();
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#retainedGeometryRecipes.clear();
+    clearVirtualTextureCoverageProviderCache(this.#virtualTextureCoverageProviders);
     this.#gltfPacketPrimitivesByGeometryId.clear();
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#autoVirtualTextureRefs.clear();
@@ -2742,6 +2751,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => {
           if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
         },
+        () => releaseVirtualTextureCoverageProviders(this.#virtualTextureCoverageProviders, id),
         () => this.#gltfPacketPrimitivesByGeometryId.delete(id),
       );
     }
@@ -4446,12 +4456,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     lights: SurfaceLightSet | undefined,
     toneMapping: SceneToneMappingState,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
-    cpuGeometry?: CpuGeometry,
+    cpuGeometry: CpuGeometry,
   ): void {
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
       material,
       this.#virtualTextureDrawDemandContext(
+        geometryId,
         cpuGeometry,
         material,
         { kind: "single", model },
@@ -4537,11 +4548,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const baseColorResidency = this.#resolveBaseColorTextureResidency(
       geometry,
       material,
-      this.#virtualTextureInstancedDrawDemandContext(
+      this.#virtualTextureDrawDemandContext(
+        geometryId,
         cpuGeometry,
         material,
-        localModels,
-        rootModels,
+        { kind: "composed", localModels, rootModels },
         projection,
         view,
         viewportSize,
@@ -5035,15 +5046,20 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #virtualTextureDrawDemandContext(
-    geometry: CpuGeometry | undefined,
+    geometryId: number,
+    geometry: CpuGeometry,
     material: Material,
     modelSource: VirtualTextureDrawDemandModelSource,
     projection: Mat4,
     view: Mat4,
     viewportSize: ViewportSize,
   ): VirtualTextureDrawDemandContext | undefined {
+    const texture = material.baseColor;
     if (
-      geometry?.texCoords0 === undefined
+      material.kind === "wireframe"
+      || texture.kind === "solid"
+      || (texture.kind === "asset" && this.#autoBaseColorVirtualTextureSource(texture) === undefined)
+      || geometry.texCoords0 === undefined
       || geometry.mode !== "triangles"
       || virtualTextureDemandModelCount(modelSource) === 0
     ) {
@@ -5052,39 +5068,22 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const baseColorCoordinates = material.kind === "wireframe"
       ? undefined
       : (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
+    const requestedSet = baseColorCoordinates?.set === 1 && geometry.texCoords1 !== undefined ? 1 : 0;
+    const provider = cachedVirtualTextureCoverageProvider(
+      this.#virtualTextureCoverageProviders,
+      geometryId,
+      geometry,
+      requestedSet,
+    );
+    if (provider === undefined) return undefined;
     return {
-      ...(geometry.indices === undefined ? {} : { indices: geometry.indices }),
       modelSource,
-      positions: geometry.positions,
       projection,
-      texCoords: baseColorCoordinates?.set === 1
-          ? geometry.texCoords1 ?? geometry.texCoords0
-          : geometry.texCoords0,
+      provider,
       ...(baseColorCoordinates === undefined ? {} : { textureCoordinates: baseColorCoordinates }),
       view,
       viewportSize,
     };
-  }
-
-  #virtualTextureInstancedDrawDemandContext(
-    geometry: CpuGeometry | undefined,
-    material: Material,
-    localModels: readonly Mat4[],
-    rootModels: readonly Mat4[],
-    projection: Mat4,
-    view: Mat4,
-    viewportSize: ViewportSize,
-  ): VirtualTextureDrawDemandContext | undefined {
-    if (material.baseColor.kind === "solid") return undefined;
-    if (geometry?.texCoords0 === undefined || geometry.mode !== "triangles" || localModels.length === 0) return undefined;
-    return this.#virtualTextureDrawDemandContext(
-      geometry,
-      material,
-      { kind: "composed", localModels, rootModels },
-      projection,
-      view,
-      viewportSize,
-    );
   }
 
   #resolveBaseColorTextureResidency(

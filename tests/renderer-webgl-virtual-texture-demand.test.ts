@@ -5,6 +5,7 @@ import {
   planVirtualTextureBootstrapDemand,
   planVirtualTextureCoarseToFineDemand,
   planVirtualTextureDrawDemand,
+  prepareVirtualTextureCoverageProvider,
   projectVirtualTextureScreenFootprint,
   selectVirtualTextureFrameWorkingSet,
   selectVirtualTextureWorkingSet,
@@ -36,11 +37,13 @@ const context = (
     readonly texCoords?: Float32Array;
   } = {},
 ): VirtualTextureDrawDemandContext => ({
-  ...(options.indices === undefined ? {} : { indices: options.indices }),
   modelSource: { kind: "single", model: identityMat4() },
-  positions,
   projection,
-  texCoords: options.texCoords ?? new Float32Array([0, 0, 1, 0, 0, 1]),
+  provider: prepareVirtualTextureCoverageProvider({
+    ...(options.indices === undefined ? {} : { indices: options.indices }),
+    positions,
+    texCoords: options.texCoords ?? new Float32Array([0, 0, 1, 0, 0, 1]),
+  }),
   view: identityMat4(),
   viewportSize: [1_000, 800],
 });
@@ -48,11 +51,11 @@ const context = (
 describe("virtual texture pure demand planning", () => {
   it("counts single and composed model sources without renderer state", () => {
     expect(virtualTextureDemandModelCount({ kind: "single", model: identityMat4() })).toBe(1);
-    expect(virtualTextureDemandModelCount({
+    expect(() => virtualTextureDemandModelCount({
       kind: "composed",
       localModels: [identityMat4(), identityMat4()],
       rootModels: [identityMat4()],
-    })).toBe(1);
+    })).toThrow("matching lengths");
   });
 
   it("projects visible geometry and preserves flipY demand orientation", () => {
@@ -478,15 +481,13 @@ describe("virtual texture pure demand planning", () => {
       indices: Uint16Array,
       localModels: readonly Mat4[],
     ): VirtualTextureDrawDemandContext => ({
-      indices,
       modelSource: {
         kind: "composed",
         localModels,
         rootModels: localModels.map(() => rootModel),
       },
-      positions,
       projection: identityMat4(),
-      texCoords,
+      provider: prepareVirtualTextureCoverageProvider({ indices, positions, texCoords }),
       view: identityMat4(),
       viewportSize: [1_000, 800],
     });

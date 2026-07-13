@@ -1,5 +1,11 @@
 import { multiplyMat4 } from "./math/mat4";
 import {
+  createVirtualTextureCoverageProvider,
+  queryVirtualTextureCoverage,
+  type VirtualTextureCoverageGeometry,
+  type VirtualTextureCoverageQuery,
+} from "./virtual-texture-coverage-provider";
+import {
   VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
   normalizeVirtualTextureDemandUvRange,
   orientVirtualTextureDemandVRange,
@@ -47,7 +53,10 @@ export const virtualTextureDemandModelCount = (source: VirtualTextureDrawDemandM
     case "single":
       return 1;
     case "composed":
-      return Math.min(source.localModels.length, source.rootModels.length);
+      if (source.localModels.length !== source.rootModels.length) {
+        throw new Error("Virtual texture composed model arrays must have matching lengths");
+      }
+      return source.localModels.length;
   }
 };
 
@@ -84,6 +93,15 @@ export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDem
   visiblePolygonCount: 0,
   visiblePolygonOffsets: new Uint32Array(RETAINED_POLYGON_CAPACITY + 1),
 });
+
+const resetVirtualTextureCoverageWorkspace = (
+  workspace: VirtualTextureDemandPlanningWorkspace,
+): void => {
+  workspace.visiblePolygonCount = 0;
+  workspace.visiblePolygonComponentCount = 0;
+  workspace.finestRegionCount = 0;
+  workspace.overflowed = false;
+};
 
 export const virtualTextureDemandPlanningWorkspaceSnapshot = (
   workspace: VirtualTextureDemandPlanningWorkspace,
@@ -358,19 +376,15 @@ const clipPolygonAgainstUvBoundary = (
   return outputCount;
 };
 
-export const projectVirtualTextureScreenFootprint = (
-  context: VirtualTextureDrawDemandContext,
-  flipY: boolean,
+const projectExactVirtualTextureCoverage = (
+  geometry: VirtualTextureCoverageGeometry,
+  context: VirtualTextureCoverageQuery,
   workspace = createVirtualTextureDemandPlanningWorkspace(),
   manifest?: VirtualTextureManifestModel,
 ): VirtualTextureProjection => {
   const [viewportWidth, viewportHeight] = context.viewportSize;
   const modelCount = virtualTextureDemandModelCount(context.modelSource);
-  const vertexCount = Math.min(Math.floor(context.positions.length / 3), Math.floor(context.texCoords.length / 2));
-  workspace.visiblePolygonCount = 0;
-  workspace.visiblePolygonComponentCount = 0;
-  workspace.finestRegionCount = 0;
-  workspace.overflowed = false;
+  const vertexCount = geometry.positions.length / 3;
   if (viewportWidth <= 0 || viewportHeight <= 0 || vertexCount === 0 || modelCount === 0) {
     return { kind: "indeterminate" };
   }
@@ -387,8 +401,7 @@ export const projectVirtualTextureScreenFootprint = (
   let invalidGeometry = false;
   const { clippedPolygonA, clippedPolygonB } = workspace;
   const projectionView = multiplyMat4(context.projection, context.view);
-  const elementCount = context.indices?.length ?? vertexCount;
-  const triangleElementCount = elementCount - elementCount % 3;
+  const triangleElementCount = geometry.indices?.length ?? vertexCount;
   if (triangleElementCount === 0) return { kind: "indeterminate" };
 
   for (let modelIndex = 0; modelIndex < modelCount; modelIndex += 1) {
@@ -399,23 +412,19 @@ export const projectVirtualTextureScreenFootprint = (
     const mvp = multiplyMat4(projectionView, model);
     for (let element = 0; element < triangleElementCount; element += 3) {
       for (let corner = 0; corner < 3; corner += 1) {
-        const vertexIndex = context.indices?.[element + corner] ?? element + corner;
-        if (vertexIndex >= vertexCount) {
-          invalidGeometry = true;
-          break;
-        }
+        const vertexIndex = geometry.indices?.[element + corner] ?? element + corner;
         const positionOffset = vertexIndex * 3;
-        const x = context.positions[positionOffset]!;
-        const y = context.positions[positionOffset + 1]!;
-        const z = context.positions[positionOffset + 2]!;
+        const x = geometry.positions[positionOffset]!;
+        const y = geometry.positions[positionOffset + 1]!;
+        const z = geometry.positions[positionOffset + 2]!;
         const targetOffset = corner * CLIPPED_VERTEX_COMPONENTS;
         clippedPolygonA[targetOffset] = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
         clippedPolygonA[targetOffset + 1] = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
         clippedPolygonA[targetOffset + 2] = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
         clippedPolygonA[targetOffset + 3] = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
         const texCoordOffset = vertexIndex * 2;
-        const sourceU = context.texCoords[texCoordOffset]!;
-        const sourceV = context.texCoords[texCoordOffset + 1]!;
+        const sourceU = geometry.texCoords[texCoordOffset]!;
+        const sourceV = geometry.texCoords[texCoordOffset + 1]!;
         const coordinates = context.textureCoordinates;
         clippedPolygonA[targetOffset + 4] = coordinates === undefined
           ? sourceU
@@ -441,7 +450,6 @@ export const projectVirtualTextureScreenFootprint = (
         invalidGeometry = true;
         break;
       }
-      if (polygonCount > 0) retainVisiblePolygon(workspace, input, polygonCount);
       let polygonMinNdcX = Number.POSITIVE_INFINITY;
       let polygonMaxNdcX = Number.NEGATIVE_INFINITY;
       let polygonMinNdcY = Number.POSITIVE_INFINITY;
@@ -450,6 +458,7 @@ export const projectVirtualTextureScreenFootprint = (
       let polygonMaxU = Number.NEGATIVE_INFINITY;
       let polygonMinV = Number.POSITIVE_INFINITY;
       let polygonMaxV = Number.NEGATIVE_INFINITY;
+      let twiceProjectedArea = 0;
       for (let vertex = 0; vertex < polygonCount; vertex += 1) {
         const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
         const clipW = input[offset + 3]!;
@@ -459,6 +468,14 @@ export const projectVirtualTextureScreenFootprint = (
         }
         const ndcX = input[offset]! / clipW;
         const ndcY = input[offset + 1]! / clipW;
+        const nextOffset = ((vertex + 1) % polygonCount) * CLIPPED_VERTEX_COMPONENTS;
+        const nextW = input[nextOffset + 3]!;
+        if (!(nextW > 0)) {
+          invalidGeometry = true;
+          break;
+        }
+        twiceProjectedArea += ndcX * (input[nextOffset + 1]! / nextW)
+          - (input[nextOffset]! / nextW) * ndcY;
         polygonMinNdcX = Math.min(polygonMinNdcX, ndcX);
         polygonMaxNdcX = Math.max(polygonMaxNdcX, ndcX);
         polygonMinNdcY = Math.min(polygonMinNdcY, ndcY);
@@ -467,17 +484,22 @@ export const projectVirtualTextureScreenFootprint = (
         polygonMaxU = Math.max(polygonMaxU, input[offset + 4]!);
         polygonMinV = Math.min(polygonMinV, input[offset + 5]!);
         polygonMaxV = Math.max(polygonMaxV, input[offset + 5]!);
-        minNdcX = Math.min(minNdcX, ndcX);
-        maxNdcX = Math.max(maxNdcX, ndcX);
-        minNdcY = Math.min(minNdcY, ndcY);
-        maxNdcY = Math.max(maxNdcY, ndcY);
-        minU = Math.min(minU, input[offset + 4]!);
-        maxU = Math.max(maxU, input[offset + 4]!);
-        minV = Math.min(minV, input[offset + 5]!);
-        maxV = Math.max(maxV, input[offset + 5]!);
-        clippedVertexCount += 1;
       }
       if (invalidGeometry) break;
+      // A triangle with no projected fragment area cannot contribute texture
+      // samples. Excluding it also prevents edge-on degenerates from inflating
+      // the retained-polygon workspace.
+      if (polygonCount > 0 && Math.abs(twiceProjectedArea) <= Number.EPSILON) continue;
+      if (polygonCount > 0) retainVisiblePolygon(workspace, input, polygonCount);
+      minNdcX = Math.min(minNdcX, polygonMinNdcX);
+      maxNdcX = Math.max(maxNdcX, polygonMaxNdcX);
+      minNdcY = Math.min(minNdcY, polygonMinNdcY);
+      maxNdcY = Math.max(maxNdcY, polygonMaxNdcY);
+      minU = Math.min(minU, polygonMinU);
+      maxU = Math.max(maxU, polygonMaxU);
+      minV = Math.min(minV, polygonMinV);
+      maxV = Math.max(maxV, polygonMaxV);
+      clippedVertexCount += polygonCount;
       if (manifest !== undefined && polygonCount > 0) {
         // Match normalizeVirtualTextureDemandUvRange's conservative full-range
         // fallback without allocating its tuple in this per-polygon hot path.
@@ -495,8 +517,8 @@ export const projectVirtualTextureScreenFootprint = (
         const observedMaxU = fullU ? 1 : Math.min(1, polygonMaxU);
         const normalizedMinV = fullV ? 0 : Math.max(0, polygonMinV);
         const normalizedMaxV = fullV ? 1 : Math.min(1, polygonMaxV);
-        const observedMinV = flipY ? 1 - normalizedMaxV : normalizedMinV;
-        const observedMaxV = flipY ? 1 - normalizedMinV : normalizedMaxV;
+        const observedMinV = context.flipY ? 1 - normalizedMaxV : normalizedMinV;
+        const observedMaxV = context.flipY ? 1 - normalizedMinV : normalizedMaxV;
         const observedScreenHeight = Math.max(
           1,
           (polygonMaxNdcY - polygonMinNdcY) * 0.5 * viewportHeight,
@@ -541,7 +563,7 @@ export const projectVirtualTextureScreenFootprint = (
   const normalizedU = normalizeVirtualTextureDemandUvRange(minU, maxU);
   const normalizedV = orientVirtualTextureDemandVRange(
     ...normalizeVirtualTextureDemandUvRange(minV, maxV),
-    flipY,
+    context.flipY,
   );
   return {
     footprint: {
@@ -554,6 +576,32 @@ export const projectVirtualTextureScreenFootprint = (
     },
     kind: "visible",
   };
+};
+
+export const prepareVirtualTextureCoverageProvider = (
+  geometry: VirtualTextureCoverageGeometry,
+) => createVirtualTextureCoverageProvider(geometry, projectExactVirtualTextureCoverage);
+
+export const projectVirtualTextureScreenFootprint = (
+  context: VirtualTextureDrawDemandContext,
+  flipY: boolean,
+  workspace = createVirtualTextureDemandPlanningWorkspace(),
+  manifest?: VirtualTextureManifestModel,
+): VirtualTextureProjection => {
+  resetVirtualTextureCoverageWorkspace(workspace);
+  return queryVirtualTextureCoverage(
+    context.provider,
+    {
+      flipY,
+      modelSource: context.modelSource,
+      projection: context.projection,
+      ...(context.textureCoordinates === undefined ? {} : { textureCoordinates: context.textureCoordinates }),
+      view: context.view,
+      viewportSize: context.viewportSize,
+    },
+    workspace,
+    manifest,
+  );
 };
 
 const virtualTexturePageScreenError = (
