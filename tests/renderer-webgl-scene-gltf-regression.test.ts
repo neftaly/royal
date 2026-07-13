@@ -3773,6 +3773,12 @@ describe("WebGL renderer scene and glTF regressions", () => {
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
       "glTF should draw fallback geometry before its base-color image settles",
     ).toBe(true);
+    expect(root.snapshot().resourceGovernor.byClass).toMatchObject({
+      "asset-decode": { cpuDecodedBytes: expect.any(Number) },
+      geometry: { cpuDecodedBytes: expect.any(Number) },
+    });
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
 
     const drawsBeforeFailure = drawCalls(calls).length;
     const failedImage = new Error("staged base-color decode failed");
@@ -3788,6 +3794,11 @@ describe("WebGL renderer scene and glTF regressions", () => {
       .toBeGreaterThan(drawsBeforeFailure);
     expect(root.snapshot().diagnostics.some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+
+    root.render(renderScene([]));
+    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBe(0);
   });
 
   it("switches a prepared glTF draw from fallback color to settled base-color texture", async () => {
@@ -6982,7 +6993,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
     expect(loader.bitmapRequests).toHaveLength(1);
 
-    loader.bitmapRequests[0]?.resolve({} as ImageBitmap);
+    loader.bitmapRequests[0]?.resolve({ height: 1, width: 1 } as ImageBitmap);
     await flushMicrotasks();
     await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useTexture", 1);
 

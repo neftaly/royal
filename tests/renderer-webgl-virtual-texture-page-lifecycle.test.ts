@@ -138,12 +138,15 @@ describe("virtual texture page lifecycle", () => {
       { attempts: 1, kind: "backoff", retryDelayMs: 50 },
       { kind: "context-lost" },
     )).toEqual({ state: { attempts: 1, kind: "eligible" } });
+    expect(reduce(
+      { attempts: 1, kind: "loading" },
+      { kind: "context-lost" },
+    )).toEqual({ state: { attempts: 1, kind: "eligible" } });
 
     const terminal = { attempts: 2, kind: "terminal" } as const;
     expect(reduce(terminal, { kind: "context-lost" }).state).toBe(terminal);
     for (const state of [
       { attempts: 1, kind: "eligible" },
-      { attempts: 1, kind: "loading" },
       { kind: "queued" },
     ] as const satisfies readonly VirtualTexturePageLifecycle[]) {
       expect(reduce(state, { kind: "context-lost" }).state).toBe(state);

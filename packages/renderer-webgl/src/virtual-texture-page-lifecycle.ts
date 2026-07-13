@@ -1,11 +1,14 @@
 export type VirtualTexturePageLifecycle =
   | { readonly attempts: number; readonly kind: "backoff"; readonly retryDelayMs: number }
+  | { readonly kind: "capacity-blocked" }
   | { readonly attempts: number; readonly kind: "eligible" }
   | { readonly attempts: number; readonly kind: "loading" }
   | { readonly kind: "queued" }
   | { readonly attempts: number; readonly kind: "terminal" };
 
 export type VirtualTexturePageLifecycleEvent =
+  | { readonly kind: "capacity-denied"; readonly permanent: boolean }
+  | { readonly kind: "capacity-released" }
   | { readonly kind: "context-lost" }
   | { readonly disposition: "discarded" | "invalid" | "queued"; readonly kind: "decoded" }
   | { readonly kind: "gpu-settled" }
@@ -33,6 +36,14 @@ export const reduceVirtualTexturePageLifecycle = (
   policy: VirtualTexturePageLifecyclePolicy,
 ): VirtualTexturePageLifecycleTransition => {
   switch (event.kind) {
+    case "capacity-denied":
+      return event.permanent
+        ? { state: { attempts: policy.retryLimit, kind: "terminal" } }
+        : { state: { kind: "capacity-blocked" } };
+    case "capacity-released":
+      return state?.kind === "capacity-blocked"
+        ? { state: { attempts: 0, kind: "eligible" } }
+        : state === undefined ? {} : { state };
     case "grant": {
       if (state !== undefined && state.kind !== "eligible") return { state };
       return { state: { attempts: attemptsOf(state), kind: "loading" } };
@@ -65,7 +76,7 @@ export const reduceVirtualTexturePageLifecycle = (
     case "gpu-settled":
       return state?.kind === "queued" ? {} : state === undefined ? {} : { state };
     case "context-lost":
-      return state?.kind === "backoff"
+      return state?.kind === "backoff" || state?.kind === "loading"
         ? { state: { attempts: state.attempts, kind: "eligible" } }
         : state === undefined ? {} : { state };
     case "release":
@@ -83,4 +94,10 @@ export const virtualTexturePageLifecycleLoading = (
 
 export const virtualTexturePageLifecycleRetryBlocked = (
   state: VirtualTexturePageLifecycle | undefined,
-): boolean => state?.kind === "backoff" || state?.kind === "terminal";
+): boolean => state?.kind === "backoff"
+  || state?.kind === "capacity-blocked"
+  || state?.kind === "terminal";
+
+export const virtualTexturePageLifecycleCapacityBlocked = (
+  state: VirtualTexturePageLifecycle | undefined,
+): boolean => state?.kind === "capacity-blocked";

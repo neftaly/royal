@@ -52,6 +52,7 @@ export type {
 export { createRendererRoot } from './root';
 export type {
   RoyalRendererRoot,
+  RoyalRendererDiagnosticsSnapshot,
   RoyalRendererRootContextOptions,
   RoyalRendererRootContextSnapshot,
   RoyalRendererRootLifecycle,

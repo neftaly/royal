@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
 import {
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
@@ -17,6 +18,14 @@ describe("Canvas renderer root cleanup", () => {
     });
     expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({
       context: { alpha: true },
+    });
+  });
+
+  it("retains a supplied resource governor policy for root construction", () => {
+    expect(normalizeCanvasRendererOptions({
+      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
+    })).toEqual({
+      context: { resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY },
     });
   });
 

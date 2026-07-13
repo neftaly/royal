@@ -181,6 +181,42 @@ describe("glTF instance-buffer arena", () => {
     disposeVertexInputArena(vertexInputs, context(gl), 1);
   });
 
+  it("does not publish packed logical-index growth when vertex admission is denied", () => {
+    let denyGrowth = false;
+    const vertexInputs = createVertexInputArena({
+      reserve: (cost) => {
+        if (denyGrowth && cost.persistentGpuBytes !== 0) return undefined;
+        return {
+          cancel: () => true,
+          commit: () => ({ release: () => true }),
+        };
+      },
+    });
+    const gl = new FakeGl();
+    const arena = createGltfInstanceBufferArena(vertexInputs);
+    const sink = counters();
+    beginGltfInstanceBufferArenaFrame(arena);
+    bindOne(arena, gl, 1, 7, sink);
+    const resource = (arena as unknown as {
+      readonly resources: Map<number, { readonly packedLogicalIndices: Int32Array }>;
+    }).resources.get(7)!;
+    const originalPackedLogicalIndices = resource.packedLogicalIndices;
+    denyGrowth = true;
+
+    expect(() => bindValues(arena, gl, sink, {
+      key: 7,
+      localModels: [identityMat4(), identityMat4()],
+      localSignature: [1, 1],
+      logicalIndices: [0, 1],
+      rootTransforms: [undefined, undefined],
+    })).toThrow(/governor/);
+    expect(resource.packedLogicalIndices).toBe(originalPackedLogicalIndices);
+    expect(resource.packedLogicalIndices).toHaveLength(1);
+
+    clearGltfInstanceBufferArena(arena);
+    disposeVertexInputArena(vertexInputs, context(gl), 1);
+  });
+
   it("prunes independently active IDs and retains failed-frame creations for the next prune", () => {
     const gl = new FakeGl();
     const vertexInputs = createVertexInputArena();

@@ -23,7 +23,10 @@ import {
   resourceArenaHasPendingAssetEvents,
   resourceArenaSnapshot,
   resourceArenaSourceReferenceCount,
+  releaseResourceArenaAssetSource,
+  releaseResourceArenaPreparedSource,
   retainResourceArenaAssetSource,
+  retainResourceArenaIblSource,
   retainResourceArenaPreparedSource,
   type PreparedAssetDependencyManifest,
   updatePreparedAssetManifest,
@@ -68,6 +71,42 @@ const replayGeometryChanges = (
   }
 };
 describe("semantic resource arena properties", () => {
+  it("admits decoded source identities before publication and deduplicates shared ownership", () => {
+    const admitted: LoadedTextureSource[] = [];
+    const denied = { value: undefined as LoadedTextureSource | undefined };
+    const arena = createResourceArena(
+      async () => emptyAsset(),
+      () => undefined,
+      { retain: (source) => {
+        if (source === denied.value) throw new Error("decoded CPU denied");
+        admitted.push(source);
+      } },
+    );
+    const first = { height: 2, width: 2 } as LoadedTextureSource;
+    const replacement = { height: 4, width: 4 } as LoadedTextureSource;
+
+    retainResourceArenaAssetSource(arena, "asset", "image", first);
+    retainResourceArenaPreparedSource(arena, "ordinary", {
+      source: first,
+      texture: imageTexture("/shared.png"),
+    });
+    retainResourceArenaIblSource(arena, "ibl", "face", first);
+    expect(admitted).toEqual([first]);
+    expect(resourceArenaSourceReferenceCount(arena, first)).toBe(3);
+
+    denied.value = replacement;
+    expect(() => retainResourceArenaIblSource(arena, "ibl", "face", replacement))
+      .toThrow("decoded CPU denied");
+    expect(resourceArenaSourceReferenceCount(arena, first)).toBe(3);
+    expect(resourceArenaSourceReferenceCount(arena, replacement)).toBe(0);
+
+    releaseResourceArenaAssetSource(arena, "asset", "image");
+    releaseResourceArenaPreparedSource(arena, "ordinary");
+    expect(resourceArenaSourceReferenceCount(arena, first)).toBe(1);
+    disposeResourceArena(arena);
+    expect(resourceArenaSourceReferenceCount(arena, first)).toBe(0);
+  });
+
   it("finishes every disposal phase while preserving changes and the first normalized failure", () => {
     const arena = createResourceArena(() => new Promise(() => undefined), () => undefined);
     const request = { count: 1, key: gltfRequestKey("/fault.gltf", 0), sourceUri: "/fault.gltf" };

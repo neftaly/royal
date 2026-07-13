@@ -1,7 +1,9 @@
 import type { Mat4 } from "../math/mat4";
 import {
   buildClusterGrid,
+  clusterBuildScratchCapacity,
   createClusterBuildScratch,
+  createClusterBuildScratchWithCapacity,
   type ClusterGrid,
   type ClusterBuildScratch,
   type ClusteredPunctualLight,
@@ -26,12 +28,31 @@ export interface ClusteredLightArenaSnapshot {
   readonly textureUnits: ClusteredLightTextureUnits;
 }
 
+export interface ClusteredLightGpuLease { release(): boolean }
+export interface ClusteredLightGpuReservation {
+  cancel(): boolean;
+  commit(): ClusteredLightGpuLease;
+}
+export interface ClusteredLightGpuGovernor {
+  replace(lease: ClusteredLightGpuLease, cost: {
+    readonly cpuDecodedBytes?: number; readonly persistentGpuBytes?: number;
+    readonly transientPeakBytes?: number; readonly uploadBytes?: number;
+  }): ClusteredLightGpuReservation | undefined;
+  reserve(cost: {
+    readonly cpuDecodedBytes?: number; readonly persistentGpuBytes?: number;
+    readonly transientPeakBytes?: number; readonly uploadBytes?: number;
+  }): ClusteredLightGpuReservation | undefined;
+}
+
 declare const authority: unique symbol;
 export interface ClusteredLightArena { readonly [authority]: "ClusteredLightArena" }
 
 type MutableTextureUnits = { grid: number; indices: number; lights: number };
 type ClusterGridMetadata = Omit<ClusterGrid, "indices" | "offsetsAndCounts">;
 type ClusteredLightResource = {
+  gpuBytes: number;
+  gpuValid: boolean;
+  gpuLease?: ClusteredLightGpuLease;
   grid?: ClusterGridMetadata;
   readonly gridTexture: WebGLTexture;
   gridTextureHeight: number;
@@ -43,26 +64,34 @@ type ClusteredLightResource = {
   lastUsedFrame: number;
   lightCount: number;
   lightData: Float32Array;
-  lightSnapshot: number[];
+  lightSnapshot: Float64Array;
   readonly lightTexture: WebGLTexture;
   lightTextureHeight: number;
-  projection: number[];
-  view: number[];
+  projection: Float64Array;
+  view: Float64Array;
   viewportHeight: number;
   viewportWidth: number;
 };
 type State = {
-  readonly buildScratch: ClusterBuildScratch;
+  buildScratch: ClusterBuildScratch;
+  cpuBytes: number;
+  cpuLease?: ClusteredLightGpuLease;
   readonly gl: WebGL2RenderingContext;
+  readonly governor?: ClusteredLightGpuGovernor;
   maxTextureSize: number;
   readonly ownedTextures: Set<WebGLTexture>;
   resource?: ClusteredLightResource;
   readonly textureUnits: MutableTextureUnits;
 };
 
-export const createClusteredLightArena = (gl: WebGL2RenderingContext): ClusteredLightArena => ({
+export const createClusteredLightArena = (
+  gl: WebGL2RenderingContext,
+  governor?: ClusteredLightGpuGovernor,
+): ClusteredLightArena => ({
   buildScratch: createClusterBuildScratch(),
+  cpuBytes: 0,
   gl,
+  ...(governor === undefined ? {} : { governor }),
   maxTextureSize: 0,
   ownedTextures: new Set(),
   textureUnits: { grid: -1, indices: -1, lights: -1 },
@@ -107,12 +136,12 @@ const createResource = (state: State): ClusteredLightResource => {
     const lightTexture = createTexture(state);
     created.push(lightTexture);
     return {
-      gridTexture, gridTextureHeight: 0, gridTextureWidth: 0,
+      gpuBytes: 0, gpuValid: false, gridTexture, gridTextureHeight: 0, gridTextureWidth: 0,
       indexData: new Uint32Array(0), indexTexture, indexTextureHeight: 0, indexTextureWidth: 0,
-      lastUsedFrame: -1, lightCount: 0, lightData: new Float32Array(0), lightSnapshot: [],
+      lastUsedFrame: -1, lightCount: 0, lightData: new Float32Array(0), lightSnapshot: new Float64Array(0),
       lightTexture, lightTextureHeight: 0,
-      projection: Array.from({ length: 16 }, () => Number.NaN),
-      view: Array.from({ length: 16 }, () => Number.NaN),
+      projection: new Float64Array(16).fill(Number.NaN),
+      view: new Float64Array(16).fill(Number.NaN),
       viewportHeight: 0, viewportWidth: 0,
     };
   } catch (error) {
@@ -126,7 +155,7 @@ const createResource = (state: State): ClusteredLightResource => {
   }
 };
 
-const matrixMatches = (left: readonly number[], right: Mat4): boolean => {
+const matrixMatches = (left: ArrayLike<number>, right: Mat4): boolean => {
   for (let index = 0; index < 16; index += 1) {
     if (!Object.is(left[index], right[index])) return false;
   }
@@ -164,39 +193,106 @@ const snapshotMatches = (
 };
 
 const commitSnapshot = (
-  resource: ClusteredLightResource,
   lights: readonly ClusteredPunctualLight[],
-): void => {
-  resource.lightCount = lights.length;
-  resource.lightSnapshot.length = lights.length * 14;
+): Float64Array => {
+  const values = new Float64Array(lights.length * 14);
   for (let index = 0; index < lights.length; index += 1) {
     const light = lights[index]!;
     const offset = index * 14;
     const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
-    resource.lightSnapshot[offset] = light.kind === "point" ? 1 : 2;
-    resource.lightSnapshot[offset + 1] = light.color[0];
-    resource.lightSnapshot[offset + 2] = light.color[1];
-    resource.lightSnapshot[offset + 3] = light.color[2];
-    resource.lightSnapshot[offset + 4] = light.position[0];
-    resource.lightSnapshot[offset + 5] = light.position[1];
-    resource.lightSnapshot[offset + 6] = light.position[2];
-    resource.lightSnapshot[offset + 7] = light.range === undefined ? 0 : 1;
-    resource.lightSnapshot[offset + 8] = light.range ?? 0;
-    resource.lightSnapshot[offset + 9] = direction[0];
-    resource.lightSnapshot[offset + 10] = direction[1];
-    resource.lightSnapshot[offset + 11] = direction[2];
-    resource.lightSnapshot[offset + 12] = light.kind === "spot" ? light.innerConeAngle : 0;
-    resource.lightSnapshot[offset + 13] = light.kind === "spot" ? light.outerConeAngle : 0;
+    values[offset] = light.kind === "point" ? 1 : 2;
+    values[offset + 1] = light.color[0];
+    values[offset + 2] = light.color[1];
+    values[offset + 3] = light.color[2];
+    values[offset + 4] = light.position[0];
+    values[offset + 5] = light.position[1];
+    values[offset + 6] = light.position[2];
+    values[offset + 7] = light.range === undefined ? 0 : 1;
+    values[offset + 8] = light.range ?? 0;
+    values[offset + 9] = direction[0];
+    values[offset + 10] = direction[1];
+    values[offset + 11] = direction[2];
+    values[offset + 12] = light.kind === "spot" ? light.innerConeAngle : 0;
+    values[offset + 13] = light.kind === "spot" ? light.outerConeAngle : 0;
   }
+  return values;
+};
+
+const scratchBytes = (scratch: ClusterBuildScratch): number =>
+  scratch.bounds.byteLength + scratch.counts.byteLength + scratch.cursors.byteLength
+  + scratch.indices.byteLength + scratch.offsetsAndCounts.byteLength;
+
+const powerOfTwoCapacity = (required: number): number =>
+  required <= 1 ? required : 2 ** Math.ceil(Math.log2(required));
+
+const paddedIndexElementLength = (
+  required: number,
+  currentLength: number,
+  maxTextureSize: number,
+): number => {
+  if (currentLength >= required) return currentLength;
+  const capacity = powerOfTwoCapacity(Math.max(required, 1));
+  if (maxTextureSize < 1) return capacity;
+  const width = Math.min(maxTextureSize, capacity);
+  return width * Math.ceil(capacity / width);
+};
+
+const retainedCpuBytesAfterUpload = (
+  scratch: ClusterBuildScratch,
+  current: ClusteredLightResource | undefined,
+  grid: ClusterGrid,
+  lightCount: number,
+  maxTextureSize: number,
+): number => {
+  const requiredIndexCount = Math.max(1, grid.indexCount);
+  const indexLength = paddedIndexElementLength(
+    requiredIndexCount,
+    current?.indexData.length ?? 0,
+    maxTextureSize,
+  );
+  const requiredLightCount = Math.max(lightCount, 1);
+  const lightHeight = Math.max(
+    current?.lightTextureHeight ?? 0,
+    Math.min(maxTextureSize, powerOfTwoCapacity(requiredLightCount)),
+  );
+  return scratchBytes(scratch)
+    + indexLength * Uint32Array.BYTES_PER_ELEMENT
+    + lightHeight * 16 * Float32Array.BYTES_PER_ELEMENT
+    + lightCount * 14 * Float64Array.BYTES_PER_ELEMENT
+    + 32 * Float64Array.BYTES_PER_ELEMENT;
+};
+
+const conservativeRetainedCpuBytes = (
+  capacity: ReturnType<typeof clusterBuildScratchCapacity>,
+  current: ClusteredLightResource | undefined,
+  lightCount: number,
+  maxTextureSize: number,
+): number => {
+  const scratch = (capacity.bounds + capacity.counts + capacity.cursors
+    + capacity.indices + capacity.offsetsAndCounts) * Uint32Array.BYTES_PER_ELEMENT;
+  const indexLength = paddedIndexElementLength(
+    Math.max(capacity.indices, 1),
+    current?.indexData.length ?? 0,
+    maxTextureSize,
+  );
+  const lightHeight = Math.max(
+    current?.lightTextureHeight ?? 0,
+    Math.min(maxTextureSize, powerOfTwoCapacity(Math.max(lightCount, 1))),
+  );
+  return scratch
+    + indexLength * Uint32Array.BYTES_PER_ELEMENT
+    + lightHeight * 16 * Float32Array.BYTES_PER_ELEMENT
+    + lightCount * 14 * Float64Array.BYTES_PER_ELEMENT
+    + 32 * Float64Array.BYTES_PER_ELEMENT;
 };
 
 const upload = (
   state: State,
-  resource: ClusteredLightResource,
+  current: ClusteredLightResource | undefined,
   grid: ClusterGrid,
   lights: readonly ClusteredPunctualLight[],
   uploadLightData: boolean,
-): void => {
+): ClusteredLightResource => {
   const gl = state.gl;
   const units = state.textureUnits;
   if (lights.length > state.maxTextureSize) {
@@ -208,38 +304,11 @@ const upload = (
       `Clustered light grid ${gridWidth}x${grid.zSliceCount} exceeds MAX_TEXTURE_SIZE ${state.maxTextureSize}`,
     );
   }
-  const configure = (unit: number, texture: WebGLTexture): void => {
-    gl.activeTexture(gl.TEXTURE0 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  };
-  configure(units.grid, resource.gridTexture);
-  if (
-    resource.gridTextureWidth === gridWidth
-    && resource.gridTextureHeight === grid.zSliceCount
-    && typeof gl.texSubImage2D === "function"
-  ) {
-    gl.texSubImage2D(
-      gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
-      gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
-    );
-  } else {
-    gl.texImage2D(
-      gl.TEXTURE_2D, 0, gl.RG32UI, gridWidth, grid.zSliceCount, 0,
-      gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts,
-    );
-    resource.gridTextureWidth = gridWidth;
-    resource.gridTextureHeight = grid.zSliceCount;
-  }
-
   const requiredIndexCount = Math.max(1, grid.indexCount);
-  const resizedIndexTexture = resource.indexData.length < requiredIndexCount;
-  let indexTextureWidth = resource.indexTextureWidth;
-  let indexTextureHeight = resource.indexTextureHeight;
-  let indexData = resource.indexData;
+  const resizedIndexTexture = (current?.indexData.length ?? 0) < requiredIndexCount;
+  let indexTextureWidth = current?.indexTextureWidth ?? 0;
+  let indexTextureHeight = current?.indexTextureHeight ?? 0;
+  let indexData: Uint32Array;
   if (resizedIndexTexture) {
     const capacity = 2 ** Math.ceil(Math.log2(requiredIndexCount));
     indexTextureWidth = Math.min(state.maxTextureSize, capacity);
@@ -248,41 +317,30 @@ const upload = (
       throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${state.maxTextureSize}`);
     }
     indexData = new Uint32Array(indexTextureWidth * indexTextureHeight);
+  } else {
+    indexData = new Uint32Array(current?.indexData.length ?? 0);
   }
   if (indexTextureHeight > state.maxTextureSize) {
     throw new Error(`Clustered light index table exceeds MAX_TEXTURE_SIZE ${state.maxTextureSize}`);
   }
   indexData.fill(0);
   for (let index = 0; index < grid.indexCount; index += 1) indexData[index] = grid.indices[index]!;
-  configure(units.indices, resource.indexTexture);
-  if (!resizedIndexTexture && typeof gl.texSubImage2D === "function") {
-    gl.texSubImage2D(
-      gl.TEXTURE_2D, 0, 0, 0, indexTextureWidth, indexTextureHeight,
-      gl.RED_INTEGER, gl.UNSIGNED_INT, indexData,
-    );
-  } else {
-    gl.texImage2D(
-      gl.TEXTURE_2D, 0, gl.R32UI, indexTextureWidth, indexTextureHeight, 0,
-      gl.RED_INTEGER, gl.UNSIGNED_INT, indexData,
-    );
-  }
-  resource.indexTextureWidth = indexTextureWidth;
-  resource.indexTextureHeight = indexTextureHeight;
-  resource.indexData = indexData;
-  if (!uploadLightData) return;
-
   const requiredLightCount = Math.max(lights.length, 1);
-  const resizedLightTexture = resource.lightTextureHeight < requiredLightCount;
-  let lightTextureHeight = resource.lightTextureHeight;
-  let lightData = resource.lightData;
+  const resizedLightTexture = (current?.lightTextureHeight ?? 0) < requiredLightCount;
+  let lightTextureHeight = current?.lightTextureHeight ?? 0;
+  let lightData: Float32Array;
   if (resizedLightTexture) {
     lightTextureHeight = Math.min(
       state.maxTextureSize,
       2 ** Math.ceil(Math.log2(requiredLightCount)),
     );
     lightData = new Float32Array(lightTextureHeight * 16);
-  } else lightData.fill(0);
-  for (let index = 0; index < lights.length; index += 1) {
+  } else if (uploadLightData) {
+    lightData = new Float32Array(current?.lightData.length ?? 0);
+  } else {
+    lightData = current?.lightData ?? new Float32Array(0);
+  }
+  for (let index = 0; uploadLightData && index < lights.length; index += 1) {
     const light = lights[index]!;
     const offset = index * 16;
     const direction = light.kind === "point" ? DEFAULT_LIGHT_DIRECTION : light.direction;
@@ -300,21 +358,133 @@ const upload = (
     lightData[offset + 11] = light.kind === "spot" ? Math.cos(light.innerConeAngle) : 1;
     lightData[offset + 12] = light.kind === "spot" ? Math.cos(light.outerConeAngle) : 0;
   }
-  configure(units.lights, resource.lightTexture);
-  if (!resizedLightTexture && typeof gl.texSubImage2D === "function") {
-    gl.texSubImage2D(
-      gl.TEXTURE_2D, 0, 0, 0, 4, lightTextureHeight,
-      gl.RGBA, gl.FLOAT, lightData,
-    );
-  } else {
-    gl.texImage2D(
-      gl.TEXTURE_2D, 0, gl.RGBA32F, 4, lightTextureHeight, 0,
-      gl.RGBA, gl.FLOAT, lightData,
-    );
+  const gridBytes = gridWidth * grid.zSliceCount * 2 * Uint32Array.BYTES_PER_ELEMENT;
+  const indexBytes = indexTextureWidth * indexTextureHeight * Uint32Array.BYTES_PER_ELEMENT;
+  const lightBytes = 4 * lightTextureHeight * 4 * Float32Array.BYTES_PER_ELEMENT;
+  const persistentGpuBytes = gridBytes + indexBytes + lightBytes;
+  const gridResized = current?.gridTextureWidth !== gridWidth
+    || current?.gridTextureHeight !== grid.zSliceCount;
+  const storageChanged = current === undefined || gridResized || resizedIndexTexture || resizedLightTexture;
+  const uploadBytes = gridBytes + indexBytes + (uploadLightData ? lightBytes : 0);
+  let storageReservation: ClusteredLightGpuReservation | undefined;
+  let uploadReservation: ClusteredLightGpuReservation | undefined;
+  if (state.governor !== undefined) {
+    storageReservation = !storageChanged
+      ? undefined
+      : current?.gpuLease !== undefined
+      ? state.governor.replace(current.gpuLease, {
+        persistentGpuBytes,
+        transientPeakBytes: current.gpuBytes + persistentGpuBytes,
+      })
+      : state.governor.reserve({ persistentGpuBytes, transientPeakBytes: persistentGpuBytes });
+    if (storageChanged && storageReservation === undefined) {
+      throw new Error("Clustered-light GPU update denied by root resource governor");
+    }
+    uploadReservation = state.governor.reserve({ uploadBytes });
+    if (uploadReservation === undefined) {
+      storageReservation?.cancel();
+      throw new Error("Clustered-light GPU upload denied by root resource governor");
+    }
   }
-  resource.lightTextureHeight = lightTextureHeight;
-  resource.lightData = lightData;
-  commitSnapshot(resource, lights);
+  let resource = current;
+  if (resource === undefined) {
+    try {
+      resource = createResource(state);
+      state.resource = resource;
+    } catch (error) {
+      storageReservation?.cancel();
+      uploadReservation?.cancel();
+      throw error;
+    }
+  }
+  let allocationStarted = false;
+  let uploadStarted = false;
+  let storageSettled = false;
+  let uploadSettled = false;
+  const cancelStorage = (): void => {
+    if (storageSettled) return;
+    storageSettled = true;
+    storageReservation?.cancel();
+  };
+  const commitStorage = (): ClusteredLightGpuLease | undefined => {
+    if (storageSettled) return undefined;
+    storageSettled = true;
+    return storageReservation?.commit();
+  };
+  const cancelUpload = (): void => {
+    if (uploadSettled) return;
+    uploadSettled = true;
+    uploadReservation?.cancel();
+  };
+  const commitUpload = (): void => {
+    if (uploadSettled) return;
+    uploadSettled = true;
+    uploadReservation?.commit().release();
+  };
+  const configure = (unit: number, texture: WebGLTexture): void => {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  };
+  const subImage = (action: () => void): void => { uploadStarted = true; action(); };
+  const image = (action: () => void): void => {
+    allocationStarted = true;
+    uploadStarted = true;
+    action();
+  };
+  // From the first possible GL mutation onward, the three textures are one
+  // poisoned generation until every upload completes successfully.
+  resource.gpuValid = false;
+  try {
+    configure(units.grid, resource.gridTexture);
+    if (!gridResized && typeof gl.texSubImage2D === "function") {
+      subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
+        gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
+    } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32UI, gridWidth, grid.zSliceCount, 0,
+      gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
+    configure(units.indices, resource.indexTexture);
+    if (!resizedIndexTexture && typeof gl.texSubImage2D === "function") {
+      subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, indexTextureWidth, indexTextureHeight,
+        gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
+    } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32UI, indexTextureWidth, indexTextureHeight, 0,
+      gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
+    if (uploadLightData) {
+      configure(units.lights, resource.lightTexture);
+      if (!resizedLightTexture && typeof gl.texSubImage2D === "function") {
+        subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, lightTextureHeight,
+          gl.RGBA, gl.FLOAT, lightData));
+      } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, lightTextureHeight, 0,
+        gl.RGBA, gl.FLOAT, lightData));
+    }
+    const lease = commitStorage();
+    if (storageChanged) {
+      if (lease !== undefined) resource.gpuLease = lease;
+      resource.gpuBytes = persistentGpuBytes;
+    } else lease?.release();
+    resource.gridTextureWidth = gridWidth; resource.gridTextureHeight = grid.zSliceCount;
+    resource.indexTextureWidth = indexTextureWidth; resource.indexTextureHeight = indexTextureHeight;
+    resource.indexData = indexData;
+    resource.lightTextureHeight = lightTextureHeight; resource.lightData = lightData;
+    if (uploadLightData) {
+      resource.lightCount = lights.length;
+      resource.lightSnapshot = commitSnapshot(lights);
+    }
+    commitUpload();
+    resource.gpuValid = true;
+    return resource;
+  } catch (error) {
+    if (uploadStarted) commitUpload();
+    else cancelUpload();
+    if (storageChanged && allocationStarted && persistentGpuBytes >= resource.gpuBytes) {
+      const lease = commitStorage();
+      if (lease !== undefined) resource.gpuLease = lease;
+      resource.gpuBytes = persistentGpuBytes;
+    } else cancelStorage();
+    throw error;
+  }
 };
 
 export const bindClusteredLights = (
@@ -345,23 +515,88 @@ export const bindClusteredLights = (
     ? projection[14] / (projection[10] + 1)
     : (projection[14] - 1) / projection[10]);
   let resource = state.resource;
-  if (resource === undefined) {
-    resource = createResource(state);
-    state.resource = resource;
-  }
-  const lightsChanged = !snapshotMatches(resource, lights);
-  const viewChanged = resource.grid === undefined
+  const lightsChanged = resource === undefined || !resource.gpuValid || !snapshotMatches(resource, lights);
+  const viewChanged = resource?.gpuValid !== true || resource.grid === undefined
     || !matrixMatches(resource.projection, projection)
     || !matrixMatches(resource.view, view)
     || resource.viewportWidth !== width
     || resource.viewportHeight !== height;
-  let grid = resource.grid;
+  let grid = resource?.grid;
   if (lightsChanged || viewChanged) {
-    const builtGrid = buildClusterGrid({
-      camera: { far, kind: perspective ? "perspective-camera" : "orthographic-camera", near },
-      height, lights, projection, view, width,
-    }, state.buildScratch);
-    upload(state, resource, builtGrid, lights, lightsChanged);
+    const capacity = clusterBuildScratchCapacity(width, height, lights.length);
+    const conservativeCpuBytes = conservativeRetainedCpuBytes(
+      capacity,
+      resource,
+      lights.length,
+      state.maxTextureSize,
+    );
+    let cpuReservation: ClusteredLightGpuReservation | undefined;
+    let reservedCpuBytes = conservativeCpuBytes;
+    if (state.governor !== undefined) {
+      const cost = {
+        cpuDecodedBytes: conservativeCpuBytes,
+        transientPeakBytes: state.cpuBytes + conservativeCpuBytes,
+      };
+      cpuReservation = state.cpuLease === undefined
+        ? state.governor.reserve(cost)
+        : state.governor.replace(state.cpuLease, cost);
+      if (cpuReservation === undefined) {
+        throw new Error("Clustered-light CPU update denied by root resource governor");
+      }
+    }
+    let nextScratch: ClusterBuildScratch;
+    let builtGrid: ClusterGrid;
+    try {
+      nextScratch = createClusterBuildScratchWithCapacity(capacity);
+      builtGrid = buildClusterGrid({
+        camera: { far, kind: perspective ? "perspective-camera" : "orthographic-camera", near },
+        height, lights, projection, view, width,
+      }, nextScratch);
+    } catch (error) {
+      cpuReservation?.cancel();
+      throw error;
+    }
+    const nextCpuBytes = retainedCpuBytesAfterUpload(
+      nextScratch,
+      resource,
+      builtGrid,
+      lights.length,
+      state.maxTextureSize,
+    );
+    if (state.governor !== undefined && nextCpuBytes !== conservativeCpuBytes) {
+      cpuReservation?.cancel();
+      const cost = {
+        cpuDecodedBytes: nextCpuBytes,
+        transientPeakBytes: state.cpuBytes + nextCpuBytes,
+      };
+      cpuReservation = state.cpuLease === undefined
+        ? state.governor.reserve(cost)
+        : state.governor.replace(state.cpuLease, cost);
+      reservedCpuBytes = nextCpuBytes;
+      if (cpuReservation === undefined) {
+        throw new Error("Clustered-light CPU update denied by root resource governor");
+      }
+    }
+    try {
+      resource = upload(state, resource, builtGrid, lights, lightsChanged);
+    } catch (error) {
+      if (
+        state.cpuLease === undefined
+        && state.resource !== undefined
+        && cpuReservation !== undefined
+      ) {
+        // A failed initial GPU allocation may retain its texture authority for
+        // teardown retry. Keep the already-admitted conservative CPU lease for
+        // the retained resource object instead of leaving those bytes unowned.
+        state.cpuLease = cpuReservation.commit();
+        state.cpuBytes = reservedCpuBytes;
+      } else cpuReservation?.cancel();
+      throw error;
+    }
+    const cpuLease = cpuReservation?.commit();
+    if (cpuLease !== undefined) state.cpuLease = cpuLease;
+    state.cpuBytes = nextCpuBytes;
+    state.buildScratch = nextScratch;
     const { indices: _indices, offsetsAndCounts: _offsetsAndCounts, ...metadata } = builtGrid;
     grid = metadata;
     resource.grid = metadata;
@@ -372,8 +607,8 @@ export const bindClusteredLights = (
     resource.viewportWidth = width;
     resource.viewportHeight = height;
     resource.lastUsedFrame = frame;
-  } else resource.lastUsedFrame = frame;
-  if (grid === undefined) throw new Error("Clustered light grid was not prepared");
+  } else if (resource !== undefined) resource.lastUsedFrame = frame;
+  if (grid === undefined || resource === undefined) throw new Error("Clustered light grid was not prepared");
 
   const gl = state.gl;
   gl.activeTexture(gl.TEXTURE0 + units.grid);
@@ -398,23 +633,35 @@ export const bindClusteredLights = (
 export const endClusteredLightFrame = (_arena: ClusteredLightArena, _frame: number): void => {};
 
 const clear = (state: State): void => {
+  state.resource?.gpuLease?.release();
+  state.cpuLease?.release();
+  delete state.cpuLease;
+  state.cpuBytes = 0;
+  state.buildScratch = createClusterBuildScratch();
   delete state.resource;
   state.ownedTextures.clear();
 };
 
 export const releaseClusteredLightContextHandles = (arena: ClusteredLightArena): void => {
   const state = arena as unknown as State;
-  delete state.resource;
-  let error: unknown;
+  let failure: { readonly value: unknown } | undefined;
   for (const texture of Array.from(state.ownedTextures)) {
     try {
       state.gl.deleteTexture(texture);
       state.ownedTextures.delete(texture);
     } catch (caught) {
-      error ??= caught;
+      failure ??= { value: caught };
     }
   }
-  if (error !== undefined) throw error;
+  if (state.ownedTextures.size === 0) {
+    state.resource?.gpuLease?.release();
+    state.cpuLease?.release();
+    delete state.cpuLease;
+    state.cpuBytes = 0;
+    state.buildScratch = createClusterBuildScratch();
+    delete state.resource;
+  }
+  if (failure !== undefined) throw failure.value;
 };
 
 export const dropClusteredLightContext = (arena: ClusteredLightArena): void => {

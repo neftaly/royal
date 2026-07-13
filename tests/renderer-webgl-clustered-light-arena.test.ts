@@ -9,6 +9,8 @@ import {
   createClusteredLightArena,
   dropClusteredLightContext,
   releaseClusteredLightContextHandles,
+  type ClusteredLightGpuGovernor,
+  type ClusteredLightGpuLease,
 } from "../packages/renderer-webgl/src/webgl/clustered-light-arena";
 import type { SurfacePointLight } from "../packages/renderer-webgl/src/webgl/lights";
 import { createProgramArena } from "../packages/renderer-webgl/src/webgl/program-arena";
@@ -37,9 +39,11 @@ class FakeGl {
   createFailure = -1;
   readonly deleteFailures = new Set<number>();
   texImageFailure = -1;
+  texSubImageFailure = -1;
   #creates = 0;
   #serial = 1;
   #texImages = 0;
+  #texSubImages = 0;
 
   #record(name: string, ...args: readonly unknown[]): void { this.calls.push({ args, name }); }
   activeTexture = (...args: readonly unknown[]): void => this.#record("activeTexture", ...args);
@@ -65,7 +69,11 @@ class FakeGl {
     if (index === this.texImageFailure) throw new Error(`texImage failure ${index}`);
   };
   texParameteri = (...args: readonly unknown[]): void => this.#record("texParameteri", ...args);
-  texSubImage2D = (...args: readonly unknown[]): void => this.#record("texSubImage2D", ...args);
+  texSubImage2D = (...args: readonly unknown[]): void => {
+    const index = this.#texSubImages++;
+    this.#record("texSubImage2D", ...args);
+    if (index === this.texSubImageFailure) throw new Error(`texSubImage failure ${index}`);
+  };
   uniform1i = (...args: readonly unknown[]): void => this.#record("uniform1i", ...args);
   uniform2fv = (...args: readonly unknown[]): void => this.#record("uniform2fv", ...args);
   uniform4fv = (...args: readonly unknown[]): void => this.#record("uniform4fv", ...args);
@@ -96,6 +104,80 @@ const bindLights = (
   bindClusteredLights(
     arena, createProgramArena(context(gl)), program, values, projection, view, 320, 240, frame,
   );
+};
+
+type ScratchView = {
+  readonly bounds: Int32Array;
+  readonly counts: Uint32Array;
+  readonly cursors: Uint32Array;
+  readonly indices: Uint32Array;
+  readonly offsetsAndCounts: Uint32Array;
+};
+const scratchOf = (arena: ReturnType<typeof createClusteredLightArena>): ScratchView =>
+  (arena as unknown as { readonly buildScratch: ScratchView }).buildScratch;
+const copiedScratch = (scratch: ScratchView): ScratchView => ({
+  bounds: scratch.bounds.slice(),
+  counts: scratch.counts.slice(),
+  cursors: scratch.cursors.slice(),
+  indices: scratch.indices.slice(),
+  offsetsAndCounts: scratch.offsetsAndCounts.slice(),
+});
+
+const recordingGovernor = (denied = false): {
+  readonly cancelled: { value: number };
+  readonly costs: Array<Record<string, number>>;
+  readonly denyCpu: { value: boolean };
+  readonly denyTransient: { value: boolean };
+  readonly denyUploads: { value: boolean };
+  readonly governor: ClusteredLightGpuGovernor;
+  readonly released: { value: number };
+  readonly replacements: { value: number };
+} => {
+  const cancelled = { value: 0 };
+  const released = { value: 0 };
+  const replacements = { value: 0 };
+  const costs: Array<Record<string, number>> = [];
+  const denyUploads = { value: false };
+  const denyCpu = { value: false };
+  const denyTransient = { value: false };
+  const lease = (): ClusteredLightGpuLease => {
+    let active = true;
+    return { release: () => {
+      if (!active) return false;
+      active = false; released.value += 1; return true;
+    } };
+  };
+  const reservation = (previous?: ClusteredLightGpuLease) => ({
+    cancel: () => { cancelled.value += 1; return true; },
+    commit: () => { previous?.release(); return lease(); },
+  });
+  return {
+    cancelled,
+    costs,
+    denyCpu,
+    denyTransient,
+    denyUploads,
+    governor: {
+      replace: (previous, cost) => {
+        replacements.value += 1; costs.push({ ...cost });
+        return denied || (denyCpu.value && cost.cpuDecodedBytes !== undefined)
+          || (denyTransient.value && cost.transientPeakBytes !== undefined)
+          ? undefined
+          : reservation(previous);
+      },
+      reserve: (cost) => {
+        costs.push({ ...cost });
+        return denied
+          || (denyCpu.value && cost.cpuDecodedBytes !== undefined)
+          || (denyTransient.value && cost.transientPeakBytes !== undefined)
+          || (denyUploads.value && cost.uploadBytes !== undefined)
+          ? undefined
+          : reservation();
+      },
+    },
+    released,
+    replacements,
+  };
 };
 
 describe("clustered light arena", () => {
@@ -230,9 +312,279 @@ describe("clustered light arena", () => {
     bind(gl, arena);
     gl.deleteFailures.add(2);
     expect(() => releaseClusteredLightContextHandles(arena)).toThrow(/deleteTexture failure 2/);
-    expect(clusteredLightArenaSnapshot(arena)).toMatchObject({ ownedTextureCount: 1, resourceCount: 0 });
+    expect(clusteredLightArenaSnapshot(arena)).toMatchObject({ ownedTextureCount: 1, resourceCount: 1 });
     releaseClusteredLightContextHandles(arena);
     expect(clusteredLightArenaSnapshot(arena).ownedTextureCount).toBe(0);
     expect(calls(gl, "deleteTexture")).toHaveLength(4);
+  });
+
+  it("denies the initial clustered allocation before any GL side effect", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor(true);
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    expect(() => bind(gl, arena)).toThrow(/governor/);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+    expect(calls(gl, "texImage2D")).toHaveLength(0);
+    expect(scratchOf(arena)).toMatchObject({
+      bounds: { byteLength: 0 },
+      counts: { byteLength: 0 },
+      cursors: { byteLength: 0 },
+      indices: { byteLength: 0 },
+      offsetsAndCounts: { byteLength: 0 },
+    });
+    expect(recorded.costs).toEqual([expect.objectContaining({
+      cpuDecodedBytes: expect.any(Number),
+      transientPeakBytes: expect.any(Number),
+    })]);
+  });
+
+  it("leases storage, charges upload-only refreshes, and replaces resized grids", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const initialStorage = recorded.costs.find((cost) => cost.persistentGpuBytes !== undefined)!;
+    const initialUpload = recorded.costs.find((cost) => cost.uploadBytes !== undefined)!;
+    expect(initialStorage.persistentGpuBytes).toBe(initialStorage.transientPeakBytes);
+    expect(initialUpload.uploadBytes).toBe(initialStorage.persistentGpuBytes);
+
+    bindLights(gl, arena, [{ ...lights[0]!, color: [11, 20, 30, 1] }], 1);
+    expect(recorded.costs.at(-1)).toEqual({ uploadBytes: initialUpload.uploadBytes });
+
+    bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 2,
+    );
+    expect(recorded.replacements.value).toBeGreaterThanOrEqual(2);
+    releaseClusteredLightContextHandles(arena);
+    expect(recorded.released.value).toBeGreaterThan(0);
+  });
+
+  it("keeps CPU growth transactional and recovers after capacity returns", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const callsBefore = gl.calls.length;
+    const releasesBefore = recorded.released.value;
+    recorded.denyCpu.value = true;
+
+    expect(() => bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 1,
+    )).toThrow(/CPU update denied/);
+    expect(gl.calls).toHaveLength(callsBefore);
+    expect(recorded.released.value).toBe(releasesBefore);
+
+    recorded.denyCpu.value = false;
+    bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 2,
+    );
+    expect(gl.calls.length).toBeGreaterThan(callsBefore);
+    releaseClusteredLightContextHandles(arena);
+  });
+
+  it("denies the full side-by-side CPU peak before allocating or mutating scratch", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const scratch = scratchOf(arena);
+    const before = copiedScratch(scratch);
+    const callsBefore = gl.calls.length;
+    recorded.denyTransient.value = true;
+
+    expect(() => bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 1,
+    )).toThrow(/CPU update denied/);
+
+    expect(gl.calls).toHaveLength(callsBefore);
+    expect(scratchOf(arena)).toBe(scratch);
+    expect(copiedScratch(scratchOf(arena))).toEqual(before);
+    expect(recorded.costs.at(-1)?.transientPeakBytes).toBeGreaterThan(
+      (arena as unknown as { readonly cpuBytes: number }).cpuBytes,
+    );
+  });
+
+  it("keeps published scratch byte-for-byte unchanged after a GPU upload fault", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const scratch = scratchOf(arena);
+    const before = copiedScratch(scratch);
+    gl.texSubImageFailure = 0;
+
+    expect(() => bindLights(
+      gl,
+      arena,
+      [{ ...lights[0]!, color: [12, 20, 30, 1] }],
+      1,
+    )).toThrow(/texSubImage failure/);
+
+    expect(scratchOf(arena)).toBe(scratch);
+    expect(copiedScratch(scratchOf(arena))).toEqual(before);
+  });
+
+  it("poisons partial GPU generations and completely restores the old input after later upload faults", () => {
+    for (const failedUpload of [1, 2]) {
+      const gl = new FakeGl();
+      const arena = createClusteredLightArena(context(gl));
+      configureClusteredLightArena(arena, 8, 1024);
+      bind(gl, arena);
+      const changed = [{ ...lights[0]!, position: [1, 0, -3] as const }];
+      gl.texSubImageFailure = calls(gl, "texSubImage2D").length + failedUpload;
+
+      expect(() => bindLights(gl, arena, changed, 1)).toThrow(/texSubImage failure/);
+      gl.texSubImageFailure = -1;
+      const uploadsBeforeRecovery = calls(gl, "texSubImage2D").length;
+
+      bind(gl, arena, 2);
+      expect(calls(gl, "texSubImage2D")).toHaveLength(uploadsBeforeRecovery + 3);
+      bind(gl, arena, 3);
+      expect(calls(gl, "texSubImage2D")).toHaveLength(uploadsBeforeRecovery + 3);
+    }
+  });
+
+  it("charges old plus new GPU storage as the replacement transient peak", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const oldStorage = recorded.costs.find((cost) => cost.persistentGpuBytes !== undefined)!;
+    const costCount = recorded.costs.length;
+
+    bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 1,
+    );
+
+    const replacement = recorded.costs.slice(costCount)
+      .find((cost) => cost.persistentGpuBytes !== undefined)!;
+    expect(replacement.transientPeakBytes).toBe(
+      Number(oldStorage.persistentGpuBytes) + Number(replacement.persistentGpuBytes),
+    );
+    releaseClusteredLightContextHandles(arena);
+  });
+
+  it("accounts padded index rows exactly for a non-power-of-two texture limit", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 17);
+    const twoLights = [
+      { ...lights[0]!, range: 100 },
+      { ...lights[0]!, position: [0.1, 0, -3] as const, range: 100 },
+    ];
+
+    bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, twoLights, projection, view, 64, 64, 0,
+    );
+
+    const state = arena as unknown as {
+      readonly buildScratch: ScratchView;
+      readonly cpuBytes: number;
+      readonly resource: {
+        readonly indexData: Uint32Array;
+        readonly lightData: Float32Array;
+        readonly lightSnapshot: Float64Array;
+        readonly projection: Float64Array;
+        readonly view: Float64Array;
+      };
+    };
+    expect(state.resource.indexData.length % 17).toBe(0);
+    const expected = Object.values(state.buildScratch)
+      .reduce((bytes, value) => bytes + value.byteLength, 0)
+      + state.resource.indexData.byteLength
+      + state.resource.lightData.byteLength
+      + state.resource.lightSnapshot.byteLength
+      + state.resource.projection.byteLength
+      + state.resource.view.byteLength;
+    expect(state.cpuBytes).toBe(expected);
+    releaseClusteredLightContextHandles(arena);
+  });
+
+  it("cancels an admitted storage replacement when upload admission denies before GL", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const callsBefore = gl.calls.length;
+    const createsBefore = calls(gl, "createTexture").length;
+    const releasesBefore = recorded.released.value;
+    const cancelsBefore = recorded.cancelled.value;
+    recorded.denyUploads.value = true;
+
+    expect(() => bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 1,
+    )).toThrow(/GPU upload denied/);
+
+    expect(recorded.replacements.value).toBeGreaterThanOrEqual(2);
+    expect(recorded.cancelled.value).toBeGreaterThanOrEqual(cancelsBefore + 2);
+    expect(recorded.released.value).toBe(releasesBefore);
+    expect(gl.calls).toHaveLength(callsBefore);
+    expect(calls(gl, "createTexture")).toHaveLength(createsBefore);
+    expect(clusteredLightArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 3,
+      resourceCount: 1,
+    });
+
+    recorded.denyUploads.value = false;
+    bindClusteredLights(
+      arena, createProgramArena(context(gl)), program, lights, projection, view, 640, 240, 2,
+    );
+    expect(recorded.replacements.value).toBeGreaterThanOrEqual(4);
+    expect(calls(gl, "createTexture")).toHaveLength(createsBefore);
+    releaseClusteredLightContextHandles(arena);
+  });
+
+  it("keeps a conservative lease across upload and deletion failures", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    gl.texImageFailure = 1;
+    expect(() => bind(gl, arena)).toThrow(/texImage failure/);
+    expect(recorded.cancelled.value).toBeGreaterThanOrEqual(1);
+    expect(clusteredLightArenaSnapshot(arena).resourceCount).toBe(1);
+    expect((arena as unknown as { readonly cpuBytes: number }).cpuBytes).toBeGreaterThan(0);
+    expect((arena as unknown as { readonly cpuLease?: unknown }).cpuLease).toBeDefined();
+    gl.texImageFailure = -1;
+    bind(gl, arena, 1);
+    expect(recorded.replacements.value).toBeGreaterThanOrEqual(1);
+
+    const releasesBeforeDelete = recorded.released.value;
+    gl.deleteFailures.add(1);
+    expect(() => releaseClusteredLightContextHandles(arena)).toThrow(/deleteTexture failure/);
+    expect(recorded.released.value).toBe(releasesBeforeDelete);
+    releaseClusteredLightContextHandles(arena);
+    expect(recorded.released.value).toBe(releasesBeforeDelete + 2);
+  });
+
+  it("spends upload bandwidth when a subimage driver call fails", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createClusteredLightArena(context(gl), recorded.governor);
+    configureClusteredLightArena(arena, 8, 1024);
+    bind(gl, arena);
+    const releasesBefore = recorded.released.value;
+    const cancelsBefore = recorded.cancelled.value;
+    gl.texSubImageFailure = 0;
+
+    expect(() => bindLights(
+      gl,
+      arena,
+      [{ ...lights[0]!, color: [12, 20, 30, 1] }],
+      1,
+    )).toThrow(/texSubImage failure/);
+
+    expect(recorded.costs.at(-1)).toMatchObject({ uploadBytes: expect.any(Number) });
+    expect(recorded.released.value).toBe(releasesBefore + 1);
+    expect(recorded.cancelled.value).toBeGreaterThan(cancelsBefore);
+    releaseClusteredLightContextHandles(arena);
   });
 });

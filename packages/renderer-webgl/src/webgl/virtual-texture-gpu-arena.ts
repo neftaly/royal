@@ -34,6 +34,17 @@ export interface VirtualTextureGpuArena {
   readonly [authority]: "VirtualTextureGpuArena";
 }
 
+/** Transaction supplied by a root-wide governor before an atlas upload. */
+export interface VirtualTextureGpuUploadReservation {
+  cancel(): void;
+  commit(): void;
+}
+
+export interface VirtualTextureGpuUploadAdmission {
+  /** Returning undefined leaves the upload queued without performing GL work. */
+  reserve(uploadBytes: number): VirtualTextureGpuUploadReservation | undefined;
+}
+
 export interface VirtualTextureGpuResource {
   readonly [authority]: "VirtualTextureGpuResource";
 }
@@ -170,6 +181,7 @@ type PhysicalAllocation = {
   readonly generation: number;
   readonly effectiveSlots: number;
   readonly pageTable: VirtualTextureAtlasPageTable;
+  pageTableUploadCharged: boolean;
   readonly pageTableHeight: number;
   readonly pageTableUploadScratch: Uint8Array;
   readonly pageTableTexture: WebGLTexture;
@@ -463,6 +475,7 @@ const allocate = (
       generation,
       pageTable: new VirtualTextureAtlasPageTable({ slotCount: slots }),
       pageTableHeight,
+      pageTableUploadCharged: false,
       pageTableUploadScratch: new Uint8Array(PAGE_TABLE_UPLOAD_SCRATCH_BYTES),
       pageTableTexture,
       pageTableWidth,
@@ -749,54 +762,80 @@ const flushNextPageTableUpdate = (
   state: State,
   resource: MutableResource,
   allocation: PhysicalAllocation,
-): boolean => {
-  if (!ownsTexture(state.handles, allocation.pageTableTexture)) return false;
+  admission?: VirtualTextureGpuUploadAdmission,
+): "blocked" | "empty" | "flushed" => {
+  if (!ownsTexture(state.handles, allocation.pageTableTexture)) return "empty";
   const update = allocation.pageTable.dirtyPageTableUpdate(0);
-  if (update === undefined) return false;
-  const { gl } = state;
-  prepareTextureUpload(gl, false);
-  gl.bindTexture(gl.TEXTURE_2D, allocation.pageTableTexture);
+  if (update === undefined) return "empty";
   const region = pageTableRegion(allocation, update);
-  if (region !== undefined) {
-    const texel = encodeVirtualTexturePageTableRgba8({
-      residentMip: region.residentMip,
-      ...(update.slot === undefined ? {} : { slot: update.slot }),
-    });
-    const scratch = allocation.pageTableUploadScratch;
-    for (let index = 0; index < scratch.length; index += 4) scratch.set(texel, index);
-    const maxCells = scratch.length / 4;
-    const chunkWidth = Math.min(region.width, maxCells);
-    const chunkHeight = Math.max(1, Math.floor(maxCells / chunkWidth));
-    for (let y = 0; y < region.height; y += chunkHeight) {
-      const height = Math.min(chunkHeight, region.height - y);
-      for (let x = 0; x < region.width; x += chunkWidth) {
-        const width = Math.min(chunkWidth, region.width - x);
-        const byteLength = width * height * 4;
-        gl.texSubImage2D(
-          gl.TEXTURE_2D,
-          0,
-          region.x + x,
-          region.y + y,
-          width,
-          height,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          byteLength === scratch.length ? scratch : scratch.subarray(0, byteLength),
-        );
+  const uploadBytes = region === undefined ? 0 : region.width * region.height * 4;
+  const reservation = uploadBytes === 0 || allocation.pageTableUploadCharged
+    ? undefined
+    : admission?.reserve(uploadBytes);
+  if (
+    uploadBytes !== 0
+    && !allocation.pageTableUploadCharged
+    && admission !== undefined
+    && reservation === undefined
+  ) return "blocked";
+  const { gl } = state;
+  let attempted = false;
+  try {
+    prepareTextureUpload(gl, false);
+    gl.bindTexture(gl.TEXTURE_2D, allocation.pageTableTexture);
+    if (region !== undefined) {
+      const texel = encodeVirtualTexturePageTableRgba8({
+        residentMip: region.residentMip,
+        ...(update.slot === undefined ? {} : { slot: update.slot }),
+      });
+      const scratch = allocation.pageTableUploadScratch;
+      for (let index = 0; index < scratch.length; index += 4) scratch.set(texel, index);
+      const maxCells = scratch.length / 4;
+      const chunkWidth = Math.min(region.width, maxCells);
+      const chunkHeight = Math.max(1, Math.floor(maxCells / chunkWidth));
+      for (let y = 0; y < region.height; y += chunkHeight) {
+        const height = Math.min(chunkHeight, region.height - y);
+        for (let x = 0; x < region.width; x += chunkWidth) {
+          const width = Math.min(chunkWidth, region.width - x);
+          const byteLength = width * height * 4;
+          attempted = true;
+          allocation.pageTableUploadCharged = true;
+          gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            region.x + x,
+            region.y + y,
+            width,
+            height,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            byteLength === scratch.length ? scratch : scratch.subarray(0, byteLength),
+          );
+        }
       }
+      resource.pageTableUpdates += region.width * region.height;
     }
-    resource.pageTableUpdates += region.width * region.height;
+    reservation?.commit();
+  } catch (error) {
+    if (attempted) reservation?.commit();
+    else reservation?.cancel();
+    throw error;
   }
   allocation.pageTable.commitDirtyPageTableUpdate();
-  return true;
+  allocation.pageTableUploadCharged = false;
+  return "flushed";
 };
 
 const flushPageTable = (
   state: State,
   resource: MutableResource,
   allocation: PhysicalAllocation,
-): void => {
-  while (flushNextPageTableUpdate(state, resource, allocation)) {
+  admission?: VirtualTextureGpuUploadAdmission,
+): boolean => {
+  for (;;) {
+    const result = flushNextPageTableUpdate(state, resource, allocation, admission);
+    if (result === "blocked") return false;
+    if (result === "empty") return true;
     // Drain complete page-table updates; a thrown GL call leaves the current
     // update uncommitted so the owning upload phase can retry it idempotently.
   }
@@ -860,12 +899,15 @@ const resumeInFlightUpload = (
   state: State,
   resource: MutableResource,
   allocation: PhysicalAllocation,
-): void => {
+  admission?: VirtualTextureGpuUploadAdmission,
+): boolean => {
   const inFlight = resource.inFlightUpload;
-  if (inFlight === undefined) return;
+  if (inFlight === undefined) return true;
   const { assignment, upload } = inFlight;
   if (inFlight.phase === "invalidate-evicted") {
-    if (!flushNextPageTableUpdate(state, resource, allocation)) {
+    const result = flushNextPageTableUpdate(state, resource, allocation, admission);
+    if (result === "blocked") return false;
+    if (result === "empty") {
       throw new Error("Virtual texture eviction is missing its page-table invalidation");
     }
     inFlight.phase = "upload-atlas";
@@ -886,9 +928,10 @@ const resumeInFlightUpload = (
     inFlight.phase = "publish-page-table";
   }
   if (inFlight.phase === "publish-page-table") {
-    flushPageTable(state, resource, allocation);
+    if (!flushPageTable(state, resource, allocation, admission)) return false;
     acknowledgeInFlightUpload(state, resource);
   }
+  return true;
 };
 
 const startUpload = (
@@ -896,7 +939,8 @@ const startUpload = (
   resource: MutableResource,
   allocation: PhysicalAllocation,
   upload: VirtualTextureGpuPendingUpload,
-): void => {
+  admission?: VirtualTextureGpuUploadAdmission,
+): boolean => {
   const transaction = allocation.pageTable.planResident(upload.page, {
     protectedPages: protectedUploadPages(
       resource.options.manifest,
@@ -915,12 +959,16 @@ const startUpload = (
     // CPU visibility is withdrawn before the old GPU mapping is invalidated.
     resource.visibleAssignments.delete(assignment.evicted.pageKey);
   }
-  resumeInFlightUpload(state, resource, allocation);
+  return resumeInFlightUpload(state, resource, allocation, admission);
 };
+
+const atlasUploadWasSpent = (resource: MutableResource): boolean =>
+  resource.inFlightUpload?.phase === "publish-page-table";
 
 export const processVirtualTextureGpuUploads = (
   arena: VirtualTextureGpuArena,
   frame: number,
+  admission?: VirtualTextureGpuUploadAdmission,
 ): void => {
   const state = stateOf(arena);
   if (state.uploadFrame !== frame) {
@@ -944,14 +992,41 @@ export const processVirtualTextureGpuUploads = (
       || !ownsTexture(state.handles, allocation.pageTableTexture)
     ) continue;
     if (resource.inFlightUpload !== undefined) {
-      resumeInFlightUpload(state, resource, allocation);
-      scansWithoutUpload = 0;
+      const phaseBefore = resource.inFlightUpload.phase;
+      const requiresAtlasUpload = resource.inFlightUpload.phase !== "publish-page-table";
+      const reservation = requiresAtlasUpload
+        ? admission?.reserve(resource.options.manifest.pageSize ** 2 * 4)
+        : undefined;
+      if (requiresAtlasUpload && admission !== undefined && reservation === undefined) continue;
+      try {
+        const completed = resumeInFlightUpload(state, resource, allocation, admission);
+        if (completed || atlasUploadWasSpent(resource)) reservation?.commit();
+        else reservation?.cancel();
+        if (completed || resource.inFlightUpload?.phase !== phaseBefore) scansWithoutUpload = 0;
+      } catch (error) {
+        // Once the atlas write succeeded, upload bandwidth was spent even if
+        // the subsequent page-table publication failed. Its retry must not be
+        // charged a second time.
+        if (atlasUploadWasSpent(resource)) reservation?.commit();
+        else reservation?.cancel();
+        throw error;
+      }
     } else {
-      flushPageTable(state, resource, allocation);
+      flushPageTable(state, resource, allocation, admission);
     }
     const upload = resource.pendingUploads[resource.pendingHead];
     if (upload !== undefined && resource.inFlightUpload === undefined) {
-      startUpload(state, resource, allocation, upload);
+      const reservation = admission?.reserve(resource.options.manifest.pageSize ** 2 * 4);
+      if (admission !== undefined && reservation === undefined) continue;
+      try {
+        const completed = startUpload(state, resource, allocation, upload, admission);
+        if (completed || atlasUploadWasSpent(resource)) reservation?.commit();
+        else reservation?.cancel();
+      } catch (error) {
+        if (atlasUploadWasSpent(resource)) reservation?.commit();
+        else reservation?.cancel();
+        throw error;
+      }
       scansWithoutUpload = 0;
     }
   }
@@ -960,13 +1035,14 @@ export const processVirtualTextureGpuUploads = (
 
 export const flushVirtualTextureGpuPageTables = (
   arena: VirtualTextureGpuArena,
+  admission?: VirtualTextureGpuUploadAdmission,
 ): void => {
   const state = stateOf(arena);
   for (const resource of state.resources.values()) {
     const allocation = resource.allocation;
     if (allocation !== undefined) {
-      if (resource.inFlightUpload === undefined) flushPageTable(state, resource, allocation);
-      else resumeInFlightUpload(state, resource, allocation);
+      if (resource.inFlightUpload === undefined) flushPageTable(state, resource, allocation, admission);
+      else resumeInFlightUpload(state, resource, allocation, admission);
     }
   }
 };
@@ -1085,7 +1161,6 @@ export const bindVirtualTextureGpuResource = (
     || !ownsTexture(state.handles, allocation.atlasTexture)
     || !ownsTexture(state.handles, allocation.pageTableTexture)
   ) return undefined;
-  if (resource.inFlightUpload === undefined) flushPageTable(state, resource, allocation);
   state.gl.activeTexture(state.gl.TEXTURE0 + atlasTextureUnit);
   state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.atlasTexture);
   state.gl.activeTexture(state.gl.TEXTURE0 + pageTableTextureUnit);

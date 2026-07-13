@@ -1,4 +1,4 @@
-import type { LoadedTextureSource } from "../texture-sources";
+import { loadedTextureSourceSize, type LoadedTextureSource } from "../texture-sources";
 import type { TextureAssetUploadRef } from "./materials";
 import {
   createOwnedTexture,
@@ -6,7 +6,7 @@ import {
   releaseOwnedTexture,
   type TextureHandleArena,
 } from "./texture-handle-arena";
-import { uploadTexture } from "./texture-upload";
+import { uploadTexture, usesMipmaps } from "./texture-upload";
 
 const MAX_UPLOADS_PER_FRAME = 1;
 
@@ -16,12 +16,15 @@ export interface OrdinaryTextureGpuArena {
   readonly [authority]: "OrdinaryTextureGpuArena";
 }
 
-export interface OrdinaryTextureGpuResource {
+interface OrdinaryTextureGpuResourceBase {
   readonly generation: number;
   readonly key: string;
-  readonly texture: WebGLTexture;
-  readonly uploaded: boolean;
 }
+
+export type OrdinaryTextureGpuResource = OrdinaryTextureGpuResourceBase & (
+  | { readonly texture: WebGLTexture; readonly uploaded: true }
+  | { readonly texture: undefined; readonly uploaded: false }
+);
 
 export interface OrdinaryTexturePendingUpload {
   readonly source: LoadedTextureSource;
@@ -32,17 +35,46 @@ export interface OrdinaryTextureGpuReleaseResult {
   readonly releaseError?: unknown;
 }
 
-export type OrdinaryTextureGpuOutcome = {
-  readonly kind: "completed" | "discarded" | "retained";
+export interface OrdinaryTextureGpuLease {
+  release(): void;
+}
+
+export interface OrdinaryTextureGpuReservation {
+  cancel(): void;
+  commit(): OrdinaryTextureGpuLease;
+}
+
+export interface OrdinaryTextureGpuAdmission {
+  reserve(cost: {
+    readonly persistentGpuBytes: number;
+    readonly uploadBytes: number;
+  }): OrdinaryTextureGpuReservation | {
+    readonly reason: "persistent-gpu-capacity" | "persistent-gpu-mandatory-floor" | "upload-capacity";
+  } | {
+    readonly limit: number;
+    readonly reason: "persistent-gpu-cost-exceeds-limit" | "upload-cost-exceeds-limit";
+  };
+}
+
+type OrdinaryTextureGpuOutcomeBase = {
   readonly key: string;
   readonly upload: OrdinaryTexturePendingUpload;
 };
 
+export type OrdinaryTextureGpuOutcome = OrdinaryTextureGpuOutcomeBase & ({
+  readonly kind: "completed" | "discarded" | "retained";
+} | {
+  readonly kind: "failed";
+  readonly message: string;
+});
+
 type MutableResource = {
   readonly generation: number;
+  gpuBytes: number;
   readonly key: string;
+  lease?: OrdinaryTextureGpuLease;
   pendingUpload?: OrdinaryTexturePendingUpload;
-  readonly texture: WebGLTexture;
+  texture?: WebGLTexture;
   uploaded: boolean;
 };
 
@@ -52,6 +84,7 @@ type State = {
   readonly outcomes: OrdinaryTextureGpuOutcome[];
   readonly pendingUploads: Array<MutableResource | undefined>;
   pendingUploadHead: number;
+  quarantinedBytes: number;
   readonly resources: Map<string, MutableResource>;
   uploadFrame: number;
   uploadsThisFrame: number;
@@ -60,7 +93,7 @@ type State = {
 
 const stateOf = (arena: OrdinaryTextureGpuArena): State => arena as unknown as State;
 const mutableResource = (resource: OrdinaryTextureGpuResource): MutableResource =>
-  resource as MutableResource;
+  resource as unknown as MutableResource;
 
 export const createOrdinaryTextureGpuArena = (
   gl: WebGL2RenderingContext,
@@ -71,6 +104,7 @@ export const createOrdinaryTextureGpuArena = (
   outcomes: [],
   pendingUploadHead: 0,
   pendingUploads: [],
+  quarantinedBytes: 0,
   resources: new Map(),
   uploadFrame: -1,
   uploadsThisFrame: 0,
@@ -80,7 +114,8 @@ export const createOrdinaryTextureGpuArena = (
 export const ordinaryTextureGpuResource = (
   arena: OrdinaryTextureGpuArena,
   key: string,
-): OrdinaryTextureGpuResource | undefined => stateOf(arena).resources.get(key);
+): OrdinaryTextureGpuResource | undefined =>
+  stateOf(arena).resources.get(key) as unknown as OrdinaryTextureGpuResource | undefined;
 
 export const ordinaryTextureGpuPendingUpload = (
   resource: OrdinaryTextureGpuResource,
@@ -97,25 +132,41 @@ export const ensureOrdinaryTextureGpuResource = (
     if (existing.generation !== generation) {
       throw new Error(`Ordinary texture ${key} belongs to stale context generation ${existing.generation}`);
     }
-    return existing;
+    return existing as unknown as OrdinaryTextureGpuResource;
   }
   const resource: MutableResource = {
     generation,
+    gpuBytes: 0,
     key,
-    texture: createOwnedTexture(state.handles),
     uploaded: false,
   };
   state.resources.set(key, resource);
-  return resource;
+  return resource as unknown as OrdinaryTextureGpuResource;
 };
 
 const publishOutcome = (
   state: State,
-  kind: OrdinaryTextureGpuOutcome["kind"],
+  kind: Exclude<OrdinaryTextureGpuOutcome["kind"], "failed">,
   resource: MutableResource,
   upload: OrdinaryTexturePendingUpload,
 ): void => {
   state.outcomes.push({ key: resource.key, kind, upload });
+};
+
+const publishOversizedOutcome = (
+  state: State,
+  resource: MutableResource,
+  upload: OrdinaryTexturePendingUpload,
+  cost: number,
+  limit: number,
+  dimension: "persistent GPU" | "upload",
+): void => {
+  state.outcomes.push({
+    key: resource.key,
+    kind: "failed",
+    message: `Ordinary texture ${resource.key} requires ${cost} ${dimension} bytes, exceeding the ${dimension === "upload" ? "per-frame " : ""}limit ${limit}`,
+    upload,
+  });
 };
 
 const clearQueuedResource = (state: State, resource: MutableResource): void => {
@@ -148,7 +199,7 @@ export const queueOrdinaryTextureUpload = (
     state.resources.get(mutable.key) !== mutable
     || mutable.uploaded
     || mutable.pendingUpload !== undefined
-    || !ownsTexture(state.handles, mutable.texture)
+    || (mutable.texture !== undefined && !ownsTexture(state.handles, mutable.texture))
   ) return false;
   mutable.pendingUpload = upload;
   state.pendingUploads.push(mutable);
@@ -168,12 +219,16 @@ export const processOrdinaryTextureUploads = (
   arena: OrdinaryTextureGpuArena,
   frame: number,
   generation: number,
+  admission?: OrdinaryTextureGpuAdmission,
 ): void => {
   const state = stateOf(arena);
+  let remainingAttempts = state.pendingUploads.length - state.pendingUploadHead;
   while (
     state.pendingUploadHead < state.pendingUploads.length
     && canUpload(state, frame, MAX_UPLOADS_PER_FRAME)
+    && remainingAttempts > 0
   ) {
+    remainingAttempts -= 1;
     const resource = state.pendingUploads[state.pendingUploadHead];
     if (resource === undefined) {
       state.pendingUploadHead += 1;
@@ -188,7 +243,7 @@ export const processOrdinaryTextureUploads = (
       resource.generation !== generation
       || state.resources.get(resource.key) !== resource
       || resource.uploaded
-      || !ownsTexture(state.handles, resource.texture)
+      || (resource.texture !== undefined && !ownsTexture(state.handles, resource.texture))
     ) {
       state.pendingUploadHead += 1;
       delete resource.pendingUpload;
@@ -196,7 +251,57 @@ export const processOrdinaryTextureUploads = (
       continue;
     }
 
-    uploadTexture(state.gl, resource.texture, pending.source, pending.texture);
+    const cost = ordinaryTextureUploadCost(pending);
+    const admissionResult = admission?.reserve(cost);
+    if (admissionResult !== undefined && "reason" in admissionResult) {
+      state.pendingUploadHead += 1;
+      if (
+        admissionResult.reason === "persistent-gpu-cost-exceeds-limit"
+        || admissionResult.reason === "upload-cost-exceeds-limit"
+      ) {
+        delete resource.pendingUpload;
+        publishOversizedOutcome(
+          state,
+          resource,
+          pending,
+          admissionResult.reason === "upload-cost-exceeds-limit"
+            ? cost.uploadBytes
+            : cost.persistentGpuBytes,
+          admissionResult.limit,
+          admissionResult.reason === "upload-cost-exceeds-limit" ? "upload" : "persistent GPU",
+        );
+        continue;
+      }
+      state.pendingUploads.push(resource);
+      if (admissionResult.reason === "upload-capacity") state.wakeRequested = true;
+      continue;
+    }
+    const reservation = admissionResult;
+    let texture: WebGLTexture | undefined;
+    try {
+      texture = createOwnedTexture(state.handles);
+      uploadTexture(state.gl, texture, pending.source, pending.texture);
+    } catch (error) {
+      if (texture === undefined) {
+        reservation?.cancel();
+      } else {
+        // Once allocation/upload begins, conservatively spend this frame's
+        // upload budget. The durable lease exists only while cleanup owns the
+        // failed allocation; deletion failure then transfers those bytes to
+        // observational quarantine before the lease is released.
+        const failedLease = reservation?.commit();
+        try {
+          releaseOwnedTexture(state.handles, texture);
+        } catch {
+          state.quarantinedBytes += cost.persistentGpuBytes;
+        }
+        failedLease?.release();
+      }
+      throw error;
+    }
+    resource.texture = texture;
+    resource.gpuBytes = cost.persistentGpuBytes;
+    if (reservation !== undefined) resource.lease = reservation.commit();
     state.pendingUploadHead += 1;
     delete resource.pendingUpload;
     resource.uploaded = true;
@@ -206,8 +311,52 @@ export const processOrdinaryTextureUploads = (
   if (state.pendingUploadHead >= state.pendingUploads.length) {
     state.pendingUploads.length = 0;
     state.pendingUploadHead = 0;
+  } else if (state.pendingUploadHead > 64) {
+    state.pendingUploads.splice(0, state.pendingUploadHead);
+    state.pendingUploadHead = 0;
   }
-  if (state.pendingUploadHead < state.pendingUploads.length) state.wakeRequested = true;
+  if (
+    state.pendingUploadHead < state.pendingUploads.length
+    && !canUpload(state, frame, MAX_UPLOADS_PER_FRAME)
+  ) state.wakeRequested = true;
+};
+
+const checkedTextureDimension = (value: number, label: string): number => {
+  const dimension = Math.ceil(value);
+  if (!Number.isSafeInteger(dimension) || dimension < 0) {
+    throw new RangeError(`${label} must be a non-negative safe integer, received ${value}`);
+  }
+  return dimension;
+};
+
+export const ordinaryTextureUploadCost = (
+  upload: OrdinaryTexturePendingUpload,
+): { readonly persistentGpuBytes: number; readonly uploadBytes: number } => {
+  const size = loadedTextureSourceSize(upload.source);
+  let width = checkedTextureDimension(size[0], "ordinary texture width");
+  let height = checkedTextureDimension(size[1], "ordinary texture height");
+  let persistentGpuBytes = 0;
+  let hasLevel = true;
+  const mipmapped = usesMipmaps(upload.texture.sampler?.minFilter);
+  while (hasLevel) {
+    const levelBytes = width * height * 4;
+    if (!Number.isSafeInteger(levelBytes) || !Number.isSafeInteger(persistentGpuBytes + levelBytes)) {
+      throw new RangeError("ordinary texture byte size exceeds safe integer range");
+    }
+    persistentGpuBytes += levelBytes;
+    hasLevel = mipmapped && (width > 1 || height > 1);
+    if (hasLevel) {
+      width = Math.max(1, Math.floor(width / 2));
+      height = Math.max(1, Math.floor(height / 2));
+    }
+  }
+  const [sourceWidth, sourceHeight] = size;
+  const uploadBytes = checkedTextureDimension(sourceWidth, "ordinary texture width")
+    * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
+  if (!Number.isSafeInteger(uploadBytes)) {
+    throw new RangeError("ordinary texture upload byte size exceeds safe integer range");
+  }
+  return { persistentGpuBytes, uploadBytes };
 };
 
 export const ordinaryTextureGpuHasPendingUploads = (
@@ -215,6 +364,16 @@ export const ordinaryTextureGpuHasPendingUploads = (
 ): boolean => {
   const state = stateOf(arena);
   return state.pendingUploadHead < state.pendingUploads.length;
+};
+
+/** Wakes durable-capacity-denied rows after the root observes capacity being released. */
+export const wakeOrdinaryTextureGpuUploads = (
+  arena: OrdinaryTextureGpuArena,
+): boolean => {
+  const state = stateOf(arena);
+  if (state.pendingUploadHead >= state.pendingUploads.length) return false;
+  state.wakeRequested = true;
+  return true;
 };
 
 export const consumeOrdinaryTextureGpuWake = (
@@ -255,10 +414,15 @@ export const releaseOrdinaryTextureGpuResource = (
     clearQueuedResource(state, resource);
     publishOutcome(state, "discarded", resource, pending);
   }
+  resource.lease?.release();
+  delete resource.lease;
+  const texture = resource.texture;
+  if (texture === undefined) return {};
   try {
-    releaseOwnedTexture(state.handles, resource.texture);
+    releaseOwnedTexture(state.handles, texture);
     return {};
   } catch (releaseError) {
+    state.quarantinedBytes += resource.gpuBytes;
     return { releaseError };
   }
 };
@@ -271,10 +435,13 @@ export const dropOrdinaryTextureGpuContext = (
     const pending = resource.pendingUpload;
     if (pending !== undefined) publishOutcome(state, "retained", resource, pending);
     delete resource.pendingUpload;
+    resource.lease?.release();
+    delete resource.lease;
   }
   state.resources.clear();
   state.pendingUploads.length = 0;
   state.pendingUploadHead = 0;
+  state.quarantinedBytes = 0;
   state.uploadFrame = -1;
   state.uploadsThisFrame = 0;
   state.wakeRequested = false;
@@ -283,3 +450,7 @@ export const dropOrdinaryTextureGpuContext = (
 export const ordinaryTextureGpuResourceCount = (
   arena: OrdinaryTextureGpuArena,
 ): number => stateOf(arena).resources.size;
+
+export const ordinaryTextureGpuQuarantinedBytes = (
+  arena: OrdinaryTextureGpuArena,
+): number => stateOf(arena).quarantinedBytes;

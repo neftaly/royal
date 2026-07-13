@@ -12,6 +12,20 @@ export interface VertexInputSemanticRow {
   readonly recipe: CpuGeometry;
 }
 
+export interface VertexInputGpuLease { release(): boolean }
+export interface VertexInputGpuReservation {
+  cancel(): boolean;
+  commit(): VertexInputGpuLease;
+}
+export interface VertexInputGpuGovernor {
+  reserve(cost: {
+    readonly persistentGpuBytes: number;
+    readonly transientPeakBytes?: number;
+    readonly uploadBytes: number;
+  }):
+    VertexInputGpuReservation | undefined;
+}
+
 interface VertexInputInstanceBuffers {
   readonly localModelBuffer: WebGLBuffer;
   readonly rootPoseBuffer: WebGLBuffer;
@@ -88,6 +102,7 @@ type StaticGeometry = VertexInputGeometry & {
   readonly compositeVertexArrays: Map<number, CompositeVertexArray>;
   readonly geometryIds: Set<number>;
   joinedIdentityBucket: boolean;
+  gpuLease?: VertexInputGpuLease;
   /** Driver handles still owned while a fallible release is resumed. */
   pendingBufferDeletes?: Set<WebGLBuffer>;
 };
@@ -106,6 +121,8 @@ type InstanceAllocationToken = {
 type OwnedInstanceAllocation = {
   readonly allocation: InstanceAllocationToken;
   bufferCapacity: number;
+  governedBufferCapacity: number;
+  readonly gpuLeases: VertexInputGpuLease[];
   buffers?: VertexInputInstanceBuffers;
   /** Driver handles still owned while a fallible release is resumed. */
   pendingBufferDeletes?: Set<WebGLBuffer>;
@@ -146,6 +163,7 @@ interface VertexInputArenaState {
   contextDropped: boolean;
   contextGeneration?: number;
   readonly geometryBuckets: Map<string, StaticGeometry[]>;
+  readonly governor?: VertexInputGpuGovernor;
   readonly instanceBuffers: Map<number, VertexInputInstanceBuffers>;
   readonly instanceGeometryIds: Map<number, Set<number>>;
   nextInstanceId: number;
@@ -154,15 +172,17 @@ interface VertexInputArenaState {
   /** Handles created by a transaction which failed before it could publish them. */
   readonly pendingBufferDeletes: Set<WebGLBuffer>;
   readonly pendingVertexArrayDeletes: Set<WebGLVertexArrayObject>;
+  readonly pendingGpuLeases: VertexInputGpuLease[];
   readonly semantics: Map<number, SemanticGeometry>;
   readonly staticGeometries: Set<StaticGeometry>;
 }
 
-export const createVertexInputArena = (): VertexInputArena => ({
+export const createVertexInputArena = (governor?: VertexInputGpuGovernor): VertexInputArena => ({
   abandonedBufferCount: 0,
   abandonedVertexArrayCount: 0,
   contextDropped: false,
   geometryBuckets: new Map(),
+  ...(governor === undefined ? {} : { governor }),
   instanceBuffers: new Map(),
   instanceGeometryIds: new Map(),
   nextInstanceId: 1,
@@ -170,6 +190,7 @@ export const createVertexInputArena = (): VertexInputArena => ({
   ownedInstances: new Map(),
   pendingBufferDeletes: new Set(),
   pendingVertexArrayDeletes: new Set(),
+  pendingGpuLeases: [],
   semantics: new Map(),
   staticGeometries: new Set(),
 } as unknown as VertexInputArena);
@@ -210,6 +231,8 @@ export const createVertexInputInstanceAllocation = (
   state.ownedInstances.set(id, {
     allocation,
     bufferCapacity: 0,
+    governedBufferCapacity: 0,
+    gpuLeases: [],
     capacity: 0,
     instanceCount: 0,
     localModelsDirty: true,
@@ -309,6 +332,98 @@ const throwFailure = (failure: Failure): void => {
   if (failure !== NO_FAILURE) throw failure.value;
 };
 
+const reserveGpu = (
+  state: VertexInputArenaState,
+  persistentGpuBytes: number,
+  uploadBytes: number,
+  transientPeakBytes = 0,
+): VertexInputGpuReservation | undefined => {
+  if (persistentGpuBytes === 0 && uploadBytes === 0 && transientPeakBytes === 0) return undefined;
+  if (state.governor === undefined) return undefined;
+  const reservation = state.governor.reserve({
+    persistentGpuBytes,
+    ...(transientPeakBytes === 0 ? {} : { transientPeakBytes }),
+    uploadBytes,
+  });
+  if (reservation === undefined) throw new Error("Vertex-input GPU allocation denied by root resource governor");
+  return reservation;
+};
+
+const releaseGpuLeases = (leases: VertexInputGpuLease[]): void => {
+  for (const lease of leases) lease.release();
+  leases.length = 0;
+};
+
+const settleFailedAcquisitionReservation = (
+  state: VertexInputArenaState,
+  reservation: VertexInputGpuReservation | undefined,
+  retainedHandles: boolean,
+  uploadAttempted = false,
+): void => {
+  if (reservation === undefined) return;
+  if (retainedHandles) state.pendingGpuLeases.push(reservation.commit());
+  else if (uploadAttempted) reservation.commit().release();
+  else reservation.cancel();
+};
+
+const releasePendingGpuLeasesIfClean = (state: VertexInputArenaState): void => {
+  if (state.pendingBufferDeletes.size === 0) releaseGpuLeases(state.pendingGpuLeases);
+};
+
+const staticGeometryByteLength = (recipe: CpuGeometry): number =>
+  recipe.positions.byteLength
+  + (recipe.normals?.byteLength ?? 0)
+  + (recipe.tangents?.byteLength ?? 0)
+  + (recipe.colors?.byteLength ?? 0)
+  + (recipe.texCoords0?.byteLength ?? 0)
+  + (recipe.texCoords1?.byteLength ?? 0)
+  + (recipe.indices?.byteLength ?? 0);
+
+const MAX_TYPED_ARRAY_ELEMENTS = 0xffff_ffff;
+
+const checkedProduct = (left: number, right: number, label: string): number => {
+  const product = left * right;
+  if (!Number.isSafeInteger(product)) throw new RangeError(`${label} exceeds the safe integer range`);
+  return product;
+};
+
+const checkedInstanceElementLength = (capacity: number, stride: number, label: string): number => {
+  const length = checkedProduct(capacity, stride, label);
+  if (length > MAX_TYPED_ARRAY_ELEMENTS) {
+    throw new RangeError(`${label} exceeds the maximum typed-array element count`);
+  }
+  return length;
+};
+
+type InstanceBufferLayout = {
+  readonly byteLength: number;
+  readonly localModelElements: number;
+  readonly rangeElements: number;
+  readonly rootPoseElements: number;
+  readonly rootScaleElements: number;
+};
+
+const checkedInstanceBufferLayout = (capacity: number): InstanceBufferLayout => {
+  const localModelElements = checkedInstanceElementLength(capacity, 16, "instance local-model staging");
+  const rootPoseElements = checkedInstanceElementLength(capacity, 6, "instance root-pose staging");
+  const rootScaleElements = checkedInstanceElementLength(capacity, 3, "instance root-scale staging");
+  const rangeElements = checkedInstanceElementLength(capacity, 2, "instance range staging");
+  const floatElements = localModelElements + rootPoseElements + rootScaleElements;
+  if (!Number.isSafeInteger(floatElements)) {
+    throw new RangeError("instance buffer element count exceeds the safe integer range");
+  }
+  return {
+    byteLength: checkedProduct(floatElements, Float32Array.BYTES_PER_ELEMENT, "instance buffer byte size"),
+    localModelElements,
+    rangeElements,
+    rootPoseElements,
+    rootScaleElements,
+  };
+};
+
+const instanceBufferByteLength = (capacity: number): number =>
+  checkedInstanceBufferLayout(capacity).byteLength;
+
 const unbindVertexInput = (gl: WebGL2RenderingContext): void => {
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -321,12 +436,16 @@ const uploadStaticGeometry = (
   recipe: CpuGeometry,
   staticIdentityId: number,
 ): StaticGeometry => {
+  const byteLength = staticGeometryByteLength(recipe);
+  const reservation = reserveGpu(state, byteLength, byteLength);
   const owned = new Set<WebGLBuffer>();
+  let uploadAttempted = false;
   const upload = (target: number, value: ArrayBufferView): WebGLBuffer => {
     const buffer = createBuffer(gl);
     owned.add(buffer);
     state.pendingBufferDeletes.add(buffer);
     gl.bindBuffer(target, buffer);
+    uploadAttempted = true;
     gl.bufferData(target, value, gl.STATIC_DRAW);
     return buffer;
   };
@@ -367,18 +486,29 @@ const uploadStaticGeometry = (
     };
     unbindVertexInput(gl);
     for (const buffer of owned) state.pendingBufferDeletes.delete(buffer);
+    if (reservation !== undefined) geometry.gpuLease = reservation.commit();
     return geometry;
   } catch (error) {
     let failure: Failure = { value: error };
     const cleanupFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
     failure = firstFailure(failure, cleanupFailure);
     failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    settleFailedAcquisitionReservation(
+      state,
+      reservation,
+      [...owned].some((buffer) => state.pendingBufferDeletes.has(buffer)),
+      uploadAttempted,
+    );
+    releasePendingGpuLeasesIfClean(state);
     throwFailure(failure);
     throw new Error("Unreachable vertex-input static upload cleanup");
   }
 };
 
 const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): void => {
+  for (const geometry of state.staticGeometries) geometry.gpuLease?.release();
+  for (const resource of state.ownedInstances.values()) releaseGpuLeases(resource.gpuLeases);
+  releaseGpuLeases(state.pendingGpuLeases);
   for (const semantic of state.semantics.values()) {
     semantic.instanceKeys.clear();
     delete semantic.staticGeometry;
@@ -390,6 +520,7 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.pendingVertexArrayDeletes.clear();
   for (const resource of state.ownedInstances.values()) {
     resource.bufferCapacity = 0;
+    resource.governedBufferCapacity = 0;
     delete resource.buffers;
     delete resource.pendingBufferDeletes;
     resource.localModelsDirty = true;
@@ -456,7 +587,8 @@ const createOwnedInstanceBuffers = (
   state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   capacity: number,
-): VertexInputInstanceBuffers => {
+  reservation: VertexInputGpuReservation | undefined,
+): { readonly buffers: VertexInputInstanceBuffers; readonly lease?: VertexInputGpuLease } => {
   const owned = new Set<WebGLBuffer>();
   const create = (floatsPerInstance: number): WebGLBuffer => {
     const buffer = createBuffer(gl);
@@ -478,12 +610,19 @@ const createOwnedInstanceBuffers = (
     };
     unbindVertexInput(gl);
     for (const buffer of owned) state.pendingBufferDeletes.delete(buffer);
-    return buffers;
+    const lease = reservation?.commit();
+    return { buffers, ...(lease === undefined ? {} : { lease }) };
   } catch (error) {
     let failure: Failure = { value: error };
     const cleanupFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
     failure = firstFailure(failure, cleanupFailure);
     failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    settleFailedAcquisitionReservation(
+      state,
+      reservation,
+      [...owned].some((buffer) => state.pendingBufferDeletes.has(buffer)),
+    );
+    releasePendingGpuLeasesIfClean(state);
     throwFailure(failure);
     throw new Error("Vertex-input instance-buffer creation failed without an error");
   }
@@ -530,22 +669,52 @@ export const prepareVertexInputInstance = (
   requireContextGeneration(state, contextGeneration);
   const resource = instanceAllocation(state, allocation);
   validSerial(instanceCount, "instance count");
+  const nextLayout = checkedInstanceBufferLayout(instanceCount);
   const countChanged = resource.instanceCount !== instanceCount;
   const grew = instanceCount > resource.capacity;
-  if (grew || countChanged || resource.buffers === undefined) markAllInstanceLanesDirty(resource);
+  const buffersMissing = resource.buffers === undefined;
   if (grew) {
-    const localModels = new Float32Array(instanceCount * 16);
-    const rootPoses = new Float32Array(instanceCount * 6);
-    const rootScales = new Float32Array(instanceCount * 3);
-    const ranges = new Int32Array(instanceCount * 2);
-    localModels.set(resource.staging.localModels.subarray(0, resource.instanceCount * 16));
-    rootPoses.set(resource.staging.rootPoses.subarray(0, resource.instanceCount * 6));
-    rootScales.set(resource.staging.rootScales.subarray(0, resource.instanceCount * 3));
     const previousBuffers = resource.buffers;
+    const governedBytes = instanceBufferByteLength(resource.governedBufferCapacity);
+    const persistentGpuBytes = Math.max(0, nextLayout.byteLength - governedBytes);
+    const transientPeakBytes = previousBuffers === undefined
+      ? 0
+      : governedBytes + nextLayout.byteLength;
+    const reservation = reserveGpu(state, persistentGpuBytes, 0, transientPeakBytes);
+    let localModels: Float32Array;
+    let rootPoses: Float32Array;
+    let rootScales: Float32Array;
+    let ranges: Int32Array;
+    try {
+      localModels = new Float32Array(nextLayout.localModelElements);
+      rootPoses = new Float32Array(nextLayout.rootPoseElements);
+      rootScales = new Float32Array(nextLayout.rootScaleElements);
+      ranges = new Int32Array(nextLayout.rangeElements);
+      localModels.set(resource.staging.localModels.subarray(0, resource.instanceCount * 16));
+      rootPoses.set(resource.staging.rootPoses.subarray(0, resource.instanceCount * 6));
+      rootScales.set(resource.staging.rootScales.subarray(0, resource.instanceCount * 3));
+    } catch (error) {
+      reservation?.cancel();
+      throw error;
+    }
     if (previousBuffers === undefined) {
-      resource.buffers = createOwnedInstanceBuffers(state, gl, instanceCount);
+      const created = createOwnedInstanceBuffers(state, gl, instanceCount, reservation);
+      resource.buffers = created.buffers;
+      if (created.lease !== undefined) resource.gpuLeases.push(created.lease);
+      resource.governedBufferCapacity = instanceCount;
     } else {
-      resizeOwnedInstanceBuffers(gl, previousBuffers, instanceCount);
+      try {
+        resizeOwnedInstanceBuffers(gl, previousBuffers, instanceCount);
+        if (reservation !== undefined) resource.gpuLeases.push(reservation.commit());
+        resource.governedBufferCapacity = Math.max(resource.governedBufferCapacity, instanceCount);
+      } catch (error) {
+        // bufferData may have resized any prefix before failing. Conservatively
+        // retain the whole growth lease so retrying cannot allocate ungoverned bytes.
+        if (reservation !== undefined) resource.gpuLeases.push(reservation.commit());
+        resource.governedBufferCapacity = Math.max(resource.governedBufferCapacity, instanceCount);
+        markAllInstanceLanesDirty(resource);
+        throw error;
+      }
     }
     resource.bufferCapacity = instanceCount;
     resource.capacity = instanceCount;
@@ -554,9 +723,14 @@ export const prepareVertexInputInstance = (
     resource.staging.rootScales = rootScales;
     resource.staging.ranges = ranges;
   } else if (resource.buffers === undefined) {
-    resource.buffers = createOwnedInstanceBuffers(state, gl, resource.capacity);
+    const reservation = reserveGpu(state, instanceBufferByteLength(resource.capacity), 0);
+    const created = createOwnedInstanceBuffers(state, gl, resource.capacity, reservation);
+    resource.buffers = created.buffers;
+    if (created.lease !== undefined) resource.gpuLeases.push(created.lease);
+    resource.governedBufferCapacity = resource.capacity;
     resource.bufferCapacity = resource.capacity;
   }
+  if (grew || countChanged || buffersMissing) markAllInstanceLanesDirty(resource);
   resource.instanceCount = instanceCount;
   resource.staging.forceFull = resource.localModelsDirty
     || resource.rootPosesDirty
@@ -616,6 +790,28 @@ export const uploadVertexInputInstanceLane = (
     previousEnd = end;
   }
   let bytes = 0;
+  for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
+    const start = forceFull ? 0 : resource.staging.ranges[rangeIndex * 2]!;
+    const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
+    const rangeBytes = checkedProduct(
+      checkedProduct(end - start, stride, `${lane} upload element count`),
+      Float32Array.BYTES_PER_ELEMENT,
+      `${lane} upload byte size`,
+    );
+    if (!Number.isSafeInteger(bytes + rangeBytes)) {
+      throw new RangeError(`${lane} upload byte size exceeds the safe integer range`);
+    }
+    bytes += rangeBytes;
+  }
+  const reservation = reserveGpu(state, 0, bytes);
+  let uploadAttempted = false;
+  let reservationSettled = false;
+  const settleUploadReservation = (): void => {
+    if (reservation === undefined || reservationSettled) return;
+    reservationSettled = true;
+    if (uploadAttempted) reservation.commit().release();
+    else reservation.cancel();
+  };
   try {
     if (actualRangeCount > 0) gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     for (let rangeIndex = 0; rangeIndex < actualRangeCount; rangeIndex += 1) {
@@ -623,6 +819,7 @@ export const uploadVertexInputInstanceLane = (
       const end = forceFull ? resource.instanceCount : resource.staging.ranges[rangeIndex * 2 + 1]!;
       const sourceOffset = start * stride;
       const floatCount = (end - start) * stride;
+      uploadAttempted = true;
       gl.bufferSubData(
         gl.ARRAY_BUFFER,
         sourceOffset * Float32Array.BYTES_PER_ELEMENT,
@@ -630,7 +827,6 @@ export const uploadVertexInputInstanceLane = (
         sourceOffset,
         floatCount,
       );
-      bytes += floatCount * Float32Array.BYTES_PER_ELEMENT;
     }
     if (lane === "localModels") resource.localModelsDirty = false;
     else if (lane === "rootPoses") resource.rootPosesDirty = false;
@@ -640,8 +836,10 @@ export const uploadVertexInputInstanceLane = (
       || resource.rootScalesDirty;
     stats.bytes = bytes;
     stats.calls = actualRangeCount;
+    settleUploadReservation();
     return stats;
   } catch (error) {
+    settleUploadReservation();
     if (lane === "localModels") resource.localModelsDirty = true;
     else if (lane === "rootPoses") resource.rootPosesDirty = true;
     else resource.rootScalesDirty = true;
@@ -882,7 +1080,11 @@ export const vertexInputCompositeVertexArrayForInstance = (
   );
 };
 
-const deleteStaticBuffers = (gl: WebGL2RenderingContext, geometry: StaticGeometry): void => {
+const deleteStaticBuffers = (
+  state: VertexInputArenaState,
+  gl: WebGL2RenderingContext,
+  geometry: StaticGeometry,
+): void => {
   const buffers = geometry.pendingBufferDeletes ??= new Set<WebGLBuffer>([
       geometry.arrayBuffer,
       ...(geometry.normalBuffer === undefined ? [] : [geometry.normalBuffer]),
@@ -894,6 +1096,9 @@ const deleteStaticBuffers = (gl: WebGL2RenderingContext, geometry: StaticGeometr
     ]);
   throwFailure(deletePendingBuffers(gl, buffers));
   delete geometry.pendingBufferDeletes;
+  geometry.gpuLease?.release();
+  delete geometry.gpuLease;
+  releasePendingGpuLeasesIfClean(state);
 };
 
 const removeStaticGeometry = (
@@ -920,7 +1125,7 @@ const removeStaticGeometry = (
     });
   }
   if (geometry.baseVertexArray !== undefined) throwFailure(failure);
-  failure = captureFirstFailure(failure, () => deleteStaticBuffers(gl, geometry));
+  failure = captureFirstFailure(failure, () => deleteStaticBuffers(state, gl, geometry));
   throwFailure(failure);
   const bucket = geometry.joinedIdentityBucket ? state.geometryBuckets.get(geometry.bucketKey) : undefined;
   if (bucket !== undefined) {
@@ -970,6 +1175,7 @@ const releaseVertexInputInstance = (
 };
 
 const deleteOwnedInstanceBuffers = (
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   resource: OwnedInstanceAllocation,
 ): void => {
@@ -982,7 +1188,10 @@ const deleteOwnedInstanceBuffers = (
   throwFailure(deletePendingBuffers(gl, buffers));
   delete resource.pendingBufferDeletes;
   resource.bufferCapacity = 0;
+  resource.governedBufferCapacity = 0;
   delete resource.buffers;
+  releaseGpuLeases(resource.gpuLeases);
+  releasePendingGpuLeasesIfClean(state);
 };
 
 export const releaseVertexInputInstanceAllocation = (
@@ -995,7 +1204,7 @@ export const releaseVertexInputInstanceAllocation = (
   const resource = instanceAllocation(state, allocation);
   requireContextGeneration(state, contextGeneration);
   releaseVertexInputInstance(arena, gl, contextGeneration, resource.allocation.id);
-  deleteOwnedInstanceBuffers(gl, resource);
+  deleteOwnedInstanceBuffers(state, gl, resource);
   state.ownedInstances.delete(resource.allocation.id);
   unbindVertexInput(gl);
 };
@@ -1123,13 +1332,14 @@ const releaseContextHandles = (
     throw new Error("Vertex-input context still owns vertex arrays after release");
   }
   for (const geometry of state.staticGeometries) {
-    failure = captureFirstFailure(failure, () => deleteStaticBuffers(gl, geometry));
+    failure = captureFirstFailure(failure, () => deleteStaticBuffers(state, gl, geometry));
   }
   for (const resource of state.ownedInstances.values()) {
-    failure = captureFirstFailure(failure, () => deleteOwnedInstanceBuffers(gl, resource));
+    failure = captureFirstFailure(failure, () => deleteOwnedInstanceBuffers(state, gl, resource));
   }
   const pendingBufferFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
   failure = firstFailure(failure, pendingBufferFailure);
+  releasePendingGpuLeasesIfClean(state);
   failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
   throwFailure(failure);
   forgetContextHandles(state, false);

@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   PreparedGltfAssetStore,
+  preparedGltfAssetRetainedCpuBytes,
   type PreparedGltfAsset,
   type PreparedGltfAssetSubscription,
 } from "../packages/renderer-webgl/src/gltf/prepared-asset";
 import { GltfPreparationScheduler } from "../packages/renderer-webgl/src/gltf/preparation-scheduler";
+import { ResourceGovernorCpuCapacityError } from "../packages/renderer-webgl/src/resource-governor";
 
 const emptyAsset = (): PreparedGltfAsset => ({
   hasMaterialLod: false,
@@ -33,6 +35,189 @@ const deferred = <Value>() => {
 };
 
 describe("PreparedGltfAssetStore", () => {
+  it("keeps declarations loading across CPU pressure and retries only on capacity wake", async () => {
+    const jobs = [deferred<PreparedGltfAsset>(), deferred<PreparedGltfAsset>()];
+    const load = vi.fn((_request, _signal) => jobs[load.mock.calls.length - 1]!.promise);
+    const listener = vi.fn();
+    const store = new PreparedGltfAssetStore(load, vi.fn());
+    const subscription = store.request({ key: "pressure", src: "/pressure.glb" }, listener);
+    jobs[0]!.reject(new ResourceGovernorCpuCapacityError("temporary CPU pressure", false));
+    await jobs[0]!.promise.catch(() => undefined);
+    await Promise.resolve();
+    expect(subscription.getSnapshot().status).toBe("loading");
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.wakeCpuCapacity()).toBe(true);
+    expect(load).toHaveBeenCalledTimes(2);
+    jobs[1]!.resolve(emptyAsset());
+    await jobs[1]!.promise;
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(subscription.getSnapshot().status).toBe("ready");
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.wakeCpuCapacity()).toBe(false);
+    subscription.release();
+  });
+
+  it("wakes every blocked declaration once so a larger re-denial cannot strand a smaller asset", async () => {
+    const calls = new Map<string, number>();
+    let retry = false;
+    const store = new PreparedGltfAssetStore(async (request) => {
+      calls.set(request.key, (calls.get(request.key) ?? 0) + 1);
+      if (!retry || request.key === "large") {
+        throw new ResourceGovernorCpuCapacityError("temporary CPU pressure", false);
+      }
+      return emptyAsset();
+    }, vi.fn());
+    const large = store.request({ key: "large", src: "/large.glb" });
+    const small = store.request({ key: "small", src: "/small.glb" });
+    await Promise.resolve();
+    await Promise.resolve();
+    retry = true;
+
+    expect(store.wakeCpuCapacity()).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toEqual(new Map([["large", 2], ["small", 2]]));
+    expect(large.getSnapshot().status).toBe("loading");
+    expect(small.getSnapshot().status).toBe("ready");
+    large.release();
+    small.release();
+  });
+
+  it("isolates throwing subscribers and still delivers peer and store notifications", async () => {
+    const onChange = vi.fn();
+    const first = vi.fn(() => { throw new Error("listener failed"); });
+    const second = vi.fn();
+    const store = new PreparedGltfAssetStore(async () => emptyAsset(), onChange);
+    const firstSubscription = store.request({ key: "shared", src: "/shared.glb" }, first);
+    const secondSubscription = store.request({ key: "shared", src: "/shared.glb" }, second);
+
+    await Promise.resolve();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledOnce();
+    firstSubscription.release();
+    secondSubscription.release();
+  });
+
+  it("does not resurrect a CPU-blocked prepared declaration after removal or disposal", async () => {
+    for (const dispose of [false, true]) {
+      const job = deferred<PreparedGltfAsset>();
+      const load = vi.fn(() => job.promise);
+      const store = new PreparedGltfAssetStore(load, vi.fn());
+      const subscription = store.request({ key: String(dispose), src: "/blocked.glb" });
+      job.reject(new ResourceGovernorCpuCapacityError("temporary CPU pressure", false));
+      await job.promise.catch(() => undefined);
+      await Promise.resolve();
+      if (dispose) store.dispose();
+      else subscription.release();
+      expect(store.wakeCpuCapacity()).toBe(false);
+      expect(load).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("stops a CPU-capacity wake snapshot when an earlier retry disposes the store", async () => {
+    const calls = new Map<string, number>();
+    let retrying = false;
+    let store!: PreparedGltfAssetStore;
+    store = new PreparedGltfAssetStore((request) => {
+      calls.set(request.key, (calls.get(request.key) ?? 0) + 1);
+      if (retrying && request.key === "first") store.dispose();
+      return Promise.reject(new ResourceGovernorCpuCapacityError("temporary CPU pressure", false));
+    }, vi.fn());
+    const first = store.request({ key: "first", src: "/first.glb" });
+    const second = store.request({ key: "second", src: "/second.glb" });
+    await Promise.resolve();
+    await Promise.resolve();
+    retrying = true;
+
+    expect(store.wakeCpuCapacity()).toBe(true);
+    await Promise.resolve();
+
+    expect(calls).toEqual(new Map([["first", 2], ["second", 1]]));
+    first.release();
+    second.release();
+  });
+
+  it("skips a later CPU-blocked snapshot row removed by an earlier retry", async () => {
+    const calls = new Map<string, number>();
+    let retrying = false;
+    let second: PreparedGltfAssetSubscription | undefined;
+    const store = new PreparedGltfAssetStore((request) => {
+      calls.set(request.key, (calls.get(request.key) ?? 0) + 1);
+      if (retrying && request.key === "first") second?.release();
+      return Promise.reject(new ResourceGovernorCpuCapacityError("temporary CPU pressure", false));
+    }, vi.fn());
+    const first = store.request({ key: "first", src: "/first.glb" });
+    second = store.request({ key: "second", src: "/second.glb" });
+    await Promise.resolve();
+    await Promise.resolve();
+    retrying = true;
+
+    expect(store.wakeCpuCapacity()).toBe(true);
+    await Promise.resolve();
+
+    expect(calls).toEqual(new Map([["first", 2], ["second", 1]]));
+    first.release();
+    store.dispose();
+  });
+
+  it("terminally caches an intrinsically impossible prepared CPU cost", async () => {
+    const store = new PreparedGltfAssetStore(
+      async () => { throw new ResourceGovernorCpuCapacityError("asset exceeds maximum", true); },
+      vi.fn(),
+    );
+    const subscription = store.request({ key: "impossible", src: "/impossible.glb" });
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(subscription.getSnapshot()).toMatchObject({
+      error: expect.stringContaining("asset exceeds maximum"),
+      status: "error",
+    });
+    expect(store.wakeCpuCapacity()).toBe(false);
+    subscription.release();
+  });
+  it("counts retained prepared-asset backing buffers once across shared views", () => {
+    const geometryBuffer = new ArrayBuffer(64);
+    const decodeBuffer = new ArrayBuffer(32);
+    const asset = {
+      ...emptyAsset(),
+      imagePreparation: {
+        buffers: [geometryBuffer, decodeBuffer],
+        document: {},
+        src: "/shared.glb",
+      },
+      primitives: [{
+        instanceTransforms: [],
+        localModels: [],
+        normals: new Float32Array(geometryBuffer, 12, 3),
+        positions: new Float32Array(geometryBuffer, 0, 3),
+      }],
+    } as unknown as PreparedGltfAsset;
+
+    expect(preparedGltfAssetRetainedCpuBytes(asset)).toEqual({
+      assetDecode: 32,
+      geometry: 64,
+    });
+  });
+
+  it("rejects retained-buffer totals outside safe integer accounting", () => {
+    const oversized = {
+      ...emptyAsset(),
+      imagePreparation: {
+        buffers: [
+          { byteLength: Number.MAX_SAFE_INTEGER } as ArrayBuffer,
+          { byteLength: 1 } as ArrayBuffer,
+        ],
+        document: {},
+        src: "/oversized.glb",
+      },
+    } satisfies PreparedGltfAsset;
+
+    expect(() => preparedGltfAssetRetainedCpuBytes(oversized)).toThrow(RangeError);
+  });
+
   it("queues one current snapshot for subscribers joining settled entries", async () => {
     for (const outcome of ["ready", "error"] as const) {
       const job = deferred<PreparedGltfAsset>();
@@ -117,6 +302,128 @@ describe("PreparedGltfAssetStore", () => {
 });
 
 describe("GltfPreparationScheduler", () => {
+  it("rejects concurrency values that could stall or unbound the lane", () => {
+    for (const limit of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => new GltfPreparationScheduler(limit)).toThrow(RangeError);
+    }
+  });
+
+  it("shares global job admission across independent preparation lanes", async () => {
+    let globallyActive = 0;
+    let globalPeak = 0;
+    const schedulers: GltfPreparationScheduler[] = [];
+    const admit = () => {
+      if (globallyActive >= 1) return undefined;
+      globallyActive += 1;
+      globalPeak = Math.max(globalPeak, globallyActive);
+      let released = false;
+      return {
+        release: () => {
+          if (released) throw new Error("job admission released twice");
+          released = true;
+          globallyActive -= 1;
+          for (const scheduler of schedulers) scheduler.wake();
+        },
+      };
+    };
+    const firstScheduler = new GltfPreparationScheduler(2, admit);
+    const secondScheduler = new GltfPreparationScheduler(2, admit);
+    schedulers.push(firstScheduler, secondScheduler);
+    const firstWork = deferred<void>();
+    const controller = new AbortController();
+    const starts: string[] = [];
+    const first = firstScheduler.run(controller.signal, async () => {
+      starts.push("first");
+      await firstWork.promise;
+    });
+    const second = secondScheduler.run(controller.signal, () => {
+      starts.push("second");
+    });
+
+    expect(starts).toEqual(["first"]);
+    expect(secondScheduler.snapshot()).toMatchObject({ active: 0, queued: 1 });
+    firstWork.resolve();
+    await first;
+    await second;
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    expect(starts).toEqual(["first", "second"]);
+    expect(globalPeak).toBe(1);
+    expect(globallyActive).toBe(0);
+    firstScheduler.dispose();
+    secondScheduler.dispose();
+  });
+
+  it("releases admission when an admitter aborts a queued row reentrantly", async () => {
+    const firstWork = deferred<void>();
+    const firstController = new AbortController();
+    const queuedController = new AbortController();
+    let admissionCalls = 0;
+    let releases = 0;
+    let queuedStarted = false;
+    let scheduler!: GltfPreparationScheduler;
+    const admit = () => {
+      admissionCalls += 1;
+      if (admissionCalls === 2) {
+        queuedController.abort();
+        scheduler.wake();
+      }
+      return { release: () => { releases += 1; } };
+    };
+    scheduler = new GltfPreparationScheduler(1, admit);
+    const first = scheduler.run(firstController.signal, () => firstWork.promise);
+    const queued = scheduler.run(queuedController.signal, () => {
+      queuedStarted = true;
+    });
+
+    firstWork.resolve();
+    await first;
+    await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(queuedStarted).toBe(false);
+    expect(releases).toBe(2);
+    expect(scheduler.snapshot()).toMatchObject({ active: 0, queued: 0 });
+    scheduler.dispose();
+  });
+
+  it("does not start immediate work when admission aborts it reentrantly", async () => {
+    const controller = new AbortController();
+    let releases = 0;
+    let started = false;
+    const scheduler = new GltfPreparationScheduler(1, () => {
+      controller.abort();
+      return { release: () => { releases += 1; } };
+    });
+
+    await expect(scheduler.run(controller.signal, () => {
+      started = true;
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect({ releases, started }).toEqual({ releases: 1, started: false });
+    expect(scheduler.snapshot()).toMatchObject({ active: 0, queued: 0 });
+    scheduler.dispose();
+  });
+
+  it("rejects a queued row cleanly when global admission throws", async () => {
+    const firstWork = deferred<void>();
+    let admissionCalls = 0;
+    const scheduler = new GltfPreparationScheduler(1, () => {
+      admissionCalls += 1;
+      if (admissionCalls === 2) throw new Error("admission fault");
+      return { release: () => undefined };
+    });
+    const controller = new AbortController();
+    const first = scheduler.run(controller.signal, () => firstWork.promise);
+    const queued = scheduler.run(controller.signal, () => undefined);
+
+    firstWork.resolve();
+    await first;
+    await expect(queued).rejects.toThrow("admission fault");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(scheduler.snapshot()).toMatchObject({ active: 0, queued: 0 });
+    scheduler.dispose();
+  });
+
   it("bounds randomized request waves without losing or duplicating jobs", async () => {
     let seed = 0x9e3779b9;
     const random = (): number => {

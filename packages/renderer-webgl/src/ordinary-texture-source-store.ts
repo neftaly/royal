@@ -1,6 +1,7 @@
 import type { TextureContentKey, TextureVersion } from "@royal/renderer-core";
 import type { ResourceArenaSourceLease } from "./resource-arena";
 import type { LoadedTextureSource } from "./texture-sources";
+import { ResourceGovernorCpuCapacityError } from "./resource-governor";
 
 export interface OrdinaryTextureSourceRequest {
   readonly contentKey?: TextureContentKey;
@@ -20,6 +21,10 @@ export interface OrdinaryTextureSourceSubscription {
   release(): void;
 }
 
+export interface OrdinaryTextureSourceJobAdmission {
+  release(): void;
+}
+
 export interface OrdinaryTextureSourceStoreSnapshot {
   readonly aborts: number;
   readonly activeJobs: number;
@@ -30,13 +35,18 @@ export interface OrdinaryTextureSourceStoreSnapshot {
 }
 
 type SourceJob = {
-  readonly controller: AbortController;
+  admission?: OrdinaryTextureSourceJobAdmission;
+  admitting: boolean;
+  controller: AbortController;
+  cpuCapacityBlocked: boolean;
   readonly key: string;
   lease?: ResourceArenaSourceLease;
   readonly listeners: Map<number, (result: OrdinaryTextureSourceResult) => void>;
+  readonly request: OrdinaryTextureSourceRequest;
   result?: OrdinaryTextureSourceResult;
   settled: boolean;
   source?: LoadedTextureSource;
+  started: boolean;
 };
 
 type CapturedError = {
@@ -58,6 +68,7 @@ export const ordinaryTextureSourceKey = (request: OrdinaryTextureSourceRequest):
  * WebGL texture creation and upload stay independently keyed by upload state.
  */
 export class OrdinaryTextureSourceStore {
+  readonly #admit: (() => OrdinaryTextureSourceJobAdmission | undefined) | undefined;
   readonly #close: (source: LoadedTextureSource) => void;
   readonly #jobs = new Map<string, SourceJob>();
   readonly #load: (request: OrdinaryTextureSourceRequest, signal: AbortSignal) => Promise<LoadedTextureSource>;
@@ -71,10 +82,12 @@ export class OrdinaryTextureSourceStore {
   #successes = 0;
 
   constructor(options: {
+    readonly admit?: () => OrdinaryTextureSourceJobAdmission | undefined;
     readonly close: (source: LoadedTextureSource) => void;
     readonly load: (request: OrdinaryTextureSourceRequest, signal: AbortSignal) => Promise<LoadedTextureSource>;
     readonly retain: (source: LoadedTextureSource) => ResourceArenaSourceLease;
   }) {
+    this.#admit = options.admit;
     this.#close = options.close;
     this.#load = options.load;
     this.#retain = options.retain;
@@ -89,7 +102,16 @@ export class OrdinaryTextureSourceStore {
     let job = this.#jobs.get(key);
     let start = false;
     if (job === undefined) {
-      job = { controller: new AbortController(), key, listeners: new Map(), settled: false };
+      job = {
+        admitting: false,
+        controller: new AbortController(),
+        cpuCapacityBlocked: false,
+        key,
+        listeners: new Map(),
+        request,
+        settled: false,
+        started: false,
+      };
       this.#jobs.set(key, job);
       this.#starts += 1;
       start = true;
@@ -99,7 +121,7 @@ export class OrdinaryTextureSourceStore {
     this.#nextListener += 1;
     job.listeners.set(listenerKey, listener);
     this.#subscribers += 1;
-    if (start) this.#start(job, request);
+    if (start) this.#tryStart(job);
     if (!start && job.result !== undefined) this.#notifyListener(listener, job.result);
 
     let released = false;
@@ -160,6 +182,57 @@ export class OrdinaryTextureSourceStore {
     };
   }
 
+  /** Retries content jobs denied by a shared root-level decode budget. */
+  wake(): void {
+    if (this.#disposed) return;
+    for (const job of this.#jobs.values()) {
+      if (job.started || job.settled || job.cpuCapacityBlocked || job.listeners.size === 0) continue;
+      if (!this.#tryStart(job)) return;
+    }
+  }
+
+  wakeCpuCapacity(): boolean {
+    if (this.#disposed) return false;
+    let woke = false;
+    // Give every row blocked at the start of this wake one chance. Admission
+    // still bounds concurrent work, while a large row that re-denies cannot
+    // strand a later smaller row that fits the released capacity.
+    for (const [key, job] of Array.from(this.#jobs)) {
+      if (!job.cpuCapacityBlocked || job.listeners.size === 0) continue;
+      job.cpuCapacityBlocked = false;
+      job.controller = new AbortController();
+      this.#jobs.delete(key);
+      this.#jobs.set(key, job);
+      this.#tryStart(job);
+      woke = true;
+    }
+    return woke;
+  }
+
+  #tryStart(job: SourceJob): boolean {
+    if (this.#disposed || this.#jobs.get(job.key) !== job || job.listeners.size === 0) return true;
+    if (job.admitting) return false;
+    let admission: OrdinaryTextureSourceJobAdmission | undefined;
+    job.admitting = true;
+    try {
+      admission = this.#admit?.();
+    } catch (error) {
+      this.#settleError(job, error);
+      return true;
+    } finally {
+      job.admitting = false;
+    }
+    if (this.#admit !== undefined && admission === undefined) return false;
+    if (this.#disposed || this.#jobs.get(job.key) !== job || job.listeners.size === 0) {
+      admission?.release();
+      return true;
+    }
+    if (admission !== undefined) job.admission = admission;
+    job.started = true;
+    this.#start(job, job.request);
+    return true;
+  }
+
   #start(job: SourceJob, request: OrdinaryTextureSourceRequest): void {
     let pending: Promise<LoadedTextureSource>;
     try {
@@ -186,6 +259,15 @@ export class OrdinaryTextureSourceStore {
           // The retain failure remains the settlement cause; close was still attempted.
         }
         if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) return;
+        if (error instanceof ResourceGovernorCpuCapacityError && !error.permanent) {
+          // The decoded size is unknowable before loading, and retaining this
+          // source would violate the hard CPU cap. A later capacity wake may
+          // therefore repeat the encoded load/decode instead of keeping
+          // unaccounted decoded memory alive.
+          job.started = false;
+          job.cpuCapacityBlocked = true;
+          return;
+        }
         this.#settleError(job, error);
         return;
       }
@@ -207,6 +289,16 @@ export class OrdinaryTextureSourceStore {
     }, (error: unknown) => {
       if (this.#jobs.get(job.key) !== job || job.listeners.size === 0) return;
       this.#settleError(job, error);
+    }).finally(() => {
+      const admission = job.admission;
+      delete job.admission;
+      try {
+        admission?.release();
+      } catch {
+        // Settlement and source ownership are already published. A broken
+        // external admission releaser must not create an unhandled rejection
+        // or leave the job marked as owning capacity.
+      }
     });
   }
 

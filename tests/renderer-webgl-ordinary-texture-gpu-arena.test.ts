@@ -12,15 +12,18 @@ import {
   ordinaryTextureGpuOutcome,
   ordinaryTextureGpuOutcomeCount,
   ordinaryTextureGpuPendingUpload,
+  ordinaryTextureGpuQuarantinedBytes,
   ordinaryTextureGpuResourceCount,
   processOrdinaryTextureUploads,
   queueOrdinaryTextureUpload,
   releaseOrdinaryTextureGpuResource,
+  wakeOrdinaryTextureGpuUploads,
 } from "../packages/renderer-webgl/src/webgl/ordinary-texture-gpu-arena";
 import {
   createTextureHandleArena,
   ownsTexture,
   releaseOwnedTexture,
+  textureHandleArenaSnapshot,
 } from "../packages/renderer-webgl/src/webgl/texture-handle-arena";
 import { runFuzzTraces } from "./fuzz";
 
@@ -47,10 +50,12 @@ class FakeGl {
   readonly UNPACK_SKIP_ROWS = 0x0cf3;
   readonly UNSIGNED_BYTE = 0x1401;
   readonly deleted: number[] = [];
+  readonly created: number[] = [];
   deleteFault: unknown = new Error("delete failure");
   deleteFaultPresent = false;
   uploadFault: unknown = new Error("upload failure");
   uploadFaultPresent = false;
+  samplerFaultPresent = false;
   readonly uploads: number[] = [];
   #serial = 1;
   activeTexture = (): void => undefined;
@@ -58,7 +63,11 @@ class FakeGl {
     if (texture !== null) this.#bound = (texture as unknown as Handle).serial;
   };
   #bound = 0;
-  createTexture = (): WebGLTexture => ({ serial: this.#serial++ }) as unknown as WebGLTexture;
+  createTexture = (): WebGLTexture => {
+    const serial = this.#serial++;
+    this.created.push(serial);
+    return { serial } as unknown as WebGLTexture;
+  };
   deleteTexture = (texture: WebGLTexture): void => {
     const serial = (texture as unknown as Handle).serial;
     this.deleted.push(serial);
@@ -76,14 +85,19 @@ class FakeGl {
     }
     this.uploads.push(this.#bound);
   };
-  texParameteri = (): void => undefined;
+  texParameteri = (): void => {
+    if (this.samplerFaultPresent) {
+      this.samplerFaultPresent = false;
+      throw new Error("sampler failure");
+    }
+  };
 }
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
-const source = (serial: number): LoadedTextureSource => ({
-  data: new Uint8Array([serial, 0, 0, 255]),
-  height: 1,
+const source = (serial: number, width = 1, height = 1): LoadedTextureSource => ({
+  data: new Uint8Array(width * height * 4).fill(serial),
+  height,
   kind: "rgba-texture",
-  width: 1,
+  width,
 }) as LoadedTextureSource;
 const texture: TextureAssetUploadRef = { kind: "asset", uri: "texture.png" };
 const setup = (): {
@@ -199,18 +213,206 @@ describe("ordinary texture GPU arena", () => {
     expect(gl.uploads).toEqual([(resource.texture as unknown as Handle).serial]);
     expect(ordinaryTextureGpuOutcome(arena, 0)?.kind).toBe("completed");
   });
+  it("leaves a durable-capacity-denied upload queued and quiescent until capacity is released", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({ reason: "persistent-gpu-capacity" }),
+    });
+
+    expect(gl.created).toEqual([]);
+    expect(gl.uploads).toEqual([]);
+    expect(gl.deleted).toEqual([]);
+    expect(resource.uploaded).toBe(false);
+    expect(ordinaryTextureGpuPendingUpload(resource)).toBeDefined();
+    expect(ordinaryTextureGpuHasPendingUploads(arena)).toBe(true);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(false);
+    expect(wakeOrdinaryTextureGpuUploads(arena)).toBe(true);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+  });
+  it("requests a next-frame retry for frame-local upload-capacity denial", () => {
+    const { arena } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    consumeOrdinaryTextureGpuWake(arena);
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({ reason: "upload-capacity" }),
+    });
+
+    expect(resource.uploaded).toBe(false);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+  });
+  it("quiesces an intrinsically oversized upload with a deterministic failed outcome", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "oversized", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1, 2, 2), texture });
+    consumeOrdinaryTextureGpuWake(arena);
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({ limit: 8, reason: "upload-cost-exceeds-limit" }),
+    });
+
+    expect(gl.created).toEqual([]);
+    expect(gl.uploads).toEqual([]);
+    expect(ordinaryTextureGpuPendingUpload(resource)).toBeUndefined();
+    expect(ordinaryTextureGpuHasPendingUploads(arena)).toBe(false);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(false);
+    expect(ordinaryTextureGpuOutcome(arena, 0)).toMatchObject({
+      kind: "failed",
+      message: expect.stringMatching(/requires 16 upload bytes.*limit 8/),
+    });
+  });
+  it("quiesces an intrinsically oversized persistent GPU allocation without GL work", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "oversized-gpu", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1, 2, 2), texture });
+    consumeOrdinaryTextureGpuWake(arena);
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({ limit: 8, reason: "persistent-gpu-cost-exceeds-limit" }),
+    });
+
+    expect(gl.created).toEqual([]);
+    expect(gl.uploads).toEqual([]);
+    expect(ordinaryTextureGpuPendingUpload(resource)).toBeUndefined();
+    expect(ordinaryTextureGpuHasPendingUploads(arena)).toBe(false);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(false);
+    expect(ordinaryTextureGpuOutcome(arena, 0)).toMatchObject({
+      kind: "failed",
+      message: expect.stringMatching(/requires 16 persistent GPU bytes.*limit 8/),
+    });
+  });
+  it("retries temporary frame upload pressure and completes on the next frame", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "temporary", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    consumeOrdinaryTextureGpuWake(arena);
+    let pressured = true;
+    const admission = {
+      reserve: () => pressured
+        ? { reason: "upload-capacity" as const }
+        : {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        },
+    };
+
+    processOrdinaryTextureUploads(arena, 1, 1, admission);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+    pressured = false;
+    processOrdinaryTextureUploads(arena, 2, 1, admission);
+
+    expect(resource.uploaded).toBe(true);
+    expect(gl.created).toHaveLength(1);
+    expect(gl.uploads).toHaveLength(1);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(false);
+  });
+  it("rotates a denied row so a later affordable upload can proceed", () => {
+    const { arena, gl } = setup();
+    const large = ensureOrdinaryTextureGpuResource(arena, "large", 1);
+    const small = ensureOrdinaryTextureGpuResource(arena, "small", 1);
+    queueOrdinaryTextureUpload(arena, large, { source: source(1, 2, 2), texture });
+    queueOrdinaryTextureUpload(arena, small, { source: source(2), texture });
+    consumeOrdinaryTextureGpuWake(arena);
+    let commits = 0;
+
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: ({ persistentGpuBytes }) => persistentGpuBytes > 4 ? {
+        reason: "persistent-gpu-capacity" as const,
+      } : {
+        cancel: () => undefined,
+        commit: () => ({ release: () => undefined }),
+      },
+    });
+
+    commits += small.uploaded ? 1 : 0;
+    expect(commits).toBe(1);
+    expect(large.uploaded).toBe(false);
+    expect(ordinaryTextureGpuPendingUpload(large)).toBeDefined();
+    expect(small.uploaded).toBe(true);
+    expect(gl.created).toHaveLength(1);
+    expect(gl.uploads).toHaveLength(1);
+    expect(consumeOrdinaryTextureGpuWake(arena)).toBe(true);
+  });
+  it("spends upload admission and releases its failed unpublished allocation", () => {
+    const { arena, gl, handles } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let cancels = 0;
+    let commits = 0;
+    let releases = 0;
+    gl.uploadFaultPresent = true;
+
+    expect(() => processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => { cancels += 1; },
+        commit: () => {
+          commits += 1;
+          return { release: () => { releases += 1; } };
+        },
+      }),
+    })).toThrow("upload failure");
+
+    expect({ cancels, commits, releases }).toEqual({ cancels: 0, commits: 1, releases: 1 });
+    expect(gl.created).toHaveLength(1);
+    expect(gl.deleted).toHaveLength(1);
+    expect(textureHandleArenaSnapshot(handles).ownedTextureCount).toBe(0);
+    expect(resource.uploaded).toBe(false);
+    expect(ordinaryTextureGpuPendingUpload(resource)).toBeDefined();
+  });
+  it("spends upload admission but releases durable bytes when sampler setup fails after upload", () => {
+    const { arena, gl, handles } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let commits = 0;
+    let releases = 0;
+    gl.samplerFaultPresent = true;
+
+    expect(() => processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => {
+          commits += 1;
+          return { release: () => { releases += 1; } };
+        },
+      }),
+    })).toThrow("sampler failure");
+
+    expect(gl.uploads).toHaveLength(1);
+    expect({ commits, releases }).toEqual({ commits: 1, releases: 1 });
+    expect(textureHandleArenaSnapshot(handles).ownedTextureCount).toBe(0);
+    expect(resource.uploaded).toBe(false);
+    expect(ordinaryTextureGpuPendingUpload(resource)).toBeDefined();
+  });
   it("publishes the pending outcome before preserving an opaque release fault", () => {
     const { arena, gl, handles } = setup();
     const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
     queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let releases = 0;
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { releases += 1; } }),
+      }),
+    });
+    clearOrdinaryTextureGpuOutcomes(arena);
     const releaseFault = { stage: "release" };
     gl.deleteFault = releaseFault;
     gl.deleteFaultPresent = true;
     expect(releaseOrdinaryTextureGpuResource(arena, "a").releaseError).toBe(releaseFault);
     expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
-    expect(ordinaryTextureGpuOutcome(arena, 0)?.kind).toBe("discarded");
+    expect(ordinaryTextureGpuOutcomeCount(arena)).toBe(0);
+    expect(releases).toBe(1);
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(4);
+    if (!resource.uploaded) throw new Error("Expected admitted texture upload");
     expect(ownsTexture(handles, resource.texture)).toBe(true);
     releaseOwnedTexture(handles, resource.texture);
+    dropOrdinaryTextureGpuContext(arena);
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
   });
   it("keeps context-loss cleanup GL-free and publishes pending retention", () => {
     const { arena, gl } = setup();
@@ -221,7 +423,27 @@ describe("ordinary texture GPU arena", () => {
     expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
     expect(ordinaryTextureGpuHasPendingUploads(arena)).toBe(false);
     expect(ordinaryTextureGpuOutcome(arena, 0)?.kind).toBe("retained");
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
     clearOrdinaryTextureGpuOutcomes(arena);
     expect(ordinaryTextureGpuOutcomeCount(arena)).toBe(0);
+  });
+  it("releases live leases without GL deletion when the context is dropped", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let releases = 0;
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { releases += 1; } }),
+      }),
+    });
+
+    dropOrdinaryTextureGpuContext(arena);
+
+    expect(releases).toBe(1);
+    expect(gl.deleted).toEqual([]);
+    expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
   });
 });

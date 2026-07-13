@@ -490,11 +490,11 @@ export const bindGltfInstanceBuffer = (
   );
   const instanceCount = localModels.length;
   const resource = gltfInstanceBufferResource(state, key);
+  let grownPackedLogicalIndices: Int32Array | undefined;
   if (resource.packedLogicalIndices.length < instanceCount) {
-    const packedLogicalIndices = new Int32Array(instanceCount);
-    packedLogicalIndices.fill(-1);
-    packedLogicalIndices.set(resource.packedLogicalIndices);
-    resource.packedLogicalIndices = packedLogicalIndices;
+    grownPackedLogicalIndices = new Int32Array(instanceCount);
+    grownPackedLogicalIndices.fill(-1);
+    grownPackedLogicalIndices.set(resource.packedLogicalIndices);
   }
   const staging = prepareVertexInputInstance(
     state.vertexInputs,
@@ -503,6 +503,9 @@ export const bindGltfInstanceBuffer = (
     resource.allocation,
     instanceCount,
   );
+  if (grownPackedLogicalIndices !== undefined) {
+    resource.packedLogicalIndices = grownPackedLogicalIndices;
+  }
   const previousInstanceCount = resource.instanceCount;
   const previousLocalSignature = resource.localSignature;
   const previousLocalStride = previousLocalSignature === undefined

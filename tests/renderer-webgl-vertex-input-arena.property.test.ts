@@ -18,6 +18,7 @@ import {
   vertexInputCompositeVertexArrayForInstance,
   vertexInputGeometry,
   uploadVertexInputInstanceLane,
+  type VertexInputGpuGovernor,
 } from "../packages/renderer-webgl/src/vertex-input-arena";
 import { forEachFuzzCase } from "./fuzz";
 
@@ -157,6 +158,44 @@ const recipe = (bucketKey: string, positions: readonly number[], indexed = true)
   normals: new Float32Array(positions.length),
   positions: new Float32Array(positions),
 });
+
+type RecordedGpuCost = {
+  readonly persistentGpuBytes: number;
+  readonly transientPeakBytes?: number;
+  readonly uploadBytes: number;
+};
+
+const recordingGovernor = (denied = false): {
+  readonly cancelled: { value: number };
+  readonly committed: { value: number };
+  readonly costs: RecordedGpuCost[];
+  readonly governor: VertexInputGpuGovernor;
+  readonly released: { value: number };
+} => {
+  const cancelled = { value: 0 };
+  const committed = { value: 0 };
+  const released = { value: 0 };
+  const costs: RecordedGpuCost[] = [];
+  return {
+    cancelled,
+    committed,
+    costs,
+    governor: {
+      reserve: (cost) => {
+        costs.push(cost);
+        if (denied) return undefined;
+        return {
+          cancel: () => { cancelled.value += 1; return true; },
+          commit: () => {
+            committed.value += 1;
+            return { release: () => { released.value += 1; return true; } };
+          },
+        };
+      },
+    },
+    released,
+  };
+};
 
 const preparedInstanceAllocation = (
   arena: ReturnType<typeof createVertexInputArena>,
@@ -726,6 +765,425 @@ describe("vertex-input arena", () => {
     expect(dropped.pendingVertexArrayDeleteCount).toBe(0);
     disposeVertexInputArena(arena);
     expect(vertexInputArenaSnapshot(arena).abandonedVertexArrayCount).toBe(2);
+  });
+
+  it("reserves exact static geometry bytes before GL effects and releases the durable lease", () => {
+    const denied = recordingGovernor(true);
+    const deniedGl = new FakeGl();
+    const deniedArena = createVertexInputArena(denied.governor);
+    const geometryRecipe = recipe("governed-static", [0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    retainVertexInputGeometry(deniedArena, { geometryId: 1, recipe: geometryRecipe });
+    expect(() => vertexInputGeometry(deniedArena, glContext(deniedGl), 1, 1)).toThrow(/governor/);
+    expect(deniedGl.uploads).toHaveLength(0);
+    const expectedBytes = geometryRecipe.positions.byteLength
+      + geometryRecipe.normals!.byteLength + geometryRecipe.indices!.byteLength;
+    expect(denied.costs).toEqual([{ persistentGpuBytes: expectedBytes, uploadBytes: expectedBytes }]);
+
+    const admitted = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createVertexInputArena(admitted.governor);
+    retainVertexInputGeometry(arena, { geometryId: 1, recipe: geometryRecipe });
+    vertexInputGeometry(arena, glContext(gl), 1, 1);
+    expect(admitted.committed.value).toBe(1);
+    expect(admitted.cancelled.value).toBe(0);
+    releaseVertexInputGeometry(arena, glContext(gl), 1, 1);
+    expect(admitted.released.value).toBe(1);
+  });
+
+  it("spends failed upload bandwidth and leases retained rollback handles until retry", () => {
+    const clean = recordingGovernor();
+    const cleanGl = new FakeGl();
+    const cleanArena = createVertexInputArena(clean.governor);
+    retainVertexInputGeometry(cleanArena, {
+      geometryId: 1,
+      recipe: recipe("clean-governor-rollback", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    cleanGl.bufferDataFailureAt = 2;
+    expect(() => vertexInputGeometry(cleanArena, glContext(cleanGl), 1, 1)).toThrow(/bufferData/);
+    expect(clean.cancelled.value).toBe(0);
+    expect(clean.committed.value).toBe(1);
+    expect(clean.released.value).toBe(1);
+
+    const retained = recordingGovernor();
+    const retainedGl = new FakeGl();
+    const retainedArena = createVertexInputArena(retained.governor);
+    retainVertexInputGeometry(retainedArena, {
+      geometryId: 1,
+      recipe: recipe("retained-governor-rollback", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    retainedGl.bufferDataFailureAt = 2;
+    retainedGl.deleteBufferFailureAt = 1;
+    expect(() => vertexInputGeometry(retainedArena, glContext(retainedGl), 1, 1)).toThrow(/bufferData/);
+    expect(retained.committed.value).toBe(1);
+    expect(retained.released.value).toBe(0);
+    disposeVertexInputArena(retainedArena, glContext(retainedGl), 1);
+    expect(retained.released.value).toBe(1);
+  });
+
+  it("governs fixed instance-buffer creation and incremental growth without double counting", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createVertexInputArena(recorded.governor);
+    const allocation = createVertexInputInstanceAllocation(arena);
+    prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 1);
+    prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 3);
+    expect(recorded.costs).toEqual([
+      { persistentGpuBytes: 100, uploadBytes: 0 },
+      { persistentGpuBytes: 200, transientPeakBytes: 400, uploadBytes: 0 },
+    ]);
+    expect(recorded.committed.value).toBe(2);
+    releaseVertexInputInstanceAllocation(arena, glContext(gl), 1, allocation);
+    expect(recorded.released.value).toBe(2);
+  });
+
+  it("denies initial instance capacity before staging or GL effects and recovers transactionally", () => {
+    type InspectedInstance = {
+      readonly buffers?: unknown;
+      readonly bufferCapacity: number;
+      readonly capacity: number;
+      readonly governedBufferCapacity: number;
+      readonly instanceCount: number;
+      readonly localModelsDirty: boolean;
+      readonly rootPosesDirty: boolean;
+      readonly rootScalesDirty: boolean;
+      readonly staging: {
+        readonly forceFull: boolean;
+        readonly localModels: Float32Array;
+        readonly ranges: Int32Array;
+        readonly rootPoses: Float32Array;
+        readonly rootScales: Float32Array;
+      };
+    };
+    let deny = true;
+    let committed = 0;
+    const costs: RecordedGpuCost[] = [];
+    const arena = createVertexInputArena({
+      reserve: (cost) => {
+        costs.push(cost);
+        if (deny) return undefined;
+        return {
+          cancel: () => true,
+          commit: () => {
+            committed += 1;
+            return { release: () => true };
+          },
+        };
+      },
+    });
+    const gl = new FakeGl();
+    const allocation = createVertexInputInstanceAllocation(arena);
+    const resource = [...(arena as unknown as {
+      readonly ownedInstances: Map<number, InspectedInstance>;
+    }).ownedInstances.values()][0]!;
+    const staging = resource.staging;
+    const originalArrays = {
+      localModels: staging.localModels,
+      ranges: staging.ranges,
+      rootPoses: staging.rootPoses,
+      rootScales: staging.rootScales,
+    };
+    const originalState = {
+      bufferCapacity: resource.bufferCapacity,
+      buffers: resource.buffers,
+      capacity: resource.capacity,
+      forceFull: staging.forceFull,
+      governedBufferCapacity: resource.governedBufferCapacity,
+      instanceCount: resource.instanceCount,
+      localModelsDirty: resource.localModelsDirty,
+      rootPosesDirty: resource.rootPosesDirty,
+      rootScalesDirty: resource.rootScalesDirty,
+    };
+    const deniedCount = 2;
+
+    expect(() => prepareVertexInputInstance(
+      arena, glContext(gl), 1, allocation, deniedCount,
+    )).toThrow(/governor/);
+    expect(costs).toEqual([{
+      persistentGpuBytes: deniedCount * 100,
+      uploadBytes: 0,
+    }]);
+    expect(resource.staging).toBe(staging);
+    expect(resource.staging.localModels).toBe(originalArrays.localModels);
+    expect(resource.staging.ranges).toBe(originalArrays.ranges);
+    expect(resource.staging.rootPoses).toBe(originalArrays.rootPoses);
+    expect(resource.staging.rootScales).toBe(originalArrays.rootScales);
+    expect({
+      bufferCapacity: resource.bufferCapacity,
+      buffers: resource.buffers,
+      capacity: resource.capacity,
+      forceFull: resource.staging.forceFull,
+      governedBufferCapacity: resource.governedBufferCapacity,
+      instanceCount: resource.instanceCount,
+      localModelsDirty: resource.localModelsDirty,
+      rootPosesDirty: resource.rootPosesDirty,
+      rootScalesDirty: resource.rootScalesDirty,
+    }).toEqual(originalState);
+    expect(gl.allocations).toHaveLength(0);
+    expect(gl.uploads).toHaveLength(0);
+    expect(gl.subUploads).toHaveLength(0);
+    expect(gl.deletedBuffers).toHaveLength(0);
+    expect(gl.events).toHaveLength(0);
+    expect(gl.arrayBufferBinding).toBeNull();
+
+    deny = false;
+    const recovered = prepareVertexInputInstance(arena, glContext(gl), 1, allocation, 2);
+    expect(recovered).toBe(staging);
+    expect(recovered.localModels).not.toBe(originalArrays.localModels);
+    expect(recovered.rootPoses).not.toBe(originalArrays.rootPoses);
+    expect(recovered.rootScales).not.toBe(originalArrays.rootScales);
+    expect(recovered.ranges).not.toBe(originalArrays.ranges);
+    expect(recovered.localModels).toHaveLength(32);
+    expect(recovered.rootPoses).toHaveLength(12);
+    expect(recovered.rootScales).toHaveLength(6);
+    expect(recovered.ranges).toHaveLength(4);
+    expect(recovered.forceFull).toBe(true);
+    expect(gl.allocations.map(({ bytes }) => bytes)).toEqual([128, 48, 24]);
+    expect(committed).toBe(1);
+  });
+
+  it("keeps clean instance staging and GL state untouched across denied growth", () => {
+    type InspectedInstance = {
+      readonly buffers?: unknown;
+      readonly bufferCapacity: number;
+      readonly capacity: number;
+      readonly governedBufferCapacity: number;
+      readonly instanceCount: number;
+      readonly localModelsDirty: boolean;
+      readonly rootPosesDirty: boolean;
+      readonly rootScalesDirty: boolean;
+    };
+    let denyPersistent = false;
+    const costs: RecordedGpuCost[] = [];
+    const arena = createVertexInputArena({
+      reserve: (cost) => {
+        costs.push(cost);
+        if (denyPersistent && cost.persistentGpuBytes !== 0) return undefined;
+        return {
+          cancel: () => true,
+          commit: () => ({ release: () => true }),
+        };
+      },
+    });
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const allocation = createVertexInputInstanceAllocation(arena);
+    const staging = prepareVertexInputInstance(arena, context, 1, allocation, 1);
+    staging.localModels.fill(11);
+    staging.rootPoses.fill(12);
+    staging.rootScales.fill(13);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "localModels", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootPoses", 0);
+    uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0);
+    staging.ranges.set([7, 9]);
+    expect(staging.forceFull).toBe(false);
+
+    const resource = [...(arena as unknown as {
+      readonly ownedInstances: Map<number, InspectedInstance>;
+    }).ownedInstances.values()][0]!;
+    const arrays = {
+      localModels: staging.localModels,
+      ranges: staging.ranges,
+      rootPoses: staging.rootPoses,
+      rootScales: staging.rootScales,
+    };
+    const contents = {
+      localModels: Array.from(staging.localModels),
+      ranges: Array.from(staging.ranges),
+      rootPoses: Array.from(staging.rootPoses),
+      rootScales: Array.from(staging.rootScales),
+    };
+    const before = {
+      allocations: gl.allocations.length,
+      bufferCapacity: resource.bufferCapacity,
+      buffers: resource.buffers,
+      capacity: resource.capacity,
+      deletedBuffers: gl.deletedBuffers.length,
+      events: gl.events.length,
+      governedBufferCapacity: resource.governedBufferCapacity,
+      instanceCount: resource.instanceCount,
+      subUploads: gl.subUploads.length,
+      uploads: gl.uploads.length,
+    };
+    const deniedCount = 3;
+    denyPersistent = true;
+
+    expect(() => prepareVertexInputInstance(
+      arena, context, 1, allocation, deniedCount,
+    )).toThrow(/governor/);
+    expect(costs.at(-1)).toEqual({
+      persistentGpuBytes: deniedCount * 100 - 100,
+      transientPeakBytes: 400,
+      uploadBytes: 0,
+    });
+    expect(staging.localModels).toBe(arrays.localModels);
+    expect(staging.ranges).toBe(arrays.ranges);
+    expect(staging.rootPoses).toBe(arrays.rootPoses);
+    expect(staging.rootScales).toBe(arrays.rootScales);
+    expect(Array.from(staging.localModels)).toEqual(contents.localModels);
+    expect(Array.from(staging.ranges)).toEqual(contents.ranges);
+    expect(Array.from(staging.rootPoses)).toEqual(contents.rootPoses);
+    expect(Array.from(staging.rootScales)).toEqual(contents.rootScales);
+    expect(staging.forceFull).toBe(false);
+    expect(resource.localModelsDirty).toBe(false);
+    expect(resource.rootPosesDirty).toBe(false);
+    expect(resource.rootScalesDirty).toBe(false);
+    expect({
+      allocations: gl.allocations.length,
+      bufferCapacity: resource.bufferCapacity,
+      buffers: resource.buffers,
+      capacity: resource.capacity,
+      deletedBuffers: gl.deletedBuffers.length,
+      events: gl.events.length,
+      governedBufferCapacity: resource.governedBufferCapacity,
+      instanceCount: resource.instanceCount,
+      subUploads: gl.subUploads.length,
+      uploads: gl.uploads.length,
+    }).toEqual(before);
+    expect(gl.arrayBufferBinding).toBeNull();
+
+    denyPersistent = false;
+    const grown = prepareVertexInputInstance(arena, context, 1, allocation, 3);
+    expect(grown).toBe(staging);
+    expect(grown.localModels).not.toBe(arrays.localModels);
+    expect(grown.rootPoses).not.toBe(arrays.rootPoses);
+    expect(grown.rootScales).not.toBe(arrays.rootScales);
+    expect(grown.ranges).not.toBe(arrays.ranges);
+    expect(Array.from(grown.localModels.subarray(0, 16))).toEqual(contents.localModels);
+    expect(Array.from(grown.rootPoses.subarray(0, 6))).toEqual(contents.rootPoses);
+    expect(Array.from(grown.rootScales.subarray(0, 3))).toEqual(contents.rootScales);
+    expect(grown.forceFull).toBe(true);
+    expect(gl.allocations.slice(-3).map(({ bytes }) => bytes)).toEqual([192, 72, 36]);
+    expect(gl.allocations.slice(-3).map(({ buffer }) => buffer))
+      .toEqual(gl.allocations.slice(0, 3).map(({ buffer }) => buffer));
+  });
+
+  it("reuses a retained failed-growth lease across smaller and later equal growth", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena(recorded.governor);
+    const allocation = createVertexInputInstanceAllocation(arena);
+    prepareVertexInputInstance(arena, context, 1, allocation, 1);
+
+    gl.bufferDataFailureAt = 5;
+    expect(() => prepareVertexInputInstance(arena, context, 1, allocation, 3))
+      .toThrow(/bufferData/);
+    delete gl.bufferDataFailureAt;
+
+    const smaller = prepareVertexInputInstance(arena, context, 1, allocation, 2);
+    expect(smaller.localModels).toHaveLength(32);
+    const equalToRetained = prepareVertexInputInstance(arena, context, 1, allocation, 3);
+    expect(equalToRetained.localModels).toHaveLength(48);
+    expect(recorded.costs).toEqual([
+      { persistentGpuBytes: 100, uploadBytes: 0 },
+      { persistentGpuBytes: 200, transientPeakBytes: 400, uploadBytes: 0 },
+      { persistentGpuBytes: 0, transientPeakBytes: 500, uploadBytes: 0 },
+      { persistentGpuBytes: 0, transientPeakBytes: 600, uploadBytes: 0 },
+    ]);
+    expect(recorded.costs.every(({ persistentGpuBytes }) => persistentGpuBytes >= 0)).toBe(true);
+    expect(recorded.costs.reduce((sum, cost) => sum + cost.persistentGpuBytes, 0)).toBe(300);
+  });
+
+  it("denies replacement transient peak before staging or GL mutation", () => {
+    let denyTransient = false;
+    const costs: RecordedGpuCost[] = [];
+    const arena = createVertexInputArena({
+      reserve: (cost) => {
+        costs.push(cost);
+        if (denyTransient && (cost.transientPeakBytes ?? 0) !== 0) return undefined;
+        return {
+          cancel: () => true,
+          commit: () => ({ release: () => true }),
+        };
+      },
+    });
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const allocation = createVertexInputInstanceAllocation(arena);
+    const staging = prepareVertexInputInstance(arena, context, 1, allocation, 1);
+    const allocationsBefore = gl.allocations.length;
+    denyTransient = true;
+
+    expect(() => prepareVertexInputInstance(arena, context, 1, allocation, 3)).toThrow(/governor/);
+    expect(costs.at(-1)).toEqual({
+      persistentGpuBytes: 200,
+      transientPeakBytes: 400,
+      uploadBytes: 0,
+    });
+    expect(gl.allocations).toHaveLength(allocationsBefore);
+    expect(staging.localModels).toHaveLength(16);
+  });
+
+  it("rejects unrepresentable instance layouts before governor or allocation effects", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createVertexInputArena(recorded.governor);
+    const allocation = createVertexInputInstanceAllocation(arena);
+
+    expect(() => prepareVertexInputInstance(
+      arena,
+      glContext(gl),
+      1,
+      allocation,
+      0x1_0000_0000,
+    )).toThrow(RangeError);
+    expect(recorded.costs).toHaveLength(0);
+    expect(gl.events).toHaveLength(0);
+  });
+
+  it("governs dynamic instance uploads before GL effects and spends attempted failures", () => {
+    const deniedCosts: RecordedGpuCost[] = [];
+    const deniedGl = new FakeGl();
+    const deniedArena = createVertexInputArena({
+      reserve: (cost) => {
+        deniedCosts.push(cost);
+        if (cost.uploadBytes !== 0) return undefined;
+        return {
+          cancel: () => true,
+          commit: () => ({ release: () => true }),
+        };
+      },
+    });
+    const deniedAllocation = createVertexInputInstanceAllocation(deniedArena);
+    prepareVertexInputInstance(deniedArena, glContext(deniedGl), 1, deniedAllocation, 1);
+
+    expect(() => uploadVertexInputInstanceLane(
+      deniedArena,
+      glContext(deniedGl),
+      1,
+      deniedAllocation,
+      "localModels",
+      0,
+    )).toThrow(/governor/);
+    expect(deniedGl.subUploads).toHaveLength(0);
+    expect(deniedCosts).toEqual([
+      { persistentGpuBytes: 100, uploadBytes: 0 },
+      { persistentGpuBytes: 0, uploadBytes: 64 },
+    ]);
+
+    const attempted = recordingGovernor();
+    const attemptedGl = new FakeGl();
+    const attemptedArena = createVertexInputArena(attempted.governor);
+    const attemptedAllocation = createVertexInputInstanceAllocation(attemptedArena);
+    prepareVertexInputInstance(attemptedArena, glContext(attemptedGl), 1, attemptedAllocation, 1);
+    attemptedGl.bufferSubDataFailureAt = 1;
+
+    expect(() => uploadVertexInputInstanceLane(
+      attemptedArena,
+      glContext(attemptedGl),
+      1,
+      attemptedAllocation,
+      "localModels",
+      0,
+    )).toThrow(/bufferSubData/);
+    expect(attempted.costs).toEqual([
+      { persistentGpuBytes: 100, uploadBytes: 0 },
+      { persistentGpuBytes: 0, uploadBytes: 64 },
+    ]);
+    expect(attempted.committed.value).toBe(2);
+    expect(attempted.released.value).toBe(1);
+    releaseVertexInputInstanceAllocation(attemptedArena, glContext(attemptedGl), 1, attemptedAllocation);
+    expect(attempted.released.value).toBe(2);
   });
 
 });

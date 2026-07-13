@@ -230,6 +230,7 @@ interface ResourceArenaState {
   readonly preparedAssets: PreparedGltfAssetStore;
   readonly preparedSources: ReadonlyMap<string, PreparedTextureSource>;
   readonly sourceReferences: ReadonlyMap<LoadedTextureSource, number>;
+  readonly sourceLifetime?: ResourceArenaSourceLifetime;
   readonly virtualTextures: Map<string, TextureDeclaration<VirtualTextureAssetRef>>;
   readonly wake: () => void;
 }
@@ -256,6 +257,11 @@ export interface ResourceArenaChanges {
   readonly releasedOrdinaryTextureKeys: readonly string[];
   readonly releasedSources: readonly LoadedTextureSource[];
   readonly releasedVirtualTextureKeys: readonly string[];
+}
+
+export interface ResourceArenaSourceLifetime {
+  /** Called before the first owning table publishes this decoded identity. */
+  retain(source: LoadedTextureSource): void;
 }
 
 export type ResourceArenaDisposalResult =
@@ -287,7 +293,9 @@ const arenaContentKeys = (arena: ResourceArena): Map<string, Map<string, Texture
 
 const retainSource = (arena: ResourceArena, source: LoadedTextureSource): void => {
   const references = arenaSourceReferences(arena);
-  references.set(source, (references.get(source) ?? 0) + 1);
+  const previous = references.get(source) ?? 0;
+  if (previous === 0) (arena as unknown as ResourceArenaState).sourceLifetime?.retain(source);
+  references.set(source, previous + 1);
 };
 
 const releaseSource = (arena: ResourceArena, source: LoadedTextureSource): boolean => {
@@ -435,6 +443,7 @@ const EMPTY_PREPARED_ASSET_EVENTS = Object.freeze({
 export const createResourceArena = (
   load: PrepareGltfAssetJob,
   wake: () => void,
+  sourceLifetime?: ResourceArenaSourceLifetime,
 ): ResourceArena => {
   let arena: ResourceArenaState;
   // The subscription callback below is the sole wake path. Store-level change
@@ -464,6 +473,7 @@ export const createResourceArena = (
     preparedAssets,
     preparedSources: new Map(),
     sourceReferences: new Map(),
+    ...(sourceLifetime === undefined ? {} : { sourceLifetime }),
     virtualTextures: new Map(),
     wake,
   };
@@ -967,9 +977,8 @@ export const detachResourceArenaImagePreparation = (
   arena: ResourceArena,
   key: string,
   generation: number,
-): void => {
+): boolean =>
   (arena as unknown as ResourceArenaState).preparedAssets.detachImagePreparation(key, generation);
-};
 
 export const resourceArenaOrdinaryTextureResidencySnapshot = (
   arena: ResourceArena,
@@ -1034,6 +1043,9 @@ export const abortResourceArenaImageWork = (arena: ResourceArena, key: string): 
 export const resourceArenaPreparedSource = (arena: ResourceArena, key: string): PreparedTextureSource | undefined =>
   arenaPreparedSources(arena).get(key);
 
+export const wakeResourceArenaPreparedAssetCpuCapacity = (arena: ResourceArena): boolean =>
+  (arena as unknown as ResourceArenaState).preparedAssets.wakeCpuCapacity();
+
 export const retainResourceArenaPreparedSource = (
   arena: ResourceArena,
   key: string,
@@ -1042,8 +1054,8 @@ export const retainResourceArenaPreparedSource = (
   const sources = arenaPreparedSources(arena);
   const previous = sources.get(key);
   if (previous?.source !== source.source) {
-    if (previous !== undefined) releaseSource(arena, previous.source);
     retainSource(arena, source.source);
+    if (previous !== undefined) releaseSource(arena, previous.source);
   }
   sources.set(key, source);
   return previous;
@@ -1101,15 +1113,16 @@ export const retainResourceArenaAssetSource = (
   sourceKey: string,
   source: LoadedTextureSource,
 ): LoadedTextureSource | undefined => {
-  let sources = arenaAssetSources(arena).get(assetKey);
-  if (sources === undefined) {
-    sources = new Map();
-    arenaAssetSources(arena).set(assetKey, sources);
-  }
-  const previous = sources.get(sourceKey);
+  const allSources = arenaAssetSources(arena);
+  let sources = allSources.get(assetKey);
+  const previous = sources?.get(sourceKey);
   if (previous !== source) {
-    if (previous !== undefined) releaseSource(arena, previous);
     retainSource(arena, source);
+    if (previous !== undefined) releaseSource(arena, previous);
+    if (sources === undefined) {
+      sources = new Map();
+      allSources.set(assetKey, sources);
+    }
     sources.set(sourceKey, source);
   }
   return previous;
@@ -1137,14 +1150,14 @@ export const retainResourceArenaIblSource = (
 ): LoadedTextureSource | undefined => {
   const allSources = arenaIblSources(arena);
   let sources = allSources.get(iblKey);
-  if (sources === undefined) {
-    sources = new Map();
-    allSources.set(iblKey, sources);
-  }
-  const previous = sources.get(sourceKey);
+  const previous = sources?.get(sourceKey);
   if (previous !== source) {
-    if (previous !== undefined) releaseSource(arena, previous);
     retainSource(arena, source);
+    if (previous !== undefined) releaseSource(arena, previous);
+    if (sources === undefined) {
+      sources = new Map();
+      allSources.set(iblKey, sources);
+    }
     sources.set(sourceKey, source);
   }
   return previous;

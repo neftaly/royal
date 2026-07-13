@@ -2,6 +2,7 @@ import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlContextSnapshot,
+  type ResourceGovernorPolicy,
   type WebGlRoot,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
@@ -14,6 +15,8 @@ export interface RoyalRendererRootContextOptions {
   readonly antialias?: boolean;
   /** Generate VT pages for ordinary large raster textures. @defaultValue `false` */
   readonly generatedRasterVirtualTextures?: boolean;
+  /** Immutable cross-class CPU/GPU/job/upload budget policy. */
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
   /** Global physical byte budget shared by virtual textures. @defaultValue `67108864` */
   readonly virtualTexturePhysicalByteBudget?: number;
 }
@@ -23,7 +26,9 @@ export interface RoyalRendererRootOptions {
   readonly context?: RoyalRendererRootContextOptions;
 }
 
-export type RoyalRendererRootContextSnapshot = Required<RoyalRendererRootContextOptions>;
+export type RoyalRendererRootContextSnapshot =
+  Required<Omit<RoyalRendererRootContextOptions, "resourceGovernorPolicy">>
+  & Pick<RoyalRendererRootContextOptions, "resourceGovernorPolicy">;
 
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
@@ -40,6 +45,9 @@ export interface RoyalRendererRootSnapshot {
   readonly lifecycle: RoyalRendererRootLifecycleSnapshot;
 }
 
+/** Typed diagnostics returned by the current Royal WebGL renderer backend. */
+export type RoyalRendererDiagnosticsSnapshot = WebGlRootSnapshot;
+
 export type RoyalRendererRootRenderInput = RenderRoot;
 
 /** Imperative renderer root bound to one canvas. */
@@ -49,13 +57,15 @@ export interface RoyalRendererRoot {
   readonly disposed: boolean;
   readonly frame: number;
   /** Typed WebGL diagnostics, including virtual-texture residency and request counters. */
-  diagnostics(): WebGlRootSnapshot;
+  diagnostics(): RoyalRendererDiagnosticsSnapshot;
   /** Immediately renders queued demand on the caller's current frame, if any. */
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   /** Observes renderer availability without polling. Calls back immediately. */
   observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
+  /** Observes failures from renderer-owned scheduled frames. */
+  observeRenderFailures(callback: (failure: unknown) => void): () => void;
   /** Returns the front-most render target under a DOM client coordinate. */
   pick(input: PickInput): PickResult | undefined;
   /** Renders a complete scene into the canvas. */
@@ -118,6 +128,9 @@ export const createRendererRoot = (
     alpha: root.options.alpha,
     antialias: root.options.antialias,
     generatedRasterVirtualTextures: root.options.generatedRasterVirtualTextures,
+    ...(root.options.resourceGovernorPolicy === undefined
+      ? {}
+      : { resourceGovernorPolicy: root.options.resourceGovernorPolicy }),
     virtualTexturePhysicalByteBudget: root.options.virtualTexturePhysicalByteBudget,
   });
 
@@ -147,6 +160,7 @@ export const createRendererRoot = (
     observeLifecycle: (callback) => root.observeContextLifecycle((snapshot) => {
       callback(royalLifecycleSnapshot(snapshot));
     }),
+    observeRenderFailures: (callback) => root.observeRenderFailures(callback),
     pick: (input: PickInput) => root.pick(input),
     render: (scene: RoyalRendererRootRenderInput) => {
       root.render(scene);

@@ -7,6 +7,7 @@ import {
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
 import { runFuzzTraces, type SeededRandom } from "./fuzz";
+import { ResourceGovernorCpuCapacityError } from "../packages/renderer-webgl/src/resource-governor";
 type DeferredLoad = {
   readonly reject: (error: unknown) => void;
   readonly requestKey: string;
@@ -47,6 +48,90 @@ const harness = () => {
   });
   return { closed, deferred, references, store };
 };
+
+it("retries decoded CPU pressure only after a fair capacity wake", async () => {
+  const sources = [fakeSource(1), fakeSource(2)];
+  const closed: LoadedTextureSource[] = [];
+  const results: unknown[] = [];
+  let loads = 0;
+  let deny = true;
+  const store = new OrdinaryTextureSourceStore({
+    close: (source) => { closed.push(source); },
+    load: async () => sources[loads++]!,
+    retain: () => {
+      if (deny) throw new ResourceGovernorCpuCapacityError("temporary CPU pressure", false);
+      return { release: () => true };
+    },
+  });
+  const subscription = store.acquire({ uri: "/pressure.png" }, (result) => results.push(result));
+  await flushJobs();
+  expect({ closed, loads, results }).toEqual({ closed: [sources[0]], loads: 1, results: [] });
+  expect(store.wake()).toBeUndefined();
+  await flushJobs();
+  expect(loads).toBe(1);
+  deny = false;
+  expect(store.wakeCpuCapacity()).toBe(true);
+  await flushJobs();
+  expect(loads).toBe(2);
+  expect(results).toHaveLength(1);
+  expect(store.wakeCpuCapacity()).toBe(false);
+  subscription.release();
+  store.dispose();
+});
+
+it("wakes every CPU-blocked source once so a larger re-denial cannot strand a smaller source", async () => {
+  const sourceUris = new WeakMap<object, string>();
+  const loads = new Map<string, number>();
+  const results = new Map<string, unknown[]>();
+  let retry = false;
+  const store = new OrdinaryTextureSourceStore({
+    close: () => undefined,
+    load: async (request) => {
+      loads.set(request.uri, (loads.get(request.uri) ?? 0) + 1);
+      const source = fakeSource(loads.get(request.uri)!);
+      sourceUris.set(source as object, request.uri);
+      return source;
+    },
+    retain: (source) => {
+      if (!retry || sourceUris.get(source as object) === "/large.png") {
+        throw new ResourceGovernorCpuCapacityError("temporary CPU pressure", false);
+      }
+      return { release: () => true };
+    },
+  });
+  const subscriptions = ["/large.png", "/small.png"].map((uri) => {
+    results.set(uri, []);
+    return store.acquire({ uri }, (result) => results.get(uri)!.push(result));
+  });
+  await flushJobs();
+  retry = true;
+
+  expect(store.wakeCpuCapacity()).toBe(true);
+  await flushJobs();
+
+  expect(loads).toEqual(new Map([["/large.png", 2], ["/small.png", 2]]));
+  expect(results.get("/large.png")).toEqual([]);
+  expect(results.get("/small.png")).toEqual([expect.objectContaining({ kind: "ready" })]);
+  for (const subscription of subscriptions) subscription.release();
+  store.dispose();
+});
+
+it("terminally publishes an intrinsically impossible decoded CPU cost", async () => {
+  const results: unknown[] = [];
+  const store = new OrdinaryTextureSourceStore({
+    close: () => undefined,
+    load: async () => fakeSource(1),
+    retain: () => {
+      throw new ResourceGovernorCpuCapacityError("decoded source exceeds maximum", true);
+    },
+  });
+  store.acquire({ uri: "/impossible.png" }, (result) => results.push(result));
+  await flushJobs();
+  expect(results).toEqual([expect.objectContaining({ kind: "error" })]);
+  expect(store.wakeCpuCapacity()).toBe(false);
+  expect(store.snapshot()).toMatchObject({ failures: 1, starts: 1 });
+  store.dispose();
+});
 type SourceOperation =
   | { readonly alias: number; readonly identity: number; readonly kind: "acquire" }
   | { readonly alias: number; readonly kind: "release" }
@@ -162,6 +247,69 @@ const runSourceTrace = async (trace: readonly SourceOperation[], label: string):
   if (!disposed) store.dispose();
 };
 describe("ordinary texture source jobs", () => {
+  it("does not double-admit or double-start when admission wakes reentrantly", async () => {
+    const source = fakeSource(30);
+    let admissions = 0;
+    let loads = 0;
+    let releases = 0;
+    let store!: OrdinaryTextureSourceStore;
+    store = new OrdinaryTextureSourceStore({
+      admit: () => {
+        admissions += 1;
+        store.wake();
+        return { release: () => { releases += 1; } };
+      },
+      close: () => undefined,
+      load: async () => { loads += 1; return source; },
+      retain: () => ({ release: () => true }),
+    });
+
+    const subscription = store.acquire({ uri: "/reentrant-admit.png" }, () => undefined);
+    await flushJobs();
+    expect({ admissions, loads, releases }).toEqual({ admissions: 1, loads: 1, releases: 1 });
+    subscription.release();
+    store.dispose();
+  });
+
+  it("releases admission when its callback disposes the store before load starts", () => {
+    let loads = 0;
+    let releases = 0;
+    let store!: OrdinaryTextureSourceStore;
+    store = new OrdinaryTextureSourceStore({
+      admit: () => {
+        store.dispose();
+        return { release: () => { releases += 1; } };
+      },
+      close: () => undefined,
+      load: async () => { loads += 1; return fakeSource(31); },
+      retain: () => ({ release: () => true }),
+    });
+
+    store.acquire({ uri: "/dispose-during-admit.png" }, () => undefined);
+    expect({ loads, releases }).toEqual({ loads: 0, releases: 1 });
+    expect(store.snapshot()).toMatchObject({ activeJobs: 0, subscribers: 0 });
+  });
+
+  it("retries denied work on wake and contains a throwing admission releaser", async () => {
+    let allowed = false;
+    let loads = 0;
+    const store = new OrdinaryTextureSourceStore({
+      admit: () => allowed ? { release: () => { throw new Error("release fault"); } } : undefined,
+      close: () => undefined,
+      load: async () => { loads += 1; return fakeSource(32); },
+      retain: () => ({ release: () => true }),
+    });
+    const subscription = store.acquire({ uri: "/denied-then-wake.png" }, () => undefined);
+    expect(loads).toBe(0);
+
+    allowed = true;
+    store.wake();
+    await flushJobs();
+    expect(loads).toBe(1);
+    subscription.release();
+    store.dispose();
+  });
+
   it("keys decoded content independently of upload state without ambiguous encodings", () => {
     expect(ordinaryTextureSourceKey({ contentKey: "same", uri: "/a.png" }))
       .toBe(ordinaryTextureSourceKey({ contentKey: "same", uri: "/b.png", version: 9 }));

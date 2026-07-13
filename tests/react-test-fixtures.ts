@@ -209,6 +209,7 @@ export const fakeRendererRoot = ({
       callback({ generation: 1, lifecycle: "available" });
       return () => undefined;
     }),
+    observeRenderFailures: vi.fn(() => () => undefined),
     pick: vi.fn((input: PickInput) => pick(latestScene, input)),
     render: vi.fn((scene: RenderRoot) => {
       latestScene = scene;

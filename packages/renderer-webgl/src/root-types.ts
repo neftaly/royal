@@ -3,6 +3,7 @@ import type {
   PickResult,
   RenderRoot,
 } from "@royal/renderer-core";
+import type { ResourceGovernorPolicy, ResourceGovernorSnapshot } from "./resource-governor";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -12,11 +13,14 @@ export interface WebGlRootOptions {
   readonly antialias?: boolean;
   /** Generate virtual-texture pages from ordinary large raster textures. Explicit virtual textures remain available. @defaultValue `false` */
   readonly generatedRasterVirtualTextures?: boolean;
+  /** Immutable cross-class CPU/GPU/job/upload budget policy. */
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
   /** Global physical GPU byte budget for virtual-texture atlases and page tables. @defaultValue `67108864` */
   readonly virtualTexturePhysicalByteBudget?: number;
 }
 
-export type NormalizedWebGlRootOptions = Required<WebGlRootOptions>;
+export type NormalizedWebGlRootOptions = Required<Omit<WebGlRootOptions, "resourceGovernorPolicy">>
+  & Pick<WebGlRootOptions, "resourceGovernorPolicy">;
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
 
@@ -48,9 +52,11 @@ export interface WebGlRootSnapshot {
   /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: Required<WebGlRootOptions>;
+  readonly options: NormalizedWebGlRootOptions;
   readonly planning: WebGlFramePlanningSnapshot;
   readonly resourceLifetime: WebGlResourceLifetimeSnapshot;
+  /** Root-wide resource pressure and admission diagnostics. */
+  readonly resourceGovernor: ResourceGovernorSnapshot;
   readonly picking: WebGlPickingSnapshot;
   readonly textureResidency: WebGlTextureResidencySnapshot;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;
@@ -204,7 +210,7 @@ export interface WebGlRoot {
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: Required<WebGlRootOptions>;
+  readonly options: NormalizedWebGlRootOptions;
   contextSnapshot(): WebGlContextSnapshot;
   /** Suspends default-framebuffer scheduling until the returned release function runs. */
   acquireExternalRenderClock(): () => void;
@@ -217,6 +223,8 @@ export interface WebGlRoot {
   invalidate(): void;
   /** Observes immutable context lifecycle transitions. Calls back immediately with the current state. */
   observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void;
+  /** Observes failures from renderer-owned scheduled frames. Explicit render calls still throw synchronously. */
+  observeRenderFailures(callback: (failure: unknown) => void): () => void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;

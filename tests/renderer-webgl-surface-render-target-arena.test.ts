@@ -5,6 +5,8 @@ import {
   dropSurfaceRenderTargetArenaContext,
   ensureHdrRenderTarget,
   releaseSurfaceRenderTargetContextHandles,
+  type SurfaceRenderTargetGpuGovernor,
+  type SurfaceRenderTargetGpuLease,
 } from "../packages/renderer-webgl/src/surface-render-target-arena";
 
 type Handle = { readonly kind: "framebuffer" | "renderbuffer" | "texture"; readonly serial: number };
@@ -33,6 +35,8 @@ class FakeGl {
   framebufferComplete = true;
   failCopyOnce = false;
   failRenderbufferCreationOnce = false;
+  failRenderbufferStorageOnce = false;
+  failTextureDeleteOnce = false;
   #serial = 1;
 
   #handle(kind: Handle["kind"]): Handle {
@@ -85,19 +89,70 @@ class FakeGl {
     this.#record("deleteFramebuffer", value);
   deleteRenderbuffer = (value: WebGLRenderbuffer | null): void =>
     this.#record("deleteRenderbuffer", value);
-  deleteTexture = (value: WebGLTexture | null): void => this.#record("deleteTexture", value);
+  deleteTexture = (value: WebGLTexture | null): void => {
+    this.#record("deleteTexture", value);
+    if (this.failTextureDeleteOnce) {
+      this.failTextureDeleteOnce = false;
+      throw new Error("delete texture failed");
+    }
+  };
   framebufferRenderbuffer = (...args: readonly unknown[]): void =>
     this.#record("framebufferRenderbuffer", ...args);
   framebufferTexture2D = (...args: readonly unknown[]): void =>
     this.#record("framebufferTexture2D", ...args);
-  renderbufferStorage = (...args: readonly unknown[]): void =>
+  renderbufferStorage = (...args: readonly unknown[]): void => {
     this.#record("renderbufferStorage", ...args);
+    if (this.failRenderbufferStorageOnce) {
+      this.failRenderbufferStorageOnce = false;
+      throw new Error("renderbuffer storage failed");
+    }
+  };
   texImage2D = (...args: readonly unknown[]): void => this.#record("texImage2D", ...args);
   texParameteri = (...args: readonly unknown[]): void => this.#record("texParameteri", ...args);
 }
 
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
 const calls = (gl: FakeGl, name: string): readonly Call[] => gl.calls.filter((call) => call.name === name);
+
+const recordingGovernor = (denied = false): {
+  readonly cancelled: { value: number };
+  readonly costs: Array<Record<string, number>>;
+  readonly governor: SurfaceRenderTargetGpuGovernor;
+  readonly released: { value: number };
+  readonly replacements: { value: number };
+} => {
+  const cancelled = { value: 0 };
+  const released = { value: 0 };
+  const replacements = { value: 0 };
+  const costs: Array<Record<string, number>> = [];
+  const lease = (): SurfaceRenderTargetGpuLease => {
+    let active = true;
+    return { release: () => {
+      if (!active) return false;
+      active = false; released.value += 1; return true;
+    } };
+  };
+  const reservation = (previous?: SurfaceRenderTargetGpuLease) => ({
+    cancel: () => { cancelled.value += 1; return true; },
+    commit: () => { previous?.release(); return lease(); },
+  });
+  return {
+    cancelled,
+    costs,
+    governor: {
+      replace: (previous, cost) => {
+        costs.push({ ...cost }); replacements.value += 1;
+        return denied ? undefined : reservation(previous);
+      },
+      reserve: (cost) => {
+        costs.push({ ...cost });
+        return denied ? undefined : reservation();
+      },
+    },
+    released,
+    replacements,
+  };
+};
 
 describe("surface render-target arena", () => {
   it("allocates and reuses one complete HDR target, resizing with RGBA16F storage", () => {
@@ -215,5 +270,144 @@ describe("surface render-target arena", () => {
     expect(calls(gl, "deleteTexture")).toHaveLength(1);
     expect(calls(gl, "deleteRenderbuffer")).toHaveLength(0);
     expect(calls(gl, "deleteFramebuffer")).toHaveLength(0);
+  });
+
+  it("denies HDR and transmission storage before any GL allocation side effect", () => {
+    const recorded = recordingGovernor(true);
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    expect(() => ensureHdrRenderTarget(arena, context(gl), 20, 10)).toThrow(/governor/);
+    expect(() => copyTransmissionScreenColorTexture(
+      arena, context(gl), 20, 10, 0, 0, false,
+    )).toThrow(/governor/);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+    expect(recorded.costs).toEqual([
+      { persistentGpuBytes: 2_200, transientPeakBytes: 2_200 },
+      { persistentGpuBytes: 800, transientPeakBytes: 800 },
+    ]);
+  });
+
+  it("cancels admitted transmission storage when copy bandwidth is denied before GL", () => {
+    const gl = new FakeGl();
+    let storageCancelled = 0;
+    const arena = createSurfaceRenderTargetArena({
+      replace: () => undefined,
+      reserve: (cost) => cost.uploadBytes !== undefined
+        ? undefined
+        : {
+            cancel: () => { storageCancelled += 1; return true; },
+            commit: () => { throw new Error("storage must not commit"); },
+          },
+    });
+
+    expect(() => copyTransmissionScreenColorTexture(
+      arena, context(gl), 20, 10, 0, 0, false,
+    )).toThrow("Render-target copy denied");
+    expect(storageCancelled).toBe(1);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+  });
+
+  it("atomically replaces render-target leases on resize and releases them on teardown", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    ensureHdrRenderTarget(arena, context(gl), 20, 10);
+    ensureHdrRenderTarget(arena, context(gl), 40, 20);
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 1, 1, false);
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, true);
+    expect(recorded.replacements.value).toBe(2);
+    // Storage replacements release superseded leases; each framebuffer copy
+    // independently commits and releases its upload-only lease.
+    expect(recorded.released.value).toBe(5);
+    releaseSurfaceRenderTargetContextHandles(arena, context(gl));
+    expect(recorded.released.value).toBe(7);
+  });
+
+  it("settles failed storage conservatively and retains leases across failed deletion", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    gl.framebufferComplete = false;
+    expect(() => ensureHdrRenderTarget(arena, context(gl), 20, 10)).toThrow(/complete/);
+    expect(recorded.cancelled.value).toBe(0);
+    gl.framebufferComplete = true;
+    ensureHdrRenderTarget(arena, context(gl), 20, 10);
+    expect(recorded.replacements.value).toBe(1);
+
+    gl.failTextureDeleteOnce = true;
+    expect(() => releaseSurfaceRenderTargetContextHandles(arena, context(gl)))
+      .toThrow(/delete texture failed/);
+    expect(recorded.released.value).toBe(1);
+    releaseSurfaceRenderTargetContextHandles(arena, context(gl));
+    expect(recorded.released.value).toBe(2);
+  });
+
+  it("quarantines a lease after terminal active-context deletion failure until context loss", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
+    expect(recorded.released.value).toBe(1); // upload-only lease
+    gl.failTextureDeleteOnce = true;
+
+    expect(() => releaseSurfaceRenderTargetContextHandles(arena, context(gl)))
+      .toThrow("delete texture failed");
+    dropSurfaceRenderTargetArenaContext(arena, false);
+    expect(recorded.released.value).toBe(1);
+
+    dropSurfaceRenderTargetArenaContext(arena, true);
+    expect(recorded.released.value).toBe(2);
+  });
+
+  it("preserves the larger lease when an in-place HDR shrink fails partway", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    ensureHdrRenderTarget(arena, context(gl), 40, 20);
+    gl.failRenderbufferStorageOnce = true;
+
+    expect(() => ensureHdrRenderTarget(arena, context(gl), 20, 10))
+      .toThrow("renderbuffer storage failed");
+
+    expect(recorded.replacements.value).toBe(1);
+    expect(recorded.cancelled.value).toBe(1);
+    expect(recorded.released.value).toBe(0);
+    const allocationsAfterFailure = calls(gl, "texImage2D").length;
+    // Published dimensions still describe the old target, but its color was
+    // already shrunk. It must be repaired rather than returned as reusable.
+    ensureHdrRenderTarget(arena, context(gl), 40, 20);
+    expect(calls(gl, "texImage2D")).toHaveLength(allocationsAfterFailure + 1);
+    expect(recorded.replacements.value).toBe(2);
+    expect(recorded.released.value).toBe(1);
+    ensureHdrRenderTarget(arena, context(gl), 20, 10);
+    expect(recorded.replacements.value).toBe(3);
+    expect(recorded.released.value).toBe(2);
+  });
+
+  it("preserves the larger transmission lease while charging an attempted failed shrink copy", () => {
+    const recorded = recordingGovernor();
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(recorded.governor);
+    copyTransmissionScreenColorTexture(arena, context(gl), 40, 20, 0, 0, false);
+    gl.failCopyOnce = true;
+
+    expect(() => copyTransmissionScreenColorTexture(
+      arena, context(gl), 20, 10, 0, 0, false,
+    )).toThrow("copy failed");
+
+    expect(recorded.replacements.value).toBe(1);
+    expect(recorded.cancelled.value).toBe(1);
+    // Initial and failed-attempt upload-only leases were spent and released;
+    // the original durable storage lease remains active.
+    expect(recorded.released.value).toBe(2);
+    expect(recorded.costs.slice(-2)).toEqual([
+      { persistentGpuBytes: 800, transientPeakBytes: 800 },
+      { uploadBytes: 800 },
+    ]);
+
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
+    expect(recorded.replacements.value).toBe(2);
+    expect(recorded.released.value).toBe(4);
   });
 });

@@ -1,4 +1,7 @@
-import { useCanvasRoot } from '@royal/react';
+import {
+  useCanvasRoot,
+  type RoyalRendererDiagnosticsSnapshot,
+} from '@royal/react';
 import { useLayoutEffect, type ReactNode } from 'react';
 
 type RendererSnapshotBridge = typeof globalThis & {
@@ -18,19 +21,6 @@ type GltfInstancingCounters = {
   readonly rootPoseUploadCalls: number;
   readonly rootScaleUploadBytes: number;
   readonly rootScaleUploadCalls: number;
-};
-
-type RendererRootSnapshot = {
-  readonly frame?: unknown;
-};
-
-type RendererDiagnosticsSnapshot = {
-  readonly context?: unknown;
-  readonly gltfInstancing?: unknown;
-  readonly gltfLoadDiagnostics?: unknown;
-  readonly planning?: unknown;
-  readonly resourceLifetime?: unknown;
-  readonly virtualTexturing?: unknown;
 };
 
 type GltfLoadDiagnosticsAsset = {
@@ -199,9 +189,9 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
     if (root === null) return undefined;
 
     const snapshot = (): RendererBenchmarkSnapshot | null => {
-      const rootSnapshot = root.snapshot() as RendererRootSnapshot;
-      const diagnostics = root.diagnostics() as RendererDiagnosticsSnapshot;
-      if (typeof rootSnapshot.frame !== 'number' || !Number.isFinite(rootSnapshot.frame)) {
+      const rootSnapshot = root.snapshot();
+      const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
+      if (!Number.isFinite(rootSnapshot.frame)) {
         return null;
       }
 

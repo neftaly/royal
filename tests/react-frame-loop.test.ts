@@ -4,7 +4,10 @@ import {
   scene,
 } from "@royal/renderer-core";
 import { createFrameLoop, type FrameSnapshot } from "../packages/react/src/frame";
-import { applyCanvasRendererLifecycle } from "../packages/react/src/canvas";
+import {
+  applyCanvasRendererFailure,
+  applyCanvasRendererLifecycle,
+} from "../packages/react/src/canvas";
 import {
   acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,
@@ -25,6 +28,22 @@ describe("React frame loop", () => {
     near: 0.1,
     position: [0, 0, 2],
     rotation: [0, 0, 0],
+  });
+
+  it("normalizes opaque scheduled-render failures for ErrorBoundary delivery", () => {
+    const report = vi.fn();
+    const existing = new Error("existing");
+    applyCanvasRendererFailure(report, existing);
+    applyCanvasRendererFailure(report, undefined);
+    applyCanvasRendererFailure(report, "capacity denied");
+
+    expect(report.mock.calls[0]?.[0]).toBe(existing);
+    expect(report.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      message: "Royal scheduled render failed without an error value",
+    }));
+    expect(report.mock.calls[2]?.[0]).toEqual(expect.objectContaining({
+      message: "Royal scheduled render failed: capacity denied",
+    }));
   });
 
   it("uses one RAF when a frame callback invalidates the renderer", () => {

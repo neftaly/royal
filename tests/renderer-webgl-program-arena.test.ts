@@ -22,6 +22,8 @@ class FakeGl {
   readonly VERTEX_SHADER = 0x8b31;
   readonly calls: Call[] = [];
   complete = true;
+  failNextProgramDelete = false;
+  failNextShaderDelete = false;
   linkStatus = true;
   nullUniforms = new Set<string>();
   #serial = 1;
@@ -39,8 +41,18 @@ class FakeGl {
     const value = this.#handle("shader"); this.#record("createShader", type, value);
     return value as unknown as WebGLShader;
   };
-  deleteProgram = (value: WebGLProgram): void => this.#record("deleteProgram", value);
-  deleteShader = (value: WebGLShader): void => this.#record("deleteShader", value);
+  deleteProgram = (value: WebGLProgram): void => {
+    this.#record("deleteProgram", value);
+    if (!this.failNextProgramDelete) return;
+    this.failNextProgramDelete = false;
+    throw new Error("program delete failed");
+  };
+  deleteShader = (value: WebGLShader): void => {
+    this.#record("deleteShader", value);
+    if (!this.failNextShaderDelete) return;
+    this.failNextShaderDelete = false;
+    throw new Error("shader delete failed");
+  };
   detachShader = (...args: readonly unknown[]): void => this.#record("detachShader", ...args);
   getProgramInfoLog = (): string => "program log";
   getProgramParameter = (_program: WebGLProgram, parameter: number): boolean =>
@@ -143,5 +155,32 @@ describe("program arena", () => {
     dropProgramArenaContext(arena);
     expect(count(gl, "deleteProgram")).toBe(deletes);
     expect(programArenaSnapshot(arena).ownedProgramCount).toBe(0);
+  });
+
+  it("retains failed program and shader deletes for active-context retry", () => {
+    const gl = new FakeGl();
+    const arena = createProgramArena(context(gl));
+    configureProgramArenaParallelCompile(arena, { COMPLETION_STATUS_KHR: 0x91b1 });
+    gl.complete = false;
+    expect(requestProgram(arena, 0, "wireframe")).toBeUndefined();
+    expect(programArenaSnapshot(arena)).toMatchObject({
+      ownedProgramCount: 1,
+      ownedShaderCount: 2,
+    });
+    gl.failNextProgramDelete = true;
+    gl.failNextShaderDelete = true;
+
+    expect(() => releaseProgramArenaContextHandles(arena)).toThrow("program delete failed");
+    expect(programArenaSnapshot(arena)).toMatchObject({
+      ownedProgramCount: 1,
+      ownedShaderCount: 1,
+      requestCount: 0,
+    });
+
+    releaseProgramArenaContextHandles(arena);
+    expect(programArenaSnapshot(arena)).toMatchObject({
+      ownedProgramCount: 0,
+      ownedShaderCount: 0,
+    });
   });
 });

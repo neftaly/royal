@@ -6,6 +6,10 @@ import type {
   TextureSampler,
   VirtualTextureAssetRef,
 } from '@royal/react';
+import {
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from '@royal/renderer-webgl';
 import { perspectiveCamera, scene } from '@royal/react/scene';
 
 const renderScene = scene({
@@ -39,6 +43,16 @@ describe('Canvas public scene boundary', () => {
 
     const props = { context, scene: renderScene } satisfies CanvasProps;
     expect(props.context).toEqual(context);
+  });
+
+  it('accepts a typed resource governor policy through Canvas context', () => {
+    const policy = DEFAULT_RESOURCE_GOVERNOR_POLICY satisfies ResourceGovernorPolicy;
+    const context = {
+      resourceGovernorPolicy: policy,
+    } satisfies NonNullable<CanvasProps['context']>;
+
+    const props = { context, scene: renderScene } satisfies CanvasProps;
+    expect(props.context?.resourceGovernorPolicy).toBe(policy);
   });
 
   it('re-exports concrete public texture types', () => {

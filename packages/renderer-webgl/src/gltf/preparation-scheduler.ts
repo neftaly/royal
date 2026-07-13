@@ -9,33 +9,61 @@ type Admission<JobResult> = {
   readonly signal: AbortSignal;
 };
 
+export interface GltfPreparationJobAdmission {
+  /** Releases this active job's global capacity. Called exactly once. */
+  release(): void;
+}
+
+export type GltfPreparationJobAdmitter = () => GltfPreparationJobAdmission | undefined;
+
 /** Browser-shell admission control for CPU-heavy codec and scene preparation. */
 export class GltfPreparationScheduler {
+  readonly #admit: GltfPreparationJobAdmitter | undefined;
   readonly #limit: number;
   readonly #queue: Array<Admission<unknown> | undefined> = [];
   #queueHead = 0;
   #active = 0;
   #disposed = false;
+  #pumping = false;
   #queued = 0;
   #queueHighWater = 0;
 
-  constructor(limit = 2) {
-    this.#limit = Math.max(1, Math.floor(limit));
+  constructor(limit = 2, admit?: GltfPreparationJobAdmitter) {
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new RangeError(`glTF preparation concurrency must be a positive safe integer, received ${limit}`);
+    }
+    this.#limit = limit;
+    this.#admit = admit;
   }
 
   run<Result>(signal: AbortSignal, job: () => Promise<Result> | Result): Promise<Result> {
     throwIfAborted(signal);
     if (this.#disposed) return Promise.reject(abortError());
-    if (this.#active < this.#limit && this.#queueHead >= this.#queue.length) {
+    const canStartImmediately = this.#active < this.#limit && this.#queueHead >= this.#queue.length;
+    let immediateAdmission: GltfPreparationJobAdmission | undefined;
+    try {
+      immediateAdmission = canStartImmediately ? this.#admit?.() : undefined;
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (canStartImmediately && (this.#admit === undefined || immediateAdmission !== undefined)) {
+      // Admission is an external callback and may abort or dispose reentrantly.
+      if (signal.aborted || this.#disposed) {
+        immediateAdmission?.release();
+        return Promise.reject(abortError());
+      }
       this.#active += 1;
       let result: Promise<Result>;
       try {
         result = Promise.resolve(job());
       } catch (error) {
-        this.#finish();
+        this.#finish(immediateAdmission);
         return Promise.reject(error);
       }
-      void result.then(() => this.#finish(), () => this.#finish());
+      void result.then(
+        () => this.#finish(immediateAdmission),
+        () => this.#finish(immediateAdmission),
+      );
       return result;
     }
     return new Promise<Result>((resolve, reject) => {
@@ -88,36 +116,85 @@ export class GltfPreparationScheduler {
     return { active: this.#active, queued: this.#queued, queueHighWater: this.#queueHighWater };
   }
 
+  /** Retries queued work after capacity owned by another scheduler is released. */
+  wake(): void {
+    this.#pump();
+  }
+
   #pump(): void {
+    if (this.#pumping) return;
+    this.#pumping = true;
+    try {
+      this.#pumpLoop();
+    } finally {
+      this.#pumping = false;
+    }
+  }
+
+  #pumpLoop(): void {
     while (!this.#disposed && this.#active < this.#limit) {
       if (this.#queueHead >= this.#queue.length) return;
       const admission = this.#queue[this.#queueHead];
+      if (admission === undefined) {
+        this.#queueHead += 1;
+        continue;
+      }
+      if (admission.signal.aborted) {
+        this.#queueHead += 1;
+        admission.signal.removeEventListener("abort", admission.onAbort);
+        admission.index = -1;
+        admission.job = undefined;
+        this.#queued = Math.max(0, this.#queued - 1);
+        admission.reject(abortError());
+        continue;
+      }
+      let jobAdmission: GltfPreparationJobAdmission | undefined;
+      try {
+        jobAdmission = this.#admit?.();
+      } catch (error) {
+        this.#queueHead += 1;
+        admission.signal.removeEventListener("abort", admission.onAbort);
+        admission.index = -1;
+        admission.job = undefined;
+        this.#queued = Math.max(0, this.#queued - 1);
+        admission.reject(error);
+        continue;
+      }
+      if (this.#admit !== undefined && jobAdmission === undefined) return;
+      // The external admitter may synchronously abort this row, dispose this
+      // scheduler, or re-enter wake(). Never leak capacity or start stale work.
+      if (
+        this.#disposed
+        || admission.signal.aborted
+        || this.#queue[this.#queueHead] !== admission
+      ) {
+        jobAdmission?.release();
+        continue;
+      }
       this.#queueHead += 1;
-      if (admission === undefined) continue;
       admission.signal.removeEventListener("abort", admission.onAbort);
       this.#queued = Math.max(0, this.#queued - 1);
       admission.index = -1;
       const job = admission.job;
       admission.job = undefined;
       if (job === undefined) continue;
-      if (admission.signal.aborted) {
-        admission.reject(abortError());
-        continue;
-      }
       this.#active += 1;
       let result: unknown;
       try {
         result = job();
       } catch (error) {
         admission.reject(error);
-        this.#finish();
+        this.#finish(jobAdmission);
         continue;
       }
-      void Promise.resolve(result).then(admission.resolve, admission.reject).finally(() => this.#finish());
+      void Promise.resolve(result)
+        .then(admission.resolve, admission.reject)
+        .finally(() => this.#finish(jobAdmission));
     }
   }
 
-  #finish(): void {
+  #finish(admission?: GltfPreparationJobAdmission): void {
+    admission?.release();
     this.#active = Math.max(0, this.#active - 1);
     // Only queued overflow yields. Isolated loads retain their former latency,
     // while request waves cannot chain every CPU decode in one task.

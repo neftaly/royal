@@ -124,15 +124,66 @@ export const generatedVirtualTexturePageCount = (
   height: number,
   pageSize: number,
 ): number => {
+  if (!isPositiveInteger(width) || !isPositiveInteger(height) || !isPositiveInteger(pageSize)) {
+    throw new RangeError("Generated virtual texture dimensions and page size must be positive safe integers");
+  }
   let pages = 0;
   let mipWidth = Math.ceil(width / pageSize);
   let mipHeight = Math.ceil(height / pageSize);
   while (true) {
-    pages += Math.max(1, mipWidth) * Math.max(1, mipHeight);
+    const mipPages = Math.max(1, mipWidth) * Math.max(1, mipHeight);
+    if (!Number.isSafeInteger(mipPages) || !Number.isSafeInteger(pages + mipPages)) {
+      throw new RangeError("Generated virtual texture page count exceeds safe integer capacity");
+    }
+    pages += mipPages;
     if (mipWidth <= 1 && mipHeight <= 1) return pages;
     mipWidth = Math.ceil(mipWidth / 2);
     mipHeight = Math.ceil(mipHeight / 2);
   }
+};
+
+export interface GeneratedVirtualTextureManifestOptions {
+  readonly colorSpace?: TextureColorSpace;
+  readonly height: number;
+  readonly pageSize: number;
+  readonly physicalSlotCap: number;
+  readonly width: number;
+}
+
+/**
+ * Shared policy for generated raster and vector sources. Page production may
+ * differ, but both source kinds must expose identical logical mip and residency
+ * constraints for the same dimensions.
+ */
+export const generatedVirtualTextureManifest = (
+  options: GeneratedVirtualTextureManifestOptions,
+): VirtualTextureManifestModel => {
+  const width = Math.max(1, Math.ceil(options.width));
+  const height = Math.max(1, Math.ceil(options.height));
+  if (
+    !isPositiveInteger(width)
+    || !isPositiveInteger(height)
+    || !isPositiveInteger(options.pageSize)
+    || !isPositiveInteger(options.physicalSlotCap)
+  ) {
+    throw new RangeError(
+      "Generated virtual texture dimensions, page size, and physical slot cap must be positive safe integers",
+    );
+  }
+  const pageSize = Math.min(options.pageSize, Math.max(width, height));
+  const physicalSlots = Math.min(
+    options.physicalSlotCap,
+    generatedVirtualTexturePageCount(width, height, pageSize),
+  );
+
+  return {
+    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    height,
+    pageSize,
+    pages: [],
+    physicalSlots,
+    width,
+  };
 };
 
 export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTexturePageId => ({

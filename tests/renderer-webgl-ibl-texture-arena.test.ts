@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { LoadedTextureSource } from "../packages/renderer-webgl/src/texture-sources";
 import {
   bindSurfaceIbl,
+  consumeIblTextureDiagnostics,
+  consumeIblTextureFrameWake,
   createIblTextureArena,
   dropIblTextureContext,
   ensureGltfIblSpecularTexture,
@@ -10,7 +12,14 @@ import {
   markGltfIblSpecularTextureDirty,
   releaseGltfIblSpecularTexture,
   releaseIblTextureContextHandles,
+  type IblTextureGpuGovernor,
+  wakeIblTextureDurablePressure,
 } from "../packages/renderer-webgl/src/webgl/ibl-texture-arena";
+import { IBL_BRDF_LUT_BYTES } from "../packages/renderer-webgl/src/webgl/ibl-brdf-lut";
+import {
+  STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
+  STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
+} from "../packages/renderer-webgl/src/webgl/studio-environment";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "../packages/renderer-webgl/src/webgl/lights";
 import { createProgramArena } from "../packages/renderer-webgl/src/webgl/program-arena";
 
@@ -96,7 +105,127 @@ const specular: SurfaceImageBasedLightSpecular = {
 const completeSources = (seed = 1): Map<string, LoadedTextureSource> =>
   new Map(keys.map((key) => [key, source(4, seed)]));
 
+const recordingGovernor = () => {
+  const state = {
+    cancels: 0,
+    commits: 0,
+    costs: [] as Array<{ readonly persistentGpuBytes: number; readonly uploadBytes: number }>,
+    denied: false,
+    releases: 0,
+  };
+  const governor: IblTextureGpuGovernor = {
+    reserve: (cost) => {
+      state.costs.push(cost);
+      if (state.denied) return undefined;
+      return {
+        cancel: () => { state.cancels += 1; },
+        commit: () => {
+          state.commits += 1;
+          return { release: () => { state.releases += 1; } };
+        },
+      };
+    },
+  };
+  return { governor, state };
+};
+
 describe("IBL texture arena", () => {
+  it("preserves permanent policy identities across lost-context drop", () => {
+    const gl = new FakeGl();
+    let admissions = 0;
+    const arena = createIblTextureArena(context(gl), {
+      reserve: () => {
+        admissions += 1;
+        return { permanent: true, reason: "studio cannot fit" };
+      },
+    });
+
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(admissions).toBe(1);
+    dropIblTextureContext(arena);
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(admissions).toBe(1);
+    expect(consumeIblTextureDiagnostics(arena)).toEqual([
+      expect.stringContaining("studio cannot fit"),
+    ]);
+  });
+
+  it("clears a glTF terminal identity on semantic release so a replacement can be reconsidered", () => {
+    const gl = new FakeGl();
+    let denied = true;
+    let admissions = 0;
+    const arena = createIblTextureArena(context(gl), {
+      reserve: () => {
+        admissions += 1;
+        if (denied) return { permanent: true, reason: "old cubemap cannot fit" };
+        return {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        };
+      },
+    });
+
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(false);
+    expect(admissions).toBe(1);
+    releaseGltfIblSpecularTexture(arena, specular.key);
+    denied = false;
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(true);
+    expect(admissions).toBeGreaterThan(1);
+    expect(consumeIblTextureDiagnostics(arena)).toEqual([]);
+  });
+  it("latches intrinsic studio, BRDF, and glTF cubemap denials without GL retry", () => {
+    const gl = new FakeGl();
+    const admissionCosts: string[] = [];
+    const arena = createIblTextureArena(context(gl), {
+      reserve: ({ persistentGpuBytes, uploadBytes }) => {
+        admissionCosts.push(`${persistentGpuBytes}:${uploadBytes}`);
+        return { permanent: true, reason: "exceeds tiny policy" };
+      },
+    });
+
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(false);
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(false);
+    const lightSet: SurfaceLightSet = {
+      directionals: [], lights: [], punctuals: [],
+      specular: {
+        encoding: "linear", intensity: 1, key: "fake", mipCount: 1,
+        texture: {} as WebGLTexture,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+    };
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+
+    expect(admissionCosts).toHaveLength(3);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+    expect(consumeIblTextureDiagnostics(arena)).toHaveLength(2);
+    expect(consumeIblTextureFrameWake(arena)).toBe(false);
+    expect(wakeIblTextureDurablePressure(arena)).toBe(false);
+  });
+
+  it("separates next-frame upload pressure from durable capacity wake", () => {
+    const gl = new FakeGl();
+    let mode: "upload" | "durable" | "ready" = "upload";
+    const arena = createIblTextureArena(context(gl), {
+      reserve: () => mode === "ready" ? {
+        cancel: () => undefined,
+        commit: () => ({ release: () => undefined }),
+      } : { permanent: false, reason: mode === "upload" ? "upload-capacity" : "persistent-gpu-capacity" },
+    });
+
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(consumeIblTextureFrameWake(arena)).toBe(true);
+    expect(wakeIblTextureDurablePressure(arena)).toBe(false);
+    mode = "durable";
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(consumeIblTextureFrameWake(arena)).toBe(false);
+    expect(wakeIblTextureDurablePressure(arena)).toBe(true);
+    expect(wakeIblTextureDurablePressure(arena)).toBe(false);
+    mode = "ready";
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeDefined();
+  });
   it("waits for all sources, validates before upload, and publishes only a complete cubemap", () => {
     const gl = new FakeGl();
     const arena = createIblTextureArena(context(gl));
@@ -180,6 +309,7 @@ describe("IBL texture arena", () => {
     const gl = new FakeGl();
     const arena = createIblTextureArena(context(gl));
     const studio = ensureStudioEnvironmentSpecularTexture(arena);
+    if (studio === undefined) throw new Error("Expected ungoverned studio texture admission");
     expect(ensureStudioEnvironmentSpecularTexture(arena)).toBe(studio);
     expect(calls(gl, "texImage2D")).toHaveLength(36);
     const lightSet: SurfaceLightSet = {
@@ -220,5 +350,258 @@ describe("IBL texture arena", () => {
     releaseIblTextureContextHandles(arena);
     expect(iblTextureArenaSnapshot(arena).ownedTextureCount).toBe(0);
     expect(calls(gl, "deleteTexture")).toHaveLength(3);
+  });
+
+  it("admits complete glTF cubemaps before allocation and charges reuploads without durable double count", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    recorded.state.denied = true;
+    const arena = createIblTextureArena(context(gl), recorded.governor);
+
+    const denied = ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    expect(denied.uploaded).toBe(false);
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+    expect(calls(gl, "texImage2D")).toHaveLength(0);
+
+    recorded.state.denied = false;
+    const ready = ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    expect(ready.uploaded).toBe(true);
+    markGltfIblSpecularTextureDirty(arena, specular.key);
+    ensureGltfIblSpecularTexture(arena, specular, completeSources(2));
+
+    expect(recorded.state.costs.slice(0, 3)).toEqual([
+      { persistentGpuBytes: 0, uploadBytes: 64 },
+      { persistentGpuBytes: 0, uploadBytes: 64 },
+      { persistentGpuBytes: 384, uploadBytes: 0 },
+    ]);
+    expect(recorded.state.costs.slice(3)).toEqual([
+      ...Array.from({ length: 6 }, () => ({ persistentGpuBytes: 0, uploadBytes: 64 })),
+      { persistentGpuBytes: 0, uploadBytes: 64 },
+      ...Array.from({ length: 6 }, () => ({ persistentGpuBytes: 0, uploadBytes: 64 })),
+    ]);
+    expect(recorded.state.cancels).toBe(2);
+    expect(recorded.state.commits).toBe(13);
+    expect(recorded.state.releases).toBe(12);
+    releaseGltfIblSpecularTexture(arena, specular.key);
+    expect(recorded.state.releases).toBe(13);
+  });
+
+  it("preflights the largest cubemap face before durable reservation or GL mutation", () => {
+    const gl = new FakeGl();
+    const costs: Array<{ readonly persistentGpuBytes: number; readonly uploadBytes: number }> = [];
+    const arena = createIblTextureArena(context(gl), {
+      reserve: (cost) => {
+        costs.push(cost);
+        if (cost.uploadBytes > 16) {
+          return { permanent: true, reason: `${cost.uploadBytes} upload bytes exceed limit 16` };
+        }
+        return {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        };
+      },
+    });
+
+    const denied = ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    expect(denied.uploaded).toBe(false);
+    expect(denied.texture).toBeUndefined();
+    expect(denied.unsupportedMessage).toMatch(/64 upload bytes exceed limit 16/);
+    expect(costs).toEqual([{ persistentGpuBytes: 0, uploadBytes: 64 }]);
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 0,
+      retainedLeaseCount: 0,
+    });
+    expect(gl.calls).toEqual([]);
+  });
+
+  it("rejects hostile image dimensions and wrapped mip chains before admission or GL", () => {
+    for (const hostile of [
+      {
+        imageLoadKeys: [keys],
+        imageSize: 2 ** 31,
+        message: /invalid image size/,
+        sources: new Map(keys.map((key) => [key, source(1)])),
+      },
+      {
+        imageLoadKeys: Array.from({ length: 33 }, (_unused, mipIndex) =>
+          keys.map((_key, faceIndex) => `mip-${mipIndex}-face-${faceIndex}`)),
+        imageSize: 4,
+        message: /33 mip levels.*at most 3/,
+        sources: new Map<string, LoadedTextureSource>(),
+      },
+    ] as const) {
+      const gl = new FakeGl();
+      let admissions = 0;
+      const arena = createIblTextureArena(context(gl), {
+        reserve: () => {
+          admissions += 1;
+          return {
+            cancel: () => undefined,
+            commit: () => ({ release: () => undefined }),
+          };
+        },
+      });
+      const rejected = ensureGltfIblSpecularTexture(arena, {
+        encoding: "linear",
+        imageLoadKeys: hostile.imageLoadKeys,
+        imageSize: hostile.imageSize,
+        key: `hostile:${hostile.imageSize}:${hostile.imageLoadKeys.length}`,
+      }, hostile.sources);
+
+      expect(rejected.uploaded).toBe(false);
+      expect(rejected.texture).toBeUndefined();
+      expect(rejected.unsupportedMessage).toMatch(hostile.message);
+      expect(admissions).toBe(0);
+      expect(gl.calls).toEqual([]);
+    }
+  });
+
+  it("rechecks retained cubemaps for terminal upload policy changes before GL mutation", () => {
+    const gl = new FakeGl();
+    let permanentlyDenyUploads = false;
+    const costs: Array<{ readonly persistentGpuBytes: number; readonly uploadBytes: number }> = [];
+    const arena = createIblTextureArena(context(gl), {
+      reserve: (cost) => {
+        costs.push(cost);
+        if (permanentlyDenyUploads && cost.uploadBytes !== 0) {
+          return { permanent: true, reason: "changed upload policy" };
+        }
+        return {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        };
+      },
+    });
+    const ready = ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    expect(ready.uploaded).toBe(true);
+    const texture = ready.texture;
+    const callsBeforeReupload = gl.calls.slice();
+
+    markGltfIblSpecularTextureDirty(arena, specular.key);
+    permanentlyDenyUploads = true;
+    const denied = ensureGltfIblSpecularTexture(arena, specular, completeSources(2));
+
+    expect(denied.uploaded).toBe(false);
+    expect(denied.texture).toBe(texture);
+    expect(denied.unsupportedMessage).toMatch(/changed upload policy/);
+    expect(costs.at(-1)).toEqual({ persistentGpuBytes: 0, uploadBytes: 64 });
+    expect(gl.calls).toEqual(callsBeforeReupload);
+  });
+
+  it("retries admissible largest-face preflight after frame-local upload pressure", () => {
+    const gl = new FakeGl();
+    let framePressured = true;
+    let cancels = 0;
+    const arena = createIblTextureArena(context(gl), {
+      reserve: ({ persistentGpuBytes, uploadBytes }) => {
+        if (framePressured && persistentGpuBytes === 0 && uploadBytes === 64) {
+          return { permanent: false, reason: "upload-capacity" };
+        }
+        return {
+          cancel: () => { cancels += 1; },
+          commit: () => ({ release: () => undefined }),
+        };
+      },
+    });
+
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(false);
+    expect(consumeIblTextureFrameWake(arena)).toBe(true);
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 0,
+      retainedLeaseCount: 0,
+    });
+    expect(gl.calls).toEqual([]);
+
+    framePressured = false;
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(true);
+    expect(cancels).toBe(1);
+    expect(calls(gl, "texImage2D")).toHaveLength(6);
+  });
+
+  it("governs studio RGB9_E5 and BRDF RGBA8 allocations and retries denial lazily", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    recorded.state.denied = true;
+    const arena = createIblTextureArena(context(gl), recorded.governor);
+
+    expect(ensureStudioEnvironmentSpecularTexture(arena)).toBeUndefined();
+    expect(calls(gl, "createTexture")).toHaveLength(0);
+    recorded.state.denied = false;
+    const studio = ensureStudioEnvironmentSpecularTexture(arena);
+    if (studio === undefined) throw new Error("Expected studio admission retry");
+    const lightSet: SurfaceLightSet = {
+      directionals: [], lights: [], punctuals: [],
+      specular: {
+        encoding: "linear", intensity: 1, key: studio.key, mipCount: studio.mipCount,
+        texture: studio.texture, worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+    };
+    recorded.state.denied = true;
+    const createsBeforeBrdf = calls(gl, "createTexture").length;
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
+    expect(calls(gl, "createTexture")).toHaveLength(createsBeforeBrdf);
+    recorded.state.denied = false;
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+
+    expect(recorded.state.costs).toEqual([
+      {
+        persistentGpuBytes: STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
+        uploadBytes: STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
+      },
+      {
+        persistentGpuBytes: STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
+        uploadBytes: STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
+      },
+      { persistentGpuBytes: IBL_BRDF_LUT_BYTES, uploadBytes: IBL_BRDF_LUT_BYTES },
+      { persistentGpuBytes: IBL_BRDF_LUT_BYTES, uploadBytes: IBL_BRDF_LUT_BYTES },
+    ]);
+    expect(recorded.state.commits).toBe(2);
+    dropIblTextureContext(arena);
+    expect(recorded.state.releases).toBe(2);
+  });
+
+  it("resumes a cubemap at the denied face without reuploading completed faces", () => {
+    const gl = new FakeGl();
+    let uploadAdmissions = 0;
+    let denyThirdFace = true;
+    const arena = createIblTextureArena(context(gl), {
+      reserve: ({ uploadBytes }) => {
+        if (uploadBytes !== 0) {
+          uploadAdmissions += 1;
+          // The first upload admission is the maximum-face preflight.
+          if (denyThirdFace && uploadAdmissions === 4) return undefined;
+        }
+        return {
+          cancel: () => undefined,
+          commit: () => ({ release: () => undefined }),
+        };
+      },
+    });
+
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(false);
+    expect(calls(gl, "texImage2D")).toHaveLength(2);
+    denyThirdFace = false;
+    expect(ensureGltfIblSpecularTexture(arena, specular, completeSources()).uploaded).toBe(true);
+    expect(calls(gl, "texImage2D")).toHaveLength(6);
+  });
+
+  it("retains a governed lease across failed deletion and releases it on retry", () => {
+    const gl = new FakeGl();
+    const recorded = recordingGovernor();
+    const arena = createIblTextureArena(context(gl), recorded.governor);
+    ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    gl.deleteFailures.add(1);
+
+    expect(() => releaseGltfIblSpecularTexture(arena, specular.key)).toThrow(/deleteTexture failure/);
+    expect(recorded.state.releases).toBe(6);
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      gltfSpecularCount: 0,
+      ownedTextureCount: 1,
+      retainedLeaseCount: 1,
+    });
+    releaseGltfIblSpecularTexture(arena, specular.key);
+    expect(recorded.state.releases).toBe(7);
+    expect(iblTextureArenaSnapshot(arena).retainedLeaseCount).toBe(0);
   });
 });

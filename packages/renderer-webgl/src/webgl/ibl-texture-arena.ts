@@ -1,11 +1,10 @@
 import {
   isDecodedRgbaTexture,
-  isPowerOfTwo,
   loadedTextureSourceSize,
   type LoadedTextureSource,
 } from "../texture-sources";
 import { identityMat4 } from "../math/mat4";
-import { uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
+import { IBL_BRDF_LUT_BYTES, uploadIblBrdfLutTexture } from "./ibl-brdf-lut";
 import { prepareTextureUpload } from "./imperative-state";
 import type { SurfaceImageBasedLightSpecular, SurfaceLightSet } from "./lights";
 import {
@@ -16,49 +15,142 @@ import {
 } from "./program-arena";
 import {
   STUDIO_ENVIRONMENT_SPECULAR_KEY,
+  STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
+  STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
   uploadStudioEnvironmentSpecularTexture,
   type StudioEnvironmentSpecularResource,
 } from "./studio-environment";
 
 export const IBL_SPECULAR_TEXTURE_UNIT = 2;
 const IBL_IRRADIANCE_COEFFICIENT_COUNT = 9;
+const MAX_WEBGL_GLSIZEI = 0x7fff_ffff;
 
-export interface IblSpecularTextureResource {
+interface IblSpecularTextureResourceBase {
   readonly imageSize: number;
   readonly key: string;
   readonly mipCount: number;
-  readonly texture: WebGLTexture;
   uploadError?: unknown;
+  uploadCursor: number;
   unsupportedMessage?: string;
-  uploaded: boolean;
+}
+
+export type IblSpecularTextureResource = IblSpecularTextureResourceBase & (
+  | { readonly texture: WebGLTexture; uploaded: true }
+  | { texture?: WebGLTexture; uploaded: false }
+);
+
+export interface IblTextureGpuLease { release(): void }
+export interface IblTextureGpuReservation {
+  cancel(): void;
+  commit(): IblTextureGpuLease;
+}
+export interface IblTextureGpuDenial {
+  readonly permanent: boolean;
+  readonly reason: string;
+}
+export interface IblTextureGpuGovernor {
+  reserve(cost: { readonly persistentGpuBytes: number; readonly uploadBytes: number }):
+    IblTextureGpuDenial | IblTextureGpuReservation | undefined;
 }
 
 export interface IblTextureArenaSnapshot {
   readonly brdfLut: boolean;
   readonly gltfSpecularCount: number;
   readonly ownedTextureCount: number;
+  readonly retainedLeaseCount: number;
   readonly studioSpecular: boolean;
 }
 
 declare const authority: unique symbol;
 export interface IblTextureArena { readonly [authority]: "IblTextureArena" }
 
+type MutableIblSpecularTextureResource = IblSpecularTextureResourceBase & {
+  readonly encoding: SurfaceImageBasedLightSpecular["encoding"];
+  readonly imageLoadKeys: SurfaceImageBasedLightSpecular["imageLoadKeys"];
+  texture?: WebGLTexture;
+  uploadError?: unknown;
+  unsupportedMessage?: string;
+  uploaded: boolean;
+};
+
 type State = {
   brdfLut?: WebGLTexture;
+  readonly diagnostics: string[];
+  durablePressurePending: boolean;
+  frameWakeRequested: boolean;
   readonly gl: WebGL2RenderingContext;
-  readonly gltfSpecular: Map<string, IblSpecularTextureResource & {
-    readonly encoding: SurfaceImageBasedLightSpecular["encoding"];
-    readonly imageLoadKeys: SurfaceImageBasedLightSpecular["imageLoadKeys"];
-  }>;
+  readonly gltfSpecular: Map<string, MutableIblSpecularTextureResource>;
   readonly ownedTextures: Set<WebGLTexture>;
+  readonly governor?: IblTextureGpuGovernor;
+  readonly retiredGltfSpecular: Map<string, WebGLTexture>;
+  readonly textureLeases: Map<WebGLTexture, IblTextureGpuLease>;
+  readonly terminalDenials: Map<string, string>;
   studio?: StudioEnvironmentSpecularResource;
 };
 
-export const createIblTextureArena = (gl: WebGL2RenderingContext): IblTextureArena => ({
+export const createIblTextureArena = (
+  gl: WebGL2RenderingContext,
+  governor?: IblTextureGpuGovernor,
+): IblTextureArena => ({
+  diagnostics: [],
+  durablePressurePending: false,
+  frameWakeRequested: false,
   gl,
   gltfSpecular: new Map(),
+  ...(governor === undefined ? {} : { governor }),
   ownedTextures: new Set(),
+  retiredGltfSpecular: new Map(),
+  textureLeases: new Map(),
+  terminalDenials: new Map(),
 } as unknown as IblTextureArena);
+
+const NOOP_LEASE: IblTextureGpuLease = { release: () => undefined };
+const NOOP_RESERVATION: IblTextureGpuReservation = {
+  cancel: () => undefined,
+  commit: () => NOOP_LEASE,
+};
+
+const reserve = (
+  state: State,
+  identity: string,
+  persistentGpuBytes: number,
+  uploadBytes: number,
+): IblTextureGpuReservation | undefined => {
+  if (state.terminalDenials.has(identity)) return undefined;
+  if (state.governor === undefined) return NOOP_RESERVATION;
+  const admission = state.governor.reserve({ persistentGpuBytes, uploadBytes });
+  if (admission === undefined) {
+    state.durablePressurePending = true;
+    return undefined;
+  }
+  if (!("reason" in admission)) return admission;
+  if (admission.permanent) {
+    const message = `${identity} is disabled because its GPU request cannot fit the configured resource policy: ${admission.reason}`;
+    state.terminalDenials.set(identity, message);
+    state.diagnostics.push(message);
+  } else if (admission.reason === "upload-capacity") {
+    state.frameWakeRequested = true;
+  } else {
+    state.durablePressurePending = true;
+  }
+  return undefined;
+};
+
+const takeTerminalDiagnostic = (state: State, identity: string): string | undefined => {
+  const message = state.terminalDenials.get(identity);
+  if (message === undefined) return undefined;
+  const diagnosticIndex = state.diagnostics.indexOf(message);
+  if (diagnosticIndex >= 0) state.diagnostics.splice(diagnosticIndex, 1);
+  return message;
+};
+
+const clearTerminalDenial = (state: State, identity: string): void => {
+  const message = state.terminalDenials.get(identity);
+  state.terminalDenials.delete(identity);
+  if (message === undefined) return;
+  const diagnosticIndex = state.diagnostics.indexOf(message);
+  if (diagnosticIndex >= 0) state.diagnostics.splice(diagnosticIndex, 1);
+};
 
 const createTexture = (state: State): WebGLTexture => {
   const texture = state.gl.createTexture();
@@ -71,19 +163,65 @@ const deleteTexture = (state: State, texture: WebGLTexture): void => {
   if (!state.ownedTextures.has(texture)) return;
   state.gl.deleteTexture(texture);
   state.ownedTextures.delete(texture);
+  state.textureLeases.get(texture)?.release();
+  state.textureLeases.delete(texture);
 };
 
 const rollbackTexture = (state: State, texture: WebGLTexture): void => {
   try { deleteTexture(state, texture); } catch { /* Retain failed deletes for context release retry. */ }
 };
 
+const createGovernedTexture = <Result>(
+  state: State,
+  identity: string,
+  persistentGpuBytes: number,
+  uploadBytes: number,
+  upload: (texture: WebGLTexture) => Result,
+): Result | undefined => {
+  const reservation = reserve(state, identity, persistentGpuBytes, uploadBytes);
+  if (reservation === undefined) return undefined;
+  let texture: WebGLTexture;
+  try {
+    texture = createTexture(state);
+  } catch (error) {
+    reservation.cancel();
+    throw error;
+  }
+  try {
+    const result = upload(texture);
+    state.textureLeases.set(texture, reservation.commit());
+    return result;
+  } catch (error) {
+    state.textureLeases.set(texture, reservation.commit());
+    rollbackTexture(state, texture);
+    throw error;
+  }
+};
+
 const uploadGltfSpecularIfReady = (
   state: State,
   specular: SurfaceImageBasedLightSpecular,
-  resource: IblSpecularTextureResource,
+  resource: MutableIblSpecularTextureResource,
   sources: ReadonlyMap<string, LoadedTextureSource>,
 ): string | undefined => {
-  if (resource.uploaded || !state.ownedTextures.has(resource.texture)) return undefined;
+  if (resource.uploaded) return undefined;
+  const imageSize = specular.imageSize;
+  const imageSizeLog2 = Math.log2(imageSize);
+  if (
+    !Number.isSafeInteger(imageSize)
+    || imageSize <= 0
+    || imageSize > MAX_WEBGL_GLSIZEI
+    || !Number.isInteger(imageSizeLog2)
+  ) {
+    return `glTF EXT_lights_image_based specular cubemap ${specular.key} has invalid image size ${imageSize}; expected a positive safe power-of-two WebGL dimension no greater than ${MAX_WEBGL_GLSIZEI}.`;
+  }
+  const maximumMipCount = imageSizeLog2 + 1;
+  if (specular.imageLoadKeys.length === 0) {
+    return `glTF EXT_lights_image_based specular cubemap ${specular.key} must provide at least one mip level.`;
+  }
+  if (specular.imageLoadKeys.length > maximumMipCount) {
+    return `glTF EXT_lights_image_based specular cubemap ${specular.key} has ${specular.imageLoadKeys.length} mip levels; image size ${imageSize} supports at most ${maximumMipCount}.`;
+  }
   for (const mip of specular.imageLoadKeys) {
     if (mip.length !== 6) {
       return `glTF EXT_lights_image_based specular cubemap ${specular.key} must provide 6 faces per mip.`;
@@ -91,32 +229,88 @@ const uploadGltfSpecularIfReady = (
     for (const key of mip) if (sources.get(key) === undefined) return undefined;
   }
   for (let mipIndex = 0; mipIndex < specular.imageLoadKeys.length; mipIndex += 1) {
-    const expectedSize = Math.max(1, specular.imageSize >> mipIndex);
+    const expectedSize = imageSize / (2 ** mipIndex);
     const mipKeys = specular.imageLoadKeys[mipIndex]!;
     for (let faceIndex = 0; faceIndex < mipKeys.length; faceIndex += 1) {
       const source = sources.get(mipKeys[faceIndex]!);
       if (source === undefined) return undefined;
       const [width, height] = loadedTextureSourceSize(source);
-      if (width !== height || width !== expectedSize || !isPowerOfTwo(width)) {
+      if (width !== height || width !== expectedSize) {
         return `glTF EXT_lights_image_based specular cubemap ${specular.key} mip ${mipIndex} face ${faceIndex} has ${width}x${height}; expected ${expectedSize}x${expectedSize}.`;
       }
     }
   }
 
+  let persistentGpuBytes = 0;
+  let maximumUploadBytes = 0;
+  for (const mip of specular.imageLoadKeys) {
+    for (const key of mip) {
+      const source = sources.get(key)!;
+      const [width, height] = loadedTextureSourceSize(source);
+      const faceBytes = width * height * 4;
+      if (!Number.isSafeInteger(faceBytes)
+        || !Number.isSafeInteger(persistentGpuBytes + faceBytes)) {
+        return `glTF EXT_lights_image_based specular cubemap ${specular.key} exceeds safe GPU byte accounting.`;
+      }
+      persistentGpuBytes += faceBytes;
+      maximumUploadBytes = Math.max(
+        maximumUploadBytes,
+        isDecodedRgbaTexture(source) ? source.data.byteLength : faceBytes,
+      );
+    }
+  }
+  const identity = `glTF IBL cubemap ${specular.key}`;
+  // Probe every upload pass, including retained-texture reuploads, before any
+  // pixel-store or binding mutation. Policy adapters may change their
+  // intrinsic decision while a semantic cubemap remains retained.
+  const uploadPreflight = reserve(state, identity, 0, maximumUploadBytes);
+  if (uploadPreflight === undefined) return takeTerminalDiagnostic(state, identity);
+  uploadPreflight.cancel();
+  let texture = resource.texture;
+  if (texture === undefined) {
+    const allocation = reserve(state, identity, persistentGpuBytes, 0);
+    if (allocation === undefined) return takeTerminalDiagnostic(state, identity);
+    try {
+      texture = createTexture(state);
+      resource.texture = texture;
+    } catch (error) {
+      allocation.cancel();
+      throw error;
+    }
+    state.textureLeases.set(texture, allocation.commit());
+  }
   const gl = state.gl;
   prepareTextureUpload(gl, false);
-  gl.bindTexture(gl.TEXTURE_CUBE_MAP, resource.texture);
+  gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
+  let uploadOrdinal = 0;
   for (let mipIndex = 0; mipIndex < specular.imageLoadKeys.length; mipIndex += 1) {
     const mipKeys = specular.imageLoadKeys[mipIndex]!;
     for (let faceIndex = 0; faceIndex < mipKeys.length; faceIndex += 1) {
       const source = sources.get(mipKeys[faceIndex]!)!;
+      if (uploadOrdinal < resource.uploadCursor) {
+        uploadOrdinal += 1;
+        continue;
+      }
+      const [width, height] = loadedTextureSourceSize(source);
+      const uploadBytes = isDecodedRgbaTexture(source) ? source.data.byteLength : width * height * 4;
+      const identity = `glTF IBL cubemap ${specular.key}`;
+      const uploadReservation = reserve(state, identity, 0, uploadBytes);
+      if (uploadReservation === undefined) return takeTerminalDiagnostic(state, identity);
       const target = gl.TEXTURE_CUBE_MAP_POSITIVE_X + faceIndex;
-      if (isDecodedRgbaTexture(source)) {
-        gl.texImage2D(
-          target, mipIndex, gl.RGBA, source.width, source.height, 0,
-          gl.RGBA, gl.UNSIGNED_BYTE, source.data,
-        );
-      } else gl.texImage2D(target, mipIndex, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      try {
+        if (isDecodedRgbaTexture(source)) {
+          gl.texImage2D(
+            target, mipIndex, gl.RGBA, source.width, source.height, 0,
+            gl.RGBA, gl.UNSIGNED_BYTE, source.data,
+          );
+        } else gl.texImage2D(target, mipIndex, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      } catch (error) {
+        uploadReservation.commit().release();
+        throw error;
+      }
+      uploadReservation.commit().release();
+      uploadOrdinal += 1;
+      resource.uploadCursor = uploadOrdinal;
     }
   }
   gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -162,7 +356,7 @@ export const ensureGltfIblSpecularTexture = (
       imageLoadKeys: specular.imageLoadKeys,
       key: specular.key,
       mipCount: specular.imageLoadKeys.length,
-      texture: createTexture(state),
+      uploadCursor: 0,
       uploaded: false,
     };
     state.gltfSpecular.set(specular.key, resource);
@@ -178,59 +372,83 @@ export const ensureGltfIblSpecularTexture = (
     resource.unsupportedMessage = `glTF EXT_lights_image_based specular cubemap ${specular.key} changed its image layout.`;
     delete resource.uploadError;
     resource.uploaded = false;
-    return resource;
+    return resource as IblSpecularTextureResource;
   }
   delete resource.unsupportedMessage;
   delete resource.uploadError;
-  if (resource.uploaded) return resource;
+  if (resource.uploaded) return resource as IblSpecularTextureResource;
+  const terminalMessage = state.terminalDenials.get(`glTF IBL cubemap ${specular.key}`);
+  if (terminalMessage !== undefined) {
+    resource.unsupportedMessage = terminalMessage;
+    return resource as IblSpecularTextureResource;
+  }
   try {
     const unsupportedMessage = uploadGltfSpecularIfReady(state, specular, resource, sources);
     if (unsupportedMessage !== undefined) resource.unsupportedMessage = unsupportedMessage;
   } catch (uploadError) {
+    if (resource.texture === undefined) {
+      state.gltfSpecular.delete(specular.key);
+      throw uploadError;
+    }
     resource.uploadError = uploadError;
   }
-  return resource;
+  return resource as IblSpecularTextureResource;
 };
 
 export const releaseGltfIblSpecularTexture = (arena: IblTextureArena, key: string): void => {
   const state = arena as unknown as State;
+  clearTerminalDenial(state, `glTF IBL cubemap ${key}`);
   const resource = state.gltfSpecular.get(key);
   state.gltfSpecular.delete(key);
-  if (resource !== undefined) deleteTexture(state, resource.texture);
+  const texture = resource?.texture ?? state.retiredGltfSpecular.get(key);
+  if (texture === undefined) return;
+  try {
+    deleteTexture(state, texture);
+    state.retiredGltfSpecular.delete(key);
+  } catch (error) {
+    state.retiredGltfSpecular.set(key, texture);
+    throw error;
+  }
 };
 
 export const markGltfIblSpecularTextureDirty = (arena: IblTextureArena, key: string): void => {
   const resource = (arena as unknown as State).gltfSpecular.get(key);
-  if (resource !== undefined) resource.uploaded = false;
+  if (resource !== undefined) {
+    resource.uploaded = false;
+    resource.uploadCursor = 0;
+  }
 };
 
 export const ensureStudioEnvironmentSpecularTexture = (
   arena: IblTextureArena,
-): StudioEnvironmentSpecularResource => {
+): StudioEnvironmentSpecularResource | undefined => {
   const state = arena as unknown as State;
   if (state.studio !== undefined) return state.studio;
-  const texture = createTexture(state);
-  try {
-    const resource = uploadStudioEnvironmentSpecularTexture(state.gl, texture);
-    state.studio = resource;
-    return resource;
-  } catch (error) {
-    rollbackTexture(state, texture);
-    throw error;
-  }
+  const resource = createGovernedTexture(
+    state,
+    "Studio IBL specular texture",
+    STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES,
+    STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES,
+    (texture) => uploadStudioEnvironmentSpecularTexture(state.gl, texture),
+  );
+  if (resource !== undefined) state.studio = resource;
+  return resource;
 };
 
-const ensureBrdfLut = (state: State): WebGLTexture => {
+const ensureBrdfLut = (state: State): WebGLTexture | undefined => {
   if (state.brdfLut !== undefined) return state.brdfLut;
-  const texture = createTexture(state);
-  try {
-    uploadIblBrdfLutTexture(state.gl, texture);
-    state.brdfLut = texture;
-    return texture;
-  } catch (error) {
-    rollbackTexture(state, texture);
-    throw error;
-  }
+  const texture = createGovernedTexture(
+    state,
+    "IBL BRDF lookup texture",
+    IBL_BRDF_LUT_BYTES,
+    IBL_BRDF_LUT_BYTES,
+    (candidate) => {
+      uploadIblBrdfLutTexture(state.gl, candidate);
+      return candidate;
+    },
+  );
+  if (texture !== undefined) state.brdfLut = texture;
+  return texture;
 };
 
 export const bindSurfaceIbl = (
@@ -277,15 +495,43 @@ export const bindSurfaceIbl = (
   }
 };
 
-const clearPublished = (state: State): void => {
+const clearPublished = (state: State, clearPolicyState: boolean): void => {
   delete state.brdfLut;
   delete state.studio;
   state.gltfSpecular.clear();
+  state.retiredGltfSpecular.clear();
+  if (clearPolicyState) {
+    state.terminalDenials.clear();
+    state.diagnostics.length = 0;
+  }
+  state.durablePressurePending = false;
+  state.frameWakeRequested = false;
+};
+
+export const consumeIblTextureDiagnostics = (arena: IblTextureArena): readonly string[] => {
+  const state = arena as unknown as State;
+  const diagnostics = state.diagnostics.slice();
+  state.diagnostics.length = 0;
+  return diagnostics;
+};
+
+export const consumeIblTextureFrameWake = (arena: IblTextureArena): boolean => {
+  const state = arena as unknown as State;
+  const requested = state.frameWakeRequested;
+  state.frameWakeRequested = false;
+  return requested;
+};
+
+export const wakeIblTextureDurablePressure = (arena: IblTextureArena): boolean => {
+  const state = arena as unknown as State;
+  if (!state.durablePressurePending) return false;
+  state.durablePressurePending = false;
+  return true;
 };
 
 export const releaseIblTextureContextHandles = (arena: IblTextureArena): void => {
   const state = arena as unknown as State;
-  clearPublished(state);
+  clearPublished(state, true);
   let error: unknown;
   for (const texture of Array.from(state.ownedTextures)) {
     try { deleteTexture(state, texture); } catch (caught) { error ??= caught; }
@@ -295,7 +541,9 @@ export const releaseIblTextureContextHandles = (arena: IblTextureArena): void =>
 
 export const dropIblTextureContext = (arena: IblTextureArena): void => {
   const state = arena as unknown as State;
-  clearPublished(state);
+  clearPublished(state, false);
+  for (const lease of state.textureLeases.values()) lease.release();
+  state.textureLeases.clear();
   state.ownedTextures.clear();
 };
 
@@ -305,6 +553,7 @@ export const iblTextureArenaSnapshot = (arena: IblTextureArena): IblTextureArena
     brdfLut: state.brdfLut !== undefined,
     gltfSpecularCount: state.gltfSpecular.size,
     ownedTextureCount: state.ownedTextures.size,
+    retainedLeaseCount: state.textureLeases.size,
     studioSpecular: state.studio?.key === STUDIO_ENVIRONMENT_SPECULAR_KEY,
   };
 };

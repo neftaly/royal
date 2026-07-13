@@ -9,6 +9,7 @@ import type {
 import type { SurfaceImageBasedLight, SurfaceLight } from "../webgl/lights";
 import type { GltfDocument } from "./schema";
 import type { GltfTextureCoordinates } from "./texture-coordinates";
+import { ResourceGovernorCpuCapacityError } from "../resource-governor";
 
 type GltfBasisuCodecModule = typeof import("./codecs/basisu");
 
@@ -147,6 +148,62 @@ export type PreparedGltfAsset = {
   readonly variants: readonly string[];
 };
 
+export interface PreparedGltfAssetRetainedCpuBytes {
+  /** Unique backing buffers reachable from retained primitive geometry. */
+  readonly geometry: number;
+  /** Other retained binary buffers needed for deferred image preparation. */
+  readonly assetDecode: number;
+}
+
+const addRetainedBuffer = (
+  buffers: Set<ArrayBufferLike>,
+  value: ArrayBufferView | ArrayBufferLike | undefined,
+): void => {
+  if (value === undefined) return;
+  buffers.add(ArrayBuffer.isView(value) ? value.buffer : value);
+};
+
+const retainedBufferBytes = (buffers: ReadonlySet<ArrayBufferLike>): number => {
+  let bytes = 0;
+  for (const buffer of buffers) {
+    if (!Number.isSafeInteger(buffer.byteLength) || !Number.isSafeInteger(bytes + buffer.byteLength)) {
+      throw new RangeError("Prepared glTF retained CPU bytes exceed safe integer capacity");
+    }
+    bytes += buffer.byteLength;
+  }
+  return bytes;
+};
+
+/** Counts unique retained binary backing stores without double-counting views. */
+export const preparedGltfAssetRetainedCpuBytes = (
+  asset: PreparedGltfAsset,
+): PreparedGltfAssetRetainedCpuBytes => {
+  const geometryBuffers = new Set<ArrayBufferLike>();
+  for (const primitive of asset.primitives) {
+    addRetainedBuffer(geometryBuffers, primitive.positions);
+    addRetainedBuffer(geometryBuffers, primitive.normals);
+    addRetainedBuffer(geometryBuffers, primitive.tangents);
+    addRetainedBuffer(geometryBuffers, primitive.colors);
+    addRetainedBuffer(geometryBuffers, primitive.texCoords0);
+    addRetainedBuffer(geometryBuffers, primitive.texCoords1);
+    addRetainedBuffer(geometryBuffers, primitive.indices);
+    for (const matrix of primitive.localModels) {
+      if (ArrayBuffer.isView(matrix)) addRetainedBuffer(geometryBuffers, matrix);
+    }
+    for (const matrix of primitive.instanceTransforms) {
+      if (ArrayBuffer.isView(matrix)) addRetainedBuffer(geometryBuffers, matrix);
+    }
+  }
+  const decodeBuffers = new Set<ArrayBufferLike>();
+  for (const buffer of asset.imagePreparation?.buffers ?? []) {
+    if (!geometryBuffers.has(buffer)) decodeBuffers.add(buffer);
+  }
+  return {
+    assetDecode: retainedBufferBytes(decodeBuffers),
+    geometry: retainedBufferBytes(geometryBuffers),
+  };
+};
+
 export type PreparedGltfAssetSnapshot =
   | {
     readonly generation: number;
@@ -180,6 +237,7 @@ export type PreparedGltfAssetSubscription = {
 };
 
 type StoreEntry = {
+  capacityBlocked: boolean;
   generation: number;
   listeners: Set<StoreListener>;
   notificationQueued: boolean;
@@ -223,6 +281,7 @@ export class PreparedGltfAssetStore {
     if (entry === undefined) {
       const generation = this.#generation++;
       entry = {
+        capacityBlocked: false,
         generation,
         listeners: new Set(),
         notificationQueued: false,
@@ -273,7 +332,24 @@ export class PreparedGltfAssetStore {
     return this.#entries.get(key)?.snapshot;
   }
 
-  detachImagePreparation(key: string, generation: number): void {
+  wakeCpuCapacity(): boolean {
+    if (this.#disposed) return false;
+    let woke = false;
+    // Retry each entry that was blocked when the wake began exactly once.
+    // The outer preparation scheduler remains the concurrency authority.
+    for (const [key, entry] of Array.from(this.#entries)) {
+      if (this.#disposed || this.#entries.get(key) !== entry) continue;
+      if (!entry.capacityBlocked || entry.subscribers === 0) continue;
+      entry.capacityBlocked = false;
+      this.#entries.delete(key);
+      this.#entries.set(key, entry);
+      this.#start(entry);
+      woke = true;
+    }
+    return woke;
+  }
+
+  detachImagePreparation(key: string, generation: number): boolean {
     const entry = this.#entries.get(key);
     if (
       this.#disposed
@@ -281,7 +357,7 @@ export class PreparedGltfAssetStore {
       || entry.generation !== generation
       || entry.snapshot.status !== "ready"
       || entry.snapshot.asset.imagePreparation === undefined
-    ) return;
+    ) return false;
     const { imagePreparation: _released, ...asset } = entry.snapshot.asset;
     entry.snapshot = Object.freeze({
       asset,
@@ -290,6 +366,7 @@ export class PreparedGltfAssetStore {
       revision: entry.snapshot.revision + 1,
       status: "ready",
     });
+    return true;
   }
 
   dispose(): void {
@@ -306,10 +383,23 @@ export class PreparedGltfAssetStore {
     const generation = entry.generation;
     void this.#load(entry.request, controller.signal).then(
       (asset) => this.#publish(entry.request.key, generation, { asset, status: "ready" }),
-      (error: unknown) => this.#publish(entry.request.key, generation, {
-        error: `glTF load failed for ${entry.request.src}: ${error instanceof Error ? error.message : String(error)}`,
-        status: "error",
-      }),
+      (error: unknown) => {
+        if (error instanceof ResourceGovernorCpuCapacityError && !error.permanent) {
+          // Prepared byte size is known only after preparation. Do not retain
+          // the rejected decoded asset outside the hard cap; a capacity wake
+          // intentionally repeats preparation from the encoded source.
+          const current = this.#entries.get(entry.request.key);
+          if (current === entry && entry.generation === generation && entry.subscribers > 0) {
+            this.#controllers.delete(entry.request.key);
+            entry.capacityBlocked = true;
+          }
+          return;
+        }
+        this.#publish(entry.request.key, generation, {
+          error: `glTF load failed for ${entry.request.src}: ${error instanceof Error ? error.message : String(error)}`,
+          status: "error",
+        });
+      },
     );
   }
 
@@ -351,11 +441,19 @@ export class PreparedGltfAssetStore {
       const notifyChange = entry.notifyChange;
       entry.notifyChange = false;
       let listenerNotified = false;
-      for (const listener of entry.listeners) {
-        if (!listener.active || listener.revision >= entry.snapshot.revision) continue;
+      for (const listener of Array.from(entry.listeners)) {
+        if (
+          !listener.active
+          || !entry.listeners.has(listener)
+          || listener.revision >= entry.snapshot.revision
+        ) continue;
         listener.revision = entry.snapshot.revision;
         listenerNotified = true;
-        listener.callback();
+        try {
+          listener.callback();
+        } catch {
+          // Subscriber failures cannot suppress peers or the store-level wake.
+        }
       }
       if (notifyChange || listenerNotified) this.#onChange();
     });

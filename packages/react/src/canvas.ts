@@ -92,6 +92,27 @@ export const applyCanvasRendererLifecycle = (
   }
 };
 
+/** @internal Normalizes opaque scheduled-render failures for React ErrorBoundary handling. */
+export const applyCanvasRendererFailure = (
+  reportError: (error: Error) => void,
+  failure: unknown,
+): void => {
+  const detail = failure === null
+    ? "null"
+    : typeof failure === "string"
+      || typeof failure === "number"
+      || typeof failure === "boolean"
+      || typeof failure === "bigint"
+      || typeof failure === "symbol"
+      ? String(failure)
+      : "an opaque non-Error value";
+  reportError(failure instanceof Error
+    ? failure
+    : new Error(failure === undefined
+      ? "Royal scheduled render failed without an error value"
+      : `Royal scheduled render failed: ${detail}`));
+};
+
 /** @internal Releases Canvas ownership before entering fallible renderer cleanup. */
 export const disposeCanvasRendererRoot = (
   rootRef: MutableRefObject<RoyalRendererRoot | null>,
@@ -124,11 +145,13 @@ export const normalizeCanvasRendererOptions = (
   const alpha = context?.alpha;
   const antialias = context?.antialias;
   const generatedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const resourceGovernorPolicy = context?.resourceGovernorPolicy;
   const virtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
   if (
     alpha === undefined
     && antialias === undefined
     && generatedRasterVirtualTextures === undefined
+    && resourceGovernorPolicy === undefined
     && virtualTexturePhysicalByteBudget === undefined
   ) return undefined;
 
@@ -139,12 +162,33 @@ export const normalizeCanvasRendererOptions = (
       ...(generatedRasterVirtualTextures === undefined
         ? {}
         : { generatedRasterVirtualTextures }),
+      ...(resourceGovernorPolicy === undefined ? {} : { resourceGovernorPolicy }),
       ...(virtualTexturePhysicalByteBudget === undefined
         ? {}
         : { virtualTexturePhysicalByteBudget }),
     },
   };
 };
+
+const resourceGovernorPolicySignature = (
+  policy: RoyalRendererRootContextOptions["resourceGovernorPolicy"],
+): string | undefined => policy === undefined ? undefined : [
+  ...(["asset-decode", "geometry", "ordinary-texture", "render-target", "virtual-texture"] as const)
+    .flatMap((resourceClass) => {
+      const value = policy.classes[resourceClass];
+      return [
+        value.cpuDecodedBytes.mandatoryFloor,
+        value.cpuDecodedBytes.softLimit,
+        value.persistentGpuBytes.mandatoryFloor,
+        value.persistentGpuBytes.softLimit,
+      ];
+    }),
+  policy.limits.cpuDecodedBytes,
+  policy.limits.jobs,
+  policy.limits.persistentGpuBytes,
+  policy.limits.transientPeakBytes,
+  policy.limits.uploadBytes,
+].join(":");
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -399,6 +443,23 @@ export const Canvas = ({
   const contextAlpha = context?.alpha;
   const contextAntialias = context?.antialias;
   const contextGeneratedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const suppliedResourceGovernorPolicy = context?.resourceGovernorPolicy;
+  const resourceGovernorPolicyKey = resourceGovernorPolicySignature(suppliedResourceGovernorPolicy);
+  const resourceGovernorPolicyRef = useRef<{
+    readonly key: string;
+    readonly policy: NonNullable<RoyalRendererRootContextOptions["resourceGovernorPolicy"]>;
+  } | undefined>(undefined);
+  if (resourceGovernorPolicyKey === undefined) resourceGovernorPolicyRef.current = undefined;
+  else if (
+    suppliedResourceGovernorPolicy !== undefined
+    && resourceGovernorPolicyRef.current?.key !== resourceGovernorPolicyKey
+  ) {
+    resourceGovernorPolicyRef.current = {
+      key: resourceGovernorPolicyKey,
+      policy: suppliedResourceGovernorPolicy,
+    };
+  }
+  const contextResourceGovernorPolicy = resourceGovernorPolicyRef.current?.policy;
   const contextVirtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
@@ -413,6 +474,9 @@ export const Canvas = ({
       ...(contextGeneratedRasterVirtualTextures === undefined
         ? {}
         : { generatedRasterVirtualTextures: contextGeneratedRasterVirtualTextures }),
+      ...(contextResourceGovernorPolicy === undefined
+        ? {}
+        : { resourceGovernorPolicy: contextResourceGovernorPolicy }),
       ...(contextVirtualTexturePhysicalByteBudget === undefined
         ? {}
         : { virtualTexturePhysicalByteBudget: contextVirtualTexturePhysicalByteBudget }),
@@ -421,6 +485,7 @@ export const Canvas = ({
       contextAlpha,
       contextAntialias,
       contextGeneratedRasterVirtualTextures,
+      contextResourceGovernorPolicy,
       contextVirtualTexturePhysicalByteBudget,
     ],
   );
@@ -460,6 +525,15 @@ export const Canvas = ({
       }, snapshot);
     });
   }, [canvasRoot, frameLoop]);
+
+  useLayoutEffect(() => {
+    if (canvasRoot === null) return undefined;
+    return canvasRoot.observeRenderFailures((failure) => {
+      applyCanvasRendererFailure((error) => {
+        setRootError((current: unknown) => current ?? error);
+      }, failure);
+    });
+  }, [canvasRoot]);
 
   // Exactly one window-frame scheduler owns a Canvas at a time. A static
   // Canvas leaves demand scheduling with the renderer; the first useFrame

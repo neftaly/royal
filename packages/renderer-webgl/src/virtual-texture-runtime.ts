@@ -8,7 +8,7 @@ import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
-  generatedVirtualTexturePageCount,
+  generatedVirtualTextureManifest,
   virtualTexturePageKey,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -81,6 +81,7 @@ export type VirtualTextureRuntimeState = {
   readonly key: string;
   manifestAbortController?: AbortController;
   readonly pageLifecycles: Map<string, VirtualTexturePageLifecycle>;
+  readonly pageLoadAbortControllers: Map<string, AbortController>;
   readonly pageRetryTimers: Map<string, ReturnType<typeof setTimeout>>;
   manifest?: VirtualTextureManifestModel;
   pageUrisByKey?: ReadonlyMap<string, string>;
@@ -171,24 +172,13 @@ export const generatedVirtualTextureSource = (
 
 export const generatedRasterVirtualTextureManifest = (
   source: RasterVirtualTextureSource,
-): VirtualTextureManifestModel => {
-  const width = Math.max(1, Math.ceil(source.width));
-  const height = Math.max(1, Math.ceil(source.height));
-  const pageSize = Math.min(GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
-  const physicalSlots = Math.min(
-    GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    generatedVirtualTexturePageCount(width, height, pageSize),
-  );
-
-  return {
+): VirtualTextureManifestModel => generatedVirtualTextureManifest({
     ...(source.colorSpace === undefined ? {} : { colorSpace: source.colorSpace }),
-    height,
-    pageSize,
-    pages: [],
-    physicalSlots,
-    width,
-  };
-};
+    height: source.height,
+    pageSize: GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE,
+    physicalSlotCap: GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+    width: source.width,
+  });
 
 const createVirtualTextureCanvas = (
   width: number,

@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRendererRoot } from "@royal/react";
-import { webGlRootForRoyalRoot } from "../packages/react/src/root";
+import {
+  createRendererRoot,
+  type RoyalRendererDiagnosticsSnapshot,
+} from "@royal/react";
+import {
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from "@royal/renderer-webgl";
 import {
   perspectiveCamera,
   scene,
   type RenderRoot,
 } from "@royal/renderer-core";
+import { webGlRootForRoyalRoot } from "../packages/react/src/root";
 import { forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
 
@@ -26,6 +33,61 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("defensively freezes a custom resource governor policy without changing default snapshots", () => {
+    const customPolicy = {
+      classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+        ([resourceClass, value]) => [resourceClass, {
+          cpuDecodedBytes: { ...value.cpuDecodedBytes },
+          persistentGpuBytes: { ...value.persistentGpuBytes },
+        }],
+      )) as unknown as ResourceGovernorPolicy["classes"],
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 8 * 1024 * 1024 },
+    } satisfies ResourceGovernorPolicy;
+    const root = createRendererRoot(fakeCanvas(), { context: { resourceGovernorPolicy: customPolicy } });
+    const retained = root.context.resourceGovernorPolicy;
+
+    expect(retained).toEqual(customPolicy);
+    expect(retained).not.toBe(customPolicy);
+    expect(Object.isFrozen(retained)).toBe(true);
+    expect(Object.isFrozen(retained?.classes)).toBe(true);
+    expect(Object.isFrozen(retained?.classes.geometry.cpuDecodedBytes)).toBe(true);
+    customPolicy.limits.uploadBytes = 1;
+    expect(root.diagnostics().resourceGovernor.limits.uploadBytes).toBe(8 * 1024 * 1024);
+    root.dispose();
+
+    const defaultRoot = createRendererRoot(fakeCanvas());
+    expect(defaultRoot.context).not.toHaveProperty("resourceGovernorPolicy");
+    defaultRoot.dispose();
+  });
+
+  it("rejects an invalid resource governor policy before requesting a WebGL context", () => {
+    const canvas = fakeCanvas();
+    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+      ([resourceClass, value]) => [resourceClass, {
+        cpuDecodedBytes: { ...value.cpuDecodedBytes },
+        persistentGpuBytes: { ...value.persistentGpuBytes },
+      }],
+    )) as unknown as ResourceGovernorPolicy["classes"];
+    const invalidPolicy = {
+      classes: {
+        ...classes,
+        geometry: {
+          ...classes.geometry,
+          persistentGpuBytes: {
+            mandatoryFloor: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
+            softLimit: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
+          },
+        },
+      },
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits },
+    } satisfies ResourceGovernorPolicy;
+
+    expect(() => createRendererRoot(canvas, {
+      context: { resourceGovernorPolicy: invalidPolicy },
+    })).toThrow("persistentGpuBytes mandatory floors exceed capacity");
+    expect(canvas.contextRequests).toEqual([]);
+  });
+
   it("normalizes context options and renders through the public root", () => {
     const canvas = fakeCanvas();
     const root = createRendererRoot(canvas, {
@@ -59,10 +121,12 @@ describe("React root public API", () => {
       frame: 0,
       lifecycle: { generation: 1, lifecycle: "available" },
     });
-    expect(root.diagnostics()).toMatchObject({
+    const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
+    expect(diagnostics).toMatchObject({
       disposed: false,
       frame: 0,
       gltfInstancing: expect.any(Object),
+      resourceGovernor: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });
     expect(webGlRootForRoyalRoot(root).snapshot()).toMatchObject({

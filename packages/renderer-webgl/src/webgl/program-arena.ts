@@ -413,16 +413,16 @@ const clearState = (state: State): void => {
 
 export const releaseProgramArenaContextHandles = (arena: ProgramArena): void => {
   const state = arena as unknown as State;
-  let error: unknown;
+  let error: { readonly value: unknown } | undefined;
   const attempt = (action: () => void): void => {
-    try { action(); } catch (caught) { error ??= caught; }
+    try { action(); } catch (caught) { error ??= { value: caught }; }
   };
-  for (const program of state.ownedPrograms) attempt(() => state.gl.deleteProgram(program));
-  for (const shader of state.ownedShaders) attempt(() => state.gl.deleteShader(shader));
-  state.ownedPrograms.clear();
-  state.ownedShaders.clear();
+  // Successful deletes leave ownership immediately; failed driver deletes stay
+  // quarantined in the owned sets so an active-context teardown can retry.
+  for (const program of state.ownedPrograms) attempt(() => deleteProgram(state, program));
+  for (const shader of state.ownedShaders) attempt(() => deleteShader(state, shader));
   clearState(state);
-  if (error !== undefined) throw error;
+  if (error !== undefined) throw error.value;
 };
 
 export const dropProgramArenaContext = (arena: ProgramArena): void => {

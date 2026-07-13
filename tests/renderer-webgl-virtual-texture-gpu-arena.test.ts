@@ -490,6 +490,146 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "completed", upload: pending });
   });
 
+  it("leaves denied governor uploads queued without performing GL side effects", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 0, y: 0 }, 1));
+    const uploadsBefore = gl.subUploads.length;
+    let requestedBytes = 0;
+
+    processVirtualTextureGpuUploads(arena, 1, {
+      reserve: (bytes) => {
+        requestedBytes = bytes;
+        return undefined;
+      },
+    });
+
+    expect(requestedBytes).toBe(manifest.pageSize ** 2 * 4);
+    expect(gl.subUploads).toHaveLength(uploadsBefore);
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      pendingUploads: 1,
+      uploadedPages: 0,
+    });
+    expect(virtualTextureGpuHasActionableUploads(arena)).toBe(true);
+  });
+
+  it("retries only page-table publication when its admission follows an admitted atlas upload", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    // Isolate the upload transaction from the allocation's initial empty-table
+    // publication; the adversarial denial below targets the new page mapping.
+    processVirtualTextureGpuUploads(arena, 0);
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 0, y: 0 }, 1));
+    const requestedBytes: number[] = [];
+    let atlasCommits = 0;
+    let pageTableCommits = 0;
+    let admitPageTable = false;
+    const admission = {
+      reserve: (bytes: number) => {
+        requestedBytes.push(bytes);
+        if (bytes === 4 && !admitPageTable) return undefined;
+        return {
+          cancel: () => undefined,
+          commit: () => {
+            if (bytes === 4) pageTableCommits += 1;
+            else atlasCommits += 1;
+          },
+        };
+      },
+    };
+    const atlasUploadsBefore = gl.subUploads.filter(({ serial }) => serial === 1).length;
+    const pageTableUploadsBefore = gl.subUploads.filter(({ serial }) => serial === 2).length;
+
+    processVirtualTextureGpuUploads(arena, 1, admission);
+
+    expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploadsBefore + 1);
+    expect(gl.subUploads.filter(({ serial }) => serial === 2)).toHaveLength(pageTableUploadsBefore);
+    expect({ atlasCommits, pageTableCommits }).toEqual({ atlasCommits: 1, pageTableCommits: 0 });
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      pendingUploads: 1,
+      residentPages: 0,
+      uploadedPages: 0,
+    });
+
+    admitPageTable = true;
+    processVirtualTextureGpuUploads(arena, 1, admission);
+
+    expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploadsBefore + 1);
+    expect(gl.subUploads.filter(({ serial }) => serial === 2)).toHaveLength(pageTableUploadsBefore + 1);
+    expect(requestedBytes[0]).toBe(manifest.pageSize ** 2 * 4);
+    expect(requestedBytes.filter((bytes) => bytes === manifest.pageSize ** 2 * 4)).toHaveLength(1);
+    expect(requestedBytes.slice(1).every((bytes) => bytes === 4)).toBe(true);
+    expect({ atlasCommits, pageTableCommits }).toEqual({ atlasCommits: 1, pageTableCommits: 1 });
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      pendingUploads: 0,
+      residentPages: 1,
+      uploadedPages: 1,
+    });
+  });
+
+  it("commits admitted upload reservations and cancels them on a GL failure", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 0, y: 0 }, 1));
+    let commits = 0;
+    let cancels = 0;
+    const requestedBytes: number[] = [];
+    const admission = {
+      reserve: (bytes: number) => {
+        requestedBytes.push(bytes);
+        return {
+          cancel: () => { cancels += 1; },
+          commit: () => { commits += 1; },
+        };
+      },
+    };
+    gl.failNextOperation(new Error("governed upload failure"));
+
+    expect(() => processVirtualTextureGpuUploads(arena, 1, admission))
+      .toThrow("governed upload failure");
+    expect({ cancels, commits }).toEqual({ cancels: 1, commits: 0 });
+
+    processVirtualTextureGpuUploads(arena, 1, admission);
+    // The successful retry independently charges its atlas texels and exact
+    // page-table texels.
+    expect({ cancels, commits }).toEqual({ cancels: 1, commits: 2 });
+    expect(requestedBytes).toEqual([
+      manifest.pageSize ** 2 * 4,
+      manifest.pageSize ** 2 * 4,
+      4,
+    ]);
+    expect(virtualTextureGpuResourceSnapshot(resource).uploadedPages).toBe(1);
+  });
+
+  it("charges atlas and attempted page-table uploads exactly once when publication fails", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 0, y: 0 }, 1));
+    let commits = 0;
+    let cancels = 0;
+    const requestedBytes: number[] = [];
+    const admission = {
+      reserve: (bytes: number) => {
+        requestedBytes.push(bytes);
+        return {
+          cancel: () => { cancels += 1; },
+          commit: () => { commits += 1; },
+        };
+      },
+    };
+    // Atlas upload succeeds; the following page-table upload fails.
+    gl.failOperationAfter(2);
+
+    expect(() => processVirtualTextureGpuUploads(arena, 1, admission)).toThrow(/operation fault/);
+    expect({ cancels, commits }).toEqual({ cancels: 0, commits: 2 });
+    expect(requestedBytes).toEqual([manifest.pageSize ** 2 * 4, 4]);
+
+    processVirtualTextureGpuUploads(arena, 1, admission);
+    expect({ cancels, commits }).toEqual({ cancels: 0, commits: 2 });
+    expect(requestedBytes).toEqual([manifest.pageSize ** 2 * 4, 4]);
+    expect(virtualTextureGpuResourceSnapshot(resource).uploadedPages).toBe(1);
+  });
+
   it("withholds completion and exact residency until a failed page-table upload retries", () => {
     const { arena, gl } = setup();
     const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());

@@ -23,6 +23,12 @@ export const STUDIO_ENVIRONMENT_IRRADIANCE: readonly Vec3[] = [
 export const STUDIO_ENVIRONMENT_SPECULAR_KEY = "environment:studio:specular";
 
 const STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES = [32, 16, 8, 4, 2, 1] as const;
+const STUDIO_ENVIRONMENT_SPECULAR_TEXELS = STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES
+  .reduce((sum, size) => sum + size * size * 6, 0);
+/** RGB9_E5 occupies four GPU bytes per cubemap texel. */
+export const STUDIO_ENVIRONMENT_SPECULAR_GPU_BYTES = STUDIO_ENVIRONMENT_SPECULAR_TEXELS * 4;
+/** Generated RGB float source payload submitted to WebGL. */
+export const STUDIO_ENVIRONMENT_SPECULAR_UPLOAD_BYTES = STUDIO_ENVIRONMENT_SPECULAR_TEXELS * 3 * 4;
 
 const normalizedStudioDirection = (x: number, y: number, z: number): Vec3 => {
   const inverseLength = 1 / Math.hypot(x, y, z);

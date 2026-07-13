@@ -8,7 +8,7 @@ import {
 } from "./gltf/io";
 import type { GltfDocument, GltfImage } from "./gltf/schema";
 import {
-  generatedVirtualTexturePageCount,
+  generatedVirtualTextureManifest,
   virtualTexturePageKey,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -454,24 +454,13 @@ const loadSvgTextImage = async (
 
 export const generatedSvgVirtualTextureManifest = (
   source: SvgVirtualTextureSource,
-): VirtualTextureManifestModel => {
-  const width = Math.max(1, Math.ceil(source.width));
-  const height = Math.max(1, Math.ceil(source.height));
-  const pageSize = Math.min(GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE, Math.max(width, height));
-  const physicalSlots = Math.min(
-    GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    generatedVirtualTexturePageCount(width, height, pageSize),
-  );
-
-  return {
+): VirtualTextureManifestModel => generatedVirtualTextureManifest({
     colorSpace: "srgb",
-    height,
-    pageSize,
-    pages: [],
-    physicalSlots,
-    width,
-  };
-};
+    height: source.height,
+    pageSize: GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE,
+    physicalSlotCap: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+    width: source.width,
+  });
 
 const generatedSvgVirtualTexturePageText = (
   source: SvgVirtualTextureSource,

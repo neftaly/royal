@@ -54,6 +54,16 @@ export interface WebGlXrLayer {
 }
 
 export interface WebGlXrSession {
+  addEventListener?(
+    type: "end",
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void;
+  removeEventListener?(
+    type: "end",
+    listener: EventListenerOrEventListenerObject,
+    options?: EventListenerOptions | boolean,
+  ): void;
   requestReferenceSpace(type: WebXrReferenceSpaceType): Promise<WebGlXrReferenceSpace>;
   updateRenderState(state: { readonly baseLayer: WebGlXrLayer }): void | Promise<void>;
 }
@@ -203,52 +213,94 @@ export const createWebXrSessionRenderer = async (
     throw new Error("Royal WebXR rendering requires an active renderer-owned WebGL2 context");
   }
   const gl = root[rendererOwnedWebGl2Context] as WebGl2XrCompatibleContext;
-  await gl.makeXRCompatible?.();
-  if (root.contextLifecycle !== "active") {
-    throw new Error("Royal WebXR renderer context became unavailable during session setup");
-  }
+  let sessionEnded = false;
+  let disposeEndedSession: (() => void) | undefined;
+  const onSessionEnd: EventListener = () => {
+    sessionEnded = true;
+    disposeEndedSession?.();
+  };
+  const assertSessionActive = (): void => {
+    if (sessionEnded) throw new Error("Royal WebXR session ended during renderer setup");
+  };
+  session.addEventListener?.("end", onSessionEnd, { once: true });
 
-  const Layer = options.advanced?.xrWebGLLayerConstructor ?? xrLayerConstructor();
-  if (Layer === undefined) {
-    throw new Error("Royal WebXR rendering requires XRWebGLLayer");
-  }
+  try {
+    await gl.makeXRCompatible?.();
+    assertSessionActive();
+    if (root.contextLifecycle !== "active") {
+      throw new Error("Royal WebXR renderer context became unavailable during session setup");
+    }
 
-  const layer = new Layer(session, gl, options.layerOptions);
-  await session.updateRenderState({ baseLayer: layer });
-  const referenceSpace = await firstReferenceSpace(
-    session,
-    options.referenceSpacePreference ?? DEFAULT_REFERENCE_SPACE_TYPES,
-  );
-  let frameIndex = 0;
-  let disposed = false;
-  const frameViews = createFrameViews(2);
-  const releaseRenderClock = root.acquireExternalRenderClock();
+    const Layer = options.advanced?.xrWebGLLayerConstructor ?? xrLayerConstructor();
+    if (Layer === undefined) {
+      throw new Error("Royal WebXR rendering requires XRWebGLLayer");
+    }
 
-  return {
-    get disposed() {
-      return disposed;
-    },
-    layer,
-    referenceSpace,
-    dispose: () => {
+    const layer = new Layer(session, gl, options.layerOptions);
+    await session.updateRenderState({ baseLayer: layer });
+    assertSessionActive();
+    const referenceSpace = await firstReferenceSpace(
+      session,
+      options.referenceSpacePreference ?? DEFAULT_REFERENCE_SPACE_TYPES,
+    );
+    assertSessionActive();
+    let frameIndex = 0;
+    let disposed = false;
+    const frameViews = createFrameViews(2);
+    const releaseRenderClock = root.acquireExternalRenderClock();
+    const dispose = (): void => {
       if (disposed) return;
       disposed = true;
-      releaseRenderClock();
-    },
-    renderFrame: (frame, scene = root.latestScene) => {
-      if (disposed) return false;
-      if (root.contextLifecycle !== "active") return false;
-      if (scene === undefined) return false;
-      const pose = frame.getViewerPose(referenceSpace);
-      if (pose === null) return false;
-      fillFrameViews(frameViews, layer, pose);
-      if (frameViews.count === 0) return false;
-      root[rendererFrameViews](scene, frameViews);
-      if (options.onFrameSnapshot !== undefined) {
-        options.onFrameSnapshot(frameSnapshot(frameIndex, frameViews));
+      let firstFailure: unknown;
+      let failed = false;
+      try {
+        session.removeEventListener?.("end", onSessionEnd);
+      } catch (error) {
+        failed = true;
+        firstFailure = error;
       }
-      frameIndex += 1;
-      return true;
-    },
-  };
+      try {
+        releaseRenderClock();
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          firstFailure = error;
+        }
+      }
+      if (failed) throw firstFailure;
+    };
+    disposeEndedSession = dispose;
+
+    return {
+      get disposed() {
+        return disposed;
+      },
+      layer,
+      referenceSpace,
+      dispose,
+      renderFrame: (frame, scene = root.latestScene) => {
+        if (disposed) return false;
+        if (root.contextLifecycle !== "active") return false;
+        if (scene === undefined) return false;
+        const pose = frame.getViewerPose(referenceSpace);
+        if (pose === null) return false;
+        fillFrameViews(frameViews, layer, pose);
+        if (frameViews.count === 0) return false;
+        root[rendererFrameViews](scene, frameViews);
+        if (options.onFrameSnapshot !== undefined) {
+          options.onFrameSnapshot(frameSnapshot(frameIndex, frameViews));
+        }
+        frameIndex += 1;
+        return true;
+      },
+    };
+  } catch (error) {
+    try {
+      if (disposeEndedSession === undefined) session.removeEventListener?.("end", onSessionEnd);
+      else disposeEndedSession();
+    } catch {
+      // Preserve the setup failure after making every available cleanup attempt.
+    }
+    throw error;
+  }
 };

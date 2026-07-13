@@ -57,6 +57,44 @@ const MIN_LIGHT_ILLUMINANCE_LUX = 0.01;
 const MAX_LIGHTS_PER_CLUSTER = 4096;
 const MAX_CLUSTER_INDEX_BYTES = 64 * 1024 * 1024;
 
+export interface ClusterBuildScratchCapacity {
+  readonly bounds: number;
+  readonly counts: number;
+  readonly cursors: number;
+  readonly indices: number;
+  readonly offsetsAndCounts: number;
+}
+
+/** Pure conservative capacity bound used to obtain admission before allocating build scratch. */
+export const clusterBuildScratchCapacity = (
+  width: number,
+  height: number,
+  lightCount: number,
+): ClusterBuildScratchCapacity => {
+  const tileCountX = Math.max(1, Math.ceil(width / DEFAULT_TILE_SIZE));
+  const tileCountY = Math.max(1, Math.ceil(height / DEFAULT_TILE_SIZE));
+  const clusterCount = tileCountX * tileCountY * DEFAULT_Z_SLICE_COUNT;
+  const indexLimit = MAX_CLUSTER_INDEX_BYTES / Uint32Array.BYTES_PER_ELEMENT;
+  const indexUpperBound = Math.min(indexLimit, clusterCount * Math.min(lightCount, MAX_LIGHTS_PER_CLUSTER));
+  return {
+    bounds: capacity(lightCount * 6),
+    counts: capacity(clusterCount),
+    cursors: capacity(clusterCount),
+    indices: capacity(indexUpperBound),
+    offsetsAndCounts: capacity(clusterCount * 2),
+  };
+};
+
+export const createClusterBuildScratchWithCapacity = (
+  value: ClusterBuildScratchCapacity,
+): ClusterBuildScratch => ({
+  bounds: new Int32Array(value.bounds),
+  counts: new Uint32Array(value.counts),
+  cursors: new Uint32Array(value.cursors),
+  indices: new Uint32Array(value.indices),
+  offsetsAndCounts: new Uint32Array(value.offsetsAndCounts),
+});
+
 const clampInteger = (value: number, minimum: number, maximum: number): number =>
   Math.max(minimum, Math.min(maximum, Math.floor(value)));
 

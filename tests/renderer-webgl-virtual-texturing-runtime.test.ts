@@ -11,16 +11,23 @@ import {
   virtualTexture,
   type Material,
 } from "@royal/renderer-core";
-import { createWebGlRoot } from "@royal/renderer-webgl";
+import {
+  createWebGlRoot,
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from "@royal/renderer-webgl";
 import type { SurfaceMaterial } from "../packages/renderer-webgl/src/webgl/materials";
 import {
   VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
   VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME,
+  generatedRasterVirtualTextureManifest,
   orientVirtualTextureDemandVRange,
 } from "../packages/renderer-webgl/src/virtual-texture-runtime";
+import { generatedSvgVirtualTextureManifest } from "../packages/renderer-webgl/src/svg-texture";
 import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,
+  generatedVirtualTexturePageCount,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
   virtualTexturePageKey,
@@ -41,6 +48,40 @@ const fuzzPage = (random: SeededRandom): FuzzPage => ({
 });
 
 describe("WebGL virtual texturing runtime model", () => {
+  it("keeps generated raster and SVG manifest policy identical", () => {
+    const dimensions = { height: 777.2, width: 1_023.1 };
+    const raster = generatedRasterVirtualTextureManifest({
+      ...dimensions,
+      colorSpace: "srgb",
+      label: "raster",
+      source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },
+    });
+    const svg = generatedSvgVirtualTextureManifest({
+      ...dimensions,
+      label: "vector",
+      text: "<svg/>",
+    });
+
+    expect(svg).toEqual(raster);
+  });
+
+  it("rejects invalid generated raster and SVG manifest dimensions without looping", () => {
+    expect(() => generatedRasterVirtualTextureManifest({
+      height: 512,
+      label: "invalid raster",
+      source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },
+      width: Number.POSITIVE_INFINITY,
+    })).toThrow(RangeError);
+    expect(() => generatedSvgVirtualTextureManifest({
+      height: Number.NaN,
+      label: "invalid vector",
+      text: "<svg/>",
+      width: 512,
+    })).toThrow(RangeError);
+    expect(() => generatedVirtualTexturePageCount(Number.MAX_SAFE_INTEGER, 2, 1))
+      .toThrow("page count exceeds safe integer capacity");
+  });
+
   it("derives complete ceil-halved mip chains for NPOT page grids", () => {
     for (const [pagesWide, pagesHigh, mipCount] of [
       [3, 1, 3],
@@ -932,6 +973,24 @@ const renderVirtualTextureMaterials = (materials: readonly Material[]) => scene(
   clearColor: [0, 0, 0, 0],
 });
 
+const renderGeometryPressure = (material: Material, extraCount: number) => scene({
+  camera: camera(),
+  nodes: Array.from({ length: extraCount + 1 }, (_value, index) => mesh({
+    geometry: planeGeometry([1 + index / 100, 1]),
+    material: index === 0 ? material : unlitMaterial({ color: [1, 1, 1, 1] }),
+  })),
+  clearColor: [0, 0, 0, 0],
+});
+
+const renderOrdinaryTexturePressure = (vtMaterial: Material, pressureMaterial: Material) => scene({
+  camera: camera(),
+  nodes: [
+    mesh({ geometry: planeGeometry([1.5, 1]), material: pressureMaterial }),
+    mesh({ geometry: planeGeometry([1, 1]), material: vtMaterial }),
+  ],
+  clearColor: [0, 0, 0, 0],
+});
+
 const vtManifest = (physicalSlots = 2) => ({
   contractVersion: 1,
   pageSize: 4,
@@ -951,6 +1010,29 @@ const vtSinglePageManifest = () => ({
   physicalSlots: 1,
   virtualSize: [4, 4],
 });
+
+const constrainedPolicy = (
+  limits: Partial<ResourceGovernorPolicy["limits"]>,
+): ResourceGovernorPolicy => {
+  const persistentGpuBytes = limits.persistentGpuBytes
+    ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes;
+  const cpuDecodedBytes = limits.cpuDecodedBytes
+    ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.cpuDecodedBytes;
+  const classPolicy = () => ({
+    cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuDecodedBytes },
+    persistentGpuBytes: { mandatoryFloor: 0, softLimit: persistentGpuBytes },
+  });
+  return {
+    classes: {
+      "asset-decode": classPolicy(),
+      geometry: classPolicy(),
+      "ordinary-texture": classPolicy(),
+      "render-target": classPolicy(),
+      "virtual-texture": classPolicy(),
+    },
+    limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, ...limits },
+  };
+};
 
 const vtParentFallbackManifest = (physicalSlots = 3) => ({
   contractVersion: 1,
@@ -1174,6 +1256,229 @@ afterEach(() => {
 });
 
 describe("WebGL renderer virtual texturing integration", () => {
+  it("keeps an intrinsically oversized decoded page terminal without fetching it", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 63 }),
+    });
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/cpu-impossible.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(0);
+    const denied = root.snapshot().resourceGovernor.denials;
+
+    root.render(graph);
+    root.render(graph);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances).toHaveLength(0);
+    expect(root.snapshot().resourceGovernor.denials).toBe(denied);
+    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 64 decoded CPU bytes");
+    root.dispose();
+  });
+
+  it("wakes a CPU-capacity-blocked page without fetching it before capacity releases", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 64 }),
+    });
+    const materials = ["first", "second"].map((name) =>
+      unlitMaterial({ texture: virtualTexture(`/vt/cpu-${name}.json`) }));
+    const graph = renderVirtualTextureMaterials(materials);
+
+    root.render(graph);
+    for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(1);
+
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances).toHaveLength(2);
+    expect(root.snapshot().resourceGovernor.denialsByReason["cpu-decoded-capacity"])
+      .toBeGreaterThan(0);
+    root.dispose();
+  });
+
+  it("retries governed VT admission after cross-class geometry capacity is released", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const probe = createWebGlRoot(fakeCanvas(fakeGl().gl));
+    probe.render(renderGeometryPressure(unlitMaterial({ color: [1, 1, 1, 1] }), 12));
+    const geometryBytes = probe.snapshot().resourceGovernor.byClass.geometry.persistentGpuBytes;
+    probe.dispose();
+
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: constrainedPolicy({ persistentGpuBytes: geometryBytes + 67 }),
+    });
+    const vtMaterial = unlitMaterial({ texture: virtualTexture("/vt/geometry-release.json") });
+    root.render(renderGeometryPressure(vtMaterial, 12));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, gpuAdmissionFailures: 1 });
+
+    root.render(renderGeometryPressure(vtMaterial, 0));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1 });
+    root.dispose();
+  });
+
+  it("retries governed VT admission after an ordinary texture releases GPU capacity", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const ordinaryMaterial = unlitMaterial({ texture: imageTexture("/ordinary-pressure.png") });
+    const plainMaterial = unlitMaterial({ color: [1, 1, 1, 1] });
+    const probe = createWebGlRoot(fakeCanvas(fakeGl().gl));
+    probe.render(renderOrdinaryTexturePressure(plainMaterial, ordinaryMaterial));
+    await flushMicrotasks();
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    probe.render(renderOrdinaryTexturePressure(plainMaterial, ordinaryMaterial));
+    const probeGovernor = probe.snapshot().resourceGovernor;
+    const geometryBytes = probeGovernor.byClass.geometry.persistentGpuBytes;
+    const ordinaryBytes = probeGovernor.byClass["ordinary-texture"].persistentGpuBytes;
+    expect(ordinaryBytes).toBeGreaterThan(0);
+    probe.dispose();
+
+    const fetchRequests = installFetchQueue();
+    const root = createWebGlRoot(fakeCanvas(fakeGl().gl), {
+      resourceGovernorPolicy: constrainedPolicy({
+        persistentGpuBytes: geometryBytes + ordinaryBytes + 67,
+      }),
+    });
+    const vtMaterial = unlitMaterial({ texture: virtualTexture("/vt/ordinary-release.json") });
+    root.render(renderOrdinaryTexturePressure(vtMaterial, ordinaryMaterial));
+    await flushMicrotasks();
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    root.render(renderOrdinaryTexturePressure(vtMaterial, ordinaryMaterial));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, gpuAdmissionFailures: 1 });
+
+    root.render(renderOrdinaryTexturePressure(vtMaterial, plainMaterial));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1 });
+    root.dispose();
+  });
+
+  it("admits a sparse explicit VT using its exact reachable page-table update bound", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: constrainedPolicy({
+        persistentGpuBytes: 8 * 1024 * 1024,
+        uploadBytes: 1_024,
+      }),
+    });
+
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/sparse.json") })));
+    const textureCreatesBeforeManifest = calls.filter(({ name }) => name === "createTexture").length;
+    fetchRequests[0]!.resolve(responseJson({
+      contractVersion: 1,
+      pageSize: 4,
+      pages: { entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }] },
+      physicalSlots: 1,
+      virtualSize: [4_096, 4_096],
+    }));
+    await flushMicrotasks();
+
+    expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(
+      textureCreatesBeforeManifest + 2,
+    );
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(root.snapshot().diagnostics.join("\n")).not.toMatch(/configured per-frame upload limit/);
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, gpuAdmissionFailures: 0 });
+    root.dispose();
+  });
+
+  it.each([
+    {
+      expected: /page or page-table upload requires up to 262144 bytes.*upload limit 1024/,
+      label: "upload",
+      policy: constrainedPolicy({ uploadBytes: 1_024 }),
+    },
+    {
+      expected: /resource allocation requires 262148 persistent GPU bytes.*limit 65536/,
+      label: "persistent GPU",
+      policy: constrainedPolicy({ persistentGpuBytes: 64 * 1024 }),
+    },
+    {
+      expected: /resource allocation requires 262148 persistent GPU bytes.*limit 65536/,
+      label: "mandatory-floor",
+      policy: (() => {
+        const policy = constrainedPolicy({});
+        const maximum = 64 * 1024;
+        const floor = policy.limits.persistentGpuBytes - maximum;
+        return {
+          ...policy,
+          classes: {
+            ...policy.classes,
+            geometry: {
+              ...policy.classes.geometry,
+              persistentGpuBytes: { mandatoryFloor: floor, softLimit: floor },
+            },
+          },
+        };
+      })(),
+    },
+  ])("terminally rejects a VT exceeding a small mobile $label limit without a wake loop", async ({
+    expected,
+    policy,
+  }) => {
+    const scheduledFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrames.push(callback);
+      return scheduledFrames.length;
+    }));
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy: policy });
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/mobile-limit.json") }));
+
+    root.render(graph);
+    const textureCreatesBeforeManifest = calls.filter(({ name }) => name === "createTexture").length;
+    fetchRequests[0]!.resolve(responseJson({
+      contractVersion: 1,
+      pageSize: 256,
+      pages: { entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }] },
+      physicalSlots: 1,
+      virtualSize: [256, 256],
+    }));
+    await flushMicrotasks();
+
+    expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(textureCreatesBeforeManifest);
+    expect(ControlledImage.instances).toHaveLength(0);
+    expect(root.snapshot().diagnostics.join("\n")).toMatch(expected);
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      atlasTextures: 0,
+      gpuAdmissionFailures: 1,
+      pendingPages: 0,
+    });
+    let frames = 0;
+    while (scheduledFrames.length > 0 && frames < 4) {
+      scheduledFrames.shift()!(frames);
+      frames += 1;
+      await flushMicrotasks();
+    }
+    expect(scheduledFrames).toHaveLength(0);
+    root.dispose();
+  });
+
   it("keeps manifest transport, JSON, parse, and GPU failures distinct", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
@@ -1209,6 +1514,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(jsonRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest JSON decode failed: bad JSON/);
     expect(parseRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest parse failed/);
     expect(gpuRoot.snapshot().diagnostics.join("\n")).toMatch(/GPU resource admission failed: allocation rejected/);
+    expect(gpuRoot.snapshot().resourceGovernor.outstandingReservations).toBe(0);
     expect(transportRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(jsonRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(parseRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
@@ -1332,6 +1638,15 @@ describe("WebGL renderer virtual texturing integration", () => {
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
     expect(pageUploads(calls)).toHaveLength(0);
+    const admittedSnapshot = root.snapshot();
+    expect(admittedSnapshot.resourceGovernor).toMatchObject({
+      byClass: {
+        "virtual-texture": {
+          cpuDecodedBytes: 4 * 4 * 4,
+          persistentGpuBytes: admittedSnapshot.virtualTexturing.physicalAllocatedBytes,
+        },
+      },
+    });
 
     canvas.dispatchContextEvent("webglcontextlost");
     const wakesWhileBlocked = requestAnimationFrame.mock.calls.length;
@@ -1340,14 +1655,52 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesWhileBlocked);
     expect(pageUploads(calls)).toHaveLength(0);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, residentPages: 0 });
+    expect(root.snapshot().resourceGovernor).toMatchObject({
+      byClass: { "virtual-texture": { cpuDecodedBytes: 4 * 4 * 4 } },
+      total: { persistentGpuBytes: 0 },
+    });
 
     canvas.dispatchContextEvent("webglcontextrestored");
     expect(requestAnimationFrame.mock.calls.length).toBeGreaterThan(wakesWhileBlocked);
     root.render(graph);
     expect(pageUploads(calls)).toHaveLength(1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, residentPages: 1 });
+    const restoredSnapshot = root.snapshot();
+    expect(restoredSnapshot.virtualTexturing).toMatchObject({ atlasTextures: 1, residentPages: 1 });
+    expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].persistentGpuBytes)
+      .toBe(restoredSnapshot.virtualTexturing.physicalAllocatedBytes);
+    expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
     root.render(graph);
     expect(pageUploads(calls)).toHaveLength(1);
+  });
+
+  it("aborts an in-flight VT page and releases its global job slot on context loss", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(root.snapshot().resourceGovernor.total.jobs).toBe(1);
+    canvas.dispatchContextEvent("webglcontextlost");
+    await flushMicrotasks();
+
+    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().virtualTexturing.pageLoadFailures).toBe(0);
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(2);
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
+    expect(root.snapshot().virtualTexturing.pageLoadFailures).toBe(0);
+    expect(root.snapshot().virtualTexturing.residentPages).toBe(1);
+    root.dispose();
   });
 
   it("uses the opted-in generated raster VT policy without manifest requests", async () => {
@@ -1433,7 +1786,8 @@ describe("WebGL renderer virtual texturing integration", () => {
       }),
     });
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedRasterVirtualTextures: true });
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas, { generatedRasterVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
     const svgText = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" onload=\"alert(1)\">",
@@ -1461,20 +1815,32 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(renderScene(material));
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/plain.svg"]);
 
+    for (let frame = 0; frame < 8 && objectUrlBlobs.length < 2; frame += 1) {
+      await flushMicrotasks();
+      root.render(renderScene(material));
+    }
+    expect(ControlledImage.instances.some((image) => image.src === "blob:royal-svg-texture-2")).toBe(true);
+    canvas.dispatchContextEvent("webglcontextlost");
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing.generatedPageFailures).toBe(0);
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(renderScene(material));
+
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
       await flushMicrotasks();
       root.render(renderScene(material));
-      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-texture-2");
+      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-texture-3");
       generatedPageImage?.settleLoad();
       await flushMicrotasks();
     }
 
-    expect(objectUrlBlobs.length).toBeGreaterThan(1);
+    expect(objectUrlBlobs.length).toBeGreaterThan(2);
     expect(await objectUrlBlobs[1]?.text()).toContain("<image href=\"data:image/svg+xml;base64,");
     expect(globalThis.document?.createElement).not.toHaveBeenCalled();
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPageFailures: 0,
+      generatedPageRequests: 2,
       generatedPagesTarget: 5,
       manifestsReady: 1,
     }));
@@ -1828,6 +2194,49 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.dispose();
   });
 
+  it("preserves governed retry identity through denied deletion and insertion churn", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas, { virtualTexturePhysicalByteBudget: 80 });
+    const materials = ["a", "b", "c"].map((name) => unlitMaterial({
+      texture: virtualTexture(`/${name}/manifest.json`),
+    }));
+    const graph = renderVirtualTextureMaterials(materials);
+
+    root.render(graph);
+    for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(ControlledImage.instances[0]?.src).toContain("/a/pages/0-0.png");
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(graph);
+    await flushMicrotasks();
+    expect(ControlledImage.instances.at(-1)?.src).toContain("/a/pages/0-0.png");
+    ControlledImage.instances.at(-1)!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    const inserted = unlitMaterial({ texture: virtualTexture("/d/manifest.json") });
+    const churnGraph = renderVirtualTextureMaterials([materials[1]!, materials[2]!, inserted]);
+    // Remove A before the anchored B and insert D after the surviving denied
+    // candidates while capacity is unavailable. Neither change may transfer
+    // B's first chance to C.
+    root.render(churnGraph);
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(churnGraph);
+    await flushMicrotasks();
+    expect(ControlledImage.instances.at(-1)?.src).toContain("/b/pages/0-0.png");
+    root.dispose();
+  });
+
   it("contains and reports a dormant allocation fault triggered by another VT's release", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     vi.stubGlobal("Image", ControlledImage);
@@ -1847,8 +2256,8 @@ describe("WebGL renderer virtual texturing integration", () => {
     });
 
     expect(() => root.render(renderScene(second))).not.toThrow();
-    const wakesAfterFailure = requestAnimationFrame.mock.calls.length;
     await flushMicrotasks();
+    const wakesAfterFailure = requestAnimationFrame.mock.calls.length;
     expect(root.snapshot().virtualTexturing).toMatchObject({ gpuAdmissionFailures: 1 });
     expect(root.snapshot().diagnostics.join("\n")).toMatch(
       /GPU resource admission failed: dormant allocation rejected/,

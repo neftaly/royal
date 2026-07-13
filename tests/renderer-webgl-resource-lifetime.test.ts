@@ -11,7 +11,11 @@ import {
   type Material,
   type Rgba,
 } from "@royal/renderer-core";
-import { createWebGlRoot } from "@royal/renderer-webgl";
+import {
+  createWebGlRoot,
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from "@royal/renderer-webgl";
 
 type CanvasSize = {
   readonly width: number;
@@ -19,6 +23,7 @@ type CanvasSize = {
 };
 
 type FakeCanvas = HTMLCanvasElement & {
+  dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored"): Event;
   getContext: ReturnType<typeof vi.fn>;
 };
 
@@ -59,7 +64,9 @@ const fakeCanvas = (
   gl: WebGL2RenderingContext | null,
   size: CanvasSize = { width: 320, height: 180 },
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -78,7 +85,13 @@ const fakeCanvas = (
       toJSON: () => ({}),
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    dispatchContextEvent(type: "webglcontextlost" | "webglcontextrestored") {
+      const event = new Event(type, { cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    },
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -220,8 +233,10 @@ const fakeGl = (): FakeGl => {
 
 class ControlledImage {
   static readonly instances: ControlledImage[] = [];
+  static closeFailures = 2;
 
   complete = false;
+  closeAttempts = 0;
   crossOrigin: string | null = null;
   height = 2;
   naturalHeight = 2;
@@ -257,6 +272,11 @@ class ControlledImage {
     return new Promise((resolve) => {
       this.#decodeResolvers.push(resolve);
     });
+  }
+
+  close(): void {
+    this.closeAttempts += 1;
+    if (this.closeAttempts <= ControlledImage.closeFailures) throw new Error("image close failed");
   }
 
   removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
@@ -350,9 +370,56 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   ControlledImage.instances.splice(0);
+  ControlledImage.closeFailures = 2;
 });
 
 describe("WebGL renderer resource lifetime contracts", () => {
+  it("retries a CPU-denied decoded source after scene removal releases capacity", async () => {
+    ControlledImage.closeFailures = 0;
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const frames = installAnimationFrameQueue();
+    const { gl } = fakeGl();
+    const cpuBudget = 16;
+    const resourceGovernorPolicy: ResourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+        ([key, value]) => [key, {
+          ...value,
+          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+        }],
+      )) as unknown as ResourceGovernorPolicy["classes"],
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, cpuDecodedBytes: cpuBudget },
+    };
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
+    const first = unlitMaterial({ texture: imageTexture("/textures/cpu-first.png") });
+    const second = unlitMaterial({ texture: imageTexture("/textures/cpu-second.png") });
+    const both = scene({
+      camera: camera(),
+      nodes: [
+        mesh({ geometry: boxGeometry(1), material: first }),
+        mesh({ geometry: boxGeometry(1), material: second }),
+      ],
+    });
+
+    root.render(both);
+    expect(ControlledImage.instances).toHaveLength(2);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
+    expect(ControlledImage.instances).toHaveLength(2);
+
+    root.render(renderScene(boxGeometry(1), second));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(3);
+    ControlledImage.instances[2]!.settleLoad();
+    await flushMicrotasks();
+    flushAnimationFrames(frames);
+    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
+    root.dispose();
+  });
   it("bounds shader program initiation to one variant per rendered frame", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -485,6 +552,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
 
   it("settles async image textures with a follow-up render signal and releases texture resources", async () => {
     vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
     const animationFrames = installAnimationFrameQueue();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -496,7 +564,10 @@ describe("WebGL renderer resource lifetime contracts", () => {
     const beforeSettle = resourceCounts(calls);
     const requestedImage = ControlledImage.instances[0];
 
-    expect(beforeSettle.createTexture, "rendering an image material should create a texture resource").toBeGreaterThan(0);
+    expect(
+      beforeSettle.createTexture,
+      "an undecoded image must not allocate GPU storage before governor admission",
+    ).toBe(0);
     expect(requestedImage, "image texture render should request an image").toBeDefined();
     expect(requestedImage?.src, "image texture render should request the configured URI").toContain("/textures/checker.png");
 
@@ -510,16 +581,167 @@ describe("WebGL renderer resource lifetime contracts", () => {
     await flushMicrotasks();
 
     const afterSettle = resourceCounts(calls);
+    expect(afterSettle.createTexture, "settling the image should admit and allocate its texture").toBeGreaterThan(0);
+    const settledSnapshot = root.snapshot();
+    expect(settledSnapshot.resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes)
+      .toBe(settledSnapshot.textureResidency.preparedBytes);
+    expect(settledSnapshot.textureResidency.preparedBytes).toBe(2 * 2 * 4);
     expect(
       scheduledByImageSettle || drewImmediately || afterSettle.draw > beforeSettle.draw,
       "loaded image textures should schedule or cause a follow-up render",
     ).toBe(true);
 
-    root.dispose();
+    expect(() => root.dispose()).toThrow("image close failed");
+    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes)
+      .toBe(2 * 2 * 4);
+    expect(() => root.dispose()).not.toThrow();
 
     const afterDispose = resourceCounts(calls);
     expect(afterDispose.deleteTexture, "dispose should delete every texture the root created").toBe(
       afterDispose.createTexture,
     );
+    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
+  });
+
+  it.each([
+    {
+      label: "default policy",
+      policy: undefined,
+      size: 2_049,
+      uploadLimit: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.uploadBytes,
+    },
+    {
+      label: "custom policy",
+      policy: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 1_024 },
+      } satisfies ResourceGovernorPolicy,
+      size: 17,
+      uploadLimit: 1_024,
+    },
+  ])("quiesces an ordinary upload larger than the $label frame limit", async ({
+    policy,
+    size,
+    uploadLimit,
+  }) => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const animationFrames = installAnimationFrameQueue();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas, policy === undefined ? undefined : {
+      resourceGovernorPolicy: policy,
+    });
+    const texturedScene = renderScene(boxGeometry(1), unlitMaterial({
+      texture: imageTexture(`/textures/oversized-${size}.png`),
+    }));
+
+    root.render(texturedScene);
+    const requestedImage = ControlledImage.instances[0]!;
+    requestedImage.width = size;
+    requestedImage.height = size;
+    requestedImage.naturalWidth = size;
+    requestedImage.naturalHeight = size;
+    requestedImage.settleLoad();
+    await flushMicrotasks();
+    flushAnimationFrames(animationFrames);
+    await flushMicrotasks();
+
+    expect(countEvents(calls, "createTexture")).toBe(0);
+    expect(countEvents(calls, "texImage2D")).toBe(0);
+    expect(animationFrames).toHaveLength(0);
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      new RegExp(`requires \\d+ upload bytes, exceeding the per-frame limit ${uploadLimit}`),
+    ));
+    expect(warning).toHaveBeenCalledTimes(1);
+    canvas.dispatchContextEvent("webglcontextlost");
+    canvas.dispatchContextEvent("webglcontextrestored");
+    flushAnimationFrames(animationFrames);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(countEvents(calls, "createTexture")).toBe(0);
+    expect(animationFrames).toHaveLength(0);
+    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
+    expect(() => root.dispose()).not.toThrow();
+  });
+
+  it("terminally rejects an ordinary allocation above its mandatory-floor-adjusted maximum", async () => {
+    ControlledImage.closeFailures = 0;
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    const frames = installAnimationFrameQueue();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const persistentLimit = DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes;
+    const floor = persistentLimit - 15;
+    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+      ([key, value]) => [key, {
+        ...value,
+        persistentGpuBytes: key === "geometry"
+          ? { mandatoryFloor: floor, softLimit: floor }
+          : { mandatoryFloor: 0, softLimit: value.persistentGpuBytes.softLimit },
+      }],
+    )) as unknown as ResourceGovernorPolicy["classes"];
+    const root = createWebGlRoot(fakeCanvas(fakeGl().gl), {
+      resourceGovernorPolicy: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY, classes },
+    });
+    const graph = renderScene(boxGeometry(1), unlitMaterial({
+      texture: imageTexture("/textures/floor-impossible.png"),
+    }));
+
+    root.render(graph);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    flushAnimationFrames(frames);
+    await flushMicrotasks();
+
+    expect(root.snapshot().diagnostics.join("\n"))
+      .toMatch(/requires 20 persistent GPU bytes, exceeding the limit 15/);
+    expect(frames).toHaveLength(0);
+    expect(warning).toHaveBeenCalledTimes(1);
+    root.dispose();
+  });
+
+  it("recovers an at-maximum ordinary allocation when a peer releases floor-adjusted capacity", async () => {
+    ControlledImage.closeFailures = 0;
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    installAnimationFrameQueue();
+    const { calls, gl } = fakeGl();
+    const persistentLimit = DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes;
+    const floor = persistentLimit - 20;
+    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+      ([key, value]) => [key, {
+        ...value,
+        persistentGpuBytes: key === "geometry"
+          ? { mandatoryFloor: floor, softLimit: floor }
+          : { mandatoryFloor: 0, softLimit: value.persistentGpuBytes.softLimit },
+      }],
+    )) as unknown as ResourceGovernorPolicy["classes"];
+    const root = createWebGlRoot(fakeCanvas(gl), {
+      resourceGovernorPolicy: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY, classes },
+    });
+    const first = unlitMaterial({ texture: imageTexture("/textures/gpu-first.png") });
+    const second = unlitMaterial({ texture: imageTexture("/textures/gpu-second.png") });
+    const both = scene({
+      camera: camera(),
+      nodes: [
+        mesh({ geometry: boxGeometry(1), material: first }),
+        mesh({ geometry: boxGeometry(1), material: second }),
+      ],
+    });
+
+    root.render(both);
+    ControlledImage.instances[0]!.settleLoad();
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    root.render(both);
+    root.render(both);
+    expect(countEvents(calls, "createTexture")).toBe(1);
+    expect(root.snapshot().diagnostics.join("\n")).not.toContain("gpu-second");
+
+    root.render(renderScene(boxGeometry(1), second));
+    expect(countEvents(calls, "createTexture")).toBe(2);
+    root.dispose();
   });
 });

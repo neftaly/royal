@@ -4,14 +4,21 @@ import {
   createCameraViewResource,
   mesh,
   orthographicCamera,
+  pointLight,
   scene,
+  standardMaterial,
+  studioEnvironment,
   unlitMaterial,
   virtualTexture,
   type RenderObjectHandle,
   type RenderRoot,
   type Rgba,
 } from "@royal/renderer-core";
-import { createWebGlRoot } from "@royal/renderer-webgl";
+import {
+  createWebGlRoot,
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from "@royal/renderer-webgl";
 import {
   createWebXrSessionRenderer,
   type WebGlXrFrameSnapshot,
@@ -150,7 +157,12 @@ const fakeGl = (): FakeGl => {
     MAX_TEXTURE_SIZE: 0x0D33,
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
+    R32UI: 0x8236,
+    RED_INTEGER: 0x8D94,
+    RG32UI: 0x823C,
+    RG_INTEGER: 0x8228,
     RGBA: 0x1908,
+    RGBA32F: 0x8814,
     RGBA8: 0x8058,
     SRGB8_ALPHA8: 0x8C43,
     SCISSOR_TEST: 0x0C11,
@@ -167,6 +179,7 @@ const fakeGl = (): FakeGl => {
     UNPACK_COLORSPACE_CONVERSION_WEBGL: 0x9243,
     UNPACK_FLIP_Y_WEBGL: 0x9240,
     UNSIGNED_BYTE: 0x1401,
+    UNSIGNED_INT: 0x1405,
     UNSIGNED_SHORT: 0x1403,
     VERTEX_SHADER: 0x8B31,
     activeTexture: record("activeTexture"),
@@ -220,7 +233,9 @@ const fakeGl = (): FakeGl => {
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
     texStorage2D: record("texStorage2D"),
+    texSubImage2D: record("texSubImage2D"),
     uniform1i: record("uniform1i"),
+    uniform2fv: record("uniform2fv"),
     uniform4fv: record("uniform4fv"),
     uniformMatrix4fv: record("uniformMatrix4fv"),
     useProgram: record("useProgram"),
@@ -256,6 +271,17 @@ const drawableScene = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => scene({
   clearColor,
 });
 
+const clusteredScene = () => scene({
+  camera: camera(),
+  nodes: [
+    pointLight({ intensityCandela: 100, position: [0, 0, 2], range: 10 }),
+    mesh({
+      geometry: boxGeometry(1),
+      material: standardMaterial({ color: [1, 1, 1, 1] }),
+    }),
+  ],
+});
+
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
 
@@ -278,6 +304,86 @@ afterEach(() => {
 });
 
 describe("WebGL root working state contracts", () => {
+  it("enforces a zero clustered-light CPU budget without observational overshoot", () => {
+    const { gl } = fakeGl();
+    const classPolicy = () => ({
+      cpuDecodedBytes: { mandatoryFloor: 0, softLimit: 0 },
+      persistentGpuBytes: { mandatoryFloor: 0, softLimit: 512 * 1024 * 1024 },
+    });
+    const resourceGovernorPolicy = {
+      classes: {
+        "asset-decode": classPolicy(),
+        geometry: classPolicy(),
+        "ordinary-texture": classPolicy(),
+        "render-target": classPolicy(),
+        "virtual-texture": classPolicy(),
+      },
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, cpuDecodedBytes: 0 },
+    } satisfies ResourceGovernorPolicy;
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
+
+    expect(() => root.render(clusteredScene())).toThrow("Clustered-light CPU update denied");
+    expect(root.snapshot().resourceGovernor).toMatchObject({
+      denialsByReason: { "cpu-decoded-capacity": 1 },
+      limits: { cpuDecodedBytes: 0 },
+      total: { cpuDecodedBytes: 0 },
+    });
+    expect(root.snapshot().resourceGovernor.highWater.cpuDecodedBytes).toBe(0);
+    root.dispose();
+  });
+
+  it("rejects a zero-job resource policy before requesting a WebGL context", () => {
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const resourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, jobs: 0 },
+    };
+
+    expect(() => createWebGlRoot(canvas, { resourceGovernorPolicy }))
+      .toThrow("jobs capacity must be at least 1");
+    expect(canvas.getContext).not.toHaveBeenCalled();
+  });
+
+  it("terminally degrades oversized studio IBL under a tiny custom upload policy", () => {
+    const scheduled: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { calls, gl } = fakeGl();
+    const resourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 50_000 },
+    };
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas, { resourceGovernorPolicy });
+    const graph = scene({
+      camera: camera(),
+      environment: studioEnvironment(),
+      nodes: [mesh({
+        geometry: boxGeometry(1),
+        material: standardMaterial({ color: [1, 1, 1, 1] }),
+      })],
+    });
+
+    root.render(graph);
+
+    expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
+      /Studio IBL specular texture is disabled.*upload bytes exceed the absolute limit/,
+    ));
+    expect(countCalls(calls, "createTexture")).toBe(0);
+    expect(scheduled).toHaveLength(0);
+    expect(warning).toHaveBeenCalledTimes(1);
+    const occurrencesBeforeRestore = root.snapshot().diagnosticStats.occurrences;
+    canvas.dispatchContextEvent("webglcontextlost");
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(graph);
+    expect(root.snapshot().diagnosticStats.occurrences).toEqual(occurrencesBeforeRestore);
+    expect(warning).toHaveBeenCalledTimes(1);
+    root.dispose();
+  });
   it("invalidates every root sharing a committed camera resource and catches up after context restore", () => {
     const scheduled: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
@@ -643,6 +749,78 @@ describe("WebGL root working state contracts", () => {
     expect(root.contextLifecycle).toBe("disposed");
   });
 
+  it("retries an opaque program deletion failure on repeated root disposal", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(drawableScene([0, 0, 0, 0]));
+    let attempts = 0;
+    vi.mocked(gl.deleteProgram).mockImplementation(() => {
+      attempts += 1;
+      if (attempts === 1) throw undefined;
+    });
+
+    let firstFailurePresent = false;
+    try {
+      root.dispose();
+    } catch (error) {
+      firstFailurePresent = true;
+      expect(error).toBeUndefined();
+    }
+    expect(firstFailurePresent).toBe(true);
+    expect(attempts).toBe(1);
+
+    expect(() => root.dispose()).not.toThrow();
+    expect(attempts).toBe(2);
+    expect(() => root.dispose()).not.toThrow();
+    expect(attempts).toBe(2);
+  });
+
+  it("retains a clustered-light lease across an opaque delete failure and releases it on retry", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(clusteredScene());
+    expect(gl.createTexture).toHaveBeenCalledTimes(3);
+    let attempts = 0;
+    vi.mocked(gl.deleteTexture).mockImplementation(() => {
+      attempts += 1;
+      if (attempts === 1) throw undefined;
+    });
+
+    let firstFailurePresent = false;
+    try {
+      root.dispose();
+    } catch (error) {
+      firstFailurePresent = true;
+      expect(error).toBeUndefined();
+    }
+
+    expect(firstFailurePresent).toBe(true);
+    expect(attempts).toBe(3);
+    // Both the clustered GPU storage and retained CPU working set remain
+    // charged until the failed active-context texture deletion can retry.
+    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(2);
+    expect(() => root.dispose()).not.toThrow();
+    expect(attempts).toBe(4);
+    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(0);
+    expect(() => root.dispose()).not.toThrow();
+    expect(attempts).toBe(4);
+  });
+
+  it("drops clustered-light handles and accounting without GL calls on genuine context loss", () => {
+    const { calls, gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    root.render(clusteredScene());
+    expect(root.snapshot().resourceGovernor.outstandingLeases).toBeGreaterThan(0);
+    const callsBeforeLoss = calls.length;
+
+    canvas.dispatchContextEvent("webglcontextlost");
+
+    expect(calls).toHaveLength(callsBeforeLoss);
+    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(0);
+    expect(() => root.dispose()).not.toThrow();
+  });
+
   it("preserves listener-removal precedence while completing later disposal phases", () => {
     const { gl } = fakeGl();
     const canvas = fakeCanvas(gl);
@@ -745,6 +923,16 @@ describe("WebGL root working state contracts", () => {
     expect(root.snapshot()).toMatchObject({
       disposed: false,
       frame: 1,
+      resourceGovernor: {
+        frame: 1,
+        limits: {
+          cpuDecodedBytes: 512 * 1024 * 1024,
+          jobs: 8,
+          persistentGpuBytes: 512 * 1024 * 1024,
+          transientPeakBytes: 192 * 1024 * 1024,
+          uploadBytes: 16 * 1024 * 1024,
+        },
+      },
     });
   });
 
@@ -1309,6 +1497,66 @@ describe("WebGL root working state contracts", () => {
     expect(calls.filter((call) => call.name === "deleteFramebuffer" && call.args[0] === framebuffer)).toHaveLength(0);
   });
 
+  it("releases the XR renderer automatically when its session ends", async () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const referenceSpace: WebGlXrReferenceSpace = {};
+    const events = new EventTarget();
+    const session: WebGlXrSession = {
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      requestReferenceSpace: vi.fn(async () => referenceSpace),
+      updateRenderState: vi.fn(),
+    };
+    const xrWebGLLayerConstructor: WebGlXrLayerConstructor = class {
+      readonly framebuffer = null;
+      getViewport() {
+        return null;
+      }
+    };
+    const renderer = await createWebXrSessionRenderer(root, session, {
+      advanced: { xrWebGLLayerConstructor },
+    });
+
+    events.dispatchEvent(new Event("end"));
+
+    expect(renderer.disposed).toBe(true);
+    expect(renderer.renderFrame({ getViewerPose: () => null })).toBe(false);
+    expect(() => renderer.dispose()).not.toThrow();
+  });
+
+  it("rejects XR setup when the session ends during an asynchronous setup step", async () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const events = new EventTarget();
+    let finishCompatibility: (() => void) | undefined;
+    (gl as WebGL2RenderingContext & {
+      readonly makeXRCompatible: ReturnType<typeof vi.fn>;
+    }).makeXRCompatible.mockImplementation(() => new Promise<void>((resolve) => {
+      finishCompatibility = resolve;
+    }));
+    const session: WebGlXrSession = {
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      requestReferenceSpace: vi.fn(async () => ({})),
+      updateRenderState: vi.fn(),
+    };
+    const creation = createWebXrSessionRenderer(root, session, {
+      advanced: { xrWebGLLayerConstructor: class {
+        readonly framebuffer = null;
+        getViewport() {
+          return null;
+        }
+      } },
+    });
+
+    events.dispatchEvent(new Event("end"));
+    finishCompatibility?.();
+
+    await expect(creation).rejects.toThrow("session ended during renderer setup");
+    expect(session.updateRenderState).not.toHaveBeenCalled();
+  });
+
   it("makes dispose idempotent while keeping render-after-dispose rejected", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -1319,5 +1567,41 @@ describe("WebGL root working state contracts", () => {
     expect(() => root.dispose()).not.toThrow();
     expect(root.disposed).toBe(true);
     expect(() => root.render(renderScene)).toThrow(/disposed Royal renderer root/i);
+  });
+
+  it("reports renderer-owned scheduled failures without an uncaught async throw", () => {
+    const scheduled: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduled.push(callback);
+      return scheduled.length;
+    }));
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(scene({ camera: camera(), nodes: [] }));
+    const failure = new Error("scheduled draw failed");
+    const observed: unknown[] = [];
+    const observerErrors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const stopThrowing = root.observeRenderFailures(() => {
+      throw new Error("observer failed");
+    });
+    const stop = root.observeRenderFailures((value) => observed.push(value));
+    vi.mocked(gl.clear).mockImplementationOnce(() => { throw failure; });
+
+    root.invalidate();
+    expect(scheduled).toHaveLength(1);
+    expect(() => scheduled.shift()?.(16)).not.toThrow();
+    expect(observed).toEqual([failure]);
+    expect(observerErrors).toHaveBeenCalledWith(
+      "Royal WebGL render failure observer failed",
+      expect.any(Error),
+    );
+
+    stop();
+    stopThrowing();
+    vi.mocked(gl.clear).mockImplementationOnce(() => { throw undefined; });
+    root.invalidate();
+    expect(() => scheduled.shift()?.(32)).not.toThrow();
+    expect(observed).toEqual([failure]);
+    root.dispose();
   });
 });
