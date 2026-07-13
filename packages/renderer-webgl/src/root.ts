@@ -5567,6 +5567,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       sourceGeneration: 1,
       stats: {
         demandAdmissions: 0,
+        demandRetentionOverflows: 0,
         demandRetentions: 0,
         generatedManifestUses: 0,
         generatedPageFailures: 0,
@@ -6129,7 +6130,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         : { coverageCandidates: [], demandCandidates: [] };
     }
 
-    return planVirtualTextureDrawDemand({
+    const demand = planVirtualTextureDrawDemand({
       ...(context === undefined ? {} : { context }),
       flipY: state.texture.flipY ?? true,
       generated: state.activeSource.kind === "generated",
@@ -6137,6 +6138,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
       workspace: this.#virtualTextureDemandPlanning,
       ...(state.pageUrisByKey === undefined ? {} : { pageUrisByKey: state.pageUrisByKey }),
     });
+    if (demand.retentionOverflowed === true) {
+      state.stats.demandRetentionOverflows += 1;
+      if (state.stats.demandRetentionOverflows === 1 && state.diagnosticsEnabled) {
+        this.#recordDiagnostic(
+          `Virtual texture ${state.activeSource.manifestUri} exceeded the retained-polygon demand workspace; using bounded conservative refinement`,
+          `virtual-texture-demand-retention-overflow:${state.activeSource.manifestUri}`,
+        );
+      }
+    }
+    return demand;
   }
 
   #transitionVirtualTexturePage(
@@ -7879,6 +7890,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let atlasTextures = 0;
     let cachedPages = 0;
     let demandAdmissions = 0;
+    let demandRetentionOverflows = 0;
     let demandRetentions = 0;
     let generatedManifestUses = 0;
     let generatedPageFailures = 0;
@@ -7912,6 +7924,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         pageTableTextures += 1;
       }
       demandAdmissions += state.stats.demandAdmissions;
+      demandRetentionOverflows += state.stats.demandRetentionOverflows;
       demandRetentions += state.stats.demandRetentions;
       generatedManifestUses += state.stats.generatedManifestUses;
       generatedPageFailures += state.stats.generatedPageFailures;
@@ -7957,6 +7970,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       cachedPagesByMip,
       atlasTextures,
       demandAdmissions,
+      demandRetentionOverflows,
       demandRetentions,
       generatedManifestUses,
       generatedPageFailures,

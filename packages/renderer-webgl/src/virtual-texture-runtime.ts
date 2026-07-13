@@ -52,6 +52,7 @@ type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported"
 
 export type VirtualTextureRuntimeStats = {
   demandAdmissions: number;
+  demandRetentionOverflows: number;
   demandRetentions: number;
   generatedManifestUses: number;
   generatedPageFailures: number;
@@ -129,6 +130,8 @@ export type VirtualTextureDrawDemand = {
   readonly coverageCandidates?: readonly VirtualTexturePageId[];
   readonly demandCandidates: readonly VirtualTexturePageId[];
   readonly preferredCandidates?: readonly VirtualTexturePageId[];
+  /** Fixed retained-polygon workspace overflowed; demand uses bounded conservative refinement. */
+  readonly retentionOverflowed?: true;
 };
 
 export const normalizeVirtualTextureDemandUvRange = (

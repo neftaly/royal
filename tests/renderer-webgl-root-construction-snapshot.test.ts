@@ -345,6 +345,7 @@ describe("WebGL root construction and snapshot regressions", () => {
     const first = root.snapshot();
     const second = root.snapshot();
 
+    expect(first.virtualTexturing.demandRetentionOverflows).toBe(0);
     expect(second.resourceGovernor.total).toEqual(first.resourceGovernor.total);
     expect(second.resourceGovernor.highWater).toEqual(first.resourceGovernor.highWater);
     expect(queueMicrotask).toHaveBeenCalledTimes(queuedBeforeSnapshots);

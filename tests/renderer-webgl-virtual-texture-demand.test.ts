@@ -239,7 +239,8 @@ describe("virtual texture pure demand planning", () => {
     expect(overflow.overflowed).toBe(true);
     expect(overflow.allocatedBytes).toBe(allocatedBytes);
     expect(overflow.retainedBytes).toBeLessThanOrEqual(32_768 * Float64Array.BYTES_PER_ELEMENT);
-    expect(overflowDemand.preferredCandidates).toBeUndefined();
+    expect(overflowDemand.retentionOverflowed).toBe(true);
+    expect(overflowDemand.preferredCandidates).toHaveLength(8);
     expect(virtualTextureDemandPlanningWorkspaceSnapshot(second)).toMatchObject({
       overflowed: false,
       retainedBytes: 0,
@@ -258,6 +259,109 @@ describe("virtual texture pure demand planning", () => {
       overflowed: false,
       retainedPolygons: 1,
     });
+  });
+
+  it("keeps bounded near-side refinement when an oblique terrain exceeds retained polygons", () => {
+    const farTriangleCount = 2_000;
+    const positions = new Float32Array((farTriangleCount + 1) * 9);
+    const texCoords = new Float32Array((farTriangleCount + 1) * 6);
+    for (let triangle = 0; triangle < farTriangleCount; triangle += 1) {
+      positions.set([0, -2, 4, 2, -2, 4, 0, 2, 4], triangle * 9);
+      texCoords.set([0.1, 0, 1, 0, 0.1, 1], triangle * 6);
+    }
+    positions.set([-0.5, -0.5, 1, 0, -0.5, 1, -0.5, 0.5, 1], farTriangleCount * 9);
+    texCoords.set([0, 0, 0.1, 0, 0, 0.1], farTriangleCount * 6);
+    const perspective = [...identityMat4()] as unknown as number[];
+    perspective[10] = 0;
+    perspective[11] = 1;
+    perspective[15] = 0;
+    const workspace = createVirtualTextureDemandPlanningWorkspace();
+    const terrainContext = context(positions, perspective as unknown as Mat4, { texCoords });
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const input = {
+      context: terrainContext,
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+      workspace,
+    } as const;
+
+    const first = planVirtualTextureDrawDemand(input);
+    const firstSnapshot = virtualTextureDemandPlanningWorkspaceSnapshot(workspace);
+    const second = planVirtualTextureDrawDemand(input);
+    expect(second).toEqual(first);
+    expect(first.retentionOverflowed).toBe(true);
+    expect(firstSnapshot.overflowed).toBe(true);
+    expect(first.demandCandidates.length).toBeLessThanOrEqual(8);
+    expect(first.coverageCandidates?.length).toBeLessThanOrEqual(8);
+    expect(first.preferredCandidates?.length).toBeLessThanOrEqual(8);
+    expect(firstSnapshot.finestObservedMip).toBeDefined();
+    const globalFallbackMip = Math.min(...first.demandCandidates.map((page) => page.mip));
+    const nearMip = Math.min(...(first.preferredCandidates ?? []).map((page) => page.mip));
+    expect(nearMip).toBe(firstSnapshot.finestObservedMip);
+    expect(nearMip).toBeLessThan(globalFallbackMip);
+    const selected = selectVirtualTextureFrameWorkingSet([{
+      candidates: first.demandCandidates,
+      preferTargetMip: true,
+      preferredCandidates: first.preferredCandidates!,
+    }], 4);
+    expect(selected[0]).toEqual(first.demandCandidates[0]);
+    expect(Math.min(...selected.slice(1).map((page) => page.mip))).toBe(nearMip);
+
+    const resized = planVirtualTextureDrawDemand({
+      ...input,
+      context: { ...terrainContext, viewportSize: [500, 400] },
+    });
+    const resizedMip = Math.min(...(resized.preferredCandidates ?? []).map((page) => page.mip));
+    expect(resized.retentionOverflowed).toBe(true);
+    expect(resizedMip).toBeGreaterThanOrEqual(nearMip);
+    planVirtualTextureDrawDemand({
+      ...input,
+      context: { ...terrainContext, viewportSize: [0, 0] },
+    });
+    expect(virtualTextureDemandPlanningWorkspaceSnapshot(workspace)).toMatchObject({
+      overflowed: false,
+      retainedBytes: 0,
+      retainedPolygons: 0,
+    });
+    expect(virtualTextureDemandPlanningWorkspaceSnapshot(workspace).finestObservedMip).toBeUndefined();
+    expect(planVirtualTextureDrawDemand(input)).toEqual(first);
+  });
+
+  it("bounds overflow fallback work for a huge sparse explicit address space", () => {
+    const triangleCount = 2_000;
+    const positions = new Float32Array(triangleCount * 9);
+    const texCoords = new Float32Array(triangleCount * 6);
+    for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+      positions.set([-1, -1, 0, 1, -1, 0, -1, 1, 0], triangle * 9);
+      texCoords.set([0, 0, 1, 0, 0, 1], triangle * 6);
+    }
+    const input = {
+      context: context(positions, identityMat4(), { texCoords }),
+      flipY: false,
+      generated: false,
+      limit: 4,
+      manifest: {
+        height: 1_073_741_824,
+        mipCount: 31,
+        pageSize: 1,
+        pages: [{ mip: 30, uri: "only-page.png", x: 0, y: 0 }],
+        width: 1_073_741_824,
+      },
+    } as const;
+    const first = planVirtualTextureDrawDemand(input);
+    expect(first.retentionOverflowed).toBe(true);
+    expect(first.coverageCandidates?.length).toBeLessThanOrEqual(4);
+    expect(first.demandCandidates.length).toBeLessThanOrEqual(4);
+    expect(first.preferredCandidates?.length ?? 0).toBeLessThanOrEqual(4);
+    expect(planVirtualTextureDrawDemand(input)).toEqual(first);
   });
 
   it("caps only destructive resident replacements and converges without a wake spin", () => {

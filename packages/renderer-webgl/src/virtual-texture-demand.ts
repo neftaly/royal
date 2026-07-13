@@ -59,6 +59,13 @@ const RETAINED_POLYGON_CAPACITY = 4_096;
 export type VirtualTextureDemandPlanningWorkspace = {
   readonly clippedPolygonA: Float64Array;
   readonly clippedPolygonB: Float64Array;
+  finestObservedMaxU: number;
+  finestObservedMaxV: number;
+  finestObservedMinU: number;
+  finestObservedMinV: number;
+  finestObservedMip: number;
+  finestObservedScreenHeight: number;
+  finestObservedScreenWidth: number;
   overflowed: boolean;
   readonly visiblePolygonComponents: Float64Array;
   visiblePolygonComponentCount: number;
@@ -69,6 +76,13 @@ export type VirtualTextureDemandPlanningWorkspace = {
 export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDemandPlanningWorkspace => ({
   clippedPolygonA: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
   clippedPolygonB: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
+  finestObservedMaxU: 0,
+  finestObservedMaxV: 0,
+  finestObservedMinU: 0,
+  finestObservedMinV: 0,
+  finestObservedMip: Number.POSITIVE_INFINITY,
+  finestObservedScreenHeight: 0,
+  finestObservedScreenWidth: 0,
   overflowed: false,
   visiblePolygonComponents: new Float64Array(RETAINED_POLYGON_COMPONENT_CAPACITY),
   visiblePolygonComponentCount: 0,
@@ -78,12 +92,21 @@ export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDem
 
 export const virtualTextureDemandPlanningWorkspaceSnapshot = (
   workspace: VirtualTextureDemandPlanningWorkspace,
-): { readonly allocatedBytes: number; readonly overflowed: boolean; readonly retainedBytes: number; readonly retainedPolygons: number } => ({
+): {
+  readonly allocatedBytes: number;
+  readonly finestObservedMip?: number;
+  readonly overflowed: boolean;
+  readonly retainedBytes: number;
+  readonly retainedPolygons: number;
+} => ({
   allocatedBytes: workspace.clippedPolygonA.byteLength
     + workspace.clippedPolygonB.byteLength
     + workspace.visiblePolygonComponents.byteLength
     + workspace.visiblePolygonOffsets.byteLength,
   overflowed: workspace.overflowed,
+  ...(Number.isFinite(workspace.finestObservedMip)
+    ? { finestObservedMip: workspace.finestObservedMip }
+    : {}),
   retainedBytes: workspace.visiblePolygonComponentCount * Float64Array.BYTES_PER_ELEMENT,
   retainedPolygons: workspace.visiblePolygonCount,
 });
@@ -216,10 +239,21 @@ export const projectVirtualTextureScreenFootprint = (
   context: VirtualTextureDrawDemandContext,
   flipY: boolean,
   workspace = createVirtualTextureDemandPlanningWorkspace(),
+  manifest?: VirtualTextureManifestModel,
 ): VirtualTextureProjection => {
   const [viewportWidth, viewportHeight] = context.viewportSize;
   const modelCount = virtualTextureDemandModelCount(context.modelSource);
   const vertexCount = Math.min(Math.floor(context.positions.length / 3), Math.floor(context.texCoords.length / 2));
+  workspace.visiblePolygonCount = 0;
+  workspace.visiblePolygonComponentCount = 0;
+  workspace.finestObservedMaxU = 0;
+  workspace.finestObservedMaxV = 0;
+  workspace.finestObservedMinU = 0;
+  workspace.finestObservedMinV = 0;
+  workspace.finestObservedMip = Number.POSITIVE_INFINITY;
+  workspace.finestObservedScreenHeight = 0;
+  workspace.finestObservedScreenWidth = 0;
+  workspace.overflowed = false;
   if (viewportWidth <= 0 || viewportHeight <= 0 || vertexCount === 0 || modelCount === 0) {
     return { kind: "indeterminate" };
   }
@@ -234,9 +268,6 @@ export const projectVirtualTextureScreenFootprint = (
   let maxV = Number.NEGATIVE_INFINITY;
   let clippedVertexCount = 0;
   let invalidGeometry = false;
-  workspace.visiblePolygonCount = 0;
-  workspace.visiblePolygonComponentCount = 0;
-  workspace.overflowed = false;
   const { clippedPolygonA, clippedPolygonB } = workspace;
   const projectionView = multiplyMat4(context.projection, context.view);
   const elementCount = context.indices?.length ?? vertexCount;
@@ -294,6 +325,14 @@ export const projectVirtualTextureScreenFootprint = (
         break;
       }
       if (polygonCount > 0) retainVisiblePolygon(workspace, input, polygonCount);
+      let polygonMinNdcX = Number.POSITIVE_INFINITY;
+      let polygonMaxNdcX = Number.NEGATIVE_INFINITY;
+      let polygonMinNdcY = Number.POSITIVE_INFINITY;
+      let polygonMaxNdcY = Number.NEGATIVE_INFINITY;
+      let polygonMinU = Number.POSITIVE_INFINITY;
+      let polygonMaxU = Number.NEGATIVE_INFINITY;
+      let polygonMinV = Number.POSITIVE_INFINITY;
+      let polygonMaxV = Number.NEGATIVE_INFINITY;
       for (let vertex = 0; vertex < polygonCount; vertex += 1) {
         const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
         const clipW = input[offset + 3]!;
@@ -303,6 +342,14 @@ export const projectVirtualTextureScreenFootprint = (
         }
         const ndcX = input[offset]! / clipW;
         const ndcY = input[offset + 1]! / clipW;
+        polygonMinNdcX = Math.min(polygonMinNdcX, ndcX);
+        polygonMaxNdcX = Math.max(polygonMaxNdcX, ndcX);
+        polygonMinNdcY = Math.min(polygonMinNdcY, ndcY);
+        polygonMaxNdcY = Math.max(polygonMaxNdcY, ndcY);
+        polygonMinU = Math.min(polygonMinU, input[offset + 4]!);
+        polygonMaxU = Math.max(polygonMaxU, input[offset + 4]!);
+        polygonMinV = Math.min(polygonMinV, input[offset + 5]!);
+        polygonMaxV = Math.max(polygonMaxV, input[offset + 5]!);
         minNdcX = Math.min(minNdcX, ndcX);
         maxNdcX = Math.max(maxNdcX, ndcX);
         minNdcY = Math.min(minNdcY, ndcY);
@@ -314,6 +361,31 @@ export const projectVirtualTextureScreenFootprint = (
         clippedVertexCount += 1;
       }
       if (invalidGeometry) break;
+      if (manifest !== undefined && polygonCount > 0) {
+        const normalizedPolygonU = normalizeVirtualTextureDemandUvRange(polygonMinU, polygonMaxU);
+        const normalizedPolygonV = orientVirtualTextureDemandVRange(
+          ...normalizeVirtualTextureDemandUvRange(polygonMinV, polygonMaxV),
+          flipY,
+        );
+        const observed: VirtualTextureScreenFootprint = {
+          maxU: normalizedPolygonU[1],
+          maxV: normalizedPolygonV[1],
+          minU: normalizedPolygonU[0],
+          minV: normalizedPolygonV[0],
+          screenHeight: Math.max(1, (polygonMaxNdcY - polygonMinNdcY) * 0.5 * viewportHeight),
+          screenWidth: Math.max(1, (polygonMaxNdcX - polygonMinNdcX) * 0.5 * viewportWidth),
+        };
+        const observedMip = virtualTextureTargetMip(manifest, observed);
+        if (observedMip < workspace.finestObservedMip) {
+          workspace.finestObservedMaxU = observed.maxU;
+          workspace.finestObservedMaxV = observed.maxV;
+          workspace.finestObservedMinU = observed.minU;
+          workspace.finestObservedMinV = observed.minV;
+          workspace.finestObservedMip = observedMip;
+          workspace.finestObservedScreenHeight = observed.screenHeight;
+          workspace.finestObservedScreenWidth = observed.screenWidth;
+        }
+      }
     }
     if (invalidGeometry) break;
   }
@@ -494,6 +566,86 @@ export const virtualTexturePagesForFootprint = (
     || left.x - right.x);
 };
 
+const boundedVirtualTexturePagesForFootprint = (
+  source: VirtualTextureDemandSource,
+  mip: number,
+  footprint: VirtualTextureScreenFootprint,
+  limit: number,
+): readonly VirtualTexturePageId[] => {
+  const boundedLimit = demandLimit(limit);
+  if (boundedLimit === 0) return [];
+  const grid = virtualTextureDemandPageGrid(source.manifest, mip);
+  const span = virtualTexturePageTexelSpan(source.manifest, mip);
+  const minX = Math.max(0, Math.min(grid.width - 1, Math.floor(footprint.minU * source.manifest.width / span)));
+  const maxX = Math.max(minX, Math.min(grid.width - 1, Math.ceil(footprint.maxU * source.manifest.width / span) - 1));
+  const minY = Math.max(0, Math.min(grid.height - 1, Math.floor(footprint.minV * source.manifest.height / span)));
+  const maxY = Math.max(minY, Math.min(grid.height - 1, Math.ceil(footprint.maxV * source.manifest.height / span) - 1));
+  const geometricCenterX = (minX + maxX) * 0.5;
+  const geometricCenterY = (minY + maxY) * 0.5;
+  if (source.manifest.uriTemplate === undefined && !source.generated) {
+    return source.manifest.pages
+      .filter((page) => page.mip === mip && page.x >= minX && page.x <= maxX && page.y >= minY && page.y <= maxY)
+      .sort((left, right) =>
+        virtualTextureDemandPageDistance(left, geometricCenterX, geometricCenterY)
+        - virtualTextureDemandPageDistance(right, geometricCenterX, geometricCenterY)
+        || left.y - right.y
+        || left.x - right.x)
+      .slice(0, boundedLimit);
+  }
+  const centerX = Math.max(minX, Math.min(maxX, Math.floor((minX + maxX) * 0.5)));
+  const centerY = Math.max(minY, Math.min(maxY, Math.floor((minY + maxY) * 0.5)));
+  const maxRadius = Math.max(maxX - minX, maxY - minY);
+  const pages: VirtualTexturePageId[] = [];
+  for (let radius = 0; radius <= maxRadius && pages.length < boundedLimit; radius += 1) {
+    const ringMinX = Math.max(minX, centerX - radius);
+    const ringMaxX = Math.min(maxX, centerX + radius);
+    const ringMinY = Math.max(minY, centerY - radius);
+    const ringMaxY = Math.min(maxY, centerY + radius);
+    for (let y = ringMinY; y <= ringMaxY && pages.length < boundedLimit; y += 1) {
+      for (let x = ringMinX; x <= ringMaxX && pages.length < boundedLimit; x += 1) {
+        if (Math.max(Math.abs(x - centerX), Math.abs(y - centerY)) !== radius) continue;
+        const page = { mip, x, y };
+        if (isVirtualTextureDemandPageAvailable(source, page)) pages.push(page);
+      }
+    }
+  }
+  return pages;
+};
+
+const virtualTextureFootprintPageCount = (
+  manifest: VirtualTextureManifestModel,
+  mip: number,
+  footprint: VirtualTextureScreenFootprint,
+): number => {
+  const grid = virtualTextureDemandPageGrid(manifest, mip);
+  const span = virtualTexturePageTexelSpan(manifest, mip);
+  const minX = Math.max(0, Math.min(grid.width - 1, Math.floor(footprint.minU * manifest.width / span)));
+  const maxX = Math.max(minX, Math.min(grid.width - 1, Math.ceil(footprint.maxU * manifest.width / span) - 1));
+  const minY = Math.max(0, Math.min(grid.height - 1, Math.floor(footprint.minV * manifest.height / span)));
+  const maxY = Math.max(minY, Math.min(grid.height - 1, Math.ceil(footprint.maxV * manifest.height / span) - 1));
+  return (maxX - minX + 1) * (maxY - minY + 1);
+};
+
+const planBoundedExplicitOverflowDemand = (
+  source: VirtualTextureDemandSource,
+  targetMip: number,
+  footprint: VirtualTextureScreenFootprint,
+  limit: number,
+): readonly VirtualTexturePageId[] => {
+  const boundedLimit = demandLimit(limit);
+  const pages: VirtualTexturePageId[] = [];
+  for (let mip = virtualTextureDemandMipCount(source.manifest) - 1; mip >= targetMip; mip -= 1) {
+    pages.push(...boundedVirtualTexturePagesForFootprint(
+      source,
+      mip,
+      footprint,
+      boundedLimit - pages.length,
+    ));
+    if (pages.length >= boundedLimit) break;
+  }
+  return pages;
+};
+
 export const isVirtualTextureDemandPageAvailable = (
   source: VirtualTextureDemandSource,
   page: VirtualTexturePageId,
@@ -661,7 +813,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     return { demandCandidates: planVirtualTextureBootstrapDemand(input, limit) };
   }
   const workspace = input.workspace ?? createVirtualTextureDemandPlanningWorkspace();
-  const projection = projectVirtualTextureScreenFootprint(input.context, input.flipY, workspace);
+  const projection = projectVirtualTextureScreenFootprint(input.context, input.flipY, workspace, input.manifest);
   if (projection.kind === "not-visible") return { coverageCandidates: [], demandCandidates: [] };
   if (projection.kind === "indeterminate") {
     const fallback = planVirtualTextureBootstrapDemand(input, limit);
@@ -670,7 +822,56 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     // fallback until projection produces a determinate footprint.
     return { coverageCandidates: [], demandCandidates: fallback };
   }
-  if (workspace.overflowed || (input.manifest.uriTemplate === undefined && !input.generated)) {
+  if (workspace.overflowed) {
+    const coarsestMip = virtualTextureDemandMipCount(input.manifest) - 1;
+    let coverageMip = virtualTextureTargetMip(input.manifest, projection.footprint);
+    const completeAddressSpace = input.generated || input.manifest.uriTemplate !== undefined;
+    while (
+      completeAddressSpace
+      &&
+      coverageMip < coarsestMip
+      && virtualTextureFootprintPageCount(input.manifest, coverageMip, projection.footprint) > limit
+    ) coverageMip += 1;
+    const coverageCandidates = boundedVirtualTexturePagesForFootprint(
+      input,
+      coverageMip,
+      projection.footprint,
+      limit,
+    );
+    const observedFootprint: VirtualTextureScreenFootprint | undefined = Number.isFinite(workspace.finestObservedMip)
+      ? {
+          maxU: workspace.finestObservedMaxU,
+          maxV: workspace.finestObservedMaxV,
+          minU: workspace.finestObservedMinU,
+          minV: workspace.finestObservedMinV,
+          screenHeight: workspace.finestObservedScreenHeight,
+          screenWidth: workspace.finestObservedScreenWidth,
+        }
+      : undefined;
+    const preferredCandidates = observedFootprint === undefined
+      ? []
+      : boundedVirtualTexturePagesForFootprint(
+          input,
+          workspace.finestObservedMip,
+          observedFootprint,
+          limit,
+        );
+    return {
+      coverageCandidates,
+      demandCandidates: completeAddressSpace
+        ? planVirtualTextureCoarseToFineDemand(
+            input,
+            coverageMip,
+            projection.footprint,
+            coverageCandidates,
+            limit,
+          )
+        : planBoundedExplicitOverflowDemand(input, coverageMip, projection.footprint, limit),
+      ...(preferredCandidates.length === 0 ? {} : { preferredCandidates }),
+      retentionOverflowed: true,
+    };
+  }
+  if (input.manifest.uriTemplate === undefined && !input.generated) {
     // Sparse explicit manifests do not promise a complete ancestor hierarchy;
     // preserve their availability-aware coarse-to-fine traversal.
     const targetMip = virtualTextureTargetMip(input.manifest, projection.footprint);
