@@ -11,14 +11,8 @@ export interface AxisDirection {
 export interface CoordinateSystem {
   readonly forward: AxisDirection;
   readonly handedness: 'left' | 'right';
-  /**
-   * Linear unit used by source coordinates. Royal world space is metric.
-   *
-   * `unit` is a legacy spelling for a source whose units already represent
-   * metres; it does not introduce an arbitrary or scale-free world unit.
-   * @deprecated Prefer `meter`.
-   */
-  readonly unit: 'meter' | 'unit';
+  /** Linear unit used by source coordinates. Royal world space is metric. */
+  readonly unit: 'meter';
   readonly up: AxisDirection;
 }
 
@@ -72,7 +66,7 @@ export const defineCoordinateSystem = (system: CoordinateSystem): CoordinateSyst
   if (system.up.axis === system.forward.axis) {
     throw new Error('Coordinate system up and forward axes must differ');
   }
-  if (system.unit !== 'meter' && system.unit !== 'unit') {
+  if (system.unit !== 'meter') {
     throw new Error('Coordinate system unit must be meter');
   }
 

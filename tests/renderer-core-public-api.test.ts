@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
+  defineCoordinateSystem,
   imageTexture,
   metresPerWorldUnit,
   mesh,
@@ -37,6 +38,27 @@ describe("renderer-core public API", () => {
     expect(metreCube.size).toEqual([1, 1, 1]);
     expect(camera.position[2]).toBe(5);
     expect(camera.near).toBe(0.1);
+
+    const orbitTarget: import("@royal/renderer-core").WorldPosition3 = [1, 2, 3];
+    const reactOrbitTarget: import("@royal/react").WorldPosition3 = orbitTarget;
+    expect(reactOrbitTarget).toEqual([1, 2, 3]);
+  });
+
+  it("accepts only metre coordinate systems", () => {
+    expect(defineCoordinateSystem({
+      forward: { axis: "z", sign: -1 },
+      handedness: "right",
+      unit: "meter",
+      up: { axis: "y", sign: 1 },
+    }).unit).toBe("meter");
+
+    expect(() => defineCoordinateSystem({
+      forward: { axis: "z", sign: -1 },
+      handedness: "right",
+      unit: "unit",
+      up: { axis: "y", sign: 1 },
+    } as unknown as import("@royal/renderer-core").CoordinateSystem))
+      .toThrow("Coordinate system unit must be meter");
   });
 
   it("defaults orthographic camera pose and depth for flat UI scenes", () => {

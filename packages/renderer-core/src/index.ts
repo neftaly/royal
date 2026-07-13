@@ -21,8 +21,7 @@ export type {
   OrbitCameraView,
   OrbitCameraViewConstraints,
   OrbitCameraViewOptions,
-  OrbitPerspectiveCameraOptions,
-  OrbitVector3
+  OrbitPerspectiveCameraOptions
 } from './orbit';
 export {
   clampOrbitCameraView,

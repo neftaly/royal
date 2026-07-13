@@ -48,8 +48,8 @@ export type {
   OrbitCameraViewOptions,
   OrbitControlsBehaviorOptions,
   OrbitControlsProps,
-  OrbitVector3,
   UseOrbitCameraOptions,
+  WorldPosition3,
 } from './orbit-controls';
 
 export type {

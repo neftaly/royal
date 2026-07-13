@@ -9,9 +9,9 @@ import {
   type PerspectiveCameraViewResource,
   type OrbitCameraView,
   type OrbitCameraViewOptions,
-  type OrbitVector3,
   type Metres,
   type Rads,
+  type WorldPosition3,
 } from "@royal/renderer-core";
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { useCanvasElement } from "./canvas";
@@ -27,7 +27,7 @@ export type {
   OrbitCameraView,
   OrbitCameraViewOptions,
   OrbitPerspectiveCameraOptions,
-  OrbitVector3,
+  WorldPosition3,
 } from "@royal/renderer-core";
 
 export type OrbitControlsBehaviorOptions = {
@@ -195,7 +195,7 @@ const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
   return Object.freeze({
     distance: view.distance,
     pitch: view.pitch,
-    target: Object.freeze([view.target[0], view.target[1], view.target[2]]) as OrbitVector3,
+    target: Object.freeze([view.target[0], view.target[1], view.target[2]]) as WorldPosition3,
     yaw: view.yaw,
   });
 };

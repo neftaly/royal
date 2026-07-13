@@ -3,14 +3,11 @@ import { perspectiveCamera } from './camera';
 import { finiteNumber, frozenVec3, positiveFiniteNumber } from './descriptor-values';
 import type { Direction3, EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
-/** @deprecated Use `WorldPosition3` for orbit targets and positions. */
-export type OrbitVector3 = WorldPosition3;
-
 export type OrbitCameraView = {
   /** Camera-to-target distance in metres. */
   readonly distance: Metres;
   readonly pitch: Rads;
-  readonly target: OrbitVector3;
+  readonly target: WorldPosition3;
   readonly yaw: Rads;
 };
 
@@ -18,7 +15,7 @@ export type OrbitCameraViewOptions = {
   /** Camera-to-target distance in metres. */
   readonly distance: Metres;
   readonly pitch?: Rads | undefined;
-  readonly target?: OrbitVector3 | undefined;
+  readonly target?: WorldPosition3 | undefined;
   readonly yaw?: Rads | undefined;
 };
 
@@ -48,7 +45,7 @@ export type OrbitPerspectiveCameraOptions =
 
 const defaultTarget = frozenVec3([0, 0, 0], 'orbit target');
 
-const orbitTarget = (target: OrbitVector3 | undefined): OrbitVector3 => {
+const orbitTarget = (target: WorldPosition3 | undefined): WorldPosition3 => {
   if (target === undefined) return defaultTarget;
   finiteNumber(target[0], 'orbit target[0]');
   finiteNumber(target[1], 'orbit target[1]');
