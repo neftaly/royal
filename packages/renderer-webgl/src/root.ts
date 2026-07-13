@@ -56,6 +56,7 @@ import {
   closeDecodedTextureSource,
   DecodedTextureSourceLifetime,
 } from "./decoded-texture-source-lifetime";
+import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
 import {
   applyPreparedAssetEvents,
   applyResourceDelta,
@@ -67,7 +68,6 @@ import {
   finishResourceArenaImageWork,
   publishResourceArenaContentKey,
   replaceResourceArenaImageAbortController,
-  releaseResourceArenaPreparedSource,
   releaseResourceArenaAssetSource,
   resourceArenaContentKeys,
   resourceArenaCountersSnapshot,
@@ -75,20 +75,15 @@ import {
   resourceArenaHasPendingAssetEvents,
   resourceArenaIblSources,
   resourceArenaOrdinaryTextureResidencySnapshot,
-  resourceArenaPreparedSource,
   resourceArenaPreparedSourceKeys,
   resourceArenaPreparedSourceValues,
   resourceArenaSourceReferenceCount,
   rekeyPreparedAssetOrdinaryTextures,
   retainResourceArenaAssetSource,
   retainResourceArenaIblSource,
-  retainResourceArenaPreparedSource,
-  retainResourceArenaSourceLease,
-  resourceArenaTextureReferenceCount,
   wakeResourceArenaPreparedAssetCpuCapacity,
   type PreparedAssetDependencyManifest,
   type PreparedAssetOrdinaryTextureRekey,
-  type PreparedTextureSource,
   type ResourceArena,
   type ResourceArenaChanges,
 } from "./resource-arena";
@@ -110,10 +105,6 @@ import {
   type ResourceGovernorPolicy,
   type ResourceGovernorReservation,
 } from "./resource-governor";
-import {
-  OrdinaryTextureSourceStore,
-  type OrdinaryTextureSourceSubscription,
-} from "./ordinary-texture-source-store";
 import {
   compileFramePlan,
   createResourceManifestDiffScratch,
@@ -159,23 +150,6 @@ import {
   type TextureHandleArena,
 } from "./webgl/texture-handle-arena";
 import {
-  consumeOrdinaryTextureGpuWake,
-  clearOrdinaryTextureGpuOutcomes,
-  createOrdinaryTextureGpuArena,
-  discardOrdinaryTexturePendingUpload,
-  dropOrdinaryTextureGpuContext,
-  ensureOrdinaryTextureGpuResource,
-  ordinaryTextureGpuOutcome,
-  ordinaryTextureGpuOutcomeCount,
-  ordinaryTextureGpuPendingUpload,
-  ordinaryTextureGpuQuarantinedBytes,
-  ordinaryTextureGpuResource,
-  ordinaryTextureGpuResourceCount,
-  processOrdinaryTextureUploads,
-  queueOrdinaryTextureUpload,
-  releaseOrdinaryTextureGpuResource,
-  wakeOrdinaryTextureGpuUploads,
-  type OrdinaryTextureGpuArena,
   type OrdinaryTextureGpuResource,
 } from "./webgl/ordinary-texture-gpu-arena";
 import {
@@ -1332,9 +1306,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
-  readonly #ordinaryTextureGpu: OrdinaryTextureGpuArena;
-  readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
-  readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
+  readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
   readonly #pendingGltfImageRows: GltfImageRow[] = [];
   readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
@@ -1353,7 +1325,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     geometry?: ResourceGovernorLease;
   }>();
   readonly #virtualTextureGovernorLeases = new Map<string, ResourceGovernorLease>();
-  readonly #terminalOrdinaryTextureKeys = new Set<string>();
   readonly #virtualTextureAdmissionTickets = new WeakMap<VirtualTextureRuntimeState, number>();
   #nextVirtualTextureAdmissionTicket = 1;
   #virtualTextureRetryTicket = 1;
@@ -1381,7 +1352,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           () => this.#gltfPreparationScheduler.wake(),
           () => this.#gltfImageScheduler.wake(),
           () => this.#gltfIblImageScheduler.wake(),
-          () => this.#ordinaryTextureSources.wake(),
+          () => this.#ordinaryTextures.wakeSourceJobs(),
           () => this.#drainVirtualTexturePageRequests(),
         ];
         const start = this.#gltfPreparationWakeCursor % wakes.length;
@@ -1576,7 +1547,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#contextLifecycle = "active";
       this.#contextError = undefined;
       this.#contextRestores += 1;
-      this.#restoreOrdinaryTextureResources();
+      this.#ordinaryTextures.restore();
       this.#restoreVirtualTextureResources();
       this.#renderDirty ||= this.#latestScene !== undefined;
       this.#scheduleRender();
@@ -1652,15 +1623,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       registerRollback(() => clearResourceArenaPreparedSources(this.#resourceArena));
       registerRollback(() => { disposeResourceArena(this.#resourceArena); });
-      this.#ordinaryTextureSources = new OrdinaryTextureSourceStore({
-        admit: this.#admitGltfPreparationJob,
-        close: (source) => this.#decodedTextureSources.closeOrdinary(source),
-        load: (request, signal) => isSvgUri(request.uri)
-          ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
-          : loadImage(request.uri, signal),
-        retain: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
-      });
-      registerRollback(() => this.#ordinaryTextureSources.dispose());
       const gl = canvas.getContext("webgl2", {
         alpha: requestedOptions.alpha,
         antialias: requestedOptions.antialias,
@@ -1714,8 +1676,33 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#textureHandles = createTextureHandleArena(gl);
       registerRollback(() => dropTextureHandleContext(this.#textureHandles));
       registerRollback(() => releaseTextureHandleContextHandles(this.#textureHandles));
-      this.#ordinaryTextureGpu = createOrdinaryTextureGpuArena(gl, this.#textureHandles);
-      registerRollback(() => dropOrdinaryTextureGpuContext(this.#ordinaryTextureGpu));
+      this.#ordinaryTextures = new OrdinaryTextureResidencyController({
+        admitSourceJob: this.#admitGltfPreparationJob,
+        decodedSources: this.#decodedTextureSources,
+        diagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        gl,
+        invalidate: () => this.invalidate(),
+        lifecycle: () => ({
+          active: this.#contextLifecycle === "active",
+          disposed: this.#disposed,
+          generation: this.#contextGeneration,
+        }),
+        loadSource: (request, signal) => isSvgUri(request.uri)
+          ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
+          : loadImage(request.uri, signal),
+        registerAutoVirtualTextureDecodedSource: (texture, source) => {
+          this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, source);
+        },
+        resourceArena: this.#resourceArena,
+        textureHandles: this.#textureHandles,
+      });
+      registerRollback(() => this.#ordinaryTextures.disposeSources());
+      registerRollback(() => {
+        const report = this.#ordinaryTextures.dropContext();
+        const settlement = this.#ordinaryTextures.settleGpuReport(report);
+        if (report.operationFailure !== undefined) throw report.operationFailure.error;
+        if (settlement !== undefined) throw settlement.error;
+      });
       this.#unsubscribeResourceGovernorDurableCapacityRelease =
         subscribeResourceGovernorDurableCapacityRelease(this.#resourceGovernor, (released) => {
           if (this.#disposed) return;
@@ -1764,7 +1751,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #wakePersistentGpuCapacity(): void {
-    const ordinaryWake = wakeOrdinaryTextureGpuUploads(this.#ordinaryTextureGpu);
+    const ordinaryWake = this.#ordinaryTextures.wakeGpuCapacity();
     const iblWake = wakeIblTextureDurablePressure(this.#iblTextures);
     if (ordinaryWake || iblWake) this.invalidate();
     this.#scheduleGovernedVirtualTextureAdmissionRetry();
@@ -2259,8 +2246,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
     try {
-    let releaseFailure = captureFailure(() => dropOrdinaryTextureGpuContext(this.#ordinaryTextureGpu));
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeOrdinaryTextureGpuOutcomes());
+    const ordinaryReport = this.#ordinaryTextures.dropContext();
+    let releaseFailure = ordinaryReport.operationFailure === undefined
+      ? undefined
+      : { value: ordinaryReport.operationFailure.error };
+    releaseFailure = captureFirstFailure(releaseFailure, () => {
+      const settlement = this.#ordinaryTextures.settleGpuReport(ordinaryReport);
+      if (settlement !== undefined) throw settlement.error;
+    });
     releaseFailure = captureFirstFailure(releaseFailure, () => {
       dropVirtualTextureGpuContext(this.#virtualTextureGpu);
     });
@@ -2342,20 +2335,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
   }
 
-  #restoreOrdinaryTextureResources(): void {
-    for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) {
-      if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) continue;
-      const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
-      if (prepared === undefined) continue;
-      const resource = ensureOrdinaryTextureGpuResource(
-        this.#ordinaryTextureGpu,
-        key,
-        this.#contextGeneration,
-      );
-      this.#queueOrdinaryTextureUpload(resource, prepared.source, prepared.texture);
-    }
-  }
-
   dispose(): void {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
@@ -2395,8 +2374,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#contextLifecycleObservers.clear();
     this.#renderFailureObservers.clear();
 
-    teardown(() => this.#ordinaryTextureSources.dispose());
-    this.#ordinaryTextureSourceSubscriptions.clear();
+    teardown(() => this.#ordinaryTextures.disposeSources());
     teardown(() => {
       const disposal = disposeResourceArena(this.#resourceArena);
       const applyFailure = captureFailure(() => this.#applyResourceArenaChanges(disposal.changes));
@@ -3024,20 +3002,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let releaseFailure = captureFailure(() => this.#releaseAutoVirtualTextures(key));
     this.#autoVirtualTextureRefs.delete(`auto-base-color:${key}`);
     this.#autoVirtualTextureGeneratedPageSources.delete(key);
-    this.#terminalOrdinaryTextureKeys.delete(key);
-
-    const sources = new Set<LoadedTextureSource>();
-    const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
-    if (prepared !== undefined) sources.add(prepared.source);
-    releaseResourceArenaPreparedSource(this.#resourceArena, key);
-    this.#releaseOrdinaryTextureSourceSubscription(key);
-    let gpuRelease: ReturnType<typeof releaseOrdinaryTextureGpuResource> = {};
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
+    let report: ReturnType<OrdinaryTextureResidencyController["release"]> | undefined;
     try {
-      releaseFailure = captureFirstFailure(releaseFailure, () => {
-        gpuRelease = releaseOrdinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-      });
+      report = this.#ordinaryTextures.release(key);
+      if (report.operationFailure !== undefined) {
+        releaseFailure ??= { value: report.operationFailure.error };
+      }
       releaseFailure = captureFirstFailure(
         releaseFailure,
         () => this.#synchronizeResourceGovernorObservations(),
@@ -3045,16 +3017,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     } finally {
       this.#suppressPersistentGpuCapacityWake = previouslySuppressed;
     }
-    if ("releaseError" in gpuRelease) {
-      releaseFailure ??= { value: gpuRelease.releaseError };
-    } else if (!previouslySuppressed) {
+    if (report?.capacityReleased === true && !previouslySuppressed) {
       this.#wakePersistentGpuCapacity();
     }
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeOrdinaryTextureGpuOutcomes());
-    for (const source of sources) {
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      releaseFailure = captureFirstFailure(releaseFailure, () => this.#decodedTextureSources.closeOrdinary(source));
-    }
+    if (report !== undefined) releaseFailure = captureFirstFailure(releaseFailure, () => {
+      const settlement = this.#ordinaryTextures.settleGpuReport(report);
+      if (settlement !== undefined) throw settlement.error;
+    });
     if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
@@ -3185,21 +3154,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#drainVirtualTexturePageRequests();
       if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
     });
-  }
-
-  #releaseOrdinaryTextureSourceSubscription(key: string): void {
-    this.#ordinaryTextureSourceSubscriptions.get(key)?.release();
-    this.#ordinaryTextureSourceSubscriptions.delete(key);
-  }
-
-  #retainPreparedTextureUpload(key: string, upload: PreparedTextureSource): void {
-    this.#terminalOrdinaryTextureKeys.delete(key);
-    const previous = retainResourceArenaPreparedSource(this.#resourceArena, key, upload);
-    if (
-      previous !== undefined
-      && previous.source !== upload.source
-      && resourceArenaSourceReferenceCount(this.#resourceArena, previous.source) === 0
-    ) this.#decodedTextureSources.closeOrdinary(previous.source);
   }
 
   #gltfMaterialTextureRefs(
@@ -4802,7 +4756,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
     const resolveOrdinary = (texture: TextureAssetUploadRef | undefined): ReadyOrdinaryTexture | undefined => {
       if (texture === undefined) return undefined;
-      const resource = this.#texture(texture);
+      const resource = this.#ordinaryTextures.request(texture);
       return resource.uploaded ? resource : undefined;
     };
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
@@ -6024,7 +5978,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     queueMicrotask(() => queueMicrotask(() => {
       this.#cpuCapacityWakeScheduled = false;
       if (this.#disposed) return;
-      const ordinaryWake = this.#ordinaryTextureSources.wakeCpuCapacity();
+      const ordinaryWake = this.#ordinaryTextures.wakeCpuCapacity();
       const preparedAssetWake = wakeResourceArenaPreparedAssetCpuCapacity(this.#resourceArena);
       this.#wakeVirtualTextureDecodedCpuCapacity();
       if (ordinaryWake || preparedAssetWake) this.invalidate();
@@ -6539,39 +6493,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
   }
 
-  #consumeOrdinaryTextureGpuOutcomes(): void {
-    let firstFailure = captureFailure(() => this.#decodedTextureSources.retryPendingOrdinary());
-    const outcomeCount = ordinaryTextureGpuOutcomeCount(this.#ordinaryTextureGpu);
-    for (let outcomeIndex = 0; outcomeIndex < outcomeCount; outcomeIndex += 1) {
-      const outcome = ordinaryTextureGpuOutcome(this.#ordinaryTextureGpu, outcomeIndex);
-      if (outcome === undefined) continue;
-      if (outcome.kind === "retained") {
-        firstFailure = captureFirstFailure(firstFailure, () => {
-          this.#retainPreparedTextureUpload(outcome.key, outcome.upload);
-        });
-        continue;
-      }
-      if (outcome.kind === "failed") {
-        this.#recordDiagnostic(outcome.message, `ordinary-texture-upload-limit:${outcome.key}`);
-        this.#terminalOrdinaryTextureKeys.add(outcome.key);
-        const prepared = resourceArenaPreparedSource(this.#resourceArena, outcome.key);
-        if (prepared?.source === outcome.upload.source) {
-          releaseResourceArenaPreparedSource(this.#resourceArena, outcome.key);
-        }
-        firstFailure = captureFirstFailure(firstFailure, () => {
-          this.#releaseOrdinaryTextureSourceSubscription(outcome.key);
-        });
-      }
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, outcome.upload.source) !== 0) continue;
-      firstFailure = captureFirstFailure(
-        firstFailure,
-        () => this.#decodedTextureSources.closeOrdinary(outcome.upload.source),
-      );
-    }
-    clearOrdinaryTextureGpuOutcomes(this.#ordinaryTextureGpu);
-    if (firstFailure !== undefined) throw firstFailure.value;
-  }
-
   #consumeVirtualTextureGpuOutcomes(): void {
     let firstFailure = captureFailure(() => this.#decodedTextureSources.retryPendingVirtualTexture());
     const outcomeCount = virtualTextureGpuOutcomeCount(this.#virtualTextureGpu);
@@ -6611,71 +6532,45 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (closeFailure !== undefined) throw closeFailure.value;
   }
 
-  #queueOrdinaryTextureUpload(
-    resource: OrdinaryTextureGpuResource,
-    source: LoadedTextureSource,
-    texture: TextureAssetUploadRef,
-  ): void {
-    if (this.#terminalOrdinaryTextureKeys.has(resource.key)) return;
-    this.#retainPreparedTextureUpload(resource.key, { source, texture });
-    if (
-      this.#disposed
-      || this.#contextLifecycle !== "active"
-      || resource.generation !== this.#contextGeneration
-      || resource.uploaded
-    ) return;
-    queueOrdinaryTextureUpload(this.#ordinaryTextureGpu, resource, { source, texture });
-    if (consumeOrdinaryTextureGpuWake(this.#ordinaryTextureGpu)) this.invalidate();
-  }
-
   #processOrdinaryTextureUploads(): void {
-    const quarantineBeforeUploads = ordinaryTextureGpuQuarantinedBytes(this.#ordinaryTextureGpu);
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
-    let processFailure = captureFailure(() => {
-      processOrdinaryTextureUploads(
-        this.#ordinaryTextureGpu,
-        this.#frame,
-        this.#contextGeneration,
-        {
-          reserve: (cost) => {
-            const limits = this.#options.resourceGovernorPolicy?.limits
-              ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
-            const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
-            if (cost.persistentGpuBytes > persistentGpuMaximum) {
-              return {
-                limit: persistentGpuMaximum,
-                reason: "persistent-gpu-cost-exceeds-limit" as const,
-              };
-            }
-            const uploadLimit = limits.uploadBytes;
-            if (cost.uploadBytes > uploadLimit) {
-              return { limit: uploadLimit, reason: "upload-cost-exceeds-limit" };
-            }
-            const reserved = reserveResourceGovernor(
-              this.#resourceGovernor,
-              "ordinary-texture",
-              cost,
-            );
-            if (typeof reserved === "string") {
-              switch (reserved) {
-                case "persistent-gpu-capacity":
-                case "persistent-gpu-hard-limit":
-                case "persistent-gpu-mandatory-floor":
-                case "upload-capacity":
-                  return { reason: reserved };
-                default:
-                  throw new Error(`Unexpected ordinary texture admission denial: ${reserved}`);
-              }
-            }
-            return {
-              cancel: () => { reserved.cancel(); },
-              commit: () => reserved.commit(),
-            };
-          },
-        },
-      );
+    const report = this.#ordinaryTextures.process(this.#frame, this.#contextGeneration, {
+      reserve: (cost) => {
+        const limits = this.#options.resourceGovernorPolicy?.limits
+          ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
+        const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
+        if (cost.persistentGpuBytes > persistentGpuMaximum) {
+          return {
+            limit: persistentGpuMaximum,
+            reason: "persistent-gpu-cost-exceeds-limit" as const,
+          };
+        }
+        const uploadLimit = limits.uploadBytes;
+        if (cost.uploadBytes > uploadLimit) {
+          return { limit: uploadLimit, reason: "upload-cost-exceeds-limit" };
+        }
+        const reserved = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
+        if (typeof reserved !== "string") {
+          return {
+            cancel: () => { reserved.cancel(); },
+            commit: () => reserved.commit(),
+          };
+        }
+        switch (reserved) {
+          case "persistent-gpu-capacity":
+          case "persistent-gpu-hard-limit":
+          case "persistent-gpu-mandatory-floor":
+          case "upload-capacity":
+            return { reason: reserved };
+          default:
+            throw new Error(`Unexpected ordinary texture admission denial: ${reserved}`);
+        }
+      },
     });
+    let processFailure = report.operationFailure === undefined
+      ? undefined
+      : { value: report.operationFailure.error };
     processFailure = captureFirstFailure(
       processFailure,
       () => this.#synchronizeResourceGovernorObservations(),
@@ -6683,122 +6578,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#suppressPersistentGpuCapacityWake = previouslySuppressed;
     if (
       processFailure !== undefined
-      && ordinaryTextureGpuQuarantinedBytes(this.#ordinaryTextureGpu) === quarantineBeforeUploads
+      && report.quarantinedBytesAfter === report.quarantinedBytesBefore
       && !previouslySuppressed
     ) {
       this.#wakePersistentGpuCapacity();
     }
-    const outcomeFailure = captureFailure(() => this.#consumeOrdinaryTextureGpuOutcomes());
-    if (consumeOrdinaryTextureGpuWake(this.#ordinaryTextureGpu)) this.invalidate();
+    const settlement = this.#ordinaryTextures.settleGpuReport(report);
+    if (report.wakeRequested) this.invalidate();
     if (processFailure !== undefined) throw processFailure.value;
-    if (outcomeFailure !== undefined) throw outcomeFailure.value;
-  }
-
-  #texture(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {
-    const key = textureCacheKey(texture);
-    const cached = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-    if (cached !== undefined) return cached;
-
-    if (this.#terminalOrdinaryTextureKeys.has(key)) {
-      return ensureOrdinaryTextureGpuResource(
-        this.#ordinaryTextureGpu,
-        key,
-        this.#contextGeneration,
-      );
-    }
-
-    const prepared = resourceArenaPreparedSource(this.#resourceArena, key);
-    const resource = ensureOrdinaryTextureGpuResource(
-      this.#ordinaryTextureGpu,
-      key,
-      this.#contextGeneration,
-    );
-
-    if (prepared !== undefined) {
-      this.#queueOrdinaryTextureUpload(resource, prepared.source, prepared.texture);
-      return resource;
-    }
-    if (texture.preparedOnly === true) return resource;
-    if (this.#ordinaryTextureSourceSubscriptions.has(key)) return resource;
-
-    let subscription!: OrdinaryTextureSourceSubscription;
-    subscription = this.#ordinaryTextureSources.acquire(
-      texture,
-      (result) => {
-        if (result.kind === "error") {
-          const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-          if (this.#disposed || current?.uploaded === true) return;
-          const message = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
-          this.#recordDiagnostic(message, `texture-image:${key}`);
-          return;
-        }
-        const image = result.source;
-        if (this.#disposed) {
-          return;
-        }
-        this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-        if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) {
-          return;
-        }
-        this.#retainPreparedTextureUpload(key, { source: image, texture });
-        if (this.#contextLifecycle !== "active") return;
-        const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-        if (current !== undefined && current.generation === this.#contextGeneration) {
-          if (!current.uploaded) this.#queueOrdinaryTextureUpload(current, image, texture);
-        }
-      },
-      {
-        onDeliveryFailure: (failure) => {
-          const detail = failure.error instanceof Error
-            ? failure.error.message
-            : String(failure.error);
-          this.#recordDiagnostic(
-            `Texture image publication failed for ${texture.uri} on attempt ${failure.attempt}: ${detail}`,
-            `texture-image-publication:${key}`,
-          );
-          // Publication may already have completed some side effects. Do not
-          // blindly replay it; make the resource terminal until its semantic
-          // declaration is released and acquired again.
-          this.#terminalOrdinaryTextureKeys.add(key);
-          queueMicrotask(() => {
-            if (this.#ordinaryTextureSourceSubscriptions.get(key) === subscription) {
-              this.#ordinaryTextureSourceSubscriptions.delete(key);
-            }
-          });
-          this.invalidate();
-          failure.terminate();
-        },
-      },
-    );
-    this.#ordinaryTextureSourceSubscriptions.set(key, subscription);
-
-    return resource;
-  }
-
-  #settleDecodedTextureSource(texture: TextureAssetUploadRef | undefined, image: LoadedTextureSource): void {
-    if (texture === undefined) return;
-    const key = textureCacheKey(texture);
-    if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) return;
-    const cached = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-    const cachedPending = cached === undefined ? undefined : ordinaryTextureGpuPendingUpload(cached);
-    if (cached !== undefined && cachedPending !== undefined && cachedPending.source !== image) {
-      discardOrdinaryTexturePendingUpload(this.#ordinaryTextureGpu, cached);
-      this.#consumeOrdinaryTextureGpuOutcomes();
-    }
-    // A prepared asset source supersedes equivalent direct URI work. Keeping
-    // that job alive would retain a redundant decode until scene removal.
-    this.#releaseOrdinaryTextureSourceSubscription(key);
-    this.#retainPreparedTextureUpload(key, { source: image, texture });
-    this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-    if (this.#contextLifecycle !== "active") return;
-    if (cached !== undefined && cached.uploaded) return;
-
-    const resource = cached ?? ensureOrdinaryTextureGpuResource(
-      this.#ordinaryTextureGpu,
-      key,
-      this.#contextGeneration,
-    );
-    this.#queueOrdinaryTextureUpload(resource, image, texture);
+    if (settlement !== undefined) throw settlement.error;
   }
 
   #recordUnsupportedGltfImageBasedLight(message: string): void {
@@ -7516,7 +7304,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
           uri: binding.textureUri,
         };
-        this.#settleDecodedTextureSource(texture, source);
+        this.#ordinaryTextures.publishPrepared(texture, source);
       }
       if (row.iblSpecular !== undefined) {
         this.#settleIblSpecularImage(row.iblSpecular, row.key, source);
@@ -7703,7 +7491,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       activeReferences: ordinary.activeReferences,
       preparedBytes,
       preparedSources: sources.size,
-      resources: ordinaryTextureGpuResourceCount(this.#ordinaryTextureGpu),
+      resources: this.#ordinaryTextures.snapshot().resources,
     };
   }
 
@@ -7835,7 +7623,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       // Migrated live allocations are represented by arena-owned durable
       // leases. Failed driver deletions remain charged observationally until
       // context loss proves that the backing storage is gone.
-      persistentGpuBytes: ordinaryTextureGpuQuarantinedBytes(this.#ordinaryTextureGpu),
+      persistentGpuBytes: this.#ordinaryTextures.snapshot().quarantinedBytes,
     });
     setResourceGovernorObservedDurableUsage(this.#resourceGovernor, "virtual-texture", {
       // Migrated allocations are represented by durable governor leases. Only
