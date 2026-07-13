@@ -154,15 +154,13 @@ export class OrdinaryTextureResidencyController {
     this.#queue(cached ?? ensureOrdinaryTextureGpuResource(this.#gpu, key, lifecycle.generation), source, texture);
   }
 
-  restore(): void {
-    const lifecycle = this.#options.lifecycle();
-    if (!lifecycle.active) return;
+  restoreContext(generation: number): void {
     for (const key of resourceArenaPreparedSourceKeys(this.#options.resourceArena)) {
       if (resourceArenaTextureReferenceCount(this.#options.resourceArena, key) === 0) continue;
       if (this.#rows.get(key)?.gpuSuppressed === true) continue;
       const prepared = resourceArenaPreparedSource(this.#options.resourceArena, key);
       if (prepared !== undefined) this.#queue(
-        ensureOrdinaryTextureGpuResource(this.#gpu, key, lifecycle.generation),
+        ensureOrdinaryTextureGpuResource(this.#gpu, key, generation),
         prepared.source,
         prepared.texture,
       );

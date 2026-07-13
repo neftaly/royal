@@ -479,6 +479,7 @@ import { prepareFrameBaseline } from "./webgl/imperative-state";
 import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
+import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlContextLifecycle,
@@ -1222,7 +1223,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #renderViewportSize: [number, number] = [0, 0];
   readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
-  readonly #contextLifecycleObservers = new Set<(snapshot: WebGlContextSnapshot) => void>();
+  readonly #context = new WebGlContextLifecycleOwner();
   readonly #renderFailureObservers = new Set<(failure: unknown) => void>();
   readonly #programArena: ProgramArena;
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
@@ -1339,12 +1340,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
-  #contextError: string | undefined;
-  #contextGeneration = 1;
-  #contextLifecycle: WebGlContextLifecycle = "active";
-  #contextLosses = 0;
-  #contextNotificationVersion = 0;
-  #contextRestores = 0;
   #disposed = false;
   #externalRenderClocks = 0;
   #frame = 0;
@@ -1417,30 +1412,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
   };
   readonly #contextLostListener = (event: Event): void => {
     event.preventDefault();
-    if (this.#contextLifecycle === "disposed" || this.#contextLifecycle === "lost") return;
-    this.#contextLifecycle = "lost";
-    this.#contextGeneration += 1;
-    this.#contextLosses += 1;
-    this.#renderDirty ||= this.#latestScene !== undefined;
-    this.#scheduledRenderGeneration = 0;
-    const cleanupFailure = captureFailure(() => this.#dropGpuState(false));
-    this.#notifyContextLifecycle();
-    if (cleanupFailure !== undefined) throw cleanupFailure.value;
+    this.#context.lose(() => {
+      this.#renderDirty ||= this.#latestScene !== undefined;
+      this.#scheduledRenderGeneration = 0;
+      this.#dropGpuState(false);
+    });
   };
   readonly #contextRestoredListener = (): void => {
-    if (this.#contextLifecycle !== "lost") return;
-    this.#contextLifecycle = "restoring";
-    this.#notifyContextLifecycle();
-    if (this.#contextLifecycle !== "restoring") return;
+    if (!this.#context.beginRestore() || this.#context.lifecycle !== "restoring") return;
     const restored = this.#canvas.getContext("webgl2", {
       alpha: this.#options.alpha,
       antialias: this.#options.antialias,
       preserveDrawingBuffer: false,
     }) as WebGL2RenderingContext | null;
     if (restored === null || restored !== this.#gl) {
-      this.#contextLifecycle = "lost";
-      this.#contextError = "Royal WebGL context restoration did not return the renderer-owned WebGL2 context";
-      this.#notifyContextLifecycle();
+      this.#context.failRestore(
+        "Royal WebGL context restoration did not return the renderer-owned WebGL2 context",
+      );
       return;
     }
     try {
@@ -1452,24 +1440,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
       releaseClusteredLightContextHandles(this.#clusteredLights);
       this.#validateRestoredContextAttributes();
       this.#probeContextCapabilities();
-      restoreVertexInputArenaContext(this.#vertexInputs, this.#contextGeneration);
-      this.#contextLifecycle = "active";
-      this.#contextError = undefined;
-      this.#contextRestores += 1;
-      this.#ordinaryTextures.restore();
+      restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
+      this.#ordinaryTextures.restoreContext(this.#context.generation);
       this.#renderDirty ||= this.#latestScene !== undefined;
-      this.#scheduleRender();
-      this.#notifyContextLifecycle();
+      if (this.#context.finishRestore()) this.#scheduleRender();
     } catch (error) {
       const dropFailure = captureFailure(() => this.#dropGpuState(true));
-      this.#contextLifecycle = "lost";
       const restoreMessage = error instanceof Error ? error.message : String(error);
-      this.#contextError = dropFailure === undefined
+      this.#context.failRestore(dropFailure === undefined
         ? restoreMessage
         : `${restoreMessage}; GPU cleanup also failed: ${
           dropFailure.value instanceof Error ? dropFailure.value.message : String(dropFailure.value)
-        }`;
-      this.#notifyContextLifecycle();
+        }`);
     }
   };
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
@@ -1591,9 +1573,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         gl,
         invalidate: () => this.invalidate(),
         lifecycle: () => ({
-          active: this.#contextLifecycle === "active",
+          active: this.#context.lifecycle === "active",
           disposed: this.#disposed,
-          generation: this.#contextGeneration,
+          generation: this.#context.generation,
         }),
         loadSource: (request, signal) => isSvgUri(request.uri)
           ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
@@ -1636,10 +1618,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
       this.#probeContextCapabilities();
-      restoreVertexInputArenaContext(this.#vertexInputs, this.#contextGeneration);
+      restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       // Replace the no-context cleanup registered before construction with an
       // active-context cleanup now that the vertex arena owns this generation.
-      rollback[3] = () => disposeVertexInputArena(this.#vertexInputs, gl, this.#contextGeneration);
+      rollback[3] = () => disposeVertexInputArena(this.#vertexInputs, gl, this.#context.generation);
       let contextListenersStarted = false;
       registerRollback(() => {
         if (!contextListenersStarted) return;
@@ -1720,30 +1702,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #contextLifecycleSnapshot(): WebGlContextSnapshot {
-    return Object.freeze({
-      generation: this.#contextGeneration,
-      ...(this.#contextError === undefined ? {} : { lastError: this.#contextError }),
-      lifecycle: this.#contextLifecycle,
-      losses: this.#contextLosses,
-      restores: this.#contextRestores,
-    });
-  }
-
-  #notifyContextLifecycle(): void {
-    const version = this.#contextNotificationVersion + 1;
-    this.#contextNotificationVersion = version;
-    const snapshot = this.#contextLifecycleSnapshot();
-    for (const observer of this.#contextLifecycleObservers) {
-      try {
-        observer(snapshot);
-      } catch (error) {
-        console.error("Royal WebGL context lifecycle observer failed", error);
-      }
-      if (this.#contextNotificationVersion !== version) break;
-    }
-  }
-
   #notifyRenderFailure(failure: unknown): void {
     for (const observer of Array.from(this.#renderFailureObservers)) {
       if (!this.#renderFailureObservers.has(observer)) continue;
@@ -1772,24 +1730,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   get contextLifecycle(): WebGlContextLifecycle {
-    return this.#contextLifecycle;
+    return this.#context.lifecycle;
   }
 
   contextSnapshot(): WebGlContextSnapshot {
-    return this.#contextLifecycleSnapshot();
+    return this.#context.snapshot();
   }
 
   observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void {
-    this.#contextLifecycleObservers.add(callback);
-    try {
-      callback(this.#contextLifecycleSnapshot());
-    } catch (error) {
-      this.#contextLifecycleObservers.delete(callback);
-      throw error;
-    }
-    return () => {
-      this.#contextLifecycleObservers.delete(callback);
-    };
+    return this.#context.observe(callback);
   }
 
   observeRenderFailures(callback: (failure: unknown) => void): () => void {
@@ -1834,7 +1783,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot render with a disposed Royal renderer root");
     }
     const plan = this.#commitScene(scene);
-    if (this.#contextLifecycle !== "active") {
+    if (this.#context.lifecycle !== "active") {
       this.#retainPlanWhileContextUnavailable();
       return;
     }
@@ -1859,7 +1808,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot render views with a disposed Royal renderer root");
     }
     const plan = this.#commitScene(scene);
-    if (this.#contextLifecycle !== "active") {
+    if (this.#context.lifecycle !== "active") {
       this.#retainPlanWhileContextUnavailable();
       return;
     }
@@ -1878,7 +1827,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot render views with a disposed Royal renderer root");
     }
     const plan = this.#commitScene(scene);
-    if (this.#contextLifecycle !== "active") {
+    if (this.#context.lifecycle !== "active") {
       this.#retainPlanWhileContextUnavailable();
       return;
     }
@@ -1886,7 +1835,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #renderScene(plan: FramePlan, frameViews: FrameViews): void {
-    if (this.#contextLifecycle !== "active") {
+    if (this.#context.lifecycle !== "active") {
       this.#retainPlanWhileContextUnavailable();
       return;
     }
@@ -2042,7 +1991,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     } catch (value) {
       renderFailure = { value };
     }
-    this.#gltfInstanceTransforms.endFrame(renderFailure === undefined);
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined),
+    );
     renderFailure = captureFirstFailure(renderFailure, () => this.#releaseUnusedGltfBatchResources());
     renderFailure = captureFirstFailure(
       renderFailure,
@@ -2099,7 +2051,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   flushInvalidated(): void {
     if (
       this.#disposed
-      || this.#contextLifecycle !== "active"
+      || this.#context.lifecycle !== "active"
       || !this.#renderDirty
       || this.#latestScene === undefined
     ) return;
@@ -2109,7 +2061,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   flushInvalidatedFromExternalClock(): void {
     if (
       this.#disposed
-      || this.#contextLifecycle !== "active"
+      || this.#context.lifecycle !== "active"
       || !this.#renderDirty
       || this.#externalRenderClocks !== 1
       || this.#latestScene === undefined
@@ -2121,7 +2073,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
     }
-    if (this.#contextLifecycle !== "active") return undefined;
+    if (this.#context.lifecycle !== "active") return undefined;
     const plan = this.#framePlan;
     if (plan === undefined) return undefined;
 
@@ -2140,7 +2092,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderDirty = true;
   }
 
-  #dropGpuState(deleteResources: boolean): void {
+  #dropGpuState(deleteResources: boolean, contextGeneration = this.#context.generation): void {
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
     try {
@@ -2166,7 +2118,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (deleteResources) {
       const gl = this.#gl;
       releaseFailure = captureFirstFailure(releaseFailure, () => {
-        releaseVertexInputContextHandles(this.#vertexInputs, gl, this.#contextGeneration);
+        releaseVertexInputContextHandles(this.#vertexInputs, gl, contextGeneration);
       });
       releaseFailure = captureFirstFailure(releaseFailure, () => {
         releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, gl);
@@ -2200,7 +2152,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => {
       clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
     });
-    this.#gltfInstanceTransforms.endFrame(false);
+    releaseFailure = captureFirstFailure(
+      releaseFailure,
+      () => this.#gltfInstanceTransforms.endFrame(false),
+    );
 
     for (const state of this.#virtualTextures.values()) {
       for (const controller of state.pageLoadAbortControllers.values()) controller.abort();
@@ -2245,23 +2200,27 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (retryFailure !== undefined) throw retryFailure.value;
       return;
     }
-    const canDeleteResources = this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring";
+    const canDeleteResources = this.#context.lifecycle === "active"
+      || this.#context.lifecycle === "restoring";
+    const contextGeneration = this.#context.generation;
     this.#disposed = true;
-    this.#contextLifecycle = "disposed";
     this.#unsubscribeResourceGovernorDurableCapacityRelease();
-    let firstFailure = captureFailure(() => {
-      this.#canvas.removeEventListener("webglcontextlost", this.#contextLostListener);
+    let firstFailure: CapturedFailure | undefined;
+    this.#context.dispose(() => {
+      firstFailure = captureFailure(() => {
+        this.#canvas.removeEventListener("webglcontextlost", this.#contextLostListener);
+      });
+      firstFailure = captureFirstFailure(firstFailure, () => {
+        this.#canvas.removeEventListener("webglcontextrestored", this.#contextRestoredListener);
+      });
+      firstFailure = captureFirstFailure(
+        firstFailure,
+        () => this.#dropGpuState(canDeleteResources, contextGeneration),
+      );
     });
-    firstFailure = captureFirstFailure(firstFailure, () => {
-      this.#canvas.removeEventListener("webglcontextrestored", this.#contextRestoredListener);
-    });
-    firstFailure = captureFirstFailure(firstFailure, () => this.#dropGpuState(canDeleteResources));
     const teardown = (operation: () => void): void => {
       firstFailure = captureFirstFailure(firstFailure, operation);
     };
-    this.#contextGeneration += 1;
-    teardown(() => this.#notifyContextLifecycle());
-    this.#contextLifecycleObservers.clear();
     this.#renderFailureObservers.clear();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
@@ -2321,7 +2280,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const textureResidency = this.#textureResidencySnapshot();
     const virtualTexturing = this.#virtualTexturingSnapshot();
     return {
-      context: this.#contextLifecycleSnapshot(),
+      context: this.#context.snapshot(),
       diagnostics: diagnostics.messages,
       diagnosticStats: {
         capacity: diagnostics.capacity,
@@ -2613,8 +2572,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     for (const { id, key } of changes.releasedGeometryDeclarations) {
       apply(
         () => {
-          if (this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring") {
-            releaseVertexInputGeometry(this.#vertexInputs, this.#gl, this.#contextGeneration, id);
+          if (this.#context.lifecycle === "active" || this.#context.lifecycle === "restoring") {
+            releaseVertexInputGeometry(this.#vertexInputs, this.#gl, this.#context.generation, id);
           } else releaseLostVertexInputGeometry(this.#vertexInputs, id);
         },
         () => {
@@ -2882,7 +2841,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     } else if (lease !== undefined && !previouslySuppressed) {
       this.#wakePersistentGpuCapacity();
     }
-    if (this.#contextLifecycle === "active") {
+    if (this.#context.lifecycle === "active") {
       if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
     }
     if (releaseFailure !== undefined) throw releaseFailure.value;
@@ -2892,7 +2851,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (
       this.#governedVirtualTextureRetryScheduled
       || this.#disposed
-      || this.#contextLifecycle !== "active"
+      || this.#context.lifecycle !== "active"
       || !this.#hasGovernedVirtualTextureAdmissionDemand()
     ) return;
     this.#governedVirtualTextureRetryScheduled = true;
@@ -2900,7 +2859,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#governedVirtualTextureRetryScheduled = false;
       if (
         this.#disposed
-        || this.#contextLifecycle !== "active"
+        || this.#context.lifecycle !== "active"
         || !this.#hasGovernedVirtualTextureAdmissionDemand()
       ) return;
       this.invalidate();
@@ -4031,7 +3990,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
     drawGeometry(
       this.#geometryDrawArena,
-      this.#contextGeneration,
+      this.#context.generation,
       geometryId,
       geometry,
       material.kind === "wireframe" ? material.width : undefined,
@@ -4109,7 +4068,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const instanceAllocation = bindGltfInstanceBuffer(
       this.#gltfInstanceBufferArena,
       this.#gl,
-      this.#contextGeneration,
+      this.#context.generation,
       instanceBufferKey,
       localModels,
       localModelSignature,
@@ -4123,7 +4082,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     prepareGeometryInstancedDraw(
       this.#geometryDrawArena,
-      this.#contextGeneration,
+      this.#context.generation,
       geometryId,
       geometry,
       instanceAllocation,
@@ -4511,7 +4470,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseUnusedGltfInstanceBuffers(
       this.#gltfInstanceBufferArena,
       this.#gl,
-      this.#contextGeneration,
+      this.#context.generation,
     );
     if (this.#gltfLiveBatchIds.length < registry.touchedBatchCount) {
       let capacity = this.#gltfLiveBatchIds.length;
@@ -4954,7 +4913,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state: VirtualTextureRuntimeState,
     manifest: VirtualTextureManifestModel,
   ): "pressure" | "ready" | "terminal" {
-    if (this.#contextLifecycle !== "active") return "pressure";
+    if (this.#context.lifecycle !== "active") return "pressure";
     const options = {
       ...(state.texture.sampler?.magFilter === undefined
         ? {}
@@ -5050,7 +5009,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       result = admitVirtualTextureGpuResource(
         this.#virtualTextureGpu,
         state.key,
-        this.#contextGeneration,
+        this.#context.generation,
         options,
       );
       this.#synchronizeResourceGovernorObservations();
@@ -5786,7 +5745,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (state.diagnosticsEnabled) {
         this.#recordDiagnostic(message, `virtual-texture-page:${state.activeSource.manifestUri}`);
       }
-      if (this.#contextLifecycle !== "active") {
+      if (this.#context.lifecycle !== "active") {
         this.#transitionVirtualTexturePage(state, pageKey, { kind: "context-lost" });
         return;
       }
@@ -5800,7 +5759,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#transitionVirtualTexturePage(state, pageKey, { kind: "retry-elapsed" });
         if (
           this.#disposed
-          || this.#contextLifecycle !== "active"
+          || this.#context.lifecycle !== "active"
           || this.#virtualTextures.get(state.key) !== state
           || state.sourceGeneration !== sourceGeneration
           || state.status !== "ready"
@@ -5830,7 +5789,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#virtualTextureRequestDrainScheduled = true;
     queueMicrotask(() => {
       this.#virtualTextureRequestDrainScheduled = false;
-      if (this.#disposed || this.#contextLifecycle !== "active") return;
+      if (this.#disposed || this.#context.lifecycle !== "active") return;
       this.#drainVirtualTexturePageRequests();
     });
   }
@@ -6107,7 +6066,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return vertexInputGeometry(
       this.#vertexInputs,
       this.#gl,
-      this.#contextGeneration,
+      this.#context.generation,
       geometryId,
     );
   }
@@ -6154,7 +6113,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #processOrdinaryTextureUploads(): void {
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
-    const report = this.#ordinaryTextures.process(this.#frame, this.#contextGeneration, {
+    const report = this.#ordinaryTextures.process(this.#frame, this.#context.generation, {
       reserve: (cost) => {
         const limits = this.#options.resourceGovernorPolicy?.limits
           ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
@@ -6241,7 +6200,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       && previous !== image
       && resourceArenaSourceReferenceCount(this.#resourceArena, previous) === 0
     ) this.#decodedTextureSources.closeOrdinary(previous);
-    if (this.#contextLifecycle !== "active") return;
+    if (this.#context.lifecycle !== "active") return;
     try {
       const resource = ensureGltfIblSpecularTexture(
         this.#iblTextures,
@@ -6950,7 +6909,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #scheduleRender(): void {
     if (
       this.#disposed ||
-      this.#contextLifecycle !== "active" ||
+      this.#context.lifecycle !== "active" ||
       !this.#renderDirty ||
       this.#externalRenderClocks > 0 ||
       this.#scheduledRenderGeneration !== 0 ||
@@ -6958,19 +6917,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
     ) return;
     const requestFrame = globalThis.requestAnimationFrame;
     const generation = this.#renderScheduleGeneration + 1;
-    const contextGeneration = this.#contextGeneration;
+    const contextGeneration = this.#context.generation;
     this.#renderScheduleGeneration = generation;
     this.#scheduledRenderGeneration = generation;
     const renderIfCurrent = (): void => {
       if (
         this.#scheduledRenderGeneration !== generation ||
-        this.#contextGeneration !== contextGeneration ||
-        this.#contextLifecycle !== "active" ||
+        this.#context.generation !== contextGeneration ||
+        this.#context.lifecycle !== "active" ||
         !this.#renderDirty ||
         this.#externalRenderClocks > 0
       ) return;
       this.#scheduledRenderGeneration = 0;
-      if (!this.#disposed && this.#contextLifecycle === "active" && this.#latestScene !== undefined) {
+      if (!this.#disposed && this.#context.lifecycle === "active" && this.#latestScene !== undefined) {
         try {
           this.#renderLatestScene();
         } catch (failure) {

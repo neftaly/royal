@@ -186,7 +186,7 @@ describe("ordinary texture residency controller", () => {
     expect(settle(controller, repeated)).toBeUndefined();
     expect({ deleted: gl.deleted.length, leaseReleases }).toEqual({ deleted: 1, leaseReleases: 1 });
 
-    controller.restore();
+    controller.restoreContext(1);
     expect(controller.snapshot().resources).toBe(0);
     controller.request(texture);
     expect(controller.snapshot()).toMatchObject({
@@ -219,7 +219,7 @@ describe("ordinary texture residency controller", () => {
     const suppressed = controller.suppressGpuResidency(textureCacheKey(texture));
     expect(settle(controller, suppressed)).toBeUndefined();
     controller.publishPrepared(texture, replacement);
-    controller.restore();
+    controller.restoreContext(1);
 
     expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 1, resources: 0 });
     expect(resourceArenaSourceReferenceCount(arena, replacement)).toBeGreaterThan(0);
@@ -262,7 +262,7 @@ describe("ordinary texture residency controller", () => {
       }),
     };
     expect(settle(controller, controller.process(0, 1, admission))).toBeUndefined();
-    controller.restore();
+    controller.restoreContext(1);
     expect(settle(controller, controller.process(1, 1, admission))).toBeUndefined();
     expect(leaseCommits).toBe(0);
     expect(controller.snapshot().resources).toBe(0);
@@ -308,7 +308,7 @@ describe("ordinary texture residency controller", () => {
       new Error("Ordinary texture GPU report was already settled"),
     );
 
-    controller.restore();
+    controller.restoreContext(1);
     expect(controller.snapshot().resources).toBe(0);
     controller.request(texture);
     expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
@@ -409,7 +409,7 @@ describe("ordinary texture residency controller", () => {
     expect(settle(controller, drop)).toBeUndefined();
     lifecycle.generation += 1;
     lifecycle.active = true;
-    controller.restore();
+    controller.restoreContext(lifecycle.generation);
     expect(controller.snapshot()).toMatchObject({ resources: 1, terminalRows: 1 });
 
     throwInvalidation = false;
@@ -504,7 +504,7 @@ it("keeps merged residency rows bounded under seeded command traces", async () =
             settle(setup.controller, setup.controller.dropContext());
             setup.lifecycle.generation += 1;
             setup.lifecycle.active = true;
-            setup.controller.restore();
+            setup.controller.restoreContext(setup.lifecycle.generation);
             break;
           }
           case "release":
