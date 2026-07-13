@@ -104,6 +104,7 @@ const fakeCanvas = (
 
 const fakeGl = (options: {
   readonly atlasUploadFailure?: { enabled: boolean };
+  readonly beforeUniform1i?: (name: string) => void;
   readonly maxTextureImageUnits?: number;
   readonly maxTextureSize?: number;
   readonly pageTableUploadFailure?: { enabled: boolean; error?: unknown };
@@ -206,6 +207,7 @@ const fakeGl = (options: {
     deleteShader: record("deleteShader"),
     deleteTexture: record("deleteTexture"),
     deleteVertexArray: record("deleteVertexArray"),
+    detachShader: record("detachShader"),
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
     depthRange: record("depthRange"),
@@ -255,7 +257,10 @@ const fakeGl = (options: {
       }
     }),
     uniform1f: record("uniform1f"),
-    uniform1i: record("uniform1i"),
+    uniform1i: record<readonly [WebGLUniformLocation, number]>("uniform1i", (location) => {
+      const name = (location as unknown as { readonly name?: unknown }).name;
+      if (typeof name === "string") options.beforeUniform1i?.(name);
+    }),
     uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform3fv: record("uniform3fv"),
@@ -776,6 +781,33 @@ afterEach(() => {
 });
 
 describe("WebGL renderer virtual texturing integration", () => {
+  it("does not let a pending high-priority material texture suppress a ready lower-priority map", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material: SurfaceMaterial = {
+      ...standardMaterial({ color: [1, 1, 1, 1] }),
+      emissiveTexture: imageTexture("/textures/pending-emissive.png"),
+      metallicRoughnessTexture: imageTexture("/textures/ready-metallic-roughness.png"),
+    };
+    const graph = renderScene(material);
+
+    root.render(graph);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "/textures/pending-emissive.png",
+      "/textures/ready-metallic-roughness.png",
+    ]);
+    imageBySrc("ready-metallic-roughness")!.settleLoad();
+    await flushMicrotasks();
+
+    root.render(graph);
+    const uniforms = namedUniform1iValues(calls);
+
+    expect(imageBySrc("pending-emissive")?.complete).toBe(false);
+    expect(uniforms.u_useMetallicRoughnessTexture).toContain(1);
+    expect(uniforms.u_metallicRoughnessTexture).toContain(0);
+  });
+
   it("keeps an intrinsically oversized decoded page terminal without fetching it", async () => {
     vi.stubGlobal("Image", ControlledImage);
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
@@ -1466,6 +1498,51 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(canvases[0]).toEqual(expect.objectContaining({ height: 256, width: 256 }));
     expect(uniformNames(calls)).toEqual(expect.arrayContaining(["u_vtAtlas", "u_vtPageTable"]));
     expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
+  it("binds the ordinary defensive fallback when generated VT becomes invalid after planning", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    installCanvas2d();
+    let invalidateAfterPlan = false;
+    let canvas: FakeCanvas;
+    const { calls, gl } = fakeGl({
+      beforeUniform1i: (name) => {
+        if (!invalidateAfterPlan || name !== "u_unlit") return;
+        invalidateAfterPlan = false;
+        canvas.dispatchContextEvent("webglcontextlost");
+      },
+    });
+    canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
+    const texture = imageTexture("/textures/defensive-fallback.png");
+    const material = unlitMaterial({ texture });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    const source = ControlledImage.instances[0]!;
+    source.height = 512;
+    source.naturalHeight = 512;
+    source.naturalWidth = 512;
+    source.width = 512;
+    source.settleLoad();
+    await flushMicrotasks();
+    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
+      root.render(graph);
+      await flushMicrotasks();
+    }
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+
+    const invalidatedDrawStart = calls.length;
+    invalidateAfterPlan = true;
+    expect(() => root.render(renderScene(standardMaterial({ texture }))))
+      .toThrow(/Vertex-input context was dropped/);
+    const uniforms = namedUniform1iValues(calls.slice(invalidatedDrawStart));
+
+    expect(invalidateAfterPlan).toBe(false);
+    expect(uniforms.u_texture).toEqual([0]);
+    expect(uniforms.u_useTexture).toEqual([1]);
+    expect(uniforms.u_useVirtualTexture).toEqual([0]);
+    expect(uniforms.u_vtAtlas).toBeUndefined();
   });
 
   it("uses the opted-in generated VT policy for direct imageTexture SVG", async () => {

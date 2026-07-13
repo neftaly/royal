@@ -468,6 +468,9 @@ const ensureBrdfLut = (state: State): WebGLTexture | undefined => {
   return texture;
 };
 
+export const prepareSurfaceIblBrdfLut = (arena: IblTextureArena): boolean =>
+  ensureBrdfLut(arena as unknown as State) !== undefined;
+
 export const bindSurfaceIbl = (
   arena: IblTextureArena,
   programArena: ProgramArena,

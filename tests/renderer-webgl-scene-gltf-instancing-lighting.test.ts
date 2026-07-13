@@ -855,7 +855,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
 
     expect(drawCalls(pendingTextureFrameCalls)).toHaveLength(1);
     expect(uniform1iPayloads(calls, "u_useEmissiveTexture")).toContain(0);
-    expect(shaderSources(calls).join("\n")).toContain("uniform sampler2D u_emissiveTexture;");
+    expect(shaderSources(calls).join("\n")).not.toContain("uniform sampler2D u_emissiveTexture;");
 
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
@@ -867,7 +867,7 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     const sources = shaderSources(calls).join("\n");
 
     expect(callCount(calls, "texImage2D")).toBe(1);
-    expect(callCount(calls, "createProgram")).toBe(programsAfterPendingTextureRender);
+    expect(callCount(calls, "createProgram")).toBe(programsAfterPendingTextureRender + 1);
     expect(drawCalls(readyFrameCalls)).toHaveLength(1);
     expect(uniform4fvPayloads(calls, "u_emissiveColor").map(roundVector))
       .toContainEqual([0.4, 0.5, 0.6, 1]);
@@ -905,9 +905,11 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
       responseWithBuffer(url, multiUvTriangleBin()))).toBe(true);
     await flushMicrotasks();
 
+    await flushPreparedAssetBoundary();
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
     await flushAnimationFrames(viewport.animationFrames);
+    await waitForUniform1iPayload(viewport.animationFrames, calls, "u_useEmissiveTexture", 1);
 
     const callsBeforeReadyRender = calls.length;
     root.render(renderGraph);
