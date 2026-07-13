@@ -127,6 +127,47 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     renderRoot.dispose();
   });
 
+  it("retains a committed bulk pose through an interrupted GPU upload", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const fake = fakeGl();
+    const renderRoot = createWebGlRoot(fakeCanvas(fake.gl));
+    const instances = createGltfInstanceTransforms({ count: 4 });
+    const renderGraph = renderScene([
+      gltfInstances({
+        instances,
+        src: triangleGltfSrc,
+        version: "bulk-interrupted-pose-upload",
+      }),
+    ]);
+
+    renderRoot.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, solidTriangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
+    renderRoot.render(renderGraph);
+
+    instances.positions[3] = 0.75;
+    instances.commitPose(1, 1);
+    const uploadFailure = new Error("interrupted instance upload");
+    vi.mocked(fake.gl.bufferSubData).mockImplementationOnce(() => {
+      throw uploadFailure;
+    });
+    expect(() => renderRoot.render(renderGraph)).toThrow(uploadFailure);
+
+    const callsBeforeRetry = fake.calls.length;
+    renderRoot.render(renderGraph);
+    const retryPose = bufferSubDataPayloads(fake.calls.slice(callsBeforeRetry))
+      .find((payload) => payload.length === 24);
+    expect(retryPose).toBeDefined();
+    expect(roundVector(retryPose!.slice(6, 12))).toEqual([0.75, 0, 0, 0, 0, 0]);
+    renderRoot.dispose();
+  });
+
   it("keeps bulk instance scale stable across pose-only animation frames", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

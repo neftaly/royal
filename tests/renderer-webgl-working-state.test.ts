@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   boxGeometry,
   createCameraViewResource,
+  createGltfInstanceTransforms,
+  gltfInstances,
   mesh,
   orthographicCamera,
   pointLight,
@@ -10,6 +12,7 @@ import {
   studioEnvironment,
   unlitMaterial,
   virtualTexture,
+  type GltfInstanceTransforms,
   type RenderObjectHandle,
   type RenderRoot,
   type Rgba,
@@ -840,6 +843,56 @@ describe("WebGL root working state contracts", () => {
     expect(attempts).toBe(2);
     expect(() => root.dispose()).not.toThrow();
     expect(attempts).toBe(2);
+  });
+
+  it("retries glTF instance-transform unsubscription on repeated root disposal", () => {
+    const { gl } = fakeGl();
+    const base = createGltfInstanceTransforms({ count: 1 });
+    const unsubscribeFailure = new Error("instance unsubscribe failed");
+    let activeSubscriptions = 0;
+    let unsubscribeAttempts = 0;
+    const instances: GltfInstanceTransforms = {
+      commitPose: base.commitPose,
+      commitScale: base.commitScale,
+      count: base.count,
+      get poseVersion() {
+        return base.poseVersion;
+      },
+      positions: base.positions,
+      rotations: base.rotations,
+      get scaleVersion() {
+        return base.scaleVersion;
+      },
+      scales: base.scales,
+      subscribe(listener) {
+        activeSubscriptions += 1;
+        const unsubscribe = base.subscribe(listener);
+        return () => {
+          unsubscribeAttempts += 1;
+          if (unsubscribeAttempts === 1) throw unsubscribeFailure;
+          activeSubscriptions -= 1;
+          unsubscribe();
+        };
+      },
+    };
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(scene({
+      camera: camera(),
+      clearColor: [0, 0, 0, 0],
+      nodes: [gltfInstances({
+        instances,
+        src: "data:application/json,%7B%22asset%22%3A%7B%22version%22%3A%222.0%22%7D%7D",
+      })],
+    }));
+    expect(activeSubscriptions).toBe(1);
+
+    expect(() => root.dispose()).toThrow(unsubscribeFailure);
+    expect(activeSubscriptions).toBe(1);
+    expect(() => root.dispose()).not.toThrow();
+    expect(activeSubscriptions).toBe(0);
+    expect(unsubscribeAttempts).toBe(2);
+    expect(() => root.dispose()).not.toThrow();
+    expect(unsubscribeAttempts).toBe(2);
   });
 
   it("retains an HDR target lease across an opaque delete failure and releases it on retry", () => {

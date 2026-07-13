@@ -26,6 +26,15 @@ export const clearInstanceDirtyBits = (dirty: InstanceDirtyBits): void => {
   dirty.maxDirtyWord = -1;
 };
 
+const mergeInstanceDirtyBits = (target: InstanceDirtyBits, source: InstanceDirtyBits): void => {
+  if (source.maxDirtyWord < source.minDirtyWord) return;
+  for (let index = source.minDirtyWord; index <= source.maxDirtyWord; index += 1) {
+    target.words[index] = target.words[index]! | source.words[index]!;
+  }
+  target.minDirtyWord = Math.min(target.minDirtyWord, source.minDirtyWord);
+  target.maxDirtyWord = Math.max(target.maxDirtyWord, source.maxDirtyWord);
+};
+
 export const markInstanceDirtyRange = (
   dirty: InstanceDirtyBits,
   startIndex: number,
@@ -86,6 +95,11 @@ export class GltfInstanceChangeTracker {
     this.activeScale = this.pendingScale;
     this.pendingPose = previousActivePose;
     this.pendingScale = previousActiveScale;
+  }
+
+  abortFrame(): void {
+    mergeInstanceDirtyBits(this.pendingPose, this.activePose);
+    mergeInstanceDirtyBits(this.pendingScale, this.activeScale);
   }
 
   commit(channel: 'pose' | 'scale', startIndex: number, count: number): void {

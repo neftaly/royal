@@ -17,7 +17,6 @@ import {
   type SpotLightNode,
   type EnvironmentLight,
   type EulerRads,
-  type GltfInstanceTransforms,
   type GltfInstancesNode,
   type GltfNode,
   type Material,
@@ -206,7 +205,10 @@ import { rendererFrameViews, type RendererFrameViewLane } from "./webgl/frame-vi
 import type { DecodedGltfDracoPrimitive } from "./gltf/codecs/draco";
 import { gltfCodecDemand } from "./gltf/codecs/demand";
 import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
-import { GltfInstanceChangeTracker } from "./gltf/instance-changes";
+import {
+  GltfInstanceTransformRegistry,
+  type GltfInstanceTransformView,
+} from "./gltf/instance-transform-registry";
 import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
 import {
   estimateGltfPreparationCpu,
@@ -735,24 +737,6 @@ const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 type AnyGltfNode = GltfNode | GltfInstancesNode;
 
-type GltfInstanceTransformViews = {
-  activeApplied: boolean;
-  readonly changes: GltfInstanceChangeTracker;
-  framePoseVersion: number;
-  frameScaleVersion: number;
-  matrixPoseVersion: number;
-  matrixScaleVersion: number;
-  readonly rootModels: MutableMat4[];
-  readonly source: GltfInstanceTransforms;
-  readonly sourceKey: number;
-  readonly transforms: Transform[];
-};
-
-type GltfInstanceTransformSubscription = {
-  readonly unsubscribe: () => void;
-  readonly views: GltfInstanceTransformViews;
-};
-
 type CameraViewResourceSubscription = {
   readonly resource: CameraViewResource;
   readonly unsubscribe: () => void;
@@ -764,7 +748,7 @@ type GltfPacketMaterialBinding = {
 
 type GltfPacketRootBinding = {
   readonly rootModel: Mat4;
-  readonly rootInstanceViews?: GltfInstanceTransformViews;
+  readonly rootInstanceViews?: GltfInstanceTransformView;
   readonly rootPositionSignatureVersion?: number;
   readonly rootRotationSignatureVersion?: number;
   readonly rootScaleSignatureVersion?: number;
@@ -787,7 +771,7 @@ type GltfPrimitiveDrawBatch = {
   readonly rootRotationSignature: number[];
   readonly rootScaleSignature: number[];
   readonly rootModels: Mat4[];
-  readonly rootInstanceViews: Array<GltfInstanceTransformViews | undefined>;
+  readonly rootInstanceViews: Array<GltfInstanceTransformView | undefined>;
   readonly rootLogicalIndices: number[];
   readonly rootTransforms: Array<Transform | undefined>;
   sidedness: DrawSidedness;
@@ -1371,12 +1355,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#admitGltfPreparationJob,
   );
   readonly #gltfStatesByNode = new WeakMap<AnyGltfNode, GltfState>();
-  readonly #gltfInstanceTransformViews = new WeakMap<GltfInstanceTransforms, GltfInstanceTransformViews>();
-  readonly #gltfInstanceTransformSubscriptions =
-    new Map<GltfInstanceTransforms, GltfInstanceTransformSubscription>();
-  #gltfInstanceSourceKey = 1;
+  readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   #gltfPreparationWakeCursor = 0;
-  #gltfInstanceFrameActive = false;
   readonly #gltfBatches: Array<GltfPrimitiveDrawBatch | undefined> = [];
   readonly #gltfInstanceBufferArena = createGltfInstanceBufferArena(this.#vertexInputs);
   readonly #sharedViewLods = new GltfSharedViewLodRegistry();
@@ -1566,7 +1546,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     try {
       this.#canvas = canvas;
       this.#pickingController = new PickingController(canvas, {
-        gltfInstanceRootModels: (node) => this.#gltfInstanceViews(node.instances).rootModels,
+        gltfInstanceRootModels: (node) => this.#gltfInstanceTransforms.views(node.instances).rootModels,
         meshGeometry: (node) => this.#meshGeometry(node.geometry, node.material),
         meshLocalBounds: (geometry) => this.#localGeometryBounds(geometry),
         preparedGltfPrimitives: (node) => {
@@ -1987,7 +1967,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       prepareFrameBaseline(gl, frameViews.scissor);
       this.#stagePendingGltfImageRows();
       this.#processOrdinaryTextureUploads();
-      this.#beginGltfInstanceFrame();
+      this.#gltfInstanceTransforms.beginFrame();
       const wantsHdr = this.#planWantsHdr(plan);
       if (wantsHdr && !this.#hdrSupported) {
         throw new Error("Royal physical lighting requires EXT_color_buffer_float");
@@ -2121,7 +2101,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     } catch (value) {
       renderFailure = { value };
     }
-    this.#gltfInstanceFrameActive = false;
+    this.#gltfInstanceTransforms.endFrame(renderFailure === undefined);
     renderFailure = captureFirstFailure(renderFailure, () => this.#releaseUnusedGltfBatchResources());
     renderFailure = captureFirstFailure(
       renderFailure,
@@ -2287,7 +2267,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => {
       clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
     });
-    this.#gltfInstanceFrameActive = false;
+    this.#gltfInstanceTransforms.endFrame(false);
 
     for (const state of this.#virtualTextures.values()) {
       for (const controller of state.pageLoadAbortControllers.values()) controller.abort();
@@ -2326,6 +2306,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       retryFailure = captureFirstFailure(retryFailure, () => {
         releaseClusteredLightContextHandles(this.#clusteredLights);
       });
+      retryFailure = captureFirstFailure(retryFailure, () => this.#gltfInstanceTransforms.dispose());
       retryFailure = captureFirstFailure(retryFailure, () => this.#drainResourceArenaSideEffectDebt());
       retryFailure = captureFirstFailure(retryFailure, () => this.#decodedTextureSources.retryPending());
       if (retryFailure !== undefined) throw retryFailure.value;
@@ -2393,10 +2374,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => this.#cameraViewResourceSubscription?.unsubscribe());
     this.#cameraViewResourceSubscription = undefined;
     firstFailure = this.#detachRenderObjectRefs(firstFailure);
-    for (const subscription of this.#gltfInstanceTransformSubscriptions.values()) {
-      teardown(() => subscription.unsubscribe());
-    }
-    this.#gltfInstanceTransformSubscriptions.clear();
+    teardown(() => this.#gltfInstanceTransforms.dispose());
     this.#renderDirty = false;
     this.#scheduledRenderGeneration = 0;
     teardown(() => this.#resizeObserver?.disconnect());
@@ -2624,7 +2602,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
         if (cameraFailure !== undefined) throw cameraFailure.value;
       });
       firstFailure = this.#reconcileRenderObjectRefs(next, delta, firstFailure);
-      firstFailure = this.#reconcileGltfInstanceTransforms(delta, firstFailure);
+      firstFailure = captureFirstFailure(
+        firstFailure,
+        () => this.#gltfInstanceTransforms.reconcile(delta.bulkInstances),
+      );
       if (firstFailure !== undefined) throw firstFailure.value;
       this.#framePlanReconciliationPending = false;
       this.#framePlanReconciliationPrevious = undefined;
@@ -2931,49 +2912,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
     }
     return firstFailure;
-  }
-
-  #reconcileGltfInstanceTransforms(
-    delta: ResourceManifestDelta,
-    initialFailure: CapturedFailure | undefined,
-  ): CapturedFailure | undefined {
-    let firstFailure = initialFailure;
-    for (const row of delta.bulkInstances) {
-      const transforms = row.resource;
-      if (row.previousCount !== 0 || row.nextCount === 0) continue;
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        if (this.#gltfInstanceTransformSubscriptions.has(transforms)) return;
-        const views = this.#gltfInstanceViews(transforms);
-        const unsubscribe = transforms.subscribe((channel, startIndex, count) => {
-          views.changes.commit(channel, startIndex, count);
-          this.invalidate();
-        });
-        this.#gltfInstanceTransformSubscriptions.set(transforms, { unsubscribe, views });
-      });
-    }
-    for (const row of delta.bulkInstances) {
-      if (row.nextCount !== 0) continue;
-      const transforms = row.resource;
-      const subscription = this.#gltfInstanceTransformSubscriptions.get(transforms);
-      if (subscription === undefined) continue;
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        subscription.unsubscribe();
-        this.#gltfInstanceTransformSubscriptions.delete(transforms);
-      });
-    }
-    return firstFailure;
-  }
-
-  #beginGltfInstanceFrame(): void {
-    this.#gltfInstanceFrameActive = true;
-    for (const subscription of this.#gltfInstanceTransformSubscriptions.values()) {
-      const views = subscription.views;
-      views.changes.beginFrame();
-      views.framePoseVersion = views.source.poseVersion;
-      views.frameScaleVersion = views.source.scaleVersion;
-      views.activeApplied = views.matrixPoseVersion === views.framePoseVersion
-        && views.matrixScaleVersion === views.frameScaleVersion;
-    }
   }
 
   #releaseOrdinaryTexture(key: string): void {
@@ -3322,7 +3260,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     const state = this.#gltfState(node);
     const instanceViews = node.kind === "gltf-instances"
-      ? this.#gltfInstanceViews(node.instances)
+      ? this.#gltfInstanceTransforms.views(node.instances)
       : undefined;
     const rootHandle = node.kind === "gltf" ? this.#renderObjectHandles.get(node) : undefined;
     const ordinaryRootTransform = node.kind === "gltf"
@@ -3494,69 +3432,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     this.#gltfLightScopeIds.set(key, this.#gltfLightScopeIdCount);
     return this.#gltfLightScopeIdCount;
-  }
-
-  #gltfInstanceViews(instances: GltfInstanceTransforms): GltfInstanceTransformViews {
-    let views = this.#gltfInstanceTransformViews.get(instances);
-    if (views === undefined) {
-      const transforms: Transform[] = [];
-      const rootModels: MutableMat4[] = [];
-      for (let index = 0; index < instances.count; index += 1) {
-        const offset = index * 3;
-        transforms.push({
-          position: instances.positions.subarray(offset, offset + 3) as unknown as Vec3,
-          rotation: instances.rotations.subarray(offset, offset + 3) as unknown as EulerRads,
-          scale: instances.scales.subarray(offset, offset + 3) as unknown as Vec3,
-        });
-        rootModels.push(identityMat4());
-      }
-      views = {
-        activeApplied: false,
-        changes: new GltfInstanceChangeTracker(instances.count),
-        framePoseVersion: instances.poseVersion,
-        frameScaleVersion: instances.scaleVersion,
-        matrixPoseVersion: -1,
-        matrixScaleVersion: -1,
-        rootModels,
-        source: instances,
-        sourceKey: this.#gltfInstanceSourceKey++,
-        transforms,
-      };
-      this.#gltfInstanceTransformViews.set(instances, views);
-    }
-    if (this.#gltfInstanceFrameActive && !views.activeApplied) {
-      const pose = views.changes.activePose;
-      const scale = views.changes.activeScale;
-      const firstWord = Math.min(pose.minDirtyWord, scale.minDirtyWord);
-      const lastWord = Math.max(pose.maxDirtyWord, scale.maxDirtyWord);
-      for (let wordIndex = firstWord; wordIndex <= lastWord; wordIndex += 1) {
-        let word = pose.words[wordIndex]! | scale.words[wordIndex]!;
-        while (word !== 0) {
-          const bit = 31 - Math.clz32(word & -word);
-          const index = wordIndex * 32 + bit;
-          if (index < views.transforms.length) {
-            transformMat4Into(views.rootModels[index]!, views.transforms[index]);
-          }
-          word &= word - 1;
-        }
-      }
-      views.activeApplied = true;
-      views.matrixPoseVersion = views.framePoseVersion;
-      views.matrixScaleVersion = views.frameScaleVersion;
-    } else if (
-      !this.#gltfInstanceFrameActive
-      && (
-        views.matrixPoseVersion !== instances.poseVersion
-        || views.matrixScaleVersion !== instances.scaleVersion
-      )
-    ) {
-      for (let index = 0; index < views.transforms.length; index += 1) {
-        transformMat4Into(views.rootModels[index]!, views.transforms[index]);
-      }
-      views.matrixPoseVersion = instances.poseVersion;
-      views.matrixScaleVersion = instances.scaleVersion;
-    }
-    return views;
   }
 
   #drawGltfPacketSubmissions(
@@ -3949,7 +3824,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const requestRow = plan.gltfRequestRows[occurrenceIndex]!;
         const node = plan.nodes[requestRow.nodeIndex] as AnyGltfNode;
         const instanceViews = node.kind === "gltf-instances"
-          ? this.#gltfInstanceViews(node.instances)
+          ? this.#gltfInstanceTransforms.views(node.instances)
           : undefined;
         const rootHandle = node.kind === "gltf" ? this.#renderObjectHandles.get(node) : undefined;
         const ordinaryRootModel = node.kind === "gltf"
@@ -4003,7 +3878,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const state = this.#gltfState(node);
       if (state.status !== "ready" || (!state.hasNodeLod && !state.hasMaterialLod)) continue;
       if (node.kind === "gltf-instances") {
-        const views = this.#gltfInstanceViews(node.instances);
+        const views = this.#gltfInstanceTransforms.views(node.instances);
         for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
           const rootModel = views.rootModels[outerIndex]!;
           multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, rootModel);
@@ -4349,7 +4224,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     localModels: readonly Mat4[],
     localModelSignature: readonly number[],
     rootModels: readonly Mat4[],
-    rootInstanceViews: readonly (GltfInstanceTransformViews | undefined)[],
+    rootInstanceViews: readonly (GltfInstanceTransformView | undefined)[],
     rootLogicalIndices: readonly number[],
     rootTransforms: readonly (Transform | undefined)[],
     rootPositionSignature: readonly number[],
