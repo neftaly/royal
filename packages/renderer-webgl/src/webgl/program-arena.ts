@@ -120,7 +120,7 @@ const deleteProgram = (state: State, program: WebGLProgram): void => {
 const releaseProgramShaders = (state: State, resource: Resource): void => {
   for (const shader of [resource.vertexShader, resource.fragmentShader]) {
     if (!state.ownedShaders.has(shader)) continue;
-    if (state.ownedPrograms.has(resource.program)) state.gl.detachShader?.(resource.program, shader);
+    if (state.ownedPrograms.has(resource.program)) state.gl.detachShader(resource.program, shader);
     deleteShader(state, shader);
   }
 };

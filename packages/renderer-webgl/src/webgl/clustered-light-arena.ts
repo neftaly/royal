@@ -440,20 +440,20 @@ const upload = (
   resource.gpuValid = false;
   try {
     configure(units.grid, resource.gridTexture);
-    if (!gridResized && typeof gl.texSubImage2D === "function") {
+    if (!gridResized) {
       subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridWidth, grid.zSliceCount,
         gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
     } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32UI, gridWidth, grid.zSliceCount, 0,
       gl.RG_INTEGER, gl.UNSIGNED_INT, grid.offsetsAndCounts));
     configure(units.indices, resource.indexTexture);
-    if (!resizedIndexTexture && typeof gl.texSubImage2D === "function") {
+    if (!resizedIndexTexture) {
       subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, indexTextureWidth, indexTextureHeight,
         gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
     } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32UI, indexTextureWidth, indexTextureHeight, 0,
       gl.RED_INTEGER, gl.UNSIGNED_INT, indexData));
     if (uploadLightData) {
       configure(units.lights, resource.lightTexture);
-      if (!resizedLightTexture && typeof gl.texSubImage2D === "function") {
+      if (!resizedLightTexture) {
         subImage(() => gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, lightTextureHeight,
           gl.RGBA, gl.FLOAT, lightData));
       } else image(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, lightTextureHeight, 0,
