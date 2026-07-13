@@ -38,6 +38,7 @@ class FakeGl {
   readonly UNPACK_SKIP_ROWS = 0x0cf3;
   readonly UNSIGNED_BYTE = 0x1401;
   deleteFailure: unknown | undefined;
+  deleteFailurePresent = false;
   readonly deleted: number[] = [];
   #serial = 1;
   activeTexture = (): void => undefined;
@@ -45,7 +46,10 @@ class FakeGl {
   createTexture = (): WebGLTexture => ({ serial: this.#serial++ }) as unknown as WebGLTexture;
   deleteTexture = (texture: WebGLTexture): void => {
     this.deleted.push((texture as unknown as Handle).serial);
-    if (this.deleteFailure !== undefined) throw this.deleteFailure;
+    if (this.deleteFailurePresent) {
+      this.deleteFailurePresent = false;
+      throw this.deleteFailure;
+    }
   };
   generateMipmap = (): void => undefined;
   pixelStorei = (): void => undefined;
@@ -144,6 +148,176 @@ const successfulAdmission = {
 };
 
 describe("ordinary texture residency controller", () => {
+  it("suppresses admitted GPU residency idempotently and re-promotes from the retained source", async () => {
+    const decoded = source(10, 2, 2);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/generated.png" };
+    let leaseCommits = 0;
+    let leaseReleases = 0;
+    const { arena, controller, gl, releasedDecodedLeases } = harness({ load: async () => decoded });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+    const admission = {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => {
+          leaseCommits += 1;
+          return { release: () => { leaseReleases += 1; } };
+        },
+      }),
+    };
+    expect(settle(controller, controller.process(0, 1, admission))).toBeUndefined();
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+
+    const first = controller.suppressGpuResidency(textureCacheKey(texture));
+    expect(first).toMatchObject({ capacityReleased: true, operationFailure: undefined });
+    expect(settle(controller, first)).toBeUndefined();
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 1, resources: 0 });
+    expect(resourceArenaSourceReferenceCount(arena, decoded)).toBeGreaterThan(0);
+    expect(releasedDecodedLeases()).toBe(0);
+    expect({ deleted: gl.deleted.length, leaseCommits, leaseReleases }).toEqual({
+      deleted: 1,
+      leaseCommits: 1,
+      leaseReleases: 1,
+    });
+
+    const repeated = controller.suppressGpuResidency(textureCacheKey(texture));
+    expect(repeated.capacityReleased).toBe(false);
+    expect(settle(controller, repeated)).toBeUndefined();
+    expect({ deleted: gl.deleted.length, leaseReleases }).toEqual({ deleted: 1, leaseReleases: 1 });
+
+    controller.restore();
+    expect(controller.snapshot().resources).toBe(0);
+    controller.request(texture);
+    expect(controller.snapshot()).toMatchObject({
+      gpuSuppressedRows: 0,
+      resources: 1,
+      sources: { starts: 1 },
+    });
+    expect(settle(controller, controller.process(1, 1, admission))).toBeUndefined();
+    expect({ leaseCommits, leaseReleases }).toEqual({ leaseCommits: 2, leaseReleases: 1 });
+
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    expect({ leaseCommits, leaseReleases }).toEqual({ leaseCommits: 2, leaseReleases: 2 });
+    controller.disposeSources();
+    expect(releasedDecodedLeases()).toBe(1);
+  });
+
+  it("retains replacement publication while suppressed without restoring GPU residency", async () => {
+    const first = source(11);
+    const replacement = source(12);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/replacement.png" };
+    const registered: LoadedTextureSource[] = [];
+    const { arena, controller } = harness({
+      load: async () => first,
+      register: (_texture, decoded) => { registered.push(decoded); },
+    });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+
+    const suppressed = controller.suppressGpuResidency(textureCacheKey(texture));
+    expect(settle(controller, suppressed)).toBeUndefined();
+    controller.publishPrepared(texture, replacement);
+    controller.restore();
+
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 1, resources: 0 });
+    expect(resourceArenaSourceReferenceCount(arena, replacement)).toBeGreaterThan(0);
+    expect(registered).toEqual([first, replacement]);
+    controller.request(texture);
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
+  it("settles a suppressed pending upload without resurrecting GPU work until request", async () => {
+    const decoded = source(14);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/pending.png" };
+    let leaseCommits = 0;
+    const { arena, controller, gl } = harness({ load: async () => decoded });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+
+    const report = controller.suppressGpuResidency(textureCacheKey(texture));
+    expect(report).toMatchObject({ capacityReleased: true, operationFailure: undefined });
+    expect(controller.settleGpuReport(report)).toBeUndefined();
+    expect(controller.snapshot()).toMatchObject({
+      gpuSuppressedRows: 1,
+      resources: 0,
+      sources: { starts: 1, subscribers: 1 },
+    });
+    expect(resourceArenaSourceReferenceCount(arena, decoded)).toBeGreaterThan(0);
+    expect(gl.deleted).toEqual([]);
+
+    const admission = {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => {
+          leaseCommits += 1;
+          return { release: () => undefined };
+        },
+      }),
+    };
+    expect(settle(controller, controller.process(0, 1, admission))).toBeUndefined();
+    controller.restore();
+    expect(settle(controller, controller.process(1, 1, admission))).toBeUndefined();
+    expect(leaseCommits).toBe(0);
+    expect(controller.snapshot().resources).toBe(0);
+
+    controller.request(texture);
+    expect(settle(controller, controller.process(2, 1, admission))).toBeUndefined();
+    expect(leaseCommits).toBe(1);
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
+  it("accounts for an opaque deletion failure while keeping suppression and re-promotion coherent", async () => {
+    const decoded = source(13);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/opaque-delete.png" };
+    let leaseReleases = 0;
+    const { arena, controller, gl } = harness({ load: async () => decoded });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+    expect(settle(controller, controller.process(0, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { leaseReleases += 1; } }),
+      }),
+    }))).toBeUndefined();
+    gl.deleteFailure = undefined;
+    gl.deleteFailurePresent = true;
+
+    const report = controller.suppressGpuResidency(textureCacheKey(texture));
+    expect(report.capacityReleased).toBe(false);
+    expect(report.operationFailure).toEqual({ error: undefined });
+    expect(report).toMatchObject({ quarantinedBytesAfter: 4, quarantinedBytesBefore: 0 });
+    expect(controller.snapshot()).toMatchObject({
+      gpuSuppressedRows: 1,
+      quarantinedBytes: 4,
+      resources: 0,
+    });
+    expect(leaseReleases).toBe(1);
+    expect(controller.settleGpuReport(report)).toBeUndefined();
+    expect(controller.settleGpuReport(report)?.error).toEqual(
+      new Error("Ordinary texture GPU report was already settled"),
+    );
+
+    controller.restore();
+    expect(controller.snapshot().resources).toBe(0);
+    controller.request(texture);
+    expect(controller.snapshot()).toMatchObject({ gpuSuppressedRows: 0, resources: 1 });
+    expect(controller.snapshot().sources.starts).toBe(1);
+
+    expect(settle(controller, controller.release(textureCacheKey(texture)))).toBeUndefined();
+    controller.disposeSources();
+  });
+
   it("does not install a released subscription after synchronous publication failure", async () => {
     const decoded = source(1);
     const base: TextureAssetUploadRef = { kind: "asset", uri: "/shared.png" };
@@ -270,6 +444,7 @@ describe("ordinary texture residency controller", () => {
     const upload = controller.process(0, 1, successfulAdmission);
     expect(settle(controller, upload)).toBeUndefined();
     gl.deleteFailure = deletionFailure;
+    gl.deleteFailurePresent = true;
 
     const release = controller.release(textureCacheKey(texture));
     expect(release.operationFailure?.error).toBe(closeFailure);
@@ -285,14 +460,16 @@ type Command =
   | { readonly kind: "process"; readonly permanent: boolean }
   | { readonly kind: "publish"; readonly source: number }
   | { readonly kind: "release" }
-  | { readonly kind: "request" };
+  | { readonly kind: "request" }
+  | { readonly kind: "suppress-gpu" };
 
 const command = (random: SeededRandom): Command => {
-  switch (random.int(0, 5)) {
+  switch (random.int(0, 6)) {
     case 0: return { kind: "request" };
     case 1: return { kind: "publish", source: random.int(1, 5) };
     case 2: return { kind: "process", permanent: random.boolean(0.2) };
     case 3: return { kind: "drop-restore" };
+    case 4: return { kind: "suppress-gpu" };
     default: return { kind: "release" };
   }
 };
@@ -332,6 +509,9 @@ it("keeps merged residency rows bounded under seeded command traces", async () =
           }
           case "release":
             settle(setup.controller, setup.controller.release(textureCacheKey(texture)));
+            break;
+          case "suppress-gpu":
+            settle(setup.controller, setup.controller.suppressGpuResidency(textureCacheKey(texture)));
             break;
         }
         const snapshot = setup.controller.snapshot();

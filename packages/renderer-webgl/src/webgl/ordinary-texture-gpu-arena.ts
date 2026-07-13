@@ -32,7 +32,10 @@ export interface OrdinaryTexturePendingUpload {
 }
 
 export interface OrdinaryTextureGpuReleaseResult {
-  readonly releaseError?: unknown;
+  readonly releaseError: unknown;
+  readonly releaseErrorPresent: boolean;
+  /** Whether a logical GPU resource row was removed. */
+  readonly released: boolean;
 }
 
 export interface OrdinaryTextureGpuLease {
@@ -410,7 +413,9 @@ export const releaseOrdinaryTextureGpuResource = (
 ): OrdinaryTextureGpuReleaseResult => {
   const state = stateOf(arena);
   const resource = state.resources.get(key);
-  if (resource === undefined) return {};
+  if (resource === undefined) {
+    return { releaseError: undefined, releaseErrorPresent: false, released: false };
+  }
   state.resources.delete(key);
   const pending = resource.pendingUpload;
   if (pending !== undefined) {
@@ -418,17 +423,29 @@ export const releaseOrdinaryTextureGpuResource = (
     clearQueuedResource(state, resource);
     publishOutcome(state, "discarded", resource, pending);
   }
-  resource.lease?.release();
+  let releaseError: unknown;
+  let releaseErrorPresent = false;
+  try {
+    resource.lease?.release();
+  } catch (error) {
+    releaseError = error;
+    releaseErrorPresent = true;
+  }
   delete resource.lease;
   const texture = resource.texture;
-  if (texture === undefined) return {};
+  if (texture === undefined) {
+    return { releaseError, releaseErrorPresent, released: true };
+  }
   try {
     releaseOwnedTexture(state.handles, texture);
-    return {};
-  } catch (releaseError) {
+  } catch (error) {
     state.quarantinedBytes += resource.gpuBytes;
-    return { releaseError };
+    if (!releaseErrorPresent) {
+      releaseError = error;
+      releaseErrorPresent = true;
+    }
   }
+  return { releaseError, releaseErrorPresent, released: true };
 };
 
 export const dropOrdinaryTextureGpuContext = (

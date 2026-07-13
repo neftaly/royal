@@ -414,6 +414,75 @@ describe("ordinary texture GPU arena", () => {
     dropOrdinaryTextureGpuContext(arena);
     expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
   });
+  it("removes uploaded residency once and releases its durable lease", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "generated", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let releases = 0;
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { releases += 1; } }),
+      }),
+    });
+
+    expect(releaseOrdinaryTextureGpuResource(arena, "generated")).toEqual({
+      releaseError: undefined,
+      releaseErrorPresent: false,
+      released: true,
+    });
+    expect(releaseOrdinaryTextureGpuResource(arena, "generated")).toEqual({
+      releaseError: undefined,
+      releaseErrorPresent: false,
+      released: false,
+    });
+    expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+    expect(gl.deleted).toHaveLength(1);
+    expect(releases).toBe(1);
+  });
+  it("distinguishes an opaque deletion failure from successful removal", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "opaque", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    let releases = 0;
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { releases += 1; } }),
+      }),
+    });
+    gl.deleteFault = undefined;
+    gl.deleteFaultPresent = true;
+
+    expect(releaseOrdinaryTextureGpuResource(arena, "opaque")).toEqual({
+      releaseError: undefined,
+      releaseErrorPresent: true,
+      released: true,
+    });
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(4);
+    expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+    expect(releases).toBe(1);
+  });
+  it("still deletes the texture when durable lease release throws opaquely", () => {
+    const { arena, gl } = setup();
+    const resource = ensureOrdinaryTextureGpuResource(arena, "lease-failure", 1);
+    queueOrdinaryTextureUpload(arena, resource, { source: source(1), texture });
+    processOrdinaryTextureUploads(arena, 1, 1, {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => ({ release: () => { throw undefined; } }),
+      }),
+    });
+
+    expect(releaseOrdinaryTextureGpuResource(arena, "lease-failure")).toEqual({
+      releaseError: undefined,
+      releaseErrorPresent: true,
+      released: true,
+    });
+    expect(gl.deleted).toHaveLength(1);
+    expect(ordinaryTextureGpuQuarantinedBytes(arena)).toBe(0);
+    expect(ordinaryTextureGpuResourceCount(arena)).toBe(0);
+  });
   it("keeps context-loss cleanup GL-free and publishes pending retention", () => {
     const { arena, gl } = setup();
     const resource = ensureOrdinaryTextureGpuResource(arena, "a", 1);
