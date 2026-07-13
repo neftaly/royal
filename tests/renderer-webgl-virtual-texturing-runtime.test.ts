@@ -298,6 +298,118 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(table.dirtyPageTableUpdate(0)).toEqual({ page, pageKey: "0/0/0", slot: 0 });
   });
 
+  it("keeps inactive resident pages cached and remaps them without another residency allocation", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const page = { mip: 0, x: 0, y: 0 };
+    const pageKey = virtualTexturePageKey(page);
+
+    table.reconcileActivePageKeys(new Set());
+    const assignment = table.ensureResident(page);
+    expect(table.residentCount).toBe(1);
+    expect(table.activeResidentCount).toBe(0);
+    expect(table.takeDirtyPageTableUpdates()).toEqual([]);
+
+    table.reconcileActivePageKeys(new Set([pageKey]));
+    expect(table.activeResidentCount).toBe(1);
+    expect(table.takeDirtyPageTableUpdates()).toEqual([
+      { page, pageKey, residentMip: 0, slot: assignment.slot },
+    ]);
+
+    table.reconcileActivePageKeys(new Set());
+    expect(table.residentCount).toBe(1);
+    expect(table.takeDirtyPageTableUpdates()).toEqual([{ page, pageKey }]);
+
+    table.reconcileActivePageKeys(new Set([pageKey]));
+    expect(table.residentSlot(page)).toBe(assignment.slot);
+    expect(table.takeDirtyPageTableUpdates()).toEqual([
+      { page, pageKey, residentMip: 0, slot: assignment.slot },
+    ]);
+  });
+
+  it("coalesces rapid partially-flushed reconciliations into a bounded authoritative mapping", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 3 });
+    const parent = { mip: 2, x: 0, y: 0 };
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 3, y: 3 };
+    const records = [parent, first, second].map((page) => table.ensureResident(page));
+    const gpuSlots = new Array<number | undefined>(16);
+    const apply = (update: NonNullable<ReturnType<typeof table.dirtyPageTableUpdate>>): void => {
+      const coverage = 2 ** update.page.mip;
+      for (let y = update.page.y * coverage; y < (update.page.y + 1) * coverage; y += 1) {
+        for (let x = update.page.x * coverage; x < (update.page.x + 1) * coverage; x += 1) {
+          gpuSlots[y * 4 + x] = update.slot;
+        }
+      }
+    };
+
+    for (const update of table.takeDirtyPageTableUpdates()) apply(update);
+    table.reconcileActivePageKeys(new Set([records[1]?.pageKey ?? ""]));
+    const partiallyFlushed = table.dirtyPageTableUpdate(0);
+    expect(partiallyFlushed).toBeDefined();
+    if (partiallyFlushed !== undefined) apply(partiallyFlushed);
+    table.commitDirtyPageTableUpdate();
+
+    // Resize/camera jitter may publish many working sets before the governor
+    // admits another table write. The queue remains bounded by physical cache,
+    // and its final snapshot does not depend on the consumed prefix above.
+    for (let index = 0; index < 1_000; index += 1) {
+      const target = index % 2 === 0 ? records[1]?.pageKey : records[2]?.pageKey;
+      table.reconcileActivePageKeys(new Set(target === undefined ? [] : [target]));
+      expect(table.dirtyPageTableUpdateCount).toBeLessThanOrEqual(table.residentCount);
+    }
+    table.reconcileActivePageKeys(new Set([records[2]?.pageKey ?? ""]));
+    for (const update of table.takeDirtyPageTableUpdates()) apply(update);
+
+    expect(gpuSlots).toEqual(Array.from({ length: 16 }, (_unused, index) => (
+      index === 15 ? records[2]?.slot : undefined
+    )));
+  });
+
+  it("preserves transaction updates ahead of superseding reconciliation snapshots", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const first = { mip: 0, x: 0, y: 0 };
+    const second = { mip: 0, x: 1, y: 0 };
+    const firstAssignment = table.ensureResident(first);
+    const secondAssignment = table.ensureResident(second);
+
+    table.reconcileActivePageKeys(new Set([firstAssignment.pageKey]));
+    table.reconcileActivePageKeys(new Set([secondAssignment.pageKey]));
+
+    expect(table.takeDirtyPageTableUpdates()).toEqual([
+      { page: first, pageKey: firstAssignment.pageKey, slot: firstAssignment.slot },
+      { page: second, pageKey: secondAssignment.pageKey, slot: secondAssignment.slot },
+      { page: first, pageKey: firstAssignment.pageKey },
+      {
+        page: second,
+        pageKey: secondAssignment.pageKey,
+        residentMip: second.mip,
+        slot: secondAssignment.slot,
+      },
+    ]);
+  });
+
+  it("uses only active resident ancestors as eviction fallbacks", () => {
+    const table = new VirtualTextureAtlasPageTable({ slotCount: 2 });
+    const parent = { mip: 1, x: 0, y: 0 };
+    const child = { mip: 0, x: 0, y: 0 };
+    const replacement = { mip: 0, x: 1, y: 0 };
+    table.ensureResident(parent);
+    table.ensureResident(child);
+    table.takeDirtyPageTableUpdates();
+
+    table.reconcileActivePageKeys(new Set([virtualTexturePageKey(child), virtualTexturePageKey(replacement)]));
+    table.takeDirtyPageTableUpdates();
+    const assignment = table.ensureResident(replacement, {
+      protectedPages: new Set([virtualTexturePageKey(parent)]),
+    });
+
+    expect(assignment.evicted?.pageKey).toBe(virtualTexturePageKey(child));
+    expect(table.takeDirtyPageTableUpdates()).toEqual([
+      { page: child, pageKey: virtualTexturePageKey(child) },
+      { page: replacement, pageKey: virtualTexturePageKey(replacement), slot: assignment.slot },
+    ]);
+  });
+
   it("leaves a planned assignment unpublished when the atlas upload fails", () => {
     const table = new VirtualTextureAtlasPageTable({ slotCount: 1 });
     const first = { mip: 0, x: 0, y: 0 };
@@ -1703,6 +1815,143 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.dispose();
   });
 
+  it.each(["resolved", "abort-rejected"] as const)(
+    "does not let an obsolete %s page settlement corrupt a rapid same-page rebound",
+    async (oldSettlement) => {
+      vi.stubGlobal("Image", ControlledImage);
+      vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+      const fetchRequests = installFetchQueue();
+      const { gl } = fakeGl();
+      const root = createWebGlRoot(fakeCanvas(gl));
+      const material = unlitMaterial({ texture: virtualTexture("/vt/rebound-page.json") });
+      const visible = renderScene(material);
+
+      root.render(visible);
+      fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+      await flushMicrotasks();
+      expect(ControlledImage.instances).toHaveLength(1);
+      const obsolete = ControlledImage.instances[0]!;
+
+      if (oldSettlement === "resolved") {
+        // Resolve the inner decode, but resume this test before the pageImage
+        // continuation consumes it. Removal below can then replace ownership
+        // while the old successful continuation is already queued.
+        obsolete.settleLoad();
+        await Promise.resolve();
+      }
+      root.render(renderScene(material, { cameraX: 100 }));
+      root.render(visible);
+      await flushMicrotasks();
+
+      expect(ControlledImage.instances).toHaveLength(2);
+      expect(root.snapshot().resourceGovernor.total.jobs).toBe(1);
+      expect(root.snapshot().virtualTexturing).toMatchObject({
+        outstandingPageRequests: 1,
+        pageLoadFailures: 0,
+      });
+
+      // The stale continuation must not release the rebound's loading
+      // lifecycle and thereby grant a duplicate third request.
+      root.render(visible);
+      root.render(visible);
+      expect(ControlledImage.instances).toHaveLength(2);
+
+      ControlledImage.instances[1]!.settleLoad();
+      await flushMicrotasks();
+      root.render(visible);
+      expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+      expect(root.snapshot().virtualTexturing).toMatchObject({
+        outstandingPageRequests: 0,
+        pageLoadFailures: 0,
+        residentPages: 1,
+      });
+      root.dispose();
+    },
+  );
+
+  it("does not spin while transition pages load and aborts work removed by exact demand", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/obsolete-page.json") });
+    const visible = renderScene(material);
+
+    root.render(visible);
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances.length).toBeGreaterThan(0);
+    expect(root.snapshot().resourceGovernor.total.jobs).toBeGreaterThan(0);
+    const wakesWhileLoading = requestAnimationFrame.mock.calls.length;
+    root.render(visible);
+    root.render(visible);
+    root.render(visible);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesWhileLoading);
+
+    const obsoleteImages = [...ControlledImage.instances];
+    root.render(renderScene(material, { cameraX: 100 }));
+    await flushMicrotasks();
+
+    expect(obsoleteImages.every((image) => image.src === "")).toBe(true);
+    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      activePages: 0,
+      outstandingPageRequests: 0,
+      pageLoadFailures: 0,
+      pendingPages: 0,
+    });
+    root.dispose();
+  });
+
+  it("wakes render-on-demand exactly once after final VT settlement", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const scheduledFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrames.push(callback);
+      return scheduledFrames.length;
+    }));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/settlement-wake.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(1);
+
+    // Merely waiting on decode must not create a self-invalidating frame loop.
+    scheduledFrames.shift()?.(0);
+    await flushMicrotasks();
+    expect(scheduledFrames).toHaveLength(0);
+
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    expect(scheduledFrames).toHaveLength(1);
+
+    // This frame performs the final atlas/page-table settlement. Even though
+    // no GPU action remains, settlement schedules one demand-convergence pass.
+    scheduledFrames.shift()!(1);
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      activePages: 1,
+      outstandingPageRequests: 0,
+      pendingPages: 0,
+      residentPages: 1,
+    });
+    expect(scheduledFrames).toHaveLength(1);
+
+    // The convergence pass observes physical residency, publishes the exact
+    // working set, and quiesces instead of scheduling another frame.
+    scheduledFrames.shift()!(2);
+    await flushMicrotasks();
+    expect(scheduledFrames).toHaveLength(0);
+    root.dispose();
+  });
+
   it("uses the opted-in generated raster VT policy without manifest requests", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const { canvases, contexts } = installCanvas2d();
@@ -1841,7 +2090,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       generatedManifestUses: 1,
       generatedPageFailures: 0,
       generatedPageRequests: 2,
-      generatedPagesTarget: 5,
+      generatedPagesTarget: 341,
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
@@ -1892,7 +2141,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(globalThis.document?.createElement).not.toHaveBeenCalled();
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
-      generatedPagesTarget: 5,
+      generatedPagesTarget: 341,
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
@@ -2305,7 +2554,12 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(caught).toBeUndefined();
     expect(ControlledImage.closeCalls).toBe(closesBeforeDemandedUpload);
     expect(pageUploads(calls)).toHaveLength(1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 0, uploadedPages: 0 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      activePages: 0,
+      cachedPages: 1,
+      residentPages: 1,
+      uploadedPages: 0,
+    });
 
     pageTableUploadFailure.enabled = false;
     expect(() => root.render(graph)).toThrow(ControlledImage.closeError);
@@ -2832,8 +3086,21 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(ControlledImage.instances.filter((image) => image.src.includes("/pages/m2-")).length)
       .toBe(refinedRequestsBeforeZoomOut);
     expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/zoom.json"]);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ residentPages: 3 }));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      cachedPages: 3,
+      residentPages: 3,
+    }));
+    expect(root.snapshot().virtualTexturing.activePagesByMip.reduce((sum, count) => sum + count, 0))
+      .toBe(root.snapshot().virtualTexturing.activePages);
     expect(root.snapshot().virtualTexturing.pageTableUpdates).toBe(updatesAfterCoarseSettle);
+
+    root.render(renderScene(material, { cameraX: 100 }));
+    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
+      activePages: 0,
+      activePagesByMip: [],
+      cachedPages: 3,
+      residentPages: 3,
+    }));
   });
 
   it("expands resident parent page-table updates over covered mip-0 cells with encoded fallback offsets", async () => {
@@ -3152,6 +3419,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
       generatedRasterVirtualTextures: true,
+      generatedSvgVirtualTextureRasterDensity: 8,
       virtualTexturePhysicalByteBudget: 123_456,
     });
 
@@ -3160,6 +3428,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       alpha: true,
       antialias: true,
       generatedRasterVirtualTextures: true,
+      generatedSvgVirtualTextureRasterDensity: 8,
       virtualTexturePhysicalByteBudget: 123_456,
     });
     root.dispose();

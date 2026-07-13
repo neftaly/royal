@@ -115,6 +115,7 @@ describe("React root public API", () => {
         alpha: false,
         antialias: true,
         generatedRasterVirtualTextures: true,
+        generatedSvgVirtualTextureRasterDensity: 4,
         virtualTexturePhysicalByteBudget: 1024,
       },
       disposed: false,
@@ -136,6 +137,7 @@ describe("React root public API", () => {
     });
     expect(webGlRootForRoyalRoot(root).options).toMatchObject({
       generatedRasterVirtualTextures: true,
+      generatedSvgVirtualTextureRasterDensity: 4,
       virtualTexturePhysicalByteBudget: 1024,
     });
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
@@ -146,6 +148,7 @@ describe("React root public API", () => {
       alpha: false,
       antialias: true,
       generatedRasterVirtualTextures: true,
+      generatedSvgVirtualTextureRasterDensity: 4,
       virtualTexturePhysicalByteBudget: 1024,
     });
     expect(Object.isFrozen(root.context)).toBe(true);

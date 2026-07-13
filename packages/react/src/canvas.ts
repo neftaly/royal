@@ -145,12 +145,14 @@ export const normalizeCanvasRendererOptions = (
   const alpha = context?.alpha;
   const antialias = context?.antialias;
   const generatedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const generatedSvgVirtualTextureRasterDensity = context?.generatedSvgVirtualTextureRasterDensity;
   const resourceGovernorPolicy = context?.resourceGovernorPolicy;
   const virtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
   if (
     alpha === undefined
     && antialias === undefined
     && generatedRasterVirtualTextures === undefined
+    && generatedSvgVirtualTextureRasterDensity === undefined
     && resourceGovernorPolicy === undefined
     && virtualTexturePhysicalByteBudget === undefined
   ) return undefined;
@@ -162,6 +164,9 @@ export const normalizeCanvasRendererOptions = (
       ...(generatedRasterVirtualTextures === undefined
         ? {}
         : { generatedRasterVirtualTextures }),
+      ...(generatedSvgVirtualTextureRasterDensity === undefined
+        ? {}
+        : { generatedSvgVirtualTextureRasterDensity }),
       ...(resourceGovernorPolicy === undefined ? {} : { resourceGovernorPolicy }),
       ...(virtualTexturePhysicalByteBudget === undefined
         ? {}
@@ -443,6 +448,7 @@ export const Canvas = ({
   const contextAlpha = context?.alpha;
   const contextAntialias = context?.antialias;
   const contextGeneratedRasterVirtualTextures = context?.generatedRasterVirtualTextures;
+  const contextGeneratedSvgVirtualTextureRasterDensity = context?.generatedSvgVirtualTextureRasterDensity;
   const suppliedResourceGovernorPolicy = context?.resourceGovernorPolicy;
   const resourceGovernorPolicyKey = resourceGovernorPolicySignature(suppliedResourceGovernorPolicy);
   const resourceGovernorPolicyRef = useRef<{
@@ -474,6 +480,9 @@ export const Canvas = ({
       ...(contextGeneratedRasterVirtualTextures === undefined
         ? {}
         : { generatedRasterVirtualTextures: contextGeneratedRasterVirtualTextures }),
+      ...(contextGeneratedSvgVirtualTextureRasterDensity === undefined
+        ? {}
+        : { generatedSvgVirtualTextureRasterDensity: contextGeneratedSvgVirtualTextureRasterDensity }),
       ...(contextResourceGovernorPolicy === undefined
         ? {}
         : { resourceGovernorPolicy: contextResourceGovernorPolicy }),
@@ -485,6 +494,7 @@ export const Canvas = ({
       contextAlpha,
       contextAntialias,
       contextGeneratedRasterVirtualTextures,
+      contextGeneratedSvgVirtualTextureRasterDensity,
       contextResourceGovernorPolicy,
       contextVirtualTexturePhysicalByteBudget,
     ],

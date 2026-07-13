@@ -110,10 +110,12 @@ export interface VirtualTextureGpuBinding {
 }
 
 export interface VirtualTextureGpuResourceSnapshot {
+  readonly activePages: number;
   readonly admissionKind: VirtualTextureGpuAdmissionResult["kind"];
   readonly allocated: boolean;
   readonly allocatedBytes: number;
   readonly atlasBytes: number;
+  readonly cachedPages: number;
   readonly dirtyPageTableUpdates: number;
   readonly drawable: boolean;
   readonly generation?: number;
@@ -181,7 +183,7 @@ type PhysicalAllocation = {
   readonly generation: number;
   readonly effectiveSlots: number;
   readonly pageTable: VirtualTextureAtlasPageTable;
-  pageTableUploadCharged: boolean;
+  pageTableUploadChargedFor?: VirtualTexturePageTableUpdate;
   readonly pageTableHeight: number;
   readonly pageTableUploadScratch: Uint8Array;
   readonly pageTableTexture: WebGLTexture;
@@ -466,6 +468,10 @@ const allocate = (
       null,
     );
     setSampler(gl, gl.NEAREST, gl.NEAREST);
+    const pageTable = new VirtualTextureAtlasPageTable({ slotCount: slots });
+    if (resource.desiredPageKeysPublished) {
+      pageTable.reconcileActivePageKeys(resource.desiredPageKeys);
+    }
     return {
       allocatedBytes: admission.allocatedBytes,
       atlasGridColumns,
@@ -473,9 +479,8 @@ const allocate = (
       atlasTexture,
       effectiveSlots: admission.effectiveSlots,
       generation,
-      pageTable: new VirtualTextureAtlasPageTable({ slotCount: slots }),
+      pageTable,
       pageTableHeight,
-      pageTableUploadCharged: false,
       pageTableUploadScratch: new Uint8Array(PAGE_TABLE_UPLOAD_SCRATCH_BYTES),
       pageTableTexture,
       pageTableWidth,
@@ -716,6 +721,20 @@ export const setVirtualTextureGpuDesiredPageKeys = (
   for (const pageKey of pageKeys) mutable.desiredPageKeys.add(pageKey);
   mutable.desiredPageKeysPublished = true;
 
+  const allocation = mutable.allocation;
+  if (allocation !== undefined) {
+    const changed = allocation.pageTable.reconcileActivePageKeys(mutable.desiredPageKeys);
+    // Withdraw stale logical visibility before its queued GPU invalidation.
+    // Newly active cached pages remain withheld until the page-table flush
+    // succeeds and synchronizes them below.
+    for (const pageKey of mutable.visibleAssignments.keys()) {
+      if (!mutable.desiredPageKeys.has(pageKey)) mutable.visibleAssignments.delete(pageKey);
+    }
+    if (changed && allocation.pageTable.dirtyPageTableUpdateCount > 0) {
+      state.wakeRequested = true;
+    }
+  }
+
   const firstCancelable = mutable.pendingHead + (mutable.inFlightUpload === undefined ? 0 : 1);
   let writeIndex = firstCancelable;
   for (let readIndex = firstCancelable; readIndex < mutable.pendingUploads.length; readIndex += 1) {
@@ -731,6 +750,16 @@ export const setVirtualTextureGpuDesiredPageKeys = (
   mutable.pendingUploads.length = writeIndex;
   compactPending(mutable);
   return true;
+};
+
+const synchronizeVisibleAssignments = (
+  resource: MutableResource,
+  allocation: PhysicalAllocation,
+): void => {
+  resource.visibleAssignments.clear();
+  for (const record of allocation.pageTable.activeResidentPages()) {
+    resource.visibleAssignments.set(record.pageKey, record);
+  }
 };
 
 const pageTableRegion = (
@@ -767,14 +796,19 @@ const flushNextPageTableUpdate = (
   if (!ownsTexture(state.handles, allocation.pageTableTexture)) return "empty";
   const update = allocation.pageTable.dirtyPageTableUpdate(0);
   if (update === undefined) return "empty";
+  if (
+    allocation.pageTableUploadChargedFor !== undefined
+    && allocation.pageTableUploadChargedFor !== update
+  ) delete allocation.pageTableUploadChargedFor;
+  const uploadAlreadyCharged = allocation.pageTableUploadChargedFor === update;
   const region = pageTableRegion(allocation, update);
   const uploadBytes = region === undefined ? 0 : region.width * region.height * 4;
-  const reservation = uploadBytes === 0 || allocation.pageTableUploadCharged
+  const reservation = uploadBytes === 0 || uploadAlreadyCharged
     ? undefined
     : admission?.reserve(uploadBytes);
   if (
     uploadBytes !== 0
-    && !allocation.pageTableUploadCharged
+    && !uploadAlreadyCharged
     && admission !== undefined
     && reservation === undefined
   ) return "blocked";
@@ -799,7 +833,7 @@ const flushNextPageTableUpdate = (
           const width = Math.min(chunkWidth, region.width - x);
           const byteLength = width * height * 4;
           attempted = true;
-          allocation.pageTableUploadCharged = true;
+          allocation.pageTableUploadChargedFor = update;
           gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
@@ -822,7 +856,7 @@ const flushNextPageTableUpdate = (
     throw error;
   }
   allocation.pageTable.commitDirtyPageTableUpdate();
-  allocation.pageTableUploadCharged = false;
+  delete allocation.pageTableUploadChargedFor;
   return "flushed";
 };
 
@@ -835,7 +869,10 @@ const flushPageTable = (
   for (;;) {
     const result = flushNextPageTableUpdate(state, resource, allocation, admission);
     if (result === "blocked") return false;
-    if (result === "empty") return true;
+    if (result === "empty") {
+      synchronizeVisibleAssignments(resource, allocation);
+      return true;
+    }
     // Drain complete page-table updates; a thrown GL call leaves the current
     // update uncommitted so the owning upload phase can retry it idempotently.
   }
@@ -882,10 +919,8 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   const inFlight = resource.inFlightUpload;
   if (inFlight === undefined) return;
   const { assignment, upload } = inFlight;
-  if (assignment.evicted !== undefined) {
-    resource.visibleAssignments.delete(assignment.evicted.pageKey);
-  }
-  resource.visibleAssignments.set(assignment.pageKey, assignment);
+  const allocation = resource.allocation;
+  if (allocation !== undefined) synchronizeVisibleAssignments(resource, allocation);
   resource.pendingHead += 1;
   publish(state, resource, "completed", upload, assignment.evicted?.pageKey);
   resource.uploadedPageBytes += resource.options.manifest.pageSize ** 2 * 4;
@@ -893,6 +928,10 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   state.uploadsThisFrame += 1;
   delete resource.inFlightUpload;
   compactPending(resource);
+  // Settlement can make a previously admitted page physically resident even
+  // when this was the final actionable GPU operation. Wake demand planning so
+  // bounded replacement can admit its next tranche or drop transition overlap.
+  state.wakeRequested = true;
 };
 
 const resumeInFlightUpload = (
@@ -949,10 +988,12 @@ const startUpload = (
     ),
   });
   const assignment = transaction.assignment;
+  const evictionNeedsInvalidation = assignment.evicted !== undefined
+    && allocation.pageTable.isActivePageKey(assignment.evicted.pageKey);
   allocation.pageTable.commitResident(transaction);
   resource.inFlightUpload = {
     assignment,
-    phase: assignment.evicted === undefined ? "upload-atlas" : "invalidate-evicted",
+    phase: evictionNeedsInvalidation ? "invalidate-evicted" : "upload-atlas",
     upload,
   };
   if (assignment.evicted !== undefined) {
@@ -1011,8 +1052,11 @@ export const processVirtualTextureGpuUploads = (
         else reservation?.cancel();
         throw error;
       }
-    } else {
-      flushPageTable(state, resource, allocation, admission);
+    } else if (!flushPageTable(state, resource, allocation, admission)) {
+      // Independent reconciliation must reach the GPU before a new atlas
+      // transaction can claim or overwrite a slot. In particular, do not let
+      // an upload jump past a budget-blocked invalidation.
+      continue;
     }
     const upload = resource.pendingUploads[resource.pendingHead];
     if (upload !== undefined && resource.inFlightUpload === undefined) {
@@ -1054,10 +1098,13 @@ export const virtualTextureGpuHasActionableUploads = (
   for (const resource of state.resources.values()) {
     const allocation = resource.allocation;
     if (
-      resource.pendingHead < resource.pendingUploads.length
-      && allocation !== undefined
+      allocation !== undefined
       && ownsTexture(state.handles, allocation.atlasTexture)
       && ownsTexture(state.handles, allocation.pageTableTexture)
+      && (
+        resource.pendingHead < resource.pendingUploads.length
+        || allocation.pageTable.dirtyPageTableUpdateCount > 0
+      )
     ) return true;
   }
   return false;
@@ -1099,6 +1146,24 @@ export const virtualTextureGpuExactResidency = (
   const resource = stateOf(arena).resources.get(key);
   const assignment = resource?.visibleAssignments.get(virtualTexturePageKey(page));
   return assignment === undefined ? undefined : assignmentResidency(assignment);
+};
+
+/** Pure physical-cache query; inactive cached pages are intentionally included. */
+export const virtualTextureGpuCachedResidency = (
+  arena: VirtualTextureGpuArena,
+  key: string,
+  page: VirtualTexturePageId,
+): VirtualTextureGpuResidency | undefined => {
+  const resource = stateOf(arena).resources.get(key);
+  const allocation = resource?.allocation;
+  const record = allocation?.pageTable.residentPage(virtualTexturePageKey(page));
+  if (record === undefined) return undefined;
+  const inFlight = resource?.inFlightUpload;
+  if (
+    inFlight?.assignment.pageKey === record.pageKey
+    && inFlight.phase !== "publish-page-table"
+  ) return undefined;
+  return assignmentResidency(record);
 };
 
 /** Pure fallback coverage query; does not touch clock reference bits. */
@@ -1180,11 +1245,20 @@ export const virtualTextureGpuResourceSnapshot = (
   const mutable = mutableResource(resource);
   const allocation = mutable.allocation;
   const supported = mutable.admission.kind === "supported" ? mutable.admission : undefined;
+  const stagedPageKey = mutable.inFlightUpload?.phase === "publish-page-table"
+    ? undefined
+    : mutable.inFlightUpload?.assignment.pageKey;
+  const cachedPages = allocation === undefined
+    ? 0
+    : allocation.pageTable.residentPages()
+      .filter((record) => record.pageKey !== stagedPageKey).length;
   return {
+    activePages: mutable.visibleAssignments.size,
     admissionKind: mutable.admission.kind,
     allocated: allocation !== undefined,
     allocatedBytes: allocation?.allocatedBytes ?? 0,
     atlasBytes: supported?.atlasBytes ?? 0,
+    cachedPages,
     dirtyPageTableUpdates: allocation?.pageTable.dirtyPageTableUpdateCount ?? 0,
     drawable: mutable.visibleAssignments.size > 0,
     effectiveSlots: supported?.effectiveSlots ?? 0,
@@ -1193,15 +1267,15 @@ export const virtualTextureGpuResourceSnapshot = (
     paddedSlots: supported?.paddedSlots ?? 0,
     pageTableBytes: supported?.pageTableBytes ?? 0,
     pageTableUpdates: mutable.pageTableUpdates,
-    residentPages: mutable.visibleAssignments.size,
+    residentPages: cachedPages,
     sourceGeneration: mutable.options.sourceGeneration,
     uploadedPageBytes: mutable.uploadedPageBytes,
     uploadedPages: mutable.uploadedPages,
   };
 };
 
-/** Adds this resource's resident page counts to a diagnostics-owned mip histogram. */
-export const accumulateVirtualTextureGpuResidentPagesByMip = (
+/** Adds this resource's active page counts to a diagnostics-owned mip histogram. */
+export const accumulateVirtualTextureGpuActivePagesByMip = (
   resource: VirtualTextureGpuResource,
   target: number[],
 ): void => {
@@ -1209,6 +1283,32 @@ export const accumulateVirtualTextureGpuResidentPagesByMip = (
     while (target.length <= assignment.page.mip) target.push(0);
     target[assignment.page.mip] = target[assignment.page.mip]! + 1;
   }
+};
+
+/** Adds this resource's cached atlas page counts to a diagnostics-owned mip histogram. */
+export const accumulateVirtualTextureGpuCachedPagesByMip = (
+  resource: VirtualTextureGpuResource,
+  target: number[],
+): void => {
+  const allocation = mutableResource(resource).allocation;
+  if (allocation === undefined) return;
+  const inFlight = mutableResource(resource).inFlightUpload;
+  const stagedPageKey = inFlight?.phase === "publish-page-table"
+    ? undefined
+    : inFlight?.assignment.pageKey;
+  for (const record of allocation.pageTable.residentPages()) {
+    if (record.pageKey === stagedPageKey) continue;
+    while (target.length <= record.page.mip) target.push(0);
+    target[record.page.mip] = target[record.page.mip]! + 1;
+  }
+};
+
+/** Compatibility alias: resident pages are physical cached pages. */
+export const accumulateVirtualTextureGpuResidentPagesByMip = (
+  resource: VirtualTextureGpuResource,
+  target: number[],
+): void => {
+  accumulateVirtualTextureGpuCachedPagesByMip(resource, target);
 };
 
 export const virtualTextureGpuArenaSnapshot = (

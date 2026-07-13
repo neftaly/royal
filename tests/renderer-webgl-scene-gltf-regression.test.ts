@@ -7153,8 +7153,8 @@ describe("WebGL renderer scene and glTF regressions", () => {
 
     expect(ControlledImage.instances).toHaveLength(1);
     expect(ControlledImage.instances[0]?.src.startsWith("blob:")).toBe(true);
-    expect(await loader.objectUrlBlobs[0]?.text()).toContain("width=\"512\"");
-    expect(await loader.objectUrlBlobs[0]?.text()).toContain("height=\"512\"");
+    expect(await loader.objectUrlBlobs[0]?.text()).toContain("width=\"1024\"");
+    expect(await loader.objectUrlBlobs[0]?.text()).toContain("height=\"1024\"");
     for (const image of ControlledImage.instances) image.settleLoad();
     await flushMicrotasks();
     await waitForAnimationFrameWork(
@@ -7231,7 +7231,7 @@ describe("WebGL renderer scene and glTF regressions", () => {
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPageFailures: 0,
-      generatedPagesTarget: 5,
+      generatedPagesTarget: 341,
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
@@ -7285,9 +7285,9 @@ describe("WebGL renderer scene and glTF regressions", () => {
       calls.some((call) =>
         call.name === "texImage2D"
         && call.args[0] === gl.TEXTURE_2D
-        && call.args[3] === 1280
-        && call.args[4] === 1280),
-      "a 1024px generated SVG should fit its 16 + 4 + 1 page pyramid in a 5x5 atlas",
+        && call.args[3] === 2048
+        && call.args[4] === 2048),
+      "a 1024px SVG at default 4x density should use its bounded 64-slot 8x8 physical atlas",
     ).toBe(true);
   });
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { VirtualTextureManifestModel, VirtualTexturePageId } from
   "../packages/renderer-webgl/src/virtual-texturing";
 import {
+  accumulateVirtualTextureGpuActivePagesByMip,
+  accumulateVirtualTextureGpuCachedPagesByMip,
   accumulateVirtualTextureGpuResidentPagesByMip,
   admitVirtualTextureGpuResource,
   bindVirtualTextureGpuResource,
@@ -19,6 +21,7 @@ import {
   touchVirtualTextureGpuResidency,
   virtualTextureGpuArenaSnapshot,
   virtualTextureGpuAdmission,
+  virtualTextureGpuCachedResidency,
   virtualTextureGpuCoverage,
   virtualTextureGpuDrawable,
   virtualTextureGpuExactResidency,
@@ -491,6 +494,22 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "completed", upload: pending });
   });
 
+  it("publishes one sticky demand wake when the final page upload settles", () => {
+    const { arena } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    const pending = upload({ mip: 0, x: 0, y: 0 }, 1);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([pending.pageKey]));
+    expect(queueVirtualTextureGpuUpload(arena, resource, pending)).toBe(true);
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
+
+    processVirtualTextureGpuUploads(arena, 1);
+
+    expect(virtualTextureGpuHasActionableUploads(arena)).toBe(false);
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "completed", upload: pending });
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(false);
+  });
+
   it("leaves denied governor uploads queued without performing GL side effects", () => {
     const { arena, gl } = setup();
     const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
@@ -512,6 +531,48 @@ describe("virtual texture GPU arena", () => {
       uploadedPages: 0,
     });
     expect(virtualTextureGpuHasActionableUploads(arena)).toBe(true);
+  });
+
+  it("does not start an upload while an independent reconciliation flush is blocked", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options({ physicalSlots: 1 }));
+    const resident = upload({ mip: 0, x: 0, y: 0 }, 1);
+    queueVirtualTextureGpuUpload(arena, resource, resident);
+    processVirtualTextureGpuUploads(arena, 1);
+
+    const replacement = upload({ mip: 0, x: 1, y: 0 }, 2);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([replacement.pageKey]));
+    queueVirtualTextureGpuUpload(arena, resource, replacement);
+    const uploadsBefore = gl.subUploads.length;
+    const requestedBytes: number[] = [];
+    const blockedAdmission = {
+      reserve: (bytes: number) => {
+        requestedBytes.push(bytes);
+        return undefined;
+      },
+    };
+
+    processVirtualTextureGpuUploads(arena, 2, blockedAdmission);
+
+    expect(requestedBytes).toEqual([4]);
+    expect(gl.subUploads).toHaveLength(uploadsBefore);
+    expect(virtualTextureGpuCachedResidency(arena, "a", resident.page)).toBeDefined();
+    expect(virtualTextureGpuCachedResidency(arena, "a", replacement.page)).toBeUndefined();
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      dirtyPageTableUpdates: 1,
+      pendingUploads: 1,
+      uploadedPages: 1,
+    });
+
+    processVirtualTextureGpuUploads(arena, 2);
+    const resumed = gl.subUploads.slice(uploadsBefore);
+    expect(resumed.map(({ serial }) => serial)).toEqual([
+      2, // Reconciliation invalidates the old mapping.
+      1, // Only then may the atlas slot be overwritten.
+      2, // Finally publish the replacement mapping.
+    ]);
+    expect(resumed[1]?.source).toBe(replacement.image);
+    expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
   });
 
   it("retries only page-table publication when its admission follows an admitted atlas upload", () => {
@@ -547,8 +608,10 @@ describe("virtual texture GPU arena", () => {
     expect(gl.subUploads.filter(({ serial }) => serial === 2)).toHaveLength(pageTableUploadsBefore);
     expect({ atlasCommits, pageTableCommits }).toEqual({ atlasCommits: 1, pageTableCommits: 0 });
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      activePages: 0,
+      cachedPages: 1,
       pendingUploads: 1,
-      residentPages: 0,
+      residentPages: 1,
       uploadedPages: 0,
     });
 
@@ -650,9 +713,11 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuExactResidency(arena, "a", pending.page)).toBeUndefined();
     expect(virtualTextureGpuDrawable(arena, "a")).toBe(false);
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      activePages: 0,
+      cachedPages: 1,
       dirtyPageTableUpdates: 1,
       pendingUploads: 1,
-      residentPages: 0,
+      residentPages: 1,
       uploadedPages: 0,
     });
     const atlasUploads = gl.subUploads.filter(({ serial }) => serial === 1).length;
@@ -906,6 +971,43 @@ describe("virtual texture GPU arena", () => {
     });
   });
 
+  it("unmaps inactive pages while caching and reactivating them without an atlas upload", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
+    const pending = upload({ mip: 0, x: 0, y: 0 }, 1);
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([pending.pageKey]));
+    queueVirtualTextureGpuUpload(arena, resource, pending);
+    processVirtualTextureGpuUploads(arena, 1);
+    const atlasUploads = gl.subUploads.filter(({ serial }) => serial === 1).length;
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      activePages: 1,
+      cachedPages: 1,
+      residentPages: 1,
+    });
+
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set());
+    expect(virtualTextureGpuExactResidency(arena, "a", pending.page)).toBeUndefined();
+    expect(virtualTextureGpuCachedResidency(arena, "a", pending.page)).toBeDefined();
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({ activePages: 0, cachedPages: 1 });
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
+    processVirtualTextureGpuUploads(arena, 2);
+
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set([pending.pageKey]));
+    expect(virtualTextureGpuExactResidency(arena, "a", pending.page)).toBeUndefined();
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
+    processVirtualTextureGpuUploads(arena, 3);
+
+    expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploads);
+    expect(virtualTextureGpuCachedResidency(arena, "a", pending.page)).toBeDefined();
+    expect(virtualTextureGpuExactResidency(arena, "a", pending.page)).toBeDefined();
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      activePages: 1,
+      cachedPages: 1,
+      pendingUploads: 0,
+      uploadedPages: 1,
+    });
+  });
+
   it("retains an in-flight upload while canceling later queued work", () => {
     const { arena, gl } = setup();
     const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options());
@@ -933,6 +1035,8 @@ describe("virtual texture GPU arena", () => {
       upload: inFlight,
     });
     expect(virtualTextureGpuResourceSnapshot(resource).pendingUploads).toBe(0);
+    expect(virtualTextureGpuExactResidency(arena, "a", inFlight.page)).toBeUndefined();
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({ activePages: 0, cachedPages: 1 });
   });
 
   it("matches clock fallback behavior when every resident slot is protected", () => {
@@ -1141,7 +1245,13 @@ describe("virtual texture GPU arena", () => {
     queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 2, x: 0, y: 0 }, 2));
     processVirtualTextureGpuUploads(arena, 2);
     const residentPagesByMip: number[] = [];
+    const activePagesByMip: number[] = [];
+    const cachedPagesByMip: number[] = [];
+    accumulateVirtualTextureGpuActivePagesByMip(resource, activePagesByMip);
+    accumulateVirtualTextureGpuCachedPagesByMip(resource, cachedPagesByMip);
     accumulateVirtualTextureGpuResidentPagesByMip(resource, residentPagesByMip);
+    expect(activePagesByMip).toEqual([1, 0, 1]);
+    expect(cachedPagesByMip).toEqual([1, 0, 1]);
     expect(residentPagesByMip).toEqual([1, 0, 1]);
     gl.maxTextureUnits = 1;
     expect(bindVirtualTextureGpuResource(arena, "a", 3, 4)).toMatchObject({

@@ -3,6 +3,11 @@ import {
   type RoyalRendererDiagnosticsSnapshot,
 } from '@royal/react';
 import { useLayoutEffect, type ReactNode } from 'react';
+import {
+  copyNumberCounters,
+  copyVirtualTexturingCounters,
+  isRecord,
+} from './BenchmarkRendererSnapshotCounters';
 
 type RendererSnapshotBridge = typeof globalThis & {
   __royalExamplesGltfInstancingSnapshot?: () => RendererBenchmarkSnapshot | null;
@@ -76,9 +81,6 @@ const gltfInstancingCounterKeys = [
   'rootScaleUploadCalls',
 ] as const satisfies readonly (keyof GltfInstancingCounters)[];
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
 const copyGltfInstancingCounters = (value: unknown): GltfInstancingCounters | null => {
   if (!isRecord(value)) return null;
 
@@ -90,27 +92,6 @@ const copyGltfInstancingCounters = (value: unknown): GltfInstancingCounters | nu
   }
 
   return counters;
-};
-
-const copyNumberCounters = (value: unknown): Record<string, number> | null => {
-  if (!isRecord(value)) return null;
-
-  const counters: Record<string, number> = {};
-  for (const [key, counter] of Object.entries(value)) {
-    if (typeof counter === 'number' && Number.isFinite(counter)) counters[key] = counter;
-  }
-
-  return Object.keys(counters).length === 0 ? null : counters;
-};
-
-const copyVirtualTexturingCounters = (value: unknown): Record<string, number> | null => {
-  const counters = copyNumberCounters(value) ?? {};
-  if (isRecord(value) && Array.isArray(value.residentPagesByMip)) {
-    for (const [mip, pages] of value.residentPagesByMip.entries()) {
-      if (typeof pages === 'number' && Number.isFinite(pages)) counters[`residentPagesMip${mip}`] = pages;
-    }
-  }
-  return Object.keys(counters).length === 0 ? null : counters;
 };
 
 const copyRendererContextSnapshot = (value: unknown): RendererContextSnapshot | null => {

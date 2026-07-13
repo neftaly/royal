@@ -15,6 +15,8 @@ export interface RoyalRendererRootContextOptions {
   readonly antialias?: boolean;
   /** Generate VT pages for ordinary large raster textures. @defaultValue `false` */
   readonly generatedRasterVirtualTextures?: boolean;
+  /** Logical virtual texels per authored SVG CSS pixel. @defaultValue `4` */
+  readonly generatedSvgVirtualTextureRasterDensity?: number;
   /** Immutable cross-class CPU/GPU/job/upload budget policy. */
   readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
   /** Global physical byte budget shared by virtual textures. @defaultValue `67108864` */
@@ -128,6 +130,7 @@ export const createRendererRoot = (
     alpha: root.options.alpha,
     antialias: root.options.antialias,
     generatedRasterVirtualTextures: root.options.generatedRasterVirtualTextures,
+    generatedSvgVirtualTextureRasterDensity: root.options.generatedSvgVirtualTextureRasterDensity,
     ...(root.options.resourceGovernorPolicy === undefined
       ? {}
       : { resourceGovernorPolicy: root.options.resourceGovernorPolicy }),

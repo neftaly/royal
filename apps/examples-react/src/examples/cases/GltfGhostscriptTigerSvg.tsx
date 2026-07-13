@@ -9,12 +9,16 @@ import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasContextOptions } from '../example-context-options';
 
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
+const tigerCanvasContextOptions = {
+  ...exampleCanvasContextOptions,
+  generatedSvgVirtualTextureRasterDensity: 8,
+} as const;
 
 export const GltfGhostscriptTigerSvg = (): ReactNode => {
   const orbit = useOrbitCamera({
     initial: { distance: 0.72, pitch: 0.08, target: [0, -0.01, 0], yaw: 0.22 },
     far: 10,
-    near: 0.01,
+    near: 0.001,
   });
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
@@ -32,12 +36,12 @@ export const GltfGhostscriptTigerSvg = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF GS_texture_svg Ghostscript tiger card fixture"
-      context={exampleCanvasContextOptions}
+      context={tigerCanvasContextOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
       scene={renderScene}
     >
       <BenchmarkRendererSnapshot />
-      <OrbitControls orbit={orbit} maxDistance={2.5} minDistance={0.1} />
+      <OrbitControls orbit={orbit} maxDistance={2.5} minDistance={0.02} />
     </Canvas>
   );
 };

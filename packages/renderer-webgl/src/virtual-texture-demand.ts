@@ -355,11 +355,17 @@ const virtualTexturePageScreenError = (
 ): number => {
   const { clippedPolygonA, clippedPolygonB } = workspace;
   const [viewportWidth, viewportHeight] = viewportSize;
-  const grid = virtualTextureDemandPageGrid(manifest, page.mip);
-  const minPageU = page.x / grid.width;
-  const maxPageU = (page.x + 1) / grid.width;
-  const minPageV = page.y / grid.height;
-  const maxPageV = (page.y + 1) / grid.height;
+  const pageTexelSpan = virtualTexturePageTexelSpan(manifest, page.mip);
+  const [minPageU, maxPageU] = virtualTexturePageUvRange(
+    manifest.width,
+    page.x,
+    pageTexelSpan,
+  );
+  const [minPageV, maxPageV] = virtualTexturePageUvRange(
+    manifest.height,
+    page.y,
+    pageTexelSpan,
+  );
   let minNdcX = Number.POSITIVE_INFINITY;
   let maxNdcX = Number.NEGATIVE_INFINITY;
   let minNdcY = Number.POSITIVE_INFINITY;
@@ -422,6 +428,20 @@ export const virtualTextureDemandPageGrid = (
   width: virtualTextureMipDimension(Math.ceil(manifest.width / manifest.pageSize), mip),
 });
 
+const virtualTexturePageTexelSpan = (
+  manifest: VirtualTextureManifestModel,
+  mip: number,
+): number => manifest.pageSize * (2 ** mip);
+
+const virtualTexturePageUvRange = (
+  dimension: number,
+  pageIndex: number,
+  pageTexelSpan: number,
+): readonly [number, number] => [
+  Math.min(1, pageIndex * pageTexelSpan / dimension),
+  Math.min(1, (pageIndex + 1) * pageTexelSpan / dimension),
+];
+
 export const virtualTextureTargetMip = (
   manifest: VirtualTextureManifestModel,
   footprint: VirtualTextureScreenFootprint,
@@ -444,12 +464,25 @@ export const virtualTexturePagesForFootprint = (
   footprint: VirtualTextureScreenFootprint,
 ): readonly VirtualTexturePageId[] => {
   const grid = virtualTextureDemandPageGrid(manifest, mip);
-  const minX = Math.max(0, Math.min(grid.width - 1, Math.floor(footprint.minU * grid.width)));
-  const maxX = Math.max(minX, Math.min(grid.width - 1, Math.ceil(footprint.maxU * grid.width) - 1));
-  const minY = Math.max(0, Math.min(grid.height - 1, Math.floor(footprint.minV * grid.height)));
-  const maxY = Math.max(minY, Math.min(grid.height - 1, Math.ceil(footprint.maxV * grid.height) - 1));
-  const centerX = (footprint.minU + footprint.maxU) * 0.5 * grid.width;
-  const centerY = (footprint.minV + footprint.maxV) * 0.5 * grid.height;
+  const pageTexelSpan = virtualTexturePageTexelSpan(manifest, mip);
+  const minX = Math.max(0, Math.min(
+    grid.width - 1,
+    Math.floor(footprint.minU * manifest.width / pageTexelSpan),
+  ));
+  const maxX = Math.max(minX, Math.min(
+    grid.width - 1,
+    Math.ceil(footprint.maxU * manifest.width / pageTexelSpan) - 1,
+  ));
+  const minY = Math.max(0, Math.min(
+    grid.height - 1,
+    Math.floor(footprint.minV * manifest.height / pageTexelSpan),
+  ));
+  const maxY = Math.max(minY, Math.min(
+    grid.height - 1,
+    Math.ceil(footprint.maxV * manifest.height / pageTexelSpan) - 1,
+  ));
+  const centerX = (footprint.minU + footprint.maxU) * 0.5 * manifest.width / pageTexelSpan;
+  const centerY = (footprint.minV + footprint.maxV) * 0.5 * manifest.height / pageTexelSpan;
   const pages: VirtualTexturePageId[] = [];
   for (let y = minY; y <= maxY; y += 1) {
     for (let x = minX; x <= maxX; x += 1) pages.push({ mip, x, y });
@@ -715,23 +748,47 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
     const key = virtualTexturePageKey(page);
     if (previousPageKeys.has(key) || isResident(page)) add(page);
   }
+  // Do not pipeline another destructive replacement while the preceding
+  // admission still has no physical residency. Re-rendering the same demand
+  // before its load settles must preserve the overlap that is currently
+  // providing coverage, rather than consuming it one frame at a time.
+  const awaitingPreviousAdmission = workingCandidates.some((page) => {
+    const key = virtualTexturePageKey(page);
+    return previousPageKeys.has(key) && !isResident(page);
+  });
   let freeAdmissions = 0;
   let replacementAdmissions = 0;
   for (const page of workingCandidates) {
     if (desiredPageKeys.has(virtualTexturePageKey(page))) continue;
-    if (freeAdmissions >= freePhysicalSlots && replacementAdmissions >= 2) break;
+    if (
+      freeAdmissions >= freePhysicalSlots
+      && (awaitingPreviousAdmission || replacementAdmissions >= 2)
+    ) break;
     if (!add(page)) continue;
     if (freeAdmissions < freePhysicalSlots) freeAdmissions += 1;
     else replacementAdmissions += 1;
   }
-  for (const page of previousPages) {
-    if (desiredPages.length >= boundedCapacity) break;
-    if (!isResident(page)) continue;
-    if (add(page)) retentions += 1;
+  const awaitingResidency = workingCandidates.some((page) => (
+    desiredPageKeys.has(virtualTexturePageKey(page)) && !isResident(page)
+  ));
+  const deferred = awaitingResidency
+    || workingCandidates.some((page) => !desiredPageKeys.has(virtualTexturePageKey(page)));
+  // Previous pages are overlap for a bounded destructive replacement, not a
+  // standing cache policy. Once every required-now candidate is physically
+  // resident, publish that exact set and let the GPU arena retain any spare
+  // residency as inactive cache. This is what allows a far-away surface to
+  // become one active coarse page without throwing away useful physical pages
+  // prematurely.
+  if (deferred) {
+    for (const page of previousPages) {
+      if (desiredPages.length >= boundedCapacity) break;
+      if (!isResident(page)) continue;
+      if (add(page)) retentions += 1;
+    }
   }
   return {
     admissions,
-    deferred: admissions > 0 && workingCandidates.some((page) => !desiredPageKeys.has(virtualTexturePageKey(page))),
+    deferred,
     retentions,
   };
 };

@@ -71,11 +71,12 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
-  demandConvergenceWakePending: boolean;
   demandPublished: boolean;
   diagnosticsEnabled: boolean;
+  /** GPU publication target: exact current demand plus bounded replacement overlap while converging. */
   desiredPageKeys: Set<string>;
   desiredPageKeysScratch: Set<string>;
+  /** Ordered counterpart of `desiredPageKeys`; inactive physical cache is owned by the GPU arena. */
   desiredPages: VirtualTexturePageId[];
   desiredPagesScratch: VirtualTexturePageId[];
   readonly key: string;

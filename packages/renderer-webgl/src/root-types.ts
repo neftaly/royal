@@ -13,6 +13,8 @@ export interface WebGlRootOptions {
   readonly antialias?: boolean;
   /** Generate virtual-texture pages from ordinary large raster textures. Explicit virtual textures remain available. @defaultValue `false` */
   readonly generatedRasterVirtualTextures?: boolean;
+  /** Logical virtual texels per authored SVG CSS pixel. Bounded independently of the SVG viewBox. @defaultValue `4` */
+  readonly generatedSvgVirtualTextureRasterDensity?: number;
   /** Immutable cross-class CPU/GPU/job/upload budget policy. */
   readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
   /** Global physical GPU byte budget for virtual-texture atlases and page tables. @defaultValue `67108864` */
@@ -151,6 +153,12 @@ export interface WebGlGltfInstancingSnapshot {
 }
 
 export interface WebGlVirtualTexturingSnapshot {
+  /** Pages currently visible to shaders and required by the latest committed frame demand. */
+  readonly activePages: number;
+  /** Physically resident atlas pages, including inactive pages retained as cache. */
+  readonly cachedPages: number;
+  /** Active page counts across all virtual textures, indexed by logical mip. */
+  readonly activePagesByMip: readonly number[];
   readonly atlasTextures: number;
   /** Newly desired pages admitted across committed demand publications. */
   readonly demandAdmissions: number;
@@ -177,8 +185,9 @@ export interface WebGlVirtualTexturingSnapshot {
   /** @deprecated Use `outstandingPageRequests`. */
   readonly requestedPages: number;
   readonly outstandingPageRequests: number;
+  /** @deprecated Compatibility alias for `cachedPages`. */
   readonly residentPages: number;
-  /** Resident page counts across all virtual textures, indexed by logical mip. */
+  /** Cached resident page counts across all virtual textures, indexed by logical mip. */
   readonly residentPagesByMip: readonly number[];
   readonly shaderBinds: number;
   readonly unreadyDraws: number;

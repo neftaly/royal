@@ -16,18 +16,19 @@ import {
 
 const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
+export const GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY = 4;
+export const GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY = 16;
+export const GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION = 16_384;
+const GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION = 1_024;
 
 const svgRootPattern = /<svg\b([^>]*)>/iu;
-const svgViewBoxPattern = /\bviewBox\s*=\s*(["'])(.*?)\1/iu;
-const svgWidthPattern = /\bwidth\s*=\s*(["'])(.*?)\1/iu;
-const svgHeightPattern = /\bheight\s*=\s*(["'])(.*?)\1/iu;
-const svgXmlBasePattern = /\bxml:base\s*=\s*(["'])(.*?)\1/iu;
+const svgAttributePattern = /(^|\s+)([^\s"'<>/=]+)\s*=\s*(["'])([\s\S]*?)\3/gu;
 const svgImageElementPattern = /<image\b[^>]*>/giu;
 const svgHrefAttributePattern = /\b((?:xlink:)?href)\s*=\s*(["'])(.*?)\2/giu;
 const svgScriptElementPattern = /<script\b[^>]*>[\s\S]*?<\/script\s*>|<script\b[^>]*\/\s*>/giu;
 const svgEventHandlerAttributePattern = /\s+on[a-z][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu;
 const svgUnsafeHrefAttributePattern = /\s+((?:xlink:)?href)\s*=\s*(["'])\s*(?:javascript|data:text\/html)\s*:[\s\S]*?\2/giu;
-const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)\s*(?:px|pt|pc|mm|cm|in)?\s*$/iu;
+const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?)\s*(px|pt|pc|mm|cm|in)?\s*$/iu;
 const svgExternalReferenceMaxDepth = 8;
 const svgTextDecoder = new TextDecoder();
 const svgTextEncoder = new TextEncoder();
@@ -40,12 +41,20 @@ export type SvgVirtualTextureSource = {
   readonly width: number;
 };
 
+// The prepared document can dwarf its page wrapper. Cache it by source identity so
+// every page does not encode another complete copy, while allowing a released
+// texture source (and its encoded string) to be garbage-collected.
+const svgVirtualTextureSourceDataUris = new WeakMap<
+  SvgVirtualTextureSource,
+  { readonly dataUri: string; readonly text: string }
+>();
+
 export type LoadedSvgTexture = {
   readonly image: HTMLImageElement;
   readonly text: string;
 };
 
-type SvgTextureViewport = {
+export type SvgTextureViewport = {
   readonly fromViewBox: boolean;
   readonly height: number;
   readonly width: number;
@@ -72,22 +81,62 @@ export const isSvgUri = (uri: string): boolean =>
 
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
+type SvgAttributeMatch = {
+  readonly end: number;
+  readonly leadingWhitespace: string;
+  readonly start: number;
+  readonly value: string;
+};
+
+const findSvgAttribute = (attributes: string, name: string): SvgAttributeMatch | undefined => {
+  for (const match of attributes.matchAll(svgAttributePattern)) {
+    if ((match[2] ?? "").toLowerCase() !== name.toLowerCase()) continue;
+    const start = match.index;
+    return {
+      end: start + match[0].length,
+      leadingWhitespace: match[1] ?? "",
+      start,
+      value: match[4] ?? "",
+    };
+  }
+  return undefined;
+};
+
+const svgAttributeValue = (attributes: string, name: string): string | undefined =>
+  findSvgAttribute(attributes, name)?.value;
+
 const parseSvgDimension = (value: string | undefined): number | undefined => {
   if (value === undefined) return undefined;
   const match = svgDimensionPattern.exec(value);
   if (match === null) return undefined;
   const parsed = Number.parseFloat(match[1] ?? "");
+  if (!positiveFinite(parsed)) return undefined;
 
-  return positiveFinite(parsed) ? parsed : undefined;
+  const cssPixelsPerUnit = (() => {
+    switch (match[2]?.toLowerCase()) {
+      case "in": return 96;
+      case "cm": return 96 / 2.54;
+      case "mm": return 96 / 25.4;
+      case "pt": return 96 / 72;
+      case "pc": return 16;
+      case "px":
+      case undefined:
+        return 1;
+      default:
+        return 1;
+    }
+  })();
+  const cssPixels = parsed * cssPixelsPerUnit;
+  return positiveFinite(cssPixels) ? cssPixels : undefined;
 };
 
-const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => {
+export const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => {
   const svgRoot = svgRootPattern.exec(svgText);
   if (svgRoot === null) return undefined;
 
   const attributes = svgRoot[1] ?? "";
-  const width = parseSvgDimension(svgWidthPattern.exec(attributes)?.[2]);
-  const height = parseSvgDimension(svgHeightPattern.exec(attributes)?.[2]);
+  const width = parseSvgDimension(svgAttributeValue(attributes, "width"));
+  const height = parseSvgDimension(svgAttributeValue(attributes, "height"));
   if (width !== undefined && height !== undefined) {
     return {
       fromViewBox: false,
@@ -96,24 +145,34 @@ const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => 
     };
   }
 
-  const viewBox = svgViewBoxPattern.exec(attributes)?.[2];
-  if (viewBox !== undefined) {
-    const values = viewBox.trim().split(/[\s,]+/u).map((value) => Number(value));
-    if (
-      values.length === 4
-      && values.every((value) => Number.isFinite(value))
-      && positiveFinite(values[2] ?? Number.NaN)
-      && positiveFinite(values[3] ?? Number.NaN)
-    ) {
-      return {
-        fromViewBox: true,
-        height: values[3]!,
-        width: values[2]!,
-      };
-    }
+  const viewBox = svgAttributeValue(attributes, "viewBox");
+  if (viewBox === undefined) return undefined;
+  const values = viewBox.trim().split(/[\s,]+/u).map((value) => Number(value));
+  if (
+    values.length !== 4
+    || !values.every((value) => Number.isFinite(value))
+    || !positiveFinite(values[2] ?? Number.NaN)
+    || !positiveFinite(values[3] ?? Number.NaN)
+  ) return undefined;
+
+  const viewBoxWidth = values[2]!;
+  const viewBoxHeight = values[3]!;
+  if (width !== undefined) {
+    return { fromViewBox: true, height: width * viewBoxHeight / viewBoxWidth, width };
+  }
+  if (height !== undefined) {
+    return { fromViewBox: true, height, width: height * viewBoxWidth / viewBoxHeight };
   }
 
-  return undefined;
+  // A viewBox is a coordinate system, not a raster resolution. Give viewBox-only
+  // documents a stable, bounded intrinsic viewport while preserving their ratio.
+  const derivedScale = GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION
+    / Math.max(viewBoxWidth, viewBoxHeight);
+  return {
+    fromViewBox: true,
+    height: viewBoxHeight * derivedScale,
+    width: viewBoxWidth * derivedScale,
+  };
 };
 
 const svgNumberAttribute = (value: number): string =>
@@ -126,9 +185,6 @@ const escapeSvgAttribute = (value: string): string =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-
 const absoluteSvgBaseUrl = (url: string, baseUrl?: string): string => {
   try {
     const base = globalThis.document?.baseURI ?? globalThis.location?.href;
@@ -139,7 +195,7 @@ const absoluteSvgBaseUrl = (url: string, baseUrl?: string): string => {
 };
 
 const svgRootBaseUrl = (attributes: string, documentBaseUrl: string): string => {
-  const authoredBase = svgXmlBasePattern.exec(attributes)?.[2];
+  const authoredBase = svgAttributeValue(attributes, "xml:base");
   return authoredBase === undefined
     ? documentBaseUrl
     : absoluteSvgBaseUrl(authoredBase, documentBaseUrl);
@@ -189,9 +245,11 @@ const bytesDataUri = (bytes: Uint8Array, mimeType: string): string =>
   `data:${mimeType};base64,${base64Bytes(bytes)}`;
 
 const setSvgAttribute = (attributes: string, name: string, value: string): string => {
-  const pattern = new RegExp(`\\b${escapeRegExp(name)}\\s*=\\s*(["']).*?\\1`, "iu");
   const attribute = `${name}="${escapeSvgAttribute(value)}"`;
-  if (pattern.test(attributes)) return attributes.replace(pattern, attribute);
+  const existing = findSvgAttribute(attributes, name);
+  if (existing !== undefined) {
+    return `${attributes.slice(0, existing.start)}${existing.leadingWhitespace}${attribute}${attributes.slice(existing.end)}`;
+  }
 
   return `${attributes} ${attribute}`;
 };
@@ -454,15 +512,46 @@ const loadSvgTextImage = async (
 
 export const generatedSvgVirtualTextureManifest = (
   source: SvgVirtualTextureSource,
+  rasterDensity = 1,
 ): VirtualTextureManifestModel => generatedVirtualTextureManifest({
-    colorSpace: "srgb",
-    height: source.height,
-    pageSize: GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE,
-    physicalSlotCap: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-    width: source.width,
-  });
+  colorSpace: "srgb",
+  ...(() => {
+    if (
+      !Number.isFinite(rasterDensity)
+      || rasterDensity <= 0
+      || rasterDensity > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY
+    ) {
+      throw new RangeError(
+        `SVG virtual texture raster density must be finite, greater than zero, and at most ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}`,
+      );
+    }
+    const desiredWidth = source.width * rasterDensity;
+    const desiredHeight = source.height * rasterDensity;
+    const capScale = Math.min(
+      1,
+      GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / Math.max(desiredWidth, desiredHeight),
+    );
+    return {
+      height: Math.max(1, Math.ceil(desiredHeight * capScale)),
+      width: Math.max(1, Math.ceil(desiredWidth * capScale)),
+    };
+  })(),
+  pageSize: GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE,
+  physicalSlotCap: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
+});
 
-const generatedSvgVirtualTexturePageText = (
+const svgVirtualTextureSourceDataUri = (source: SvgVirtualTextureSource): string => {
+  const cached = svgVirtualTextureSourceDataUris.get(source);
+  // Runtime callers can circumvent the readonly type. Do not return stale encoded
+  // content if that happens; normal immutable sources stay on the allocation-free path.
+  if (cached?.text === source.text) return cached.dataUri;
+
+  const dataUri = bytesDataUri(svgTextEncoder.encode(source.text), "image/svg+xml");
+  svgVirtualTextureSourceDataUris.set(source, { dataUri, text: source.text });
+  return dataUri;
+};
+
+export const generatedSvgVirtualTexturePageText = (
   source: SvgVirtualTextureSource,
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
@@ -472,14 +561,14 @@ const generatedSvgVirtualTexturePageText = (
   const sourceY = page.y * manifest.pageSize * mipScale;
   const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
   const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
-  const href = bytesDataUri(svgTextEncoder.encode(source.text), "image/svg+xml");
+  const href = svgVirtualTextureSourceDataUri(source);
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.pageSize}" height="${manifest.pageSize}"`,
     ` viewBox="${svgNumberAttribute(sourceX)} ${svgNumberAttribute(sourceY)} ${svgNumberAttribute(sourceWidth)} ${svgNumberAttribute(sourceHeight)}"`,
     " preserveAspectRatio=\"none\">",
-    `<image href="${escapeSvgAttribute(href)}" x="0" y="0" width="${svgNumberAttribute(source.width)}"`,
-    ` height="${svgNumberAttribute(source.height)}" preserveAspectRatio="none"/>`,
+    `<image href="${escapeSvgAttribute(href)}" x="0" y="0" width="${svgNumberAttribute(manifest.width)}"`,
+    ` height="${svgNumberAttribute(manifest.height)}" preserveAspectRatio="none"/>`,
     "</svg>",
   ].join("");
 };

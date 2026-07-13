@@ -289,10 +289,10 @@ describe("virtual texture pure demand planning", () => {
 
     const underfilled = stabilize(previous, new Set(["0/0/0"]), 1);
     expect(underfilled.pages).toEqual(next);
-    expect(underfilled.result).toEqual({ admissions: 4, deferred: false, retentions: 0 });
+    expect(underfilled.result).toEqual({ admissions: 4, deferred: true, retentions: 0 });
     const evicted = stabilize(previous, new Set(), 0);
     expect(evicted.pages).toEqual(next);
-    expect(evicted.result.deferred).toBe(false);
+    expect(evicted.result.deferred).toBe(true);
 
     let prior = previous;
     let step = full;
@@ -305,6 +305,155 @@ describe("virtual texture pure demand planning", () => {
     expect(step.result.deferred).toBe(false);
     const quiescent = stabilize(step.pages, new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`)), 4);
     expect(quiescent.result).toEqual({ admissions: 0, deferred: false, retentions: 0 });
+  });
+
+  it("publishes an exact small or empty working set instead of filling it from old residency", () => {
+    const previous = [0, 1, 2, 3].map((x) => ({ mip: 0, x, y: 0 }));
+    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const stabilize = (working: readonly { readonly mip: number; readonly x: number; readonly y: number }[]) => {
+      const pages: Array<{ mip: number; x: number; y: number }> = [];
+      const keys = new Set<string>();
+      const result = stabilizeVirtualTextureDesiredPagesInto(
+        working,
+        previous,
+        previousKeys,
+        previous.length,
+        (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+        previous.length,
+        pages,
+        keys,
+      );
+      return { pages, result };
+    };
+
+    expect(stabilize([previous[2]!])).toEqual({
+      pages: [previous[2]],
+      result: { admissions: 0, deferred: false, retentions: 0 },
+    });
+    expect(stabilize([])).toEqual({
+      pages: [],
+      result: { admissions: 0, deferred: false, retentions: 0 },
+    });
+  });
+
+  it("keeps transition overlap only while a two-page replacement is deferred", () => {
+    const previous = [0, 1, 2, 3].map((x) => ({ mip: 0, x, y: 0 }));
+    const next = [4, 5, 6, 7].map((x) => ({ mip: 0, x, y: 0 }));
+    const residentKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const firstPages: Array<{ mip: number; x: number; y: number }> = [];
+    const firstKeys = new Set<string>();
+    const first = stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      previous,
+      residentKeys,
+      4,
+      (page) => residentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      firstPages,
+      firstKeys,
+    );
+    expect(first).toEqual({ admissions: 2, deferred: true, retentions: 2 });
+    expect(firstPages).toEqual([next[0], next[1], previous[0], previous[1]]);
+
+    const secondPages: Array<{ mip: number; x: number; y: number }> = [];
+    const secondKeys = new Set<string>();
+    const second = stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      firstPages,
+      firstKeys,
+      4,
+      (page) => residentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      secondPages,
+      secondKeys,
+    );
+    expect(second).toEqual({ admissions: 0, deferred: true, retentions: 2 });
+    expect(secondPages).toEqual(firstPages);
+
+    const loadedKeys = new Set([...residentKeys, ...next.slice(0, 2).map((page) => `${page.mip}/${page.x}/${page.y}`)]);
+    const thirdPages: Array<{ mip: number; x: number; y: number }> = [];
+    const thirdKeys = new Set<string>();
+    const third = stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      secondPages,
+      secondKeys,
+      4,
+      (page) => loadedKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      thirdPages,
+      thirdKeys,
+    );
+    expect(third).toEqual({ admissions: 2, deferred: true, retentions: 0 });
+    expect(thirdPages).toEqual(next);
+
+    const allLoadedKeys = new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const settledPages: Array<{ mip: number; x: number; y: number }> = [];
+    const settledKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      thirdPages,
+      thirdKeys,
+      4,
+      (page) => allLoadedKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      settledPages,
+      settledKeys,
+    )).toEqual({ admissions: 0, deferred: false, retentions: 0 });
+    expect(settledPages).toEqual(next);
+  });
+
+  it("retains sparse disjoint coverage until a smaller target set is resident", () => {
+    const previous = [
+      { mip: 3, x: 0, y: 0 },
+      { mip: 2, x: 7, y: 1 },
+    ];
+    const next = [
+      { mip: 1, x: 1, y: 6 },
+      { mip: 0, x: 11, y: 3 },
+    ];
+    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const transitionPages: Array<{ mip: number; x: number; y: number }> = [];
+    const transitionKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      previous,
+      previousKeys,
+      4,
+      (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      transitionPages,
+      transitionKeys,
+    )).toEqual({ admissions: 2, deferred: true, retentions: 2 });
+    expect(transitionPages).toEqual([...next, ...previous]);
+
+    const repeatedPages: Array<{ mip: number; x: number; y: number }> = [];
+    const repeatedKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      transitionPages,
+      transitionKeys,
+      4,
+      (page) => previousKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      repeatedPages,
+      repeatedKeys,
+    )).toEqual({ admissions: 0, deferred: true, retentions: 2 });
+    expect(repeatedPages).toEqual(transitionPages);
+
+    const nextKeys = new Set(next.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const settledPages: Array<{ mip: number; x: number; y: number }> = [];
+    const settledKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      next,
+      repeatedPages,
+      repeatedKeys,
+      4,
+      (page) => nextKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      settledPages,
+      settledKeys,
+    )).toEqual({ admissions: 0, deferred: false, retentions: 0 });
+    expect(settledPages).toEqual(next);
   });
 
   it("does not let one root's planning pass overwrite another root's retained polygons", () => {
@@ -336,8 +485,50 @@ describe("virtual texture pure demand planning", () => {
     expect(virtualTextureTargetMip(source, footprint)).toBeGreaterThanOrEqual(0);
     expect(virtualTexturePagesForFootprint(source, 2, footprint)).toEqual([
       { mip: 2, x: 0, y: 0 },
-      { mip: 2, x: 1, y: 0 },
     ]);
+  });
+
+  it("addresses truncated NPOT pages by logical texels instead of equal grid fractions", () => {
+    const source = manifest({ height: 1_200, width: 2_200 });
+    const footprint = {
+      maxU: 0.9,
+      maxV: 0.3,
+      minU: 0.82,
+      minV: 0.2,
+      screenHeight: 100,
+      screenWidth: 100,
+    };
+
+    // At mip 1, x=3 covers logical texels [1536, 2048), or
+    // U=[0.698..., 0.930...). Treating the five-page grid as equal fifths
+    // incorrectly selects the truncated x=4 edge page for this footprint.
+    expect(virtualTexturePagesForFootprint(source, 1, footprint)).toEqual([
+      { mip: 1, x: 3, y: 0 },
+    ]);
+  });
+
+  it("refines the texel-addressed NPOT branch that the shader samples", () => {
+    const source = manifest({ height: 1_200, width: 2_200 });
+    const faceOnNpotSlice = context(
+      new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]),
+      identityMat4(),
+      {
+        indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+        texCoords: new Float32Array([0.82, 0.2, 0.9, 0.2, 0.9, 0.3, 0.82, 0.3]),
+      },
+    );
+    const demand = planVirtualTextureDrawDemand({
+      context: faceOnNpotSlice,
+      flipY: false,
+      generated: true,
+      limit: 64,
+      manifest: source,
+    });
+
+    expect(demand.demandCandidates).toContainEqual({ mip: 1, x: 3, y: 0 });
+    expect(demand.demandCandidates).toContainEqual({ mip: 0, x: 7, y: 0 });
+    expect(demand.demandCandidates).not.toContainEqual({ mip: 1, x: 4, y: 0 });
+    expect(demand.demandCandidates).not.toContainEqual({ mip: 0, x: 8, y: 0 });
   });
 
   it("checks sparse page availability independently from demand ordering", () => {

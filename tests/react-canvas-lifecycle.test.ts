@@ -19,6 +19,9 @@ describe("Canvas renderer root cleanup", () => {
     expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({
       context: { alpha: true },
     });
+    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureRasterDensity: 8 })).toEqual({
+      context: { generatedSvgVirtualTextureRasterDensity: 8 },
+    });
   });
 
   it("retains a supplied resource governor policy for root construction", () => {

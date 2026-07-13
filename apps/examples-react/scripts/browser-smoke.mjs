@@ -616,8 +616,101 @@ const assertRoute = (expected, state) => {
       if (interaction.far?.contextLifecycle !== 'active' || interaction.far?.contextLastError !== null) {
         failures.push('virtual texture far zoom did not preserve an active error-free context');
       }
+      if (interaction.far?.activePages !== 1) {
+        failures.push(`virtual texture far zoom kept ${interaction.far?.activePages ?? 'unknown'} active pages instead of one`);
+      }
+      if (interaction.far?.activePagesMip3 !== 1) {
+        failures.push(`virtual texture far zoom kept ${interaction.far?.activePagesMip3 ?? 'unknown'} active mip-3 pages instead of the root page`);
+      }
+      if (!(
+        Number.isFinite(interaction.far?.cachedPages) &&
+        interaction.far.cachedPages >= interaction.far.activePages
+      )) {
+        failures.push('virtual texture far zoom did not report a reusable cache containing its active page');
+      }
       if (!((interaction.far?.residentPagesMip3 ?? 0) >= 1)) {
         failures.push('virtual texture far zoom did not retain the coarsest root page');
+      }
+      if (interaction.reactivation?.contextLifecycle !== 'active' || interaction.reactivation?.contextLastError !== null) {
+        failures.push('virtual texture cache reactivation did not preserve an active error-free context');
+      }
+      if (interaction.reactivation?.settled !== true || !(interaction.reactivation?.activePages > 1)) {
+        failures.push('virtual texture zoom-back did not reactivate cached fine pages');
+      }
+      const reactivationRequestLimit = Math.max(
+        2,
+        Math.ceil((interaction.reactivation?.activePages ?? 0) * 0.15),
+      );
+      // Resource Timing entries and atlas settlements are not one-to-one while
+      // a working set converges. Permit one bounded two-page destructive
+      // replacement batch beyond the cache-miss allowance, while keeping both
+      // ceilings proportional to the final active set.
+      const reactivationUploadLimit = Math.min(
+        interaction.reactivation?.activePages ?? 0,
+        reactivationRequestLimit + 2,
+      );
+      const reactivationUploads = (
+        interaction.reactivation?.uploadedPages ?? Number.POSITIVE_INFINITY
+      ) - (interaction.far?.uploadedPages ?? 0);
+      if (
+        (interaction.reactivation?.newPageRequestCount ?? Number.POSITIVE_INFINITY) > reactivationRequestLimit ||
+        reactivationUploads > reactivationUploadLimit
+      ) {
+        failures.push(`virtual texture zoom-back did not substantially reuse cache (${interaction.reactivation?.newPageRequestCount ?? 'unknown'}/${reactivationRequestLimit} requests, ${reactivationUploads}/${reactivationUploadLimit} uploads for ${interaction.reactivation?.activePages ?? 'unknown'} active pages)`);
+      }
+      if (interaction.resize?.error !== undefined) {
+        failures.push(`virtual texture resize smoke failed: ${interaction.resize.error}`);
+      } else {
+        const beforeWidth = interaction.resize?.before?.backingWidth;
+        const narrowWidth = interaction.resize?.narrow?.backingWidth;
+        const restoredWidth = interaction.resize?.restored?.backingWidth;
+        if (!(narrowWidth < beforeWidth * 0.8)) {
+          failures.push(`virtual texture resize did not shrink the drawing buffer (${beforeWidth ?? 'unknown'} -> ${narrowWidth ?? 'unknown'})`);
+        }
+        if (!(Math.abs(restoredWidth - beforeWidth) <= 2)) {
+          failures.push(`virtual texture resize did not restore the drawing buffer (${beforeWidth ?? 'unknown'} -> ${restoredWidth ?? 'unknown'})`);
+        }
+        for (const [label, sample] of [
+          ['narrow', interaction.resize?.narrow],
+          ['restored', interaction.resize?.restored],
+        ]) {
+          if (sample?.devicePixelRatio !== 2) {
+            failures.push(`virtual texture ${label} resize ran at DPR ${sample?.devicePixelRatio ?? 'unknown'} instead of 2`);
+          }
+          if (
+            !Number.isFinite(sample?.cssWidth) ||
+            !Number.isFinite(sample?.backingWidth) ||
+            Math.abs(sample.backingWidth - sample.cssWidth * sample.devicePixelRatio) > 2
+          ) {
+            failures.push(`virtual texture ${label} drawing buffer did not track CSS pixels at DPR 2`);
+          }
+        }
+        if (
+          interaction.resize?.narrow?.contextLifecycle !== 'active' ||
+          interaction.resize?.restored?.contextLifecycle !== 'active' ||
+          interaction.resize?.narrow?.contextLastError !== null ||
+          interaction.resize?.restored?.contextLastError !== null
+        ) {
+          failures.push('virtual texture resize did not preserve an active error-free context');
+        }
+        for (const [label, sample] of [
+          ['narrow', interaction.resize?.narrow],
+          ['restored', interaction.resize?.restored],
+        ]) {
+          if (!(
+            Number.isFinite(sample?.activePages) &&
+            Number.isFinite(sample?.cachedPages) &&
+            sample.activePages <= sample.cachedPages
+          )) {
+            failures.push(`virtual texture ${label} resize exceeded its cached working set`);
+          }
+        }
+        if (
+          interaction.resize?.restored?.pendingPages !== 0 ||
+          interaction.resize?.restored?.outstandingPageRequests !== 0
+        ) {
+          failures.push('virtual texture resize did not converge after restoring its drawing buffer');
+        }
       }
       const focusedRegions = [
         { label: 'NW', preset: 1, u: 0.25, v: 0.25 },
@@ -647,6 +740,52 @@ const assertRoute = (expected, state) => {
         ))) {
           failures.push(`virtual texture map ${region.label} focus did not refine the target UV beyond the coarse root`);
         }
+      }
+    }
+  }
+
+  if (expected.id === 'gltf-ghostscript-tiger-svg') {
+    const interaction = state.svgVirtualTextureInteraction;
+    if (interaction === undefined) {
+      failures.push('SVG virtual texture route missed close zoom interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`SVG virtual texture close zoom failed: ${interaction.error}`);
+    } else {
+      if (interaction.contextLifecycle !== 'active') {
+        failures.push(`SVG virtual texture close zoom left the renderer context ${interaction.contextLifecycle ?? 'unavailable'}`);
+      }
+      if (interaction.contextLastError !== null) {
+        failures.push(`SVG virtual texture close zoom reported a renderer context error: ${interaction.contextLastError ?? 'unavailable'}`);
+      }
+      if (interaction.settled !== true) {
+        failures.push('SVG virtual texture close zoom did not converge');
+      }
+      if (interaction.pendingPages !== 0 || interaction.outstandingPageRequests !== 0) {
+        failures.push(`SVG virtual texture close zoom left work pending (${interaction.pendingPages ?? 'unknown'} pages, ${interaction.outstandingPageRequests ?? 'unknown'} requests)`);
+      }
+      if (!(interaction.activePagesMip0 > 0)) {
+        failures.push('SVG virtual texture close zoom did not activate mip-0 pages');
+      }
+      if (!(
+        Number.isFinite(interaction.activePages) &&
+        Number.isFinite(interaction.cachedPages) &&
+        interaction.activePages <= interaction.cachedPages
+      )) {
+        failures.push('SVG virtual texture close zoom active pages exceeded its physical cache');
+      }
+      if (!(
+        Number.isFinite(interaction.cachedPages) &&
+        Number.isFinite(interaction.physicalPageCapacity) &&
+        interaction.cachedPages <= interaction.physicalPageCapacity
+      )) {
+        failures.push(`SVG virtual texture cache exceeded its physical capacity (${interaction.cachedPages ?? 'unknown'} > ${interaction.physicalPageCapacity ?? 'unknown'})`);
+      }
+      if (!(
+        Number.isFinite(interaction.physicalAllocatedBytes) &&
+        Number.isFinite(interaction.physicalBudgetBytes) &&
+        interaction.physicalAllocatedBytes <= interaction.physicalBudgetBytes
+      )) {
+        failures.push(`SVG virtual texture allocation exceeded its governed byte budget (${interaction.physicalAllocatedBytes ?? 'unknown'} > ${interaction.physicalBudgetBytes ?? 'unknown'})`);
       }
     }
   }
@@ -757,7 +896,15 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
 })()
 `);
 
-const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
+const runVirtualTextureInteractionSmoke = async (session) => {
+  await session.call('Emulation.setDeviceMetricsOverride', {
+    deviceScaleFactor: 2,
+    height: 600,
+    mobile: false,
+    width: 800,
+  });
+  try {
+    return await evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing virtual texture canvas' };
@@ -769,10 +916,12 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
     .map((entry) => entry.name)
     .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
   const rendererSnapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
-  const waitForConvergence = async (afterFrame = null, previousPageUrls = []) => {
+  const waitForConvergence = async (afterFrame = null, previousPageUrls = [], expectedActivePages = null) => {
     const deadline = performance.now() + 8000;
     let currentPages = pageUrls().length;
     let lastPages = -1;
+    let lastActivePages = -1;
+    let lastCachedPages = -1;
     let stableFrames = 0;
     let renderer = rendererSnapshot();
     while (performance.now() < deadline && stableFrames < 8) {
@@ -782,29 +931,46 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
       const vt = renderer?.virtualTexturing;
       if (
         currentPages === lastPages &&
+        vt?.activePages === lastActivePages &&
+        vt?.cachedPages === lastCachedPages &&
+        (expectedActivePages === null || vt?.activePages === expectedActivePages) &&
         (afterFrame === null || (renderer?.frame ?? -1) > afterFrame) &&
         vt?.pendingPages === 0 &&
         vt?.outstandingPageRequests === 0
       ) stableFrames += 1;
       else stableFrames = 0;
       lastPages = currentPages;
+      lastActivePages = vt?.activePages ?? -1;
+      lastCachedPages = vt?.cachedPages ?? -1;
     }
     const vt = renderer?.virtualTexturing;
     const currentPageUrls = pageUrls();
     const previousPages = new Set(previousPageUrls);
+    const canvasRect = canvas.getBoundingClientRect();
     return {
+      activePages: vt?.activePages ?? null,
+      activePagesByMip: [0, 1, 2, 3].map((mip) => vt?.['activePagesMip' + mip] ?? 0),
+      backingHeight: canvas.height,
+      backingWidth: canvas.width,
+      cachedPages: vt?.cachedPages ?? null,
+      cachedPagesByMip: [0, 1, 2, 3].map((mip) => vt?.['cachedPagesMip' + mip] ?? 0),
       contextLastError: renderer?.context?.lastError ?? null,
       contextLifecycle: renderer?.context?.lifecycle ?? null,
+      cssHeight: canvasRect.height,
+      cssWidth: canvasRect.width,
+      devicePixelRatio: window.devicePixelRatio,
       distance: Number(canvas.dataset.mapDistance),
       frame: renderer?.frame ?? null,
       outstandingPageRequests: vt?.outstandingPageRequests ?? null,
       pageCount: currentPages,
       pageUrls: currentPageUrls,
       newPageUrls: currentPageUrls.filter((url) => !previousPages.has(url)),
+      newPageRequestCount: Math.max(0, currentPageUrls.length - previousPageUrls.length),
       pendingPages: vt?.pendingPages ?? null,
       settled: stableFrames >= 8,
       targetX: Number(canvas.dataset.mapTargetX),
       targetY: Number(canvas.dataset.mapTargetY),
+      uploadedPages: vt?.uploadedPages ?? null,
     };
   };
   const presets = [await waitForConvergence(null, [])];
@@ -849,18 +1015,43 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
     deltaY: 2000,
   }));
   await globalThis.__royalExamplesRenderNow?.();
-  const farSettled = await waitForConvergence(farFrame, pageUrls());
+  const farSettled = await waitForConvergence(farFrame, pageUrls(), 1);
   const far = {
     ...farSettled,
+    activePagesMip3: rendererSnapshot()?.virtualTexturing?.activePagesMip3 ?? null,
     residentPagesMip3: rendererSnapshot()?.virtualTexturing?.residentPagesMip3 ?? null,
   };
+  const reactivationFrame = rendererSnapshot()?.frame ?? null;
+  const previousReactivationPageUrls = pageUrls();
   canvas.dispatchEvent(new WheelEvent('wheel', {
     bubbles: true,
     cancelable: true,
     deltaMode: WheelEvent.DOM_DELTA_PIXEL,
     deltaY: -2000,
   }));
-  await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+  await globalThis.__royalExamplesRenderNow?.();
+  const reactivation = await waitForConvergence(reactivationFrame, previousReactivationPageUrls);
+  const resizeContainer = canvas.closest('.vt-stress-canvas');
+  let resize = { error: 'missing virtual texture resize container' };
+  if (resizeContainer instanceof HTMLElement) {
+    const originalInlineSize = resizeContainer.style.inlineSize;
+    const before = {
+      backingHeight: canvas.height,
+      backingWidth: canvas.width,
+      contextLifecycle: rendererSnapshot()?.context?.lifecycle ?? null,
+      uploadedPages: rendererSnapshot()?.virtualTexturing?.uploadedPages ?? null,
+    };
+    resizeContainer.style.inlineSize = '62%';
+    const narrow = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+    const narrowBackingWidth = canvas.width;
+    resizeContainer.style.inlineSize = originalInlineSize;
+    const restored = await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+    resize = {
+      before,
+      narrow: { ...narrow, backingHeight: canvas.height, backingWidth: narrowBackingWidth },
+      restored: { ...restored, backingHeight: canvas.height, backingWidth: canvas.width },
+    };
+  }
   const panErrors = [];
   const recordPanError = (event) => panErrors.push(String(event.error?.stack ?? event.message ?? event.error));
   const recordPanRejection = (event) => panErrors.push(String(event.reason?.stack ?? event.reason));
@@ -910,6 +1101,8 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
         startTargetY,
       },
       presets,
+      reactivation,
+      resize,
       zoom,
     };
   } finally {
@@ -917,6 +1110,69 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
     globalThis.removeEventListener('error', recordPanError);
     globalThis.removeEventListener('unhandledrejection', recordPanRejection);
   }
+})()
+    `);
+  } finally {
+    await session.call('Emulation.clearDeviceMetricsOverride');
+  }
+};
+
+const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas');
+  if (canvas === null) return { error: 'missing SVG virtual texture canvas' };
+  const rendererSnapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  const before = rendererSnapshot();
+  for (let step = 0; step < 6; step += 1) {
+    canvas.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      deltaY: -400,
+    }));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  await globalThis.__royalExamplesRenderNow?.();
+
+  const deadline = performance.now() + 10_000;
+  let lastActivePages = -1;
+  let lastCachedPages = -1;
+  let stableFrames = 0;
+  let renderer = rendererSnapshot();
+  while (performance.now() < deadline && stableFrames < 8) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    renderer = rendererSnapshot();
+    const vt = renderer?.virtualTexturing;
+    if (
+      vt?.activePages === lastActivePages &&
+      vt?.cachedPages === lastCachedPages &&
+      vt?.pendingPages === 0 &&
+      vt?.outstandingPageRequests === 0 &&
+      (vt?.activePagesMip0 ?? 0) > 0
+    ) stableFrames += 1;
+    else stableFrames = 0;
+    lastActivePages = vt?.activePages ?? -1;
+    lastCachedPages = vt?.cachedPages ?? -1;
+  }
+
+  const vt = renderer?.virtualTexturing;
+  const rgbaPageBytes = 256 * 256 * 4;
+  return {
+    activePages: vt?.activePages ?? null,
+    activePagesMip0: vt?.activePagesMip0 ?? null,
+    beforeActivePagesMip0: before?.virtualTexturing?.activePagesMip0 ?? null,
+    cachedPages: vt?.cachedPages ?? null,
+    contextLastError: renderer?.context?.lastError ?? null,
+    contextLifecycle: renderer?.context?.lifecycle ?? null,
+    outstandingPageRequests: vt?.outstandingPageRequests ?? null,
+    pendingPages: vt?.pendingPages ?? null,
+    physicalAllocatedBytes: vt?.physicalAllocatedBytes ?? null,
+    physicalBudgetBytes: vt?.physicalBudgetBytes ?? null,
+    physicalPageCapacity: Number.isFinite(vt?.physicalAllocatedBytes)
+      ? Math.floor(vt.physicalAllocatedBytes / rgbaPageBytes)
+      : null,
+    settled: stableFrames >= 8,
+  };
 })()
 `);
 
@@ -1125,6 +1381,12 @@ const main = async () => {
           virtualTextureInteraction,
         };
       }
+      if (route.id === 'gltf-ghostscript-tiger-svg') {
+        state = {
+          ...state,
+          svgVirtualTextureInteraction: await runSvgVirtualTextureInteractionSmoke(session),
+        };
+      }
       try {
         assertRoute(effectiveRoute, state);
       } catch (error) {
@@ -1133,7 +1395,9 @@ const main = async () => {
           .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
           .join('; ');
         const interactionDiagnostics = state.virtualTextureInteraction === undefined
-          ? ''
+          ? (state.svgVirtualTextureInteraction === undefined
+            ? ''
+            : JSON.stringify(state.svgVirtualTextureInteraction))
           : JSON.stringify(state.virtualTextureInteraction);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`

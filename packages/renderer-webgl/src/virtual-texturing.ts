@@ -57,6 +57,11 @@ export interface VirtualTexturePageTableUpdate {
   readonly slot?: number;
 }
 
+type QueuedVirtualTexturePageTableUpdate = {
+  readonly kind: "reconcile" | "transaction";
+  readonly update: VirtualTexturePageTableUpdate;
+};
+
 declare const residentTransactionAuthority: unique symbol;
 
 export interface VirtualTextureResidentTransaction {
@@ -413,7 +418,8 @@ export const virtualTexturePageUri = (
 };
 
 export class VirtualTextureAtlasPageTable {
-  readonly #dirty: VirtualTexturePageTableUpdate[] = [];
+  #activePageKeys: Set<string> | undefined;
+  readonly #dirty: QueuedVirtualTexturePageTableUpdate[] = [];
   #dirtyHead = 0;
   readonly #freeSlots: number[];
   readonly #recordsByPage = new Map<string, VirtualTextureResidentPage>();
@@ -432,8 +438,133 @@ export class VirtualTextureAtlasPageTable {
     return this.#recordsByPage.size;
   }
 
+  /** Number of cached pages that participate in the current page-table mapping. */
+  get activeResidentCount(): number {
+    if (this.#activePageKeys === undefined) return this.#recordsByPage.size;
+    let count = 0;
+    for (const pageKey of this.#activePageKeys) {
+      if (this.#recordsByPage.has(pageKey)) count += 1;
+    }
+    return count;
+  }
+
   get slotCount(): number {
     return this.#freeSlots.length + this.#recordsBySlot.size;
+  }
+
+  /**
+   * Reconciles logical page-table visibility independently from atlas cache
+   * residency. Coarse mappings are queued before fine mappings so overlapping
+   * active descendants always win when the updates reach the GPU.
+   */
+  reconcileActivePageKeys(pageKeys: ReadonlySet<string>): boolean {
+    const previous = this.#activePageKeys;
+    let identical = previous !== undefined && previous.size === pageKeys.size;
+    if (identical) {
+      for (const pageKey of pageKeys) {
+        if (previous?.has(pageKey) !== true) {
+          identical = false;
+          break;
+        }
+      }
+    }
+    if (identical) return false;
+
+    const wasActive = (pageKey: string): boolean => previous?.has(pageKey) ?? true;
+    this.#activePageKeys = new Set(pageKeys);
+    const supersededPendingReconciliation = this.#dropPendingReconciliationUpdates();
+
+    if (supersededPendingReconciliation) {
+      // The GPU may have consumed any prefix of the superseded delta. Queue a
+      // complete, authoritative mapping from the current cache so convergence
+      // no longer depends on which part of that delta reached it. Every
+      // resident contributes at most one update, bounding the replacement by
+      // physical slot count. Transaction updates remain ahead of this snapshot.
+      const inactiveRecords: VirtualTextureResidentPage[] = [];
+      const activeRecords: VirtualTextureResidentPage[] = [];
+      for (const record of this.#recordsByPage.values()) {
+        if (this.#activePageKeys.has(record.pageKey)) activeRecords.push(record);
+        else inactiveRecords.push(record);
+      }
+      for (const record of inactiveRecords) {
+        const fallback = this.#residentFallbackRecord(
+          parentVirtualTexturePage(record.page),
+          record.pageKey,
+        );
+        this.#queueReconciliationUpdate(this.#fallbackUpdate(record, fallback));
+      }
+      // Broad coarse mappings precede fine mappings, which must win in
+      // overlapping regions.
+      activeRecords.sort((left, right) => right.page.mip - left.page.mip);
+      for (const record of activeRecords) {
+        this.#queueReconciliationUpdate({
+          page: record.page,
+          pageKey: record.pageKey,
+          residentMip: record.page.mip,
+          slot: record.slot,
+        });
+      }
+      this.#revision += 1;
+      return true;
+    }
+
+    const changedRecords: VirtualTextureResidentPage[] = [];
+    // First withdraw records that ceased to be active. Their replacement may
+    // only be an active cached ancestor; an inactive prewarm must never leak
+    // back into the current page table as an eviction fallback.
+    for (const record of this.#recordsByPage.values()) {
+      if (wasActive(record.pageKey) && !this.#activePageKeys.has(record.pageKey)) {
+        changedRecords.push(record);
+        const fallback = this.#residentFallbackRecord(
+          parentVirtualTexturePage(record.page),
+          record.pageKey,
+        );
+        this.#queueReconciliationUpdate(this.#fallbackUpdate(record, fallback));
+      }
+      else if (!wasActive(record.pageKey) && this.#activePageKeys.has(record.pageKey)) {
+        changedRecords.push(record);
+      }
+    }
+
+    // A changed coarse page can cover an unchanged fine mapping. Republish
+    // only newly active records and affected active descendants, coarse to
+    // fine. This keeps ordinary camera motion proportional to changed regions
+    // instead of rewriting the complete active set.
+    const activeRecords = [...this.#recordsByPage.values()]
+      .filter((record) => (
+        this.#activePageKeys?.has(record.pageKey) === true
+        && (
+          !wasActive(record.pageKey)
+          || changedRecords.some((changed) => this.#isDescendantPage(record.page, changed.page))
+        )
+      ))
+      .sort((left, right) => right.page.mip - left.page.mip);
+    for (const record of activeRecords) {
+      this.#queueReconciliationUpdate({
+        page: record.page,
+        pageKey: record.pageKey,
+        residentMip: record.page.mip,
+        slot: record.slot,
+      });
+    }
+    this.#revision += 1;
+    return true;
+  }
+
+  isActivePageKey(pageKey: string): boolean {
+    return this.#activePageKeys?.has(pageKey) ?? true;
+  }
+
+  residentPage(pageKey: string): VirtualTextureResidentPage | undefined {
+    return this.#recordsByPage.get(pageKey);
+  }
+
+  activeResidentPages(): readonly VirtualTextureResidentPage[] {
+    return [...this.#recordsByPage.values()].filter((record) => this.isActivePageKey(record.pageKey));
+  }
+
+  residentPages(): readonly VirtualTextureResidentPage[] {
+    return [...this.#recordsByPage.values()];
   }
 
   ensureResident(
@@ -512,11 +643,15 @@ export class VirtualTextureAtlasPageTable {
     if (assignment.evicted !== undefined) {
       this.#recordsByPage.delete(assignment.evicted.pageKey);
       this.#recordsBySlot.delete(assignment.evicted.slot);
-      this.#dirty.push(this.#fallbackUpdate(assignment.evicted, mutable.fallbackRecord));
+      if (this.isActivePageKey(assignment.evicted.pageKey)) {
+        this.#queueTransactionUpdate(this.#fallbackUpdate(assignment.evicted, mutable.fallbackRecord));
+      }
     }
     const record: VirtualTextureResidentPage = { ...assignment, referenceBit: true };
     this.#setRecord(record);
-    this.#dirty.push({ page: assignment.page, pageKey: assignment.pageKey, slot: assignment.slot });
+    if (this.isActivePageKey(assignment.pageKey)) {
+      this.#queueTransactionUpdate({ page: assignment.page, pageKey: assignment.pageKey, slot: assignment.slot });
+    }
     this.#revision += 1;
   }
 
@@ -533,7 +668,7 @@ export class VirtualTextureAtlasPageTable {
     let page = requested;
     while (page.mip <= maxMip) {
       const record = this.#recordsByPage.get(virtualTexturePageKey(page));
-      if (record !== undefined) {
+      if (record !== undefined && this.isActivePageKey(record.pageKey)) {
         const touched = { ...record, referenceBit: true };
         this.#setRecord(touched);
         this.#revision += 1;
@@ -545,7 +680,7 @@ export class VirtualTextureAtlasPageTable {
   }
 
   takeDirtyPageTableUpdates(): readonly VirtualTexturePageTableUpdate[] {
-    const updates = this.#dirty.slice(this.#dirtyHead);
+    const updates = this.#dirty.slice(this.#dirtyHead).map(({ update }) => update);
     this.#dirty.length = 0;
     this.#dirtyHead = 0;
     return updates;
@@ -557,7 +692,7 @@ export class VirtualTextureAtlasPageTable {
 
   dirtyPageTableUpdate(index: number): VirtualTexturePageTableUpdate | undefined {
     if (!Number.isSafeInteger(index) || index < 0) return undefined;
-    return this.#dirty[this.#dirtyHead + index];
+    return this.#dirty[this.#dirtyHead + index]?.update;
   }
 
   commitDirtyPageTableUpdate(): void {
@@ -568,7 +703,43 @@ export class VirtualTextureAtlasPageTable {
     if (this.#dirtyHead === this.#dirty.length) {
       this.#dirty.length = 0;
       this.#dirtyHead = 0;
+    } else {
+      this.#compactDirtyPrefix();
     }
+  }
+
+  #compactDirtyPrefix(force = false): void {
+    // Keep acknowledged entries from retaining update/page objects during a
+    // long partial drain. The threshold avoids shifting the hot queue for each
+    // successful page-table write while placing a fixed bound on dead prefix.
+    if (this.#dirtyHead === 0 || (!force && this.#dirtyHead < 64)) return;
+    this.#dirty.copyWithin(0, this.#dirtyHead);
+    this.#dirty.length -= this.#dirtyHead;
+    this.#dirtyHead = 0;
+  }
+
+  #dropPendingReconciliationUpdates(): boolean {
+    this.#compactDirtyPrefix(true);
+    let found = false;
+    let writeIndex = 0;
+    for (const entry of this.#dirty) {
+      if (entry.kind === "reconcile") {
+        found = true;
+      } else {
+        this.#dirty[writeIndex] = entry;
+        writeIndex += 1;
+      }
+    }
+    this.#dirty.length = writeIndex;
+    return found;
+  }
+
+  #queueReconciliationUpdate(update: VirtualTexturePageTableUpdate): void {
+    this.#dirty.push({ kind: "reconcile", update });
+  }
+
+  #queueTransactionUpdate(update: VirtualTexturePageTableUpdate): void {
+    this.#dirty.push({ kind: "transaction", update });
   }
 
 
@@ -621,6 +792,13 @@ export class VirtualTextureAtlasPageTable {
     this.#recordsBySlot.set(record.slot, record);
   }
 
+  #isDescendantPage(page: VirtualTexturePageId, ancestor: VirtualTexturePageId): boolean {
+    if (page.mip >= ancestor.mip) return false;
+    let parent = page;
+    while (parent.mip < ancestor.mip) parent = parentVirtualTexturePage(parent);
+    return parent.x === ancestor.x && parent.y === ancestor.y;
+  }
+
   #residentFallbackRecord(
     requested: VirtualTexturePageId,
     excludedPageKey: string,
@@ -629,7 +807,11 @@ export class VirtualTextureAtlasPageTable {
     const maxMip = requested.mip + 32;
     while (page.mip <= maxMip) {
       const record = this.#recordsByPage.get(virtualTexturePageKey(page));
-      if (record !== undefined && record.pageKey !== excludedPageKey) return record;
+      if (
+        record !== undefined
+        && record.pageKey !== excludedPageKey
+        && this.isActivePageKey(record.pageKey)
+      ) return record;
       page = parentVirtualTexturePage(page);
     }
     return undefined;
