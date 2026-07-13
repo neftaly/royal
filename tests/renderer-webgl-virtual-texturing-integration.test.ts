@@ -1713,11 +1713,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       static revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
-    vi.stubGlobal("document", {
-      createElement: vi.fn(() => {
-        throw new Error("unexpected 2D canvas raster fallback");
-      }),
-    });
+    const { contexts } = installCanvas2d();
     const { gl } = fakeGl();
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
@@ -1748,11 +1744,11 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(renderScene(material));
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/plain.svg"]);
 
-    for (let frame = 0; frame < 8 && objectUrlBlobs.length < 2; frame += 1) {
+    for (let frame = 0; frame < 8 && contexts.length === 0; frame += 1) {
       await flushMicrotasks();
       root.render(renderScene(material));
     }
-    expect(ControlledImage.instances.some((image) => image.src === "blob:royal-svg-texture-2")).toBe(true);
+    expect(contexts.length).toBeGreaterThan(0);
     canvas.dispatchContextEvent("webglcontextlost");
     await flushMicrotasks();
     expect(root.snapshot().virtualTexturing.generatedPageFailures).toBe(0);
@@ -1762,14 +1758,13 @@ describe("WebGL renderer virtual texturing integration", () => {
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
       await flushMicrotasks();
       root.render(renderScene(material));
-      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-texture-3");
-      generatedPageImage?.settleLoad();
       await flushMicrotasks();
     }
 
-    expect(objectUrlBlobs.length).toBeGreaterThan(2);
-    expect(await objectUrlBlobs[1]?.text()).toContain("<image href=\"data:image/svg+xml;base64,");
-    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(objectUrlBlobs).toHaveLength(1);
+    expect(contexts.every((context) => context.drawImage.mock.calls.every((call) => (
+      call[0] === ControlledImage.instances[0]
+    )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPageFailures: 0,
@@ -1794,11 +1789,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       static revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
-    vi.stubGlobal("document", {
-      createElement: vi.fn(() => {
-        throw new Error("unexpected 2D canvas raster fallback");
-      }),
-    });
+    const { contexts } = installCanvas2d();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#0af\"/></svg>";
@@ -1815,14 +1806,12 @@ describe("WebGL renderer virtual texturing integration", () => {
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
       await flushMicrotasks();
       root.render(renderScene(material));
-      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-svg-data-texture-2");
-      generatedPageImage?.settleLoad();
       await flushMicrotasks();
     }
 
     expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
-    expect(objectUrlBlobs.length).toBeGreaterThan(1);
-    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(objectUrlBlobs).toHaveLength(1);
+    expect(contexts.length).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPagesTarget: 341,

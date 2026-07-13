@@ -1,4 +1,5 @@
 import type { LoadedTextureSource } from "./texture-sources";
+import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
 import {
   abortError,
   dataUriMediaType,
@@ -34,20 +35,23 @@ const svgTextDecoder = new TextDecoder();
 const svgTextEncoder = new TextEncoder();
 const svgVirtualTextureSourceSymbol = Symbol("royal.svgVirtualTextureSource");
 
-export type SvgVirtualTextureSource = {
+export type SvgVirtualTextureDescription = {
   readonly height: number;
   readonly label: string;
-  readonly text: string;
   readonly width: number;
 };
 
-// The prepared document can dwarf its page wrapper. Cache it by source identity so
-// every page does not encode another complete copy, while allowing a released
-// texture source (and its encoded string) to be garbage-collected.
-const svgVirtualTextureSourceDataUris = new WeakMap<
-  SvgVirtualTextureSource,
-  { readonly dataUri: string; readonly text: string }
->();
+export type SvgVirtualTexturePageProducer = {
+  loadPage(
+    manifest: VirtualTextureManifestModel,
+    page: VirtualTexturePageId,
+    signal?: AbortSignal,
+  ): TexImageSource;
+};
+
+export type SvgVirtualTextureSource = SvgVirtualTextureDescription & {
+  readonly pageProducer: SvgVirtualTexturePageProducer;
+};
 
 export type LoadedSvgTexture = {
   readonly image: HTMLImageElement;
@@ -569,7 +573,7 @@ const loadSvgTextImage = async (
       : attachSvgVirtualTextureSource(image, {
         height: viewport.height,
         label,
-        text: normalizedText,
+        pageProducer: new GeneratedSvgVirtualTexturePageProducer(image, label, viewport),
         width: viewport.width,
       }),
     text: normalizedText,
@@ -577,7 +581,7 @@ const loadSvgTextImage = async (
 };
 
 export const generatedSvgVirtualTextureManifest = (
-  source: SvgVirtualTextureSource,
+  source: SvgVirtualTextureDescription,
   rasterDensity = 1,
 ): VirtualTextureManifestModel => generatedVirtualTextureManifest({
   colorSpace: "srgb",
@@ -612,50 +616,59 @@ export const generatedSvgVirtualTextureManifest = (
   physicalSlotCap: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
 });
 
-const svgVirtualTextureSourceDataUri = (source: SvgVirtualTextureSource): string => {
-  const cached = svgVirtualTextureSourceDataUris.get(source);
-  // Runtime callers can circumvent the readonly type. Do not return stale encoded
-  // content if that happens; normal immutable sources stay on the allocation-free path.
-  if (cached?.text === source.text) return cached.dataUri;
+class GeneratedSvgVirtualTexturePageProducer implements SvgVirtualTexturePageProducer {
+  readonly #image: HTMLImageElement;
+  readonly #label: string;
+  readonly #viewport: SvgTextureViewport;
 
-  const dataUri = bytesDataUri(svgTextEncoder.encode(source.text), "image/svg+xml");
-  svgVirtualTextureSourceDataUris.set(source, { dataUri, text: source.text });
-  return dataUri;
-};
+  constructor(image: HTMLImageElement, label: string, viewport: SvgTextureViewport) {
+    this.#image = image;
+    this.#label = label;
+    this.#viewport = viewport;
+  }
 
-export const generatedSvgVirtualTexturePageText = (
-  source: SvgVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): string => {
-  const mipScale = 2 ** page.mip;
-  const sourceX = page.x * manifest.pageSize * mipScale;
-  const sourceY = page.y * manifest.pageSize * mipScale;
-  const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
-  const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
-  const href = svgVirtualTextureSourceDataUri(source);
-
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${manifest.pageSize}" height="${manifest.pageSize}"`,
-    ` viewBox="${svgNumberAttribute(sourceX)} ${svgNumberAttribute(sourceY)} ${svgNumberAttribute(sourceWidth)} ${svgNumberAttribute(sourceHeight)}"`,
-    " preserveAspectRatio=\"none\">",
-    `<image href="${escapeSvgAttribute(href)}" x="0" y="0" width="${svgNumberAttribute(manifest.width)}"`,
-    ` height="${svgNumberAttribute(manifest.height)}" preserveAspectRatio="none"/>`,
-    "</svg>",
-  ].join("");
-};
+  loadPage(
+    manifest: VirtualTextureManifestModel,
+    page: VirtualTexturePageId,
+    signal?: AbortSignal,
+  ): TexImageSource {
+    if (signal?.aborted === true) throw abortError();
+    const mipScale = 2 ** page.mip;
+    const logicalX = page.x * manifest.pageSize * mipScale;
+    const logicalY = page.y * manifest.pageSize * mipScale;
+    const logicalWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - logicalX));
+    const logicalHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - logicalY));
+    const scaleX = this.#viewport.width / manifest.width;
+    const scaleY = this.#viewport.height / manifest.height;
+    const canvas = createVirtualTextureCanvas(
+      manifest.pageSize,
+      manifest.pageSize,
+      `generated SVG virtual texture page ${this.#label} ${virtualTexturePageKey(page)}`,
+    );
+    const context = virtualTextureCanvasContext(canvas, this.#label);
+    context.clearRect(0, 0, manifest.pageSize, manifest.pageSize);
+    context.drawImage(
+      this.#image,
+      logicalX * scaleX,
+      logicalY * scaleY,
+      logicalWidth * scaleX,
+      logicalHeight * scaleY,
+      0,
+      0,
+      manifest.pageSize,
+      manifest.pageSize,
+    );
+    return canvas;
+  }
+}
 
 export const loadGeneratedSvgVirtualTexturePageImage = (
   source: SvgVirtualTextureSource,
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
   signal?: AbortSignal,
-): Promise<HTMLImageElement> =>
-  loadImageFromBlob(
-    new Blob([generatedSvgVirtualTexturePageText(source, manifest, page)], { type: "image/svg+xml" }),
-    `generated SVG virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
-    signal,
-  );
+): Promise<TexImageSource> =>
+  Promise.resolve().then(() => source.pageProducer.loadPage(manifest, page, signal));
 
 export const loadSvgTextureFromUri = async (url: string, signal?: AbortSignal): Promise<LoadedSvgTexture> => {
   if (signal?.aborted === true) throw abortError();

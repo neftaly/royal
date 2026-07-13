@@ -14,6 +14,7 @@ import {
   type VirtualTexturePageId,
 } from "./virtual-texturing";
 import type { VirtualTexturePageLifecycle } from "./virtual-texture-page-lifecycle";
+import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
 
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
@@ -72,6 +73,8 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
+  /** Stable root-policy ordering for admission and cold-reclamation ties. */
+  readonly admissionTicket: number;
   demandPublished: boolean;
   /** Raw current draw demand before terminal-page convergence filtering. */
   demandedPageKeys: Set<string>;
@@ -86,6 +89,8 @@ export type VirtualTextureRuntimeState = {
   readonly key: string;
   /** Incremental count of page lifecycles currently in the loading state. */
   loadingPageCount: number;
+  /** Most recent successfully committed frame that contained draw demand. */
+  lastDemandFrame: number;
   manifestAbortController?: AbortController;
   readonly pageLifecycles: Map<string, VirtualTexturePageLifecycle>;
   readonly pageLoadAbortControllers: Map<string, AbortController>;
@@ -188,37 +193,6 @@ export const generatedRasterVirtualTextureManifest = (
     physicalSlotCap: GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
     width: source.width,
   });
-
-const createVirtualTextureCanvas = (
-  width: number,
-  height: number,
-  label: string,
-): HTMLCanvasElement | OffscreenCanvas => {
-  const document = globalThis.document;
-  if (typeof document?.createElement === "function") {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    return canvas;
-  }
-
-  if (typeof globalThis.OffscreenCanvas === "function") {
-    return new globalThis.OffscreenCanvas(width, height);
-  }
-
-  throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
-};
-
-const virtualTextureCanvasContext = (
-  canvas: HTMLCanvasElement | OffscreenCanvas,
-  label: string,
-): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D => {
-  const context = canvas.getContext("2d");
-  if (context === null) throw new Error(`Canvas 2D rendering is unavailable for ${label}`);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  return context;
-};
 
 const rasterVirtualTextureCanvasSource = (
   source: RasterVirtualTextureSource,

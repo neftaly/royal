@@ -79,7 +79,6 @@ describe("WebGL virtual texturing runtime model", () => {
     const svg = generatedSvgVirtualTextureManifest({
       ...dimensions,
       label: "vector",
-      text: "<svg/>",
     });
 
     expect(svg).toEqual(raster);
@@ -95,7 +94,6 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(() => generatedSvgVirtualTextureManifest({
       height: Number.NaN,
       label: "invalid vector",
-      text: "<svg/>",
       width: 512,
     })).toThrow(RangeError);
     expect(() => generatedVirtualTexturePageCount(Number.MAX_SAFE_INTEGER, 2, 1))

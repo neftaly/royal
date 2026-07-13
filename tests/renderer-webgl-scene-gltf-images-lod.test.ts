@@ -61,6 +61,7 @@ const {
   responseWithBuffer,
   responseWithText,
   installStagedGltfLoader,
+  installCanvas2d,
   installCanvasImageMimeTypeSupport,
   settleDocumentAndBuffer,
   settleLodDocumentAndBuffer,
@@ -324,11 +325,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
   it("uses opted-in generated VT for plain glTF .svg image sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    vi.stubGlobal("document", {
-      createElement: vi.fn(() => {
-        throw new Error("unexpected 2D canvas raster fallback");
-      }),
-    });
+    const { contexts } = installCanvas2d();
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { gl } = fakeGl();
@@ -375,14 +372,14 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     ) {
       await flushMicrotasks();
       root.render(renderGraph);
-      const generatedPageImage = ControlledImage.instances.find((image) => image.src === "blob:royal-test-2");
-      generatedPageImage?.settleLoad();
       await flushAnimationFrames(viewport.animationFrames);
     }
 
-    expect(loader.objectUrlBlobs.length).toBeGreaterThan(1);
-    expect(await loader.objectUrlBlobs[1]?.text()).toContain("<image href=\"data:image/svg+xml;base64,");
-    expect(globalThis.document?.createElement).not.toHaveBeenCalled();
+    expect(loader.objectUrlBlobs).toHaveLength(1);
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts.every((context) => context.drawImage.mock.calls.every((call) => (
+      call[0] === ControlledImage.instances[0]
+    )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPageFailures: 0,
