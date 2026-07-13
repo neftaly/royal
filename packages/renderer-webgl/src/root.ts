@@ -352,7 +352,6 @@ import {
 import {
   identityMat4,
   inverseMat4,
-  inverseMat4Into,
   multiplyMat4,
   multiplyMat4Into,
   projectionMat4Into,
@@ -365,19 +364,12 @@ import {
   type MutableMat4,
 } from "./math/mat4";
 import {
-  createRayGeometryScratch,
   isBoundsVisible,
-  pointOnRay,
-  rayAabbDistanceScalars,
-  rayGeometryDistanceWithScratch,
-  transformBoundsInto,
   worldBounds,
   type Bounds3,
   type MutableBounds3,
-  type Ray,
-  type RayGeometryScratch,
-  type RayGeometryMode,
 } from "./math/picking";
+import { PickingController } from "./picking-controller";
 import {
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
@@ -547,7 +539,6 @@ import type {
   WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,
-  WebGlPickingSnapshot,
   WebGlRoot,
   WebGlRootOptions,
   WebGlRootSnapshot,
@@ -571,21 +562,6 @@ export type {
   WebGlTextureResidencySnapshot,
   WebGlVirtualTexturingSnapshot,
 } from "./root-types";
-
-type PickCandidate = PickResult & {
-  readonly drawOrdinal: number;
-};
-
-type PickScratchCandidate = {
-  readonly bounds: MutableBounds3;
-  boundsDistance: number;
-  instanceIndex: number;
-  localModel?: Mat4;
-  ordinal: number;
-  outerIndex: number;
-  primitive?: LoadedGltfPrimitive;
-  rootModel?: Mat4;
-};
 
 type GeometryDrawMode = GltfGeometryDrawMode;
 
@@ -1897,12 +1873,6 @@ const gltfPrimitiveMode = (mode: number | undefined): GeometryDrawMode | undefin
 };
 
 
-const isPickableDrawMode = (mode: GeometryDrawMode | undefined): boolean =>
-  mode === undefined
-  || mode === "triangles"
-  || mode === "triangle-strip"
-  || mode === "triangle-fan";
-
 const gltfPrimitiveTexCoords = (
   document: GltfDocument,
   buffers: readonly ArrayBuffer[],
@@ -2242,20 +2212,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #sceneCommits = 0;
   #maxTextureImageUnits = 0;
   #maxTextureSize = 0;
-  readonly #pickCandidates: PickScratchCandidate[] = [];
-  #pickCandidateCount = 0;
-  #pickCandidatesThisPick = 0;
-  #pickExactTestsThisPick = 0;
-  readonly #pickHeap: number[] = [];
-  readonly #pickInverseViewProjection = identityMat4();
-  readonly #pickProjection = identityMat4();
-  readonly #pickView = identityMat4();
-  readonly #pickModel = identityMat4();
-  readonly #pickRootModel = identityMat4();
-  readonly #pickRootViewProjection = identityMat4();
-  readonly #pickRay: Ray = { direction: [0, 0, -1], origin: [0, 0, 0] };
-  readonly #pickRayGeometryScratch: RayGeometryScratch = createRayGeometryScratch();
-  readonly #pickViewProjection = identityMat4();
+  readonly #pickingController: PickingController;
   #renderObjectInvalidationPending = false;
   #renderDirty = false;
   #renderScheduleGeneration = 0;
@@ -2349,6 +2306,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
   };
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
     this.#canvas = canvas;
+    this.#pickingController = new PickingController(canvas, {
+      gltfInstanceRootModels: (node) => this.#gltfInstanceViews(node.instances).rootModels,
+      meshGeometry: (node) => this.#meshGeometry(node.geometry, node.material),
+      meshLocalBounds: (geometry) => this.#localGeometryBounds(geometry),
+      preparedGltfPrimitives: (node) => {
+        const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
+        return state?.status === "ready" ? state.primitives : undefined;
+      },
+      renderObjectTransform: (node) => this.#renderObjectTransform(node),
+    });
     const requestedOptions = normalizeOptions(options);
     this.#requestedContextOptions = {
       ...options,
@@ -2917,40 +2884,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (plan === undefined) return undefined;
 
     const { height, width } = this.#resize();
-    this.#pickCandidatesThisPick = 0;
-    this.#pickExactTestsThisPick = 0;
-    const camera = this.#readCamera(plan.camera);
-    const projection = projectionMat4Into(this.#pickProjection, camera, width, height);
-    const view = viewMat4Into(this.#pickView, camera);
-    const viewProjection = multiplyMat4Into(this.#pickViewProjection, projection, view);
-    const ray = this.#pickRayInto(input, viewProjection);
-    if (ray === undefined) return undefined;
-
-    let best: PickCandidate | undefined;
-    let drawOrdinal = 0;
-    for (const node of plan.nodes) {
-      let hit: PickCandidate | undefined;
-      if (node.kind === "mesh") {
-        hit = this.#pickMesh(node, ray, viewProjection, input, drawOrdinal);
-        drawOrdinal += 1;
-      } else if (node.kind === "gltf") {
-        hit = this.#pickGltf(node, ray, viewProjection, input, drawOrdinal);
-        drawOrdinal += 1;
-      } else if (node.kind === "gltf-instances") {
-        hit = this.#pickGltfInstances(node, ray, viewProjection, input, drawOrdinal);
-        drawOrdinal += 1;
-      }
-      if (hit !== undefined && this.#isBetterPick(hit, best)) best = hit;
-    }
-
-    if (best === undefined) return undefined;
-    return {
-      clientX: best.clientX,
-      clientY: best.clientY,
-      distance: best.distance,
-      point: best.point,
-      target: best.target,
-    };
+    return this.#pickingController.pick({
+      camera: this.#readCamera(plan.camera),
+      height,
+      input,
+      nodes: plan.nodes,
+      width,
+    });
   }
 
   #retainPlanWhileContextUnavailable(): void {
@@ -3177,7 +3117,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         iblImageQueueHighWater: this.#gltfIblImageScheduler.snapshot().queueHighWater,
       },
       resourceGovernor: resourceGovernorSnapshot(this.#resourceGovernor),
-      picking: this.#pickingWorkSnapshot(),
+      picking: this.#pickingController.snapshot(),
       textureResidency,
       virtualTexturing,
     };
@@ -3998,310 +3938,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #renderObjectTransform(node: TransformableRenderNode): Transform | undefined {
     const handle = this.#renderObjectHandles.get(node);
     return handle === undefined ? node.transform : readRenderObjectHandleTransform(handle);
-  }
-
-  #pickRayInto(input: PickInput, viewProjection: Mat4): Ray | undefined {
-    const rect = this.#canvas.getBoundingClientRect?.();
-    const width = rect?.width ?? this.#canvas.clientWidth;
-    const height = rect?.height ?? this.#canvas.clientHeight;
-    if (width <= 0 || height <= 0) return undefined;
-
-    const ndcX = ((input.clientX - (rect?.left ?? 0)) / width) * 2 - 1;
-    const ndcY = 1 - ((input.clientY - (rect?.top ?? 0)) / height) * 2;
-    const inverse = inverseMat4Into(this.#pickInverseViewProjection, viewProjection);
-    if (inverse === undefined) return undefined;
-    const nearW = inverse[3] * ndcX + inverse[7] * ndcY - inverse[11] + inverse[15];
-    const farW = inverse[3] * ndcX + inverse[7] * ndcY + inverse[11] + inverse[15];
-    if (nearW === 0 || farW === 0) return undefined;
-    const origin = this.#pickRay.origin as [number, number, number];
-    const direction = this.#pickRay.direction as [number, number, number];
-    origin[0] = (inverse[0] * ndcX + inverse[4] * ndcY - inverse[8] + inverse[12]) / nearW;
-    origin[1] = (inverse[1] * ndcX + inverse[5] * ndcY - inverse[9] + inverse[13]) / nearW;
-    origin[2] = (inverse[2] * ndcX + inverse[6] * ndcY - inverse[10] + inverse[14]) / nearW;
-    const farX = (inverse[0] * ndcX + inverse[4] * ndcY + inverse[8] + inverse[12]) / farW;
-    const farY = (inverse[1] * ndcX + inverse[5] * ndcY + inverse[9] + inverse[13]) / farW;
-    const farZ = (inverse[2] * ndcX + inverse[6] * ndcY + inverse[10] + inverse[14]) / farW;
-    const x = farX - origin[0];
-    const y = farY - origin[1];
-    const z = farZ - origin[2];
-    const length = Math.hypot(x, y, z);
-    if (length === 0 || !Number.isFinite(length)) return undefined;
-    direction[0] = x / length;
-    direction[1] = y / length;
-    direction[2] = z / length;
-    return this.#pickRay;
-  }
-
-  #pickMesh(
-    node: MeshNode,
-    ray: Ray,
-    viewProjection: Mat4,
-    input: PickInput,
-    drawOrdinal: number,
-  ): PickCandidate | undefined {
-    const cpu = this.#meshGeometry(node.geometry, node.material);
-    if (!isPickableDrawMode(cpu.mode)) return undefined;
-    const model = transformMat4Into(this.#pickModel, this.#renderObjectTransform(node));
-    const localBounds = this.#localGeometryBounds(cpu);
-    if (localBounds === undefined) return undefined;
-    if (!isBoundsVisible(localBounds, multiplyMat4Into(this.#pickRootViewProjection, viewProjection, model))) {
-      return undefined;
-    }
-    const bounds = transformBoundsInto(
-      this.#pickCandidates[0]?.bounds ?? { max: [0, 0, 0], min: [0, 0, 0] },
-      localBounds,
-      model,
-    );
-    if (this.#pickCandidates.length === 0) {
-      this.#pickCandidates.push({
-        bounds,
-        boundsDistance: 0,
-        instanceIndex: 0,
-        ordinal: 0,
-        outerIndex: 0,
-      });
-    }
-    if (rayAabbDistanceScalars(
-      ray,
-      bounds.min[0], bounds.min[1], bounds.min[2],
-      bounds.max[0], bounds.max[1], bounds.max[2],
-    ) === undefined) return undefined;
-    this.#pickCandidatesThisPick += 1;
-    this.#pickExactTestsThisPick += 1;
-    const mode = cpu.mode === "triangle-fan" || cpu.mode === "triangle-strip" ? cpu.mode : "triangles";
-    const distance = rayGeometryDistanceWithScratch(
-      cpu.positions, cpu.indices, mode, model, ray, this.#pickRayGeometryScratch,
-    );
-    if (distance === undefined) return undefined;
-    return {
-      clientX: input.clientX,
-      clientY: input.clientY,
-      distance,
-      drawOrdinal,
-      point: pointOnRay(ray, distance),
-      target: { ...(node.pickingId === undefined ? {} : { id: node.pickingId }), kind: "mesh", node },
-    };
-  }
-
-  #pickGltf(
-    node: GltfNode,
-    ray: Ray,
-    viewProjection: Mat4,
-    input: PickInput,
-    drawOrdinal: number,
-  ): PickCandidate | undefined {
-    const rootModel = transformMat4Into(this.#pickRootModel, this.#renderObjectTransform(node));
-    const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
-    if (state?.status === "ready") {
-      this.#resetPickCandidates();
-      const rootViewProjection = multiplyMat4Into(this.#pickRootViewProjection, viewProjection, rootModel);
-      for (const primitive of state.primitives) {
-        if (!isPickableDrawMode(primitive.mode)) continue;
-        const localModels = primitive.localModels;
-        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
-          const localBounds = primitive.localBounds[instanceIndex];
-          if (localBounds === undefined || !isBoundsVisible(localBounds, rootViewProjection)) continue;
-          this.#addPickCandidate(localBounds, rootModel, localModels[instanceIndex]!, primitive, -1, instanceIndex, ray);
-        }
-      }
-      return this.#pickNearestGltfCandidate(node, ray, input, drawOrdinal);
-    }
-
-    return undefined;
-  }
-
-  #pickGltfInstances(
-    node: GltfInstancesNode,
-    ray: Ray,
-    viewProjection: Mat4,
-    input: PickInput,
-    drawOrdinal: number,
-  ): PickCandidate | undefined {
-    const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
-    if (state?.status !== "ready") return undefined;
-
-    const views = this.#gltfInstanceViews(node.instances);
-    this.#resetPickCandidates();
-    for (const primitive of state.primitives) {
-      if (!isPickableDrawMode(primitive.mode)) continue;
-      const localModels = primitive.localModels;
-      for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
-        const rootModel = views.rootModels[outerIndex]!;
-        const rootViewProjection = multiplyMat4Into(this.#pickRootViewProjection, viewProjection, rootModel);
-        for (let instanceIndex = 0; instanceIndex < localModels.length; instanceIndex += 1) {
-          const localBounds = primitive.localBounds[instanceIndex];
-          if (localBounds === undefined || !isBoundsVisible(localBounds, rootViewProjection)) continue;
-          this.#addPickCandidate(
-            localBounds, rootModel, localModels[instanceIndex]!, primitive, outerIndex, instanceIndex, ray,
-          );
-        }
-      }
-    }
-    return this.#pickNearestGltfCandidate(node, ray, input, drawOrdinal);
-  }
-
-  #localGeometryBounds(geometry: CpuGeometry): Bounds3 | undefined {
-    if (this.#geometryLocalBounds.has(geometry.positions)) return this.#geometryLocalBounds.get(geometry.positions);
-    const bounds = worldBounds(geometry.positions, identityMat4());
-    this.#geometryLocalBounds.set(geometry.positions, bounds);
-    return bounds;
-  }
-
-  #resetPickCandidates(): void {
-    this.#pickCandidateCount = 0;
-    this.#pickHeap.length = 0;
-  }
-
-  #addPickCandidate(
-    localBounds: Bounds3,
-    rootModel: Mat4,
-    localModel: Mat4,
-    primitive: LoadedGltfPrimitive,
-    outerIndex: number,
-    instanceIndex: number,
-    ray: Ray,
-  ): void {
-    const index = this.#pickCandidateCount;
-    let candidate = this.#pickCandidates[index];
-    if (candidate === undefined) {
-      candidate = {
-        bounds: { max: [0, 0, 0], min: [0, 0, 0] },
-        boundsDistance: 0,
-        instanceIndex: 0,
-        ordinal: 0,
-        outerIndex: 0,
-      };
-      this.#pickCandidates.push(candidate);
-    }
-    transformBoundsInto(candidate.bounds, localBounds, rootModel);
-    const distance = rayAabbDistanceScalars(
-      ray,
-      candidate.bounds.min[0], candidate.bounds.min[1], candidate.bounds.min[2],
-      candidate.bounds.max[0], candidate.bounds.max[1], candidate.bounds.max[2],
-    );
-    if (distance === undefined) return;
-    candidate.boundsDistance = distance;
-    candidate.instanceIndex = instanceIndex;
-    candidate.localModel = localModel;
-    candidate.ordinal = index;
-    candidate.outerIndex = outerIndex;
-    candidate.primitive = primitive;
-    candidate.rootModel = rootModel;
-    this.#pickCandidateCount += 1;
-    this.#pickCandidatesThisPick += 1;
-    this.#pushPickHeap(index);
-  }
-
-  #pickCandidateBefore(leftIndex: number, rightIndex: number): boolean {
-    const left = this.#pickCandidates[leftIndex]!;
-    const right = this.#pickCandidates[rightIndex]!;
-    return left.boundsDistance < right.boundsDistance
-      || (left.boundsDistance === right.boundsDistance && left.ordinal < right.ordinal);
-  }
-
-  #pushPickHeap(candidateIndex: number): void {
-    let index = this.#pickHeap.length;
-    this.#pickHeap.push(candidateIndex);
-    while (index > 0) {
-      const parent = (index - 1) >> 1;
-      if (!this.#pickCandidateBefore(candidateIndex, this.#pickHeap[parent]!)) break;
-      this.#pickHeap[index] = this.#pickHeap[parent]!;
-      index = parent;
-    }
-    this.#pickHeap[index] = candidateIndex;
-  }
-
-  #popPickHeap(): number | undefined {
-    const first = this.#pickHeap[0];
-    const last = this.#pickHeap.pop();
-    if (first === undefined || last === undefined || this.#pickHeap.length === 0) return first;
-    let index = 0;
-    while (true) {
-      const left = index * 2 + 1;
-      if (left >= this.#pickHeap.length) break;
-      const right = left + 1;
-      const child = right < this.#pickHeap.length
-        && this.#pickCandidateBefore(this.#pickHeap[right]!, this.#pickHeap[left]!) ? right : left;
-      if (!this.#pickCandidateBefore(this.#pickHeap[child]!, last)) break;
-      this.#pickHeap[index] = this.#pickHeap[child]!;
-      index = child;
-    }
-    this.#pickHeap[index] = last;
-    return first;
-  }
-
-  #pickNearestGltfCandidate(
-    node: GltfNode | GltfInstancesNode,
-    ray: Ray,
-    input: PickInput,
-    drawOrdinal: number,
-  ): PickCandidate | undefined {
-    let bestIndex = -1;
-    let bestDistance = Infinity;
-    let bestOrdinal = Infinity;
-    while (this.#pickHeap.length > 0) {
-      const index = this.#popPickHeap();
-      if (index === undefined) break;
-      const candidate = this.#pickCandidates[index]!;
-      if (candidate.boundsDistance > bestDistance) break;
-      const primitive = candidate.primitive;
-      const rootModel = candidate.rootModel;
-      const localModel = candidate.localModel;
-      if (primitive === undefined || rootModel === undefined || localModel === undefined) continue;
-      multiplyMat4Into(this.#pickModel, rootModel, localModel);
-      this.#pickExactTestsThisPick += 1;
-      const mode = primitive.mode as RayGeometryMode;
-      const distance = rayGeometryDistanceWithScratch(
-        primitive.positions,
-        primitive.indices,
-        mode,
-        this.#pickModel,
-        ray,
-        this.#pickRayGeometryScratch,
-      );
-      if (
-        distance !== undefined
-        && (distance < bestDistance || (distance === bestDistance && candidate.ordinal < bestOrdinal))
-      ) {
-        bestDistance = distance;
-        bestIndex = index;
-        bestOrdinal = candidate.ordinal;
-      }
-    }
-    if (bestIndex < 0) return undefined;
-    const best = this.#pickCandidates[bestIndex]!;
-    const primitive = best.primitive!;
-    const primitiveKey = primitive.localModels.length === 1
-      ? primitive.key
-      : node.kind === "gltf"
-        ? `${primitive.key}:instance:${best.instanceIndex}`
-        : `${primitive.key}:asset-instance:${best.instanceIndex}`;
-    return {
-      clientX: input.clientX,
-      clientY: input.clientY,
-      distance: bestDistance,
-      drawOrdinal,
-      point: pointOnRay(ray, bestDistance),
-      target: node.kind === "gltf"
-        ? { ...(node.pickingId === undefined ? {} : { id: node.pickingId }), kind: "gltf", node, primitiveKey }
-        : {
-          ...(node.pickingId === undefined ? {} : { id: node.pickingId }),
-          ...(node.instances.logicalIds?.[best.outerIndex] === undefined
-            ? {}
-            : { instanceId: node.instances.logicalIds[best.outerIndex] }),
-          instanceIndex: best.outerIndex,
-          kind: "gltf-instances",
-          node,
-          primitiveKey,
-        },
-    };
-  }
-
-  #isBetterPick(candidate: PickCandidate, current: PickCandidate | undefined): boolean {
-    if (current === undefined) return true;
-    if (candidate.distance !== current.distance) return candidate.distance < current.distance;
-
-    return candidate.drawOrdinal > current.drawOrdinal;
   }
 
   #resize(): { readonly height: number; readonly width: number } {
@@ -7608,6 +7244,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return this.#meshGeometryRow(geometry, material).recipe;
   }
 
+  #localGeometryBounds(geometry: CpuGeometry): Bounds3 | undefined {
+    if (this.#geometryLocalBounds.has(geometry.positions)) return this.#geometryLocalBounds.get(geometry.positions);
+    const bounds = worldBounds(geometry.positions, identityMat4());
+    this.#geometryLocalBounds.set(geometry.positions, bounds);
+    return bounds;
+  }
+
 
   #geometryResource(geometryId: number): GeometryResource {
     return vertexInputGeometry(
@@ -9237,14 +8880,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
     return { ...this.#gltfInstancingCounters };
-  }
-
-  #pickingWorkSnapshot(): WebGlPickingSnapshot {
-    return {
-      candidateHighWater: this.#pickCandidates.length,
-      candidates: this.#pickCandidatesThisPick,
-      exactTests: this.#pickExactTestsThisPick,
-    };
   }
 
   #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {

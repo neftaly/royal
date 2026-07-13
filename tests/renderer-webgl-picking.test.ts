@@ -46,6 +46,7 @@ const loadedTriangleGltfFetch = (): ReturnType<typeof vi.fn> => {
           ],
           buffers: [
             {
+              byteLength: buffer.byteLength,
               uri: "right.bin",
             },
           ],
