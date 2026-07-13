@@ -73,6 +73,9 @@ export type VirtualTextureRuntimeStats = {
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
   demandPublished: boolean;
+  /** Raw current draw demand before terminal-page convergence filtering. */
+  demandedPageKeys: Set<string>;
+  demandedPageKeysScratch: Set<string>;
   diagnosticsEnabled: boolean;
   /** GPU publication target: exact current demand plus bounded replacement overlap while converging. */
   desiredPageKeys: Set<string>;
@@ -81,6 +84,8 @@ export type VirtualTextureRuntimeState = {
   desiredPages: VirtualTexturePageId[];
   desiredPagesScratch: VirtualTexturePageId[];
   readonly key: string;
+  /** Incremental count of page lifecycles currently in the loading state. */
+  loadingPageCount: number;
   manifestAbortController?: AbortController;
   readonly pageLifecycles: Map<string, VirtualTexturePageLifecycle>;
   readonly pageLoadAbortControllers: Map<string, AbortController>;

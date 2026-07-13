@@ -862,6 +862,41 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.dispose();
   });
 
+  it("purges obsolete capacity-blocked pages without retrying or waking after capacity releases", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }), {
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 64 }),
+    });
+    const material = unlitMaterial({ texture: virtualTexture("/vt/obsolete-capacity.json") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(4)));
+    await flushMicrotasks();
+    root.render(renderScene(material));
+    await flushMicrotasks();
+
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(root.snapshot().resourceGovernor.denialsByReason["cpu-decoded-capacity"])
+      .toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBeGreaterThan(1);
+
+    root.render(renderScene(material, { cameraX: 100 }));
+    await flushMicrotasks();
+    const settledImageCount = ControlledImage.instances.length;
+    const settledWakeCount = requestAnimationFrame.mock.calls.length;
+
+    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBe(0);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(settledImageCount);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(settledWakeCount);
+    root.dispose();
+  });
+
   it("retries governed VT admission after cross-class geometry capacity is released", async () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     const probe = createWebGlRoot(fakeCanvas(fakeGl().gl));
@@ -1136,6 +1171,98 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(1);
     expect(ControlledImage.closeCalls).toBe(1);
+    root.dispose();
+  });
+
+  it("requests a terminal failed page again only after it leaves and re-enters draw demand", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/terminal-reentry.json") });
+    const visible = renderScene(material);
+
+    root.render(visible);
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushMicrotasks();
+    const failed = ControlledImage.instances[0]!;
+    failed.naturalWidth = 5;
+    failed.width = 5;
+    failed.settleLoad();
+    await flushMicrotasks();
+
+    root.render(visible);
+    expect(ControlledImage.instances).toHaveLength(1);
+    expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBe(1);
+
+    root.render(renderScene(material, { cameraX: 100 }));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBe(0);
+
+    root.render(visible);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(2);
+    expect(ControlledImage.instances[1]!.src).toBe(failed.src);
+    root.dispose();
+  });
+
+  it("bounds lifecycle retention across many failed pages that become obsolete", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const pageCount = 12;
+    const texture = virtualTexture("/vt/lifecycle-churn.json");
+    const materialAt = (index: number): SurfaceMaterial => ({
+      ...unlitMaterial({ texture }),
+      textureCoordinates: {
+        baseColorTexture: {
+          row0: [1 / pageCount, 0, index / pageCount, 0],
+          row1: [0, 1, 0, 0],
+          set: 0,
+        },
+      },
+    });
+
+    root.render(renderScene(materialAt(0)));
+    fetchRequests[0]!.resolve(responseJson({
+      contractVersion: 1,
+      pageSize: 4,
+      pages: {
+        entries: Array.from({ length: pageCount }, (_value, x) => ({
+          mip: 0,
+          uri: `pages/${x}-0.png`,
+          x,
+          y: 0,
+        })),
+      },
+      physicalSlots: 1,
+      virtualSize: [pageCount * 4, 4],
+    }));
+    await flushMicrotasks();
+
+    for (let index = 0; index < pageCount; index += 1) {
+      if (index > 0) {
+        root.render(renderScene(materialAt(index)));
+        await flushMicrotasks();
+      }
+      const failed = ControlledImage.instances.at(-1)!;
+      expect(failed.complete).toBe(false);
+      failed.naturalWidth = 5;
+      failed.width = 5;
+      failed.settleLoad();
+      await flushMicrotasks();
+      expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBeLessThanOrEqual(1);
+    }
+
+    expect(new Set(ControlledImage.instances.map((image) => image.src)).size).toBe(pageCount);
+    root.render(renderScene(materialAt(pageCount - 1), { cameraX: 100 }));
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBe(0);
     root.dispose();
   });
 

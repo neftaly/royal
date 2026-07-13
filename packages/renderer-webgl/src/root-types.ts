@@ -202,6 +202,8 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly manifestsReady: number;
   readonly pageTableTextures: number;
   readonly pageTableUpdates: number;
+  /** Retained per-page request lifecycle entries across all virtual textures. */
+  readonly pageLifecycleEntries: number;
   /** Pages currently loading, decoding, or queued/in-flight for GPU upload. */
   readonly pendingPages: number;
   /** Allocated VT atlas and page-table storage, in GPU bytes. Excludes quarantined bytes. */

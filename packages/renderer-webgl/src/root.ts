@@ -2002,6 +2002,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     beginVirtualTextureFrameDemand(this.#virtualTextureFrameDemand);
+    for (const state of this.#virtualTextures.values()) state.demandedPageKeysScratch.clear();
     try {
     gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
     prepareFrameBaseline(gl, frameViews.scissor);
@@ -3084,6 +3085,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     state.desiredPageKeys.clear();
     state.desiredPageKeysScratch.clear();
+    state.demandedPageKeys.clear();
+    state.demandedPageKeysScratch.clear();
     state.desiredPages.length = 0;
     state.desiredPagesScratch.length = 0;
     this.#virtualTextureFrameDemand.resources.delete(state);
@@ -5333,12 +5336,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const state: VirtualTextureRuntimeState = {
       activeSource,
       demandPublished: false,
+      demandedPageKeys: new Set(),
+      demandedPageKeysScratch: new Set(),
       diagnosticsEnabled,
       desiredPageKeys: new Set(),
       desiredPageKeysScratch: new Set(),
       desiredPages: [],
       desiredPagesScratch: [],
       key,
+      loadingPageCount: 0,
       pageLifecycles: new Map(),
       pageLoadAbortControllers: new Map(),
       pageRetryTimers: new Map(),
@@ -5688,6 +5694,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
+    const demandedPageKeys = state.demandedPageKeysScratch;
+    if (!this.#virtualTextureFrameDemand.active) demandedPageKeys.clear();
+    for (const page of candidates) demandedPageKeys.add(virtualTexturePageKey(page));
+    if (preferredCandidates !== undefined) {
+      for (const page of preferredCandidates) demandedPageKeys.add(virtualTexturePageKey(page));
+    }
     const convergentCandidates = this.#convergentVirtualTextureCandidates(state, candidates);
     const convergentPreferredCandidates = preferredCandidates === undefined
       ? undefined
@@ -5723,6 +5735,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             }],
             this.#virtualTextureDemandCapacity(state),
           ),
+      true,
     );
   }
 
@@ -5782,13 +5795,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return true;
   }
 
-  #commitPreparedVirtualTextureDemand(state: VirtualTextureRuntimeState): void {
+  #commitPreparedVirtualTextureDemand(
+    state: VirtualTextureRuntimeState,
+    commitDemandedPageKeys = false,
+  ): void {
     const previousPageKeys = state.desiredPageKeys;
     const previousPages = state.desiredPages;
     state.desiredPageKeys = state.desiredPageKeysScratch;
     state.desiredPages = state.desiredPagesScratch;
     state.desiredPageKeysScratch = previousPageKeys;
     state.desiredPagesScratch = previousPages;
+    if (commitDemandedPageKeys) {
+      const previousDemandedPageKeys = state.demandedPageKeys;
+      state.demandedPageKeys = state.demandedPageKeysScratch;
+      state.demandedPageKeysScratch = previousDemandedPageKeys;
+    }
     state.demandPublished = true;
     const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
     if (resource !== undefined) {
@@ -5812,6 +5833,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#transitionVirtualTexturePage(state, pageKey, { kind: "release" });
       }
     }
+    this.#purgeObsoleteVirtualTexturePageLifecycles(state);
     // Convergence is woken by decode/upload settlement. Invalidating here
     // would repeatedly reconsider the same nonresident admissions and erode
     // transition coverage before any page can become drawable.
@@ -5833,9 +5855,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #applyVirtualTextureDemand(
     state: VirtualTextureRuntimeState,
     workingCandidates: readonly VirtualTexturePageId[],
+    commitDemandedPageKeys = false,
   ): void {
     if (!this.#prepareVirtualTextureDemand(state, workingCandidates)) return;
-    this.#commitPreparedVirtualTextureDemand(state);
+    this.#commitPreparedVirtualTextureDemand(state, commitDemandedPageKeys);
     this.#touchPublishedVirtualTextureDemand(state);
     const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
     this.#scheduleVirtualTextureRequestDrain();
@@ -5872,7 +5895,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     for (const state of publicationStates) {
       commitFailure = captureFirstFailure(
         commitFailure,
-        () => this.#commitPreparedVirtualTextureDemand(state),
+        () => this.#commitPreparedVirtualTextureDemand(state, true),
       );
     }
     for (const state of publicationStates) {
@@ -5933,8 +5956,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     pageKey: string,
     event: VirtualTexturePageLifecycleEvent,
   ): VirtualTexturePageLifecycleTransition {
+    const previous = state.pageLifecycles.get(pageKey);
     const transition = reduceVirtualTexturePageLifecycle(
-      state.pageLifecycles.get(pageKey),
+      previous,
       event,
       {
         retryBaseDelayMs: VIRTUAL_TEXTURE_PAGE_RETRY_BASE_DELAY_MS,
@@ -5943,7 +5967,33 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     if (transition.state === undefined) state.pageLifecycles.delete(pageKey);
     else state.pageLifecycles.set(pageKey, transition.state);
+    const loadingDelta = Number(virtualTexturePageLifecycleLoading(transition.state))
+      - Number(virtualTexturePageLifecycleLoading(previous));
+    state.loadingPageCount += loadingDelta;
+    if (state.loadingPageCount < 0) {
+      throw new Error(`Virtual texture ${state.key} loading-page count became negative`);
+    }
     return transition;
+  }
+
+  #purgeObsoleteVirtualTexturePageLifecycle(
+    state: VirtualTextureRuntimeState,
+    pageKey: string,
+  ): void {
+    if (
+      state.demandedPageKeys.has(pageKey)
+      || state.pageLoadAbortControllers.has(pageKey)
+      || state.pageRetryTimers.has(pageKey)
+    ) return;
+    const lifecycle = state.pageLifecycles.get(pageKey);
+    if (lifecycle === undefined || lifecycle.kind === "queued") return;
+    this.#transitionVirtualTexturePage(state, pageKey, { kind: "release" });
+  }
+
+  #purgeObsoleteVirtualTexturePageLifecycles(state: VirtualTextureRuntimeState): void {
+    for (const pageKey of state.pageLifecycles.keys()) {
+      this.#purgeObsoleteVirtualTexturePageLifecycle(state, pageKey);
+    }
   }
 
   #maximumVirtualTextureDecodedCpuBytes(): number {
@@ -6041,6 +6091,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     try {
       pageImage = this.#virtualTexturePageImage(state, page, controller.signal);
     } catch (error) {
+      state.pageLoadAbortControllers.delete(pageKey);
+      controller.abort();
       decodedReservation.cancel();
       job.release();
       throw error;
@@ -6187,7 +6239,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
           || state.sourceGeneration !== sourceGeneration
           || state.status !== "ready"
           || !state.desiredPageKeys.has(pageKey)
-        ) return;
+        ) {
+          this.#purgeObsoleteVirtualTexturePageLifecycle(state, pageKey);
+          return;
+        }
         this.invalidate();
         this.#scheduleVirtualTextureRequestDrain();
       }, retry.retryDelayMs);
@@ -6227,12 +6282,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         resources.length = 0;
         let resourceIndex = 0;
         for (const state of this.#virtualTextures.values()) {
+          this.#purgeObsoleteVirtualTexturePageLifecycles(state);
           const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
           const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-          let loadingPages = 0;
-          for (const lifecycle of state.pageLifecycles.values()) {
-            if (virtualTexturePageLifecycleLoading(lifecycle)) loadingPages += 1;
-          }
           let snapshot = this.#virtualTextureRequestResourcePool[resourceIndex];
           if (snapshot === undefined) {
             snapshot = {
@@ -6250,7 +6302,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           snapshot.effectiveSlots = gpu?.effectiveSlots ?? 0;
           snapshot.enabled = state.status === "ready" && state.desiredPages.length > 0;
           snapshot.key = state.key;
-          snapshot.loadingPages = loadingPages;
+          snapshot.loadingPages = state.loadingPageCount;
           snapshot.pendingUploads = gpu?.pendingUploads ?? 0;
           for (let pageIndex = 0; pageIndex < state.desiredPages.length; pageIndex += 1) {
             const page = state.desiredPages[pageIndex]!;
@@ -7683,6 +7735,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let manifestsReady = 0;
     let pageTableTextures = 0;
     let pageTableUpdates = 0;
+    let pageLifecycleEntries = 0;
     let pendingPages = 0;
     let preparedResidencyResolutions = 0;
     let outstandingPageRequests = 0;
@@ -7716,15 +7769,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       pageLoadFailures += state.stats.pageLoadFailures;
       if (state.status === "ready") manifestsReady += 1;
       pageTableUpdates += gpu?.pageTableUpdates ?? 0;
-      let loadingPages = 0;
-      let outstandingPages = 0;
+      let queuedPages = 0;
       for (const lifecycle of state.pageLifecycles.values()) {
-        if (virtualTexturePageLifecycleLoading(lifecycle)) loadingPages += 1;
-        if (virtualTexturePageLifecycleClaimed(lifecycle)) outstandingPages += 1;
+        if (lifecycle.kind === "queued") queuedPages += 1;
       }
-      pendingPages += loadingPages + (gpu?.pendingUploads ?? 0);
+      pageLifecycleEntries += state.pageLifecycles.size;
+      pendingPages += state.loadingPageCount + (gpu?.pendingUploads ?? 0);
       preparedResidencyResolutions += state.stats.preparedResidencyResolutions;
-      outstandingPageRequests += outstandingPages;
+      outstandingPageRequests += state.loadingPageCount + queuedPages;
       activePages += gpu?.activePages ?? 0;
       cachedPages += gpu?.cachedPages ?? 0;
       residentPages += gpu?.residentPages ?? 0;
@@ -7763,6 +7815,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       manifestsReady,
       pageTableTextures,
       pageTableUpdates,
+      pageLifecycleEntries,
       pendingPages,
       physicalAllocatedBytes: gpuArena.allocatedBytes,
       physicalBudgetBytes: gpuArena.budgetBytes,
