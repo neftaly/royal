@@ -118,15 +118,18 @@ export class OrdinaryTextureResidencyController {
     });
   }
 
+  peekGpuResource(key: string): OrdinaryTextureGpuResource | undefined {
+    return ordinaryTextureGpuResource(this.#gpu, key);
+  }
+
   request(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {
     const key = textureCacheKey(texture);
     const row = this.#row(key);
     row.gpuSuppressed = false;
-    const cached = ordinaryTextureGpuResource(this.#gpu, key);
-    if (cached !== undefined) return cached;
     const lifecycle = this.#options.lifecycle();
     const resource = ensureOrdinaryTextureGpuResource(this.#gpu, key, lifecycle.generation);
     if (row.terminal) return resource;
+    if (resource.uploaded || ordinaryTextureGpuPendingUpload(resource) !== undefined) return resource;
     const prepared = resourceArenaPreparedSource(this.#options.resourceArena, key);
     if (prepared !== undefined) this.#queue(resource, prepared.source, prepared.texture);
     else if (texture.preparedOnly !== true && row.subscription === undefined) this.#acquire(row, key, texture);
@@ -163,6 +166,7 @@ export class OrdinaryTextureResidencyController {
         ensureOrdinaryTextureGpuResource(this.#gpu, key, generation),
         prepared.source,
         prepared.texture,
+        true,
       );
     }
   }
@@ -340,11 +344,21 @@ export class OrdinaryTextureResidencyController {
     return this.#rows.get(key) === row && row.acquisition === acquisition;
   }
 
-  #queue(resource: OrdinaryTextureGpuResource, source: LoadedTextureSource, texture: TextureAssetUploadRef): void {
+  #queue(
+    resource: OrdinaryTextureGpuResource,
+    source: LoadedTextureSource,
+    texture: TextureAssetUploadRef,
+    allowRestoring = false,
+  ): void {
     if (this.#rows.get(resource.key)?.terminal === true) return;
     this.#retain(resource.key, { source, texture });
     const lifecycle = this.#options.lifecycle();
-    if (lifecycle.disposed || !lifecycle.active || resource.generation !== lifecycle.generation || resource.uploaded) return;
+    if (
+      lifecycle.disposed
+      || (!lifecycle.active && !allowRestoring)
+      || resource.generation !== lifecycle.generation
+      || resource.uploaded
+    ) return;
     queueOrdinaryTextureUpload(this.#gpu, resource, { source, texture });
     if (consumeOrdinaryTextureGpuWake(this.#gpu)) this.#options.invalidate();
   }

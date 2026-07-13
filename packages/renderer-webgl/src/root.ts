@@ -308,6 +308,7 @@ import {
   projectedBoundsScreenCoverage,
 } from "./math/projected-bounds";
 import { PickingController } from "./picking-controller";
+import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
 import {
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
@@ -521,8 +522,8 @@ type SurfaceBaseColorTextureBinding =
       readonly resource: Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
     }
   | {
-      readonly fallback?: Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
       readonly kind: "prepared-virtual";
+      readonly ordinaryFallback?: TextureAssetUploadRef;
       readonly state: VirtualTextureRuntimeState;
     };
 
@@ -1233,6 +1234,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
   readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
+  readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
   readonly #pendingGltfImageRows: GltfImageRow[] = [];
   readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
@@ -1851,6 +1853,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     beginVirtualTextureFrameDemand(this.#virtualTextureFrameDemand);
+    this.#textureResidencyIntent.beginFrame();
     for (const state of this.#virtualTextures.values()) state.demandedPageKeysScratch.clear();
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
@@ -2007,6 +2010,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (renderFailure === undefined) {
       renderFailure = captureFirstFailure(renderFailure, () => this.#processVirtualTextureGpuUploads());
     }
+    renderFailure = captureFirstFailure(
+      renderFailure,
+      () => this.#finalizeTextureResidencyIntent(renderFailure === undefined),
+    );
     renderFailure = captureFirstFailure(renderFailure, () => {
       this.#frame += 1;
     });
@@ -4225,7 +4232,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
     const resolveOrdinary = (texture: TextureAssetUploadRef | undefined): ReadyOrdinaryTexture | undefined => {
       if (texture === undefined) return undefined;
-      const resource = this.#ordinaryTextures.request(texture);
+      const resource = this.#requestOrdinaryTexture(texture);
       return resource.uploaded ? resource : undefined;
     };
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
@@ -4239,7 +4246,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
 
     let ordinaryBaseColor: ReadyOrdinaryTexture | undefined;
-    let virtualFallback: ReadyOrdinaryTexture | undefined;
+    let virtualFallbackTexture: TextureAssetUploadRef | undefined;
+    let virtualFallbackReady: ReadyOrdinaryTexture | undefined;
     const baseColor = (() => {
       switch (baseColorResidency.kind) {
         case "none": return { kind: "none" } as const;
@@ -4255,11 +4263,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
             if (baseColorResidency.state.status === "unsupported") baseColorResidency.state.stats.unsupportedDraws += 1;
             else baseColorResidency.state.stats.unreadyDraws += 1;
           }
-          virtualFallback = resolveOrdinary(baseColorResidency.ordinaryFallback);
+          virtualFallbackTexture = baseColorResidency.ordinaryFallback;
+          const fallbackResource = virtualFallbackTexture === undefined
+            ? undefined
+            : this.#ordinaryTextures.peekGpuResource(textureCacheKey(virtualFallbackTexture));
+          virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
           return {
-            ...(baseColorResidency.ordinaryFallback === undefined
+            ...(virtualFallbackTexture === undefined
               ? {}
-              : { fallback: virtualFallback === undefined ? "unavailable" as const : "ready" as const }),
+              : { fallback: virtualFallbackReady === undefined ? "unavailable" as const : "ready" as const }),
             kind: "virtual" as const,
             virtual: drawable ? "ready" as const : "unavailable" as const,
           };
@@ -4304,18 +4316,20 @@ class WebGlRootImpl implements InternalWebGlRoot {
       }
     }
     this.#recordSurfaceTextureBindingOmissions(pure);
+    const selectedVirtualFallback = pure.baseColor.kind !== "virtual"
+      && virtualFallbackTexture !== undefined
+      ? resolveOrdinary(virtualFallbackTexture)
+      : undefined;
     const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
-      ? ordinaryBaseColor === undefined && virtualFallback !== undefined
-        ? { kind: "ordinary", resource: virtualFallback }
+      ? ordinaryBaseColor === undefined && selectedVirtualFallback !== undefined
+        ? { kind: "ordinary", resource: selectedVirtualFallback }
         : ordinaryBaseColor === undefined
           ? { kind: "none" }
           : { kind: "ordinary", resource: ordinaryBaseColor }
       : pure.baseColor.kind === "virtual" && baseColorResidency.kind === "prepared-virtual"
         ? {
-            ...(pure.baseColor.fallback === "atlas-unit" && virtualFallback !== undefined
-              ? { fallback: virtualFallback }
-              : {}),
             kind: "prepared-virtual",
+            ...(virtualFallbackTexture === undefined ? {} : { ordinaryFallback: virtualFallbackTexture }),
             state: baseColorResidency.state,
           }
         : { kind: "none" };
@@ -4492,18 +4506,31 @@ class WebGlRootImpl implements InternalWebGlRoot {
         return this.#bindOrdinaryBaseColorTexture(program, binding, plan)
           ? binding
           : { kind: "none" };
-      case "prepared-virtual":
-        if (this.#bindVirtualTexture(program, binding.state, plan)) return binding;
-        if (binding.fallback !== undefined) {
-          const fallback = { kind: "ordinary" as const, resource: binding.fallback };
+      case "prepared-virtual": {
+        if (this.#bindVirtualTexture(program, binding.state, plan)) {
+          if (binding.ordinaryFallback !== undefined) {
+            this.#textureResidencyIntent.recordVirtualBind(textureCacheKey(binding.ordinaryFallback));
+          }
+          return binding;
+        }
+        if (binding.ordinaryFallback !== undefined) {
+          const resource = this.#requestOrdinaryTexture(binding.ordinaryFallback);
+          if (!resource.uploaded) return { kind: "none" };
+          const fallback = { kind: "ordinary" as const, resource };
           return this.#bindOrdinaryBaseColorTexture(program, fallback, plan)
             ? fallback
             : { kind: "none" };
         }
         return { kind: "none" };
+      }
       case "none":
         return { kind: "none" };
     }
+  }
+
+  #requestOrdinaryTexture(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {
+    this.#textureResidencyIntent.requireOrdinary(textureCacheKey(texture));
+    return this.#ordinaryTextures.request(texture);
   }
 
   #bindOrdinaryBaseColorTexture(
@@ -6108,6 +6135,38 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
     if (gpuFailure !== undefined) throw gpuFailure.value;
     if (closeFailure !== undefined) throw closeFailure.value;
+  }
+
+  #finalizeTextureResidencyIntent(commit: boolean): void {
+    const suppressions = this.#textureResidencyIntent.finishFrame(commit);
+    if (suppressions.length === 0) return;
+    const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
+    this.#suppressPersistentGpuCapacityWake = true;
+    let capacityReleased = false;
+    let firstFailure: CapturedFailure | undefined;
+    try {
+      for (const key of suppressions) {
+        let report: ReturnType<OrdinaryTextureResidencyController["suppressGpuResidency"]> | undefined;
+        firstFailure = captureFirstFailure(firstFailure, () => {
+          report = this.#ordinaryTextures.suppressGpuResidency(key);
+          capacityReleased ||= report.capacityReleased;
+          if (report.operationFailure !== undefined) throw report.operationFailure.error;
+        });
+        const settledReport = report;
+        if (settledReport !== undefined) firstFailure = captureFirstFailure(firstFailure, () => {
+          const settlement = this.#ordinaryTextures.settleGpuReport(settledReport);
+          if (settlement !== undefined) throw settlement.error;
+        });
+      }
+      firstFailure = captureFirstFailure(
+        firstFailure,
+        () => this.#synchronizeResourceGovernorObservations(),
+      );
+    } finally {
+      this.#suppressPersistentGpuCapacityWake = previouslySuppressed;
+    }
+    if (capacityReleased && !previouslySuppressed) this.#wakePersistentGpuCapacity();
+    if (firstFailure !== undefined) throw firstFailure.value;
   }
 
   #processOrdinaryTextureUploads(): void {

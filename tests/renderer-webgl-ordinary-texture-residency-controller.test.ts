@@ -419,6 +419,54 @@ describe("ordinary texture residency controller", () => {
     controller.disposeSources();
   });
 
+  it("queues retained prepared sources while the matching context is restoring", async () => {
+    const decoded = source(31);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/restore-queue.png" };
+    const { arena, controller, lifecycle } = harness({ load: async () => decoded });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+    expect(settle(controller, controller.process(0, 1, successfulAdmission))).toBeUndefined();
+
+    lifecycle.active = false;
+    expect(settle(controller, controller.dropContext())).toBeUndefined();
+    lifecycle.generation += 1;
+    controller.restoreContext(lifecycle.generation);
+    expect(settle(
+      controller,
+      controller.process(1, lifecycle.generation, successfulAdmission),
+    )).toBeUndefined();
+
+    expect(controller.peekGpuResource(textureCacheKey(texture))?.uploaded).toBe(true);
+    settle(controller, controller.release(textureCacheKey(texture)));
+    controller.disposeSources();
+  });
+
+  it("repairs a cached unqueued resource when an active request follows context loss", async () => {
+    const decoded = source(32);
+    const texture: TextureAssetUploadRef = { kind: "asset", uri: "/request-repair.png" };
+    const { arena, controller, lifecycle } = harness({ load: async () => decoded });
+    retainTexture(arena, texture);
+    controller.request(texture);
+    await flushJobs();
+    expect(settle(controller, controller.process(0, 1, successfulAdmission))).toBeUndefined();
+
+    lifecycle.active = false;
+    expect(settle(controller, controller.dropContext())).toBeUndefined();
+    lifecycle.generation += 1;
+    expect(controller.request(texture).uploaded).toBe(false);
+    lifecycle.active = true;
+    controller.request(texture);
+    expect(settle(
+      controller,
+      controller.process(1, lifecycle.generation, successfulAdmission),
+    )).toBeUndefined();
+
+    expect(controller.peekGpuResource(textureCacheKey(texture))?.uploaded).toBe(true);
+    settle(controller, controller.release(textureCacheKey(texture)));
+    controller.disposeSources();
+  });
+
   it("rejects double report settlement", () => {
     const { controller } = harness();
     const report = controller.process(0, 1, successfulAdmission);
