@@ -1,9 +1,16 @@
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+
+import {
+  connectCdpPage,
+  evaluate,
+  spawnLogged,
+  startVitePreview,
+  stopProcess,
+  waitForHttp,
+} from './browser-harness.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -40,135 +47,7 @@ if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const waitForJson = async (url, timeoutMs) => {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return await response.json();
-      lastError = new Error(`${url} returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(100);
-  }
-
-  throw lastError ?? new Error(`Timed out waiting for ${url}`);
-};
-
-const waitForHttp = async (url, timeoutMs) => {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-      lastError = new Error(`${url} returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(100);
-  }
-
-  throw lastError ?? new Error(`Timed out waiting for ${url}`);
-};
-
-class CdpSession {
-  #nextId = 1;
-  #pending = new Map();
-  #handlers = new Map();
-
-  constructor(socket) {
-    this.socket = socket;
-    socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data);
-      if (message.id !== undefined) {
-        const pending = this.#pending.get(message.id);
-        if (pending === undefined) return;
-        this.#pending.delete(message.id);
-        if (message.error === undefined) pending.resolve(message.result);
-        else pending.reject(new Error(message.error.message));
-        return;
-      }
-
-      for (const handler of this.#handlers.get(message.method) ?? []) handler(message.params);
-    });
-  }
-
-  on(method, handler) {
-    this.#handlers.set(method, [...(this.#handlers.get(method) ?? []), handler]);
-  }
-
-  once(method) {
-    return new Promise((resolve) => {
-      const handler = (params) => {
-        this.#handlers.set(method, (this.#handlers.get(method) ?? []).filter((entry) => entry !== handler));
-        resolve(params);
-      };
-      this.on(method, handler);
-    });
-  }
-
-  call(method, params = {}) {
-    const id = this.#nextId++;
-    this.socket.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
-    });
-  }
-
-  close() {
-    this.socket.close();
-  }
-}
-
-const connectPage = async () => {
-  await waitForJson(`http://${host}:${debugPort}/json/version`, 10_000);
-  const pages = await waitForJson(`http://${host}:${debugPort}/json/list`, 10_000);
-  const page = pages.find((entry) => entry.type === 'page');
-  if (page?.webSocketDebuggerUrl === undefined) {
-    throw new Error('Chromium did not expose a debuggable page target');
-  }
-
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
-  await once(socket, 'open');
-  return new CdpSession(socket);
-};
-
-const evaluate = async (session, expression, options = {}) => {
-  const result = await session.call('Runtime.evaluate', {
-    awaitPromise: true,
-    expression,
-    returnByValue: true,
-    ...options,
-  });
-  if (result.exceptionDetails !== undefined) {
-    throw new Error(
-      result.exceptionDetails.exception?.description ?? result.exceptionDetails.text,
-    );
-  }
-  return result.result.value;
-};
-
-const spawnLogged = (command, args, options) => {
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
-  child.stdout.on('data', (chunk) => process.stdout.write(chunk));
-  child.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  return child;
-};
-
-const stop = async (child) => {
-  if (child === undefined || child.exitCode !== null || child.signalCode !== null) return;
-  child.kill('SIGTERM');
-  await Promise.race([once(child, 'exit'), sleep(2000)]);
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL');
-    await once(child, 'exit');
-  }
-};
+const connectPage = () => connectCdpPage({ debugHost: host, debugPort });
 
 const installBenchmarkHooks = async (session) => {
   const hookConfig = JSON.stringify({
@@ -1145,18 +1024,7 @@ const printSummary = (report) => {
 const main = async () => {
   const profileDir = await mkdtemp(path.join(tmpdir(), 'royal-gltf-load-bench-'));
   const preview = managePreview
-    ? spawnLogged('pnpm', [
-        'exec',
-        'vite',
-        'preview',
-        '--config',
-        'vite.config.ts',
-        '--host',
-        host,
-        '--port',
-        String(previewPort),
-        '--strictPort',
-      ], { cwd: appRoot })
+    ? startVitePreview({ appRoot, host, port: previewPort })
     : undefined;
   const browser = spawnLogged('chromium', [
     '--headless=new',
@@ -1271,8 +1139,8 @@ const main = async () => {
     }
   } finally {
     session?.close();
-    await stop(browser);
-    await stop(preview);
+    await stopProcess(browser);
+    await stopProcess(preview);
     await rm(profileDir, {
       force: true,
       maxRetries: 3,

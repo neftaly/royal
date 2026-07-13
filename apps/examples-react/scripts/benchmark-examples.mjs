@@ -1,11 +1,18 @@
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { createReadStream, readFileSync } from 'node:fs';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { createGzip } from 'node:zlib';
+
+import {
+  connectCdpPage,
+  evaluate,
+  spawnLogged,
+  startVitePreview,
+  stopProcess,
+  waitForHttp,
+} from './browser-harness.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -252,134 +259,12 @@ const selectedRoutes = () => {
   return selected;
 };
 
-const waitForJson = async (url, timeoutMs) => {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return await response.json();
-      lastError = new Error(`${url} returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(100);
-  }
-  throw lastError ?? new Error(`Timed out waiting for ${url}`);
-};
-
-const waitForHttp = async (url, timeoutMs) => {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-      lastError = new Error(`${url} returned ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-    await sleep(100);
-  }
-  throw lastError ?? new Error(`Timed out waiting for ${url}`);
-};
-
-class CdpSession {
-  #nextId = 1;
-  #pending = new Map();
-  #handlers = new Map();
-
-  constructor(socket) {
-    this.socket = socket;
-    socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data);
-      if (message.id !== undefined) {
-        const pending = this.#pending.get(message.id);
-        if (pending === undefined) return;
-        this.#pending.delete(message.id);
-        clearTimeout(pending.timeout);
-        if (message.error === undefined) pending.resolve(message.result);
-        else pending.reject(new Error(`${pending.method} failed: ${message.error.message}`));
-        return;
-      }
-      for (const handler of this.#handlers.get(message.method) ?? []) handler(message.params);
-    });
-    socket.addEventListener('close', () => {
-      this.#rejectPending(new Error('CDP socket closed'));
-    });
-    socket.addEventListener('error', () => {
-      this.#rejectPending(new Error('CDP socket error'));
-    });
-  }
-
-  on(method, handler) {
-    this.#handlers.set(method, [...(this.#handlers.get(method) ?? []), handler]);
-  }
-
-  once(method) {
-    return new Promise((resolve) => {
-      const handler = (params) => {
-        this.#handlers.set(method, (this.#handlers.get(method) ?? []).filter((entry) => entry !== handler));
-        resolve(params);
-      };
-      this.on(method, handler);
-    });
-  }
-
-  call(method, params = {}) {
-    const id = this.#nextId++;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.#pending.delete(id);
-        reject(new Error(`${method} timed out after ${cdpCommandTimeoutMs}ms`));
-      }, cdpCommandTimeoutMs);
-      this.#pending.set(id, { method, reject, resolve, timeout });
-      try {
-        this.socket.send(JSON.stringify({ id, method, params }));
-      } catch (error) {
-        clearTimeout(timeout);
-        this.#pending.delete(id);
-        reject(error);
-      }
-    });
-  }
-
-  close() {
-    this.socket.close();
-  }
-
-  #rejectPending(error) {
-    const pending = this.#pending;
-    this.#pending = new Map();
-    for (const entry of pending.values()) {
-      clearTimeout(entry.timeout);
-      entry.reject(error);
-    }
-  }
-}
-
-const connectPage = async () => {
-  await waitForJson(`http://${debugHost}:${debugPort}/json/version`, 10_000);
-  const pages = await waitForJson(`http://${debugHost}:${debugPort}/json/list`, 10_000);
-  const page = pages.find((entry) => entry.type === 'page');
-  if (page?.webSocketDebuggerUrl === undefined) {
-    throw new Error('Chromium did not expose a debuggable page target');
-  }
-  const socket = new WebSocket(page.webSocketDebuggerUrl.replace(/^ws:\/\/[^/]+/, `ws://${debugHost}:${debugPort}`));
-  await once(socket, 'open');
-  return new CdpSession(socket);
-};
-
-const evaluate = async (session, expression, options = {}) => {
-  const result = await session.call('Runtime.evaluate', {
-    awaitPromise: true,
-    expression,
-    returnByValue: true,
-    ...options,
-  });
-  if (result.exceptionDetails !== undefined) throw new Error(result.exceptionDetails.text);
-  return result.result.value;
-};
+const connectPage = () => connectCdpPage({
+  commandTimeoutMs: cdpCommandTimeoutMs,
+  debugHost,
+  debugPort,
+  rewriteWebSocketAuthority: true,
+});
 
 const readWebGlGpu = async (session) => evaluate(session, `
 (() => {
@@ -403,23 +288,6 @@ const assertRequestedGpu = (gpu) => {
   }
   if (/SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu.renderer)) {
     throw new Error(`Hardware GPU benchmark resolved to software rendering: ${gpu.renderer}`);
-  }
-};
-
-const spawnLogged = (command, args, options) => {
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
-  child.stdout.on('data', (chunk) => process.stdout.write(chunk));
-  child.stderr.on('data', (chunk) => process.stderr.write(chunk));
-  return child;
-};
-
-const stop = async (child) => {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill('SIGTERM');
-  await Promise.race([once(child, 'exit'), sleep(2000)]);
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL');
-    await once(child, 'exit');
   }
 };
 
@@ -1714,18 +1582,7 @@ const main = async () => {
     mkdtemp(path.join(tmpdir(), 'royal-examples-bench-'))
   );
   const preview = managePreview
-    ? spawnLogged('pnpm', [
-      'exec',
-      'vite',
-      'preview',
-      '--config',
-      'vite.config.ts',
-      '--host',
-      host,
-      '--port',
-      String(previewPort),
-      '--strictPort',
-    ], { cwd: appRoot })
+    ? startVitePreview({ appRoot, host, port: previewPort })
     : undefined;
   const browserArgs = [
     '--no-sandbox',
@@ -1925,8 +1782,8 @@ const main = async () => {
     }
   } finally {
     session?.close();
-    if (browser !== undefined) await stop(browser);
-    if (preview !== undefined) await stop(preview);
+    await stopProcess(browser);
+    await stopProcess(preview);
     await rm(profileDir, { force: true, maxRetries: 3, recursive: true, retryDelay: 100 });
   }
 };
