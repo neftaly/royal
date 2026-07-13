@@ -5065,9 +5065,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     ) {
       return undefined;
     }
-    const baseColorCoordinates = material.kind === "wireframe"
-      ? undefined
-      : (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
+    const baseColorCoordinates = (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
     const requestedSet = baseColorCoordinates?.set === 1 && geometry.texCoords1 !== undefined ? 1 : 0;
     const provider = cachedVirtualTextureCoverageProvider(
       this.#virtualTextureCoverageProviders,
