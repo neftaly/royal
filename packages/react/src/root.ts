@@ -55,7 +55,7 @@ export interface RoyalRendererRoot {
   readonly frame: number;
   /** Typed WebGL diagnostics, including virtual-texture residency and request counters. */
   diagnostics(): RoyalRendererDiagnosticsSnapshot;
-  /** Immediately renders queued demand on the caller's current frame, if any. */
+  /** Immediately renders queued demand on the caller's current frame, regardless of clock ownership. */
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
@@ -86,7 +86,9 @@ const royalLifecycleSnapshot = (
 
 /** @internal Transfers demand scheduling to a React-owned frame loop. */
 export type RoyalRendererFrameClock = {
+  /** Flushes demand while this is the root's sole external clock owner. */
   flushInvalidated(): void;
+  /** Returns scheduling to the root after the last external owner releases. */
   release(): void;
 };
 

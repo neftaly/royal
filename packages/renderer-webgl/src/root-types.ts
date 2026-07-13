@@ -254,7 +254,7 @@ export interface WebGlRoot {
   /** Suspends default-framebuffer scheduling until the returned release function runs. */
   acquireExternalRenderClock(): () => void;
   dispose(): void;
-  /** Immediately renders queued demand on the caller's current frame, if any. */
+  /** Immediately renders queued demand on the caller's current frame, regardless of clock ownership. */
   flushInvalidated(): void;
   /** Flushes demand only when exactly one external clock owns the renderer. */
   flushInvalidatedFromExternalClock(): void;

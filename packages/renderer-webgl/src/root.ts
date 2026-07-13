@@ -2180,7 +2180,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#disposed
       || this.#contextLifecycle !== "active"
       || !this.#renderDirty
-      || this.#externalRenderClocks > 0
       || this.#latestScene === undefined
     ) return;
     this.#renderLatestScene();

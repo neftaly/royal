@@ -265,6 +265,46 @@ describe("React root public API", () => {
     expect(root.frame).toBe(2);
   });
 
+  it("honors an explicit public force-flush while React owns the render clock", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const root = createRendererRoot(fakeCanvas());
+    root.render(emptyScene());
+    const rendererClock = acquireExternalRenderClockForRoyalRoot(root);
+
+    root.invalidate();
+    root.flushInvalidated();
+
+    expect(root.frame).toBe(2);
+    expect(frameCallbacks).toHaveLength(0);
+    rendererClock.release();
+    expect(frameCallbacks).toHaveLength(0);
+    root.dispose();
+  });
+
+  it("flushes React-owned demand through the external-clock capability", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    }));
+    const root = createRendererRoot(fakeCanvas());
+    root.render(emptyScene());
+    const rendererClock = acquireExternalRenderClockForRoyalRoot(root);
+
+    root.invalidate();
+    rendererClock.flushInvalidated();
+
+    expect(root.frame).toBe(2);
+    expect(frameCallbacks).toHaveLength(0);
+    rendererClock.release();
+    expect(frameCallbacks).toHaveLength(0);
+    root.dispose();
+  });
+
   it("matches the demand-render model across randomized clock interleavings", () => {
     type Operation = {
       readonly index?: number;
@@ -358,7 +398,7 @@ describe("React root public API", () => {
           scheduledFrameId = undefined;
           expectedFrame += 1;
         } else {
-          if (dirty && externalClocks === 0) {
+          if (dirty) {
             dirty = false;
             scheduledFrameId = undefined;
             expectedFrame += 1;
