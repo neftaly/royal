@@ -119,13 +119,19 @@ const fakeGl = (options: {
     ARRAY_BUFFER: 0x8892,
     BLEND: 0x0BE2,
     CLAMP_TO_EDGE: 0x812F,
+    COLOR_ATTACHMENT0: 0x8CE0,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
     DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_ATTACHMENT: 0x8D00,
+    DEPTH_COMPONENT24: 0x81A6,
     DEPTH_TEST: 0x0B71,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
+    FRAMEBUFFER_COMPLETE: 0x8CD5,
     FRAGMENT_SHADER: 0x8B30,
+    HALF_FLOAT: 0x140B,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
     LINEAR_MIPMAP_LINEAR: 0x2703,
@@ -141,9 +147,13 @@ const fakeGl = (options: {
     ONE_MINUS_SRC_ALPHA: 0x0303,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    RGBA16F: 0x881A,
     RGBA8: 0x8058,
     SRGB8_ALPHA8: 0x8C43,
+    SCISSOR_TEST: 0x0C11,
+    SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
+    RENDERBUFFER: 0x8D41,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
     TEXTURE_CUBE_MAP: 0x8513,
@@ -187,10 +197,12 @@ const fakeGl = (options: {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
+    bindRenderbuffer: record("bindRenderbuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
     blendEquationSeparate: record("blendEquationSeparate"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
     clear: record("clear"),
     clearColor: record("clearColor"),
@@ -198,12 +210,16 @@ const fakeGl = (options: {
     colorMask: record("colorMask"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
+    createFramebuffer: record("createFramebuffer", () => handle<WebGLFramebuffer>("framebuffer")),
     createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
+    createRenderbuffer: record("createRenderbuffer", () => handle<WebGLRenderbuffer>("renderbuffer")),
     createShader: record("createShader", () => handle<WebGLShader>("shader")),
     createTexture: record("createTexture", () => handle<WebGLTexture>("texture")),
     createVertexArray: record("createVertexArray", () => handle<WebGLVertexArrayObject>("vertex-array")),
     deleteBuffer: record("deleteBuffer"),
+    deleteFramebuffer: record("deleteFramebuffer"),
     deleteProgram: record("deleteProgram"),
+    deleteRenderbuffer: record("deleteRenderbuffer"),
     deleteShader: record("deleteShader"),
     deleteTexture: record("deleteTexture"),
     deleteVertexArray: record("deleteVertexArray"),
@@ -213,16 +229,23 @@ const fakeGl = (options: {
     depthRange: record("depthRange"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
+    drawArrays: record("drawArrays"),
     drawElements: record("drawElements"),
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
+    framebufferRenderbuffer: record("framebufferRenderbuffer"),
+    framebufferTexture2D: record("framebufferTexture2D"),
     generateMipmap: record("generateMipmap"),
+    checkFramebufferStatus: record("checkFramebufferStatus", () => constants.FRAMEBUFFER_COMPLETE),
     getAttribLocation: record<[WebGLProgram, string]>("getAttribLocation", (_program, name) => {
       const normalized = name.toLowerCase();
       if (normalized.includes("normal")) return 1;
       if (normalized.includes("uv")) return 2;
       return 0;
     }),
+    getContextAttributes: record("getContextAttributes", () => ({ alpha: true, antialias: true })),
+    getExtension: record("getExtension", (name: string) =>
+      name === "EXT_color_buffer_float" ? {} : null),
     getParameter: record<[number]>("getParameter", (parameter) => {
       if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS) return options.maxTextureImageUnits ?? 8;
       if (parameter === constants.MAX_TEXTURE_SIZE) return options.maxTextureSize ?? 4096;
@@ -240,6 +263,8 @@ const fakeGl = (options: {
     getUniformLocation: record<[WebGLProgram, string]>("getUniformLocation", (_program, name) => uniform(name)),
     linkProgram: record("linkProgram"),
     pixelStorei: record("pixelStorei"),
+    renderbufferStorage: record("renderbufferStorage"),
+    scissor: record("scissor"),
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
@@ -455,10 +480,12 @@ const renderScene = (
 ) => scene({
   camera: camera(options.cameraX),
   nodes: [
-    directionalLight({
-      color: [1, 1, 1, 1],
-      direction: [0, 0, -1],
-    }),
+    ...(material.kind === "standard"
+      ? [directionalLight({
+        color: [1, 1, 1, 1],
+        direction: [0, 0, -1],
+      })]
+      : []),
     mesh({
       geometry: planeGeometry(options.planeSize ?? [2, 2]),
       material,
@@ -1913,7 +1940,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     }));
     expect(uniform4fv).toEqual(expect.objectContaining({
       u_color: expect.arrayContaining([[1, 1, 1, 1]]),
-      u_toneMappingSettings: expect.arrayContaining([[1, 1 / (1.2 * (2 ** 1.75)), 0, 0]]),
+      u_toneMappingSettings: expect.arrayContaining([[1, 1 / (1.2 * (2 ** 1.75)), 1, 0]]),
     }));
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([

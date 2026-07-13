@@ -142,15 +142,20 @@ const fakeGl = (): FakeGl => {
     BACK: 0x0405,
     BLEND: 0x0BE2,
     CLAMP_TO_EDGE: 0x812F,
+    COLOR_ATTACHMENT0: 0x8CE0,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
     CULL_FACE: 0x0B44,
     DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_ATTACHMENT: 0x8D00,
+    DEPTH_COMPONENT24: 0x81A6,
     DEPTH_TEST: 0x0B71,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
     FRAMEBUFFER: 0x8D40,
+    FRAMEBUFFER_COMPLETE: 0x8CD5,
     FRAGMENT_SHADER: 0x8B30,
+    HALF_FLOAT: 0x140B,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
     LINK_STATUS: 0x8B82,
@@ -159,13 +164,16 @@ const fakeGl = (): FakeGl => {
     ONE_MINUS_SRC_ALPHA: 0x0303,
     R32UI: 0x8236,
     RED_INTEGER: 0x8D94,
+    RENDERBUFFER: 0x8D41,
     RG32UI: 0x823C,
     RG_INTEGER: 0x8228,
     RGBA: 0x1908,
+    RGBA16F: 0x881A,
     RGBA32F: 0x8814,
     RGBA8: 0x8058,
     SRGB8_ALPHA8: 0x8C43,
     SCISSOR_TEST: 0x0C11,
+    SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -187,24 +195,30 @@ const fakeGl = (): FakeGl => {
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
     bindFramebuffer: record("bindFramebuffer"),
+    bindRenderbuffer: record("bindRenderbuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
     blendEquationSeparate: record("blendEquationSeparate"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
+    checkFramebufferStatus: record("checkFramebufferStatus", () => 0x8CD5),
     clear: record("clear"),
     clearColor: record("clearColor"),
     clearDepth: record("clearDepth"),
     colorMask: record("colorMask"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => makeHandle<WebGLBuffer>()),
+    createFramebuffer: record("createFramebuffer", () => makeHandle<WebGLFramebuffer>()),
     createProgram: record("createProgram", () => makeHandle<WebGLProgram>()),
+    createRenderbuffer: record("createRenderbuffer", () => makeHandle<WebGLRenderbuffer>()),
     createShader: record("createShader", () => makeHandle<WebGLShader>()),
     createTexture: record("createTexture", () => makeHandle<WebGLTexture>()),
     createVertexArray: record("createVertexArray", () => makeHandle<WebGLVertexArrayObject>()),
     cullFace: record("cullFace"),
     deleteBuffer: record("deleteBuffer"),
+    deleteFramebuffer: record("deleteFramebuffer"),
     deleteProgram: record("deleteProgram"),
+    deleteRenderbuffer: record("deleteRenderbuffer"),
     deleteShader: record("deleteShader"),
     deleteTexture: record("deleteTexture"),
     deleteVertexArray: record("deleteVertexArray"),
@@ -218,8 +232,13 @@ const fakeGl = (): FakeGl => {
     drawElements: record("drawElements"),
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
+    framebufferRenderbuffer: record("framebufferRenderbuffer"),
+    framebufferTexture2D: record("framebufferTexture2D"),
     getAttribLocation: record("getAttribLocation", () => 0),
+    getContextAttributes: record("getContextAttributes", () => ({ alpha: true, antialias: true })),
     getError: record("getError", () => 0),
+    getExtension: record("getExtension", (name: string) =>
+      name === "EXT_color_buffer_float" ? {} : null),
     getParameter: record("getParameter", () => 4096),
     getProgramInfoLog: record("getProgramInfoLog", () => ""),
     getProgramParameter: record("getProgramParameter", () => true),
@@ -229,6 +248,7 @@ const fakeGl = (): FakeGl => {
     linkProgram: record("linkProgram"),
     makeXRCompatible: record("makeXRCompatible", async () => undefined),
     pixelStorei: record("pixelStorei"),
+    renderbufferStorage: record("renderbufferStorage"),
     shaderSource: record("shaderSource"),
     scissor: record("scissor"),
     texImage2D: record("texImage2D"),
@@ -379,8 +399,10 @@ describe("WebGL root working state contracts", () => {
     expect(root.snapshot().diagnostics).toContainEqual(expect.stringMatching(
       /Studio IBL specular texture is disabled.*upload bytes exceed the absolute limit/,
     ));
-    expect(countCalls(calls, "createTexture")).toBe(0);
-    expect(scheduled).toHaveLength(0);
+    // The HDR surface remains required for physical rendering; only the
+    // over-budget studio IBL textures are suppressed.
+    expect(countCalls(calls, "createTexture")).toBe(1);
+    expect(scheduled).toHaveLength(1);
     expect(warning).toHaveBeenCalledTimes(1);
     const occurrencesBeforeRestore = root.snapshot().diagnosticStats.occurrences;
     canvas.dispatchContextEvent("webglcontextlost");
@@ -589,6 +611,45 @@ describe("WebGL root working state contracts", () => {
       .toThrow(/requested antialias=true.*received antialias=false/i);
   });
 
+  it("rejects unavailable context attributes during construction", () => {
+    const { gl } = fakeGl();
+    vi.mocked(gl.getContextAttributes).mockReturnValue(null);
+
+    expect(() => createWebGlRoot(fakeCanvas(gl)))
+      .toThrow("Royal WebGL context attributes are unavailable");
+  });
+
+  it("publishes unavailable restored context attributes as a restore failure", () => {
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    const root = createWebGlRoot(canvas);
+    vi.mocked(gl.getContextAttributes).mockReturnValue(null);
+
+    canvas.dispatchContextEvent("webglcontextlost");
+    canvas.dispatchContextEvent("webglcontextrestored");
+
+    expect(root.contextSnapshot()).toMatchObject({
+      lastError: "Royal WebGL context attributes are unavailable",
+      lifecycle: "lost",
+      restores: 0,
+    });
+    root.dispose();
+  });
+
+  it("uses extension support structurally when deciding whether physical lighting can render", () => {
+    const supported = fakeGl();
+    const supportedRoot = createWebGlRoot(fakeCanvas(supported.gl));
+    expect(() => supportedRoot.render(clusteredScene())).not.toThrow();
+    supportedRoot.dispose();
+
+    const unsupported = fakeGl();
+    vi.mocked(unsupported.gl.getExtension).mockReturnValue(null);
+    const unsupportedRoot = createWebGlRoot(fakeCanvas(unsupported.gl));
+    expect(() => unsupportedRoot.render(clusteredScene()))
+      .toThrow("Royal physical lighting requires EXT_color_buffer_float");
+    unsupportedRoot.dispose();
+  });
+
   it("keeps context lifecycle safe under generated loss, restore, demand, and stale-frame sequences", () => {
     forEachFuzzCase({ cases: 48, seed: 0x63b77a21 }, ({ random }) => {
       const scheduled: FrameRequestCallback[] = [];
@@ -781,11 +842,11 @@ describe("WebGL root working state contracts", () => {
     expect(attempts).toBe(2);
   });
 
-  it("retains a clustered-light lease across an opaque delete failure and releases it on retry", () => {
+  it("retains an HDR target lease across an opaque delete failure and releases it on retry", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     root.render(clusteredScene());
-    expect(gl.createTexture).toHaveBeenCalledTimes(3);
+    expect(gl.createTexture).toHaveBeenCalledTimes(4);
     let attempts = 0;
     vi.mocked(gl.deleteTexture).mockImplementation(() => {
       attempts += 1;
@@ -801,15 +862,15 @@ describe("WebGL root working state contracts", () => {
     }
 
     expect(firstFailurePresent).toBe(true);
-    expect(attempts).toBe(3);
-    // Both the clustered GPU storage and retained CPU working set remain
-    // charged until the failed active-context texture deletion can retry.
-    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(2);
-    expect(() => root.dispose()).not.toThrow();
     expect(attempts).toBe(4);
+    // The failed HDR texture retains its target lease until deletion retries;
+    // the clustered-light resources completed their independent cleanup.
+    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(1);
+    expect(() => root.dispose()).not.toThrow();
+    expect(attempts).toBe(5);
     expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(0);
     expect(() => root.dispose()).not.toThrow();
-    expect(attempts).toBe(4);
+    expect(attempts).toBe(5);
   });
 
   it("drops clustered-light handles and accounting without GL calls on genuine context loss", () => {

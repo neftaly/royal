@@ -91,6 +91,10 @@ describe("SVG texture reference lifecycle", () => {
       complete = false;
       crossOrigin: string | null = null;
       src = "";
+
+      decode(): Promise<void> {
+        return Promise.resolve();
+      }
     }
     class TestUrl extends URL {
       static createObjectURL = vi.fn(() => "blob:royal-svg-abort");

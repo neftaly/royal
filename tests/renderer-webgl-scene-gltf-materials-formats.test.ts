@@ -109,7 +109,17 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
     expect(copyIndex).toBeGreaterThan(drawIndexes[0] ?? -1);
     expect(copyIndex).toBeLessThan(drawIndexes[1] ?? Number.POSITIVE_INFINITY);
     expect(shaderWarmupAndReadyCalls).toContainEqual({
-      args: [gl.TEXTURE_2D, 0, gl.RGBA, defaultCanvasSize.width, defaultCanvasSize.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null],
+      args: [
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA16F,
+        defaultCanvasSize.width,
+        defaultCanvasSize.height,
+        0,
+        gl.RGBA,
+        gl.HALF_FLOAT,
+        null,
+      ],
       name: "texImage2D",
     });
     expect(readyFrameCalls).toContainEqual({
@@ -177,11 +187,9 @@ describe("WebGL renderer glTF advanced material and format regressions", () => {
       .filter((call) => call.name === "copyTexSubImage2D")
       .map((call) => call.args.slice(4, 8)))
       .toEqual([
-        [11, 13, 100, 80],
-        [127, 17, 100, 80],
+        [0, 0, 100, 80],
+        [0, 0, 100, 80],
       ]);
-    expect(uniform2fvPayloads(viewCalls, "u_viewportOrigin").map(roundVector))
-      .toEqual(expect.arrayContaining([[11, 13], [127, 17]]));
   });
 
   it("takes an independent transmission screen copy on each side of a direct-mesh barrier", async () => {

@@ -490,8 +490,7 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
     });
   };
   const onLoad = (): void => {
-    const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
-    decoded.then(() => {
+    image.decode().then(() => {
       settle(() => resolve(image));
     }, (error: unknown) => {
       settle(() => reject(error));

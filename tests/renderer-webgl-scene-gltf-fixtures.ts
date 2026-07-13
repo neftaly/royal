@@ -131,7 +131,9 @@ export const fakeCanvas = (
   gl: WebGL2RenderingContext,
   size: CanvasSize = defaultCanvasSize,
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -151,6 +153,7 @@ export const fakeCanvas = (
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -170,6 +173,7 @@ export const fakeGl = (): FakeGl => {
     ARRAY_BUFFER: 0x8892,
     BACK: 0x0405,
     BLEND: 0x0BE2,
+    COLOR_ATTACHMENT0: 0x8CE0,
     CLAMP_TO_EDGE: 0x812F,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
@@ -177,11 +181,16 @@ export const fakeGl = (): FakeGl => {
     CCW: 0x0901,
     CW: 0x0900,
     DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_ATTACHMENT: 0x8D00,
+    DEPTH_COMPONENT24: 0x81A6,
     DEPTH_TEST: 0x0B71,
     DYNAMIC_DRAW: 0x88E8,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
+    FRAMEBUFFER_COMPLETE: 0x8CD5,
     FRAGMENT_SHADER: 0x8B30,
+    HALF_FLOAT: 0x140B,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
     LINEAR_MIPMAP_LINEAR: 0x2703,
@@ -201,10 +210,13 @@ export const fakeGl = (): FakeGl => {
     POINTS: 0x0000,
     REPEAT: 0x2901,
     RGBA: 0x1908,
+    RGBA16F: 0x881A,
     RGBA32F: 0x8814,
     SRGB8_ALPHA8: 0x8C43,
     SRC_ALPHA: 0x0302,
+    SCISSOR_TEST: 0x0C11,
     STATIC_DRAW: 0x88E4,
+    RENDERBUFFER: 0x8D41,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
     TEXTURE_CUBE_MAP: 0x8513,
@@ -258,9 +270,11 @@ export const fakeGl = (): FakeGl => {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
+    bindRenderbuffer: record("bindRenderbuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
     clear: record("clear"),
@@ -268,13 +282,17 @@ export const fakeGl = (): FakeGl => {
     clearDepth: record("clearDepth"),
     compileShader: record("compileShader"),
     createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
+    createFramebuffer: record("createFramebuffer", () => handle<WebGLFramebuffer>("framebuffer")),
     createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
+    createRenderbuffer: record("createRenderbuffer", () => handle<WebGLRenderbuffer>("renderbuffer")),
     createShader: record("createShader", () => handle<WebGLShader>("shader")),
     createTexture: record("createTexture", () => handle<WebGLTexture>("texture")),
     createVertexArray: record("createVertexArray", () => handle<WebGLVertexArrayObject>("vertex-array")),
     cullFace: record("cullFace"),
     deleteBuffer: record("deleteBuffer"),
+    deleteFramebuffer: record("deleteFramebuffer"),
     deleteProgram: record("deleteProgram"),
+    deleteRenderbuffer: record("deleteRenderbuffer"),
     deleteShader: record("deleteShader"),
     deleteTexture: record("deleteTexture"),
     deleteVertexArray: record("deleteVertexArray"),
@@ -286,6 +304,8 @@ export const fakeGl = (): FakeGl => {
     drawElements: record("drawElements"),
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
+    framebufferRenderbuffer: record("framebufferRenderbuffer"),
+    framebufferTexture2D: record("framebufferTexture2D"),
     frontFace: record("frontFace"),
     generateMipmap: record("generateMipmap"),
     getActiveAttrib: record("getActiveAttrib", () => null),
@@ -312,7 +332,9 @@ export const fakeGl = (): FakeGl => {
       stencil: false,
     })),
     getError: record("getError", () => constants.NO_ERROR),
-    getExtension: record("getExtension", () => null),
+    getExtension: record("getExtension", (name: string) =>
+      name === "EXT_color_buffer_float" ? {} : null),
+    checkFramebufferStatus: record("checkFramebufferStatus", () => constants.FRAMEBUFFER_COMPLETE),
     getParameter: record<[number]>("getParameter", (parameter) => {
       if (parameter === constants.MAX_COMBINED_TEXTURE_IMAGE_UNITS) return 32;
       if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS || parameter === constants.MAX_VERTEX_TEXTURE_IMAGE_UNITS) {
@@ -338,11 +360,14 @@ export const fakeGl = (): FakeGl => {
     lineWidth: record("lineWidth"),
     linkProgram: record("linkProgram"),
     pixelStorei: record("pixelStorei"),
+    renderbufferStorage: record("renderbufferStorage"),
+    scissor: record("scissor"),
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),
     texSubImage2D: record("texSubImage2D"),
     uniform1i: record("uniform1i"),
+    uniform2f: record("uniform2f"),
     uniform3f: record("uniform3f"),
     uniform3fv: record("uniform3fv"),
     uniform4f: record("uniform4f"),
@@ -656,7 +681,11 @@ export const renderScene = (children: readonly RenderNode[]): SceneRenderRoot =>
   });
 
 export const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
-  calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
+  calls.filter((call, index) =>
+    call.name === "drawElements"
+    || (call.name === "drawArrays"
+      && !(calls[index - 1]?.name === "bindVertexArray" && calls[index - 1]?.args[0] === null))
+  );
 
 export const instancedDrawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArraysInstanced" || call.name === "drawElementsInstanced");
@@ -673,7 +702,10 @@ export const instancedDrawInstanceCount = (call: GlCall): number =>
   call.name === "drawArraysInstanced" ? Number(call.args[3]) : Number(call.args[4]);
 
 export const callCount = (calls: readonly GlCall[], name: string): number =>
-  calls.filter((call) => call.name === name).length;
+  calls.filter((call) =>
+    call.name === name
+    && !(name === "texImage2D" && call.args[2] === 0x881A)
+  ).length;
 
 export const lodScaleForCoverage = (coverage: number): number =>
   Math.sqrt(coverage / 0.5625);

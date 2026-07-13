@@ -345,7 +345,9 @@ const fakeCanvas = (
   gl: WebGL2RenderingContext,
   size: CanvasSize = defaultCanvasSize,
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -365,6 +367,7 @@ const fakeCanvas = (
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -384,15 +387,21 @@ const fakeGl = (): FakeGl => {
     ARRAY_BUFFER: 0x8892,
     BACK: 0x0405,
     BLEND: 0x0BE2,
+    COLOR_ATTACHMENT0: 0x8CE0,
     COLOR_BUFFER_BIT: 0x4000,
     COMPILE_STATUS: 0x8B81,
     CULL_FACE: 0x0B44,
     DEPTH_BUFFER_BIT: 0x0100,
+    DEPTH_ATTACHMENT: 0x8D00,
+    DEPTH_COMPONENT24: 0x81A6,
     DEPTH_TEST: 0x0B71,
     DYNAMIC_DRAW: 0x88E8,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
+    FRAMEBUFFER_COMPLETE: 0x8CD5,
     FRAGMENT_SHADER: 0x8B30,
+    HALF_FLOAT: 0x140B,
     LEQUAL: 0x0203,
     LESS: 0x0201,
     LINEAR: 0x2601,
@@ -403,10 +412,13 @@ const fakeGl = (): FakeGl => {
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
     RGBA: 0x1908,
+    RGBA16F: 0x881A,
     RGBA8: 0x8058,
     SRGB8_ALPHA8: 0x8C43,
     SRC_ALPHA: 0x0302,
+    SCISSOR_TEST: 0x0C11,
     STATIC_DRAW: 0x88E4,
+    RENDERBUFFER: 0x8D41,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
     TEXTURE_CUBE_MAP: 0x8513,
@@ -455,10 +467,12 @@ const fakeGl = (): FakeGl => {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
+    bindRenderbuffer: record("bindRenderbuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
     blendEquationSeparate: record("blendEquationSeparate"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
     clear: record("clear"),
@@ -468,13 +482,17 @@ const fakeGl = (): FakeGl => {
     compileShader: record("compileShader"),
     copyTexSubImage2D: record("copyTexSubImage2D"),
     createBuffer: record("createBuffer", () => handle<WebGLBuffer>("buffer")),
+    createFramebuffer: record("createFramebuffer", () => handle<WebGLFramebuffer>("framebuffer")),
     createProgram: record("createProgram", () => handle<WebGLProgram>("program")),
+    createRenderbuffer: record("createRenderbuffer", () => handle<WebGLRenderbuffer>("renderbuffer")),
     createShader: record("createShader", () => handle<WebGLShader>("shader")),
     createTexture: record("createTexture", () => handle<WebGLTexture>("texture")),
     createVertexArray: record("createVertexArray", () => handle<WebGLVertexArrayObject>("vertex-array")),
     cullFace: record("cullFace"),
     deleteBuffer: record("deleteBuffer"),
+    deleteFramebuffer: record("deleteFramebuffer"),
     deleteProgram: record("deleteProgram"),
+    deleteRenderbuffer: record("deleteRenderbuffer"),
     deleteShader: record("deleteShader"),
     detachShader: record("detachShader"),
     deleteTexture: record("deleteTexture"),
@@ -490,6 +508,8 @@ const fakeGl = (): FakeGl => {
     drawElementsInstanced: record("drawElementsInstanced"),
     enable: record("enable"),
     enableVertexAttribArray: record("enableVertexAttribArray"),
+    framebufferRenderbuffer: record("framebufferRenderbuffer"),
+    framebufferTexture2D: record("framebufferTexture2D"),
     frontFace: record("frontFace"),
     getActiveAttrib: record("getActiveAttrib", () => null),
     getActiveUniform: record("getActiveUniform", () => null),
@@ -513,7 +533,9 @@ const fakeGl = (): FakeGl => {
       stencil: false,
     })),
     getError: record("getError", () => 0),
-    getExtension: record("getExtension", () => null),
+    getExtension: record("getExtension", (name: string) =>
+      name === "EXT_color_buffer_float" ? {} : null),
+    checkFramebufferStatus: record("checkFramebufferStatus", () => constants.FRAMEBUFFER_COMPLETE),
     getParameter: record<[number]>("getParameter", (parameter) => {
       if (parameter === constants.MAX_TEXTURE_IMAGE_UNITS) return 16;
       if (parameter === constants.MAX_TEXTURE_SIZE) return 4096;
@@ -540,6 +562,7 @@ const fakeGl = (): FakeGl => {
     linkProgram: record("linkProgram"),
     pixelStorei: record("pixelStorei"),
     polygonOffset: record("polygonOffset"),
+    renderbufferStorage: record("renderbufferStorage"),
     scissor: record("scissor"),
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
@@ -547,6 +570,7 @@ const fakeGl = (): FakeGl => {
     texStorage2D: record("texStorage2D"),
     uniform1f: record("uniform1f"),
     uniform1i: record("uniform1i"),
+    uniform2f: record("uniform2f"),
     uniform2fv: record("uniform2fv"),
     uniform3fv: record("uniform3fv"),
     uniform4fv: record("uniform4fv"),
@@ -584,7 +608,11 @@ const renderScene = (children: readonly RenderNode[]): RenderRoot =>
   });
 
 const drawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
-  calls.filter((call) => call.name === "drawArrays" || call.name === "drawElements");
+  calls.filter((call, index) =>
+    call.name === "drawElements"
+    || (call.name === "drawArrays"
+      && !(calls[index - 1]?.name === "bindVertexArray" && calls[index - 1]?.args[0] === null))
+  );
 
 const instancedDrawCalls = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "drawArraysInstanced" || call.name === "drawElementsInstanced");

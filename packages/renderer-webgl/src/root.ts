@@ -1145,8 +1145,7 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
     reject(abortError());
   };
   const onLoad = (): void => {
-    const decoded = typeof image.decode === "function" ? image.decode() : Promise.resolve();
-    decoded.then(() => {
+    image.decode().then(() => {
       cleanup();
       resolve(image);
     }, (error: unknown) => {
@@ -1568,6 +1567,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       // A failed cleanup from an earlier restoration attempt retains its
       // driver handles for retry. Drain that quarantine before allowing a
       // later restoration to reuse either arena.
+      releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, this.#gl);
       releaseProgramArenaContextHandles(this.#programArena);
       releaseClusteredLightContextHandles(this.#clusteredLights);
       this.#validateRestoredContextAttributes();
@@ -1748,12 +1748,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       let contextListenersStarted = false;
       registerRollback(() => {
         if (!contextListenersStarted) return;
-        captureFailure(() => this.#canvas.removeEventListener?.("webglcontextlost", this.#contextLostListener));
-        captureFailure(() => this.#canvas.removeEventListener?.("webglcontextrestored", this.#contextRestoredListener));
+        captureFailure(() => this.#canvas.removeEventListener("webglcontextlost", this.#contextLostListener));
+        captureFailure(() => this.#canvas.removeEventListener("webglcontextrestored", this.#contextRestoredListener));
       });
       contextListenersStarted = true;
-      this.#canvas.addEventListener?.("webglcontextlost", this.#contextLostListener);
-      this.#canvas.addEventListener?.("webglcontextrestored", this.#contextRestoredListener);
+      this.#canvas.addEventListener("webglcontextlost", this.#contextLostListener);
+      this.#canvas.addEventListener("webglcontextrestored", this.#contextRestoredListener);
       registerRollback(() => this.#resizeObserver?.disconnect());
       registerRollback(() => this.#unwatchDevicePixelRatio());
       this.#watchViewport();
@@ -1774,9 +1774,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     configureProgramArenaParallelCompile(
       this.#programArena,
-      gl.getExtension?.("KHR_parallel_shader_compile") ?? undefined,
+      gl.getExtension("KHR_parallel_shader_compile") ?? undefined,
     );
-    this.#hdrSupported = gl.getExtension?.("EXT_color_buffer_float") != null;
+    this.#hdrSupported = gl.getExtension("EXT_color_buffer_float") !== null;
     const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
     const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
@@ -1784,10 +1784,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
     configureClusteredLightArena(this.#clusteredLights, this.#maxTextureImageUnits, this.#maxTextureSize);
   }
 
-  #validatedContextOptions(fallback: NormalizedWebGlRootOptions): NormalizedWebGlRootOptions {
-    const attributes = this.#gl.getContextAttributes?.();
-    const alpha = attributes?.alpha ?? fallback.alpha;
-    const antialias = attributes?.antialias ?? fallback.antialias;
+  #validatedContextOptions(base: NormalizedWebGlRootOptions): NormalizedWebGlRootOptions {
+    const attributes = this.#gl.getContextAttributes();
+    if (
+      attributes === null
+      || typeof attributes.alpha !== "boolean"
+      || typeof attributes.antialias !== "boolean"
+    ) {
+      throw new Error("Royal WebGL context attributes are unavailable");
+    }
+    const { alpha, antialias } = attributes;
     if (this.#requestedContextOptions.alpha !== undefined && alpha !== this.#requestedContextOptions.alpha) {
       throw new Error(
         `Royal WebGL context requested alpha=${this.#requestedContextOptions.alpha} but received alpha=${alpha}`,
@@ -1804,11 +1810,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return Object.freeze({
       alpha,
       antialias,
-      generatedImageVirtualTextures: fallback.generatedImageVirtualTextures,
-      generatedSvgVirtualTextureRasterDensity: fallback.generatedSvgVirtualTextureRasterDensity,
-      ...(fallback.resourceGovernorPolicy === undefined
+      generatedImageVirtualTextures: base.generatedImageVirtualTextures,
+      generatedSvgVirtualTextureRasterDensity: base.generatedSvgVirtualTextureRasterDensity,
+      ...(base.resourceGovernorPolicy === undefined
         ? {}
-        : { resourceGovernorPolicy: fallback.resourceGovernorPolicy }),
+        : { resourceGovernorPolicy: base.resourceGovernorPolicy }),
     });
   }
 
@@ -2004,17 +2010,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     beginVirtualTextureFrameDemand(this.#virtualTextureFrameDemand);
     for (const state of this.#virtualTextures.values()) state.demandedPageKeysScratch.clear();
     try {
-    gl.bindFramebuffer?.(gl.FRAMEBUFFER, frameViews.framebuffer);
-    prepareFrameBaseline(gl, frameViews.scissor);
-    this.#stagePendingGltfImageRows();
-    this.#processOrdinaryTextureUploads();
-    this.#beginGltfInstanceFrame();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
+      prepareFrameBaseline(gl, frameViews.scissor);
+      this.#stagePendingGltfImageRows();
+      this.#processOrdinaryTextureUploads();
+      this.#beginGltfInstanceFrame();
       const wantsHdr = this.#planWantsHdr(plan);
-      const actualWebGl2 = (
-        typeof globalThis.WebGL2RenderingContext === "function"
-        && gl instanceof globalThis.WebGL2RenderingContext
-      ) || Object.prototype.toString.call(gl) === "[object WebGL2RenderingContext]";
-      if (wantsHdr && !this.#hdrSupported && actualWebGl2) {
+      if (wantsHdr && !this.#hdrSupported) {
         throw new Error("Royal physical lighting requires EXT_color_buffer_float");
       }
       const useHdr = wantsHdr && this.#hdrSupported;
@@ -2035,7 +2037,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         // Resetting the ordinal across eyes avoids duplicate instance uploads
         // and other occurrence-owned resources in XR.
         this.#gltfRenderOrdinal = 0;
-        gl.enable?.(gl.DEPTH_TEST);
+        gl.enable(gl.DEPTH_TEST);
         const viewportOffset = viewIndex * 4;
         const x = frameViews.viewports[viewportOffset]!;
         const y = frameViews.viewports[viewportOffset + 1]!;
@@ -2044,9 +2046,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const hdrTarget = useHdr
           ? ensureHdrRenderTarget(this.#surfaceRenderTargets, gl, width, height)
           : undefined;
-        gl.bindFramebuffer?.(gl.FRAMEBUFFER, hdrTarget?.framebuffer ?? frameViews.framebuffer);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, hdrTarget?.framebuffer ?? frameViews.framebuffer);
         gl.viewport(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
-        if (frameViews.scissor) gl.scissor?.(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
+        if (frameViews.scissor) gl.scissor(useHdr ? 0 : x, useHdr ? 0 : y, width, height);
         const [r, g, b, a] = plan.clearColor;
         gl.clearColor(r, g, b, a);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -2173,12 +2175,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (frameViews.scissor) {
       normalizationFailure = captureFirstFailure(
         normalizationFailure,
-        () => gl.disable?.(gl.SCISSOR_TEST),
+        () => gl.disable(gl.SCISSOR_TEST),
       );
     }
     normalizationFailure = captureFirstFailure(
       normalizationFailure,
-      () => gl.bindFramebuffer?.(gl.FRAMEBUFFER, null),
+      () => gl.bindFramebuffer(gl.FRAMEBUFFER, null),
     );
     normalizationFailure = captureFirstFailure(normalizationFailure, () => gl.bindVertexArray(null));
     normalizationFailure = captureFirstFailure(
@@ -2289,13 +2291,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     // Active release APIs retain failed handles for direct retry. Context loss
     // cannot call GL and therefore drops those handles and their accounting;
-    // active-context teardown leaves program/cluster failures quarantined so a
-    // repeated dispose (or restoration attempt) can retry them.
+    // active-context teardown leaves surface/program/cluster failures in their
+    // arenas so a repeated dispose (or restoration attempt) can retry them.
     releaseFailure = captureFirstFailure(releaseFailure, () => dropVertexInputArenaContext(this.#vertexInputs));
-    releaseFailure = captureFirstFailure(releaseFailure, () => {
-      dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets, !deleteResources);
-    });
     if (!deleteResources) {
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
+        dropSurfaceRenderTargetArenaContext(this.#surfaceRenderTargets);
+      });
       releaseFailure = captureFirstFailure(releaseFailure, () => dropProgramArenaContext(this.#programArena));
       releaseFailure = captureFirstFailure(releaseFailure, () => dropClusteredLightContext(this.#clusteredLights));
     }
@@ -2361,6 +2363,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#disposed) {
       let retryFailure = this.#detachRenderObjectRefs();
       retryFailure = captureFirstFailure(retryFailure, () => {
+        releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, this.#gl);
+      });
+      retryFailure = captureFirstFailure(retryFailure, () => {
         releaseProgramArenaContextHandles(this.#programArena);
       });
       retryFailure = captureFirstFailure(retryFailure, () => {
@@ -2376,10 +2381,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#contextLifecycle = "disposed";
     this.#unsubscribeResourceGovernorDurableCapacityRelease();
     let firstFailure = captureFailure(() => {
-      this.#canvas.removeEventListener?.("webglcontextlost", this.#contextLostListener);
+      this.#canvas.removeEventListener("webglcontextlost", this.#contextLostListener);
     });
     firstFailure = captureFirstFailure(firstFailure, () => {
-      this.#canvas.removeEventListener?.("webglcontextrestored", this.#contextRestoredListener);
+      this.#canvas.removeEventListener("webglcontextrestored", this.#contextRestoredListener);
     });
     firstFailure = captureFirstFailure(firstFailure, () => this.#dropGpuState(canDeleteResources));
     const teardown = (operation: () => void): void => {
@@ -3250,9 +3255,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #resize(): { readonly height: number; readonly width: number } {
-    const rect = this.#canvas.getBoundingClientRect?.();
-    const cssWidth = rect?.width ?? this.#canvas.clientWidth;
-    const cssHeight = rect?.height ?? this.#canvas.clientHeight;
+    const rect = this.#canvas.getBoundingClientRect();
+    const cssWidth = rect.width;
+    const cssHeight = rect.height;
     const dpr = globalThis.devicePixelRatio ?? 1;
     const width = Math.max(1, Math.round(cssWidth * dpr));
     const height = Math.max(1, Math.round(cssHeight * dpr));
@@ -3276,11 +3281,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const mediaQuery = this.#dprMediaQuery;
     if (mediaQuery === undefined) return;
 
-    if (typeof mediaQuery.removeEventListener === "function") {
-      mediaQuery.removeEventListener("change", this.#dprChangeListener);
-    } else {
-      mediaQuery.removeListener?.(this.#dprChangeListener);
-    }
+    mediaQuery.removeEventListener("change", this.#dprChangeListener);
     this.#dprMediaQuery = undefined;
   }
 
@@ -3291,11 +3292,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     const mediaQuery = matchMedia(`(resolution: ${globalThis.devicePixelRatio ?? 1}dppx)`);
     this.#dprMediaQuery = mediaQuery;
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", this.#dprChangeListener);
-    } else {
-      mediaQuery.addListener?.(this.#dprChangeListener);
-    }
+    mediaQuery.addEventListener("change", this.#dprChangeListener);
   }
 
   #drawNode(
@@ -3889,11 +3886,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const gl = this.#gl;
     if (material.kind !== "wireframe" && isBlendedSurfaceMaterial(material)) {
       gl.enable(gl.BLEND);
-      if (typeof gl.blendFuncSeparate === "function") {
-        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      } else {
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      }
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
 
       return;

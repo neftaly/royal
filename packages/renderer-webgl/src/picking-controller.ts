@@ -153,13 +153,12 @@ export class PickingController {
   }
 
   #pickRayInto(input: PickInput, viewProjection: Mat4): Ray | undefined {
-    const rect = this.#canvas.getBoundingClientRect?.();
-    const width = rect?.width ?? this.#canvas.clientWidth;
-    const height = rect?.height ?? this.#canvas.clientHeight;
+    const rect = this.#canvas.getBoundingClientRect();
+    const { height, width } = rect;
     if (width <= 0 || height <= 0) return undefined;
 
-    const ndcX = ((input.clientX - (rect?.left ?? 0)) / width) * 2 - 1;
-    const ndcY = 1 - ((input.clientY - (rect?.top ?? 0)) / height) * 2;
+    const ndcX = ((input.clientX - rect.left) / width) * 2 - 1;
+    const ndcY = 1 - ((input.clientY - rect.top) / height) * 2;
     const inverse = inverseMat4Into(this.#inverseViewProjection, viewProjection);
     if (inverse === undefined) return undefined;
     const nearW = inverse[3] * ndcX + inverse[7] * ndcY - inverse[11] + inverse[15];

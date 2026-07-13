@@ -49,28 +49,33 @@ const uvLocations = [10, 11] as const;
 const handle = <Handle>(kind: string, id: number): Handle =>
   ({ id, kind }) as Handle;
 
-const fakeCanvas = (gl: WebGL2RenderingContext): FakeCanvas => ({
-  get clientHeight() {
-    return canvasSize.height;
-  },
-  get clientWidth() {
-    return canvasSize.width;
-  },
-  getBoundingClientRect: vi.fn(() => ({
-    bottom: canvasSize.height,
-    height: canvasSize.height,
-    left: 0,
-    right: canvasSize.width,
-    top: 0,
-    width: canvasSize.width,
-    x: 0,
-    y: 0,
-    toJSON: () => ({}),
-  })),
-  getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
-  height: 0,
-  width: 0,
-}) as unknown as FakeCanvas;
+const fakeCanvas = (gl: WebGL2RenderingContext): FakeCanvas => {
+  const target = new EventTarget();
+  return ({
+    addEventListener: target.addEventListener.bind(target),
+    get clientHeight() {
+      return canvasSize.height;
+    },
+    get clientWidth() {
+      return canvasSize.width;
+    },
+    getBoundingClientRect: vi.fn(() => ({
+      bottom: canvasSize.height,
+      height: canvasSize.height,
+      left: 0,
+      right: canvasSize.width,
+      top: 0,
+      width: canvasSize.width,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })),
+    getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
+    height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
+    width: 0,
+  }) as unknown as FakeCanvas;
+};
 
 const fakeGl = (): FakeGl => {
   const calls: GlCall[] = [];
@@ -91,6 +96,7 @@ const fakeGl = (): FakeGl => {
     DEPTH_TEST: 0x0B71,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
     FRAGMENT_SHADER: 0x8B30,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
@@ -108,6 +114,8 @@ const fakeGl = (): FakeGl => {
     REPEAT: 0x2901,
     RGBA: 0x1908,
     SRGB8_ALPHA8: 0x8C43,
+    SCISSOR_TEST: 0x0C11,
+    SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -145,9 +153,10 @@ const fakeGl = (): FakeGl => {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
     clear: record("clear"),
     clearColor: record("clearColor"),
@@ -179,6 +188,7 @@ const fakeGl = (): FakeGl => {
       return 1;
     }),
     getError: record("getError", () => constants.NO_ERROR),
+    getContextAttributes: record("getContextAttributes", () => ({ alpha: true, antialias: true })),
     getExtension: record("getExtension", () => null),
     getParameter: record<[number]>("getParameter", (parameter) => {
       if (
@@ -207,6 +217,7 @@ const fakeGl = (): FakeGl => {
     lineWidth: record("lineWidth"),
     linkProgram: record("linkProgram"),
     pixelStorei: record("pixelStorei"),
+    scissor: record("scissor"),
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
     texParameteri: record("texParameteri"),

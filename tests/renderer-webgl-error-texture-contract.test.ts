@@ -62,7 +62,9 @@ const fakeCanvas = (
   gl: WebGL2RenderingContext,
   size: CanvasSize = defaultCanvasSize,
 ): FakeCanvas => {
+  const target = new EventTarget();
   const canvas = {
+    addEventListener: target.addEventListener.bind(target),
     get clientHeight() {
       return size.height;
     },
@@ -82,6 +84,7 @@ const fakeCanvas = (
     })),
     getContext: vi.fn((contextId: string) => (contextId === "webgl2" ? gl : null)),
     height: 0,
+    removeEventListener: target.removeEventListener.bind(target),
     width: 0,
   };
 
@@ -111,6 +114,7 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     DEPTH_TEST: 0x0B71,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     FLOAT: 0x1406,
+    FRAMEBUFFER: 0x8D40,
     FRAGMENT_SHADER: 0x8B30,
     LEQUAL: 0x0203,
     LINEAR: 0x2601,
@@ -128,6 +132,8 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     RGBA: 0x1908,
     RGBA8: 0x8058,
     SRGB8_ALPHA8: 0x8C43,
+    SCISSOR_TEST: 0x0C11,
+    SRC_ALPHA: 0x0302,
     STATIC_DRAW: 0x88E4,
     TEXTURE0: 0x84C0,
     TEXTURE_2D: 0x0DE1,
@@ -165,9 +171,10 @@ const fakeGl = (options: FakeGlOptions = {}): FakeGl => {
     attachShader: record("attachShader"),
     bindAttribLocation: record("bindAttribLocation"),
     bindBuffer: record("bindBuffer"),
+    bindFramebuffer: record("bindFramebuffer"),
     bindTexture: record("bindTexture"),
     bindVertexArray: record("bindVertexArray"),
-    blendFunc: record("blendFunc"),
+    blendFuncSeparate: record("blendFuncSeparate"),
     bufferData: record("bufferData"),
     bufferSubData: record("bufferSubData"),
     clear: record("clear"),
