@@ -86,9 +86,6 @@ importers:
       '@royal/react':
         specifier: workspace:*
         version: link:../../packages/react
-      '@royal/renderer-webgl':
-        specifier: workspace:*
-        version: link:../../packages/renderer-webgl
       react:
         specifier: 'catalog:'
         version: 19.2.7

@@ -33,6 +33,36 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("normalizes concise resource overrides into the effective root policy", () => {
+    const root = createRendererRoot(fakeCanvas(), {
+      resourceGovernorPolicy: {
+        classes: {
+          "virtual-texture": {
+            persistentGpuBytes: { hardLimit: 96 * 1024 * 1024 },
+          },
+        },
+        limits: { jobs: 3 },
+      },
+    });
+
+    expect(root.options.resourceGovernorPolicy).toMatchObject({
+      classes: {
+        geometry: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes.geometry,
+        "virtual-texture": {
+          persistentGpuBytes: {
+            hardLimit: 96 * 1024 * 1024,
+            mandatoryFloor:
+              DEFAULT_RESOURCE_GOVERNOR_POLICY.classes["virtual-texture"].persistentGpuBytes.mandatoryFloor,
+            softLimit: 96 * 1024 * 1024,
+          },
+        },
+      },
+      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, jobs: 3 },
+    });
+    expect(Object.isFrozen(root.options.resourceGovernorPolicy.classes["virtual-texture"])).toBe(true);
+    root.dispose();
+  });
+
   it("defensively freezes a custom resource governor policy without changing default snapshots", () => {
     const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
       ([resourceClass, value]) => [resourceClass, {
@@ -68,7 +98,7 @@ describe("React root public API", () => {
     root.dispose();
 
     const defaultRoot = createRendererRoot(fakeCanvas());
-    expect(defaultRoot.options).not.toHaveProperty("resourceGovernorPolicy");
+    expect(defaultRoot.options.resourceGovernorPolicy).toEqual(DEFAULT_RESOURCE_GOVERNOR_POLICY);
     defaultRoot.dispose();
   });
 
@@ -132,6 +162,7 @@ describe("React root public API", () => {
         antialias: true,
         generatedImageVirtualTextures: true,
         generatedSvgVirtualTextureRasterDensity: 4,
+        resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
       },
     });
     const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
@@ -167,6 +198,7 @@ describe("React root public API", () => {
       antialias: true,
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
+      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
     expect(Object.isFrozen(root.options)).toBe(true);
     expect(Object.isFrozen(root.diagnostics())).toBe(true);

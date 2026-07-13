@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@royal/react": "workspace:*",
-    "@royal/renderer-webgl": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

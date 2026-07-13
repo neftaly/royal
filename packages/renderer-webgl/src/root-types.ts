@@ -3,7 +3,11 @@ import type {
   PickResult,
   RenderRoot,
 } from "@royal/renderer-core";
-import type { ResourceGovernorPolicy, ResourceGovernorSnapshot } from "./resource-governor";
+import type {
+  ResourceGovernorPolicy,
+  ResourceGovernorPolicyInput,
+  ResourceGovernorSnapshot,
+} from "./resource-governor";
 
 /** Renderer context options accepted by the WebGL2 backend. */
 export interface WebGlRootOptions {
@@ -30,14 +34,15 @@ export interface WebGlRootOptions {
    */
   readonly generatedSvgVirtualTextureRasterDensity?: number;
   /**
-   * Immutable cross-class CPU/GPU/job/upload budget policy. VT atlas and
-   * page-table storage uses the `virtual-texture` persistent-GPU class budget.
+   * Nested overrides for the immutable cross-class CPU/GPU/job/upload budget
+   * policy. Omitted fields inherit Royal's exported default policy. VT atlas
+   * and page-table storage uses the `virtual-texture` persistent-GPU class budget.
    */
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
 }
 
 export type NormalizedWebGlRootOptions = Required<Omit<WebGlRootOptions, "resourceGovernorPolicy">>
-  & Pick<WebGlRootOptions, "resourceGovernorPolicy">;
+  & { readonly resourceGovernorPolicy: ResourceGovernorPolicy };
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
 

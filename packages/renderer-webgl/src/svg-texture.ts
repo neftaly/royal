@@ -3,11 +3,7 @@ import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-ras
 import {
   abortError,
   dataUriMediaType,
-  decodeDataUri,
-  gltfBufferViewBytes,
-  resolveResourceUri,
 } from "./gltf/io";
-import type { GltfDocument, GltfImage } from "./gltf/schema";
 import {
   generatedVirtualTextureManifest,
   type VirtualTextureManifestModel,
@@ -662,34 +658,14 @@ export const loadSvgTextureFromUri = async (url: string, signal?: AbortSignal): 
   );
 };
 
-export const loadGltfSvgTexture = async (
-  src: string,
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
-  image: GltfImage,
+export const loadSvgTextureFromBytes = (
+  bytes: ArrayBuffer,
+  label: string,
+  baseUrl: string,
   signal?: AbortSignal,
-): Promise<LoadedSvgTexture> => {
-  if (image.uri !== undefined) {
-    if (image.uri.startsWith("data:")) {
-      const bytes = decodeDataUri(image.uri);
-      return loadSvgTextImage(
-        svgTextDecoder.decode(bytes),
-        `glTF GS_texture_svg data URI ${image.uri.slice(0, 48)}`,
-        absoluteSvgBaseUrl(src),
-        signal,
-      );
-    }
-
-    return loadSvgTextureFromUri(resolveResourceUri(src, image.uri), signal);
-  }
-  if (image.bufferView === undefined) {
-    throw new Error("glTF GS_texture_svg image has no URI or bufferView");
-  }
-  const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
-  return loadSvgTextImage(
-    svgTextDecoder.decode(bytes),
-    `glTF GS_texture_svg bufferView ${image.bufferView}`,
-    absoluteSvgBaseUrl(src),
-    signal,
-  );
-};
+): Promise<LoadedSvgTexture> => loadSvgTextImage(
+  svgTextDecoder.decode(bytes),
+  label,
+  absoluteSvgBaseUrl(baseUrl),
+  signal,
+);

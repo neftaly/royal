@@ -7,11 +7,12 @@ import type {
   SurfaceMaterialExtensionFactors,
 } from "../webgl/materials";
 import type { SurfaceImageBasedLight, SurfaceLight } from "../webgl/lights";
-import type { GltfDocument } from "./schema";
 import type { GltfTextureCoordinates } from "./texture-coordinates";
 import { ResourceGovernorCpuCapacityError } from "../resource-governor";
-
-type GltfBasisuCodecModule = typeof import("./codecs/basisu");
+import {
+  gltfImageSourceRecipeBytes,
+  type GltfImageSourceRecipe,
+} from "./image-source-recipe";
 
 export type GltfGeometryDrawMode =
   | "line-loop"
@@ -136,10 +137,7 @@ export type PreparedGltfAsset = {
   readonly imageBasedLight?: SurfaceImageBasedLight;
   /** CPU inputs retained so image decode never needs to refetch the document. */
   readonly imagePreparation?: {
-    readonly basisuCodec?: Promise<GltfBasisuCodecModule>;
-    readonly buffers: readonly ArrayBuffer[];
-    readonly document: GltfDocument;
-    readonly src: string;
+    readonly recipes: readonly GltfImageSourceRecipe[];
   };
   readonly lights: readonly SurfaceLight[];
   readonly load: GltfLoadMetrics;
@@ -194,12 +192,8 @@ export const preparedGltfAssetRetainedCpuBytes = (
       if (ArrayBuffer.isView(matrix)) addRetainedBuffer(geometryBuffers, matrix);
     }
   }
-  const decodeBuffers = new Set<ArrayBufferLike>();
-  for (const buffer of asset.imagePreparation?.buffers ?? []) {
-    if (!geometryBuffers.has(buffer)) decodeBuffers.add(buffer);
-  }
   return {
-    assetDecode: retainedBufferBytes(decodeBuffers),
+    assetDecode: gltfImageSourceRecipeBytes(asset.imagePreparation?.recipes ?? []),
     geometry: retainedBufferBytes(geometryBuffers),
   };
 };

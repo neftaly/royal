@@ -12,9 +12,9 @@ import {
   createRendererRoot,
   rendererRootOptionsSemanticKey,
   type RoyalRendererFrameClock,
+  type RendererOptions,
   type RoyalRendererRoot,
   type RoyalRendererRootLifecycleSnapshot,
-  type RoyalRendererRootOptions,
 } from "./root";
 
 type CanvasElementRef = {
@@ -88,8 +88,8 @@ export const disposeCanvasRendererRoot = (
 
 /** @internal Normalizes semantically empty Canvas renderer options. */
 export const normalizeCanvasRendererOptions = (
-  rendererOptions: RoyalRendererRootOptions | undefined,
-): RoyalRendererRootOptions | undefined => {
+  rendererOptions: RendererOptions | undefined,
+): RendererOptions | undefined => {
   if (rendererOptions === undefined || Object.values(rendererOptions).every((value) => value === undefined)) {
     return undefined;
   }
@@ -99,7 +99,7 @@ export const normalizeCanvasRendererOptions = (
 /** Owns the renderer root and retained frame-loop lifetime for one React Canvas. */
 export const useRendererRootRuntime = (
   canvasRef: CanvasElementRef,
-  rendererOptions: RoyalRendererRootOptions | undefined,
+  rendererOptions: RendererOptions | undefined,
 ): CanvasRendererRuntime => {
   const rootRef = useRef<RoyalRendererRoot | null>(null);
   const rendererFrameClockRef = useRef<RoyalRendererFrameClock | undefined>(undefined);
@@ -116,7 +116,7 @@ export const useRendererRootRuntime = (
   }), []);
   const optionsRef = useRef<{
     readonly key: string;
-    readonly options: RoyalRendererRootOptions | undefined;
+    readonly options: RendererOptions | undefined;
   } | undefined>(undefined);
   if (optionsRef.current?.key !== optionsKey) {
     optionsRef.current = {

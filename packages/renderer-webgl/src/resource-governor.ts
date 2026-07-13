@@ -65,6 +65,20 @@ export interface ResourceGovernorPolicy {
   readonly limits: ResourceGovernorUsage;
 }
 
+/**
+ * Nested overrides applied to the renderer's complete default resource policy.
+ * A lowered hard ceiling also clamps inherited soft/floor values; explicit
+ * dependent values remain authoritative. Lower root capacities may require
+ * corresponding class-floor overrides.
+ */
+export interface ResourceGovernorPolicyInput {
+  readonly classes?: Readonly<Partial<Record<ResourceGovernorClass, {
+    readonly cpuDecodedBytes?: Readonly<Partial<ResourceGovernorDurableBudget>>;
+    readonly persistentGpuBytes?: Readonly<Partial<ResourceGovernorDurableBudget>>;
+  }>>>;
+  readonly limits?: Readonly<Partial<ResourceGovernorUsage>>;
+}
+
 export type ResourceGovernorDenialReason =
   | "cpu-decoded-capacity"
   | "cpu-decoded-hard-limit"
@@ -259,6 +273,60 @@ export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.f
   }),
 });
 
+/**
+ * Resolves one deeply immutable, complete policy from concise nested overrides.
+ * Structural validation occurs when a renderer root or governor is created.
+ */
+export const defineResourceGovernorPolicy = (
+  input?: ResourceGovernorPolicyInput,
+): ResourceGovernorPolicy => {
+  if (input === undefined) return DEFAULT_RESOURCE_GOVERNOR_POLICY;
+  const budget = (
+    fallback: ResourceGovernorDurableBudget,
+    overrides: Readonly<Partial<ResourceGovernorDurableBudget>> | undefined,
+  ): ResourceGovernorDurableBudget => {
+    const hardLimit = overrides !== undefined && "hardLimit" in overrides
+      ? overrides.hardLimit
+      : fallback.hardLimit;
+    const softLimit = overrides?.softLimit ?? (hardLimit === undefined
+      ? fallback.softLimit
+      : Math.min(fallback.softLimit, hardLimit));
+    const inheritedMandatoryFloor = Math.min(fallback.mandatoryFloor, softLimit);
+    return Object.freeze({
+      ...(hardLimit === undefined ? {} : { hardLimit }),
+      mandatoryFloor: overrides?.mandatoryFloor ?? inheritedMandatoryFloor,
+      softLimit,
+    });
+  };
+  const resourceClass = (resourceClass: ResourceGovernorClass): ResourceGovernorClassPolicy => {
+    const fallback = DEFAULT_RESOURCE_GOVERNOR_POLICY.classes[resourceClass];
+    const overrides = input.classes?.[resourceClass];
+    return Object.freeze({
+      cpuDecodedBytes: budget(fallback.cpuDecodedBytes, overrides?.cpuDecodedBytes),
+      persistentGpuBytes: budget(fallback.persistentGpuBytes, overrides?.persistentGpuBytes),
+    });
+  };
+  return Object.freeze({
+    classes: Object.freeze({
+      "asset-decode": resourceClass("asset-decode"),
+      geometry: resourceClass("geometry"),
+      "ordinary-texture": resourceClass("ordinary-texture"),
+      "render-target": resourceClass("render-target"),
+      "virtual-texture": resourceClass("virtual-texture"),
+    }),
+    limits: Object.freeze({
+      cpuDecodedBytes: input.limits?.cpuDecodedBytes
+        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.cpuDecodedBytes,
+      jobs: input.limits?.jobs ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.jobs,
+      persistentGpuBytes: input.limits?.persistentGpuBytes
+        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
+      transientPeakBytes: input.limits?.transientPeakBytes
+        ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.transientPeakBytes,
+      uploadBytes: input.limits?.uploadBytes ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.uploadBytes,
+    }),
+  });
+};
+
 export interface ResourceGovernorSnapshot {
   readonly admissions: number;
   readonly borrowAdmissions: number;
@@ -317,7 +385,7 @@ interface ResourceGovernorState {
 }
 
 interface ResourceGovernorLeaseRecord {
-  readonly cost: ResourceGovernorUsage;
+  cost: ResourceGovernorUsage;
   replacementPending: boolean;
   readonly resourceClass: ResourceGovernorClass;
 }
@@ -340,6 +408,13 @@ export class ResourceGovernorCpuCapacityError extends Error {
   }
 }
 
+/**
+ * Runs synchronously after released capacity is committed. Listener failures
+ * are isolated: they neither stop later listeners nor affect the mutating
+ * governor call, its accounting, or its returned ownership. Each pass uses a
+ * subscriber snapshot and a frozen payload; subscriptions added during a pass
+ * begin with the next notification.
+ */
 export type ResourceGovernorDurableCapacityReleaseListener = (
   released: Readonly<Pick<ResourceGovernorUsage, "cpuDecodedBytes" | "persistentGpuBytes">>,
 ) => void;
@@ -434,11 +509,19 @@ const notifyDurableCapacityReleased = (
   released: Pick<ResourceGovernorUsage, "cpuDecodedBytes" | "persistentGpuBytes">,
 ): void => {
   if (released.cpuDecodedBytes === 0 && released.persistentGpuBytes === 0) return;
-  const capacity = {
+  const capacity = Object.freeze({
     cpuDecodedBytes: released.cpuDecodedBytes,
     persistentGpuBytes: released.persistentGpuBytes,
-  };
-  for (const listener of state.durableCapacityReleaseListeners) listener(capacity);
+  });
+  for (const listener of Array.from(state.durableCapacityReleaseListeners)) {
+    try {
+      listener(capacity);
+    } catch {
+      // Capacity listeners are wake-up observers. A broken observer must not
+      // make a committed ownership mutation appear to have failed or prevent
+      // independent waiters from seeing newly available capacity.
+    }
+  }
 };
 
 const releaseLease = (
@@ -599,7 +682,8 @@ export const reserveResourceGovernor = (
 /**
  * Atomically replaces a durable lease. Admission credits the previous durable
  * bytes while still charging the caller-supplied transient peak for the full
- * side-by-side allocation. Cancellation preserves the previous lease.
+ * side-by-side allocation. Cancellation preserves the previous lease; a
+ * successful commit updates and returns that same lease token.
  */
 export const replaceResourceGovernorLease = (
   governor: ResourceGovernor,
@@ -680,19 +764,30 @@ export const replaceResourceGovernorLease = (
       const completedWork = { ...transactionCost, uploadBytes: 0 };
       addUsage(state.total, completedWork, -1);
       addUsage(state.byClass[previous.resourceClass], completedWork, -1);
-      releaseLease(state, previousLease, true);
       const nextDurable = durableUsage(cost);
+      addUsage(state.total, previousDurable, -1);
+      addUsage(state.byClass[previous.resourceClass], previousDurable, -1);
       addUsage(state.total, nextDurable, 1);
       addUsage(state.byClass[previous.resourceClass], nextDurable, 1);
+      // Preserve the lease token so a synchronous capacity-listener failure
+      // cannot strand the newly committed durable ownership before the caller
+      // receives a replacement handle. Notifications run after accounting is
+      // committed; observer failures are isolated from ownership mutations.
+      previous.cost = cost;
       updateHighWater(state);
-      notifyDurableCapacityReleased(state, {
-        cpuDecodedBytes: Math.max(0, previousDurable.cpuDecodedBytes - nextDurable.cpuDecodedBytes),
-        persistentGpuBytes: Math.max(
-          0,
-          previousDurable.persistentGpuBytes - nextDurable.persistentGpuBytes,
-        ),
-      });
-      return createLease(state, previous.resourceClass, cost);
+      previous.replacementPending = true;
+      try {
+        notifyDurableCapacityReleased(state, {
+          cpuDecodedBytes: Math.max(0, previousDurable.cpuDecodedBytes - nextDurable.cpuDecodedBytes),
+          persistentGpuBytes: Math.max(
+            0,
+            previousDurable.persistentGpuBytes - nextDurable.persistentGpuBytes,
+          ),
+        });
+      } finally {
+        previous.replacementPending = false;
+      }
+      return previousLease;
     },
   };
 };

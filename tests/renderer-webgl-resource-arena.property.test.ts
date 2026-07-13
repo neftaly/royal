@@ -23,9 +23,8 @@ import {
   resourceArenaHasPendingAssetEvents,
   resourceArenaSnapshot,
   resourceArenaSourceReferenceCount,
-  releaseResourceArenaAssetSource,
   releaseResourceArenaPreparedSource,
-  retainResourceArenaAssetSource,
+  retainResourceArenaSourceLease,
   retainResourceArenaIblSource,
   retainResourceArenaPreparedSource,
   type PreparedAssetDependencyManifest,
@@ -85,7 +84,7 @@ describe("semantic resource arena properties", () => {
     const first = { height: 2, width: 2 } as LoadedTextureSource;
     const replacement = { height: 4, width: 4 } as LoadedTextureSource;
 
-    retainResourceArenaAssetSource(arena, "asset", "image", first);
+    const assetLease = retainResourceArenaSourceLease(arena, first);
     retainResourceArenaPreparedSource(arena, "ordinary", {
       source: first,
       texture: imageTexture("/shared.png"),
@@ -100,7 +99,7 @@ describe("semantic resource arena properties", () => {
     expect(resourceArenaSourceReferenceCount(arena, first)).toBe(3);
     expect(resourceArenaSourceReferenceCount(arena, replacement)).toBe(0);
 
-    releaseResourceArenaAssetSource(arena, "asset", "image");
+    assetLease.release();
     releaseResourceArenaPreparedSource(arena, "ordinary");
     expect(resourceArenaSourceReferenceCount(arena, first)).toBe(1);
     disposeResourceArena(arena);
@@ -118,15 +117,11 @@ describe("semantic resource arena properties", () => {
 
     const state = arena as unknown as {
       readonly gltfRequests: Map<string, { subscription: { release(): void } }>;
-      readonly imageAbortControllers: Map<string, { abort(): void }>;
       readonly preparedAssets: { dispose(): void };
       readonly sourceReferences: Map<LoadedTextureSource, number>;
     };
     state.gltfRequests.get(request.key)!.subscription.release = () => { throw "subscription failure"; };
     state.sourceReferences.set({} as LoadedTextureSource, 1);
-    state.imageAbortControllers.set("image", {
-      abort: () => { throw new Error("abort failure"); },
-    });
     state.preparedAssets.dispose = () => { throw new Error("store failure"); };
 
     const result = disposeResourceArena(arena);
@@ -136,7 +131,6 @@ describe("semantic resource arena properties", () => {
     expect(result.error.message).toBe("subscription failure");
     expect(result.changes.releasedGltfKeys).toEqual([request.key]);
     expect(state.gltfRequests.size).toBe(0);
-    expect(state.imageAbortControllers.size).toBe(0);
     expect(state.sourceReferences.size).toBe(0);
   });
 
@@ -291,7 +285,10 @@ describe("semantic resource arena properties", () => {
         let nextGeneration = 1;
         let generation: number | undefined;
         let dependencyKey: string | undefined;
-        const sourceSlots = new Map<number, LoadedTextureSource>();
+        const sourceSlots = new Map<number, {
+          readonly lease: ReturnType<typeof retainResourceArenaSourceLease>;
+          readonly source: LoadedTextureSource;
+        }>();
         const sourceCounts = new Map<LoadedTextureSource, number>();
         const dependencies = (suffix: string): PreparedAssetDependencyManifest => ({
           geometries: [], iblKeys: [],
@@ -317,14 +314,24 @@ describe("semantic resource arena properties", () => {
         };
         for (const [step, op] of trace.entries()) {
           if (op.kind === "live" && !disposed && op.value !== live) {
-            applyResourceDelta(arena, diffResourceManifests(live ? manifest : emptyManifest(), op.value ? manifest : emptyManifest(), scratch));
+            const changes = applyResourceDelta(
+              arena,
+              diffResourceManifests(
+                live ? manifest : emptyManifest(),
+                op.value ? manifest : emptyManifest(),
+                scratch,
+              ),
+            );
             live = op.value;
             dependencyKey = undefined;
             if (live) {
               generation = nextGeneration++;
+              expect(changes.acquiredGltfRequests).toEqual([{ generation, request }]);
               jobs.at(-1)!.generation = generation;
             } else {
+              expect(changes.acquiredGltfRequests).toEqual([]);
               generation = undefined;
+              for (const slot of sourceSlots.values()) slot.lease.release();
               sourceSlots.clear();
               sourceCounts.clear();
               expect(resourceArenaContentKeys(arena, key)).toEqual(new Map());
@@ -363,13 +370,18 @@ describe("semantic resource arena properties", () => {
           } else if (op.kind === "retain" && !disposed) {
             const source = { token: op.token } as unknown as LoadedTextureSource;
             const previous = sourceSlots.get(op.slot);
-            expect(retainResourceArenaAssetSource(arena, key, `slot:${op.slot}`, source)).toBe(previous);
-            if (previous !== undefined) sourceCounts.delete(previous);
-            sourceSlots.set(op.slot, source);
+            previous?.lease.release();
+            if (previous !== undefined) sourceCounts.delete(previous.source);
+            sourceSlots.set(op.slot, {
+              lease: retainResourceArenaSourceLease(arena, source),
+              source,
+            });
             sourceCounts.set(source, 1);
           } else if (op.kind === "dispose" && !disposed) {
             disposed = true;
-            expect(new Set(disposeResourceArena(arena).changes.releasedSources)).toEqual(new Set(sourceCounts.keys()));
+            for (const slot of sourceSlots.values()) slot.lease.release();
+            sourceSlots.clear();
+            expect(disposeResourceArena(arena).kind).toBe("disposed");
             sourceCounts.clear();
             live = false;
             generation = undefined;
@@ -378,7 +390,10 @@ describe("semantic resource arena properties", () => {
           await flush();
           assertModel(step);
         }
-        if (!disposed) disposeResourceArena(arena);
+        if (!disposed) {
+          for (const slot of sourceSlots.values()) slot.lease.release();
+          disposeResourceArena(arena);
+        }
       },
       seed: 0xa2e4_1e4f,
       steps: 48,
@@ -531,12 +546,13 @@ describe("semantic resource arena properties", () => {
     });
     expect(resourceArenaHasHdrReadyAsset(arena)).toBe(true);
     const source = {} as LoadedTextureSource;
-    retainResourceArenaAssetSource(arena, request.key, "image:0", source);
+    const sourceLease = retainResourceArenaSourceLease(arena, source);
     retainResourceArenaPreparedSource(arena, "prepared", {
       source,
       texture: imageTexture({ src: "/texture.png" }),
     });
     expect(resourceArenaSourceReferenceCount(arena, source)).toBe(2);
+    sourceLease.release();
     const disposed = disposeResourceArena(arena);
     expect(disposed.changes.releasedSources).toEqual([source]);
     expect(resourceArenaSourceReferenceCount(arena, source)).toBe(0);

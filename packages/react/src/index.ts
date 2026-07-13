@@ -5,7 +5,7 @@ export {
   useCanvasRoot,
   useInvalidate,
 } from './canvas';
-export type { CanvasProps, CanvasRendererOptions } from './canvas';
+export type { CanvasProps } from './canvas';
 export type { CanvasInteractions } from './scene-interactions';
 export type {
   PickInput,
@@ -35,6 +35,11 @@ export type {
   ResourceGovernorClassPolicy,
   ResourceGovernorDurableBudget,
   ResourceGovernorPolicy,
+  ResourceGovernorPolicyInput,
+} from '@royal/renderer-webgl';
+export {
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  defineResourceGovernorPolicy,
 } from '@royal/renderer-webgl';
 
 export { useFrame } from './frame';
@@ -69,8 +74,7 @@ export type {
   RoyalRendererDiagnosticsSnapshot,
   RoyalRendererRootLifecycle,
   RoyalRendererRootLifecycleSnapshot,
-  RoyalRendererRootOptions,
-  RoyalRendererRootOptionsSnapshot,
-  RoyalRendererRootRenderInput,
+  RendererOptions,
+  ResolvedRendererOptions,
   RoyalRendererRootSnapshot,
 } from './root';

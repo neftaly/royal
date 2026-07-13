@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
 import type {
   PickInput,
   PickResult,
@@ -27,6 +28,7 @@ export const fakeRendererRoot = ({
     antialias: true,
     generatedImageVirtualTextures: false,
     generatedSvgVirtualTextureRasterDensity: 4,
+    resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
   },
   diagnostics = {},
   pick = () => undefined,

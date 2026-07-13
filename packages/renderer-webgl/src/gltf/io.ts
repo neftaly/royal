@@ -68,6 +68,23 @@ export const dataUriMediaType = (uri: string): string => {
   return mediaType.toLowerCase();
 };
 
+export const dataUriDecodedByteLength = (uri: string): number => {
+  const match = dataUriPattern.exec(uri);
+  if (match === null) throw new Error("Invalid data URI");
+  const metadata = match[1] ?? "";
+  const payload = match[2] ?? "";
+  if (!metadata.split(";").some((part) => part.toLowerCase() === "base64")) {
+    return new TextEncoder().encode(decodeURIComponent(payload)).byteLength;
+  }
+  const compact = payload.replace(/\s/gu, "");
+  const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0;
+  const byteLength = Math.floor(compact.length * 3 / 4) - padding;
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+    throw new RangeError("Data URI decoded byte length exceeds safe integer capacity");
+  }
+  return byteLength;
+};
+
 const responseContentType = (response: Response): string =>
   ((response as { readonly headers?: Headers }).headers?.get("content-type") ?? "").toLowerCase();
 

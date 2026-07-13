@@ -557,6 +557,8 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     });
 
     expect(Object.isFrozen(root.options)).toBe(true);
+    expect(root.snapshot().options).toBe(root.options);
+    expect(Object.isFrozen(root.snapshot().options)).toBe(true);
     expect(root.options).toMatchObject({
       alpha: true,
       antialias: true,

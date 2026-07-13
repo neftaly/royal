@@ -1,5 +1,4 @@
-import { type CanvasRendererOptions } from '@royal/react';
-import { type ResourceGovernorPolicy } from '@royal/renderer-webgl';
+import { type RendererOptions, type ResourceGovernorPolicy } from '@royal/react';
 
 const mib = (value: number): number => value * 1024 * 1024;
 
@@ -55,11 +54,11 @@ export const mobileExampleResourceGovernorPolicy = {
 const defaultExampleCanvasRendererOptions = {
   alpha: true,
   generatedImageVirtualTextures: true,
-} as const satisfies CanvasRendererOptions;
+} as const satisfies RendererOptions;
 
 export const exampleCanvasRendererOptionsForSearch = (
   search: string,
-): CanvasRendererOptions => {
+): RendererOptions => {
   const profile = new URLSearchParams(search).get('resourceGovernor');
   if (profile !== 'mobile') return defaultExampleCanvasRendererOptions;
   return {

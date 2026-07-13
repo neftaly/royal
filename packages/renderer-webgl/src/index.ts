@@ -1,5 +1,6 @@
 export {
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  defineResourceGovernorPolicy,
   maximumResourceGovernorClassDurableBytes,
 } from "./resource-governor";
 export { createWebGlRoot } from "./root";
@@ -10,6 +11,7 @@ export type {
   ResourceGovernorDenialReason,
   ResourceGovernorDurableBudget,
   ResourceGovernorPolicy,
+  ResourceGovernorPolicyInput,
   ResourceGovernorSnapshot,
   ResourceGovernorUsage,
 } from "./resource-governor";

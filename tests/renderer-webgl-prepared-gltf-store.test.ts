@@ -184,9 +184,14 @@ describe("PreparedGltfAssetStore", () => {
     const asset = {
       ...emptyAsset(),
       imagePreparation: {
-        buffers: [geometryBuffer, decodeBuffer],
-        document: {},
-        src: "/shared.glb",
+        recipes: [{
+          key: "image",
+          source: {
+            bytes: decodeBuffer,
+            contentKey: "shared-image",
+            kind: "bitmap-bytes",
+          },
+        }],
       },
       primitives: [{
         instanceTransforms: [],
@@ -206,12 +211,14 @@ describe("PreparedGltfAssetStore", () => {
     const oversized = {
       ...emptyAsset(),
       imagePreparation: {
-        buffers: [
-          { byteLength: Number.MAX_SAFE_INTEGER } as ArrayBuffer,
-          { byteLength: 1 } as ArrayBuffer,
-        ],
-        document: {},
-        src: "/oversized.glb",
+        recipes: [Number.MAX_SAFE_INTEGER, 1].map((byteLength, index) => ({
+          key: `image:${index}`,
+          source: {
+            bytes: { byteLength } as ArrayBuffer,
+            contentKey: `oversized:${index}`,
+            kind: "bitmap-bytes" as const,
+          },
+        })),
       },
     } satisfies PreparedGltfAsset;
 

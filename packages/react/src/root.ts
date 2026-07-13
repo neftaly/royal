@@ -3,6 +3,7 @@ import {
   createWebGlRoot,
   webGlRootOptionsSemanticKey,
   type WebGlContextSnapshot,
+  type WebGlRoot,
   type WebGlRootOptions,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
@@ -12,15 +13,13 @@ import {
 } from "./renderer-capabilities";
 
 /** Immutable renderer creation options accepted by `createRendererRoot`. */
-export type RoyalRendererRootOptions = WebGlRootOptions;
+export type RendererOptions = WebGlRootOptions;
 
 /** @internal Backend-owned semantic identity used by the React Canvas lifetime. */
 export const rendererRootOptionsSemanticKey = webGlRootOptionsSemanticKey;
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
-export type RoyalRendererRootOptionsSnapshot =
-  Required<Omit<RoyalRendererRootOptions, "resourceGovernorPolicy">>
-  & Pick<RoyalRendererRootOptions, "resourceGovernorPolicy">;
+export type ResolvedRendererOptions = WebGlRoot["options"];
 
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
@@ -37,7 +36,7 @@ export interface RoyalRendererRootLifecycleSnapshot {
 export interface RoyalRendererRootSnapshot {
   readonly frame: number;
   readonly lifecycle: RoyalRendererRootLifecycleSnapshot;
-  readonly options: RoyalRendererRootOptionsSnapshot;
+  readonly options: ResolvedRendererOptions;
 }
 
 /** Bounded operational diagnostics projected from the active renderer backend. */
@@ -56,15 +55,13 @@ export interface RoyalRendererDiagnosticsSnapshot {
   readonly virtualTexturing: WebGlRootSnapshot["virtualTexturing"];
 }
 
-export type RoyalRendererRootRenderInput = RenderRoot;
-
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
   readonly canvas: HTMLCanvasElement;
   readonly disposed: boolean;
   readonly frame: number;
   /** Normalized creation options fixed for the lifetime of this root. */
-  readonly options: RoyalRendererRootOptionsSnapshot;
+  readonly options: ResolvedRendererOptions;
   /** Bounded operational diagnostics, excluding scene data and root snapshot fields. */
   diagnostics(): RoyalRendererDiagnosticsSnapshot;
   /** Immediately renders queued demand on the caller's current frame, regardless of clock ownership. */
@@ -78,7 +75,7 @@ export interface RoyalRendererRoot {
   /** Returns the front-most render target under a DOM client coordinate. */
   pick(input: PickInput): PickResult | undefined;
   /** Renders a complete scene into the canvas. */
-  render(scene: RoyalRendererRootRenderInput): void;
+  render(scene: RenderRoot): void;
   /** Canonical resource cleanup hook. */
   dispose(): void;
   snapshot(): RoyalRendererRootSnapshot;
@@ -122,18 +119,10 @@ export const acquireExternalRenderClockForRoyalRoot = (
  */
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
-  options?: RoyalRendererRootOptions,
+  options?: RendererOptions,
 ): RoyalRendererRoot => {
   const root = createWebGlRoot(canvas, options);
-  const normalizedOptions: RoyalRendererRootOptionsSnapshot = Object.freeze({
-    alpha: root.options.alpha,
-    antialias: root.options.antialias,
-    generatedImageVirtualTextures: root.options.generatedImageVirtualTextures,
-    generatedSvgVirtualTextureRasterDensity: root.options.generatedSvgVirtualTextureRasterDensity,
-    ...(root.options.resourceGovernorPolicy === undefined
-      ? {}
-      : { resourceGovernorPolicy: root.options.resourceGovernorPolicy }),
-  });
+  const normalizedOptions = root.options;
 
   const royalRoot: RoyalRendererRoot = {
     get canvas() {
@@ -177,7 +166,7 @@ export const createRendererRoot = (
     }),
     observeRenderFailures: (callback) => root.observeRenderFailures(callback),
     pick: (input: PickInput) => root.pick(input),
-    render: (scene: RoyalRendererRootRenderInput) => {
+    render: (scene: RenderRoot) => {
       root.render(scene);
     },
     snapshot: () => {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  defineResourceGovernorPolicy,
+} from '@royal/react';
 import type {
   CanvasProps,
-  CanvasRendererOptions,
   PickInput,
   PickingId,
   PickResult,
   PickTarget,
   ResourceGovernorPolicy,
+  ResourceGovernorPolicyInput,
+  RendererOptions,
   TextureAssetRef,
   TextureColorSpace,
   TextureSampler,
@@ -15,9 +20,6 @@ import type {
   VirtualTextureAssetSrcOptions,
   VirtualTextureInput,
 } from '@royal/react';
-import {
-  DEFAULT_RESOURCE_GOVERNOR_POLICY,
-} from '@royal/renderer-webgl';
 import {
   perspectiveCamera,
   scene,
@@ -51,7 +53,7 @@ describe('Canvas public scene boundary', () => {
     const rendererOptions = {
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
-    } satisfies CanvasRendererOptions;
+    } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
     expect(props.rendererOptions).toEqual(rendererOptions);
@@ -61,14 +63,29 @@ describe('Canvas public scene boundary', () => {
     const policy = DEFAULT_RESOURCE_GOVERNOR_POLICY satisfies ResourceGovernorPolicy;
     const rendererOptions = {
       resourceGovernorPolicy: policy,
-    } satisfies CanvasRendererOptions;
+    } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
     expect(props.rendererOptions?.resourceGovernorPolicy).toBe(policy);
   });
 
+  it('defines concise resource policy overrides without a backend import', () => {
+    const overrides = {
+      classes: {
+        'virtual-texture': { persistentGpuBytes: { hardLimit: 96 * 1024 * 1024 } },
+      },
+      limits: { jobs: 3 },
+    } satisfies ResourceGovernorPolicyInput;
+    const rendererOptions = { resourceGovernorPolicy: overrides } satisfies RendererOptions;
+    const policy = defineResourceGovernorPolicy(overrides);
+
+    expect(rendererOptions.resourceGovernorPolicy).toBe(overrides);
+    expect(policy.limits.jobs).toBe(3);
+    expect(policy.classes['virtual-texture'].persistentGpuBytes.hardLimit).toBe(96 * 1024 * 1024);
+  });
+
   it('does not expose the former context creation-options prop', () => {
-    const rendererOptions = { alpha: false } satisfies CanvasRendererOptions;
+    const rendererOptions = { alpha: false } satisfies RendererOptions;
     const invalid: CanvasProps = {
       // @ts-expect-error Renderer creation policy belongs under rendererOptions.
       context: rendererOptions,

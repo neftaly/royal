@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
+import type { RendererOptions } from "@royal/react";
 import {
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
@@ -66,6 +67,29 @@ describe("Canvas renderer root cleanup", () => {
     expect(rendererRootOptionsSemanticKey({})).toBe(omitted);
     expect(explicit).toBe(omitted);
     expect(rendererRootOptionsSemanticKey({ alpha: false })).not.toBe(omitted);
+  });
+
+  it("gives concise and fully expanded resource overrides one semantic identity", () => {
+    const concise = rendererRootOptionsSemanticKey({
+      resourceGovernorPolicy: { limits: { jobs: 3 } },
+    });
+    const expanded = rendererRootOptionsSemanticKey({
+      resourceGovernorPolicy: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, jobs: 3 },
+      },
+    });
+
+    expect(concise).toBe(expanded);
+  });
+
+  it("ignores unknown or undefined runtime policy fields in semantic identity", () => {
+    const noisy = {
+      resourceGovernorPolicy: { limits: { ignored: 1, jobs: undefined } },
+    } as unknown as RendererOptions;
+
+    expect(rendererRootOptionsSemanticKey(noisy))
+      .toBe(rendererRootOptionsSemanticKey(undefined));
   });
 
   it("releases ownership before surfacing a dispose failure", () => {

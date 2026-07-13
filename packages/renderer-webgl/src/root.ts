@@ -31,9 +31,6 @@ import {
 import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
 import {
   abortError,
-  dataUriMediaType,
-  decodeDataUri,
-  gltfBufferViewBytes,
   loadGltfBuffers,
   loadGltfDocument,
   resolveResourceUri,
@@ -49,15 +46,11 @@ import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
   applyPreparedAssetEvents,
   applyResourceDelta,
-  abortResourceArenaImageWork,
   clearResourceArenaPreparedSources,
   createResourceArena,
   detachResourceArenaImagePreparation,
   disposeResourceArena,
-  finishResourceArenaImageWork,
   publishResourceArenaContentKey,
-  replaceResourceArenaImageAbortController,
-  releaseResourceArenaAssetSource,
   resourceArenaContentKeys,
   resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
@@ -68,9 +61,10 @@ import {
   resourceArenaPreparedSourceValues,
   resourceArenaSourceReferenceCount,
   rekeyPreparedAssetOrdinaryTextures,
-  retainResourceArenaAssetSource,
+  retainResourceArenaSourceLease,
   retainResourceArenaIblSource,
   wakeResourceArenaPreparedAssetCpuCapacity,
+  type PreparedAssetArenaEvent,
   type PreparedAssetDependencyManifest,
   type PreparedAssetOrdinaryTextureRekey,
   type ResourceArena,
@@ -79,7 +73,7 @@ import {
 import {
   beginResourceGovernorFrame,
   createResourceGovernor,
-  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  defineResourceGovernorPolicy,
   maximumResourceGovernorClassDurableBytes,
   RESOURCE_GOVERNOR_CLASSES,
   ResourceGovernorCpuCapacityError,
@@ -91,7 +85,6 @@ import {
   type ResourceGovernor,
   type ResourceGovernorClass,
   type ResourceGovernorLease,
-  type ResourceGovernorPolicy,
   type ResourceGovernorReservation,
 } from "./resource-governor";
 import {
@@ -198,7 +191,15 @@ import {
   GltfInstanceTransformRegistry,
   type GltfInstanceTransformView,
 } from "./gltf/instance-transform-registry";
-import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
+import {
+  GltfImageDemandCoordinator,
+  gltfImageDemandKeys,
+  type GltfImageRecipeLease,
+} from "./gltf/image-demand-coordinator";
+import {
+  createGltfImageSourceRecipes,
+  gltfImageSourceRecipeBytes,
+} from "./gltf/image-source-recipe";
 import {
   estimateGltfPreparationCpu,
   type GltfPreparationCpuEstimate,
@@ -209,7 +210,6 @@ import {
 } from "./gltf/scene-reader";
 import {
   type GltfDocument,
-  type GltfImage,
   type GltfMeshPrimitive,
 } from "./gltf/schema";
 import {
@@ -318,7 +318,6 @@ import {
   generatedSvgVirtualTextureManifest,
   isSvgUri,
   loadGeneratedSvgVirtualTexturePageImage,
-  loadGltfSvgTexture,
   loadSvgTextureFromUri,
   svgVirtualTextureSourceForImage,
 } from "./svg-texture";
@@ -514,11 +513,6 @@ type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"
   >>;
 };
 
-type LoadedGltfImageSource = {
-  readonly contentKey?: TextureContentKey;
-  readonly image: LoadedTextureSource;
-};
-
 type GltfBasisuCodecModule = typeof import("./gltf/codecs/basisu");
 type GltfDracoCodecModule = typeof import("./gltf/codecs/draco");
 type GltfMeshoptCodecModule = typeof import("./gltf/codecs/meshopt");
@@ -551,14 +545,6 @@ const importGltfCodecs = (document: GltfDocument): GltfCodecImports => {
       : {}),
   };
 };
-
-const loadedGltfImageSource = (
-  image: LoadedTextureSource,
-  contentKey: TextureContentKey | undefined,
-): LoadedGltfImageSource => ({
-  ...(contentKey === undefined ? {} : { contentKey }),
-  image,
-});
 
 type DrawSidedness = {
   readonly doubleSided: boolean;
@@ -649,12 +635,12 @@ type GltfState = {
   hasMaterialVariants: boolean;
   hasNodeLod: boolean;
   imageBasedLight?: SurfaceImageBasedLight;
-  readonly imageRows: Map<string, GltfImageRow>;
   readonly instanceKey: number;
   readonly key: string;
+  readonly preparedGeneration: number;
   error?: string;
   lights: readonly SurfaceLight[];
-  readonly load: GltfLoadMetrics;
+  load: GltfLoadMetrics;
   materials: readonly LoadedGltfMaterial[];
   nodeCount: number;
   primitives: readonly LoadedGltfPrimitive[];
@@ -662,9 +648,11 @@ type GltfState = {
   variants: readonly string[];
 };
 
-const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMaterial[] => {
+const preparedPrimitiveMaterials = (
+  primitives: readonly LoadedGltfPrimitive[],
+): readonly LoadedGltfMaterial[] => {
   const materials = new Set<LoadedGltfMaterial>();
-  for (const primitive of asset.primitives) {
+  for (const primitive of primitives) {
     materials.add(primitive.material);
     for (const material of primitive.materialLod?.levels ?? []) materials.add(material);
     for (const variant of primitive.materialVariants ?? []) {
@@ -675,35 +663,8 @@ const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMa
   return [...materials];
 };
 
-type GltfImageTextureBinding = {
-  readonly baseColor: boolean;
-  readonly colorSpace: TextureColorSpace;
-  readonly contentKey?: TextureContentKey;
-  readonly count: number;
-  readonly material: LoadedGltfMaterial;
-  readonly sampler?: TextureSampler;
-  readonly sourceUri?: string;
-  readonly textureUri: string;
-};
-
-type GltfImageRow = {
-  readonly assetKey: string;
-  readonly bindings: GltfImageTextureBinding[];
-  contentKey?: TextureContentKey;
-  error?: string;
-  iblSpecular?: SurfaceImageBasedLightSpecular;
-  readonly key: string;
-  readonly materials: Set<LoadedGltfMaterial>;
-  readonly stateInstanceKey: number;
-  queued: boolean;
-  revision: number;
-  source?: LoadedTextureSource;
-  status: "error" | "pending" | "ready";
-};
-
-// Fetch and decode are currently one job. Reserve one lane for environment
-// lighting so a slow ordinary image cannot consume both A10/Quest-class lanes.
-const GLTF_IMAGE_LANE_CONCURRENCY = 1;
+const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMaterial[] =>
+  preparedPrimitiveMaterials(asset.primitives);
 const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 type AnyGltfNode = GltfNode | GltfInstancesNode;
@@ -783,11 +744,6 @@ const IDENTITY_TRANSFORM: Transform = {
   scale: [1, 1, 1],
 };
 
-const FNV_1A_32_OFFSET = 0x811c9dc5;
-const FNV_1A_32_PRIME = 0x01000193;
-const DJB2_XOR_OFFSET = 5381;
-const textureTextEncoder = new TextEncoder();
-
 const sceneToneMappingState = (
   scene: {
     readonly exposureEv100: number | undefined;
@@ -838,28 +794,6 @@ const compileSceneSurfaceLights = (
     }
   });
 };
-
-const hex32 = (value: number): string =>
-  value.toString(16).padStart(8, "0");
-
-const hashTextureBytes = (bytes: Uint8Array): string => {
-  let fnv = FNV_1A_32_OFFSET;
-  let djb = DJB2_XOR_OFFSET;
-  for (const byte of bytes) {
-    fnv ^= byte;
-    fnv = Math.imul(fnv, FNV_1A_32_PRIME) >>> 0;
-    djb = Math.imul(djb, 33) ^ byte;
-    djb >>>= 0;
-  }
-
-  return `${hex32(fnv)}${hex32(djb)}`;
-};
-
-const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
-  `royal-auto-bytes-v1:${kind}:${bytes.byteLength}:${hashTextureBytes(new Uint8Array(bytes))}`;
-
-const svgTextContentKey = (svgText: string): TextureContentKey =>
-  byteContentKey(textureTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
 
 type CapturedFailure = { readonly value: unknown };
 
@@ -937,31 +871,6 @@ const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   rootScaleUploadCalls: 0,
 });
 
-const immutableResourceGovernorPolicy = (
-  policy: ResourceGovernorPolicy,
-): ResourceGovernorPolicy => {
-  const budget = (value: ResourceGovernorPolicy["classes"]["geometry"]["cpuDecodedBytes"]) =>
-    Object.freeze({
-      ...(value.hardLimit === undefined ? {} : { hardLimit: value.hardLimit }),
-      mandatoryFloor: value.mandatoryFloor,
-      softLimit: value.softLimit,
-    });
-  const resourceClass = (value: ResourceGovernorPolicy["classes"]["geometry"]) => Object.freeze({
-    cpuDecodedBytes: budget(value.cpuDecodedBytes),
-    persistentGpuBytes: budget(value.persistentGpuBytes),
-  });
-  return Object.freeze({
-    classes: Object.freeze({
-      "asset-decode": resourceClass(policy.classes["asset-decode"]),
-      geometry: resourceClass(policy.classes.geometry),
-      "ordinary-texture": resourceClass(policy.classes["ordinary-texture"]),
-      "render-target": resourceClass(policy.classes["render-target"]),
-      "virtual-texture": resourceClass(policy.classes["virtual-texture"]),
-    }),
-    limits: Object.freeze({ ...policy.limits }),
-  });
-};
-
 const maxVirtualTexturePageTableUploadBytes = (
   manifest: VirtualTextureManifestModel,
   generated: boolean,
@@ -998,9 +907,7 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
     antialias: options.antialias ?? true,
     generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
     generatedSvgVirtualTextureRasterDensity,
-    ...(options.resourceGovernorPolicy === undefined
-      ? {}
-      : { resourceGovernorPolicy: immutableResourceGovernorPolicy(options.resourceGovernorPolicy) }),
+    resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
   });
 };
 
@@ -1054,101 +961,6 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
   if (image.complete) onLoad();
 });
 
-const loadImageBitmapFromBytes = (
-  bytes: ArrayBuffer,
-  mimeType: string | undefined,
-  signal?: AbortSignal,
-): Promise<ImageBitmap> => {
-  const createBitmap = globalThis.createImageBitmap;
-  if (typeof createBitmap !== "function") {
-    return Promise.reject(new Error("ImageBitmap decoding is unavailable for glTF bufferView image"));
-  }
-  const blob = new Blob([bytes], {
-    type: mimeType ?? "application/octet-stream",
-  });
-
-  return createBitmap(blob).then((bitmap) => {
-    if (signal?.aborted !== true) return bitmap;
-    bitmap.close();
-    throw abortError();
-  });
-};
-
-const loadBasisuBytesFromUri = async (
-  src: string,
-  image: GltfImage,
-  signal?: AbortSignal,
-): Promise<ArrayBuffer> => {
-  if (image.uri === undefined) throw new Error("glTF KHR_texture_basisu image has no URI");
-  if (image.uri.startsWith("data:")) return decodeDataUri(image.uri);
-
-  const url = resolveResourceUri(src, image.uri);
-  throwIfAborted(signal);
-  const response = await fetch(url, signal === undefined ? undefined : { signal });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-
-  return response.arrayBuffer();
-};
-
-const loadGltfImageSource = (
-  src: string,
-  document: GltfDocument,
-  buffers: readonly ArrayBuffer[],
-  image: GltfImage,
-  kind: GltfImageKind,
-  basisuCodec: Promise<GltfBasisuCodecModule> | undefined,
-  signal?: AbortSignal,
-): Promise<LoadedGltfImageSource> => {
-  if (kind === "svg") {
-    return loadGltfSvgTexture(src, document, buffers, image, signal)
-      .then((loadedImage) => loadedGltfImageSource(
-        loadedImage.image,
-        svgTextContentKey(loadedImage.text),
-      )).then((loadedImage) => {
-        if (signal?.aborted !== true) return loadedImage;
-        closeDecodedTextureSource(loadedImage.image);
-        throw abortError();
-      });
-  }
-
-  if (kind === "basisu") {
-    if (basisuCodec === undefined) {
-      return Promise.reject(new Error("glTF KHR_texture_basisu decoder was not requested"));
-    }
-    const bytes = image.uri === undefined
-      ? image.bufferView === undefined
-        ? Promise.reject(new Error("glTF KHR_texture_basisu image has no URI or bufferView"))
-        : Promise.resolve(gltfBufferViewBytes(document, buffers, image.bufferView))
-      : loadBasisuBytesFromUri(src, image, signal);
-
-    return Promise.all([bytes, basisuCodec]).then(async ([buffer, codec]) =>
-      loadedGltfImageSource(
-        await codec.decodeGltfBasisuRgba(buffer, image.uri ?? `bufferView ${image.bufferView ?? ""}`),
-        byteContentKey(buffer, "KHR_texture_basisu"),
-      ));
-  }
-
-  if (image.uri !== undefined) {
-    if (image.uri.startsWith("data:")) {
-      const bytes = decodeDataUri(image.uri);
-      const contentKey = byteContentKey(
-        bytes,
-        (image.mimeType ?? dataUriMediaType(image.uri)) || "application/octet-stream",
-      );
-      return loadImageBitmapFromBytes(bytes, image.mimeType, signal)
-        .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
-    }
-
-    return loadImage(resolveResourceUri(src, image.uri), signal).then((loadedImage) => ({ image: loadedImage }));
-  }
-  if (image.bufferView === undefined) return Promise.reject(new Error("glTF image has no URI or bufferView"));
-
-  const bytes = gltfBufferViewBytes(document, buffers, image.bufferView);
-  const contentKey = byteContentKey(bytes, image.mimeType ?? "application/octet-stream");
-  return loadImageBitmapFromBytes(bytes, image.mimeType, signal)
-    .then((loadedImage) => loadedGltfImageSource(loadedImage, contentKey));
-};
-
 const getNodeKind = (node: RenderNode): string =>
   typeof node === "object" && node !== null && "kind" in node && typeof node.kind === "string"
     ? node.kind
@@ -1172,6 +984,7 @@ type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameV
 
 type ResourceArenaSideEffectDebt = {
   nextStep: number;
+  readonly phase: "acquire" | "release";
   readonly steps: readonly (() => void)[];
 };
 
@@ -1205,9 +1018,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
-  readonly #pendingGltfImageRows: GltfImageRow[] = [];
-  readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
-  #pendingGltfImageRowHead = 0;
+  readonly #gltfImages: GltfImageDemandCoordinator;
   readonly #virtualTextures = new Map<string, VirtualTextureRuntimeState>();
   readonly #virtualTextureGpu: VirtualTextureGpuArena;
   readonly #virtualTextureRequests: VirtualTextureRequestCoordinator;
@@ -1228,6 +1039,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #virtualTextureRetryTicket = 1;
   #governedVirtualTextureRetryScheduled = false;
   #resourceArenaSideEffectDebt: ResourceArenaSideEffectDebt[] = [];
+  #resourceArenaAcquisitionsCancelled = false;
+  #resourceArenaSideEffectDrainInProgress = false;
+  readonly #pendingPreparedAssetEvents: PreparedAssetArenaEvent[] = [];
+  #pendingPreparedAssetEventHead = 0;
+  #preparedAssetEventDrainInProgress = false;
   #cpuCapacityWakeScheduled = false;
   #suppressCpuCapacityWake = false;
   #suppressPersistentGpuCapacityWake = false;
@@ -1248,8 +1064,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         reservation.cancel();
         const wakes = [
           () => this.#gltfPreparationScheduler.wake(),
-          () => this.#gltfImageScheduler.wake(),
-          () => this.#gltfIblImageScheduler.wake(),
+          () => this.#gltfImages.wake(),
           () => this.#ordinaryTextures.wakeSourceJobs(),
           () => this.#virtualTextureRequests.drain(),
         ];
@@ -1263,14 +1078,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     };
   };
   readonly #gltfPreparationScheduler = new GltfPreparationScheduler(2, this.#admitGltfPreparationJob);
-  readonly #gltfImageScheduler = new GltfPreparationScheduler(
-    GLTF_IMAGE_LANE_CONCURRENCY,
-    this.#admitGltfPreparationJob,
-  );
-  readonly #gltfIblImageScheduler = new GltfPreparationScheduler(
-    GLTF_IMAGE_LANE_CONCURRENCY,
-    this.#admitGltfPreparationJob,
-  );
   readonly #gltfStatesByNode = new WeakMap<AnyGltfNode, GltfState>();
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   #gltfPreparationWakeCursor = 0;
@@ -1421,8 +1228,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   };
   constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
     const rollback: Array<() => void> = [
-      () => this.#gltfIblImageScheduler.dispose(),
-      () => this.#gltfImageScheduler.dispose(),
       () => this.#gltfPreparationScheduler.dispose(),
       () => disposeVertexInputArena(this.#vertexInputs),
     ];
@@ -1447,13 +1252,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const requestedOptions = normalizeOptions(options);
       this.#requestedContextOptions = {
         ...options,
-        ...(requestedOptions.resourceGovernorPolicy === undefined
-          ? {}
-          : { resourceGovernorPolicy: requestedOptions.resourceGovernorPolicy }),
+        resourceGovernorPolicy: requestedOptions.resourceGovernorPolicy,
       };
-      this.#resourceGovernor = createResourceGovernor(
-        requestedOptions.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY,
-      );
+      this.#resourceGovernor = createResourceGovernor(requestedOptions.resourceGovernorPolicy);
       this.#decodedTextureSources = new DecodedTextureSourceLifetime({
         ordinaryReferenceCount: (source) => resourceArenaSourceReferenceCount(this.#resourceArena, source),
         reserveOrdinaryDecodedBytes: (decodedBytes) => {
@@ -1478,6 +1279,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       registerRollback(() => clearResourceArenaPreparedSources(this.#resourceArena));
       registerRollback(() => { disposeResourceArena(this.#resourceArena); });
+      this.#gltfImages = new GltfImageDemandCoordinator({
+        admit: this.#admitGltfPreparationJob,
+        closeSource: (source) => this.#decodedTextureSources.closeOrdinary(source),
+        diagnostic: (message, key) => this.#recordDiagnostic(message, `gltf-image:${key}`),
+        invalidate: () => this.invalidate(),
+        retainSource: (source) => retainResourceArenaSourceLease(this.#resourceArena, source),
+      });
+      registerRollback(() => this.#gltfImages.dispose());
       const gl = canvas.getContext("webgl2", {
         alpha: requestedOptions.alpha,
         antialias: requestedOptions.antialias,
@@ -1502,7 +1311,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => releaseClusteredLightContextHandles(this.#clusteredLights));
       this.#iblTextures = createIblTextureArena(gl, {
         reserve: (cost) => {
-          const policy = requestedOptions.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
+          const policy = requestedOptions.resourceGovernorPolicy;
           if (cost.uploadBytes > policy.limits.uploadBytes) {
             return {
               permanent: true,
@@ -1571,7 +1380,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => this.#unsubscribeResourceGovernorDurableCapacityRelease());
       this.#virtualTextureGpu = createVirtualTextureGpuArena(gl, this.#textureHandles, {
         maxPhysicalBytes: maximumResourceGovernorClassDurableBytes(
-          this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY,
+          this.#options.resourceGovernorPolicy,
           "virtual-texture",
           "persistentGpuBytes",
         ),
@@ -1599,7 +1408,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       // Replace the no-context cleanup registered before construction with an
       // active-context cleanup now that the vertex arena owns this generation.
-      rollback[3] = () => disposeVertexInputArena(this.#vertexInputs, gl, this.#context.generation);
+      rollback[1] = () => disposeVertexInputArena(this.#vertexInputs, gl, this.#context.generation);
       let contextListenersStarted = false;
       registerRollback(() => {
         if (!contextListenersStarted) return;
@@ -1667,9 +1476,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       antialias,
       generatedImageVirtualTextures: base.generatedImageVirtualTextures,
       generatedSvgVirtualTextureRasterDensity: base.generatedSvgVirtualTextureRasterDensity,
-      ...(base.resourceGovernorPolicy === undefined
-        ? {}
-        : { resourceGovernorPolicy: base.resourceGovernorPolicy }),
+      resourceGovernorPolicy: base.resourceGovernorPolicy,
     });
   }
 
@@ -1834,7 +1641,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
       prepareFrameBaseline(gl, frameViews.scissor);
-      this.#stagePendingGltfImageRows();
+      this.#stageReadyGltfImages();
       this.#processOrdinaryTextureUploads();
       this.#gltfInstanceTransforms.beginFrame();
       const wantsHdr = this.#planWantsHdr(plan);
@@ -2149,6 +1956,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   dispose(): void {
+    if (
+      this.#resourceArenaSideEffectDrainInProgress
+      || this.#preparedAssetEventDrainInProgress
+    ) {
+      throw new Error("Cannot dispose while Royal is applying resource events");
+    }
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
     }
@@ -2193,8 +2006,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderFailureObservers.clear();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
+    teardown(() => this.#gltfImages.dispose());
     teardown(() => {
       const disposal = disposeResourceArena(this.#resourceArena);
+      // The semantic arena is now authoritatively empty. Retrying an older
+      // acquisition after its paired disposal release could resurrect state in
+      // this disposed root; release debt still owns any partially-created
+      // imperative resources and must continue normally.
+      this.#cancelResourceArenaAcquisitionDebt();
       const applyFailure = captureFailure(() => this.#applyResourceArenaChanges(disposal.changes));
       if (disposal.kind === "failed") throw disposal.error;
       if (applyFailure !== undefined) throw applyFailure.value;
@@ -2213,13 +2032,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#autoVirtualTextureRefs.clear();
     this.#autoVirtualTextureGeneratedPageSources.clear();
+    this.#pendingPreparedAssetEvents.length = 0;
+    this.#pendingPreparedAssetEventHead = 0;
     this.#gltf.clear();
     for (const key of this.#preparedAssetCpuGovernorLeases.keys()) {
       this.#releasePreparedAssetCpuLeases(key);
     }
     teardown(() => this.#gltfPreparationScheduler.dispose());
-    teardown(() => this.#gltfImageScheduler.dispose());
-    teardown(() => this.#gltfIblImageScheduler.dispose());
     this.#gltfBatches.length = 0;
     teardown(() => clearGltfInstanceBufferArena(this.#gltfInstanceBufferArena));
     this.#gltfLiveBatchCount = 0;
@@ -2230,8 +2049,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfMaterialBatchClassIdCount = 0;
     this.#gltfLightScopeIds.clear();
     this.#gltfLightScopeIdCount = 0;
-    this.#pendingGltfImageRows.length = 0;
-    this.#pendingGltfImageRowHead = 0;
     teardown(() => this.#sceneBindings.dispose());
     teardown(() => this.#gltfInstanceTransforms.dispose());
     this.#renderDirty = false;
@@ -2248,6 +2065,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const diagnostics = this.#diagnostics.snapshot();
     const textureResidency = this.#textureResidencySnapshot();
     const virtualTexturing = this.#virtualTexturingSnapshot();
+    const gltfImages = this.#gltfImages.snapshot();
     return {
       context: this.#context.snapshot(),
       diagnostics: diagnostics.messages,
@@ -2262,7 +2080,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
       gltfInstancing: this.#gltfInstancingSnapshot(),
       latestScene: this.#latestScene,
-      options: { ...this.#options },
+      options: this.#options,
       planning: {
         compileNodeVisits: this.#compileNodeVisits,
         planCompiles: this.#planCompiles,
@@ -2272,8 +2090,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       resourceLifetime: {
         ...resourceArenaCountersSnapshot(this.#resourceArena),
         gltfPreparationQueueHighWater: this.#gltfPreparationScheduler.snapshot().queueHighWater,
-        imageQueueHighWater: this.#gltfImageScheduler.snapshot().queueHighWater,
-        iblImageQueueHighWater: this.#gltfIblImageScheduler.snapshot().queueHighWater,
+        imageQueueHighWater: gltfImages.ordinaryQueueHighWater,
+        iblImageQueueHighWater: gltfImages.iblQueueHighWater,
       },
       resourceGovernor: resourceGovernorSnapshot(this.#resourceGovernor),
       picking: this.#pickingController.snapshot(),
@@ -2529,17 +2347,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
-    const apply = (...steps: readonly (() => void)[]): void => {
-      this.#resourceArenaSideEffectDebt.push({ nextStep: 0, steps });
+    const apply = (
+      phase: ResourceArenaSideEffectDebt["phase"],
+      ...steps: readonly (() => void)[]
+    ): void => {
+      if (phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) return;
+      this.#resourceArenaSideEffectDebt.push({ nextStep: 0, phase, steps });
     };
     for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
       apply(
+        "acquire",
         () => retainVertexInputGeometry(this.#vertexInputs, { geometryId: id, recipe }),
         () => this.#retainedGeometryRecipes.set(key, { id, recipe }),
       );
     }
     for (const { id, key } of changes.releasedGeometryDeclarations) {
       apply(
+        "release",
         () => {
           if (this.#context.lifecycle === "active" || this.#context.lifecycle === "restoring") {
             releaseVertexInputGeometry(this.#vertexInputs, this.#gl, this.#context.generation, id);
@@ -2552,152 +2376,257 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => this.#gltfPacketPrimitivesByGeometryId.delete(id),
       );
     }
-    for (const request of changes.acquiredGltfRequests) apply(() => this.#ensureGltfState(request.key));
+    for (const { generation, request } of changes.acquiredGltfRequests) {
+      apply("acquire", () => this.#ensureGltfState(request.key, generation));
+    }
     for (const key of changes.releasedGltfKeys) {
       apply(
-        () => abortResourceArenaImageWork(this.#resourceArena, key),
+        "release",
+        () => this.#gltfImages.releaseAsset(key),
         () => this.#releasePreparedAssetCpuLeases(key),
         () => this.#gltf.delete(key),
       );
     }
     for (const key of changes.releasedOrdinaryTextureKeys) {
-      apply(() => this.#releaseOrdinaryTexture(key));
+      apply("release", () => this.#releaseOrdinaryTexture(key));
     }
     for (const key of changes.releasedVirtualTextureKeys) {
-      apply(() => this.#releaseVirtualTexture(key));
+      apply("release", () => this.#releaseVirtualTexture(key));
     }
     for (const key of changes.releasedIblKeys) {
-      apply(() => releaseGltfIblSpecularTexture(this.#iblTextures, key));
+      apply("release", () => releaseGltfIblSpecularTexture(this.#iblTextures, key));
     }
     for (const source of changes.releasedSources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      apply(() => this.#decodedTextureSources.closeOrdinary(source));
+      apply("release", () => this.#decodedTextureSources.closeOrdinary(source));
     }
     this.#drainResourceArenaSideEffectDebt();
   }
 
   #drainResourceArenaSideEffectDebt(): void {
-    if (this.#resourceArenaSideEffectDebt.length === 0) return;
+    if (
+      this.#resourceArenaSideEffectDrainInProgress
+      || this.#resourceArenaSideEffectDebt.length === 0
+    ) return;
+    const pending = this.#resourceArenaSideEffectDebt;
+    this.#resourceArenaSideEffectDebt = [];
+    this.#resourceArenaSideEffectDrainInProgress = true;
     let firstFailure: CapturedFailure | undefined;
     const remaining: ResourceArenaSideEffectDebt[] = [];
-    for (const operation of this.#resourceArenaSideEffectDebt) {
-      while (operation.nextStep < operation.steps.length) {
-        const failure = captureFailure(operation.steps[operation.nextStep]!);
-        if (failure !== undefined) {
-          firstFailure ??= failure;
-          remaining.push(operation);
-          break;
+    try {
+      for (const operation of pending) {
+        if (operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) continue;
+        while (operation.nextStep < operation.steps.length) {
+          const failure = captureFailure(operation.steps[operation.nextStep]!);
+          if (failure !== undefined) {
+            firstFailure ??= failure;
+            if (!(operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled)) {
+              remaining.push(operation);
+            }
+            break;
+          }
+          operation.nextStep += 1;
+          if (operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) break;
         }
-        operation.nextStep += 1;
       }
+    } finally {
+      this.#resourceArenaSideEffectDrainInProgress = false;
+      this.#resourceArenaSideEffectDebt = [
+        ...remaining,
+        ...this.#resourceArenaSideEffectDebt,
+      ];
     }
-    this.#resourceArenaSideEffectDebt = remaining;
     if (firstFailure !== undefined) throw firstFailure.value;
   }
 
-  #applyPendingResourceArenaEvents(): void {
-    if (!resourceArenaHasPendingAssetEvents(this.#resourceArena)) return;
-    const applied = applyPreparedAssetEvents(
-      this.#resourceArena,
-      (asset, contentKeys, assetKey) => this.#preparedAssetDependencyManifest(asset, contentKeys, assetKey),
+  #cancelResourceArenaAcquisitionDebt(): void {
+    this.#resourceArenaAcquisitionsCancelled = true;
+    this.#resourceArenaSideEffectDebt = this.#resourceArenaSideEffectDebt.filter(
+      (operation) => operation.phase !== "acquire",
     );
-    this.#applyResourceArenaChanges(applied.changes);
-    for (const event of applied.events) {
-      const snapshot = event.snapshot;
-      const state = this.#gltf.get(snapshot.key);
-      if (state === undefined) continue;
-      if (snapshot.status === "error") {
-        state.status = "error";
-        state.error = snapshot.error;
-        state.load.readyAt = nowMs();
-        this.#recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
-        const plan = this.#framePlan;
-        if (plan !== undefined) {
-          for (const occurrenceIndex of this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? []) {
-            if (
-              this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex]
-              === GLTF_PACKET_OCCURRENCE_STATUS.ready
-            ) {
-              clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
-            }
-          }
-        }
-        continue;
+  }
+
+  #applyPendingResourceArenaEvents(): void {
+    if (this.#preparedAssetEventDrainInProgress) return;
+    this.#drainResourceArenaSideEffectDebt();
+    // A retained event belongs to the already-applied arena generation. Drain
+    // it before admitting newer arena events so same-key revisions cannot be
+    // published in reverse order after a fallible imperative side effect.
+    this.#drainPendingPreparedAssetEvents();
+    if (resourceArenaHasPendingAssetEvents(this.#resourceArena)) {
+      const applied = applyPreparedAssetEvents(
+        this.#resourceArena,
+        (asset, contentKeys, assetKey) => this.#preparedAssetDependencyManifest(asset, contentKeys, assetKey),
+      );
+      // The arena consumes its pending keys transactionally. Retain the event
+      // batch before running fallible imperative side effects so their retry
+      // cannot strand semantic publication on the old renderer generation.
+      this.#pendingPreparedAssetEvents.push(...applied.events);
+      this.#applyResourceArenaChanges(applied.changes);
+    }
+    this.#drainPendingPreparedAssetEvents();
+  }
+
+  #drainPendingPreparedAssetEvents(): void {
+    if (this.#preparedAssetEventDrainInProgress) return;
+    this.#preparedAssetEventDrainInProgress = true;
+    try {
+      while (this.#pendingPreparedAssetEventHead < this.#pendingPreparedAssetEvents.length) {
+        this.#applyPreparedAssetEvent(
+          this.#pendingPreparedAssetEvents[this.#pendingPreparedAssetEventHead]!,
+        );
+        this.#pendingPreparedAssetEventHead += 1;
       }
-      if (snapshot.status !== "ready") continue;
-      const asset = snapshot.asset;
-      const replacesReadyAsset = state.status === "ready";
-      const lodReplacement = replacesReadyAsset
-        ? this.#sharedViewLods.beginAssetReplacement(state.key)
-        : undefined;
-      state.hasMaterialLod = asset.hasMaterialLod;
-      state.hasMaterialVariants = asset.hasMaterialVariants;
-      state.hasNodeLod = asset.hasNodeLod;
-      if (asset.imageBasedLight === undefined) delete state.imageBasedLight;
-      else state.imageBasedLight = asset.imageBasedLight;
-      state.lights = asset.lights;
-      state.materials = preparedAssetMaterials(asset);
-      Object.assign(state.load, asset.load);
-      state.nodeCount = asset.nodeCount;
-      state.primitives = asset.primitives;
-      state.status = "ready";
-      state.variants = asset.variants;
+      this.#pendingPreparedAssetEvents.length = 0;
+      this.#pendingPreparedAssetEventHead = 0;
+    } finally {
+      this.#preparedAssetEventDrainInProgress = false;
+    }
+  }
+
+  #applyPreparedAssetEvent(event: PreparedAssetArenaEvent): void {
+    const snapshot = event.snapshot;
+    const state = this.#gltf.get(snapshot.key);
+    if (state === undefined || state.preparedGeneration !== snapshot.generation) return;
+    if (snapshot.status === "error") {
+      this.#releaseGltfImageAssetForReplacement(snapshot.key);
+      state.status = "error";
+      state.error = snapshot.error;
+      state.load.readyAt = nowMs();
+      this.#recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
       const plan = this.#framePlan;
       if (plan !== undefined) {
-        const occurrenceIndices = this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? [];
-        try {
-          for (const occurrenceIndex of occurrenceIndices) {
-            const topologyStatus = this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex];
-            if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.loading) {
-              appendReadyGltfPacketOccurrence(
-                this.#gltfPacketTopology,
-                plan.revision,
-                this.#gltfPacketOccurrence(plan, occurrenceIndex),
-              );
-            } else if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.ready) {
-              replaceReadyGltfPacketOccurrence(
-                this.#gltfPacketTopology,
-                plan.revision,
-                this.#gltfPacketOccurrence(plan, occurrenceIndex),
-              );
-            }
+        for (const occurrenceIndex of this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? []) {
+          if (
+            this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex]
+            === GLTF_PACKET_OCCURRENCE_STATUS.ready
+          ) {
+            clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
           }
-          if (lodReplacement !== undefined) {
-            this.#sharedViewLods.commitAssetReplacement(lodReplacement);
-          }
-        } catch (error) {
-          // Asset state and the packet resolver bridge must never describe
-          // different generations. If publication fails, make every range for
-          // this request unreachable instead of retaining a mixed generation.
-          for (const occurrenceIndex of occurrenceIndices) {
-            if (
-              this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex]
-              === GLTF_PACKET_OCCURRENCE_STATUS.ready
-            ) {
-              clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
-            }
-          }
-          if (lodReplacement !== undefined) {
-            this.#sharedViewLods.rollbackAssetReplacement(lodReplacement);
-          }
-          state.status = "error";
-          state.error = error instanceof Error ? error.message : String(error);
-          state.load.readyAt = nowMs();
-          this.#recordDiagnostic(state.error, `gltf-packets:${state.key}`);
-          if (asset.imagePreparation !== undefined) {
-            this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
-            this.#releasePreparedAssetDecodeLease(snapshot.key);
-          }
-          continue;
         }
-      } else if (lodReplacement !== undefined) {
-        this.#sharedViewLods.commitAssetReplacement(lodReplacement);
       }
-      const images = asset.imagePreparation;
-      if (images !== undefined) {
-        this.#loadGltfImages(images.src, images.document, images.buffers, state, images.basisuCodec);
-        this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
+      return;
+    }
+    if (snapshot.status !== "ready") return;
+    const asset = snapshot.asset;
+    this.#releaseGltfImageAssetForReplacement(snapshot.key);
+    const replacesReadyAsset = state.status === "ready";
+    const lodReplacement = replacesReadyAsset
+      ? this.#sharedViewLods.beginAssetReplacement(state.key)
+      : undefined;
+    state.hasMaterialLod = asset.hasMaterialLod;
+    state.hasMaterialVariants = asset.hasMaterialVariants;
+    state.hasNodeLod = asset.hasNodeLod;
+    if (asset.imageBasedLight === undefined) delete state.imageBasedLight;
+    else state.imageBasedLight = asset.imageBasedLight;
+    state.lights = asset.lights;
+    state.materials = preparedAssetMaterials(asset);
+    state.load = asset.load;
+    delete state.error;
+    state.nodeCount = asset.nodeCount;
+    state.primitives = asset.primitives;
+    state.status = "ready";
+    state.variants = asset.variants;
+    const plan = this.#framePlan;
+    if (plan !== undefined) {
+      const occurrenceIndices = this.#gltfPacketOccurrenceIndicesByRequestKey.get(snapshot.key) ?? [];
+      try {
+        for (const occurrenceIndex of occurrenceIndices) {
+          const topologyStatus = this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex];
+          if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.loading) {
+            appendReadyGltfPacketOccurrence(
+              this.#gltfPacketTopology,
+              plan.revision,
+              this.#gltfPacketOccurrence(plan, occurrenceIndex),
+            );
+          } else if (topologyStatus === GLTF_PACKET_OCCURRENCE_STATUS.ready) {
+            replaceReadyGltfPacketOccurrence(
+              this.#gltfPacketTopology,
+              plan.revision,
+              this.#gltfPacketOccurrence(plan, occurrenceIndex),
+            );
+          }
+        }
+        if (lodReplacement !== undefined) {
+          this.#sharedViewLods.commitAssetReplacement(lodReplacement);
+        }
+      } catch (error) {
+        // Asset state and the packet resolver bridge must never describe
+        // different generations. If publication fails, make every range for
+        // this request unreachable instead of retaining a mixed generation.
+        for (const occurrenceIndex of occurrenceIndices) {
+          if (
+            this.#gltfPacketTopology.occurrenceStatuses[occurrenceIndex]
+            === GLTF_PACKET_OCCURRENCE_STATUS.ready
+          ) {
+            clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
+          }
+        }
+        if (lodReplacement !== undefined) {
+          this.#sharedViewLods.rollbackAssetReplacement(lodReplacement);
+        }
+        state.status = "error";
+        state.error = error instanceof Error ? error.message : String(error);
+        state.load.readyAt = nowMs();
+        this.#recordDiagnostic(state.error, `gltf-packets:${state.key}`);
+        if (asset.imagePreparation !== undefined) {
+          this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
+          this.#releasePreparedAssetDecodeLease(snapshot.key);
+        }
+        return;
       }
+    } else if (lodReplacement !== undefined) {
+      this.#sharedViewLods.commitAssetReplacement(lodReplacement);
+    }
+    const images = asset.imagePreparation;
+    if (images === undefined) return;
+    const eventIsCurrent = (): boolean =>
+      !this.#disposed
+      && this.#gltf.get(snapshot.key) === state
+      && state.preparedGeneration === snapshot.generation;
+    let recipeLease: GltfImageRecipeLease | undefined;
+    try {
+      recipeLease = this.#takePreparedAssetDecodeRecipeLease(
+        state.key,
+        gltfImageSourceRecipeBytes(images.recipes),
+      );
+      this.#gltfImages.registerAsset({
+        ...(state.imageBasedLight === undefined ? {} : { imageBasedLight: state.imageBasedLight }),
+        key: state.key,
+        load: state.load,
+        materials: state.materials,
+        recipeLease,
+        recipes: images.recipes,
+        stateInstanceKey: state.instanceKey,
+      });
+      if (!eventIsCurrent()) {
+        this.#releaseGltfImageAssetForReplacement(state.key);
+        return;
+      }
+      this.#gltfImages.demandAll(state.key);
+      this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
+    } catch (error) {
+      recipeLease?.release();
+      if (!eventIsCurrent()) return;
+      this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
+      state.status = "error";
+      state.error = error instanceof Error ? error.message : String(error);
+      state.load.readyAt = nowMs();
+      this.#recordDiagnostic(state.error, `gltf-images:${state.key}`);
+    }
+  }
+
+  #releaseGltfImageAssetForReplacement(key: string): void {
+    try {
+      this.#gltfImages.releaseAsset(key);
+    } catch (error) {
+      // releaseAsset removes the old generation before fallible cleanup and
+      // retains failed work as coordinator cleanup debt. Do not strand an
+      // already-consumed prepared-asset event outside the replacement path.
+      this.#recordDiagnostic(
+        `glTF image asset cleanup failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+        `gltf-image-cleanup:${key}`,
+      );
     }
   }
 
@@ -3743,7 +3672,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const material = loadedGltfSurfaceMaterial(
       loadedMaterial,
       loadedMaterial.baseColorTexture?.imageUri !== undefined
-        && state.imageRows.get(loadedMaterial.baseColorTexture.imageUri)?.status === "ready"
+        && this.#gltfImages.imageReady(state.key, loadedMaterial.baseColorTexture.imageUri)
         && baseColor !== undefined
         ? baseColor
         : {
@@ -4963,8 +4892,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         return "pressure";
       }
       if (admission.kind === "supported") {
-        const limits = this.#options.resourceGovernorPolicy?.limits
-          ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
+        const limits = this.#options.resourceGovernorPolicy.limits;
         if (admission.allocatedBytes > persistentGpuMaximum) {
           state.stats.gpuAdmissionFailures += 1;
           this.#markVirtualTextureUnsupported(
@@ -5457,12 +5385,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {
-    const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
+    const policy = this.#options.resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
   }
 
   #maximumResourceClassPersistentGpuBytes(resourceClass: ResourceGovernorClass): number {
-    const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
+    const policy = this.#options.resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "persistentGpuBytes");
   }
 
@@ -5746,8 +5674,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#suppressPersistentGpuCapacityWake = true;
     const report = this.#ordinaryTextures.process(this.#frame, this.#context.generation, {
       reserve: (cost) => {
-        const limits = this.#options.resourceGovernorPolicy?.limits
-          ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
+        const limits = this.#options.resourceGovernorPolicy.limits;
         const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
         if (cost.persistentGpuBytes > persistentGpuMaximum) {
           return {
@@ -5892,16 +5819,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return state;
   }
 
-  #ensureGltfState(key: string): GltfState {
+  #ensureGltfState(key: string, preparedGeneration: number): GltfState {
     const existing = this.#gltf.get(key);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      if (existing.preparedGeneration !== preparedGeneration) {
+        throw new Error(
+          `retained glTF request ${key} generation ${preparedGeneration} conflicts with ${existing.preparedGeneration}`,
+        );
+      }
+      return existing;
+    }
     const state: GltfState = {
       hasMaterialLod: false,
       hasMaterialVariants: false,
       hasNodeLod: false,
       instanceKey: this.#gltfStateInstanceKey,
-      imageRows: new Map(),
       key,
+      preparedGeneration,
       lights: [],
       load: {
         imageFailures: 0,
@@ -5947,7 +5881,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#preparedAssetCpuGovernorLeases.has(assetKey)) {
       throw new Error(`Prepared glTF asset ${assetKey} already owns CPU resource leases`);
     }
-    const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
+    const policy = this.#options.resourceGovernorPolicy;
     const combinedMaximum = policy.limits.cpuDecodedBytes - RESOURCE_GOVERNOR_CLASSES
       .filter((resourceClass) => resourceClass !== "geometry" && resourceClass !== "asset-decode")
       .reduce((sum, resourceClass) =>
@@ -6042,6 +5976,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         true,
       );
     }
+    let capacityReleased = false;
     const resize = (
       resourceClass: "asset-decode" | "geometry",
       lease: ResourceGovernorLease | undefined,
@@ -6055,6 +5990,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       }
       if (cpuDecodedBytes === 0) {
         lease.release();
+        capacityReleased = true;
         return undefined;
       }
       const replacement = replaceResourceGovernorLease(this.#resourceGovernor, lease, {
@@ -6063,8 +5999,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (typeof replacement === "string") {
         throw new Error(`glTF ${resourceClass} estimate shrink was denied: ${replacement}`);
       }
-      return replacement.commit();
+      const resized = replacement.commit();
+      if (cpuDecodedBytes < estimate[
+        resourceClass === "asset-decode" ? "assetDecode" : "geometry"
+      ]) capacityReleased = true;
+      return resized;
     };
+    const previouslySuppressed = this.#suppressCpuCapacityWake;
     this.#suppressCpuCapacityWake = true;
     try {
       admission.geometry = resize("geometry", admission.geometry, actual.geometry);
@@ -6072,7 +6013,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       admission.transient?.cancel();
       admission.transient = undefined;
     } finally {
-      this.#suppressCpuCapacityWake = false;
+      this.#suppressCpuCapacityWake = previouslySuppressed;
+      if (capacityReleased && !previouslySuppressed) this.#scheduleCpuCapacityWake();
     }
     this.#preparedAssetCpuGovernorLeases.set(assetKey, {
       ...(admission.assetDecode === undefined ? {} : { assetDecode: admission.assetDecode }),
@@ -6096,6 +6038,63 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const leases = this.#preparedAssetCpuGovernorLeases.get(assetKey);
     leases?.assetDecode?.release();
     if (leases !== undefined) delete leases.assetDecode;
+  }
+
+  #takePreparedAssetDecodeRecipeLease(
+    assetKey: string,
+    initialBytes: number,
+  ): GltfImageRecipeLease {
+    const leases = this.#preparedAssetCpuGovernorLeases.get(assetKey);
+    let lease = leases?.assetDecode;
+    if (leases !== undefined) delete leases.assetDecode;
+    let released = false;
+    let retainedBytes = initialBytes;
+    if (lease === undefined && initialBytes !== 0) {
+      throw new Error(`Prepared glTF asset ${assetKey} has ${initialBytes} recipe bytes without a CPU lease`);
+    }
+    return {
+      release: () => {
+        if (released) return;
+        lease?.release();
+        lease = undefined;
+        retainedBytes = 0;
+        released = true;
+      },
+      resize: (nextBytes) => {
+        if (!Number.isSafeInteger(nextBytes) || nextBytes < 0) {
+          throw new RangeError(`glTF image recipe bytes must be a non-negative safe integer, received ${nextBytes}`);
+        }
+        if (released) throw new Error(`glTF image recipe lease for ${assetKey} is released`);
+        if (nextBytes > retainedBytes) {
+          throw new Error(
+            `glTF image recipe lease for ${assetKey} cannot grow from ${retainedBytes} to ${nextBytes} bytes`,
+          );
+        }
+        if (nextBytes === retainedBytes) return;
+        if (nextBytes === 0) {
+          lease?.release();
+          lease = undefined;
+          retainedBytes = 0;
+          return;
+        }
+        if (lease === undefined) {
+          throw new Error(`glTF image recipe lease for ${assetKey} has no ownership to resize`);
+        }
+        const replacement = replaceResourceGovernorLease(this.#resourceGovernor, lease, {
+          cpuDecodedBytes: nextBytes,
+        });
+        if (typeof replacement === "string") {
+          throw new Error(`glTF image recipe lease shrink for ${assetKey} was denied: ${replacement}`);
+        }
+        try {
+          lease = replacement.commit();
+          retainedBytes = nextBytes;
+        } catch (error) {
+          replacement.cancel();
+          throw error;
+        }
+      },
+    };
   }
 
   async #prepareGltfAssetAdmitted(
@@ -6145,17 +6144,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       load.sceneReadAt = nowMs();
       load.readyAt = nowMs();
+      const materials = preparedPrimitiveMaterials(scene.primitives);
+      const imageRecipes = createGltfImageSourceRecipes(
+        assetKey,
+        src,
+        decodedDocument,
+        buffers,
+        gltfImageDemandKeys(materials, scene.imageBasedLight),
+        codecs.basisu,
+      );
       const asset: PreparedGltfAsset = {
         hasMaterialLod: scene.hasMaterialLod,
         hasMaterialVariants: scene.hasMaterialVariants,
         hasNodeLod: scene.hasNodeLod,
         ...(scene.imageBasedLight === undefined ? {} : { imageBasedLight: scene.imageBasedLight }),
-        imagePreparation: {
-          ...(codecs.basisu === undefined ? {} : { basisuCodec: codecs.basisu }),
-          buffers,
-          document: decodedDocument,
-          src,
-        },
+        ...(imageRecipes.length === 0 ? {} : { imagePreparation: { recipes: imageRecipes } }),
         lights: scene.lights,
         load,
         nodeCount: decodedDocument.nodes?.length ?? 0,
@@ -6181,330 +6184,62 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #initializeGltfImageRows(state: GltfState): void {
-    const iblRows = new Map<string, SurfaceImageBasedLightSpecular>();
-    const specular = state.imageBasedLight?.specular;
-    if (specular !== undefined) {
-      for (const mip of specular.imageLoadKeys) {
-        for (const key of mip) iblRows.set(key, specular);
-      }
-    }
-    for (const key of this.#usedGltfImageLoadKeys(state)) {
-      const iblSpecular = iblRows.get(key);
-      const row: GltfImageRow = {
-        assetKey: state.key,
-        bindings: [],
-        ...(iblSpecular === undefined ? {} : { iblSpecular }),
-        key,
-        materials: new Set(),
-        stateInstanceKey: state.instanceKey,
-        queued: false,
-        revision: 0,
-        status: "pending",
-      };
-      state.imageRows.set(key, row);
-    }
-
-    const bind = (
-      imageUri: string | undefined,
-      binding: Omit<GltfImageTextureBinding, "count" | "material">,
-      material: LoadedGltfMaterial,
-    ): void => {
-      if (imageUri === undefined) return;
-      const row = state.imageRows.get(imageUri);
-      if (row === undefined) return;
-      row.materials.add(material);
-      row.bindings.push({ ...binding, count: 1, material });
-    };
-    for (const material of state.materials) {
-      const baseColor = material.baseColorTexture;
-      if (baseColor?.textureUri !== undefined) bind(baseColor.imageUri, {
-        baseColor: true,
-        colorSpace: "srgb",
-        ...(baseColor.contentKey === undefined ? {} : { contentKey: baseColor.contentKey }),
-        ...(baseColor.sampler === undefined ? {} : { sampler: baseColor.sampler }),
-        ...(baseColor.sourceUri === undefined ? {} : { sourceUri: baseColor.sourceUri }),
-        textureUri: baseColor.textureUri,
-      }, material);
-      const emissive = material.emissiveTexture;
-      if (emissive?.textureUri !== undefined) bind(emissive.imageUri, {
-        baseColor: false,
-        colorSpace: "srgb",
-        ...(emissive.contentKey === undefined ? {} : { contentKey: emissive.contentKey }),
-        ...(emissive.sampler === undefined ? {} : { sampler: emissive.sampler }),
-        ...(emissive.sourceUri === undefined ? {} : { sourceUri: emissive.sourceUri }),
-        textureUri: emissive.textureUri,
-      }, material);
-      for (const slot of [material.metallicRoughnessTexture, material.normalTexture, material.occlusionTexture]) {
-        if (slot?.textureUri === undefined) continue;
-        bind(slot.imageUri, {
-          baseColor: false,
-          colorSpace: "linear",
-          ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
-          ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
-          ...(slot.sourceUri === undefined ? {} : { sourceUri: slot.sourceUri }),
-          textureUri: slot.textureUri,
-        }, material);
-      }
-      for (const definition of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-        const slot = material.extensionTextures?.[definition.key];
-        if (slot?.textureUri === undefined) continue;
-        bind(slot.imageUri, {
-          baseColor: false,
-          colorSpace: definition.colorSpace,
-          ...(slot.contentKey === undefined ? {} : { contentKey: slot.contentKey }),
-          ...(slot.sampler === undefined ? {} : { sampler: slot.sampler }),
-          ...(slot.sourceUri === undefined ? {} : { sourceUri: slot.sourceUri }),
-          textureUri: slot.textureUri,
-        }, material);
-      }
-    }
-  }
-
-  #loadGltfImages(
-    src: string,
-    document: GltfDocument,
-    buffers: readonly ArrayBuffer[],
-    state: GltfState,
-    basisuCodec: Promise<GltfBasisuCodecModule> | undefined,
-  ): void {
-    this.#initializeGltfImageRows(state);
-    const controller = replaceResourceArenaImageAbortController(this.#resourceArena, state.key);
-    const usedImageKeys = this.#usedGltfImageLoadKeys(state);
-    const startedImageKeys = new Set<string>();
-    const ordinaryJobs: Array<{ readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }> = [];
-    const iblJobs: Array<{ readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }> = [];
-    for (const [imageIndex, image] of (document.images ?? []).entries()) {
-      for (const kind of ["image", "basisu", "svg"] as const) {
-        const key = gltfImageLoadKey(state.key, src, imageIndex, image, kind);
-        if (key === undefined) continue;
-        if (!usedImageKeys.has(key)) continue;
-        if (startedImageKeys.has(key)) continue;
-        const row = state.imageRows.get(key);
-        if (row === undefined) continue;
-        startedImageKeys.add(key);
-        this.#recordGltfImageLoadStarted(state);
-        (row.iblSpecular === undefined ? ordinaryJobs : iblJobs).push({ imageIndex, key, kind });
-      }
-    }
-    const pump = (
-      jobs: readonly { readonly imageIndex: number; readonly key: string; readonly kind: GltfImageKind }[],
-      scheduler: GltfPreparationScheduler,
-    ): void => {
-      let index = 0;
-      const next = (): void => {
-        if (controller.signal.aborted || index >= jobs.length) return;
-        const job = jobs[index++]!;
-        const image = document.images?.[job.imageIndex];
-        const row = state.imageRows.get(job.key);
-        if (image === undefined || row === undefined) {
-          next();
-          return;
-        }
-        scheduler.run(controller.signal, () =>
-          loadGltfImageSource(src, document, buffers, image, job.kind, basisuCodec, controller.signal)).then((loadedImage) => {
-          if (
-            this.#disposed
-            || state.status !== "ready"
-            || this.#gltf.get(state.key) !== state
-            || state.imageRows.get(job.key) !== row
-          ) {
-            this.#decodedTextureSources.closeOrdinary(loadedImage.image);
-            return;
-          }
-          let previousSource: LoadedTextureSource | undefined;
-          try {
-            previousSource = retainResourceArenaAssetSource(
-              this.#resourceArena,
-              state.key,
-              row.key,
-              loadedImage.image,
-            );
-          } catch (error) {
-            this.#recordGltfImageLoadSettled(state, true);
-            try {
-              this.#decodedTextureSources.closeOrdinary(loadedImage.image);
-            } catch {
-              // The pending-close set retains the denied source for retry.
-            }
-            row.error = error instanceof Error ? error.message : String(error);
-            row.status = "error";
-            row.revision += 1;
-            this.#recordDiagnostic(`glTF image retention failed for ${job.key}: ${row.error}`);
-            this.invalidate();
-            return;
-          }
-          this.#recordGltfImageLoadSettled(state, false);
-          if (
-            previousSource !== undefined
-            && previousSource !== loadedImage.image
-            && resourceArenaSourceReferenceCount(this.#resourceArena, previousSource) === 0
-          ) this.#decodedTextureSources.closeOrdinary(previousSource);
-          row.source = loadedImage.image;
-          row.status = "ready";
-          row.revision += 1;
-          if (loadedImage.contentKey !== undefined) {
-            row.contentKey = loadedImage.contentKey;
-            for (const binding of row.bindings) {
-              if (binding.contentKey === undefined) {
-                publishResourceArenaContentKey(
-                  this.#resourceArena,
-                  state.key,
-                  binding.textureUri,
-                  loadedImage.contentKey,
-                );
-              }
-            }
-          }
-          if (!row.queued) {
-            row.queued = true;
-            this.#pendingGltfImageRows.push(row);
-          }
-          this.invalidate();
-        }, (error: unknown) => {
-          if (
-            this.#disposed
-            || this.#gltf.get(state.key) !== state
-            || state.imageRows.get(job.key) !== row
-          ) return;
-          this.#recordGltfImageLoadSettled(state, true);
-          row.error = error instanceof Error ? error.message : String(error);
-          row.status = "error";
-          row.revision += 1;
-          this.invalidate();
-          this.#recordDiagnostic(`glTF image load failed for ${job.key}: ${row.error}`);
-        }).finally(next);
-      };
-      next();
-    };
-    pump(ordinaryJobs, this.#gltfImageScheduler);
-    pump(iblJobs, this.#gltfIblImageScheduler);
-    if (state.load.imageRequests === 0) {
-      state.load.imagesSettledAt = nowMs();
-      finishResourceArenaImageWork(this.#resourceArena, state.key);
-      this.#releasePreparedAssetDecodeLease(state.key);
-    }
-  }
-
-  #recordGltfImageLoadStarted(state: GltfState): void {
-    state.load.imageLoadStartedAt ??= nowMs();
-    state.load.imageRequests += 1;
-  }
-
-  #recordGltfImageLoadSettled(state: GltfState, failed: boolean): void {
-    const load = state.load;
-    if (failed) load.imageFailures += 1;
-    else load.imageLoaded += 1;
-    load.firstImageSettledAt ??= nowMs();
-    if (load.imageLoaded + load.imageFailures >= load.imageRequests) {
-      load.imagesSettledAt = nowMs();
-      finishResourceArenaImageWork(this.#resourceArena, state.key);
-      this.#releasePreparedAssetDecodeLease(state.key);
-    }
-  }
-
-  #usedGltfImageLoadKeys(state: GltfState): ReadonlySet<string> {
-    const keys = new Set<string>();
-    for (const primitive of state.primitives) {
-      this.#addGltfMaterialImageLoadKeys(keys, primitive.material);
-      for (const material of primitive.materialLod?.levels ?? []) this.#addGltfMaterialImageLoadKeys(keys, material);
-      for (const variant of primitive.materialVariants ?? []) {
-        this.#addGltfMaterialImageLoadKeys(keys, variant.material);
-        for (const material of variant.materialLod?.levels ?? []) this.#addGltfMaterialImageLoadKeys(keys, material);
-      }
-    }
-    for (const mip of state.imageBasedLight?.specular?.imageLoadKeys ?? []) {
-      for (const key of mip) keys.add(key);
-    }
-
-    return keys;
-  }
-
-  #addGltfMaterialImageLoadKeys(keys: Set<string>, material: LoadedGltfMaterial): void {
-    for (const slot of [
-      material.baseColorTexture,
-      material.emissiveTexture,
-      material.metallicRoughnessTexture,
-      material.normalTexture,
-      material.occlusionTexture,
-    ]) this.#addGltfMaterialTextureSlotImageLoadKey(keys, slot);
-    const extensionTextures = material.extensionTextures;
-    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
-      this.#addGltfMaterialTextureSlotImageLoadKey(keys, extensionTextures?.[texture.key]);
-    }
-  }
-
-  #addGltfMaterialTextureSlotImageLoadKey(
-    keys: Set<string>,
-    slot: LoadedGltfMaterialTextureSlot | undefined,
-  ): void {
-    if (slot?.imageUri !== undefined) keys.add(slot.imageUri);
-  }
-
-  #stagePendingGltfImageRows(): void {
-    if (this.#pendingGltfImageRowHead >= this.#pendingGltfImageRows.length) return;
-    const rekeysByAsset = this.#pendingGltfTextureRekeys;
-    rekeysByAsset.clear();
-    for (let index = this.#pendingGltfImageRowHead; index < this.#pendingGltfImageRows.length; index += 1) {
-      const row = this.#pendingGltfImageRows[index];
-      if (row?.status !== "ready" || row.contentKey === undefined || row.source === undefined) continue;
-      const state = this.#gltf.get(row.assetKey);
+  #stageReadyGltfImages(): void {
+    const outcomes = this.#gltfImages.pendingReadyOutcomes();
+    if (outcomes.length === 0) return;
+    for (const outcome of outcomes) {
+      const state = this.#gltf.get(outcome.assetKey);
       if (
         state === undefined
-        || state.instanceKey !== row.stateInstanceKey
-        || state.imageRows.get(row.key) !== row
-      ) continue;
-      let rekeys = rekeysByAsset.get(row.assetKey);
-      if (rekeys === undefined) {
-        rekeys = [];
-        rekeysByAsset.set(row.assetKey, rekeys);
-      }
-      for (const binding of row.bindings) {
-        if (binding.contentKey !== undefined) continue;
-        const previousTexture: TextureAssetUploadRef = {
-          colorSpace: binding.colorSpace,
-          flipY: false,
-          kind: "asset",
-          ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-          uri: binding.textureUri,
-        };
-        const nextTexture: TextureAssetUploadRef = { ...previousTexture, contentKey: row.contentKey };
-        rekeys.push({
-          next: { count: binding.count, key: textureCacheKey(nextTexture), texture: nextTexture },
-          previous: { count: binding.count, key: textureCacheKey(previousTexture), texture: previousTexture },
-        });
-      }
-    }
-    for (const [key, rekeys] of rekeysByAsset) {
-      this.#applyResourceArenaChanges(rekeyPreparedAssetOrdinaryTextures(this.#resourceArena, key, rekeys));
-    }
-    while (this.#pendingGltfImageRowHead < this.#pendingGltfImageRows.length) {
-      const row = this.#pendingGltfImageRows[this.#pendingGltfImageRowHead];
-      this.#pendingGltfImageRowHead += 1;
-      if (row === undefined) continue;
-      row.queued = false;
-      const state = this.#gltf.get(row.assetKey);
-      if (
-        state === undefined
-        || state.instanceKey !== row.stateInstanceKey
-        || state.imageRows.get(row.key) !== row
-        || row.status !== "ready"
-        || row.source === undefined
+        || state.status !== "ready"
+        || state.instanceKey !== outcome.stateInstanceKey
       ) {
-        if (row.source !== undefined) {
-          const source = row.source;
-          delete row.source;
-          releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
-          if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) {
-            this.#decodedTextureSources.closeOrdinary(source);
-          }
-        }
+        outcome.acknowledge();
         continue;
       }
-      const source = row.source;
-
-      for (const binding of row.bindings) {
-        const contentKey = binding.contentKey ?? row.contentKey;
+      if (!outcome.referencesRekeyed) {
+        const rekeys: PreparedAssetOrdinaryTextureRekey[] = [];
+        for (const binding of outcome.bindings) {
+          if (binding.contentKey !== undefined || outcome.contentKey === undefined) continue;
+          const previousTexture: TextureAssetUploadRef = {
+            colorSpace: binding.colorSpace,
+            flipY: false,
+            kind: "asset",
+            ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
+            uri: binding.textureUri,
+          };
+          const nextTexture: TextureAssetUploadRef = {
+            ...previousTexture,
+            contentKey: outcome.contentKey,
+          };
+          rekeys.push({
+            next: { count: binding.count, key: textureCacheKey(nextTexture), texture: nextTexture },
+            previous: { count: binding.count, key: textureCacheKey(previousTexture), texture: previousTexture },
+          });
+        }
+        const changes = rekeyPreparedAssetOrdinaryTextures(this.#resourceArena, outcome.assetKey, rekeys);
+        // The arena mutation above is the semantic commit. Record it before
+        // running fallible side effects so a retry never applies the same
+        // reference delta twice.
+        outcome.markReferencesRekeyed();
+        this.#applyResourceArenaChanges(changes);
+      }
+      if (outcome.contentKey !== undefined) {
+        // Idempotent on retry and deliberately outside the rekey checkpoint:
+        // a failure while draining rekey side effects must not suppress this
+        // identity publication on the next attempt.
+        for (const binding of outcome.bindings) {
+          if (binding.contentKey !== undefined) continue;
+          publishResourceArenaContentKey(
+            this.#resourceArena,
+            outcome.assetKey,
+            binding.textureUri,
+            outcome.contentKey,
+          );
+        }
+      }
+      for (const binding of outcome.bindings) {
+        const contentKey = binding.contentKey ?? outcome.contentKey;
         const texture: TextureAssetUploadRef = {
           colorSpace: binding.colorSpace,
           ...(contentKey === undefined ? {} : { contentKey }),
@@ -6513,30 +6248,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
           ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
           uri: binding.textureUri,
         };
-        this.#ordinaryTextures.publishPrepared(texture, source);
+        this.#ordinaryTextures.publishPrepared(texture, outcome.source);
       }
-      if (row.iblSpecular !== undefined) {
-        this.#settleIblSpecularImage(row.iblSpecular, row.key, source);
+      if (outcome.iblSpecular !== undefined) {
+        this.#settleIblSpecularImage(outcome.iblSpecular, outcome.key, outcome.source);
       }
-      if (row.bindings.length === 0 && row.iblSpecular === undefined) {
-        this.#decodedTextureSources.closeOrdinary(source);
-      }
-      delete row.source;
-      releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) {
-        this.#decodedTextureSources.closeOrdinary(source);
-      }
-      for (const material of row.materials) {
+      for (const material of outcome.materials) {
         for (const primitive of this.#gltfMaterialPrimitives.get(material) ?? []) {
           this.#gltfPreparedPrimitiveMaterials.get(primitive)?.delete(material);
         }
       }
+      outcome.acknowledge();
     }
-    this.#pendingGltfImageRows.length = 0;
-    this.#pendingGltfImageRowHead = 0;
-    rekeysByAsset.clear();
   }
-
   #scheduleRender(): void {
     if (
       this.#disposed ||

@@ -137,6 +137,85 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     root.dispose();
   });
 
+  it("retries a CPU-blocked glTF preparation when a retained estimate shrinks", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const cpuBudget = 320;
+    const resourceGovernorPolicy: ResourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+        ([key, value]) => [key, {
+          ...value,
+          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+        }],
+      )) as unknown as ResourceGovernorPolicy["classes"],
+      limits: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
+        cpuDecodedBytes: cpuBudget,
+        transientPeakBytes: cpuBudget,
+      },
+    };
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
+    const firstDocument = {
+      ...solidTriangleDocument(),
+      buffers: [{ byteLength: triangleBinByteLength, uri: "first-capacity.bin" }],
+    };
+    const secondDocument = {
+      ...solidTriangleDocument(),
+      buffers: [{ byteLength: triangleBinByteLength, uri: "second-capacity.bin" }],
+    };
+
+    root.render(renderScene([
+      gltf({ src: triangleGltfSrc, version: "cpu-shrink-first" }),
+      gltf({ src: matchingTriangleGltfSrc, version: "cpu-shrink-second" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, firstDocument))).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, secondDocument))).toBe(true);
+    await flushMicrotasks();
+
+    expect(
+      loader.fetchRequests.filter((request) => /first-capacity\.bin(?:$|[?#])/.test(request.url)),
+    ).toHaveLength(1);
+    expect(
+      loader.fetchRequests.filter((request) => /second-capacity\.bin(?:$|[?#])/.test(request.url)),
+      "the second asset must remain blocked before requesting its external buffer",
+    ).toHaveLength(0);
+    const blockedUsage = root.snapshot().resourceGovernor;
+    expect(blockedUsage.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
+    expect(blockedUsage.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+    expect(blockedUsage.total.cpuDecodedBytes).toBeLessThanOrEqual(cpuBudget);
+
+    expect(loader.resolvePendingFetch(/first-capacity\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushPreparedAssetBoundary();
+
+    const shrunkenUsage = root.snapshot().resourceGovernor;
+    expect(shrunkenUsage.byClass["asset-decode"].cpuDecodedBytes)
+      .toBeLessThan(blockedUsage.byClass["asset-decode"].cpuDecodedBytes);
+    expect(shrunkenUsage.total.cpuDecodedBytes).toBeLessThan(blockedUsage.total.cpuDecodedBytes);
+    expect(
+      loader.resolvePendingFetch(/matching-triangle\.gltf(?:$|[?#])/, (url) =>
+        responseWithJson(url, secondDocument)),
+      "shrinking the first asset estimate must automatically retry the blocked preparation",
+    ).toBe(true);
+    await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/second-capacity\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushPreparedAssetBoundary();
+
+    const completedUsage = root.snapshot().resourceGovernor;
+    expect(completedUsage.byClass.geometry.cpuDecodedBytes)
+      .toBeGreaterThan(shrunkenUsage.byClass.geometry.cpuDecodedBytes);
+    expect(completedUsage.total.cpuDecodedBytes).toBeGreaterThan(shrunkenUsage.total.cpuDecodedBytes);
+    expect(completedUsage.total.cpuDecodedBytes).toBeLessThanOrEqual(cpuBudget);
+    root.dispose();
+  });
+
   it("publishes mixed-scene packet topology before retrying a throwing ref attachment", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
@@ -613,7 +692,10 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       "asset-decode": { cpuDecodedBytes: expect.any(Number) },
       geometry: { cpuDecodedBytes: expect.any(Number) },
     });
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
+    // External image recipes retain a URL, not decoded binary bytes. The
+    // pre-decode reservation is therefore shrunk to exact retained bytes while
+    // the image request is pending.
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
     expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
 
     const drawsBeforeFailure = drawCalls(calls).length;
@@ -809,9 +891,11 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     await flushMicrotasks();
     await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(1);
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(4);
     const firstBitmap = new CloseTrackedImageBitmap(4);
     loader.bitmapRequests[0]?.resolve(firstBitmap as unknown as ImageBitmap);
     await flushMicrotasks();
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
     await flushAnimationFrames(viewport.animationFrames);
     await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
 

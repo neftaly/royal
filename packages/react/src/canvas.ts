@@ -27,8 +27,8 @@ import {
   type CanvasInteractions,
 } from "./scene-interactions";
 import type {
+  RendererOptions,
   RoyalRendererRoot,
-  RoyalRendererRootOptions,
 } from "./root";
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
@@ -51,9 +51,6 @@ export {
   normalizeCanvasRendererOptions,
 } from "./canvas-renderer-runtime";
 
-/** Renderer creation options accepted by the React-owned canvas. */
-export type CanvasRendererOptions = RoyalRendererRootOptions;
-
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
@@ -66,7 +63,7 @@ export interface CanvasProps
    * Renderer creation options. Changing a value disposes and recreates the
    * renderer root.
    */
-  readonly rendererOptions?: CanvasRendererOptions;
+  readonly rendererOptions?: RendererOptions;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
   readonly scene: RenderRoot;
 }

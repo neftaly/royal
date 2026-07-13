@@ -151,7 +151,6 @@ export const resourceArenaSnapshot = (arena: ResourceArena) => {
   const copySources = (sources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>) =>
     new Map([...sources].map(([key, rows]) => [key, new Map(rows)]));
   return {
-    assetSources: copySources(state.assetSources),
     contentKeysByAsset: new Map(
       [...state.contentKeysByAsset].map(([key, rows]) => [key, new Map(rows)]),
     ),
@@ -215,13 +214,11 @@ export interface ResourceArena {
 }
 
 interface ResourceArenaState {
-  readonly assetSources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>;
   readonly counters: ResourceArenaCounters;
   readonly contentKeysByAsset: ReadonlyMap<string, ReadonlyMap<string, TextureContentKey>>;
   readonly gltfRequests: Map<string, GltfRequestDeclaration>;
   readonly geometries: Map<string, MutableResourceArenaGeometryRow>;
   hdrReadyAssetCount: number;
-  readonly imageAbortControllers: ReadonlyMap<string, AbortController>;
   readonly iblReferences: Map<string, number>;
   readonly iblSources: ReadonlyMap<string, ReadonlyMap<string, LoadedTextureSource>>;
   nextGeometryId: number;
@@ -250,7 +247,10 @@ export interface ResourceArenaChanges {
     readonly key: string;
     readonly recipe: CpuGeometry;
   }[];
-  readonly acquiredGltfRequests: readonly CountedGltfRequest[];
+  readonly acquiredGltfRequests: readonly {
+    readonly generation: number;
+    readonly request: CountedGltfRequest;
+  }[];
   readonly releasedGltfKeys: readonly string[];
   readonly releasedGeometryDeclarations: readonly { readonly id: number; readonly key: string }[];
   readonly releasedIblKeys: readonly string[];
@@ -276,9 +276,6 @@ export interface PreparedAssetArenaEvent {
   readonly snapshot: PreparedGltfAssetSnapshot;
 }
 
-const arenaImageAbortControllers = (arena: ResourceArena): Map<string, AbortController> => {
-  return (arena as unknown as ResourceArenaState).imageAbortControllers as Map<string, AbortController>;
-};
 const arenaPreparedSources = (arena: ResourceArena): Map<string, PreparedTextureSource> => {
   return (arena as unknown as ResourceArenaState).preparedSources as Map<string, PreparedTextureSource>;
 };
@@ -286,8 +283,6 @@ const arenaSourceReferences = (arena: ResourceArena): Map<LoadedTextureSource, n
   (arena as unknown as ResourceArenaState).sourceReferences as Map<LoadedTextureSource, number>;
 const arenaIblSources = (arena: ResourceArena): Map<string, Map<string, LoadedTextureSource>> =>
   (arena as unknown as ResourceArenaState).iblSources as Map<string, Map<string, LoadedTextureSource>>;
-const arenaAssetSources = (arena: ResourceArena): Map<string, Map<string, LoadedTextureSource>> =>
-  (arena as unknown as ResourceArenaState).assetSources as Map<string, Map<string, LoadedTextureSource>>;
 const arenaContentKeys = (arena: ResourceArena): Map<string, Map<string, TextureContentKey>> =>
   (arena as unknown as ResourceArenaState).contentKeysByAsset as Map<string, Map<string, TextureContentKey>>;
 
@@ -450,7 +445,6 @@ export const createResourceArena = (
   // notification would wake a second time for the same published revision.
   const preparedAssets = new PreparedGltfAssetStore(load, () => undefined);
   arena = {
-    assetSources: new Map(),
     counters: {
       assetPlanCompiles: 0,
       preparedAssetAcquires: 0,
@@ -464,7 +458,6 @@ export const createResourceArena = (
     gltfRequests: new Map(),
     geometries: new Map(),
     hdrReadyAssetCount: 0,
-    imageAbortControllers: new Map(),
     iblReferences: new Map(),
     iblSources: new Map(),
     nextGeometryId: 1,
@@ -632,7 +625,10 @@ export const applyResourceDelta = (
       state.gltfRequests.set(row.key, declaration);
       state.counters.preparedAssetAcquires += 1;
       state.counters.sceneLeaseAcquires += row.nextCount;
-      result.acquiredGltfRequests.push(request);
+      result.acquiredGltfRequests.push({
+        generation: declaration.generation,
+        request,
+      });
       continue;
     }
     state.counters.sceneLeaseAcquires += Math.max(0, row.delta);
@@ -640,7 +636,6 @@ export const applyResourceDelta = (
     declaration.count = row.nextCount;
     if (row.nextCount !== 0) continue;
     releaseAssetPlan(arena, declaration, result);
-    releaseAssetSources(arena, declaration.key, result.releasedSources);
     declaration.subscription.release();
     state.gltfRequests.delete(row.key);
     arenaContentKeys(arena).delete(row.key);
@@ -856,18 +851,6 @@ const releaseAssetPlan = (
   declaration.plan = undefined;
 };
 
-const releaseAssetSources = (
-  arena: ResourceArena,
-  assetKey: string,
-  releasedSources: LoadedTextureSource[],
-): void => {
-  const sources = arenaAssetSources(arena).get(assetKey);
-  arenaAssetSources(arena).delete(assetKey);
-  for (const source of sources?.values() ?? []) {
-    if (releaseSource(arena, source)) releasedSources.push(source);
-  }
-};
-
 export const applyPreparedAssetEvents = (
   arena: ResourceArena,
   compileManifest: (
@@ -1019,27 +1002,6 @@ export const resourceArenaTextureReferenceCount = (arena: ResourceArena, key: st
   return virtual === undefined ? 0 : virtual.sceneReferences + virtual.assetReferences;
 };
 
-export const replaceResourceArenaImageAbortController = (
-  arena: ResourceArena,
-  key: string,
-): AbortController => {
-  const controllers = arenaImageAbortControllers(arena);
-  controllers.get(key)?.abort();
-  const controller = new AbortController();
-  controllers.set(key, controller);
-  return controller;
-};
-
-export const finishResourceArenaImageWork = (arena: ResourceArena, key: string): void => {
-  arenaImageAbortControllers(arena).delete(key);
-};
-
-export const abortResourceArenaImageWork = (arena: ResourceArena, key: string): void => {
-  const controllers = arenaImageAbortControllers(arena);
-  controllers.get(key)?.abort();
-  controllers.delete(key);
-};
-
 export const resourceArenaPreparedSource = (arena: ResourceArena, key: string): PreparedTextureSource | undefined =>
   arenaPreparedSources(arena).get(key);
 
@@ -1105,41 +1067,6 @@ export const retainResourceArenaSourceLease = (
       return releaseSource(arena, source);
     },
   };
-};
-
-export const retainResourceArenaAssetSource = (
-  arena: ResourceArena,
-  assetKey: string,
-  sourceKey: string,
-  source: LoadedTextureSource,
-): LoadedTextureSource | undefined => {
-  const allSources = arenaAssetSources(arena);
-  let sources = allSources.get(assetKey);
-  const previous = sources?.get(sourceKey);
-  if (previous !== source) {
-    retainSource(arena, source);
-    if (previous !== undefined) releaseSource(arena, previous);
-    if (sources === undefined) {
-      sources = new Map();
-      allSources.set(assetKey, sources);
-    }
-    sources.set(sourceKey, source);
-  }
-  return previous;
-};
-
-export const releaseResourceArenaAssetSource = (
-  arena: ResourceArena,
-  assetKey: string,
-  sourceKey: string,
-): LoadedTextureSource | undefined => {
-  const sources = arenaAssetSources(arena).get(assetKey);
-  const source = sources?.get(sourceKey);
-  if (source === undefined) return undefined;
-  sources!.delete(sourceKey);
-  if (sources!.size === 0) arenaAssetSources(arena).delete(assetKey);
-  releaseSource(arena, source);
-  return source;
 };
 
 export const retainResourceArenaIblSource = (
@@ -1292,7 +1219,6 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
     state.counters.sceneLeaseReleases += declaration.count;
     state.counters.preparedAssetReleases += 1;
     finish(() => releaseAssetPlan(arena, declaration, result));
-    finish(() => releaseAssetSources(arena, declaration.key, result.releasedSources));
     finish(() => declaration.subscription.release());
     result.releasedGltfKeys.push(declaration.key);
   }
@@ -1306,9 +1232,6 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
   state.gltfRequests.clear();
   arenaContentKeys(arena).clear();
   state.hdrReadyAssetCount = 0;
-  for (const [assetKey] of arenaAssetSources(arena)) {
-    finish(() => releaseAssetSources(arena, assetKey, result.releasedSources));
-  }
   const preparedSources = arenaPreparedSources(arena);
   for (const prepared of preparedSources.values()) {
     finish(() => {
@@ -1330,9 +1253,6 @@ export const disposeResourceArena = (arena: ResourceArena): ResourceArenaDisposa
     finish(() => { throw new Error("resource arena disposed with unowned source references"); });
   }
   arenaSourceReferences(arena).clear();
-  const controllers = arenaImageAbortControllers(arena);
-  for (const controller of controllers.values()) finish(() => controller.abort());
-  controllers.clear();
   for (const declaration of state.ordinaryTextures.values()) {
     state.counters.sceneLeaseReleases += declaration.sceneReferences;
   }

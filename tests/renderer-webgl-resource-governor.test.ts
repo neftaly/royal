@@ -4,6 +4,7 @@ import {
   RESOURCE_GOVERNOR_CLASSES,
   beginResourceGovernorFrame,
   createResourceGovernor,
+  defineResourceGovernorPolicy,
   evaluateResourceGovernorAdmission,
   maximumResourceGovernorClassDurableBytes,
   reserveResourceGovernor,
@@ -63,6 +64,49 @@ describe("root resource governor", () => {
       DEFAULT_RESOURCE_GOVERNOR_POLICY.classes.geometry.persistentGpuBytes,
     )).toBe(true);
     expect(Object.isFrozen(DEFAULT_RESOURCE_GOVERNOR_POLICY.limits)).toBe(true);
+  });
+
+  it("defines a complete immutable policy from concise nested overrides", () => {
+    const configured = defineResourceGovernorPolicy({
+      classes: {
+        "virtual-texture": {
+          persistentGpuBytes: { hardLimit: 96, softLimit: 80 },
+        },
+      },
+      limits: { jobs: 3, persistentGpuBytes: 128 },
+    });
+
+    expect(configured).toMatchObject({
+      classes: {
+        geometry: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes.geometry,
+        "virtual-texture": {
+          persistentGpuBytes: {
+            hardLimit: 96,
+            mandatoryFloor: 80,
+            softLimit: 80,
+          },
+        },
+      },
+      limits: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
+        jobs: 3,
+        persistentGpuBytes: 128,
+      },
+    });
+    expect(Object.isFrozen(configured)).toBe(true);
+    expect(Object.isFrozen(configured.classes["virtual-texture"].persistentGpuBytes)).toBe(true);
+    expect(Object.isFrozen(configured.limits)).toBe(true);
+  });
+
+  it("ignores unknown or undefined runtime limit overrides", () => {
+    const noisy = {
+      limits: { ignored: 1, jobs: undefined },
+    } as unknown as Parameters<typeof defineResourceGovernorPolicy>[0];
+    const configured = defineResourceGovernorPolicy(noisy);
+
+    expect(configured.limits).toEqual(DEFAULT_RESOURCE_GOVERNOR_POLICY.limits);
+    expect(configured.limits).not.toHaveProperty("ignored");
+    expect(() => createResourceGovernor(configured)).not.toThrow();
   });
 
   it("makes admission a pure all-dimension decision", () => {
@@ -284,6 +328,44 @@ describe("root resource governor", () => {
     ]);
   });
 
+  it("isolates notification payloads and defers subscriptions added during dispatch", () => {
+    const governor = createResourceGovernor(policy());
+    let mutationSucceeded: boolean | undefined;
+    let lateNotifications = 0;
+    let unsubscribeLate: (() => void) | undefined;
+    const unsubscribeMutator = subscribeResourceGovernorDurableCapacityRelease(
+      governor,
+      (capacity) => {
+        mutationSucceeded = Reflect.set(capacity, "persistentGpuBytes", 999);
+        unsubscribeLate ??= subscribeResourceGovernorDurableCapacityRelease(governor, () => {
+          lateNotifications += 1;
+        });
+      },
+    );
+    const observed: number[] = [];
+    const unsubscribeObserver = subscribeResourceGovernorDurableCapacityRelease(
+      governor,
+      (capacity) => { observed.push(capacity.persistentGpuBytes); },
+    );
+
+    reservation(reserveResourceGovernor(governor, "geometry", {
+      persistentGpuBytes: 7,
+    })).cancel();
+    expect(mutationSucceeded).toBe(false);
+    expect(observed).toEqual([7]);
+    expect(lateNotifications).toBe(0);
+
+    reservation(reserveResourceGovernor(governor, "geometry", {
+      persistentGpuBytes: 5,
+    })).cancel();
+    expect(observed).toEqual([7, 5]);
+    expect(lateNotifications).toBe(1);
+
+    unsubscribeMutator();
+    unsubscribeObserver();
+    unsubscribeLate?.();
+  });
+
   it("releases job capacity when admitted work commits", () => {
     const governor = createResourceGovernor(policy({ jobs: 1 }));
     const first = reservation(reserveResourceGovernor(governor, "asset-decode", { jobs: 1 }));
@@ -362,6 +444,80 @@ describe("root resource governor", () => {
     expect(resourceGovernorSnapshot(governor).total.persistentGpuBytes).toBe(20);
     expect(shrunk.release()).toBe(true);
     expect(resourceGovernorSnapshot(governor).total.persistentGpuBytes).toBe(0);
+  });
+
+  it("keeps replacement ownership releasable when a capacity listener throws", () => {
+    const governor = createResourceGovernor(policy({ transientPeakBytes: 100 }));
+    const original = reservation(reserveResourceGovernor(governor, "render-target", {
+      cpuDecodedBytes: 30,
+      persistentGpuBytes: 60,
+    })).commit();
+    const unsubscribe = subscribeResourceGovernorDurableCapacityRelease(governor, () => {
+      throw new Error("capacity listener failed");
+    });
+    const laterNotifications: Array<{
+      cpuDecodedBytes: number;
+      persistentGpuBytes: number;
+    }> = [];
+    const unsubscribeLater = subscribeResourceGovernorDurableCapacityRelease(governor, (released) => {
+      laterNotifications.push({ ...released });
+    });
+    const shrink = reservation(replaceResourceGovernorLease(governor, original, {
+      cpuDecodedBytes: 10,
+      persistentGpuBytes: 20,
+      transientPeakBytes: 20,
+    }));
+
+    const replacement = shrink.commit();
+    expect(replacement).toBe(original);
+    expect(laterNotifications).toEqual([{ cpuDecodedBytes: 20, persistentGpuBytes: 40 }]);
+    const afterListenerFailure = resourceGovernorSnapshot(governor);
+    expect(afterListenerFailure).toMatchObject({
+      outstandingLeases: 1,
+      outstandingReservations: 0,
+    });
+    expect(afterListenerFailure.total).toEqual({
+      cpuDecodedBytes: 10,
+      jobs: 0,
+      persistentGpuBytes: 20,
+      transientPeakBytes: 0,
+      uploadBytes: 0,
+    });
+
+    unsubscribe();
+    unsubscribeLater();
+    const retry = reservation(replaceResourceGovernorLease(governor, replacement, {
+      cpuDecodedBytes: 8,
+      persistentGpuBytes: 16,
+      transientPeakBytes: 16,
+    })).commit();
+    expect(retry).toBe(original);
+    const afterRetry = resourceGovernorSnapshot(governor);
+    expect(afterRetry).toMatchObject({
+      outstandingLeases: 1,
+      outstandingReservations: 0,
+    });
+    expect(afterRetry.total).toEqual({
+      cpuDecodedBytes: 8,
+      jobs: 0,
+      persistentGpuBytes: 16,
+      transientPeakBytes: 0,
+      uploadBytes: 0,
+    });
+    expect(retry.release()).toBe(true);
+    expect(retry.release()).toBe(false);
+    const afterRelease = resourceGovernorSnapshot(governor);
+    expect(afterRelease).toMatchObject({
+      outstandingLeases: 0,
+      outstandingReservations: 0,
+    });
+    expect(afterRelease.total).toEqual({
+      cpuDecodedBytes: 0,
+      jobs: 0,
+      persistentGpuBytes: 0,
+      transientPeakBytes: 0,
+      uploadBytes: 0,
+    });
   });
 
   it("keeps the old lease intact when an upload-bearing replacement cannot cross a frame", () => {

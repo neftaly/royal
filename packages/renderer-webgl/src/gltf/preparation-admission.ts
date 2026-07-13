@@ -1,11 +1,12 @@
 import { gltfComponentCount } from "./accessors";
+import { dataUriDecodedByteLength } from "./io";
 import type { GltfDocument, GltfMeshPrimitive } from "./schema";
 
 const MAX_GLTF_NODE_TRAVERSAL_DEPTH = 512;
 const MAX_GLTF_NODE_TRAVERSAL_WORK = 1_000_000;
 
 export interface GltfPreparationCpuEstimate {
-  /** Source and meshopt-decoded buffers retained for deferred image preparation. */
+  /** Conservative pre-decode bound; publication shrinks this to exact recipe bytes. */
   readonly assetDecode: number;
   /** Conservative upper bound for typed geometry arrays retained by scene preparation. */
   readonly geometry: number;
@@ -254,9 +255,41 @@ export const estimateGltfPreparationCpu = (document: GltfDocument): GltfPreparat
     meshoptBytes = checkedAdd(meshoptBytes, bufferView.byteLength, "glTF meshopt decoded bytes");
     largestMeshoptBytes = Math.max(largestMeshoptBytes, bufferView.byteLength);
   }
+  let embeddedImageBytes = 0;
+  const imageSources = new Set<string>();
+  for (const [index, image] of (document.images ?? []).entries()) {
+    if (image.uri?.startsWith("data:") === true) {
+      const sourceKey = `uri:${image.uri}`;
+      if (imageSources.has(sourceKey)) continue;
+      imageSources.add(sourceKey);
+      embeddedImageBytes = checkedAdd(
+        embeddedImageBytes,
+        dataUriDecodedByteLength(image.uri),
+        "glTF embedded image bytes",
+      );
+      continue;
+    }
+    if (image.bufferView === undefined) continue;
+    const bufferView = document.bufferViews?.[image.bufferView];
+    if (bufferView === undefined) {
+      throw new Error(`glTF image ${index} references invalid bufferView ${image.bufferView}`);
+    }
+    const sourceKey = `bufferView:${image.bufferView}`;
+    if (imageSources.has(sourceKey)) continue;
+    imageSources.add(sourceKey);
+    embeddedImageBytes = checkedAdd(
+      embeddedImageBytes,
+      bufferView.byteLength,
+      "glTF embedded image bytes",
+    );
+  }
   const geometry = estimateReachableGeometryBytes(document);
   return {
-    assetDecode: checkedAdd(sourceBytes, meshoptBytes, "glTF retained asset decode bytes"),
+    assetDecode: checkedAdd(
+      checkedAdd(sourceBytes, meshoptBytes, "glTF retained asset decode bytes"),
+      embeddedImageBytes,
+      "glTF retained asset decode bytes",
+    ),
     geometry,
     // meshopt currently creates a target and then a copied ArrayBuffer; decoded
     // geometry is also conservatively charged as active preparation workspace.
