@@ -4,6 +4,7 @@ import {
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
 } from "../packages/react/src/canvas";
+import { rendererRootContextOptionsSemanticKey } from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
 describe("Canvas renderer root cleanup", () => {
@@ -30,6 +31,33 @@ describe("Canvas renderer root cleanup", () => {
     })).toEqual({
       context: { resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY },
     });
+  });
+
+  it("derives renderer lifetime identity from every nested backend option", () => {
+    const first = rendererRootContextOptionsSemanticKey({
+      alpha: true,
+      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
+    });
+    const reordered = rendererRootContextOptionsSemanticKey({
+      resourceGovernorPolicy: {
+        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits },
+        classes: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.classes },
+      },
+      alpha: true,
+    });
+    const changed = rendererRootContextOptionsSemanticKey({
+      alpha: true,
+      resourceGovernorPolicy: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+        limits: {
+          ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
+          jobs: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.jobs + 1,
+        },
+      },
+    });
+
+    expect(reordered).toBe(first);
+    expect(changed).not.toBe(first);
   });
 
   it("releases ownership before surfacing a dispose failure", () => {

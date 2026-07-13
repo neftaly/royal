@@ -1,5 +1,6 @@
 export { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "./resource-governor";
 export { createWebGlRoot } from "./root";
+export { webGlRootOptionsSemanticKey } from "./root-options";
 export type {
   ResourceGovernorClass,
   ResourceGovernorDenialReason,

@@ -1,51 +1,24 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
+  webGlRootOptionsSemanticKey,
   type WebGlContextSnapshot,
-  type ResourceGovernorPolicy,
   type WebGlRoot,
+  type WebGlRootOptions,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 
 /** Renderer creation options exposed through `Canvas.context` and `createRendererRoot`. */
-export interface RoyalRendererRootContextOptions {
-  /** Request an alpha channel in the canvas backing store. @defaultValue `true` */
-  readonly alpha?: boolean;
-  /** Request browser-provided WebGL antialiasing. Actual support is device-dependent. @defaultValue `true` */
-  readonly antialias?: boolean;
-  /**
-   * Generate VTs for ordinary base-color image textures used by triangle
-   * geometry with `TEXCOORD_0`. SVG sources are not subject to the raster size
-   * threshold; decoded raster sources qualify when their longest dimension is
-   * at least 257 px. The ordinary texture remains active until generated
-   * coverage is ready. Authored `virtualTexture(...)` resources are unaffected.
-   * @defaultValue `false`
-   */
-  readonly generatedImageVirtualTextures?: boolean;
-  /**
-   * Logical virtual texels per authored SVG CSS pixel. Used only when
-   * `generatedImageVirtualTextures` is true. Must be finite and in `(0, 16]`.
-   * It controls close-zoom texture detail without changing layout or world size;
-   * generated dimensions preserve aspect ratio and are capped at 16384 logical
-   * texels on their longest side. SVG viewBox coordinates are not raster pixels.
-   * @defaultValue `4`
-   */
-  readonly generatedSvgVirtualTextureRasterDensity?: number;
-  /** Immutable cross-class CPU/GPU/job/upload budget policy. Byte-named fields are bytes. */
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
-  /**
-   * Global physical GPU byte budget shared by all virtual-texture atlases and page
-   * tables in this root. Must be a non-negative safe integer.
-   * @defaultValue `67108864` (64 MiB)
-   */
-  readonly virtualTexturePhysicalByteBudget?: number;
-}
+export type RoyalRendererRootContextOptions = WebGlRootOptions;
 
 /** Options for the Royal renderer root. */
 export interface RoyalRendererRootOptions {
   /** Renderer creation options. These are fixed for the lifetime of the root. */
   readonly context?: RoyalRendererRootContextOptions;
 }
+
+/** @internal Backend-owned semantic identity used by the React Canvas lifetime. */
+export const rendererRootContextOptionsSemanticKey = webGlRootOptionsSemanticKey;
 
 export type RoyalRendererRootContextSnapshot =
   Required<Omit<RoyalRendererRootContextOptions, "resourceGovernorPolicy">>

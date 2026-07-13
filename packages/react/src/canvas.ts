@@ -35,6 +35,7 @@ import {
 import {
   acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,
+  rendererRootContextOptionsSemanticKey,
   type RoyalRendererRoot,
   type RoyalRendererFrameClock,
   type RoyalRendererRootLifecycleSnapshot,
@@ -145,58 +146,11 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
 export const normalizeCanvasRendererOptions = (
   context: CanvasContextOptions | undefined,
 ): RoyalRendererRootOptions | undefined => {
-  const alpha = context?.alpha;
-  const antialias = context?.antialias;
-  const generatedImageVirtualTextures = context?.generatedImageVirtualTextures;
-  const generatedSvgVirtualTextureRasterDensity = context?.generatedSvgVirtualTextureRasterDensity;
-  const resourceGovernorPolicy = context?.resourceGovernorPolicy;
-  const virtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
-  if (
-    alpha === undefined
-    && antialias === undefined
-    && generatedImageVirtualTextures === undefined
-    && generatedSvgVirtualTextureRasterDensity === undefined
-    && resourceGovernorPolicy === undefined
-    && virtualTexturePhysicalByteBudget === undefined
-  ) return undefined;
-
-  return {
-    context: {
-      ...(alpha === undefined ? {} : { alpha }),
-      ...(antialias === undefined ? {} : { antialias }),
-      ...(generatedImageVirtualTextures === undefined
-        ? {}
-        : { generatedImageVirtualTextures }),
-      ...(generatedSvgVirtualTextureRasterDensity === undefined
-        ? {}
-        : { generatedSvgVirtualTextureRasterDensity }),
-      ...(resourceGovernorPolicy === undefined ? {} : { resourceGovernorPolicy }),
-      ...(virtualTexturePhysicalByteBudget === undefined
-        ? {}
-        : { virtualTexturePhysicalByteBudget }),
-    },
-  };
+  if (context === undefined || Object.values(context).every((value) => value === undefined)) {
+    return undefined;
+  }
+  return { context };
 };
-
-const resourceGovernorPolicySignature = (
-  policy: RoyalRendererRootContextOptions["resourceGovernorPolicy"],
-): string | undefined => policy === undefined ? undefined : [
-  ...(["asset-decode", "geometry", "ordinary-texture", "render-target", "virtual-texture"] as const)
-    .flatMap((resourceClass) => {
-      const value = policy.classes[resourceClass];
-      return [
-        value.cpuDecodedBytes.mandatoryFloor,
-        value.cpuDecodedBytes.softLimit,
-        value.persistentGpuBytes.mandatoryFloor,
-        value.persistentGpuBytes.softLimit,
-      ];
-    }),
-  policy.limits.cpuDecodedBytes,
-  policy.limits.jobs,
-  policy.limits.persistentGpuBytes,
-  policy.limits.transientPeakBytes,
-  policy.limits.uploadBytes,
-].join(":");
 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
@@ -448,60 +402,24 @@ export const Canvas = ({
   );
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [canvasRoot, setCanvasRoot] = useState<RoyalRendererRoot | null>(null);
-  const contextAlpha = context?.alpha;
-  const contextAntialias = context?.antialias;
-  const contextGeneratedImageVirtualTextures = context?.generatedImageVirtualTextures;
-  const contextGeneratedSvgVirtualTextureRasterDensity = context?.generatedSvgVirtualTextureRasterDensity;
-  const suppliedResourceGovernorPolicy = context?.resourceGovernorPolicy;
-  const resourceGovernorPolicyKey = resourceGovernorPolicySignature(suppliedResourceGovernorPolicy);
-  const resourceGovernorPolicyRef = useRef<{
+  const rendererOptionsKey = rendererRootContextOptionsSemanticKey(context);
+  const rendererOptionsRef = useRef<{
     readonly key: string;
-    readonly policy: NonNullable<RoyalRendererRootContextOptions["resourceGovernorPolicy"]>;
+    readonly options: RoyalRendererRootOptions | undefined;
   } | undefined>(undefined);
-  if (resourceGovernorPolicyKey === undefined) resourceGovernorPolicyRef.current = undefined;
-  else if (
-    suppliedResourceGovernorPolicy !== undefined
-    && resourceGovernorPolicyRef.current?.key !== resourceGovernorPolicyKey
-  ) {
-    resourceGovernorPolicyRef.current = {
-      key: resourceGovernorPolicyKey,
-      policy: suppliedResourceGovernorPolicy,
+  if (rendererOptionsRef.current?.key !== rendererOptionsKey) {
+    rendererOptionsRef.current = {
+      key: rendererOptionsKey,
+      options: normalizeCanvasRendererOptions(context),
     };
   }
-  const contextResourceGovernorPolicy = resourceGovernorPolicyRef.current?.policy;
-  const contextVirtualTexturePhysicalByteBudget = context?.virtualTexturePhysicalByteBudget;
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
     assignCanvasRef(ref, canvas);
   }, [ref]);
 
-  const memoizedRendererOptions = useMemo(
-    () => normalizeCanvasRendererOptions({
-      ...(contextAlpha === undefined ? {} : { alpha: contextAlpha }),
-      ...(contextAntialias === undefined ? {} : { antialias: contextAntialias }),
-      ...(contextGeneratedImageVirtualTextures === undefined
-        ? {}
-        : { generatedImageVirtualTextures: contextGeneratedImageVirtualTextures }),
-      ...(contextGeneratedSvgVirtualTextureRasterDensity === undefined
-        ? {}
-        : { generatedSvgVirtualTextureRasterDensity: contextGeneratedSvgVirtualTextureRasterDensity }),
-      ...(contextResourceGovernorPolicy === undefined
-        ? {}
-        : { resourceGovernorPolicy: contextResourceGovernorPolicy }),
-      ...(contextVirtualTexturePhysicalByteBudget === undefined
-        ? {}
-        : { virtualTexturePhysicalByteBudget: contextVirtualTexturePhysicalByteBudget }),
-    }),
-    [
-      contextAlpha,
-      contextAntialias,
-      contextGeneratedImageVirtualTextures,
-      contextGeneratedSvgVirtualTextureRasterDensity,
-      contextResourceGovernorPolicy,
-      contextVirtualTexturePhysicalByteBudget,
-    ],
-  );
+  const memoizedRendererOptions = rendererOptionsRef.current.options;
   const canvasElementNode = createElement("canvas", {
     ...canvasProps,
     ref: setCanvasRef,
