@@ -8,7 +8,7 @@ import { rendererRootOptionsSemanticKey } from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
 describe("Canvas renderer root cleanup", () => {
-  it("normalizes omitted and empty context options to the same effect identity", () => {
+  it("normalizes omitted and empty renderer options to the same effect identity", () => {
     expect(normalizeCanvasRendererOptions(undefined)).toBeUndefined();
     expect(normalizeCanvasRendererOptions({})).toBeUndefined();
   });
@@ -26,7 +26,7 @@ describe("Canvas renderer root cleanup", () => {
     })).toEqual({ resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY });
   });
 
-  it("derives renderer lifetime identity from every nested backend option", () => {
+  it("retains the root for equivalent rendererOptions and recreates it for semantic changes", () => {
     const first = rendererRootOptionsSemanticKey({
       alpha: true,
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,

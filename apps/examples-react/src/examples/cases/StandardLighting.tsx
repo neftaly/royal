@@ -14,7 +14,7 @@ import {
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { srgbColor } from '../color';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 
@@ -78,7 +78,7 @@ export const StandardLighting = (): ReactNode => {
   return (
     <Canvas
       aria-label="Standard material lighting"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={interactiveCanvasStyle}
       scene={renderScene}
     >

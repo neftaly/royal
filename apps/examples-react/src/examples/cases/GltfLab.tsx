@@ -8,7 +8,7 @@ import {
 import { directionalLight, gltf, scene } from '@royal/react/scene';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import {
   gltfLabCaseByName,
   gltfLabManifest,
@@ -89,7 +89,7 @@ const GltfLabCanvas = ({ entry }: { readonly entry: GltfLabCase }): ReactNode =>
   return (
     <Canvas
       aria-label={`Khronos glTF compatibility case ${entry.name}`}
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       scene={renderScene}
       style={interactiveCanvasStyle}
     >

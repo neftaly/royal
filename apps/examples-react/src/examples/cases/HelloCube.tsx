@@ -6,7 +6,7 @@ import {
 } from '@royal/react';
 import { useMemo, type ReactNode } from 'react';
 import { srgbColor } from '../color';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 
@@ -32,7 +32,7 @@ export const HelloCube = (): ReactNode => {
   }), [orbit.cameraResource]);
 
   return (
-    <Canvas aria-label="Lit cube" context={exampleCanvasContextOptions} scene={renderScene}>
+    <Canvas aria-label="Lit cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>
       <BenchmarkRendererSnapshot />
       <OrbitControls orbit={orbit} />
     </Canvas>

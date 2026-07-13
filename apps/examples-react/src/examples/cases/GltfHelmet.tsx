@@ -6,7 +6,7 @@ import {
 import { directionalLight, gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, materialEnvironment, materialFillLight, materialKeyLight, materialPass } from '../presentation';
 
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
@@ -36,7 +36,7 @@ export const GltfHelmet = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF DamagedHelmet PBR material"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={interactiveCanvasStyle}
       scene={renderScene}
     >

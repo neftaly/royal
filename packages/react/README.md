@@ -99,14 +99,14 @@ diagnostics actually consume per-frame viewport data.
 
 ### Canvas renderer options
 
-Pass renderer creation options through `Canvas.context`, or through
+Pass renderer creation options through `Canvas.rendererOptions`, or through
 `createRendererRoot(canvas, options)` when you own the canvas. These values are
 fixed for an imperative root and are available as `root.options`. Changing them
 on `<Canvas>` recreates its renderer root.
 
 ```tsx
 <Canvas
-  context={{
+  rendererOptions={{
     generatedImageVirtualTextures: true,
     generatedSvgVirtualTextureRasterDensity: 4,
   }}

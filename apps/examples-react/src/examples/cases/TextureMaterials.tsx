@@ -8,7 +8,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const swatchGeometry = boxGeometry({ size: [1.72, 1.72, 1.72] });
@@ -36,7 +36,7 @@ export const TextureMaterials = (): ReactNode => {
   return (
     <Canvas
       aria-label="Texture materials"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={interactiveCanvasStyle}
       scene={renderScene}
     >

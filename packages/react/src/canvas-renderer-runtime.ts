@@ -86,26 +86,26 @@ export const disposeCanvasRendererRoot = (
   root.dispose();
 };
 
-/** @internal Normalizes semantically empty Canvas context options. */
+/** @internal Normalizes semantically empty Canvas renderer options. */
 export const normalizeCanvasRendererOptions = (
-  context: RoyalRendererRootOptions | undefined,
+  rendererOptions: RoyalRendererRootOptions | undefined,
 ): RoyalRendererRootOptions | undefined => {
-  if (context === undefined || Object.values(context).every((value) => value === undefined)) {
+  if (rendererOptions === undefined || Object.values(rendererOptions).every((value) => value === undefined)) {
     return undefined;
   }
-  return context;
+  return rendererOptions;
 };
 
 /** Owns the renderer root and retained frame-loop lifetime for one React Canvas. */
 export const useRendererRootRuntime = (
   canvasRef: CanvasElementRef,
-  context: RoyalRendererRootOptions | undefined,
+  rendererOptions: RoyalRendererRootOptions | undefined,
 ): CanvasRendererRuntime => {
   const rootRef = useRef<RoyalRendererRoot | null>(null);
   const rendererFrameClockRef = useRef<RoyalRendererFrameClock | undefined>(undefined);
   const [errorState, setErrorState] = useState<CanvasRendererErrorState | undefined>(undefined);
   const [rootState, setRootState] = useState<CanvasRendererRootState | undefined>(undefined);
-  const optionsKey = rendererRootOptionsSemanticKey(context);
+  const optionsKey = rendererRootOptionsSemanticKey(rendererOptions);
   const optionsKeyRef = useCommittedRef(optionsKey);
   const frameLoop = useMemo(() => createFrameLoop((failure) => {
     const normalizedFailure = failure
@@ -121,7 +121,7 @@ export const useRendererRootRuntime = (
   if (optionsRef.current?.key !== optionsKey) {
     optionsRef.current = {
       key: optionsKey,
-      options: normalizeCanvasRendererOptions(context),
+      options: normalizeCanvasRendererOptions(rendererOptions),
     };
   }
   const options = optionsRef.current.options;

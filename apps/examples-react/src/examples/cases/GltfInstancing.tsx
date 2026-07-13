@@ -14,7 +14,7 @@ import {
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { productEnvironment, productFillLight, productKeyLight, productPass } from '../presentation';
 
 const fixtureBase = import.meta.env.BASE_URL + 'fixtures/gltf-instancing/';
@@ -187,7 +187,7 @@ export const GltfInstancing = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF automatic instancing"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={{ cursor: 'grab', touchAction: 'none' }}
       scene={renderScene}
     >

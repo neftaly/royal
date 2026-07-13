@@ -18,7 +18,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { srgbColor } from '../color';
 import {
   showcaseEnvironment,
@@ -87,7 +87,7 @@ export const Picking = (): ReactNode => {
       data-royal-picking-hovered-id={hoveredId}
       data-royal-picking-readout={`Target ${readoutText}`}
       interactions={interactions}
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={{ cursor: 'pointer', touchAction: 'none' }}
       scene={renderScene}
     >

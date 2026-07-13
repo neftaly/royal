@@ -13,7 +13,7 @@ import {
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
 const mapGeometry = planeGeometry([8, 8]);
@@ -75,7 +75,7 @@ export const VirtualTextureStress = (): ReactNode => {
       <div className="vt-stress-canvas">
         <Canvas
           aria-label="Interactive giant virtual texture map"
-          context={exampleCanvasContextOptions}
+          rendererOptions={exampleCanvasRendererOptions}
           data-map-distance={orbitView.distance.toFixed(3)}
           data-map-target-x={orbitView.target[0].toFixed(3)}
           data-map-target-y={orbitView.target[1].toFixed(3)}

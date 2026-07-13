@@ -1,4 +1,4 @@
-import { type CanvasContextOptions } from '@royal/react';
+import { type CanvasRendererOptions } from '@royal/react';
 import { type ResourceGovernorPolicy } from '@royal/renderer-webgl';
 
 const mib = (value: number): number => value * 1024 * 1024;
@@ -52,22 +52,22 @@ export const mobileExampleResourceGovernorPolicy = {
   },
 } as const satisfies ResourceGovernorPolicy;
 
-const defaultExampleCanvasContextOptions = {
+const defaultExampleCanvasRendererOptions = {
   alpha: true,
   generatedImageVirtualTextures: true,
-} as const satisfies CanvasContextOptions;
+} as const satisfies CanvasRendererOptions;
 
-export const exampleCanvasContextOptionsForSearch = (
+export const exampleCanvasRendererOptionsForSearch = (
   search: string,
-): CanvasContextOptions => {
+): CanvasRendererOptions => {
   const profile = new URLSearchParams(search).get('resourceGovernor');
-  if (profile !== 'mobile') return defaultExampleCanvasContextOptions;
+  if (profile !== 'mobile') return defaultExampleCanvasRendererOptions;
   return {
-    ...defaultExampleCanvasContextOptions,
+    ...defaultExampleCanvasRendererOptions,
     resourceGovernorPolicy: mobileExampleResourceGovernorPolicy,
   };
 };
 
-export const exampleCanvasContextOptions = exampleCanvasContextOptionsForSearch(
+export const exampleCanvasRendererOptions = exampleCanvasRendererOptionsForSearch(
   globalThis.location?.search ?? '',
 );

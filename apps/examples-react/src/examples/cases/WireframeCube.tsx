@@ -17,7 +17,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { srgbColor } from '../color';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
@@ -58,7 +58,7 @@ export const WireframeCube = (): ReactNode => {
   }), [orbit.cameraResource]);
 
   return (
-    <Canvas aria-label="Wireframe cube" context={exampleCanvasContextOptions} scene={renderScene}>
+    <Canvas aria-label="Wireframe cube" rendererOptions={exampleCanvasRendererOptions} scene={renderScene}>
       <SpinController meshRef={meshRef} />
       <OrbitControls orbit={orbit} />
     </Canvas>

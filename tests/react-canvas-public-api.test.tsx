@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanvasProps,
+  CanvasRendererOptions,
   PickInput,
   PickingId,
   PickResult,
@@ -46,24 +47,35 @@ describe('Canvas public scene boundary', () => {
     expect(invalid.scene).toBe(dom);
   });
 
-  it('accepts VT root policy through Canvas context', () => {
-    const context = {
+  it('accepts VT root policy through Canvas rendererOptions', () => {
+    const rendererOptions = {
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
-    } satisfies NonNullable<CanvasProps['context']>;
+    } satisfies CanvasRendererOptions;
 
-    const props = { context, scene: renderScene } satisfies CanvasProps;
-    expect(props.context).toEqual(context);
+    const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
+    expect(props.rendererOptions).toEqual(rendererOptions);
   });
 
-  it('accepts a typed resource governor policy through Canvas context', () => {
+  it('accepts a typed resource governor policy through Canvas rendererOptions', () => {
     const policy = DEFAULT_RESOURCE_GOVERNOR_POLICY satisfies ResourceGovernorPolicy;
-    const context = {
+    const rendererOptions = {
       resourceGovernorPolicy: policy,
-    } satisfies NonNullable<CanvasProps['context']>;
+    } satisfies CanvasRendererOptions;
 
-    const props = { context, scene: renderScene } satisfies CanvasProps;
-    expect(props.context?.resourceGovernorPolicy).toBe(policy);
+    const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
+    expect(props.rendererOptions?.resourceGovernorPolicy).toBe(policy);
+  });
+
+  it('does not expose the former context creation-options prop', () => {
+    const rendererOptions = { alpha: false } satisfies CanvasRendererOptions;
+    const invalid: CanvasProps = {
+      // @ts-expect-error Renderer creation policy belongs under rendererOptions.
+      context: rendererOptions,
+      scene: renderScene,
+    };
+
+    expect(invalid).toHaveProperty('context', rendererOptions);
   });
 
   it('re-exports concrete public texture types', () => {

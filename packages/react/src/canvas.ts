@@ -51,8 +51,8 @@ export {
   normalizeCanvasRendererOptions,
 } from "./canvas-renderer-runtime";
 
-/** Backend-context creation options accepted by the React-owned canvas. */
-export type CanvasContextOptions = RoyalRendererRootOptions;
+/** Renderer creation options accepted by the React-owned canvas. */
+export type CanvasRendererOptions = RoyalRendererRootOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
@@ -66,7 +66,7 @@ export interface CanvasProps
    * Renderer creation options. Changing a value disposes and recreates the
    * renderer root.
    */
-  readonly context?: CanvasContextOptions;
+  readonly rendererOptions?: CanvasRendererOptions;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
   readonly scene: RenderRoot;
 }
@@ -124,7 +124,7 @@ export const Canvas = ({
   children,
   interactions,
   ref,
-  context,
+  rendererOptions,
   scene,
   ...canvasProps
 }: CanvasProps): ReactNode => {
@@ -133,7 +133,7 @@ export const Canvas = ({
     error: rootError,
     frameLoop,
     root: canvasRoot,
-  } = useRendererRootRuntime(canvasRef, context);
+  } = useRendererRootRuntime(canvasRef, rendererOptions);
   const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
   const sceneInteractions = useMemo(
     () => createRoyalScenePointerEventRegistry(scenePickingIndex, interactions),

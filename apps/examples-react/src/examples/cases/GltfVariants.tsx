@@ -6,7 +6,7 @@ import {
 import { gltf, scene } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { colorAccuratePass, interactiveCanvasStyle } from '../presentation';
 
 const variantSrc = import.meta.env.BASE_URL + 'fixtures/gltf-variants/variant-quad.gltf';
@@ -28,7 +28,7 @@ export const GltfVariants = (): ReactNode => {
   return (
     <Canvas
       aria-label="glTF KHR_materials_variants"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       style={interactiveCanvasStyle}
       scene={renderScene}
     >

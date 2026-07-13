@@ -5,7 +5,7 @@ export {
   useCanvasRoot,
   useInvalidate,
 } from './canvas';
-export type { CanvasContextOptions, CanvasProps } from './canvas';
+export type { CanvasProps, CanvasRendererOptions } from './canvas';
 export type { CanvasInteractions } from './scene-interactions';
 export type {
   PickInput,

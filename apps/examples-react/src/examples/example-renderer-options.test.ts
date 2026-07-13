@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  exampleCanvasContextOptionsForSearch,
+  exampleCanvasRendererOptionsForSearch,
   mobileExampleResourceGovernorPolicy,
-} from './example-context-options';
+} from './example-renderer-options';
 
-describe('exampleCanvasContextOptionsForSearch', () => {
+describe('exampleCanvasRendererOptionsForSearch', () => {
   it.each(['', '?bench=auto', '?resourceGovernor=desktop', '?resourceGovernor=MOBILE'])(
     'preserves renderer defaults for %s',
     (search) => {
-      expect(exampleCanvasContextOptionsForSearch(search)).toEqual({
+      expect(exampleCanvasRendererOptionsForSearch(search)).toEqual({
         alpha: true,
         generatedImageVirtualTextures: true,
       });
@@ -16,13 +16,13 @@ describe('exampleCanvasContextOptionsForSearch', () => {
   );
 
   it('selects the constrained policy explicitly without dropping other query parameters', () => {
-    const context = exampleCanvasContextOptionsForSearch(
+    const rendererOptions = exampleCanvasRendererOptionsForSearch(
       '?bench=auto&resourceGovernor=mobile&frames=60',
     );
 
-    expect(context.resourceGovernorPolicy).toBe(mobileExampleResourceGovernorPolicy);
-    expect(context.alpha).toBe(true);
-    expect(context.generatedImageVirtualTextures).toBe(true);
+    expect(rendererOptions.resourceGovernorPolicy).toBe(mobileExampleResourceGovernorPolicy);
+    expect(rendererOptions.alpha).toBe(true);
+    expect(rendererOptions.generatedImageVirtualTextures).toBe(true);
   });
 
   it('keeps mandatory floors within the global constrained capacities', () => {

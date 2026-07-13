@@ -24,7 +24,7 @@ import {
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { srgbColor } from '../color';
-import { exampleCanvasContextOptions } from '../example-context-options';
+import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
 const camera = perspectiveCamera({
@@ -482,7 +482,7 @@ export const WebXrVr = (): ReactNode =>
     <Canvas
       aria-label="WebXR VR"
       className="webxr-vr-canvas"
-      context={exampleCanvasContextOptions}
+      rendererOptions={exampleCanvasRendererOptions}
       scene={renderScene}
     >
       <XrSessionControl />
