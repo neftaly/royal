@@ -74,11 +74,6 @@ export interface VirtualTextureGpuPendingUpload {
   readonly image: TexImageSource;
   readonly page: VirtualTexturePageId;
   readonly pageKey: string;
-  /**
-   * @deprecated Publish current protection with
-   * `setVirtualTextureGpuDesiredPageKeys`; per-upload snapshots are ignored.
-   */
-  readonly protectedPageKeys?: readonly string[];
   readonly sourceGeneration: number;
 }
 
@@ -175,16 +170,11 @@ export type VirtualTextureGpuAdmissionResult =
         | "texture-size-exceeded";
     };
 
-export type VirtualTextureGpuEnsureResult =
+export type VirtualTextureGpuResourceAdmissionResult =
   | { readonly kind: "ready"; readonly resource: VirtualTextureGpuResource }
   | { readonly kind: "dormant"; readonly resource: VirtualTextureGpuResource; readonly reason: "physical-budget-exceeded" }
   | Extract<VirtualTextureGpuAdmissionResult, { readonly kind: "unsupported" }>
   | { readonly error: unknown; readonly kind: "failed" };
-
-export type VirtualTextureGpuReadmissionOutcome =
-  | { readonly key: string; readonly kind: "ready" }
-  | ({ readonly key: string } & Extract<VirtualTextureGpuAdmissionResult, { readonly kind: "unsupported" }>)
-  | { readonly error: unknown; readonly key: string; readonly kind: "failed" };
 
 type PhysicalAllocation = {
   readonly allocatedBytes: number;
@@ -204,7 +194,6 @@ type PhysicalAllocation = {
 type MutableResource = {
   admission: VirtualTextureGpuAdmissionResult;
   allocation?: PhysicalAllocation;
-  desiredGeneration: number;
   readonly desiredPageKeys: Set<string>;
   desiredPageKeysPublished: boolean;
   readonly key: string;
@@ -218,14 +207,12 @@ type MutableResource = {
   pageTableUpdates: number;
   pendingHead: number;
   readonly pendingUploads: VirtualTextureGpuPendingUpload[];
-  readmissionBlocked: boolean;
   uploadedPageBytes: number;
   uploadedPages: number;
   readonly visibleAssignments: Map<string, VirtualTextureAtlasAssignment>;
 };
 
 type State = {
-  admissionCursor: number;
   allocatedBytes: number;
   readonly budgetBytes: number;
   readonly gl: WebGL2RenderingContext;
@@ -257,7 +244,6 @@ export const createVirtualTextureGpuArena = (
   const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
   const maxTextureUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
   return {
-    admissionCursor: 0,
     allocatedBytes: 0,
     budgetBytes: options.maxPhysicalBytes,
     gl,
@@ -519,7 +505,7 @@ export const admitVirtualTextureGpuResource = (
   key: string,
   generation: number,
   options: VirtualTextureGpuResourceOptions,
-): VirtualTextureGpuEnsureResult => {
+): VirtualTextureGpuResourceAdmissionResult => {
   const state = stateOf(arena);
   let resource = state.resources.get(key);
   const created = resource === undefined;
@@ -543,7 +529,6 @@ export const admitVirtualTextureGpuResource = (
   if (resource === undefined) {
     resource = {
       admission,
-      desiredGeneration: generation,
       desiredPageKeys: new Set(),
       desiredPageKeysPublished: false,
       key,
@@ -553,16 +538,13 @@ export const admitVirtualTextureGpuResource = (
       pageTableUpdates: 0,
       pendingHead: 0,
       pendingUploads: [],
-      readmissionBlocked: false,
       uploadedPageBytes: 0,
       uploadedPages: 0,
     };
     state.resources.set(key, resource);
     state.resourceOrder.push(resource);
   } else {
-    resource.desiredGeneration = generation;
     resource.admission = admission;
-    resource.readmissionBlocked = false;
   }
   if (admission.kind === "dormant") {
     return { kind: "dormant", reason: admission.reason, resource: resource as unknown as VirtualTextureGpuResource };
@@ -574,11 +556,6 @@ export const admitVirtualTextureGpuResource = (
     if (created) {
       state.resources.delete(key);
       removeResourceOrder(state, resource);
-    } else {
-      // Allocation failure is terminal for this root-side source epoch. Leaving
-      // it eligible for automatic readmission could later consume physical
-      // budget after the owner has already transitioned the VT to an error.
-      resource.readmissionBlocked = true;
     }
     return { error, kind: "failed" };
   }
@@ -586,71 +563,11 @@ export const admitVirtualTextureGpuResource = (
   return { kind: "ready", resource: resource as unknown as VirtualTextureGpuResource };
 };
 
-/** Compatibility convenience for callers that want exceptional unsupported/allocation failures. */
-export const ensureVirtualTextureGpuResource = (
-  arena: VirtualTextureGpuArena,
-  key: string,
-  generation: number,
-  options: VirtualTextureGpuResourceOptions,
-): VirtualTextureGpuResource => {
-  const result = admitVirtualTextureGpuResource(arena, key, generation, options);
-  if (result.kind === "ready" || result.kind === "dormant") return result.resource;
-  if (result.kind === "failed") throw result.error;
-  throw new Error(`Virtual texture ${key} is unsupported: ${result.reason}`);
-};
-
 export const virtualTextureGpuResource = (
   arena: VirtualTextureGpuArena,
   key: string,
 ): VirtualTextureGpuResource | undefined =>
   stateOf(arena).resources.get(key) as unknown as VirtualTextureGpuResource | undefined;
-
-/** Fairly retries dormant logical resources after budget or context availability changes. */
-export const retryVirtualTextureGpuAdmissions = (
-  arena: VirtualTextureGpuArena,
-  generation: number,
-): readonly VirtualTextureGpuReadmissionOutcome[] => {
-  const state = stateOf(arena);
-  const resourceCount = state.resourceOrder.length;
-  if (resourceCount === 0) return [];
-  const outcomes: VirtualTextureGpuReadmissionOutcome[] = [];
-  for (let scanned = 0; scanned < resourceCount; scanned += 1) {
-    const resource = state.resourceOrder[state.admissionCursor];
-    state.admissionCursor = (state.admissionCursor + 1) % resourceCount;
-    if (
-      resource === undefined
-      || resource.allocation !== undefined
-      || resource.readmissionBlocked
-      || resource.desiredGeneration !== generation
-    ) continue;
-    const admission = virtualTextureGpuAdmission(
-      resource.options,
-      state.maxTextureSize,
-      state.budgetBytes - state.allocatedBytes - state.quarantinedBytes,
-      state.maxTextureUnits,
-    );
-    resource.admission = admission;
-    if (admission.kind === "dormant") continue;
-    if (admission.kind === "unsupported") {
-      resource.readmissionBlocked = true;
-      outcomes.push({ key: resource.key, ...admission });
-      continue;
-    }
-    try {
-      resource.allocation = allocate(state, resource, generation, admission);
-    } catch (error) {
-      resource.readmissionBlocked = true;
-      outcomes.push({ error, key: resource.key, kind: "failed" });
-      continue;
-    }
-    state.allocatedBytes += admission.allocatedBytes;
-    outcomes.push({ key: resource.key, kind: "ready" });
-    // Admission itself unblocks root-side demand/request draining, even when
-    // this logical resource has not decoded a page yet.
-    state.wakeRequested = true;
-  }
-  return outcomes;
-};
 
 const removeResourceOrder = (state: State, resource: MutableResource): void => {
   const removedIndex = resource.orderIndex;
@@ -660,14 +577,11 @@ const removeResourceOrder = (state: State, resource: MutableResource): void => {
     if (shifted !== undefined) shifted.orderIndex = index;
   }
   if (removedIndex < state.resourceCursor) state.resourceCursor -= 1;
-  if (removedIndex < state.admissionCursor) state.admissionCursor -= 1;
   if (state.resourceOrder.length === 0) {
-    state.admissionCursor = 0;
     state.resourceCursor = 0;
   }
   else {
     state.resourceCursor %= state.resourceOrder.length;
-    state.admissionCursor %= state.resourceOrder.length;
   }
 };
 
@@ -1318,14 +1232,6 @@ export const accumulateVirtualTextureGpuCachedPagesByMip = (
   }
 };
 
-/** Compatibility alias: resident pages are physical cached pages. */
-export const accumulateVirtualTextureGpuResidentPagesByMip = (
-  resource: VirtualTextureGpuResource,
-  target: number[],
-): void => {
-  accumulateVirtualTextureGpuCachedPagesByMip(resource, target);
-};
-
 export const virtualTextureGpuArenaSnapshot = (
   arena: VirtualTextureGpuArena,
 ): VirtualTextureGpuArenaSnapshot => {
@@ -1386,7 +1292,6 @@ export const dropVirtualTextureGpuContext = (arena: VirtualTextureGpuArena): voi
   state.quarantinedBytes = 0;
   state.uploadFrame = -1;
   state.uploadsThisFrame = 0;
-  state.admissionCursor = 0;
   state.resourceCursor = 0;
   state.wakeRequested = false;
 };
