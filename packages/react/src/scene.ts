@@ -52,6 +52,7 @@ export type {
   PerspectiveCamera,
   PerspectiveCameraViewResource,
   PerspectiveCameraOptions,
+  PickingId,
   PlaneGeometry,
   PlaneGeometryOptions,
   PointLightNode,

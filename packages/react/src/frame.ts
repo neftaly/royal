@@ -278,6 +278,11 @@ const useFrameSubscription = (
     : undefined, [active, frameLoop, priority]);
 };
 
+/**
+ * Runs on every active Canvas frame. Lower priorities run first; equal
+ * priorities run in subscription order. The callback receives one reused
+ * snapshot object, so copy scalar fields that must outlive the callback.
+ */
 export const useFrame = (callback: FrameCallback, priority = 0): void => {
   useFrameSubscription(callback, priority, true);
 };

@@ -6,8 +6,6 @@ export type XrSessionStatus =
   | "active"
   | "available"
   | "checking"
-  | "ended"
-  | "ending"
   | "error"
   | "starting"
   | "unavailable";
@@ -48,28 +46,23 @@ export type XrSessionStoreInitialState = Partial<XrSessionState>;
 
 export type XrSessionAvailabilityOptions = {
   readonly mode?: XrSessionMode | null;
-  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionBeginOptions = {
   readonly mode?: XrSessionMode | null;
-  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionActivationOptions = {
   readonly mode: XrSessionMode;
-  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionEndOptions = {
   readonly available?: boolean;
-  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionFailureOptions = {
   readonly available?: boolean;
   readonly mode?: XrSessionMode | null;
-  readonly status?: XrSessionStatus;
 };
 
 export type XrSessionFrameRecord = {
@@ -87,7 +80,7 @@ export type XrSessionStoreActions<Session extends object = object> = {
     session?: Session | null,
     options?: XrSessionBeginOptions,
   ) => void;
-  readonly endSession: (options?: XrSessionEndOptions | XrSessionStatus) => void;
+  readonly endSession: (options?: XrSessionEndOptions) => void;
   readonly failSession: (
     error: unknown,
     options?: XrSessionFailureOptions,
@@ -148,11 +141,6 @@ const copyXrViewports = (
 const availabilityStatus = (available: boolean): XrSessionStatus =>
   available ? "available" : "unavailable";
 
-const normalizeXrSessionStatus = (
-  status: XrSessionStatus | undefined,
-  fallback: XrSessionStatus,
-): XrSessionStatus => status ?? fallback;
-
 const createXrSessionState = (
   state: XrSessionStoreInitialState = {},
 ): XrSessionState => {
@@ -183,11 +171,10 @@ const createAvailabilityPatch = <Session extends object>(
   available: boolean,
   options: XrSessionAvailabilityOptions = {},
 ): XrSessionStorePatch<Session> => {
-  const status = normalizeXrSessionStatus(options.status, availabilityStatus(available));
   const patch: XrSessionStorePatch<Session> = {
     available,
     error: null,
-    status,
+    status: availabilityStatus(available),
   };
 
   if (options.mode !== undefined) patch.mode = options.mode;
@@ -249,7 +236,7 @@ export const createXrSessionStore = <Session extends object = object>(
         frameIndex: 0,
         mode: options.mode,
         session,
-        status: normalizeXrSessionStatus(options.status, "active"),
+        status: "active",
         viewCount: 0,
         viewports: [],
       });
@@ -260,7 +247,7 @@ export const createXrSessionStore = <Session extends object = object>(
         error: null,
         frameIndex: 0,
         session,
-        status: normalizeXrSessionStatus(options.status, "starting"),
+        status: "starting",
         viewCount: 0,
         viewports: [],
       };
@@ -268,16 +255,15 @@ export const createXrSessionStore = <Session extends object = object>(
       set(patch);
     },
     endSession: (options = {}) => {
-      const normalizedOptions = typeof options === "string" ? { status: options } : options;
       set((state) => {
-        const available = normalizedOptions.available ?? state.available;
+        const available = options.available ?? state.available;
         return {
           active: false,
           available,
           error: null,
           mode: null,
           session: null,
-          status: normalizeXrSessionStatus(normalizedOptions.status, availabilityStatus(available)),
+          status: availabilityStatus(available),
           viewCount: 0,
           viewports: [],
         };
@@ -289,7 +275,7 @@ export const createXrSessionStore = <Session extends object = object>(
         error: errorMessageFromUnknown(error),
         frameIndex: 0,
         session: null,
-        status: normalizeXrSessionStatus(options.status, "error"),
+        status: "error",
         viewCount: 0,
         viewports: [],
       };

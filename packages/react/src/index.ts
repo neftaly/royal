@@ -8,6 +8,10 @@ export {
 export type { CanvasContextOptions, CanvasProps } from './canvas';
 export type { CanvasInteractions } from './scene-interactions';
 export type {
+  PickInput,
+  PickingId,
+  PickResult,
+  PickTarget,
   SolidTextureOptions,
   SolidTextureRef,
   TextureAssetOptions,

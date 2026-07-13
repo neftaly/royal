@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanvasProps,
+  PickInput,
+  PickingId,
+  PickResult,
+  PickTarget,
   ResourceGovernorPolicy,
   TextureAssetRef,
   TextureColorSpace,
@@ -13,7 +17,11 @@ import type {
 import {
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
 } from '@royal/renderer-webgl';
-import { perspectiveCamera, scene } from '@royal/react/scene';
+import {
+  perspectiveCamera,
+  scene,
+  type PickingId as ScenePickingId,
+} from '@royal/react/scene';
 
 const renderScene = scene({
   camera: perspectiveCamera({
@@ -78,5 +86,21 @@ describe('Canvas public scene boundary', () => {
       '/map.vt.json',
       '/map.vt.json',
     ]);
+  });
+
+  it('re-exports the types used by React picking APIs', () => {
+    const pickingId: PickingId = 'helmet';
+    const scenePickingId: ScenePickingId = pickingId;
+    const input = { clientX: 10, clientY: 20 } satisfies PickInput;
+    const acceptTarget = (target: PickTarget): PickTarget => target;
+    const acceptResult = (result: PickResult): PickResult => ({
+      ...result,
+      target: acceptTarget(result.target),
+    });
+
+    expect(pickingId).toBe('helmet');
+    expect(scenePickingId).toBe('helmet');
+    expect(input).toEqual({ clientX: 10, clientY: 20 });
+    expect(typeof acceptResult).toBe('function');
   });
 });

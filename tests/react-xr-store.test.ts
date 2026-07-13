@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   createXrSessionStore,
   selectXrSessionSnapshot,
+  type XrSessionActivationOptions,
+  type XrSessionAvailabilityOptions,
+  type XrSessionBeginOptions,
+  type XrSessionEndOptions,
+  type XrSessionFailureOptions,
+  type XrSessionStatus,
   useXrSessionSnapshot,
 } from "@royal/react/xr";
 import { createXrSessionSelectionReaders } from "../packages/react/src/xr-store";
@@ -79,6 +85,35 @@ describe("React XR session store", () => {
       available: false,
       status: "unavailable",
     });
+  });
+
+  it("does not expose arbitrary status overrides on semantic actions", () => {
+    // @ts-expect-error Availability derives its status from the boolean input.
+    const invalidAvailability = { status: "active" } satisfies XrSessionAvailabilityOptions;
+    // @ts-expect-error Beginning a session always enters starting.
+    const invalidBegin = { status: "available" } satisfies XrSessionBeginOptions;
+    // @ts-expect-error Activating a session always enters active.
+    const invalidActivation = { mode: "immersive-vr", status: "starting" } satisfies XrSessionActivationOptions;
+    // @ts-expect-error Ending derives available or unavailable from availability.
+    const invalidEnd = { status: "active" } satisfies XrSessionEndOptions;
+    // @ts-expect-error Failure always enters error.
+    const invalidFailure = { status: "available" } satisfies XrSessionFailureOptions;
+    // @ts-expect-error No lifecycle action produces an ended status.
+    const invalidStatus = "ended" satisfies XrSessionStatus;
+    expect([
+      invalidAvailability,
+      invalidBegin,
+      invalidActivation,
+      invalidEnd,
+      invalidFailure,
+      invalidStatus,
+    ]).toHaveLength(6);
+
+    const store = createXrSessionStore<TestXrSession>();
+    if (false) {
+      // @ts-expect-error endSession no longer accepts a status shorthand.
+      store.getState().endSession("unavailable");
+    }
   });
 
   it("exports an explicit-store XR snapshot hook", () => {

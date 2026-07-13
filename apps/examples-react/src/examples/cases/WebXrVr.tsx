@@ -383,7 +383,7 @@ const XrSessionControl = (): ReactNode => {
     )
       .then(async ({ mode, session }) => {
         if (cancelled) return;
-        setAvailability(mode !== null, { mode, status: mode === null ? 'unavailable' : 'available' });
+        setAvailability(mode !== null, { mode });
         if (mode === null) {
           setOfferStatus('unsupported');
           return;
@@ -436,7 +436,7 @@ const XrSessionControl = (): ReactNode => {
       return;
     }
 
-    setAvailability(true, { mode, status: 'available' });
+    setAvailability(true, { mode });
     const session = await xr.requestSession(mode, immersiveSessionOptions);
     await startXrSession(session, mode);
   }, [
