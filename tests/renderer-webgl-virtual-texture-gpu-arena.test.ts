@@ -15,6 +15,7 @@ import {
   flushVirtualTextureGpuPageTables,
   processVirtualTextureGpuUploads,
   queueVirtualTextureGpuUpload,
+  releaseVirtualTextureGpuAllocation,
   releaseVirtualTextureGpuResource,
   setVirtualTextureGpuDesiredPageKeys,
   touchVirtualTextureGpuResidency,
@@ -1202,6 +1203,39 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuResource(arena, "a")).toBeUndefined();
     expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "discarded", upload: first });
     expect(virtualTextureGpuOutcome(arena, 1)).toEqual({ key: "a", kind: "discarded", upload: second });
+  });
+
+  it("releases only physical allocation while preserving resource identity", () => {
+    const { arena, gl } = setup();
+    const resource = admitTestVirtualTextureGpuResource(arena, "a", 1, options());
+    setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set(["0/0/0"]));
+    const pending = upload({ mip: 0, x: 0, y: 0 }, 1);
+    queueVirtualTextureGpuUpload(arena, resource, pending);
+
+    expect(releaseVirtualTextureGpuAllocation(arena, "a")).toEqual({
+      releaseError: undefined,
+      releaseErrorPresent: false,
+    });
+    expect(gl.deleted.sort((a, b) => a - b)).toEqual([1, 2]);
+    expect(virtualTextureGpuResource(arena, "a")).toBe(resource);
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      allocated: false,
+      pendingUploads: 0,
+    });
+    expect(virtualTextureGpuArenaSnapshot(arena)).toMatchObject({
+      allocatedBytes: 0,
+      allocatedResources: 0,
+      resources: 1,
+      schedulerSlots: 1,
+    });
+    expect(virtualTextureGpuOutcome(arena, 0)).toEqual({
+      key: "a",
+      kind: "discarded",
+      upload: pending,
+    });
+
+    expect(admitTestVirtualTextureGpuResource(arena, "a", 1, options())).toBe(resource);
+    expect(virtualTextureGpuResourceSnapshot(resource).allocated).toBe(true);
   });
 
   it("preserves the presence of a release error thrown as undefined and attempts both handles", () => {

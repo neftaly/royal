@@ -163,6 +163,7 @@ import {
   dropVirtualTextureGpuContext,
   processVirtualTextureGpuUploads,
   queueVirtualTextureGpuUpload,
+  releaseVirtualTextureGpuAllocation,
   releaseVirtualTextureGpuResource,
   setVirtualTextureGpuDesiredPageKeys,
   touchVirtualTextureGpuResidency,
@@ -737,6 +738,7 @@ type GltfImageRow = {
 // Fetch and decode are currently one job. Reserve one lane for environment
 // lighting so a slow ordinary image cannot consume both A10/Quest-class lanes.
 const GLTF_IMAGE_LANE_CONCURRENCY = 1;
+const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 type AnyGltfNode = GltfNode | GltfInstancesNode;
 
@@ -1325,8 +1327,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     geometry?: ResourceGovernorLease;
   }>();
   readonly #virtualTextureGovernorLeases = new Map<string, ResourceGovernorLease>();
-  readonly #virtualTextureAdmissionTickets = new WeakMap<VirtualTextureRuntimeState, number>();
   #nextVirtualTextureAdmissionTicket = 1;
+  #virtualTextureAllocationRetryFrame = -1;
   #virtualTextureRetryTicket = 1;
   #governedVirtualTextureRetryScheduled = false;
   #resourceArenaSideEffectDebt: ResourceArenaSideEffectDebt[] = [];
@@ -1493,6 +1495,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
   >();
   readonly #virtualTextureDemandPublicationStates: VirtualTextureRuntimeState[] = [];
+  readonly #virtualTextureAdmissionStates: VirtualTextureRuntimeState[] = [];
+  readonly #virtualTextureDemandedStates = new Set<VirtualTextureRuntimeState>();
   readonly #virtualTextureDemandPublicationCommits: Array<
     VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState> | undefined
   > = [];
@@ -1548,7 +1552,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#contextError = undefined;
       this.#contextRestores += 1;
       this.#ordinaryTextures.restore();
-      this.#restoreVirtualTextureResources();
       this.#renderDirty ||= this.#latestScene !== undefined;
       this.#scheduleRender();
       this.#notifyContextLifecycle();
@@ -2326,15 +2329,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #restoreVirtualTextureResources(): void {
-    this.#retryGovernedVirtualTextureAdmissions((state) => {
-      if (!state.demandPublished) this.#demandVirtualTexturePages(state);
-      else this.#applyVirtualTextureDemand(state, state.desiredPages);
-    });
-    this.#drainVirtualTexturePageRequests();
-    if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
-  }
-
   dispose(): void {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
@@ -3066,6 +3060,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#virtualTextureFrameDemand.resources.delete(state);
     this.#virtualTextureFrameDemand.preferenceCursors.delete(state);
     this.#virtualTextureDemandCursors.delete(state);
+    releaseFailure = captureFirstFailure(
+      releaseFailure,
+      () => this.#releaseVirtualTextureGpuOwnership(state, true),
+    );
+    if (releaseFailure !== undefined) throw releaseFailure.value;
+  }
+
+  #releaseVirtualTextureGpuOwnership(
+    state: VirtualTextureRuntimeState,
+    removeResource: boolean,
+  ): void {
+    let releaseFailure: CapturedFailure | undefined;
     let release: ReturnType<typeof releaseVirtualTextureGpuResource> = {
       releaseError: undefined,
       releaseErrorPresent: false,
@@ -3077,7 +3083,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#suppressPersistentGpuCapacityWake = true;
     try {
       releaseFailure = captureFirstFailure(releaseFailure, () => {
-        release = releaseVirtualTextureGpuResource(this.#virtualTextureGpu, state.key);
+        release = removeResource
+          ? releaseVirtualTextureGpuResource(this.#virtualTextureGpu, state.key)
+          : releaseVirtualTextureGpuAllocation(this.#virtualTextureGpu, state.key);
       });
       releaseFailure = captureFirstFailure(
         releaseFailure,
@@ -3100,60 +3108,35 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
-  #retryGovernedVirtualTextureAdmissions(
-    onReady?: (state: VirtualTextureRuntimeState) => void,
-  ): void {
-    const candidates: Array<{ readonly state: VirtualTextureRuntimeState; readonly ticket: number }> = [];
-    for (const candidate of this.#virtualTextures.values()) {
-      if (
-        candidate.status === "ready"
-        && candidate.manifest !== undefined
-        && !this.#virtualTextureGovernorLeases.has(candidate.key)
-      ) {
-        let ticket = this.#virtualTextureAdmissionTickets.get(candidate);
-        if (ticket === undefined) {
-          ticket = this.#nextVirtualTextureAdmissionTicket;
-          this.#nextVirtualTextureAdmissionTicket += 1;
-          this.#virtualTextureAdmissionTickets.set(candidate, ticket);
-        }
-        candidates.push({ state: candidate, ticket });
-      }
-    }
-    if (candidates.length === 0) {
-      return;
-    }
-    let start = candidates.findIndex(({ ticket }) => ticket >= this.#virtualTextureRetryTicket);
-    if (start < 0) start = 0;
-    for (let offset = 0; offset < candidates.length; offset += 1) {
-      const candidate = candidates[(start + offset) % candidates.length]!.state;
-      if (!this.#ensureVirtualTextureGpuResource(candidate, candidate.manifest!)) continue;
-      onReady?.(candidate);
-    }
-    // Anchor the next first chance to resource identity, not a shifting array
-    // index. New resources receive later tickets, while deletion of an earlier
-    // candidate cannot transfer a survivor's priority to its successor.
-    this.#virtualTextureRetryTicket = candidates[(start + 1) % candidates.length]!.ticket;
-  }
-
   #scheduleGovernedVirtualTextureAdmissionRetry(): void {
     if (
       this.#governedVirtualTextureRetryScheduled
       || this.#disposed
       || this.#contextLifecycle !== "active"
+      || !this.#hasGovernedVirtualTextureAdmissionDemand()
     ) return;
     this.#governedVirtualTextureRetryScheduled = true;
     queueMicrotask(() => {
       this.#governedVirtualTextureRetryScheduled = false;
-      if (this.#disposed || this.#contextLifecycle !== "active") return;
-      this.#retryGovernedVirtualTextureAdmissions((state) => {
-        if (!state.demandPublished || state.desiredPages.length === 0) {
-          this.#demandVirtualTexturePages(state);
-        }
-        else this.#applyVirtualTextureDemand(state, state.desiredPages);
-      });
-      this.#drainVirtualTexturePageRequests();
-      if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
+      if (
+        this.#disposed
+        || this.#contextLifecycle !== "active"
+        || !this.#hasGovernedVirtualTextureAdmissionDemand()
+      ) return;
+      this.invalidate();
     });
+  }
+
+  #hasGovernedVirtualTextureAdmissionDemand(): boolean {
+    for (const state of this.#virtualTextures.values()) {
+      if (
+        state.status === "ready"
+        && state.manifest !== undefined
+        && state.lastDemandFrame !== Number.NEGATIVE_INFINITY
+        && !this.#virtualTextureGovernorLeases.has(state.key)
+      ) return true;
+    }
+    return false;
   }
 
   #gltfMaterialTextureRefs(
@@ -5282,6 +5265,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     const state: VirtualTextureRuntimeState = {
       activeSource,
+      admissionTicket: this.#nextVirtualTextureAdmissionTicket,
       demandPublished: false,
       demandedPageKeys: new Set(),
       demandedPageKeysScratch: new Set(),
@@ -5291,6 +5275,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       desiredPages: [],
       desiredPagesScratch: [],
       key,
+      lastDemandFrame: Number.NEGATIVE_INFINITY,
       loadingPageCount: 0,
       pageLifecycles: new Map(),
       pageLoadAbortControllers: new Map(),
@@ -5318,6 +5303,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       status: "loading",
       texture,
     };
+    this.#nextVirtualTextureAdmissionTicket += 1;
     this.#virtualTextures.set(key, state);
     this.#startVirtualTextureSource(state);
 
@@ -5417,11 +5403,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       state.manifest = parsed.manifest;
       state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
       state.status = "ready";
-      if (this.#contextLifecycle === "active") {
-        if (!this.#ensureVirtualTextureGpuResource(state, parsed.manifest)) return;
-        if (state.desiredPages.length === 0) this.#demandVirtualTexturePages(state);
-        else this.#applyVirtualTextureDemand(state, state.desiredPages);
-      }
       this.invalidate();
   }
 
@@ -5439,10 +5420,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state.manifest = manifest;
     state.pageUrisByKey = new Map();
     state.status = "ready";
-    if (this.#contextLifecycle === "active") {
-      if (!this.#ensureVirtualTextureGpuResource(state, manifest)) return;
-      if (!this.#virtualTextureFrameDemand.active) this.#demandVirtualTexturePages(state);
-    }
     this.invalidate();
   }
 
@@ -5460,11 +5437,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #ensureVirtualTextureGpuResource(
+  #attemptVirtualTextureGpuAdmission(
     state: VirtualTextureRuntimeState,
     manifest: VirtualTextureManifestModel,
-  ): boolean {
-    if (this.#contextLifecycle !== "active") return false;
+  ): "pressure" | "ready" | "terminal" {
+    if (this.#contextLifecycle !== "active") return "pressure";
     const options = {
       ...(state.texture.sampler?.magFilter === undefined
         ? {}
@@ -5492,7 +5469,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           state,
           `resource allocation requires ${admission.requiredBytes} persistent GPU bytes, exceeding the virtual-texture limit ${persistentGpuMaximum}`,
         );
-        return false;
+        return "terminal";
       }
       if (
         admission.kind === "dormant"
@@ -5504,7 +5481,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
           state,
           `resource allocation requires ${admission.requiredBytes} persistent GPU bytes, exceeding the manifest physical byte limit ${manifest.physicalByteBudget}`,
         );
-        return false;
+        return "terminal";
+      }
+      if (admission.kind === "dormant") {
+        state.stats.gpuAdmissionFailures += 1;
+        return "pressure";
       }
       if (admission.kind === "supported") {
         const limits = this.#options.resourceGovernorPolicy?.limits
@@ -5515,7 +5496,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             state,
             `resource allocation requires ${admission.allocatedBytes} persistent GPU bytes, exceeding the virtual-texture limit ${persistentGpuMaximum}`,
           );
-          return false;
+          return "terminal";
         }
         const pageUploadBytes = manifest.pageSize * manifest.pageSize * 4;
         const largestUploadBytes = Math.max(
@@ -5528,7 +5509,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             state,
             `page or page-table upload requires up to ${largestUploadBytes} bytes, exceeding the configured per-frame upload limit ${limits.uploadBytes}`,
           );
-          return false;
+          return "terminal";
         }
         const reserved = reserveResourceGovernor(this.#resourceGovernor, "virtual-texture", {
           persistentGpuBytes: admission.allocatedBytes,
@@ -5541,7 +5522,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
               `virtual-texture-governor:${state.activeSource.manifestUri}:${reserved}`,
             );
           }
-          return false;
+          return "pressure";
         }
         governorReservation = reserved;
       }
@@ -5602,7 +5583,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           ? "atlas or page-table dimensions exceed WebGL2 texture limits"
           : result.reason;
       this.#markVirtualTextureUnsupported(state, reason);
-      return false;
+      return "terminal";
     }
     if (result.kind === "failed") {
       state.status = "error";
@@ -5614,10 +5595,69 @@ class WebGlRootImpl implements InternalWebGlRoot {
           `virtual-texture-gpu-admission:${state.activeSource.manifestUri}`,
         );
       }
+      return "terminal";
+    }
+    if (result.kind === "dormant") return "pressure";
+    if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
+    return "ready";
+  }
+
+  #ensureVirtualTextureGpuResource(
+    state: VirtualTextureRuntimeState,
+    manifest: VirtualTextureManifestModel,
+    demandedStates: ReadonlySet<VirtualTextureRuntimeState>,
+  ): boolean {
+    const firstAttempt = this.#attemptVirtualTextureGpuAdmission(state, manifest);
+    if (firstAttempt !== "pressure") return firstAttempt === "ready";
+    const reclamation = this.#oldestColdVirtualTextureAllocation(demandedStates);
+    if (reclamation.state === undefined) {
+      if (reclamation.graceBlocked) this.#scheduleVirtualTextureAllocationRetry();
       return false;
     }
-    if (consumeVirtualTextureGpuWake(this.#virtualTextureGpu)) this.invalidate();
-    return true;
+    this.#releaseVirtualTextureGpuOwnership(reclamation.state, false);
+    const secondAttempt = this.#attemptVirtualTextureGpuAdmission(state, manifest);
+    if (secondAttempt === "pressure") {
+      const remaining = this.#oldestColdVirtualTextureAllocation(demandedStates);
+      if (remaining.state !== undefined || remaining.graceBlocked) {
+        this.#scheduleVirtualTextureAllocationRetry();
+      }
+    }
+    return secondAttempt === "ready";
+  }
+
+  #oldestColdVirtualTextureAllocation(
+    demandedStates: ReadonlySet<VirtualTextureRuntimeState>,
+  ): { readonly graceBlocked: boolean; readonly state?: VirtualTextureRuntimeState } {
+    let graceBlocked = false;
+    let oldest: VirtualTextureRuntimeState | undefined;
+    for (const candidate of this.#virtualTextures.values()) {
+      if (demandedStates.has(candidate)) continue;
+      const resource = virtualTextureGpuResource(this.#virtualTextureGpu, candidate.key);
+      if (resource === undefined || !virtualTextureGpuResourceSnapshot(resource).allocated) continue;
+      const demandAge = this.#frame - candidate.lastDemandFrame;
+      if (
+        candidate.lastDemandFrame !== Number.NEGATIVE_INFINITY
+        && demandAge <= VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES
+      ) {
+        graceBlocked = true;
+        continue;
+      }
+      if (
+        oldest === undefined
+        || candidate.lastDemandFrame < oldest.lastDemandFrame
+        || (
+          candidate.lastDemandFrame === oldest.lastDemandFrame
+          && candidate.admissionTicket < oldest.admissionTicket
+        )
+      ) oldest = candidate;
+    }
+    return oldest === undefined ? { graceBlocked } : { graceBlocked, state: oldest };
+  }
+
+  #scheduleVirtualTextureAllocationRetry(): void {
+    if (this.#virtualTextureAllocationRetryFrame === this.#frame) return;
+    this.#virtualTextureAllocationRetryFrame = this.#frame;
+    this.invalidate();
   }
 
   #demandVirtualTexturePages(
@@ -5710,7 +5750,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (manifest === undefined) return 0;
     const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
     const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-    return gpu?.effectiveSlots ?? manifest.physicalSlots ?? 4;
+    return gpu?.allocated === true ? gpu.effectiveSlots : 0;
   }
 
   #prepareVirtualTextureDemand(
@@ -5822,23 +5862,49 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const commitsByState = this.#virtualTextureFrameCommits;
     commitsByState.clear();
     for (const entry of commits) commitsByState.set(entry.resource, entry);
+    const demandedStates = this.#virtualTextureDemandedStates;
+    demandedStates.clear();
+    for (const entry of commits) {
+      if (entry.resource.demandedPageKeysScratch.size > 0) demandedStates.add(entry.resource);
+    }
+    const admissionStates = this.#virtualTextureAdmissionStates;
+    admissionStates.length = 0;
+    for (const state of demandedStates) {
+      if (state.status === "ready" && state.manifest !== undefined) admissionStates.push(state);
+    }
+    admissionStates.sort((left, right) => left.admissionTicket - right.admissionTicket);
+    let admissionStart = admissionStates.findIndex(
+      (state) => state.admissionTicket >= this.#virtualTextureRetryTicket,
+    );
+    if (admissionStart < 0) admissionStart = 0;
+    let commitFailure: CapturedFailure | undefined;
+    for (let offset = 0; offset < admissionStates.length && commitFailure === undefined; offset += 1) {
+      const state = admissionStates[(admissionStart + offset) % admissionStates.length]!;
+      commitFailure = captureFirstFailure(commitFailure, () => {
+        this.#ensureVirtualTextureGpuResource(state, state.manifest!, demandedStates);
+      });
+    }
+    if (admissionStates.length > 0) {
+      this.#virtualTextureRetryTicket = admissionStates[(admissionStart + 1) % admissionStates.length]!.admissionTicket;
+    }
     const publicationStates = this.#virtualTextureDemandPublicationStates;
     const publicationCommits = this.#virtualTextureDemandPublicationCommits;
     publicationStates.length = 0;
     publicationCommits.length = 0;
-    for (const state of this.#virtualTextures.values()) {
-      const entry = commitsByState.get(state);
-      const submissions = entry?.submissions ?? [];
-      const pages = selectVirtualTextureFrameWorkingSet(
-        submissions,
-        this.#virtualTextureDemandCapacity(state),
-        entry?.startSubmission ?? 0,
-      );
-      if (!this.#prepareVirtualTextureDemand(state, pages)) continue;
-      publicationStates.push(state);
-      publicationCommits.push(entry);
+    if (commitFailure === undefined) {
+      for (const state of this.#virtualTextures.values()) {
+        const entry = commitsByState.get(state);
+        const submissions = entry?.submissions ?? [];
+        const pages = selectVirtualTextureFrameWorkingSet(
+          submissions,
+          this.#virtualTextureDemandCapacity(state),
+          entry?.startSubmission ?? 0,
+        );
+        if (!this.#prepareVirtualTextureDemand(state, pages)) continue;
+        publicationStates.push(state);
+        publicationCommits.push(entry);
+      }
     }
-    let commitFailure: CapturedFailure | undefined;
     for (const state of publicationStates) {
       commitFailure = captureFirstFailure(
         commitFailure,
@@ -5851,6 +5917,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => this.#touchPublishedVirtualTextureDemand(state),
       );
     }
+    if (commitFailure === undefined) {
+      for (const state of demandedStates) state.lastDemandFrame = this.#frame;
+    }
     for (let index = 0; index < publicationStates.length; index += 1) {
       const entry = publicationCommits[index];
       if (entry !== undefined && entry.submissions.length > 1) {
@@ -5861,6 +5930,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
     this.#scheduleVirtualTextureRequestDrain();
     commitsByState.clear();
+    demandedStates.clear();
+    admissionStates.length = 0;
     publicationStates.length = 0;
     publicationCommits.length = 0;
     if (commitFailure !== undefined) throw commitFailure.value;

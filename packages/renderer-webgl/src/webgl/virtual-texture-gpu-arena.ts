@@ -1254,15 +1254,10 @@ export const virtualTextureGpuArenaSnapshot = (
   };
 };
 
-export const releaseVirtualTextureGpuResource = (
-  arena: VirtualTextureGpuArena,
-  key: string,
+const releaseVirtualTextureAllocation = (
+  state: State,
+  resource: MutableResource,
 ): VirtualTextureGpuReleaseResult => {
-  const state = stateOf(arena);
-  const resource = state.resources.get(key);
-  if (resource === undefined) return { releaseError: undefined, releaseErrorPresent: false };
-  state.resources.delete(key);
-  removeResourceOrder(state, resource);
   for (let index = resource.pendingHead; index < resource.pendingUploads.length; index += 1) {
     const upload = resource.pendingUploads[index];
     if (upload !== undefined) publish(state, resource, "discarded", upload);
@@ -1278,6 +1273,30 @@ export const releaseVirtualTextureGpuResource = (
   state.allocatedBytes -= allocation.allocatedBytes;
   if (release.present) state.quarantinedBytes += allocation.allocatedBytes;
   return { releaseError: release.error, releaseErrorPresent: release.present };
+};
+
+/** Releases only the physical allocation, retaining resource identity and desired-page state. */
+export const releaseVirtualTextureGpuAllocation = (
+  arena: VirtualTextureGpuArena,
+  key: string,
+): VirtualTextureGpuReleaseResult => {
+  const state = stateOf(arena);
+  const resource = state.resources.get(key);
+  return resource === undefined
+    ? { releaseError: undefined, releaseErrorPresent: false }
+    : releaseVirtualTextureAllocation(state, resource);
+};
+
+export const releaseVirtualTextureGpuResource = (
+  arena: VirtualTextureGpuArena,
+  key: string,
+): VirtualTextureGpuReleaseResult => {
+  const state = stateOf(arena);
+  const resource = state.resources.get(key);
+  if (resource === undefined) return { releaseError: undefined, releaseErrorPresent: false };
+  state.resources.delete(key);
+  removeResourceOrder(state, resource);
+  return releaseVirtualTextureAllocation(state, resource);
 };
 
 /** Drops context-generation state without deleting GL handles or surrendering queued images. */

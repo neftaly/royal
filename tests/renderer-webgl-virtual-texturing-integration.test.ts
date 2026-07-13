@@ -688,6 +688,14 @@ const flushMicrotasks = async (): Promise<void> => {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
 };
 
+const flushVirtualTextureManifest = async (
+  root: ReturnType<typeof createRendererWebGlRoot>,
+): Promise<void> => {
+  await flushMicrotasks();
+  root.flushInvalidated();
+  await flushMicrotasks();
+};
+
 const textureAllocations = (calls: readonly GlCall[]): readonly GlCall[] =>
   calls.filter((call) => call.name === "texImage2D" && call.args.length >= 9);
 
@@ -847,7 +855,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(0);
     const denied = root.snapshot().resourceGovernor.denials;
 
@@ -875,7 +883,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(1);
 
     ControlledImage.instances[0]!.settleLoad();
@@ -939,7 +947,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const vtMaterial = unlitMaterial({ texture: virtualTexture("/vt/geometry-release.json") });
     root.render(renderGeometryPressure(vtMaterial, 12));
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, gpuAdmissionFailures: 1 });
 
     root.render(renderGeometryPressure(vtMaterial, 0));
@@ -979,7 +987,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
     root.render(renderOrdinaryTexturePressure(vtMaterial, ordinaryMaterial));
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, gpuAdmissionFailures: 1 });
 
     root.render(renderOrdinaryTexturePressure(vtMaterial, plainMaterial));
@@ -1000,7 +1008,18 @@ describe("WebGL renderer virtual texturing integration", () => {
       }),
     });
 
-    root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/sparse.json") })));
+    const sparseTexture = virtualTexture({ flipY: false, src: "/vt/sparse.json" });
+    const sparseMaterial: SurfaceMaterial = {
+      ...unlitMaterial({ texture: sparseTexture }),
+      textureCoordinates: {
+        baseColorTexture: {
+          row0: [1 / 1_024, 0, 0, 0],
+          row1: [0, 1 / 1_024, 0, 0],
+          set: 0,
+        },
+      },
+    };
+    root.render(renderScene(sparseMaterial));
     const textureCreatesBeforeManifest = calls.filter(({ name }) => name === "createTexture").length;
     fetchRequests[0]!.resolve(responseJson({
       contractVersion: 1,
@@ -1009,7 +1028,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       physicalSlots: 1,
       virtualSize: [4_096, 4_096],
     }));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(
       textureCreatesBeforeManifest + 2,
@@ -1073,7 +1092,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       physicalSlots: 1,
       virtualSize: [256, 256],
     }));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     expect(calls.filter(({ name }) => name === "createTexture")).toHaveLength(textureCreatesBeforeManifest);
     expect(ControlledImage.instances).toHaveLength(0);
@@ -1162,7 +1181,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       physicalSlots: 1,
       virtualSize: [12, 4],
     }));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     expect(ControlledImage.instances.map((image) => image.src)).toEqual(["/vt/pages/m2-0-0.png"]);
     root.dispose();
@@ -1181,7 +1200,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     const page = ControlledImage.instances[0]!;
     page.naturalWidth = width;
     page.width = width;
@@ -1213,7 +1232,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(visible);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     const failed = ControlledImage.instances[0]!;
     failed.naturalWidth = 5;
     failed.width = 5;
@@ -1270,7 +1289,7 @@ describe("WebGL renderer virtual texturing integration", () => {
       physicalSlots: 1,
       virtualSize: [pageCount * 4, 4],
     }));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     for (let index = 0; index < pageCount; index += 1) {
       if (index > 0) {
@@ -1305,7 +1324,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     const invalid = ControlledImage.instances[0]!;
     const invalidSrc = invalid.src;
     invalid.naturalWidth = 5;
@@ -1350,7 +1369,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     const invalidPage = ControlledImage.instances[0]!;
     invalidPage.naturalWidth = 5;
     invalidPage.width = 5;
@@ -1385,7 +1404,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
     expect(pageUploads(calls)).toHaveLength(0);
@@ -1433,7 +1452,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     const root = createWebGlRoot(canvas);
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     expect(ControlledImage.instances).toHaveLength(1);
     expect(root.snapshot().resourceGovernor.total.jobs).toBe(1);
@@ -1467,7 +1486,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
       root.render(visible);
       fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-      await flushMicrotasks();
+      await flushVirtualTextureManifest(root);
       expect(ControlledImage.instances).toHaveLength(1);
       const obsolete = ControlledImage.instances[0]!;
 
@@ -1520,7 +1539,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(visible);
     fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
     expect(ControlledImage.instances.length).toBeGreaterThan(0);
     expect(root.snapshot().resourceGovernor.total.jobs).toBeGreaterThan(0);
@@ -1559,7 +1578,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(1);
 
     // Merely waiting on decode must not create a self-invalidating frame loop.
@@ -1880,8 +1899,8 @@ describe("WebGL renderer virtual texturing integration", () => {
     await flushMicrotasks();
 
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
-      "/vt/pages/0-0.png",
       "/vt/pages/1-0.png",
+      "/vt/pages/0-0.png",
     ]);
     expect(root.snapshot().virtualTexturing.manifestsReady).toBe(1);
   });
@@ -2014,7 +2033,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(graph);
     expect(fetchRequests).toHaveLength(5);
     for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(4);
     for (const page of ControlledImage.instances) page.settleLoad();
     await flushMicrotasks();
@@ -2042,13 +2061,13 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(1);
     const wakesBeforeFailure = requestAnimationFrame.mock.calls.length;
 
     ControlledImage.instances[0]!.settleError();
     await flushMicrotasks();
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure + 1);
     expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, manifestFailures: 0 });
 
     root.render(graph);
@@ -2086,7 +2105,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     const failedSrc = ControlledImage.instances[0]!.src;
 
     for (const retryDelay of [50, 100, undefined]) {
@@ -2095,6 +2114,8 @@ describe("WebGL renderer virtual texturing integration", () => {
       await flushMicrotasks();
       if (retryDelay !== undefined) {
         await vi.advanceTimersByTimeAsync(retryDelay);
+        await flushMicrotasks();
+        root.flushInvalidated();
         await flushMicrotasks();
       }
     }
@@ -2139,9 +2160,10 @@ describe("WebGL renderer virtual texturing integration", () => {
     const materials = Array.from({ length: 5 }, (_value, index) =>
       unlitMaterial({ texture: virtualTexture(`/vt/${index}.json`) }));
 
-    root.render(renderVirtualTextureMaterials(materials));
+    const graph = renderVirtualTextureMaterials(materials);
+    root.render(graph);
     for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(4);
 
     ControlledImage.instances[0]!.settleError();
@@ -2166,9 +2188,10 @@ describe("WebGL renderer virtual texturing integration", () => {
     const first = unlitMaterial({ texture: virtualTexture("/vt/first.json") });
     const second = unlitMaterial({ texture: virtualTexture("/vt/second.json") });
 
-    root.render(renderVirtualTextureMaterials([first, second]));
+    const graph = renderVirtualTextureMaterials([first, second]);
+    root.render(graph);
     for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(1);
     root.render(renderScene(second));
     await flushMicrotasks();
@@ -2192,7 +2215,7 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     for (const request of fetchRequests) request.resolve(responseJson(vtSinglePageManifest()));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances[0]?.src).toContain("/a/pages/0-0.png");
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
@@ -2202,7 +2225,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(graph);
     await flushMicrotasks();
-    expect(ControlledImage.instances.at(-1)?.src).toContain("/a/pages/0-0.png");
+    expect(ControlledImage.instances.at(-1)?.src).toContain("/c/pages/0-0.png");
     ControlledImage.instances.at(-1)!.settleLoad();
     await flushMicrotasks();
     root.render(graph);
@@ -2339,14 +2362,9 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtManifest(2)));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
 
-    // Replace context-free bootstrap demand with two pages selected by the
-    // ordinary view, then fill both physical slots.
-    root.render(graph);
-    ControlledImage.instances[0]!.settleLoad();
-    await flushMicrotasks();
-    const residentPages = ControlledImage.instances.slice(1);
+    const residentPages = ControlledImage.instances;
     expect(residentPages.map((image) => image.src).sort()).toEqual([
       "/vt/pages/1-0.png",
       "/vt/pages/2-0.png",
@@ -2598,7 +2616,7 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.render(renderVirtualTextureMaterials(textures.map((texture) => unlitMaterial({ texture }))));
     expect(fetchRequests).toHaveLength(2);
     for (const request of fetchRequests) request.resolve(responseJson(manifest));
-    await flushMicrotasks();
+    await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "/vt/first/pages/0-0.png",
       "/vt/second/pages/0-0.png",
@@ -3062,12 +3080,8 @@ describe("WebGL renderer virtual texturing integration", () => {
 
     root.render(graph);
     fetchRequests[0]!.resolve(responseJson(vtManifest(1)));
-    await flushMicrotasks();
-    root.render(graph);
-    ControlledImage.instances[0]!.settleLoad();
-    await flushMicrotasks();
-    expect(ControlledImage.instances.length).toBeGreaterThan(1);
-    const demandedPage = ControlledImage.instances.at(-1)!;
+    await flushVirtualTextureManifest(root);
+    const demandedPage = ControlledImage.instances[0]!;
     expect(demandedPage.src).toContain("/vt/pages/1-0.png");
     demandedPage.settleLoad();
     await flushMicrotasks();
