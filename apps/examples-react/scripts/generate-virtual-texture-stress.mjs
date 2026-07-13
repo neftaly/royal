@@ -1,5 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 3072 512 512">
-<g id="canonical-map">
+import { mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+const virtualSize = 4096;
+const pageSize = 512;
+const mipCount = 4;
+const outputDirectory = fileURLToPath(
+  new URL('../public/fixtures/virtual-texture-stress/map-pages/', import.meta.url),
+);
+
+// Every page embeds this exact map in the same 4096-square coordinate system.
+// A page changes only its viewBox and diagnostic overlay, so parent and child
+// residency always depict the same landmarks instead of unrelated test cards.
+const canonicalMap = `<g id="canonical-map">
 <rect width="4096" height="4096" fill="#13232e"/>
 <path d="M0 0H2048V2048H0z" fill="#9b3f35"/><path d="M2048 0H4096V2048H2048z" fill="#c89435"/><path d="M0 2048H2048V4096H0z" fill="#397ba3"/><path d="M2048 2048H4096V4096H2048z" fill="#4a9568"/>
 <path d="M0 520C680 330 1110 760 1690 600S2780 120 4096 590V0H0z" fill="#182f3a" opacity=".48"/><path d="M0 3520C720 3310 1250 3790 1980 3510S3280 3100 4096 3450V4096H0z" fill="#102731" opacity=".42"/>
@@ -14,10 +26,31 @@
 <text x="1024" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHWEST</text><text x="3072" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHEAST</text><text x="1024" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHWEST</text><text x="3072" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHEAST</text>
 <text x="2048" y="1770" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="92" font-weight="900">CROWN HARBOR</text><text x="2048" y="2300" text-anchor="middle" fill="#fff1c9" font-family="ui-monospace,monospace" font-size="58">4096 m chart grid</text>
 <path d="M2048 70l-70 145h140z" fill="#fff1c9"/><text x="2048" y="330" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="76" font-weight="900">NORTH</text>
-</g>
-<g id="vt-debug-overlay" data-vt-page="0/0/6" opacity=".62">
-<rect x="8" y="3080" width="496" height="496" rx="12" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="10 8"/>
-<rect x="15" y="3087" width="128" height="32" rx="7" fill="#09141b"/>
-<text x="24" y="3110" fill="#fff" font-family="ui-monospace,monospace" font-size="18" font-weight="800">m0 · 0,6</text>
+</g>`;
+
+const pageSvg = (mip, x, y) => {
+  const scale = 2 ** mip;
+  const sourceSize = pageSize * scale;
+  const sourceX = x * sourceSize;
+  const sourceY = y * sourceSize;
+  const inset = 8 * scale;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${pageSize}" height="${pageSize}" viewBox="${sourceX} ${sourceY} ${sourceSize} ${sourceSize}">
+${canonicalMap}
+<g id="vt-debug-overlay" data-vt-page="${mip}/${x}/${y}" opacity=".62">
+<rect x="${sourceX + inset}" y="${sourceY + inset}" width="${sourceSize - inset * 2}" height="${sourceSize - inset * 2}" rx="${12 * scale}" fill="none" stroke="#fff" stroke-width="${3 * scale}" stroke-dasharray="${10 * scale} ${8 * scale}"/>
+<rect x="${sourceX + 15 * scale}" y="${sourceY + 15 * scale}" width="${128 * scale}" height="${32 * scale}" rx="${7 * scale}" fill="#09141b"/>
+<text x="${sourceX + 24 * scale}" y="${sourceY + 38 * scale}" fill="#fff" font-family="ui-monospace,monospace" font-size="${18 * scale}" font-weight="800">m${mip} · ${x},${y}</text>
 </g>
 </svg>
+`;
+};
+
+await mkdir(outputDirectory, { recursive: true });
+for (let mip = 0; mip < mipCount; mip += 1) {
+  const grid = virtualSize / pageSize / (2 ** mip);
+  for (let y = 0; y < grid; y += 1) {
+    for (let x = 0; x < grid; x += 1) {
+      await writeFile(`${outputDirectory}/m${mip}-${x}-${y}.svg`, pageSvg(mip, x, y));
+    }
+  }
+}

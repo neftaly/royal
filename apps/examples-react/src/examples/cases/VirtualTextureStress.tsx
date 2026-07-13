@@ -76,6 +76,7 @@ export const VirtualTextureStress = (): ReactNode => {
         <Canvas
           aria-label="Interactive giant virtual texture map"
           context={exampleCanvasContextOptions}
+          data-map-distance={orbitView.distance.toFixed(3)}
           data-map-target-x={orbitView.target[0].toFixed(3)}
           data-map-target-y={orbitView.target[1].toFixed(3)}
           scene={renderScene}
@@ -84,7 +85,7 @@ export const VirtualTextureStress = (): ReactNode => {
           <BenchmarkRendererSnapshot />
           <OrbitControls
             enablePan
-            maxDistance={18}
+            maxDistance={60}
             minDistance={0.1}
             orbit={orbit}
             zoomSpeed={0.0015}

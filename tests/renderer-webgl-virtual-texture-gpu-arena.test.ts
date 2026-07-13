@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { VirtualTextureManifestModel, VirtualTexturePageId } from
   "../packages/renderer-webgl/src/virtual-texturing";
 import {
+  accumulateVirtualTextureGpuResidentPagesByMip,
   admitVirtualTextureGpuResource,
   bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
@@ -1137,6 +1138,11 @@ describe("virtual texture GPU arena", () => {
     processVirtualTextureGpuUploads(arena, 1);
     expect(virtualTextureGpuDrawable(arena, "a")).toBe(true);
     expect(virtualTextureGpuExactResidency(arena, "a", page)).toMatchObject({ residentMip: 0, slot: 0 });
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 2, x: 0, y: 0 }, 2));
+    processVirtualTextureGpuUploads(arena, 2);
+    const residentPagesByMip: number[] = [];
+    accumulateVirtualTextureGpuResidentPagesByMip(resource, residentPagesByMip);
+    expect(residentPagesByMip).toEqual([1, 0, 1]);
     gl.maxTextureUnits = 1;
     expect(bindVirtualTextureGpuResource(arena, "a", 3, 4)).toMatchObject({
       atlasGridColumns: 2,

@@ -50,6 +50,7 @@ type RendererBenchmarkSnapshot = {
   readonly gltfInstancing: GltfInstancingCounters | null;
   readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
   readonly planning: Record<string, number> | null;
+  readonly resourceGovernor: RoyalRendererDiagnosticsSnapshot['resourceGovernor'];
   readonly resourceLifetime: Record<string, number> | null;
   readonly virtualTexturing: Record<string, number> | null;
 };
@@ -99,6 +100,16 @@ const copyNumberCounters = (value: unknown): Record<string, number> | null => {
     if (typeof counter === 'number' && Number.isFinite(counter)) counters[key] = counter;
   }
 
+  return Object.keys(counters).length === 0 ? null : counters;
+};
+
+const copyVirtualTexturingCounters = (value: unknown): Record<string, number> | null => {
+  const counters = copyNumberCounters(value) ?? {};
+  if (isRecord(value) && Array.isArray(value.residentPagesByMip)) {
+    for (const [mip, pages] of value.residentPagesByMip.entries()) {
+      if (typeof pages === 'number' && Number.isFinite(pages)) counters[`residentPagesMip${mip}`] = pages;
+    }
+  }
   return Object.keys(counters).length === 0 ? null : counters;
 };
 
@@ -201,8 +212,9 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
         gltfInstancing: copyGltfInstancingCounters(diagnostics.gltfInstancing),
         gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoadDiagnostics),
         planning: copyNumberCounters(diagnostics.planning),
+        resourceGovernor: diagnostics.resourceGovernor,
         resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),
-        virtualTexturing: copyNumberCounters(diagnostics.virtualTexturing),
+        virtualTexturing: copyVirtualTexturingCounters(diagnostics.virtualTexturing),
       };
     };
     const renderNow = (): void => {

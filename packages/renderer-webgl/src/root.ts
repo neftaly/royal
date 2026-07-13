@@ -180,6 +180,7 @@ import {
   type OrdinaryTextureGpuResource,
 } from "./webgl/ordinary-texture-gpu-arena";
 import {
+  accumulateVirtualTextureGpuResidentPagesByMip,
   admitVirtualTextureGpuResource,
   bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
@@ -9089,6 +9090,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let preparedResidencyResolutions = 0;
     let outstandingPageRequests = 0;
     let residentPages = 0;
+    const residentPagesByMip: number[] = [];
     let shaderBinds = 0;
     let unreadyDraws = 0;
     let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
@@ -9126,6 +9128,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       preparedResidencyResolutions += state.stats.preparedResidencyResolutions;
       outstandingPageRequests += outstandingPages;
       residentPages += gpu?.residentPages ?? 0;
+      if (resource !== undefined) accumulateVirtualTextureGpuResidentPagesByMip(resource, residentPagesByMip);
       shaderBinds += state.stats.shaderBinds;
       unreadyDraws += state.stats.unreadyDraws;
       unsupportedDraws += state.stats.unsupportedDraws;
@@ -9160,6 +9163,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       requestedPages: outstandingPageRequests,
       outstandingPageRequests,
       residentPages,
+      residentPagesByMip,
       shaderBinds,
       unreadyDraws,
       unsupportedDraws,

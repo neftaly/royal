@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { RoyalRendererDiagnosticsSnapshot } from '@royal/react';
 import type { Example } from '../examples';
 
 type BrowserBenchmarkCounters = {
@@ -38,6 +39,7 @@ type BrowserBenchmarkApi = {
 type RendererBenchmarkSnapshot = {
   readonly frame: number;
   readonly gltfInstancing: Record<string, number> | null;
+  readonly resourceGovernor: RoyalRendererDiagnosticsSnapshot['resourceGovernor'] | null;
   readonly virtualTexturing: Record<string, number> | null;
 };
 
@@ -333,6 +335,10 @@ const deltaRendererSnapshot = (
   return {
     frame: after.frame - before.frame,
     gltfInstancing: deltaNumberRecord(after.gltfInstancing, before.gltfInstancing),
+    // Governor snapshots mix cumulative counters with current/high-water gauges.
+    // Keep the complete before/after snapshots instead of publishing a
+    // misleading recursively-subtracted object as the frame delta.
+    resourceGovernor: null,
     virtualTexturing: deltaNumberRecord(after.virtualTexturing, before.virtualTexturing),
   };
 };

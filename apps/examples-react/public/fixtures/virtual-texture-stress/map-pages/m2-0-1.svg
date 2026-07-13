@@ -1,9 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-<rect width="512" height="512" fill="#ffd06a"/><path d="M0 128H512M0 256H512M0 384H512M128 0V512M256 0V512M384 0V512" stroke="#fff" stroke-opacity=".12" stroke-width="3"/>
-<rect x="10" y="10" width="492" height="492" rx="20" fill="none" stroke="#fff4cf" stroke-width="8"/>
-<text x="256" y="72" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="44" font-weight="900">SW • MAP</text>
-<text x="256" y="258" text-anchor="middle" fill="#fff" font-family="ui-monospace,monospace" font-size="54" font-weight="900">M2  0,1</text>
-
-<text x="28" y="300" fill="#fff9a8" font-family="system-ui" font-size="22" font-weight="900" transform="rotate(-90 28 300)">← LEFT EDGE</text>
-<circle cx="256" cy="360" r="50" fill="#15212b" stroke="#fff9a8" stroke-width="8"/><text x="256" y="440" text-anchor="middle" fill="#fff9a8" font-family="system-ui" font-size="25" font-weight="900">RED DELTA</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 2048 2048 2048">
+<g id="canonical-map">
+<rect width="4096" height="4096" fill="#13232e"/>
+<path d="M0 0H2048V2048H0z" fill="#9b3f35"/><path d="M2048 0H4096V2048H2048z" fill="#c89435"/><path d="M0 2048H2048V4096H0z" fill="#397ba3"/><path d="M2048 2048H4096V4096H2048z" fill="#4a9568"/>
+<path d="M0 520C680 330 1110 760 1690 600S2780 120 4096 590V0H0z" fill="#182f3a" opacity=".48"/><path d="M0 3520C720 3310 1250 3790 1980 3510S3280 3100 4096 3450V4096H0z" fill="#102731" opacity=".42"/>
+<path d="M-120 1470C640 1220 1220 1800 2020 1530S3300 930 4230 1330" fill="none" stroke="#d8c291" stroke-width="78"/><path d="M-120 1470C640 1220 1220 1800 2020 1530S3300 930 4230 1330" fill="none" stroke="#675b43" stroke-width="18"/>
+<path d="M2660 -120C2500 680 2870 1120 2580 1900S2050 3140 2460 4220" fill="none" stroke="#90dded" stroke-width="118" opacity=".9"/><path d="M2660 -120C2500 680 2870 1120 2580 1900S2050 3140 2460 4220" fill="none" stroke="#d7f7ff" stroke-width="18" opacity=".7"/>
+<path d="M0 2048H4096M2048 0V4096" stroke="#fff1c9" stroke-width="24" opacity=".75"/><path d="M512 0V4096M1024 0V4096M1536 0V4096M2560 0V4096M3072 0V4096M3584 0V4096M0 512H4096M0 1024H4096M0 1536H4096M0 2560H4096M0 3072H4096M0 3584H4096" stroke="#fff" stroke-width="5" opacity=".1"/>
+<circle cx="850" cy="720" r="180" fill="#ffe65b" stroke="#fff7bd" stroke-width="38"/><circle cx="850" cy="720" r="65" fill="#9b3f35"/>
+<path d="M3210 490l230 430h-460z" fill="#65f1ff" stroke="#d7fbff" stroke-width="38"/>
+<rect x="590" y="2860" width="520" height="390" rx="48" fill="#ff6b8b" stroke="#ffd5df" stroke-width="38"/><path d="M690 2860v-210h320v210" fill="none" stroke="#ffd5df" stroke-width="58"/>
+<path d="M3235 2720l90 240 255 12-200 160 68 248-213-140-213 140 68-248-200-160 255-12z" fill="#b9ff75" stroke="#ecffc9" stroke-width="34"/>
+<circle cx="2048" cy="2048" r="250" fill="#172832" stroke="#fff1c9" stroke-width="34"/><path d="M2048 1840l74 150 165 24-120 117 28 165-147-77-147 77 28-165-120-117 165-24z" fill="#fff1c9"/>
+<text x="1024" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHWEST</text><text x="3072" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHEAST</text><text x="1024" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHWEST</text><text x="3072" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHEAST</text>
+<text x="2048" y="1770" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="92" font-weight="900">CROWN HARBOR</text><text x="2048" y="2300" text-anchor="middle" fill="#fff1c9" font-family="ui-monospace,monospace" font-size="58">4096 m chart grid</text>
+<path d="M2048 70l-70 145h140z" fill="#fff1c9"/><text x="2048" y="330" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="76" font-weight="900">NORTH</text>
+</g>
+<g id="vt-debug-overlay" data-vt-page="2/0/1" opacity=".62">
+<rect x="32" y="2080" width="1984" height="1984" rx="48" fill="none" stroke="#fff" stroke-width="12" stroke-dasharray="40 32"/>
+<rect x="60" y="2108" width="512" height="128" rx="28" fill="#09141b"/>
+<text x="96" y="2200" fill="#fff" font-family="ui-monospace,monospace" font-size="72" font-weight="800">m2 · 0,1</text>
+</g>
 </svg>

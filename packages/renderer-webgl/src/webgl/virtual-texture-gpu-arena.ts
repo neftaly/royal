@@ -1200,6 +1200,17 @@ export const virtualTextureGpuResourceSnapshot = (
   };
 };
 
+/** Adds this resource's resident page counts to a diagnostics-owned mip histogram. */
+export const accumulateVirtualTextureGpuResidentPagesByMip = (
+  resource: VirtualTextureGpuResource,
+  target: number[],
+): void => {
+  for (const assignment of mutableResource(resource).visibleAssignments.values()) {
+    while (target.length <= assignment.page.mip) target.push(0);
+    target[assignment.page.mip] = target[assignment.page.mip]! + 1;
+  }
+};
+
 export const virtualTextureGpuArenaSnapshot = (
   arena: VirtualTextureGpuArena,
 ): VirtualTextureGpuArenaSnapshot => {

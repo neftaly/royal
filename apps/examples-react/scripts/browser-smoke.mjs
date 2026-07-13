@@ -598,6 +598,27 @@ const assertRoute = (expected, state) => {
       ) {
         failures.push(`virtual texture map pan left VT work pending (${interaction.pan?.pendingPages ?? 'unknown'} pages, ${interaction.pan?.outstandingPageRequests ?? 'unknown'} requests)`);
       }
+      if (interaction.zoom?.contextLifecycle !== 'active') {
+        failures.push(`virtual texture close zoom left the renderer context ${interaction.zoom?.contextLifecycle ?? 'unavailable'}`);
+      }
+      if (interaction.zoom?.contextLastError !== null) {
+        failures.push(`virtual texture close zoom reported a renderer context error: ${interaction.zoom?.contextLastError ?? 'unavailable'}`);
+      }
+      if (interaction.zoom?.settled !== true) {
+        failures.push('virtual texture close zoom did not settle');
+      }
+      if (!(interaction.zoom?.distance < 1.1)) {
+        failures.push('virtual texture close zoom did not reach the intended close inspection distance');
+      }
+      if (!(interaction.far?.distance > 50) || interaction.far?.settled !== true) {
+        failures.push('virtual texture far zoom did not reach and settle at the coarse overview distance');
+      }
+      if (interaction.far?.contextLifecycle !== 'active' || interaction.far?.contextLastError !== null) {
+        failures.push('virtual texture far zoom did not preserve an active error-free context');
+      }
+      if (!((interaction.far?.residentPagesMip3 ?? 0) >= 1)) {
+        failures.push('virtual texture far zoom did not retain the coarsest root page');
+      }
       const focusedRegions = [
         { label: 'NW', preset: 1, u: 0.25, v: 0.25 },
         { label: 'NE', preset: 2, u: 0.75, v: 0.25 },
@@ -774,6 +795,7 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
     return {
       contextLastError: renderer?.context?.lastError ?? null,
       contextLifecycle: renderer?.context?.lifecycle ?? null,
+      distance: Number(canvas.dataset.mapDistance),
       frame: renderer?.frame ?? null,
       outstandingPageRequests: vt?.outstandingPageRequests ?? null,
       pageCount: currentPages,
@@ -796,6 +818,49 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
   const previousOverviewPageUrls = pageUrls();
   buttons[0].click();
   presets.push(await waitForConvergence(overviewFrame, previousOverviewPageUrls));
+  const zoomFrame = rendererSnapshot()?.frame ?? null;
+  const previousZoomPageUrls = pageUrls();
+  for (let step = 0; step < 8; step += 1) {
+    canvas.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      deltaY: -200,
+    }));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  await globalThis.__royalExamplesRenderNow?.();
+  const zoom = await waitForConvergence(zoomFrame, previousZoomPageUrls);
+  for (let step = 0; step < 8; step += 1) {
+    canvas.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      deltaY: 200,
+    }));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
+  const farFrame = rendererSnapshot()?.frame ?? null;
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+    deltaY: 2000,
+  }));
+  await globalThis.__royalExamplesRenderNow?.();
+  const farSettled = await waitForConvergence(farFrame, pageUrls());
+  const far = {
+    ...farSettled,
+    residentPagesMip3: rendererSnapshot()?.virtualTexturing?.residentPagesMip3 ?? null,
+  };
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+    deltaY: -2000,
+  }));
+  await waitForConvergence(rendererSnapshot()?.frame ?? null, pageUrls());
   const panErrors = [];
   const recordPanError = (event) => panErrors.push(String(event.error?.stack ?? event.message ?? event.error));
   const recordPanRejection = (event) => panErrors.push(String(event.reason?.stack ?? event.reason));
@@ -834,6 +899,7 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
     await globalThis.__royalExamplesRenderNow?.();
     const settled = await waitForConvergence(frameBefore, previousPanPageUrls);
     return {
+      far,
       pageUrls: pageUrls(),
       pan: {
         ...settled,
@@ -844,6 +910,7 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
         startTargetY,
       },
       presets,
+      zoom,
     };
   } finally {
     if (pointerDown) dispatchPan('pointerup');

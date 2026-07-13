@@ -178,6 +178,8 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly requestedPages: number;
   readonly outstandingPageRequests: number;
   readonly residentPages: number;
+  /** Resident page counts across all virtual textures, indexed by logical mip. */
+  readonly residentPagesByMip: readonly number[];
   readonly shaderBinds: number;
   readonly unreadyDraws: number;
   readonly unsupportedDraws: number;
