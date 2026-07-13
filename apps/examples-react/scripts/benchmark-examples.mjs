@@ -13,6 +13,10 @@ import {
   stopProcess,
   waitForHttp,
 } from './browser-harness.mjs';
+import {
+  exampleContract,
+  rendererSnapshotExpression,
+} from './example-contract.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -125,35 +129,31 @@ const defaultInstancingRoute = () => ({
   },
 });
 
-const routes = [
-  { id: 'cube', path: '/cube' },
-  { id: 'wireframe', path: '/wireframe' },
-  { id: 'picking', path: '/picking' },
-  { id: 'texture-materials', path: '/texture-materials' },
-  { id: 'virtual-texture-stress', path: '/virtual-texture-stress' },
-  { id: 'standard-lighting', path: '/standard-lighting' },
-  { id: 'gltf-helmet', path: '/gltf-helmet' },
-  defaultInstancingRoute(),
-  instancingRoute({
-    animate: false,
-    grid: defaultInstancingGrid,
-    id: 'gltf-instancing-static',
-    seed: 0,
-    sweep: 'baseline',
-  }),
-  instancingRoute({
-    animate: true,
-    grid: defaultInstancingGrid,
-    id: 'gltf-instancing-animated',
-    seed: 0,
-    sweep: 'baseline',
-  }),
-  gltfLabRoute(runnableGltfLabCases.find((entry) => entry.name === 'Box')),
-  { id: 'gltf-ghostscript-tiger-svg', path: '/gltf-ghostscript-tiger-svg' },
-  { id: 'gltf-lod', path: '/gltf-lod' },
-  { id: 'gltf-variants', path: '/gltf-variants' },
-  { id: 'webxr-vr', path: '/webxr-vr' },
-];
+const routes = exampleContract.examples.flatMap(({ id, path }) => {
+  if (id === 'gltf-instancing') {
+    return [
+      defaultInstancingRoute(),
+      instancingRoute({
+        animate: false,
+        grid: defaultInstancingGrid,
+        id: 'gltf-instancing-static',
+        seed: 0,
+        sweep: 'baseline',
+      }),
+      instancingRoute({
+        animate: true,
+        grid: defaultInstancingGrid,
+        id: 'gltf-instancing-animated',
+        seed: 0,
+        sweep: 'baseline',
+      }),
+    ];
+  }
+  if (id === 'gltf-lab') {
+    return [gltfLabRoute(runnableGltfLabCases.find((entry) => entry.name === 'Box'))];
+  }
+  return [{ id, path }];
+});
 
 const optInRoutes = [
   { id: 'forward-plus-8', path: '/standard-lighting?lights=8' },
@@ -313,20 +313,10 @@ const glCounterTotals = (gl) => ({
     (gl.useProgram ?? 0),
 });
 
-const emptyGltfInstancingCounters = Object.freeze({
-  batchInstancesTotal: 0,
-  batchPlansBuilt: 0,
-  drawCalls: 0,
-  instancesDrawn: 0,
-  localModelUploadBytes: 0,
-  localModelUploadCalls: 0,
-  rootPoseUploadBytes: 0,
-  rootPoseUploadCalls: 0,
-  rootScaleUploadBytes: 0,
-  rootScaleUploadCalls: 0,
-});
-
-const gltfInstancingCounterKeys = Object.keys(emptyGltfInstancingCounters);
+const gltfInstancingCounterKeys = exampleContract.benchmark.gltfInstancingCounterFields;
+const emptyGltfInstancingCounters = Object.freeze(Object.fromEntries(
+  gltfInstancingCounterKeys.map((key) => [key, 0]),
+));
 
 const gltfInstancingCounters = (snapshot) => {
   const counters = snapshot?.gltfInstancing;
@@ -984,7 +974,7 @@ const waitForBenchmarkReady = (session) => evaluate(session, `
 const collectPageMetrics = async (session, frames, options = {}) => {
   const { sampleXr = true } = options;
   const setupGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
-  const setupRenderer = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
+  const setupRenderer = await evaluate(session, rendererSnapshotExpression);
   const warmupComplete = await evaluate(session, `
 (async () => {
   const rafOrTimeout = (deadline) => new Promise((resolve) => {
@@ -1009,7 +999,7 @@ const collectPageMetrics = async (session, frames, options = {}) => {
   const beforeGc = await session.call('Runtime.getHeapUsage');
   await session.call('HeapProfiler.collectGarbage');
   const afterGc = await session.call('Runtime.getHeapUsage');
-  const rendererBeforeFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
+  const rendererBeforeFrames = await evaluate(session, rendererSnapshotExpression);
   await evaluate(session, 'globalThis.__royalBench?.reset?.()');
   const frameStats = await evaluate(session, `
 (async () => {
@@ -1072,16 +1062,16 @@ const collectPageMetrics = async (session, frames, options = {}) => {
 })()
 `);
   const gl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
-  const rendererAfterFrames = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
+  const rendererAfterFrames = await evaluate(session, rendererSnapshotExpression);
   const cameraDrag = cameraDragEnabled
     ? await (async () => {
-        const dragRendererBefore = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
+        const dragRendererBefore = await evaluate(session, rendererSnapshotExpression);
         await evaluate(session, 'globalThis.__royalBench?.reset?.()');
         const frameStats = await evaluate(session, `
 (async () => globalThis.__royalBench?.cameraDragSample?.(${cameraDragFrameCount}, ${cameraDragStepPixels}) ?? null)()
 `);
         const dragGl = await evaluate(session, 'globalThis.__royalBench?.snapshot?.() ?? {}');
-        const dragRendererAfter = await evaluate(session, 'globalThis.__royalExamplesGltfInstancingSnapshot?.() ?? null');
+        const dragRendererAfter = await evaluate(session, rendererSnapshotExpression);
         return frameStats === null
           ? undefined
           : {

@@ -11,6 +11,7 @@ import {
   stopProcess,
   waitForHttp,
 } from './browser-harness.mjs';
+import { rendererSnapshotExpression } from './example-contract.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -407,10 +408,7 @@ const installBenchmarkHooks = async (session) => {
       lastSample: sampleCanvas(true),
     };
   };
-  const readRendererSnapshot = () =>
-    globalThis.__royalExamplesRendererBenchmarkSnapshot?.()
-      ?? globalThis.__royalExamplesGltfInstancingSnapshot?.()
-      ?? null;
+  const readRendererSnapshot = () => ${rendererSnapshotExpression};
   const rendererVirtualTexturingDone = () => {
     const virtualTexturing = readRendererSnapshot()?.virtualTexturing;
     if (virtualTexturing === undefined || virtualTexturing === null) return true;

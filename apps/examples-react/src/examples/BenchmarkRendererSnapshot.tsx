@@ -8,83 +8,22 @@ import {
   copyVirtualTexturingCounters,
   isRecord,
 } from './BenchmarkRendererSnapshotCounters';
+import {
+  exampleContract,
+  installRendererBenchmarkBridge,
+  type GltfInstancingCounters,
+  type GltfLoadDiagnosticsAsset,
+  type GltfLoadDiagnosticsSnapshot,
+  type RendererBenchmarkSnapshot,
+  type RendererContextSnapshot,
+} from '../example-contract';
 
-type RendererSnapshotBridge = typeof globalThis & {
-  __royalExamplesGltfInstancingSnapshot?: () => RendererBenchmarkSnapshot | null;
-  __royalExamplesRenderNow?: () => void;
-  __royalExamplesRendererBenchmarkSnapshot?: () => RendererBenchmarkSnapshot | null;
-};
-
-type GltfInstancingCounters = {
-  readonly batchInstancesTotal: number;
-  readonly batchPlansBuilt: number;
-  readonly drawCalls: number;
-  readonly instancesDrawn: number;
-  readonly localModelUploadBytes: number;
-  readonly localModelUploadCalls: number;
-  readonly rootPoseUploadBytes: number;
-  readonly rootPoseUploadCalls: number;
-  readonly rootScaleUploadBytes: number;
-  readonly rootScaleUploadCalls: number;
-};
-
-type GltfLoadDiagnosticsAsset = {
-  readonly error?: string;
-  readonly imageFailures: number;
-  readonly imageLoaded: number;
-  readonly imageRequests: number;
-  readonly key: string;
-  readonly lightCount: number;
-  readonly nodeCount: number;
-  readonly phaseMs: Record<string, number>;
-  readonly primitiveCount: number;
-  readonly status: string;
-  readonly variantCount: number;
-};
-
-type GltfLoadDiagnosticsSnapshot = {
-  readonly assets: readonly GltfLoadDiagnosticsAsset[];
-  readonly errorAssets: number;
-  readonly loadingAssets: number;
-  readonly sceneReadyAssets: number;
-};
-
-type RendererBenchmarkSnapshot = {
-  readonly context: RendererContextSnapshot | null;
-  readonly frame: number;
-  readonly gltfInstancing: GltfInstancingCounters | null;
-  readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
-  readonly planning: Record<string, number> | null;
-  readonly resourceGovernor: RoyalRendererDiagnosticsSnapshot['resourceGovernor'];
-  readonly resourceLifetime: Record<string, number> | null;
-  readonly virtualTexturing: Record<string, number> | null;
-};
-
-type RendererContextSnapshot = {
-  readonly generation: number;
-  readonly lastError?: string;
-  readonly lifecycle: 'active' | 'disposed' | 'lost' | 'restoring';
-  readonly losses: number;
-  readonly restores: number;
-};
-
-const gltfInstancingCounterKeys = [
-  'batchInstancesTotal',
-  'batchPlansBuilt',
-  'drawCalls',
-  'instancesDrawn',
-  'localModelUploadBytes',
-  'localModelUploadCalls',
-  'rootPoseUploadBytes',
-  'rootPoseUploadCalls',
-  'rootScaleUploadBytes',
-  'rootScaleUploadCalls',
-] as const satisfies readonly (keyof GltfInstancingCounters)[];
+const gltfInstancingCounterKeys = exampleContract.benchmark.gltfInstancingCounterFields;
 
 const copyGltfInstancingCounters = (value: unknown): GltfInstancingCounters | null => {
   if (!isRecord(value)) return null;
 
-  const counters = {} as Record<keyof GltfInstancingCounters, number>;
+  const counters: Record<string, number> = {};
   for (const key of gltfInstancingCounterKeys) {
     const counter = value[key];
     if (typeof counter !== 'number' || !Number.isFinite(counter)) return null;
@@ -177,7 +116,6 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
   const root = useCanvasRoot();
 
   useLayoutEffect(() => {
-    const bridge = globalThis as RendererSnapshotBridge;
     if (root === null) return undefined;
 
     const snapshot = (): RendererBenchmarkSnapshot | null => {
@@ -202,21 +140,7 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
       root.invalidate();
       root.flushInvalidated();
     };
-    bridge.__royalExamplesGltfInstancingSnapshot = snapshot;
-    bridge.__royalExamplesRenderNow = renderNow;
-    bridge.__royalExamplesRendererBenchmarkSnapshot = snapshot;
-
-    return () => {
-      if (bridge.__royalExamplesGltfInstancingSnapshot === snapshot) {
-        delete bridge.__royalExamplesGltfInstancingSnapshot;
-      }
-      if (bridge.__royalExamplesRenderNow === renderNow) {
-        delete bridge.__royalExamplesRenderNow;
-      }
-      if (bridge.__royalExamplesRendererBenchmarkSnapshot === snapshot) {
-        delete bridge.__royalExamplesRendererBenchmarkSnapshot;
-      }
-    };
+    return installRendererBenchmarkBridge(snapshot, renderNow);
   }, [root]);
 
   return null;

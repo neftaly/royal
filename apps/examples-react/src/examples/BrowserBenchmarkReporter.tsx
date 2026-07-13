@@ -1,7 +1,11 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { RoyalRendererDiagnosticsSnapshot } from '@royal/react';
 import type { Example } from '../examples';
+import {
+  exampleContract,
+  readRendererBenchmarkSnapshot,
+  type RendererBenchmarkSnapshot,
+} from '../example-contract';
 
 type BrowserBenchmarkCounters = {
   readonly bindBuffer: number;
@@ -36,18 +40,10 @@ type BrowserBenchmarkApi = {
   readonly snapshot: () => BrowserBenchmarkSnapshot;
 };
 
-type RendererBenchmarkSnapshot = {
-  readonly frame: number;
-  readonly gltfInstancing: Record<string, number> | null;
-  readonly resourceGovernor: RoyalRendererDiagnosticsSnapshot['resourceGovernor'] | null;
-  readonly virtualTexturing: Record<string, number> | null;
-};
-
 type BrowserBenchmarkGlobal = typeof globalThis & {
   __royalBrowserBenchmarkError?: string;
   __royalBrowserBenchmarkReport?: BrowserBenchmarkReport;
   __royalBrowserBench?: BrowserBenchmarkApi;
-  __royalExamplesRendererBenchmarkSnapshot?: () => RendererBenchmarkSnapshot | null;
 };
 
 type BrowserBenchmarkOptions = {
@@ -56,6 +52,11 @@ type BrowserBenchmarkOptions = {
   readonly timeoutMs: number;
   readonly warmupFrames: number;
 };
+
+type RendererBenchmarkDeltaSnapshot = Pick<
+  RendererBenchmarkSnapshot,
+  'frame' | 'gltfInstancing' | 'virtualTexturing'
+> & { readonly resourceGovernor: null };
 
 type BrowserBenchmarkReport = {
   readonly device: Record<string, unknown>;
@@ -80,7 +81,7 @@ type BrowserBenchmarkReport = {
   readonly renderer: {
     readonly after: RendererBenchmarkSnapshot | null;
     readonly beforeFrames: RendererBenchmarkSnapshot | null;
-    readonly delta: RendererBenchmarkSnapshot | null;
+    readonly delta: RendererBenchmarkDeltaSnapshot | null;
     readonly setup: RendererBenchmarkSnapshot | null;
   };
   readonly url: string;
@@ -89,26 +90,9 @@ type BrowserBenchmarkReport = {
   readonly wallMs: number;
 };
 
-const counterKeys = [
-  'bindBuffer',
-  'bindTexture',
-  'bindVertexArray',
-  'bufferDataBytes',
-  'bufferDataCalls',
-  'bufferSubDataBytes',
-  'bufferSubDataCalls',
-  'copyTexImage2D',
-  'copyTexSubImage2D',
-  'drawArrays',
-  'drawArraysInstanced',
-  'drawElements',
-  'drawElementsInstanced',
-  'texImage2D',
-  'texSubImage2D',
-  'uniformCalls',
-  'uniformMatrixCalls',
-  'useProgram',
-] as const satisfies readonly (keyof BrowserBenchmarkCounters)[];
+const counterKeys = exampleContract.benchmark.browserGlCounterFields as readonly (
+  keyof BrowserBenchmarkCounters
+)[];
 
 const uniformCallNames = [
   'uniform1f',
@@ -313,7 +297,7 @@ export const installBrowserBenchmarkHooks = (): void => {
 };
 
 const rendererSnapshot = (): RendererBenchmarkSnapshot | null =>
-  (globalThis as BrowserBenchmarkGlobal).__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  readRendererBenchmarkSnapshot();
 
 const deltaNumberRecord = (
   after: Record<string, number> | null,
@@ -330,7 +314,7 @@ const deltaNumberRecord = (
 const deltaRendererSnapshot = (
   after: RendererBenchmarkSnapshot | null,
   before: RendererBenchmarkSnapshot | null,
-): RendererBenchmarkSnapshot | null => {
+): RendererBenchmarkDeltaSnapshot | null => {
   if (after === null || before === null) return null;
   return {
     frame: after.frame - before.frame,

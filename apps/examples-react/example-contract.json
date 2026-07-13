@@ -1,0 +1,147 @@
+{
+  "schema": "royal-examples-contract",
+  "version": 1,
+  "examples": [
+    {
+      "id": "cube",
+      "maturity": "product",
+      "path": "/cube",
+      "sourceFile": "examples/cases/HelloCube.tsx",
+      "title": "Cube"
+    },
+    {
+      "id": "wireframe",
+      "maturity": "product",
+      "path": "/wireframe",
+      "sourceFile": "examples/cases/WireframeCube.tsx",
+      "title": "Wireframe"
+    },
+    {
+      "id": "picking",
+      "maturity": "product",
+      "path": "/picking",
+      "sourceFile": "examples/cases/Picking.tsx",
+      "title": "Picking"
+    },
+    {
+      "id": "texture-materials",
+      "maturity": "product",
+      "navigation": false,
+      "path": "/texture-materials",
+      "sourceFile": "examples/cases/TextureMaterials.tsx",
+      "title": "Texture Materials"
+    },
+    {
+      "id": "virtual-texture-stress",
+      "maturity": "lab-probe",
+      "path": "/virtual-texture-stress",
+      "sourceFile": "examples/cases/VirtualTextureStress.tsx",
+      "title": "Virtual Texture Stress"
+    },
+    {
+      "id": "standard-lighting",
+      "maturity": "product",
+      "navigation": true,
+      "path": "/standard-lighting",
+      "sourceFile": "examples/cases/StandardLighting.tsx",
+      "title": "Standard Lighting"
+    },
+    {
+      "id": "gltf-helmet",
+      "maturity": "product",
+      "path": "/gltf-helmet",
+      "sourceFile": "examples/cases/GltfHelmet.tsx",
+      "title": "glTF Material Showcase"
+    },
+    {
+      "id": "gltf-instancing",
+      "maturity": "product",
+      "path": "/gltf-instancing",
+      "sourceFile": "examples/cases/GltfInstancing.tsx",
+      "title": "glTF Auto Instancing"
+    },
+    {
+      "id": "gltf-lab",
+      "maturity": "lab-probe",
+      "path": "/gltf-lab",
+      "sourceFile": "examples/cases/GltfLab.tsx",
+      "title": "Khronos Compatibility Lab"
+    },
+    {
+      "id": "gltf-ghostscript-tiger-svg",
+      "maturity": "product",
+      "path": "/gltf-ghostscript-tiger-svg",
+      "sourceFile": "examples/cases/GltfGhostscriptTigerSvg.tsx",
+      "title": "glTF Ghostscript Tiger SVG"
+    },
+    {
+      "id": "gltf-lod",
+      "maturity": "product",
+      "path": "/gltf-lod",
+      "sourceFile": "examples/cases/GltfLod.tsx",
+      "title": "glTF MSFT_lod"
+    },
+    {
+      "id": "gltf-variants",
+      "maturity": "product",
+      "path": "/gltf-variants",
+      "sourceFile": "examples/cases/GltfVariants.tsx",
+      "title": "glTF Material Variants"
+    },
+    {
+      "id": "webxr-vr",
+      "maturity": "lab-probe",
+      "path": "/webxr-vr",
+      "sourceFile": "examples/cases/WebXrVr.tsx",
+      "title": "WebXR VR"
+    }
+  ],
+  "benchmark": {
+    "bridge": {
+      "rendererSnapshotGlobal": "__royalExamplesRendererBenchmarkSnapshot",
+      "renderNowGlobal": "__royalExamplesRenderNow"
+    },
+    "browserGlCounterFields": [
+      "bindBuffer",
+      "bindTexture",
+      "bindVertexArray",
+      "bufferDataBytes",
+      "bufferDataCalls",
+      "bufferSubDataBytes",
+      "bufferSubDataCalls",
+      "copyTexImage2D",
+      "copyTexSubImage2D",
+      "drawArrays",
+      "drawArraysInstanced",
+      "drawElements",
+      "drawElementsInstanced",
+      "texImage2D",
+      "texSubImage2D",
+      "uniformCalls",
+      "uniformMatrixCalls",
+      "useProgram"
+    ],
+    "gltfInstancingCounterFields": [
+      "batchInstancesTotal",
+      "batchPlansBuilt",
+      "drawCalls",
+      "instancesDrawn",
+      "localModelUploadBytes",
+      "localModelUploadCalls",
+      "rootPoseUploadBytes",
+      "rootPoseUploadCalls",
+      "rootScaleUploadBytes",
+      "rootScaleUploadCalls"
+    ],
+    "rendererSnapshotFields": [
+      "context",
+      "frame",
+      "gltfInstancing",
+      "gltfLoadDiagnostics",
+      "planning",
+      "resourceGovernor",
+      "resourceLifetime",
+      "virtualTexturing"
+    ]
+  }
+}

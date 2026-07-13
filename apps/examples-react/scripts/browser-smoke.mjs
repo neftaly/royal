@@ -11,6 +11,11 @@ import {
   stopProcess,
   waitForHttp,
 } from './browser-harness.mjs';
+import {
+  renderNowExpression,
+  rendererSnapshotExpression,
+  requireExampleRoute,
+} from './example-contract.mjs';
 
 const appRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const host = '127.0.0.1';
@@ -43,24 +48,19 @@ const gltfLabResourceSubstring = (entry) => `/${entry.path}`;
 
 const smokeExpectations = {
   cube: {
-    path: '/cube',
     minPaintedRatio: 0.01,
   },
   wireframe: {
-    path: '/wireframe',
     minPaintedRatio: 0.003,
   },
   picking: {
-    path: '/picking',
     minColorBuckets: 6,
     minPaintedRatio: 0.01,
   },
   'texture-materials': {
-    path: '/texture-materials',
     minPaintedRatio: 0.01,
   },
   'virtual-texture-stress': {
-    path: '/virtual-texture-stress',
     resourceSubstrings: [
       '/fixtures/virtual-texture-stress/map.vt.json',
       '/fixtures/virtual-texture-stress/map-pages/m3-0-0.svg',
@@ -69,51 +69,44 @@ const smokeExpectations = {
     minPaintedRatio: 0.02,
   },
   'standard-lighting': {
-    path: '/standard-lighting',
     minColorBuckets: 12,
     minPaintedRatio: 0.01,
   },
   'gltf-helmet': {
-    path: '/gltf-helmet',
     minColorBuckets: 32,
     minPaintedRatio: 0.01,
   },
   'gltf-instancing': {
-    path: '/gltf-instancing',
     minColorBuckets: 8,
     minPaintedRatio: 0.01,
   },
   'gltf-lab': {
-    path: '/gltf-lab?case=Box',
     resourceSubstrings: [gltfLabResourceSubstring(gltfLabCaseByName.get('Box'))],
     minColorBuckets: 1,
     minPaintedRatio: 0.0001,
   },
   'gltf-ghostscript-tiger-svg': {
-    path: '/gltf-ghostscript-tiger-svg',
     minColorBuckets: 18,
     minPaintedRatio: 0.006,
   },
   'gltf-lod': {
-    path: '/gltf-lod',
     minColorBuckets: 8,
     minPaintedRatio: 0.004,
   },
   'gltf-variants': {
-    path: '/gltf-variants',
     minColorBuckets: 8,
     minPaintedRatio: 0.006,
   },
   'webxr-vr': {
-    path: '/webxr-vr',
     minColorBuckets: 10,
     minPaintedRatio: 0.01,
   },
 };
 
 const smokeRoutes = Object.entries(smokeExpectations).map(([id, expectation]) => ({
-  id,
+  ...requireExampleRoute(id),
   ...expectation,
+  ...(id === 'gltf-lab' ? { path: '/gltf-lab?case=Box' } : {}),
 }));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -213,7 +206,7 @@ const smokeExpression = `
         hoveredId: canvas?.dataset.royalPickingHoveredId ?? '',
         text: canvas?.dataset.royalPickingReadout ?? '',
       } : undefined,
-      renderer: globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null,
+      renderer: ${rendererSnapshotExpression},
       resources: performance.getEntriesByType('resource')
         .slice(-20)
         .map((entry) => ({
@@ -786,7 +779,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   const pageUrls = () => performance.getEntriesByType('resource')
     .map((entry) => entry.name)
     .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
-  const rendererSnapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  const rendererSnapshot = () => ${rendererSnapshotExpression};
   const waitForConvergence = async (afterFrame = null, previousPageUrls = [], expectedActivePages = null) => {
     const deadline = performance.now() + 8000;
     let currentPages = pageUrls().length;
@@ -992,7 +985,7 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
 (async () => {
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing SVG virtual texture canvas' };
-  const rendererSnapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  const rendererSnapshot = () => ${rendererSnapshotExpression};
   const before = rendererSnapshot();
   for (let step = 0; step < 6; step += 1) {
     canvas.dispatchEvent(new WheelEvent('wheel', {
@@ -1003,7 +996,7 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
     }));
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
-  await globalThis.__royalExamplesRenderNow?.();
+  await ${renderNowExpression};
 
   const deadline = performance.now() + 10_000;
   let lastActivePages = -1;
@@ -1050,7 +1043,7 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
 const runContextLossSmoke = async (session) => evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
-  const snapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  const snapshot = () => ${rendererSnapshotExpression};
   if (canvas === null) return { status: 'error', reason: 'missing canvas' };
   if (snapshot()?.context?.lifecycle !== 'active') {
     return { status: 'error', reason: 'renderer context snapshot was not active before loss', snapshot: snapshot() };
