@@ -26,6 +26,47 @@ const fuzzPage = (random: SeededRandom): FuzzPage => ({
   x: random.int(0, 8),
   y: random.int(0, 8),
 });
+
+type ResidentAssignment = ReturnType<VirtualTextureAtlasPageTable["ensureResident"]>;
+type PageTableUpdate = ReturnType<VirtualTextureAtlasPageTable["takeDirtyPageTableUpdates"]>[number];
+
+const applyPageTableUpdates = (
+  target: Array<number | undefined>,
+  width: number,
+  updates: readonly PageTableUpdate[],
+): void => {
+  for (const update of updates) {
+    const coverage = 2 ** update.page.mip;
+    for (let y = update.page.y * coverage; y < (update.page.y + 1) * coverage; y += 1) {
+      for (let x = update.page.x * coverage; x < (update.page.x + 1) * coverage; x += 1) {
+        target[y * width + x] = update.slot;
+      }
+    }
+  }
+};
+
+const referencePageTableSlots = (
+  width: number,
+  assignments: readonly ResidentAssignment[],
+  activePageKeys: ReadonlySet<string>,
+): Array<number | undefined> => Array.from({ length: width * width }, (_unused, index) => {
+  const x = index % width;
+  const y = Math.floor(index / width);
+  let selected: ResidentAssignment | undefined;
+  for (const assignment of assignments) {
+    if (!activePageKeys.has(assignment.pageKey)) continue;
+    const coverage = 2 ** assignment.page.mip;
+    if (
+      x < assignment.page.x * coverage
+      || x >= (assignment.page.x + 1) * coverage
+      || y < assignment.page.y * coverage
+      || y >= (assignment.page.y + 1) * coverage
+    ) continue;
+    if (selected === undefined || assignment.page.mip < selected.page.mip) selected = assignment;
+  }
+  return selected?.slot;
+});
+
 describe("WebGL virtual texturing runtime model", () => {
   it("keeps generated raster and SVG manifest policy identical", () => {
     const dimensions = { height: 777.2, width: 1_023.1 };
@@ -342,6 +383,73 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(gpuSlots).toEqual(Array.from({ length: 16 }, (_unused, index) => (
       index === 15 ? records[2]?.slot : undefined
     )));
+  });
+
+  it("matches a seeded reference page table across active hierarchy changes", () => {
+    forEachFuzzCase({
+      cases: 16,
+      seed: 0x5c0a91e7,
+    }, ({ label, random }) => {
+      const width = 8;
+      const table = new VirtualTextureAtlasPageTable({ slotCount: 85 });
+      const assignments: ResidentAssignment[] = [];
+      for (let mip = 3; mip >= 0; mip -= 1) {
+        const gridWidth = width / (2 ** mip);
+        for (let y = 0; y < gridWidth; y += 1) {
+          for (let x = 0; x < gridWidth; x += 1) {
+            assignments.push(table.ensureResident({ mip, x, y }));
+          }
+        }
+      }
+
+      const gpuSlots = new Array<number | undefined>(width * width);
+      applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+      let activePageKeys = new Set(assignments.map(({ pageKey }) => pageKey));
+      expect(gpuSlots, `${label} initial mapping`).toEqual(
+        referencePageTableSlots(width, assignments, activePageKeys),
+      );
+
+      for (let step = 0; step < 64; step += 1) {
+        activePageKeys = new Set(
+          assignments
+            .filter(() => random.boolean(0.45))
+            .map(({ pageKey }) => pageKey),
+        );
+        table.reconcileActivePageKeys(activePageKeys);
+        expect(table.dirtyPageTableUpdateCount, `${label} step=${step} bounded updates`)
+          .toBeLessThanOrEqual(table.residentCount);
+        applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+        expect(gpuSlots, `${label} step=${step} mapping`).toEqual(
+          referencePageTableSlots(width, assignments, activePageKeys),
+        );
+      }
+    });
+  });
+
+  it("keeps 4096-slot alternating active sets bounded and reference-equivalent", () => {
+    const width = 64;
+    const table = new VirtualTextureAtlasPageTable({ slotCount: width * width });
+    const assignments: ResidentAssignment[] = [];
+    for (let y = 0; y < width; y += 1) {
+      for (let x = 0; x < width; x += 1) assignments.push(table.ensureResident({ mip: 0, x, y }));
+    }
+    const gpuSlots = new Array<number | undefined>(width * width);
+    applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+
+    const stable = assignments.filter((_assignment, index) => index % 3 === 0);
+    const left = assignments.filter((_assignment, index) => index % 3 === 1);
+    const right = assignments.filter((_assignment, index) => index % 3 === 2);
+    for (let step = 0; step < 16; step += 1) {
+      const activePageKeys = new Set(
+        [...stable, ...(step % 2 === 0 ? left : right)].map(({ pageKey }) => pageKey),
+      );
+      table.reconcileActivePageKeys(activePageKeys);
+      expect(table.dirtyPageTableUpdateCount).toBeLessThanOrEqual(table.residentCount);
+      applyPageTableUpdates(gpuSlots, width, table.takeDirtyPageTableUpdates());
+      expect(gpuSlots).toEqual(assignments.map((assignment) => (
+        activePageKeys.has(assignment.pageKey) ? assignment.slot : undefined
+      )));
+    }
   });
 
   it("preserves transaction updates ahead of superseding reconciliation snapshots", () => {

@@ -508,13 +508,15 @@ export class VirtualTextureAtlasPageTable {
       return true;
     }
 
-    const changedRecords: VirtualTextureResidentPage[] = [];
+    const changedPageKeys = new Set<string>();
+    let maximumChangedMip = -1;
     // First withdraw records that ceased to be active. Their replacement may
     // only be an active cached ancestor; an inactive prewarm must never leak
     // back into the current page table as an eviction fallback.
     for (const record of this.#recordsByPage.values()) {
       if (wasActive(record.pageKey) && !this.#activePageKeys.has(record.pageKey)) {
-        changedRecords.push(record);
+        changedPageKeys.add(record.pageKey);
+        maximumChangedMip = Math.max(maximumChangedMip, record.page.mip);
         const fallback = this.#residentFallbackRecord(
           parentVirtualTexturePage(record.page),
           record.pageKey,
@@ -522,7 +524,8 @@ export class VirtualTextureAtlasPageTable {
         this.#queueReconciliationUpdate(this.#fallbackUpdate(record, fallback));
       }
       else if (!wasActive(record.pageKey) && this.#activePageKeys.has(record.pageKey)) {
-        changedRecords.push(record);
+        changedPageKeys.add(record.pageKey);
+        maximumChangedMip = Math.max(maximumChangedMip, record.page.mip);
       }
     }
 
@@ -535,7 +538,7 @@ export class VirtualTextureAtlasPageTable {
         this.#activePageKeys?.has(record.pageKey) === true
         && (
           !wasActive(record.pageKey)
-          || changedRecords.some((changed) => this.#isDescendantPage(record.page, changed.page))
+          || this.#hasChangedAncestor(record.page, changedPageKeys, maximumChangedMip)
         )
       ))
       .sort((left, right) => right.page.mip - left.page.mip);
@@ -792,11 +795,17 @@ export class VirtualTextureAtlasPageTable {
     this.#recordsBySlot.set(record.slot, record);
   }
 
-  #isDescendantPage(page: VirtualTexturePageId, ancestor: VirtualTexturePageId): boolean {
-    if (page.mip >= ancestor.mip) return false;
-    let parent = page;
-    while (parent.mip < ancestor.mip) parent = parentVirtualTexturePage(parent);
-    return parent.x === ancestor.x && parent.y === ancestor.y;
+  #hasChangedAncestor(
+    page: VirtualTexturePageId,
+    changedPageKeys: ReadonlySet<string>,
+    maximumChangedMip: number,
+  ): boolean {
+    let ancestor = page;
+    while (ancestor.mip < maximumChangedMip) {
+      ancestor = parentVirtualTexturePage(ancestor);
+      if (changedPageKeys.has(virtualTexturePageKey(ancestor))) return true;
+    }
+    return false;
   }
 
   #residentFallbackRecord(
