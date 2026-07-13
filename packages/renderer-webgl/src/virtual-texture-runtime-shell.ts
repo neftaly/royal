@@ -1,0 +1,589 @@
+import {
+  advanceVirtualTextureFrameDemand,
+  beginVirtualTextureFrameDemand,
+  createVirtualTextureFrameDemandWorkspace,
+  finalizeVirtualTextureFrameDemand,
+  releaseVirtualTextureFrameDemandResource,
+  resetVirtualTextureFrameDemand,
+  submitVirtualTextureFrameDemand,
+  type VirtualTextureFrameDemandCommit,
+} from "./virtual-texture-frame-demand";
+import {
+  VirtualTextureRequestCoordinator,
+  type VirtualTextureRequestCoordinatorOptions,
+} from "./virtual-texture-request-coordinator";
+import type { VirtualTextureDemandSubmission } from "./virtual-texture-demand";
+import {
+  GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
+  generatedVirtualTextureSource,
+  generatedRasterVirtualTextureManifest,
+  generatedRasterVirtualTexturePageImage,
+  virtualTextureNow,
+  type GeneratedVirtualTextureSource,
+  type VirtualTextureGeneratedPageSource,
+  type VirtualTextureManifestSource,
+  type VirtualTextureRef,
+  type VirtualTextureRuntimeState,
+} from "./virtual-texture-runtime";
+import { loadedTextureSourceSize, type LoadedTextureSource } from "./texture-sources";
+import {
+  generatedVirtualTexturePageCount,
+  parseVirtualTextureManifest,
+  virtualTextureExplicitPageUrisByKey,
+  virtualTexturePageKey,
+  virtualTexturePageUri,
+  type VirtualTextureManifestModel,
+  type VirtualTexturePageId,
+} from "./virtual-texturing";
+import { resolveResourceUri, throwIfAborted } from "./gltf/io";
+import {
+  generatedSvgVirtualTextureManifest,
+  loadGeneratedSvgVirtualTexturePageImage,
+  svgVirtualTextureSourceForImage,
+} from "./svg-texture";
+import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
+import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
+
+export type VirtualTextureRuntimeShellOptions = Omit<
+  VirtualTextureRequestCoordinatorOptions,
+  "loadPage" | "resources"
+> & {
+  readonly disposed: () => boolean;
+  readonly generatedSvgVirtualTextureRasterDensity: number;
+  readonly generatedImageVirtualTextures: boolean;
+  readonly loadImageSource: (uri: string, signal: AbortSignal) => Promise<TexImageSource>;
+};
+
+export type AcquireVirtualTextureOptions = {
+  readonly generatedSource?: GeneratedVirtualTextureSource;
+  readonly cacheNamespace?: string;
+  readonly diagnosticsEnabled?: boolean;
+};
+
+export type VirtualTextureFramePublication = {
+  readonly admissions: readonly VirtualTextureRuntimeState[];
+  readonly commits: ReadonlyMap<
+    VirtualTextureRuntimeState,
+    VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
+  >;
+  readonly demanded: ReadonlySet<VirtualTextureRuntimeState>;
+};
+
+/**
+ * Owns the mutable browser-shell state shared by VT demand publication and
+ * asynchronous page requests. Pure demand planning and GPU allocation remain
+ * separate authorities.
+ */
+export class VirtualTextureRuntimeShell {
+  readonly #admissions: VirtualTextureRuntimeState[] = [];
+  readonly #commits = new Map<
+    VirtualTextureRuntimeState,
+    VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
+  >();
+  readonly #demanded = new Set<VirtualTextureRuntimeState>();
+  readonly #demandCursors = new WeakMap<VirtualTextureRuntimeState, number>();
+  readonly #frameDemand = createVirtualTextureFrameDemandWorkspace<VirtualTextureRuntimeState>();
+  readonly #autoRefs = new Map<string, VirtualTextureRef>();
+  readonly #autoSources = new Map<string, GeneratedVirtualTextureSource>();
+  readonly #options: VirtualTextureRuntimeShellOptions;
+  readonly #resources = new Map<string, VirtualTextureRuntimeState>();
+  readonly #gpuLeases = new Map<string, ResourceGovernorLease>();
+  readonly requests: VirtualTextureRequestCoordinator;
+  #nextAdmissionTicket = 1;
+  #retryTicket = 1;
+  #viewIndex = 0;
+  #governedAdmissionRetryScheduled = false;
+
+  constructor(options: VirtualTextureRuntimeShellOptions) {
+    this.#options = options;
+    this.requests = new VirtualTextureRequestCoordinator({
+      ...options,
+      loadPage: (state, page, signal) => this.#pageImage(state, page, signal),
+      resources: this.#resources,
+    });
+  }
+
+  get activeFrame(): boolean {
+    return this.#frameDemand.active;
+  }
+
+  get resources(): ReadonlyMap<string, VirtualTextureRuntimeState> {
+    return this.#resources;
+  }
+
+  get(key: string): VirtualTextureRuntimeState | undefined {
+    return this.#resources.get(key);
+  }
+
+  hasGpuLease(key: string): boolean {
+    return this.#gpuLeases.has(key);
+  }
+
+  commitGpuLease(key: string, reservation: ResourceGovernorReservation): void {
+    if (this.#gpuLeases.has(key)) throw new Error(`Virtual texture ${key} already owns a GPU lease`);
+    this.#gpuLeases.set(key, reservation.commit());
+  }
+
+  releaseGpuLease(key: string): boolean {
+    const lease = this.#gpuLeases.get(key);
+    if (lease === undefined) return false;
+    try {
+      lease.release();
+    } finally {
+      this.#gpuLeases.delete(key);
+    }
+    return true;
+  }
+
+  releaseAllGpuLeases(): void {
+    let firstFailure: unknown;
+    for (const [key, lease] of this.#gpuLeases) {
+      try {
+        lease.release();
+      } catch (error) {
+        firstFailure ??= error;
+      } finally {
+        this.#gpuLeases.delete(key);
+      }
+    }
+    if (firstFailure !== undefined) throw firstFailure;
+  }
+
+  scheduleGovernedAdmissionRetry(): void {
+    if (
+      this.#governedAdmissionRetryScheduled
+      || !this.#options.active()
+      || !this.#hasGovernedAdmissionDemand()
+    ) return;
+    this.#governedAdmissionRetryScheduled = true;
+    queueMicrotask(() => {
+      this.#governedAdmissionRetryScheduled = false;
+      if (this.#options.active() && this.#hasGovernedAdmissionDemand()) this.#options.invalidate();
+    });
+  }
+
+  register(state: VirtualTextureRuntimeState): void {
+    if (this.#resources.has(state.key)) {
+      throw new Error(`Virtual texture runtime ${state.key} is already registered`);
+    }
+    this.#resources.set(state.key, state);
+  }
+
+  nextAdmissionTicket(): number {
+    const ticket = this.#nextAdmissionTicket;
+    this.#nextAdmissionTicket += 1;
+    return ticket;
+  }
+
+  acquire(
+    texture: VirtualTextureRef,
+    options: AcquireVirtualTextureOptions = {},
+  ): VirtualTextureRuntimeState {
+    const diagnosticsEnabled = options.diagnosticsEnabled ?? true;
+    const textureKey = textureCacheKey(texture);
+    const key = options.cacheNamespace === undefined
+      ? textureKey
+      : `${options.cacheNamespace}:${textureKey}`;
+    const cached = this.#resources.get(key);
+    if (cached !== undefined) {
+      if (diagnosticsEnabled) cached.diagnosticsEnabled = true;
+      return cached;
+    }
+    const activeSource = options.generatedSource ?? {
+      kind: "sidecar" as const,
+      manifestUri: texture.manifestUri,
+    };
+    const state: VirtualTextureRuntimeState = {
+      activeSource,
+      admissionTicket: this.nextAdmissionTicket(),
+      demandPublished: false,
+      demandedPageKeys: new Set(),
+      demandedPageKeysScratch: new Set(),
+      diagnosticsEnabled,
+      desiredPageKeys: new Set(),
+      desiredPageKeysScratch: new Set(),
+      desiredPages: [],
+      desiredPagesScratch: [],
+      key,
+      lastDemandFrame: Number.NEGATIVE_INFINITY,
+      sourceGeneration: 1,
+      stats: {
+        demandAdmissions: 0,
+        demandRetentionOverflows: 0,
+        demandRetentions: 0,
+        generatedManifestUses: 0,
+        generatedPageFailures: 0,
+        generatedPageRasterizeMaxMs: 0,
+        generatedPageRasterizeMs: 0,
+        generatedPageRequests: 0,
+        generatedPagesTarget: 0,
+        gpuAdmissionFailures: 0,
+        manifestFailures: 0,
+        manifestRequests: activeSource.kind === "sidecar" ? 1 : 0,
+        preparedResidencyResolutions: 0,
+        pageLoadFailures: 0,
+        shaderBinds: 0,
+        unreadyDraws: 0,
+        unsupportedDraws: 0,
+      },
+      status: "loading",
+      texture,
+    };
+    this.register(state);
+    this.#startSource(state);
+    return state;
+  }
+
+  autoSource(texture: TextureAssetUploadRef): GeneratedVirtualTextureSource | undefined {
+    return this.#autoSources.get(textureCacheKey(texture));
+  }
+
+  acquireAuto(texture: TextureAssetUploadRef): VirtualTextureRuntimeState | undefined {
+    const textureKey = textureCacheKey(texture);
+    const source = this.#autoSources.get(textureKey);
+    if (source === undefined) return undefined;
+    const refKey = `auto-base-color:${textureKey}`;
+    let ref = this.#autoRefs.get(refKey);
+    if (ref === undefined) {
+      ref = {
+        kind: "virtual-asset",
+        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+        ...(texture.contentKey === undefined ? {} : { contentKey: texture.contentKey }),
+        flipY: texture.flipY ?? true,
+        manifestUri: source.manifestUri,
+        ...(texture.sampler === undefined ? {} : { sampler: texture.sampler }),
+        ...(texture.version === undefined ? {} : { version: texture.version }),
+      };
+      this.#autoRefs.set(refKey, ref);
+    }
+    return this.acquire(ref, {
+      cacheNamespace: `auto-base-color:${textureKey}`,
+      diagnosticsEnabled: false,
+      generatedSource: source,
+    });
+  }
+
+  registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void {
+    if (!this.#options.generatedImageVirtualTextures) return;
+    const textureKey = textureCacheKey(texture);
+    const svgSource = svgVirtualTextureSourceForImage(source);
+    let pageSource: VirtualTextureGeneratedPageSource;
+    if (svgSource !== undefined) {
+      pageSource = { kind: "svg", source: svgSource };
+    } else {
+      const [width, height] = loadedTextureSourceSize(source);
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+      if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
+      pageSource = {
+        kind: "raster",
+        source: {
+          ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+          height: Math.ceil(height),
+          label: texture.uri,
+          source,
+          width: Math.ceil(width),
+        },
+      };
+    }
+    this.#autoSources.set(textureKey, generatedVirtualTextureSource(textureKey, pageSource));
+  }
+
+  releaseAutoMetadata(textureKey: string): void {
+    this.#autoRefs.delete(`auto-base-color:${textureKey}`);
+    this.#autoSources.delete(textureKey);
+  }
+
+  clearAutoMetadata(): void {
+    this.#autoRefs.clear();
+    this.#autoSources.clear();
+  }
+
+  /** Forgets all CPU/request demand identity after the caller ends source ownership. */
+  forget(state: VirtualTextureRuntimeState): void {
+    state.sourceGeneration += 1;
+    state.manifestAbortController?.abort();
+    delete state.manifestAbortController;
+    if (this.#resources.get(state.key) === state) this.#resources.delete(state.key);
+    this.requests.release(state);
+    state.desiredPageKeys.clear();
+    state.desiredPageKeysScratch.clear();
+    state.demandedPageKeys.clear();
+    state.demandedPageKeysScratch.clear();
+    state.desiredPages.length = 0;
+    state.desiredPagesScratch.length = 0;
+    releaseVirtualTextureFrameDemandResource(this.#frameDemand, state);
+    this.#demandCursors.delete(state);
+  }
+
+  beginFrame(): void {
+    beginVirtualTextureFrameDemand(this.#frameDemand);
+    for (const state of this.#resources.values()) state.demandedPageKeysScratch.clear();
+  }
+
+  beginView(viewIndex: number): void {
+    this.#viewIndex = viewIndex;
+  }
+
+  submit(
+    state: VirtualTextureRuntimeState,
+    capacity: number,
+    submission: VirtualTextureDemandSubmission,
+    nonconvergentCandidates: readonly VirtualTexturePageId[],
+  ): void {
+    submitVirtualTextureFrameDemand(
+      this.#frameDemand,
+      state,
+      state.admissionTicket,
+      this.#viewIndex,
+      capacity,
+      submission,
+      nonconvergentCandidates,
+    );
+  }
+
+  finishFrame(commit: boolean): VirtualTextureFramePublication | undefined {
+    const commits = finalizeVirtualTextureFrameDemand(
+      this.#frameDemand,
+      commit,
+      (state) => this.#demandCursors.get(state) ?? 0,
+    );
+    if (!commit) return undefined;
+
+    this.#commits.clear();
+    this.#demanded.clear();
+    this.#admissions.length = 0;
+    for (const entry of commits) {
+      this.#commits.set(entry.resource, entry);
+      const demandedPageKeys = entry.resource.demandedPageKeysScratch;
+      for (const page of entry.nonconvergentCandidates) {
+        demandedPageKeys.add(virtualTexturePageKey(page));
+      }
+      for (const submission of entry.submissions) {
+        for (const page of submission.candidates) demandedPageKeys.add(virtualTexturePageKey(page));
+        for (const page of submission.preferredCandidates ?? []) {
+          demandedPageKeys.add(virtualTexturePageKey(page));
+        }
+      }
+      if (demandedPageKeys.size > 0) this.#demanded.add(entry.resource);
+    }
+    for (const state of this.#demanded) {
+      if (state.status === "ready" && state.manifest !== undefined) this.#admissions.push(state);
+    }
+    this.#admissions.sort((left, right) => left.admissionTicket - right.admissionTicket);
+    let admissionStart = this.#admissions.findIndex(
+      (state) => state.admissionTicket >= this.#retryTicket,
+    );
+    if (admissionStart < 0) admissionStart = 0;
+    if (admissionStart > 0) {
+      this.#admissions.push(...this.#admissions.splice(0, admissionStart));
+    }
+    if (this.#admissions.length > 0) {
+      this.#retryTicket = this.#admissions[1 % this.#admissions.length]!.admissionTicket;
+    }
+    return {
+      admissions: this.#admissions,
+      commits: this.#commits,
+      demanded: this.#demanded,
+    };
+  }
+
+  commitPublication(
+    published: readonly VirtualTextureRuntimeState[],
+    frame: number,
+  ): void {
+    for (const state of this.#demanded) state.lastDemandFrame = frame;
+    for (const state of published) {
+      const entry = this.#commits.get(state);
+      if (entry === undefined) continue;
+      if (entry.submissions.length > 1) {
+        this.#demandCursors.set(state, entry.nextStartSubmission);
+      }
+      advanceVirtualTextureFrameDemand(this.#frameDemand, entry);
+    }
+  }
+
+  clearFinishedFrame(): void {
+    this.#commits.clear();
+    this.#demanded.clear();
+    this.#admissions.length = 0;
+  }
+
+  loseContext(): void {
+    this.requests.loseContext();
+    resetVirtualTextureFrameDemand(this.#frameDemand);
+  }
+
+  markUnsupported(state: VirtualTextureRuntimeState, reason: string): void {
+    state.status = "unsupported";
+    const message = `Virtual texture ${state.activeSource.manifestUri} unsupported: ${reason}. Rendering with material color only.`;
+    if (state.diagnosticsEnabled) {
+      this.#options.diagnostic(message, `virtual-texture-unsupported:${state.activeSource.manifestUri}`);
+    }
+    this.#options.invalidate();
+  }
+
+  diagnose(state: VirtualTextureRuntimeState, message: string, key: string): void {
+    if (state.diagnosticsEnabled) this.#options.diagnostic(message, key);
+  }
+
+  #startSource(state: VirtualTextureRuntimeState): void {
+    if (state.activeSource.kind === "generated") {
+      this.#useGeneratedManifest(state, state.activeSource);
+      return;
+    }
+    state.manifestAbortController = new AbortController();
+    void this.#loadManifest(state, state.manifestAbortController.signal);
+  }
+
+  #current(state: VirtualTextureRuntimeState, sourceGeneration: number): boolean {
+    return !this.#options.disposed()
+      && this.#resources.get(state.key) === state
+      && state.sourceGeneration === sourceGeneration;
+  }
+
+  async #loadManifest(state: VirtualTextureRuntimeState, signal: AbortSignal): Promise<void> {
+    const source = state.activeSource;
+    if (source.kind !== "sidecar") return;
+    const sourceGeneration = state.sourceGeneration;
+    let response: Response;
+    try {
+      response = await fetch(source.manifestUri, { signal });
+      if (!this.#current(state, sourceGeneration)) return;
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    } catch (error) {
+      if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
+      if (!this.#current(state, sourceGeneration)) return;
+      this.#fail(state, `manifest transport failed: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json() as unknown;
+      if (!this.#current(state, sourceGeneration)) return;
+      if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
+    } catch (error) {
+      if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
+      if (!this.#current(state, sourceGeneration)) return;
+      this.#fail(state, `manifest JSON decode failed: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    const parsed = parseVirtualTextureManifest(payload);
+    for (const diagnostic of parsed.diagnostics) {
+      if (!state.diagnosticsEnabled) continue;
+      this.#options.diagnostic(
+        `Virtual texture ${source.manifestUri}: ${diagnostic.message}`,
+        `virtual-texture-manifest:${source.manifestUri}:${diagnostic.severity}:${diagnostic.message}`,
+      );
+    }
+    if (parsed.manifest === undefined) {
+      this.#fail(state, "manifest parse failed");
+      return;
+    }
+    const unsupported = parsed.diagnostics.find((diagnostic) => diagnostic.severity === "unsupported");
+    if (unsupported !== undefined) {
+      this.markUnsupported(state, unsupported.message);
+      return;
+    }
+    state.manifest = parsed.manifest;
+    state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
+    state.status = "ready";
+    this.#options.invalidate();
+  }
+
+  #useGeneratedManifest(
+    state: VirtualTextureRuntimeState,
+    source: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>,
+  ): void {
+    const manifest = this.#generatedManifest(source.pageSource);
+    state.stats.generatedManifestUses += 1;
+    state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
+      manifest.width,
+      manifest.height,
+      manifest.pageSize,
+    );
+    state.manifest = manifest;
+    state.pageUrisByKey = new Map();
+    state.status = "ready";
+    this.#options.invalidate();
+  }
+
+  #generatedManifest(source: VirtualTextureGeneratedPageSource): VirtualTextureManifestModel {
+    return source.kind === "raster"
+      ? generatedRasterVirtualTextureManifest(source.source)
+      : generatedSvgVirtualTextureManifest(
+          source.source,
+          this.#options.generatedSvgVirtualTextureRasterDensity,
+        );
+  }
+
+  #pageImage(
+    state: VirtualTextureRuntimeState,
+    page: VirtualTexturePageId,
+    signal: AbortSignal,
+  ): Promise<TexImageSource> | undefined {
+    const manifest = state.manifest;
+    if (manifest === undefined) return undefined;
+    if (state.activeSource.kind === "generated") {
+      return this.#generatedPageImage(state, state.activeSource.pageSource, manifest, page, signal);
+    }
+    const uri = virtualTexturePageUri(manifest, page, state.pageUrisByKey);
+    return uri === undefined
+      ? undefined
+      : this.#options.loadImageSource(resolveResourceUri(state.activeSource.manifestUri, uri), signal);
+  }
+
+  #generatedPageImage(
+    state: VirtualTextureRuntimeState,
+    source: VirtualTextureGeneratedPageSource,
+    manifest: VirtualTextureManifestModel,
+    page: VirtualTexturePageId,
+    signal: AbortSignal,
+  ): Promise<TexImageSource> {
+    const started = virtualTextureNow();
+    state.stats.generatedPageRequests += 1;
+    const recordResult = (image: TexImageSource): TexImageSource => {
+      const elapsed = Math.max(0, virtualTextureNow() - started);
+      state.stats.generatedPageRasterizeMs += elapsed;
+      state.stats.generatedPageRasterizeMaxMs = Math.max(state.stats.generatedPageRasterizeMaxMs, elapsed);
+      return image;
+    };
+    const recordFailure = (error: unknown): never => {
+      if (!signal.aborted) state.stats.generatedPageFailures += 1;
+      throw error;
+    };
+    if (source.kind === "svg") {
+      return loadGeneratedSvgVirtualTexturePageImage(source.source, manifest, page, signal)
+        .then(recordResult, recordFailure);
+    }
+    try {
+      throwIfAborted(signal);
+      return Promise.resolve(recordResult(generatedRasterVirtualTexturePageImage(source.source, manifest, page)));
+    } catch (error) {
+      if (!signal.aborted) state.stats.generatedPageFailures += 1;
+      return Promise.reject(error);
+    }
+  }
+
+  #fail(state: VirtualTextureRuntimeState, reason: string): void {
+    state.status = "error";
+    state.stats.manifestFailures += 1;
+    if (state.diagnosticsEnabled) {
+      this.#options.diagnostic(
+        `Virtual texture ${state.activeSource.manifestUri} failed: ${reason}`,
+        `virtual-texture-failed:${state.activeSource.manifestUri}`,
+      );
+    }
+  }
+
+  #hasGovernedAdmissionDemand(): boolean {
+    for (const state of this.#resources.values()) {
+      if (
+        state.status === "ready"
+        && state.manifest !== undefined
+        && state.lastDemandFrame !== Number.NEGATIVE_INFINITY
+        && !this.#gpuLeases.has(state.key)
+      ) return true;
+    }
+    return false;
+  }
+}
