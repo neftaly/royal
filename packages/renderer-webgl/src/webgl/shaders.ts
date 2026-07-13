@@ -115,6 +115,7 @@ const surfaceBaseColorVirtualTextureUniforms = (features: SurfaceShaderFeatures)
 uniform vec2 u_vtAtlasGrid;
 uniform vec2 u_vtAtlasTexelSize;
 uniform vec2 u_vtPageTableSize;
+uniform float u_vtBorderTexels;
 uniform float u_vtPageSize;
 uniform vec2 u_vtVirtualSize;
 uniform bool u_vtFlipY;
@@ -124,27 +125,30 @@ uniform int u_vtWrapT;`
 
 const surfaceBaseColorVirtualTextureFunctions = (features: SurfaceShaderFeatures): string =>
   hasSurfaceShaderVirtualBaseColor(features)
-    ? `float wrapVirtualTextureCoord(float coord, int mode) {
+    ? `float wrapVirtualTextureCoord(float coord, int mode, float dimension) {
   if (mode == 1) {
     return fract(coord);
   }
 
+  float halfTexel = 0.5 / max(dimension, 1.0);
+  float edgeMaximum = max(halfTexel, 1.0 - halfTexel);
   if (mode == 2) {
     float mirrored = mod(coord, 2.0);
     if (mirrored < 0.0) {
       mirrored += 2.0;
     }
 
-    return min(mirrored <= 1.0 ? mirrored : 2.0 - mirrored, 0.999999);
+    float reflected = mirrored <= 1.0 ? mirrored : 2.0 - mirrored;
+    return clamp(reflected, halfTexel, edgeMaximum);
   }
 
-  return clamp(coord, 0.0, 0.999999);
+  return clamp(coord, halfTexel, edgeMaximum);
 }
 
 vec2 wrapVirtualTextureUv(vec2 uv) {
   return vec2(
-    wrapVirtualTextureCoord(uv.x, u_vtWrapS),
-    wrapVirtualTextureCoord(uv.y, u_vtWrapT)
+    wrapVirtualTextureCoord(uv.x, u_vtWrapS, u_vtVirtualSize.x),
+    wrapVirtualTextureCoord(uv.y, u_vtWrapT, u_vtVirtualSize.y)
   );
 }
 
@@ -173,18 +177,12 @@ vec4 sampleVirtualBaseColor(vec2 uv) {
   vec2 atlasSlotCoord = vec2(mod(slot, u_vtAtlasGrid.x), floor(slot / u_vtAtlasGrid.x));
   float residentCoverage = exp2(residentMip);
   vec2 residentPageMin = floor(pageCoord / residentCoverage) * residentCoverage * u_vtPageSize;
-  vec2 residentPageMax = min(
-    residentPageMin + vec2(residentCoverage * u_vtPageSize),
-    u_vtVirtualSize
-  );
-  vec2 localUv = (sourceTexel - residentPageMin) / max(vec2(1.0), residentPageMax - residentPageMin);
-  vec2 atlasSlotMin = atlasSlotCoord / u_vtAtlasGrid;
-  vec2 atlasSlotMax = (atlasSlotCoord + vec2(1.0)) / u_vtAtlasGrid;
-  vec2 atlasLocalUv = clamp(
-    (atlasSlotCoord + localUv) / u_vtAtlasGrid,
-    atlasSlotMin + u_vtAtlasTexelSize * 0.5,
-    atlasSlotMax - u_vtAtlasTexelSize * 0.5
-  );
+  vec2 residentLocalTexel = (sourceTexel - residentPageMin) / residentCoverage;
+  float atlasCellSize = u_vtPageSize + 2.0 * u_vtBorderTexels;
+  vec2 atlasTexel = atlasSlotCoord * atlasCellSize
+    + vec2(u_vtBorderTexels)
+    + residentLocalTexel;
+  vec2 atlasLocalUv = atlasTexel * u_vtAtlasTexelSize;
 
   return texture(u_vtAtlas, atlasLocalUv) * u_color;
 }`

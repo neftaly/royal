@@ -202,7 +202,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(80),
+      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(160),
     });
     const first = unlitMaterial({ texture: virtualTexture("/vt/first.json") });
     const second = unlitMaterial({ texture: virtualTexture("/vt/second.json") });
@@ -225,7 +225,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     const { gl } = fakeGl();
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas, {
-      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(80),
+      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(160),
     });
     const materials = ["a", "b", "c"].map((name) => unlitMaterial({
       texture: virtualTexture(`/${name}/manifest.json`),
@@ -271,7 +271,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(80),
+      resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(160),
     });
     const first = unlitMaterial({ texture: virtualTexture("/vt/first.json") });
     const second = unlitMaterial({ texture: virtualTexture("/vt/second.json") });
@@ -619,7 +619,8 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
       ]),
     });
     const manifest = {
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 4,
       pages: {
         entries: [

@@ -45,6 +45,7 @@ const virtualBaseColorSourceInvariants = [
   "uniform vec2 u_vtAtlasGrid;",
   "uniform vec2 u_vtAtlasTexelSize;",
   "uniform vec2 u_vtPageTableSize;",
+  "uniform float u_vtBorderTexels;",
   "uniform float u_vtPageSize;",
   "uniform vec2 u_vtVirtualSize;",
   "uniform int u_vtWrapS;",
@@ -54,8 +55,12 @@ const virtualBaseColorSourceInvariants = [
   "tableEntry.g",
   "residentMip",
   "floor(sourceTexel / u_vtPageSize)",
+  "halfTexel",
+  "reflected",
   "residentPageMin",
-  "residentPageMax",
+  "residentLocalTexel",
+  "atlasCellSize",
+  "atlasTexel",
   "atlasLocalUv",
   "tableEntry.a is reserved",
   "u_useVirtualTexture ? sampleVirtualBaseColor(materialTextureUv(u_baseColorUvSet",
@@ -131,6 +136,8 @@ describe("surface shader variants", () => {
       for (const invariant of virtualBaseColorSourceInvariants) {
         expect(source.includes(invariant), `${label} ${invariant}`).toBe(hasVirtualBaseColor);
       }
+      expect(source.includes("residentPageMax"), `${label} NPOT page stretching`).toBe(false);
+      expect(source.includes("atlasSlotMax"), `${label} interior half-texel clamp`).toBe(false);
       expect(source.includes("materialFallbackCotangentFrame(normal) * textureNormal"), label)
         .toBe(features.has("normalTexture"));
       expect(source.includes("texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg"), label)

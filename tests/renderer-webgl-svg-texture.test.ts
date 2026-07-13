@@ -13,6 +13,10 @@ import {
   virtualTexturePagesForFootprint,
   virtualTextureTargetMip,
 } from "../packages/renderer-webgl/src/virtual-texture-demand";
+import {
+  virtualTextureMipTexelSize,
+  virtualTextureStoredPageSize,
+} from "../packages/renderer-webgl/src/virtual-texturing";
 
 const svg = (hrefs: readonly string[]): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8">${hrefs
@@ -152,7 +156,7 @@ describe("SVG texture reference lifecycle", () => {
     scheduler.dispose();
   });
 
-  it("reuses one decoded SVG across seeded page crops without embedding or reparsing its text", async () => {
+  it("reuses one decoded SVG across seeded periodic page rasters without embedding or reparsing its text", async () => {
     const objectUrlBlobs: Blob[] = [];
     class TestUrl extends URL {
       static createObjectURL = vi.fn((blob: Blob) => {
@@ -162,10 +166,16 @@ describe("SVG texture reference lifecycle", () => {
       static revokeObjectURL = vi.fn();
     }
     const largePath = "M0 0h1v1z".repeat(8_192);
-    const drawImage = vi.fn();
+    const canvases: Array<{ height: number; width: number }> = [];
+    const patterns: Array<{
+      image: CanvasImageSource;
+      repetition: string | null;
+      setTransform: ReturnType<typeof vi.fn>;
+    }> = [];
     const contexts: Array<{
-      clearRect: ReturnType<typeof vi.fn>;
-      drawImage: typeof drawImage;
+      createPattern: ReturnType<typeof vi.fn>;
+      fillRect: ReturnType<typeof vi.fn>;
+      fillStyle: unknown;
       imageSmoothingEnabled: boolean;
       imageSmoothingQuality: ImageSmoothingQuality;
     }> = [];
@@ -174,17 +184,24 @@ describe("SVG texture reference lifecycle", () => {
     vi.stubGlobal("document", {
       createElement: vi.fn(() => {
         const context = {
-          clearRect: vi.fn(),
-          drawImage,
+          createPattern: vi.fn((image: CanvasImageSource, repetition: string | null) => {
+            const pattern = { image, repetition, setTransform: vi.fn() };
+            patterns.push(pattern);
+            return pattern;
+          }),
+          fillRect: vi.fn(),
+          fillStyle: "#000",
           imageSmoothingEnabled: false,
           imageSmoothingQuality: "low" as ImageSmoothingQuality,
         };
         contexts.push(context);
-        return {
+        const canvas = {
           getContext: vi.fn(() => context),
           height: 0,
           width: 0,
         };
+        canvases.push(canvas);
+        return canvas;
       }),
     });
     vi.stubGlobal("fetch", vi.fn(async () => textResponse(
@@ -219,31 +236,34 @@ describe("SVG texture reference lifecycle", () => {
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(objectUrlBlobs).toHaveLength(1);
     expect(contexts).toHaveLength(32);
-    expect(drawImage).toHaveBeenCalledTimes(32);
-    for (const [index, call] of drawImage.mock.calls.entries()) {
-      expect(call[0]).toBe(loaded.image);
+    expect(patterns).toHaveLength(32);
+    const storedPageSize = virtualTextureStoredPageSize(manifest);
+    for (const [index, pattern] of patterns.entries()) {
+      expect(pattern).toEqual(expect.objectContaining({
+        image: loaded.image,
+        repetition: "repeat",
+      }));
       const page = requestedPages[index]!;
-      const mipScale = 2 ** page.mip;
-      const logicalX = page.x * manifest.pageSize * mipScale;
-      const logicalY = page.y * manifest.pageSize * mipScale;
-      const logicalWidth = Math.max(1, Math.min(
-        manifest.pageSize * mipScale,
-        manifest.width - logicalX,
-      ));
-      const logicalHeight = Math.max(1, Math.min(
-        manifest.pageSize * mipScale,
-        manifest.height - logicalY,
-      ));
-      expect(call.slice(1)).toEqual([
-        logicalX * source!.width / manifest.width,
-        logicalY * source!.height / manifest.height,
-        logicalWidth * source!.width / manifest.width,
-        logicalHeight * source!.height / manifest.height,
+      const [mipWidth, mipHeight] = virtualTextureMipTexelSize(manifest, page.mip);
+      expect(pattern.setTransform).toHaveBeenCalledWith({
+        a: mipWidth / source!.width,
+        b: 0,
+        c: 0,
+        d: mipHeight / source!.height,
+        e: manifest.borderTexels - page.x * manifest.pageSize,
+        f: manifest.borderTexels - page.y * manifest.pageSize,
+      });
+      expect(contexts[index]?.fillRect).toHaveBeenCalledWith(
         0,
         0,
-        manifest.pageSize,
-        manifest.pageSize,
-      ]);
+        storedPageSize,
+        storedPageSize,
+      );
+      expect(contexts[index]?.fillStyle).toBe(pattern);
+      expect(canvases[index]).toEqual(expect.objectContaining({
+        height: storedPageSize,
+        width: storedPageSize,
+      }));
     }
     expect(contexts.every((context) => context.imageSmoothingEnabled)).toBe(true);
     expect(contexts.every((context) => context.imageSmoothingQuality === "high")).toBe(true);

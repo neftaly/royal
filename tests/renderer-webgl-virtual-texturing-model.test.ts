@@ -8,10 +8,13 @@ import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,
   generatedVirtualTexturePageCount,
+  generatedVirtualTextureManifest,
   parseVirtualTextureManifest,
   VirtualTextureAtlasPageTable,
+  virtualTextureDecodedPageBytes,
   virtualTexturePageKey,
   virtualTexturePageUri,
+  virtualTextureStoredPageSize,
 } from "../packages/renderer-webgl/src/virtual-texturing";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
@@ -121,7 +124,8 @@ describe("WebGL virtual texturing runtime model", () => {
 
   it("parses explicit page-entry manifests into a normalized resource model", () => {
     const result = parseVirtualTextureManifest({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       colorSpace: "srgb",
       id: "terrain",
       mipCount: 2,
@@ -156,7 +160,8 @@ describe("WebGL virtual texturing runtime model", () => {
   it("rejects explicit mip counts outside the dimension-derived chain", () => {
     for (const mipCount of [0, 4, 1.5]) {
       const result = parseVirtualTextureManifest({
-        contractVersion: 1,
+        borderTexels: 1,
+        contractVersion: 2,
         mipCount,
         pageSize: 128,
         pages: { entries: [{ mip: 0, uri: "page.png", x: 0, y: 0 }] },
@@ -172,7 +177,8 @@ describe("WebGL virtual texturing runtime model", () => {
 
   it("accepts the final mip of NPOT grids and bounds explicit pages at every mip", () => {
     const valid = parseVirtualTextureManifest({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 64,
       pages: { entries: [{ mip: 3, uri: "root.png", x: 0, y: 0 }] },
       virtualSize: [192, 320],
@@ -185,7 +191,8 @@ describe("WebGL virtual texturing runtime model", () => {
       { mip: 4, uri: "bad-mip.png", x: 0, y: 0 },
     ]) {
       const result = parseVirtualTextureManifest({
-        contractVersion: 1,
+        borderTexels: 1,
+        contractVersion: 2,
         pageSize: 64,
         pages: { entries: [entry] },
         virtualSize: [192, 320],
@@ -205,7 +212,8 @@ describe("WebGL virtual texturing runtime model", () => {
       ["physicalByteBudget", 1.5, "vt.manifest.physicalByteBudget"],
     ] as const) {
       const result = parseVirtualTextureManifest({
-        contractVersion: 1,
+        borderTexels: 1,
+        contractVersion: 2,
         [field]: value,
         pageSize: 64,
         pages: { uriTemplate: "{mip}/{x}/{y}.png" },
@@ -221,7 +229,8 @@ describe("WebGL virtual texturing runtime model", () => {
       { mip: 0, uri: "not-an-array.png", x: 0, y: 0 },
     ]) {
       const result = parseVirtualTextureManifest({
-        contractVersion: 1,
+        borderTexels: 1,
+        contractVersion: 2,
         pageSize: 64,
         pages: { entries, uriTemplate: "{mip}/{x}/{y}.png" },
         virtualSize: [128, 128],
@@ -233,7 +242,8 @@ describe("WebGL virtual texturing runtime model", () => {
 
   it("preserves deliberately sparse valid explicit manifests", () => {
     const result = parseVirtualTextureManifest({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 64,
       pages: { entries: [{ mip: 0, uri: "one-page.png", x: 2, y: 4 }] },
       virtualSize: [192, 320],
@@ -242,9 +252,9 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(result.manifest?.pages).toEqual([{ mip: 0, uri: "one-page.png", x: 2, y: 4 }]);
   });
 
-  it("rejects nonzero borders while preserving resource budgets", () => {
+  it("normalizes bordered storage while preserving logical grids and resource budgets", () => {
     const result = parseVirtualTextureManifest({
-      contractVersion: 1,
+      contractVersion: 2,
       borderTexels: 2,
       mipCount: 3,
       pageSize: 64,
@@ -255,28 +265,53 @@ describe("WebGL virtual texturing runtime model", () => {
       virtualSize: [256, 128],
     });
 
-    expect(result.diagnostics).toContainEqual(expect.objectContaining({
-      code: "vt.manifest.borderTexels",
-      severity: "unsupported",
-    }));
+    expect(result.diagnostics).toEqual([]);
     expect(result.manifest).toEqual(expect.objectContaining({
+      borderTexels: 2,
       mipCount: 3,
       pageSize: 64,
       physicalByteBudget: 80 * 80 * 4 * 3,
     }));
     expect(result.manifest === undefined ? undefined : virtualTexturePageUri(result.manifest, { mip: 0, x: 0, y: 0 }))
       .toBe("pages/0.png");
+    expect(result.manifest === undefined ? undefined : virtualTextureStoredPageSize(result.manifest)).toBe(68);
+    expect(result.manifest === undefined ? undefined : virtualTextureDecodedPageBytes(result.manifest)).toBe(68 ** 2 * 4);
   });
 
-  it("requires the supported versioned contract", () => {
-    const result = parseVirtualTextureManifest({
+  it("requires v2 and a positive border, failing v1 closed", () => {
+    for (const input of [
+      { borderTexels: 1, contractVersion: 1, pageSize: 64, pages: { uriTemplate: "page.png" }, virtualSize: [64, 64] },
+      { contractVersion: 2, pageSize: 64, pages: { uriTemplate: "page.png" }, virtualSize: [64, 64] },
+      { borderTexels: 0, contractVersion: 2, pageSize: 64, pages: { uriTemplate: "page.png" }, virtualSize: [64, 64] },
+    ]) {
+      const result = parseVirtualTextureManifest(input);
+      expect(result.manifest).toBeUndefined();
+      expect(result.diagnostics.some(({ severity }) => severity === "error")).toBe(true);
+    }
+  });
+
+  it("fails stored-cell extent and byte arithmetic closed at safe-integer boundaries", () => {
+    expect(parseVirtualTextureManifest({
+      borderTexels: Number.MAX_SAFE_INTEGER,
       contractVersion: 2,
-    });
-    expect(result.manifest).toBeUndefined();
-    expect(result.diagnostics).toContainEqual(expect.objectContaining({
-      code: "vt.manifest.contractVersion",
-      severity: "error",
-    }));
+      pageSize: 1,
+      pages: { uriTemplate: "page.png" },
+      virtualSize: [1, 1],
+    }).manifest).toBeUndefined();
+    expect(() => generatedVirtualTextureManifest({
+      borderTexels: Number.MAX_SAFE_INTEGER,
+      height: 1,
+      pageSize: 1,
+      physicalSlotCap: 1,
+      width: 1,
+    })).toThrow(RangeError);
+    expect(() => virtualTextureDecodedPageBytes({
+      borderTexels: 1,
+      height: 1,
+      pageSize: 1_000_000_000,
+      pages: [],
+      width: 1,
+    })).toThrow(RangeError);
   });
 
   it("tracks page to atlas slot mappings and dirty page-table updates incrementally", () => {

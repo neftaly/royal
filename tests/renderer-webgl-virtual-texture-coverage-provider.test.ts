@@ -58,6 +58,7 @@ const context = (
 });
 
 const manifest: VirtualTextureManifestModel = {
+  borderTexels: 1,
   height: 4_096,
   mipCount: 5,
   pageSize: 256,

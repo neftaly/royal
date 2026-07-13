@@ -305,12 +305,12 @@ export class ControlledImage {
 
   complete = false;
   crossOrigin: string | null = null;
-  height = 4;
-  naturalHeight = 4;
-  naturalWidth = 4;
+  height = 6;
+  naturalHeight = 6;
+  naturalWidth = 6;
   onerror: OnErrorEventHandler = null;
   onload: ((this: HTMLImageElement, event: Event) => unknown) | null = null;
-  width = 4;
+  width = 6;
   #decodeResolvers: Array<() => void> = [];
   #listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
   #src = "";
@@ -395,7 +395,10 @@ export const installCanvas2d = (): {
   }>;
   readonly contexts: Array<{
     clearRect: ReturnType<typeof vi.fn>;
+    createPattern: ReturnType<typeof vi.fn>;
     drawImage: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
+    fillStyle: unknown;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     putImageData: ReturnType<typeof vi.fn>;
@@ -408,7 +411,10 @@ export const installCanvas2d = (): {
   }> = [];
   const contexts: Array<{
     clearRect: ReturnType<typeof vi.fn>;
+    createPattern: ReturnType<typeof vi.fn>;
     drawImage: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
+    fillStyle: unknown;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     putImageData: ReturnType<typeof vi.fn>;
@@ -418,7 +424,10 @@ export const installCanvas2d = (): {
       if (tagName !== "canvas") throw new Error(`unexpected element ${tagName}`);
       const context = {
         clearRect: vi.fn(),
+        createPattern: vi.fn(() => ({ setTransform: vi.fn() })),
         drawImage: vi.fn(),
+        fillRect: vi.fn(),
+        fillStyle: "#000",
         imageSmoothingEnabled: false,
         imageSmoothingQuality: "low" as ImageSmoothingQuality,
         putImageData: vi.fn(),
@@ -515,7 +524,8 @@ export const renderOrdinaryTexturePressure = (vtMaterial: Material, pressureMate
 });
 
 export const vtManifest = (physicalSlots = 2) => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   pageSize: 4,
   pages: {
     entries: [0, 1, 2].map((x) => ({ mip: 0, uri: `pages/${x}-0.png`, x, y: 0 })),
@@ -525,7 +535,8 @@ export const vtManifest = (physicalSlots = 2) => ({
 });
 
 export const vtSinglePageManifest = () => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   pageSize: 4,
   pages: {
     entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }],
@@ -572,7 +583,8 @@ export const vtPersistentGpuHardLimitPolicy = (hardLimit: number): ResourceGover
 };
 
 export const vtParentFallbackManifest = (physicalSlots = 3) => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   mipCount: 2,
   pageSize: 4,
   pages: {
@@ -586,7 +598,8 @@ export const vtParentFallbackManifest = (physicalSlots = 3) => ({
 });
 
 export const vtStereoManifest = () => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   mipCount: 3,
   pageSize: 4,
   pages: {
@@ -652,7 +665,8 @@ export const leftStereoView = () => stereoView(2, 0);
 export const rightStereoView = () => stereoView(-2, 128);
 
 export const vtDenseMipManifest = (physicalSlots = 4) => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   mipCount: 5,
   pageSize: 4,
   pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
@@ -661,7 +675,8 @@ export const vtDenseMipManifest = (physicalSlots = 4) => ({
 });
 
 export const vtZoomCycleManifest = () => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   mipCount: 4,
   pageSize: 256,
   pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
@@ -670,7 +685,8 @@ export const vtZoomCycleManifest = () => ({
 });
 
 export const vtTerrainManifest = () => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   mipCount: 4,
   pageSize: 512,
   pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
@@ -747,7 +763,7 @@ export const pageTableUploadSummary = (call: GlCall): readonly unknown[] => [
 export const imageBySrc = (fragment: string): ControlledImage | undefined =>
   ControlledImage.instances.find((image) => image.src.includes(fragment));
 
-export const settleIncompleteImages = async (size = 4): Promise<void> => {
+export const settleIncompleteImages = async (size = 6): Promise<void> => {
   for (const image of ControlledImage.instances) {
     if (!image.complete) {
       image.naturalHeight = size;

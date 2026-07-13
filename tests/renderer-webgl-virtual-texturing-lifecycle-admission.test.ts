@@ -63,7 +63,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 63 }),
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 143 }),
     });
     const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/cpu-impossible.json") }));
 
@@ -79,7 +79,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(ControlledImage.instances).toHaveLength(0);
     expect(root.snapshot().resourceGovernor.denials).toBe(denied);
-    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 64 decoded CPU bytes");
+    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 144 decoded CPU bytes");
     root.dispose();
   });
 
@@ -89,7 +89,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 64 }),
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 144 }),
     });
     const materials = ["first", "second"].map((name) =>
       unlitMaterial({ texture: virtualTexture(`/vt/cpu-${name}.json`) }));
@@ -118,7 +118,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }), {
-      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 64 }),
+      resourceGovernorPolicy: constrainedPolicy({ cpuDecodedBytes: 144 }),
     });
     const material = unlitMaterial({ texture: virtualTexture("/vt/obsolete-capacity.json") });
 
@@ -156,7 +156,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      resourceGovernorPolicy: constrainedPolicy({ persistentGpuBytes: geometryBytes + 67 }),
+      resourceGovernorPolicy: constrainedPolicy({ persistentGpuBytes: geometryBytes + 147 }),
     });
     const vtMaterial = unlitMaterial({ texture: virtualTexture("/vt/geometry-release.json") });
     root.render(renderGeometryPressure(vtMaterial, 12));
@@ -191,7 +191,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const fetchRequests = installFetchQueue();
     const root = createWebGlRoot(fakeCanvas(fakeGl().gl), {
       resourceGovernorPolicy: constrainedPolicy({
-        persistentGpuBytes: geometryBytes + ordinaryBytes + 67,
+        persistentGpuBytes: geometryBytes + ordinaryBytes + 147,
       }),
     });
     const vtMaterial = unlitMaterial({ texture: virtualTexture("/vt/ordinary-release.json") });
@@ -236,7 +236,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(renderScene(sparseMaterial));
     const textureCreatesBeforeManifest = calls.filter(({ name }) => name === "createTexture").length;
     fetchRequests[0]!.resolve(responseJson({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 4,
       pages: { entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }] },
       physicalSlots: 1,
@@ -255,17 +256,17 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
   it.each([
     {
-      expected: /page or page-table upload requires up to 262144 bytes.*upload limit 1024/,
+      expected: /page or page-table upload requires up to 266256 bytes.*upload limit 1024/,
       label: "upload",
       policy: constrainedPolicy({ uploadBytes: 1_024 }),
     },
     {
-      expected: /resource allocation requires 262148 persistent GPU bytes.*limit 65536/,
+      expected: /resource allocation requires 266260 persistent GPU bytes.*limit 65536/,
       label: "persistent GPU",
       policy: constrainedPolicy({ persistentGpuBytes: 64 * 1024 }),
     },
     {
-      expected: /resource allocation requires 262148 persistent GPU bytes.*limit 65536/,
+      expected: /resource allocation requires 266260 persistent GPU bytes.*limit 65536/,
       label: "mandatory-floor",
       policy: (() => {
         const policy = constrainedPolicy({});
@@ -300,7 +301,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     const textureCreatesBeforeManifest = calls.filter(({ name }) => name === "createTexture").length;
     fetchRequests[0]!.resolve(responseJson({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 256,
       pages: { entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }] },
       physicalSlots: 1,
@@ -345,7 +347,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     const parseRoot = createWebGlRoot(fakeCanvas(fakeGl().gl));
     parseRoot.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/parse.json") })));
-    fetchRequests[2]!.resolve(responseJson({ contractVersion: 1 }));
+    fetchRequests[2]!.resolve(responseJson({ contractVersion: 2 }));
     await flushMicrotasks();
 
     const { gl: gpuGl } = fakeGl();
@@ -389,7 +391,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/npot.json") })));
     fetchRequests[0]!.resolve(responseJson({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 4,
       pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
       physicalSlots: 1,
@@ -402,8 +405,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
   });
 
   it.each([
-    ["undersized", 3, 4],
-    ["oversized", 5, 4],
+    ["undersized", 5, 6],
+    ["oversized", 7, 6],
   ])("rejects and closes an %s authored page before WebGL upload", async (_label, width, height) => {
     vi.stubGlobal("Image", ControlledImage);
     vi.stubGlobal("ImageBitmap", ControlledImage);
@@ -426,7 +429,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(pageUploads(calls)).toHaveLength(0);
     expect(ControlledImage.closeCalls).toBe(1);
     expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, cachedPages: 0 });
-    expect(root.snapshot().diagnostics.join("\n")).toMatch(/has \dx\d pixels; expected 4x4/);
+    expect(root.snapshot().diagnostics.join("\n")).toMatch(/has \dx\d pixels; expected 6x6/);
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(1);
@@ -490,7 +493,8 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     root.render(renderScene(materialAt(0)));
     fetchRequests[0]!.resolve(responseJson({
-      contractVersion: 1,
+      borderTexels: 1,
+      contractVersion: 2,
       pageSize: 4,
       pages: {
         entries: Array.from({ length: pageCount }, (_value, x) => ({
@@ -626,7 +630,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(admittedSnapshot.resourceGovernor).toMatchObject({
       byClass: {
         "virtual-texture": {
-          cpuDecodedBytes: 4 * 4 * 4,
+          cpuDecodedBytes: 6 * 6 * 4,
           persistentGpuBytes: admittedSnapshot.virtualTexturing.physicalAllocatedBytes,
         },
       },
@@ -640,7 +644,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(pageUploads(calls)).toHaveLength(0);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, cachedPages: 0 });
     expect(root.snapshot().resourceGovernor).toMatchObject({
-      byClass: { "virtual-texture": { cpuDecodedBytes: 4 * 4 * 4 } },
+      byClass: { "virtual-texture": { cpuDecodedBytes: 6 * 6 * 4 } },
       total: { persistentGpuBytes: 0 },
     });
 

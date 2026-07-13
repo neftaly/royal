@@ -385,8 +385,8 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
 
     expect(loader.objectUrlBlobs).toHaveLength(1);
     expect(contexts.length).toBeGreaterThan(0);
-    expect(contexts.every((context) => context.drawImage.mock.calls.every((call) => (
-      call[0] === ControlledImage.instances[0]
+    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
+      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
     )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
@@ -445,9 +445,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       calls.some((call) =>
         call.name === "texImage2D"
         && call.args[0] === gl.TEXTURE_2D
-        && call.args[3] === 2048
-        && call.args[4] === 2048),
-      "a 1024px SVG at default 4x density should use its bounded 64-slot 8x8 physical atlas",
+        && call.args[3] === 2064
+        && call.args[4] === 2064),
+      "a 1024px SVG at default 4x density should use its bounded 64-slot 8x8 bordered atlas",
     ).toBe(true);
   });
 

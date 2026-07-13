@@ -25,12 +25,12 @@ class PendingImage {
 
   complete = false;
   crossOrigin: string | null = null;
-  height = 4;
-  naturalHeight = 4;
-  naturalWidth = 4;
+  height = 6;
+  naturalHeight = 6;
+  naturalWidth = 6;
   onerror: OnErrorEventHandler = null;
   onload: ((this: HTMLImageElement, event: Event) => unknown) | null = null;
-  width = 4;
+  width = 6;
   #src = "";
 
   constructor() {
@@ -75,7 +75,8 @@ const flushMicrotasks = async (): Promise<void> => {
 };
 
 const manifest = (physicalSlots = 1) => ({
-  contractVersion: 1,
+  borderTexels: 1,
+  contractVersion: 2,
   pageSize: 4,
   pages: { entries: [{ mip: 0, uri: "pages/0-0.png", x: 0, y: 0 }] },
   physicalSlots,
@@ -371,12 +372,12 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
   it("reclaims one oldest cold allocation after its two-frame grace", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 80);
+    const root = createRoot(gl, 160);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const second = unlitMaterial({ texture: virtualTexture("/second/manifest.json") });
 
     await preparePair(root, requests, first, second);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 68 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 148 });
 
     const secondVisible = positionedGraph([
       { material: first, x: 100 },
@@ -389,7 +390,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
     root.render(secondVisible);
     expect(calls.filter(({ name }) => name === "deleteTexture")).toHaveLength(0);
     root.render(secondVisible);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 68 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 148 });
     expect(calls.filter(({ name }) => name === "deleteTexture")).toHaveLength(2);
     expect(PendingImage.instances.at(-1)?.src).toContain("/second/pages/0-0.png");
   });
@@ -397,7 +398,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
   it("does not evict or time-slice when every allocation is visible", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 80);
+    const root = createRoot(gl, 160);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const second = unlitMaterial({ texture: virtualTexture("/second/manifest.json") });
 
@@ -414,7 +415,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
   it("protects demand unioned across both stereo views", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 80);
+    const root = createRoot(gl, 160);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const second = unlitMaterial({ texture: virtualTexture("/second/manifest.json") });
     await preparePair(root, requests, first, second);
@@ -436,7 +437,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
     const { calls, gl } = fakeGl();
     const size = { height: 128, width: 128 };
     const root = createWebGlRoot(fakeCanvas(gl, size), {
-      resourceGovernorPolicy: constrainedPolicy(80),
+      resourceGovernorPolicy: constrainedPolicy(160),
     });
     roots.add(root);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
@@ -464,7 +465,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
   it("gives three repeatedly competing resources a stable chance without starvation", async () => {
     const requests = installFetchQueue();
     const { gl } = fakeGl();
-    const root = createRoot(gl, 80);
+    const root = createRoot(gl, 160);
     const materials = ["a", "b", "c"].map((name) => unlitMaterial({
       texture: virtualTexture(`/${name}/manifest.json`),
     }));
@@ -487,12 +488,12 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
   it("reclaims at most one cold allocation per frame until a large target fits", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 340);
+    const root = createRoot(gl, 460);
     const materials = ["a", "b", "c", "target"].map((name) => unlitMaterial({
       texture: virtualTexture(`/${name}/manifest.json`),
     }));
     await prepareMaterials(root, requests, materials, [manifest(), manifest(), manifest(), largeManifest()]);
-    expect(root.snapshot().virtualTexturing.physicalAllocatedBytes).toBe(204);
+    expect(root.snapshot().virtualTexturing.physicalAllocatedBytes).toBe(444);
     const targetVisible = positionedGraph(materials.map((material, index) => ({
       material,
       x: index === 3 ? 0 : 100,
@@ -508,14 +509,14 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
     root.render(targetVisible);
 
     expect(calls.filter(({ name }) => name === "deleteTexture")).toHaveLength(6);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 320 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 1, physicalAllocatedBytes: 400 });
     expect(PendingImage.startedSrcs.at(-1)).toContain("/target/pages/0-0.png");
   });
 
   it("retains cold allocations when admission fits without pressure", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 160);
+    const root = createRoot(gl, 300);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const second = unlitMaterial({ texture: virtualTexture("/second/manifest.json") });
 
@@ -525,20 +526,20 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
       { material: second, x: 0 },
     ]));
 
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 2, physicalAllocatedBytes: 136 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 2, physicalAllocatedBytes: 296 });
     expect(calls.filter(({ name }) => name === "deleteTexture")).toHaveLength(0);
   });
 
   it("does not evict a resident allocation for an intrinsically oversized VT", async () => {
     const requests = installFetchQueue();
     const { calls, gl } = fakeGl();
-    const root = createRoot(gl, 80);
+    const root = createRoot(gl, 160);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const oversized = unlitMaterial({ texture: virtualTexture("/oversized/manifest.json") });
 
     await preparePair(root, requests, first, oversized, {
       ...manifest(),
-      physicalByteBudget: 67,
+      physicalByteBudget: 147,
     });
     const oversizedVisible = positionedGraph([
       { material: first, x: 100 },
@@ -557,7 +558,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
     const deleteFailure = { enabled: false };
     const { gl } = fakeGl(deleteFailure);
     const canvas = fakeCanvas(gl);
-    const root = createWebGlRoot(canvas, { resourceGovernorPolicy: constrainedPolicy(80) });
+    const root = createWebGlRoot(canvas, { resourceGovernorPolicy: constrainedPolicy(160) });
     roots.add(root);
     const first = unlitMaterial({ texture: virtualTexture("/first/manifest.json") });
     const second = unlitMaterial({ texture: virtualTexture("/second/manifest.json") });
@@ -572,7 +573,7 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
     deleteFailure.enabled = true;
     expect(() => root.render(secondVisible)).toThrow("delete texture failure");
 
-    expect(root.snapshot().virtualTexturing.physicalQuarantinedBytes).toBe(68);
+    expect(root.snapshot().virtualTexturing.physicalQuarantinedBytes).toBe(148);
     canvas.dispatchContextEvent("webglcontextlost");
     expect(root.snapshot().virtualTexturing.physicalQuarantinedBytes).toBe(0);
     deleteFailure.enabled = false;

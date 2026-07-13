@@ -11,12 +11,17 @@ export interface VirtualTexturePageEntry extends VirtualTexturePageId {
 }
 
 export interface VirtualTextureManifestModel {
+  /** Physical gutter texels stored on every side of each logical page. */
+  readonly borderTexels: number;
   readonly colorSpace?: TextureColorSpace;
   readonly height: number;
   readonly mipCount?: number;
+  /** Logical square page interior; decoded page images additionally include both gutters. */
   readonly pageSize: number;
   readonly pages: readonly VirtualTexturePageEntry[];
+  /** Maximum atlas plus page-table allocation, charged using stored guttered cells. */
   readonly physicalByteBudget?: number;
+  /** Requested maximum resident page cells; hardware and byte budgets may reduce it. */
   readonly physicalSlots?: number;
   readonly uriTemplate?: string;
   readonly width: number;
@@ -148,6 +153,8 @@ export const generatedVirtualTexturePageCount = (
 };
 
 export interface GeneratedVirtualTextureManifestOptions {
+  /** Physical gutter texels on every side. @defaultValue `1` */
+  readonly borderTexels?: number;
   readonly colorSpace?: TextureColorSpace;
   readonly height: number;
   readonly pageSize: number;
@@ -165,23 +172,30 @@ export const generatedVirtualTextureManifest = (
 ): VirtualTextureManifestModel => {
   const width = Math.max(1, Math.ceil(options.width));
   const height = Math.max(1, Math.ceil(options.height));
+  const borderTexels = options.borderTexels ?? 1;
   if (
     !isPositiveInteger(width)
     || !isPositiveInteger(height)
+    || !isPositiveInteger(borderTexels)
     || !isPositiveInteger(options.pageSize)
     || !isPositiveInteger(options.physicalSlotCap)
   ) {
     throw new RangeError(
-      "Generated virtual texture dimensions, page size, and physical slot cap must be positive safe integers",
+      "Generated virtual texture dimensions, page size, border, and physical slot cap must be positive safe integers",
     );
   }
   const pageSize = Math.min(options.pageSize, Math.max(width, height));
+  const storedPageSize = pageSize + borderTexels * 2;
+  if (!isPositiveInteger(storedPageSize)) {
+    throw new RangeError("Generated virtual texture stored page size exceeds safe integer capacity");
+  }
   const physicalSlots = Math.min(
     options.physicalSlotCap,
     generatedVirtualTexturePageCount(width, height, pageSize),
   );
 
   return {
+    borderTexels,
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     height,
     pageSize,
@@ -189,6 +203,37 @@ export const generatedVirtualTextureManifest = (
     physicalSlots,
     width,
   };
+};
+
+/** Physical square cell extent, including both page gutters. */
+export const virtualTextureStoredPageSize = (manifest: VirtualTextureManifestModel): number => {
+  const storedPageSize = manifest.pageSize + manifest.borderTexels * 2;
+  if (!isPositiveInteger(storedPageSize)) {
+    throw new RangeError("Virtual texture stored page size must be a positive safe integer");
+  }
+  return storedPageSize;
+};
+
+/** Decoded/uploaded RGBA8 byte cost of one physical page cell. */
+export const virtualTextureDecodedPageBytes = (manifest: VirtualTextureManifestModel): number => {
+  const storedPageSize = virtualTextureStoredPageSize(manifest);
+  const bytes = storedPageSize * storedPageSize * 4;
+  if (!isPositiveInteger(bytes)) {
+    throw new RangeError("Virtual texture decoded page byte size exceeds safe integer capacity");
+  }
+  return bytes;
+};
+
+/** Actual texel dimensions of mip `mip`, including NPOT rounding. */
+export const virtualTextureMipTexelSize = (
+  manifest: Pick<VirtualTextureManifestModel, "height" | "width">,
+  mip: number,
+): readonly [width: number, height: number] => {
+  if (!isNonNegativeInteger(mip)) throw new RangeError("Virtual texture mip must be a non-negative safe integer");
+  return [
+    virtualTextureMipDimension(manifest.width, mip),
+    virtualTextureMipDimension(manifest.height, mip),
+  ];
 };
 
 export const parentVirtualTexturePage = (page: VirtualTexturePageId): VirtualTexturePageId => ({
@@ -238,21 +283,22 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       }],
     };
   }
-  if (root.contractVersion !== 1) {
+  if (root.contractVersion !== 2) {
     return { diagnostics: [{
       code: "vt.manifest.contractVersion",
-      message: "Virtual texture manifest contractVersion must be 1.",
+      message: "Virtual texture manifest contractVersion must be 2.",
       severity: "error",
     }] };
   }
 
   const dimensions = readDimensions(root.virtualSize);
   const pageSize = isPositiveInteger(root.pageSize) ? root.pageSize : undefined;
-  if (root.borderTexels !== undefined && root.borderTexels !== 0) {
+  const borderTexels = isPositiveInteger(root.borderTexels) ? root.borderTexels : undefined;
+  if (borderTexels === undefined) {
     diagnostics.push({
       code: "vt.manifest.borderTexels",
-      message: "Virtual texture manifest borderTexels must be zero when present.",
-      severity: "unsupported",
+      message: "Virtual texture manifest borderTexels must be a positive integer.",
+      severity: "error",
     });
   }
   if (dimensions === undefined) {
@@ -287,7 +333,16 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
     });
   }
 
-  if (dimensions === undefined || pageSize === undefined) {
+  if (dimensions === undefined || pageSize === undefined || borderTexels === undefined) {
+    return { diagnostics };
+  }
+  const storedPageSize = pageSize + borderTexels * 2;
+  if (!isPositiveInteger(storedPageSize)) {
+    diagnostics.push({
+      code: "vt.manifest.borderTexels",
+      message: "Virtual texture manifest stored page size exceeds safe integer capacity.",
+      severity: "error",
+    });
     return { diagnostics };
   }
 
@@ -376,6 +431,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
   return {
     diagnostics,
     manifest: {
+      borderTexels,
       ...(colorSpace === undefined ? {} : { colorSpace }),
       height,
       ...(mipCount === undefined ? {} : { mipCount }),

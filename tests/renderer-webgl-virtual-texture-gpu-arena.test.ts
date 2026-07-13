@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { VirtualTextureManifestModel, VirtualTexturePageId } from
-  "../packages/renderer-webgl/src/virtual-texturing";
+import {
+  virtualTextureDecodedPageBytes,
+  type VirtualTextureManifestModel,
+  type VirtualTexturePageId,
+} from "../packages/renderer-webgl/src/virtual-texturing";
 import { stabilizeVirtualTextureDesiredPagesInto } from
   "../packages/renderer-webgl/src/virtual-texture-demand";
 import {
@@ -72,7 +75,12 @@ class FakeGl {
   readonly activeUnits: number[] = [];
   readonly deleted: number[] = [];
   readonly imageAllocations: unknown[] = [];
-  readonly subUploads: Array<{ readonly serial: number; readonly source: unknown }> = [];
+  readonly subUploads: Array<{
+    readonly serial: number;
+    readonly source: unknown;
+    readonly x: unknown;
+    readonly y: unknown;
+  }> = [];
   createFaultAt = 0;
   deleteFaultAt = 0;
   deleteFault: unknown = new Error("delete fault");
@@ -113,7 +121,12 @@ class FakeGl {
   texParameteri = (): void => { this.#operation(); };
   texSubImage2D = (...args: readonly unknown[]): void => {
     this.#operation();
-    this.subUploads.push({ serial: this.#bound, source: args.at(-1) });
+    this.subUploads.push({
+      serial: this.#bound,
+      source: args.at(-1),
+      x: args[2],
+      y: args[3],
+    });
   };
 
   failNextOperation(error: unknown): void {
@@ -133,6 +146,7 @@ class FakeGl {
 }
 
 const manifest: VirtualTextureManifestModel = {
+  borderTexels: 1,
   height: 8,
   mipCount: 4,
   pageSize: 2,
@@ -295,11 +309,11 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuAdmission(
       options({ manifest: oddManifest, physicalSlots: 1 }),
       16_384,
-      64,
+      112,
       8,
     )).toMatchObject({
-      allocatedBytes: 64,
-      atlasBytes: 16,
+      allocatedBytes: 112,
+      atlasBytes: 64,
       effectiveSlots: 1,
       kind: "supported",
       paddedSlots: 1,
@@ -308,11 +322,11 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuAdmission(
       options({ manifest: oddManifest, physicalSlots: 3 }),
       16_384,
-      112,
+      304,
       8,
     )).toMatchObject({
-      allocatedBytes: 112,
-      atlasBytes: 64,
+      allocatedBytes: 304,
+      atlasBytes: 256,
       effectiveSlots: 3,
       kind: "supported",
       paddedSlots: 4,
@@ -321,11 +335,11 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuAdmission(
       options({ manifest: oddManifest, physicalSlots: 5 }),
       16_384,
-      144,
+      432,
       8,
     )).toMatchObject({
-      allocatedBytes: 144,
-      atlasBytes: 96,
+      allocatedBytes: 432,
+      atlasBytes: 384,
       effectiveSlots: 5,
       kind: "supported",
       paddedSlots: 6,
@@ -334,18 +348,18 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuAdmission(
       options({ manifest: oddManifest, physicalSlots: 5 }),
       16_384,
-      143,
+      431,
       8,
-    )).toMatchObject({ allocatedBytes: 112, effectiveSlots: 4, kind: "supported" });
+    )).toMatchObject({ allocatedBytes: 304, effectiveSlots: 4, kind: "supported" });
     expect(virtualTextureGpuAdmission(
       options({ manifest: oddManifest, physicalSlots: 1 }),
       16_384,
-      63,
+      111,
       8,
     )).toEqual({
       kind: "dormant",
       reason: "physical-budget-exceeded",
-      requiredBytes: 64,
+      requiredBytes: 112,
     });
   });
 
@@ -356,7 +370,7 @@ describe("virtual texture GPU arena", () => {
         physicalSlots: 1_000_000,
       }),
       1_024,
-      1_000_000,
+      10_000_000,
       8,
     )).toMatchObject({ effectiveSlots: 65_535, kind: "supported" });
   });
@@ -364,25 +378,25 @@ describe("virtual texture GPU arena", () => {
   it("enforces per-manifest bytes and globally re-admits dormant resources after release", () => {
     const perManifest = {
       ...manifest,
-      physicalByteBudget: 80,
+      physicalByteBudget: 128,
       physicalSlots: 4,
     };
     expect(virtualTextureGpuAdmission(options({ manifest: perManifest }), 16_384, 1_000, 8)).toMatchObject({
-      allocatedBytes: 80,
+      allocatedBytes: 128,
       effectiveSlots: 1,
       kind: "supported",
     });
 
-    const { arena, handles } = setup(200);
+    const { arena, handles } = setup(400);
     const first = admitTestVirtualTextureGpuResource(arena, "a", 1, options());
     const second = admitTestVirtualTextureGpuResource(arena, "b", 1, options());
-    expect(virtualTextureGpuResourceSnapshot(first)).toMatchObject({ allocated: true, allocatedBytes: 128 });
+    expect(virtualTextureGpuResourceSnapshot(first)).toMatchObject({ allocated: true, allocatedBytes: 320 });
     expect(virtualTextureGpuResourceSnapshot(second)).toMatchObject({
       admissionKind: "dormant",
       allocated: false,
     });
     expect(textureHandleArenaSnapshot(handles).ownedTextureCount).toBe(2);
-    expect(virtualTextureGpuArenaSnapshot(arena)).toMatchObject({ allocatedBytes: 128, budgetBytes: 200 });
+    expect(virtualTextureGpuArenaSnapshot(arena)).toMatchObject({ allocatedBytes: 320, budgetBytes: 400 });
     queueVirtualTextureGpuUpload(arena, second, upload({ mip: 0, x: 0, y: 0 }, 1));
     expect(consumeVirtualTextureGpuWake(arena)).toBe(false);
     releaseVirtualTextureGpuResource(arena, "a");
@@ -390,10 +404,10 @@ describe("virtual texture GPU arena", () => {
       kind: "ready",
       resource: second,
     });
-    expect(virtualTextureGpuResourceSnapshot(second)).toMatchObject({ allocated: true, allocatedBytes: 128 });
+    expect(virtualTextureGpuResourceSnapshot(second)).toMatchObject({ allocated: true, allocatedBytes: 320 });
     expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
     expect(consumeVirtualTextureGpuWake(arena)).toBe(false);
-    expect(virtualTextureGpuArenaSnapshot(arena).allocatedBytes).toBeLessThanOrEqual(200);
+    expect(virtualTextureGpuArenaSnapshot(arena).allocatedBytes).toBeLessThanOrEqual(400);
   });
 
   it("keeps an existing dormant resource atomic when direct admission allocation fails", () => {
@@ -512,7 +526,7 @@ describe("virtual texture GPU arena", () => {
       },
     });
 
-    expect(requestedBytes).toBe(manifest.pageSize ** 2 * 4);
+    expect(requestedBytes).toBe(virtualTextureDecodedPageBytes(manifest));
     expect(gl.subUploads).toHaveLength(uploadsBefore);
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
       pendingUploads: 1,
@@ -578,7 +592,7 @@ describe("virtual texture GPU arena", () => {
     processVirtualTextureGpuUploads(arena, 3, {
       reserve: (bytes) => {
         requestedBytes.push(bytes);
-        if (bytes !== manifest.pageSize ** 2 * 4) return undefined;
+        if (bytes !== virtualTextureDecodedPageBytes(manifest)) return undefined;
         return { cancel: () => undefined, commit: () => undefined };
       },
     });
@@ -587,7 +601,7 @@ describe("virtual texture GPU arena", () => {
     // invalidation means the atlas write has not happened. It is neither a
     // valid cache hit nor a free slot that demand planning may admit again.
     const snapshot = virtualTextureGpuResourceSnapshot(resource);
-    expect(requestedBytes).toEqual([16, 4, 16, 4]);
+    expect(requestedBytes).toEqual([64, 4, 64, 4]);
     expect(snapshot).toMatchObject({
       activePages: 2,
       cachedPages: 2,
@@ -670,8 +684,8 @@ describe("virtual texture GPU arena", () => {
 
     expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploadsBefore + 1);
     expect(gl.subUploads.filter(({ serial }) => serial === 2)).toHaveLength(pageTableUploadsBefore + 1);
-    expect(requestedBytes[0]).toBe(manifest.pageSize ** 2 * 4);
-    expect(requestedBytes.filter((bytes) => bytes === manifest.pageSize ** 2 * 4)).toHaveLength(1);
+    expect(requestedBytes[0]).toBe(virtualTextureDecodedPageBytes(manifest));
+    expect(requestedBytes.filter((bytes) => bytes === virtualTextureDecodedPageBytes(manifest))).toHaveLength(1);
     expect(requestedBytes.slice(1).every((bytes) => bytes === 4)).toBe(true);
     expect({ atlasCommits, pageTableCommits }).toEqual({ atlasCommits: 1, pageTableCommits: 1 });
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
@@ -679,6 +693,30 @@ describe("virtual texture GPU arena", () => {
       cachedPages: 1,
       uploadedPages: 1,
     });
+  });
+
+  it("places atlas uploads on stored-cell boundaries rather than logical-page boundaries", () => {
+    const { arena, gl } = setup();
+    const resource = admitTestVirtualTextureGpuResource(arena, "a", 1, options({ physicalSlots: 4 }));
+    processVirtualTextureGpuUploads(arena, 0);
+    for (const [serial, page] of [
+      [1, { mip: 0, x: 0, y: 0 }],
+      [2, { mip: 0, x: 1, y: 0 }],
+      [3, { mip: 0, x: 0, y: 1 }],
+    ] as const) {
+      queueVirtualTextureGpuUpload(arena, resource, upload(page, serial));
+    }
+
+    processVirtualTextureGpuUploads(arena, 1);
+    processVirtualTextureGpuUploads(arena, 2);
+
+    expect(gl.subUploads
+      .filter(({ serial }) => serial === 1)
+      .map(({ source, x, y }) => ({ source, x, y }))).toEqual([
+      { source: { serial: 1 }, x: 0, y: 0 },
+      { source: { serial: 2 }, x: 4, y: 0 },
+      { source: { serial: 3 }, x: 0, y: 4 },
+    ]);
   });
 
   it("commits admitted upload reservations and cancels them on a GL failure", () => {
@@ -708,8 +746,8 @@ describe("virtual texture GPU arena", () => {
     // page-table texels.
     expect({ cancels, commits }).toEqual({ cancels: 1, commits: 2 });
     expect(requestedBytes).toEqual([
-      manifest.pageSize ** 2 * 4,
-      manifest.pageSize ** 2 * 4,
+      virtualTextureDecodedPageBytes(manifest),
+      virtualTextureDecodedPageBytes(manifest),
       4,
     ]);
     expect(virtualTextureGpuResourceSnapshot(resource).uploadedPages).toBe(1);
@@ -736,11 +774,11 @@ describe("virtual texture GPU arena", () => {
 
     expect(() => processVirtualTextureGpuUploads(arena, 1, admission)).toThrow(/operation fault/);
     expect({ cancels, commits }).toEqual({ cancels: 0, commits: 2 });
-    expect(requestedBytes).toEqual([manifest.pageSize ** 2 * 4, 4]);
+    expect(requestedBytes).toEqual([virtualTextureDecodedPageBytes(manifest), 4]);
 
     processVirtualTextureGpuUploads(arena, 1, admission);
     expect({ cancels, commits }).toEqual({ cancels: 0, commits: 2 });
-    expect(requestedBytes).toEqual([manifest.pageSize ** 2 * 4, 4]);
+    expect(requestedBytes).toEqual([virtualTextureDecodedPageBytes(manifest), 4]);
     expect(virtualTextureGpuResourceSnapshot(resource).uploadedPages).toBe(1);
   });
 
@@ -919,6 +957,7 @@ describe("virtual texture GPU arena", () => {
   it("protects resident ancestors using page-grid mip semantics", () => {
     const { arena } = setup();
     const inferredMipManifest: VirtualTextureManifestModel = {
+      borderTexels: manifest.borderTexels,
       height: manifest.height,
       pageSize: manifest.pageSize,
       pages: manifest.pages,
@@ -945,6 +984,7 @@ describe("virtual texture GPU arena", () => {
   it("accepts inferred final mips for NPOT page grids", () => {
     const { arena } = setup();
     const inferredManifest: VirtualTextureManifestModel = {
+      borderTexels: 1,
       height: 10,
       pageSize: 2,
       pages: [],
@@ -1328,8 +1368,9 @@ describe("virtual texture GPU arena", () => {
     expect(cachedPagesByMip).toEqual([1, 0, 1]);
     gl.maxTextureUnits = 1;
     expect(bindVirtualTextureGpuResource(arena, "a", 3, 4)).toMatchObject({
+      atlasCellSize: 4,
       atlasGridColumns: 2,
-      pageSize: 2,
+      borderTexels: 1,
       pageTableHeight: 4,
       pageTableWidth: 4,
     });
@@ -1340,10 +1381,10 @@ describe("virtual texture GPU arena", () => {
       expect(gl.activeUnits).toHaveLength(activeCount);
     }
     expect(virtualTextureGpuArenaSnapshot(arena)).toEqual({
-      allocatedBytes: 128,
+      allocatedBytes: 320,
       allocatedResources: 1,
       budgetBytes: 10_000_000_000,
-      chargedBytes: 128,
+      chargedBytes: 320,
       pendingUploads: 0,
       resources: 1,
       schedulerSlots: 1,

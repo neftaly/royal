@@ -327,12 +327,14 @@ import {
 import {
   generatedVirtualTexturePageCount,
   parseVirtualTextureManifest,
+  virtualTextureDecodedPageBytes,
   virtualTextureExplicitPageUrisByKey,
   virtualTexturePageKey,
   virtualTexturePageUri,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
+import { validateVirtualTexturePageImage } from "./virtual-texture-page-image";
 import {
   GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
   VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS,
@@ -4997,7 +4999,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           );
           return "terminal";
         }
-        const pageUploadBytes = manifest.pageSize * manifest.pageSize * 4;
+        const pageUploadBytes = virtualTextureDecodedPageBytes(manifest);
         const largestUploadBytes = Math.max(
           pageUploadBytes,
           maxVirtualTexturePageTableUploadBytes(manifest, state.activeSource.kind === "generated"),
@@ -5610,8 +5612,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       return false;
     }
 
-    const decodedBytes = manifest.pageSize * manifest.pageSize * 4;
-    if (!Number.isSafeInteger(decodedBytes)) {
+    let decodedBytes: number;
+    try {
+      decodedBytes = virtualTextureDecodedPageBytes(manifest);
+    } catch {
       this.#transitionVirtualTexturePage(state, pageKey, {
         kind: "capacity-denied",
         permanent: true,
@@ -5691,43 +5695,24 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#scheduleVirtualTextureRequestDrain();
         return;
       }
-      if (state.activeSource.kind === "sidecar") {
-        const candidate = image as TexImageSource & {
-          readonly height?: number;
-          readonly naturalHeight?: number;
-          readonly naturalWidth?: number;
-          readonly videoHeight?: number;
-          readonly videoWidth?: number;
-          readonly width?: number;
-        };
-        const width = candidate.naturalWidth && candidate.naturalWidth > 0
-          ? candidate.naturalWidth
-          : candidate.videoWidth && candidate.videoWidth > 0
-            ? candidate.videoWidth
-            : candidate.width;
-        const height = candidate.naturalHeight && candidate.naturalHeight > 0
-          ? candidate.naturalHeight
-          : candidate.videoHeight && candidate.videoHeight > 0
-            ? candidate.videoHeight
-            : candidate.height;
-        if (width !== manifest.pageSize || height !== manifest.pageSize) {
-          // The decoded resource cannot become valid by retrying the same URI.
-          // Keep it terminally dormant while allowing other desired pages to drain.
-          this.#transitionVirtualTexturePage(state, pageKey, {
-            disposition: "invalid",
-            kind: "decoded",
-          });
-          state.stats.pageLoadFailures += 1;
-          if (state.diagnosticsEnabled) {
-            this.#recordDiagnostic(
-              `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} has ${String(width)}x${String(height)} pixels; expected ${manifest.pageSize}x${manifest.pageSize}`,
-              `virtual-texture-page-size:${state.activeSource.manifestUri}:${pageKey}`,
-            );
-          }
-          this.#scheduleVirtualTextureRequestDrain();
-          this.#decodedTextureSources.closeVirtualTextureAsync(image);
-          return;
+      const pageImageValidation = validateVirtualTexturePageImage(manifest, image);
+      if (pageImageValidation.kind === "invalid") {
+        // The decoded resource cannot become valid by retrying the same URI.
+        // Keep it terminally dormant while allowing other desired pages to drain.
+        this.#transitionVirtualTexturePage(state, pageKey, {
+          disposition: "invalid",
+          kind: "decoded",
+        });
+        state.stats.pageLoadFailures += 1;
+        if (state.diagnosticsEnabled) {
+          this.#recordDiagnostic(
+            `Virtual texture page ${state.activeSource.manifestUri} ${pageKey} has ${String(pageImageValidation.width)}x${String(pageImageValidation.height)} pixels; expected ${pageImageValidation.storedPageSize}x${pageImageValidation.storedPageSize}`,
+            `virtual-texture-page-size:${state.activeSource.manifestUri}:${pageKey}`,
+          );
         }
+        this.#scheduleVirtualTextureRequestDrain();
+        this.#decodedTextureSources.closeVirtualTextureAsync(image);
+        return;
       }
       const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
       if (
@@ -6010,9 +5995,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#programArena,
       program,
       "u_vtAtlasTexelSize",
-      1 / (binding.atlasGridColumns * manifest.pageSize),
-      1 / (binding.atlasGridRows * manifest.pageSize),
+      1 / (binding.atlasGridColumns * binding.atlasCellSize),
+      1 / (binding.atlasGridRows * binding.atlasCellSize),
     );
+    uniform1f(this.#programArena, program, "u_vtBorderTexels", binding.borderTexels);
     uniform1f(this.#programArena, program, "u_vtPageSize", manifest.pageSize);
     uniform2f(this.#programArena, program, "u_vtVirtualSize", manifest.width, manifest.height);
     uniform1i(this.#programArena, program, "u_vtFlipY", (state.texture.flipY ?? true) ? 1 : 0);

@@ -24,14 +24,15 @@ treated as raster pixels.
 
 ## Authored manifest contract
 
-The intended public format is the version 1 JSON shape below. Manifest-relative
+The intended public format is the version 2 JSON shape below. Manifest-relative
 page URIs are recommended.
 
 ```json
 {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "virtualSize": [4096, 2048],
   "pageSize": 256,
+  "borderTexels": 1,
   "mipCount": 5,
   "colorSpace": "srgb",
   "physicalSlots": 32,
@@ -42,16 +43,25 @@ page URIs are recommended.
 }
 ```
 
-`contractVersion` is required and must be `1`. The fields shown are top-level;
+`contractVersion` is required and must be `2`. The fields shown are top-level;
 legacy nested `virtualTexture`, dimension, tile-size, budget, and keyed-entry
 aliases are not part of the contract.
 
-`virtualSize` is the mip-0 width and height in texels. `pageSize` is the usable
-square page size. Border-bearing manifests are unsupported: omit
-`borderTexels`, or set it to zero. Mip 0 is full resolution; mip `n` is the
-image reduced by `2^n`. Page `(mip, x, y)` covers the page at column `x`, row
-`y`, with `(0, 0)` at the top-left of that mip image. Edge pages may contain
-less source data but are uploaded into a page-sized physical slot.
+`virtualSize` is the mip-0 width and height in texels. `pageSize` is the logical
+square interior covered by a page; it does not include storage needed for
+filtering. `borderTexels` is required and must be a positive integer. Every
+decoded authored page must therefore be a square image whose stored extent is
+`pageSize + 2 * borderTexels` texels. A 256-texel logical page with a one-texel
+border is stored as 258 by 258 texels.
+
+Mip 0 is full resolution; mip `n` is the image reduced by `2^n`. Page
+`(mip, x, y)` covers the logical page at column `x`, row `y`, with `(0, 0)` at
+the top-left of that mip image. The page interior starts at
+`(borderTexels, borderTexels)` in its stored image. Authors must provide the
+gutter texels: each stored image is the periodic crop of the complete mip over
+the logical page plus its border. This also defines the unused tail and gutter
+of partial edge pages. Royal validates the decoded stored dimensions and does
+not synthesize missing gutters from an isolated authored page.
 
 The canonical key is `{mip}/{x}/{y}`. A `pages.uriTemplate` may contain
 `{mip}`, `{x}`, `{y}`, `{key}`, or `{page}`; `{page}` expands to
@@ -95,8 +105,10 @@ while preserving geometry, ordinary-texture, and render-target floors.
 
 Manifest `physicalByteBudget` and `physicalSlots` remain per-resource quality
 and footprint ceilings; they cannot expand the governor's effective VT
-capacity. Residency is demand-driven and eviction may return a sample to a
-resident parent mip.
+capacity. Each RGBA8 physical page consumes
+`(pageSize + 2 * borderTexels)^2 * 4` texel bytes before atlas-grid padding;
+page tables and atlas padding also count toward allocation. Residency is
+demand-driven and eviction may return a sample to a resident parent mip.
 
 In `diagnostics().virtualTexturing`, `activePages`/`activePagesByMip` count the
 page-table mappings currently visible to shaders. `cachedPages` and

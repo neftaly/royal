@@ -10,12 +10,12 @@ import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
   generatedVirtualTextureManifest,
-  virtualTexturePageKey,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
 import type { VirtualTexturePageLifecycle } from "./virtual-texture-page-lifecycle";
 import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
+import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-rasterizer";
 
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_RASTER_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
@@ -222,28 +222,10 @@ export const generatedRasterVirtualTexturePageImage = (
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
 ): TexImageSource => {
-  const mipScale = 2 ** page.mip;
-  const sourceX = page.x * manifest.pageSize * mipScale;
-  const sourceY = page.y * manifest.pageSize * mipScale;
-  const sourceWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - sourceX));
-  const sourceHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - sourceY));
-  const canvas = createVirtualTextureCanvas(
-    manifest.pageSize,
-    manifest.pageSize,
-    `generated raster virtual texture page ${source.label} ${virtualTexturePageKey(page)}`,
-  );
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  context.clearRect(0, 0, manifest.pageSize, manifest.pageSize);
-  context.drawImage(
-    rasterVirtualTextureCanvasSource(source),
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    manifest.pageSize,
-    manifest.pageSize,
-  );
-  return canvas;
+  return rasterizeGeneratedVirtualTexturePage({
+    height: source.height,
+    image: rasterVirtualTextureCanvasSource(source),
+    label: source.label,
+    width: source.width,
+  }, manifest, page);
 };

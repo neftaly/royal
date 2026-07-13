@@ -152,7 +152,10 @@ export const installCanvasImageMimeTypeSupport = (supported: readonly string[]):
 export const installCanvas2d = (): {
   readonly contexts: Array<{
     readonly clearRect: ReturnType<typeof vi.fn>;
+    readonly createPattern: ReturnType<typeof vi.fn>;
     readonly drawImage: ReturnType<typeof vi.fn>;
+    readonly fillRect: ReturnType<typeof vi.fn>;
+    fillStyle: unknown;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     readonly putImageData: ReturnType<typeof vi.fn>;
@@ -160,7 +163,10 @@ export const installCanvas2d = (): {
 } => {
   const contexts: Array<{
     readonly clearRect: ReturnType<typeof vi.fn>;
+    readonly createPattern: ReturnType<typeof vi.fn>;
     readonly drawImage: ReturnType<typeof vi.fn>;
+    readonly fillRect: ReturnType<typeof vi.fn>;
+    fillStyle: unknown;
     imageSmoothingEnabled: boolean;
     imageSmoothingQuality: ImageSmoothingQuality;
     readonly putImageData: ReturnType<typeof vi.fn>;
@@ -171,7 +177,10 @@ export const installCanvas2d = (): {
       if (tagName !== "canvas") throw new Error(`unexpected element ${tagName}`);
       const context = {
         clearRect: vi.fn(),
+        createPattern: vi.fn(() => ({ setTransform: vi.fn() })),
         drawImage: vi.fn(),
+        fillRect: vi.fn(),
+        fillStyle: "#000",
         imageSmoothingEnabled: false,
         imageSmoothingQuality: "low" as ImageSmoothingQuality,
         putImageData: vi.fn(),

@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="2560 512 512 512">
-<g id="canonical-map">
+<svg xmlns="http://www.w3.org/2000/svg" width="514" height="514" viewBox="2559 511 514 514">
+<defs>
+<clipPath id="canonical-map-clip"><rect width="4096" height="4096"/></clipPath>
+<g id="canonical-map" clip-path="url(#canonical-map-clip)">
 <rect width="4096" height="4096" fill="#13232e"/>
 <path d="M0 0H2048V2048H0z" fill="#9b3f35"/><path d="M2048 0H4096V2048H2048z" fill="#c89435"/><path d="M0 2048H2048V4096H0z" fill="#397ba3"/><path d="M2048 2048H4096V4096H2048z" fill="#4a9568"/>
 <path d="M0 520C680 330 1110 760 1690 600S2780 120 4096 590V0H0z" fill="#182f3a" opacity=".48"/><path d="M0 3520C720 3310 1250 3790 1980 3510S3280 3100 4096 3450V4096H0z" fill="#102731" opacity=".42"/>
@@ -14,6 +16,18 @@
 <text x="1024" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHWEST</text><text x="3072" y="260" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">NORTHEAST</text><text x="1024" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHWEST</text><text x="3072" y="3980" text-anchor="middle" fill="#fff7df" font-family="system-ui,sans-serif" font-size="150" font-weight="900">SOUTHEAST</text>
 <text x="2048" y="1770" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="92" font-weight="900">CROWN HARBOR</text><text x="2048" y="2300" text-anchor="middle" fill="#fff1c9" font-family="ui-monospace,monospace" font-size="58">4096 m chart grid</text>
 <path d="M2048 70l-70 145h140z" fill="#fff1c9"/><text x="2048" y="330" text-anchor="middle" fill="#fff1c9" font-family="system-ui,sans-serif" font-size="76" font-weight="900">NORTH</text>
+</g>
+</defs>
+<g id="canonical-map-periodic-copies">
+<use href="#canonical-map" transform="translate(-4096 -4096)"/>
+<use href="#canonical-map" transform="translate(0 -4096)"/>
+<use href="#canonical-map" transform="translate(4096 -4096)"/>
+<use href="#canonical-map" transform="translate(-4096 0)"/>
+<use href="#canonical-map" transform="translate(0 0)"/>
+<use href="#canonical-map" transform="translate(4096 0)"/>
+<use href="#canonical-map" transform="translate(-4096 4096)"/>
+<use href="#canonical-map" transform="translate(0 4096)"/>
+<use href="#canonical-map" transform="translate(4096 4096)"/>
 </g>
 <g id="vt-debug-overlay" data-vt-page="0/5/1" opacity=".62">
 <rect x="2568" y="520" width="496" height="496" rx="12" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="10 8"/>

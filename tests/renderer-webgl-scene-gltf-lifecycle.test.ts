@@ -718,18 +718,19 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       await flushAnimationFrames(viewport.animationFrames);
     }
 
-    expect(contexts[0]?.drawImage).toHaveBeenCalled();
-    expect(contexts[0]?.drawImage.mock.calls[0]).toEqual([
+    expect(contexts[0]?.createPattern).toHaveBeenCalledWith(
       baseColorImage,
-      0,
-      0,
-      512,
-      512,
-      0,
-      0,
-      256,
-      256,
-    ]);
+      "repeat",
+    );
+    expect(contexts[0]?.createPattern.mock.results[0]?.value.setTransform).toHaveBeenCalledWith({
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: 1,
+      f: 1,
+    });
+    expect(contexts[0]?.fillRect).toHaveBeenCalledWith(0, 0, 258, 258);
     expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
     expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({

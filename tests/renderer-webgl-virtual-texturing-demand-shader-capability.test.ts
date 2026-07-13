@@ -166,10 +166,10 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     fetchRequests[0]!.resolve(responseJson(vtTerrainManifest()));
     await flushMicrotasks();
     for (let cycle = 0; cycle < 16; cycle += 1) {
-      await settleIncompleteImages(512);
+      await settleIncompleteImages(514);
       root.render(renderScene(material));
     }
-    await settleIncompleteImages(512);
+    await settleIncompleteImages(514);
 
     const pageRequests = ControlledImage.instances.map((image) => image.src);
     expect(pageRequests.some((src) => src.includes("/pages/m3-"))).toBe(true);
@@ -196,7 +196,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     fetchRequests[0]!.resolve(responseJson(vtZoomCycleManifest()));
     await flushMicrotasks();
     for (let cycle = 0; cycle < 8; cycle += 1) {
-      await settleIncompleteImages(256);
+      await settleIncompleteImages(258);
       root.render(fineView);
     }
 
@@ -207,14 +207,14 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(root.snapshot().virtualTexturing.cachedPages).toBe(3);
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
-      await settleIncompleteImages(256);
+      await settleIncompleteImages(258);
       root.render(coarseView);
     }
     const requestsAfterCoarseSettle = ControlledImage.instances.length;
     const updatesAfterCoarseSettle = root.snapshot().virtualTexturing.pageTableUpdates;
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
-      await settleIncompleteImages(256);
+      await settleIncompleteImages(258);
       root.render(fineView);
     }
 
@@ -327,6 +327,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       "u_vtPageTableSize",
       "u_vtAtlasGrid",
       "u_vtAtlasTexelSize",
+      "u_vtBorderTexels",
       "u_vtPageSize",
       "u_vtVirtualSize",
     ]));

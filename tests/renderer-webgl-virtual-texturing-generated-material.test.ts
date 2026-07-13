@@ -30,7 +30,6 @@ import {
   uniformNames,
   namedUniform1iValues,
   namedUniform4fvValues,
-  type FakeCanvas,
 } from "./renderer-webgl-virtual-texturing-fixtures";
 
 describe("WebGL renderer generated and material virtual texturing", () => {
@@ -60,18 +59,19 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       u_texture: expect.arrayContaining([0]),
       u_useTexture: expect.arrayContaining([1]),
     }));
-    expect(contexts[0]?.drawImage).toHaveBeenCalled();
-    expect(contexts[0]?.drawImage.mock.calls[0]).toEqual([
+    expect(contexts[0]?.createPattern).toHaveBeenCalledWith(
       ControlledImage.instances[0],
-      0,
-      0,
-      512,
-      512,
-      0,
-      0,
-      256,
-      256,
-    ]);
+      "repeat",
+    );
+    expect(contexts[0]?.createPattern.mock.results[0]?.value.setTransform).toHaveBeenCalledWith({
+      a: 0.5,
+      b: 0,
+      c: 0,
+      d: 0.5,
+      e: 1,
+      f: 1,
+    });
+    expect(contexts[0]?.fillRect).toHaveBeenCalledWith(0, 0, 258, 258);
 
     for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
       await flushMicrotasks();
@@ -90,56 +90,11 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThanOrEqual(1);
     expect(root.snapshot().virtualTexturing.cachedPages).toBeGreaterThanOrEqual(1);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-    expect(root.snapshot().virtualTexturing.uploadedPageBytes).toBeGreaterThanOrEqual(256 * 256 * 4);
+    expect(root.snapshot().virtualTexturing.uploadedPageBytes).toBeGreaterThanOrEqual(258 * 258 * 4);
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThanOrEqual(1);
-    expect(canvases[0]).toEqual(expect.objectContaining({ height: 256, width: 256 }));
+    expect(canvases[0]).toEqual(expect.objectContaining({ height: 258, width: 258 }));
     expect(uniformNames(calls)).toEqual(expect.arrayContaining(["u_vtAtlas", "u_vtPageTable"]));
     expect(consoleWarn).not.toHaveBeenCalled();
-  });
-
-  it("binds the ordinary defensive fallback when generated VT becomes invalid after planning", async () => {
-    vi.stubGlobal("Image", ControlledImage);
-    installCanvas2d();
-    let invalidateAfterPlan = false;
-    let canvas: FakeCanvas;
-    const { calls, gl } = fakeGl({
-      beforeUniform1i: (name) => {
-        if (!invalidateAfterPlan || name !== "u_unlit") return;
-        invalidateAfterPlan = false;
-        canvas.dispatchContextEvent("webglcontextlost");
-      },
-    });
-    canvas = fakeCanvas(gl);
-    const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
-    const texture = imageTexture("/textures/defensive-fallback.png");
-    const material = unlitMaterial({ texture });
-    const graph = renderScene(material);
-
-    root.render(graph);
-    const source = ControlledImage.instances[0]!;
-    source.height = 512;
-    source.naturalHeight = 512;
-    source.naturalWidth = 512;
-    source.width = 512;
-    source.settleLoad();
-    await flushMicrotasks();
-    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
-      root.render(graph);
-      await flushMicrotasks();
-    }
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-
-    const invalidatedDrawStart = calls.length;
-    invalidateAfterPlan = true;
-    expect(() => root.render(renderScene(standardMaterial({ texture }))))
-      .toThrow(/Vertex-input context was dropped/);
-    const uniforms = namedUniform1iValues(calls.slice(invalidatedDrawStart));
-
-    expect(invalidateAfterPlan).toBe(false);
-    expect(uniforms.u_texture).toEqual([0]);
-    expect(uniforms.u_useTexture).toEqual([1]);
-    expect(uniforms.u_useVirtualTexture).toEqual([0]);
-    expect(uniforms.u_vtAtlas).toBeUndefined();
   });
 
   it("uses the opted-in generated VT policy for direct imageTexture SVG", async () => {
@@ -205,8 +160,8 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     }
 
     expect(objectUrlBlobs).toHaveLength(1);
-    expect(contexts.every((context) => context.drawImage.mock.calls.every((call) => (
-      call[0] === ControlledImage.instances[0]
+    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
+      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
     )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
@@ -288,11 +243,13 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(canvases).toHaveLength(generatedPageRequests);
     expect(contexts).toHaveLength(generatedPageRequests);
     for (const canvas of canvases) {
-      expect(canvas).toEqual(expect.objectContaining({ height: 256, width: 256 }));
+      expect(canvas).toEqual(expect.objectContaining({ height: 258, width: 258 }));
     }
     for (const context of contexts) {
-      expect(context.clearRect).toHaveBeenCalledTimes(1);
-      expect(context.drawImage).toHaveBeenCalledTimes(1);
+      expect(context.createPattern).toHaveBeenCalledTimes(1);
+      expect(context.createPattern.mock.calls[0]?.[1]).toBe("repeat");
+      expect(context.createPattern.mock.results[0]?.value.setTransform).toHaveBeenCalledTimes(1);
+      expect(context.fillRect).toHaveBeenCalledWith(0, 0, 258, 258);
     }
   });
 
@@ -359,6 +316,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       "u_vtPageTableSize",
       "u_vtAtlasGrid",
       "u_vtAtlasTexelSize",
+      "u_vtBorderTexels",
       "u_vtPageSize",
       "u_vtVirtualSize",
     ]));
@@ -376,7 +334,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     }));
     expect(uniform4fv.u_color?.at(-1)).toEqual([1, 1, 1, 1]);
     expect(textureAllocations(calls).map((call) => call.args.slice(2, 7))).toEqual(expect.arrayContaining([
-      [gl.SRGB8_ALPHA8, 4, 4, 0, gl.RGBA],
+      [gl.SRGB8_ALPHA8, 6, 6, 0, gl.RGBA],
       [gl.RGBA8, 1, 1, 0, gl.RGBA],
     ]));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);

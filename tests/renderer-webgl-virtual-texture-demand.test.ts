@@ -27,6 +27,7 @@ const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): Virtual
   uriTemplate: "pages/m{mip}-{x}-{y}.png",
   width: 1_024,
   ...overrides,
+  borderTexels: overrides.borderTexels ?? 1,
 });
 
 const context = (
@@ -380,6 +381,7 @@ describe("virtual texture pure demand planning", () => {
       generated: false,
       limit: 4,
       manifest: {
+        borderTexels: 1,
         height: 1_073_741_824,
         mipCount: 31,
         pageSize: 1,
@@ -397,6 +399,7 @@ describe("virtual texture pure demand planning", () => {
 
   it("bounds non-overflow demand for a 2^30 sparse address space by authored entries", () => {
     const huge = {
+      borderTexels: 1,
       height: 2 ** 30,
       mipCount: 31,
       pageSize: 1,
@@ -438,6 +441,7 @@ describe("virtual texture pure demand planning", () => {
 
   it("bounds a truncated huge template hierarchy without a terminal 1x1 mip", () => {
     const truncated: VirtualTextureManifestModel = {
+      borderTexels: 1,
       height: 2 ** 30,
       mipCount: 2,
       pageSize: 1,
@@ -914,6 +918,7 @@ describe("virtual texture pure demand planning", () => {
 
   it("checks sparse page availability independently from demand ordering", () => {
     const sparse: VirtualTextureManifestModel = {
+      borderTexels: 1,
       height: 1_024,
       pageSize: 256,
       pages: [{ mip: 1, uri: "parent.png", x: 0, y: 0 }],

@@ -5,8 +5,10 @@ import {
   generatedVirtualTexturePageCount,
   parentVirtualTexturePage,
   VirtualTextureAtlasPageTable,
+  virtualTextureDecodedPageBytes,
   virtualTexturePageKey,
   virtualTextureMipDimension,
+  virtualTextureStoredPageSize,
   type VirtualTextureAtlasAssignment,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
@@ -97,9 +99,12 @@ export interface VirtualTextureGpuResidency {
 }
 
 export interface VirtualTextureGpuBinding {
+  /** Physical atlas cell edge in texels, including both gutters. */
+  readonly atlasCellSize: number;
   readonly atlasGridColumns: number;
   readonly atlasGridRows: number;
-  readonly pageSize: number;
+  /** Gutter width on one side; the logical interior starts at this cell offset. */
+  readonly borderTexels: number;
   readonly pageTableHeight: number;
   readonly pageTableWidth: number;
 }
@@ -297,6 +302,7 @@ export const virtualTextureGpuAdmission = (
     || !isPositiveSafeInteger(manifest.width)
     || !isPositiveSafeInteger(manifest.height)
     || !isPositiveSafeInteger(manifest.pageSize)
+    || !isPositiveSafeInteger(manifest.borderTexels)
     || !isPositiveSafeInteger(requestedSlots)
     || (manifest.physicalByteBudget !== undefined && !isPositiveSafeInteger(manifest.physicalByteBudget))
   ) return { kind: "unsupported", reason: "invalid-dimensions" };
@@ -315,11 +321,15 @@ export const virtualTextureGpuAdmission = (
     availablePhysicalBytes,
     manifest.physicalByteBudget ?? availablePhysicalBytes,
   );
-  const bytesPerSlotCell = manifest.pageSize * manifest.pageSize * 4;
-  if (!isPositiveSafeInteger(bytesPerSlotCell)) {
+  let atlasCellSize: number;
+  let bytesPerSlotCell: number;
+  try {
+    atlasCellSize = virtualTextureStoredPageSize(manifest);
+    bytesPerSlotCell = virtualTextureDecodedPageBytes(manifest);
+  } catch {
     return { kind: "unsupported", reason: "invalid-dimensions" };
   }
-  const atlasCellsPerAxis = Math.floor(maxTextureSize / manifest.pageSize);
+  const atlasCellsPerAxis = Math.floor(maxTextureSize / atlasCellSize);
   if (atlasCellsPerAxis < 1) return { kind: "unsupported", reason: "texture-size-exceeded" };
   const atlasCellBudget = Math.floor((resourceBudget - pageTableBytes) / bytesPerSlotCell);
   const requiredBytes = pageTableBytes + bytesPerSlotCell;
@@ -357,8 +367,8 @@ export const virtualTextureGpuAdmission = (
   const atlasGridColumns = Math.ceil(Math.sqrt(effectiveSlots));
   const atlasGridRows = Math.ceil(effectiveSlots / atlasGridColumns);
   const paddedSlots = atlasGridColumns * atlasGridRows;
-  const atlasWidth = atlasGridColumns * manifest.pageSize;
-  const atlasHeight = atlasGridRows * manifest.pageSize;
+  const atlasWidth = atlasGridColumns * atlasCellSize;
+  const atlasHeight = atlasGridRows * atlasCellSize;
   const atlasBytes = paddedSlots * bytesPerSlotCell;
   const allocatedBytes = atlasBytes + pageTableBytes;
   return {
@@ -852,7 +862,7 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   if (allocation !== undefined) synchronizeVisibleAssignments(resource, allocation);
   resource.pendingHead += 1;
   publish(state, resource, "completed", upload, assignment.evicted?.pageKey);
-  resource.uploadedPageBytes += resource.options.manifest.pageSize ** 2 * 4;
+  resource.uploadedPageBytes += virtualTextureDecodedPageBytes(resource.options.manifest);
   resource.uploadedPages += 1;
   state.uploadsThisFrame += 1;
   delete resource.inFlightUpload;
@@ -882,13 +892,14 @@ const resumeInFlightUpload = (
   }
   if (inFlight.phase === "upload-atlas") {
     const { gl } = state;
+    const atlasCellSize = virtualTextureStoredPageSize(resource.options.manifest);
     prepareTextureUpload(gl, false);
     gl.bindTexture(gl.TEXTURE_2D, allocation.atlasTexture);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,
-      (assignment.slot % allocation.atlasGridColumns) * resource.options.manifest.pageSize,
-      Math.floor(assignment.slot / allocation.atlasGridColumns) * resource.options.manifest.pageSize,
+      (assignment.slot % allocation.atlasGridColumns) * atlasCellSize,
+      Math.floor(assignment.slot / allocation.atlasGridColumns) * atlasCellSize,
       gl.RGBA,
       gl.UNSIGNED_BYTE,
       upload.image,
@@ -965,7 +976,7 @@ export const processVirtualTextureGpuUploads = (
       const phaseBefore = resource.inFlightUpload.phase;
       const requiresAtlasUpload = resource.inFlightUpload.phase !== "publish-page-table";
       const reservation = requiresAtlasUpload
-        ? admission?.reserve(resource.options.manifest.pageSize ** 2 * 4)
+        ? admission?.reserve(virtualTextureDecodedPageBytes(resource.options.manifest))
         : undefined;
       if (requiresAtlasUpload && admission !== undefined && reservation === undefined) continue;
       try {
@@ -989,7 +1000,7 @@ export const processVirtualTextureGpuUploads = (
     }
     const upload = resource.pendingUploads[resource.pendingHead];
     if (upload !== undefined && resource.inFlightUpload === undefined) {
-      const reservation = admission?.reserve(resource.options.manifest.pageSize ** 2 * 4);
+      const reservation = admission?.reserve(virtualTextureDecodedPageBytes(resource.options.manifest));
       if (admission !== undefined && reservation === undefined) continue;
       try {
         const completed = startUpload(state, resource, allocation, upload, admission);
@@ -1160,9 +1171,10 @@ export const bindVirtualTextureGpuResource = (
   state.gl.activeTexture(state.gl.TEXTURE0 + pageTableTextureUnit);
   state.gl.bindTexture(state.gl.TEXTURE_2D, allocation.pageTableTexture);
   return {
+    atlasCellSize: virtualTextureStoredPageSize(resource.options.manifest),
     atlasGridColumns: allocation.atlasGridColumns,
     atlasGridRows: allocation.atlasGridRows,
-    pageSize: resource.options.manifest.pageSize,
+    borderTexels: resource.options.manifest.borderTexels,
     pageTableHeight: allocation.pageTableHeight,
     pageTableWidth: allocation.pageTableWidth,
   };

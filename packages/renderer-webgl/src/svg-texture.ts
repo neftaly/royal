@@ -1,5 +1,5 @@
 import type { LoadedTextureSource } from "./texture-sources";
-import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
+import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-rasterizer";
 import {
   abortError,
   dataUriMediaType,
@@ -10,7 +10,6 @@ import {
 import type { GltfDocument, GltfImage } from "./gltf/schema";
 import {
   generatedVirtualTextureManifest,
-  virtualTexturePageKey,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
@@ -633,32 +632,12 @@ class GeneratedSvgVirtualTexturePageProducer implements SvgVirtualTexturePagePro
     signal?: AbortSignal,
   ): TexImageSource {
     if (signal?.aborted === true) throw abortError();
-    const mipScale = 2 ** page.mip;
-    const logicalX = page.x * manifest.pageSize * mipScale;
-    const logicalY = page.y * manifest.pageSize * mipScale;
-    const logicalWidth = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.width - logicalX));
-    const logicalHeight = Math.max(1, Math.min(manifest.pageSize * mipScale, manifest.height - logicalY));
-    const scaleX = this.#viewport.width / manifest.width;
-    const scaleY = this.#viewport.height / manifest.height;
-    const canvas = createVirtualTextureCanvas(
-      manifest.pageSize,
-      manifest.pageSize,
-      `generated SVG virtual texture page ${this.#label} ${virtualTexturePageKey(page)}`,
-    );
-    const context = virtualTextureCanvasContext(canvas, this.#label);
-    context.clearRect(0, 0, manifest.pageSize, manifest.pageSize);
-    context.drawImage(
-      this.#image,
-      logicalX * scaleX,
-      logicalY * scaleY,
-      logicalWidth * scaleX,
-      logicalHeight * scaleY,
-      0,
-      0,
-      manifest.pageSize,
-      manifest.pageSize,
-    );
-    return canvas;
+    return rasterizeGeneratedVirtualTexturePage({
+      height: this.#viewport.height,
+      image: this.#image,
+      label: this.#label,
+      width: this.#viewport.width,
+    }, manifest, page);
   }
 }
 
