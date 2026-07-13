@@ -1,9 +1,4 @@
-import * as fixtures from "./renderer-webgl-scene-gltf-fixtures";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { directionalLight, gltf, mesh, planeGeometry, unlitMaterial } from "@royal/renderer-core";
-import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
-
-const {
+import {
   defaultCanvasSize,
   triangleGltfSrc,
   triangleBinUri,
@@ -33,6 +28,10 @@ const {
   uniform1iPayloads,
   uniform4fvPayloads,
   uniform2fvPayloads,
+  trackGltfSceneTestRoot,
+  resetGltfSceneTestState,
+} from "./renderer-webgl-scene-gltf-test-runtime";
+import {
   triangleBin,
   meshoptCompressedTriangleBin,
   dracoCompressedTriangleBin,
@@ -41,6 +40,8 @@ const {
   interleavedTriangleBin,
   quantizedTriangleBin,
   sparseTriangleBin,
+} from "./renderer-webgl-scene-gltf-binary-fixtures";
+import {
   triangleDocument,
   materialTransmissionVolumeTriangleDocument,
   materialTransmissionVolumeDefaultsTriangleDocument,
@@ -53,16 +54,21 @@ const {
   materialDispersionBatchKeyTriangleDocument,
   materialVariantsTriangleDocument,
   materialVariantTextureTriangleDocument,
+} from "./renderer-webgl-scene-gltf-material-documents";
+import {
   responseWithJson,
   responseWithBuffer,
   installStagedGltfLoader,
-} = fixtures;
+} from "./renderer-webgl-scene-gltf-loader-fixtures";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { directionalLight, gltf, mesh, planeGeometry, unlitMaterial } from "@royal/renderer-core";
+import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
 
 const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
-  fixtures.trackGltfSceneTestRoot(createWebGlRootBase(...args));
+  trackGltfSceneTestRoot(createWebGlRootBase(...args));
 
 describe("WebGL renderer glTF advanced material and format regressions", () => {
-  afterEach(fixtures.resetGltfSceneTestState);
+  afterEach(resetGltfSceneTestState);
 
   it("renders required KHR materials transmission and volume through current-frame screen sampling", async () => {
     vi.stubGlobal("devicePixelRatio", 1);

@@ -1,12 +1,4 @@
-import * as fixtures from "./renderer-webgl-scene-gltf-fixtures";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { boxGeometry, createCameraViewResource, directionalLight, gltf, mesh, planeGeometry, scene, standardMaterial, unlitMaterial } from "@royal/renderer-core";
-import type { RenderObjectHandle } from "@royal/renderer-core";
-import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
-import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "../packages/renderer-webgl/src/resource-governor";
-import type { ResourceGovernorPolicy } from "../packages/renderer-webgl/src/resource-governor";
-
-const {
+import {
   triangleGltfSrc,
   matchingTriangleGltfSrc,
   triangleBinUri,
@@ -35,26 +27,40 @@ const {
   uniform1iPayloads,
   waitForUniform1iPayload,
   uniform4fvPayloads,
+  trackGltfSceneTestRoot,
+  resetGltfSceneTestState,
+} from "./renderer-webgl-scene-gltf-test-runtime";
+import {
   triangleBin,
   triangleWithImageBytes,
+} from "./renderer-webgl-scene-gltf-binary-fixtures";
+import {
   triangleDocument,
   solidTriangleDocument,
   doubleSidedTriangleDocument,
   alphaMaskTriangleDocument,
   alphaBlendTriangleDocument,
   mirroredTriangleNodesDocument,
+} from "./renderer-webgl-scene-gltf-material-documents";
+import {
   responseWithJson,
   responseWithBuffer,
   installStagedGltfLoader,
   installCanvas2d,
   settleDocumentAndBuffer,
-} = fixtures;
+} from "./renderer-webgl-scene-gltf-loader-fixtures";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { boxGeometry, createCameraViewResource, directionalLight, gltf, mesh, planeGeometry, scene, standardMaterial, unlitMaterial } from "@royal/renderer-core";
+import type { RenderObjectHandle } from "@royal/renderer-core";
+import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
+import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "../packages/renderer-webgl/src/resource-governor";
+import type { ResourceGovernorPolicy } from "../packages/renderer-webgl/src/resource-governor";
 
 const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
-  fixtures.trackGltfSceneTestRoot(createWebGlRootBase(...args));
+  trackGltfSceneTestRoot(createWebGlRootBase(...args));
 
 describe("WebGL renderer scene and glTF lifecycle regressions", () => {
-  afterEach(fixtures.resetGltfSceneTestState);
+  afterEach(resetGltfSceneTestState);
 
   it("denies oversized declared geometry before requesting external buffers", async () => {
     vi.stubGlobal("devicePixelRatio", 1);

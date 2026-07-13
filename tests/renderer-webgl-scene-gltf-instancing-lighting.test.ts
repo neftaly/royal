@@ -1,9 +1,4 @@
-import * as fixtures from "./renderer-webgl-scene-gltf-fixtures";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGltfInstanceTransforms, directionalLight, gltf, gltfInstances } from "@royal/renderer-core";
-import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
-
-const {
+import {
   triangleGltfSrc,
   khronosEnvironmentTestGltfSrc,
   khronosEnvironmentTestTransform,
@@ -38,10 +33,16 @@ const {
   waitForUniform1iPayload,
   uniform4fvPayloads,
   matrixUniformPayloads,
+  trackGltfSceneTestRoot,
+  resetGltfSceneTestState,
+} from "./renderer-webgl-scene-gltf-test-runtime";
+import {
   triangleBin,
   tangentTriangleBin,
   multiUvTriangleBin,
   instancedTriangleBin,
+} from "./renderer-webgl-scene-gltf-binary-fixtures";
+import {
   solidTriangleDocument,
   normalTextureTriangleDocument,
   tangentTriangleDocument,
@@ -62,16 +63,21 @@ const {
   materialSheenIridescenceDefaultsTriangleDocument,
   materialSheenIridescenceTextureDiagnosticTriangleDocument,
   materialSheenIridescenceBatchKeyTriangleDocument,
+} from "./renderer-webgl-scene-gltf-material-documents";
+import {
   responseWithJson,
   responseWithBuffer,
   installStagedGltfLoader,
-} = fixtures;
+} from "./renderer-webgl-scene-gltf-loader-fixtures";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createGltfInstanceTransforms, directionalLight, gltf, gltfInstances } from "@royal/renderer-core";
+import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
 
 const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
-  fixtures.trackGltfSceneTestRoot(createWebGlRootBase(...args));
+  trackGltfSceneTestRoot(createWebGlRootBase(...args));
 
 describe("WebGL renderer glTF instancing and lighting regressions", () => {
-  afterEach(fixtures.resetGltfSceneTestState);
+  afterEach(resetGltfSceneTestState);
 
   it("uploads only a committed bulk pose range in a 10k source", async () => {
     vi.stubGlobal("devicePixelRatio", 1);

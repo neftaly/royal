@@ -1,14 +1,4 @@
-import * as fixtures from "./renderer-webgl-scene-gltf-fixtures";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { directionalLight, gltf, perspectiveCamera } from "@royal/renderer-core";
-import type { RenderObjectHandle } from "@royal/renderer-core";
-import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
 import {
-  identityMat4,
-  projectionMat4,
-} from "../packages/renderer-webgl/src/math/mat4";
-
-const {
   decodeBasisuMock,
   triangleGltfSrc,
   triangleBinUri,
@@ -43,20 +33,30 @@ const {
   matrixUniformPayloads,
   textureParameterCalls,
   texturePixelStoreCalls,
+  trackGltfSceneTestRoot,
+  resetGltfSceneTestState,
+} from "./renderer-webgl-scene-gltf-test-runtime";
+import {
   triangleBin,
   vertexColorTriangleBin,
   lineBin,
   triangleWithImageBytes,
   triangleWithBasisuBytes,
+} from "./renderer-webgl-scene-gltf-binary-fixtures";
+import {
   nodeLodDocument,
   nodeLodSeparatedBoundsDocument,
   materialLodDocument,
   materialTexturePendingLodDocument,
   materialSecondaryTexturePendingLodDocument,
   materialSharedTextureLodDocument,
+} from "./renderer-webgl-scene-gltf-lod-documents";
+import {
   triangleDocument,
   solidTriangleDocument,
   vertexColorTriangleDocument,
+} from "./renderer-webgl-scene-gltf-material-documents";
+import {
   responseWithJson,
   responseWithBuffer,
   responseWithText,
@@ -65,13 +65,21 @@ const {
   installCanvasImageMimeTypeSupport,
   settleDocumentAndBuffer,
   settleLodDocumentAndBuffer,
-} = fixtures;
+} from "./renderer-webgl-scene-gltf-loader-fixtures";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { directionalLight, gltf, perspectiveCamera } from "@royal/renderer-core";
+import type { RenderObjectHandle } from "@royal/renderer-core";
+import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
+import {
+  identityMat4,
+  projectionMat4,
+} from "../packages/renderer-webgl/src/math/mat4";
 
 const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
-  fixtures.trackGltfSceneTestRoot(createWebGlRootBase(...args));
+  trackGltfSceneTestRoot(createWebGlRootBase(...args));
 
 describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
-  afterEach(fixtures.resetGltfSceneTestState);
+  afterEach(resetGltfSceneTestState);
 
   it("applies parent and child transforms when traversing glTF node hierarchies", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
