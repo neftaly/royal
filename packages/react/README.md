@@ -100,9 +100,9 @@ diagnostics actually consume per-frame viewport data.
 ### Canvas renderer options
 
 Pass renderer creation options through `Canvas.context`, or through
-`createRendererRoot(canvas, { context })` when you own the canvas. These values
-are fixed for an imperative root. Changing them on `<Canvas>` recreates its
-renderer root.
+`createRendererRoot(canvas, options)` when you own the canvas. These values are
+fixed for an imperative root and are available as `root.options`. Changing them
+on `<Canvas>` recreates its renderer root.
 
 ```tsx
 <Canvas
@@ -113,6 +113,14 @@ renderer root.
   scene={renderScene}
 />
 ```
+
+The imperative root separates its two observational models:
+
+- `root.snapshot()` returns the current frame, normalized creation `options`,
+  and a backend-neutral `lifecycle` with `state`, `generation`,
+  `interruptions`, and `recoveries`.
+- `root.diagnostics()` returns bounded messages and operational counters. It
+  does not repeat root state or retain the submitted scene graph.
 
 - `alpha` and `antialias` both default to `true` and are requests made when the
   WebGL context is created.

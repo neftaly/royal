@@ -22,7 +22,7 @@ export const fakeCanvas = (
 
 export const fakeRendererRoot = ({
   canvas = {} as HTMLCanvasElement,
-  context = {
+  options = {
     alpha: true,
     antialias: true,
     generatedImageVirtualTextures: false,
@@ -32,7 +32,7 @@ export const fakeRendererRoot = ({
   pick = () => undefined,
 }: {
   readonly canvas?: HTMLCanvasElement;
-  readonly context?: RoyalRendererRoot["context"];
+  readonly options?: RoyalRendererRoot["options"];
   readonly diagnostics?: unknown;
   readonly pick?: (scene: RenderRoot | undefined, input: PickInput) => PickResult | undefined;
 } = {}): RoyalRendererRoot => {
@@ -40,19 +40,19 @@ export const fakeRendererRoot = ({
   let latestScene: RenderRoot | undefined;
   const root: RoyalRendererRoot = {
     canvas,
-    context,
     get disposed() {
       return false;
     },
     get frame() {
       return frame;
     },
+    options,
     diagnostics: vi.fn(() => diagnostics as ReturnType<RoyalRendererRoot["diagnostics"]>),
     dispose: vi.fn(),
     flushInvalidated: vi.fn(),
     invalidate: vi.fn(),
     observeLifecycle: vi.fn((callback: Parameters<RoyalRendererRoot["observeLifecycle"]>[0]) => {
-      callback({ generation: 1, lifecycle: "available" });
+      callback({ generation: 1, interruptions: 0, recoveries: 0, state: "available" });
       return () => undefined;
     }),
     observeRenderFailures: vi.fn(() => () => undefined),
@@ -62,10 +62,14 @@ export const fakeRendererRoot = ({
       frame += 1;
     }),
     snapshot: vi.fn(() => ({
-      context: root.context,
-      disposed: root.disposed,
       frame: root.frame,
-      lifecycle: { generation: 1, lifecycle: "available" as const },
+      lifecycle: {
+        generation: 1,
+        interruptions: 0,
+        recoveries: 0,
+        state: "available" as const,
+      },
+      options: root.options,
     })),
   };
 

@@ -11,49 +11,61 @@ import {
   royalRendererCapabilitiesFor,
 } from "./renderer-capabilities";
 
-/** Renderer creation options exposed through `Canvas.context` and `createRendererRoot`. */
-export type RoyalRendererRootContextOptions = WebGlRootOptions;
-
-/** Options for the Royal renderer root. */
-export interface RoyalRendererRootOptions {
-  /** Renderer creation options. These are fixed for the lifetime of the root. */
-  readonly context?: RoyalRendererRootContextOptions;
-}
+/** Immutable renderer creation options accepted by `createRendererRoot`. */
+export type RoyalRendererRootOptions = WebGlRootOptions;
 
 /** @internal Backend-owned semantic identity used by the React Canvas lifetime. */
-export const rendererRootContextOptionsSemanticKey = webGlRootOptionsSemanticKey;
+export const rendererRootOptionsSemanticKey = webGlRootOptionsSemanticKey;
 
-export type RoyalRendererRootContextSnapshot =
-  Required<Omit<RoyalRendererRootContextOptions, "resourceGovernorPolicy">>
-  & Pick<RoyalRendererRootContextOptions, "resourceGovernorPolicy">;
+/** Normalized creation options retained for the lifetime of a renderer root. */
+export type RoyalRendererRootOptionsSnapshot =
+  Required<Omit<RoyalRendererRootOptions, "resourceGovernorPolicy">>
+  & Pick<RoyalRendererRootOptions, "resourceGovernorPolicy">;
 
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
 export interface RoyalRendererRootLifecycleSnapshot {
   readonly error?: string;
   readonly generation: number;
-  readonly lifecycle: RoyalRendererRootLifecycle;
+  /** Number of backend interruptions observed during this root's lifetime. */
+  readonly interruptions: number;
+  /** Number of successful recoveries from an interruption. */
+  readonly recoveries: number;
+  readonly state: RoyalRendererRootLifecycle;
 }
 
 export interface RoyalRendererRootSnapshot {
-  readonly context: RoyalRendererRootContextSnapshot;
-  readonly disposed: boolean;
   readonly frame: number;
   readonly lifecycle: RoyalRendererRootLifecycleSnapshot;
+  readonly options: RoyalRendererRootOptionsSnapshot;
 }
 
-/** Typed diagnostics returned by the current Royal WebGL renderer backend. */
-export type RoyalRendererDiagnosticsSnapshot = WebGlRootSnapshot;
+/** Bounded operational diagnostics projected from the active renderer backend. */
+export interface RoyalRendererDiagnosticsSnapshot {
+  /** Bounded recent diagnostic messages. */
+  readonly messages: WebGlRootSnapshot["diagnostics"];
+  /** Capacity and occurrence counts for the bounded diagnostic message log. */
+  readonly messageStats: WebGlRootSnapshot["diagnosticStats"];
+  readonly gltfLoads: WebGlRootSnapshot["gltfLoadDiagnostics"];
+  readonly gltfInstancing: WebGlRootSnapshot["gltfInstancing"];
+  readonly planning: WebGlRootSnapshot["planning"];
+  readonly resourceLifetime: WebGlRootSnapshot["resourceLifetime"];
+  readonly resourceGovernor: WebGlRootSnapshot["resourceGovernor"];
+  readonly picking: WebGlRootSnapshot["picking"];
+  readonly textureResidency: WebGlRootSnapshot["textureResidency"];
+  readonly virtualTexturing: WebGlRootSnapshot["virtualTexturing"];
+}
 
 export type RoyalRendererRootRenderInput = RenderRoot;
 
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
   readonly canvas: HTMLCanvasElement;
-  readonly context: RoyalRendererRootContextSnapshot;
   readonly disposed: boolean;
   readonly frame: number;
-  /** Typed WebGL diagnostics, including virtual-texture residency and request counters. */
+  /** Normalized creation options fixed for the lifetime of this root. */
+  readonly options: RoyalRendererRootOptionsSnapshot;
+  /** Bounded operational diagnostics, excluding scene data and root snapshot fields. */
   diagnostics(): RoyalRendererDiagnosticsSnapshot;
   /** Immediately renders queued demand on the caller's current frame, regardless of clock ownership. */
   flushInvalidated(): void;
@@ -77,7 +89,9 @@ const royalLifecycleSnapshot = (
 ): RoyalRendererRootLifecycleSnapshot => Object.freeze({
   ...(snapshot.lastError === undefined ? {} : { error: snapshot.lastError }),
   generation: snapshot.generation,
-  lifecycle: snapshot.lifecycle === "active"
+  interruptions: snapshot.losses,
+  recoveries: snapshot.restores,
+  state: snapshot.lifecycle === "active"
     ? "available"
     : snapshot.lifecycle === "disposed"
       ? "disposed"
@@ -103,15 +117,15 @@ export const acquireExternalRenderClockForRoyalRoot = (
 };
 
 /**
- * Creates an imperative renderer root. `options.context` is fixed for the
- * lifetime of the returned root.
+ * Creates an imperative renderer root. `options` is fixed for the lifetime of
+ * the returned root.
  */
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RoyalRendererRootOptions,
 ): RoyalRendererRoot => {
-  const root = createWebGlRoot(canvas, options?.context);
-  const context: RoyalRendererRootContextSnapshot = Object.freeze({
+  const root = createWebGlRoot(canvas, options);
+  const normalizedOptions: RoyalRendererRootOptionsSnapshot = Object.freeze({
     alpha: root.options.alpha,
     antialias: root.options.antialias,
     generatedImageVirtualTextures: root.options.generatedImageVirtualTextures,
@@ -125,16 +139,30 @@ export const createRendererRoot = (
     get canvas() {
       return root.canvas;
     },
-    get context() {
-      return context;
-    },
     get disposed() {
       return root.disposed;
     },
     get frame() {
       return root.frame;
     },
-    diagnostics: () => root.snapshot(),
+    get options() {
+      return normalizedOptions;
+    },
+    diagnostics: () => {
+      const snapshot = root.snapshot();
+      return Object.freeze({
+        gltfInstancing: snapshot.gltfInstancing,
+        gltfLoads: snapshot.gltfLoadDiagnostics,
+        messageStats: snapshot.diagnosticStats,
+        messages: snapshot.diagnostics,
+        picking: snapshot.picking,
+        planning: snapshot.planning,
+        resourceGovernor: snapshot.resourceGovernor,
+        resourceLifetime: snapshot.resourceLifetime,
+        textureResidency: snapshot.textureResidency,
+        virtualTexturing: snapshot.virtualTexturing,
+      });
+    },
     dispose: () => {
       root.dispose();
     },
@@ -154,10 +182,9 @@ export const createRendererRoot = (
     },
     snapshot: () => {
       return Object.freeze({
-        context,
-        disposed: root.disposed,
         frame: root.frame,
         lifecycle: royalLifecycleSnapshot(root.contextSnapshot()),
+        options: normalizedOptions,
       });
     },
   };

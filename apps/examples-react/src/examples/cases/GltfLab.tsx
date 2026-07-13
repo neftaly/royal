@@ -33,7 +33,7 @@ const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
     const startedAt = performance.now();
     const inspect = (): void => {
       if (!active) return;
-      const asset = root.diagnostics().gltfLoadDiagnostics.assets.find(
+      const asset = root.diagnostics().gltfLoads.assets.find(
         (candidate) => candidate.key.includes(src),
       );
       const next = asset?.error === undefined ? asset?.status : `error: ${asset.error}`;

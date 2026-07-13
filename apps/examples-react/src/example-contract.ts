@@ -33,19 +33,19 @@ export type GltfLoadDiagnosticsSnapshot = {
   readonly sceneReadyAssets: number;
 };
 
-export type RendererContextSnapshot = {
+export type RendererLifecycleSnapshot = {
+  readonly error?: string;
   readonly generation: number;
-  readonly lastError?: string;
-  readonly lifecycle: 'active' | 'disposed' | 'lost' | 'restoring';
-  readonly losses: number;
-  readonly restores: number;
+  readonly interruptions: number;
+  readonly recoveries: number;
+  readonly state: 'available' | 'disposed' | 'failed' | 'unavailable';
 };
 
 export type RendererBenchmarkSnapshot = {
-  readonly context: RendererContextSnapshot | null;
   readonly frame: number;
   readonly gltfInstancing: GltfInstancingCounters | null;
   readonly gltfLoadDiagnostics: GltfLoadDiagnosticsSnapshot | null;
+  readonly lifecycle: RendererLifecycleSnapshot | null;
   readonly planning: Record<string, number> | null;
   readonly resourceGovernor: RoyalRendererDiagnosticsSnapshot['resourceGovernor'] | null;
   readonly resourceLifetime: Record<string, number> | null;

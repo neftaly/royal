@@ -76,7 +76,10 @@ React scenes.
 for code that already owns a canvas and lowered renderer descriptors. App
 examples and docs should start with `<Canvas>`. React root snapshots stay
 backend-neutral; the imperative root exposes a bounded, backend-neutral
-`diagnostics()` payload for profiling and integration checks.
+`diagnostics()` payload for profiling and integration checks. Creation options
+are accepted directly by `createRendererRoot(canvas, options)` and exposed as
+`root.options`; interruptions and recoveries live in the snapshot's neutral
+`lifecycle` model.
 
 Royal renderer APIs stop at renderer primitives. App-specific surface
 descriptors, placement contracts, product panels, and event rows belong in

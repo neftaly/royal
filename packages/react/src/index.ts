@@ -67,11 +67,10 @@ export { createRendererRoot } from './root';
 export type {
   RoyalRendererRoot,
   RoyalRendererDiagnosticsSnapshot,
-  RoyalRendererRootContextOptions,
-  RoyalRendererRootContextSnapshot,
   RoyalRendererRootLifecycle,
   RoyalRendererRootLifecycleSnapshot,
   RoyalRendererRootOptions,
+  RoyalRendererRootOptionsSnapshot,
   RoyalRendererRootRenderInput,
   RoyalRendererRootSnapshot,
 } from './root';

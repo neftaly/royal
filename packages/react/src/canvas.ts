@@ -28,7 +28,7 @@ import {
 } from "./scene-interactions";
 import type {
   RoyalRendererRoot,
-  RoyalRendererRootContextOptions,
+  RoyalRendererRootOptions,
 } from "./root";
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
@@ -51,7 +51,8 @@ export {
   normalizeCanvasRendererOptions,
 } from "./canvas-renderer-runtime";
 
-export type CanvasContextOptions = RoyalRendererRootContextOptions;
+/** Backend-context creation options accepted by the React-owned canvas. */
+export type CanvasContextOptions = RoyalRendererRootOptions;
 
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps

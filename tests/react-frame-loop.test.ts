@@ -406,7 +406,7 @@ describe("React frame loop", () => {
     applyCanvasRendererLifecycle(
       frameLoop,
       (error) => errors.push(error),
-      { generation: 2, lifecycle: "unavailable" },
+      { generation: 2, interruptions: 1, recoveries: 0, state: "unavailable" },
     );
     expect(queuedFrames.size).toBe(0);
     staleFrame?.(10_000);
@@ -416,7 +416,7 @@ describe("React frame loop", () => {
     applyCanvasRendererLifecycle(
       frameLoop,
       (error) => errors.push(error),
-      { generation: 2, lifecycle: "available" },
+      { generation: 2, interruptions: 1, recoveries: 1, state: "available" },
     );
     expect(queuedFrames.size).toBe(1);
     const resumed = queuedFrames.entries().next().value as [number, FrameRequestCallback] | undefined;
@@ -433,7 +433,7 @@ describe("React frame loop", () => {
     applyCanvasRendererLifecycle(
       frameLoop,
       (error) => errors.push(error),
-      { error: "restore failed", generation: 2, lifecycle: "failed" },
+      { error: "restore failed", generation: 2, interruptions: 1, recoveries: 0, state: "failed" },
     );
     expect(queuedFrames.size).toBe(0);
     expect(activity).toEqual([false, true]);

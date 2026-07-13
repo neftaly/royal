@@ -134,10 +134,10 @@
       "rootScaleUploadCalls"
     ],
     "rendererSnapshotFields": [
-      "context",
       "frame",
       "gltfInstancing",
       "gltfLoadDiagnostics",
+      "lifecycle",
       "planning",
       "resourceGovernor",
       "resourceLifetime",

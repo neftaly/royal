@@ -53,8 +53,8 @@ describe("React root public API", () => {
       },
       limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 8 * 1024 * 1024 },
     } satisfies ResourceGovernorPolicy;
-    const root = createRendererRoot(fakeCanvas(), { context: { resourceGovernorPolicy: customPolicy } });
-    const retained = root.context.resourceGovernorPolicy;
+    const root = createRendererRoot(fakeCanvas(), { resourceGovernorPolicy: customPolicy });
+    const retained = root.options.resourceGovernorPolicy;
 
     expect(retained).toEqual(customPolicy);
     expect(retained).not.toBe(customPolicy);
@@ -68,7 +68,7 @@ describe("React root public API", () => {
     root.dispose();
 
     const defaultRoot = createRendererRoot(fakeCanvas());
-    expect(defaultRoot.context).not.toHaveProperty("resourceGovernorPolicy");
+    expect(defaultRoot.options).not.toHaveProperty("resourceGovernorPolicy");
     defaultRoot.dispose();
   });
 
@@ -95,18 +95,16 @@ describe("React root public API", () => {
     } satisfies ResourceGovernorPolicy;
 
     expect(() => createRendererRoot(canvas, {
-      context: { resourceGovernorPolicy: invalidPolicy },
+      resourceGovernorPolicy: invalidPolicy,
     })).toThrow("persistentGpuBytes mandatory floors exceed capacity");
     expect(canvas.contextRequests).toEqual([]);
   });
 
-  it("normalizes context options and renders through the public root", () => {
+  it("normalizes creation options and renders through the public root", () => {
     const canvas = fakeCanvas();
     const root = createRendererRoot(canvas, {
-      context: {
-        alpha: false,
-        generatedImageVirtualTextures: true,
-      },
+      alpha: false,
+      generatedImageVirtualTextures: true,
     });
     const renderRoot = emptyScene();
 
@@ -122,53 +120,78 @@ describe("React root public API", () => {
       },
     ]);
     expect(root.snapshot()).toEqual({
-      context: {
+      frame: 0,
+      lifecycle: {
+        generation: 1,
+        interruptions: 0,
+        recoveries: 0,
+        state: "available",
+      },
+      options: {
         alpha: false,
         antialias: true,
         generatedImageVirtualTextures: true,
         generatedSvgVirtualTextureRasterDensity: 4,
       },
-      disposed: false,
-      frame: 0,
-      lifecycle: { generation: 1, lifecycle: "available" },
     });
     const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
+    expect(Object.keys(diagnostics)).toEqual([
+      "gltfInstancing",
+      "gltfLoads",
+      "messageStats",
+      "messages",
+      "picking",
+      "planning",
+      "resourceGovernor",
+      "resourceLifetime",
+      "textureResidency",
+      "virtualTexturing",
+    ]);
     expect(diagnostics).toMatchObject({
-      disposed: false,
-      frame: 0,
       gltfInstancing: expect.any(Object),
+      gltfLoads: expect.any(Object),
       resourceGovernor: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });
-    expect(root.diagnostics().options).toMatchObject({
-      generatedImageVirtualTextures: true,
-      generatedSvgVirtualTextureRasterDensity: 4,
-    });
+    expect(diagnostics).not.toHaveProperty("context");
+    expect(diagnostics).not.toHaveProperty("disposed");
+    expect(diagnostics).not.toHaveProperty("frame");
+    expect(diagnostics).not.toHaveProperty("latestScene");
+    expect(diagnostics).not.toHaveProperty("options");
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
 
     root.render(renderRoot);
 
-    expect(root.context).toEqual({
+    expect(root.options).toEqual({
       alpha: false,
       antialias: true,
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
     });
-    expect(Object.isFrozen(root.context)).toBe(true);
+    expect(Object.isFrozen(root.options)).toBe(true);
+    expect(Object.isFrozen(root.diagnostics())).toBe(true);
     expect(Object.isFrozen(root.snapshot())).toBe(true);
     expect(root.snapshot()).toEqual({
-      context: root.context,
-      disposed: false,
       frame: 1,
-      lifecycle: { generation: 1, lifecycle: "available" },
+      lifecycle: {
+        generation: 1,
+        interruptions: 0,
+        recoveries: 0,
+        state: "available",
+      },
+      options: root.options,
     });
 
     root.dispose();
     expect(root.snapshot()).toEqual({
-      context: root.context,
-      disposed: true,
       frame: 1,
-      lifecycle: { generation: 2, lifecycle: "disposed" },
+      lifecycle: {
+        generation: 2,
+        interruptions: 0,
+        recoveries: 0,
+        state: "disposed",
+      },
+      options: root.options,
     });
   });
 
@@ -191,10 +214,10 @@ describe("React root public API", () => {
     );
 
     expect(lifecycles).toEqual([
-      { generation: 1, lifecycle: "available" },
-      { generation: 2, lifecycle: "unavailable" },
-      { generation: 2, lifecycle: "unavailable" },
-      { generation: 2, lifecycle: "available" },
+      { generation: 1, interruptions: 0, recoveries: 0, state: "available" },
+      { generation: 2, interruptions: 1, recoveries: 0, state: "unavailable" },
+      { generation: 2, interruptions: 1, recoveries: 0, state: "unavailable" },
+      { generation: 2, interruptions: 1, recoveries: 1, state: "available" },
     ]);
     stop();
   });

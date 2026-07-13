@@ -15,7 +15,7 @@ import {
   type GltfLoadDiagnosticsAsset,
   type GltfLoadDiagnosticsSnapshot,
   type RendererBenchmarkSnapshot,
-  type RendererContextSnapshot,
+  type RendererLifecycleSnapshot,
 } from '../example-contract';
 
 const gltfInstancingCounterKeys = exampleContract.benchmark.gltfInstancingCounterFields;
@@ -33,25 +33,25 @@ const copyGltfInstancingCounters = (value: unknown): GltfInstancingCounters | nu
   return counters;
 };
 
-const copyRendererContextSnapshot = (value: unknown): RendererContextSnapshot | null => {
+const copyRendererLifecycleSnapshot = (value: unknown): RendererLifecycleSnapshot | null => {
   if (!isRecord(value)) return null;
-  const lifecycle = value.lifecycle;
+  const state = value.state;
   if (
     typeof value.generation !== 'number' ||
     !Number.isFinite(value.generation) ||
-    (lifecycle !== 'active' && lifecycle !== 'disposed' && lifecycle !== 'lost' && lifecycle !== 'restoring') ||
-    typeof value.losses !== 'number' ||
-    !Number.isFinite(value.losses) ||
-    typeof value.restores !== 'number' ||
-    !Number.isFinite(value.restores)
+    typeof value.interruptions !== 'number' ||
+    !Number.isFinite(value.interruptions) ||
+    typeof value.recoveries !== 'number' ||
+    !Number.isFinite(value.recoveries) ||
+    (state !== 'available' && state !== 'disposed' && state !== 'failed' && state !== 'unavailable')
   ) return null;
 
   return {
+    ...(typeof value.error === 'string' ? { error: value.error } : {}),
     generation: value.generation,
-    ...(typeof value.lastError === 'string' ? { lastError: value.lastError } : {}),
-    lifecycle,
-    losses: value.losses,
-    restores: value.restores,
+    interruptions: value.interruptions,
+    recoveries: value.recoveries,
+    state,
   };
 };
 
@@ -126,10 +126,10 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
       }
 
       return {
-        context: copyRendererContextSnapshot(diagnostics.context),
         frame: rootSnapshot.frame,
         gltfInstancing: copyGltfInstancingCounters(diagnostics.gltfInstancing),
-        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoadDiagnostics),
+        gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoads),
+        lifecycle: copyRendererLifecycleSnapshot(rootSnapshot.lifecycle),
         planning: copyNumberCounters(diagnostics.planning),
         resourceGovernor: diagnostics.resourceGovernor,
         resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),

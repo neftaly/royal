@@ -115,7 +115,9 @@ const connectPage = () => connectCdpPage({ debugHost: host, debugPort });
 
 const smokeExpression = `
 (async () => {
-  const smokeExpectations = ${JSON.stringify(smokeExpectations)};
+  const smokeExpectations = ${JSON.stringify(Object.fromEntries(
+    smokeRoutes.map(({ id, ...expectation }) => [id, expectation]),
+  ))};
   const gltfLabPaths = ${JSON.stringify(Object.fromEntries(
     gltfLabManifest.cases.map((entry) => [entry.name, `/${entry.path}`]),
   ))};
@@ -461,11 +463,11 @@ const assertRoute = (expected, state) => {
       ) < 0.25) {
         failures.push('virtual texture map pan did not move the camera target');
       }
-      if (interaction.pan?.contextLifecycle !== 'active') {
-        failures.push(`virtual texture map pan left the renderer context ${interaction.pan?.contextLifecycle ?? 'unavailable'}`);
+      if (interaction.pan?.lifecycleState !== 'available') {
+        failures.push(`virtual texture map pan left the renderer ${interaction.pan?.lifecycleState ?? 'unavailable'}`);
       }
-      if (interaction.pan?.contextLastError !== null) {
-        failures.push(`virtual texture map pan reported a renderer context error: ${interaction.pan?.contextLastError ?? 'unavailable'}`);
+      if (interaction.pan?.lifecycleError !== null) {
+        failures.push(`virtual texture map pan reported a renderer error: ${interaction.pan?.lifecycleError ?? 'unavailable'}`);
       }
       if (!(interaction.pan?.frameAfter > interaction.pan?.frameBefore)) {
         failures.push('virtual texture map pan did not continue rendering');
@@ -479,11 +481,11 @@ const assertRoute = (expected, state) => {
       ) {
         failures.push(`virtual texture map pan left VT work pending (${interaction.pan?.pendingPages ?? 'unknown'} pages, ${interaction.pan?.outstandingPageRequests ?? 'unknown'} requests)`);
       }
-      if (interaction.zoom?.contextLifecycle !== 'active') {
-        failures.push(`virtual texture close zoom left the renderer context ${interaction.zoom?.contextLifecycle ?? 'unavailable'}`);
+      if (interaction.zoom?.lifecycleState !== 'available') {
+        failures.push(`virtual texture close zoom left the renderer ${interaction.zoom?.lifecycleState ?? 'unavailable'}`);
       }
-      if (interaction.zoom?.contextLastError !== null) {
-        failures.push(`virtual texture close zoom reported a renderer context error: ${interaction.zoom?.contextLastError ?? 'unavailable'}`);
+      if (interaction.zoom?.lifecycleError !== null) {
+        failures.push(`virtual texture close zoom reported a renderer error: ${interaction.zoom?.lifecycleError ?? 'unavailable'}`);
       }
       if (interaction.zoom?.settled !== true) {
         failures.push('virtual texture close zoom did not settle');
@@ -494,8 +496,8 @@ const assertRoute = (expected, state) => {
       if (!(interaction.far?.distance > 50) || interaction.far?.settled !== true) {
         failures.push('virtual texture far zoom did not reach and settle at the coarse overview distance');
       }
-      if (interaction.far?.contextLifecycle !== 'active' || interaction.far?.contextLastError !== null) {
-        failures.push('virtual texture far zoom did not preserve an active error-free context');
+      if (interaction.far?.lifecycleState !== 'available' || interaction.far?.lifecycleError !== null) {
+        failures.push('virtual texture far zoom did not preserve an available error-free renderer');
       }
       if (interaction.far?.activePages !== 1) {
         failures.push(`virtual texture far zoom kept ${interaction.far?.activePages ?? 'unknown'} active pages instead of one`);
@@ -512,8 +514,8 @@ const assertRoute = (expected, state) => {
       if (!((interaction.far?.cachedPagesMip3 ?? 0) >= 1)) {
         failures.push('virtual texture far zoom did not retain the coarsest root page');
       }
-      if (interaction.reactivation?.contextLifecycle !== 'active' || interaction.reactivation?.contextLastError !== null) {
-        failures.push('virtual texture cache reactivation did not preserve an active error-free context');
+      if (interaction.reactivation?.lifecycleState !== 'available' || interaction.reactivation?.lifecycleError !== null) {
+        failures.push('virtual texture cache reactivation did not preserve an available error-free renderer');
       }
       if (interaction.reactivation?.settled !== true || !(interaction.reactivation?.activePages > 1)) {
         failures.push('virtual texture zoom-back did not reactivate cached fine pages');
@@ -567,12 +569,12 @@ const assertRoute = (expected, state) => {
           }
         }
         if (
-          interaction.resize?.narrow?.contextLifecycle !== 'active' ||
-          interaction.resize?.restored?.contextLifecycle !== 'active' ||
-          interaction.resize?.narrow?.contextLastError !== null ||
-          interaction.resize?.restored?.contextLastError !== null
+          interaction.resize?.narrow?.lifecycleState !== 'available' ||
+          interaction.resize?.restored?.lifecycleState !== 'available' ||
+          interaction.resize?.narrow?.lifecycleError !== null ||
+          interaction.resize?.restored?.lifecycleError !== null
         ) {
-          failures.push('virtual texture resize did not preserve an active error-free context');
+          failures.push('virtual texture resize did not preserve an available error-free renderer');
         }
         for (const [label, sample] of [
           ['narrow', interaction.resize?.narrow],
@@ -632,11 +634,11 @@ const assertRoute = (expected, state) => {
     } else if (interaction.error !== undefined) {
       failures.push(`SVG virtual texture close zoom failed: ${interaction.error}`);
     } else {
-      if (interaction.contextLifecycle !== 'active') {
-        failures.push(`SVG virtual texture close zoom left the renderer context ${interaction.contextLifecycle ?? 'unavailable'}`);
+      if (interaction.lifecycleState !== 'available') {
+        failures.push(`SVG virtual texture close zoom left the renderer ${interaction.lifecycleState ?? 'unavailable'}`);
       }
-      if (interaction.contextLastError !== null) {
-        failures.push(`SVG virtual texture close zoom reported a renderer context error: ${interaction.contextLastError ?? 'unavailable'}`);
+      if (interaction.lifecycleError !== null) {
+        failures.push(`SVG virtual texture close zoom reported a renderer error: ${interaction.lifecycleError ?? 'unavailable'}`);
       }
       if (interaction.settled !== true) {
         failures.push('SVG virtual texture close zoom did not converge');
@@ -818,8 +820,8 @@ const runVirtualTextureInteractionSmoke = async (session) => {
       backingWidth: canvas.width,
       cachedPages: vt?.cachedPages ?? null,
       cachedPagesByMip: [0, 1, 2, 3].map((mip) => vt?.['cachedPagesMip' + mip] ?? 0),
-      contextLastError: renderer?.context?.lastError ?? null,
-      contextLifecycle: renderer?.context?.lifecycle ?? null,
+      lifecycleError: renderer?.lifecycle?.error ?? null,
+      lifecycleState: renderer?.lifecycle?.state ?? null,
       cssHeight: canvasRect.height,
       cssWidth: canvasRect.width,
       devicePixelRatio: window.devicePixelRatio,
@@ -902,7 +904,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     const before = {
       backingHeight: canvas.height,
       backingWidth: canvas.width,
-      contextLifecycle: rendererSnapshot()?.context?.lifecycle ?? null,
+      lifecycleState: rendererSnapshot()?.lifecycle?.state ?? null,
       uploadedPages: rendererSnapshot()?.virtualTexturing?.uploadedPages ?? null,
     };
     resizeContainer.style.inlineSize = '62%';
@@ -1026,8 +1028,8 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
     activePagesMip0: vt?.activePagesMip0 ?? null,
     beforeActivePagesMip0: before?.virtualTexturing?.activePagesMip0 ?? null,
     cachedPages: vt?.cachedPages ?? null,
-    contextLastError: renderer?.context?.lastError ?? null,
-    contextLifecycle: renderer?.context?.lifecycle ?? null,
+    lifecycleError: renderer?.lifecycle?.error ?? null,
+    lifecycleState: renderer?.lifecycle?.state ?? null,
     outstandingPageRequests: vt?.outstandingPageRequests ?? null,
     pendingPages: vt?.pendingPages ?? null,
     physicalAllocatedBytes: vt?.physicalAllocatedBytes ?? null,
@@ -1045,8 +1047,8 @@ const runContextLossSmoke = async (session) => evaluate(session, `
   const canvas = document.querySelector('canvas');
   const snapshot = () => ${rendererSnapshotExpression};
   if (canvas === null) return { status: 'error', reason: 'missing canvas' };
-  if (snapshot()?.context?.lifecycle !== 'active') {
-    return { status: 'error', reason: 'renderer context snapshot was not active before loss', snapshot: snapshot() };
+  if (snapshot()?.lifecycle?.state !== 'available') {
+    return { status: 'error', reason: 'renderer snapshot was not available before interruption', snapshot: snapshot() };
   }
   const gl = canvas.getContext('webgl2');
   if (gl === null) return { status: 'error', reason: 'canvas no longer returned its WebGL2 context' };
@@ -1064,9 +1066,9 @@ const runContextLossSmoke = async (session) => evaluate(session, `
   };
   const before = snapshot();
   extension.loseContext();
-  const lost = await waitFor((value) => value?.context?.lifecycle === 'lost');
-  if (lost?.context?.lifecycle !== 'lost') {
-    return { status: 'error', reason: 'renderer never published lost context state', before, lost };
+  const lost = await waitFor((value) => value?.lifecycle?.state === 'unavailable');
+  if (lost?.lifecycle?.state !== 'unavailable') {
+    return { status: 'error', reason: 'renderer never published unavailable state', before, lost };
   }
   await new Promise((resolve) => setTimeout(resolve, 150));
   const settledLost = snapshot();
@@ -1076,12 +1078,12 @@ const runContextLossSmoke = async (session) => evaluate(session, `
 
   extension.restoreContext();
   const restored = await waitFor((value) =>
-    value?.context?.lifecycle === 'active' &&
-    value.context.restores >= before.context.restores + 1 &&
-    value.context.generation > before.context.generation
+    value?.lifecycle?.state === 'available' &&
+    value.lifecycle.recoveries >= before.lifecycle.recoveries + 1 &&
+    value.lifecycle.generation > before.lifecycle.generation
   );
-  if (restored?.context?.lifecycle !== 'active') {
-    return { status: 'error', reason: 'renderer never returned to active context state', before, restored };
+  if (restored?.lifecycle?.state !== 'available') {
+    return { status: 'error', reason: 'renderer never returned to available state', before, restored };
   }
   globalThis.__royalExamplesRenderNow?.();
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -1268,7 +1270,7 @@ const main = async () => {
         contextLossChecked = true;
         console.log(lifecycle.status === 'unsupported'
           ? `skip context-loss ${lifecycle.reason}`
-          : `ok context-loss generation=${lifecycle.restored.context.generation} painted=${lifecycle.paintedPixels}`);
+          : `ok context-loss generation=${lifecycle.restored.lifecycle.generation} painted=${lifecycle.paintedPixels}`);
       }
       const canvasSummary = state.canvas?.sample === undefined
         ? ''

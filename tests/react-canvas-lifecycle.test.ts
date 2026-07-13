@@ -4,7 +4,7 @@ import {
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
 } from "../packages/react/src/canvas-renderer-runtime";
-import { rendererRootContextOptionsSemanticKey } from "../packages/react/src/root";
+import { rendererRootOptionsSemanticKey } from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
 describe("Canvas renderer root cleanup", () => {
@@ -14,38 +14,31 @@ describe("Canvas renderer root cleanup", () => {
   });
 
   it("retains normalized scalar changes that recreate the renderer root", () => {
-    expect(normalizeCanvasRendererOptions({ alpha: false })).toEqual({
-      context: { alpha: false },
-    });
-    expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({
-      context: { alpha: true },
-    });
-    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureRasterDensity: 8 })).toEqual({
-      context: { generatedSvgVirtualTextureRasterDensity: 8 },
-    });
+    expect(normalizeCanvasRendererOptions({ alpha: false })).toEqual({ alpha: false });
+    expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({ alpha: true });
+    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureRasterDensity: 8 }))
+      .toEqual({ generatedSvgVirtualTextureRasterDensity: 8 });
   });
 
   it("retains a supplied resource governor policy for root construction", () => {
     expect(normalizeCanvasRendererOptions({
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
-    })).toEqual({
-      context: { resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY },
-    });
+    })).toEqual({ resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY });
   });
 
   it("derives renderer lifetime identity from every nested backend option", () => {
-    const first = rendererRootContextOptionsSemanticKey({
+    const first = rendererRootOptionsSemanticKey({
       alpha: true,
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
-    const reordered = rendererRootContextOptionsSemanticKey({
+    const reordered = rendererRootOptionsSemanticKey({
       resourceGovernorPolicy: {
         limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits },
         classes: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.classes },
       },
       alpha: true,
     });
-    const changed = rendererRootContextOptionsSemanticKey({
+    const changed = rendererRootOptionsSemanticKey({
       alpha: true,
       resourceGovernorPolicy: {
         ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
@@ -61,8 +54,8 @@ describe("Canvas renderer root cleanup", () => {
   });
 
   it("gives omitted and explicit renderer defaults one semantic identity", () => {
-    const omitted = rendererRootContextOptionsSemanticKey(undefined);
-    const explicit = rendererRootContextOptionsSemanticKey({
+    const omitted = rendererRootOptionsSemanticKey(undefined);
+    const explicit = rendererRootOptionsSemanticKey({
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: false,
@@ -70,9 +63,9 @@ describe("Canvas renderer root cleanup", () => {
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
 
-    expect(rendererRootContextOptionsSemanticKey({})).toBe(omitted);
+    expect(rendererRootOptionsSemanticKey({})).toBe(omitted);
     expect(explicit).toBe(omitted);
-    expect(rendererRootContextOptionsSemanticKey({ alpha: false })).not.toBe(omitted);
+    expect(rendererRootOptionsSemanticKey({ alpha: false })).not.toBe(omitted);
   });
 
   it("releases ownership before surfacing a dispose failure", () => {
