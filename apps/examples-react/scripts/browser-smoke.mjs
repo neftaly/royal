@@ -509,7 +509,7 @@ const assertRoute = (expected, state) => {
       )) {
         failures.push('virtual texture far zoom did not report a reusable cache containing its active page');
       }
-      if (!((interaction.far?.residentPagesMip3 ?? 0) >= 1)) {
+      if (!((interaction.far?.cachedPagesMip3 ?? 0) >= 1)) {
         failures.push('virtual texture far zoom did not retain the coarsest root page');
       }
       if (interaction.reactivation?.contextLifecycle !== 'active' || interaction.reactivation?.contextLastError !== null) {
@@ -883,7 +883,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   const far = {
     ...farSettled,
     activePagesMip3: rendererSnapshot()?.virtualTexturing?.activePagesMip3 ?? null,
-    residentPagesMip3: rendererSnapshot()?.virtualTexturing?.residentPagesMip3 ?? null,
+    cachedPagesMip3: rendererSnapshot()?.virtualTexturing?.cachedPagesMip3 ?? null,
   };
   const reactivationFrame = rendererSnapshot()?.frame ?? null;
   const previousReactivationPageUrls = pageUrls();
