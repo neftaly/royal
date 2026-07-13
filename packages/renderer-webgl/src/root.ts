@@ -53,6 +53,10 @@ import {
 } from "./gltf/io";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import {
+  closeDecodedTextureSource,
+  DecodedTextureSourceLifetime,
+} from "./decoded-texture-source-lifetime";
+import {
   applyPreparedAssetEvents,
   applyResourceDelta,
   abortResourceArenaImageWork,
@@ -600,16 +604,6 @@ const loadedGltfImageSource = (
   ...(contentKey === undefined ? {} : { contentKey }),
   image,
 });
-
-const closeLoadedTextureSource = (source: LoadedTextureSource): void => {
-  const ImageBitmapConstructor = globalThis.ImageBitmap;
-  if (typeof ImageBitmapConstructor === "function" && source instanceof ImageBitmapConstructor) source.close();
-};
-
-const closeTexImageSource = (source: TexImageSource): void => {
-  const ImageBitmapConstructor = globalThis.ImageBitmap;
-  if (typeof ImageBitmapConstructor === "function" && source instanceof ImageBitmapConstructor) source.close();
-};
 
 type DrawSidedness = {
   readonly doubleSided: boolean;
@@ -1248,7 +1242,7 @@ const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement>
   const onAbort = (): void => {
     cleanup();
     image.src = "";
-    closeLoadedTextureSource(image);
+    closeDecodedTextureSource(image);
     reject(abortError());
   };
   const onLoad = (): void => {
@@ -1333,7 +1327,7 @@ const loadGltfImageSource = (
         svgTextContentKey(loadedImage.text),
       )).then((loadedImage) => {
         if (signal?.aborted !== true) return loadedImage;
-        closeLoadedTextureSource(loadedImage.image);
+        closeDecodedTextureSource(loadedImage.image);
         throw abortError();
       });
   }
@@ -1488,9 +1482,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #ordinaryTextureGpu: OrdinaryTextureGpuArena;
   readonly #ordinaryTextureSourceSubscriptions = new Map<string, OrdinaryTextureSourceSubscription>();
   readonly #ordinaryTextureSources: OrdinaryTextureSourceStore;
-  readonly #closedTextureSources = new WeakSet<object>();
-  readonly #pendingTextureSourceCloses = new Set<LoadedTextureSource>();
-  readonly #pendingVirtualTextureImageCloses = new Set<TexImageSource>();
+  readonly #decodedTextureSources: DecodedTextureSourceLifetime;
   readonly #pendingGltfImageRows: GltfImageRow[] = [];
   readonly #pendingGltfTextureRekeys = new Map<string, PreparedAssetOrdinaryTextureRekey[]>();
   #pendingGltfImageRowHead = 0;
@@ -1507,10 +1499,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     assetDecode?: ResourceGovernorLease;
     geometry?: ResourceGovernorLease;
   }>();
-  readonly #decodedTextureCpuGovernorLeases = new Map<object, ResourceGovernorLease>();
   readonly #virtualTextureGovernorLeases = new Map<string, ResourceGovernorLease>();
   readonly #terminalOrdinaryTextureKeys = new Set<string>();
-  readonly #virtualTextureDecodedCpuLeases = new Map<object, ResourceGovernorLease>();
   readonly #virtualTextureAdmissionTickets = new WeakMap<VirtualTextureRuntimeState, number>();
   #nextVirtualTextureAdmissionTicket = 1;
   #virtualTextureRetryTicket = 1;
@@ -1783,16 +1773,33 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#resourceGovernor = createResourceGovernor(
         requestedOptions.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY,
       );
+      this.#decodedTextureSources = new DecodedTextureSourceLifetime({
+        ordinaryReferenceCount: (source) => resourceArenaSourceReferenceCount(this.#resourceArena, source),
+        reserveOrdinaryDecodedBytes: (decodedBytes) => {
+          const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", {
+            cpuDecodedBytes: decodedBytes,
+          });
+          if (typeof reservation === "string") {
+            const maximum = this.#maximumResourceClassCpuBytes("ordinary-texture");
+            throw new ResourceGovernorCpuCapacityError(
+              `Decoded texture source retention denied by root resource governor: ${reservation}`,
+              decodedBytes > maximum,
+            );
+          }
+          return reservation.commit();
+        },
+        scheduleRetry: () => this.invalidate(),
+      });
       this.#resourceArena = createResourceArena(
         (request, signal) => this.#prepareGltfAsset(request.src, request.key, signal),
         () => this.invalidate(),
-        { retain: (source) => this.#retainDecodedTextureCpuLease(source) },
+        { retain: (source) => this.#decodedTextureSources.retainOrdinary(source) },
       );
       registerRollback(() => clearResourceArenaPreparedSources(this.#resourceArena));
       registerRollback(() => { disposeResourceArena(this.#resourceArena); });
       this.#ordinaryTextureSources = new OrdinaryTextureSourceStore({
         admit: this.#admitGltfPreparationJob,
-        close: (source) => this.#closeTextureSource(source),
+        close: (source) => this.#decodedTextureSources.closeOrdinary(source),
         load: (request, signal) => isSvgUri(request.uri)
           ? loadSvgTextureFromUri(request.uri, signal).then((loadedImage) => loadedImage.image)
           : loadImage(request.uri, signal),
@@ -2504,7 +2511,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         releaseClusteredLightContextHandles(this.#clusteredLights);
       });
       retryFailure = captureFirstFailure(retryFailure, () => this.#drainResourceArenaSideEffectDebt());
-      retryFailure = captureFirstFailure(retryFailure, () => this.#retryPendingTextureSourceCloses());
+      retryFailure = captureFirstFailure(retryFailure, () => this.#decodedTextureSources.retryPending());
       if (retryFailure !== undefined) throw retryFailure.value;
       return;
     }
@@ -2580,7 +2587,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#resizeObserver = undefined;
     teardown(() => this.#unwatchDevicePixelRatio());
     teardown(() => disposeVertexInputArena(this.#vertexInputs));
-    teardown(() => this.#retryPendingTextureSourceCloses());
+    teardown(() => this.#decodedTextureSources.retryPending());
     if (firstFailure !== undefined) throw firstFailure.value;
   }
 
@@ -2924,7 +2931,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     for (const source of changes.releasedSources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      apply(() => this.#closeTextureSource(source));
+      apply(() => this.#decodedTextureSources.closeOrdinary(source));
     }
     this.#drainResourceArenaSideEffectDebt();
   }
@@ -3185,7 +3192,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => this.#consumeOrdinaryTextureGpuOutcomes());
     for (const source of sources) {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
-      releaseFailure = captureFirstFailure(releaseFailure, () => this.#closeTextureSource(source));
+      releaseFailure = captureFirstFailure(releaseFailure, () => this.#decodedTextureSources.closeOrdinary(source));
     }
     if (releaseFailure !== undefined) throw releaseFailure.value;
   }
@@ -3317,95 +3324,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     });
   }
 
-  #closeTextureSource(source: LoadedTextureSource): void {
-    const identity = source as object;
-    if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) {
-      this.#pendingTextureSourceCloses.delete(source);
-      return;
-    }
-    if (this.#closedTextureSources.has(identity)) {
-      this.#decodedTextureCpuGovernorLeases.get(identity)?.release();
-      this.#decodedTextureCpuGovernorLeases.delete(identity);
-      return;
-    }
-    try {
-      closeLoadedTextureSource(source);
-    } catch (error) {
-      this.#pendingTextureSourceCloses.add(source);
-      throw error;
-    }
-    this.#pendingTextureSourceCloses.delete(source);
-    this.#closedTextureSources.add(identity);
-    this.#decodedTextureCpuGovernorLeases.get(identity)?.release();
-    this.#decodedTextureCpuGovernorLeases.delete(identity);
-  }
-
-  #retainDecodedTextureCpuLease(source: LoadedTextureSource): void {
-    const identity = source as object;
-    if (this.#decodedTextureCpuGovernorLeases.has(identity)) return;
-    const decodedBytes = isDecodedRgbaTexture(source)
-      ? source.data.byteLength
-      : (() => {
-          const [width, height] = loadedTextureSourceSize(source);
-          const bytes = Math.ceil(width) * Math.ceil(height) * 4;
-          if (!Number.isSafeInteger(bytes) || bytes < 0) {
-            throw new RangeError("Decoded texture source byte size exceeds safe integer capacity");
-          }
-          return bytes;
-        })();
-    const reservation = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", {
-      cpuDecodedBytes: decodedBytes,
-    });
-    if (typeof reservation === "string") {
-      const maximum = this.#maximumResourceClassCpuBytes("ordinary-texture");
-      throw new ResourceGovernorCpuCapacityError(
-        `Decoded texture source retention denied by root resource governor: ${reservation}`,
-        decodedBytes > maximum,
-      );
-    }
-    this.#decodedTextureCpuGovernorLeases.set(identity, reservation.commit());
-  }
-
-  #closeVirtualTextureImage(image: TexImageSource): void {
-    const identity = image as object;
-    if (this.#closedTextureSources.has(identity)) {
-      this.#virtualTextureDecodedCpuLeases.get(identity)?.release();
-      this.#virtualTextureDecodedCpuLeases.delete(identity);
-      return;
-    }
-    try {
-      closeTexImageSource(image);
-    } catch (error) {
-      this.#pendingVirtualTextureImageCloses.add(image);
-      throw error;
-    }
-    this.#pendingVirtualTextureImageCloses.delete(image);
-    this.#closedTextureSources.add(identity);
-    this.#virtualTextureDecodedCpuLeases.get(identity)?.release();
-    this.#virtualTextureDecodedCpuLeases.delete(identity);
-  }
-
-  #closeVirtualTextureImageAsync(image: TexImageSource): void {
-    try {
-      this.#closeVirtualTextureImage(image);
-    } catch {
-      // Retained by #pendingVirtualTextureImageCloses. A renderer-owned frame
-      // retries the fallible release without rejecting this Promise callback.
-      this.invalidate();
-    }
-  }
-
-  #retryPendingTextureSourceCloses(): void {
-    let firstFailure: CapturedFailure | undefined;
-    for (const source of this.#pendingTextureSourceCloses) {
-      firstFailure = captureFirstFailure(firstFailure, () => this.#closeTextureSource(source));
-    }
-    for (const image of this.#pendingVirtualTextureImageCloses) {
-      firstFailure = captureFirstFailure(firstFailure, () => this.#closeVirtualTextureImage(image));
-    }
-    if (firstFailure !== undefined) throw firstFailure.value;
-  }
-
   #releaseOrdinaryTextureSourceSubscription(key: string): void {
     this.#ordinaryTextureSourceSubscriptions.get(key)?.release();
     this.#ordinaryTextureSourceSubscriptions.delete(key);
@@ -3418,7 +3336,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       previous !== undefined
       && previous.source !== upload.source
       && resourceArenaSourceReferenceCount(this.#resourceArena, previous.source) === 0
-    ) this.#closeTextureSource(previous.source);
+    ) this.#decodedTextureSources.closeOrdinary(previous.source);
   }
 
   #gltfMaterialTextureRefs(
@@ -6388,7 +6306,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#transitionVirtualTexturePage(state, pageKey, { kind: "grant" });
     const sourceGeneration = state.sourceGeneration;
     void pageImage.then((image) => {
-      this.#virtualTextureDecodedCpuLeases.set(image as object, decodedReservation.commit());
+      this.#decodedTextureSources.retainVirtualTexture(image, decodedReservation.commit());
       const ownsPageLoad = state.pageLoadAbortControllers.get(pageKey) === controller;
       if (
         this.#disposed
@@ -6406,7 +6324,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             kind: "decoded",
           });
         }
-        this.#closeVirtualTextureImageAsync(image);
+        this.#decodedTextureSources.closeVirtualTextureAsync(image);
         return;
       }
       if (!state.desiredPageKeys.has(pageKey)) {
@@ -6414,7 +6332,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           disposition: "discarded",
           kind: "decoded",
         });
-        this.#closeVirtualTextureImageAsync(image);
+        this.#decodedTextureSources.closeVirtualTextureAsync(image);
         this.#scheduleVirtualTextureRequestDrain();
         return;
       }
@@ -6452,7 +6370,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             );
           }
           this.#scheduleVirtualTextureRequestDrain();
-          this.#closeVirtualTextureImageAsync(image);
+          this.#decodedTextureSources.closeVirtualTextureAsync(image);
           return;
         }
       }
@@ -6471,7 +6389,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           kind: "decoded",
         });
         this.#scheduleVirtualTextureRequestDrain();
-        this.#closeVirtualTextureImageAsync(image);
+        this.#decodedTextureSources.closeVirtualTextureAsync(image);
         return;
       }
       this.#transitionVirtualTexturePage(state, pageKey, {
@@ -6826,10 +6744,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #consumeOrdinaryTextureGpuOutcomes(): void {
-    let firstFailure: CapturedFailure | undefined;
-    for (const source of this.#pendingTextureSourceCloses) {
-      firstFailure = captureFirstFailure(firstFailure, () => this.#closeTextureSource(source));
-    }
+    let firstFailure = captureFailure(() => this.#decodedTextureSources.retryPendingOrdinary());
     const outcomeCount = ordinaryTextureGpuOutcomeCount(this.#ordinaryTextureGpu);
     for (let outcomeIndex = 0; outcomeIndex < outcomeCount; outcomeIndex += 1) {
       const outcome = ordinaryTextureGpuOutcome(this.#ordinaryTextureGpu, outcomeIndex);
@@ -6852,17 +6767,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
         });
       }
       if (resourceArenaSourceReferenceCount(this.#resourceArena, outcome.upload.source) !== 0) continue;
-      firstFailure = captureFirstFailure(firstFailure, () => this.#closeTextureSource(outcome.upload.source));
+      firstFailure = captureFirstFailure(
+        firstFailure,
+        () => this.#decodedTextureSources.closeOrdinary(outcome.upload.source),
+      );
     }
     clearOrdinaryTextureGpuOutcomes(this.#ordinaryTextureGpu);
     if (firstFailure !== undefined) throw firstFailure.value;
   }
 
   #consumeVirtualTextureGpuOutcomes(): void {
-    let firstFailure: CapturedFailure | undefined;
-    for (const image of this.#pendingVirtualTextureImageCloses) {
-      firstFailure = captureFirstFailure(firstFailure, () => this.#closeVirtualTextureImage(image));
-    }
+    let firstFailure = captureFailure(() => this.#decodedTextureSources.retryPendingVirtualTexture());
     const outcomeCount = virtualTextureGpuOutcomeCount(this.#virtualTextureGpu);
     for (let index = 0; index < outcomeCount; index += 1) {
       const outcome = virtualTextureGpuOutcome(this.#virtualTextureGpu, index);
@@ -6872,7 +6787,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#transitionVirtualTexturePage(state, outcome.upload.pageKey, { kind: "gpu-settled" });
       }
       firstFailure = captureFirstFailure(firstFailure, () => {
-        this.#closeVirtualTextureImage(outcome.upload.image);
+        this.#decodedTextureSources.closeVirtualTexture(outcome.upload.image);
       });
     }
     clearVirtualTextureGpuOutcomes(this.#virtualTextureGpu);
@@ -7122,7 +7037,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       previous !== undefined
       && previous !== image
       && resourceArenaSourceReferenceCount(this.#resourceArena, previous) === 0
-    ) this.#closeTextureSource(previous);
+    ) this.#decodedTextureSources.closeOrdinary(previous);
     if (this.#contextLifecycle !== "active") return;
     try {
       const resource = ensureGltfIblSpecularTexture(
@@ -7601,7 +7516,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             || this.#gltf.get(state.key) !== state
             || state.imageRows.get(job.key) !== row
           ) {
-            this.#closeTextureSource(loadedImage.image);
+            this.#decodedTextureSources.closeOrdinary(loadedImage.image);
             return;
           }
           let previousSource: LoadedTextureSource | undefined;
@@ -7615,7 +7530,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           } catch (error) {
             this.#recordGltfImageLoadSettled(state, true);
             try {
-              this.#closeTextureSource(loadedImage.image);
+              this.#decodedTextureSources.closeOrdinary(loadedImage.image);
             } catch {
               // The pending-close set retains the denied source for retry.
             }
@@ -7631,7 +7546,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             previousSource !== undefined
             && previousSource !== loadedImage.image
             && resourceArenaSourceReferenceCount(this.#resourceArena, previousSource) === 0
-          ) this.#closeTextureSource(previousSource);
+          ) this.#decodedTextureSources.closeOrdinary(previousSource);
           row.source = loadedImage.image;
           row.status = "ready";
           row.revision += 1;
@@ -7787,7 +7702,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
           const source = row.source;
           delete row.source;
           releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
-          if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+          if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) {
+            this.#decodedTextureSources.closeOrdinary(source);
+          }
         }
         continue;
       }
@@ -7808,10 +7725,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (row.iblSpecular !== undefined) {
         this.#settleIblSpecularImage(row.iblSpecular, row.key, source);
       }
-      if (row.bindings.length === 0 && row.iblSpecular === undefined) this.#closeTextureSource(source);
+      if (row.bindings.length === 0 && row.iblSpecular === undefined) {
+        this.#decodedTextureSources.closeOrdinary(source);
+      }
       delete row.source;
       releaseResourceArenaAssetSource(this.#resourceArena, row.assetKey, row.key);
-      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) this.#closeTextureSource(source);
+      if (resourceArenaSourceReferenceCount(this.#resourceArena, source) === 0) {
+        this.#decodedTextureSources.closeOrdinary(source);
+      }
       for (const material of row.materials) {
         for (const primitive of this.#gltfMaterialPrimitives.get(material) ?? []) {
           this.#gltfPreparedPrimitiveMaterials.get(primitive)?.delete(material);
