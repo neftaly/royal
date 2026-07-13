@@ -17,7 +17,6 @@ import {
   type RenderRoot as SceneRenderRoot,
 } from "@royal/renderer-core";
 import type { WebGlGltfInstancingSnapshot, WebGlRoot } from "@royal/renderer-webgl";
-import type { installStagedGltfLoader } from "./renderer-webgl-scene-gltf-loader-fixtures";
 
 export type CanvasSize = {
   readonly height: number;
@@ -600,29 +599,6 @@ export const fakeImageBitmap = (size: number): ImageBitmap => ({
   height: size,
   width: size,
 }) as unknown as ImageBitmap;
-
-export const settleKhronosEnvironmentTestIblBitmaps = async (
-  loader: ReturnType<typeof installStagedGltfLoader>,
-): Promise<void> => {
-  const mipSizes = [256, 128, 64, 32, 16] as const;
-  let settled = 0;
-  let settledImages = 0;
-  for (let attempt = 0; attempt < 80 && settled < 30; attempt += 1) {
-    await flushMicrotasks();
-    await flushAnimationFrames(latestAnimationFrames);
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    while (settledImages < ControlledImage.instances.length) {
-      ControlledImage.instances[settledImages]?.settleLoad();
-      settledImages += 1;
-    }
-    while (settled < loader.bitmapRequests.length) {
-      loader.bitmapRequests[settled]?.resolve(fakeImageBitmap(mipSizes[settled % mipSizes.length] ?? 16));
-      settled += 1;
-    }
-  }
-  expect(loader.bitmapRequests).toHaveLength(30);
-  await flushMicrotasks();
-};
 
 export const settleControlledImageWave = async (expected: number): Promise<void> => {
   let settled = 0;

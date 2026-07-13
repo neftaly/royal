@@ -6,10 +6,36 @@ import {
 import { triangleDocument } from "./renderer-webgl-scene-gltf-material-documents";
 import {
   ControlledImage,
+  fakeImageBitmap,
+  flushAnimationFrames,
   flushMicrotasks,
+  latestAnimationFrames,
   type BitmapRequest,
   type FetchRequest,
 } from "./renderer-webgl-scene-gltf-test-runtime";
+
+export const settleKhronosEnvironmentTestIblBitmaps = async (
+  loader: ReturnType<typeof installStagedGltfLoader>,
+): Promise<void> => {
+  const mipSizes = [256, 128, 64, 32, 16] as const;
+  let settled = 0;
+  let settledImages = 0;
+  for (let attempt = 0; attempt < 80 && settled < 30; attempt += 1) {
+    await flushMicrotasks();
+    await flushAnimationFrames(latestAnimationFrames);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    while (settledImages < ControlledImage.instances.length) {
+      ControlledImage.instances[settledImages]?.settleLoad();
+      settledImages += 1;
+    }
+    while (settled < loader.bitmapRequests.length) {
+      loader.bitmapRequests[settled]?.resolve(fakeImageBitmap(mipSizes[settled % mipSizes.length] ?? 16));
+      settled += 1;
+    }
+  }
+  expect(loader.bitmapRequests).toHaveLength(30);
+  await flushMicrotasks();
+};
 
 export const responseWithJson = (url: string, json: unknown): Response => {
   const text = JSON.stringify(json);

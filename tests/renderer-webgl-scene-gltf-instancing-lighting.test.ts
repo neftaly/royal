@@ -10,7 +10,6 @@ import {
   ControlledImage,
   installViewportInvalidationStubs,
   flushMicrotasks,
-  settleKhronosEnvironmentTestIblBitmaps,
   settleControlledImageWave,
   flushAnimationFrames,
   flushPreparedAssetBoundary,
@@ -68,6 +67,7 @@ import {
   responseWithJson,
   responseWithBuffer,
   installStagedGltfLoader,
+  settleKhronosEnvironmentTestIblBitmaps,
 } from "./renderer-webgl-scene-gltf-loader-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGltfInstanceTransforms, directionalLight, gltf, gltfInstances } from "@royal/renderer-core";
