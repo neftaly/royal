@@ -67,6 +67,34 @@ describe("virtual texture pure demand planning", () => {
     expect(projected.footprint.screenHeight).toBe(400);
   });
 
+  it("rejects non-finite UV input without retaining a malformed finest region", () => {
+    for (const nonFinite of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const workspace = createVirtualTextureDemandPlanningWorkspace();
+      const invalid = context(
+        new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0]),
+        identityMat4(),
+        { texCoords: new Float32Array([nonFinite, 0, 1, 0, 0, 1]) },
+      );
+      expect(projectVirtualTextureScreenFootprint(invalid, false, workspace, manifest())).toEqual({
+        kind: "indeterminate",
+      });
+      expect(virtualTextureDemandPlanningWorkspaceSnapshot(workspace).finestRegionCount).toBe(0);
+      expect(planVirtualTextureDrawDemand({
+        context: invalid,
+        flipY: false,
+        generated: true,
+        limit: 4,
+        manifest: manifest(),
+      })).toEqual({
+        coverageCandidates: [],
+        demandCandidates: planVirtualTextureBootstrapDemand({
+          generated: true,
+          manifest: manifest(),
+        }, 4),
+      });
+    }
+  });
+
   it("rejects every non-positive clipW sample and safely culls one-sided offscreen bounds", () => {
     const behindProjection = [...identityMat4()] as unknown as number[];
     behindProjection[15] = -1;
@@ -362,6 +390,195 @@ describe("virtual texture pure demand planning", () => {
     expect(first.demandCandidates.length).toBeLessThanOrEqual(4);
     expect(first.preferredCandidates?.length ?? 0).toBeLessThanOrEqual(4);
     expect(planVirtualTextureDrawDemand(input)).toEqual(first);
+  });
+
+  it("bounds non-overflow demand for a 2^30 sparse address space by authored entries", () => {
+    const huge = {
+      height: 2 ** 30,
+      mipCount: 31,
+      pageSize: 1,
+      pages: [],
+      width: 2 ** 30,
+    } satisfies VirtualTextureManifestModel;
+    const faceOn = context(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0]));
+    const projected = projectVirtualTextureScreenFootprint(faceOn, false);
+    expect(projected.kind).toBe("visible");
+    if (projected.kind !== "visible") return;
+    const targetMip = virtualTextureTargetMip(huge, projected.footprint);
+    const targetGrid = virtualTextureDemandPageGrid(huge, targetMip);
+    const sparse: VirtualTextureManifestModel = {
+      ...huge,
+      pages: [
+        { mip: 30, uri: "root.png", x: 0, y: 0 },
+        { mip: targetMip, uri: "first.png", x: 0, y: 0 },
+        {
+          mip: targetMip,
+          uri: "last.png",
+          x: targetGrid.width - 1,
+          y: targetGrid.height - 1,
+        },
+      ],
+    };
+
+    const demand = planVirtualTextureDrawDemand({
+      context: faceOn,
+      flipY: false,
+      generated: false,
+      limit: 4,
+      manifest: sparse,
+    });
+
+    expect(demand.retentionOverflowed).toBeUndefined();
+    expect(demand.coverageCandidates).toEqual(sparse.pages.slice(1));
+    expect(demand.demandCandidates).toEqual(sparse.pages);
+  });
+
+  it("bounds a truncated huge template hierarchy without a terminal 1x1 mip", () => {
+    const truncated: VirtualTextureManifestModel = {
+      height: 2 ** 30,
+      mipCount: 2,
+      pageSize: 1,
+      pages: [],
+      uriTemplate: "pages/{mip}/{x}/{y}.png",
+      width: 2 ** 30,
+    };
+    const input = {
+      context: context(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0])),
+      flipY: false,
+      generated: false,
+      limit: 4,
+      manifest: truncated,
+    } as const;
+
+    const first = planVirtualTextureDrawDemand(input);
+    expect(first.retentionOverflowed).toBeUndefined();
+    expect(first.coverageCandidates).toHaveLength(4);
+    expect(first.demandCandidates).toHaveLength(4);
+    expect(first.coverageCandidates?.every((page) => page.mip === 1)).toBe(true);
+    expect(planVirtualTextureDrawDemand(input)).toEqual(first);
+  });
+
+  it("keeps disjoint finest regions localized independent of reversed index and model ordering", () => {
+    const positions = new Float32Array([
+      -1, -1, 0, 1, -1, 0, -1, 1, 0,
+      -1, -1, 0, 1, -1, 0, -1, 1, 0,
+    ]);
+    const texCoords = new Float32Array([
+      0, 0, 0.25, 0, 0, 0.25,
+      0.75, 0.75, 1, 0.75, 0.75, 1,
+    ]);
+    const triangleOrder = (first: readonly number[], second: readonly number[]): Uint16Array =>
+      new Uint16Array(Array.from({ length: 1_000 }, () => [...first, ...second]).flat());
+    const large = identityMat4();
+    const small = identityMat4();
+    small[0] = 0.25;
+    small[5] = 0.25;
+    const rootModel = identityMat4();
+    const demandContext = (
+      indices: Uint16Array,
+      localModels: readonly Mat4[],
+    ): VirtualTextureDrawDemandContext => ({
+      indices,
+      modelSource: {
+        kind: "composed",
+        localModels,
+        rootModels: localModels.map(() => rootModel),
+      },
+      positions,
+      projection: identityMat4(),
+      texCoords,
+      view: identityMat4(),
+      viewportSize: [1_000, 800],
+    });
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const forwardWorkspace = createVirtualTextureDemandPlanningWorkspace();
+    const reverseWorkspace = createVirtualTextureDemandPlanningWorkspace();
+    const forward = planVirtualTextureDrawDemand({
+      context: demandContext(triangleOrder([0, 1, 2], [3, 4, 5]), [small, large]),
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+      workspace: forwardWorkspace,
+    });
+    const reverse = planVirtualTextureDrawDemand({
+      context: demandContext(triangleOrder([3, 4, 5], [0, 1, 2]), [large, small]),
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+      workspace: reverseWorkspace,
+    });
+
+    expect(forward.retentionOverflowed).toBe(true);
+    expect(reverse).toEqual(forward);
+    expect(virtualTextureDemandPlanningWorkspaceSnapshot(reverseWorkspace).finestObservedMip).toBe(
+      virtualTextureDemandPlanningWorkspaceSnapshot(forwardWorkspace).finestObservedMip,
+    );
+    expect(forwardWorkspace.finestRegionCount).toBe(2);
+    const preferred = forward.preferredCandidates ?? [];
+    const normalizedCenters = preferred.map((page) => {
+      const grid = virtualTextureDemandPageGrid(source, page.mip);
+      return {
+        u: (page.x + 0.5) / grid.width,
+        v: (page.y + 0.5) / grid.height,
+      };
+    });
+    expect(normalizedCenters.some(({ u, v }) => u <= 0.25 && v <= 0.25)).toBe(true);
+    expect(normalizedCenters.some(({ u, v }) => u >= 0.75 && v >= 0.75)).toBe(true);
+    expect(normalizedCenters.every(({ u, v }) => (
+      (u <= 0.25 && v <= 0.25) || (u >= 0.75 && v >= 0.75)
+    ))).toBe(true);
+  });
+
+  it("keeps the four largest equal-mip regions in a deterministic bounded frontier", () => {
+    const sizes = [0.95, 0.85, 0.75, 0.65, 0.55];
+    const positions = new Float32Array(sizes.flatMap((size) => [
+      -size, -size, 0,
+      size, -size, 0,
+      -size, size, 0,
+    ]));
+    const texCoords = new Float32Array(sizes.flatMap((_size, index) => {
+      const min = index * 0.2;
+      const max = min + 0.1;
+      return [min, min, max, min, min, max];
+    }));
+    const triangleGroups = sizes.map((_size, index) => [index * 3, index * 3 + 1, index * 3 + 2]);
+    const indices = (groups: readonly (readonly number[])[]): Uint16Array =>
+      new Uint16Array(Array.from({ length: 400 }, () => groups.flat()).flat());
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const demand = (groups: readonly (readonly number[])[]) => planVirtualTextureDrawDemand({
+      context: context(positions, identityMat4(), { indices: indices(groups), texCoords }),
+      flipY: false,
+      generated: true,
+      limit: 8,
+      manifest: source,
+    });
+
+    const forward = demand(triangleGroups);
+    const reverse = demand([...triangleGroups].reverse());
+    expect(forward.retentionOverflowed).toBe(true);
+    expect(reverse).toEqual(forward);
+    const preferredCenters = (forward.preferredCandidates ?? []).map((page) => {
+      const grid = virtualTextureDemandPageGrid(source, page.mip);
+      return (page.x + 0.5) / grid.width;
+    });
+    for (const retainedCenter of [0.05, 0.25, 0.45, 0.65]) {
+      expect(preferredCenters.some((center) => Math.abs(center - retainedCenter) <= 0.06)).toBe(true);
+    }
+    expect(preferredCenters.every((center) => center < 0.8)).toBe(true);
   });
 
   it("caps only destructive resident replacements and converges without a wake spin", () => {
