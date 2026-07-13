@@ -211,6 +211,7 @@ const fakeGl = (): FakeGl => {
     depthFunc: record("depthFunc"),
     depthMask: record("depthMask"),
     depthRange: record("depthRange"),
+    detachShader: record("detachShader"),
     disable: record("disable"),
     disableVertexAttribArray: record("disableVertexAttribArray"),
     drawArrays: record("drawArrays"),
@@ -297,6 +298,11 @@ const expectMatricesToContainClose = (
     && matrix.every((value, index) => Math.abs(value - expected[index]!) < 0.00001));
   expect(hasMatrix).toBe(true);
 };
+
+const xrSessionEventMethods = (target: EventTarget) => ({
+  addEventListener: target.addEventListener.bind(target),
+  removeEventListener: target.removeEventListener.bind(target),
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -1370,7 +1376,9 @@ describe("WebGL root working state contracts", () => {
     const publicOnlyRoot = {
       contextLifecycle: "active",
     } as Parameters<typeof createWebXrSessionRenderer>[0];
+    const events = new EventTarget();
     const session: WebGlXrSession = {
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(),
       updateRenderState: vi.fn(),
     };
@@ -1381,13 +1389,37 @@ describe("WebGL root working state contracts", () => {
     expect(session.updateRenderState).not.toHaveBeenCalled();
   });
 
+  it("rejects WebXR setup when the WebGL context cannot become XR-compatible", async () => {
+    const { gl } = fakeGl();
+    const xrGl = gl as WebGL2RenderingContext & {
+      makeXRCompatible?: () => Promise<void>;
+    };
+    delete xrGl.makeXRCompatible;
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const events = new EventTarget();
+    const session: WebGlXrSession = {
+      ...xrSessionEventMethods(events),
+      requestReferenceSpace: vi.fn(),
+      updateRenderState: vi.fn(),
+    };
+
+    await expect(createWebXrSessionRenderer(root, session)).rejects.toThrow(
+      "requires WebGL makeXRCompatible support",
+    );
+    expect(session.requestReferenceSpace).not.toHaveBeenCalled();
+    expect(session.updateRenderState).not.toHaveBeenCalled();
+    root.dispose();
+  });
+
   it("creates a WebXR session renderer that renders the latest scene through XR views", async () => {
     const { calls, gl } = fakeGl();
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas);
     const framebuffer = makeHandle<WebGLFramebuffer>();
     const referenceSpace: WebGlXrReferenceSpace = {};
+    const events = new EventTarget();
     const session: WebGlXrSession = {
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(async () => referenceSpace),
       updateRenderState: vi.fn(),
     };
@@ -1448,7 +1480,7 @@ describe("WebGL root working state contracts", () => {
         return {
           views: [{
             projectionMatrix,
-            viewMatrix,
+            transform: { inverse: { matrix: viewMatrix } },
             viewport: xrViewport,
           }],
         };
@@ -1483,7 +1515,11 @@ describe("WebGL root working state contracts", () => {
     const callsWhileLost = calls.length;
     expect(renderer.renderFrame({
       getViewerPose: () => ({
-        views: [{ projectionMatrix, viewMatrix, viewport: xrViewport }],
+        views: [{
+          projectionMatrix,
+          transform: { inverse: { matrix: viewMatrix } },
+          viewport: xrViewport,
+        }],
       }),
     })).toBe(false);
     expect(calls).toHaveLength(callsWhileLost);
@@ -1503,8 +1539,7 @@ describe("WebGL root working state contracts", () => {
     const referenceSpace: WebGlXrReferenceSpace = {};
     const events = new EventTarget();
     const session: WebGlXrSession = {
-      addEventListener: events.addEventListener.bind(events),
-      removeEventListener: events.removeEventListener.bind(events),
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(async () => referenceSpace),
       updateRenderState: vi.fn(),
     };
@@ -1536,8 +1571,7 @@ describe("WebGL root working state contracts", () => {
       finishCompatibility = resolve;
     }));
     const session: WebGlXrSession = {
-      addEventListener: events.addEventListener.bind(events),
-      removeEventListener: events.removeEventListener.bind(events),
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(async () => ({})),
       updateRenderState: vi.fn(),
     };

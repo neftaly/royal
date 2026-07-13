@@ -15,12 +15,11 @@ export type XrReferenceSpaceType =
 
 export interface XrView {
   readonly projectionMatrix: ArrayLike<number>;
-  readonly transform?: {
-    readonly inverse?: {
+  readonly transform: {
+    readonly inverse: {
       readonly matrix: ArrayLike<number>;
     };
   };
-  readonly viewMatrix?: ArrayLike<number>;
 }
 
 export interface XrViewerPose {
@@ -32,6 +31,16 @@ export interface XrFrame {
 }
 
 export interface XrSession {
+  addEventListener(
+    type: "end",
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void;
+  removeEventListener(
+    type: "end",
+    listener: EventListenerOrEventListenerObject,
+    options?: EventListenerOptions | boolean,
+  ): void;
   requestReferenceSpace(type: XrReferenceSpaceType): Promise<XrReferenceSpace>;
   updateRenderState(state: { readonly baseLayer: unknown }): void | Promise<void>;
 }

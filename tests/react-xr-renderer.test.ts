@@ -15,6 +15,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const xrSessionEventMethods = (target: EventTarget) => ({
+  addEventListener: target.addEventListener.bind(target),
+  removeEventListener: target.removeEventListener.bind(target),
+});
+
 describe("React XR renderer capability", () => {
   it("renders XR frames without exposing the concrete WebGL root", async () => {
     const makeXRCompatible = vi.fn(async () => undefined);
@@ -34,7 +39,9 @@ describe("React XR renderer capability", () => {
     }));
 
     const referenceSpace: XrReferenceSpace = {};
+    const events = new EventTarget();
     const session: XrSession = {
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(async () => referenceSpace),
       updateRenderState: vi.fn(),
     };
@@ -60,12 +67,16 @@ describe("React XR renderer capability", () => {
               0, 0, -1, -1,
               0, 0, -0.1, 0,
             ],
-            viewMatrix: [
-              1, 0, 0, 0,
-              0, 1, 0, 0,
-              0, 0, 1, 0,
-              0, 0, -2, 1,
-            ],
+            transform: {
+              inverse: {
+                matrix: [
+                  1, 0, 0, 0,
+                  0, 1, 0, 0,
+                  0, 0, 1, 0,
+                  0, 0, -2, 1,
+                ],
+              },
+            },
           }],
         };
       },
@@ -82,7 +93,9 @@ describe("React XR renderer capability", () => {
 
   it("rejects roots without the optional XR integration capability", async () => {
     const root = fakeRendererRoot();
+    const events = new EventTarget();
     const session: XrSession = {
+      ...xrSessionEventMethods(events),
       requestReferenceSpace: vi.fn(),
       updateRenderState: vi.fn(),
     };

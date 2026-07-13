@@ -32,12 +32,11 @@ export type WebXrReferenceSpaceType =
 
 export interface WebGlXrView {
   readonly projectionMatrix: ArrayLike<number>;
-  readonly transform?: {
-    readonly inverse?: {
+  readonly transform: {
+    readonly inverse: {
       readonly matrix: ArrayLike<number>;
     };
   };
-  readonly viewMatrix?: ArrayLike<number>;
 }
 
 export interface WebGlXrViewerPose {
@@ -54,12 +53,12 @@ export interface WebGlXrLayer {
 }
 
 export interface WebGlXrSession {
-  addEventListener?(
+  addEventListener(
     type: "end",
     listener: EventListenerOrEventListenerObject,
     options?: AddEventListenerOptions | boolean,
   ): void;
-  removeEventListener?(
+  removeEventListener(
     type: "end",
     listener: EventListenerOrEventListenerObject,
     options?: EventListenerOptions | boolean,
@@ -148,15 +147,6 @@ const firstReferenceSpace = async (
     : new Error("Royal WebXR could not acquire a reference space");
 };
 
-const viewMatrix = (view: WebGlXrView): ArrayLike<number> => {
-  const matrix = view.viewMatrix ?? view.transform?.inverse?.matrix;
-  if (matrix === undefined) {
-    throw new Error("Royal WebXR views require an inverse transform matrix");
-  }
-
-  return matrix;
-};
-
 const fillFrameViews = (
   frameViews: FrameViews,
   layer: WebGlXrLayer,
@@ -169,7 +159,7 @@ const fillFrameViews = (
     appendFrameView(
       frameViews,
       view.projectionMatrix,
-      viewMatrix(view),
+      view.transform.inverse.matrix,
       viewport.x,
       viewport.y,
       viewport.width,
@@ -222,10 +212,13 @@ export const createWebXrSessionRenderer = async (
   const assertSessionActive = (): void => {
     if (sessionEnded) throw new Error("Royal WebXR session ended during renderer setup");
   };
-  session.addEventListener?.("end", onSessionEnd, { once: true });
+  session.addEventListener("end", onSessionEnd, { once: true });
 
   try {
-    await gl.makeXRCompatible?.();
+    if (typeof gl.makeXRCompatible !== "function") {
+      throw new Error("Royal WebXR rendering requires WebGL makeXRCompatible support");
+    }
+    await gl.makeXRCompatible();
     assertSessionActive();
     if (root.contextLifecycle !== "active") {
       throw new Error("Royal WebXR renderer context became unavailable during session setup");
@@ -254,7 +247,7 @@ export const createWebXrSessionRenderer = async (
       let firstFailure: unknown;
       let failed = false;
       try {
-        session.removeEventListener?.("end", onSessionEnd);
+        session.removeEventListener("end", onSessionEnd);
       } catch (error) {
         failed = true;
         firstFailure = error;
@@ -296,7 +289,7 @@ export const createWebXrSessionRenderer = async (
     };
   } catch (error) {
     try {
-      if (disposeEndedSession === undefined) session.removeEventListener?.("end", onSessionEnd);
+      if (disposeEndedSession === undefined) session.removeEventListener("end", onSessionEnd);
       else disposeEndedSession();
     } catch {
       // Preserve the setup failure after making every available cleanup attempt.
