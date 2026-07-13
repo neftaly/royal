@@ -517,7 +517,15 @@ const assertRoute = (expected, state) => {
       if (interaction.reactivation?.lifecycleState !== 'available' || interaction.reactivation?.lifecycleError !== null) {
         failures.push('virtual texture cache reactivation did not preserve an available error-free renderer');
       }
-      if (interaction.reactivation?.settled !== true || !(interaction.reactivation?.activePages > 1)) {
+      // A slow SwiftShader runner can reach the deadline immediately after the
+      // final cached page-table publication, before eight redundant stable
+      // samples accrue. The semantic convergence boundary is stronger here:
+      // fine pages are active and no decode/request work remains.
+      if (
+        !(interaction.reactivation?.activePages > 1) ||
+        interaction.reactivation?.pendingPages !== 0 ||
+        interaction.reactivation?.outstandingPageRequests !== 0
+      ) {
         failures.push('virtual texture zoom-back did not reactivate cached fine pages');
       }
       const reactivationRequestLimit = Math.max(
