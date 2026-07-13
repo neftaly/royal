@@ -261,6 +261,39 @@ describe("virtual texture pure request orchestration", () => {
     expect(slotBound.grants).toHaveLength(2);
   });
 
+  it("does not grant work to resources without a physical slot", () => {
+    for (const effectiveSlots of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const plan = planVirtualTexturePageRequests(
+        createVirtualTextureRequestScheduler(),
+        0,
+        [resource("dormant", 2, { effectiveSlots })],
+        options,
+      );
+      expect(plan.grants).toEqual([]);
+    }
+  });
+
+  it("grants each page identity at most once even when a snapshot repeats it", () => {
+    const duplicate = { mip: 0, x: 1, y: 2 } as const;
+    const plan = planVirtualTexturePageRequests(
+      createVirtualTextureRequestScheduler(),
+      0,
+      [resource("duplicate", 3, {
+        pages: [
+          { claimed: false, page: duplicate, resident: false, retryBlocked: false },
+          { claimed: false, page: duplicate, resident: false, retryBlocked: false },
+          { claimed: false, page: { mip: 0, x: 2, y: 2 }, resident: false, retryBlocked: false },
+        ],
+      })],
+      options,
+    );
+
+    expect(plan.grants).toEqual([
+      { key: "duplicate", page: duplicate },
+      { key: "duplicate", page: { mip: 0, x: 2, y: 2 } },
+    ]);
+  });
+
   it("skips claimed, resident, retry-blocked, disabled, dormant, and full resources without spinning", () => {
     const blockedPages = resource("pages", 3, {
       pages: [

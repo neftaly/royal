@@ -89,9 +89,29 @@ export const beginVirtualTextureRequestFrame = (
     };
 };
 
+const pageAlreadyGranted = (
+  grants: readonly VirtualTextureRequestGrant[],
+  grantCount: number,
+  key: string,
+  page: VirtualTexturePageId,
+): boolean => {
+  for (let index = 0; index < grantCount; index += 1) {
+    const grant = grants[index];
+    if (
+      grant?.key === key
+      && grant.page.mip === page.mip
+      && grant.page.x === page.x
+      && grant.page.y === page.y
+    ) return true;
+  }
+  return false;
+};
+
 const requestablePageIndex = (
   resource: VirtualTextureRequestResourceSnapshot,
   startIndex: number,
+  grants: readonly VirtualTextureRequestGrant[],
+  grantCount: number,
 ): number | undefined => {
   for (let index = startIndex; index < resource.pages.length; index += 1) {
     const page = resource.pages[index];
@@ -100,10 +120,14 @@ const requestablePageIndex = (
       && !page.claimed
       && !page.resident
       && !page.retryBlocked
+      && !pageAlreadyGranted(grants, grantCount, resource.key, page.page)
     ) return index;
   }
   return undefined;
 };
+
+const nonNegativeInteger = (value: number): number =>
+  Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 
 /**
  * Plans one frame's fair request grants without starting work. Grants are never
@@ -156,7 +180,8 @@ export const planVirtualTexturePageRequestsInto = (
   nextPageIndices.length = resources.length;
   for (let index = 0; index < resources.length; index += 1) {
     const resource = resources[index]!;
-    simulatedInFlight[index] = Math.max(0, resource.loadingPages) + Math.max(0, resource.pendingUploads);
+    simulatedInFlight[index] = nonNegativeInteger(resource.loadingPages)
+      + nonNegativeInteger(resource.pendingUploads);
     nextPageIndices[index] = 0;
   }
   const grants = workspace.grants;
@@ -176,12 +201,17 @@ export const planVirtualTexturePageRequestsInto = (
       scansWithoutProgress += 1;
       continue;
     }
-    const resourceLimit = Math.min(Math.max(1, resource.effectiveSlots), maxInFlight);
+    const resourceLimit = Math.min(nonNegativeInteger(resource.effectiveSlots), maxInFlight);
     if ((simulatedInFlight[resourceIndex] ?? 0) >= resourceLimit) {
       scansWithoutProgress += 1;
       continue;
     }
-    const pageIndex = requestablePageIndex(resource, nextPageIndices[resourceIndex] ?? 0);
+    const pageIndex = requestablePageIndex(
+      resource,
+      nextPageIndices[resourceIndex] ?? 0,
+      grants,
+      grantCount,
+    );
     if (pageIndex === undefined) {
       scansWithoutProgress += 1;
       continue;
