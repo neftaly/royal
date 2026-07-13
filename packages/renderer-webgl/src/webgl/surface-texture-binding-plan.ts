@@ -87,6 +87,11 @@ export type SurfaceTextureBindingPlan = {
   readonly textureUnits: ReadonlyMap<SurfaceShaderTextureFeature, number>;
 };
 
+export type AdmittedSurfaceTextureReadiness = Pick<
+  SurfaceTextureBindingPlanInput,
+  "baseColor" | "candidates"
+>;
+
 const IBL_SPECULAR_PREFERRED_TEXTURE_UNIT = 2;
 
 /**
@@ -205,6 +210,86 @@ export const planSurfaceTextureBindings = (
     if (!textureUnits.has("iblSpecularCube")) omissions.push({ feature: "iblBrdfLut", reason: "dependency-omitted" });
     else if (brdf === "unavailable") omissions.push({ feature: "iblBrdfLut", reason: "unavailable" });
     else assign("iblBrdfLut", input.brdfLutPreferredUnit);
+  }
+
+  return {
+    baseColor,
+    features: new Set(textureUnits.keys()),
+    omissions,
+    textureUnits,
+  };
+};
+
+/**
+ * Resolves readiness without reallocating sampler units. The admission plan is
+ * authoritative, so unavailable high-priority features leave holes instead of
+ * allowing semantically omitted lower-priority features to enter the draw.
+ */
+export const resolveAdmittedSurfaceTextureBindings = (
+  admission: SurfaceTextureBindingPlan,
+  readiness: AdmittedSurfaceTextureReadiness,
+): SurfaceTextureBindingPlan => {
+  const textureUnits = new Map<SurfaceShaderTextureFeature, number>();
+  const omissions = [...admission.omissions];
+  const admit = (feature: SurfaceShaderTextureFeature): void => {
+    const unit = admission.textureUnits.get(feature);
+    if (unit !== undefined) textureUnits.set(feature, unit);
+  };
+  const unavailable = (feature: SurfaceShaderTextureFeature): void => {
+    omissions.push({ feature, reason: "unavailable" });
+  };
+
+  let baseColor: SurfaceBaseColorBindingPlan = { kind: "none" };
+  switch (admission.baseColor.kind) {
+    case "none":
+      break;
+    case "ordinary": {
+      const status = readiness.baseColor.kind === "ordinary"
+        ? readiness.baseColor.ordinary
+        : readiness.baseColor.kind === "virtual"
+          ? readiness.baseColor.fallback
+          : undefined;
+      if (status === "ready") {
+        admit("baseColorTexture");
+        baseColor = { kind: "ordinary" };
+      } else if (status === "unavailable") unavailable("baseColorTexture");
+      break;
+    }
+    case "virtual": {
+      if (readiness.baseColor.kind !== "virtual") break;
+      if (readiness.baseColor.virtual === "ready") {
+        admit("baseColorVirtualTextureAtlas");
+        admit("baseColorVirtualTexturePageTable");
+        if (readiness.baseColor.fallback === "ready") admit("baseColorTexture");
+        else if (readiness.baseColor.fallback === "unavailable") unavailable("baseColorTexture");
+        baseColor = {
+          fallback: readiness.baseColor.fallback === "ready" ? "atlas-unit" : "none",
+          kind: "virtual",
+        };
+      } else {
+        unavailable("baseColorVirtualTextureAtlas");
+        unavailable("baseColorVirtualTexturePageTable");
+        if (readiness.baseColor.fallback === "ready") {
+          admit("baseColorTexture");
+          baseColor = { kind: "ordinary" };
+        } else if (readiness.baseColor.fallback === "unavailable") unavailable("baseColorTexture");
+      }
+      break;
+    }
+  }
+
+  for (const [feature] of admission.textureUnits) {
+    if (
+      feature === "baseColorTexture"
+      || feature === "baseColorVirtualTextureAtlas"
+      || feature === "baseColorVirtualTexturePageTable"
+    ) continue;
+    if (feature === "iblBrdfLut" && !textureUnits.has("iblSpecularCube")) {
+      omissions.push({ feature, reason: "dependency-omitted" });
+      continue;
+    }
+    if (readiness.candidates[feature] === "ready") admit(feature);
+    else unavailable(feature);
   }
 
   return {

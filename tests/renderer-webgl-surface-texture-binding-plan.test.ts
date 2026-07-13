@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
   planSurfaceTextureBindings,
+  resolveAdmittedSurfaceTextureBindings,
   type SurfaceTextureBindingPlanInput,
 } from "../packages/renderer-webgl/src/webgl/surface-texture-binding-plan";
 import { SURFACE_SHADER_TEXTURE_FEATURES } from "../packages/renderer-webgl/src/webgl/shaders";
@@ -68,6 +69,60 @@ describe("surface texture binding planner", () => {
     expect(plan.omissions).toContainEqual({ feature: "specularTexture", reason: "unavailable" });
   });
 
+  it("resolves readiness within admission without backfilling sampler holes", () => {
+    const admission = planSurfaceTextureBindings(input({
+      candidates: {
+        emissiveTexture: "ready",
+        metallicRoughnessTexture: "ready",
+        normalTexture: "ready",
+      },
+      maxTextureUnits: 2,
+    }));
+    const resolved = resolveAdmittedSurfaceTextureBindings(admission, {
+      baseColor: { kind: "none" },
+      candidates: {
+        emissiveTexture: "unavailable",
+        metallicRoughnessTexture: "ready",
+      },
+    });
+
+    expect([...admission.textureUnits]).toEqual([
+      ["emissiveTexture", 0],
+      ["metallicRoughnessTexture", 1],
+    ]);
+    expect([...resolved.textureUnits]).toEqual([["metallicRoughnessTexture", 1]]);
+    expect(resolved.features.has("normalTexture")).toBe(false);
+    expect(resolved.omissions).toContainEqual({ feature: "emissiveTexture", reason: "unavailable" });
+    expect(resolved.omissions).toContainEqual({ feature: "normalTexture", reason: "unit-exhausted" });
+  });
+
+  it("keeps VT admission stable while resolving its ordinary fallback", () => {
+    const admission = planSurfaceTextureBindings(input({
+      baseColor: { fallback: "ready", kind: "virtual", virtual: "ready" },
+      candidates: { emissiveTexture: "ready" },
+      maxTextureUnits: 2,
+    }));
+    const pending = resolveAdmittedSurfaceTextureBindings(admission, {
+      baseColor: { fallback: "unavailable", kind: "virtual", virtual: "unavailable" },
+      candidates: {},
+    });
+    const fallback = resolveAdmittedSurfaceTextureBindings(admission, {
+      baseColor: { fallback: "ready", kind: "virtual", virtual: "unavailable" },
+      candidates: {},
+    });
+    const virtual = resolveAdmittedSurfaceTextureBindings(admission, {
+      baseColor: { fallback: "ready", kind: "virtual", virtual: "ready" },
+      candidates: {},
+    });
+
+    expect(admission.omissions).toContainEqual({ feature: "emissiveTexture", reason: "unit-exhausted" });
+    expect(pending.baseColor).toEqual({ kind: "none" });
+    expect(fallback.baseColor).toEqual({ kind: "ordinary" });
+    expect(fallback.textureUnits).toEqual(new Map([["baseColorTexture", 0]]));
+    expect(virtual.baseColor).toEqual({ fallback: "atlas-unit", kind: "virtual" });
+    expect(virtual.textureUnits.get("baseColorTexture")).toBe(0);
+  });
+
   it("allocates VT atomically, falls back when it cannot, and aliases a ready defensive fallback", () => {
     const constrained = planSurfaceTextureBindings(input({
       baseColor: { fallback: "ready", kind: "virtual", virtual: "ready" },
@@ -96,6 +151,18 @@ describe("surface texture binding planner", () => {
       reservedTextureUnits: new Set([3, 4, 5]),
     }));
     expect(plan.textureUnits).toEqual(new Map([
+      ["iblSpecularCube", 2],
+      ["transmissionScreenTexture", 1],
+      ["iblBrdfLut", 0],
+    ]));
+    expect(resolveAdmittedSurfaceTextureBindings(plan, {
+      baseColor: { kind: "none" },
+      candidates: {
+        iblBrdfLut: "ready",
+        iblSpecularCube: "ready",
+        transmissionScreenTexture: "ready",
+      },
+    }).textureUnits).toEqual(new Map([
       ["iblSpecularCube", 2],
       ["transmissionScreenTexture", 1],
       ["iblBrdfLut", 0],
@@ -177,6 +244,17 @@ describe("surface texture binding planner", () => {
       }
 
       expect([...plan.features]).toEqual([...plan.textureUnits.keys()]);
+      const readinessCandidates = Object.fromEntries(
+        Object.keys(candidates).map((feature) => [feature, random() < 0.5 ? "ready" : "unavailable"]),
+      );
+      const resolved = resolveAdmittedSurfaceTextureBindings(plan, {
+        baseColor,
+        candidates: readinessCandidates,
+      });
+      for (const [feature, unit] of resolved.textureUnits) {
+        expect(plan.textureUnits.get(feature), `resolved ${feature}`).toBe(unit);
+      }
+      for (const feature of resolved.features) expect(plan.features.has(feature)).toBe(true);
       const allocated = [...plan.textureUnits.entries()];
       for (const [, unit] of allocated) {
         expect(unit).toBeGreaterThanOrEqual(0);

@@ -30,7 +30,7 @@ import {
 } from "./renderer-webgl-virtual-texturing-fixtures";
 
 describe("WebGL renderer virtual texturing lifecycle and admission", () => {
-  it("does not let a pending high-priority material texture suppress a ready lower-priority map", async () => {
+  it("admits a pending high-priority map without loading an omitted lower-priority map", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -44,17 +44,95 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     expect(ControlledImage.instances.map((image) => image.src)).toEqual([
       "/textures/pending-emissive.png",
-      "/textures/ready-metallic-roughness.png",
     ]);
-    imageBySrc("ready-metallic-roughness")!.settleLoad();
+    imageBySrc("pending-emissive")!.settleLoad();
     await flushMicrotasks();
 
-    root.render(graph);
+    for (let frame = 0; frame < 3; frame += 1) root.render(graph);
     const uniforms = namedUniform1iValues(calls);
 
-    expect(imageBySrc("pending-emissive")?.complete).toBe(false);
-    expect(uniforms.u_useMetallicRoughnessTexture).toContain(1);
-    expect(uniforms.u_metallicRoughnessTexture).toContain(0);
+    expect(uniforms.u_useEmissiveTexture).toContain(1);
+    expect(uniforms.u_emissiveTexture).toContain(0);
+    expect(uniforms.u_useMetallicRoughnessTexture).not.toContain(1);
+    expect(imageBySrc("ready-metallic-roughness")).toBeUndefined();
+    expect(root.snapshot().textureResidency.resources).toBe(1);
+  });
+
+  it("keeps ordinary base color ahead of material maps under one sampler", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    const baseColor = imageTexture("/textures/admitted-base.png");
+    const material: SurfaceMaterial = {
+      ...standardMaterial({ texture: baseColor }),
+      emissiveTexture: imageTexture("/textures/omitted-emissive.png"),
+    };
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(material);
+
+    root.render(graph);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "/textures/admitted-base.png",
+    ]);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+    root.render(graph);
+
+    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(namedUniform1iValues(calls).u_useEmissiveTexture).not.toContain(1);
+    expect(imageBySrc("omitted-emissive")).toBeUndefined();
+    expect(root.snapshot().textureResidency.resources).toBe(1);
+  });
+
+  it("keeps admitted acquisition retryable after a failed draw", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const marker = new Error("draw failed after texture admission");
+    const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
+    vi.spyOn(gl, "drawElements").mockImplementationOnce(() => { throw marker; });
+    const material: SurfaceMaterial = {
+      ...standardMaterial({ color: [1, 1, 1, 1] }),
+      emissiveTexture: imageTexture("/textures/retry-emissive.png"),
+      metallicRoughnessTexture: imageTexture("/textures/still-omitted.png"),
+    };
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(material);
+
+    expect(() => root.render(graph)).toThrow(marker);
+    expect(ControlledImage.instances.map((image) => image.src)).toEqual([
+      "/textures/retry-emissive.png",
+    ]);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+    root.render(graph);
+
+    expect(namedUniform1iValues(calls).u_useEmissiveTexture).toContain(1);
+    expect(imageBySrc("still-omitted")).toBeUndefined();
+  });
+
+  it("keeps atomic VT ahead of ordinary maps without acquisition churn", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl({ maxTextureImageUnits: 2 });
+    const material: SurfaceMaterial = {
+      ...standardMaterial({ texture: virtualTexture("/vt/admitted-base.json") }),
+      emissiveTexture: imageTexture("/textures/omitted-behind-vt.png"),
+    };
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(material);
+
+    root.render(graph);
+    expect(fetchRequests).toHaveLength(1);
+    expect(imageBySrc("omitted-behind-vt")).toBeUndefined();
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushVirtualTextureManifest(root);
+    ControlledImage.instances[0]!.settleLoad();
+    await flushMicrotasks();
+    for (let frame = 0; frame < 4; frame += 1) root.render(graph);
+
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(imageBySrc("omitted-behind-vt")).toBeUndefined();
+    expect(root.snapshot().textureResidency.resources).toBe(0);
   });
 
   it("keeps an intrinsically oversized decoded page terminal without fetching it", async () => {

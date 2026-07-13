@@ -420,6 +420,7 @@ import {
 import {
   SURFACE_MATERIAL_TEXTURE_BINDINGS,
   planSurfaceTextureBindings,
+  resolveAdmittedSurfaceTextureBindings,
   type SurfaceIndependentTextureFeature,
   type SurfaceTextureBindingPlan as PureSurfaceTextureBindingPlan,
   type SurfaceTextureCandidate,
@@ -4230,19 +4231,56 @@ class WebGlRootImpl implements InternalWebGlRoot {
     baseColorResidency: BaseColorTextureResidency,
   ): SurfaceTextureBindingPlan {
     type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
-    const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
-    const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
-    const resolveOrdinary = (texture: TextureAssetUploadRef | undefined): ReadyOrdinaryTexture | undefined => {
-      if (texture === undefined) return undefined;
-      const resource = this.#requestOrdinaryTexture(texture);
-      return resource.uploaded ? resource : undefined;
-    };
+    const declaredCandidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
+    const declaredTextures = new Map<SurfaceShaderTextureFeature, TextureAssetUploadRef>();
     for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
       const texture = descriptor.key === "emissiveTexture"
         ? material.emissiveTexture
         : material.kind === "standard" ? material[descriptor.key] : undefined;
       if (texture === undefined) continue;
-      const ready = resolveOrdinary(texture);
+      declaredCandidates[descriptor.feature] = "ready";
+      declaredTextures.set(descriptor.feature, texture);
+    }
+    if (transmissionScreenColorTexture !== undefined) declaredCandidates.transmissionScreenTexture = "ready";
+    if (lightSet.specular !== undefined) {
+      declaredCandidates.iblSpecularCube = "ready";
+      declaredCandidates.iblBrdfLut = "ready";
+    }
+
+    const declaredBaseColor = (() => {
+      switch (baseColorResidency.kind) {
+        case "none": return { kind: "none" } as const;
+        case "ordinary": return { kind: "ordinary", ordinary: "ready" } as const;
+        case "prepared-virtual": return {
+          ...(baseColorResidency.ordinaryFallback === undefined ? {} : { fallback: "ready" as const }),
+          kind: "virtual" as const,
+          virtual: "ready" as const,
+        };
+      }
+    })();
+    const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
+    const reserveClusterUnits = lightSet.punctuals.length > 0;
+    const reservedTextureUnits = reserveClusterUnits
+      ? new Set([clusterUnits.grid, clusterUnits.indices, clusterUnits.lights].filter((unit) => unit >= 0))
+      : new Set<number>();
+    const admission = planSurfaceTextureBindings({
+      baseColor: declaredBaseColor,
+      brdfLutPreferredUnit: reserveClusterUnits && clusterUnits.grid > 0
+        ? clusterUnits.grid - 1
+        : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
+      candidates: declaredCandidates,
+      maxTextureUnits: this.#maxTextureImageUnits,
+      reservedTextureUnits,
+    });
+
+    const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
+    const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
+    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
+      if (!admission.features.has(descriptor.feature)) continue;
+      const texture = declaredTextures.get(descriptor.feature);
+      if (texture === undefined) continue;
+      const resource = this.#requestOrdinaryTexture(texture);
+      const ready = resource.uploaded ? resource : undefined;
       candidates[descriptor.feature] = ready === undefined ? "unavailable" : "ready";
       if (ready !== undefined) readyTextures.set(descriptor.feature, ready);
     }
@@ -4253,12 +4291,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const baseColor = (() => {
       switch (baseColorResidency.kind) {
         case "none": return { kind: "none" } as const;
-        case "ordinary":
-          ordinaryBaseColor = resolveOrdinary(baseColorResidency.texture);
+        case "ordinary": {
+          if (admission.baseColor.kind === "ordinary") {
+            const resource = this.#requestOrdinaryTexture(baseColorResidency.texture);
+            ordinaryBaseColor = resource.uploaded ? resource : undefined;
+          }
           return {
             kind: "ordinary" as const,
             ordinary: ordinaryBaseColor === undefined ? "unavailable" as const : "ready" as const,
           };
+        }
         case "prepared-virtual": {
           const drawable = this.#isVirtualTextureDrawable(baseColorResidency.state);
           if (!drawable) {
@@ -4266,16 +4308,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
             else baseColorResidency.state.stats.unreadyDraws += 1;
           }
           virtualFallbackTexture = baseColorResidency.ordinaryFallback;
-          const fallbackResource = virtualFallbackTexture === undefined
+          let fallbackResource = virtualFallbackTexture === undefined
             ? undefined
             : this.#ordinaryTextures.peekGpuResource(textureCacheKey(virtualFallbackTexture));
+          if (
+            virtualFallbackTexture !== undefined
+            && admission.baseColor.kind !== "none"
+            && (admission.baseColor.kind === "ordinary" || !drawable)
+          ) fallbackResource = this.#requestOrdinaryTexture(virtualFallbackTexture);
           virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
           return {
-            ...(virtualFallbackTexture === undefined
+            ...(virtualFallbackTexture === undefined || admission.baseColor.kind === "none"
               ? {}
               : { fallback: virtualFallbackReady === undefined ? "unavailable" as const : "ready" as const }),
             kind: "virtual" as const,
-            virtual: drawable ? "ready" as const : "unavailable" as const,
+            virtual: admission.baseColor.kind === "virtual" && drawable
+              ? "ready" as const
+              : "unavailable" as const,
           };
         }
       }
@@ -4286,45 +4335,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     if (lightSet.specular !== undefined) {
       candidates.iblSpecularCube = "ready";
-      // The LUT is staged as selectable, then admitted only if sampler planning
-      // actually chooses the last-priority feature.
-      candidates.iblBrdfLut = "ready";
-    }
-    const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
-    const reserveClusterUnits = lightSet.punctuals.length > 0;
-    const reservedTextureUnits = reserveClusterUnits
-      ? new Set([clusterUnits.grid, clusterUnits.indices, clusterUnits.lights].filter((unit) => unit >= 0))
-      : new Set<number>();
-    const buildPlan = (): PureSurfaceTextureBindingPlan => planSurfaceTextureBindings({
-        baseColor,
-        brdfLutPreferredUnit: reserveClusterUnits && clusterUnits.grid > 0
-          ? clusterUnits.grid - 1
-          : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-        candidates,
-        maxTextureUnits: this.#maxTextureImageUnits,
-        reservedTextureUnits,
-      });
-    let pure = buildPlan();
-    if (pure.features.has("iblBrdfLut")) {
-      let ready = false;
-      try {
-        ready = prepareSurfaceIblBrdfLut(this.#iblTextures);
-      } finally {
-        this.#consumeIblTextureSignals();
-      }
-      if (!ready) {
-        candidates.iblBrdfLut = "unavailable";
-        pure = buildPlan();
+      if (admission.features.has("iblBrdfLut")) {
+        let ready = false;
+        try {
+          ready = prepareSurfaceIblBrdfLut(this.#iblTextures);
+        } finally {
+          this.#consumeIblTextureSignals();
+        }
+        candidates.iblBrdfLut = ready ? "ready" : "unavailable";
       }
     }
+    const pure = resolveAdmittedSurfaceTextureBindings(admission, { baseColor, candidates });
     this.#recordSurfaceTextureBindingOmissions(pure);
-    const selectedVirtualFallback = pure.baseColor.kind !== "virtual"
-      && virtualFallbackTexture !== undefined
-      ? resolveOrdinary(virtualFallbackTexture)
-      : undefined;
     const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
-      ? ordinaryBaseColor === undefined && selectedVirtualFallback !== undefined
-        ? { kind: "ordinary", resource: selectedVirtualFallback }
+      ? ordinaryBaseColor === undefined && virtualFallbackReady !== undefined
+        ? { kind: "ordinary", resource: virtualFallbackReady }
         : ordinaryBaseColor === undefined
           ? { kind: "none" }
           : { kind: "ordinary", resource: ordinaryBaseColor }
