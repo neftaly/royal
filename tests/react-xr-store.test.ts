@@ -30,17 +30,8 @@ describe("React XR session store", () => {
       status: "active",
     });
     expect("session" in snapshot).toBe(false);
-
-    store.getState().setSnapshot({
-      active: false,
-      offerStatus: "offered",
-      status: "available",
-    });
-
-    expect(store.getState().session).toBe(session);
-    expect(store.getState().active).toBe(false);
-    expect(store.getState().offerStatus).toBe("offered");
-    expect(store.getState().status).toBe("available");
+    expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+    expect("activateSession" in snapshot).toBe(false);
   });
 
   it("uses semantic actions for session lifecycle state", () => {

@@ -40,12 +40,6 @@ export type XrSessionState = {
   readonly viewports: readonly XrViewport[];
 };
 
-export type XrSessionSnapshot = XrSessionState;
-
-export type XrSessionSerializableState = XrSessionState;
-
-export type XrSessionSerializableSnapshot = XrSessionState;
-
 export type XrSessionControlSnapshot<Session extends object = object> = {
   readonly session: Session | null;
 };
@@ -108,7 +102,6 @@ export type XrSessionStoreActions<Session extends object = object> = {
     available: boolean,
     options?: XrSessionAvailabilityOptions,
   ) => void;
-  readonly setSnapshot: (state: XrSessionStoreInitialState) => void;
 };
 
 export type XrSessionStoreState<Session extends object = object> =
@@ -160,9 +153,9 @@ const normalizeXrSessionStatus = (
   fallback: XrSessionStatus,
 ): XrSessionStatus => status ?? fallback;
 
-const createXrSessionSnapshot = (
+const createXrSessionState = (
   state: XrSessionStoreInitialState = {},
-): XrSessionSnapshot => {
+): XrSessionState => {
   const viewports = copyXrViewports(state.viewports);
 
   return {
@@ -182,34 +175,9 @@ const createXrSessionSnapshot = (
 const createXrSessionStoreData = <Session extends object>(
   state: XrSessionStoreInitialState = {},
 ): XrSessionStoreData<Session> => ({
-  ...createXrSessionSnapshot(state),
+  ...createXrSessionState(state),
   session: null,
 });
-
-const createXrSessionStorePatch = <Session extends object>(
-  state: XrSessionStoreInitialState,
-): XrSessionStorePatch<Session> => {
-  const patch: XrSessionStorePatch<Session> = {};
-
-  if (state.active !== undefined) patch.active = state.active;
-  if (state.available !== undefined) patch.available = state.available;
-  if (state.error !== undefined) patch.error = state.error;
-  if (state.frameIndex !== undefined) patch.frameIndex = state.frameIndex;
-  if (state.mode !== undefined) patch.mode = state.mode;
-  if (state.offerError !== undefined) patch.offerError = state.offerError;
-  if (state.offerStatus !== undefined) patch.offerStatus = state.offerStatus;
-  if (state.status !== undefined) patch.status = state.status;
-
-  if (state.viewports !== undefined) {
-    const viewports = copyXrViewports(state.viewports);
-    patch.viewports = viewports;
-    patch.viewCount = state.viewCount ?? viewports.length;
-  } else if (state.viewCount !== undefined) {
-    patch.viewCount = state.viewCount;
-  }
-
-  return patch;
-};
 
 const createAvailabilityPatch = <Session extends object>(
   available: boolean,
@@ -236,7 +204,7 @@ const createAvailabilityPatch = <Session extends object>(
 
 export const selectXrSessionSnapshot = <Session extends object>(
   state: XrSessionStoreState<Session>,
-): XrSessionSnapshot => ({
+): XrSessionState => ({
   active: state.active,
   available: state.available,
   error: state.error,
@@ -258,7 +226,7 @@ export const selectXrSessionControlSnapshot = <Session extends object>(
 export const createXrSessionStore = <Session extends object = object>(
   initialState: XrSessionStoreInitialState = {},
 ): XrSessionStore<Session> => {
-  const initialSnapshot = createXrSessionSnapshot(initialState);
+  const initialSnapshot = createXrSessionState(initialState);
   const initialData = createXrSessionStoreData<Session>(initialSnapshot);
 
   const listeners = new Set<() => void>();
@@ -351,9 +319,6 @@ export const createXrSessionStore = <Session extends object = object>(
     setOfferStatus: (offerStatus, offerError = null) => {
       set({ offerError, offerStatus });
     },
-    setSnapshot: (state) => {
-      set(createXrSessionStorePatch<Session>(state));
-    },
   };
   current = { ...initialData, ...actions };
   const initial = current;
@@ -432,5 +397,5 @@ export const useXrSessionSelector = <Session extends object, State>(
 
 export const useXrSessionSnapshot = <Session extends object>(
   store: XrSessionStore<Session>,
-): XrSessionSnapshot =>
+): XrSessionState =>
   useXrSessionSelector(store, selectXrSessionSnapshot);

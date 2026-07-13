@@ -203,7 +203,6 @@ const XrSessionControl = (): ReactNode => {
   const beginSession = useXrSessionSelector(store, (state) => state.beginSession);
   const endSession = useXrSessionSelector(store, (state) => state.endSession);
   const failSession = useXrSessionSelector(store, (state) => state.failSession);
-  const recordFrame = useXrSessionSelector(store, (state) => state.recordFrame);
   const setAvailability = useXrSessionSelector(store, (state) => state.setAvailability);
   const visibleStatus = xrStatusLabel(status, error);
 
@@ -245,7 +244,6 @@ const XrSessionControl = (): ReactNode => {
           antialias: true,
           framebufferScaleFactor: 0.85,
         },
-        onFrameSnapshot: recordFrame,
         referenceSpacePreference: ['local-floor', 'local'],
       });
     } catch (error) {
@@ -319,7 +317,6 @@ const XrSessionControl = (): ReactNode => {
     cleanupFrameLoop,
     endSession,
     failSession,
-    recordFrame,
     root,
     store,
   ]);

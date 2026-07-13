@@ -83,6 +83,20 @@ Tarstate-derived scene snapshots.
 The imperative `createRendererRoot(canvas)` path accepts the same pure scene
 descriptors as `Canvas.scene`. It does not create or evaluate React elements.
 
+### WebXR
+
+`@royal/react/xr` provides an explicit session store and the renderer bridge;
+it does not own an application's WebXR workflow. `createXrSessionStore()` keeps
+serializable UI state separate from the live session object and exposes
+semantic actions for availability, offers, lifecycle transitions, and optional
+frame telemetry. `createXrSessionRenderer()` owns the Royal render layer and
+reference space until disposal.
+
+The application owns support detection, session offer/request/end policy, the
+animation-frame loop, and controller or input picking. Frame snapshots are
+opt-in telemetry: only connect `onFrameSnapshot` to `recordFrame` when UI or
+diagnostics actually consume per-frame viewport data.
+
 ### Canvas renderer options
 
 Pass renderer creation options through `Canvas.context`, or through
