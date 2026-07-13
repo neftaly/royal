@@ -56,6 +56,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Test
         run: pnpm test
 
@@ -70,6 +73,12 @@ jobs:
           fi
           chromium --version
           pnpm --filter @royal/examples-react test:browser
+
+      - name: Browser context loss and restoration
+        env:
+          EXAMPLES_SMOKE_CONTEXT_LOSS: "1"
+          EXAMPLES_SMOKE_ROUTE: cube
+        run: node apps/examples-react/scripts/browser-smoke.mjs
 
       - name: Build examples for GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

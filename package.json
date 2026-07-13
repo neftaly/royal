@@ -22,6 +22,7 @@
     "check:gpu": "node scripts/gpu.ts check",
     "dev": "pnpm --filter @royal/examples-react dev",
     "dev:xr": "node scripts/dev-xr.mjs",
+    "lint": "pnpm -r --if-present lint",
     "perf:vt-pages": "node scripts/virtual-texture-page-perf.ts",
     "quest:browser": "node scripts/quest-browser-control.mjs",
     "test": "vitest run tests/*.test.ts tests/*.test.tsx",
