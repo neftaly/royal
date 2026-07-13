@@ -476,6 +476,7 @@ const fakeGl = (): FakeGl => {
     deleteBuffer: record("deleteBuffer"),
     deleteProgram: record("deleteProgram"),
     deleteShader: record("deleteShader"),
+    detachShader: record("detachShader"),
     deleteTexture: record("deleteTexture"),
     deleteVertexArray: record("deleteVertexArray"),
     depthFunc: record("depthFunc"),

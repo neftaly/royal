@@ -211,6 +211,7 @@ const fakeGl = (): FakeGl => {
     getUniformLocation: record("getUniformLocation", () => uniform),
     isContextLost: record("isContextLost", () => false),
     linkProgram: record("linkProgram"),
+    lineWidth: record("lineWidth"),
     pixelStorei: record("pixelStorei"),
     shaderSource: record("shaderSource"),
     texImage2D: record("texImage2D"),
