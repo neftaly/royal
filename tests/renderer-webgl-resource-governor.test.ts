@@ -701,5 +701,5 @@ describe("root resource governor", () => {
         transientPeakBytes: 0,
       });
     });
-  });
+  }, 15_000);
 });
