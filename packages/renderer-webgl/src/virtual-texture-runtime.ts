@@ -13,7 +13,6 @@ import {
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
-import type { VirtualTexturePageLifecycle } from "./virtual-texture-page-lifecycle";
 import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
 import { rasterizeGeneratedVirtualTexturePage } from "./virtual-texture-page-rasterizer";
 
@@ -88,14 +87,9 @@ export type VirtualTextureRuntimeState = {
   desiredPages: VirtualTexturePageId[];
   desiredPagesScratch: VirtualTexturePageId[];
   readonly key: string;
-  /** Incremental count of page lifecycles currently in the loading state. */
-  loadingPageCount: number;
   /** Most recent successfully committed frame that contained draw demand. */
   lastDemandFrame: number;
   manifestAbortController?: AbortController;
-  readonly pageLifecycles: Map<string, VirtualTexturePageLifecycle>;
-  readonly pageLoadAbortControllers: Map<string, AbortController>;
-  readonly pageRetryTimers: Map<string, ReturnType<typeof setTimeout>>;
   manifest?: VirtualTextureManifestModel;
   pageUrisByKey?: ReadonlyMap<string, string>;
   sourceGeneration: number;

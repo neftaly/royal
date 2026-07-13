@@ -406,6 +406,87 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.dispose();
   });
 
+  it("settles decoded ownership when page validation throws", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushVirtualTextureManifest(root);
+    const page = ControlledImage.instances[0]!;
+    Object.defineProperty(page, "naturalWidth", {
+      configurable: true,
+      get: () => {
+        throw new Error("broken decoded dimensions");
+      },
+    });
+    page.settleLoad();
+    await flushMicrotasks();
+
+    expect(pageUploads(calls)).toHaveLength(0);
+    expect(ControlledImage.closeCalls).toBe(1);
+    expect(root.snapshot().resourceGovernor).toMatchObject({
+      byClass: { "virtual-texture": { cpuDecodedBytes: 0 } },
+      total: { cpuDecodedBytes: 0 },
+    });
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      cachedPages: 0,
+      outstandingPageRequests: 0,
+      pageLoadFailures: 1,
+    });
+    expect(root.snapshot().diagnostics.join("\n")).toContain("broken decoded dimensions");
+    root.render(graph);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(1);
+  });
+
+  it("does not recreate a loading claim when page construction loses the context", async () => {
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+    let contextLost = false;
+    class ContextLosingImage extends ControlledImage {
+      override get src(): string {
+        return super.src;
+      }
+
+      override set src(value: string) {
+        super.src = value;
+        if (value.length === 0 || contextLost) return;
+        contextLost = true;
+        canvas.dispatchContextEvent("webglcontextlost");
+      }
+    }
+    vi.stubGlobal("Image", ContextLosingImage);
+    const root = createWebGlRoot(canvas);
+    const graph = renderScene(unlitMaterial({ texture: virtualTexture("/vt/reentrant-loss.json") }));
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
+    await flushVirtualTextureManifest(root);
+    expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(0);
+    expect(root.snapshot().resourceGovernor.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
+
+    canvas.dispatchContextEvent("webglcontextrestored");
+    root.render(graph);
+    await flushMicrotasks();
+    expect(ControlledImage.instances).toHaveLength(2);
+    ControlledImage.instances[1]!.settleLoad();
+    await flushMicrotasks();
+    root.render(graph);
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      cachedPages: 1,
+      outstandingPageRequests: 0,
+      uploadedPages: 1,
+    });
+  });
+
   it("keeps manifest transport, JSON, parse, and GPU failures distinct", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
