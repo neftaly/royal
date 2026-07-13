@@ -31,6 +31,7 @@ class FakeGl {
   readonly FLOAT = 0x1406;
   readonly LINEAR = 0x2601;
   readonly LINEAR_MIPMAP_LINEAR = 0x2703;
+  readonly MAX_TEXTURE_IMAGE_UNITS = 0x8872;
   readonly RGB = 0x1907;
   readonly RGB9_E5 = 0x8c3d;
   readonly RGBA = 0x1908;
@@ -59,6 +60,7 @@ class FakeGl {
   failCreateOnce = false;
   failTexImageOnce = false;
   #serial = 1;
+  constructor(readonly maxTextureImageUnits = 16) {}
   #record(name: string, ...args: readonly unknown[]): void { this.calls.push({ args, name }); }
   activeTexture = (...args: readonly unknown[]): void => this.#record("activeTexture", ...args);
   bindTexture = (...args: readonly unknown[]): void => this.#record("bindTexture", ...args);
@@ -79,6 +81,8 @@ class FakeGl {
   };
   getUniformLocation = (_program: WebGLProgram, name: string): WebGLUniformLocation =>
     ({ name } as unknown as WebGLUniformLocation);
+  getParameter = (parameter: number): unknown =>
+    parameter === this.MAX_TEXTURE_IMAGE_UNITS ? this.maxTextureImageUnits : undefined;
   pixelStorei = (...args: readonly unknown[]): void => this.#record("pixelStorei", ...args);
   texImage2D = (...args: readonly unknown[]): void => {
     this.#record("texImage2D", ...args);
@@ -95,6 +99,10 @@ class FakeGl {
 
 const context = (gl: FakeGl): WebGL2RenderingContext => gl as unknown as WebGL2RenderingContext;
 const calls = (gl: FakeGl, name: string): readonly Call[] => gl.calls.filter((call) => call.name === name);
+const uniform1iValues = (gl: FakeGl, name: string): readonly unknown[] =>
+  calls(gl, "uniform1i")
+    .filter((call) => (call.args[0] as { readonly name?: string } | undefined)?.name === name)
+    .map((call) => call.args[1]);
 const source = (size: number, seed = 1): LoadedTextureSource => ({
   data: new Uint8Array(size * size * 4).fill(seed), height: size, kind: "rgba-texture", width: size,
 });
@@ -130,6 +138,94 @@ const recordingGovernor = () => {
 };
 
 describe("IBL texture arena", () => {
+  it("does not bind or enable an available specular texture when its planned unit is omitted", () => {
+    const gl = new FakeGl();
+    const arena = createIblTextureArena(context(gl));
+    const lightSet: SurfaceLightSet = {
+      directionals: [],
+      irradiance: {
+        coefficients: Array.from({ length: 9 }, () => [1, 1, 1]),
+        intensity: 2,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+      lights: [],
+      punctuals: [],
+      specular: {
+        encoding: "linear",
+        intensity: 1,
+        key: "planned",
+        mipCount: 1,
+        texture: {} as WebGLTexture,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+    };
+
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, undefined, 7);
+
+    expect(uniform1iValues(gl, "u_useIblIrradiance")).toEqual([1]);
+    expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([0]);
+    expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([0]);
+    expect(uniform1iValues(gl, "u_iblSpecularCube")).toEqual([]);
+    expect(calls(gl, "activeTexture")).toEqual([]);
+    expect(calls(gl, "bindTexture")).toEqual([]);
+    expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
+  });
+
+  it("binds planned specular and BRDF units without aliasing them", () => {
+    const gl = new FakeGl();
+    const arena = createIblTextureArena(context(gl));
+    const texture = {} as WebGLTexture;
+    const lightSet: SurfaceLightSet = {
+      directionals: [],
+      lights: [],
+      punctuals: [],
+      specular: {
+        encoding: "linear",
+        intensity: 1,
+        key: "planned",
+        mipCount: 1,
+        texture,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+    };
+
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 3, 7);
+
+    expect(uniform1iValues(gl, "u_useIblSpecular")).toEqual([1]);
+    expect(uniform1iValues(gl, "u_iblSpecularCube")).toEqual([3]);
+    expect(uniform1iValues(gl, "u_useIblBrdfLut")).toEqual([1]);
+    expect(uniform1iValues(gl, "u_iblBrdfLut")).toEqual([7]);
+    expect(calls(gl, "activeTexture").map((call) => call.args[0])).toContain(gl.TEXTURE0 + 3);
+    expect(calls(gl, "activeTexture").map((call) => call.args[0])).toContain(gl.TEXTURE0 + 7);
+    expect(calls(gl, "bindTexture")).toContainEqual({ args: [gl.TEXTURE_CUBE_MAP, texture], name: "bindTexture" });
+  });
+
+  it("rejects aliased and out-of-range planned IBL units before texture binding", () => {
+    const gl = new FakeGl(8);
+    const arena = createIblTextureArena(context(gl));
+    const lightSet: SurfaceLightSet = {
+      directionals: [],
+      lights: [],
+      punctuals: [],
+      specular: {
+        encoding: "linear",
+        intensity: 1,
+        key: "planned",
+        mipCount: 1,
+        texture: {} as WebGLTexture,
+        worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      },
+    };
+    const programArena = createProgramArena(context(gl));
+    const program = {} as WebGLProgram;
+
+    expect(() => bindSurfaceIbl(arena, programArena, program, lightSet, 4, 4)).toThrow(/must not alias unit 4/);
+    expect(() => bindSurfaceIbl(arena, programArena, program, lightSet, 8, undefined)).toThrow(/in \[0, 8\)/);
+    expect(() => bindSurfaceIbl(arena, programArena, program, lightSet, 2, 8)).toThrow(/in \[0, 8\)/);
+    expect(calls(gl, "activeTexture")).toEqual([]);
+    expect(calls(gl, "bindTexture")).toEqual([]);
+  });
+
   it("preserves permanent policy identities across lost-context drop", () => {
     const gl = new FakeGl();
     let admissions = 0;
@@ -195,8 +291,8 @@ describe("IBL texture arena", () => {
         worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       },
     };
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, 7);
 
     expect(admissionCosts).toHaveLength(3);
     expect(calls(gl, "createTexture")).toHaveLength(0);
@@ -316,9 +412,9 @@ describe("IBL texture arena", () => {
       directionals: [], lights: [], punctuals: [],
       specular: { encoding: "linear", intensity: 1, key: studio.key, mipCount: studio.mipCount, texture: studio.texture, worldToIbl: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
     };
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, undefined);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, undefined);
     expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, 7);
     expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(true);
     expect(calls(gl, "texImage2D")).toHaveLength(37);
   });
@@ -538,11 +634,11 @@ describe("IBL texture arena", () => {
     };
     recorded.state.denied = true;
     const createsBeforeBrdf = calls(gl, "createTexture").length;
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, 7);
     expect(iblTextureArenaSnapshot(arena).brdfLut).toBe(false);
     expect(calls(gl, "createTexture")).toHaveLength(createsBeforeBrdf);
     recorded.state.denied = false;
-    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 7);
+    bindSurfaceIbl(arena, createProgramArena(context(gl)), {} as WebGLProgram, lightSet, 2, 7);
 
     expect(recorded.state.costs).toEqual([
       {

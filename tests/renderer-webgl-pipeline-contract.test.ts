@@ -927,14 +927,18 @@ describe("WebGL renderer pipeline contracts", () => {
       && call.args[0] === gl.TEXTURE_2D)).toBe(true);
   });
 
-  it("disables the environment BRDF LUT when no texture unit is available", () => {
+  it("disables environment specular and its BRDF LUT when no planned texture unit is available", () => {
     const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
     const root = createWebGlRoot(fakeCanvas(gl));
 
     root.render(iblEnvironmentScene());
 
     expect(uniform1iPayloadsByName(calls, "u_useIblIrradiance")).toContain(1);
-    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(1);
+    expect(uniform1iPayloadsByName(calls, "u_useIblSpecular")).toContain(0);
+    expect(uniform1iPayloadsByName(calls, "u_iblSpecularCube")).toEqual([]);
+    expect(calls.some((call) =>
+      call.name === "activeTexture"
+      && call.args[0] === gl.TEXTURE0 + iblSpecularTextureUnit)).toBe(false);
     expect(uniform1iPayloadsByName(calls, "u_useIblBrdfLut")).toContain(0);
     expect(uniform1iPayloadsByName(calls, "u_iblBrdfLut")).toEqual([]);
     expect(calls.some((call) =>
@@ -942,7 +946,10 @@ describe("WebGL renderer pipeline contracts", () => {
       && call.args[0] === gl.TEXTURE_2D
       && call.args[3] === iblBrdfLutSize
       && call.args[4] === iblBrdfLutSize)).toBe(false);
-    expect(shaderSources(calls).join("\n")).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
+    const sources = shaderSources(calls).join("\n");
+    expect(sources).not.toContain("uniform samplerCube u_iblSpecularCube;");
+    expect(sources).not.toContain("uniform sampler2D u_iblBrdfLut;");
+    expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
   });
 
   it("throws a deterministic error for unknown geometry kinds", () => {

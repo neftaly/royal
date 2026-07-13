@@ -21,7 +21,6 @@ import {
   type StudioEnvironmentSpecularResource,
 } from "./studio-environment";
 
-export const IBL_SPECULAR_TEXTURE_UNIT = 2;
 const IBL_IRRADIANCE_COEFFICIENT_COUNT = 9;
 const MAX_WEBGL_GLSIZEI = 0x7fff_ffff;
 
@@ -79,6 +78,7 @@ type State = {
   durablePressurePending: boolean;
   frameWakeRequested: boolean;
   readonly gl: WebGL2RenderingContext;
+  readonly maxTextureImageUnits: number;
   readonly gltfSpecular: Map<string, MutableIblSpecularTextureResource>;
   readonly ownedTextures: Set<WebGLTexture>;
   readonly governor?: IblTextureGpuGovernor;
@@ -86,6 +86,22 @@ type State = {
   readonly textureLeases: Map<WebGLTexture, IblTextureGpuLease>;
   readonly terminalDenials: Map<string, string>;
   studio?: StudioEnvironmentSpecularResource;
+};
+
+const maxTextureImageUnits = (gl: WebGL2RenderingContext): number => {
+  const value: unknown = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    throw new RangeError(`MAX_TEXTURE_IMAGE_UNITS must be a non-negative integer, received ${String(value)}`);
+  }
+  return value as number;
+};
+
+const assertTextureUnit = (state: State, unit: number, label: string): void => {
+  if (!Number.isInteger(unit) || unit < 0 || unit >= state.maxTextureImageUnits) {
+    throw new RangeError(
+      `${label} texture unit must be an integer in [0, ${state.maxTextureImageUnits}), received ${unit}`,
+    );
+  }
 };
 
 export const createIblTextureArena = (
@@ -97,6 +113,7 @@ export const createIblTextureArena = (
   frameWakeRequested: false,
   gl,
   gltfSpecular: new Map(),
+  maxTextureImageUnits: maxTextureImageUnits(gl),
   ...(governor === undefined ? {} : { governor }),
   ownedTextures: new Set(),
   retiredGltfSpecular: new Map(),
@@ -456,6 +473,7 @@ export const bindSurfaceIbl = (
   programArena: ProgramArena,
   program: WebGLProgram,
   lightSet: SurfaceLightSet,
+  specularTextureUnit: number | undefined,
   brdfLutTextureUnit: number | undefined,
 ): void => {
   const state = arena as unknown as State;
@@ -466,21 +484,28 @@ export const bindSurfaceIbl = (
   ]);
   uniformMatrix(programArena, program, "u_iblWorldToIbl", irradiance?.worldToIbl ?? identityMat4());
   const specular = lightSet.specular;
-  uniform1i(programArena, program, "u_useIblSpecular", specular === undefined ? 0 : 1);
+  const useSpecular = specular !== undefined && specularTextureUnit !== undefined;
+  if (useSpecular) assertTextureUnit(state, specularTextureUnit, "IBL specular");
+  const useBrdfLut = useSpecular && brdfLutTextureUnit !== undefined;
+  if (useBrdfLut) {
+    assertTextureUnit(state, brdfLutTextureUnit, "IBL BRDF LUT");
+    if (brdfLutTextureUnit === specularTextureUnit) {
+      throw new RangeError(`IBL specular and BRDF LUT texture units must not alias unit ${brdfLutTextureUnit}`);
+    }
+  }
+  uniform1i(programArena, program, "u_useIblSpecular", useSpecular ? 1 : 0);
   uniformColor(programArena, program, "u_iblSpecularSettings", [
-    specular === undefined ? 0 : 1,
+    useSpecular ? 1 : 0,
     specular?.intensity ?? 1,
     specular?.mipCount ?? 1,
     specular?.encoding === "rgbd" ? 1 : 0,
   ]);
-  if (specular !== undefined) {
-    state.gl.activeTexture(state.gl.TEXTURE0 + IBL_SPECULAR_TEXTURE_UNIT);
+  if (useSpecular) {
+    state.gl.activeTexture(state.gl.TEXTURE0 + specularTextureUnit);
     state.gl.bindTexture(state.gl.TEXTURE_CUBE_MAP, specular.texture);
-    uniform1i(programArena, program, "u_iblSpecularCube", IBL_SPECULAR_TEXTURE_UNIT);
+    uniform1i(programArena, program, "u_iblSpecularCube", specularTextureUnit);
   }
-  const brdfLut = specular === undefined || brdfLutTextureUnit === undefined
-    ? undefined
-    : ensureBrdfLut(state);
+  const brdfLut = useBrdfLut ? ensureBrdfLut(state) : undefined;
   uniform1i(programArena, program, "u_useIblBrdfLut", brdfLut === undefined ? 0 : 1);
   if (brdfLut !== undefined && brdfLutTextureUnit !== undefined) {
     state.gl.activeTexture(state.gl.TEXTURE0 + brdfLutTextureUnit);

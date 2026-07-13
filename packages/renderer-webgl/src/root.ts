@@ -496,7 +496,6 @@ import {
   ensureGltfIblSpecularTexture,
   ensureStudioEnvironmentSpecularTexture,
   IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-  IBL_SPECULAR_TEXTURE_UNIT,
   markGltfIblSpecularTextureDirty,
   releaseGltfIblSpecularTexture,
   releaseIblTextureContextHandles,
@@ -542,6 +541,8 @@ export type {
 } from "./root-types";
 
 type GeometryResource = VertexInputGeometry;
+
+const IBL_SPECULAR_PREFERRED_TEXTURE_UNIT = 2;
 
 type TextureUnitAllocator = {
   readonly reserveClusterUnits: boolean;
@@ -5018,10 +5019,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     };
 
     const baseColor = reserveBaseColor();
-    if (lightSet.specular !== undefined && IBL_SPECULAR_TEXTURE_UNIT < this.#maxTextureImageUnits) {
+    if (lightSet.specular !== undefined && IBL_SPECULAR_PREFERRED_TEXTURE_UNIT < this.#maxTextureImageUnits) {
       features.add("iblSpecularCube");
-      textureUnits.set("iblSpecularCube", IBL_SPECULAR_TEXTURE_UNIT);
-      allocator.used.add(IBL_SPECULAR_TEXTURE_UNIT);
+      textureUnits.set("iblSpecularCube", IBL_SPECULAR_PREFERRED_TEXTURE_UNIT);
+      allocator.used.add(IBL_SPECULAR_PREFERRED_TEXTURE_UNIT);
     }
     if (transmissionScreenColorTexture?.uploaded === true) {
       reserveTextureUnit("transmissionScreenTexture", 1);
@@ -5252,6 +5253,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#programArena,
         program,
         lightSet,
+        plan.textureUnits.get("iblSpecularCube"),
         plan.textureUnits.get("iblBrdfLut"),
       );
     } finally {
