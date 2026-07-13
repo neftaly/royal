@@ -228,8 +228,6 @@ import {
 import {
   preparedGltfAssetRetainedCpuBytes,
   type GltfLoadMetrics,
-  type GltfMaterialPrimitiveLod,
-  type GltfNodePrimitiveLod,
   type LoadedGltfMaterial,
   type LoadedGltfMaterialTextureSlot,
   type LoadedGltfPrimitive,
@@ -240,19 +238,7 @@ import {
   GltfPreparationScheduler,
   type GltfPreparationJobAdmission,
 } from "./gltf/preparation-scheduler";
-import {
-  beginSharedViewLodSelections,
-  createSharedViewLodSelections,
-  finalizeSharedViewLodSelection,
-  finalizeUnobservedSharedViewLodFallback,
-  observeSharedViewLodCoverage,
-  reserveSharedViewLodSelections,
-  sharedViewLodSelectedLevel,
-  sharedViewLodWasObserved,
-  validateSharedViewLodMetadata,
-  type SharedViewLodMetadata,
-  type SharedViewLodSelections,
-} from "./gltf/shared-view-lod-selection";
+import { GltfSharedViewLodRegistry } from "./gltf/shared-view-lod-registry";
 import {
   appendReadyGltfPacketOccurrence,
   clearGltfPacketOccurrence,
@@ -1392,19 +1378,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #gltfInstanceFrameActive = false;
   readonly #gltfBatches: Array<GltfPrimitiveDrawBatch | undefined> = [];
   readonly #gltfInstanceBufferArena = createGltfInstanceBufferArena(this.#vertexInputs);
-  #sharedViewLodSelections: SharedViewLodSelections = createSharedViewLodSelections();
-  readonly #sharedViewLodSelectionIds = new Map<string, number>();
-  #sharedViewLodSelectionIdCount = 0;
-  readonly #sharedViewLodMetadata = new Map<string, SharedViewLodMetadata>();
-  #sharedViewLodMetadataById: SharedViewLodMetadata[] = [];
-  #sharedViewLodTouchEpochs = new Uint32Array(1);
-  #sharedViewLodTouchPhases = new Uint8Array(1);
-  #sharedViewNodeLodFallbackEpochs = new Uint32Array(1);
-  #sharedViewNodeLodFallbackLevels = new Uint32Array(1);
-  #sharedViewNodeLodIds = new Uint32Array(1);
-  #sharedViewMaterialLodIds = new Uint32Array(1);
-  #sharedViewNodeLodCount = 0;
-  #sharedViewMaterialLodCount = 0;
+  readonly #sharedViewLods = new GltfSharedViewLodRegistry();
   readonly #gltfPacketTopology: GltfPacketTopology = createGltfPacketTopology();
   readonly #selectedGltfFramePackets: SelectedFramePackets = createSelectedFramePackets(
     this.#gltfPacketTopology.catalog,
@@ -2501,19 +2475,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // same semantic resource delta to an arena that is already on `next`.
     const resourceChanges = applyResourceDelta(this.#resourceArena, resourceDelta);
     this.#framePlan = next;
-    this.#sharedViewLodSelectionIds.clear();
-    this.#sharedViewLodSelectionIdCount = 0;
-    this.#sharedViewLodMetadata.clear();
-    this.#sharedViewLodMetadataById = [];
-    this.#sharedViewLodSelections = createSharedViewLodSelections();
-    this.#sharedViewLodTouchEpochs = new Uint32Array(1);
-    this.#sharedViewLodTouchPhases = new Uint8Array(1);
-    this.#sharedViewNodeLodFallbackEpochs = new Uint32Array(1);
-    this.#sharedViewNodeLodFallbackLevels = new Uint32Array(1);
-    this.#sharedViewNodeLodIds = new Uint32Array(1);
-    this.#sharedViewMaterialLodIds = new Uint32Array(1);
-    this.#sharedViewNodeLodCount = 0;
-    this.#sharedViewMaterialLodCount = 0;
+    this.#sharedViewLods.resetPlan();
     this.#framePlanSurfaceLights = surfaceLights;
     this.#framePlanSurfaceLightSet = surfaceLights.length === 0 ? undefined : surfaceLightSet(surfaceLights);
     this.#latestScene = scene;
@@ -2562,7 +2524,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
         : Array.from({ length: outerCount * primitive.localModels.length }, (_, index) => {
             const outerIndex = Math.floor(index / primitive.localModels.length);
             const localIndex = index % primitive.localModels.length;
-            return this.#sharedViewMaterialLodSelectionId(
+            return this.#sharedViewLods.materialSelectionId(
+              state.key,
               this.#gltfMaterialLodSelectionKey(
                 state,
                 renderInstanceKey(outerIndex),
@@ -2578,10 +2541,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         : {
             level: primitive.nodeLod.level,
             selectionIds: Array.from({ length: outerCount }, (_, outerIndex) =>
-              this.#sharedViewNodeLodSelectionId(
-                state,
+              this.#sharedViewLods.nodeSelectionId(
+                state.key,
                 `${state.key}:${renderInstanceKey(outerIndex)}:node:${primitive.nodeLod!.group}`,
                 primitive.nodeLod!,
+                state.primitives,
               )),
           };
       return {
@@ -2830,7 +2794,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (snapshot.status !== "ready") continue;
       const asset = snapshot.asset;
       const replacesReadyAsset = state.status === "ready";
-      if (replacesReadyAsset) this.#invalidateGltfPacketLodRegistry(state);
+      const lodReplacement = replacesReadyAsset
+        ? this.#sharedViewLods.beginAssetReplacement(state.key)
+        : undefined;
       state.hasMaterialLod = asset.hasMaterialLod;
       state.hasMaterialVariants = asset.hasMaterialVariants;
       state.hasNodeLod = asset.hasNodeLod;
@@ -2863,6 +2829,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
               );
             }
           }
+          if (lodReplacement !== undefined) {
+            this.#sharedViewLods.commitAssetReplacement(lodReplacement);
+          }
         } catch (error) {
           // Asset state and the packet resolver bridge must never describe
           // different generations. If publication fails, make every range for
@@ -2875,6 +2844,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
               clearGltfPacketOccurrence(this.#gltfPacketTopology, plan.revision, occurrenceIndex);
             }
           }
+          if (lodReplacement !== undefined) {
+            this.#sharedViewLods.rollbackAssetReplacement(lodReplacement);
+          }
           state.status = "error";
           state.error = error instanceof Error ? error.message : String(error);
           state.load.readyAt = nowMs();
@@ -2885,6 +2857,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
           }
           continue;
         }
+      } else if (lodReplacement !== undefined) {
+        this.#sharedViewLods.commitAssetReplacement(lodReplacement);
       }
       const images = asset.imagePreparation;
       if (images !== undefined) {
@@ -3949,32 +3923,25 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #prepareSharedViewGltfLodSelections(plan: FramePlan, frameViews: FrameViews): void {
-    const previousEpoch = this.#sharedViewLodSelections.epoch;
-    const epoch = beginSharedViewLodSelections(this.#sharedViewLodSelections);
-    if (epoch <= previousEpoch) {
-      this.#sharedViewLodTouchEpochs.fill(0);
-      this.#sharedViewLodTouchPhases.fill(0);
-      this.#sharedViewNodeLodFallbackEpochs.fill(0);
-    }
-    this.#sharedViewNodeLodCount = 0;
-    this.#sharedViewMaterialLodCount = 0;
+    this.#sharedViewLods.beginFrame();
 
     for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
       copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
       this.#visitGltfLodRoots(plan, this.#renderViewProjection, 1);
     }
-    this.#finalizeSharedViewNodeLodSelections();
+    this.#sharedViewLods.finalizeNodes();
 
     for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
       copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
       this.#visitGltfLodRoots(plan, this.#renderViewProjection, 2);
     }
-    this.#finalizeSharedViewLodSelections(this.#sharedViewMaterialLodIds, this.#sharedViewMaterialLodCount);
+    this.#sharedViewLods.finalizeMaterials();
   }
 
   #selectGltfFramePackets(plan: FramePlan, frameViews: FrameViews): void {
     const topology = this.#gltfPacketTopology;
     const selected = this.#selectedGltfFramePackets;
+    const packetSelections = this.#sharedViewLods.packetSelections;
     beginSelectedFramePacketViews(selected, topology.catalog, frameViews.count);
     for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
       beginSelectedFramePacketView(selected, topology.catalog, viewIndex);
@@ -3999,9 +3966,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
             topology.catalog,
             topology.requirements,
             packetIndex,
-            this.#sharedViewLodSelections.selectedLevels,
-            this.#sharedViewLodSelections.selectionEpochs,
-            this.#sharedViewLodSelections.epoch,
+            packetSelections.selectedLevels,
+            packetSelections.selectionEpochs,
+            packetSelections.epoch,
           )) continue;
           const outerIndex = topology.catalog.instanceFirsts[packetIndex]!;
           const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
@@ -4072,19 +4039,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (phase === 1) {
         if (nodeLod === undefined) continue;
         const selectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
-        const id = this.#sharedViewNodeLodSelectionId(state, selectionKey, nodeLod);
-        this.#touchSharedViewLodSelection(id, phase);
+        const id = this.#sharedViewLods.nodeSelectionId(
+          state.key,
+          selectionKey,
+          nodeLod,
+          state.primitives,
+        );
+        this.#sharedViewLods.touchNode(id);
         if (nodeLod.level !== 0) {
           for (const bounds of primitive.localBounds) {
             if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
-            this.#observeSharedViewNodeLodFallback(id, nodeLod.level);
+            this.#sharedViewLods.observeNodeFallback(id, nodeLod.level);
           }
           continue;
         }
         for (const bounds of primitive.localBounds) {
           if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
-          observeSharedViewLodCoverage(
-            this.#sharedViewLodSelections,
+          this.#sharedViewLods.observeCoverage(
             id,
             projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
           );
@@ -4093,7 +4064,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       }
       if (nodeLod !== undefined) {
         const nodeSelectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
-        if (this.#sharedViewSelectedLodLevel(nodeSelectionKey) !== nodeLod.level) continue;
+        if (this.#sharedViewLods.selectedLevel(state.key, nodeSelectionKey) !== nodeLod.level) continue;
       }
       const primitiveMaterial = selectedVariantIndex === undefined
         ? primitive.baseMaterial
@@ -4106,166 +4077,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const selectionKey = this.#gltfMaterialLodSelectionKey(
           state, renderInstanceKey, primitive, primitiveMaterial, instanceIndex,
         );
-        const id = this.#sharedViewMaterialLodSelectionId(selectionKey, materialLod);
-        this.#touchSharedViewLodSelection(id, phase);
-        observeSharedViewLodCoverage(
-          this.#sharedViewLodSelections,
+        const id = this.#sharedViewLods.materialSelectionId(state.key, selectionKey, materialLod);
+        this.#sharedViewLods.touchMaterial(id);
+        this.#sharedViewLods.observeCoverage(
           id,
           projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
         );
       }
     }
-  }
-
-  #sharedViewNodeLodSelectionId(
-    state: GltfState,
-    selectionKey: string,
-    lod: GltfNodePrimitiveLod,
-  ): number {
-    const metadataKey = `${state.key}:node:${lod.group}`;
-    let metadata = this.#sharedViewLodMetadata.get(metadataKey);
-    if (metadata === undefined) {
-      const drawableLevels = new Uint8Array(lod.levelCount);
-      for (const primitive of state.primitives) {
-        if (primitive.nodeLod?.group === lod.group) drawableLevels[primitive.nodeLod.level] = 1;
-      }
-      metadata = validateSharedViewLodMetadata({
-        drawableLevels,
-        levelCount: lod.levelCount,
-        offset: 0,
-        thresholds: Float64Array.from(lod.thresholds),
-      });
-      this.#sharedViewLodMetadata.set(metadataKey, metadata);
-    }
-    return this.#sharedViewLodSelectionId(selectionKey, metadata);
-  }
-
-  #sharedViewMaterialLodSelectionId(
-    selectionKey: string,
-    lod: GltfMaterialPrimitiveLod,
-  ): number {
-    const metadataKey = `material:${lod.thresholds.join(",")}:${lod.levels.length}`;
-    let metadata = this.#sharedViewLodMetadata.get(metadataKey);
-    if (metadata === undefined) {
-      metadata = validateSharedViewLodMetadata({
-        drawableLevels: new Uint8Array(lod.levels.length).fill(1),
-        levelCount: lod.levels.length,
-        offset: 0,
-        thresholds: Float64Array.from(lod.thresholds),
-      });
-      this.#sharedViewLodMetadata.set(metadataKey, metadata);
-    }
-    return this.#sharedViewLodSelectionId(selectionKey, metadata);
-  }
-
-  #sharedViewLodSelectionId(selectionKey: string, metadata: SharedViewLodMetadata): number {
-    const existing = this.#sharedViewLodSelectionIds.get(selectionKey);
-    if (existing !== undefined) return existing;
-    const id = this.#sharedViewLodSelectionIdCount;
-    this.#sharedViewLodSelectionIdCount += 1;
-    reserveSharedViewLodSelections(this.#sharedViewLodSelections, id + 1);
-    this.#reserveSharedViewLodScratch(id + 1);
-    this.#sharedViewLodSelectionIds.set(selectionKey, id);
-    this.#sharedViewLodMetadataById[id] = metadata;
-    return id;
-  }
-
-  #invalidateGltfPacketLodRegistry(state: GltfState): void {
-    const selectionPrefix = `${state.key}:`;
-    for (const selectionKey of this.#sharedViewLodSelectionIds.keys()) {
-      if (selectionKey.startsWith(selectionPrefix)) this.#sharedViewLodSelectionIds.delete(selectionKey);
-    }
-    const nodeMetadataPrefix = `${state.key}:node:`;
-    for (const metadataKey of this.#sharedViewLodMetadata.keys()) {
-      if (metadataKey.startsWith(nodeMetadataPrefix)) this.#sharedViewLodMetadata.delete(metadataKey);
-    }
-  }
-
-  #reserveSharedViewLodScratch(minimumCapacity: number): void {
-    if (minimumCapacity <= this.#sharedViewLodTouchEpochs.length) return;
-    const capacity = this.#sharedViewLodSelections.capacity;
-    const touchEpochs = new Uint32Array(capacity);
-    touchEpochs.set(this.#sharedViewLodTouchEpochs);
-    this.#sharedViewLodTouchEpochs = touchEpochs;
-    const touchPhases = new Uint8Array(capacity);
-    touchPhases.set(this.#sharedViewLodTouchPhases);
-    this.#sharedViewLodTouchPhases = touchPhases;
-    const fallbackEpochs = new Uint32Array(capacity);
-    fallbackEpochs.set(this.#sharedViewNodeLodFallbackEpochs);
-    this.#sharedViewNodeLodFallbackEpochs = fallbackEpochs;
-    const fallbackLevels = new Uint32Array(capacity);
-    fallbackLevels.set(this.#sharedViewNodeLodFallbackLevels);
-    this.#sharedViewNodeLodFallbackLevels = fallbackLevels;
-    const nodeIds = new Uint32Array(capacity);
-    nodeIds.set(this.#sharedViewNodeLodIds);
-    this.#sharedViewNodeLodIds = nodeIds;
-    const materialIds = new Uint32Array(capacity);
-    materialIds.set(this.#sharedViewMaterialLodIds);
-    this.#sharedViewMaterialLodIds = materialIds;
-  }
-
-  #observeSharedViewNodeLodFallback(id: number, level: number): void {
-    const epoch = this.#sharedViewLodSelections.epoch;
-    if (this.#sharedViewNodeLodFallbackEpochs[id] !== epoch) {
-      this.#sharedViewNodeLodFallbackEpochs[id] = epoch;
-      this.#sharedViewNodeLodFallbackLevels[id] = level;
-      return;
-    }
-    if (level < this.#sharedViewNodeLodFallbackLevels[id]!) {
-      this.#sharedViewNodeLodFallbackLevels[id] = level;
-    }
-  }
-
-  #finalizeSharedViewNodeLodSelections(): void {
-    const epoch = this.#sharedViewLodSelections.epoch;
-    for (let index = 0; index < this.#sharedViewNodeLodCount; index += 1) {
-      const id = this.#sharedViewNodeLodIds[index]!;
-      const metadata = this.#sharedViewLodMetadataById[id];
-      if (metadata === undefined) throw new Error("Royal shared-view LOD selection is missing metadata");
-      if (
-        !sharedViewLodWasObserved(this.#sharedViewLodSelections, id)
-        && this.#sharedViewNodeLodFallbackEpochs[id] === epoch
-      ) {
-        // LOD0 coverage remains authoritative. With no visible LOD0 in any
-        // view, select the finest visible drawable lower member exactly.
-        finalizeUnobservedSharedViewLodFallback(
-          this.#sharedViewLodSelections,
-          id,
-          metadata,
-          this.#sharedViewNodeLodFallbackLevels[id]!,
-        );
-      } else {
-        finalizeSharedViewLodSelection(this.#sharedViewLodSelections, id, metadata);
-      }
-    }
-  }
-
-  #touchSharedViewLodSelection(id: number, phase: 1 | 2): void {
-    const epoch = this.#sharedViewLodSelections.epoch;
-    if (this.#sharedViewLodTouchEpochs[id] === epoch && this.#sharedViewLodTouchPhases[id] === phase) return;
-    this.#sharedViewLodTouchEpochs[id] = epoch;
-    this.#sharedViewLodTouchPhases[id] = phase;
-    if (phase === 1) {
-      this.#sharedViewNodeLodIds[this.#sharedViewNodeLodCount] = id;
-      this.#sharedViewNodeLodCount += 1;
-    } else {
-      this.#sharedViewMaterialLodIds[this.#sharedViewMaterialLodCount] = id;
-      this.#sharedViewMaterialLodCount += 1;
-    }
-  }
-
-  #finalizeSharedViewLodSelections(ids: Uint32Array, count: number): void {
-    for (let index = 0; index < count; index += 1) {
-      const id = ids[index]!;
-      const metadata = this.#sharedViewLodMetadataById[id];
-      if (metadata === undefined) throw new Error("Royal shared-view LOD selection is missing metadata");
-      finalizeSharedViewLodSelection(this.#sharedViewLodSelections, id, metadata);
-    }
-  }
-
-  #sharedViewSelectedLodLevel(selectionKey: string): number | undefined {
-    const id = this.#sharedViewLodSelectionIds.get(selectionKey);
-    return id === undefined ? undefined : sharedViewLodSelectedLevel(this.#sharedViewLodSelections, id);
   }
 
   #gltfMaterialLodSelectionKey(
