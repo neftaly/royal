@@ -92,8 +92,13 @@ export type {
   TextureSampler,
   TextureSamplerFilter,
   TextureSamplerWrap,
+  TextureAssetSrcOptions,
+  TextureAssetUriOptions,
   VirtualTextureAssetOptions,
-  VirtualTextureAssetRef
+  VirtualTextureAssetRef,
+  VirtualTextureAssetManifestOptions,
+  VirtualTextureAssetSrcOptions,
+  VirtualTextureInput
 } from './texture';
 export {
   defaultImageTextureSampler,

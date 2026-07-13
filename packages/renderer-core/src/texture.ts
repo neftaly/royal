@@ -88,6 +88,7 @@ export type TextureAssetOptions = TextureAssetSrcOptions | TextureAssetUriOption
 export type ImageTextureOptions = TextureAssetOptions;
 
 interface VirtualTextureAssetBaseOptions {
+  /** Color-space override. Otherwise the manifest declaration is used when available. */
   readonly colorSpace?: TextureColorSpace;
   /** Stable decoded-content identity supplied by the asset layer for cross-manifest sharing. */
   readonly contentKey?: TextureContentKey;
@@ -100,15 +101,19 @@ interface VirtualTextureAssetBaseOptions {
 
 export interface VirtualTextureAssetSrcOptions extends VirtualTextureAssetBaseOptions {
   readonly manifestUri?: never;
+  /** URI of the authored virtual-texture JSON manifest. */
   readonly src: string;
 }
 
 export interface VirtualTextureAssetManifestOptions extends VirtualTextureAssetBaseOptions {
+  /** URI of the authored virtual-texture JSON manifest; explicit alias for `src`. */
   readonly manifestUri: string;
   readonly src?: never;
 }
 
+/** Options for an authored manifest. Supply exactly one of `src` or `manifestUri`. */
 export type VirtualTextureAssetOptions = VirtualTextureAssetSrcOptions | VirtualTextureAssetManifestOptions;
+/** A manifest URI string or the equivalent authored-manifest options object. */
 export type VirtualTextureInput = string | VirtualTextureAssetOptions;
 
 export const defaultImageTextureSampler: TextureSampler = Object.freeze({
@@ -125,12 +130,15 @@ const sourceUri = (
   src: string | undefined,
   uri: string | undefined,
   label: string,
+  fields: readonly [string, string],
 ): string => {
   if ((src === undefined) === (uri === undefined)) {
-    throw new Error(`${label} requires exactly one source`);
+    throw new Error(`${label} requires exactly one of "${fields[0]}" or "${fields[1]}"`);
   }
   const value = src ?? uri!;
-  if (value.length === 0) throw new Error(`${label} source must not be empty`);
+  if (value.length === 0) {
+    throw new Error(`${label} "${src === undefined ? fields[1] : fields[0]}" must not be empty`);
+  }
   return value;
 };
 
@@ -146,7 +154,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
 export function textureAsset(options: TextureAssetSrcOptions): TextureAssetRef;
 export function textureAsset(options: TextureAssetUriOptions): TextureAssetRef;
 export function textureAsset(options: TextureAssetOptions): TextureAssetRef {
-  const uri = sourceUri(options.src, options.uri, 'texture asset');
+  const uri = sourceUri(options.src, options.uri, 'texture asset', ['src', 'uri']);
   const sampler = frozenSampler(options.sampler);
 
   return Object.freeze({
@@ -165,7 +173,7 @@ export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
 export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {
   const options: ImageTextureOptions =
     typeof srcOrOptions === 'string' ? { src: srcOrOptions } : srcOrOptions;
-  const uri = sourceUri(options.src, options.uri, 'image texture');
+  const uri = sourceUri(options.src, options.uri, 'image texture', ['src', 'uri']);
 
   return textureAsset({
     colorSpace: options.colorSpace ?? 'srgb',
@@ -181,7 +189,12 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 }
 
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
-  const manifestUri = sourceUri(options.src, options.manifestUri, 'virtual texture');
+  const manifestUri = sourceUri(
+    options.src,
+    options.manifestUri,
+    'virtual texture',
+    ['src', 'manifestUri'],
+  );
   const sampler = frozenSampler(options.sampler);
 
   return Object.freeze({
@@ -195,8 +208,10 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
   });
 };
 
+/** Creates an authored virtual-texture reference from its JSON manifest URI. */
 export function virtualTexture(src: string): VirtualTextureAssetRef;
 export function virtualTexture(options: VirtualTextureAssetOptions): VirtualTextureAssetRef;
+export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef;
 export function virtualTexture(input: VirtualTextureInput): VirtualTextureAssetRef {
   return virtualTextureAsset(typeof input === 'string' ? { src: input } : input);
 }

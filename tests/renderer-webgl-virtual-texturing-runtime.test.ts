@@ -1699,6 +1699,51 @@ describe("WebGL renderer virtual texturing integration", () => {
     root.dispose();
   });
 
+  it("fills a working set after an invalid authored page becomes terminal", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("ImageBitmap", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/invalid-convergence.json") });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
+    await flushMicrotasks();
+    const invalid = ControlledImage.instances[0]!;
+    const invalidSrc = invalid.src;
+    invalid.naturalWidth = 5;
+    invalid.width = 5;
+    invalid.settleLoad();
+    await flushMicrotasks();
+
+    for (let cycle = 0; cycle < 10; cycle += 1) {
+      for (const image of ControlledImage.instances) {
+        if (!image.complete && image.src !== invalidSrc) image.settleLoad();
+      }
+      await flushMicrotasks();
+      root.render(graph);
+      await flushMicrotasks();
+    }
+
+    expect(ControlledImage.instances.filter((image) => image.src === invalidSrc)).toHaveLength(1);
+    expect(new Set(
+      ControlledImage.instances.filter((image) => image.src !== invalidSrc).map((image) => image.src),
+    ).size).toBeGreaterThanOrEqual(3);
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      outstandingPageRequests: 0,
+      pageLoadFailures: 1,
+      pendingPages: 0,
+      residentPages: 3,
+    });
+    const settledRequests = ControlledImage.instances.length;
+    for (let frame = 0; frame < 4; frame += 1) root.render(graph);
+    expect(ControlledImage.instances).toHaveLength(settledRequests);
+    root.dispose();
+  });
+
   it("keeps an invalid-size authored page terminal across context restoration", async () => {
     vi.stubGlobal("Image", ControlledImage);
     vi.stubGlobal("ImageBitmap", ControlledImage);
@@ -2399,6 +2444,62 @@ describe("WebGL renderer virtual texturing integration", () => {
     vi.useRealTimers();
   });
 
+  it("replaces a retry-exhausted page with later healthy demand and then stays quiescent", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("Image", ControlledImage);
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/terminal-convergence.json") });
+    const graph = renderScene(material);
+
+    root.render(graph);
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(3)));
+    await flushMicrotasks();
+    const failedSrc = ControlledImage.instances[0]!.src;
+
+    for (const retryDelay of [50, 100, undefined]) {
+      const failedAttempt = ControlledImage.instances.filter((image) => image.src === failedSrc).at(-1)!;
+      failedAttempt.settleError();
+      await flushMicrotasks();
+      if (retryDelay !== undefined) {
+        await vi.advanceTimersByTimeAsync(retryDelay);
+        await flushMicrotasks();
+      }
+    }
+    expect(ControlledImage.instances.filter((image) => image.src === failedSrc)).toHaveLength(3);
+
+    for (let cycle = 0; cycle < 10; cycle += 1) {
+      for (const image of ControlledImage.instances) {
+        if (!image.complete && image.src !== failedSrc) image.settleLoad();
+      }
+      await flushMicrotasks();
+      root.render(graph);
+      await flushMicrotasks();
+    }
+
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      outstandingPageRequests: 0,
+      pageLoadFailures: 3,
+      pendingPages: 0,
+      residentPages: 3,
+    });
+    expect(new Set(
+      ControlledImage.instances.filter((image) => image.src !== failedSrc).map((image) => image.src),
+    ).size).toBeGreaterThanOrEqual(3);
+
+    const settledAdmissions = root.snapshot().virtualTexturing.demandAdmissions;
+    const settledRequests = ControlledImage.instances.length;
+    for (let frame = 0; frame < 4; frame += 1) root.render(graph);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushMicrotasks();
+    expect(root.snapshot().virtualTexturing.demandAdmissions).toBe(settledAdmissions);
+    expect(ControlledImage.instances).toHaveLength(settledRequests);
+    root.dispose();
+    vi.useRealTimers();
+  });
+
   it("keeps the per-frame VT request-start budget monotonic after a rejection", async () => {
     vi.stubGlobal("Image", ControlledImage);
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
@@ -3090,6 +3191,10 @@ describe("WebGL renderer virtual texturing integration", () => {
       cachedPages: 3,
       residentPages: 3,
     }));
+    expect(root.snapshot().virtualTexturing.cachedPagesByMip)
+      .toEqual(root.snapshot().virtualTexturing.residentPagesByMip);
+    expect(root.snapshot().virtualTexturing.cachedPagesByMip.reduce((sum, count) => sum + count, 0))
+      .toBe(root.snapshot().virtualTexturing.cachedPages);
     expect(root.snapshot().virtualTexturing.activePagesByMip.reduce((sum, count) => sum + count, 0))
       .toBe(root.snapshot().virtualTexturing.activePages);
     expect(root.snapshot().virtualTexturing.pageTableUpdates).toBe(updatesAfterCoarseSettle);
@@ -3432,5 +3537,19 @@ describe("WebGL renderer virtual texturing integration", () => {
       virtualTexturePhysicalByteBudget: 123_456,
     });
     root.dispose();
+  });
+
+  it("reports invalid VT root options with their units, range, and received value", () => {
+    const { gl } = fakeGl();
+    const canvas = fakeCanvas(gl);
+
+    expect(() => createWebGlRoot(canvas, { virtualTexturePhysicalByteBudget: -1 }))
+      .toThrow(new RangeError(
+        "virtualTexturePhysicalByteBudget must be a non-negative safe integer number of bytes, received -1",
+      ));
+    expect(() => createWebGlRoot(canvas, { generatedSvgVirtualTextureRasterDensity: 17 }))
+      .toThrow(new RangeError(
+        "generatedSvgVirtualTextureRasterDensity must be finite and in (0, 16] logical texels per authored SVG CSS pixel, received 17",
+      ));
   });
 });

@@ -173,6 +173,47 @@ describe("generated SVG virtual texture density", () => {
     });
   });
 
+  it("keeps extreme finite authored dimensions finite without distorting representable aspects", () => {
+    const largest = String(Number.MAX_VALUE);
+    expect(svgTextureViewport(`<svg width="${largest}" height="${largest}"/>`)).toEqual({
+      fromViewBox: false,
+      height: Number.MAX_VALUE,
+      width: Number.MAX_VALUE,
+    });
+    expect(svgTextureViewport('<svg width="1e308in" height="1e308in"/>')).toEqual({
+      fromViewBox: false,
+      height: Number.MAX_VALUE,
+      width: Number.MAX_VALUE,
+    });
+
+    expect(svgTextureViewport(`<svg width="${largest}" viewBox="0 0 1 2"/>`)).toEqual({
+      fromViewBox: true,
+      height: Number.MAX_VALUE,
+      width: Number.MAX_VALUE / 2,
+    });
+    expect(svgTextureViewport(`<svg height="${largest}" viewBox="0 0 2 1"/>`)).toEqual({
+      fromViewBox: true,
+      height: Number.MAX_VALUE / 2,
+      width: Number.MAX_VALUE,
+    });
+  });
+
+  it("keeps extreme viewBox-only aspects positive and bounded", async () => {
+    const source = `<svg viewBox="0 0 ${String(Number.MAX_VALUE)} ${String(Number.MIN_VALUE)}"/>`;
+    const viewport = svgTextureViewport(
+      source,
+    );
+    expect(viewport).toEqual({
+      fromViewBox: true,
+      height: Number.MIN_VALUE,
+      width: 1_024,
+    });
+    expect(Object.values(viewport ?? {}).every((value) =>
+      typeof value !== "number" || (Number.isFinite(value) && value > 0))).toBe(true);
+    await expect(prepareSvgTextForImage(source, "extreme viewBox", undefined))
+      .resolves.toContain(`height="${String(Number.MIN_VALUE)}"`);
+  });
+
   it("scales authored pixels uniformly and caps extreme logical sizes", () => {
     const source = { height: 500, label: "wide vector", text: "<svg/>", width: 1_000 };
     expect(generatedSvgVirtualTextureManifest(source, 8)).toMatchObject({
@@ -186,6 +227,32 @@ describe("generated SVG virtual texture density", () => {
       width: GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
     });
     expect(() => generatedSvgVirtualTextureManifest(source, 17)).toThrow("at most 16");
+  });
+
+  it("caps extreme dimensions before density multiplication can overflow", () => {
+    const manifest = generatedSvgVirtualTextureManifest({
+      height: Number.MAX_VALUE / 2,
+      label: "extreme vector",
+      text: "<svg/>",
+      width: Number.MAX_VALUE,
+    }, 16);
+    expect(manifest).toMatchObject({ height: 8_192, width: 16_384 });
+    expect(Number.isSafeInteger(manifest.width)).toBe(true);
+    expect(Number.isSafeInteger(manifest.height)).toBe(true);
+
+    expect(generatedSvgVirtualTextureManifest({
+      height: Number.MIN_VALUE,
+      label: "extreme aspect vector",
+      text: "<svg/>",
+      width: Number.MAX_VALUE,
+    }, 16)).toMatchObject({ height: 1, width: 16_384 });
+
+    expect(generatedSvgVirtualTextureManifest({
+      height: Number.MAX_VALUE,
+      label: "sub-unit density vector",
+      text: "<svg/>",
+      width: Number.MAX_VALUE,
+    }, Number.MIN_VALUE)).toMatchObject({ height: 1, width: 1 });
   });
 
   it("addresses a capped SVG's truncated NPOT edge from its logical texels", () => {

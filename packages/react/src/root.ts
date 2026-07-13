@@ -7,24 +7,41 @@ import {
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 
-/** WebGL context options for the Royal renderer root. */
+/** Renderer creation options exposed through `Canvas.context` and `createRendererRoot`. */
 export interface RoyalRendererRootContextOptions {
-  /** @defaultValue `true` */
+  /** Request an alpha channel in the canvas backing store. @defaultValue `true` */
   readonly alpha?: boolean;
-  /** @defaultValue `true` */
+  /** Request browser-provided WebGL antialiasing. Actual support is device-dependent. @defaultValue `true` */
   readonly antialias?: boolean;
-  /** Generate VT pages for ordinary large raster textures. @defaultValue `false` */
+  /**
+   * Generate virtual-texture pages for eligible ordinary image textures, including
+   * large raster images and SVG sources. Authored `virtualTexture(...)` manifests
+   * do not require this option.
+   * @defaultValue `false`
+   */
   readonly generatedRasterVirtualTextures?: boolean;
-  /** Logical virtual texels per authored SVG CSS pixel. @defaultValue `4` */
+  /**
+   * Logical virtual texels per authored SVG CSS pixel. Used only when
+   * `generatedRasterVirtualTextures` is true. Must be finite and in `(0, 16]`.
+   * It controls close-zoom texture detail without changing layout or world size;
+   * generated dimensions preserve aspect ratio and are capped at 16384 logical
+   * texels on their longest side. SVG viewBox coordinates are not raster pixels.
+   * @defaultValue `4`
+   */
   readonly generatedSvgVirtualTextureRasterDensity?: number;
-  /** Immutable cross-class CPU/GPU/job/upload budget policy. */
+  /** Immutable cross-class CPU/GPU/job/upload budget policy. Byte-named fields are bytes. */
   readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
-  /** Global physical byte budget shared by virtual textures. @defaultValue `67108864` */
+  /**
+   * Global physical GPU byte budget shared by all virtual-texture atlases and page
+   * tables in this root. Must be a non-negative safe integer.
+   * @defaultValue `67108864` (64 MiB)
+   */
   readonly virtualTexturePhysicalByteBudget?: number;
 }
 
 /** Options for the Royal renderer root. */
 export interface RoyalRendererRootOptions {
+  /** Renderer creation options. These are fixed for the lifetime of the root. */
   readonly context?: RoyalRendererRootContextOptions;
 }
 
@@ -120,7 +137,10 @@ export const acquireExternalRenderClockForRoyalRoot = (
   };
 };
 
-/** Creates an imperative renderer root. */
+/**
+ * Creates an imperative renderer root. `options.context` is fixed for the
+ * lifetime of the returned root.
+ */
 export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RoyalRendererRootOptions,

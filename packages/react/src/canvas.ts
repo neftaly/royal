@@ -55,7 +55,10 @@ export interface CanvasProps
   /** React-owned pointer handlers keyed by stable pickingId values in the pure scene. */
   readonly interactions?: CanvasInteractions;
   readonly ref?: Ref<HTMLCanvasElement>;
-  /** WebGL context creation policy. */
+  /**
+   * Renderer creation options. Changing a value disposes and recreates the
+   * renderer root.
+   */
   readonly context?: CanvasContextOptions;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
   readonly scene: RenderRoot;
@@ -421,7 +424,7 @@ export const attachCanvasPointerEventHandlers = ({
   };
 };
 
-/** Canvas component that renders one Royal scene child. */
+/** Renders one pure Royal scene into a Royal-owned canvas element. */
 export const Canvas = ({
   children,
   interactions,

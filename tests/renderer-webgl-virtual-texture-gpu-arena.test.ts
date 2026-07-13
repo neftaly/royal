@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { VirtualTextureManifestModel, VirtualTexturePageId } from
   "../packages/renderer-webgl/src/virtual-texturing";
+import { stabilizeVirtualTextureDesiredPagesInto } from
+  "../packages/renderer-webgl/src/virtual-texture-demand";
 import {
   accumulateVirtualTextureGpuActivePagesByMip,
   accumulateVirtualTextureGpuCachedPagesByMip,
@@ -485,6 +487,7 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
       // The unpublished mapping remains staged for the phaseful retry.
       dirtyPageTableUpdates: 1,
+      occupiedSlots: 1,
       pendingUploads: 1,
       residentPages: 0,
     });
@@ -573,6 +576,69 @@ describe("virtual texture GPU arena", () => {
     ]);
     expect(resumed[1]?.source).toBe(replacement.image);
     expect(virtualTextureGpuExactResidency(arena, "a", replacement.page)).toBeDefined();
+  });
+
+  it("counts a budget-blocked staged assignment as occupied without exposing it as cache", () => {
+    const { arena, gl } = setup();
+    const resource = ensureVirtualTextureGpuResource(arena, "a", 1, options({ physicalSlots: 3 }));
+    const prior = [0, 1, 2].map((x, serial) => upload({ mip: 0, x, y: 0 }, serial + 1));
+    for (const pending of prior) queueVirtualTextureGpuUpload(arena, resource, pending);
+    processVirtualTextureGpuUploads(arena, 1);
+    processVirtualTextureGpuUploads(arena, 2);
+
+    const replacement = upload({ mip: 0, x: 3, y: 0 }, 4);
+    queueVirtualTextureGpuUpload(arena, resource, replacement);
+    const atlasUploadsBefore = gl.subUploads.filter(({ serial }) => serial === 1).length;
+    const requestedBytes: number[] = [];
+    processVirtualTextureGpuUploads(arena, 3, {
+      reserve: (bytes) => {
+        requestedBytes.push(bytes);
+        if (bytes !== manifest.pageSize ** 2 * 4) return undefined;
+        return { cancel: () => undefined, commit: () => undefined };
+      },
+    });
+
+    // The clock has claimed an old slot for the replacement, but the denied
+    // invalidation means the atlas write has not happened. It is neither a
+    // valid cache hit nor a free slot that demand planning may admit again.
+    const snapshot = virtualTextureGpuResourceSnapshot(resource);
+    expect(requestedBytes).toEqual([16, 4, 16, 4]);
+    expect(snapshot).toMatchObject({
+      activePages: 2,
+      cachedPages: 2,
+      occupiedSlots: 3,
+      pendingUploads: 1,
+    });
+    expect(virtualTextureGpuCachedResidency(arena, "a", replacement.page)).toBeUndefined();
+    expect(gl.subUploads.filter(({ serial }) => serial === 1)).toHaveLength(atlasUploadsBefore);
+
+    const survivors = prior
+      .filter(({ page }) => virtualTextureGpuCachedResidency(arena, "a", page) !== undefined)
+      .map(({ page }) => page);
+    const previousPages = [replacement.page, ...survivors];
+    const previousKeys = new Set(previousPages.map(({ mip, x, y }) => `${mip}/${x}/${y}`));
+    const nextCandidate = { mip: 0, x: 0, y: 1 };
+    const desiredPages: VirtualTexturePageId[] = [];
+    const desiredPageKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      [replacement.page, nextCandidate],
+      previousPages,
+      previousKeys,
+      snapshot.occupiedSlots,
+      (page) => virtualTextureGpuCachedResidency(arena, "a", page) !== undefined,
+      snapshot.effectiveSlots,
+      desiredPages,
+      desiredPageKeys,
+    )).toEqual({ admissions: 0, deferred: true, retentions: 2 });
+    expect(desiredPages).toEqual(previousPages);
+    expect(desiredPageKeys.has(`${nextCandidate.mip}/${nextCandidate.x}/${nextCandidate.y}`)).toBe(false);
+
+    processVirtualTextureGpuUploads(arena, 4);
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      cachedPages: 3,
+      occupiedSlots: 3,
+      pendingUploads: 0,
+    });
   });
 
   it("retries only page-table publication when its admission follows an admitted atlas upload", () => {

@@ -120,6 +120,12 @@ export interface VirtualTextureGpuResourceSnapshot {
   readonly drawable: boolean;
   readonly generation?: number;
   readonly effectiveSlots: number;
+  /**
+   * Physical atlas slots claimed by cached pages or an in-flight upload.
+   * Unlike `cachedPages`, this includes staged assignments whose texels are
+   * not reusable yet and is therefore the capacity-planning count.
+   */
+  readonly occupiedSlots: number;
   readonly pendingUploads: number;
   readonly residentPages: number;
   readonly paddedSlots: number;
@@ -1248,10 +1254,8 @@ export const virtualTextureGpuResourceSnapshot = (
   const stagedPageKey = mutable.inFlightUpload?.phase === "publish-page-table"
     ? undefined
     : mutable.inFlightUpload?.assignment.pageKey;
-  const cachedPages = allocation === undefined
-    ? 0
-    : allocation.pageTable.residentPages()
-      .filter((record) => record.pageKey !== stagedPageKey).length;
+  const occupiedPages = allocation?.pageTable.residentPages() ?? [];
+  const cachedPages = occupiedPages.filter((record) => record.pageKey !== stagedPageKey).length;
   return {
     activePages: mutable.visibleAssignments.size,
     admissionKind: mutable.admission.kind,
@@ -1262,6 +1266,7 @@ export const virtualTextureGpuResourceSnapshot = (
     dirtyPageTableUpdates: allocation?.pageTable.dirtyPageTableUpdateCount ?? 0,
     drawable: mutable.visibleAssignments.size > 0,
     effectiveSlots: supported?.effectiveSlots ?? 0,
+    occupiedSlots: occupiedPages.length,
     ...(allocation === undefined ? {} : { generation: allocation.generation }),
     pendingUploads: mutable.pendingUploads.length - mutable.pendingHead,
     paddedSlots: supported?.paddedSlots ?? 0,

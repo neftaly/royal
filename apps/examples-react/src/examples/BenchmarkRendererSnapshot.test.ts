@@ -7,6 +7,7 @@ describe('copyVirtualTexturingCounters', () => {
       activePages: 1,
       activePagesByMip: [0, 0, 0, 1],
       cachedPages: 12,
+      cachedPagesByMip: [5, 4, 2, 1],
       residentPages: 12,
       residentPagesByMip: [5, 4, 2, 1],
       uploadedPages: 12,

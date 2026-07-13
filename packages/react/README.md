@@ -83,6 +83,46 @@ Tarstate-derived scene snapshots.
 The imperative `createRendererRoot(canvas)` path accepts the same pure scene
 descriptors as `Canvas.scene`. It does not create or evaluate React elements.
 
+### Canvas renderer options
+
+Pass renderer creation options through `Canvas.context`, or through
+`createRendererRoot(canvas, { context })` when you own the canvas. These values
+are fixed for an imperative root. Changing them on `<Canvas>` recreates its
+renderer root.
+
+```tsx
+<Canvas
+  context={{
+    generatedRasterVirtualTextures: true,
+    generatedSvgVirtualTextureRasterDensity: 4,
+    virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
+  }}
+  scene={renderScene}
+/>
+```
+
+- `alpha` and `antialias` both default to `true` and are requests made when the
+  WebGL context is created.
+- `generatedRasterVirtualTextures` defaults to `false`. Enable it to generate
+  virtual pages for eligible ordinary image textures, including large raster
+  images and SVG sources. Authored `virtualTexture(...)` manifests work without
+  it.
+- `generatedSvgVirtualTextureRasterDensity` is the number of logical virtual
+  texels per authored SVG CSS pixel. It defaults to `4`, accepts values greater
+  than zero through `16`, and only has an effect when generated virtual textures
+  are enabled. It controls close-zoom texture detail without changing layout or
+  world size, preserves aspect ratio, and caps the generated longest side at
+  16384 logical texels. SVG `viewBox` coordinates are not treated as raster
+  pixels.
+- `virtualTexturePhysicalByteBudget` is the root-wide GPU budget shared by all
+  virtual-texture atlases and page tables. It is measured in bytes and defaults
+  to `67108864` (64 MiB).
+
+Use `virtualTexture('/terrain.vt.json')` from `@royal/react/scene` for an
+authored manifest. The string and the object form
+`virtualTexture({ manifestUri: '/terrain.vt.json' })` are equivalent. See the
+[manifest, orientation, and fallback contract](../../docs/virtual-textures.md).
+
 The main `@royal/react` JSX runtime is ordinary React. Royal does not create a
 second React root, so outer Context, ErrorBoundary, and Suspense semantics stay
 normal. Read app state in React, pass immutable snapshots to pure scene

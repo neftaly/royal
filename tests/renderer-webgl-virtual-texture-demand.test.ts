@@ -402,6 +402,65 @@ describe("virtual texture pure demand planning", () => {
     expect(settledPages).toEqual(next);
   });
 
+  it("skips a terminal admission and continues bounded replacement convergence", () => {
+    const failed = { mip: 0, x: 4, y: 0 };
+    const healthy = [5, 6, 7, 8].map((x) => ({ mip: 0, x, y: 0 }));
+    const old = [0, 1, 2].map((x) => ({ mip: 0, x, y: 0 }));
+    const previous = [failed, ...old];
+    const previousKeys = new Set(previous.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const oldResidentKeys = new Set(old.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const transitionPages: Array<{ mip: number; x: number; y: number }> = [];
+    const transitionKeys = new Set<string>();
+
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      [failed, ...healthy],
+      previous,
+      previousKeys,
+      4,
+      (page) => oldResidentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      transitionPages,
+      transitionKeys,
+      (page) => page !== failed,
+    )).toEqual({ admissions: 2, deferred: true, retentions: 2 });
+    expect(transitionPages).toEqual([healthy[0], healthy[1], old[0], old[1]]);
+
+    const firstHealthyResidents = new Set([
+      ...oldResidentKeys,
+      ...healthy.slice(0, 2).map((page) => `${page.mip}/${page.x}/${page.y}`),
+    ]);
+    const finalTransitionPages: Array<{ mip: number; x: number; y: number }> = [];
+    const finalTransitionKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      [failed, ...healthy],
+      transitionPages,
+      transitionKeys,
+      4,
+      (page) => firstHealthyResidents.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      finalTransitionPages,
+      finalTransitionKeys,
+      (page) => page !== failed,
+    )).toEqual({ admissions: 2, deferred: true, retentions: 0 });
+    expect(finalTransitionPages).toEqual(healthy);
+
+    const healthyResidentKeys = new Set(healthy.map((page) => `${page.mip}/${page.x}/${page.y}`));
+    const settledPages: Array<{ mip: number; x: number; y: number }> = [];
+    const settledKeys = new Set<string>();
+    expect(stabilizeVirtualTextureDesiredPagesInto(
+      [failed, ...healthy],
+      finalTransitionPages,
+      finalTransitionKeys,
+      4,
+      (page) => healthyResidentKeys.has(`${page.mip}/${page.x}/${page.y}`),
+      4,
+      settledPages,
+      settledKeys,
+      (page) => page !== failed,
+    )).toEqual({ admissions: 0, deferred: false, retentions: 0 });
+    expect(settledPages).toEqual(healthy);
+  });
+
   it("retains sparse disjoint coverage until a smaller target set is resident", () => {
     const previous = [
       { mip: 3, x: 0, y: 0 },

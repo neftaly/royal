@@ -15,7 +15,8 @@ export type VirtualTexturePageLifecycleEvent =
   | { readonly kind: "grant" }
   | { readonly kind: "load-rejected" }
   | { readonly kind: "release" }
-  | { readonly kind: "retry-elapsed" };
+  | { readonly kind: "retry-elapsed" }
+  | { readonly kind: "unrequestable" };
 
 export interface VirtualTexturePageLifecyclePolicy {
   readonly retryBaseDelayMs: number;
@@ -81,6 +82,8 @@ export const reduceVirtualTexturePageLifecycle = (
         : state === undefined ? {} : { state };
     case "release":
       return {};
+    case "unrequestable":
+      return { state: { attempts: policy.retryLimit, kind: "terminal" } };
   }
 };
 
@@ -101,3 +104,7 @@ export const virtualTexturePageLifecycleRetryBlocked = (
 export const virtualTexturePageLifecycleCapacityBlocked = (
   state: VirtualTexturePageLifecycle | undefined,
 ): boolean => state?.kind === "capacity-blocked";
+
+export const virtualTexturePageLifecycleCanBecomeResident = (
+  state: VirtualTexturePageLifecycle | undefined,
+): boolean => state?.kind !== "terminal";

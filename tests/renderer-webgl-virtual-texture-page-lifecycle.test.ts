@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   reduceVirtualTexturePageLifecycle,
+  virtualTexturePageLifecycleCanBecomeResident,
   virtualTexturePageLifecycleClaimed,
   virtualTexturePageLifecycleLoading,
   virtualTexturePageLifecycleRetryBlocked,
@@ -86,6 +87,18 @@ describe("virtual texture page lifecycle", () => {
     expect(reduce(finalLoad.state, { kind: "load-rejected" })).toEqual({
       state: { attempts: 2, kind: "terminal" },
     });
+  });
+
+  it("classifies permanent source absence as terminal and non-convergent", () => {
+    expect(reduce(undefined, { kind: "unrequestable" })).toEqual({
+      state: { attempts: policy.retryLimit, kind: "terminal" },
+    });
+    expect(virtualTexturePageLifecycleCanBecomeResident(undefined)).toBe(true);
+    expect(virtualTexturePageLifecycleCanBecomeResident({ kind: "capacity-blocked" })).toBe(true);
+    expect(virtualTexturePageLifecycleCanBecomeResident({
+      attempts: policy.retryLimit,
+      kind: "terminal",
+    })).toBe(false);
   });
 
   it("clamps negative retry delays and honors a zero retry cap", () => {

@@ -7,6 +7,16 @@ generate pages from ordinary large raster images, explicitly set
 `createRendererRoot(..., { context: ... })`. The default is `false`; Royal does
 not probe for a hidden `imageUri + '.vt.json'` sidecar.
 
+Eligible SVG image textures use that same generated-VT path. Their close-zoom
+detail is controlled by `generatedSvgVirtualTextureRasterDensity`, measured in
+logical mip-0 texels per authored SVG CSS pixel (96 CSS pixels per inch). It
+defaults to `4`, accepts finite values in `(0, 16]`, preserves aspect ratio, and
+caps the longest generated dimension at 16384 logical texels. The density
+changes texture detail only: it does not change the SVG's layout or world-space
+size. For a viewBox-only SVG, Royal first derives a stable intrinsic viewport
+whose longest side is 1024 CSS pixels; viewBox coordinates themselves are not
+treated as raster pixels.
+
 ## Authored manifest contract
 
 The intended public format is the version 1 JSON shape below. Manifest-relative
@@ -74,6 +84,15 @@ all VT atlases and page tables owned by a root; it defaults to 64 MiB. Manifest
 `physicalByteBudget` and `physicalSlots` are per-resource limits and cannot
 expand the global budget. Residency is demand-driven and eviction may return a
 sample to a resident parent mip.
+
+In `diagnostics().virtualTexturing`, `activePages`/`activePagesByMip` count the
+page-table mappings currently visible to shaders. `cachedPages` and
+`cachedPagesByMip` count physically usable atlas pages, including active pages
+and inactive pages retained for quick reuse; in-flight uploads do not count
+until their texels are usable. The deprecated `residentPages` and
+`residentPagesByMip` names are compatibility aliases for the cached counters.
+All `physical*Bytes` counters are byte counts: allocated storage excludes
+quarantined storage, while both remain charged against the configured budget.
 
 Manifest fetch and parse, page fetch/decode, GPU admission, and upload happen
 asynchronously. Rendering continues with available fallback data while work is

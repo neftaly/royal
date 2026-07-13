@@ -15,6 +15,7 @@ import {
   unlitMaterial,
   virtualTexture,
   type VirtualTextureAssetOptions,
+  type VirtualTextureInput,
 } from "@royal/renderer-core";
 
 const camera = perspectiveCamera({
@@ -109,6 +110,18 @@ describe("renderer-core descriptor contract", () => {
 
     const stringTexture: TextureRef = virtualTexture("/textures/terrain.vt.json");
     expect(standardMaterial({ texture: stringTexture }).baseColor).toBe(stringTexture);
+    const textureFromInput = (input: VirtualTextureInput): TextureRef => virtualTexture(input);
+    expect(textureFromInput({ manifestUri: "/textures/terrain.vt.json" })).toEqual(stringTexture);
+
+    expect(() => virtualTexture({} as VirtualTextureAssetOptions)).toThrow(
+      'virtual texture requires exactly one of "src" or "manifestUri"',
+    );
+    expect(() => virtualTexture({ src: "" })).toThrow(
+      'virtual texture "src" must not be empty',
+    );
+    expect(() => virtualTexture({ manifestUri: "" })).toThrow(
+      'virtual texture "manifestUri" must not be empty',
+    );
 
     if (false) {
       // @ts-expect-error preview is not a public render fallback for virtual textures.

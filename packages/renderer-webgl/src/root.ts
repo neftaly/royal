@@ -181,7 +181,7 @@ import {
 } from "./webgl/ordinary-texture-gpu-arena";
 import {
   accumulateVirtualTextureGpuActivePagesByMip,
-  accumulateVirtualTextureGpuResidentPagesByMip,
+  accumulateVirtualTextureGpuCachedPagesByMip,
   admitVirtualTextureGpuResource,
   bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
@@ -449,6 +449,7 @@ import {
 } from "./virtual-texture-orchestration";
 import {
   reduceVirtualTexturePageLifecycle,
+  virtualTexturePageLifecycleCanBecomeResident,
   virtualTexturePageLifecycleCapacityBlocked,
   virtualTexturePageLifecycleClaimed,
   virtualTexturePageLifecycleLoading,
@@ -1325,7 +1326,9 @@ const maxVirtualTexturePageTableUploadBytes = (
 const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
   const virtualTexturePhysicalByteBudget = options.virtualTexturePhysicalByteBudget ?? 64 * 1024 * 1024;
   if (!Number.isSafeInteger(virtualTexturePhysicalByteBudget) || virtualTexturePhysicalByteBudget < 0) {
-    throw new Error("virtualTexturePhysicalByteBudget must be a non-negative safe integer");
+    throw new RangeError(
+      `virtualTexturePhysicalByteBudget must be a non-negative safe integer number of bytes, received ${String(virtualTexturePhysicalByteBudget)}`,
+    );
   }
   const generatedSvgVirtualTextureRasterDensity = options.generatedSvgVirtualTextureRasterDensity
     ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY;
@@ -1334,8 +1337,8 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
     || generatedSvgVirtualTextureRasterDensity <= 0
     || generatedSvgVirtualTextureRasterDensity > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY
   ) {
-    throw new Error(
-      `generatedSvgVirtualTextureRasterDensity must be finite, greater than zero, and at most ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}`,
+    throw new RangeError(
+      `generatedSvgVirtualTextureRasterDensity must be finite and in (0, ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}] logical texels per authored SVG CSS pixel, received ${String(generatedSvgVirtualTextureRasterDensity)}`,
     );
   }
   return Object.freeze({
@@ -6795,28 +6798,61 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
+    const convergentCandidates = this.#convergentVirtualTextureCandidates(state, candidates);
+    const convergentPreferredCandidates = preferredCandidates === undefined
+      ? undefined
+      : this.#convergentVirtualTextureCandidates(state, preferredCandidates);
     if (this.#virtualTextureFrameDemand.active) {
       submitVirtualTextureFrameDemand(
         this.#virtualTextureFrameDemand,
         state,
         this.#virtualTextureDemandViewIndex,
         {
-          candidates,
+          candidates: convergentCandidates,
           preferTargetMip,
-          ...(preferredCandidates === undefined ? {} : { preferredCandidates }),
+          ...(convergentPreferredCandidates === undefined
+            ? {}
+            : { preferredCandidates: convergentPreferredCandidates }),
         },
       );
       return;
     }
     this.#applyVirtualTextureDemand(
       state,
-      preferredCandidates === undefined
-        ? selectVirtualTextureWorkingSet(candidates, this.#virtualTextureDemandCapacity(state), preferTargetMip)
+      convergentPreferredCandidates === undefined
+        ? selectVirtualTextureWorkingSet(
+            convergentCandidates,
+            this.#virtualTextureDemandCapacity(state),
+            preferTargetMip,
+          )
         : selectVirtualTextureFrameWorkingSet(
-            [{ candidates, preferTargetMip, preferredCandidates }],
+            [{
+              candidates: convergentCandidates,
+              preferTargetMip,
+              preferredCandidates: convergentPreferredCandidates,
+            }],
             this.#virtualTextureDemandCapacity(state),
           ),
     );
+  }
+
+  #convergentVirtualTextureCandidates(
+    state: VirtualTextureRuntimeState,
+    candidates: readonly VirtualTexturePageId[],
+  ): readonly VirtualTexturePageId[] {
+    let includesTerminalPage = false;
+    for (const page of candidates) {
+      if (!virtualTexturePageLifecycleCanBecomeResident(
+        state.pageLifecycles.get(virtualTexturePageKey(page)),
+      )) {
+        includesTerminalPage = true;
+        break;
+      }
+    }
+    if (!includesTerminalPage) return candidates;
+    return candidates.filter((page) => virtualTexturePageLifecycleCanBecomeResident(
+      state.pageLifecycles.get(virtualTexturePageKey(page)),
+    ));
   }
 
   #virtualTextureDemandCapacity(state: VirtualTextureRuntimeState): number {
@@ -6842,11 +6878,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       workingCandidates,
       state.desiredPages,
       state.desiredPageKeys,
-      gpu?.residentPages ?? 0,
+      gpu?.occupiedSlots ?? 0,
       (page) => virtualTextureGpuCachedResidency(this.#virtualTextureGpu, state.key, page) !== undefined,
       capacity,
       desiredPages,
       desiredPageKeys,
+      (page) => virtualTexturePageLifecycleCanBecomeResident(
+        state.pageLifecycles.get(virtualTexturePageKey(page)),
+      ),
     );
     state.stats.demandAdmissions += stabilized.admissions;
     state.stats.demandRetentions += stabilized.retentions;
@@ -7084,6 +7123,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         permanent: true,
       });
       job.release();
+      this.invalidate();
       return false;
     }
     const decodedReservation = reserveResourceGovernor(this.#resourceGovernor, "virtual-texture", {
@@ -7099,6 +7139,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         );
       }
       job.release();
+      if (permanent) this.invalidate();
       return false;
     }
 
@@ -7116,6 +7157,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       decodedReservation.cancel();
       job.release();
       state.pageLoadAbortControllers.delete(pageKey);
+      this.#transitionVirtualTexturePage(state, pageKey, { kind: "unrequestable" });
+      this.invalidate();
       return false;
     }
 
@@ -9133,7 +9176,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let preparedResidencyResolutions = 0;
     let outstandingPageRequests = 0;
     let residentPages = 0;
-    const residentPagesByMip: number[] = [];
+    const cachedPagesByMip: number[] = [];
     let shaderBinds = 0;
     let unreadyDraws = 0;
     let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
@@ -9175,7 +9218,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       residentPages += gpu?.residentPages ?? 0;
       if (resource !== undefined) {
         accumulateVirtualTextureGpuActivePagesByMip(resource, activePagesByMip);
-        accumulateVirtualTextureGpuResidentPagesByMip(resource, residentPagesByMip);
+        accumulateVirtualTextureGpuCachedPagesByMip(resource, cachedPagesByMip);
       }
       shaderBinds += state.stats.shaderBinds;
       unreadyDraws += state.stats.unreadyDraws;
@@ -9189,8 +9232,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return {
       activePages,
       activePagesByMip,
-      atlasTextures,
       cachedPages,
+      cachedPagesByMip,
+      atlasTextures,
       demandAdmissions,
       demandRetentions,
       generatedManifestUses,
@@ -9214,7 +9258,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       requestedPages: outstandingPageRequests,
       outstandingPageRequests,
       residentPages,
-      residentPagesByMip,
+      residentPagesByMip: cachedPagesByMip,
       shaderBinds,
       unreadyDraws,
       unsupportedDraws,

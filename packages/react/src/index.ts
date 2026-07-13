@@ -12,6 +12,8 @@ export type {
   SolidTextureRef,
   TextureAssetOptions,
   TextureAssetRef,
+  TextureAssetSrcOptions,
+  TextureAssetUriOptions,
   TextureColorSpace,
   TextureContentKey,
   TextureRef,
@@ -20,8 +22,12 @@ export type {
   TextureSamplerWrap,
   TextureVersion,
   VirtualTextureAssetOptions,
+  VirtualTextureAssetManifestOptions,
   VirtualTextureAssetRef,
+  VirtualTextureAssetSrcOptions,
+  VirtualTextureInput,
 } from '@royal/renderer-core';
+export type { ResourceGovernorPolicy } from '@royal/renderer-webgl';
 
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';

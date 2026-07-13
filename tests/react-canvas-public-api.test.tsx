@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanvasProps,
+  ResourceGovernorPolicy,
   TextureAssetRef,
   TextureColorSpace,
   TextureSampler,
+  VirtualTextureAssetManifestOptions,
   VirtualTextureAssetRef,
+  VirtualTextureAssetSrcOptions,
+  VirtualTextureInput,
 } from '@royal/react';
 import {
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
-  type ResourceGovernorPolicy,
 } from '@royal/renderer-webgl';
 import { perspectiveCamera, scene } from '@royal/react/scene';
 
@@ -66,6 +69,15 @@ describe('Canvas public scene boundary', () => {
       manifestUri: '/map.vt.json',
       sampler,
     };
+    const virtualSrc = { src: '/map.vt.json' } satisfies VirtualTextureAssetSrcOptions;
+    const virtualManifest = {
+      manifestUri: '/map.vt.json',
+    } satisfies VirtualTextureAssetManifestOptions;
+    const virtualInput: VirtualTextureInput = virtualManifest;
     expect([ordinary.kind, virtual.kind]).toEqual(['asset', 'virtual-asset']);
+    expect([virtualSrc.src, virtualInput.manifestUri]).toEqual([
+      '/map.vt.json',
+      '/map.vt.json',
+    ]);
   });
 });

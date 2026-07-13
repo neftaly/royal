@@ -81,6 +81,66 @@ export const isSvgUri = (uri: string): boolean =>
 
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
+const positiveFiniteProduct = (left: number, right: number): number => {
+  if (left > Number.MAX_VALUE / right) return Number.MAX_VALUE;
+  const product = left * right;
+  // Ratios smaller than the representable range are still valid SVG geometry.
+  // Keep the viewport positive; the generated raster will clamp it to one texel.
+  return product > 0 ? product : Number.MIN_VALUE;
+};
+
+const viewportFromAuthoredWidth = (
+  width: number,
+  viewBoxWidth: number,
+  viewBoxHeight: number,
+): SvgTextureViewport => {
+  if (viewBoxHeight <= viewBoxWidth) {
+    return {
+      fromViewBox: true,
+      height: positiveFiniteProduct(width, viewBoxHeight / viewBoxWidth),
+      width,
+    };
+  }
+
+  const ratio = viewBoxHeight / viewBoxWidth;
+  if (Number.isFinite(ratio) && width <= Number.MAX_VALUE / ratio) {
+    return { fromViewBox: true, height: width * ratio, width };
+  }
+
+  // The authored width and aspect cannot both fit in a finite Number. Scale the
+  // pair uniformly instead of returning Infinity or distorting the aspect.
+  return {
+    fromViewBox: true,
+    height: Number.MAX_VALUE,
+    width: positiveFiniteProduct(Number.MAX_VALUE, viewBoxWidth / viewBoxHeight),
+  };
+};
+
+const viewportFromAuthoredHeight = (
+  height: number,
+  viewBoxWidth: number,
+  viewBoxHeight: number,
+): SvgTextureViewport => {
+  if (viewBoxWidth <= viewBoxHeight) {
+    return {
+      fromViewBox: true,
+      height,
+      width: positiveFiniteProduct(height, viewBoxWidth / viewBoxHeight),
+    };
+  }
+
+  const ratio = viewBoxWidth / viewBoxHeight;
+  if (Number.isFinite(ratio) && height <= Number.MAX_VALUE / ratio) {
+    return { fromViewBox: true, height, width: height * ratio };
+  }
+
+  return {
+    fromViewBox: true,
+    height: positiveFiniteProduct(Number.MAX_VALUE, viewBoxHeight / viewBoxWidth),
+    width: Number.MAX_VALUE,
+  };
+};
+
 type SvgAttributeMatch = {
   readonly end: number;
   readonly leadingWhitespace: string;
@@ -126,8 +186,7 @@ const parseSvgDimension = (value: string | undefined): number | undefined => {
         return 1;
     }
   })();
-  const cssPixels = parsed * cssPixelsPerUnit;
-  return positiveFinite(cssPixels) ? cssPixels : undefined;
+  return positiveFiniteProduct(parsed, cssPixelsPerUnit);
 };
 
 export const svgTextureViewport = (svgText: string): SvgTextureViewport | undefined => {
@@ -158,25 +217,33 @@ export const svgTextureViewport = (svgText: string): SvgTextureViewport | undefi
   const viewBoxWidth = values[2]!;
   const viewBoxHeight = values[3]!;
   if (width !== undefined) {
-    return { fromViewBox: true, height: width * viewBoxHeight / viewBoxWidth, width };
+    return viewportFromAuthoredWidth(width, viewBoxWidth, viewBoxHeight);
   }
   if (height !== undefined) {
-    return { fromViewBox: true, height, width: height * viewBoxWidth / viewBoxHeight };
+    return viewportFromAuthoredHeight(height, viewBoxWidth, viewBoxHeight);
   }
 
   // A viewBox is a coordinate system, not a raster resolution. Give viewBox-only
   // documents a stable, bounded intrinsic viewport while preserving their ratio.
-  const derivedScale = GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION
-    / Math.max(viewBoxWidth, viewBoxHeight);
+  const largestViewBoxDimension = Math.max(viewBoxWidth, viewBoxHeight);
   return {
     fromViewBox: true,
-    height: viewBoxHeight * derivedScale,
-    width: viewBoxWidth * derivedScale,
+    height: positiveFiniteProduct(
+      GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION,
+      viewBoxHeight / largestViewBoxDimension,
+    ),
+    width: positiveFiniteProduct(
+      GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION,
+      viewBoxWidth / largestViewBoxDimension,
+    ),
   };
 };
 
-const svgNumberAttribute = (value: number): string =>
-  Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+const svgNumberAttribute = (value: number): string => {
+  if (Number.isInteger(value)) return String(value);
+  const rounded = Number(value.toFixed(6));
+  return rounded === 0 && value !== 0 ? String(value) : String(rounded);
+};
 
 const escapeSvgAttribute = (value: string): string =>
   value
@@ -525,15 +592,21 @@ export const generatedSvgVirtualTextureManifest = (
         `SVG virtual texture raster density must be finite, greater than zero, and at most ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}`,
       );
     }
-    const desiredWidth = source.width * rasterDensity;
-    const desiredHeight = source.height * rasterDensity;
-    const capScale = Math.min(
-      1,
-      GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / Math.max(desiredWidth, desiredHeight),
-    );
+    if (!positiveFinite(source.width) || !positiveFinite(source.height)) {
+      throw new RangeError("SVG virtual texture dimensions must be finite and greater than zero");
+    }
+
+    const largestSourceDimension = Math.max(source.width, source.height);
+    const needsCap = largestSourceDimension
+      > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / rasterDensity;
+    const logicalDimension = (dimension: number): number => Math.max(1, Math.ceil(
+      needsCap
+        ? GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION * (dimension / largestSourceDimension)
+        : dimension * rasterDensity,
+    ));
     return {
-      height: Math.max(1, Math.ceil(desiredHeight * capScale)),
-      width: Math.max(1, Math.ceil(desiredWidth * capScale)),
+      height: logicalDimension(source.height),
+      width: logicalDimension(source.width),
     };
   })(),
   pageSize: GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE,

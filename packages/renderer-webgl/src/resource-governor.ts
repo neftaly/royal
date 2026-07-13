@@ -15,25 +15,35 @@ export const RESOURCE_GOVERNOR_CLASSES = [
 export type ResourceGovernorClass = (typeof RESOURCE_GOVERNOR_CLASSES)[number];
 
 export interface ResourceGovernorCost {
+  /** Durable decoded CPU memory, in bytes. */
   readonly cpuDecodedBytes?: number;
+  /** Concurrent asynchronous jobs; released when the reservation commits or cancels. */
   readonly jobs?: number;
+  /** Durable GPU allocation, in bytes. */
   readonly persistentGpuBytes?: number;
+  /** Temporary concurrent working-set peak, in bytes. */
   readonly transientPeakBytes?: number;
+  /** GPU upload traffic charged to the current renderer frame, in bytes. */
   readonly uploadBytes?: number;
 }
 
 export interface ResourceGovernorUsage {
+  /** Durable decoded CPU memory, in bytes. */
   readonly cpuDecodedBytes: number;
+  /** Concurrent asynchronous jobs. */
   readonly jobs: number;
+  /** Durable GPU allocation, in bytes. */
   readonly persistentGpuBytes: number;
+  /** Temporary concurrent working-set peak, in bytes. */
   readonly transientPeakBytes: number;
+  /** GPU upload traffic spent in the current renderer frame, in bytes. */
   readonly uploadBytes: number;
 }
 
 export interface ResourceGovernorDurableBudget {
-  /** Capacity protected from borrowing while this class is below its floor. */
+  /** Byte capacity protected from borrowing while this class is below its floor. */
   readonly mandatoryFloor: number;
-  /** Diagnostic threshold. Unused capacity may be borrowed by other classes. */
+  /** Byte threshold used for borrowing diagnostics; it is not a hard per-class cap. */
   readonly softLimit: number;
 }
 
@@ -43,7 +53,9 @@ export interface ResourceGovernorClassPolicy {
 }
 
 export interface ResourceGovernorPolicy {
+  /** Borrowing policy for durable CPU and GPU bytes, keyed by resource class. */
   readonly classes: Readonly<Record<ResourceGovernorClass, ResourceGovernorClassPolicy>>;
+  /** Root-wide hard capacities. Byte-named fields are bytes; `jobs` is a count. */
   readonly limits: ResourceGovernorUsage;
 }
 

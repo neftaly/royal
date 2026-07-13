@@ -11,13 +11,29 @@ export interface WebGlRootOptions {
   readonly alpha?: boolean;
   /** @defaultValue `true` */
   readonly antialias?: boolean;
-  /** Generate virtual-texture pages from ordinary large raster textures. Explicit virtual textures remain available. @defaultValue `false` */
+  /**
+   * Generate virtual-texture pages for eligible raster and SVG image textures.
+   * This does not affect textures created with `virtualTexture`, which are always explicit VTs.
+   * @defaultValue `false`
+   */
   readonly generatedRasterVirtualTextures?: boolean;
-  /** Logical virtual texels per authored SVG CSS pixel. Bounded independently of the SVG viewBox. @defaultValue `4` */
+  /**
+   * Maximum mip-0 detail for generated SVG VTs, in logical texels per authored
+   * SVG CSS pixel. This changes close-zoom texture detail, not layout or world size.
+   * Must be finite and in `(0, 16]`; generated dimensions preserve aspect ratio
+   * and are capped at 16384 logical texels on their longest side. Only used when
+   * `generatedRasterVirtualTextures` is enabled.
+   * @defaultValue `4`
+   */
   readonly generatedSvgVirtualTextureRasterDensity?: number;
   /** Immutable cross-class CPU/GPU/job/upload budget policy. */
   readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
-  /** Global physical GPU byte budget for virtual-texture atlases and page tables. @defaultValue `67108864` */
+  /**
+   * Root-wide allocation cap, in bytes, for VT atlas and page-table GPU storage.
+   * Per-manifest limits may reduce an individual VT's allocation, but cannot
+   * expand this cap. Must be a non-negative safe integer.
+   * @defaultValue `67108864` (64 MiB)
+   */
   readonly virtualTexturePhysicalByteBudget?: number;
 }
 
@@ -153,12 +169,20 @@ export interface WebGlGltfInstancingSnapshot {
 }
 
 export interface WebGlVirtualTexturingSnapshot {
-  /** Pages currently visible to shaders and required by the latest committed frame demand. */
+  /**
+   * Pages currently mapped for shader sampling. May temporarily include fallback
+   * or transition coverage while the latest committed frame demand converges.
+   */
   readonly activePages: number;
-  /** Physically resident atlas pages, including inactive pages retained as cache. */
-  readonly cachedPages: number;
-  /** Active page counts across all virtual textures, indexed by logical mip. */
+  /** Active page counts across all virtual textures, indexed by logical mip (mip 0 is finest). */
   readonly activePagesByMip: readonly number[];
+  /**
+   * Physically usable atlas pages, including every active page and inactive pages
+   * retained for reuse. In-flight uploads do not count until their texels are usable.
+   */
+  readonly cachedPages: number;
+  /** Cached page counts across all virtual textures, indexed by logical mip (mip 0 is finest). */
+  readonly cachedPagesByMip: readonly number[];
   readonly atlasTextures: number;
   /** Newly desired pages admitted across committed demand publications. */
   readonly demandAdmissions: number;
@@ -177,17 +201,22 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly manifestsReady: number;
   readonly pageTableTextures: number;
   readonly pageTableUpdates: number;
+  /** Pages currently loading, decoding, or queued/in-flight for GPU upload. */
   readonly pendingPages: number;
+  /** Allocated VT atlas and page-table storage, in GPU bytes. Excludes quarantined bytes. */
   readonly physicalAllocatedBytes: number;
+  /** Configured root-wide VT allocation cap, in GPU bytes. */
   readonly physicalBudgetBytes: number;
+  /** GPU bytes still charged after a failed resource release; reset by context recreation. */
   readonly physicalQuarantinedBytes: number;
   readonly preparedResidencyResolutions: number;
   /** @deprecated Use `outstandingPageRequests`. */
   readonly requestedPages: number;
+  /** Pages with a live loading or queued-GPU claim; excludes backoff, capacity-blocked, and terminal work. */
   readonly outstandingPageRequests: number;
   /** @deprecated Compatibility alias for `cachedPages`. */
   readonly residentPages: number;
-  /** Cached resident page counts across all virtual textures, indexed by logical mip. */
+  /** @deprecated Compatibility alias for `cachedPagesByMip`. */
   readonly residentPagesByMip: readonly number[];
   readonly shaderBinds: number;
   readonly unreadyDraws: number;

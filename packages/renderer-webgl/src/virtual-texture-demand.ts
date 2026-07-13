@@ -723,16 +723,17 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
   workingCandidates: readonly VirtualTexturePageId[],
   previousPages: readonly VirtualTexturePageId[],
   previousPageKeys: ReadonlySet<string>,
-  residentPages: number,
+  occupiedSlots: number,
   isResident: (page: VirtualTexturePageId) => boolean,
   capacity: number,
   desiredPages: VirtualTexturePageId[],
   desiredPageKeys: Set<string>,
+  canBecomeResident: (page: VirtualTexturePageId) => boolean = () => true,
 ): { readonly admissions: number; readonly deferred: boolean; readonly retentions: number } => {
   desiredPages.length = 0;
   desiredPageKeys.clear();
   const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
-  const freePhysicalSlots = Math.max(0, boundedCapacity - Math.max(0, residentPages));
+  const freePhysicalSlots = Math.max(0, boundedCapacity - Math.max(0, occupiedSlots));
   let admissions = 0;
   let retentions = 0;
   const add = (page: VirtualTexturePageId): boolean => {
@@ -746,7 +747,7 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
   };
   for (const page of workingCandidates) {
     const key = virtualTexturePageKey(page);
-    if (previousPageKeys.has(key) || isResident(page)) add(page);
+    if (isResident(page) || (previousPageKeys.has(key) && canBecomeResident(page))) add(page);
   }
   // Do not pipeline another destructive replacement while the preceding
   // admission still has no physical residency. Re-rendering the same demand
@@ -754,12 +755,13 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
   // providing coverage, rather than consuming it one frame at a time.
   const awaitingPreviousAdmission = workingCandidates.some((page) => {
     const key = virtualTexturePageKey(page);
-    return previousPageKeys.has(key) && !isResident(page);
+    return previousPageKeys.has(key) && !isResident(page) && canBecomeResident(page);
   });
   let freeAdmissions = 0;
   let replacementAdmissions = 0;
   for (const page of workingCandidates) {
     if (desiredPageKeys.has(virtualTexturePageKey(page))) continue;
+    if (!isResident(page) && !canBecomeResident(page)) continue;
     if (
       freeAdmissions >= freePhysicalSlots
       && (awaitingPreviousAdmission || replacementAdmissions >= 2)
@@ -769,10 +771,14 @@ export const stabilizeVirtualTextureDesiredPagesInto = (
     else replacementAdmissions += 1;
   }
   const awaitingResidency = workingCandidates.some((page) => (
-    desiredPageKeys.has(virtualTexturePageKey(page)) && !isResident(page)
+    desiredPageKeys.has(virtualTexturePageKey(page))
+      && !isResident(page)
+      && canBecomeResident(page)
   ));
   const deferred = awaitingResidency
-    || workingCandidates.some((page) => !desiredPageKeys.has(virtualTexturePageKey(page)));
+    || workingCandidates.some((page) => (
+      canBecomeResident(page) && !desiredPageKeys.has(virtualTexturePageKey(page))
+    ));
   // Previous pages are overlap for a bounded destructive replacement, not a
   // standing cache policy. Once every required-now candidate is physically
   // resident, publish that exact set and let the GPU arena retain any spare
