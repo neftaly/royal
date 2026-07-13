@@ -544,11 +544,10 @@ Canvas product contract and maps such concepts at integration adapters.
 1. Preserve retained visual/performance baselines.
 2. Remove text/UI/editor code and eager codec loading.
 3. Contract the public React/core surface and delete obsolete examples/tests.
-4. Extract pure glTF/scene semantics and retained incremental frame maintenance,
-   following the first vertical slice in
-   [FramePlan / ResourceArena / Executor](./frame-plan-slice.md).
-5. Centralize GPU ownership, state, program bindings, and flat execution through
-   that slice's explicit ownership and deletion gates.
+4. Preserve the landed retained frame-plan, semantic-resource, and GPU-arena
+   ownership boundaries.
+5. Continue only the ownership-deleting slices listed in the repository
+   [TODO](../TODO.md).
 6. Replace the public pass graph with the private compiled DAG.
 7. Add the minimal Primitive/effect escape hatches.
 8. Validate physical iPad and Quest quality, lifecycle, and performance.
