@@ -28,11 +28,42 @@ export interface OrdinaryTextureSourceJobAdmission {
 export interface OrdinaryTextureSourceStoreSnapshot {
   readonly aborts: number;
   readonly activeJobs: number;
+  readonly deliveryFailures: number;
   readonly failures: number;
   readonly starts: number;
   readonly subscribers: number;
   readonly successes: number;
 }
+
+/**
+ * A subscriber callback failed while observing a borrowed settled result.
+ * The store still owns ready sources; `terminate` releases only this subscriber.
+ */
+export interface OrdinaryTextureSourceDeliveryFailure {
+  /** One-based count of consecutive failures delivering this settled result. */
+  readonly attempt: number;
+  readonly error: unknown;
+  readonly request: OrdinaryTextureSourceRequest;
+  readonly result: OrdinaryTextureSourceResult;
+  /** Re-delivers this result if the subscriber is still active and failed. */
+  retry(): boolean;
+  /** Releases this subscriber, including its share of any settled source ownership. */
+  terminate(): void;
+}
+
+export interface OrdinaryTextureSourceAcquireOptions {
+  readonly onDeliveryFailure?: (failure: OrdinaryTextureSourceDeliveryFailure) => void;
+}
+
+type SourceSubscriber = {
+  readonly listener: (result: OrdinaryTextureSourceResult) => void;
+  readonly onDeliveryFailure: ((failure: OrdinaryTextureSourceDeliveryFailure) => void) | undefined;
+  readonly request: OrdinaryTextureSourceRequest;
+  consecutiveFailures: number;
+  deliveryFailed: boolean;
+  notifying: boolean;
+  released: boolean;
+};
 
 type SourceJob = {
   admission?: OrdinaryTextureSourceJobAdmission;
@@ -41,7 +72,7 @@ type SourceJob = {
   cpuCapacityBlocked: boolean;
   readonly key: string;
   lease?: ResourceArenaSourceLease;
-  readonly listeners: Map<number, (result: OrdinaryTextureSourceResult) => void>;
+  readonly listeners: Map<number, SourceSubscriber>;
   readonly request: OrdinaryTextureSourceRequest;
   result?: OrdinaryTextureSourceResult;
   settled: boolean;
@@ -75,6 +106,7 @@ export class OrdinaryTextureSourceStore {
   readonly #retain: (source: LoadedTextureSource) => ResourceArenaSourceLease;
   #aborts = 0;
   #disposed = false;
+  #deliveryFailures = 0;
   #failures = 0;
   #nextListener = 1;
   #starts = 0;
@@ -96,6 +128,7 @@ export class OrdinaryTextureSourceStore {
   acquire(
     request: OrdinaryTextureSourceRequest,
     listener: (result: OrdinaryTextureSourceResult) => void,
+    options?: OrdinaryTextureSourceAcquireOptions,
   ): OrdinaryTextureSourceSubscription {
     if (this.#disposed) throw new Error("OrdinaryTextureSourceStore is disposed");
     const key = ordinaryTextureSourceKey(request);
@@ -119,27 +152,23 @@ export class OrdinaryTextureSourceStore {
 
     const listenerKey = this.#nextListener;
     this.#nextListener += 1;
-    job.listeners.set(listenerKey, listener);
+    const subscriber: SourceSubscriber = {
+      consecutiveFailures: 0,
+      deliveryFailed: false,
+      listener,
+      notifying: false,
+      onDeliveryFailure: options?.onDeliveryFailure,
+      request,
+      released: false,
+    };
+    job.listeners.set(listenerKey, subscriber);
     this.#subscribers += 1;
     if (start) this.#tryStart(job);
-    if (!start && job.result !== undefined) this.#notifyListener(listener, job.result);
+    if (!start && job.result !== undefined) this.#notifyListener(job, listenerKey, subscriber, job.result);
 
-    let released = false;
     return {
       release: () => {
-        if (released) return;
-        released = true;
-        const current = this.#jobs.get(key);
-        if (current === undefined || !current.listeners.delete(listenerKey)) return;
-        this.#subscribers -= 1;
-        if (current.listeners.size !== 0) return;
-        this.#jobs.delete(key);
-        if (!current.settled) {
-          current.controller.abort();
-          this.#aborts += 1;
-          return;
-        }
-        this.#releaseSource(current);
+        this.#releaseSubscriber(job, listenerKey, subscriber);
       },
     };
   }
@@ -175,6 +204,7 @@ export class OrdinaryTextureSourceStore {
     return {
       aborts: this.#aborts,
       activeJobs: this.#jobs.size,
+      deliveryFailures: this.#deliveryFailures,
       failures: this.#failures,
       starts: this.#starts,
       subscribers: this.#subscribers,
@@ -310,20 +340,75 @@ export class OrdinaryTextureSourceStore {
 
   #notify(job: SourceJob, result: OrdinaryTextureSourceResult): void {
     const listeners = [...job.listeners.entries()];
-    for (const [key, listener] of listeners) {
-      if (job.listeners.has(key)) this.#notifyListener(listener, result);
+    for (const [key, subscriber] of listeners) {
+      if (job.listeners.get(key) === subscriber) this.#notifyListener(job, key, subscriber, result);
     }
   }
 
   #notifyListener(
-    listener: (result: OrdinaryTextureSourceResult) => void,
+    job: SourceJob,
+    key: number,
+    subscriber: SourceSubscriber,
     result: OrdinaryTextureSourceResult,
   ): void {
+    if (subscriber.released || subscriber.notifying) return;
+    subscriber.deliveryFailed = false;
+    subscriber.notifying = true;
     try {
-      listener(result);
-    } catch {
-      // Subscribers observe borrowed results; one callback cannot disrupt store ownership or peers.
+      subscriber.listener(result);
+      subscriber.consecutiveFailures = 0;
+    } catch (error) {
+      if (!subscriber.released && job.listeners.get(key) === subscriber) {
+        subscriber.consecutiveFailures += 1;
+        subscriber.deliveryFailed = true;
+        this.#deliveryFailures += 1;
+        try {
+          subscriber.onDeliveryFailure?.({
+            attempt: subscriber.consecutiveFailures,
+            error,
+            request: subscriber.request,
+            result,
+            retry: () => this.#retrySubscriber(job, key, subscriber),
+            terminate: () => this.#releaseSubscriber(job, key, subscriber),
+          });
+        } catch {
+          // Failure reporting is external too; it cannot disrupt peers or store ownership.
+        }
+      }
+    } finally {
+      subscriber.notifying = false;
     }
+  }
+
+  #releaseSubscriber(job: SourceJob, key: number, subscriber: SourceSubscriber): void {
+    if (subscriber.released) return;
+    subscriber.released = true;
+    const current = this.#jobs.get(job.key);
+    if (current !== job || current.listeners.get(key) !== subscriber) return;
+    current.listeners.delete(key);
+    this.#subscribers -= 1;
+    if (current.listeners.size !== 0) return;
+    this.#jobs.delete(job.key);
+    if (!current.settled) {
+      current.controller.abort();
+      this.#aborts += 1;
+      return;
+    }
+    this.#releaseSource(current);
+  }
+
+  #retrySubscriber(job: SourceJob, key: number, subscriber: SourceSubscriber): boolean {
+    if (
+      this.#disposed
+      || subscriber.released
+      || subscriber.notifying
+      || !subscriber.deliveryFailed
+      || this.#jobs.get(job.key) !== job
+      || job.listeners.get(key) !== subscriber
+      || job.result === undefined
+    ) return false;
+    this.#notifyListener(job, key, subscriber, job.result);
+    return true;
   }
 
   #releaseSource(job: SourceJob): void {

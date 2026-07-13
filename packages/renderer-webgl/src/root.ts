@@ -237,6 +237,10 @@ import { readGltfSceneImageBasedLight } from "./gltf/image-based-light";
 import { gltfImageLoadKey, type GltfImageKind } from "./gltf/image-keys";
 import { generateGltfPrimitiveNormals } from "./gltf/normals";
 import {
+  estimateGltfPreparationCpu,
+  type GltfPreparationCpuEstimate,
+} from "./gltf/preparation-admission";
+import {
   type GltfContentExtras,
   type GltfDocument,
   type GltfImage,
@@ -2030,6 +2034,12 @@ type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameV
 type ResourceArenaSideEffectDebt = {
   nextStep: number;
   readonly steps: readonly (() => void)[];
+};
+
+type PreparedAssetCpuAdmission = {
+  assetDecode: ResourceGovernorLease | undefined;
+  geometry: ResourceGovernorLease | undefined;
+  transient: ResourceGovernorReservation | undefined;
 };
 
 class WebGlRootImpl implements InternalWebGlRoot {
@@ -7764,29 +7774,55 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (texture.preparedOnly === true) return resource;
     if (this.#ordinaryTextureSourceSubscriptions.has(key)) return resource;
 
-    const subscription = this.#ordinaryTextureSources.acquire(texture, (result) => {
-      if (result.kind === "error") {
+    let subscription!: OrdinaryTextureSourceSubscription;
+    subscription = this.#ordinaryTextureSources.acquire(
+      texture,
+      (result) => {
+        if (result.kind === "error") {
+          const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
+          if (this.#disposed || current?.uploaded === true) return;
+          const message = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
+          this.#recordDiagnostic(message, `texture-image:${key}`);
+          return;
+        }
+        const image = result.source;
+        if (this.#disposed) {
+          return;
+        }
+        this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
+        if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) {
+          return;
+        }
+        this.#retainPreparedTextureUpload(key, { source: image, texture });
+        if (this.#contextLifecycle !== "active") return;
         const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-        if (this.#disposed || current?.uploaded === true) return;
-        const message = `Texture image load failed for ${texture.uri}: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
-        this.#recordDiagnostic(message, `texture-image:${key}`);
-        return;
-      }
-      const image = result.source;
-      if (this.#disposed) {
-        return;
-      }
-      this.#registerAutoBaseColorVirtualTextureDecodedPageSource(texture, image);
-      if (resourceArenaTextureReferenceCount(this.#resourceArena, key) === 0) {
-        return;
-      }
-      this.#retainPreparedTextureUpload(key, { source: image, texture });
-      if (this.#contextLifecycle !== "active") return;
-      const current = ordinaryTextureGpuResource(this.#ordinaryTextureGpu, key);
-      if (current !== undefined && current.generation === this.#contextGeneration) {
-        if (!current.uploaded) this.#queueOrdinaryTextureUpload(current, image, texture);
-      }
-    });
+        if (current !== undefined && current.generation === this.#contextGeneration) {
+          if (!current.uploaded) this.#queueOrdinaryTextureUpload(current, image, texture);
+        }
+      },
+      {
+        onDeliveryFailure: (failure) => {
+          const detail = failure.error instanceof Error
+            ? failure.error.message
+            : String(failure.error);
+          this.#recordDiagnostic(
+            `Texture image publication failed for ${texture.uri} on attempt ${failure.attempt}: ${detail}`,
+            `texture-image-publication:${key}`,
+          );
+          // Publication may already have completed some side effects. Do not
+          // blindly replay it; make the resource terminal until its semantic
+          // declaration is released and acquired again.
+          this.#terminalOrdinaryTextureKeys.add(key);
+          queueMicrotask(() => {
+            if (this.#ordinaryTextureSourceSubscriptions.get(key) === subscription) {
+              this.#ordinaryTextureSourceSubscriptions.delete(key);
+            }
+          });
+          this.invalidate();
+          failure.terminate();
+        },
+      },
+    );
     this.#ordinaryTextureSourceSubscriptions.set(key, subscription);
 
     return resource;
@@ -7941,36 +7977,62 @@ class WebGlRootImpl implements InternalWebGlRoot {
     assetKey: string,
     signal: AbortSignal,
   ): Promise<PreparedGltfAsset> {
-    const asset = await this.#gltfPreparationScheduler.run(
-      signal,
-      () => this.#prepareGltfAssetAdmitted(src, assetKey, signal),
-    );
-    throwIfAborted(signal);
-    this.#retainPreparedAssetCpuLeases(assetKey, asset);
-    return asset;
+    try {
+      const asset = await this.#gltfPreparationScheduler.run(
+        signal,
+        () => this.#prepareGltfAssetAdmitted(src, assetKey, signal),
+      );
+      throwIfAborted(signal);
+      return asset;
+    } catch (error) {
+      // The admitted job installs its final leases immediately before return.
+      // Abort may win between that return and this outer boundary.
+      this.#releasePreparedAssetCpuLeases(assetKey);
+      throw error;
+    }
   }
 
-  #retainPreparedAssetCpuLeases(assetKey: string, asset: PreparedGltfAsset): void {
+  #reservePreparedAssetCpuAdmission(
+    assetKey: string,
+    estimate: GltfPreparationCpuEstimate,
+  ): PreparedAssetCpuAdmission {
     if (this.#preparedAssetCpuGovernorLeases.has(assetKey)) {
       throw new Error(`Prepared glTF asset ${assetKey} already owns CPU resource leases`);
     }
-    const bytes = preparedGltfAssetRetainedCpuBytes(asset);
     const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
     const combinedMaximum = policy.limits.cpuDecodedBytes - RESOURCE_GOVERNOR_CLASSES
       .filter((resourceClass) => resourceClass !== "geometry" && resourceClass !== "asset-decode")
       .reduce((sum, resourceClass) =>
         sum + policy.classes[resourceClass].cpuDecodedBytes.mandatoryFloor, 0);
-    if (bytes.geometry + bytes.assetDecode > combinedMaximum) {
+    if (estimate.geometry + estimate.assetDecode > combinedMaximum) {
       throw new ResourceGovernorCpuCapacityError(
-        `Prepared glTF asset ${assetKey} requires ${bytes.geometry + bytes.assetDecode} retained CPU bytes, exceeding its combined maximum ${combinedMaximum}`,
+        `glTF asset ${assetKey} declares up to ${estimate.geometry + estimate.assetDecode} prepared CPU bytes, exceeding its combined maximum ${combinedMaximum}`,
         true,
       );
     }
-    const reservations: Array<{
-      readonly resourceClass: "asset-decode" | "geometry";
-      readonly reservation: ResourceGovernorReservation;
-    }> = [];
-    const reserve = (resourceClass: "asset-decode" | "geometry", cpuDecodedBytes: number): void => {
+    if (estimate.transientPeak > policy.limits.transientPeakBytes) {
+      throw new ResourceGovernorCpuCapacityError(
+        `glTF asset ${assetKey} declares up to ${estimate.transientPeak} transient preparation bytes, exceeding the maximum ${policy.limits.transientPeakBytes}`,
+        true,
+      );
+    }
+    const admission: PreparedAssetCpuAdmission = {
+      assetDecode: undefined,
+      geometry: undefined,
+      transient: undefined,
+    };
+    const release = (): void => {
+      admission.transient?.cancel();
+      admission.transient = undefined;
+      admission.assetDecode?.release();
+      admission.assetDecode = undefined;
+      admission.geometry?.release();
+      admission.geometry = undefined;
+    };
+    const reserveDurable = (
+      resourceClass: "asset-decode" | "geometry",
+      cpuDecodedBytes: number,
+    ): void => {
       if (cpuDecodedBytes === 0) return;
       const reservation = reserveResourceGovernor(this.#resourceGovernor, resourceClass, {
         cpuDecodedBytes,
@@ -7978,25 +8040,96 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (typeof reservation === "string") {
         this.#suppressCpuCapacityWake = true;
         try {
-          for (const retained of reservations) retained.reservation.cancel();
+          release();
         } finally {
           this.#suppressCpuCapacityWake = false;
         }
         throw new ResourceGovernorCpuCapacityError(
-          `Prepared glTF asset ${assetKey} CPU retention denied by root resource governor: ${reservation}`,
+          `glTF asset ${assetKey} pre-decode CPU admission denied by root resource governor: ${reservation}`,
           cpuDecodedBytes > this.#maximumResourceClassCpuBytes(resourceClass),
         );
       }
-      reservations.push({ reservation, resourceClass });
+      admission[resourceClass === "asset-decode" ? "assetDecode" : "geometry"] = reservation.commit();
     };
-    reserve("geometry", bytes.geometry);
-    reserve("asset-decode", bytes.assetDecode);
-    const leases: { assetDecode?: ResourceGovernorLease; geometry?: ResourceGovernorLease } = {};
-    for (const retained of reservations) {
-      leases[retained.resourceClass === "asset-decode" ? "assetDecode" : "geometry"]
-        = retained.reservation.commit();
+    try {
+      // Reserving geometry first consumes its own protected floor before the
+      // asset-decode class attempts to borrow the remaining shared capacity.
+      reserveDurable("geometry", estimate.geometry);
+      reserveDurable("asset-decode", estimate.assetDecode);
+      if (estimate.transientPeak > 0) {
+        const transient = reserveResourceGovernor(this.#resourceGovernor, "asset-decode", {
+          transientPeakBytes: estimate.transientPeak,
+        });
+        if (typeof transient === "string") {
+          throw new ResourceGovernorCpuCapacityError(
+            `glTF asset ${assetKey} transient preparation admission denied by root resource governor: ${transient}`,
+            false,
+          );
+        }
+        admission.transient = transient;
+      }
+      return admission;
+    } catch (error) {
+      this.#suppressCpuCapacityWake = true;
+      try {
+        release();
+      } finally {
+        this.#suppressCpuCapacityWake = false;
+      }
+      throw error;
     }
-    this.#preparedAssetCpuGovernorLeases.set(assetKey, leases);
+  }
+
+  #finalizePreparedAssetCpuAdmission(
+    assetKey: string,
+    estimate: GltfPreparationCpuEstimate,
+    asset: PreparedGltfAsset,
+    admission: PreparedAssetCpuAdmission,
+  ): void {
+    const actual = preparedGltfAssetRetainedCpuBytes(asset);
+    if (actual.assetDecode > estimate.assetDecode || actual.geometry > estimate.geometry) {
+      throw new ResourceGovernorCpuCapacityError(
+        `glTF asset ${assetKey} prepared bytes exceeded its pre-decode estimate `
+        + `(asset-decode ${actual.assetDecode}/${estimate.assetDecode}, geometry ${actual.geometry}/${estimate.geometry})`,
+        true,
+      );
+    }
+    const resize = (
+      resourceClass: "asset-decode" | "geometry",
+      lease: ResourceGovernorLease | undefined,
+      cpuDecodedBytes: number,
+    ): ResourceGovernorLease | undefined => {
+      if (lease === undefined) {
+        if (cpuDecodedBytes !== 0) {
+          throw new Error(`glTF ${resourceClass} estimate omitted ${cpuDecodedBytes} retained bytes`);
+        }
+        return undefined;
+      }
+      if (cpuDecodedBytes === 0) {
+        lease.release();
+        return undefined;
+      }
+      const replacement = replaceResourceGovernorLease(this.#resourceGovernor, lease, {
+        cpuDecodedBytes,
+      });
+      if (typeof replacement === "string") {
+        throw new Error(`glTF ${resourceClass} estimate shrink was denied: ${replacement}`);
+      }
+      return replacement.commit();
+    };
+    this.#suppressCpuCapacityWake = true;
+    try {
+      admission.geometry = resize("geometry", admission.geometry, actual.geometry);
+      admission.assetDecode = resize("asset-decode", admission.assetDecode, actual.assetDecode);
+      admission.transient?.cancel();
+      admission.transient = undefined;
+    } finally {
+      this.#suppressCpuCapacityWake = false;
+    }
+    this.#preparedAssetCpuGovernorLeases.set(assetKey, {
+      ...(admission.assetDecode === undefined ? {} : { assetDecode: admission.assetDecode }),
+      ...(admission.geometry === undefined ? {} : { geometry: admission.geometry }),
+    });
   }
 
   #releasePreparedAssetCpuLeases(assetKey: string): void {
@@ -8028,11 +8161,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
       imageRequests: 0,
       startedAt: nowMs(),
     };
+    let cpuAdmission: PreparedAssetCpuAdmission | undefined;
     try {
       const { binaryChunk, document } = await loadGltfDocument(src, signal);
       load.documentLoadedAt = nowMs();
       throwIfAborted(signal);
       assertSupportedRequiredGltfExtensions(src, document);
+      throwIfAborted(signal);
+      const cpuEstimate = estimateGltfPreparationCpu(document);
+      cpuAdmission = this.#reservePreparedAssetCpuAdmission(assetKey, cpuEstimate);
       throwIfAborted(signal);
       const codecs = importGltfCodecs(document);
       const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk, signal);
@@ -8051,7 +8188,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const scene = this.#readGltfScene(decodedDocument, buffers, dracoPrimitives, src, assetKey);
         load.sceneReadAt = nowMs();
         load.readyAt = nowMs();
-      return {
+      const asset: PreparedGltfAsset = {
           hasMaterialLod: scene.hasMaterialLod,
           hasMaterialVariants: scene.hasMaterialVariants,
           hasNodeLod: scene.hasNodeLod,
@@ -8068,8 +8205,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
           primitives: scene.primitives,
           variants: scene.variants,
       };
+      this.#finalizePreparedAssetCpuAdmission(assetKey, cpuEstimate, asset, cpuAdmission);
+      cpuAdmission = undefined;
+      return asset;
     } catch (error) {
       load.readyAt = nowMs();
+      if (cpuAdmission !== undefined) {
+        this.#suppressCpuCapacityWake = true;
+        try {
+          cpuAdmission.transient?.cancel();
+          cpuAdmission.assetDecode?.release();
+          cpuAdmission.geometry?.release();
+        } finally {
+          this.#suppressCpuCapacityWake = false;
+        }
+      }
       throw error;
     }
   }

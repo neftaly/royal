@@ -25,6 +25,10 @@ import {
   type RenderRoot,
 } from "@royal/renderer-core";
 import { createWebGlRoot, type WebGlGltfInstancingSnapshot } from "@royal/renderer-webgl";
+import {
+  DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  type ResourceGovernorPolicy,
+} from "../packages/renderer-webgl/src/resource-governor";
 
 type CanvasSize = {
   readonly height: number;
@@ -3301,6 +3305,81 @@ afterEach(() => {
 });
 
 describe("WebGL renderer scene and glTF regressions", () => {
+  it("denies oversized declared geometry before requesting external buffers", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const cpuBudget = 1_024;
+    const resourceGovernorPolicy: ResourceGovernorPolicy = {
+      ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+        ([key, value]) => [key, {
+          ...value,
+          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+        }],
+      )) as unknown as ResourceGovernorPolicy["classes"],
+      limits: {
+        ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
+        cpuDecodedBytes: cpuBudget,
+        transientPeakBytes: cpuBudget,
+      },
+    };
+    const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
+    const renderGraph = renderScene([
+      gltf({ src: triangleGltfSrc, version: "predecode-geometry-admission" }),
+    ]);
+
+    root.render(renderGraph);
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, {
+        accessors: [{ bufferView: 0, componentType: 5126, count: 100_000, type: "VEC3" }],
+        asset: { version: "2.0" },
+        buffers: [{ byteLength: 36, uri: triangleBinUri }],
+        bufferViews: [{ buffer: 0, byteLength: 36 }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+        nodes: [{ mesh: 0 }],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+      }))).toBe(true);
+    await flushPreparedAssetBoundary();
+
+    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
+      .toBe(false);
+    expect(root.snapshot().diagnostics.join("\n"))
+      .toMatch(/declares up to .*prepared CPU bytes, exceeding its combined maximum/i);
+    expect(root.snapshot().resourceGovernor.total.cpuDecodedBytes).toBe(0);
+    root.dispose();
+  });
+
+  it("releases pre-decode CPU admission when a pending glTF request is cancelled", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+
+    root.render(renderScene([
+      gltf({ src: triangleGltfSrc, version: "predecode-cancellation" }),
+    ]));
+    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
+      responseWithJson(url, triangleDocument()))).toBe(true);
+    await flushMicrotasks();
+    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
+
+    root.render(renderScene([]));
+    // The staged fetch double does not implement AbortSignal; settling it lets
+    // the loader observe the abort at its next explicit boundary.
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushPreparedAssetBoundary();
+
+    expect(root.snapshot().resourceGovernor.total.cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourceGovernor.total.transientPeakBytes).toBe(0);
+    root.dispose();
+  });
+
   it("publishes mixed-scene packet topology before retrying a throwing ref attachment", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

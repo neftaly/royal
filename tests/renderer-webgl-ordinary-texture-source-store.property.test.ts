@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   OrdinaryTextureSourceStore,
   ordinaryTextureSourceKey,
+  type OrdinaryTextureSourceDeliveryFailure,
   type OrdinaryTextureSourceSubscription,
 } from "../packages/renderer-webgl/src/ordinary-texture-source-store";
 import type { ResourceArenaSourceLease } from "../packages/renderer-webgl/src/resource-arena";
@@ -404,6 +405,124 @@ describe("ordinary texture source jobs", () => {
     await flushJobs();
     expect(received).toEqual([3, 4]);
     expect(store.snapshot()).toMatchObject({ activeJobs: 1, subscribers: 4, successes: 1 });
+    store.dispose();
+  });
+  it("reports the exact failed delivery and can retry it without disturbing peers or ownership", async () => {
+    const source = fakeSource(40);
+    const request = { contentKey: "shared-image", uri: "/delivery.png", version: 4 } as const;
+    const peerRequest = { contentKey: "shared-image", uri: "/canonical.png", version: 1 } as const;
+    const closed: LoadedTextureSource[] = [];
+    const failures: OrdinaryTextureSourceDeliveryFailure[] = [];
+    const received: string[] = [];
+    let failFirst = true;
+    let loads = 0;
+    let releases = 0;
+    const store = new OrdinaryTextureSourceStore({
+      close: (value) => { closed.push(value); },
+      load: async () => { loads += 1; return source; },
+      retain: () => ({
+        release: () => {
+          releases += 1;
+          return true;
+        },
+      }),
+    });
+    const peer = store.acquire(peerRequest, (result) => {
+      expect(result).toEqual({ kind: "ready", source });
+      received.push("peer");
+    });
+    const failing = store.acquire(
+      request,
+      (result) => {
+        if (failFirst) throw new Error("publish failed");
+        expect(result).toEqual({ kind: "ready", source });
+        received.push("retried");
+      },
+      { onDeliveryFailure: (failure) => { failures.push(failure); } },
+    );
+
+    await flushJobs();
+
+    expect(received).toEqual(["peer"]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      attempt: 1,
+      error: expect.objectContaining({ message: "publish failed" }),
+      request,
+      result: { kind: "ready", source },
+    });
+    expect(store.snapshot()).toMatchObject({
+      activeJobs: 1,
+      deliveryFailures: 1,
+      subscribers: 2,
+      successes: 1,
+    });
+    expect({ closed, loads, releases }).toEqual({ closed: [], loads: 1, releases: 0 });
+
+    failFirst = false;
+    expect(failures[0]!.retry()).toBe(true);
+    expect(failures[0]!.retry()).toBe(false);
+    expect(received).toEqual(["peer", "retried"]);
+    expect({ closed, loads, releases }).toEqual({ closed: [], loads: 1, releases: 0 });
+
+    failing.release();
+    expect(closed).toEqual([]);
+    peer.release();
+    expect({ closed, releases }).toEqual({ closed: [source], releases: 1 });
+    store.dispose();
+    expect({ closed, releases }).toEqual({ closed: [source], releases: 1 });
+  });
+  it("lets a reported delivery failure terminalize only its subscriber", async () => {
+    const source = fakeSource(41);
+    const closed: LoadedTextureSource[] = [];
+    const received: number[] = [];
+    let reportedError: unknown = "missing";
+    const store = new OrdinaryTextureSourceStore({
+      close: (value) => { closed.push(value); },
+      load: async () => source,
+      retain: () => ({ release: () => true }),
+    });
+    const terminal = store.acquire(
+      { uri: "/terminal-delivery.png" },
+      () => { throw null; },
+      {
+        onDeliveryFailure: (failure) => {
+          reportedError = failure.error;
+          failure.terminate();
+        },
+      },
+    );
+    const peer = store.acquire({ uri: "/terminal-delivery.png" }, () => { received.push(1); });
+
+    await flushJobs();
+
+    expect(reportedError).toBeNull();
+    expect(received).toEqual([1]);
+    expect(store.snapshot()).toMatchObject({ activeJobs: 1, deliveryFailures: 1, subscribers: 1 });
+    expect(closed).toEqual([]);
+    terminal.release();
+    peer.release();
+    expect(closed).toEqual([source]);
+    store.dispose();
+  });
+  it("contains a throwing delivery-failure reporter while preserving peer delivery", async () => {
+    const received: number[] = [];
+    const store = new OrdinaryTextureSourceStore({
+      close: () => undefined,
+      load: async () => fakeSource(42),
+      retain: () => ({ release: () => true }),
+    });
+    store.acquire(
+      { uri: "/reporter.png" },
+      () => { throw new Error("listener failed"); },
+      { onDeliveryFailure: () => { throw new Error("reporter failed"); } },
+    );
+    store.acquire({ uri: "/reporter.png" }, () => { received.push(1); });
+
+    await flushJobs();
+
+    expect(received).toEqual([1]);
+    expect(store.snapshot()).toMatchObject({ deliveryFailures: 1, subscribers: 2 });
     store.dispose();
   });
   it("makes aggregate cleanup total and preserves the first opaque failure", async () => {
