@@ -20,7 +20,7 @@ import {
 } from "./webgl/frame-view-lane";
 
 export interface WebGlXrReferenceSpace {
-  readonly __royalWebGlXrReferenceSpace?: never;
+  readonly __royalXrReferenceSpace?: never;
 }
 
 export type WebXrReferenceSpaceType =

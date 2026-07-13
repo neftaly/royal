@@ -3,10 +3,13 @@ import {
   createWebGlRoot,
   webGlRootOptionsSemanticKey,
   type WebGlContextSnapshot,
-  type WebGlRoot,
   type WebGlRootOptions,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
+import {
+  registerRoyalRendererCapabilities,
+  royalRendererCapabilitiesFor,
+} from "./renderer-capabilities";
 
 /** Renderer creation options exposed through `Canvas.context` and `createRendererRoot`. */
 export type RoyalRendererRootContextOptions = WebGlRootOptions;
@@ -69,8 +72,6 @@ export interface RoyalRendererRoot {
   snapshot(): RoyalRendererRootSnapshot;
 }
 
-const WEB_GL_ROOT = Symbol("Royal React WebGL root");
-
 const royalLifecycleSnapshot = (
   snapshot: WebGlContextSnapshot,
 ): RoyalRendererRootLifecycleSnapshot => Object.freeze({
@@ -83,19 +84,6 @@ const royalLifecycleSnapshot = (
       : snapshot.lastError === undefined ? "unavailable" : "failed",
 });
 
-type WebGlBackedRoyalRendererRoot = RoyalRendererRoot & {
-  readonly [WEB_GL_ROOT]: WebGlRoot;
-};
-
-export const webGlRootForRoyalRoot = (root: RoyalRendererRoot): WebGlRoot => {
-  const webGlRoot = (root as Partial<WebGlBackedRoyalRendererRoot>)[WEB_GL_ROOT];
-  if (webGlRoot === undefined) {
-    throw new Error("Royal React root is not backed by the WebGL renderer");
-  }
-
-  return webGlRoot;
-};
-
 /** @internal Transfers demand scheduling to a React-owned frame loop. */
 export type RoyalRendererFrameClock = {
   flushInvalidated(): void;
@@ -105,10 +93,10 @@ export type RoyalRendererFrameClock = {
 export const acquireExternalRenderClockForRoyalRoot = (
   root: RoyalRendererRoot,
 ): RoyalRendererFrameClock => {
-  const webGlRoot = webGlRootForRoyalRoot(root);
+  const capabilities = royalRendererCapabilitiesFor(root);
   return {
-    flushInvalidated: () => webGlRoot.flushInvalidatedFromExternalClock(),
-    release: webGlRoot.acquireExternalRenderClock(),
+    flushInvalidated: () => capabilities.flushInvalidatedFromExternalClock(),
+    release: capabilities.acquireExternalRenderClock(),
   };
 };
 
@@ -171,10 +159,13 @@ export const createRendererRoot = (
       });
     },
   };
-  Object.defineProperty(royalRoot, WEB_GL_ROOT, {
-    configurable: false,
-    enumerable: false,
-    value: root,
+  registerRoyalRendererCapabilities(royalRoot, {
+    acquireExternalRenderClock: () => root.acquireExternalRenderClock(),
+    createXrSessionRenderer: async (session, xrOptions) => {
+      const { createWebXrSessionRenderer } = await import("@royal/renderer-webgl/webxr");
+      return createWebXrSessionRenderer(root, session, xrOptions);
+    },
+    flushInvalidatedFromExternalClock: () => root.flushInvalidatedFromExternalClock(),
   });
 
   return royalRoot;

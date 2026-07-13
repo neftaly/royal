@@ -1,14 +1,17 @@
-import type { WebGlXrFrame, WebGlXrSession, WebXrReferenceSpaceType } from "@royal/renderer-webgl/webxr";
-import { createWebXrSessionRenderer } from "@royal/renderer-webgl/webxr";
 import type { RoyalRendererRoot } from "./root";
-import { webGlRootForRoyalRoot } from "./root";
+import { royalRendererCapabilitiesFor } from "./renderer-capabilities";
 import type { XrViewport } from "./xr-store";
 
 export interface XrReferenceSpace {
   readonly __royalXrReferenceSpace?: never;
 }
 
-export type XrReferenceSpaceType = WebXrReferenceSpaceType;
+export type XrReferenceSpaceType =
+  | "viewer"
+  | "local"
+  | "local-floor"
+  | "bounded-floor"
+  | "unbounded";
 
 export interface XrView {
   readonly projectionMatrix: ArrayLike<number>;
@@ -62,22 +65,7 @@ export const createXrSessionRenderer = async (
   session: XrSession,
   options?: XrSessionRendererOptions,
 ): Promise<XrSessionRenderer> => {
-  const renderer = await createWebXrSessionRenderer(
-    webGlRootForRoyalRoot(root),
-    session as WebGlXrSession,
-    options,
-  );
-
-  return {
-    get disposed() {
-      return renderer.disposed;
-    },
-    referenceSpace: renderer.referenceSpace as XrReferenceSpace,
-    dispose: () => {
-      renderer.dispose();
-    },
-    renderFrame: (frame) => renderer.renderFrame(frame as WebGlXrFrame),
-  };
+  return royalRendererCapabilitiesFor(root).createXrSessionRenderer(session, options);
 };
 
 export {

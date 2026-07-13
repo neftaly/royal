@@ -12,7 +12,7 @@ import {
   scene,
   type RenderRoot,
 } from "@royal/renderer-core";
-import { webGlRootForRoyalRoot } from "../packages/react/src/root";
+import { acquireExternalRenderClockForRoyalRoot } from "../packages/react/src/root";
 import { forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
 
@@ -140,12 +140,7 @@ describe("React root public API", () => {
       resourceGovernor: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });
-    expect(webGlRootForRoyalRoot(root).snapshot()).toMatchObject({
-      frame: 0,
-      gltfInstancing: expect.any(Object),
-      virtualTexturing: expect.any(Object),
-    });
-    expect(webGlRootForRoyalRoot(root).options).toMatchObject({
+    expect(root.diagnostics().options).toMatchObject({
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
     });
@@ -175,18 +170,6 @@ describe("React root public API", () => {
       frame: 1,
       lifecycle: { generation: 2, lifecycle: "disposed" },
     });
-  });
-
-  it("keeps the neutral React snapshot on the lean WebGL path", () => {
-    const root = createRendererRoot(fakeCanvas());
-    const webGlRoot = webGlRootForRoyalRoot(root);
-    const webGlSnapshot = vi.spyOn(webGlRoot, "snapshot");
-
-    root.snapshot();
-
-    expect(webGlSnapshot).not.toHaveBeenCalled();
-    root.diagnostics();
-    expect(webGlSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("maps backend context lifecycle into push-based neutral availability", () => {
@@ -268,11 +251,10 @@ describe("React root public API", () => {
       return frameCallbacks.length;
     }));
     const root = createRendererRoot(fakeCanvas());
-    const webGlRoot = webGlRootForRoyalRoot(root);
 
     root.render(emptyScene());
     root.invalidate();
-    const releaseExternalClock = webGlRoot.acquireExternalRenderClock();
+    const releaseExternalClock = acquireExternalRenderClockForRoyalRoot(root).release;
     frameCallbacks[0]?.(16);
 
     expect(root.frame).toBe(1);
@@ -312,7 +294,6 @@ describe("React root public API", () => {
         return id;
       }));
       const root = createRendererRoot(fakeCanvas());
-      const webGlRoot = webGlRootForRoyalRoot(root);
       const releases: { active: boolean; readonly release: () => void }[] = [];
       let dirty = false;
       let externalClocks = 0;
@@ -337,7 +318,7 @@ describe("React root public API", () => {
           if (shouldSchedule) recordExpectedSchedule(previousNextFrameId, operationLabel);
           else expect(nextFrameId, `${label} ${operationLabel} no schedule`).toBe(previousNextFrameId);
         } else if (operation.kind === "acquire") {
-          releases.push({ active: true, release: webGlRoot.acquireExternalRenderClock() });
+          releases.push({ active: true, release: acquireExternalRenderClockForRoyalRoot(root).release });
           externalClocks += 1;
           scheduledFrameId = undefined;
         } else if (operation.kind === "release") {

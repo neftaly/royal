@@ -11,7 +11,6 @@ import {
 import {
   acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,
-  webGlRootForRoyalRoot,
 } from "../packages/react/src/root";
 import { forEachFuzzCase } from "./fuzz";
 import { fakeCanvas } from "./react-test-fixtures";
@@ -101,7 +100,7 @@ describe("React frame loop", () => {
     const renderScene = scene({ camera, nodes: [] });
     root.render(renderScene);
     const rendererClock = acquireExternalRenderClockForRoyalRoot(root);
-    const releaseXrClock = webGlRootForRoyalRoot(root).acquireExternalRenderClock();
+    const releaseXrClock = acquireExternalRenderClockForRoyalRoot(root).release;
 
     root.invalidate();
     rendererClock.flushInvalidated();
