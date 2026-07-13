@@ -289,7 +289,7 @@ describe("WebGL prepared-asset event retries", () => {
       "registerAsset",
     )!.value as GltfImageDemandCoordinator["registerAsset"];
     const register = vi.spyOn(GltfImageDemandCoordinator.prototype, "registerAsset");
-    const demand = vi.spyOn(GltfImageDemandCoordinator.prototype, "demandAll");
+    const demand = vi.spyOn(GltfImageDemandCoordinator.prototype, "demandMaterial");
     const detach = vi.spyOn(PreparedGltfAssetStore.prototype, "detachImagePreparation");
     register.mockImplementation((input) => {
       const coordinator = register.mock.instances.at(-1)!;
@@ -300,7 +300,8 @@ describe("WebGL prepared-asset event retries", () => {
 
     expect(() => root.flushInvalidated()).not.toThrow();
     expect(register).toHaveBeenCalledOnce();
-    expect(demand).not.toHaveBeenCalled();
+    expect(demand.mock.calls.filter(([, material]) => material.baseColorTexture?.imageUri !== undefined))
+      .toHaveLength(0);
     expect(detach).not.toHaveBeenCalled();
 
     const replacementDocument = solidTriangleDocument();
@@ -317,7 +318,8 @@ describe("WebGL prepared-asset event retries", () => {
     await flushPreparedAssetBoundary();
 
     expect(drawCalls(calls).at(-1)?.args[0]).toBe(gl.LINES);
-    expect(demand).not.toHaveBeenCalled();
+    expect(demand.mock.calls.filter(([, material]) => material.baseColorTexture?.imageUri !== undefined))
+      .toHaveLength(0);
     expect(detach).not.toHaveBeenCalled();
   });
 });

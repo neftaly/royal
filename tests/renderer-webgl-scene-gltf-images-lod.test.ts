@@ -1212,7 +1212,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const releaseExternalClock = root.acquireExternalRenderClock();
+    const externalClock = root.acquireExternalRenderClock();
     const renderGraph = (z: number) => renderScene([
       gltf({
         src: lodGltfSrc,
@@ -1254,7 +1254,7 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
       expect(renderNearView(-1.22), "return motion does not oscillate the selected LOD")
         .toEqual([6]);
     } finally {
-      releaseExternalClock();
+      externalClock.release();
     }
   });
 
@@ -1547,11 +1547,12 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
-    expect(ControlledImage.instances, "lower LOD texture should be staged but not settled").toHaveLength(1);
+    expect(ControlledImage.instances, "unselected lower LOD texture should remain dormant").toHaveLength(0);
 
     const pendingCallsStart = calls.length;
     root.render(renderGraph(0.2));
     const pendingCalls = calls.slice(pendingCallsStart);
+    expect(ControlledImage.instances, "selected lower LOD texture should begin decoding").toHaveLength(1);
     expect(drawCalls(pendingCalls), "pending lower texture LOD should not blank the glTF").toHaveLength(1);
     expect(
       callCount(pendingCalls, "texImage2D"),
@@ -1606,11 +1607,12 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     await flushAnimationFrames(viewport.animationFrames);
 
     expect(uniform4fvPayloads(calls, "u_color").map(roundVector)).toContainEqual([1, 0, 0, 1]);
-    expect(ControlledImage.instances, "secondary material textures should be staged but not settled").toHaveLength(1);
+    expect(ControlledImage.instances, "unselected secondary material textures should remain dormant").toHaveLength(0);
 
     const pendingCallsStart = calls.length;
     root.render(renderGraph(0.2));
     const pendingCalls = calls.slice(pendingCallsStart);
+    expect(ControlledImage.instances, "selected secondary material textures should begin decoding").toHaveLength(1);
 
     expect(drawCalls(pendingCalls), "pending normal/ORM/emissive/extension textures should not block the LOD").toHaveLength(1);
     expect(uniform4fvPayloads(pendingCalls, "u_color").map(roundVector)).toContainEqual([0, 1, 0, 1]);

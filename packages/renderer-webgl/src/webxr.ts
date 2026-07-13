@@ -83,7 +83,7 @@ export interface WebGlXrLayerOptions {
 export interface WebGlXrRenderRoot extends RendererOwnedWebGl2Context, RendererFrameViewLane {
   readonly contextLifecycle: WebGlContextLifecycle;
   readonly latestScene: RenderRoot | undefined;
-  acquireExternalRenderClock(): () => void;
+  acquireExternalRenderClock(): { release(): void };
 }
 
 export interface WebGlXrFrameSnapshotViewport {
@@ -240,7 +240,7 @@ export const createWebXrSessionRenderer = async (
     let frameIndex = 0;
     let disposed = false;
     const frameViews = createFrameViews(2);
-    const releaseRenderClock = root.acquireExternalRenderClock();
+    const renderClock = root.acquireExternalRenderClock();
     const dispose = (): void => {
       if (disposed) return;
       disposed = true;
@@ -253,7 +253,7 @@ export const createWebXrSessionRenderer = async (
         firstFailure = error;
       }
       try {
-        releaseRenderClock();
+        renderClock.release();
       } catch (error) {
         if (!failed) {
           failed = true;

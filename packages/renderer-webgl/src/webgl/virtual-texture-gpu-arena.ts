@@ -133,6 +133,14 @@ export interface VirtualTextureGpuResourceSnapshot {
   readonly sourceGeneration: number;
   readonly uploadedPageBytes: number;
   readonly uploadedPages: number;
+  readonly atlasUploadBytesPerChunkMax: number;
+  readonly atlasUploadBytesPerChunkMin: number;
+  readonly atlasUploadChunkSamples: number;
+  readonly uploadQueueWaitMaxMs: number;
+  readonly uploadQueueWaitTotalMs: number;
+  readonly uploadQueueWaitTotalMsByMip: readonly number[];
+  readonly uploadQueueWaitSamplesByMip: readonly number[];
+  readonly uploadQueueWaitSamples: number;
 }
 
 export interface VirtualTextureGpuArenaSnapshot {
@@ -198,6 +206,9 @@ type PhysicalAllocation = {
 type MutableResource = {
   admission: VirtualTextureGpuAdmissionResult;
   allocation?: PhysicalAllocation;
+  atlasUploadBytesPerChunkMax: number;
+  atlasUploadBytesPerChunkMin: number;
+  atlasUploadChunkSamples: number;
   readonly desiredPageKeys: Set<string>;
   desiredPageKeysPublished: boolean;
   readonly key: string;
@@ -213,6 +224,11 @@ type MutableResource = {
   readonly pendingUploads: VirtualTextureGpuPendingUpload[];
   uploadedPageBytes: number;
   uploadedPages: number;
+  uploadQueueWaitMaxMs: number;
+  uploadQueueWaitMs: number;
+  readonly uploadQueueWaitMsByMip: number[];
+  readonly uploadQueueWaitSamplesByMip: number[];
+  uploadQueueWaitSamples: number;
   readonly visibleAssignments: Map<string, VirtualTextureAtlasAssignment>;
 };
 
@@ -230,8 +246,11 @@ type State = {
   readonly resources: Map<string, MutableResource>;
   uploadFrame: number;
   uploadsThisFrame: number;
+  readonly uploadQueuedAt: WeakMap<VirtualTextureGpuPendingUpload, number>;
   wakeRequested: boolean;
 };
+
+const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
 
 const stateOf = (arena: VirtualTextureGpuArena): State => arena as unknown as State;
 const mutableResource = (resource: VirtualTextureGpuResource): MutableResource =>
@@ -261,6 +280,7 @@ export const createVirtualTextureGpuArena = (
     resources: new Map(),
     uploadFrame: -1,
     uploadsThisFrame: 0,
+    uploadQueuedAt: new WeakMap(),
     wakeRequested: false,
   } as unknown as VirtualTextureGpuArena;
 };
@@ -547,8 +567,16 @@ export const admitVirtualTextureGpuResource = (
       pageTableUpdates: 0,
       pendingHead: 0,
       pendingUploads: [],
+      atlasUploadBytesPerChunkMax: 0,
+      atlasUploadBytesPerChunkMin: 0,
+      atlasUploadChunkSamples: 0,
       uploadedPageBytes: 0,
       uploadedPages: 0,
+      uploadQueueWaitMaxMs: 0,
+      uploadQueueWaitMs: 0,
+      uploadQueueWaitMsByMip: [],
+      uploadQueueWaitSamplesByMip: [],
+      uploadQueueWaitSamples: 0,
     };
     state.resources.set(key, resource);
     state.resourceOrder.push(resource);
@@ -637,6 +665,7 @@ export const queueVirtualTextureGpuUpload = (
     if (mutable.pendingUploads[index]?.pageKey === upload.pageKey) return false;
   }
   mutable.pendingUploads.push(upload);
+  state.uploadQueuedAt.set(upload, nowMs());
   if (allocation !== undefined) state.wakeRequested = true;
   return true;
 };
@@ -840,6 +869,7 @@ const publish = (
   upload: VirtualTextureGpuPendingUpload,
   evictedPageKey?: string,
 ): void => {
+  if (kind === "discarded") state.uploadQueuedAt.delete(upload);
   state.outcomes.push({
     ...(evictedPageKey === undefined ? {} : { evictedPageKey }),
     key: resource.key,
@@ -864,6 +894,23 @@ const acknowledgeInFlightUpload = (state: State, resource: MutableResource): voi
   publish(state, resource, "completed", upload, assignment.evicted?.pageKey);
   resource.uploadedPageBytes += virtualTextureDecodedPageBytes(resource.options.manifest);
   resource.uploadedPages += 1;
+  const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+  resource.atlasUploadChunkSamples += 1;
+  resource.atlasUploadBytesPerChunkMax = Math.max(resource.atlasUploadBytesPerChunkMax, uploadBytes);
+  resource.atlasUploadBytesPerChunkMin = resource.atlasUploadBytesPerChunkMin === 0
+    ? uploadBytes
+    : Math.min(resource.atlasUploadBytesPerChunkMin, uploadBytes);
+  const queuedAt = state.uploadQueuedAt.get(upload);
+  state.uploadQueuedAt.delete(upload);
+  if (queuedAt !== undefined) {
+    const waitMs = Math.max(0, nowMs() - queuedAt);
+    const mip = upload.page.mip;
+    resource.uploadQueueWaitMs += waitMs;
+    resource.uploadQueueWaitMaxMs = Math.max(resource.uploadQueueWaitMaxMs, waitMs);
+    resource.uploadQueueWaitSamples += 1;
+    resource.uploadQueueWaitMsByMip[mip] = (resource.uploadQueueWaitMsByMip[mip] ?? 0) + waitMs;
+    resource.uploadQueueWaitSamplesByMip[mip] = (resource.uploadQueueWaitSamplesByMip[mip] ?? 0) + 1;
+  }
   state.uploadsThisFrame += 1;
   delete resource.inFlightUpload;
   compactPending(resource);
@@ -1210,6 +1257,14 @@ export const virtualTextureGpuResourceSnapshot = (
     sourceGeneration: mutable.options.sourceGeneration,
     uploadedPageBytes: mutable.uploadedPageBytes,
     uploadedPages: mutable.uploadedPages,
+    atlasUploadBytesPerChunkMax: mutable.atlasUploadBytesPerChunkMax,
+    atlasUploadBytesPerChunkMin: mutable.atlasUploadBytesPerChunkMin,
+    atlasUploadChunkSamples: mutable.atlasUploadChunkSamples,
+    uploadQueueWaitMaxMs: mutable.uploadQueueWaitMaxMs,
+    uploadQueueWaitTotalMs: mutable.uploadQueueWaitMs,
+    uploadQueueWaitTotalMsByMip: [...mutable.uploadQueueWaitMsByMip],
+    uploadQueueWaitSamplesByMip: [...mutable.uploadQueueWaitSamplesByMip],
+    uploadQueueWaitSamples: mutable.uploadQueueWaitSamples,
   };
 };
 

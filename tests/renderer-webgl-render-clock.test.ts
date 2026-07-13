@@ -41,13 +41,13 @@ describe("WebGL render-clock ownership", () => {
     scheduled.shift()?.(16);
     expect(root.frame).toBe(2);
 
-    const release = root.acquireExternalRenderClock();
+    const clock = root.acquireExternalRenderClock();
     root.invalidate();
     expect(scheduled).toHaveLength(0);
     root.flushInvalidated();
     expect(root.frame).toBe(3);
 
-    release();
+    clock.release();
     expect(scheduled).toHaveLength(0);
     root.dispose();
   });
@@ -56,21 +56,23 @@ describe("WebGL render-clock ownership", () => {
     const scheduled = scheduledFrames();
     const root = createWebGlRoot(createWebGlTestCanvas(createStrictWebGl2Context().gl));
     root.render(emptyScene());
-    const releaseFirst = root.acquireExternalRenderClock();
-    const releaseSecond = root.acquireExternalRenderClock();
+    const firstClock = root.acquireExternalRenderClock();
+    const secondClock = root.acquireExternalRenderClock();
 
     root.invalidate();
-    root.flushInvalidatedFromExternalClock();
+    firstClock.flushInvalidated();
     expect(root.frame).toBe(1);
     expect(scheduled).toHaveLength(0);
 
-    releaseFirst();
-    root.flushInvalidatedFromExternalClock();
+    firstClock.release();
+    firstClock.flushInvalidated();
+    expect(root.frame).toBe(1);
+    secondClock.flushInvalidated();
     expect(root.frame).toBe(2);
     expect(scheduled).toHaveLength(0);
 
     root.invalidate();
-    releaseSecond();
+    secondClock.release();
     expect(scheduled).toHaveLength(1);
     scheduled.shift()?.(16);
     expect(root.frame).toBe(3);
@@ -82,24 +84,24 @@ describe("WebGL render-clock ownership", () => {
     const canvas = createWebGlTestCanvas(createStrictWebGl2Context().gl);
     const root = createWebGlRoot(canvas);
     root.render(emptyScene());
-    const release = root.acquireExternalRenderClock();
+    const clock = root.acquireExternalRenderClock();
     root.invalidate();
 
     canvas.dispatchContextEvent("webglcontextlost");
     root.flushInvalidated();
-    root.flushInvalidatedFromExternalClock();
+    clock.flushInvalidated();
     expect(root.frame).toBe(1);
 
     canvas.dispatchContextEvent("webglcontextrestored");
     expect(scheduled).toHaveLength(0);
-    root.flushInvalidatedFromExternalClock();
+    clock.flushInvalidated();
     expect(root.frame).toBe(2);
-    release();
+    clock.release();
     expect(scheduled).toHaveLength(0);
 
     root.dispose();
     root.flushInvalidated();
-    root.flushInvalidatedFromExternalClock();
+    clock.flushInvalidated();
     expect(root.frame).toBe(2);
     expect(() => root.acquireExternalRenderClock()).toThrow("disposed Royal renderer root");
   });

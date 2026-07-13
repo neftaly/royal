@@ -105,13 +105,7 @@ export type RoyalRendererFrameClock = {
 
 export const acquireExternalRenderClockForRoyalRoot = (
   root: RoyalRendererRoot,
-): RoyalRendererFrameClock => {
-  const capabilities = royalRendererCapabilitiesFor(root);
-  return {
-    flushInvalidated: () => capabilities.flushInvalidatedFromExternalClock(),
-    release: capabilities.acquireExternalRenderClock(),
-  };
-};
+): RoyalRendererFrameClock => royalRendererCapabilitiesFor(root).acquireExternalRenderClock();
 
 /**
  * Creates an imperative renderer root. `options` is fixed for the lifetime of
@@ -183,7 +177,6 @@ export const createRendererRoot = (
       const { createWebXrSessionRenderer } = await import("@royal/renderer-webgl/webxr");
       return createWebXrSessionRenderer(root, session, xrOptions);
     },
-    flushInvalidatedFromExternalClock: () => root.flushInvalidatedFromExternalClock(),
   });
 
   return royalRoot;

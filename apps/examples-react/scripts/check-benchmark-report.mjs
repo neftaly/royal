@@ -357,6 +357,17 @@ const checkCameraDrag = (route, routeLabel, cameraDragEnabled) => {
   if (!cameraDragEnabled && route.cameraDrag === undefined) return;
   if (!requireObject(route.cameraDrag, `${routeLabel}.cameraDrag`)) return;
   checkFrameStats(route.cameraDrag.frameStats, `${routeLabel}.cameraDrag.frameStats`);
+  if (route.cameraDrag.frameStats?.cameraInput !== undefined
+    && requireObject(route.cameraDrag.frameStats.cameraInput, `${routeLabel}.cameraDrag.frameStats.cameraInput`)
+    && requireObject(
+      route.cameraDrag.frameStats.cameraInput.handlerDurationMs,
+      `${routeLabel}.cameraDrag.frameStats.cameraInput.handlerDurationMs`,
+    )) {
+    checkFrameStats(
+      route.cameraDrag.frameStats.cameraInput.handlerDurationMs,
+      `${routeLabel}.cameraDrag.frameStats.cameraInput.handlerDurationMs`,
+    );
+  }
   requireGlCounters(route.cameraDrag.gl, `${routeLabel}.cameraDrag.gl`);
   if (route.profile?.kind === 'gltf-instancing') {
     checkGltfSampleEvidence(
@@ -406,6 +417,16 @@ const checkVtFrameSample = (value, label, { generatedVt }) => {
   if (requireObject(value.gl, `${label}.gl`)) {
     requirePositiveNumber(value.gl.drawCalls, `${label}.gl.drawCalls`);
   }
+  if (value.cameraInput !== undefined
+    && requireObject(value.cameraInput, `${label}.cameraInput`)
+    && requireObject(value.cameraInput.handlerDurationMs, `${label}.cameraInput.handlerDurationMs`)) {
+    for (const key of ['averageMs', 'maxMs', 'minMs', 'p50Ms', 'p95Ms', 'p99Ms', 'sampleCount']) {
+      requireNonNegativeNumber(
+        value.cameraInput.handlerDurationMs[key],
+        `${label}.cameraInput.handlerDurationMs.${key}`,
+      );
+    }
+  }
   if (generatedVt && requireObject(value.virtualTexturing, `${label}.virtualTexturing`)) {
     if (requireObject(value.virtualTexturing.after, `${label}.virtualTexturing.after`)) {
       requirePositiveNumber(value.virtualTexturing.after.uploadedPages, `${label}.virtualTexturing.after.uploadedPages`);
@@ -446,6 +467,26 @@ const checkGltfLoadReport = (report) => {
     requirePositiveNumber(metrics.textures.allocationCalls, 'report.metrics.textures.allocationCalls');
     requirePositiveNumber(metrics.textures.uploadBytesRough, 'report.metrics.textures.uploadBytesRough');
     requirePositiveNumber(metrics.textures.uploadCalls, 'report.metrics.textures.uploadCalls');
+    if (metrics.textures.bytesPerChunk !== null
+      && requireObject(metrics.textures.bytesPerChunk, 'report.metrics.textures.bytesPerChunk')) {
+      for (const key of ['averageBytes', 'maxBytes', 'minBytes', 'p50Bytes', 'p95Bytes', 'p99Bytes', 'sampleCount']) {
+        requireNonNegativeNumber(
+          metrics.textures.bytesPerChunk[key],
+          `report.metrics.textures.bytesPerChunk.${key}`,
+        );
+      }
+    }
+  }
+  if (metrics.renderFrame !== null
+    && requireObject(metrics.renderFrame, 'report.metrics.renderFrame')) {
+    requireBoolean(metrics.renderFrame.supported, 'report.metrics.renderFrame.supported');
+    requireNonNegativeNumber(metrics.renderFrame.disjointSamples, 'report.metrics.renderFrame.disjointSamples');
+    requireNonNegativeNumber(metrics.renderFrame.pendingSamples, 'report.metrics.renderFrame.pendingSamples');
+    if (requireObject(metrics.renderFrame.gpuMs, 'report.metrics.renderFrame.gpuMs')) {
+      for (const key of ['averageMs', 'maxMs', 'minMs', 'p50Ms', 'p95Ms', 'p99Ms', 'sampleCount']) {
+        requireNonNegativeNumber(metrics.renderFrame.gpuMs[key], `report.metrics.renderFrame.gpuMs.${key}`);
+      }
+    }
   }
 
   if (requireObject(metrics.gltfLoadSummary, 'report.metrics.gltfLoadSummary')) {

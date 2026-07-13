@@ -265,6 +265,12 @@ export class GltfImageDemandCoordinator {
     this.#bindMaterialRows(asset, input.materials);
     this.#assets.set(input.key, asset);
     this.#registrationClaims.delete(input.key);
+    // Lighting faces define the environment for every material and must be
+    // available independently of visibility. Ordinary material images remain
+    // dormant until demandMaterial publishes a selected material.
+    for (const row of asset.rows.values()) {
+      if (row.iblSpecular !== undefined) this.#demand(row);
+    }
   }
 
   demandAll(assetKey: string): void {
@@ -275,6 +281,23 @@ export class GltfImageDemandCoordinator {
       asset.load.imagesSettledAt = nowMs();
       asset.recipeOwnership.releaseRequested = true;
       this.#releaseRecipesIfUnused(asset.recipeOwnership);
+    }
+  }
+
+  /** Demands only the ordinary images referenced by one selected material. */
+  demandMaterial(assetKey: string, material: LoadedGltfMaterial): void {
+    const asset = this.#assets.get(assetKey);
+    if (asset === undefined) return;
+    const demand = (slot: LoadedGltfMaterialTextureSlot | undefined): void => {
+      if (slot?.imageUri !== undefined) this.#demand(asset.rows.get(slot.imageUri));
+    };
+    demand(material.baseColorTexture);
+    demand(material.emissiveTexture);
+    demand(material.metallicRoughnessTexture);
+    demand(material.normalTexture);
+    demand(material.occlusionTexture);
+    for (const texture of GLTF_MATERIAL_EXTENSION_TEXTURES) {
+      demand(material.extensionTextures?.[texture.key]);
     }
   }
 
@@ -492,7 +515,8 @@ export class GltfImageDemandCoordinator {
     this.#releaseRowSource(row);
   }
 
-  #demand(row: Row): void {
+  #demand(row: Row | undefined): void {
+    if (row === undefined) return;
     if (row.status !== "idle") return;
     const asset = row.asset;
     const recipe = row.recipe;

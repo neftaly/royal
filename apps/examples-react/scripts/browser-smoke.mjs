@@ -22,7 +22,6 @@ const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_SMOKE_PORT ?? 4573);
 const debugPort = Number(process.env.EXAMPLES_SMOKE_DEBUG_PORT ?? 4574);
 const baseUrl = `http://${host}:${previewPort}`;
-const gpuMode = process.env.EXAMPLES_SMOKE_GPU?.trim() || 'swiftshader';
 const routeQuery = process.env.EXAMPLES_SMOKE_QUERY?.trim() ?? '';
 const routeFilter = process.env.EXAMPLES_SMOKE_ROUTE?.trim() ?? '';
 const envNumber = (name, fallback) => {
@@ -34,10 +33,6 @@ const envNumber = (name, fallback) => {
 };
 const routeReadyTimeoutMs = envNumber('EXAMPLES_ROUTE_READY_TIMEOUT_MS', 20_000);
 const contextLossSmoke = process.env.EXAMPLES_SMOKE_CONTEXT_LOSS === '1';
-
-if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
-  throw new Error(`EXAMPLES_SMOKE_GPU must be "swiftshader" or "hardware-headless", received ${JSON.stringify(gpuMode)}`);
-}
 
 const gltfLabManifest = JSON.parse(readFileSync(
   new URL('../src/examples/gltf-lab-manifest.json', import.meta.url),
@@ -517,7 +512,7 @@ const assertRoute = (expected, state) => {
       if (interaction.reactivation?.lifecycleState !== 'available' || interaction.reactivation?.lifecycleError !== null) {
         failures.push('virtual texture cache reactivation did not preserve an available error-free renderer');
       }
-      // A slow SwiftShader runner can reach the deadline immediately after the
+      // A slow or heavily loaded runner can reach the deadline immediately after the
       // final cached page-table publication, before eight redundant stable
       // samples accrue. The semantic convergence boundary is stronger here:
       // fine pages are active and no decode/request work remains.
@@ -1134,14 +1129,10 @@ const main = async () => {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     '--use-gl=angle',
-    ...(gpuMode === 'swiftshader'
-      ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']
-      : [
-        '--use-angle=vulkan',
-        '--ignore-gpu-blocklist',
-        '--disable-software-rasterizer',
-        '--use-gpu-in-tests',
-      ]),
+    '--use-angle=vulkan',
+    '--ignore-gpu-blocklist',
+    '--disable-software-rasterizer',
+    '--use-gpu-in-tests',
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     'about:blank',
@@ -1175,8 +1166,7 @@ const main = async () => {
         return debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
       })()
     `);
-    if (gpuMode === 'hardware-headless' &&
-      (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu))) {
+    if (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
       throw new Error(`Hardware GPU smoke resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
     }
     console.log(`gpu ${gpu ?? 'renderer unavailable'}`);

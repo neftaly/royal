@@ -461,6 +461,7 @@ import {
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import type {
   NormalizedWebGlRootOptions,
+  WebGlExternalRenderClock,
   WebGlContextLifecycle,
   WebGlContextSnapshot,
   WebGlGltfInstancingSnapshot,
@@ -1120,7 +1121,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  #externalRenderClocks = 0;
+  readonly #externalRenderClocks = new Set<object>();
   #frame = 0;
   #gltfRenderOrdinal = 0;
   #gltfStateInstanceKey = 1;
@@ -1546,20 +1547,31 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return this.#options;
   }
 
-  acquireExternalRenderClock(): () => void {
+  acquireExternalRenderClock(): WebGlExternalRenderClock {
     if (this.#disposed) {
       throw new Error("Cannot acquire a render clock from a disposed Royal renderer root");
     }
 
-    this.#externalRenderClocks += 1;
+    const token = {};
+    this.#externalRenderClocks.add(token);
     this.#scheduledRenderGeneration = 0;
     let released = false;
 
-    return () => {
-      if (released) return;
-      released = true;
-      this.#externalRenderClocks = Math.max(0, this.#externalRenderClocks - 1);
-      if (this.#externalRenderClocks === 0) this.#scheduleRender();
+    return {
+      flushInvalidated: () => {
+        if (
+          released
+          || !this.#externalRenderClocks.has(token)
+          || this.#externalRenderClocks.size !== 1
+        ) return;
+        this.flushInvalidated();
+      },
+      release: () => {
+        if (released) return;
+        released = true;
+        this.#externalRenderClocks.delete(token);
+        if (this.#externalRenderClocks.size === 0) this.#scheduleRender();
+      },
     };
   }
 
@@ -1848,17 +1860,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderLatestScene();
   }
 
-  flushInvalidatedFromExternalClock(): void {
-    if (
-      this.#disposed
-      || this.#context.lifecycle !== "active"
-      || !this.#renderDirty
-      || this.#externalRenderClocks !== 1
-      || this.#latestScene === undefined
-    ) return;
-    this.#renderLatestScene();
-  }
-
   pick(input: PickInput): PickResult | undefined {
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
@@ -2004,6 +2005,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       firstFailure = captureFirstFailure(firstFailure, operation);
     };
     this.#renderFailureObservers.clear();
+    this.#externalRenderClocks.clear();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
     teardown(() => this.#gltfImages.dispose());
@@ -2603,7 +2605,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#releaseGltfImageAssetForReplacement(state.key);
         return;
       }
-      this.#gltfImages.demandAll(state.key);
       this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
     } catch (error) {
       recipeLease?.release();
@@ -2987,6 +2988,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         topology.resources,
         catalog.materialIds[packetIndex]!,
       );
+      this.#gltfImages.demandMaterial(state.key, loadedMaterial);
       const prepared = this.#preparedGltfPrimitiveMaterial(state, primitive, loadedMaterial);
       const geometry = this.#geometryResource(geometryId);
       const localDeterminant = readPacketLocalModelInto(
@@ -6266,7 +6268,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#disposed ||
       this.#context.lifecycle !== "active" ||
       !this.#renderDirty ||
-      this.#externalRenderClocks > 0 ||
+      this.#externalRenderClocks.size > 0 ||
       this.#scheduledRenderGeneration !== 0 ||
       this.#latestScene === undefined
     ) return;
@@ -6281,7 +6283,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#context.generation !== contextGeneration ||
         this.#context.lifecycle !== "active" ||
         !this.#renderDirty ||
-        this.#externalRenderClocks > 0
+        this.#externalRenderClocks.size > 0
       ) return;
       this.#scheduledRenderGeneration = 0;
       if (!this.#disposed && this.#context.lifecycle === "active" && this.#latestScene !== undefined) {
@@ -6460,6 +6462,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
     let uploadedPageBytes = 0;
     let uploadedPages = 0;
+    let textureUploadBytesPerChunkMax = 0;
+    let textureUploadBytesPerChunkMin = 0;
+    let textureUploadChunkSamples = 0;
+    let uploadQueueWaitMaxMs = 0;
+    let uploadQueueWaitTotalMs = 0;
+    let uploadQueueWaitSamples = 0;
+    const uploadQueueWaitTotalMsByMip: number[] = [];
+    const uploadQueueWaitSamplesByMip: number[] = [];
 
     for (const state of this.#virtualTextures.values()) {
       const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
@@ -6500,6 +6510,27 @@ class WebGlRootImpl implements InternalWebGlRoot {
       unsupportedDraws += state.stats.unsupportedDraws;
       uploadedPageBytes += gpu?.uploadedPageBytes ?? 0;
       uploadedPages += gpu?.uploadedPages ?? 0;
+      if (gpu !== undefined) {
+        textureUploadBytesPerChunkMax = Math.max(
+          textureUploadBytesPerChunkMax,
+          gpu.atlasUploadBytesPerChunkMax,
+        );
+        if (gpu.atlasUploadBytesPerChunkMin > 0) {
+          textureUploadBytesPerChunkMin = textureUploadBytesPerChunkMin === 0
+            ? gpu.atlasUploadBytesPerChunkMin
+            : Math.min(textureUploadBytesPerChunkMin, gpu.atlasUploadBytesPerChunkMin);
+        }
+        textureUploadChunkSamples += gpu.atlasUploadChunkSamples;
+        uploadQueueWaitMaxMs = Math.max(uploadQueueWaitMaxMs, gpu.uploadQueueWaitMaxMs);
+        uploadQueueWaitTotalMs += gpu.uploadQueueWaitTotalMs;
+        uploadQueueWaitSamples += gpu.uploadQueueWaitSamples;
+        for (let mip = 0; mip < gpu.uploadQueueWaitTotalMsByMip.length; mip += 1) {
+          uploadQueueWaitTotalMsByMip[mip] = (uploadQueueWaitTotalMsByMip[mip] ?? 0)
+            + (gpu.uploadQueueWaitTotalMsByMip[mip] ?? 0);
+          uploadQueueWaitSamplesByMip[mip] = (uploadQueueWaitSamplesByMip[mip] ?? 0)
+            + (gpu.uploadQueueWaitSamplesByMip[mip] ?? 0);
+        }
+      }
     }
 
     const gpuArena = virtualTextureGpuArenaSnapshot(this.#virtualTextureGpu);
@@ -6539,6 +6570,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
       unsupportedDraws,
       uploadedPageBytes,
       uploadedPages,
+      textureUploadBytesPerChunkMax,
+      textureUploadBytesPerChunkMin,
+      textureUploadChunkSamples,
+      uploadQueueWaitAverageMs: uploadQueueWaitSamples === 0
+        ? 0
+        : uploadQueueWaitTotalMs / uploadQueueWaitSamples,
+      uploadQueueWaitMaxMs,
+      uploadQueueWaitMsByMip: uploadQueueWaitTotalMsByMip.map((total, mip) =>
+        total / (uploadQueueWaitSamplesByMip[mip] ?? 1)),
+      uploadQueueWaitSamples,
     };
   }
 

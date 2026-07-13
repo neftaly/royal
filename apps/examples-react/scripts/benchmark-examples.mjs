@@ -25,7 +25,7 @@ const debugPort = Number(process.env.EXAMPLES_BENCH_DEBUG_PORT ?? 4674);
 const debugHost = process.env.EXAMPLES_BENCH_DEBUG_HOST?.trim() || host;
 const baseUrl = process.env.EXAMPLES_BENCH_BASE_URL?.trim() || `http://${host}:${previewPort}`;
 const browserMode = process.env.EXAMPLES_BENCH_BROWSER?.trim() || 'chromium';
-const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'swiftshader';
+const gpuMode = process.env.EXAMPLES_BENCH_GPU?.trim() || 'hardware-headless';
 const benchmarkMode = process.env.EXAMPLES_BENCH_MODE?.trim() || 'quick';
 const routeFilter = process.env.EXAMPLES_BENCH_ROUTE?.trim() ?? '';
 const outputPath = process.env.EXAMPLES_BENCH_OUTPUT?.trim() ?? '';
@@ -90,9 +90,9 @@ if (!new Set(['chromium', 'cdp']).has(browserMode)) {
   throw new Error(`EXAMPLES_BENCH_BROWSER must be "chromium" or "cdp", received ${JSON.stringify(browserMode)}`);
 }
 
-if (!new Set(['swiftshader', 'hardware-headed', 'hardware-headless']).has(gpuMode)) {
+if (!new Set(['hardware-headed', 'hardware-headless']).has(gpuMode)) {
   throw new Error(
-    `EXAMPLES_BENCH_GPU must be "swiftshader", "hardware-headed", or "hardware-headless", received ${JSON.stringify(gpuMode)}`,
+    `EXAMPLES_BENCH_GPU must be "hardware-headed" or "hardware-headless", received ${JSON.stringify(gpuMode)}`,
   );
 }
 
@@ -282,7 +282,6 @@ const readWebGlGpu = async (session) => evaluate(session, `
 
 const assertRequestedGpu = (gpu) => {
   if (gpu === null) throw new Error('Examples benchmark could not create a WebGL2 context');
-  if (!gpuMode.startsWith('hardware-')) return;
   if (gpu.renderer === null) {
     throw new Error('Hardware GPU benchmark requires WEBGL_debug_renderer_info');
   }
@@ -756,6 +755,7 @@ const installBenchmarkHooks = async (session) => {
       pointerType: 'mouse',
     });
     const drawDeltas = [];
+    const handlerDeltas = [];
     const rafDeltas = [];
     const dispatchPointer = (type) => {
       canvas.dispatchEvent(new PointerEvent(type, eventOptions(type)));
@@ -768,6 +768,7 @@ const installBenchmarkHooks = async (session) => {
         const rafPromise = new Promise((resolve) => requestAnimationFrame((time) => resolve(time)));
         const eventAt = performance.now();
         dispatchPointer('pointermove');
+        handlerDeltas.push(performance.now() - eventAt);
         const [drawAt, rafAt] = await Promise.all([drawPromise, rafPromise]);
         if (typeof drawAt === 'number') drawDeltas.push(drawAt - eventAt);
         if (typeof rafAt === 'number') rafDeltas.push(rafAt - eventAt);
@@ -781,6 +782,9 @@ const installBenchmarkHooks = async (session) => {
       ...draw,
       measurement: 'synthetic-camera-drag-pointermove-to-next-webgl-draw',
       note: 'Draw latency is measured at the next WebGL draw call after each synthetic drag move; RAF latency is reported separately.',
+      cameraInput: {
+        handlerDurationMs: statsFromDeltas(handlerDeltas, requestedSampleCount, sampleTimeoutMs),
+      },
       raf: statsFromDeltas(rafDeltas, requestedSampleCount, sampleTimeoutMs),
       ...(draw.failed ? { reason: 'draw-timeout' } : {}),
     };
@@ -1307,6 +1311,7 @@ const routeSummary = (route) => {
   const uniformCallsPerFrame = route.gl.uniformCalls / sampledFrameCount;
   const cameraDragSampleCount = route.cameraDrag?.frameStats?.sampleCount ?? 0;
   const cameraDragFrameStats = route.cameraDrag?.frameStats;
+  const cameraInputHandlerStats = cameraDragFrameStats?.cameraInput?.handlerDurationMs;
   const cameraDragDrawCallsPerFrame = cameraDragSampleCount <= 0 || route.cameraDrag === undefined
     ? undefined
     : route.cameraDrag.gl.drawCalls / cameraDragSampleCount;
@@ -1430,6 +1435,12 @@ const routeSummary = (route) => {
           : {}),
         cameraDragDrawP95Ms: round(cameraDragFrameStats.p95Ms),
         cameraDragDrawP99Ms: round(cameraDragFrameStats.p99Ms),
+        ...(typeof cameraInputHandlerStats?.p95Ms === 'number'
+          ? {
+              cameraInputHandlerMaxMs: round(cameraInputHandlerStats.maxMs),
+              cameraInputHandlerP95Ms: round(cameraInputHandlerStats.p95Ms),
+            }
+          : {}),
         ...(typeof cameraDragFrameStats.samplesMissing === 'number' && cameraDragFrameStats.samplesMissing > 0
           ? { cameraDragSamplesMissing: cameraDragFrameStats.samplesMissing }
           : {}),
@@ -1578,9 +1589,7 @@ const main = async () => {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     ...(gpuMode === 'hardware-headed' ? [] : ['--headless=new']),
-    ...(gpuMode === 'swiftshader'
-      ? ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader']
-      : gpuMode === 'hardware-headed'
+    ...(gpuMode === 'hardware-headed'
         ? [
           '--ozone-platform=x11',
           '--use-gl=angle',
@@ -1669,6 +1678,9 @@ const main = async () => {
         ...(hasCameraDragStats
           ? [
             `dragDrawP95=${cameraDragFrameStats.p95Ms.toFixed(1)}ms`,
+            ...(typeof cameraDragFrameStats.cameraInput?.handlerDurationMs?.p95Ms === 'number'
+              ? [`dragHandlerP95=${cameraDragFrameStats.cameraInput.handlerDurationMs.p95Ms.toFixed(2)}ms`]
+              : []),
             ...(typeof cameraDragFrameStats.raf?.p95Ms === 'number'
               ? [`dragRafP95=${cameraDragFrameStats.raf.p95Ms.toFixed(1)}ms`]
               : []),

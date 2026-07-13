@@ -18,7 +18,6 @@ const host = '127.0.0.1';
 const previewPort = Number(process.env.EXAMPLES_GLTF_LOAD_PORT ?? 4773);
 const debugPort = Number(process.env.EXAMPLES_GLTF_LOAD_DEBUG_PORT ?? 4774);
 const baseUrl = process.env.EXAMPLES_GLTF_LOAD_BASE_URL?.trim() || `http://${host}:${previewPort}`;
-const gpuMode = process.env.EXAMPLES_GLTF_LOAD_GPU?.trim() || 'swiftshader';
 const routePathInput = process.env.EXAMPLES_GLTF_LOAD_ROUTE?.trim() || '/gltf-helmet';
 const routePath = routePathInput.startsWith('/') ? routePathInput : `/${routePathInput}`;
 const outputPath = process.env.EXAMPLES_GLTF_LOAD_OUTPUT?.trim() ?? '';
@@ -41,10 +40,6 @@ const vtFrameSampleTimeoutMs = envNumber('EXAMPLES_GLTF_LOAD_VT_FRAME_TIMEOUT_MS
 const vtCameraDragEnabled = process.env.EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG === '1';
 const vtCameraDragStepPixels = envNumber('EXAMPLES_GLTF_LOAD_VT_CAMERA_DRAG_STEP_PX', 7);
 const glErrorDebugEnabled = process.env.EXAMPLES_GLTF_LOAD_GL_ERROR_DEBUG === '1';
-
-if (!new Set(['swiftshader', 'hardware-headless']).has(gpuMode)) {
-  throw new Error(`EXAMPLES_GLTF_LOAD_GPU must be "swiftshader" or "hardware-headless", received ${JSON.stringify(gpuMode)}`);
-}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -96,6 +91,13 @@ const installBenchmarkHooks = async (session) => {
   let fullyLoadedState = null;
   const glErrors = [];
   const slowGlCalls = [];
+  const textureUploadByteChunks = [];
+  let gpuTimerContext = null;
+  let gpuTimerExtension = null;
+  let gpuTimerSupported = false;
+  let gpuTimerDisjointSamples = 0;
+  const gpuTimerPending = [];
+  const gpuFrameDurationMs = [];
   const loadFrameDeltas = [];
   let loadFramePreviousAt = performance.now();
   let loadFrameRequest = null;
@@ -191,8 +193,51 @@ const installBenchmarkHooks = async (session) => {
     const payload = args.find((value) => value?.byteLength !== undefined);
     return typeof payload?.byteLength === 'number' ? payload.byteLength : 0;
   };
-  const recordDraw = () => {
+  const recordDraw = (gl) => {
+    if (gpuTimerContext === null && typeof gl?.createQuery === 'function') {
+      gpuTimerContext = gl;
+      try {
+        gpuTimerExtension = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+        gpuTimerSupported = gpuTimerExtension !== null;
+      } catch {
+        gpuTimerExtension = null;
+      }
+    }
     if (firstDrawAt === null) firstDrawAt = performance.now();
+  };
+  const pollGpuTimers = () => {
+    const gl = gpuTimerContext;
+    const extension = gpuTimerExtension;
+    if (gl === null || extension === null) return;
+    let write = 0;
+    for (const sample of gpuTimerPending) {
+      let available = false;
+      try {
+        available = gl.getQueryParameter(sample.query, gl.QUERY_RESULT_AVAILABLE) === true;
+      } catch {
+        available = true;
+      }
+      if (!available) {
+        gpuTimerPending[write++] = sample;
+        continue;
+      }
+      try {
+        const disjoint = gl.getParameter(extension.GPU_DISJOINT_EXT) === true;
+        if (disjoint) gpuTimerDisjointSamples += 1;
+        else if (sample.drew) {
+          const nanoseconds = Number(gl.getQueryParameter(sample.query, gl.QUERY_RESULT));
+          if (Number.isFinite(nanoseconds) && nanoseconds >= 0) {
+            gpuFrameDurationMs.push(nanoseconds / 1_000_000);
+          }
+        }
+      } catch {
+        // A lost context or invalidated query makes this sample unusable but
+        // must not perturb the page being measured.
+      } finally {
+        try { gl.deleteQuery(sample.query); } catch {}
+      }
+    }
+    gpuTimerPending.length = write;
   };
   const bytesForIndexType = (gl, type) => {
     if (type === gl.UNSIGNED_BYTE) return 1;
@@ -225,6 +270,10 @@ const installBenchmarkHooks = async (session) => {
   };
   const recordTextureUpload = () => {
     if (firstTextureUploadAt === null) firstTextureUploadAt = performance.now();
+  };
+  const recordTextureUploadChunk = (bytes) => {
+    const value = Number(bytes);
+    if (Number.isFinite(value) && value >= 0) textureUploadByteChunks.push(value);
   };
   const recordSlowGlCall = (name, args, durationMs) => {
     if (config.glCallTimingEnabled !== true || durationMs < 1) return;
@@ -259,21 +308,25 @@ const installBenchmarkHooks = async (session) => {
     patch(prototype, 'bindTexture', () => { counters.bindTexture += 1; });
     patch(prototype, 'createTexture', () => { counters.createTexture += 1; });
     patch(prototype, 'deleteTexture', () => { counters.deleteTexture += 1; });
-    patch(prototype, 'drawArrays', () => { counters.drawArrays += 1; recordDraw(); });
-    patch(prototype, 'drawElements', (args, gl) => { counters.drawElements += 1; recordDraw(); recordGlError(gl, 'drawElements', args); });
-    patch(prototype, 'drawArraysInstanced', () => { counters.drawArraysInstanced += 1; recordDraw(); });
-    patch(prototype, 'drawElementsInstanced', (args, gl) => { counters.drawElementsInstanced += 1; recordDraw(); recordGlError(gl, 'drawElementsInstanced', args); });
+    patch(prototype, 'drawArrays', (_args, gl) => { counters.drawArrays += 1; recordDraw(gl); });
+    patch(prototype, 'drawElements', (args, gl) => { counters.drawElements += 1; recordDraw(gl); recordGlError(gl, 'drawElements', args); });
+    patch(prototype, 'drawArraysInstanced', (_args, gl) => { counters.drawArraysInstanced += 1; recordDraw(gl); });
+    patch(prototype, 'drawElementsInstanced', (args, gl) => { counters.drawElementsInstanced += 1; recordDraw(gl); recordGlError(gl, 'drawElementsInstanced', args); });
     patch(prototype, 'texImage2D', (args) => {
+      const bytes = texImageBytes(args);
       counters.texImage2D += 1;
       counters.textureAllocationCalls += 1;
       counters.textureUploadCalls += 1;
-      counters.textureUploadBytesRough += texImageBytes(args);
+      counters.textureUploadBytesRough += bytes;
+      recordTextureUploadChunk(bytes);
       recordTextureUpload();
     });
     patch(prototype, 'texSubImage2D', (args) => {
+      const bytes = texSubImageBytes(args);
       counters.texSubImage2D += 1;
       counters.textureUploadCalls += 1;
-      counters.textureUploadBytesRough += texSubImageBytes(args);
+      counters.textureUploadBytesRough += bytes;
+      recordTextureUploadChunk(bytes);
       recordTextureUpload();
     });
     patch(prototype, 'texStorage2D', () => {
@@ -281,16 +334,20 @@ const installBenchmarkHooks = async (session) => {
       counters.textureAllocationCalls += 1;
     });
     patch(prototype, 'compressedTexImage2D', (args) => {
+      const bytes = compressedBytes(args);
       counters.compressedTexImage2D += 1;
       counters.textureAllocationCalls += 1;
       counters.textureUploadCalls += 1;
-      counters.textureUploadBytesRough += compressedBytes(args);
+      counters.textureUploadBytesRough += bytes;
+      recordTextureUploadChunk(bytes);
       recordTextureUpload();
     });
     patch(prototype, 'compressedTexSubImage2D', (args) => {
+      const bytes = compressedBytes(args);
       counters.compressedTexSubImage2D += 1;
       counters.textureUploadCalls += 1;
-      counters.textureUploadBytesRough += compressedBytes(args);
+      counters.textureUploadBytesRough += bytes;
+      recordTextureUploadChunk(bytes);
       recordTextureUpload();
     });
     patch(prototype, 'copyTexImage2D', () => {
@@ -307,6 +364,40 @@ const installBenchmarkHooks = async (session) => {
   };
   patchPrototype(globalThis.WebGLRenderingContext?.prototype);
   patchPrototype(globalThis.WebGL2RenderingContext?.prototype);
+  const nativeRequestAnimationFrame = globalThis.requestAnimationFrame.bind(globalThis);
+  globalThis.requestAnimationFrame = (callback) => nativeRequestAnimationFrame((time) => {
+    pollGpuTimers();
+    const gl = gpuTimerContext;
+    const extension = gpuTimerExtension;
+    const drawsBefore = counters.drawArrays + counters.drawElements
+      + counters.drawArraysInstanced + counters.drawElementsInstanced;
+    let query = null;
+    if (gl !== null && extension !== null) {
+      try {
+        query = gl.createQuery();
+        if (query !== null) gl.beginQuery(extension.TIME_ELAPSED_EXT, query);
+      } catch {
+        if (query !== null) {
+          try { gl.deleteQuery(query); } catch {}
+        }
+        query = null;
+      }
+    }
+    try {
+      callback(time);
+    } finally {
+      if (query !== null && gl !== null && extension !== null) {
+        try {
+          gl.endQuery(extension.TIME_ELAPSED_EXT);
+          const drawsAfter = counters.drawArrays + counters.drawElements
+            + counters.drawArraysInstanced + counters.drawElementsInstanced;
+          gpuTimerPending.push({ drew: drawsAfter > drawsBefore, query });
+        } catch {
+          try { gl.deleteQuery(query); } catch {}
+        }
+      }
+    }
+  });
 
   const renderBeforeCanvasReadback = () => {
     // Demand-rendered canvases normally keep preserveDrawingBuffer disabled. A
@@ -590,6 +681,27 @@ const installBenchmarkHooks = async (session) => {
       totalMs: longTaskTotalMs,
     },
   });
+  const gpuTimingSnapshot = () => {
+    pollGpuTimers();
+    return {
+      disjointSamples: gpuTimerDisjointSamples,
+      gpuMs: statsFromDeltas(gpuFrameDurationMs),
+      pendingSamples: gpuTimerPending.length,
+      supported: gpuTimerSupported,
+    };
+  };
+  const textureUploadChunkSnapshot = () => {
+    const stats = statsFromDeltas(textureUploadByteChunks);
+    return {
+      averageBytes: stats.averageMs,
+      maxBytes: stats.maxMs,
+      minBytes: stats.minMs,
+      p50Bytes: stats.p50Ms,
+      p95Bytes: stats.p95Ms,
+      p99Bytes: stats.p99Ms,
+      sampleCount: stats.sampleCount,
+    };
+  };
   const numberDelta = (after, before) => {
     const result = {};
     for (const [key, value] of Object.entries(after ?? {})) {
@@ -605,6 +717,7 @@ const installBenchmarkHooks = async (session) => {
     if (canvas === null) return false;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
+    const startedAt = performance.now();
     canvas.dispatchEvent(new PointerEvent(index === 0 ? 'pointerdown' : 'pointermove', {
       bubbles: true,
       button: 0,
@@ -616,7 +729,7 @@ const installBenchmarkHooks = async (session) => {
       pointerId: 947,
       pointerType: 'mouse',
     }));
-    return true;
+    return performance.now() - startedAt;
   };
   const endCameraDrag = () => {
     if (typeof PointerEvent !== 'function') return;
@@ -641,12 +754,19 @@ const installBenchmarkHooks = async (session) => {
     const beforeRenderer = readRendererSnapshot();
     const beforeCounters = { ...counters, drawCalls: drawCalls() };
     const frames = [];
+    const cameraInputHandlerDurationMs = [];
     let previous = performance.now();
     let dragStarted = false;
     let settledFrame = null;
     try {
       for (let index = 0; index < requestedFrames && performance.now() < deadline; index += 1) {
-        if (cameraDrag === true) dragStarted = dispatchCameraDragMove(index) || dragStarted;
+        if (cameraDrag === true) {
+          const handlerDurationMs = dispatchCameraDragMove(index);
+          if (handlerDurationMs !== false) {
+            dragStarted = true;
+            cameraInputHandlerDurationMs.push(handlerDurationMs);
+          }
+        }
         if (!await rafBeforeDeadline(deadline)) break;
         updateFirstUsable();
         const now = performance.now();
@@ -675,6 +795,9 @@ const installBenchmarkHooks = async (session) => {
 
     return {
       cameraDrag: cameraDrag === true,
+      cameraInput: {
+        handlerDurationMs: statsFromDeltas(cameraInputHandlerDurationMs),
+      },
       timedOut: performance.now() >= deadline,
       requestedFrames,
       settledFrame,
@@ -709,7 +832,11 @@ const installBenchmarkHooks = async (session) => {
         firstUsableSample,
         glErrors: [...glErrors],
         slowGlCalls: [...slowGlCalls],
+        textureUpload: {
+          bytesPerChunk: textureUploadChunkSnapshot(),
+        },
         loadHitches: loadHitchSnapshot(),
+        renderFrame: gpuTimingSnapshot(),
         renderer: readRendererSnapshot(),
         resources: resourceSummary(),
       };
@@ -895,7 +1022,6 @@ const buildReport = ({
       vtFrameSampleCount,
       vtFrameSampleTimeoutMs,
       vtCameraDragEnabled,
-      forceGeneratedVirtualTexturing,
       glErrorDebugEnabled,
     },
     metrics: {
@@ -927,6 +1053,7 @@ const buildReport = ({
       gltfLoadDiagnostics,
       gltfLoadSummary: gltfLoadDiagnosticsSummary(gltfLoadDiagnostics),
       loadHitches: roundedLoadHitches(snapshot.loadHitches),
+      renderFrame: snapshot.renderFrame ?? null,
       textures: {
         allocations: counters.createTexture ?? 0,
         allocationCalls: counters.textureAllocationCalls ?? 0,
@@ -937,6 +1064,7 @@ const buildReport = ({
         texImage2D: counters.texImage2D ?? 0,
         texStorage2D: counters.texStorage2D ?? 0,
         texSubImage2D: counters.texSubImage2D ?? 0,
+        bytesPerChunk: snapshot.textureUpload?.bytesPerChunk ?? null,
       },
       textureResources: {
         imageCount: resourceKinds.image?.count ?? 0,
@@ -1029,14 +1157,10 @@ const main = async () => {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     '--use-gl=angle',
-    ...(gpuMode === 'swiftshader'
-      ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']
-      : [
-        '--use-angle=vulkan',
-        '--ignore-gpu-blocklist',
-        '--disable-software-rasterizer',
-        '--use-gpu-in-tests',
-      ]),
+    '--use-angle=vulkan',
+    '--ignore-gpu-blocklist',
+    '--disable-software-rasterizer',
+    '--use-gpu-in-tests',
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profileDir}`,
     'about:blank',
@@ -1072,8 +1196,7 @@ const main = async () => {
         return gl === null || debug === null ? null : String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
       })()
     `);
-    if (gpuMode === 'hardware-headless' &&
-      (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu))) {
+    if (gpu === null || /SwiftShader|Subzero|llvmpipe|lavapipe|software/iu.test(gpu)) {
       throw new Error(`Hardware GPU glTF load benchmark resolved to software rendering: ${gpu ?? 'unknown renderer'}`);
     }
     console.log(`gpu ${gpu ?? 'renderer unavailable'}`);

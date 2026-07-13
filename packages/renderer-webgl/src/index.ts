@@ -17,6 +17,7 @@ export type {
 } from "./resource-governor";
 export type {
   WebGlContextSnapshot,
+  WebGlExternalRenderClock,
   WebGlFramePlanningSnapshot,
   WebGlResourceLifetimeSnapshot,
   WebGlPickingSnapshot,

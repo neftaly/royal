@@ -507,6 +507,12 @@ describe("virtual texture GPU arena", () => {
     processVirtualTextureGpuUploads(arena, 1);
 
     expect(virtualTextureGpuHasActionableUploads(arena)).toBe(false);
+    expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
+      atlasUploadBytesPerChunkMax: virtualTextureDecodedPageBytes(manifest),
+      atlasUploadBytesPerChunkMin: virtualTextureDecodedPageBytes(manifest),
+      atlasUploadChunkSamples: 1,
+      uploadQueueWaitSamples: 1,
+    });
     expect(virtualTextureGpuOutcome(arena, 0)).toEqual({ key: "a", kind: "completed", upload: pending });
     expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
     expect(consumeVirtualTextureGpuWake(arena)).toBe(false);

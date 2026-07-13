@@ -1,4 +1,4 @@
-import type { RoyalRendererRoot } from "./root";
+import type { RoyalRendererFrameClock, RoyalRendererRoot } from "./root";
 import type {
   XrSession,
   XrSessionRenderer,
@@ -7,12 +7,11 @@ import type {
 
 /** @internal Backend operations used by optional React renderer integrations. */
 export interface RoyalRendererCapabilities {
-  acquireExternalRenderClock(): () => void;
+  acquireExternalRenderClock(): RoyalRendererFrameClock;
   createXrSessionRenderer(
     session: XrSession,
     options?: XrSessionRendererOptions,
   ): Promise<XrSessionRenderer>;
-  flushInvalidatedFromExternalClock(): void;
 }
 
 const rendererCapabilities = new WeakMap<RoyalRendererRoot, RoyalRendererCapabilities>();

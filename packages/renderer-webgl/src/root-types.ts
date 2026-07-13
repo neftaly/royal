@@ -227,6 +227,16 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly unsupportedDraws: number;
   readonly uploadedPageBytes: number;
   readonly uploadedPages: number;
+  /** Largest and smallest completed atlas upload calls, in bytes. */
+  readonly textureUploadBytesPerChunkMax: number;
+  readonly textureUploadBytesPerChunkMin: number;
+  readonly textureUploadChunkSamples: number;
+  /** Queue-to-resident completion timing for decoded pages. */
+  readonly uploadQueueWaitAverageMs: number;
+  readonly uploadQueueWaitMaxMs: number;
+  /** Average wait indexed by virtual mip priority (mip 0 is finest). */
+  readonly uploadQueueWaitMsByMip: readonly number[];
+  readonly uploadQueueWaitSamples: number;
 }
 
 export interface WebGlRenderViewport {
@@ -247,6 +257,14 @@ export interface WebGlRenderViewsOptions {
   readonly views: readonly WebGlRenderView[];
 }
 
+/** Token-bound ownership of one external renderer frame clock. */
+export interface WebGlExternalRenderClock {
+  /** Flushes queued demand only while this token is the sole active external owner. */
+  flushInvalidated(): void;
+  /** Idempotently returns this token's scheduling ownership to the root. */
+  release(): void;
+}
+
 /** Imperative WebGL2 renderer root. */
 export interface WebGlRoot {
   readonly canvas: HTMLCanvasElement;
@@ -257,12 +275,10 @@ export interface WebGlRoot {
   readonly options: NormalizedWebGlRootOptions;
   contextSnapshot(): WebGlContextSnapshot;
   /** Suspends default-framebuffer scheduling until the returned release function runs. */
-  acquireExternalRenderClock(): () => void;
+  acquireExternalRenderClock(): WebGlExternalRenderClock;
   dispose(): void;
   /** Immediately renders queued demand on the caller's current frame, regardless of clock ownership. */
   flushInvalidated(): void;
-  /** Flushes demand only when exactly one external clock owns the renderer. */
-  flushInvalidatedFromExternalClock(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
   /** Observes immutable context lifecycle transitions. Calls back immediately with the current state. */

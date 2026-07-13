@@ -2,6 +2,13 @@
 
 Date: 2026-06-28
 
+Status reviewed: 2026-07-14
+
+This document's build order is historical research context. Renderer packets,
+frustum selection, virtual-texture runtime integration, and the current browser
+benchmark bridge now exist. [The repository TODO](../../TODO.md) is the
+authoritative list of remaining renderer work.
+
 ## Scope
 
 This is a concrete plan for turning the broad rendering wishlist into staged
@@ -47,11 +54,18 @@ deterministic structural pressure values such as visible packet budget, cluster
 overflow, LOD accounting, and highest-mip demand; local timing numbers remain
 reported but are not treated as pass/fail gates.
 
-## VT Browser Benchmark Coverage
+## Current Browser Benchmark Coverage
 
-The live virtual-texturing hitch benchmark is
-`apps/examples-react/scripts/virtual-texturing-smoothness.mjs`. It should stay
-pointed at browser-observed or probe-observed facts that can catch hitches:
+The earlier `virtual-texturing-smoothness.mjs` prototype no longer exists. Its
+coverage now lives in two maintained browser probes:
+
+- `apps/examples-react/scripts/benchmark-examples.mjs` measures route frame
+  pacing and camera-input latency.
+- `apps/examples-react/scripts/benchmark-gltf-load.mjs` measures textured glTF
+  load, upload behavior, VT convergence, and optional GPU timer queries.
+
+They remain pointed at browser-observed or renderer-diagnostic facts that can
+catch hitches:
 
 - Initial load: navigation-to-canvas, navigation-to-probe-ready, and first
   usable probe-ready time when pending pages are drained below the configured
@@ -69,14 +83,24 @@ pointed at browser-observed or probe-observed facts that can catch hitches:
 - Render frame timing: browser rAF p50/p95/p99/max plus probe frame p95/max and
   slow-frame count.
 
-Current missing probe TODOs before adding stricter direct timings:
+The four previously missing probes are now covered:
 
-- `cameraInput.handlerDurationMs`: direct wheel/pointer handler self-time. The
-  benchmark currently uses input-correlated rAF as the hitch-catching proxy.
-- `uploadQueue.waitMsByPageOrPriority`: queue age is exposed as
-  `oldestQueuedWorkFrames`, not per-page wait timing.
-- `textureUpload.bytesPerChunk`: only cumulative `bytesUploaded` exists today.
-- `renderFrame.gpuMs`: WebGL timer-query/GPU frame timing is not exposed.
+- `cameraInput.handlerDurationMs` records synchronous pointer-handler self-time
+  alongside event-to-draw and event-to-rAF latency. Route summaries expose p95
+  and maximum handler time.
+- VT diagnostics expose queue-to-atlas completion as average/max milliseconds
+  and average wait by mip priority. Benchmark snapshots flatten the latter as
+  `uploadQueueWaitMsMip<N>`.
+- VT diagnostics expose atlas upload chunk min/max/sample count; the glTF load
+  report additionally records a byte distribution for every intercepted WebGL
+  texture upload under `metrics.textures.bytesPerChunk`.
+- The glTF load probe uses `EXT_disjoint_timer_query_webgl2`, when supported,
+  around draw-producing rAF callbacks and reports `metrics.renderFrame.gpuMs`,
+  pending results, and disjoint samples. Unsupported environments report the
+  capability explicitly rather than substituting CPU time.
+
+These are diagnostic observations, not product scheduling inputs. The browser
+probes reject software renderers; GPU timings must come from physical hardware.
 
 ## Build Order
 

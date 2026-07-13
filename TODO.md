@@ -3,18 +3,6 @@
 Deferred after the July 2026 renderer close-out. These are separate follow-up
 slices, not release blockers for the current branch.
 
-## Renderer lifecycle and demand
-
-1. Make ordinary glTF image decoding demand-driven. Carry image identity to the
-   ordinary texture request, demand it only when a selected material needs it,
-   and keep image-based-lighting faces eager. Remove any readiness gate that
-   forces unrelated material images to decode together. Cover replacement,
-   variants, LOD, context loss, and budget pressure.
-2. Replace the shared external-clock counter with token-bound render-clock
-   leases. A stale lease must not flush while another owner remains. Keep the
-   React and WebXR integration private and expose only the smallest useful
-   renderer API.
-
 ## Root decomposition
 
 Reduce `packages/renderer-webgl/src/root.ts` only along ownership boundaries

@@ -1,5 +1,11 @@
 # Examples Benchmark
 
+Local browser benchmarks and smoke tests require a hardware WebGL2 renderer.
+They default to headless ANGLE/Vulkan, disable software rasterization, and fail
+if Chromium reports SwiftShader, llvmpipe, lavapipe, or another software
+renderer. `EXAMPLES_BENCH_GPU=hardware-headed` remains available when a visible
+desktop Chromium window is preferable.
+
 `benchmark-examples.mjs` builds a route-by-route browser report for the examples app.
 It records load timing, frame pacing, heap growth, WebGL draw/upload counters,
 low-overhead GL state counters (`useProgram`, `bindTexture`, `bindBuffer`,
@@ -22,7 +28,8 @@ pnpm --filter @royal/examples-react bench:examples:input
 
 This runs the existing route benchmark on `/cube` with scripted camera drag
 enabled and reports pointermove-to-next-WebGL-draw latency as
-`cameraDragDrawP95Ms` plus RAF context as `cameraDragRafP95Ms`. Use
+`cameraDragDrawP95Ms`, direct synchronous handler self-time as
+`cameraInputHandlerP95Ms`, plus RAF context as `cameraDragRafP95Ms`. Use
 `EXAMPLES_BENCH_ROUTE=gltf-helmet` or `gltf-instancing` with
 `EXAMPLES_BENCH_CAMERA_DRAG=1 pnpm --filter @royal/examples-react bench:examples`
 when you need renderer/glTF churn beside the same input metric. Do not add
@@ -165,6 +172,12 @@ upload, fully loaded resource-stable time, VT manifest/page resource counts,
 generated raster VT page prep counters/time from the renderer snapshot, texture
 resource counts, texture allocation/upload calls, rough upload bytes, and CDP
 heap growth before/after GC.
+
+It also reports texture upload bytes per call and optional WebGL disjoint
+timer-query samples under `metrics.renderFrame.gpuMs`. Timer-query output
+includes support, pending, and disjoint counts; no CPU proxy is substituted
+when GPU timing is unavailable. Renderer VT snapshots include atlas upload
+chunk size and queue-to-upload average/max/by-mip wait timings.
 
 ```sh
 EXAMPLES_GLTF_LOAD_OUTPUT=research/gltf-load-host.json \

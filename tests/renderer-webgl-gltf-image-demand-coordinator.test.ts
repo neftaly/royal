@@ -157,7 +157,7 @@ afterEach(() => {
 });
 
 describe("GltfImageDemandCoordinator lifecycle", () => {
-  it("eagerly demands material and IBL recipes on independent lanes and transfers outcome leases", async () => {
+  it("keeps material recipes dormant while eagerly demanding IBL on its independent lane", async () => {
     const ordinaryKey = "ordinary";
     const iblKey = "ibl";
     const jobs = new Map([
@@ -169,18 +169,27 @@ describe("GltfImageDemandCoordinator lifecycle", () => {
     const load = metrics();
     const ownership = recipeLease();
     const ibl = imageBasedLight(iblKey);
+    const ordinaryMaterial = material(ordinaryKey);
     harness.coordinator.registerAsset({
       imageBasedLight: ibl.light,
       key: "asset",
       load,
-      materials: [material(ordinaryKey)],
+      materials: [ordinaryMaterial],
       recipeLease: ownership,
       recipes: [recipe(ordinaryKey), recipe(iblKey)],
       stateInstanceKey: 7,
     });
 
-    expect(harness.coordinator.snapshot()).toMatchObject({ candidates: 2, dormant: 2 });
-    harness.coordinator.demandAll("asset");
+    expect(harness.coordinator.snapshot()).toMatchObject({
+      active: 1,
+      candidates: 2,
+      dormant: 1,
+      loading: 1,
+    });
+    expect(load.imageRequests).toBe(1);
+    expect(loadRecipeMock.mock.calls.map(([value]) => value.key)).toEqual([iblKey]);
+
+    harness.coordinator.demandMaterial("asset", ordinaryMaterial);
 
     expect(load.imageRequests).toBe(2);
     expect(loadRecipeMock.mock.calls.map(([value]) => value.key).sort()).toEqual([iblKey, ordinaryKey]);

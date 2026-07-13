@@ -17,7 +17,7 @@ export const copyVirtualTexturingCounters = (value: unknown): Record<string, num
   if (isRecord(value)) {
     const flattenPagesByMip = (
       pagesByMip: unknown,
-      prefix: 'activePagesMip' | 'cachedPagesMip',
+      prefix: 'activePagesMip' | 'cachedPagesMip' | 'uploadQueueWaitMsMip',
     ): void => {
       if (!Array.isArray(pagesByMip)) return;
       for (const [mip, pages] of pagesByMip.entries()) {
@@ -27,6 +27,7 @@ export const copyVirtualTexturingCounters = (value: unknown): Record<string, num
 
     flattenPagesByMip(value.activePagesByMip, 'activePagesMip');
     flattenPagesByMip(value.cachedPagesByMip, 'cachedPagesMip');
+    flattenPagesByMip(value.uploadQueueWaitMsByMip, 'uploadQueueWaitMsMip');
   }
   return Object.keys(counters).length === 0 ? null : counters;
 };
