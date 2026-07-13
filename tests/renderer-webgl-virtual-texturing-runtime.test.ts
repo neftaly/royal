@@ -890,12 +890,12 @@ const responseText = (url: string, text: string): Response => ({
   url,
 }) as unknown as Response;
 
-const camera = () => orthographicCamera({
+const camera = (positionX = 0) => orthographicCamera({
   bottom: -1,
   far: 10,
   left: -1,
   near: 0.1,
-  position: [0, 0, 4],
+  position: [positionX, 0, 4],
   right: 1,
   rotation: [0, 0, 0],
   top: 1,
@@ -905,11 +905,12 @@ const renderScene = (
   material: Material,
   options: {
     readonly exposureEv100?: number;
+    readonly cameraX?: number;
     readonly planeSize?: readonly [number, number];
     readonly toneMapping?: "aces-fitted" | "linear-clamp" | "pbr-neutral";
   } = {},
 ) => scene({
-  camera: camera(),
+  camera: camera(options.cameraX),
   nodes: [
     directionalLight({
       color: [1, 1, 1, 1],
@@ -1047,6 +1048,15 @@ const vtZoomCycleManifest = () => ({
   pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
   physicalSlots: 3,
   virtualSize: [2048, 2048],
+});
+
+const vtTerrainManifest = () => ({
+  contractVersion: 1,
+  mipCount: 4,
+  pageSize: 512,
+  pages: { uriTemplate: "pages/m{mip}-{x}-{y}.png" },
+  physicalSlots: 24,
+  virtualSize: [4096, 4096],
 });
 
 const flushMicrotasks = async (): Promise<void> => {
@@ -2277,8 +2287,10 @@ describe("WebGL renderer virtual texturing integration", () => {
     }
 
     const pageRequests = ControlledImage.instances.map((image) => image.src);
-    expect(pageRequests.some((src) => src.includes("/vt/pages/m2-"))).toBe(true);
-    expect(pageRequests.some((src) => src.includes("/vt/pages/m1-") || src.includes("/vt/pages/m0-"))).toBe(false);
+    expect(pageRequests.some((src) => src.includes("/vt/pages/m3-"))).toBe(true);
+    expect(pageRequests.some((src) => (
+      src.includes("/vt/pages/m2-") || src.includes("/vt/pages/m1-") || src.includes("/vt/pages/m0-")
+    ))).toBe(false);
   });
 
   it("converges an oversubscribed visible working set without stable-camera eviction churn", async () => {
@@ -2308,7 +2320,71 @@ describe("WebGL renderer virtual texturing integration", () => {
     expect(root.snapshot().virtualTexturing.residentPages).toBeLessThanOrEqual(3);
   });
 
-  it("re-requests fine pages after a coarse zoom evicts them and the camera zooms back in", async () => {
+  it("keeps camera jitter sticky and bounds refinement admissions during a slow pan", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/manifest.json") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtDenseMipManifest(4)));
+    await flushMicrotasks();
+    for (let cycle = 0; cycle < 6; cycle += 1) {
+      await settleIncompleteImages();
+      root.render(renderScene(material));
+    }
+    const stableRequests = ControlledImage.instances.length;
+    const stableAdmissions = root.snapshot().virtualTexturing.demandAdmissions;
+    for (const cameraX of [0.002, -0.002, 0.001, 0]) {
+      root.render(renderScene(material, { cameraX }));
+    }
+    expect(ControlledImage.instances).toHaveLength(stableRequests);
+    expect(root.snapshot().virtualTexturing.demandAdmissions).toBe(stableAdmissions);
+
+    for (const cameraX of [0.8, 1, 1.2, 1.4]) {
+      await settleIncompleteImages();
+      const requestsBeforePanStep = ControlledImage.instances.length;
+      root.render(renderScene(material, { cameraX }));
+      expect(ControlledImage.instances.length - requestsBeforePanStep).toBeLessThanOrEqual(2);
+    }
+    expect(root.snapshot().virtualTexturing.demandAdmissions - stableAdmissions).toBeLessThanOrEqual(8);
+    await settleIncompleteImages();
+    const requestsBeforeDirectionChange = ControlledImage.instances.length;
+    root.render(renderScene(material, { cameraX: -1.4 }));
+    expect(ControlledImage.instances.length - requestsBeforeDirectionChange).toBeLessThanOrEqual(2);
+    expect(root.snapshot().virtualTexturing.demandRetentions).toBeGreaterThan(0);
+  });
+
+  it("fills free 24-slot terrain capacity beyond the replacement churn allowance", async () => {
+    vi.stubGlobal("Image", ControlledImage);
+    const fetchRequests = installFetchQueue();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl, { height: 1024, width: 1024 }));
+    const material = unlitMaterial({ texture: virtualTexture("/vt/terrain.json") });
+
+    root.render(renderScene(material));
+    fetchRequests[0]!.resolve(responseJson(vtTerrainManifest()));
+    await flushMicrotasks();
+    for (let cycle = 0; cycle < 16; cycle += 1) {
+      await settleIncompleteImages(512);
+      root.render(renderScene(material));
+    }
+    await settleIncompleteImages(512);
+
+    const pageRequests = ControlledImage.instances.map((image) => image.src);
+    expect(pageRequests.some((src) => src.includes("/pages/m3-"))).toBe(true);
+    expect(new Set(pageRequests).size).toBeGreaterThan(3);
+    expect(root.snapshot().virtualTexturing.demandAdmissions).toBeGreaterThan(2);
+    expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(0);
+    const convergedAdmissions = root.snapshot().virtualTexturing.demandAdmissions;
+    const convergedRequests = ControlledImage.instances.length;
+    for (let frame = 0; frame < 4; frame += 1) root.render(renderScene(material));
+    expect(root.snapshot().virtualTexturing.demandAdmissions).toBe(convergedAdmissions);
+    expect(ControlledImage.instances).toHaveLength(convergedRequests);
+  });
+
+  it("retains a bounded coherent hierarchy across a coarse zoom cycle", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const { gl } = fakeGl();
@@ -2325,17 +2401,17 @@ describe("WebGL renderer virtual texturing integration", () => {
       root.render(fineView);
     }
 
-    const fineRequestsBeforeZoomOut = ControlledImage.instances
-      .filter((image) => image.src.includes("/pages/m0-"))
+    const refinedRequestsBeforeZoomOut = ControlledImage.instances
+      .filter((image) => image.src.includes("/pages/m2-"))
       .length;
-    expect(fineRequestsBeforeZoomOut).toBeGreaterThan(0);
+    expect(refinedRequestsBeforeZoomOut).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.residentPages).toBe(3);
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
       await settleIncompleteImages(256);
       root.render(coarseView);
     }
-    expect(ControlledImage.instances.some((image) => image.src.includes("/pages/m1-"))).toBe(true);
+    const requestsAfterCoarseSettle = ControlledImage.instances.length;
     const updatesAfterCoarseSettle = root.snapshot().virtualTexturing.pageTableUpdates;
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
@@ -2343,11 +2419,12 @@ describe("WebGL renderer virtual texturing integration", () => {
       root.render(fineView);
     }
 
-    expect(ControlledImage.instances.filter((image) => image.src.includes("/pages/m0-")).length)
-      .toBeGreaterThan(fineRequestsBeforeZoomOut);
+    expect(ControlledImage.instances).toHaveLength(requestsAfterCoarseSettle);
+    expect(ControlledImage.instances.filter((image) => image.src.includes("/pages/m2-")).length)
+      .toBe(refinedRequestsBeforeZoomOut);
     expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/zoom.json"]);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({ residentPages: 3 }));
-    expect(root.snapshot().virtualTexturing.pageTableUpdates).toBeGreaterThan(updatesAfterCoarseSettle);
+    expect(root.snapshot().virtualTexturing.pageTableUpdates).toBe(updatesAfterCoarseSettle);
   });
 
   it("expands resident parent page-table updates over covered mip-0 cells with encoded fallback offsets", async () => {

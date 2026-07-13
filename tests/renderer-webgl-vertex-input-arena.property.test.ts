@@ -34,6 +34,8 @@ class FakeGl {
   readonly UNSIGNED_SHORT = 0x1403;
   readonly deletedBuffers: Handle[] = [];
   readonly deletedVertexArrays: Handle[] = [];
+  readonly successfullyDeletedBuffers: Handle[] = [];
+  readonly successfullyDeletedVertexArrays: Handle[] = [];
   readonly events: string[] = [];
   readonly uploads: Array<{ readonly buffer: Handle; readonly bytes: Uint8Array }> = [];
   readonly allocations: Array<{ readonly buffer: Handle; readonly bytes: number }> = [];
@@ -46,8 +48,18 @@ class FakeGl {
   bufferDataFailureAt?: number;
   bufferSubDataFailureAt?: number;
   createBufferFailureAt?: number;
+  createVertexArrayFailureAt?: number;
+  deleteBufferFailureAt?: number;
+  readonly deleteBufferFailures = new Set<number>();
+  deleteVertexArrayFailureAt?: number;
+  readonly deleteVertexArrayFailures = new Set<number>();
+  vertexAttribPointerFailureAt?: number;
   #arrayBuffer: Handle | null = null;
   #createBufferCalls = 0;
+  #deleteBufferCalls = 0;
+  #deleteVertexArrayCalls = 0;
+  #createVertexArrayCalls = 0;
+  #vertexAttribPointerCalls = 0;
   #bufferDataCalls = 0;
   #bufferSubDataCalls = 0;
   #serial = 1;
@@ -59,9 +71,13 @@ class FakeGl {
   };
   deleteBuffer = (value: WebGLBuffer | null): void => {
     if (value === null) return;
+    this.#deleteBufferCalls += 1;
     const handle = value as unknown as Handle;
     this.deletedBuffers.push(handle);
     this.events.push(`buffer:${handle.serial}`);
+    if (this.#deleteBufferCalls === this.deleteBufferFailureAt
+      || this.deleteBufferFailures.has(this.#deleteBufferCalls)) throw new Error("deleteBuffer failed");
+    this.successfullyDeletedBuffers.push(handle);
   };
   bindBuffer = (target: number, value: WebGLBuffer | null): void => {
     if (target === this.ARRAY_BUFFER) this.#arrayBuffer = value as unknown as Handle | null;
@@ -93,13 +109,22 @@ class FakeGl {
       sourceOffset,
     });
   };
-  createVertexArray = (): WebGLVertexArrayObject =>
-    ({ kind: "vao", serial: this.#serial++ } as unknown as WebGLVertexArrayObject);
+  createVertexArray = (): WebGLVertexArrayObject | null => {
+    this.#createVertexArrayCalls += 1;
+    if (this.#createVertexArrayCalls === this.createVertexArrayFailureAt) return null;
+    return { kind: "vao", serial: this.#serial++ } as unknown as WebGLVertexArrayObject;
+  };
   deleteVertexArray = (value: WebGLVertexArrayObject | null): void => {
     if (value === null) return;
     const handle = value as unknown as Handle;
     this.deletedVertexArrays.push(handle);
     this.events.push(`vao:${handle.serial}`);
+    this.#deleteVertexArrayCalls += 1;
+    if (this.#deleteVertexArrayCalls === this.deleteVertexArrayFailureAt
+      || this.deleteVertexArrayFailures.has(this.#deleteVertexArrayCalls)) {
+      throw new Error("deleteVertexArray failed");
+    }
+    this.successfullyDeletedVertexArrays.push(handle);
   };
   bindVertexArray = (_value: WebGLVertexArrayObject | null): void => {};
   enableVertexAttribArray = (_location: number): void => {};
@@ -111,7 +136,12 @@ class FakeGl {
     _normalized: boolean,
     _stride: number,
     _offset: number,
-  ): void => {};
+  ): void => {
+    this.#vertexAttribPointerCalls += 1;
+    if (this.#vertexAttribPointerCalls === this.vertexAttribPointerFailureAt) {
+      throw new Error("vertexAttribPointer failed");
+    }
+  };
   vertexAttribDivisor = (_location: number, _divisor: number): void => {};
   get arrayBufferBinding(): Handle | null {
     return this.#arrayBuffer;
@@ -296,6 +326,47 @@ describe("vertex-input arena", () => {
     expect(vertexInputArenaSnapshot(arena).compositeVertexArrayCount).toBe(1);
     releaseVertexInputGeometry(arena, context, 1, 32);
     expect(gl.deletedVertexArrays).toHaveLength(1);
+    expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(0);
+  });
+
+  it("resumes a composite geometry release without applying semantic mutations twice", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    const shared = recipe("shared-release", [0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const allocation = preparedInstanceAllocation(arena, gl, 1);
+    retainVertexInputGeometry(arena, { geometryId: 1, recipe: shared });
+    retainVertexInputGeometry(arena, { geometryId: 2, recipe: recipe("shared-release", [...shared.positions]) });
+    vertexInputCompositeVertexArrayForInstance(arena, context, 1, 1, allocation);
+    vertexInputCompositeVertexArrayForInstance(arena, context, 1, 2, allocation);
+
+    releaseVertexInputGeometry(arena, context, 1, 1);
+    gl.deleteVertexArrayFailureAt = 1;
+    expect(() => releaseVertexInputGeometry(arena, context, 1, 2)).toThrow(/deleteVertexArray failed/);
+    expect(vertexInputArenaSnapshot(arena).instanceGeometryEdges.size).toBe(0);
+    expect(vertexInputArenaSnapshot(arena).semanticGeometryIds).toEqual(new Set([2]));
+
+    expect(() => releaseVertexInputGeometry(arena, context, 1, 2)).not.toThrow();
+    expect(vertexInputArenaSnapshot(arena).semanticGeometryCount).toBe(0);
+    expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(0);
+  });
+
+  it("resumes static buffer deletion after the last successful handle", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("buffer-release", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    vertexInputGeometry(arena, context, 1, 1);
+    gl.deleteBufferFailureAt = 2;
+
+    expect(() => releaseVertexInputGeometry(arena, context, 1, 1)).toThrow(/deleteBuffer failed/);
+    const firstSuccessfullyDeleted = gl.deletedBuffers[0]!;
+    expect(() => releaseVertexInputGeometry(arena, context, 1, 1)).not.toThrow();
+    expect(gl.deletedBuffers.filter((handle) => handle === firstSuccessfullyDeleted)).toHaveLength(1);
+    expect(vertexInputArenaSnapshot(arena).semanticGeometryCount).toBe(0);
     expect(vertexInputArenaSnapshot(arena).staticGeometryCount).toBe(0);
   });
 
@@ -488,6 +559,173 @@ describe("vertex-input arena", () => {
     expect(lastVao).toBeGreaterThanOrEqual(0);
     expect(firstBuffer).toBeGreaterThan(lastVao);
     expect(vertexInputArenaSnapshot(arena).instanceAllocationCount).toBe(1);
+  });
+
+  it("retains failed static-upload rollback handles and retries every delete exactly once", () => {
+    const gl = new FakeGl();
+    const arena = createVertexInputArena();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("static-acquire-fault", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    gl.bufferDataFailureAt = 2;
+    gl.deleteBufferFailures.add(1);
+    gl.deleteBufferFailures.add(2);
+    expect(() => vertexInputGeometry(arena, glContext(gl), 1, 1)).toThrow(/bufferData failed/);
+    expect(vertexInputArenaSnapshot(arena).pendingBufferDeleteCount).toBe(2);
+
+    gl.deleteBufferFailures.clear();
+    disposeVertexInputArena(arena, glContext(gl), 1);
+    expect(vertexInputArenaSnapshot(arena).pendingBufferDeleteCount).toBe(0);
+    expect(new Set(gl.successfullyDeletedBuffers).size).toBe(2);
+    expect(gl.successfullyDeletedBuffers).toHaveLength(2);
+  });
+
+  it("covers every partial buffer acquisition boundary, including rollback failures", () => {
+    for (let failureAt = 1; failureAt <= 3; failureAt += 1) {
+      const staticGl = new FakeGl();
+      const staticArena = createVertexInputArena();
+      retainVertexInputGeometry(staticArena, {
+        geometryId: 1,
+        recipe: recipe("static-create-boundary", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      });
+      staticGl.createBufferFailureAt = failureAt;
+      expect(() => vertexInputGeometry(staticArena, glContext(staticGl), 1, 1)).toThrow(/creation failed/);
+      expect(vertexInputArenaSnapshot(staticArena).pendingBufferDeleteCount).toBe(0);
+
+      const instanceGl = new FakeGl();
+      const instanceArena = createVertexInputArena();
+      const allocation = createVertexInputInstanceAllocation(instanceArena);
+      instanceGl.createBufferFailureAt = failureAt;
+      if (failureAt > 1) instanceGl.deleteBufferFailures.add(1);
+      expect(() => prepareVertexInputInstance(instanceArena, glContext(instanceGl), 1, allocation, 1))
+        .toThrow(/creation failed/);
+      expect(vertexInputArenaSnapshot(instanceArena).pendingBufferDeleteCount)
+        .toBe(failureAt > 1 ? 1 : 0);
+      instanceGl.deleteBufferFailures.clear();
+      disposeVertexInputArena(instanceArena, glContext(instanceGl), 1);
+      expect(vertexInputArenaSnapshot(instanceArena).pendingBufferDeleteCount).toBe(0);
+    }
+  });
+
+  it("retains failed base and composite setup VAOs until context disposal retries them", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("vao-acquire-fault", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    gl.vertexAttribPointerFailureAt = 1;
+    gl.deleteVertexArrayFailureAt = 1;
+    expect(() => vertexInputBaseVertexArray(arena, context, 1, 1)).toThrow(/vertexAttribPointer failed/);
+    expect(vertexInputArenaSnapshot(arena).pendingVertexArrayDeleteCount).toBe(1);
+
+    delete gl.vertexAttribPointerFailureAt;
+    const allocation = preparedInstanceAllocation(arena, gl, 1);
+    gl.vertexAttribPointerFailureAt = 3;
+    gl.deleteVertexArrayFailures.add(3);
+    expect(() => vertexInputCompositeVertexArrayForInstance(arena, context, 1, 1, allocation))
+      .toThrow(/vertexAttribPointer failed/);
+    expect(vertexInputArenaSnapshot(arena).pendingVertexArrayDeleteCount).toBe(1);
+
+    delete gl.vertexAttribPointerFailureAt;
+    gl.deleteVertexArrayFailures.clear();
+    disposeVertexInputArena(arena, context, 1);
+    expect(vertexInputArenaSnapshot(arena).pendingVertexArrayDeleteCount).toBe(0);
+    expect(new Set(gl.successfullyDeletedVertexArrays).size)
+      .toBe(gl.successfullyDeletedVertexArrays.length);
+  });
+
+  it("does not publish null base or composite VAO acquisitions", () => {
+    const baseGl = new FakeGl();
+    const baseArena = createVertexInputArena();
+    retainVertexInputGeometry(baseArena, {
+      geometryId: 1,
+      recipe: recipe("null-base-vao", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    baseGl.createVertexArrayFailureAt = 1;
+    expect(() => vertexInputBaseVertexArray(baseArena, glContext(baseGl), 1, 1)).toThrow(/creation failed/);
+    expect(vertexInputArenaSnapshot(baseArena).baseVertexArrayCount).toBe(0);
+    expect(vertexInputArenaSnapshot(baseArena).pendingVertexArrayDeleteCount).toBe(0);
+
+    const compositeGl = new FakeGl();
+    const compositeArena = createVertexInputArena();
+    retainVertexInputGeometry(compositeArena, {
+      geometryId: 1,
+      recipe: recipe("null-composite-vao", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    const allocation = preparedInstanceAllocation(compositeArena, compositeGl, 1);
+    compositeGl.createVertexArrayFailureAt = 1;
+    expect(() => vertexInputCompositeVertexArrayForInstance(
+      compositeArena, glContext(compositeGl), 1, 1, allocation,
+    )).toThrow(/creation failed/);
+    expect(vertexInputArenaSnapshot(compositeArena).compositeVertexArrayCount).toBe(0);
+    expect(vertexInputArenaSnapshot(compositeArena).instanceGeometryEdges.size).toBe(0);
+  });
+
+  it("resumes active instance release across multiple VAO and buffer delete failures", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("instance-release-a", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    retainVertexInputGeometry(arena, {
+      geometryId: 2,
+      recipe: recipe("instance-release-b", [0, 0, 1, 1, 0, 1, 0, 1, 1]),
+    });
+    const allocation = preparedInstanceAllocation(arena, gl, 1);
+    vertexInputCompositeVertexArrayForInstance(arena, context, 1, 1, allocation);
+    vertexInputCompositeVertexArrayForInstance(arena, context, 1, 2, allocation);
+    gl.deleteVertexArrayFailures.add(1);
+    gl.deleteVertexArrayFailures.add(2);
+    expect(() => releaseVertexInputInstanceAllocation(arena, context, 1, allocation))
+      .toThrow(/deleteVertexArray failed/);
+    expect(vertexInputArenaSnapshot(arena).compositeVertexArrayCount).toBe(2);
+
+    gl.deleteVertexArrayFailures.clear();
+    gl.deleteBufferFailures.add(1);
+    gl.deleteBufferFailures.add(3);
+    expect(() => releaseVertexInputInstanceAllocation(arena, context, 1, allocation))
+      .toThrow(/deleteBuffer failed/);
+    expect(vertexInputArenaSnapshot(arena).pendingBufferDeleteCount).toBe(2);
+
+    gl.deleteBufferFailures.clear();
+    releaseVertexInputInstanceAllocation(arena, context, 1, allocation);
+    expect(vertexInputArenaSnapshot(arena).instanceAllocationCount).toBe(0);
+    expect(new Set(gl.successfullyDeletedBuffers).size)
+      .toBe(gl.successfullyDeletedBuffers.length);
+    expect(new Set(gl.successfullyDeletedVertexArrays).size)
+      .toBe(gl.successfullyDeletedVertexArrays.length);
+  });
+
+  it("keeps failed context handles retryable or accounts them when teardown becomes terminal", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    retainVertexInputGeometry(arena, {
+      geometryId: 1,
+      recipe: recipe("terminal-release", [0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    });
+    const allocation = preparedInstanceAllocation(arena, gl, 4);
+    vertexInputBaseVertexArray(arena, context, 4, 1);
+    vertexInputCompositeVertexArrayForInstance(arena, context, 4, 1, allocation);
+    gl.deleteVertexArrayFailures.add(1);
+    gl.deleteVertexArrayFailures.add(2);
+    expect(() => releaseVertexInputContextHandles(arena, context, 4)).toThrow(/deleteVertexArray failed/);
+    expect(vertexInputArenaSnapshot(arena).baseVertexArrayCount).toBe(1);
+    expect(vertexInputArenaSnapshot(arena).compositeVertexArrayCount).toBe(1);
+
+    dropVertexInputArenaContext(arena);
+    const dropped = vertexInputArenaSnapshot(arena);
+    expect(dropped.abandonedVertexArrayCount).toBe(2);
+    expect(dropped.abandonedBufferCount).toBe(6);
+    expect(dropped.pendingBufferDeleteCount).toBe(0);
+    expect(dropped.pendingVertexArrayDeleteCount).toBe(0);
+    disposeVertexInputArena(arena);
+    expect(vertexInputArenaSnapshot(arena).abandonedVertexArrayCount).toBe(2);
   });
 
 });

@@ -452,6 +452,22 @@ describe("WebGL renderer resource lifetime contracts", () => {
     );
   });
 
+  it("finishes pending geometry cleanup during disposal after a driver deletion fails", () => {
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const sharedMaterial = material([1, 0.8, 0.1, 1]);
+    root.render(renderScene(boxGeometry(1), sharedMaterial));
+    const deleteBuffer = Reflect.get(gl, "deleteBuffer") as ReturnType<typeof vi.fn>;
+    deleteBuffer.mockImplementationOnce(() => {
+      throw new Error("injected deleteBuffer failure");
+    });
+
+    expect(() => root.render(renderScene(boxGeometry([2, 1, 1]), sharedMaterial)))
+      .toThrow(/injected deleteBuffer failure/);
+    expect(() => root.dispose()).not.toThrow();
+    expect(() => root.dispose()).not.toThrow();
+  });
+
   it("makes dispose idempotent and rejects render after disposal with a clear error", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));

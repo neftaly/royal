@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   boxGeometry,
   imageTexture,
+  metresPerWorldUnit,
   mesh,
   orthographicCamera,
   perspectiveCamera,
@@ -21,6 +22,23 @@ import * as reactRoyal from "@royal/react";
 import * as reactSceneApi from "@royal/react/scene";
 
 describe("renderer-core public API", () => {
+  it("defines one Royal world unit as one metre", () => {
+    expect(metresPerWorldUnit).toBe(1);
+
+    const metreCube = boxGeometry(1);
+    const camera = perspectiveCamera({
+      far: 100,
+      fovY: Math.PI / 4,
+      near: 0.1,
+      position: [0, 0, 5],
+      rotation: [0, 0, 0],
+    });
+
+    expect(metreCube.size).toEqual([1, 1, 1]);
+    expect(camera.position[2]).toBe(5);
+    expect(camera.near).toBe(0.1);
+  });
+
   it("defaults orthographic camera pose and depth for flat UI scenes", () => {
     expect(orthographicCamera({
       bottom: -1,
@@ -100,6 +118,7 @@ describe("renderer-core public API", () => {
   });
 
   it("exposes scene primitives from the React scene subpath", () => {
+    expect(reactSceneApi.metresPerWorldUnit).toBe(1);
     expect(reactSceneApi).toHaveProperty("boxGeometry");
     expect(reactSceneApi).toHaveProperty("mesh");
     expect(reactSceneApi).toHaveProperty("scene");

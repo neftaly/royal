@@ -4,13 +4,15 @@ import {
   type TransformOptions
 } from './primitives';
 import { frozenBounds3, nonEmptyString } from './descriptor-values';
-import type { Vec3 } from './primitives';
+import type { WorldPosition3 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
 
 export interface GltfAssetBounds {
-  readonly max: Vec3;
-  readonly min: Vec3;
+  /** Asset-space maximum in metres, following glTF's metre unit. */
+  readonly max: WorldPosition3;
+  /** Asset-space minimum in metres, following glTF's metre unit. */
+  readonly min: WorldPosition3;
 }
 
 export interface GltfAssetRef {

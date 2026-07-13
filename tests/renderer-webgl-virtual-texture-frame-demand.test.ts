@@ -12,6 +12,7 @@ import {
   type VirtualTextureDemandSubmission,
 } from "../packages/renderer-webgl/src/virtual-texture-demand";
 import type { VirtualTexturePageId } from "../packages/renderer-webgl/src/virtual-texturing";
+import { forEachFuzzCase } from "./fuzz";
 
 const page = (x: number, mip = 0): VirtualTexturePageId => ({ mip, x, y: 0 });
 
@@ -175,41 +176,74 @@ describe("virtual texture frame-demand workspace", () => {
     expect(selectVirtualTextureFrameWorkingSet(commit!.submissions, 2)).toEqual([parent, left]);
   });
 
-  it("orders views by view index and bounds submissions by views, not draws", () => {
-    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
-    beginVirtualTextureFrameDemand(workspace);
-    submitVirtualTextureFrameDemand(workspace, "surface", 2, submission([page(2)]));
-    submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([page(0)]));
-    submitVirtualTextureFrameDemand(workspace, "surface", 1, submission([page(1)]));
-    for (let draw = 0; draw < 20; draw += 1) {
-      submitVirtualTextureFrameDemand(workspace, "surface", 1, submission([page(1)]));
-    }
+  it("keeps arbitrary resource/view collection isolated, ordered, and draw-count independent", () => {
+    forEachFuzzCase({ cases: 48, seed: 0xf4a6_d3ad }, ({ label, random }) => {
+      const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+      const resourceCount = random.int(1, 5);
+      const cursors = new Map<string, number>();
+      const draws: Array<{ page: VirtualTexturePageId; resource: string; view: number }> = [];
+      for (let resourceIndex = 0; resourceIndex < resourceCount; resourceIndex += 1) {
+        const resource = `resource-${resourceIndex}`;
+        cursors.set(resource, random.int(0, 12));
+        const viewCount = random.int(1, 7);
+        const availableViews = Array.from({ length: 12 }, (_value, view) => view);
+        for (let index = availableViews.length - 1; index > 0; index -= 1) {
+          const other = random.int(0, index + 1);
+          [availableViews[index], availableViews[other]] = [availableViews[other]!, availableViews[index]!];
+        }
+        for (const view of availableViews.slice(0, viewCount)) {
+          draws.push({ page: page(resourceIndex * 16 + view), resource, view });
+        }
+      }
+      for (let index = draws.length - 1; index > 0; index -= 1) {
+        const other = random.int(0, index + 1);
+        [draws[index], draws[other]] = [draws[other]!, draws[index]!];
+      }
 
-    const [commit] = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
-    expect(commit!.submissions).toEqual([
-      committedSubmission([page(0)]),
-      committedSubmission([page(1)]),
-      committedSubmission([page(2)]),
-    ]);
-    expect(commit!.submissions).toHaveLength(3);
-  });
+      const firstSeenResources: string[] = [];
+      const seenResources = new Set<string>();
+      beginVirtualTextureFrameDemand(workspace);
+      for (const draw of draws) {
+        if (!seenResources.has(draw.resource)) {
+          seenResources.add(draw.resource);
+          firstSeenResources.push(draw.resource);
+        }
+        const repetitions = random.int(1, 24);
+        for (let repetition = 0; repetition < repetitions; repetition += 1) {
+          submitVirtualTextureFrameDemand(
+            workspace,
+            draw.resource,
+            draw.view,
+            submission([draw.page]),
+          );
+        }
+      }
 
-  it("keeps resources isolated while preserving first-seen resource order", () => {
-    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
-    beginVirtualTextureFrameDemand(workspace);
-    submitVirtualTextureFrameDemand(workspace, "b", 0, submission([page(20)]));
-    submitVirtualTextureFrameDemand(workspace, "a", 1, submission([page(11)]));
-    submitVirtualTextureFrameDemand(workspace, "a", 0, submission([page(10)]));
-    submitVirtualTextureFrameDemand(workspace, "b", 1, submission([page(21)]));
-
-    const commits = finalizeVirtualTextureFrameDemand(workspace, true, (resource) => resource === "a" ? 1 : 0);
-    expect(commits.map((commit) => commit.resource)).toEqual(["b", "a"]);
-    expect(commits.map((commit) => commit.submissions)).toEqual([
-      [committedSubmission([page(20)]), committedSubmission([page(21)])],
-      [committedSubmission([page(10)]), committedSubmission([page(11)])],
-    ]);
-    expect(commits.map((commit) => commit.startSubmission)).toEqual([0, 1]);
-    expect(commits.map((commit) => commit.nextStartSubmission)).toEqual([1, 0]);
+      const commits = finalizeVirtualTextureFrameDemand(
+        workspace,
+        true,
+        (resource) => cursors.get(resource)!,
+      );
+      expect(commits.map((commit) => commit.resource), `${label} resource encounter order`)
+        .toEqual(firstSeenResources);
+      for (const commit of commits) {
+        const expectedDraws = draws
+          .filter((draw) => draw.resource === commit.resource)
+          .sort((left, right) => left.view - right.view);
+        expect(commit.submissions, `${label} ${commit.resource} sorted isolated views`).toEqual(
+          expectedDraws.map((draw) => committedSubmission([draw.page])),
+        );
+        expect(commit.submissions, `${label} ${commit.resource} one lane per repeated draw group`)
+          .toHaveLength(expectedDraws.length);
+        const start = expectedDraws.length <= 1
+          ? 0
+          : cursors.get(commit.resource)! % expectedDraws.length;
+        expect(commit.startSubmission, `${label} ${commit.resource} normalized cursor`).toBe(start);
+        expect(commit.nextStartSubmission, `${label} ${commit.resource} next cursor`).toBe(
+          expectedDraws.length <= 1 ? 0 : (start + 1) % expectedDraws.length,
+        );
+      }
+    });
   });
 
   it("aborts without commits or cursor advancement and can reuse the workspace", () => {

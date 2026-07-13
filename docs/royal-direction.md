@@ -29,6 +29,14 @@ Royal must make these paths excellent:
 Royal is not a canvas UI toolkit, text editor, scene ECS, physics engine,
 application state model, public render graph, or cross-backend abstraction.
 
+Royal world space has one fixed physical scale: one world unit is one metre.
+This covers authored geometry, transforms, camera distances, light ranges,
+picking, glTF, and XR. Scale vectors and directions are dimensionless;
+angles are radians. Pixels, seconds/milliseconds, photometric units, texels,
+normalized values, and bytes remain explicitly named non-world domains.
+Physics and large-world adapters preserve this metre contract at their Royal
+boundary even when their own storage uses sectors or higher precision.
+
 Future 2D work is a compatibility constraint, not current product scope. The
 renderer retains orthographic cameras, color-managed unlit primitives, generic
 pick identity, instanced geometry, and explicit scene-linear/display-linear

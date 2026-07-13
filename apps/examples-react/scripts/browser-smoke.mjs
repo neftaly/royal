@@ -564,9 +564,67 @@ const assertRoute = (expected, state) => {
       if ((interaction.presets?.[1]?.pageCount ?? 0) <= (interaction.presets?.[0]?.pageCount ?? 0)) {
         failures.push('virtual texture map focus did not request finer public pages');
       }
-      for (const page of ['m2-0-0.svg', 'm2-1-0.svg', 'm2-0-1.svg', 'm2-1-1.svg']) {
-        if (!interaction.pageUrls?.some((url) => url.includes('/map-pages/' + page))) {
-          failures.push(`virtual texture map missed expected oriented region page "${page}"`);
+      if ((interaction.pan?.errors?.length ?? 0) > 0) {
+        failures.push(`virtual texture map pan crashed: ${interaction.pan.errors.join('; ')}`);
+      }
+      if (!Number.isFinite(interaction.pan?.targetX) || !Number.isFinite(interaction.pan?.targetY)) {
+        failures.push('virtual texture map pan produced a non-finite camera target');
+      } else if (
+        Math.abs(interaction.pan.targetX) > 16 ||
+        Math.abs(interaction.pan.targetY) > 16
+      ) {
+        failures.push(`virtual texture map pan produced an unbounded camera target (${interaction.pan.targetX}, ${interaction.pan.targetY})`);
+      } else if (Math.hypot(
+        interaction.pan.targetX - interaction.pan.startTargetX,
+        interaction.pan.targetY - interaction.pan.startTargetY,
+      ) < 0.25) {
+        failures.push('virtual texture map pan did not move the camera target');
+      }
+      if (interaction.pan?.contextLifecycle !== 'active') {
+        failures.push(`virtual texture map pan left the renderer context ${interaction.pan?.contextLifecycle ?? 'unavailable'}`);
+      }
+      if (interaction.pan?.contextLastError !== null) {
+        failures.push(`virtual texture map pan reported a renderer context error: ${interaction.pan?.contextLastError ?? 'unavailable'}`);
+      }
+      if (!(interaction.pan?.frameAfter > interaction.pan?.frameBefore)) {
+        failures.push('virtual texture map pan did not continue rendering');
+      }
+      if (interaction.pan?.settled !== true) {
+        failures.push('virtual texture map pan did not settle');
+      }
+      if (
+        interaction.pan?.pendingPages !== 0 ||
+        interaction.pan?.outstandingPageRequests !== 0
+      ) {
+        failures.push(`virtual texture map pan left VT work pending (${interaction.pan?.pendingPages ?? 'unknown'} pages, ${interaction.pan?.outstandingPageRequests ?? 'unknown'} requests)`);
+      }
+      const focusedRegions = [
+        { label: 'NW', preset: 1, u: 0.25, v: 0.25 },
+        { label: 'NE', preset: 2, u: 0.75, v: 0.25 },
+        { label: 'SW', preset: 3, u: 0.25, v: 0.75 },
+        { label: 'SE', preset: 4, u: 0.75, v: 0.75 },
+      ];
+      for (const region of focusedRegions) {
+        const pageUrls = interaction.presets?.[region.preset]?.pageUrls ?? [];
+        const pages = pageUrls.flatMap((url) => {
+          const match = /\/map-pages\/m(\d+)-(\d+)-(\d+)\.svg(?:$|\?)/.exec(url);
+          if (match === null) return [];
+          const mip = Number(match[1]);
+          const grid = 2 ** Math.max(0, 3 - mip);
+          return [{
+            maxU: (Number(match[2]) + 1) / grid,
+            maxV: (Number(match[3]) + 1) / grid,
+            mip,
+            minU: Number(match[2]) / grid,
+            minV: Number(match[3]) / grid,
+          }];
+        });
+        if (!pages.some((page) => (
+          page.mip < 3
+          && page.minU <= region.u && region.u <= page.maxU
+          && page.minV <= region.v && region.v <= page.maxV
+        ))) {
+          failures.push(`virtual texture map ${region.label} focus did not refine the target UV beyond the coarse root`);
         }
       }
     }
@@ -689,33 +747,109 @@ const runVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
   const pageUrls = () => performance.getEntriesByType('resource')
     .map((entry) => entry.name)
     .filter((url) => url.includes('/fixtures/virtual-texture-stress/map-pages/'));
-  const waitForConvergence = async () => {
+  const rendererSnapshot = () => globalThis.__royalExamplesRendererBenchmarkSnapshot?.() ?? null;
+  const waitForConvergence = async (afterFrame = null, previousPageUrls = []) => {
     const deadline = performance.now() + 8000;
     let currentPages = pageUrls().length;
     let lastPages = -1;
     let stableFrames = 0;
+    let renderer = rendererSnapshot();
     while (performance.now() < deadline && stableFrames < 8) {
       await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       currentPages = pageUrls().length;
-      if (currentPages === lastPages) stableFrames += 1;
+      renderer = rendererSnapshot();
+      const vt = renderer?.virtualTexturing;
+      if (
+        currentPages === lastPages &&
+        (afterFrame === null || (renderer?.frame ?? -1) > afterFrame) &&
+        vt?.pendingPages === 0 &&
+        vt?.outstandingPageRequests === 0
+      ) stableFrames += 1;
       else stableFrames = 0;
       lastPages = currentPages;
     }
+    const vt = renderer?.virtualTexturing;
+    const currentPageUrls = pageUrls();
+    const previousPages = new Set(previousPageUrls);
     return {
+      contextLastError: renderer?.context?.lastError ?? null,
+      contextLifecycle: renderer?.context?.lifecycle ?? null,
+      frame: renderer?.frame ?? null,
+      outstandingPageRequests: vt?.outstandingPageRequests ?? null,
       pageCount: currentPages,
+      pageUrls: currentPageUrls,
+      newPageUrls: currentPageUrls.filter((url) => !previousPages.has(url)),
+      pendingPages: vt?.pendingPages ?? null,
       settled: stableFrames >= 8,
       targetX: Number(canvas.dataset.mapTargetX),
       targetY: Number(canvas.dataset.mapTargetY),
     };
   };
-  const presets = [await waitForConvergence()];
+  const presets = [await waitForConvergence(null, [])];
   for (const button of buttons.slice(1)) {
+    const frame = rendererSnapshot()?.frame ?? null;
+    const previousPageUrls = pageUrls();
     button.click();
-    presets.push(await waitForConvergence());
+    presets.push(await waitForConvergence(frame, previousPageUrls));
   }
+  const overviewFrame = rendererSnapshot()?.frame ?? null;
+  const previousOverviewPageUrls = pageUrls();
   buttons[0].click();
-  presets.push(await waitForConvergence());
-  return { pageUrls: pageUrls(), presets };
+  presets.push(await waitForConvergence(overviewFrame, previousOverviewPageUrls));
+  const panErrors = [];
+  const recordPanError = (event) => panErrors.push(String(event.error?.stack ?? event.message ?? event.error));
+  const recordPanRejection = (event) => panErrors.push(String(event.reason?.stack ?? event.reason));
+  globalThis.addEventListener('error', recordPanError);
+  globalThis.addEventListener('unhandledrejection', recordPanRejection);
+  const rect = canvas.getBoundingClientRect();
+  const pointerId = 1217;
+  let clientX = rect.left + rect.width * 0.5;
+  const clientY = rect.top + rect.height * 0.5;
+  const startTargetX = Number(canvas.dataset.mapTargetX);
+  const startTargetY = Number(canvas.dataset.mapTargetY);
+  const frameBefore = rendererSnapshot()?.frame ?? null;
+  const previousPanPageUrls = pageUrls();
+  const dispatchPan = (type) => canvas.dispatchEvent(new PointerEvent(type, {
+    bubbles: true,
+    button: 1,
+    buttons: type === 'pointerup' ? 0 : 4,
+    cancelable: true,
+    clientX,
+    clientY,
+    isPrimary: true,
+    pointerId,
+    pointerType: 'mouse',
+  }));
+  let pointerDown = false;
+  try {
+    dispatchPan('pointerdown');
+    pointerDown = true;
+    for (let step = 0; step < 10; step += 1) {
+      clientX += 10;
+      dispatchPan('pointermove');
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    dispatchPan('pointerup');
+    pointerDown = false;
+    await globalThis.__royalExamplesRenderNow?.();
+    const settled = await waitForConvergence(frameBefore, previousPanPageUrls);
+    return {
+      pageUrls: pageUrls(),
+      pan: {
+        ...settled,
+        errors: panErrors,
+        frameAfter: rendererSnapshot()?.frame ?? settled.frame,
+        frameBefore,
+        startTargetX,
+        startTargetY,
+      },
+      presets,
+    };
+  } finally {
+    if (pointerDown) dispatchPan('pointerup');
+    globalThis.removeEventListener('error', recordPanError);
+    globalThis.removeEventListener('unhandledrejection', recordPanRejection);
+  }
 })()
 `);
 
@@ -931,10 +1065,15 @@ const main = async () => {
         const recentResources = (state.resources ?? [])
           .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
           .join('; ');
+        const interactionDiagnostics = state.virtualTextureInteraction === undefined
+          ? ''
+          : JSON.stringify(state.virtualTextureInteraction);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`
         }${
           recentResources === '' ? '' : `; resources: ${recentResources}`
+        }${
+          interactionDiagnostics === '' ? '' : `; interaction: ${interactionDiagnostics}`
         }`);
       }
       if (contextLossSmoke && !contextLossChecked) {

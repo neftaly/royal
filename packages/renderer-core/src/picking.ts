@@ -1,12 +1,14 @@
 import type { GltfNode } from './gltf';
 import type { GltfInstancesNode } from './gltf-instances';
 import type { MeshNode } from './mesh';
-import type { Vec3 } from './primitives';
+import type { Metres, WorldPosition3 } from './primitives';
 
 export type PickingId = string;
 
 export interface PickInput {
+  /** CSS-pixel coordinate relative to the browser viewport. */
   readonly clientX: number;
+  /** CSS-pixel coordinate relative to the browser viewport. */
   readonly clientY: number;
 }
 
@@ -36,9 +38,13 @@ export interface GltfInstancesPickTarget {
 export type PickTarget = MeshPickTarget | GltfPickTarget | GltfInstancesPickTarget;
 
 export interface PickResult {
+  /** CSS-pixel coordinate supplied to the pick. */
   readonly clientX: number;
+  /** CSS-pixel coordinate supplied to the pick. */
   readonly clientY: number;
-  readonly distance: number;
-  readonly point: Vec3;
+  /** Ray distance from the camera to the hit point, in metres. */
+  readonly distance: Metres;
+  /** Hit point in Royal world space, in metres. */
+  readonly point: WorldPosition3;
   readonly target: PickTarget;
 }

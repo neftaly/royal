@@ -156,7 +156,17 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
       }
     } finally {
       try {
-        for (const callback of afterFrameCallbacks) callback();
+        let afterFrameError: unknown;
+        let afterFrameFailed = false;
+        for (const callback of afterFrameCallbacks) {
+          try {
+            callback();
+          } catch (error) {
+            if (!afterFrameFailed) afterFrameError = error;
+            afterFrameFailed = true;
+          }
+        }
+        if (afterFrameFailed) reportError(afterFrameError);
       } finally {
         runningFrame = false;
         compactSubscribers();

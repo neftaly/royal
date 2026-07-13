@@ -1,21 +1,25 @@
 import { frozenRgba, frozenVec3 } from './descriptor-values';
-import type { Rgba, Vec3 } from './primitives';
+import type { Metres, Rgba, WorldPosition3 } from './primitives';
 
 export interface PointLightNode {
   readonly kind: 'point-light';
   readonly color: Rgba;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
-  readonly position: Vec3;
-  readonly range?: number;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
+  /** Optional maximum influence distance in metres. */
+  readonly range?: Metres;
 }
 
 export interface PointLightOptions {
   readonly color?: Rgba;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
-  readonly position: Vec3;
-  readonly range?: number;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
+  /** Optional maximum influence distance in metres. */
+  readonly range?: Metres;
 }
 
 const WHITE: Rgba = frozenRgba([1, 1, 1, 1], 'point light color');

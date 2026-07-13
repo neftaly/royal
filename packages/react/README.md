@@ -109,7 +109,9 @@ and hover stay coherent across immutable scene replacement.
 For many copies of one asset, create one stable transform resource and render
 one `gltfInstances(...)` node instead of thousands of individual nodes.
 The position, rotation, and scale arrays use three consecutive numbers per
-instance. Mutate them outside React render, then commit the channel once:
+instance. Positions are metres, rotations are radians, and scales are
+dimensionless multipliers. Mutate them outside React render, then commit the
+channel once:
 
 ```tsx
 import { createGltfInstanceTransforms } from '@royal/react/scene';

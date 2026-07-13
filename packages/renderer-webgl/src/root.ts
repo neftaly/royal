@@ -37,8 +37,9 @@ import {
   type Vec3,
 } from "@royal/renderer-core";
 import {
-  createRenderObjectHandle,
+  attachRenderObjectRef,
   readRenderObjectHandleTransform,
+  type RenderObjectRefAttachment,
 } from "@royal/renderer-core/render-object";
 import {
   gltfComponentCount,
@@ -392,9 +393,11 @@ import {
   type ViewportSize,
 } from "./virtual-texture-runtime";
 import {
+  createVirtualTextureDemandPlanningWorkspace,
   planVirtualTextureDrawDemand,
   selectVirtualTextureFrameWorkingSet,
   selectVirtualTextureWorkingSet,
+  stabilizeVirtualTextureDesiredPagesInto,
   virtualTextureDemandMipCount,
   virtualTextureDemandModelCount,
 } from "./virtual-texture-demand";
@@ -1137,10 +1140,9 @@ const svgTextContentKey = (svgText: string): TextureContentKey =>
 type TransformableRenderNode = GltfNode | MeshNode;
 
 type RenderObjectBinding = {
-  attached: boolean;
+  readonly attachment: RenderObjectRefAttachment;
   declarativeTransform: Transform;
   readonly handle: RenderObjectHandle;
-  readonly invalidation: { suppress: boolean } | undefined;
   node: TransformableRenderNode;
 };
 
@@ -1248,18 +1250,6 @@ const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
   rootScaleUploadBytes: 0,
   rootScaleUploadCalls: 0,
 });
-
-const assignRenderObjectRef = (
-  ref: RenderObjectRef,
-  handle: RenderObjectHandle | null,
-): void => {
-  if (typeof ref === "function") {
-    ref(handle);
-    return;
-  }
-
-  ref.current = handle;
-};
 
 const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
   const virtualTexturePhysicalByteBudget = options.virtualTexturePhysicalByteBudget ?? 64 * 1024 * 1024;
@@ -1948,6 +1938,11 @@ const projectedBoundsScreenCoverage = (
  */
 type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameViewLane;
 
+type ResourceArenaSideEffectDebt = {
+  nextStep: number;
+  readonly steps: readonly (() => void)[];
+};
+
 class WebGlRootImpl implements InternalWebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
@@ -1994,6 +1989,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #autoVirtualTextureGeneratedPageSources = new Map<string, GeneratedVirtualTextureSource>();
   readonly #gltf = new Map<string, GltfState>();
   readonly #resourceArena: ResourceArena;
+  #resourceArenaSideEffectDebt: ResourceArenaSideEffectDebt[] = [];
   readonly #vertexInputs: VertexInputArena = createVertexInputArena();
   readonly #gltfPreparationScheduler = new GltfPreparationScheduler(2);
   readonly #gltfImageScheduler = new GltfPreparationScheduler(GLTF_IMAGE_LANE_CONCURRENCY);
@@ -2075,6 +2071,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #framePlanReconciliationInProgress = false;
   #framePlanReconciliationPending = false;
   #framePlanReconciliationPrevious: FramePlan | undefined;
+  #framePlanTopologyPending = false;
   #framePlanSurfaceLights: readonly SurfaceLight[] = [];
   #framePlanSurfaceLightSet: SurfaceLightSet | undefined;
   #latestScene: RenderRoot | undefined;
@@ -2112,6 +2109,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #virtualTextureRequestDrainScheduled = false;
   readonly #virtualTextureFrameDemand =
     createVirtualTextureFrameDemandWorkspace<VirtualTextureRuntimeState>();
+  readonly #virtualTextureDemandPlanning = createVirtualTextureDemandPlanningWorkspace();
   readonly #virtualTextureFrameCommits = new Map<
     VirtualTextureRuntimeState,
     VirtualTextureFrameDemandCommit<VirtualTextureRuntimeState>
@@ -2800,7 +2798,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
     }
     if (this.#disposed) {
-      this.#retryPendingTextureSourceCloses();
+      let retryFailure = this.#detachRenderObjectRefs();
+      retryFailure = captureFirstFailure(retryFailure, () => this.#drainResourceArenaSideEffectDebt());
+      retryFailure = captureFirstFailure(retryFailure, () => this.#retryPendingTextureSourceCloses());
+      if (retryFailure !== undefined) throw retryFailure.value;
       return;
     }
     const canDeleteResources = this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring";
@@ -2859,11 +2860,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#pendingGltfImageRowHead = 0;
     teardown(() => this.#cameraViewResourceSubscription?.unsubscribe());
     this.#cameraViewResourceSubscription = undefined;
-    for (const [ref, binding] of this.#renderObjectBindings) {
-      this.#renderObjectHandles.delete(binding.node);
-      teardown(() => assignRenderObjectRef(ref, null));
-    }
-    this.#renderObjectBindings.clear();
+    firstFailure = this.#detachRenderObjectRefs(firstFailure);
     for (const subscription of this.#gltfInstanceTransformSubscriptions.values()) {
       teardown(() => subscription.unsubscribe());
     }
@@ -2923,6 +2920,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot render while Royal is reconciling render-object refs");
     }
+    this.#drainResourceArenaSideEffectDebt();
     const previous = this.#framePlan;
     if (this.#framePlanReconciliationPending) this.#finishFramePlanReconciliation();
     if (previous?.scene === scene) return previous;
@@ -2935,7 +2933,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       next.manifest,
       this.#framePlanDiffScratch,
     );
-    this.#applyResourceArenaChanges(applyResourceDelta(this.#resourceArena, resourceDelta));
+    // ResourceArena is the authoritative resource generation. Once its
+    // validated delta commits, publish the matching frame plan before running
+    // fallible GPU cleanup, source close hooks, or user ref callbacks. A
+    // reported side-effect failure can then be retried without applying the
+    // same semantic resource delta to an arena that is already on `next`.
+    const resourceChanges = applyResourceDelta(this.#resourceArena, resourceDelta);
     this.#framePlan = next;
     this.#sharedViewLodSelectionIds.clear();
     this.#sharedViewLodSelectionIdCount = 0;
@@ -2959,8 +2962,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#sceneCommits += 1;
     this.#framePlanReconciliationPending = true;
     this.#framePlanReconciliationPrevious = previous;
-    this.#finishFramePlanReconciliation(resourceDelta);
-    this.#rebuildGltfPacketTopology(next);
+    this.#framePlanTopologyPending = true;
+    const resourceFailure = captureFailure(() => this.#applyResourceArenaChanges(resourceChanges));
+    this.#finishFramePlanReconciliation(resourceDelta, resourceFailure);
     return next;
   }
 
@@ -3067,7 +3071,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
   }
 
-  #finishFramePlanReconciliation(initialDelta?: ResourceManifestDelta): void {
+  #finishFramePlanReconciliation(
+    initialDelta?: ResourceManifestDelta,
+    initialFailure?: CapturedFailure,
+  ): void {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Render-object ref reconciliation is already in progress");
     }
@@ -3081,7 +3088,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     this.#framePlanReconciliationInProgress = true;
     try {
-      let firstFailure = this.#reconcileCameraViewResource(next);
+      let firstFailure = initialFailure;
+      if (this.#framePlanTopologyPending) {
+        const topologyFailure = captureFailure(() => this.#rebuildGltfPacketTopology(next));
+        if (topologyFailure === undefined) this.#framePlanTopologyPending = false;
+        else firstFailure ??= topologyFailure;
+      }
+      firstFailure = captureFirstFailure(firstFailure, () => {
+        const cameraFailure = this.#reconcileCameraViewResource(next);
+        if (cameraFailure !== undefined) throw cameraFailure.value;
+      });
       firstFailure = this.#reconcileRenderObjectRefs(next, delta, firstFailure);
       firstFailure = this.#reconcileGltfInstanceTransforms(delta, firstFailure);
       if (firstFailure !== undefined) throw firstFailure.value;
@@ -3155,31 +3171,34 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
-    let firstFailure: CapturedFailure | undefined;
-    const apply = (operation: () => void): void => {
-      firstFailure = captureFirstFailure(firstFailure, operation);
+    const apply = (...steps: readonly (() => void)[]): void => {
+      this.#resourceArenaSideEffectDebt.push({ nextStep: 0, steps });
     };
     for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
-      apply(() => {
-        retainVertexInputGeometry(this.#vertexInputs, { geometryId: id, recipe });
-        this.#retainedGeometryRecipes.set(key, { id, recipe });
-      });
+      apply(
+        () => retainVertexInputGeometry(this.#vertexInputs, { geometryId: id, recipe }),
+        () => this.#retainedGeometryRecipes.set(key, { id, recipe }),
+      );
     }
     for (const { id, key } of changes.releasedGeometryDeclarations) {
-      apply(() => {
-        if (this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring") {
-          releaseVertexInputGeometry(this.#vertexInputs, this.#gl, this.#contextGeneration, id);
-        } else releaseLostVertexInputGeometry(this.#vertexInputs, id);
-        if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
-        this.#gltfPacketPrimitivesByGeometryId.delete(id);
-      });
+      apply(
+        () => {
+          if (this.#contextLifecycle === "active" || this.#contextLifecycle === "restoring") {
+            releaseVertexInputGeometry(this.#vertexInputs, this.#gl, this.#contextGeneration, id);
+          } else releaseLostVertexInputGeometry(this.#vertexInputs, id);
+        },
+        () => {
+          if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
+        },
+        () => this.#gltfPacketPrimitivesByGeometryId.delete(id),
+      );
     }
     for (const request of changes.acquiredGltfRequests) apply(() => this.#ensureGltfState(request.key));
     for (const key of changes.releasedGltfKeys) {
-      apply(() => {
-        abortResourceArenaImageWork(this.#resourceArena, key);
-        this.#gltf.delete(key);
-      });
+      apply(
+        () => abortResourceArenaImageWork(this.#resourceArena, key),
+        () => this.#gltf.delete(key),
+      );
     }
     for (const key of changes.releasedOrdinaryTextureKeys) {
       apply(() => this.#releaseOrdinaryTexture(key));
@@ -3194,6 +3213,25 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
       apply(() => this.#closeTextureSource(source));
     }
+    this.#drainResourceArenaSideEffectDebt();
+  }
+
+  #drainResourceArenaSideEffectDebt(): void {
+    if (this.#resourceArenaSideEffectDebt.length === 0) return;
+    let firstFailure: CapturedFailure | undefined;
+    const remaining: ResourceArenaSideEffectDebt[] = [];
+    for (const operation of this.#resourceArenaSideEffectDebt) {
+      while (operation.nextStep < operation.steps.length) {
+        const failure = captureFailure(operation.steps[operation.nextStep]!);
+        if (failure !== undefined) {
+          firstFailure ??= failure;
+          remaining.push(operation);
+          break;
+        }
+        operation.nextStep += 1;
+      }
+    }
+    this.#resourceArenaSideEffectDebt = remaining;
     if (firstFailure !== undefined) throw firstFailure.value;
   }
 
@@ -3335,7 +3373,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const binding = this.#renderObjectBindings.get(ref);
       if (binding === undefined) continue;
       firstFailure = captureFirstFailure(firstFailure, () => {
-        assignRenderObjectRef(ref, null);
+        binding.attachment.detach();
+        this.#renderObjectHandles.delete(binding.node);
+        this.#renderObjectBindings.delete(ref);
+      });
+    }
+    return firstFailure;
+  }
+
+  #detachRenderObjectRefs(
+    initialFailure?: CapturedFailure,
+  ): CapturedFailure | undefined {
+    let firstFailure = initialFailure;
+    for (const [ref, binding] of this.#renderObjectBindings) {
+      firstFailure = captureFirstFailure(firstFailure, () => {
+        binding.attachment.detach();
         this.#renderObjectHandles.delete(binding.node);
         this.#renderObjectBindings.delete(ref);
       });
@@ -3571,33 +3623,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const declarativeTransform = resolvedTransform(node.transform);
     let binding = this.#renderObjectBindings.get(ref);
     if (binding === undefined) {
-      const existingHandle = typeof ref === "function" ? null : ref.current;
-      const invalidation = existingHandle === null ? { suppress: false } : undefined;
-      const handle = existingHandle ?? createRenderObjectHandle(declarativeTransform, () => {
-        if (invalidation?.suppress === true) return;
-
+      const attachment = attachRenderObjectRef(ref, declarativeTransform, () => {
         this.#invalidateRenderObjectMutation();
       });
       binding = {
-        attached: false,
+        attachment,
         declarativeTransform,
-        handle,
-        invalidation,
+        handle: attachment.handle,
         node,
       };
       this.#renderObjectBindings.set(ref, binding);
       this.#renderObjectHandles.set(node, binding.handle);
-      assignRenderObjectRef(ref, binding.handle);
-      binding.attached = true;
       return;
     } else {
       if (!sameTransform(binding.declarativeTransform, declarativeTransform)) {
-        if (binding.invalidation !== undefined) binding.invalidation.suppress = true;
-        try {
-          binding.handle.setTransform(declarativeTransform);
-        } finally {
-          if (binding.invalidation !== undefined) binding.invalidation.suppress = false;
-        }
+        binding.attachment.syncTransform(declarativeTransform);
         binding.declarativeTransform = declarativeTransform;
       }
       this.#renderObjectHandles.delete(binding.node);
@@ -3605,10 +3645,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
 
     this.#renderObjectHandles.set(node, binding.handle);
-    if (!binding.attached) {
-      assignRenderObjectRef(ref, binding.handle);
-      binding.attached = true;
-    }
   }
 
   #renderObjectTransform(node: TransformableRenderNode): Transform | undefined {
@@ -5905,6 +5941,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       ? undefined
       : (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
     return {
+      ...(geometry.indices === undefined ? {} : { indices: geometry.indices }),
       modelSource,
       positions: geometry.positions,
       projection,
@@ -5980,7 +6017,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       ? this.#virtualTextureDrawDemand(state, demandContext)
       : undefined;
     if (drawDemand !== undefined) {
-      this.#demandVirtualTexturePageCandidates(state, drawDemand.demandCandidates, true);
+      this.#demandVirtualTexturePageCandidates(
+        state,
+        drawDemand.demandCandidates,
+        true,
+        drawDemand.preferredCandidates,
+      );
     }
 
     return this.#isAutoVirtualTextureCoverageReady(state, drawDemand)
@@ -6111,6 +6153,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     const state: VirtualTextureRuntimeState = {
       activeSource,
+      demandConvergenceWakePending: false,
       demandPublished: false,
       diagnosticsEnabled,
       desiredPageKeys: new Set(),
@@ -6122,6 +6165,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       pageRetryTimers: new Map(),
       sourceGeneration: 1,
       stats: {
+        demandAdmissions: 0,
+        demandRetentions: 0,
         generatedManifestUses: 0,
         generatedPageFailures: 0,
         generatedPageRasterizeMaxMs: 0,
@@ -6335,6 +6380,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       state,
       drawDemand.demandCandidates,
       context !== undefined || state.activeSource.kind === "generated",
+      drawDemand.preferredCandidates,
     );
   }
 
@@ -6342,6 +6388,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state: VirtualTextureRuntimeState,
     candidates: readonly VirtualTexturePageId[],
     preferTargetMip = false,
+    preferredCandidates?: readonly VirtualTexturePageId[],
   ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
@@ -6350,13 +6397,22 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#virtualTextureFrameDemand,
         state,
         this.#virtualTextureDemandViewIndex,
-        { candidates, preferTargetMip },
+        {
+          candidates,
+          preferTargetMip,
+          ...(preferredCandidates === undefined ? {} : { preferredCandidates }),
+        },
       );
       return;
     }
     this.#applyVirtualTextureDemand(
       state,
-      selectVirtualTextureWorkingSet(candidates, this.#virtualTextureDemandCapacity(state), preferTargetMip),
+      preferredCandidates === undefined
+        ? selectVirtualTextureWorkingSet(candidates, this.#virtualTextureDemandCapacity(state), preferTargetMip)
+        : selectVirtualTextureFrameWorkingSet(
+            [{ candidates, preferTargetMip, preferredCandidates }],
+            this.#virtualTextureDemandCapacity(state),
+          ),
     );
   }
 
@@ -6376,14 +6432,22 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (manifest === undefined || state.status !== "ready") return false;
     const desiredPageKeys = state.desiredPageKeysScratch;
     const desiredPages = state.desiredPagesScratch;
-    desiredPageKeys.clear();
-    desiredPages.length = 0;
-    for (const page of workingCandidates) {
-      const pageKey = virtualTexturePageKey(page);
-      if (desiredPageKeys.has(pageKey)) continue;
-      desiredPageKeys.add(pageKey);
-      desiredPages.push(page);
-    }
+    const capacity = this.#virtualTextureDemandCapacity(state);
+    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
+    const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
+    const stabilized = stabilizeVirtualTextureDesiredPagesInto(
+      workingCandidates,
+      state.desiredPages,
+      state.desiredPageKeys,
+      gpu?.residentPages ?? 0,
+      (page) => virtualTextureGpuExactResidency(this.#virtualTextureGpu, state.key, page) !== undefined,
+      capacity,
+      desiredPages,
+      desiredPageKeys,
+    );
+    state.stats.demandAdmissions += stabilized.admissions;
+    state.stats.demandRetentions += stabilized.retentions;
+    state.demandConvergenceWakePending = stabilized.deferred;
     return true;
   }
 
@@ -6398,6 +6462,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
     if (resource !== undefined) {
       setVirtualTextureGpuDesiredPageKeys(this.#virtualTextureGpu, resource, state.desiredPageKeys);
+    }
+    if (state.demandConvergenceWakePending) {
+      state.demandConvergenceWakePending = false;
+      this.invalidate();
     }
   }
 
@@ -6497,6 +6565,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       flipY: state.texture.flipY ?? true,
       generated: state.activeSource.kind === "generated",
       manifest,
+      workspace: this.#virtualTextureDemandPlanning,
       ...(state.pageUrisByKey === undefined ? {} : { pageUrisByKey: state.pageUrisByKey }),
     });
   }
@@ -8308,6 +8377,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {
     let atlasTextures = 0;
+    let demandAdmissions = 0;
+    let demandRetentions = 0;
     let generatedManifestUses = 0;
     let generatedPageFailures = 0;
     let generatedPageRasterizeMaxMs = 0;
@@ -8338,6 +8409,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
         atlasTextures += 1;
         pageTableTextures += 1;
       }
+      demandAdmissions += state.stats.demandAdmissions;
+      demandRetentions += state.stats.demandRetentions;
       generatedManifestUses += state.stats.generatedManifestUses;
       generatedPageFailures += state.stats.generatedPageFailures;
       generatedPageRasterizeMaxMs = Math.max(generatedPageRasterizeMaxMs, state.stats.generatedPageRasterizeMaxMs);
@@ -8371,6 +8444,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     return {
       atlasTextures,
+      demandAdmissions,
+      demandRetentions,
       generatedManifestUses,
       generatedPageFailures,
       generatedPageRasterizeMaxMs,

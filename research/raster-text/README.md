@@ -247,7 +247,8 @@ arrives; do not expose missing atlas internals through the public text API.
 
 Raster pixels are visual output, not the scene's source of truth.
 
-- Layout stores text run bounds in CSS/world units.
+- Layout stores screen text bounds in CSS pixels; any future world-space text
+  stores its bounds in Royal metres. These are separate layout domains.
 - Atlas layout stores per-glyph or per-cluster boxes with advance, offset,
   ascent/descent, and texture UVs.
 - Culling uses run bounds expanded for filter/shadow/padding, never alpha scans.

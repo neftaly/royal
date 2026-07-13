@@ -3301,6 +3301,42 @@ afterEach(() => {
 });
 
 describe("WebGL renderer scene and glTF regressions", () => {
+  it("publishes mixed-scene packet topology before retrying a throwing ref attachment", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    let failAttachment = true;
+    const renderGraph = renderScene([
+      gltf({ src: triangleGltfSrc, version: "packet-ref-retry" }),
+      mesh({
+        geometry: planeGeometry(0.25),
+        material: unlitMaterial({ color: [1, 1, 1, 1] }),
+        ref: (handle) => {
+          if (handle !== null && failAttachment) {
+            failAttachment = false;
+            throw new Error("ref attachment failed");
+          }
+        },
+      }),
+    ]);
+
+    expect(() => root.render(renderGraph)).toThrow("ref attachment failed");
+    expect(() => root.render(renderGraph)).not.toThrow();
+    expect(drawCalls(calls), "the retry must render the direct portion of the committed generation")
+      .toHaveLength(1);
+
+    await settleDocumentAndBuffer(loader);
+    await waitForAnimationFrameWork(viewport.animationFrames, () => drawCalls(calls).length === 3);
+    expect(
+      drawCalls(calls).slice(-2),
+      "the ready glTF occurrence must remain reverse-mapped after the ref failure",
+    ).toHaveLength(2);
+    expect(root.snapshot().planning).toMatchObject({ planCompiles: 1, planRevision: 1, sceneCommits: 1 });
+    root.dispose();
+  });
+
   it("fills a retained loading occurrence without rebuilding on camera frames", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();

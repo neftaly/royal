@@ -1,27 +1,33 @@
 import { frozenDirection3, frozenRgba, frozenVec3 } from './descriptor-values';
-import type { Direction3, Rgba, Vec3 } from './primitives';
+import type { Direction3, Metres, Rads, Rgba, WorldPosition3 } from './primitives';
 
 export interface SpotLightNode {
   readonly kind: 'spot-light';
   readonly color: Rgba;
   readonly direction: Direction3;
-  readonly innerConeAngle: number;
+  readonly innerConeAngle: Rads;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
-  readonly outerConeAngle: number;
-  readonly position: Vec3;
-  readonly range?: number;
+  readonly outerConeAngle: Rads;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
+  /** Optional maximum influence distance in metres. */
+  readonly range?: Metres;
 }
 
 export interface SpotLightOptions {
   readonly color?: Rgba;
   readonly direction: Direction3;
-  readonly innerConeAngle?: number;
+  /** Inner cone angle in radians. */
+  readonly innerConeAngle?: Rads;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
-  readonly outerConeAngle?: number;
-  readonly position: Vec3;
-  readonly range?: number;
+  /** Outer cone angle in radians. */
+  readonly outerConeAngle?: Rads;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
+  /** Optional maximum influence distance in metres. */
+  readonly range?: Metres;
 }
 
 const WHITE: Rgba = frozenRgba([1, 1, 1, 1], 'spot light color');

@@ -144,6 +144,52 @@ describe("React frame loop", () => {
     root.dispose();
   });
 
+  it("reports after-frame failures after every flush callback has run", () => {
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const failure = new Error("renderer flush failed");
+    const reportError = vi.fn();
+    const laterFlush = vi.fn();
+    const frameLoop = createFrameLoop(reportError);
+    frameLoop.afterFrame(() => {
+      throw failure;
+    });
+    frameLoop.afterFrame(laterFlush);
+    frameLoop.subscribe(() => undefined, 0);
+
+    queuedFrames.shift()?.(16);
+
+    expect(laterFlush).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(failure);
+    frameLoop.dispose();
+  });
+
+  it("reports an undefined after-frame throw", () => {
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const reportError = vi.fn();
+    const frameLoop = createFrameLoop(reportError);
+    frameLoop.afterFrame(() => {
+      throw undefined;
+    });
+    frameLoop.subscribe(() => undefined, 0);
+
+    queuedFrames.shift()?.(16);
+
+    expect(reportError).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(undefined);
+    frameLoop.dispose();
+  });
+
   it("keeps scheduling and active-run counters coherent under randomized churn", () => {
     forEachFuzzCase({ cases: 32, seed: 0xf24a_c10c }, ({ label, random }) => {
       const queuedFrames = new Map<number, FrameRequestCallback>();

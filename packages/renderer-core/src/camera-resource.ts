@@ -3,7 +3,9 @@ import type { Rads } from './primitives';
 
 export interface CameraViewReadTarget {
   kind: Camera['kind'];
+  /** Mutable XYZ position storage in metres. */
   readonly position: Float64Array;
+  /** Mutable XYZ Euler-angle storage in radians. */
   readonly rotation: Float64Array;
   fovY: Rads;
   left: number;
@@ -18,7 +20,9 @@ export type CameraViewResourceListener = (version: number) => void;
 
 interface CameraViewResourceBase {
   readonly kind: 'camera-view-resource';
+  /** Staged XYZ position in metres. */
   readonly position: Float64Array;
+  /** Staged XYZ Euler angles in radians. */
   readonly rotation: Float64Array;
   readonly version: number;
   /** Publishes staged fields. Equal commits are silent. */
@@ -31,13 +35,16 @@ interface CameraViewResourceBase {
 export interface PerspectiveCameraViewResource extends CameraViewResourceBase {
   readonly projection: 'perspective';
   fovY: Rads;
+  /** Near clipping distance in metres. */
   near: number;
+  /** Far clipping distance in metres. */
   far: number;
   set(camera: PerspectiveCamera): void;
 }
 
 export interface OrthographicCameraViewResource extends CameraViewResourceBase {
   readonly projection: 'orthographic';
+  /** Orthographic bounds and clipping distances in metres. */
   left: number;
   right: number;
   bottom: number;

@@ -4,6 +4,13 @@ This note evaluates JavaScript/WASM physics engines that Royal could demo for a
 multiplayer FPS-style simulation. The focus is not just "can it collide
 objects", but whether it has a credible multiplayer story.
 
+Unit boundary: Royal positions, sizes, distances, and picking results are
+metres (`1 Royal world unit = 1 m`). A physics adapter must expose that same
+scale to Royal and the network protocol; any engine-specific scaling belongs at
+one explicit adapter boundary. Velocities are therefore metres per second and
+accelerations are metres per second squared. Fixed-step durations remain
+seconds and angles remain radians.
+
 ## Local Constraints From Patchpit Research
 
 The Patchpit notes are useful guardrails:

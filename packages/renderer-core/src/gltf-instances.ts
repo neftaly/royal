@@ -11,9 +11,12 @@ export interface GltfInstanceTransforms {
   /** Stable application identities. Their order is immutable for this source's lifetime. */
   readonly logicalIds?: readonly PickingId[];
   readonly poseVersion: number;
+  /** Packed XYZ translations in metres (`count * 3`). */
   readonly positions: Float32Array;
+  /** Packed XYZ Euler angles in radians (`count * 3`). */
   readonly rotations: Float32Array;
   readonly scaleVersion: number;
+  /** Packed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales: Float32Array;
   /** Notify attached renderer roots after mutating positions or rotations. */
   commitPose(startIndex?: number, count?: number): void;
@@ -35,8 +38,11 @@ export type GltfInstanceTransformsListener = (
 export interface CreateGltfInstanceTransformsOptions {
   readonly count: number;
   readonly logicalIds?: readonly PickingId[];
+  /** Packed XYZ translations in metres (`count * 3`). */
   readonly positions?: ArrayLike<number>;
+  /** Packed XYZ Euler angles in radians (`count * 3`). */
   readonly rotations?: ArrayLike<number>;
+  /** Packed dimensionless XYZ multipliers (`count * 3`). */
   readonly scales?: ArrayLike<number>;
 }
 
@@ -138,10 +144,38 @@ export const createGltfInstanceTransforms = (
   validateFiniteChannel(positions, 'positions');
   validateFiniteChannel(rotations, 'rotations');
   validateScales(scales);
+  let notifying = false;
+  const notify = (
+    channel: GltfInstanceTransformChannel,
+    start: number,
+    rangeCount: number,
+    version: number,
+  ): void => {
+    const cohort = [...listeners];
+    let failed = false;
+    let firstFailure: unknown;
+    notifying = true;
+    try {
+      for (const listener of cohort) {
+        try {
+          listener(channel, start, rangeCount, version);
+        } catch (value) {
+          if (!failed) {
+            failed = true;
+            firstFailure = value;
+          }
+        }
+      }
+    } finally {
+      notifying = false;
+    }
+    if (failed) throw firstFailure;
+  };
   const transforms: GltfInstanceTransforms = {
     count,
     ...(logicalIds === undefined ? {} : { logicalIds }),
     commitPose: (startIndex, committedCount) => {
+      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
       assertCommittedRange(count, startIndex, committedCount);
       const start = startIndex ?? 0;
       const rangeCount = committedCount ?? count - start;
@@ -150,9 +184,10 @@ export const createGltfInstanceTransforms = (
       validateFiniteChannel(positions, 'positions', startOffset, endOffset);
       validateFiniteChannel(rotations, 'rotations', startOffset, endOffset);
       poseVersion += 1;
-      for (const listener of listeners) listener('pose', start, rangeCount, poseVersion);
+      notify('pose', start, rangeCount, poseVersion);
     },
     commitScale: (startIndex, committedCount) => {
+      if (notifying) throw new Error('glTF instance commit cannot run from an instance transform subscriber');
       assertCommittedRange(count, startIndex, committedCount);
       const start = startIndex ?? 0;
       const rangeCount = committedCount ?? count - start;
@@ -160,7 +195,7 @@ export const createGltfInstanceTransforms = (
       const endOffset = (start + rangeCount) * 3;
       validateScales(scales, startOffset, endOffset);
       scaleVersion += 1;
-      for (const listener of listeners) listener('scale', start, rangeCount, scaleVersion);
+      notify('scale', start, rangeCount, scaleVersion);
     },
     get poseVersion() {
       return poseVersion;

@@ -97,33 +97,43 @@ const parseJsonBytes = (buffer: ArrayBuffer): GltfDocument => {
 };
 
 const parseGlb = (buffer: ArrayBuffer): GltfDocumentPayload => {
+  if (buffer.byteLength < 12) throw new Error("Invalid GLB header length");
   const header = new DataView(buffer, 0, 12);
   const magic = header.getUint32(0, true);
   const version = header.getUint32(4, true);
   const length = header.getUint32(8, true);
   if (magic !== GLB_MAGIC) throw new Error("Invalid GLB magic");
   if (version !== GLB_VERSION) throw new Error(`Unsupported GLB version ${version}`);
-  if (length > buffer.byteLength) throw new Error("Invalid GLB length");
+  if (length !== buffer.byteLength) {
+    throw new Error(`Invalid GLB length ${length}; received ${buffer.byteLength} bytes`);
+  }
 
   let offset = 12;
+  let chunkIndex = 0;
   let document: GltfDocument | undefined;
   let binaryChunk: ArrayBuffer | undefined;
-  while (offset + 8 <= length) {
+  while (offset < length) {
+    if (length - offset < 8) throw new Error("Invalid GLB trailing chunk header");
     const chunkHeader = new DataView(buffer, offset, 8);
     const chunkLength = chunkHeader.getUint32(0, true);
     const chunkType = chunkHeader.getUint32(4, true);
+    if (chunkLength % 4 !== 0) throw new Error(`GLB chunk ${chunkIndex} length is not 4-byte aligned`);
+    if (chunkIndex === 0 && chunkType !== GLB_CHUNK_JSON) {
+      throw new Error("GLB JSON chunk must be first");
+    }
     offset += 8;
     if (offset + chunkLength > length) throw new Error("Invalid GLB chunk length");
     const chunk = buffer.slice(offset, offset + chunkLength);
     offset += chunkLength;
 
     if (chunkType === GLB_CHUNK_JSON) {
+      if (document !== undefined) throw new Error("GLB contains multiple JSON chunks");
       document = parseJsonBytes(chunk);
-      continue;
-    }
-    if (chunkType === GLB_CHUNK_BIN && binaryChunk === undefined) {
+    } else if (chunkType === GLB_CHUNK_BIN) {
+      if (binaryChunk !== undefined) throw new Error("GLB contains multiple BIN chunks");
       binaryChunk = chunk;
     }
+    chunkIndex += 1;
   }
 
   if (document === undefined) throw new Error("GLB is missing a JSON chunk");
@@ -160,10 +170,45 @@ export const loadGltfDocument = async (src: string, signal?: AbortSignal): Promi
   };
 };
 
-const bufferSlice = (buffer: ArrayBuffer, byteLength: number | undefined): ArrayBuffer => {
-  if (byteLength === undefined || byteLength >= buffer.byteLength) return buffer;
+const bufferSlice = (buffer: ArrayBuffer, byteLength: number | undefined, context: string): ArrayBuffer => {
+  if (byteLength === undefined) return buffer;
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+    throw new Error(`${context} has invalid byteLength ${String(byteLength)}`);
+  }
+  if (byteLength > buffer.byteLength) {
+    throw new Error(`${context} declares ${byteLength} bytes, but only ${buffer.byteLength} bytes are available`);
+  }
+  if (byteLength === buffer.byteLength) return buffer;
 
   return buffer.slice(0, byteLength);
+};
+
+const checkedBufferView = (
+  document: GltfDocument,
+  buffers: readonly ArrayBuffer[],
+  bufferViewIndex: number,
+): { readonly buffer: ArrayBuffer; readonly byteLength: number; readonly byteOffset: number } => {
+  const context = `glTF bufferView ${bufferViewIndex}`;
+  const bufferView = document.bufferViews?.[bufferViewIndex];
+  if (bufferView === undefined) throw new Error(`${context} does not exist`);
+  const bufferIndex = bufferView.buffer ?? 0;
+  const buffer = buffers[bufferIndex];
+  if (buffer === undefined) throw new Error(`${context} references missing buffer ${bufferIndex}`);
+  const byteOffset = bufferView.byteOffset ?? 0;
+  const { byteLength } = bufferView;
+  if (!Number.isSafeInteger(byteOffset) || byteOffset < 0) {
+    throw new Error(`${context} has invalid byteOffset ${String(byteOffset)}`);
+  }
+  if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+    throw new Error(`${context} has invalid byteLength ${String(byteLength)}`);
+  }
+  if (byteOffset > buffer.byteLength || byteLength > buffer.byteLength - byteOffset) {
+    throw new Error(
+      `${context} range [${byteOffset}, ${byteOffset + byteLength}) exceeds buffer ${bufferIndex} byteLength ${buffer.byteLength}`,
+    );
+  }
+
+  return { buffer, byteLength, byteOffset };
 };
 
 export const gltfBufferViewBytes = (
@@ -171,13 +216,9 @@ export const gltfBufferViewBytes = (
   buffers: readonly ArrayBuffer[],
   bufferViewIndex: number,
 ): ArrayBuffer => {
-  const bufferView = document.bufferViews?.[bufferViewIndex];
-  if (bufferView === undefined) return new ArrayBuffer(0);
-  const buffer = buffers[bufferView.buffer ?? 0];
-  if (buffer === undefined) return new ArrayBuffer(0);
-  const offset = bufferView.byteOffset ?? 0;
+  const { buffer, byteLength, byteOffset } = checkedBufferView(document, buffers, bufferViewIndex);
 
-  return buffer.slice(offset, offset + bufferView.byteLength);
+  return buffer.slice(byteOffset, byteOffset + byteLength);
 };
 
 export const loadGltfBuffers = async (
@@ -188,20 +229,38 @@ export const loadGltfBuffers = async (
 ): Promise<readonly ArrayBuffer[]> =>
   Promise.all((document.buffers ?? []).map(async (buffer, index) => {
     throwIfAborted(signal);
+    const context = `glTF asset ${JSON.stringify(src)} buffer ${index}`;
     if (buffer.uri === undefined) {
-      if (index === 0 && binaryChunk !== undefined) return bufferSlice(binaryChunk, buffer.byteLength);
+      if (index === 0 && binaryChunk !== undefined) return bufferSlice(binaryChunk, buffer.byteLength, context);
+      const targetBufferViews = document.bufferViews?.filter((bufferView) => (bufferView.buffer ?? 0) === index) ?? [];
+      const requiredExtensions = new Set(document.extensionsRequired ?? []);
+      const meshoptDecodeTarget = targetBufferViews.length > 0 && targetBufferViews.every((bufferView) =>
+        (bufferView.extensions?.EXT_meshopt_compression !== undefined
+          && requiredExtensions.has("EXT_meshopt_compression"))
+        || (bufferView.extensions?.KHR_meshopt_compression !== undefined
+          && requiredExtensions.has("KHR_meshopt_compression")));
+      if (meshoptDecodeTarget === true && buffer.byteLength !== undefined) {
+        if (!Number.isSafeInteger(buffer.byteLength) || buffer.byteLength < 0) {
+          throw new Error(`${context} has invalid byteLength ${String(buffer.byteLength)}`);
+        }
 
-      return new ArrayBuffer(0);
+        // Required meshopt assets may omit the URI of a decode-only fallback buffer.
+        return new ArrayBuffer(buffer.byteLength);
+      }
+
+      throw new Error(`${context} has no URI and no GLB binary chunk`);
     }
-    if (buffer.uri.startsWith("data:")) return bufferSlice(decodeDataUri(buffer.uri), buffer.byteLength);
+    if (buffer.uri.startsWith("data:")) return bufferSlice(decodeDataUri(buffer.uri), buffer.byteLength, context);
 
     const bufferResponse = await fetch(
       resolveResourceUri(src, buffer.uri),
       signal === undefined ? undefined : { signal },
     );
-    if (!bufferResponse.ok) throw new Error(`${bufferResponse.status} ${bufferResponse.statusText}`);
+    if (!bufferResponse.ok) {
+      throw new Error(`${context} failed to load: ${bufferResponse.status} ${bufferResponse.statusText}`);
+    }
 
     const bytes = await bufferResponse.arrayBuffer();
     throwIfAborted(signal);
-    return bufferSlice(bytes, buffer.byteLength);
+    return bufferSlice(bytes, buffer.byteLength, context);
   }));

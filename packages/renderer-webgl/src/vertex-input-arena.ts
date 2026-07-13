@@ -60,6 +60,8 @@ export interface VertexInputGeometry {
 }
 
 export interface VertexInputArenaSnapshot {
+  readonly abandonedBufferCount: number;
+  readonly abandonedVertexArrayCount: number;
   readonly baseVertexArrayCount: number;
   readonly compositeVertexArrayCount: number;
   readonly contextGeneration?: number;
@@ -67,6 +69,8 @@ export interface VertexInputArenaSnapshot {
   readonly instanceAllocationCount: number;
   readonly instanceAllocationIds: ReadonlySet<number>;
   readonly identityBucketSizes: ReadonlyMap<string, number>;
+  readonly pendingBufferDeleteCount: number;
+  readonly pendingVertexArrayDeleteCount: number;
   readonly semanticGeometryIds: ReadonlySet<number>;
   readonly semanticGeometryCount: number;
   readonly staticGeometryCount: number;
@@ -84,6 +88,8 @@ type StaticGeometry = VertexInputGeometry & {
   readonly compositeVertexArrays: Map<number, CompositeVertexArray>;
   readonly geometryIds: Set<number>;
   joinedIdentityBucket: boolean;
+  /** Driver handles still owned while a fallible release is resumed. */
+  pendingBufferDeletes?: Set<WebGLBuffer>;
 };
 
 type SemanticGeometry = {
@@ -101,6 +107,8 @@ type OwnedInstanceAllocation = {
   readonly allocation: InstanceAllocationToken;
   bufferCapacity: number;
   buffers?: VertexInputInstanceBuffers;
+  /** Driver handles still owned while a fallible release is resumed. */
+  pendingBufferDeletes?: Set<WebGLBuffer>;
   capacity: number;
   instanceCount: number;
   localModelsDirty: boolean;
@@ -133,6 +141,8 @@ export interface VertexInputArena {
 }
 
 interface VertexInputArenaState {
+  abandonedBufferCount: number;
+  abandonedVertexArrayCount: number;
   contextDropped: boolean;
   contextGeneration?: number;
   readonly geometryBuckets: Map<string, StaticGeometry[]>;
@@ -141,11 +151,16 @@ interface VertexInputArenaState {
   nextInstanceId: number;
   nextStaticIdentityId: number;
   readonly ownedInstances: Map<number, OwnedInstanceAllocation>;
+  /** Handles created by a transaction which failed before it could publish them. */
+  readonly pendingBufferDeletes: Set<WebGLBuffer>;
+  readonly pendingVertexArrayDeletes: Set<WebGLVertexArrayObject>;
   readonly semantics: Map<number, SemanticGeometry>;
   readonly staticGeometries: Set<StaticGeometry>;
 }
 
 export const createVertexInputArena = (): VertexInputArena => ({
+  abandonedBufferCount: 0,
+  abandonedVertexArrayCount: 0,
   contextDropped: false,
   geometryBuckets: new Map(),
   instanceBuffers: new Map(),
@@ -153,6 +168,8 @@ export const createVertexInputArena = (): VertexInputArena => ({
   nextInstanceId: 1,
   nextStaticIdentityId: 1,
   ownedInstances: new Map(),
+  pendingBufferDeletes: new Set(),
+  pendingVertexArrayDeletes: new Set(),
   semantics: new Map(),
   staticGeometries: new Set(),
 } as unknown as VertexInputArena);
@@ -244,6 +261,54 @@ const createVertexArray = (gl: WebGL2RenderingContext): WebGLVertexArrayObject =
   return vertexArray;
 };
 
+const NO_FAILURE: unique symbol = Symbol("vertex-input-no-failure");
+type CapturedFailure = { readonly value: unknown };
+type Failure = CapturedFailure | typeof NO_FAILURE;
+
+const firstFailure = (failure: Failure, next: Failure): Failure =>
+  failure === NO_FAILURE ? next : failure;
+
+const captureFirstFailure = (failure: Failure, action: () => void): Failure => {
+  try {
+    action();
+  } catch (error) {
+    return firstFailure(failure, { value: error });
+  }
+  return failure;
+};
+
+const deletePendingBuffers = (
+  gl: WebGL2RenderingContext,
+  buffers: Set<WebGLBuffer>,
+): Failure => {
+  let failure: Failure = NO_FAILURE;
+  for (const buffer of buffers) {
+    failure = captureFirstFailure(failure, () => {
+      gl.deleteBuffer(buffer);
+      buffers.delete(buffer);
+    });
+  }
+  return failure;
+};
+
+const deletePendingVertexArrays = (
+  gl: WebGL2RenderingContext,
+  vertexArrays: Set<WebGLVertexArrayObject>,
+): Failure => {
+  let failure: Failure = NO_FAILURE;
+  for (const vertexArray of vertexArrays) {
+    failure = captureFirstFailure(failure, () => {
+      gl.deleteVertexArray(vertexArray);
+      vertexArrays.delete(vertexArray);
+    });
+  }
+  return failure;
+};
+
+const throwFailure = (failure: Failure): void => {
+  if (failure !== NO_FAILURE) throw failure.value;
+};
+
 const unbindVertexInput = (gl: WebGL2RenderingContext): void => {
   gl.bindVertexArray(null);
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -251,14 +316,16 @@ const unbindVertexInput = (gl: WebGL2RenderingContext): void => {
 };
 
 const uploadStaticGeometry = (
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   recipe: CpuGeometry,
   staticIdentityId: number,
 ): StaticGeometry => {
-  const owned: WebGLBuffer[] = [];
+  const owned = new Set<WebGLBuffer>();
   const upload = (target: number, value: ArrayBufferView): WebGLBuffer => {
     const buffer = createBuffer(gl);
-    owned.push(buffer);
+    owned.add(buffer);
+    state.pendingBufferDeletes.add(buffer);
     gl.bindBuffer(target, buffer);
     gl.bufferData(target, value, gl.STATIC_DRAW);
     return buffer;
@@ -279,7 +346,7 @@ const uploadStaticGeometry = (
       : recipe.indices instanceof Uint32Array
         ? gl.UNSIGNED_INT
         : recipe.indices instanceof Uint8Array ? gl.UNSIGNED_BYTE : gl.UNSIGNED_SHORT;
-    return {
+    const geometry: StaticGeometry = {
       arrayBuffer,
       bucketKey: recipe.bucketKey,
       ...(colorBuffer === undefined ? {} : { colorBuffer }),
@@ -298,11 +365,16 @@ const uploadStaticGeometry = (
       ...(texCoord1Buffer === undefined ? {} : { texCoord1Buffer }),
       vertexCount: recipe.positions.length / 3,
     };
-  } catch (error) {
-    for (const buffer of owned) gl.deleteBuffer(buffer);
-    throw error;
-  } finally {
     unbindVertexInput(gl);
+    for (const buffer of owned) state.pendingBufferDeletes.delete(buffer);
+    return geometry;
+  } catch (error) {
+    let failure: Failure = { value: error };
+    const cleanupFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
+    failure = firstFailure(failure, cleanupFailure);
+    failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    throwFailure(failure);
+    throw new Error("Unreachable vertex-input static upload cleanup");
   }
 };
 
@@ -314,9 +386,12 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.geometryBuckets.clear();
   state.instanceBuffers.clear();
   state.instanceGeometryIds.clear();
+  state.pendingBufferDeletes.clear();
+  state.pendingVertexArrayDeletes.clear();
   for (const resource of state.ownedInstances.values()) {
     resource.bufferCapacity = 0;
     delete resource.buffers;
+    delete resource.pendingBufferDeletes;
     resource.localModelsDirty = true;
     resource.rootPosesDirty = true;
     resource.rootScalesDirty = true;
@@ -326,6 +401,39 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.staticGeometries.clear();
   delete state.contextGeneration;
   state.contextDropped = dropped;
+};
+
+const accountAbandonedContextHandles = (state: VertexInputArenaState): void => {
+  const buffers = new Set<WebGLBuffer>(state.pendingBufferDeletes);
+  const vertexArrays = new Set<WebGLVertexArrayObject>(state.pendingVertexArrayDeletes);
+  for (const geometry of state.staticGeometries) {
+    if (geometry.pendingBufferDeletes !== undefined) {
+      for (const buffer of geometry.pendingBufferDeletes) buffers.add(buffer);
+    } else {
+      buffers.add(geometry.arrayBuffer);
+      if (geometry.normalBuffer !== undefined) buffers.add(geometry.normalBuffer);
+      if (geometry.tangentBuffer !== undefined) buffers.add(geometry.tangentBuffer);
+      if (geometry.colorBuffer !== undefined) buffers.add(geometry.colorBuffer);
+      if (geometry.texCoord0Buffer !== undefined) buffers.add(geometry.texCoord0Buffer);
+      if (geometry.texCoord1Buffer !== undefined) buffers.add(geometry.texCoord1Buffer);
+      if (geometry.indexBuffer !== undefined) buffers.add(geometry.indexBuffer);
+    }
+    if (geometry.baseVertexArray !== undefined) vertexArrays.add(geometry.baseVertexArray);
+    for (const composite of geometry.compositeVertexArrays.values()) {
+      vertexArrays.add(composite.vertexArray);
+    }
+  }
+  for (const resource of state.ownedInstances.values()) {
+    if (resource.pendingBufferDeletes !== undefined) {
+      for (const buffer of resource.pendingBufferDeletes) buffers.add(buffer);
+    } else if (resource.buffers !== undefined) {
+      buffers.add(resource.buffers.localModelBuffer);
+      buffers.add(resource.buffers.rootPoseBuffer);
+      buffers.add(resource.buffers.rootScaleBuffer);
+    }
+  }
+  state.abandonedBufferCount += buffers.size;
+  state.abandonedVertexArrayCount += vertexArrays.size;
 };
 
 const requireContextGeneration = (state: VertexInputArenaState, contextGeneration: number): void => {
@@ -345,13 +453,15 @@ const requireContextGeneration = (state: VertexInputArenaState, contextGeneratio
 };
 
 const createOwnedInstanceBuffers = (
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
   capacity: number,
 ): VertexInputInstanceBuffers => {
-  const owned: WebGLBuffer[] = [];
+  const owned = new Set<WebGLBuffer>();
   const create = (floatsPerInstance: number): WebGLBuffer => {
     const buffer = createBuffer(gl);
-    owned.push(buffer);
+    owned.add(buffer);
+    state.pendingBufferDeletes.add(buffer);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -361,16 +471,21 @@ const createOwnedInstanceBuffers = (
     return buffer;
   };
   try {
-    return {
+    const buffers = {
       localModelBuffer: create(16),
       rootPoseBuffer: create(6),
       rootScaleBuffer: create(3),
     };
-  } catch (error) {
-    for (const buffer of owned) gl.deleteBuffer(buffer);
-    throw error;
-  } finally {
     unbindVertexInput(gl);
+    for (const buffer of owned) state.pendingBufferDeletes.delete(buffer);
+    return buffers;
+  } catch (error) {
+    let failure: Failure = { value: error };
+    const cleanupFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
+    failure = firstFailure(failure, cleanupFailure);
+    failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    throwFailure(failure);
+    throw new Error("Vertex-input instance-buffer creation failed without an error");
   }
 };
 
@@ -428,7 +543,7 @@ export const prepareVertexInputInstance = (
     rootScales.set(resource.staging.rootScales.subarray(0, resource.instanceCount * 3));
     const previousBuffers = resource.buffers;
     if (previousBuffers === undefined) {
-      resource.buffers = createOwnedInstanceBuffers(gl, instanceCount);
+      resource.buffers = createOwnedInstanceBuffers(state, gl, instanceCount);
     } else {
       resizeOwnedInstanceBuffers(gl, previousBuffers, instanceCount);
     }
@@ -439,7 +554,7 @@ export const prepareVertexInputInstance = (
     resource.staging.rootScales = rootScales;
     resource.staging.ranges = ranges;
   } else if (resource.buffers === undefined) {
-    resource.buffers = createOwnedInstanceBuffers(gl, resource.capacity);
+    resource.buffers = createOwnedInstanceBuffers(state, gl, resource.capacity);
     resource.bufferCapacity = resource.capacity;
   }
   resource.instanceCount = instanceCount;
@@ -571,7 +686,7 @@ const resolveStaticGeometry = (
       Number.MAX_SAFE_INTEGER,
       "Vertex-input static identity",
     );
-    resource = uploadStaticGeometry(gl, semantic.recipe, id);
+    resource = uploadStaticGeometry(state, gl, semantic.recipe, id);
     state.nextStaticIdentityId = id + 1;
     state.staticGeometries.add(resource);
     if ((bucket?.length ?? 0) < GEOMETRY_BUCKET_COMPARISON_LIMIT) {
@@ -631,16 +746,21 @@ export const vertexInputBaseVertexArray = (
   const geometry = resolveStaticGeometry(state, gl, contextGeneration, semantic);
   if (geometry.baseVertexArray !== undefined) return geometry.baseVertexArray;
   const vertexArray = createVertexArray(gl);
+  state.pendingVertexArrayDeletes.add(vertexArray);
   try {
     gl.bindVertexArray(vertexArray);
     configureStaticAttributes(gl, geometry);
+    unbindVertexInput(gl);
     geometry.baseVertexArray = vertexArray;
+    state.pendingVertexArrayDeletes.delete(vertexArray);
     return vertexArray;
   } catch (error) {
-    gl.deleteVertexArray(vertexArray);
-    throw error;
-  } finally {
-    unbindVertexInput(gl);
+    let failure: Failure = { value: error };
+    const cleanupFailure = deletePendingVertexArrays(gl, state.pendingVertexArrayDeletes);
+    failure = firstFailure(failure, cleanupFailure);
+    failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    throwFailure(failure);
+    throw new Error("Vertex-input base VAO creation failed without an error");
   }
 };
 
@@ -705,10 +825,12 @@ const vertexInputCompositeVertexArray = (
     return cached.vertexArray;
   }
   const vertexArray = createVertexArray(gl);
+  state.pendingVertexArrayDeletes.add(vertexArray);
   try {
     gl.bindVertexArray(vertexArray);
     configureStaticAttributes(gl, geometry);
     configureInstanceAttributes(gl, buffers);
+    unbindVertexInput(gl);
     geometry.compositeVertexArrays.set(instanceKey, { buffers, geometryReferenceCount: 1, vertexArray });
     state.instanceBuffers.set(instanceKey, buffers);
     let ids = state.instanceGeometryIds.get(instanceKey);
@@ -718,12 +840,15 @@ const vertexInputCompositeVertexArray = (
     }
     ids.add(geometryId);
     semantic.instanceKeys.add(instanceKey);
+    state.pendingVertexArrayDeletes.delete(vertexArray);
     return vertexArray;
   } catch (error) {
-    gl.deleteVertexArray(vertexArray);
-    throw error;
-  } finally {
-    unbindVertexInput(gl);
+    let failure: Failure = { value: error };
+    const cleanupFailure = deletePendingVertexArrays(gl, state.pendingVertexArrayDeletes);
+    failure = firstFailure(failure, cleanupFailure);
+    failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+    throwFailure(failure);
+    throw new Error("Vertex-input composite VAO creation failed without an error");
   }
 };
 
@@ -758,16 +883,17 @@ export const vertexInputCompositeVertexArrayForInstance = (
 };
 
 const deleteStaticBuffers = (gl: WebGL2RenderingContext, geometry: StaticGeometry): void => {
-  const buffers = new Set<WebGLBuffer>([
-    geometry.arrayBuffer,
-    ...(geometry.normalBuffer === undefined ? [] : [geometry.normalBuffer]),
-    ...(geometry.tangentBuffer === undefined ? [] : [geometry.tangentBuffer]),
-    ...(geometry.colorBuffer === undefined ? [] : [geometry.colorBuffer]),
-    ...(geometry.texCoord0Buffer === undefined ? [] : [geometry.texCoord0Buffer]),
-    ...(geometry.texCoord1Buffer === undefined ? [] : [geometry.texCoord1Buffer]),
-    ...(geometry.indexBuffer === undefined ? [] : [geometry.indexBuffer]),
-  ]);
-  for (const buffer of buffers) gl.deleteBuffer(buffer);
+  const buffers = geometry.pendingBufferDeletes ??= new Set<WebGLBuffer>([
+      geometry.arrayBuffer,
+      ...(geometry.normalBuffer === undefined ? [] : [geometry.normalBuffer]),
+      ...(geometry.tangentBuffer === undefined ? [] : [geometry.tangentBuffer]),
+      ...(geometry.colorBuffer === undefined ? [] : [geometry.colorBuffer]),
+      ...(geometry.texCoord0Buffer === undefined ? [] : [geometry.texCoord0Buffer]),
+      ...(geometry.texCoord1Buffer === undefined ? [] : [geometry.texCoord1Buffer]),
+      ...(geometry.indexBuffer === undefined ? [] : [geometry.indexBuffer]),
+    ]);
+  throwFailure(deletePendingBuffers(gl, buffers));
+  delete geometry.pendingBufferDeletes;
 };
 
 const removeStaticGeometry = (
@@ -775,13 +901,27 @@ const removeStaticGeometry = (
   gl: WebGL2RenderingContext,
   geometry: StaticGeometry,
 ): void => {
-  for (const composite of geometry.compositeVertexArrays.values()) gl.deleteVertexArray(composite.vertexArray);
-  geometry.compositeVertexArrays.clear();
-  if (geometry.baseVertexArray !== undefined) {
-    gl.deleteVertexArray(geometry.baseVertexArray);
-    delete geometry.baseVertexArray;
+  let failure: Failure = NO_FAILURE;
+  for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
+    if (composite.geometryReferenceCount !== 0) continue;
+    failure = captureFirstFailure(failure, () => {
+      gl.deleteVertexArray(composite.vertexArray);
+      geometry.compositeVertexArrays.delete(instanceKey);
+    });
   }
-  deleteStaticBuffers(gl, geometry);
+  if (geometry.compositeVertexArrays.size !== 0) {
+    throwFailure(failure);
+    throw new Error("Cannot remove vertex-input static geometry with live composite references");
+  }
+  if (geometry.baseVertexArray !== undefined) {
+    failure = captureFirstFailure(failure, () => {
+      gl.deleteVertexArray(geometry.baseVertexArray!);
+      delete geometry.baseVertexArray;
+    });
+  }
+  if (geometry.baseVertexArray !== undefined) throwFailure(failure);
+  failure = captureFirstFailure(failure, () => deleteStaticBuffers(gl, geometry));
+  throwFailure(failure);
   const bucket = geometry.joinedIdentityBucket ? state.geometryBuckets.get(geometry.bucketKey) : undefined;
   if (bucket !== undefined) {
     const index = bucket.indexOf(geometry);
@@ -810,28 +950,37 @@ const releaseVertexInputInstance = (
   const geometries = new Set<StaticGeometry>();
   for (const id of ids) {
     const semantic = state.semantics.get(id);
-    semantic?.instanceKeys.delete(instanceKey);
     const geometry = semantic?.staticGeometry;
     if (geometry !== undefined) geometries.add(geometry);
   }
+  let failure: Failure = NO_FAILURE;
   for (const geometry of geometries) {
     const composite = geometry.compositeVertexArrays.get(instanceKey);
-    if (composite !== undefined) gl.deleteVertexArray(composite.vertexArray);
-    geometry.compositeVertexArrays.delete(instanceKey);
+    if (composite === undefined) continue;
+    failure = captureFirstFailure(failure, () => {
+      gl.deleteVertexArray(composite.vertexArray);
+      geometry.compositeVertexArrays.delete(instanceKey);
+    });
   }
+  failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+  throwFailure(failure);
+  for (const id of ids) state.semantics.get(id)?.instanceKeys.delete(instanceKey);
   state.instanceGeometryIds.delete(instanceKey);
   state.instanceBuffers.delete(instanceKey);
-  unbindVertexInput(gl);
 };
 
 const deleteOwnedInstanceBuffers = (
   gl: WebGL2RenderingContext,
   resource: OwnedInstanceAllocation,
 ): void => {
-  if (resource.buffers === undefined) return;
-  gl.deleteBuffer(resource.buffers.localModelBuffer);
-  gl.deleteBuffer(resource.buffers.rootPoseBuffer);
-  gl.deleteBuffer(resource.buffers.rootScaleBuffer);
+  if (resource.buffers === undefined && resource.pendingBufferDeletes === undefined) return;
+  const buffers = resource.pendingBufferDeletes ??= new Set<WebGLBuffer>([
+    resource.buffers!.localModelBuffer,
+    resource.buffers!.rootPoseBuffer,
+    resource.buffers!.rootScaleBuffer,
+  ]);
+  throwFailure(deletePendingBuffers(gl, buffers));
+  delete resource.pendingBufferDeletes;
   resource.bufferCapacity = 0;
   delete resource.buffers;
 };
@@ -886,25 +1035,36 @@ export const releaseVertexInputGeometry = (
     geometry.geometryIds.delete(geometryId);
     for (const instanceKey of semantic.instanceKeys) {
       const ids = state.instanceGeometryIds.get(instanceKey);
-      if (ids === undefined || !ids.delete(geometryId)) continue;
-      if (ids.size === 0) {
-        state.instanceGeometryIds.delete(instanceKey);
-        state.instanceBuffers.delete(instanceKey);
-      }
-      const composite = geometry.compositeVertexArrays.get(instanceKey);
-      if (composite !== undefined) {
-        composite.geometryReferenceCount -= 1;
-        if (composite.geometryReferenceCount < 0) {
-          throw new Error(`Vertex-input composite ${instanceKey} has negative semantic references`);
+      if (ids?.delete(geometryId)) {
+        if (ids.size === 0) {
+          state.instanceGeometryIds.delete(instanceKey);
+          state.instanceBuffers.delete(instanceKey);
         }
-        if (composite.geometryReferenceCount === 0) {
-          gl.deleteVertexArray(composite.vertexArray);
-          geometry.compositeVertexArrays.delete(instanceKey);
+        const composite = geometry.compositeVertexArrays.get(instanceKey);
+        if (composite !== undefined) {
+          composite.geometryReferenceCount -= 1;
+          if (composite.geometryReferenceCount < 0) {
+            throw new Error(`Vertex-input composite ${instanceKey} has negative semantic references`);
+          }
         }
       }
+      // This edge's semantic mutation is complete even when the subsequent
+      // driver deletion fails. A retry must not decrement the reference again.
+      semantic.instanceKeys.delete(instanceKey);
     }
+    let releaseFailure: Failure = NO_FAILURE;
+    for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
+      if (composite.geometryReferenceCount !== 0) continue;
+      releaseFailure = captureFirstFailure(releaseFailure, () => {
+        gl.deleteVertexArray(composite.vertexArray);
+        geometry.compositeVertexArrays.delete(instanceKey);
+      });
+    }
+    throwFailure(releaseFailure);
     if (geometry.geometryIds.size === 0) removeStaticGeometry(state, gl, geometry);
+    state.semantics.delete(geometryId);
     unbindVertexInput(gl);
+    return;
   }
   state.semantics.delete(geometryId);
 };
@@ -935,17 +1095,43 @@ const releaseContextHandles = (
   }
   // Global ordering is deliberate: no static buffer is deleted while any VAO
   // owned by this arena can still retain it as ELEMENT_ARRAY_BUFFER state.
+  // Every successful driver deletion is committed independently so a retry
+  // never repeats it and multiple failures do not hide later progress.
+  let failure: Failure = NO_FAILURE;
   for (const geometry of state.staticGeometries) {
-    for (const composite of geometry.compositeVertexArrays.values()) gl.deleteVertexArray(composite.vertexArray);
-    geometry.compositeVertexArrays.clear();
+    for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
+      failure = captureFirstFailure(failure, () => {
+        gl.deleteVertexArray(composite.vertexArray);
+        geometry.compositeVertexArrays.delete(instanceKey);
+      });
+    }
     if (geometry.baseVertexArray !== undefined) {
-      gl.deleteVertexArray(geometry.baseVertexArray);
-      delete geometry.baseVertexArray;
+      failure = captureFirstFailure(failure, () => {
+        gl.deleteVertexArray(geometry.baseVertexArray!);
+        delete geometry.baseVertexArray;
+      });
     }
   }
-  for (const geometry of state.staticGeometries) deleteStaticBuffers(gl, geometry);
-  for (const resource of state.ownedInstances.values()) deleteOwnedInstanceBuffers(gl, resource);
-  unbindVertexInput(gl);
+  const pendingVertexArrayFailure = deletePendingVertexArrays(gl, state.pendingVertexArrayDeletes);
+  failure = firstFailure(failure, pendingVertexArrayFailure);
+  failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+  const hasVertexArrays = state.pendingVertexArrayDeletes.size !== 0
+    || [...state.staticGeometries].some((geometry) =>
+      geometry.baseVertexArray !== undefined || geometry.compositeVertexArrays.size !== 0);
+  if (hasVertexArrays) {
+    throwFailure(failure);
+    throw new Error("Vertex-input context still owns vertex arrays after release");
+  }
+  for (const geometry of state.staticGeometries) {
+    failure = captureFirstFailure(failure, () => deleteStaticBuffers(gl, geometry));
+  }
+  for (const resource of state.ownedInstances.values()) {
+    failure = captureFirstFailure(failure, () => deleteOwnedInstanceBuffers(gl, resource));
+  }
+  const pendingBufferFailure = deletePendingBuffers(gl, state.pendingBufferDeletes);
+  failure = firstFailure(failure, pendingBufferFailure);
+  failure = captureFirstFailure(failure, () => unbindVertexInput(gl));
+  throwFailure(failure);
   forgetContextHandles(state, false);
 };
 
@@ -960,6 +1146,7 @@ export const releaseVertexInputContextHandles = (
 
 export const dropVertexInputArenaContext = (arena: VertexInputArena): void => {
   const state = arena as unknown as VertexInputArenaState;
+  accountAbandonedContextHandles(state);
   forgetContextHandles(state, true);
 };
 
@@ -978,6 +1165,7 @@ export const disposeVertexInputArena = (
     if (state.contextGeneration !== undefined) {
       throw new Error("Active vertex-input disposal requires gl and contextGeneration");
     }
+    accountAbandonedContextHandles(state);
     forgetContextHandles(state, true);
   }
   state.semantics.clear();
@@ -988,11 +1176,18 @@ export const vertexInputArenaSnapshot = (arena: VertexInputArena): VertexInputAr
   const state = arena as unknown as VertexInputArenaState;
   let bases = 0;
   let composites = 0;
+  let pendingBufferDeletes = state.pendingBufferDeletes.size;
   for (const geometry of state.staticGeometries) {
     if (geometry.baseVertexArray !== undefined) bases += 1;
     composites += geometry.compositeVertexArrays.size;
+    pendingBufferDeletes += geometry.pendingBufferDeletes?.size ?? 0;
+  }
+  for (const resource of state.ownedInstances.values()) {
+    pendingBufferDeletes += resource.pendingBufferDeletes?.size ?? 0;
   }
   return {
+    abandonedBufferCount: state.abandonedBufferCount,
+    abandonedVertexArrayCount: state.abandonedVertexArrayCount,
     baseVertexArrayCount: bases,
     compositeVertexArrayCount: composites,
     ...(state.contextGeneration === undefined ? {} : { contextGeneration: state.contextGeneration }),
@@ -1004,6 +1199,8 @@ export const vertexInputArenaSnapshot = (arena: VertexInputArena): VertexInputAr
     ),
     instanceAllocationCount: state.ownedInstances.size,
     instanceAllocationIds: new Set(state.ownedInstances.keys()),
+    pendingBufferDeleteCount: pendingBufferDeletes,
+    pendingVertexArrayDeleteCount: state.pendingVertexArrayDeletes.size,
     semanticGeometryCount: state.semantics.size,
     semanticGeometryIds: new Set(state.semantics.keys()),
     staticGeometryCount: state.staticGeometries.size,

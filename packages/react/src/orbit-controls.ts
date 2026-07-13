@@ -10,6 +10,8 @@ import {
   type OrbitCameraView,
   type OrbitCameraViewOptions,
   type OrbitVector3,
+  type Metres,
+  type Rads,
 } from "@royal/renderer-core";
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { useCanvasElement } from "./canvas";
@@ -33,13 +35,20 @@ export type OrbitControlsBehaviorOptions = {
   readonly enablePan?: boolean | undefined;
   readonly enableRotate?: boolean | undefined;
   readonly enableZoom?: boolean | undefined;
-  readonly maxDistance?: number | undefined;
-  readonly maxPitch?: number | undefined;
-  readonly minDistance?: number | undefined;
-  readonly minPitch?: number | undefined;
+  /** Maximum orbit distance in metres. */
+  readonly maxDistance?: Metres | undefined;
+  /** Maximum pitch in radians. */
+  readonly maxPitch?: Rads | undefined;
+  /** Minimum orbit distance in metres. */
+  readonly minDistance?: Metres | undefined;
+  /** Minimum pitch in radians. */
+  readonly minPitch?: Rads | undefined;
   readonly onChange?: ((view: OrbitCameraView) => void) | undefined;
+  /** Target displacement ratio per CSS pixel, scaled by orbit distance. */
   readonly panSpeed?: number | undefined;
+  /** Radians per CSS pixel. */
   readonly rotateSpeed?: number | undefined;
+  /** Exponential zoom coefficient per CSS pixel. */
   readonly zoomSpeed?: number | undefined;
 };
 
@@ -163,16 +172,20 @@ const sameOrbitCameraView = (
 export interface OrbitCameraController {
   readonly cameraResource: PerspectiveCameraViewResource;
   readonly getView: () => OrbitCameraView;
-  readonly setProjection: (projection: { readonly far: number; readonly fovY: number; readonly near: number }) => void;
+  readonly setProjection: (projection: { readonly far: Metres; readonly fovY: Rads; readonly near: Metres }) => void;
   readonly setView: (view: OrbitCameraViewOptions) => void;
   readonly subscribeView: (listener: () => void) => () => void;
 }
 
 export interface UseOrbitCameraOptions {
+  /** Initial target and distance in metres; angles are radians. */
   readonly initial: OrbitCameraViewOptions;
-  readonly far?: number;
-  readonly fovY?: number;
-  readonly near?: number;
+  /** Far clipping distance in metres. */
+  readonly far?: Metres;
+  /** Vertical field of view in radians. */
+  readonly fovY?: Rads;
+  /** Near clipping distance in metres. */
+  readonly near?: Metres;
 }
 
 export type OrbitCameraHookResult = OrbitCameraController;
@@ -200,7 +213,7 @@ const writeOrbitCamera = (resource: PerspectiveCameraViewResource, view: OrbitCa
 
 export const createOrbitCameraController = (
   initial: OrbitCameraViewOptions,
-  projection: { readonly far: number; readonly fovY: number; readonly near: number },
+  projection: { readonly far: Metres; readonly fovY: Rads; readonly near: Metres },
 ): OrbitCameraController => {
   let view = stableOrbitView(initial);
   const cameraResource = createCameraViewResource(orbitPerspectiveCamera({ ...projection, view }));

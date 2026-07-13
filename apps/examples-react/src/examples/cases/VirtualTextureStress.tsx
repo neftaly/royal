@@ -87,7 +87,6 @@ export const VirtualTextureStress = (): ReactNode => {
             maxDistance={18}
             minDistance={0.1}
             orbit={orbit}
-            panSpeed={0.9}
             zoomSpeed={0.0015}
           />
         </Canvas>

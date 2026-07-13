@@ -146,6 +146,10 @@ export interface WebGlGltfInstancingSnapshot {
 
 export interface WebGlVirtualTexturingSnapshot {
   readonly atlasTextures: number;
+  /** Newly desired pages admitted across committed demand publications. */
+  readonly demandAdmissions: number;
+  /** Prior resident pages temporarily retained by demand hysteresis. */
+  readonly demandRetentions: number;
   readonly generatedManifestUses: number;
   readonly generatedPageFailures: number;
   readonly generatedPageRasterizeMaxMs: number;

@@ -143,13 +143,23 @@ export type {
   Direction3,
   EulerRads,
   Ms,
+  Metres,
   Rads,
   Rgba,
+  Scale3,
   SceneSource,
   Transform,
   TransformOptions,
   Vec3,
-  Vec4
+  Vec4,
+  WorldPosition3,
+  WorldSize3
 } from './primitives';
-export { defineCoordinateSystem, sceneSource, yUpRightHanded, zUpLeftHanded } from './primitives';
+export {
+  defineCoordinateSystem,
+  metresPerWorldUnit,
+  sceneSource,
+  yUpRightHanded,
+  zUpLeftHanded
+} from './primitives';
 export type { RenderNode } from './render-node';

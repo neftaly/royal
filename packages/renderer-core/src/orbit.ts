@@ -1,38 +1,43 @@
 import type { PerspectiveCamera, PerspectiveCameraOptions } from './camera';
 import { perspectiveCamera } from './camera';
 import { finiteNumber, frozenVec3, positiveFiniteNumber } from './descriptor-values';
-import type { EulerRads, Rads, Vec3 } from './primitives';
+import type { Direction3, EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
-export type OrbitVector3 = Vec3;
+/** @deprecated Use `WorldPosition3` for orbit targets and positions. */
+export type OrbitVector3 = WorldPosition3;
 
 export type OrbitCameraView = {
-  readonly distance: number;
+  /** Camera-to-target distance in metres. */
+  readonly distance: Metres;
   readonly pitch: Rads;
   readonly target: OrbitVector3;
   readonly yaw: Rads;
 };
 
 export type OrbitCameraViewOptions = {
-  readonly distance: number;
+  /** Camera-to-target distance in metres. */
+  readonly distance: Metres;
   readonly pitch?: Rads | undefined;
   readonly target?: OrbitVector3 | undefined;
   readonly yaw?: Rads | undefined;
 };
 
 export type OrbitCameraViewConstraints = {
-  readonly maxDistance?: number | undefined;
+  /** Maximum camera-to-target distance in metres. */
+  readonly maxDistance?: Metres | undefined;
   readonly maxPitch?: Rads | undefined;
-  readonly minDistance?: number | undefined;
+  /** Minimum camera-to-target distance in metres. */
+  readonly minDistance?: Metres | undefined;
   readonly minPitch?: Rads | undefined;
 };
 
 export type OrbitCameraBasis = {
-  readonly right: OrbitVector3;
-  readonly up: OrbitVector3;
+  readonly right: Direction3;
+  readonly up: Direction3;
 };
 
 export type OrbitCameraTransform = {
-  readonly position: OrbitVector3;
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
 };
 
@@ -113,8 +118,11 @@ export const orbitCameraBasis = (view: OrbitCameraViewOptions): OrbitCameraBasis
 
 export const rotateOrbitCameraView = (
   view: OrbitCameraViewOptions,
+  /** Pointer movement in CSS pixels. */
   deltaX: number,
+  /** Pointer movement in CSS pixels. */
   deltaY: number,
+  /** Radians per CSS pixel. */
   rotateSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);
@@ -132,6 +140,7 @@ export const rotateOrbitCameraView = (
 export const zoomOrbitCameraView = (
   view: OrbitCameraViewOptions,
   deltaPixels: number,
+  /** Exponential zoom coefficient per CSS pixel. */
   zoomSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);
@@ -146,8 +155,11 @@ export const zoomOrbitCameraView = (
 
 export const panOrbitCameraView = (
   view: OrbitCameraViewOptions,
+  /** Pointer movement in CSS pixels. */
   deltaX: number,
+  /** Pointer movement in CSS pixels. */
   deltaY: number,
+  /** Target displacement ratio per CSS pixel, scaled by orbit distance. */
   panSpeed: number
 ): OrbitCameraView => {
   const resolvedView = resolveOrbitCameraView(view);

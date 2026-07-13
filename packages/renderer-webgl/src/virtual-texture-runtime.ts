@@ -51,6 +51,8 @@ export type GeneratedVirtualTextureSource = Extract<VirtualTextureManifestSource
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
 
 export type VirtualTextureRuntimeStats = {
+  demandAdmissions: number;
+  demandRetentions: number;
   generatedManifestUses: number;
   generatedPageFailures: number;
   generatedPageRasterizeMaxMs: number;
@@ -69,6 +71,7 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTextureManifestSource;
+  demandConvergenceWakePending: boolean;
   demandPublished: boolean;
   diagnosticsEnabled: boolean;
   desiredPageKeys: Set<string>;
@@ -101,6 +104,7 @@ export type VirtualTextureDrawDemandModelSource =
   | { readonly kind: "single"; readonly model: Mat4 };
 
 export type VirtualTextureDrawDemandContext = {
+  readonly indices?: Uint8Array | Uint16Array | Uint32Array;
   readonly modelSource: VirtualTextureDrawDemandModelSource;
   readonly positions: Float32Array;
   readonly projection: Mat4;
@@ -122,6 +126,7 @@ export type VirtualTextureScreenFootprint = {
 export type VirtualTextureDrawDemand = {
   readonly coverageCandidates?: readonly VirtualTexturePageId[];
   readonly demandCandidates: readonly VirtualTexturePageId[];
+  readonly preferredCandidates?: readonly VirtualTexturePageId[];
 };
 
 export const normalizeVirtualTextureDemandUvRange = (

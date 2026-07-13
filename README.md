@@ -83,6 +83,22 @@ descriptors, placement contracts, product panels, and event rows belong in
 Patchpit/Opshop lab or example integration code, not in the product renderer
 API.
 
+## Units
+
+Royal world space is metric: **one Royal world unit is exactly one metre**.
+Geometry sizes, positions and translations, camera clipping distances and
+orthographic bounds, orbit targets/distances, punctual-light ranges, glTF
+bounds and instance positions, and picking points/distances all use metres.
+glTF and WebXR enter Royal at their native metre scale, so adapters must not
+apply a hidden scene-scale conversion.
+
+Transform scales and directions are dimensionless. Rotations, fields of view,
+and spotlight cone angles are radians. Light quantities keep their named SI
+units (`intensityCandela`, `illuminanceLux`); colors are normalized values.
+Pointer coordinates and gesture deltas are CSS pixels, frame timing is seconds,
+API durations named `Ms` are milliseconds, texture dimensions are texels, and
+memory/storage budgets are bytes. These domains never redefine world scale.
+
 glTF support is first-class. Optional and draft features should stay isolated
 until they are useful through the public renderer and React APIs.
 

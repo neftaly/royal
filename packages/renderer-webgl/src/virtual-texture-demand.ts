@@ -8,6 +8,7 @@ import {
   type VirtualTextureDrawDemandContext,
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureScreenFootprint,
+  type ViewportSize,
 } from "./virtual-texture-runtime";
 import {
   derivedVirtualTextureMipCount,
@@ -33,6 +34,7 @@ export type VirtualTextureDrawDemandInput = VirtualTextureDemandSource & {
   readonly context?: VirtualTextureDrawDemandContext;
   readonly flipY: boolean;
   readonly limit?: number;
+  readonly workspace?: VirtualTextureDemandPlanningWorkspace;
 };
 
 const demandLimit = (limit: number | undefined): number =>
@@ -49,9 +51,171 @@ export const virtualTextureDemandModelCount = (source: VirtualTextureDrawDemandM
   }
 };
 
+const CLIPPED_VERTEX_COMPONENTS = 6;
+const CLIPPED_POLYGON_CAPACITY = 12;
+const RETAINED_POLYGON_COMPONENT_CAPACITY = 32_768;
+const RETAINED_POLYGON_CAPACITY = 4_096;
+
+export type VirtualTextureDemandPlanningWorkspace = {
+  readonly clippedPolygonA: Float64Array;
+  readonly clippedPolygonB: Float64Array;
+  overflowed: boolean;
+  readonly visiblePolygonComponents: Float64Array;
+  visiblePolygonComponentCount: number;
+  visiblePolygonCount: number;
+  readonly visiblePolygonOffsets: Uint32Array;
+};
+
+export const createVirtualTextureDemandPlanningWorkspace = (): VirtualTextureDemandPlanningWorkspace => ({
+  clippedPolygonA: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
+  clippedPolygonB: new Float64Array(CLIPPED_VERTEX_COMPONENTS * CLIPPED_POLYGON_CAPACITY),
+  overflowed: false,
+  visiblePolygonComponents: new Float64Array(RETAINED_POLYGON_COMPONENT_CAPACITY),
+  visiblePolygonComponentCount: 0,
+  visiblePolygonCount: 0,
+  visiblePolygonOffsets: new Uint32Array(RETAINED_POLYGON_CAPACITY + 1),
+});
+
+export const virtualTextureDemandPlanningWorkspaceSnapshot = (
+  workspace: VirtualTextureDemandPlanningWorkspace,
+): { readonly allocatedBytes: number; readonly overflowed: boolean; readonly retainedBytes: number; readonly retainedPolygons: number } => ({
+  allocatedBytes: workspace.clippedPolygonA.byteLength
+    + workspace.clippedPolygonB.byteLength
+    + workspace.visiblePolygonComponents.byteLength
+    + workspace.visiblePolygonOffsets.byteLength,
+  overflowed: workspace.overflowed,
+  retainedBytes: workspace.visiblePolygonComponentCount * Float64Array.BYTES_PER_ELEMENT,
+  retainedPolygons: workspace.visiblePolygonCount,
+});
+
+const retainVisiblePolygon = (
+  workspace: VirtualTextureDemandPlanningWorkspace,
+  polygon: Float64Array,
+  vertexCount: number,
+): void => {
+  const componentCount = vertexCount * CLIPPED_VERTEX_COMPONENTS;
+  if (
+    workspace.visiblePolygonCount >= RETAINED_POLYGON_CAPACITY
+    || workspace.visiblePolygonComponentCount + componentCount > RETAINED_POLYGON_COMPONENT_CAPACITY
+  ) {
+    workspace.overflowed = true;
+    return;
+  }
+  workspace.visiblePolygonOffsets[workspace.visiblePolygonCount] = workspace.visiblePolygonComponentCount;
+  workspace.visiblePolygonComponents.set(
+    polygon.subarray(0, componentCount),
+    workspace.visiblePolygonComponentCount,
+  );
+  workspace.visiblePolygonComponentCount += componentCount;
+  workspace.visiblePolygonCount += 1;
+  workspace.visiblePolygonOffsets[workspace.visiblePolygonCount] = workspace.visiblePolygonComponentCount;
+};
+
+const clipPlaneDistance = (plane: number, polygon: Float64Array, offset: number): number => {
+  const x = polygon[offset]!;
+  const y = polygon[offset + 1]!;
+  const z = polygon[offset + 2]!;
+  const w = polygon[offset + 3]!;
+  switch (plane) {
+    case 0: return x + w;
+    case 1: return w - x;
+    case 2: return y + w;
+    case 3: return w - y;
+    case 4: return z + w;
+    default: return w - z;
+  }
+};
+
+const clipPolygonAgainstPlane = (
+  input: Float64Array,
+  inputCount: number,
+  output: Float64Array,
+  plane: number,
+): number => {
+  let outputCount = 0;
+  let previousOffset = (inputCount - 1) * CLIPPED_VERTEX_COMPONENTS;
+  let previousDistance = clipPlaneDistance(plane, input, previousOffset);
+  let previousInside = previousDistance >= 0;
+  for (let vertex = 0; vertex < inputCount; vertex += 1) {
+    const currentOffset = vertex * CLIPPED_VERTEX_COMPONENTS;
+    const currentDistance = clipPlaneDistance(plane, input, currentOffset);
+    const currentInside = currentDistance >= 0;
+    if (currentInside !== previousInside) {
+      const denominator = previousDistance - currentDistance;
+      if (!Number.isFinite(denominator) || denominator === 0 || outputCount >= CLIPPED_POLYGON_CAPACITY) return -1;
+      const t = previousDistance / denominator;
+      const outputOffset = outputCount * CLIPPED_VERTEX_COMPONENTS;
+      for (let component = 0; component < CLIPPED_VERTEX_COMPONENTS; component += 1) {
+        const previous = input[previousOffset + component]!;
+        output[outputOffset + component] = previous + (input[currentOffset + component]! - previous) * t;
+      }
+      outputCount += 1;
+    }
+    if (currentInside) {
+      if (outputCount >= CLIPPED_POLYGON_CAPACITY) return -1;
+      const outputOffset = outputCount * CLIPPED_VERTEX_COMPONENTS;
+      for (let component = 0; component < CLIPPED_VERTEX_COMPONENTS; component += 1) {
+        output[outputOffset + component] = input[currentOffset + component]!;
+      }
+      outputCount += 1;
+    }
+    previousOffset = currentOffset;
+    previousDistance = currentDistance;
+    previousInside = currentInside;
+  }
+  return outputCount;
+};
+
+const clipPolygonAgainstUvBoundary = (
+  input: Float64Array,
+  inputCount: number,
+  output: Float64Array,
+  component: 4 | 5,
+  boundary: number,
+  keepGreater: boolean,
+): number => {
+  let outputCount = 0;
+  let previousOffset = (inputCount - 1) * CLIPPED_VERTEX_COMPONENTS;
+  let previousDistance = keepGreater
+    ? input[previousOffset + component]! - boundary
+    : boundary - input[previousOffset + component]!;
+  let previousInside = previousDistance >= 0;
+  for (let vertex = 0; vertex < inputCount; vertex += 1) {
+    const currentOffset = vertex * CLIPPED_VERTEX_COMPONENTS;
+    const currentDistance = keepGreater
+      ? input[currentOffset + component]! - boundary
+      : boundary - input[currentOffset + component]!;
+    const currentInside = currentDistance >= 0;
+    if (currentInside !== previousInside) {
+      const denominator = previousDistance - currentDistance;
+      if (!Number.isFinite(denominator) || denominator === 0 || outputCount >= CLIPPED_POLYGON_CAPACITY) return -1;
+      const t = previousDistance / denominator;
+      const outputOffset = outputCount * CLIPPED_VERTEX_COMPONENTS;
+      for (let index = 0; index < CLIPPED_VERTEX_COMPONENTS; index += 1) {
+        const previous = input[previousOffset + index]!;
+        output[outputOffset + index] = previous + (input[currentOffset + index]! - previous) * t;
+      }
+      outputCount += 1;
+    }
+    if (currentInside) {
+      if (outputCount >= CLIPPED_POLYGON_CAPACITY) return -1;
+      const outputOffset = outputCount * CLIPPED_VERTEX_COMPONENTS;
+      for (let index = 0; index < CLIPPED_VERTEX_COMPONENTS; index += 1) {
+        output[outputOffset + index] = input[currentOffset + index]!;
+      }
+      outputCount += 1;
+    }
+    previousOffset = currentOffset;
+    previousDistance = currentDistance;
+    previousInside = currentInside;
+  }
+  return outputCount;
+};
+
 export const projectVirtualTextureScreenFootprint = (
   context: VirtualTextureDrawDemandContext,
   flipY: boolean,
+  workspace = createVirtualTextureDemandPlanningWorkspace(),
 ): VirtualTextureProjection => {
   const [viewportWidth, viewportHeight] = context.viewportSize;
   const modelCount = virtualTextureDemandModelCount(context.modelSource);
@@ -68,9 +232,16 @@ export const projectVirtualTextureScreenFootprint = (
   let maxU = Number.NEGATIVE_INFINITY;
   let minV = Number.POSITIVE_INFINITY;
   let maxV = Number.NEGATIVE_INFINITY;
-  let positiveClipSamples = 0;
-  let nonPositiveClipSamples = 0;
+  let clippedVertexCount = 0;
+  let invalidGeometry = false;
+  workspace.visiblePolygonCount = 0;
+  workspace.visiblePolygonComponentCount = 0;
+  workspace.overflowed = false;
+  const { clippedPolygonA, clippedPolygonB } = workspace;
   const projectionView = multiplyMat4(context.projection, context.view);
+  const elementCount = context.indices?.length ?? vertexCount;
+  const triangleElementCount = elementCount - elementCount % 3;
+  if (triangleElementCount === 0) return { kind: "indeterminate" };
 
   for (let modelIndex = 0; modelIndex < modelCount; modelIndex += 1) {
     const source = context.modelSource;
@@ -78,51 +249,77 @@ export const projectVirtualTextureScreenFootprint = (
       ? source.model
       : multiplyMat4(source.rootModels[modelIndex]!, source.localModels[modelIndex]!);
     const mvp = multiplyMat4(projectionView, model);
-    for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
-      const positionOffset = vertexIndex * 3;
-      const x = context.positions[positionOffset]!;
-      const y = context.positions[positionOffset + 1]!;
-      const z = context.positions[positionOffset + 2]!;
-      const clipX = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
-      const clipY = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
-      const clipW = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
-      if (!Number.isFinite(clipW) || clipW <= 0.000001) {
-        nonPositiveClipSamples += 1;
-        continue;
+    for (let element = 0; element < triangleElementCount; element += 3) {
+      for (let corner = 0; corner < 3; corner += 1) {
+        const vertexIndex = context.indices?.[element + corner] ?? element + corner;
+        if (vertexIndex >= vertexCount) {
+          invalidGeometry = true;
+          break;
+        }
+        const positionOffset = vertexIndex * 3;
+        const x = context.positions[positionOffset]!;
+        const y = context.positions[positionOffset + 1]!;
+        const z = context.positions[positionOffset + 2]!;
+        const targetOffset = corner * CLIPPED_VERTEX_COMPONENTS;
+        clippedPolygonA[targetOffset] = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+        clippedPolygonA[targetOffset + 1] = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+        clippedPolygonA[targetOffset + 2] = mvp[2] * x + mvp[6] * y + mvp[10] * z + mvp[14];
+        clippedPolygonA[targetOffset + 3] = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+        const texCoordOffset = vertexIndex * 2;
+        const sourceU = context.texCoords[texCoordOffset]!;
+        const sourceV = context.texCoords[texCoordOffset + 1]!;
+        const coordinates = context.textureCoordinates;
+        clippedPolygonA[targetOffset + 4] = coordinates === undefined
+          ? sourceU
+          : coordinates.row0[0] * sourceU + coordinates.row0[1] * sourceV + coordinates.row0[2];
+        clippedPolygonA[targetOffset + 5] = coordinates === undefined
+          ? sourceV
+          : coordinates.row1[0] * sourceU + coordinates.row1[1] * sourceV + coordinates.row1[2];
+        for (let component = 0; component < CLIPPED_VERTEX_COMPONENTS; component += 1) {
+          if (!Number.isFinite(clippedPolygonA[targetOffset + component])) invalidGeometry = true;
+        }
       }
-
-      const ndcX = clipX / clipW;
-      const ndcY = clipY / clipW;
-      if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) continue;
-      positiveClipSamples += 1;
-      minNdcX = Math.min(minNdcX, ndcX);
-      maxNdcX = Math.max(maxNdcX, ndcX);
-      minNdcY = Math.min(minNdcY, ndcY);
-      maxNdcY = Math.max(maxNdcY, ndcY);
-
-      const texCoordOffset = vertexIndex * 2;
-      const sourceU = context.texCoords[texCoordOffset]!;
-      const sourceV = context.texCoords[texCoordOffset + 1]!;
-      const coordinates = context.textureCoordinates;
-      const u = coordinates === undefined
-        ? sourceU
-        : coordinates.row0[0] * sourceU + coordinates.row0[1] * sourceV + coordinates.row0[2];
-      const v = coordinates === undefined
-        ? sourceV
-        : coordinates.row1[0] * sourceU + coordinates.row1[1] * sourceV + coordinates.row1[2];
-      minU = Math.min(minU, u);
-      maxU = Math.max(maxU, u);
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
+      if (invalidGeometry) break;
+      let input = clippedPolygonA;
+      let output = clippedPolygonB;
+      let polygonCount = 3;
+      for (let plane = 0; plane < 6 && polygonCount > 0; plane += 1) {
+        polygonCount = clipPolygonAgainstPlane(input, polygonCount, output, plane);
+        const swap = input;
+        input = output;
+        output = swap;
+      }
+      if (polygonCount < 0) {
+        invalidGeometry = true;
+        break;
+      }
+      if (polygonCount > 0) retainVisiblePolygon(workspace, input, polygonCount);
+      for (let vertex = 0; vertex < polygonCount; vertex += 1) {
+        const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
+        const clipW = input[offset + 3]!;
+        if (!(clipW > 0)) {
+          invalidGeometry = true;
+          break;
+        }
+        const ndcX = input[offset]! / clipW;
+        const ndcY = input[offset + 1]! / clipW;
+        minNdcX = Math.min(minNdcX, ndcX);
+        maxNdcX = Math.max(maxNdcX, ndcX);
+        minNdcY = Math.min(minNdcY, ndcY);
+        maxNdcY = Math.max(maxNdcY, ndcY);
+        minU = Math.min(minU, input[offset + 4]!);
+        maxU = Math.max(maxU, input[offset + 4]!);
+        minV = Math.min(minV, input[offset + 5]!);
+        maxV = Math.max(maxV, input[offset + 5]!);
+        clippedVertexCount += 1;
+      }
+      if (invalidGeometry) break;
     }
+    if (invalidGeometry) break;
   }
 
-  if (positiveClipSamples === 0) return { kind: "not-visible" };
-  // A primitive can intersect the near plane even when some source vertices
-  // are behind it. Vertex-cloud bounds cannot reconstruct the clipped UV
-  // intersections safely, so fall back to bounded conservative demand.
-  if (nonPositiveClipSamples > 0) return { kind: "indeterminate" };
-  if (maxNdcX < -1 || minNdcX > 1 || maxNdcY < -1 || minNdcY > 1) return { kind: "not-visible" };
+  if (invalidGeometry) return { kind: "indeterminate" };
+  if (clippedVertexCount === 0) return { kind: "not-visible" };
   if (!Number.isFinite(minU) || !Number.isFinite(maxU) || !Number.isFinite(minV) || !Number.isFinite(maxV)) {
     return { kind: "indeterminate" };
   }
@@ -147,6 +344,71 @@ export const projectVirtualTextureScreenFootprint = (
     },
     kind: "visible",
   };
+};
+
+const virtualTexturePageScreenError = (
+  workspace: VirtualTextureDemandPlanningWorkspace,
+  flipY: boolean,
+  manifest: VirtualTextureManifestModel,
+  page: VirtualTexturePageId,
+  viewportSize: ViewportSize,
+): number => {
+  const { clippedPolygonA, clippedPolygonB } = workspace;
+  const [viewportWidth, viewportHeight] = viewportSize;
+  const grid = virtualTextureDemandPageGrid(manifest, page.mip);
+  const minPageU = page.x / grid.width;
+  const maxPageU = (page.x + 1) / grid.width;
+  const minPageV = page.y / grid.height;
+  const maxPageV = (page.y + 1) / grid.height;
+  let minNdcX = Number.POSITIVE_INFINITY;
+  let maxNdcX = Number.NEGATIVE_INFINITY;
+  let minNdcY = Number.POSITIVE_INFINITY;
+  let maxNdcY = Number.NEGATIVE_INFINITY;
+  for (let polygonIndex = 0; polygonIndex < workspace.visiblePolygonCount; polygonIndex += 1) {
+      const componentOffset = workspace.visiblePolygonOffsets[polygonIndex]!;
+      const componentCount = workspace.visiblePolygonOffsets[polygonIndex + 1]! - componentOffset;
+      let polygonCount = componentCount / CLIPPED_VERTEX_COMPONENTS;
+      clippedPolygonA.set(
+        workspace.visiblePolygonComponents.subarray(componentOffset, componentOffset + componentCount),
+        0,
+      );
+      if (flipY) {
+        for (let vertex = 0; vertex < polygonCount; vertex += 1) {
+          const vOffset = vertex * CLIPPED_VERTEX_COMPONENTS + 5;
+          clippedPolygonA[vOffset] = 1 - clippedPolygonA[vOffset]!;
+        }
+      }
+      let input = clippedPolygonA;
+      let output = clippedPolygonB;
+      const uvBoundaries = [minPageU, maxPageU, minPageV, maxPageV] as const;
+      for (let boundaryIndex = 0; boundaryIndex < 4 && polygonCount > 0; boundaryIndex += 1) {
+        polygonCount = clipPolygonAgainstUvBoundary(
+          input,
+          polygonCount,
+          output,
+          boundaryIndex < 2 ? 4 : 5,
+          uvBoundaries[boundaryIndex]!,
+          boundaryIndex % 2 === 0,
+        );
+        const swap = input;
+        input = output;
+        output = swap;
+      }
+      if (polygonCount < 0) return Number.POSITIVE_INFINITY;
+      for (let vertex = 0; vertex < polygonCount; vertex += 1) {
+        const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
+        const clipW = input[offset + 3]!;
+        if (!(clipW > 0)) return Number.POSITIVE_INFINITY;
+        minNdcX = Math.min(minNdcX, input[offset]! / clipW);
+        maxNdcX = Math.max(maxNdcX, input[offset]! / clipW);
+        minNdcY = Math.min(minNdcY, input[offset + 1]! / clipW);
+        maxNdcY = Math.max(maxNdcY, input[offset + 1]! / clipW);
+      }
+  }
+  if (!Number.isFinite(minNdcX) || !Number.isFinite(minNdcY)) return 0;
+  const screenWidth = Math.max(0, maxNdcX - minNdcX) * 0.5 * viewportWidth;
+  const screenHeight = Math.max(0, maxNdcY - minNdcY) * 0.5 * viewportHeight;
+  return Math.max(screenWidth, screenHeight) / Math.max(1, manifest.pageSize);
 };
 
 export const virtualTextureDemandMipCount = (manifest: VirtualTextureManifestModel): number =>
@@ -260,12 +522,113 @@ export const planVirtualTextureCoarseToFineDemand = (
   return candidates;
 };
 
+type VirtualTextureRefinementCandidate = {
+  readonly page: VirtualTexturePageId;
+  readonly score: number;
+  readonly spatialOrder: number;
+};
+
+// Refine before a resident texel reaches a full screen pixel, leaving enough
+// admission headroom that subpixel camera jitter does not toggle the frontier.
+const VIRTUAL_TEXTURE_REFINEMENT_ADMISSION_ERROR = 0.75;
+
+const virtualTexturePageSpatialOrder = (page: VirtualTexturePageId): number => {
+  let order = 0;
+  let scale = 0.25;
+  for (let bit = 0; bit < 20; bit += 1) {
+    order += ((page.x >>> bit) & 1) * scale;
+    scale *= 0.5;
+    order += ((page.y >>> bit) & 1) * scale;
+    scale *= 0.5;
+  }
+  return order;
+};
+
+/**
+ * Builds a bounded coverage hierarchy. Coarse visible pages are emitted first;
+ * refinements then follow descending projected screen error. Equal-error pages
+ * use a deterministic low-discrepancy spatial order instead of center distance.
+ */
+const planVirtualTextureHierarchicalDemand = (
+  source: VirtualTextureDemandSource,
+  context: VirtualTextureDrawDemandContext,
+  flipY: boolean,
+  footprint: VirtualTextureScreenFootprint,
+  workspace: VirtualTextureDemandPlanningWorkspace,
+  limit = VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
+): {
+  readonly coverageCandidates: readonly VirtualTexturePageId[];
+  readonly demandCandidates: readonly VirtualTexturePageId[];
+} => {
+  const boundedLimit = demandLimit(limit);
+  if (boundedLimit === 0) return { coverageCandidates: [], demandCandidates: [] };
+  const coarsestMip = virtualTextureDemandMipCount(source.manifest) - 1;
+  const geometricRoots = [...virtualTexturePagesForFootprint(source.manifest, coarsestMip, footprint)]
+    .sort((left, right) => virtualTexturePageSpatialOrder(left) - virtualTexturePageSpatialOrder(right)
+      || left.y - right.y
+      || left.x - right.x);
+  const roots = geometricRoots.filter((page) => isVirtualTextureDemandPageAvailable(source, page));
+  const demandCandidates = roots.slice(0, boundedLimit);
+  const queuedKeys = new Set(demandCandidates.map(virtualTexturePageKey));
+  const queue: VirtualTextureRefinementCandidate[] = [];
+  const enqueueChildren = (parent: VirtualTexturePageId, parentScore: number): void => {
+    if (parent.mip === 0 || parentScore <= VIRTUAL_TEXTURE_REFINEMENT_ADMISSION_ERROR) return;
+    const childMip = parent.mip - 1;
+    const childGrid = virtualTextureDemandPageGrid(source.manifest, childMip);
+    for (let offsetY = 0; offsetY < 2; offsetY += 1) {
+      for (let offsetX = 0; offsetX < 2; offsetX += 1) {
+        const page = { mip: childMip, x: parent.x * 2 + offsetX, y: parent.y * 2 + offsetY };
+        if (page.x >= childGrid.width || page.y >= childGrid.height) continue;
+        const key = virtualTexturePageKey(page);
+        if (queuedKeys.has(key)) continue;
+        queuedKeys.add(key);
+        const score = virtualTexturePageScreenError(workspace, flipY, source.manifest, page, context.viewportSize);
+        if (score <= 0) continue;
+        queue.push({ page, score, spatialOrder: virtualTexturePageSpatialOrder(page) });
+      }
+    }
+  };
+  for (const root of geometricRoots) {
+    enqueueChildren(root, virtualTexturePageScreenError(
+      workspace,
+      flipY,
+      source.manifest,
+      root,
+      context.viewportSize,
+    ));
+  }
+
+  while (demandCandidates.length < boundedLimit && queue.length > 0) {
+    let bestIndex = 0;
+    for (let index = 1; index < queue.length; index += 1) {
+      const candidate = queue[index]!;
+      const best = queue[bestIndex]!;
+      if (
+        candidate.score > best.score
+        || (candidate.score === best.score && candidate.page.mip > best.page.mip)
+        || (candidate.score === best.score
+          && candidate.page.mip === best.page.mip
+          && candidate.spatialOrder < best.spatialOrder)
+      ) {
+        bestIndex = index;
+      }
+    }
+    const candidate = queue[bestIndex]!;
+    queue[bestIndex] = queue.at(-1)!;
+    queue.pop();
+    if (isVirtualTextureDemandPageAvailable(source, candidate.page)) demandCandidates.push(candidate.page);
+    enqueueChildren(candidate.page, candidate.score);
+  }
+  return { coverageCandidates: roots, demandCandidates };
+};
+
 export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInput): VirtualTextureDrawDemand => {
   const limit = demandLimit(input.limit);
   if (input.context === undefined) {
     return { demandCandidates: planVirtualTextureBootstrapDemand(input, limit) };
   }
-  const projection = projectVirtualTextureScreenFootprint(input.context, input.flipY);
+  const workspace = input.workspace ?? createVirtualTextureDemandPlanningWorkspace();
+  const projection = projectVirtualTextureScreenFootprint(input.context, input.flipY, workspace);
   if (projection.kind === "not-visible") return { coverageCandidates: [], demandCandidates: [] };
   if (projection.kind === "indeterminate") {
     const fallback = planVirtualTextureBootstrapDemand(input, limit);
@@ -274,18 +637,34 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     // fallback until projection produces a determinate footprint.
     return { coverageCandidates: [], demandCandidates: fallback };
   }
-  const targetMip = virtualTextureTargetMip(input.manifest, projection.footprint);
-  const coverageCandidates = virtualTexturePagesForFootprint(input.manifest, targetMip, projection.footprint)
-    .filter((page) => isVirtualTextureDemandPageAvailable(input, page));
-  return {
-    coverageCandidates,
-    demandCandidates: planVirtualTextureCoarseToFineDemand(
-      input,
-      targetMip,
-      projection.footprint,
+  if (workspace.overflowed || (input.manifest.uriTemplate === undefined && !input.generated)) {
+    // Sparse explicit manifests do not promise a complete ancestor hierarchy;
+    // preserve their availability-aware coarse-to-fine traversal.
+    const targetMip = virtualTextureTargetMip(input.manifest, projection.footprint);
+    const coverageCandidates = virtualTexturePagesForFootprint(input.manifest, targetMip, projection.footprint)
+      .filter((page) => isVirtualTextureDemandPageAvailable(input, page));
+    return {
       coverageCandidates,
-      limit,
-    ),
+      demandCandidates: planVirtualTextureCoarseToFineDemand(
+        input,
+        targetMip,
+        projection.footprint,
+        coverageCandidates,
+        limit,
+      ),
+    };
+  }
+  const hierarchical = planVirtualTextureHierarchicalDemand(
+    input,
+    input.context,
+    input.flipY,
+    projection.footprint,
+    workspace,
+    limit,
+  );
+  return {
+    ...hierarchical,
+    preferredCandidates: hierarchical.demandCandidates,
   };
 };
 
@@ -305,6 +684,56 @@ export const selectVirtualTextureWorkingSet = (
   return candidates.length === 0
     ? []
     : [candidates[0]!, ...targetCandidates.slice(0, boundedCapacity - 1)];
+};
+
+export const stabilizeVirtualTextureDesiredPagesInto = (
+  workingCandidates: readonly VirtualTexturePageId[],
+  previousPages: readonly VirtualTexturePageId[],
+  previousPageKeys: ReadonlySet<string>,
+  residentPages: number,
+  isResident: (page: VirtualTexturePageId) => boolean,
+  capacity: number,
+  desiredPages: VirtualTexturePageId[],
+  desiredPageKeys: Set<string>,
+): { readonly admissions: number; readonly deferred: boolean; readonly retentions: number } => {
+  desiredPages.length = 0;
+  desiredPageKeys.clear();
+  const boundedCapacity = Number.isSafeInteger(capacity) ? Math.max(0, capacity) : 0;
+  const freePhysicalSlots = Math.max(0, boundedCapacity - Math.max(0, residentPages));
+  let admissions = 0;
+  let retentions = 0;
+  const add = (page: VirtualTexturePageId): boolean => {
+    if (desiredPages.length >= boundedCapacity) return false;
+    const key = virtualTexturePageKey(page);
+    if (desiredPageKeys.has(key)) return false;
+    desiredPageKeys.add(key);
+    desiredPages.push(page);
+    if (!previousPageKeys.has(key)) admissions += 1;
+    return true;
+  };
+  for (const page of workingCandidates) {
+    const key = virtualTexturePageKey(page);
+    if (previousPageKeys.has(key) || isResident(page)) add(page);
+  }
+  let freeAdmissions = 0;
+  let replacementAdmissions = 0;
+  for (const page of workingCandidates) {
+    if (desiredPageKeys.has(virtualTexturePageKey(page))) continue;
+    if (freeAdmissions >= freePhysicalSlots && replacementAdmissions >= 2) break;
+    if (!add(page)) continue;
+    if (freeAdmissions < freePhysicalSlots) freeAdmissions += 1;
+    else replacementAdmissions += 1;
+  }
+  for (const page of previousPages) {
+    if (desiredPages.length >= boundedCapacity) break;
+    if (!isResident(page)) continue;
+    if (add(page)) retentions += 1;
+  }
+  return {
+    admissions,
+    deferred: admissions > 0 && workingCandidates.some((page) => !desiredPageKeys.has(virtualTexturePageKey(page))),
+    retentions,
+  };
 };
 
 export interface VirtualTextureDemandSubmission {

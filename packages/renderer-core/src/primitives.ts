@@ -11,6 +11,13 @@ export interface AxisDirection {
 export interface CoordinateSystem {
   readonly forward: AxisDirection;
   readonly handedness: 'left' | 'right';
+  /**
+   * Linear unit used by source coordinates. Royal world space is metric.
+   *
+   * `unit` is a legacy spelling for a source whose units already represent
+   * metres; it does not introduce an arbitrary or scale-free world unit.
+   * @deprecated Prefer `meter`.
+   */
   readonly unit: 'meter' | 'unit';
   readonly up: AxisDirection;
 }
@@ -20,36 +27,53 @@ export interface SceneSource {
   readonly id: string;
 }
 
-/** World-space XYZ in the coordinate system declared by the scene source. */
+/** A scalar distance or length in Royal world space. One unit is one metre. */
+export type Metres = number;
+/** Generic numeric XYZ tuple. Prefer a semantic alias at public API boundaries. */
 export type Vec3 = readonly [x: number, y: number, z: number];
 export type Vec4 = readonly [number, number, number, number];
+/** A position in Royal world space, in metres. */
+export type WorldPosition3 = readonly [x: Metres, y: Metres, z: Metres];
+/** XYZ dimensions in metres before a dimensionless transform scale is applied. */
+export type WorldSize3 = readonly [width: Metres, height: Metres, depth: Metres];
+/** Dimensionless XYZ transform multipliers. */
+export type Scale3 = readonly [x: number, y: number, z: number];
+/** Royal's fixed metric scale. Exported so adapters can assert their boundary. */
+export const metresPerWorldUnit = 1 as const;
 /** Duration in milliseconds. */
 export type Ms = number;
+/** Angle in radians. */
 export type Rads = number;
 /** Normalized RGBA color. */
 export type Rgba = readonly [r: number, g: number, b: number, a: number];
-/** World-space direction. */
-export type Direction3 = Vec3;
+/** Dimensionless world-space direction; constructors normalize where required. */
+export type Direction3 = readonly [x: number, y: number, z: number];
 
 /** XYZ Euler rotation in radians. */
 export type EulerRads = readonly [x: Rads, y: Rads, z: Rads];
 
 export interface Transform {
-  readonly position: Vec3;
+  /** Translation in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
-  readonly scale: Vec3;
+  /** Dimensionless multiplier; it never changes the metre definition. */
+  readonly scale: Scale3;
 }
 
 export interface TransformOptions {
-  readonly position: Vec3;
+  /** Translation in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
-  /** @defaultValue `[1, 1, 1]` */
-  readonly scale?: Vec3;
+  /** Dimensionless multiplier. @defaultValue `[1, 1, 1]` */
+  readonly scale?: Scale3;
 }
 
 export const defineCoordinateSystem = (system: CoordinateSystem): CoordinateSystem => {
   if (system.up.axis === system.forward.axis) {
     throw new Error('Coordinate system up and forward axes must differ');
+  }
+  if (system.unit !== 'meter' && system.unit !== 'unit') {
+    throw new Error('Coordinate system unit must be meter');
   }
 
   return Object.freeze({

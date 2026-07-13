@@ -1,4 +1,4 @@
-import type { EulerRads, Transform, Vec3 } from './primitives';
+import type { EulerRads, Scale3, Transform, Vec3, WorldPosition3 } from './primitives';
 
 export interface RenderObjectVector3 {
   x: number;
@@ -10,15 +10,19 @@ export interface RenderObjectVector3 {
 }
 
 export type RenderObjectTransformUpdate = Partial<{
-  readonly position: Vec3;
+  /** World-space translation in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
-  readonly scale: Vec3;
+  /** Dimensionless multiplier. */
+  readonly scale: Scale3;
 }>;
 
 export interface RenderObjectTransformState {
-  readonly position: Vec3;
+  /** World-space translation in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
-  readonly scale: Vec3;
+  /** Dimensionless multiplier. */
+  readonly scale: Scale3;
 }
 
 type MutableVec3 = [x: number, y: number, z: number];
@@ -51,8 +55,11 @@ export type RenderObjectTransformAction =
 
 export interface RenderObjectHandle {
   readonly renderObjectId: number;
+  /** Mutable world-space translation in metres. */
   readonly position: RenderObjectVector3;
+  /** Mutable XYZ Euler angles in radians. */
   readonly rotation: RenderObjectVector3;
+  /** Mutable dimensionless XYZ multiplier. */
   readonly scale: RenderObjectVector3;
   readonly transformVersion: number;
   readonly positionVersion: number;
@@ -68,6 +75,15 @@ export interface RenderObjectRefObject {
 
 export type RenderObjectRefCallback = (handle: RenderObjectHandle | null) => void;
 export type RenderObjectRef = RenderObjectRefCallback | RenderObjectRefObject;
+
+/** A root-scoped attachment to a render-object ref shared by every attached root. */
+export interface RenderObjectRefAttachment {
+  readonly handle: RenderObjectHandle;
+  /** Detach only this root. The public ref is cleared after the final attachment leaves. */
+  detach(): void;
+  /** Apply a declarative update without redundantly notifying the root applying it. */
+  syncTransform(transform: Transform): void;
+}
 
 const sameVec3 = (left: Vec3, right: Vec3): boolean =>
   Object.is(left[0], right[0]) &&
@@ -362,6 +378,120 @@ export const createRenderObjectHandle = (
   transform: Transform,
   onChange: () => void,
 ): RenderObjectHandle => new MutableRenderObjectHandle(transform, onChange);
+
+type RenderObjectRefListener = () => void;
+
+interface SharedRenderObjectRef {
+  attachmentCount: number;
+  readonly handle: RenderObjectHandle;
+  readonly listeners: Map<object, RenderObjectRefListener>;
+  mutationSource: object | undefined;
+}
+
+const sharedRenderObjectRefs = new WeakMap<RenderObjectRef, SharedRenderObjectRef>();
+
+const assignRenderObjectRef = (ref: RenderObjectRef, handle: RenderObjectHandle | null): void => {
+  if (typeof ref === 'function') ref(handle);
+  else ref.current = handle;
+};
+
+const notifyRenderObjectRefListeners = (shared: SharedRenderObjectRef): void => {
+  const cohort = [...shared.listeners.entries()];
+  let failed = false;
+  let firstFailure: unknown;
+  for (const [token, listener] of cohort) {
+    if (token === shared.mutationSource) continue;
+    try {
+      listener();
+    } catch (value) {
+      if (!failed) {
+        failed = true;
+        firstFailure = value;
+      }
+    }
+  }
+  if (failed) throw firstFailure;
+};
+
+/**
+ * Attach one renderer root to a ref. Attachments to the same ref share one
+ * imperative handle, while retaining independent invalidation ownership.
+ */
+export const attachRenderObjectRef = (
+  ref: RenderObjectRef,
+  transform: Transform,
+  onChange: RenderObjectRefListener,
+): RenderObjectRefAttachment => {
+  let shared = sharedRenderObjectRefs.get(ref);
+  if (shared === undefined) {
+    const listeners = new Map<object, RenderObjectRefListener>();
+    let createdShared: SharedRenderObjectRef;
+    const handle = createRenderObjectHandle(transform, () => notifyRenderObjectRefListeners(createdShared));
+    createdShared = { attachmentCount: 0, handle, listeners, mutationSource: undefined };
+    shared = createdShared;
+    sharedRenderObjectRefs.set(ref, shared);
+    try {
+      assignRenderObjectRef(ref, handle);
+    } catch (value) {
+      // Publishing the first handle is reentrant. Roll back only the
+      // provisional generation created by this call: a nested attachment may
+      // now own it, or the callback may have installed a newer generation.
+      if (sharedRenderObjectRefs.get(ref) === shared && shared.attachmentCount === 0) {
+        sharedRenderObjectRefs.delete(ref);
+      }
+      throw value;
+    }
+  }
+
+  const attached = shared;
+  const token = {};
+  attached.listeners.set(token, onChange);
+  attached.attachmentCount += 1;
+  let active = true;
+  let listenerAttached = true;
+  return {
+    detach: () => {
+      if (!active) return;
+      if (listenerAttached) {
+        attached.listeners.delete(token);
+        listenerAttached = false;
+      }
+      if (attached.attachmentCount > 1 || sharedRenderObjectRefs.get(ref) !== attached) {
+        attached.attachmentCount -= 1;
+        active = false;
+        return;
+      }
+      sharedRenderObjectRefs.delete(ref);
+      try {
+        assignRenderObjectRef(ref, null);
+        attached.attachmentCount = 0;
+        active = false;
+      } catch (value) {
+        // Restore only if the callback did not reentrantly attach a new
+        // generation. That keeps an ordinary failure retryable while never
+        // replacing ownership established during the callback itself.
+        if (sharedRenderObjectRefs.get(ref) === undefined) {
+          sharedRenderObjectRefs.set(ref, attached);
+        } else {
+          attached.attachmentCount = 0;
+          active = false;
+        }
+        throw value;
+      }
+    },
+    handle: attached.handle,
+    syncTransform: (nextTransform) => {
+      if (!active) return;
+      const previousSource = attached.mutationSource;
+      attached.mutationSource = token;
+      try {
+        attached.handle.setTransform(nextTransform);
+      } finally {
+        attached.mutationSource = previousSource;
+      }
+    },
+  };
+};
 
 export const readRenderObjectHandleTransform = (handle: RenderObjectHandle): Transform => {
   const internal = handle as RenderObjectHandle & {

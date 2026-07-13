@@ -62,4 +62,41 @@ describe("glTF instance transform properties", () => {
     transforms.scales[3] = Number.POSITIVE_INFINITY;
     expect(() => transforms.commitScale(1, 1)).toThrow(/finite and non-negative/);
   });
+
+  it('notifies the stable listener cohort best-effort before rethrowing the first failure', () => {
+    const transforms = createGltfInstanceTransforms({ count: 1 });
+    const calls: string[] = [];
+    let unsubscribeSecond = (): void => {};
+    transforms.subscribe(() => {
+      calls.push('first');
+      unsubscribeSecond();
+      transforms.subscribe(() => calls.push('late'));
+      throw new Error('first listener failed');
+    });
+    unsubscribeSecond = transforms.subscribe(() => calls.push('second'));
+
+    expect(() => transforms.commitPose()).toThrow('first listener failed');
+    expect(calls).toEqual(['first', 'second']);
+    expect(transforms.poseVersion).toBe(2);
+
+    calls.length = 0;
+    expect(() => transforms.commitScale()).toThrow('first listener failed');
+    expect(calls).toEqual(['first', 'late']);
+    expect(transforms.scaleVersion).toBe(2);
+  });
+
+  it('rejects reentrant commits before subscriber versions can be inverted', () => {
+    const transforms = createGltfInstanceTransforms({ count: 1 });
+    const versions: number[] = [];
+    transforms.subscribe((_channel, _start, _count, version) => {
+      versions.push(version);
+      transforms.commitScale();
+    });
+    transforms.subscribe((_channel, _start, _count, version) => versions.push(version));
+
+    expect(() => transforms.commitPose()).toThrow(/cannot run from.*subscriber/);
+    expect(versions).toEqual([2, 2]);
+    expect(transforms.poseVersion).toBe(2);
+    expect(transforms.scaleVersion).toBe(1);
+  });
 });

@@ -1,12 +1,12 @@
-import type { EulerRads, Rads, Vec3 } from './primitives';
+import type { EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
 
-const frozenVec3 = (value: Vec3): Vec3 => Object.freeze([value[0], value[1], value[2]]) as Vec3;
+const frozenVec3 = (value: WorldPosition3): WorldPosition3 => Object.freeze([value[0], value[1], value[2]]) as WorldPosition3;
 
 const finite = (value: number, label: string): void => {
   if (!Number.isFinite(value)) throw new Error(`camera ${label} must be finite; received ${String(value)}`);
 };
 
-const validatePose = (position: Vec3, rotation: EulerRads): void => {
+const validatePose = (position: WorldPosition3, rotation: EulerRads): void => {
   for (let index = 0; index < 3; index += 1) {
     finite(position[index]!, `position[${index}]`);
     finite(rotation[index]!, `rotation[${index}]`);
@@ -16,48 +16,57 @@ const validatePose = (position: Vec3, rotation: EulerRads): void => {
 /** Perspective camera for a scene. */
 export interface PerspectiveCamera {
   readonly kind: 'perspective-camera';
-  readonly position: Vec3;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
   readonly fovY: Rads;
-  readonly near: number;
-  readonly far: number;
+  /** Near clipping distance in metres. */
+  readonly near: Metres;
+  /** Far clipping distance in metres. */
+  readonly far: Metres;
 }
 
 /** Orthographic camera for flat or isometric scenes. */
 export interface OrthographicCamera {
   readonly kind: 'orthographic-camera';
-  readonly position: Vec3;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
-  readonly left: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly top: number;
-  readonly near: number;
-  readonly far: number;
+  /** Orthographic bounds relative to the camera, in metres. */
+  readonly left: Metres;
+  readonly right: Metres;
+  readonly bottom: Metres;
+  readonly top: Metres;
+  /** Clipping-plane coordinates in metres. */
+  readonly near: Metres;
+  readonly far: Metres;
 }
 
 export interface PerspectiveCameraOptions {
-  readonly position: Vec3;
+  /** World-space position in metres. */
+  readonly position: WorldPosition3;
   readonly rotation: EulerRads;
   /** Vertical field of view in radians. */
   readonly fovY: Rads;
-  readonly near: number;
-  readonly far: number;
+  /** Near clipping distance in metres. */
+  readonly near: Metres;
+  /** Far clipping distance in metres. */
+  readonly far: Metres;
 }
 
 export interface OrthographicCameraOptions {
-  /** @defaultValue `[0, 0, 0]` */
-  readonly position?: Vec3;
-  /** @defaultValue `[0, 0, 0]` */
+  /** World-space position in metres. @defaultValue `[0, 0, 0]` */
+  readonly position?: WorldPosition3;
   readonly rotation?: EulerRads;
-  readonly left: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly top: number;
+  /** Orthographic bounds relative to the camera, in metres. */
+  readonly left: Metres;
+  readonly right: Metres;
+  readonly bottom: Metres;
+  readonly top: Metres;
   /** @defaultValue `-1000` */
-  readonly near?: number;
+  readonly near?: Metres;
   /** @defaultValue `1000` */
-  readonly far?: number;
+  readonly far?: Metres;
 }
 
 export type Camera = PerspectiveCamera | OrthographicCamera;
