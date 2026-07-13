@@ -29,15 +29,11 @@ export interface WebGlRootOptions {
    * @defaultValue `4`
    */
   readonly generatedSvgVirtualTextureRasterDensity?: number;
-  /** Immutable cross-class CPU/GPU/job/upload budget policy. */
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
   /**
-   * Root-wide allocation cap, in bytes, for VT atlas and page-table GPU storage.
-   * Per-manifest limits may reduce an individual VT's allocation, but cannot
-   * expand this cap. Must be a non-negative safe integer.
-   * @defaultValue `67108864` (64 MiB)
+   * Immutable cross-class CPU/GPU/job/upload budget policy. VT atlas and
+   * page-table storage uses the `virtual-texture` persistent-GPU class budget.
    */
-  readonly virtualTexturePhysicalByteBudget?: number;
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicy;
 }
 
 export type NormalizedWebGlRootOptions = Required<Omit<WebGlRootOptions, "resourceGovernorPolicy">>
@@ -208,7 +204,7 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly pendingPages: number;
   /** Allocated VT atlas and page-table storage, in GPU bytes. Excludes quarantined bytes. */
   readonly physicalAllocatedBytes: number;
-  /** Configured root-wide VT allocation cap, in GPU bytes. */
+  /** Effective VT allocation maximum derived from the resource governor, in GPU bytes. */
   readonly physicalBudgetBytes: number;
   /** GPU bytes still charged after a failed resource release; reset by context recreation. */
   readonly physicalQuarantinedBytes: number;

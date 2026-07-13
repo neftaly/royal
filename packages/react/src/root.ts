@@ -129,7 +129,6 @@ export const createRendererRoot = (
     ...(root.options.resourceGovernorPolicy === undefined
       ? {}
       : { resourceGovernorPolicy: root.options.resourceGovernorPolicy }),
-    virtualTexturePhysicalByteBudget: root.options.virtualTexturePhysicalByteBudget,
   });
 
   const royalRoot: RoyalRendererRoot = {

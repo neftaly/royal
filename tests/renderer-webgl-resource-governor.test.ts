@@ -5,6 +5,7 @@ import {
   beginResourceGovernorFrame,
   createResourceGovernor,
   evaluateResourceGovernorAdmission,
+  maximumResourceGovernorClassDurableBytes,
   reserveResourceGovernor,
   replaceResourceGovernorLease,
   resourceGovernorSnapshot,
@@ -127,6 +128,87 @@ describe("root resource governor", () => {
     }));
     expect(resourceGovernorSnapshot(governor).total.persistentGpuBytes).toBe(100);
     geometry.cancel();
+  });
+
+  it("uses optional per-class hard ceilings without disabling borrowing below them", () => {
+    const base = policy();
+    const configured: ResourceGovernorPolicy = {
+      ...base,
+      classes: {
+        ...base.classes,
+        "ordinary-texture": classPolicy(20, 30, 10, 20),
+        "virtual-texture": {
+          cpuDecodedBytes: { hardLimit: 55, mandatoryFloor: 0, softLimit: 30 },
+          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0, softLimit: 40 },
+        },
+      },
+    };
+    const governor = createResourceGovernor(configured);
+
+    expect(maximumResourceGovernorClassDurableBytes(
+      configured,
+      "virtual-texture",
+      "persistentGpuBytes",
+    )).toBe(60);
+    expect(maximumResourceGovernorClassDurableBytes(
+      configured,
+      "geometry",
+      "persistentGpuBytes",
+    )).toBe(80);
+    const borrowed = reservation(reserveResourceGovernor(governor, "virtual-texture", {
+      cpuDecodedBytes: 55,
+      persistentGpuBytes: 60,
+    })).commit();
+    expect(resourceGovernorSnapshot(governor)).toMatchObject({
+      borrowAdmissions: 1,
+      maximumDurableBytesByClass: {
+        geometry: { persistentGpuBytes: 80 },
+        "virtual-texture": { cpuDecodedBytes: 55, persistentGpuBytes: 60 },
+      },
+    });
+    expect(reserveResourceGovernor(governor, "virtual-texture", { persistentGpuBytes: 1 }))
+      .toBe("persistent-gpu-hard-limit");
+    expect(reserveResourceGovernor(governor, "virtual-texture", { cpuDecodedBytes: 1 }))
+      .toBe("cpu-decoded-hard-limit");
+    const otherClass = reservation(reserveResourceGovernor(governor, "geometry", {
+      persistentGpuBytes: 20,
+    }));
+    otherClass.cancel();
+    borrowed.release();
+  });
+
+  it("applies class hard ceilings atomically when replacing a durable lease", () => {
+    const base = policy({ transientPeakBytes: 100 });
+    const configured: ResourceGovernorPolicy = {
+      ...base,
+      classes: {
+        ...base.classes,
+        "virtual-texture": {
+          ...base.classes["virtual-texture"],
+          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0, softLimit: 40 },
+        },
+      },
+    };
+    const governor = createResourceGovernor(configured);
+    const original = reservation(reserveResourceGovernor(governor, "virtual-texture", {
+      persistentGpuBytes: 40,
+    })).commit();
+
+    expect(replaceResourceGovernorLease(governor, original, {
+      persistentGpuBytes: 61,
+      transientPeakBytes: 20,
+    })).toBe("persistent-gpu-hard-limit");
+    expect(resourceGovernorSnapshot(governor)).toMatchObject({
+      outstandingLeases: 1,
+      outstandingReservations: 0,
+      total: { persistentGpuBytes: 40, transientPeakBytes: 0 },
+    });
+    const replacement = reservation(replaceResourceGovernorLease(governor, original, {
+      persistentGpuBytes: 60,
+      transientPeakBytes: 20,
+    })).commit();
+    expect(resourceGovernorSnapshot(governor).total.persistentGpuBytes).toBe(60);
+    replacement.release();
   });
 
   it("rolls back cancelled work and leases committed durable ownership", () => {
@@ -382,6 +464,32 @@ describe("root resource governor", () => {
       classes: { ...base.classes, geometry: classPolicy(101, 101) },
     };
     expect(() => createResourceGovernor(impossible)).toThrow("mandatory floors exceed capacity");
+
+    const invalidHardLimit: ResourceGovernorPolicy = {
+      ...base,
+      classes: {
+        ...base.classes,
+        geometry: {
+          ...base.classes.geometry,
+          persistentGpuBytes: { hardLimit: 49, mandatoryFloor: 0, softLimit: 50 },
+        },
+      },
+    };
+    expect(() => createResourceGovernor(invalidHardLimit))
+      .toThrow("geometry.persistentGpuBytes soft limit exceeds its hard limit");
+
+    const aboveRoot: ResourceGovernorPolicy = {
+      ...base,
+      classes: {
+        ...base.classes,
+        geometry: {
+          ...base.classes.geometry,
+          persistentGpuBytes: { hardLimit: 101, mandatoryFloor: 0, softLimit: 50 },
+        },
+      },
+    };
+    expect(() => createResourceGovernor(aboveRoot))
+      .toThrow("geometry.persistentGpuBytes hard limit exceeds root capacity");
   });
 
   it("admits a terrain, houses, interiors, VT, and frame targets without letting terrain consume their floors", () => {
@@ -527,7 +635,18 @@ describe("root resource governor", () => {
 
   it("preserves accounting invariants across seeded mixed-scene transaction sequences", () => {
     forEachFuzzCase({ cases: 48, seed: 0x6a07_e20f }, ({ random }) => {
-      const governor = createResourceGovernor(policy());
+      const base = policy();
+      const fuzzPolicy: ResourceGovernorPolicy = {
+        ...base,
+        classes: {
+          ...base.classes,
+          "virtual-texture": {
+            cpuDecodedBytes: { hardLimit: 35, mandatoryFloor: 0, softLimit: 25 },
+            persistentGpuBytes: { hardLimit: 45, mandatoryFloor: 0, softLimit: 30 },
+          },
+        },
+      };
+      const governor = createResourceGovernor(fuzzPolicy);
       const leases: Array<{ release(): boolean }> = [];
       for (let step = 0; step < 96; step += 1) {
         if (leases.length > 0 && random.boolean(0.2)) {
@@ -556,6 +675,14 @@ describe("root resource governor", () => {
         }
 
         const snapshot = resourceGovernorSnapshot(governor);
+        for (const resourceClass of RESOURCE_GOVERNOR_CLASSES) {
+          expect(snapshot.byClass[resourceClass].cpuDecodedBytes).toBeLessThanOrEqual(
+            snapshot.maximumDurableBytesByClass[resourceClass].cpuDecodedBytes,
+          );
+          expect(snapshot.byClass[resourceClass].persistentGpuBytes).toBeLessThanOrEqual(
+            snapshot.maximumDurableBytesByClass[resourceClass].persistentGpuBytes,
+          );
+        }
         for (const dimension of Object.keys(snapshot.total) as (keyof typeof snapshot.total)[]) {
           expect(Number.isSafeInteger(snapshot.total[dimension])).toBe(true);
           expect(snapshot.total[dimension]).toBeGreaterThanOrEqual(0);

@@ -42,7 +42,6 @@ describe('Canvas public scene boundary', () => {
     const context = {
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 8,
-      virtualTexturePhysicalByteBudget: 32 * 1024 * 1024,
     } satisfies NonNullable<CanvasProps['context']>;
 
     const props = { context, scene: renderScene } satisfies CanvasProps;

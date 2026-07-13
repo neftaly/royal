@@ -27,7 +27,6 @@ export const fakeRendererRoot = ({
     antialias: true,
     generatedImageVirtualTextures: false,
     generatedSvgVirtualTextureRasterDensity: 4,
-    virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
   },
   diagnostics = {},
   pick = () => undefined,

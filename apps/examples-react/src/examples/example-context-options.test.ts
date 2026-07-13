@@ -40,5 +40,8 @@ describe('exampleCanvasContextOptionsForSearch', () => {
     expect(gpuFloors).toBeLessThanOrEqual(mobileExampleResourceGovernorPolicy.limits.persistentGpuBytes);
     expect(mobileExampleResourceGovernorPolicy.limits.jobs).toBeGreaterThan(0);
     expect(mobileExampleResourceGovernorPolicy.limits.uploadBytes).toBeGreaterThan(0);
+    expect(
+      mobileExampleResourceGovernorPolicy.classes['virtual-texture'].persistentGpuBytes.hardLimit,
+    ).toBe(112 * 1024 * 1024);
   });
 });

@@ -34,13 +34,23 @@ afterEach(() => {
 
 describe("React root public API", () => {
   it("defensively freezes a custom resource governor policy without changing default snapshots", () => {
+    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
+      ([resourceClass, value]) => [resourceClass, {
+        cpuDecodedBytes: { ...value.cpuDecodedBytes },
+        persistentGpuBytes: { ...value.persistentGpuBytes },
+      }],
+    )) as unknown as ResourceGovernorPolicy["classes"];
     const customPolicy = {
-      classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
-        ([resourceClass, value]) => [resourceClass, {
-          cpuDecodedBytes: { ...value.cpuDecodedBytes },
-          persistentGpuBytes: { ...value.persistentGpuBytes },
-        }],
-      )) as unknown as ResourceGovernorPolicy["classes"],
+      classes: {
+        ...classes,
+        "virtual-texture": {
+          ...classes["virtual-texture"],
+          persistentGpuBytes: {
+            ...classes["virtual-texture"].persistentGpuBytes,
+            hardLimit: 256 * 1024 * 1024,
+          },
+        },
+      },
       limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 8 * 1024 * 1024 },
     } satisfies ResourceGovernorPolicy;
     const root = createRendererRoot(fakeCanvas(), { context: { resourceGovernorPolicy: customPolicy } });
@@ -51,6 +61,8 @@ describe("React root public API", () => {
     expect(Object.isFrozen(retained)).toBe(true);
     expect(Object.isFrozen(retained?.classes)).toBe(true);
     expect(Object.isFrozen(retained?.classes.geometry.cpuDecodedBytes)).toBe(true);
+    expect(retained?.classes["virtual-texture"].persistentGpuBytes.hardLimit)
+      .toBe(256 * 1024 * 1024);
     customPolicy.limits.uploadBytes = 1;
     expect(root.diagnostics().resourceGovernor.limits.uploadBytes).toBe(8 * 1024 * 1024);
     root.dispose();
@@ -94,7 +106,6 @@ describe("React root public API", () => {
       context: {
         alpha: false,
         generatedImageVirtualTextures: true,
-        virtualTexturePhysicalByteBudget: 1024,
       },
     });
     const renderRoot = emptyScene();
@@ -116,7 +127,6 @@ describe("React root public API", () => {
         antialias: true,
         generatedImageVirtualTextures: true,
         generatedSvgVirtualTextureRasterDensity: 4,
-        virtualTexturePhysicalByteBudget: 1024,
       },
       disposed: false,
       frame: 0,
@@ -138,7 +148,6 @@ describe("React root public API", () => {
     expect(webGlRootForRoyalRoot(root).options).toMatchObject({
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
-      virtualTexturePhysicalByteBudget: 1024,
     });
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
 
@@ -149,7 +158,6 @@ describe("React root public API", () => {
       antialias: true,
       generatedImageVirtualTextures: true,
       generatedSvgVirtualTextureRasterDensity: 4,
-      virtualTexturePhysicalByteBudget: 1024,
     });
     expect(Object.isFrozen(root.context)).toBe(true);
     expect(Object.isFrozen(root.snapshot())).toBe(true);

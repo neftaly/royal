@@ -330,7 +330,11 @@ describe("virtual texture GPU arena", () => {
       16_384,
       63,
       8,
-    )).toEqual({ kind: "dormant", reason: "physical-budget-exceeded" });
+    )).toEqual({
+      kind: "dormant",
+      reason: "physical-budget-exceeded",
+      requiredBytes: 64,
+    });
   });
 
   it("caps physical slots at the 16-bit page-table encoding limit", () => {

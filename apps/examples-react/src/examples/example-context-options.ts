@@ -6,7 +6,9 @@ const mib = (value: number): number => value * 1024 * 1024;
 const durableBudget = (
   mandatoryFloorMiB: number,
   softLimitMiB: number,
-): { readonly mandatoryFloor: number; readonly softLimit: number } => ({
+  hardLimitMiB?: number,
+): { readonly hardLimit?: number; readonly mandatoryFloor: number; readonly softLimit: number } => ({
+  ...(hardLimitMiB === undefined ? {} : { hardLimit: mib(hardLimitMiB) }),
   mandatoryFloor: mib(mandatoryFloorMiB),
   softLimit: mib(softLimitMiB),
 });
@@ -36,7 +38,9 @@ export const mobileExampleResourceGovernorPolicy = {
     },
     'virtual-texture': {
       cpuDecodedBytes: durableBudget(16, 48),
-      persistentGpuBytes: durableBudget(32, 96),
+      // Keep a little borrowable headroom while preventing VT atlases from
+      // consuming the entire constrained-device GPU pool.
+      persistentGpuBytes: durableBudget(32, 96, 112),
     },
   },
   limits: {

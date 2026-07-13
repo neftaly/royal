@@ -49,7 +49,11 @@ export interface OrdinaryTextureGpuAdmission {
     readonly persistentGpuBytes: number;
     readonly uploadBytes: number;
   }): OrdinaryTextureGpuReservation | {
-    readonly reason: "persistent-gpu-capacity" | "persistent-gpu-mandatory-floor" | "upload-capacity";
+    readonly reason:
+      | "persistent-gpu-capacity"
+      | "persistent-gpu-hard-limit"
+      | "persistent-gpu-mandatory-floor"
+      | "upload-capacity";
   } | {
     readonly limit: number;
     readonly reason: "persistent-gpu-cost-exceeds-limit" | "upload-cost-exceeds-limit";

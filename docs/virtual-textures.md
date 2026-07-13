@@ -84,11 +84,19 @@ resident.
 
 ## Memory, loading, and errors
 
-`virtualTexturePhysicalByteBudget` is the global physical GPU byte budget for
-all VT atlases and page tables owned by a root; it defaults to 64 MiB. Manifest
-`physicalByteBudget` and `physicalSlots` are per-resource limits and cannot
-expand the global budget. Residency is demand-driven and eviction may return a
-sample to a resident parent mip.
+VT atlases and page tables are governed as
+`classes['virtual-texture'].persistentGpuBytes` in the root's
+`resourceGovernorPolicy`. The class `softLimit` is a borrowing/diagnostic
+threshold rather than a second allocator cap. Set its optional `hardLimit` for
+an exact VT ceiling; otherwise VTs may borrow root GPU capacity not protected
+by other classes' mandatory floors. The default policy therefore scales beyond
+a fixed small atlas pool when a large terrain or many visible textures need it,
+while preserving geometry, ordinary-texture, and render-target floors.
+
+Manifest `physicalByteBudget` and `physicalSlots` remain per-resource quality
+and footprint ceilings; they cannot expand the governor's effective VT
+capacity. Residency is demand-driven and eviction may return a sample to a
+resident parent mip.
 
 In `diagnostics().virtualTexturing`, `activePages`/`activePagesByMip` count the
 page-table mappings currently visible to shaders. `cachedPages` and
@@ -96,8 +104,9 @@ page-table mappings currently visible to shaders. `cachedPages` and
 and inactive pages retained for quick reuse; in-flight uploads do not count
 until their texels are usable. The deprecated `residentPages` and
 `residentPagesByMip` names are compatibility aliases for the cached counters.
-All `physical*Bytes` counters are byte counts: allocated storage excludes
-quarantined storage, while both remain charged against the configured budget.
+All `physical*Bytes` counters are byte counts. `physicalBudgetBytes` is the
+effective VT hard maximum derived from the governor policy, allocated storage
+excludes quarantined storage, and both remain charged against that maximum.
 
 Manifest fetch and parse, page fetch/decode, GPU admission, and upload happen
 asynchronously. Rendering continues with available fallback data while work is

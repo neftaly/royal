@@ -27,7 +27,11 @@ export type {
   VirtualTextureAssetSrcOptions,
   VirtualTextureInput,
 } from '@royal/renderer-core';
-export type { ResourceGovernorPolicy } from '@royal/renderer-webgl';
+export type {
+  ResourceGovernorClassPolicy,
+  ResourceGovernorDurableBudget,
+  ResourceGovernorPolicy,
+} from '@royal/renderer-webgl';
 
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';

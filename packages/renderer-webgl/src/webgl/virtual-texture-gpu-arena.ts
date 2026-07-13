@@ -160,7 +160,12 @@ export type VirtualTextureGpuAdmissionResult =
       readonly pageTableHeight: number;
       readonly pageTableWidth: number;
     }
-  | { readonly kind: "dormant"; readonly reason: "physical-budget-exceeded" }
+  | {
+      /** Minimum bytes required for a page table and one physical page. */
+      readonly requiredBytes: number;
+      readonly kind: "dormant";
+      readonly reason: "physical-budget-exceeded";
+    }
   | {
       readonly kind: "unsupported";
       readonly reason:
@@ -247,7 +252,7 @@ export const createVirtualTextureGpuArena = (
   options: { readonly maxPhysicalBytes: number },
 ): VirtualTextureGpuArena => {
   if (!Number.isSafeInteger(options.maxPhysicalBytes) || options.maxPhysicalBytes < 0) {
-    throw new Error("Virtual texture physical byte budget must be a non-negative safe integer");
+    throw new Error("Virtual texture physical byte maximum must be a non-negative safe integer");
   }
   const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
   const maxTextureUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
@@ -332,7 +337,10 @@ export const virtualTextureGpuAdmission = (
   const atlasCellsPerAxis = Math.floor(maxTextureSize / manifest.pageSize);
   if (atlasCellsPerAxis < 1) return { kind: "unsupported", reason: "texture-size-exceeded" };
   const atlasCellBudget = Math.floor((resourceBudget - pageTableBytes) / bytesPerSlotCell);
-  if (atlasCellBudget < 1) return { kind: "dormant", reason: "physical-budget-exceeded" };
+  const requiredBytes = pageTableBytes + bytesPerSlotCell;
+  if (atlasCellBudget < 1) {
+    return { kind: "dormant", reason: "physical-budget-exceeded", requiredBytes };
+  }
   const logicalPages = generatedVirtualTexturePageCount(
     manifest.width,
     manifest.height,
@@ -358,7 +366,9 @@ export const virtualTextureGpuAdmission = (
       high = candidate - 1;
     }
   }
-  if (effectiveSlots < 1) return { kind: "dormant", reason: "physical-budget-exceeded" };
+  if (effectiveSlots < 1) {
+    return { kind: "dormant", reason: "physical-budget-exceeded", requiredBytes };
+  }
   const atlasGridColumns = Math.ceil(Math.sqrt(effectiveSlots));
   const atlasGridRows = Math.ceil(effectiveSlots / atlasGridColumns);
   const paddedSlots = atlasGridColumns * atlasGridRows;

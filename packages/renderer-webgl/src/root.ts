@@ -98,6 +98,7 @@ import {
   beginResourceGovernorFrame,
   createResourceGovernor,
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  maximumResourceGovernorClassDurableBytes,
   RESOURCE_GOVERNOR_CLASSES,
   ResourceGovernorCpuCapacityError,
   replaceResourceGovernorLease,
@@ -1291,7 +1292,11 @@ const immutableResourceGovernorPolicy = (
   policy: ResourceGovernorPolicy,
 ): ResourceGovernorPolicy => {
   const budget = (value: ResourceGovernorPolicy["classes"]["geometry"]["cpuDecodedBytes"]) =>
-    Object.freeze({ mandatoryFloor: value.mandatoryFloor, softLimit: value.softLimit });
+    Object.freeze({
+      ...(value.hardLimit === undefined ? {} : { hardLimit: value.hardLimit }),
+      mandatoryFloor: value.mandatoryFloor,
+      softLimit: value.softLimit,
+    });
   const resourceClass = (value: ResourceGovernorPolicy["classes"]["geometry"]) => Object.freeze({
     cpuDecodedBytes: budget(value.cpuDecodedBytes),
     persistentGpuBytes: budget(value.persistentGpuBytes),
@@ -1328,12 +1333,6 @@ const maxVirtualTexturePageTableUploadBytes = (
 };
 
 const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
-  const virtualTexturePhysicalByteBudget = options.virtualTexturePhysicalByteBudget ?? 64 * 1024 * 1024;
-  if (!Number.isSafeInteger(virtualTexturePhysicalByteBudget) || virtualTexturePhysicalByteBudget < 0) {
-    throw new RangeError(
-      `virtualTexturePhysicalByteBudget must be a non-negative safe integer number of bytes, received ${String(virtualTexturePhysicalByteBudget)}`,
-    );
-  }
   const generatedSvgVirtualTextureRasterDensity = options.generatedSvgVirtualTextureRasterDensity
     ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY;
   if (
@@ -1353,7 +1352,6 @@ const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOp
     ...(options.resourceGovernorPolicy === undefined
       ? {}
       : { resourceGovernorPolicy: immutableResourceGovernorPolicy(options.resourceGovernorPolicy) }),
-    virtualTexturePhysicalByteBudget,
   });
 };
 
@@ -2403,11 +2401,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
             reason: `${cost.uploadBytes} upload bytes exceed the absolute limit ${policy.limits.uploadBytes}`,
           };
         }
-        const protectedPersistentBytes = RESOURCE_GOVERNOR_CLASSES
-          .filter((resourceClass) => resourceClass !== "ordinary-texture")
-          .reduce((sum, resourceClass) =>
-            sum + policy.classes[resourceClass].persistentGpuBytes.mandatoryFloor, 0);
-        const maximumPersistentBytes = policy.limits.persistentGpuBytes - protectedPersistentBytes;
+        const maximumPersistentBytes = maximumResourceGovernorClassDurableBytes(
+          policy,
+          "ordinary-texture",
+          "persistentGpuBytes",
+        );
         if (cost.persistentGpuBytes > maximumPersistentBytes) {
           return {
             permanent: true,
@@ -2436,7 +2434,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }
       });
     this.#virtualTextureGpu = createVirtualTextureGpuArena(gl, this.#textureHandles, {
-      maxPhysicalBytes: this.#options.virtualTexturePhysicalByteBudget,
+      maxPhysicalBytes: maximumResourceGovernorClassDurableBytes(
+        this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY,
+        "virtual-texture",
+        "persistentGpuBytes",
+      ),
     });
     this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
     this.#programArena = createProgramArena(gl);
@@ -2486,7 +2488,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       ...(fallback.resourceGovernorPolicy === undefined
         ? {}
         : { resourceGovernorPolicy: fallback.resourceGovernorPolicy }),
-      virtualTexturePhysicalByteBudget: fallback.virtualTexturePhysicalByteBudget,
     });
   }
 
@@ -6703,10 +6704,30 @@ class WebGlRootImpl implements InternalWebGlRoot {
         gpuArena.budgetBytes - gpuArena.chargedBytes,
         this.#maxTextureImageUnits,
       );
+      const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("virtual-texture");
+      if (admission.kind === "dormant" && admission.requiredBytes > persistentGpuMaximum) {
+        state.stats.gpuAdmissionFailures += 1;
+        this.#markVirtualTextureUnsupported(
+          state,
+          `resource allocation requires ${admission.requiredBytes} persistent GPU bytes, exceeding the virtual-texture limit ${persistentGpuMaximum}`,
+        );
+        return false;
+      }
+      if (
+        admission.kind === "dormant"
+        && manifest.physicalByteBudget !== undefined
+        && admission.requiredBytes > manifest.physicalByteBudget
+      ) {
+        state.stats.gpuAdmissionFailures += 1;
+        this.#markVirtualTextureUnsupported(
+          state,
+          `resource allocation requires ${admission.requiredBytes} persistent GPU bytes, exceeding the manifest physical byte limit ${manifest.physicalByteBudget}`,
+        );
+        return false;
+      }
       if (admission.kind === "supported") {
         const limits = this.#options.resourceGovernorPolicy?.limits
           ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits;
-        const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("virtual-texture");
         if (admission.allocatedBytes > persistentGpuMaximum) {
           state.stats.gpuAdmissionFailures += 1;
           this.#markVirtualTextureUnsupported(
@@ -7062,20 +7083,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {
     const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
-    const protectedBytes = RESOURCE_GOVERNOR_CLASSES
-      .filter((candidate) => candidate !== resourceClass)
-      .reduce((sum, candidate) =>
-        sum + policy.classes[candidate].cpuDecodedBytes.mandatoryFloor, 0);
-    return Math.max(0, policy.limits.cpuDecodedBytes - protectedBytes);
+    return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
   }
 
   #maximumResourceClassPersistentGpuBytes(resourceClass: ResourceGovernorClass): number {
     const policy = this.#options.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY;
-    const protectedBytes = RESOURCE_GOVERNOR_CLASSES
-      .filter((candidate) => candidate !== resourceClass)
-      .reduce((sum, candidate) =>
-        sum + policy.classes[candidate].persistentGpuBytes.mandatoryFloor, 0);
-    return Math.max(0, policy.limits.persistentGpuBytes - protectedBytes);
+    return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "persistentGpuBytes");
   }
 
   #wakeVirtualTextureDecodedCpuCapacity(): void {
@@ -7726,6 +7739,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             if (typeof reserved === "string") {
               switch (reserved) {
                 case "persistent-gpu-capacity":
+                case "persistent-gpu-hard-limit":
                 case "persistent-gpu-mandatory-floor":
                 case "upload-capacity":
                   return { reason: reserved };

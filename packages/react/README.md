@@ -95,7 +95,6 @@ renderer root.
   context={{
     generatedImageVirtualTextures: true,
     generatedSvgVirtualTextureRasterDensity: 4,
-    virtualTexturePhysicalByteBudget: 64 * 1024 * 1024,
   }}
   scene={renderScene}
 />
@@ -116,9 +115,12 @@ renderer root.
   world size, preserves aspect ratio, and caps the generated longest side at
   16384 logical texels. SVG `viewBox` coordinates are not treated as raster
   pixels.
-- `virtualTexturePhysicalByteBudget` is the root-wide GPU budget shared by all
-  virtual-texture atlases and page tables. It is measured in bytes and defaults
-  to `67108864` (64 MiB).
+- VT atlases and page tables participate in `resourceGovernorPolicy` as
+  `classes['virtual-texture'].persistentGpuBytes`. Its `softLimit` marks
+  borrowing for diagnostics, while optional `hardLimit` sets an exact class
+  ceiling. With no hard limit, VTs may borrow root GPU capacity not protected
+  by another class's mandatory floor. Manifest `physicalByteBudget` and
+  `physicalSlots` remain per-texture quality and footprint ceilings.
 
 Use `virtualTexture('/terrain.vt.json')` from `@royal/react/scene` for an
 authored manifest. The string and the object form
