@@ -381,6 +381,7 @@ import {
   beginVirtualTextureFrameDemand,
   createVirtualTextureFrameDemandWorkspace,
   finalizeVirtualTextureFrameDemand,
+  releaseVirtualTextureFrameDemandResource,
   resetVirtualTextureFrameDemand,
   submitVirtualTextureFrameDemand,
   type VirtualTextureFrameDemandCommit,
@@ -3041,8 +3042,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     state.demandedPageKeysScratch.clear();
     state.desiredPages.length = 0;
     state.desiredPagesScratch.length = 0;
-    this.#virtualTextureFrameDemand.resources.delete(state);
-    this.#virtualTextureFrameDemand.preferenceCursors.delete(state);
+    releaseVirtualTextureFrameDemandResource(this.#virtualTextureFrameDemand, state);
     this.#virtualTextureDemandCursors.delete(state);
     releaseFailure = captureFirstFailure(
       releaseFailure,
@@ -5498,20 +5498,33 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
     const demandedPageKeys = state.demandedPageKeysScratch;
-    if (!this.#virtualTextureFrameDemand.active) demandedPageKeys.clear();
-    for (const page of candidates) demandedPageKeys.add(virtualTexturePageKey(page));
-    if (preferredCandidates !== undefined) {
-      for (const page of preferredCandidates) demandedPageKeys.add(virtualTexturePageKey(page));
+    if (!this.#virtualTextureFrameDemand.active) {
+      demandedPageKeys.clear();
+      for (const page of candidates) demandedPageKeys.add(virtualTexturePageKey(page));
+      if (preferredCandidates !== undefined) {
+        for (const page of preferredCandidates) demandedPageKeys.add(virtualTexturePageKey(page));
+      }
     }
     const convergentCandidates = this.#convergentVirtualTextureCandidates(state, candidates);
     const convergentPreferredCandidates = preferredCandidates === undefined
       ? undefined
       : this.#convergentVirtualTextureCandidates(state, preferredCandidates);
     if (this.#virtualTextureFrameDemand.active) {
+      const nonconvergentCandidates = convergentCandidates.length === candidates.length
+        && (preferredCandidates === undefined
+          || convergentPreferredCandidates?.length === preferredCandidates.length)
+        ? []
+        : [...candidates, ...(preferredCandidates ?? [])].filter((page) => (
+            !virtualTexturePageLifecycleCanBecomeResident(
+              state.pageLifecycles.get(virtualTexturePageKey(page)),
+            )
+          ));
       submitVirtualTextureFrameDemand(
         this.#virtualTextureFrameDemand,
         state,
+        state.admissionTicket,
         this.#virtualTextureDemandViewIndex,
+        this.#virtualTextureFrameDemandCapacity(state),
         {
           candidates: convergentCandidates,
           preferTargetMip,
@@ -5519,6 +5532,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             ? {}
             : { preferredCandidates: convergentPreferredCandidates }),
         },
+        nonconvergentCandidates,
       );
       return;
     }
@@ -5567,6 +5581,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
     const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
     return gpu?.allocated === true ? gpu.effectiveSlots : 0;
+  }
+
+  #virtualTextureFrameDemandCapacity(state: VirtualTextureRuntimeState): number {
+    const manifest = state.manifest;
+    if (manifest === undefined) return 1;
+    const allocated = this.#virtualTextureDemandCapacity(state);
+    if (allocated > 0) return allocated;
+    return Math.min(
+      manifest.physicalSlots ?? 4,
+      generatedVirtualTexturePageCount(manifest.width, manifest.height, manifest.pageSize),
+    );
   }
 
   #prepareVirtualTextureDemand(
@@ -5681,7 +5706,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const demandedStates = this.#virtualTextureDemandedStates;
     demandedStates.clear();
     for (const entry of commits) {
-      if (entry.resource.demandedPageKeysScratch.size > 0) demandedStates.add(entry.resource);
+      const demandedPageKeys = entry.resource.demandedPageKeysScratch;
+      for (const page of entry.nonconvergentCandidates) {
+        demandedPageKeys.add(virtualTexturePageKey(page));
+      }
+      for (const submission of entry.submissions) {
+        for (const page of submission.candidates) demandedPageKeys.add(virtualTexturePageKey(page));
+        for (const page of submission.preferredCandidates ?? []) {
+          demandedPageKeys.add(virtualTexturePageKey(page));
+        }
+      }
+      if (demandedPageKeys.size > 0) demandedStates.add(entry.resource);
     }
     const admissionStates = this.#virtualTextureAdmissionStates;
     admissionStates.length = 0;
@@ -7388,6 +7423,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let atlasTextures = 0;
     let cachedPages = 0;
     let demandAdmissions = 0;
+    let publishedDemandPages = 0;
     let demandRetentionOverflows = 0;
     let demandRetentions = 0;
     let generatedManifestUses = 0;
@@ -7422,6 +7458,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         pageTableTextures += 1;
       }
       demandAdmissions += state.stats.demandAdmissions;
+      publishedDemandPages += state.demandedPageKeys.size;
       demandRetentionOverflows += state.stats.demandRetentionOverflows;
       demandRetentions += state.stats.demandRetentions;
       generatedManifestUses += state.stats.generatedManifestUses;
@@ -7466,6 +7503,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       cachedPagesByMip,
       atlasTextures,
       demandAdmissions,
+      publishedDemandPages,
       demandRetentionOverflows,
       demandRetentions,
       generatedManifestUses,

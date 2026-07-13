@@ -185,6 +185,8 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly atlasTextures: number;
   /** Newly desired pages admitted across committed demand publications. */
   readonly demandAdmissions: number;
+  /** Distinct pages in each virtual texture's last successfully published bounded demand. */
+  readonly publishedDemandPages: number;
   /** Draw-demand passes that exceeded the fixed retained-polygon workspace. */
   readonly demandRetentionOverflows: number;
   /** Prior resident pages temporarily retained by demand hysteresis. */

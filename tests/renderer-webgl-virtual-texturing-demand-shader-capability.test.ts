@@ -30,6 +30,9 @@ import {
   namedUniform1iValues,
   namedUniform4fvValues,
 } from "./renderer-webgl-virtual-texturing-fixtures";
+import {
+  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES,
+} from "../packages/renderer-webgl/src/virtual-texture-frame-demand";
 
 describe("WebGL renderer virtual texturing demand, shaders, and capabilities", () => {
   it("requests coarsest resident parent pages before mip-0 children", async () => {
@@ -102,6 +105,9 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       root.render(fullView);
     }
     expect(root.snapshot().virtualTexturing.cachedPages).toBe(3);
+    expect(root.snapshot().virtualTexturing.publishedDemandPages).toBeLessThanOrEqual(
+      VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES,
+    );
     const stableRequests = ControlledImage.instances.length;
     const stableUpdates = root.snapshot().virtualTexturing.pageTableUpdates;
     for (let frame = 0; frame < 8; frame += 1) root.render(fullView);

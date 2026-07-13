@@ -4,8 +4,13 @@ import {
   beginVirtualTextureFrameDemand,
   createVirtualTextureFrameDemandWorkspace,
   finalizeVirtualTextureFrameDemand,
+  releaseVirtualTextureFrameDemandResource,
   resetVirtualTextureFrameDemand,
-  submitVirtualTextureFrameDemand,
+  submitVirtualTextureFrameDemand as submitBoundedVirtualTextureFrameDemand,
+  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES,
+  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES,
+  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS,
+  VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES,
 } from "../packages/renderer-webgl/src/virtual-texture-frame-demand";
 import {
   selectVirtualTextureFrameWorkingSet,
@@ -25,6 +30,31 @@ const committedSubmission = (
   candidates: readonly VirtualTexturePageId[],
   preferredCandidates: readonly VirtualTexturePageId[] = candidates,
 ): VirtualTextureDemandSubmission => ({ candidates, preferTargetMip: true, preferredCandidates });
+
+const resourceOrders = new Map<unknown, number>();
+const resourceOrder = (resource: unknown): number => {
+  let order = resourceOrders.get(resource);
+  if (order === undefined) {
+    order = resourceOrders.size;
+    resourceOrders.set(resource, order);
+  }
+  return order;
+};
+
+const submitVirtualTextureFrameDemand = <K>(
+  workspace: ReturnType<typeof createVirtualTextureFrameDemandWorkspace<K>>,
+  resource: K,
+  viewIndex: number,
+  demand: VirtualTextureDemandSubmission,
+  capacity = 4,
+): void => submitBoundedVirtualTextureFrameDemand(
+  workspace,
+  resource,
+  resourceOrder(resource),
+  viewIndex,
+  capacity,
+  demand,
+);
 
 describe("virtual texture frame-demand workspace", () => {
   it("gives each view one fairness lane regardless of repeated object draws", () => {
@@ -85,7 +115,7 @@ describe("virtual texture frame-demand workspace", () => {
     ]);
   });
 
-  it("does not let a later conservative draw replace an earlier draw's target preference", () => {
+  it("keeps the coarsest fallback without replacing an earlier draw's target preference", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
     const coarse = page(0, 3);
     const target = page(1, 0);
@@ -111,10 +141,11 @@ describe("virtual texture frame-demand workspace", () => {
     const selectFrame = (): readonly VirtualTexturePageId[] => {
       beginVirtualTextureFrameDemand(workspace);
       for (let draw = 0; draw < 100; draw += 1) {
-        submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, left]));
+        submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, left]), 2);
       }
-      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, right]));
-      expect(workspace.resources.get("surface")!.views.get(0)!.preferredGroups.size).toBe(2);
+      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, right]), 2);
+      const retained = workspace.resources.get("surface")!.views.get(0)!.preferredWrap;
+      expect(new Set([...retained.values()].map((item) => item.signature)).size).toBe(2);
       const [commit] = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
       const selected = selectVirtualTextureFrameWorkingSet(
         commit!.submissions,
@@ -137,8 +168,8 @@ describe("virtual texture frame-demand workspace", () => {
     const right = page(3);
     const prepare = () => {
       beginVirtualTextureFrameDemand(workspace);
-      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, left]));
-      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, right]));
+      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, left]), 2);
+      submitVirtualTextureFrameDemand(workspace, "surface", 0, submission([parent, right]), 2);
       return finalizeVirtualTextureFrameDemand(workspace, true, () => 0)[0]!;
     };
     const select = (commit: ReturnType<typeof prepare>) =>
@@ -215,6 +246,7 @@ describe("virtual texture frame-demand workspace", () => {
             draw.resource,
             draw.view,
             submission([draw.page]),
+            16,
           );
         }
       }
@@ -224,8 +256,8 @@ describe("virtual texture frame-demand workspace", () => {
         true,
         (resource) => cursors.get(resource)!,
       );
-      expect(commits.map((commit) => commit.resource), `${label} resource encounter order`)
-        .toEqual(firstSeenResources);
+      expect(commits.map((commit) => commit.resource), `${label} stable resource order`)
+        .toEqual([...firstSeenResources].sort((left, right) => resourceOrder(left) - resourceOrder(right)));
       for (const commit of commits) {
         const expectedDraws = draws
           .filter((draw) => draw.resource === commit.resource)
@@ -288,36 +320,38 @@ describe("virtual texture frame-demand workspace", () => {
     submitVirtualTextureFrameDemand(workspace, "first-resource", 4, submission([first]));
     const resourceNode = workspace.resources.get("first-resource")!;
     const viewNode = resourceNode.views.get(4)!;
-    const groupNode = [...viewNode.preferredGroups.values()][0]!;
+    const preferredNode = viewNode.preferredWrap;
 
     finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
     expect(resourceNode.resource).toBeUndefined();
     expect(resourceNode.views.size).toBe(0);
     expect(viewNode.candidates.size).toBe(0);
-    expect(viewNode.preferredGroups.size).toBe(0);
-    expect(groupNode.size).toBe(0);
+    expect(viewNode.preferredWrap.size).toBe(0);
+    expect(viewNode.preferredAfterCursor.size).toBe(0);
+    expect(preferredNode.size).toBe(0);
 
     beginVirtualTextureFrameDemand(workspace);
     submitVirtualTextureFrameDemand(workspace, "second-resource", 7, submission([second]));
     expect(workspace.resources.get("second-resource")).toBe(resourceNode);
     expect(resourceNode.views.get(7)).toBe(viewNode);
-    expect([...viewNode.preferredGroups.values()][0]).toBe(groupNode);
+    expect(viewNode.preferredWrap).toBe(preferredNode);
     expect([...viewNode.candidates.values()]).toEqual([second]);
-    expect([...groupNode.values()]).toEqual([second]);
+    expect([...preferredNode.values()].map((item) => item.page)).toEqual([second]);
     expect(viewNode.candidates.has("0/1/0")).toBe(false);
 
     finalizeVirtualTextureFrameDemand(workspace, false, () => 0);
     expect(resourceNode.resource).toBeUndefined();
     expect(resourceNode.views.size).toBe(0);
     expect(viewNode.candidates.size).toBe(0);
-    expect(viewNode.preferredGroups.size).toBe(0);
-    expect(groupNode.size).toBe(0);
+    expect(viewNode.preferredWrap.size).toBe(0);
+    expect(viewNode.preferredAfterCursor.size).toBe(0);
+    expect(preferredNode.size).toBe(0);
 
     beginVirtualTextureFrameDemand(workspace);
     submitVirtualTextureFrameDemand(workspace, "third-resource", 0, submission([first]));
     expect(workspace.resources.get("third-resource")).toBe(resourceNode);
     expect(resourceNode.views.get(0)).toBe(viewNode);
-    expect([...viewNode.preferredGroups.values()][0]).toBe(groupNode);
+    expect(viewNode.preferredWrap).toBe(preferredNode);
   });
 
   it("releases active pooled demand when reset by an external lifecycle transition", () => {
@@ -326,7 +360,7 @@ describe("virtual texture frame-demand workspace", () => {
     submitVirtualTextureFrameDemand(workspace, "resource", 3, submission([page(1)]));
     const resourceNode = workspace.resources.get("resource")!;
     const viewNode = resourceNode.views.get(3)!;
-    const groupNode = [...viewNode.preferredGroups.values()][0]!;
+    const preferredNode = viewNode.preferredWrap;
 
     resetVirtualTextureFrameDemand(workspace);
 
@@ -335,11 +369,12 @@ describe("virtual texture frame-demand workspace", () => {
     expect(resourceNode.resource).toBeUndefined();
     expect(resourceNode.views.size).toBe(0);
     expect(viewNode.candidates.size).toBe(0);
-    expect(viewNode.preferredGroups.size).toBe(0);
-    expect(groupNode.size).toBe(0);
+    expect(viewNode.preferredWrap.size).toBe(0);
+    expect(viewNode.preferredAfterCursor.size).toBe(0);
+    expect(preferredNode.size).toBe(0);
   });
 
-  it("caps retained resource, view, and group pools at their high-water limits", () => {
+  it("caps retained resource and view pools at their high-water limits", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
 
     beginVirtualTextureFrameDemand(workspace);
@@ -350,17 +385,171 @@ describe("virtual texture frame-demand workspace", () => {
     expect(workspace.resourcePool).toHaveLength(64);
 
     beginVirtualTextureFrameDemand(workspace);
-    for (let view = 0; view < 257; view += 1) {
-      submitVirtualTextureFrameDemand(workspace, "views", view, submission([page(view)]));
+    for (let resource = 0; resource < 33; resource += 1) {
+      for (let view = 0; view < VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS; view += 1) {
+        submitVirtualTextureFrameDemand(workspace, `views-${resource}`, view, submission([page(view)]), 1_000);
+      }
     }
     finalizeVirtualTextureFrameDemand(workspace, false, () => 0);
     expect(workspace.viewPool).toHaveLength(256);
+  });
 
+  it("bounds 100k active draws independently of physical capacity and view cardinality", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    let maximumPages = 0;
+    let maximumViews = 0;
     beginVirtualTextureFrameDemand(workspace);
-    for (let group = 0; group < 513; group += 1) {
-      submitVirtualTextureFrameDemand(workspace, "groups", 0, submission([page(group)]));
+    for (let draw = 0; draw < 100_000; draw += 1) {
+      const view = draw % 1_000;
+      submitVirtualTextureFrameDemand(
+        workspace,
+        "terrain",
+        view,
+        submission([page(0, 12), page(draw, 0)]),
+        100_000,
+      );
+      const resource = workspace.resources.get("terrain")!;
+      const retainedPages = [...resource.views.values()].reduce((total, lane) => (
+        total
+        + lane.candidates.size
+        + lane.nonconvergentCandidates.size
+        + lane.preferredAfterCursor.size
+        + lane.preferredWrap.size
+      ), 0);
+      maximumPages = Math.max(maximumPages, retainedPages);
+      maximumViews = Math.max(maximumViews, resource.views.size);
+      if (resource.views.size > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS) {
+        throw new Error("active view-lane bound exceeded during collection");
+      }
+      if (retainedPages > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES) {
+        throw new Error("active page-evidence bound exceeded during collection");
+      }
     }
-    finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
-    expect(workspace.groupPool).toHaveLength(512);
+    const resource = workspace.resources.get("terrain")!;
+    expect([...resource.views.values()].some((lane) => lane.candidates.has("12/0/0"))).toBe(true);
+    expect(maximumPages).toBeGreaterThan(0);
+    expect(maximumViews).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS);
+  });
+
+  it("bounds 100k distinct resources globally and rotates later resources into the window", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    beginVirtualTextureFrameDemand(workspace);
+    for (let resource = 0; resource < 100_000; resource += 1) {
+      submitBoundedVirtualTextureFrameDemand(
+        workspace,
+        `terrain-${resource}`,
+        resource,
+        0,
+        1_000,
+        submission([page(resource)]),
+      );
+      let totalPages = 0;
+      for (const demand of workspace.resources.values()) {
+        for (const lane of demand.views.values()) {
+          totalPages += lane.candidates.size
+            + lane.nonconvergentCandidates.size
+            + lane.preferredAfterCursor.size
+            + lane.preferredWrap.size;
+        }
+      }
+      if (workspace.resources.size > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES) {
+        throw new Error("active resource bound exceeded during collection");
+      }
+      if (totalPages > VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES) {
+        throw new Error("global page-evidence bound exceeded during collection");
+      }
+    }
+    expect(workspace.resources.size).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES);
+    expect(workspace.resourcePoolIndex).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES);
+    expect(workspace.viewPoolIndex).toBe(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES);
+
+    const rotating = createVirtualTextureFrameDemandWorkspace<string>();
+    const publish = (): readonly string[] => {
+      beginVirtualTextureFrameDemand(rotating);
+      for (let resource = 0; resource < 100; resource += 1) {
+        submitBoundedVirtualTextureFrameDemand(
+          rotating,
+          `rotating-${resource}`,
+          resource,
+          0,
+          4,
+          submission([page(resource)]),
+        );
+      }
+      const commits = finalizeVirtualTextureFrameDemand(rotating, true, () => 0);
+      for (const commit of commits) advanceVirtualTextureFrameDemand(rotating, commit);
+      return commits.map((commit) => commit.resource);
+    };
+    expect(publish()).toContain("rotating-63");
+    const second = publish();
+    expect(second).toContain("rotating-64");
+    expect(second).toContain("rotating-99");
+  });
+
+  it("rotates bounded view lanes without starvation and preserves stereo lanes", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    const seen = new Set<number>();
+    for (let frame = 0; frame < 5; frame += 1) {
+      beginVirtualTextureFrameDemand(workspace);
+      const views = Array.from({ length: 40 }, (_value, view) => view);
+      if (frame % 2 === 1) views.reverse();
+      for (const view of views) {
+        submitVirtualTextureFrameDemand(workspace, "xr", view, submission([page(view)]), 1_000);
+      }
+      const retainedViews = [...workspace.resources.get("xr")!.views.keys()];
+      for (const view of retainedViews) seen.add(view);
+      const [commit] = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+      if (frame === 0) {
+        expect(retainedViews).toContain(0);
+        expect(retainedViews).toContain(1);
+      }
+      advanceVirtualTextureFrameDemand(workspace, commit!);
+    }
+    expect(seen).toEqual(new Set(Array.from({ length: 40 }, (_value, view) => view)));
+    expect(workspace.preferenceCursors.get("xr")?.size ?? 0).toBeLessThanOrEqual(
+      VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS,
+    );
+    expect(workspace.viewCursors.has("xr")).toBe(true);
+  });
+
+  it("is deterministic under reversed draw order while retaining coarse and local evidence", () => {
+    const collect = (reverse: boolean) => {
+      const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+      const draws = Array.from({ length: 200 }, (_value, draw) => ({
+        candidates: [page(0, 9), page(draw, draw % 3)],
+        preferredCandidates: [page(draw, draw % 3)],
+      }));
+      if (reverse) draws.reverse();
+      beginVirtualTextureFrameDemand(workspace);
+      for (const draw of draws) {
+        submitBoundedVirtualTextureFrameDemand(workspace, "map", resourceOrder("map"), 0, 24, {
+          ...draw,
+          preferTargetMip: true,
+        });
+      }
+      return finalizeVirtualTextureFrameDemand(workspace, true, () => 0)[0]!.submissions;
+    };
+    const forward = collect(false);
+    const reverse = collect(true);
+    expect(reverse[0]!.preferredCandidates).toEqual(forward[0]!.preferredCandidates);
+    expect(forward[0]!.candidates[0]).toEqual(page(0, 9));
+    expect(reverse[0]!.candidates[0]).toEqual(page(0, 9));
+  });
+
+  it("releases all persistent fairness state under resource and view churn", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    for (let resourceIndex = 0; resourceIndex < 1_000; resourceIndex += 1) {
+      const resource = `resource-${resourceIndex}`;
+      beginVirtualTextureFrameDemand(workspace);
+      for (let view = 0; view < 100; view += 1) {
+        submitVirtualTextureFrameDemand(workspace, resource, view, submission([page(view)]), 32);
+      }
+      const [commit] = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+      advanceVirtualTextureFrameDemand(workspace, commit!);
+      releaseVirtualTextureFrameDemandResource(workspace, resource);
+    }
+    expect(workspace.preferenceCursors.size).toBe(0);
+    expect(workspace.viewCursors.size).toBe(0);
+    expect(workspace.resources.size).toBe(0);
   });
 });
