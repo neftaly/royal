@@ -1,8 +1,12 @@
 import * as fixtures from "./renderer-webgl-scene-gltf-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { directionalLight, gltf } from "@royal/renderer-core";
+import { directionalLight, gltf, perspectiveCamera } from "@royal/renderer-core";
 import type { RenderObjectHandle } from "@royal/renderer-core";
 import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
+import {
+  identityMat4,
+  projectionMat4,
+} from "../packages/renderer-webgl/src/math/mat4";
 
 const {
   decodeBasisuMock,
@@ -1195,6 +1199,58 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     const lowDraws = drawCalls(calls).slice(drawsBeforeLow);
     expect(lowDraws, "only one node in the LOD chain should draw per render").toHaveLength(1);
     expect(drawCount(lowDraws[0]!), "low coverage should select the referenced three-index LOD1 triangle").toBe(3);
+  });
+
+  it("selects and hysteretically retains LOD0 when bounds cross the perspective near plane", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const releaseExternalClock = root.acquireExternalRenderClock();
+    const renderGraph = (z: number) => renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, z],
+          rotation: [0, Math.PI / 4, 0],
+          scale: [1, 1.2, 1],
+        },
+        version: "node-lod-near-plane",
+      }),
+    ]);
+    const projectionMatrix = projectionMat4(perspectiveCamera({
+      far: 20,
+      fovY: Math.PI / 2,
+      near: 1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+    }), 100, 100);
+    const renderNearView = (z: number): readonly number[] => {
+      const callsBefore = calls.length;
+      root.renderViews(renderGraph(z), {
+        views: [{
+          projectionMatrix,
+          viewMatrix: identityMat4(),
+          viewport: { height: 100, width: 100, x: 0, y: 0 },
+        }],
+      });
+      return drawCalls(calls.slice(callsBefore)).map(drawCount);
+    };
+
+    try {
+      root.render(renderGraph(-1.2));
+      await settleLodDocumentAndBuffer(loader, nodeLodDocument());
+
+      expect(renderNearView(-1.2), "clipped near-plane footprint exceeds the LOD0 threshold")
+        .toEqual([6]);
+      expect(renderNearView(-1.15), "small near-plane motion remains inside LOD0 hysteresis")
+        .toEqual([6]);
+      expect(renderNearView(-1.22), "return motion does not oscillate the selected LOD")
+        .toEqual([6]);
+    } finally {
+      releaseExternalClock();
+    }
   });
 
   it("draws a large visible lower node LOD on its first frame when LOD0 is outside every view", async () => {

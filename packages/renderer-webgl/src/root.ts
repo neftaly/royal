@@ -351,6 +351,10 @@ import {
   type Bounds3,
   type MutableBounds3,
 } from "./math/picking";
+import {
+  createProjectedBoundsWorkspace,
+  projectedBoundsScreenCoverage,
+} from "./math/projected-bounds";
 import { PickingController } from "./picking-controller";
 import {
   isDecodedRgbaTexture,
@@ -1386,51 +1390,6 @@ const mat4OrientationDeterminant = (matrix: Mat4): number =>
   - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
   + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
 
-const clamp01 = (value: number): number =>
-  Math.max(0, Math.min(1, value));
-
-const projectedBoundsScreenCoverage = (
-  bounds: Bounds3 | undefined,
-  viewProjectionModel: Mat4,
-): number => {
-  if (bounds === undefined) return 0;
-
-  let minX = 1;
-  let minY = 1;
-  let maxX = -1;
-  let maxY = -1;
-  let projected = false;
-
-  for (let xIndex = 0; xIndex < 2; xIndex += 1) {
-    const x = xIndex === 0 ? bounds.min[0] : bounds.max[0];
-    for (let yIndex = 0; yIndex < 2; yIndex += 1) {
-      const y = yIndex === 0 ? bounds.min[1] : bounds.max[1];
-      for (let zIndex = 0; zIndex < 2; zIndex += 1) {
-        const z = zIndex === 0 ? bounds.min[2] : bounds.max[2];
-        const clipX = viewProjectionModel[0] * x + viewProjectionModel[4] * y + viewProjectionModel[8] * z
-          + viewProjectionModel[12];
-        const clipY = viewProjectionModel[1] * x + viewProjectionModel[5] * y + viewProjectionModel[9] * z
-          + viewProjectionModel[13];
-        const clipW = viewProjectionModel[3] * x + viewProjectionModel[7] * y + viewProjectionModel[11] * z
-          + viewProjectionModel[15];
-        if (clipW === 0) continue;
-
-        const ndcX = clamp01((clipX / clipW + 1) / 2);
-        const ndcY = clamp01((clipY / clipW + 1) / 2);
-        minX = Math.min(minX, ndcX);
-        minY = Math.min(minY, ndcY);
-        maxX = Math.max(maxX, ndcX);
-        maxY = Math.max(maxY, ndcY);
-        projected = true;
-      }
-    }
-  }
-
-  if (!projected) return 0;
-
-  return clamp01((maxX - minX) * (maxY - minY));
-};
-
 /**
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
  * by the contracts while keeping all GPU ownership inside this root.
@@ -1591,6 +1550,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #gltfLightScopeIdCount = 0;
   readonly #gltfPacketOccurrenceIndicesByRequestKey = new Map<string, number[]>();
   readonly #gltfPacketBoundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
+  readonly #projectedBoundsWorkspace = createProjectedBoundsWorkspace();
   readonly #gltfPacketLocalModelScratch: MutableMat4 = identityMat4();
   readonly #gltfPacketRootSourceScratch: MutablePacketRootSourceRow = {
     kind: 0,
@@ -4289,7 +4249,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           observeSharedViewLodCoverage(
             this.#sharedViewLodSelections,
             id,
-            projectedBoundsScreenCoverage(bounds, rootViewProjectionModel),
+            projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
           );
         }
         continue;
@@ -4314,7 +4274,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         observeSharedViewLodCoverage(
           this.#sharedViewLodSelections,
           id,
-          projectedBoundsScreenCoverage(bounds, rootViewProjectionModel),
+          projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
         );
       }
     }
