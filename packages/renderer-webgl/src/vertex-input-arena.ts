@@ -120,7 +120,6 @@ type InstanceAllocationToken = {
 
 type OwnedInstanceAllocation = {
   readonly allocation: InstanceAllocationToken;
-  bufferCapacity: number;
   governedBufferCapacity: number;
   readonly gpuLeases: VertexInputGpuLease[];
   buffers?: VertexInputInstanceBuffers;
@@ -230,7 +229,6 @@ export const createVertexInputInstanceAllocation = (
   state.nextInstanceId = id + 1;
   state.ownedInstances.set(id, {
     allocation,
-    bufferCapacity: 0,
     governedBufferCapacity: 0,
     gpuLeases: [],
     capacity: 0,
@@ -519,7 +517,6 @@ const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): v
   state.pendingBufferDeletes.clear();
   state.pendingVertexArrayDeletes.clear();
   for (const resource of state.ownedInstances.values()) {
-    resource.bufferCapacity = 0;
     resource.governedBufferCapacity = 0;
     delete resource.buffers;
     delete resource.pendingBufferDeletes;
@@ -716,7 +713,6 @@ export const prepareVertexInputInstance = (
         throw error;
       }
     }
-    resource.bufferCapacity = instanceCount;
     resource.capacity = instanceCount;
     resource.staging.localModels = localModels;
     resource.staging.rootPoses = rootPoses;
@@ -728,7 +724,6 @@ export const prepareVertexInputInstance = (
     resource.buffers = created.buffers;
     if (created.lease !== undefined) resource.gpuLeases.push(created.lease);
     resource.governedBufferCapacity = resource.capacity;
-    resource.bufferCapacity = resource.capacity;
   }
   if (grew || countChanged || buffersMissing) markAllInstanceLanesDirty(resource);
   resource.instanceCount = instanceCount;
@@ -770,12 +765,14 @@ export const uploadVertexInputInstanceLane = (
     stride = 6;
     forceFull = resource.rootPosesDirty;
     stats = resource.rootPosesStats;
-  } else {
+  } else if (lane === "rootScales") {
     buffer = resource.buffers?.rootScaleBuffer;
     data = resource.staging.rootScales;
     stride = 3;
     forceFull = resource.rootScalesDirty;
     stats = resource.rootScalesStats;
+  } else {
+    throw new Error(`Invalid vertex-input instance lane ${String(lane)}`);
   }
   if (buffer === undefined) throw new Error("Vertex-input instance must be prepared before upload");
   const actualRangeCount = forceFull ? (resource.instanceCount === 0 ? 0 : 1) : rangeCount;
@@ -1137,19 +1134,10 @@ const removeStaticGeometry = (
 };
 
 const releaseVertexInputInstance = (
-  arena: VertexInputArena,
+  state: VertexInputArenaState,
   gl: WebGL2RenderingContext,
-  contextGeneration: number,
   instanceKey: number,
 ): void => {
-  const state = arena as unknown as VertexInputArenaState;
-  validSerial(contextGeneration, "context generation");
-  if (state.contextGeneration === undefined) return;
-  if (state.contextGeneration !== contextGeneration) {
-    throw new Error(
-      `Vertex-input context generation mismatch: active ${state.contextGeneration}, received ${contextGeneration}`,
-    );
-  }
   const ids = state.instanceGeometryIds.get(instanceKey);
   if (ids === undefined) return;
   const geometries = new Set<StaticGeometry>();
@@ -1187,7 +1175,6 @@ const deleteOwnedInstanceBuffers = (
   ]);
   throwFailure(deletePendingBuffers(gl, buffers));
   delete resource.pendingBufferDeletes;
-  resource.bufferCapacity = 0;
   resource.governedBufferCapacity = 0;
   delete resource.buffers;
   releaseGpuLeases(resource.gpuLeases);
@@ -1203,7 +1190,7 @@ export const releaseVertexInputInstanceAllocation = (
   const state = arena as unknown as VertexInputArenaState;
   const resource = instanceAllocation(state, allocation);
   requireContextGeneration(state, contextGeneration);
-  releaseVertexInputInstance(arena, gl, contextGeneration, resource.allocation.id);
+  releaseVertexInputInstance(state, gl, resource.allocation.id);
   deleteOwnedInstanceBuffers(state, gl, resource);
   state.ownedInstances.delete(resource.allocation.id);
   unbindVertexInput(gl);

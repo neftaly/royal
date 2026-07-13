@@ -474,6 +474,27 @@ describe("vertex-input arena", () => {
     expect(gl.subUploads.map(({ buffer }) => buffer)).toEqual(handles);
   });
 
+  it("rejects an invalid instance lane instead of uploading root scales", () => {
+    const gl = new FakeGl();
+    const context = glContext(gl);
+    const arena = createVertexInputArena();
+    const allocation = createVertexInputInstanceAllocation(arena);
+    prepareVertexInputInstance(arena, context, 1, allocation, 1);
+
+    expect(() => uploadVertexInputInstanceLane(
+      arena,
+      context,
+      1,
+      allocation,
+      "not-a-lane" as never,
+      0,
+    )).toThrow(/Invalid vertex-input instance lane not-a-lane/);
+    expect(gl.subUploads).toHaveLength(0);
+    expect(uploadVertexInputInstanceLane(arena, context, 1, allocation, "rootScales", 0))
+      .toEqual({ bytes: 12, calls: 1 });
+    expect(gl.subUploads[0]?.buffer).toBe(gl.allocations[2]?.buffer);
+  });
+
   it("resolves owned composite VAOs, deletes VAOs before buffers, and lazily restores full data", () => {
     const firstGl = new FakeGl();
     const secondGl = new FakeGl();
@@ -839,7 +860,6 @@ describe("vertex-input arena", () => {
   it("denies initial instance capacity before staging or GL effects and recovers transactionally", () => {
     type InspectedInstance = {
       readonly buffers?: unknown;
-      readonly bufferCapacity: number;
       readonly capacity: number;
       readonly governedBufferCapacity: number;
       readonly instanceCount: number;
@@ -883,7 +903,6 @@ describe("vertex-input arena", () => {
       rootScales: staging.rootScales,
     };
     const originalState = {
-      bufferCapacity: resource.bufferCapacity,
       buffers: resource.buffers,
       capacity: resource.capacity,
       forceFull: staging.forceFull,
@@ -908,7 +927,6 @@ describe("vertex-input arena", () => {
     expect(resource.staging.rootPoses).toBe(originalArrays.rootPoses);
     expect(resource.staging.rootScales).toBe(originalArrays.rootScales);
     expect({
-      bufferCapacity: resource.bufferCapacity,
       buffers: resource.buffers,
       capacity: resource.capacity,
       forceFull: resource.staging.forceFull,
@@ -944,7 +962,6 @@ describe("vertex-input arena", () => {
   it("keeps clean instance staging and GL state untouched across denied growth", () => {
     type InspectedInstance = {
       readonly buffers?: unknown;
-      readonly bufferCapacity: number;
       readonly capacity: number;
       readonly governedBufferCapacity: number;
       readonly instanceCount: number;
@@ -994,7 +1011,6 @@ describe("vertex-input arena", () => {
     };
     const before = {
       allocations: gl.allocations.length,
-      bufferCapacity: resource.bufferCapacity,
       buffers: resource.buffers,
       capacity: resource.capacity,
       deletedBuffers: gl.deletedBuffers.length,
@@ -1029,7 +1045,6 @@ describe("vertex-input arena", () => {
     expect(resource.rootScalesDirty).toBe(false);
     expect({
       allocations: gl.allocations.length,
-      bufferCapacity: resource.bufferCapacity,
       buffers: resource.buffers,
       capacity: resource.capacity,
       deletedBuffers: gl.deletedBuffers.length,
