@@ -89,7 +89,7 @@ const dispatchTypes = (
 const pressedIdentity = (
   state: CanvasPointerInteractionState,
   pointerId: number,
-) => state.pressedTargetsByPointerId.get(pointerId);
+) => state.pressedTargetsByPointerId.get(pointerId)?.identity;
 
 const pointerIds = [1, 2, 7] as const;
 
@@ -259,7 +259,7 @@ describe("React canvas pointer interaction planner", () => {
     });
 
     expect(dispatchTypes(down)).toEqual(["pointerdown"]);
-    expect(pressedIdentity(down.state, 7)).toBe(target.identity);
+    expect(down.state.pressedTargetsByPointerId.get(7)).toBe(target);
 
     const miss = reduceCanvasPointerInteraction(down.state, {
       picked: undefined,
@@ -338,7 +338,7 @@ describe("React canvas pointer interaction planner", () => {
     expect(pressedIdentity(result.state, 2)).toBe(targetB.identity);
   });
 
-  it("clears only one pressed pointer on cancel and clears all state on reset", () => {
+  it("dispatches cancel to its retained pressed target before clearing interaction state", () => {
     const targetA = pickedTarget(targetNode("a"));
     const targetB = pickedTarget(targetNode("b"));
     let state = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
@@ -360,15 +360,44 @@ describe("React canvas pointer interaction planner", () => {
       pointerId: 1,
       type: "pointercancel",
     });
-    expect(dispatchTypes(canceled)).toEqual(["pointerleave"]);
+    expect(dispatchTypes(canceled)).toEqual(["pointercancel", "pointerleave"]);
+    expect(canceled.dispatches.map((dispatch) => dispatch.picked)).toEqual([targetA, targetA]);
     expect(canceled.state.hoveredTarget).toBeUndefined();
     expect(canceled.state.pressedTargetsByPointerId.has(1)).toBe(false);
     expect(pressedIdentity(canceled.state, 2)).toBe(targetB.identity);
+
+    const laterLeave = reduceCanvasPointerInteraction(canceled.state, { type: "pointerleave" });
+    expect(dispatchTypes(laterLeave)).toEqual([]);
+    expect(laterLeave.state).toBe(canceled.state);
 
     const reset = reduceCanvasPointerInteraction(canceled.state, { type: "reset" });
     expect(dispatchTypes(reset)).toEqual([]);
     expect(reset.state.hoveredTarget).toBeUndefined();
     expect(reset.state.pressedTargetsByPointerId.size).toBe(0);
+  });
+
+  it("routes cancel to the press while leave remains owned by the hovered target", () => {
+    const pressed = pickedTarget(targetNode("pressed"));
+    const hovered = pickedTarget(targetNode("hovered"));
+    let state = reduceCanvasPointerInteraction(createCanvasPointerInteractionState(), {
+      picked: pressed,
+      pointerId: 1,
+      type: "pointerdown",
+    }).state;
+    state = reduceCanvasPointerInteraction(state, {
+      picked: hovered,
+      type: "pointermove",
+    }).state;
+
+    const result = reduceCanvasPointerInteraction(state, {
+      pointerId: 1,
+      type: "pointercancel",
+    });
+
+    expect(result.dispatches).toEqual([
+      { picked: pressed, type: "pointercancel" },
+      { picked: hovered, type: "pointerleave" },
+    ]);
   });
 
   it("preserves pointer interaction invariants across generated event sequences", () => {
@@ -387,7 +416,7 @@ describe("React canvas pointer interaction planner", () => {
         const action = randomPointerAction(random, targets);
         const before = state;
         const expectedPressedIdentity = action.type === "pointerup"
-          ? before.pressedTargetsByPointerId.get(action.pointerId)
+          ? before.pressedTargetsByPointerId.get(action.pointerId)?.identity
           : undefined;
         const result = reduceCanvasPointerInteraction(before, action);
         const types = dispatchTypes(result);
@@ -419,6 +448,18 @@ describe("React canvas pointer interaction planner", () => {
         } else {
           expect(result.state.hoveredTarget, `${detail} clears hover`).toBeUndefined();
           expect(result.state.pressedTargetsByPointerId.size, `${detail} clears pressed pointers`).toBe(0);
+        }
+
+        if (action.type === "pointercancel") {
+          const cancelDispatch = result.dispatches.find((dispatch) => dispatch.type === "pointercancel");
+          expect(
+            cancelDispatch?.picked,
+            `${detail} routes cancel to retained press`,
+          ).toBe(before.pressedTargetsByPointerId.get(action.pointerId));
+          expect(
+            types.filter((type) => type === "pointercancel"),
+            `${detail} emits at most one cancel`,
+          ).toHaveLength(before.pressedTargetsByPointerId.has(action.pointerId) ? 1 : 0);
         }
 
         if (types.includes("click")) {

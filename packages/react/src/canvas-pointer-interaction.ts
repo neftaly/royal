@@ -24,7 +24,8 @@ export interface CanvasPickedPointerTarget {
 
 export interface CanvasPointerInteractionState {
   readonly hoveredTarget: CanvasPickedPointerTarget | undefined;
-  readonly pressedTargetsByPointerId: ReadonlyMap<number, CanvasPointerInteractionIdentity>;
+  /** The exact pointerdown target retained until pointerup or pointercancel. */
+  readonly pressedTargetsByPointerId: ReadonlyMap<number, CanvasPickedPointerTarget>;
 }
 
 export type CanvasPointerInteractionAction =
@@ -116,9 +117,9 @@ const stateWith = (
 const setPressedTarget = (
   state: CanvasPointerInteractionState,
   pointerId: number,
-  target: CanvasPointerInteractionIdentity,
+  target: CanvasPickedPointerTarget,
 ): CanvasPointerInteractionState => {
-  if (samePointerInteractionIdentity(state.pressedTargetsByPointerId.get(pointerId), target)) return state;
+  if (state.pressedTargetsByPointerId.get(pointerId) === target) return state;
 
   return stateWith(state, {
     pressedTargetsByPointerId: new Map(state.pressedTargetsByPointerId).set(pointerId, target),
@@ -189,7 +190,7 @@ export const reduceCanvasPointerInteraction = (
     case "pointerdown": {
       const nextState = action.picked === undefined
         ? deletePressedTarget(state, action.pointerId)
-        : setPressedTarget(state, action.pointerId, action.picked.identity);
+        : setPressedTarget(state, action.pointerId, action.picked);
 
       return {
         dispatches: action.picked === undefined
@@ -205,7 +206,7 @@ export const reduceCanvasPointerInteraction = (
 
       if (action.picked !== undefined) {
         dispatches.push({ picked: action.picked, type: "pointerup" });
-        if (samePointerInteractionIdentity(pressedTarget, action.picked.identity) && action.button === 0) {
+        if (samePointerInteractionIdentity(pressedTarget?.identity, action.picked.identity) && action.button === 0) {
           dispatches.push({ picked: action.picked, type: "click" });
         }
       }
@@ -227,10 +228,16 @@ export const reduceCanvasPointerInteraction = (
     }
     case "pointercancel": {
       const previous = state.hoveredTarget;
+      const pressedTarget = state.pressedTargetsByPointerId.get(action.pointerId);
+      const dispatches: CanvasPointerInteractionDispatch[] = [];
+      if (pressedTarget !== undefined) {
+        dispatches.push({ picked: pressedTarget, type: "pointercancel" });
+      }
+      if (previous !== undefined) {
+        dispatches.push({ picked: previous, type: "pointerleave" });
+      }
       return {
-        dispatches: previous === undefined
-          ? []
-          : [{ picked: previous, type: "pointerleave" }],
+        dispatches,
         state: clearHoveredTarget(deletePressedTarget(state, action.pointerId)),
       };
     }

@@ -251,6 +251,108 @@ describe("React Canvas picking optimization", () => {
     detach();
   });
 
+  it.each(["touch", "pen"] as const)(
+    "routes %s cancellation to its retained press after the target is removed",
+    (pointerType) => {
+      const canvas = fakeCanvas();
+      const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+      const onPointerCancel = vi.fn<(event: RoyalPointerEvent) => void>();
+      const onPointerLeave = vi.fn();
+      const renderRoot = renderScene();
+      const emptyRoot = scene({
+        camera: perspectiveCamera(perspectiveProps),
+        nodes: [],
+      });
+      const sceneInteractionsRef = {
+        current: interactionRegistry(
+          renderRoot,
+          interactions({ onPointerCancel, onPointerLeave }),
+        ),
+      };
+      const pointerInteractionStateRef = { current: createCanvasPointerInteractionState() };
+      const lastPointerEventRef: { current: PointerEvent | undefined } = { current: undefined };
+      root.render(renderRoot);
+      const detach = attachCanvasPointerEventHandlers({
+        canvas,
+        lastPointerEventRef,
+        pointerInteractionStateRef,
+        sceneInteractionsRef,
+        root,
+      });
+
+      canvas.dispatchFakeEvent(
+        "pointermove",
+        pointerEvent(17, { pointerType }),
+      );
+      canvas.dispatchFakeEvent(
+        "pointerdown",
+        pointerEvent(17, { buttons: 1, pointerType }),
+      );
+      reconcileCanvasPointerInteractionScene({
+        lastPointerEventRef,
+        pointerInteractionStateRef,
+        sceneInteractions: interactionRegistry(emptyRoot),
+        sceneInteractionsRef,
+      });
+      root.render(emptyRoot);
+
+      const canceled = pointerEvent(17, { pointerType });
+      onPointerCancel.mockImplementationOnce((event) => {
+        expect(event.type).toBe("pointercancel");
+        expect(event.nativeEvent).toBe(canceled);
+        expect(event.nativeEvent.pointerType).toBe(pointerType);
+        canvas.dispatchFakeEvent("pointercancel", canceled);
+      });
+      canvas.dispatchFakeEvent("pointercancel", canceled);
+      canvas.dispatchFakeEvent("pointerleave", canceled);
+
+      expect(onPointerCancel).toHaveBeenCalledTimes(1);
+      expect(onPointerLeave).toHaveBeenCalledTimes(1);
+      expect(root.pick).toHaveBeenCalledTimes(2);
+      expect(pointerInteractionStateRef.current.hoveredTarget).toBeUndefined();
+      expect(pointerInteractionStateRef.current.pressedTargetsByPointerId.size).toBe(0);
+
+      detach();
+      canvas.dispatchFakeEvent("pointercancel", canceled);
+      expect(onPointerCancel).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not invent a cancel target when pointerdown had no hit", () => {
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas });
+    const onPointerCancel = vi.fn();
+    const renderRoot = renderScene();
+    const sceneInteractions = interactionRegistry(
+      renderRoot,
+      interactions({ onPointerCancel }),
+    );
+    const pointerInteractionStateRef = { current: createCanvasPointerInteractionState() };
+    root.render(renderRoot);
+    expect(sceneInteractions.hasPointerEventTargets).toBe(true);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef,
+      sceneInteractionsRef: { current: sceneInteractions },
+      root,
+    });
+
+    canvas.dispatchFakeEvent(
+      "pointerdown",
+      pointerEvent(23, { buttons: 1, pointerType: "touch" }),
+    );
+    canvas.dispatchFakeEvent(
+      "pointercancel",
+      pointerEvent(23, { pointerType: "touch" }),
+    );
+
+    expect(root.pick).toHaveBeenCalledTimes(1);
+    expect(onPointerCancel).not.toHaveBeenCalled();
+    expect(pointerInteractionStateRef.current.pressedTargetsByPointerId.size).toBe(0);
+    detach();
+  });
+
   it("consumes picked gestures before controls even when controls attach first", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });

@@ -2,6 +2,7 @@ import type { PickResult, PickTarget } from '@royal/renderer-core';
 
 export type RoyalPointerEventType =
   | 'click'
+  | 'pointercancel'
   | 'pointerdown'
   | 'pointerenter'
   | 'pointerleave'
@@ -26,6 +27,8 @@ export type RoyalPointerEventHandler = (event: RoyalPointerEvent) => void;
 
 export interface RoyalPointerEventProps {
   readonly onClick?: RoyalPointerEventHandler;
+  /** Called on the pressed target when the browser cancels its pointer gesture. */
+  readonly onPointerCancel?: RoyalPointerEventHandler;
   readonly onPointerDown?: RoyalPointerEventHandler;
   readonly onPointerEnter?: RoyalPointerEventHandler;
   readonly onPointerLeave?: RoyalPointerEventHandler;
@@ -45,6 +48,7 @@ type PointerHandlerProp = keyof RoyalPointerEventProps;
 
 const pointerHandlerProps = [
   'onClick',
+  'onPointerCancel',
   'onPointerDown',
   'onPointerEnter',
   'onPointerLeave',
@@ -54,6 +58,7 @@ const pointerHandlerProps = [
 
 const pointerEventHandlerProp = {
   click: 'onClick',
+  pointercancel: 'onPointerCancel',
   pointerdown: 'onPointerDown',
   pointerenter: 'onPointerEnter',
   pointerleave: 'onPointerLeave',
