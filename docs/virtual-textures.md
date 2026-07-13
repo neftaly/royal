@@ -102,11 +102,10 @@ In `diagnostics().virtualTexturing`, `activePages`/`activePagesByMip` count the
 page-table mappings currently visible to shaders. `cachedPages` and
 `cachedPagesByMip` count physically usable atlas pages, including active pages
 and inactive pages retained for quick reuse; in-flight uploads do not count
-until their texels are usable. The deprecated `residentPages` and
-`residentPagesByMip` names are compatibility aliases for the cached counters.
-All `physical*Bytes` counters are byte counts. `physicalBudgetBytes` is the
-effective VT hard maximum derived from the governor policy, allocated storage
-excludes quarantined storage, and both remain charged against that maximum.
+until their texels are usable. All `physical*Bytes` counters are byte counts.
+`physicalBudgetBytes` is the effective VT hard maximum derived from the
+governor policy, allocated storage excludes quarantined storage, and both
+remain charged against that maximum.
 
 Manifest fetch and parse, page fetch/decode, GPU admission, and upload happen
 asynchronously. Rendering continues with available fallback data while work is

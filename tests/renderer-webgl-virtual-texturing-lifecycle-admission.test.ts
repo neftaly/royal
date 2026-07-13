@@ -425,7 +425,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(pageUploads(calls)).toHaveLength(0);
     expect(ControlledImage.closeCalls).toBe(1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, residentPages: 0 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, cachedPages: 0 });
     expect(root.snapshot().diagnostics.join("\n")).toMatch(/has \dx\d pixels; expected 4x4/);
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
     await flushMicrotasks();
@@ -563,7 +563,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       outstandingPageRequests: 0,
       pageLoadFailures: 1,
       pendingPages: 0,
-      residentPages: 3,
+      cachedPages: 3,
     });
     const settledRequests = ControlledImage.instances.length;
     for (let frame = 0; frame < 4; frame += 1) root.render(graph);
@@ -638,7 +638,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesWhileBlocked);
     expect(pageUploads(calls)).toHaveLength(0);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, residentPages: 0 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, cachedPages: 0 });
     expect(root.snapshot().resourceGovernor).toMatchObject({
       byClass: { "virtual-texture": { cpuDecodedBytes: 4 * 4 * 4 } },
       total: { persistentGpuBytes: 0 },
@@ -649,7 +649,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     root.render(graph);
     expect(pageUploads(calls)).toHaveLength(1);
     const restoredSnapshot = root.snapshot();
-    expect(restoredSnapshot.virtualTexturing).toMatchObject({ atlasTextures: 1, residentPages: 1 });
+    expect(restoredSnapshot.virtualTexturing).toMatchObject({ atlasTextures: 1, cachedPages: 1 });
     expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].persistentGpuBytes)
       .toBe(restoredSnapshot.virtualTexturing.physicalAllocatedBytes);
     expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
@@ -683,7 +683,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushMicrotasks();
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
     expect(root.snapshot().virtualTexturing.pageLoadFailures).toBe(0);
-    expect(root.snapshot().virtualTexturing.residentPages).toBe(1);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBe(1);
     root.dispose();
   });
 
@@ -735,7 +735,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       expect(root.snapshot().virtualTexturing).toMatchObject({
         outstandingPageRequests: 0,
         pageLoadFailures: 0,
-        residentPages: 1,
+        cachedPages: 1,
       });
       root.dispose();
     },
@@ -812,7 +812,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       activePages: 1,
       outstandingPageRequests: 0,
       pendingPages: 0,
-      residentPages: 1,
+      cachedPages: 1,
     });
     expect(scheduledFrames).toHaveLength(1);
 

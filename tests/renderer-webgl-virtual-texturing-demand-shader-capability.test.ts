@@ -53,7 +53,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/manifest.json") })));
 
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      residentPages: 1,
+      cachedPages: 1,
       shaderBinds: expect.any(Number),
       uploadedPages: 1,
     }));
@@ -101,16 +101,16 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       await settleIncompleteImages();
       root.render(fullView);
     }
-    expect(root.snapshot().virtualTexturing.residentPages).toBe(3);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBe(3);
     const stableRequests = ControlledImage.instances.length;
     const stableUpdates = root.snapshot().virtualTexturing.pageTableUpdates;
     for (let frame = 0; frame < 8; frame += 1) root.render(fullView);
     expect(ControlledImage.instances).toHaveLength(stableRequests);
     expect(root.snapshot().virtualTexturing.pageTableUpdates).toBe(stableUpdates);
-    expect(root.snapshot().virtualTexturing.residentPages).toBe(3);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBe(3);
 
     root.render(renderScene(material, { planeSize: [0.25, 0.25] }));
-    expect(root.snapshot().virtualTexturing.residentPages).toBeLessThanOrEqual(3);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBeLessThanOrEqual(3);
   });
 
   it("keeps camera jitter sticky and bounds refinement admissions during a slow pan", async () => {
@@ -198,7 +198,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       .filter((image) => image.src.includes("/pages/m2-"))
       .length;
     expect(refinedRequestsBeforeZoomOut).toBeGreaterThan(0);
-    expect(root.snapshot().virtualTexturing.residentPages).toBe(3);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBe(3);
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
       await settleIncompleteImages(256);
@@ -218,10 +218,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(fetchRequests.map((request) => request.url)).toEqual(["/vt/zoom.json"]);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       cachedPages: 3,
-      residentPages: 3,
     }));
-    expect(root.snapshot().virtualTexturing.cachedPagesByMip)
-      .toEqual(root.snapshot().virtualTexturing.residentPagesByMip);
     expect(root.snapshot().virtualTexturing.cachedPagesByMip.reduce((sum, count) => sum + count, 0))
       .toBe(root.snapshot().virtualTexturing.cachedPages);
     expect(root.snapshot().virtualTexturing.activePagesByMip.reduce((sum, count) => sum + count, 0))
@@ -233,7 +230,6 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       activePages: 0,
       activePagesByMip: [],
       cachedPages: 3,
-      residentPages: 3,
     }));
   });
 

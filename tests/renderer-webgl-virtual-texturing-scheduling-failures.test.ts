@@ -64,7 +64,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     ControlledImage.instances[4]!.settleLoad();
     await flushMicrotasks();
     for (let frame = 0; frame < 3; frame += 1) root.render(graph);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 5, uploadedPages: 5 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ cachedPages: 5, uploadedPages: 5 });
     root.dispose();
   });
 
@@ -153,7 +153,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
       outstandingPageRequests: 0,
       pageLoadFailures: 3,
       pendingPages: 0,
-      residentPages: 3,
+      cachedPages: 3,
     });
     expect(new Set(
       ControlledImage.instances.filter((image) => image.src !== failedSrc).map((image) => image.src),
@@ -336,7 +336,6 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     expect(root.snapshot().virtualTexturing).toMatchObject({
       activePages: 0,
       cachedPages: 1,
-      residentPages: 1,
       uploadedPages: 0,
     });
 
@@ -344,7 +343,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     expect(() => root.render(graph)).toThrow(ControlledImage.closeError);
     expect(ControlledImage.closeCalls).toBe(closesBeforeDemandedUpload + 1);
     expect(pageUploads(calls)).toHaveLength(1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ cachedPages: 1, uploadedPages: 1 });
   });
 
   it("does not let an eviction outcome clear a newer request for the evicted page", async () => {
@@ -383,15 +382,15 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     fetchRequests[0]!.resolve(responseJson(vtManifest(2)));
     await flushVirtualTextureManifest(root);
 
-    const residentPages = ControlledImage.instances;
-    expect(residentPages.map((image) => image.src).sort()).toEqual([
+    const initialPageImages = ControlledImage.instances;
+    expect(initialPageImages.map((image) => image.src).sort()).toEqual([
       "/vt/pages/1-0.png",
       "/vt/pages/2-0.png",
     ]);
-    for (const image of residentPages) image.settleLoad();
+    for (const image of initialPageImages) image.settleLoad();
     await flushMicrotasks();
     root.render(graph);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 2, uploadedPages: 2 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ cachedPages: 2, uploadedPages: 2 });
 
     // Shift the UV window onto the left-hand page and queue it as the replacement
     // for the one physical slot.
@@ -412,7 +411,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     await flushMicrotasks();
     const newerEvictedPage = ControlledImage.instances.at(-1)!;
     expect(newerEvictedPage).not.toBe(replacementPage);
-    expect(residentPages.map((image) => image.src)).toContain(newerEvictedPage.src);
+    expect(initialPageImages.map((image) => image.src)).toContain(newerEvictedPage.src);
     expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(2);
 
     pageTableUploadFailure.enabled = false;
@@ -459,7 +458,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     expect(pageUploads(calls)).toHaveLength(1);
     expect(root.snapshot().virtualTexturing).toMatchObject({
       outstandingPageRequests: 0,
-      residentPages: 1,
+      cachedPages: 1,
       uploadedPages: 1,
     });
   });
@@ -540,7 +539,7 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     root.renderViews(graph, { views: [leftStereoView()] });
 
     expect(pageUploads(calls)).toHaveLength(1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ residentPages: 1, uploadedPages: 1 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({ cachedPages: 1, uploadedPages: 1 });
   });
 
   it("clears outstanding ownership when demand discards a queued page even if image close throws", async () => {

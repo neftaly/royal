@@ -474,7 +474,7 @@ describe("virtual texture GPU arena", () => {
       dirtyPageTableUpdates: 1,
       occupiedSlots: 1,
       pendingUploads: 1,
-      residentPages: 0,
+      cachedPages: 0,
     });
     expect(virtualTextureGpuOutcomeCount(arena)).toBe(0);
     expect(consumeVirtualTextureGpuWake(arena)).toBe(false);
@@ -662,7 +662,6 @@ describe("virtual texture GPU arena", () => {
       activePages: 0,
       cachedPages: 1,
       pendingUploads: 1,
-      residentPages: 1,
       uploadedPages: 0,
     });
 
@@ -677,7 +676,7 @@ describe("virtual texture GPU arena", () => {
     expect({ atlasCommits, pageTableCommits }).toEqual({ atlasCommits: 1, pageTableCommits: 1 });
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
       pendingUploads: 0,
-      residentPages: 1,
+      cachedPages: 1,
       uploadedPages: 1,
     });
   });
@@ -768,7 +767,6 @@ describe("virtual texture GPU arena", () => {
       cachedPages: 1,
       dirtyPageTableUpdates: 1,
       pendingUploads: 1,
-      residentPages: 1,
       uploadedPages: 0,
     });
     const atlasUploads = gl.subUploads.filter(({ serial }) => serial === 1).length;
@@ -777,7 +775,7 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
       dirtyPageTableUpdates: 0,
       pendingUploads: 0,
-      residentPages: 1,
+      cachedPages: 1,
       uploadedPages: 1,
     });
     expect(virtualTextureGpuExactResidency(arena, "a", pending.page)).toBeDefined();
@@ -1028,7 +1026,6 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuResourceSnapshot(resource)).toMatchObject({
       activePages: 1,
       cachedPages: 1,
-      residentPages: 1,
     });
 
     setVirtualTextureGpuDesiredPageKeys(arena, resource, new Set());

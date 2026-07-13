@@ -213,14 +213,8 @@ export interface WebGlVirtualTexturingSnapshot {
   /** GPU bytes still charged after a failed resource release; reset by context recreation. */
   readonly physicalQuarantinedBytes: number;
   readonly preparedResidencyResolutions: number;
-  /** @deprecated Use `outstandingPageRequests`. */
-  readonly requestedPages: number;
   /** Pages with a live loading or queued-GPU claim; excludes backoff, capacity-blocked, and terminal work. */
   readonly outstandingPageRequests: number;
-  /** @deprecated Compatibility alias for `cachedPages`. */
-  readonly residentPages: number;
-  /** @deprecated Compatibility alias for `cachedPagesByMip`. */
-  readonly residentPagesByMip: readonly number[];
   readonly shaderBinds: number;
   readonly unreadyDraws: number;
   readonly unsupportedDraws: number;

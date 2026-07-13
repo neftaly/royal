@@ -738,11 +738,11 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       generatedPagesTarget: 5,
       manifestRequests: 0,
       manifestsReady: 1,
-      residentPages: expect.any(Number),
+      cachedPages: expect.any(Number),
       uploadedPages: expect.any(Number),
     }));
     expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
-    expect(root.snapshot().virtualTexturing.residentPages).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThan(0);
   });

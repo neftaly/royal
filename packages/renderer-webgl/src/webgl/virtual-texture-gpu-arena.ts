@@ -122,7 +122,6 @@ export interface VirtualTextureGpuResourceSnapshot {
    */
   readonly occupiedSlots: number;
   readonly pendingUploads: number;
-  readonly residentPages: number;
   readonly paddedSlots: number;
   readonly pageTableBytes: number;
   readonly pageTableUpdates: number;
@@ -1196,7 +1195,6 @@ export const virtualTextureGpuResourceSnapshot = (
     paddedSlots: supported?.paddedSlots ?? 0,
     pageTableBytes: supported?.pageTableBytes ?? 0,
     pageTableUpdates: mutable.pageTableUpdates,
-    residentPages: cachedPages,
     sourceGeneration: mutable.options.sourceGeneration,
     uploadedPageBytes: mutable.uploadedPageBytes,
     uploadedPages: mutable.uploadedPages,

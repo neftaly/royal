@@ -7588,7 +7588,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     let pendingPages = 0;
     let preparedResidencyResolutions = 0;
     let outstandingPageRequests = 0;
-    let residentPages = 0;
     const cachedPagesByMip: number[] = [];
     let shaderBinds = 0;
     let unreadyDraws = 0;
@@ -7628,7 +7627,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       outstandingPageRequests += state.loadingPageCount + queuedPages;
       activePages += gpu?.activePages ?? 0;
       cachedPages += gpu?.cachedPages ?? 0;
-      residentPages += gpu?.residentPages ?? 0;
       if (resource !== undefined) {
         accumulateVirtualTextureGpuActivePagesByMip(resource, activePagesByMip);
         accumulateVirtualTextureGpuCachedPagesByMip(resource, cachedPagesByMip);
@@ -7670,10 +7668,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       physicalBudgetBytes: gpuArena.budgetBytes,
       physicalQuarantinedBytes: gpuArena.quarantinedBytes,
       preparedResidencyResolutions,
-      requestedPages: outstandingPageRequests,
       outstandingPageRequests,
-      residentPages,
-      residentPagesByMip: cachedPagesByMip,
       shaderBinds,
       unreadyDraws,
       unsupportedDraws,

@@ -84,11 +84,11 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       manifestFailures: 0,
       manifestRequests: 0,
       manifestsReady: 1,
-      residentPages: expect.any(Number),
+      cachedPages: expect.any(Number),
       uploadedPages: expect.any(Number),
     }));
     expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThanOrEqual(1);
-    expect(root.snapshot().virtualTexturing.residentPages).toBeGreaterThanOrEqual(1);
+    expect(root.snapshot().virtualTexturing.cachedPages).toBeGreaterThanOrEqual(1);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.uploadedPageBytes).toBeGreaterThanOrEqual(256 * 256 * 4);
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThanOrEqual(1);
