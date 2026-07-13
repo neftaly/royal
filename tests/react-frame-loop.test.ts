@@ -7,7 +7,7 @@ import { createFrameLoop, type FrameSnapshot } from "../packages/react/src/frame
 import {
   applyCanvasRendererFailure,
   applyCanvasRendererLifecycle,
-} from "../packages/react/src/canvas";
+} from "../packages/react/src/canvas-renderer-runtime";
 import {
   acquireExternalRenderClockForRoyalRoot,
   createRendererRoot,

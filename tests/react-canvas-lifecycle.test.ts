@@ -3,7 +3,7 @@ import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
 import {
   disposeCanvasRendererRoot,
   normalizeCanvasRendererOptions,
-} from "../packages/react/src/canvas";
+} from "../packages/react/src/canvas-renderer-runtime";
 import { rendererRootContextOptionsSemanticKey } from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
