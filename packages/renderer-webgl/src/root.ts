@@ -9,14 +9,10 @@ import {
   type ClusteredLightArena,
 } from "./webgl/clustered-light-arena";
 import {
-  type Camera,
-  type CameraViewReadTarget,
-  type CameraViewResource,
   type DirectionalLightNode,
   type PointLightNode,
   type SpotLightNode,
   type EnvironmentLight,
-  type EulerRads,
   type GltfInstancesNode,
   type GltfNode,
   type Material,
@@ -24,8 +20,6 @@ import {
   type PickInput,
   type PickResult,
   type RenderToneMapping,
-  type RenderObjectHandle,
-  type RenderObjectRef,
   type RenderNode,
   type RenderRoot,
   type Rgba,
@@ -33,13 +27,8 @@ import {
   type TextureRef,
   type TextureSampler,
   type Transform,
-  type Vec3,
 } from "@royal/renderer-core";
-import {
-  attachRenderObjectRef,
-  readRenderObjectHandleTransform,
-  type RenderObjectRefAttachment,
-} from "@royal/renderer-core/render-object";
+import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
 import {
   abortError,
   dataUriMediaType,
@@ -56,6 +45,7 @@ import {
   DecodedTextureSourceLifetime,
 } from "./decoded-texture-source-lifetime";
 import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
+import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
   applyPreparedAssetEvents,
   applyResourceDelta,
@@ -737,11 +727,6 @@ const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
 type AnyGltfNode = GltfNode | GltfInstancesNode;
 
-type CameraViewResourceSubscription = {
-  readonly resource: CameraViewResource;
-  readonly unsubscribe: () => void;
-};
-
 type GltfPacketMaterialBinding = {
   readonly material: SurfaceMaterial;
 };
@@ -894,34 +879,6 @@ const byteContentKey = (bytes: ArrayBuffer, kind: string): TextureContentKey =>
 
 const svgTextContentKey = (svgText: string): TextureContentKey =>
   byteContentKey(textureTextEncoder.encode(svgText).buffer, "image/svg+xml;prepared");
-
-type TransformableRenderNode = GltfNode | MeshNode;
-
-type RenderObjectBinding = {
-  readonly attachment: RenderObjectRefAttachment;
-  declarativeTransform: Transform;
-  readonly handle: RenderObjectHandle;
-  node: TransformableRenderNode;
-};
-
-const cloneEulerRads = (value: EulerRads): EulerRads => [value[0], value[1], value[2]];
-const cloneVec3 = (value: Vec3): Vec3 => [value[0], value[1], value[2]];
-
-const resolvedTransform = (transform: Transform | undefined): Transform => ({
-  position: cloneVec3(transform?.position ?? IDENTITY_TRANSFORM.position),
-  rotation: cloneEulerRads(transform?.rotation ?? IDENTITY_TRANSFORM.rotation),
-  scale: cloneVec3(transform?.scale ?? IDENTITY_TRANSFORM.scale),
-});
-
-const sameVec3 = (left: Vec3, right: Vec3): boolean =>
-  Object.is(left[0], right[0]) &&
-  Object.is(left[1], right[1]) &&
-  Object.is(left[2], right[2]);
-
-const sameTransform = (left: Transform, right: Transform): boolean =>
-  sameVec3(left.position, right.position) &&
-  sameVec3(left.rotation, right.rotation) &&
-  sameVec3(left.scale, right.scale);
 
 type CapturedFailure = { readonly value: unknown };
 
@@ -1258,19 +1215,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
   readonly #requestedContextOptions: WebGlRootOptions;
-  readonly #cameraView: CameraViewReadTarget = {
-    kind: 'perspective-camera',
-    position: new Float64Array(3),
-    rotation: new Float64Array(3),
-    fovY: 1,
-    left: -1,
-    right: 1,
-    bottom: -1,
-    top: 1,
-    near: 0.1,
-    far: 100,
-  };
-  #cameraViewResourceSubscription: CameraViewResourceSubscription | undefined;
   readonly #frameViews = createFrameViews();
   readonly #renderProjection = identityMat4();
   readonly #renderView = identityMat4();
@@ -1392,8 +1336,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     new WeakMap<LoadedGltfPrimitive, WeakMap<LoadedGltfMaterial, GltfPreparedPrimitiveMaterial>>();
   readonly #gltfMaterialPrimitives = new WeakMap<LoadedGltfMaterial, Set<LoadedGltfPrimitive>>();
   readonly #textureHandles: TextureHandleArena;
-  readonly #renderObjectBindings = new Map<RenderObjectRef, RenderObjectBinding>();
-  readonly #renderObjectHandles = new WeakMap<TransformableRenderNode, RenderObjectHandle>();
+  readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #contextError: string | undefined;
@@ -1437,7 +1380,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #maxTextureImageUnits = 0;
   #maxTextureSize = 0;
   readonly #pickingController: PickingController;
-  #renderObjectInvalidationPending = false;
   #renderDirty = false;
   #renderScheduleGeneration = 0;
   #scheduledRenderGeneration = 0;
@@ -1553,7 +1495,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
           const state = this.#gltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
           return state?.status === "ready" ? state.primitives : undefined;
         },
-        renderObjectTransform: (node) => this.#renderObjectTransform(node),
+        renderObjectTransform: (node) => this.#sceneBindings.transform(node),
       });
       const requestedOptions = normalizeOptions(options);
       this.#requestedContextOptions = {
@@ -1898,7 +1840,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
 
     const { height, width } = this.#resize();
-    const camera = this.#readCamera(plan.camera);
+    const camera = this.#sceneBindings.readCamera(plan.camera);
     resetFrameViews(this.#frameViews, null, false);
     appendFrameView(
       this.#frameViews,
@@ -1954,7 +1896,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // callback checks its generation before drawing.
     this.#renderDirty = false;
     this.#scheduledRenderGeneration = 0;
-    this.#renderObjectInvalidationPending = false;
     beginResourceGovernorFrame(this.#resourceGovernor);
     this.#applyPendingResourceArenaEvents();
     this.#gltfRenderOrdinal = 0;
@@ -2176,13 +2117,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderLatestScene();
   }
 
-  #invalidateRenderObjectMutation(): void {
-    if (this.#renderObjectInvalidationPending) return;
-
-    this.#renderObjectInvalidationPending = true;
-    this.invalidate();
-  }
-
   pick(input: PickInput): PickResult | undefined {
     if (this.#disposed) {
       throw new Error("Cannot pick with a disposed Royal renderer root");
@@ -2193,7 +2127,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     const { height, width } = this.#resize();
     return this.#pickingController.pick({
-      camera: this.#readCamera(plan.camera),
+      camera: this.#sceneBindings.readCamera(plan.camera),
       height,
       input,
       nodes: plan.nodes,
@@ -2204,7 +2138,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #retainPlanWhileContextUnavailable(): void {
     this.#applyPendingResourceArenaEvents();
     this.#renderDirty = true;
-    this.#renderObjectInvalidationPending = false;
   }
 
   #dropGpuState(deleteResources: boolean): void {
@@ -2296,7 +2229,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       throw new Error("Cannot dispose while Royal is reconciling render-object refs");
     }
     if (this.#disposed) {
-      let retryFailure = this.#detachRenderObjectRefs();
+      let retryFailure = captureFailure(() => this.#sceneBindings.dispose());
       retryFailure = captureFirstFailure(retryFailure, () => {
         releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, this.#gl);
       });
@@ -2371,9 +2304,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfLightScopeIdCount = 0;
     this.#pendingGltfImageRows.length = 0;
     this.#pendingGltfImageRowHead = 0;
-    teardown(() => this.#cameraViewResourceSubscription?.unsubscribe());
-    this.#cameraViewResourceSubscription = undefined;
-    firstFailure = this.#detachRenderObjectRefs(firstFailure);
+    teardown(() => this.#sceneBindings.dispose());
     teardown(() => this.#gltfInstanceTransforms.dispose());
     this.#renderDirty = false;
     this.#scheduledRenderGeneration = 0;
@@ -2421,12 +2352,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       textureResidency,
       virtualTexturing,
     };
-  }
-
-  #readCamera(source: Camera | CameraViewResource): Camera | CameraViewReadTarget {
-    if (source.kind !== 'camera-view-resource') return source;
-    source.read(this.#cameraView);
-    return this.#cameraView;
   }
 
   #commitScene(scene: RenderRoot): FramePlan {
@@ -2597,11 +2522,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
         if (topologyFailure === undefined) this.#framePlanTopologyPending = false;
         else firstFailure ??= topologyFailure;
       }
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        const cameraFailure = this.#reconcileCameraViewResource(next);
-        if (cameraFailure !== undefined) throw cameraFailure.value;
-      });
-      firstFailure = this.#reconcileRenderObjectRefs(next, delta, firstFailure);
+      firstFailure = captureFirstFailure(
+        firstFailure,
+        () => this.#sceneBindings.reconcile(next, delta.renderObjectRefs),
+      );
       firstFailure = captureFirstFailure(
         firstFailure,
         () => this.#gltfInstanceTransforms.reconcile(delta.bulkInstances),
@@ -2849,71 +2773,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #reconcileCameraViewResource(next: FramePlan): CapturedFailure | undefined {
-    const resource = next.camera.kind === 'camera-view-resource' ? next.camera : undefined;
-    if (this.#cameraViewResourceSubscription?.resource === resource) return undefined;
-    const previousSubscription = this.#cameraViewResourceSubscription;
-    if (previousSubscription !== undefined) {
-      try {
-        previousSubscription.unsubscribe();
-      } catch (value) {
-        return { value };
-      }
-      this.#cameraViewResourceSubscription = undefined;
-    }
-    let firstFailure: CapturedFailure | undefined;
-    if (resource !== undefined) {
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        this.#cameraViewResourceSubscription = {
-          resource,
-          unsubscribe: resource.subscribe(() => this.invalidate()),
-        };
-      });
-    }
-    return firstFailure;
-  }
-
-  #reconcileRenderObjectRefs(
-    next: FramePlan,
-    delta: ResourceManifestDelta,
-    initialFailure: CapturedFailure | undefined,
-  ): CapturedFailure | undefined {
-    let firstFailure = initialFailure;
-    for (const row of next.renderObjectRefRows) {
-      const node = next.nodes[row.nodeIndex];
-      if (node?.kind === "mesh" || node?.kind === "gltf") {
-        firstFailure = captureFirstFailure(firstFailure, () => this.#syncRenderObjectNodeRef(node));
-      }
-    }
-
-    for (const row of delta.renderObjectRefs) {
-      if (row.nextCount !== 0) continue;
-      const ref = row.resource;
-      const binding = this.#renderObjectBindings.get(ref);
-      if (binding === undefined) continue;
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        binding.attachment.detach();
-        this.#renderObjectHandles.delete(binding.node);
-        this.#renderObjectBindings.delete(ref);
-      });
-    }
-    return firstFailure;
-  }
-
-  #detachRenderObjectRefs(
-    initialFailure?: CapturedFailure,
-  ): CapturedFailure | undefined {
-    let firstFailure = initialFailure;
-    for (const [ref, binding] of this.#renderObjectBindings) {
-      firstFailure = captureFirstFailure(firstFailure, () => {
-        binding.attachment.detach();
-        this.#renderObjectHandles.delete(binding.node);
-        this.#renderObjectBindings.delete(ref);
-      });
-    }
-    return firstFailure;
-  }
-
   #releaseOrdinaryTexture(key: string): void {
     let releaseFailure = captureFailure(() => this.#releaseAutoVirtualTextures(key));
     this.#autoVirtualTextureRefs.delete(`auto-base-color:${key}`);
@@ -3076,42 +2935,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return refs.filter((ref): ref is TextureAssetUploadRef => ref !== undefined);
   }
 
-  #syncRenderObjectNodeRef(node: TransformableRenderNode): void {
-    if (node.ref === undefined) return;
-
-    const ref = node.ref;
-    const declarativeTransform = resolvedTransform(node.transform);
-    let binding = this.#renderObjectBindings.get(ref);
-    if (binding === undefined) {
-      const attachment = attachRenderObjectRef(ref, declarativeTransform, () => {
-        this.#invalidateRenderObjectMutation();
-      });
-      binding = {
-        attachment,
-        declarativeTransform,
-        handle: attachment.handle,
-        node,
-      };
-      this.#renderObjectBindings.set(ref, binding);
-      this.#renderObjectHandles.set(node, binding.handle);
-      return;
-    } else {
-      if (!sameTransform(binding.declarativeTransform, declarativeTransform)) {
-        binding.attachment.syncTransform(declarativeTransform);
-        binding.declarativeTransform = declarativeTransform;
-      }
-      this.#renderObjectHandles.delete(binding.node);
-      binding.node = node;
-    }
-
-    this.#renderObjectHandles.set(node, binding.handle);
-  }
-
-  #renderObjectTransform(node: TransformableRenderNode): Transform | undefined {
-    const handle = this.#renderObjectHandles.get(node);
-    return handle === undefined ? node.transform : readRenderObjectHandleTransform(handle);
-  }
-
   #resize(): { readonly height: number; readonly width: number } {
     const rect = this.#canvas.getBoundingClientRect();
     const cssWidth = rect.width;
@@ -3208,7 +3031,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): void {
     const retainedGeometry = this.#meshGeometryRow(node.geometry, node.material);
     const cpu = retainedGeometry.recipe;
-    const model = transformMat4Into(this.#meshModel, this.#renderObjectTransform(node));
+    const model = transformMat4Into(this.#meshModel, this.#sceneBindings.transform(node));
     const localBounds = this.#localGeometryBounds(cpu);
     if (!isBoundsVisible(
       localBounds,
@@ -3262,7 +3085,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const instanceViews = node.kind === "gltf-instances"
       ? this.#gltfInstanceTransforms.views(node.instances)
       : undefined;
-    const rootHandle = node.kind === "gltf" ? this.#renderObjectHandles.get(node) : undefined;
+    const rootHandle = node.kind === "gltf" ? this.#sceneBindings.handle(node) : undefined;
     const ordinaryRootTransform = node.kind === "gltf"
       ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
       : undefined;
@@ -3826,7 +3649,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const instanceViews = node.kind === "gltf-instances"
           ? this.#gltfInstanceTransforms.views(node.instances)
           : undefined;
-        const rootHandle = node.kind === "gltf" ? this.#renderObjectHandles.get(node) : undefined;
+        const rootHandle = node.kind === "gltf" ? this.#sceneBindings.handle(node) : undefined;
         const ordinaryRootModel = node.kind === "gltf"
           ? transformMat4Into(
               this.#sharedViewLodRootModel,
@@ -3888,7 +3711,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }
         continue;
       }
-      const rootHandle = this.#renderObjectHandles.get(node);
+      const rootHandle = this.#sceneBindings.handle(node);
       const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
       transformMat4Into(this.#sharedViewLodRootModel, rootTransform);
       multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, this.#sharedViewLodRootModel);
@@ -7164,7 +6987,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (plan === undefined) return;
 
     const { height, width } = this.#resize();
-    const camera = this.#readCamera(plan.camera);
+    const camera = this.#sceneBindings.readCamera(plan.camera);
     resetFrameViews(this.#frameViews, null, false);
     appendFrameView(
       this.#frameViews,

@@ -13,6 +13,8 @@ import {
   unlitMaterial,
   virtualTexture,
   type GltfInstanceTransforms,
+  type CameraViewResource,
+  type CameraViewResourceListener,
   type RenderObjectHandle,
   type RenderRoot,
   type Rgba,
@@ -884,6 +886,43 @@ describe("WebGL root working state contracts", () => {
         src: "data:application/json,%7B%22asset%22%3A%7B%22version%22%3A%222.0%22%7D%7D",
       })],
     }));
+    expect(activeSubscriptions).toBe(1);
+
+    expect(() => root.dispose()).toThrow(unsubscribeFailure);
+    expect(activeSubscriptions).toBe(1);
+    expect(() => root.dispose()).not.toThrow();
+    expect(activeSubscriptions).toBe(0);
+    expect(unsubscribeAttempts).toBe(2);
+    expect(() => root.dispose()).not.toThrow();
+    expect(unsubscribeAttempts).toBe(2);
+  });
+
+  it("retries camera-view unsubscription on repeated root disposal", () => {
+    const { gl } = fakeGl();
+    const base = createCameraViewResource(camera());
+    const unsubscribeFailure = new Error("camera unsubscribe failed");
+    let activeSubscriptions = 0;
+    let unsubscribeAttempts = 0;
+    const cameraResource = new Proxy(base, {
+      get(target, property) {
+        if (property !== "subscribe") return Reflect.get(target, property, target);
+        return (listener: CameraViewResourceListener): (() => void) => {
+          const unsubscribe = target.subscribe(listener);
+          activeSubscriptions += 1;
+          let active = true;
+          return () => {
+            unsubscribeAttempts += 1;
+            if (unsubscribeAttempts === 1) throw unsubscribeFailure;
+            if (!active) return;
+            active = false;
+            activeSubscriptions -= 1;
+            unsubscribe();
+          };
+        };
+      },
+    }) satisfies CameraViewResource;
+    const root = createWebGlRoot(fakeCanvas(gl));
+    root.render(scene({ camera: cameraResource, nodes: [] }));
     expect(activeSubscriptions).toBe(1);
 
     expect(() => root.dispose()).toThrow(unsubscribeFailure);
