@@ -60,6 +60,21 @@ describe("Canvas renderer root cleanup", () => {
     expect(changed).not.toBe(first);
   });
 
+  it("gives omitted and explicit renderer defaults one semantic identity", () => {
+    const omitted = rendererRootContextOptionsSemanticKey(undefined);
+    const explicit = rendererRootContextOptionsSemanticKey({
+      alpha: true,
+      antialias: true,
+      generatedImageVirtualTextures: false,
+      generatedSvgVirtualTextureRasterDensity: 4,
+      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
+    });
+
+    expect(rendererRootContextOptionsSemanticKey({})).toBe(omitted);
+    expect(explicit).toBe(omitted);
+    expect(rendererRootContextOptionsSemanticKey({ alpha: false })).not.toBe(omitted);
+  });
+
   it("releases ownership before surfacing a dispose failure", () => {
     const root = fakeRendererRoot();
     const rootRef = { current: root };

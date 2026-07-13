@@ -104,5 +104,6 @@ export type {
   XrSessionStoreState,
   XrSessionStatus,
   XrSessionSerializableSnapshot,
+  XrSessionSelectorEquality,
   XrViewport,
 } from "./xr-store";

@@ -1,4 +1,6 @@
-import type { WebGlRootOptions } from "./root-types";
+import type { NormalizedWebGlRootOptions, WebGlRootOptions } from "./root-types";
+import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "./resource-governor";
+import { GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY } from "./svg-texture";
 
 const canonicalOptionValue = (value: unknown): string => {
   if (value === null) return "null";
@@ -33,10 +35,20 @@ const canonicalOptionValue = (value: unknown): string => {
  * Canonical semantic identity for immutable renderer creation options.
  *
  * React uses this backend-owned boundary to decide when a Canvas must recreate
- * its renderer. Keeping the traversal generic means new data-only backend
- * options participate automatically instead of requiring another field list in
- * the adapter.
+ * its renderer. The normalized shape makes omitted and explicit defaults equal;
+ * its exhaustive type also requires new backend options to declare a default here.
  */
 export const webGlRootOptionsSemanticKey = (
   options: WebGlRootOptions | undefined,
-): string => canonicalOptionValue(options ?? {});
+): string => {
+  const normalized: NormalizedWebGlRootOptions = {
+    alpha: options?.alpha ?? true,
+    antialias: options?.antialias ?? true,
+    generatedImageVirtualTextures: options?.generatedImageVirtualTextures ?? false,
+    generatedSvgVirtualTextureRasterDensity:
+      options?.generatedSvgVirtualTextureRasterDensity
+      ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY,
+    resourceGovernorPolicy: options?.resourceGovernorPolicy ?? DEFAULT_RESOURCE_GOVERNOR_POLICY,
+  };
+  return canonicalOptionValue(normalized);
+};

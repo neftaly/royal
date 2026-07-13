@@ -22,20 +22,6 @@ import {
   showcasePass,
 } from '../presentation';
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const loadStateFor = (diagnostics: unknown, src: string): string | undefined => {
-  if (!isRecord(diagnostics) || !isRecord(diagnostics.gltfLoadDiagnostics)) return undefined;
-  const assets = diagnostics.gltfLoadDiagnostics.assets;
-  if (!Array.isArray(assets)) return undefined;
-  const asset = assets.find((candidate) =>
-    isRecord(candidate) && typeof candidate.key === 'string' && candidate.key.includes(src)
-  );
-  if (!isRecord(asset) || typeof asset.status !== 'string') return undefined;
-  return typeof asset.error === 'string' ? `error: ${asset.error}` : asset.status;
-};
-
 const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
   const root = useCanvasRoot();
   const [status, setStatus] = useState('loading');
@@ -47,9 +33,13 @@ const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
     const startedAt = performance.now();
     const inspect = (): void => {
       if (!active) return;
-      const next = loadStateFor(root.diagnostics(), src);
+      const asset = root.diagnostics().gltfLoadDiagnostics.assets.find(
+        (candidate) => candidate.key.includes(src),
+      );
+      const next = asset?.error === undefined ? asset?.status : `error: ${asset.error}`;
       if (next !== undefined) setStatus(next);
-      if (next !== 'ready' && !next?.startsWith('error:') && performance.now() - startedAt < 20_000) {
+      const terminal = next === 'sceneReady' || next === 'error' || next?.startsWith('error:');
+      if (!terminal && performance.now() - startedAt < 20_000) {
         timeout = setTimeout(inspect, 100);
       }
     };

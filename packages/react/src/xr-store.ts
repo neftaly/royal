@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
 
@@ -121,6 +121,11 @@ export interface XrSessionStore<Session extends object = object> {
   getState(this: void): XrSessionStoreState<Session>;
   subscribe(this: void, listener: () => void): () => void;
 }
+
+export type XrSessionSelectorEquality<State> = (
+  previous: State,
+  next: State,
+) => boolean;
 
 type XrSessionStoreData<Session extends object> =
   XrSessionState & XrSessionControlSnapshot<Session>;
@@ -362,10 +367,68 @@ export const createXrSessionStore = <Session extends object = object>(
   };
 };
 
+type XrSessionSelectionReaders<State> = {
+  readonly getInitialSelection: () => State;
+  readonly getSelection: () => State;
+};
+
+const createCachedSelectionReader = <StoreState, State>(
+  getSnapshot: () => StoreState,
+  selector: (state: StoreState) => State,
+  isEqual: XrSessionSelectorEquality<State>,
+): (() => State) => {
+  let cachedSelection: State;
+  let cachedSnapshot: StoreState;
+  let hasCachedSelection = false;
+
+  return () => {
+    const snapshot = getSnapshot();
+    if (hasCachedSelection && Object.is(snapshot, cachedSnapshot)) {
+      return cachedSelection;
+    }
+
+    const selection = selector(snapshot);
+    if (hasCachedSelection && isEqual(cachedSelection, selection)) {
+      cachedSnapshot = snapshot;
+      return cachedSelection;
+    }
+
+    cachedSelection = selection;
+    cachedSnapshot = snapshot;
+    hasCachedSelection = true;
+    return selection;
+  };
+};
+
+/** @internal Builds the selector-aware snapshot boundary used by the React hook. */
+export const createXrSessionSelectionReaders = <Session extends object, State>(
+  store: XrSessionStore<Session>,
+  selector: (state: XrSessionStoreState<Session>) => State,
+  isEqual: XrSessionSelectorEquality<State> = Object.is,
+): XrSessionSelectionReaders<State> => ({
+  getInitialSelection: createCachedSelectionReader(store.getInitialState, selector, isEqual),
+  getSelection: createCachedSelectionReader(store.getState, selector, isEqual),
+});
+
+/**
+ * Subscribes to a derived XR value. Store updates whose selected value is equal
+ * do not rerender the component; pass an equality function for object selections.
+ */
 export const useXrSessionSelector = <Session extends object, State>(
   store: XrSessionStore<Session>,
   selector: (state: XrSessionStoreState<Session>) => State,
-): State => selector(useSyncExternalStore(store.subscribe, store.getState, store.getInitialState));
+  isEqual: XrSessionSelectorEquality<State> = Object.is,
+): State => {
+  const readers = useMemo(
+    () => createXrSessionSelectionReaders(store, selector, isEqual),
+    [isEqual, selector, store],
+  );
+  return useSyncExternalStore(
+    store.subscribe,
+    readers.getSelection,
+    readers.getInitialSelection,
+  );
+};
 
 export const useXrSessionSnapshot = <Session extends object>(
   store: XrSessionStore<Session>,

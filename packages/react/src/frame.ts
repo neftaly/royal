@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect } from 'react';
+import { useCommittedRef } from './committed-ref';
 
 /**
  * Callback-scoped values backed by one reused frame-loop object. Copy the
@@ -268,8 +269,7 @@ const useFrameSubscription = (
   active: boolean,
 ): void => {
   const frameLoop = useCanvasFrameLoop();
-  const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+  const callbackRef = useCommittedRef(callback);
 
   useEffect(() => active
     ? frameLoop.subscribe((frame) => {

@@ -5,6 +5,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
+import { useCommittedRef } from "./committed-ref";
 import { createFrameLoop, type FrameLoop } from "./frame";
 import {
   acquireExternalRenderClockForRoyalRoot,
@@ -105,7 +106,8 @@ export const useRendererRootRuntime = (
   const rendererFrameClockRef = useRef<RoyalRendererFrameClock | undefined>(undefined);
   const [errorState, setErrorState] = useState<CanvasRendererErrorState | undefined>(undefined);
   const [rootState, setRootState] = useState<CanvasRendererRootState | undefined>(undefined);
-  const optionsKeyRef = useRef("");
+  const optionsKey = rendererRootContextOptionsSemanticKey(context);
+  const optionsKeyRef = useCommittedRef(optionsKey);
   const frameLoop = useMemo(() => createFrameLoop((failure) => {
     const normalizedFailure = failure
       ?? new Error("Royal frame callback failed without an error value");
@@ -113,8 +115,6 @@ export const useRendererRootRuntime = (
     setErrorState((current) =>
       retainFirstCanvasRendererError(current, normalizedFailure, failureKey));
   }), []);
-  const optionsKey = rendererRootContextOptionsSemanticKey(context);
-  optionsKeyRef.current = optionsKey;
   const optionsRef = useRef<{
     readonly key: string;
     readonly options: RoyalRendererRootOptions | undefined;

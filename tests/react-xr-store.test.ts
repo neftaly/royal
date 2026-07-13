@@ -4,6 +4,7 @@ import {
   selectXrSessionSnapshot,
   useXrSessionSnapshot,
 } from "@royal/react/xr";
+import { createXrSessionSelectionReaders } from "../packages/react/src/xr-store";
 
 type TestXrSession = {
   readonly id: string;
@@ -91,5 +92,34 @@ describe("React XR session store", () => {
 
   it("exports an explicit-store XR snapshot hook", () => {
     expect(typeof useXrSessionSnapshot).toBe("function");
+  });
+
+  it("retains unrelated selector snapshots across frame records", () => {
+    const store = createXrSessionStore({ available: true });
+    const readers = createXrSessionSelectionReaders(
+      store,
+      (state) => ({ available: state.available, status: state.status }),
+      (previous, next) =>
+        previous.available === next.available && previous.status === next.status,
+    );
+    let selected = readers.getSelection();
+    const before = selected;
+    let selectionChanges = 0;
+    const unsubscribe = store.subscribe(() => {
+      const next = readers.getSelection();
+      if (Object.is(next, selected)) return;
+      selected = next;
+      selectionChanges += 1;
+    });
+
+    store.getState().recordFrame({ frameIndex: 42 });
+
+    expect(readers.getSelection()).toBe(before);
+    expect(readers.getSelection()).toBe(before);
+    expect(selectionChanges).toBe(0);
+    store.getState().setAvailability(false);
+    expect(readers.getSelection()).not.toBe(before);
+    expect(selectionChanges).toBe(1);
+    unsubscribe();
   });
 });
