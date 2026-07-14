@@ -1,5 +1,5 @@
 import { closeDecodedTextureSource } from "./decoded-texture-source-lifetime";
-import { abortError } from "./gltf/io";
+import { abortError } from "./resource-io";
 
 export type LoadHtmlImageOptions = {
   /** Renderer-created same-origin object URLs do not need a CORS request mode. */

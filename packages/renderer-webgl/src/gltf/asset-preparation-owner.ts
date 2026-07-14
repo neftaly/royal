@@ -1,4 +1,5 @@
-import { throwIfAborted, loadGltfBuffers, loadGltfDocument } from "./io";
+import { throwIfAborted } from "../resource-io";
+import { loadGltfBuffers, loadGltfDocument } from "./io";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
 import { gltfCodecDemand } from "./codecs/demand";
 import { assertSupportedRequiredGltfExtensions } from "./extensions";

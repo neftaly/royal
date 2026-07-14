@@ -46,10 +46,11 @@ import {
   type VirtualTextureGpuArena,
 } from "./webgl/virtual-texture-gpu-arena";
 
-const captureFirstFailure = (
-  firstFailure: CapturedFailure | undefined,
+/** Stops transaction mutation after its first failure while retaining that value. */
+const captureUnlessFailed = (
+  failure: CapturedFailure | undefined,
   action: () => void,
-): CapturedFailure | undefined => firstFailure ?? captureFailure(action);
+): CapturedFailure | undefined => failure ?? captureFailure(action);
 
 type VirtualTextureDemandOwnerOptions = {
   readonly consumeGpuOutcomes: () => void;
@@ -141,7 +142,7 @@ export class VirtualTextureDemandOwner {
     let commitFailure: CapturedFailure | undefined;
     for (const state of publication.admissions) {
       if (commitFailure !== undefined) break;
-      commitFailure = captureFirstFailure(commitFailure, () => {
+      commitFailure = captureUnlessFailed(commitFailure, () => {
         this.#options.ensureGpuResource(state, state.manifest!, publication.demanded);
       });
     }
@@ -160,13 +161,13 @@ export class VirtualTextureDemandOwner {
       }
     }
     for (const state of this.#publicationStates) {
-      commitFailure = captureFirstFailure(
+      commitFailure = captureUnlessFailed(
         commitFailure,
         () => this.#commitPreparedDemand(state, true),
       );
     }
     for (const state of this.#publicationStates) {
-      commitFailure = captureFirstFailure(
+      commitFailure = captureUnlessFailed(
         commitFailure,
         () => this.#touchPublishedDemand(state),
       );

@@ -9,7 +9,7 @@ import {
 } from "../math/mat4";
 import { worldBounds } from "../math/picking";
 import { normalizeLodThresholds, type LodLevelMembership, type LodSet } from "../lod";
-import { resolveResourceUri } from "./io";
+import { resolveResourceUri } from "../resource-io";
 import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./accessors";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
 import { readGltfSceneImageBasedLight } from "./image-based-light";

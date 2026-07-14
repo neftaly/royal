@@ -1,4 +1,4 @@
-import { resolveResourceUri } from "./io";
+import { resolveResourceUri } from "../resource-io";
 import type { GltfImage } from "./schema";
 
 export type GltfImageKind = "basisu" | "image" | "svg";

@@ -1,9 +1,5 @@
 import type { GltfDocument } from "./schema";
-
-export const abortError = (): DOMException => new DOMException("The operation was aborted", "AbortError");
-export const throwIfAborted = (signal: AbortSignal | undefined): void => {
-  if (signal?.aborted === true) throw abortError();
-};
+import { resolveResourceUri, throwIfAborted } from "../resource-io";
 
 export type GltfDocumentPayload = {
   readonly binaryChunk?: ArrayBuffer;
@@ -14,12 +10,6 @@ const GLB_MAGIC = 0x46546C67;
 const GLB_VERSION = 2;
 const GLB_CHUNK_JSON = 0x4E4F534A;
 const GLB_CHUNK_BIN = 0x004E4942;
-
-export const resolveResourceUri = (base: string, relative: string): string => {
-  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/iu.test(relative)) return relative;
-  const index = base.lastIndexOf("/");
-  return `${index < 0 ? "" : base.slice(0, index + 1)}${relative}`;
-};
 
 const dataUriPattern = /^data:([^,]*?),(.*)$/isu;
 
@@ -276,7 +266,6 @@ export const loadGltfBuffers = async (
     if (!bufferResponse.ok) {
       throw new Error(`${context} failed to load: ${bufferResponse.status} ${bufferResponse.statusText}`);
     }
-
     const bytes = await bufferResponse.arrayBuffer();
     throwIfAborted(signal);
     return bufferSlice(bytes, buffer.byteLength, context);

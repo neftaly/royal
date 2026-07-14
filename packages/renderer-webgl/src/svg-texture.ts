@@ -1,10 +1,8 @@
 import type { LoadedTextureSource } from "./texture-sources";
 import { loadHtmlImage } from "./browser-image-loader";
 import { rasterizeGeneratedVirtualTexturePageImageData } from "./virtual-texture-page-rasterizer";
-import {
-  abortError,
-  dataUriMediaType,
-} from "./gltf/io";
+import { dataUriMediaType } from "./gltf/io";
+import { abortError } from "./resource-io";
 import {
   generatedVirtualTextureManifest,
   type VirtualTextureManifestModel,

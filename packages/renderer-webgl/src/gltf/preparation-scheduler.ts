@@ -1,4 +1,4 @@
-import { abortError, throwIfAborted } from "./io";
+import { abortError, throwIfAborted } from "../resource-io";
 
 type Admission<JobResult> = {
   index: number;

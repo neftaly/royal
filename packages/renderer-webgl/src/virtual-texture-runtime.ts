@@ -6,7 +6,7 @@ import {
 } from "./texture-sources";
 import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
-import { throwIfAborted } from "./gltf/io";
+import { throwIfAborted } from "./resource-io";
 import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-provider";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {

@@ -38,7 +38,7 @@ import {
   virtualTexturePageUri,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
-import { resolveResourceUri, throwIfAborted } from "./gltf/io";
+import { resolveResourceUri, throwIfAborted } from "./resource-io";
 import {
   automaticSvgVirtualTextureManifest,
   loadAutomaticSvgVirtualTexturePageImage,

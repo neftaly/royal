@@ -2,17 +2,19 @@ import type { TextureContentKey } from "@royal/renderer-core";
 import { loadHtmlImage } from "../browser-image-loader";
 import { closeDecodedTextureSource } from "../decoded-texture-source-lifetime";
 import {
+  abortError,
+  resolveResourceUri,
+} from "../resource-io";
+import {
   loadSvgTextureFromBytes,
   loadSvgTextureFromUri,
 } from "../svg-texture";
 import type { LoadedTextureSource } from "../texture-sources";
 import { gltfImageLoadKey, type GltfImageKind } from "./image-keys";
 import {
-  abortError,
   dataUriMediaType,
   decodeDataUri,
   gltfBufferViewBytes,
-  resolveResourceUri,
 } from "./io";
 import type { GltfDocument, GltfImage } from "./schema";
 
