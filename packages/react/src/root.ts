@@ -2,8 +2,15 @@ import type { GltfAssetRef, PickInput, PickResult, RenderRoot } from "@royal/ren
 import {
   createWebGlRoot,
   type WebGlContextSnapshot,
+  type WebGlFramePlanningSnapshot,
+  type WebGlGltfInstancingSnapshot,
   type WebGlGltfLoadDiagnosticsAssetSnapshot,
-  type WebGlRootSnapshot,
+  type WebGlGltfLoadDiagnosticsSnapshot,
+  type WebGlPickingSnapshot,
+  type WebGlResourceLifetimeSnapshot,
+  type WebGlResourcePressureSnapshot,
+  type WebGlTextureResidencySnapshot,
+  type WebGlVirtualTexturingSnapshot,
 } from "@royal/renderer-webgl";
 import {
   registerRoyalRendererCapabilities,
@@ -106,28 +113,56 @@ export interface RoyalRendererRootSnapshot {
   readonly options: ResolvedRendererOptions;
 }
 
+/** Capacity and occurrence counts for the bounded renderer message log. */
+export interface RoyalRendererDiagnosticMessageStats {
+  readonly capacity: number;
+  readonly dropped: number;
+  readonly occurrences: readonly Readonly<{
+    readonly count: number;
+    readonly key: string;
+  }>[];
+  readonly retained: number;
+}
+
+/** Retained glTF asset readiness and bounded load timing. */
+export type RoyalRendererGltfLoadDiagnostics = WebGlGltfLoadDiagnosticsSnapshot;
+/** Instanced glTF planning, drawing, and upload counters. */
+export type RoyalRendererGltfInstancingDiagnostics = WebGlGltfInstancingSnapshot;
+/** Scene-plan compilation counters. */
+export type RoyalRendererPlanningDiagnostics = WebGlFramePlanningSnapshot;
+/** Renderer resource acquisition and queue high-water counters. */
+export type RoyalRendererResourceLifetimeDiagnostics = WebGlResourceLifetimeSnapshot;
+/** Current resource budgets, usage, admissions, and denials. */
+export type RoyalRendererResourcePressureDiagnostics = WebGlResourcePressureSnapshot;
+/** Counters from the most recent picking query. */
+export type RoyalRendererPickingDiagnostics = WebGlPickingSnapshot;
+/** Current ordinary-texture lease and prepared-source counts. */
+export type RoyalRendererTextureResidencyDiagnostics = WebGlTextureResidencySnapshot;
+/** Current VT residency plus cumulative request, upload, and failure counters. */
+export type RoyalRendererVirtualTexturingDiagnostics = WebGlVirtualTexturingSnapshot;
+
 /** Bounded operational diagnostics projected from the active renderer backend. */
 export interface RoyalRendererDiagnosticsSnapshot {
   /** Bounded recent diagnostic messages. */
-  readonly messages: WebGlRootSnapshot["diagnostics"];
+  readonly messages: readonly string[];
   /** Capacity and occurrence counts for the bounded diagnostic message log. */
-  readonly messageStats: WebGlRootSnapshot["diagnosticStats"];
+  readonly messageStats: RoyalRendererDiagnosticMessageStats;
   /** Retained glTF asset readiness and bounded load timing. */
-  readonly gltfLoads: WebGlRootSnapshot["gltfLoadDiagnostics"];
+  readonly gltfLoads: RoyalRendererGltfLoadDiagnostics;
   /** Instanced glTF planning, drawing, and upload counters. */
-  readonly gltfInstancing: WebGlRootSnapshot["gltfInstancing"];
+  readonly gltfInstancing: RoyalRendererGltfInstancingDiagnostics;
   /** Scene-plan compilation counters. */
-  readonly planning: WebGlRootSnapshot["planning"];
+  readonly planning: RoyalRendererPlanningDiagnostics;
   /** Renderer resource acquisition and queue high-water counters. */
-  readonly resourceLifetime: WebGlRootSnapshot["resourceLifetime"];
+  readonly resourceLifetime: RoyalRendererResourceLifetimeDiagnostics;
   /** Current resource budgets, usage, admissions, and denials. */
-  readonly resourcePressure: WebGlRootSnapshot["resourcePressure"];
+  readonly resourcePressure: RoyalRendererResourcePressureDiagnostics;
   /** Counters from the most recent picking query. */
-  readonly picking: WebGlRootSnapshot["picking"];
+  readonly picking: RoyalRendererPickingDiagnostics;
   /** Current ordinary-texture lease and prepared-source counts. */
-  readonly textureResidency: WebGlRootSnapshot["textureResidency"];
+  readonly textureResidency: RoyalRendererTextureResidencyDiagnostics;
   /** Current VT residency plus cumulative request, upload, and failure counters. */
-  readonly virtualTexturing: WebGlRootSnapshot["virtualTexturing"];
+  readonly virtualTexturing: RoyalRendererVirtualTexturingDiagnostics;
 }
 
 /** Focused state for one exact glTF asset identity retained by the renderer. */
