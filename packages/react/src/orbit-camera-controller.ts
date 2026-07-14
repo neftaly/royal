@@ -11,6 +11,16 @@ import {
 } from "@royal/renderer-core";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
+/** Perspective projection owned by an orbit camera controller. */
+export interface OrbitCameraProjection {
+  /** Far clipping distance in metres. */
+  readonly far: Metres;
+  /** Vertical field of view in radians. */
+  readonly fovY: Rads;
+  /** Near clipping distance in metres. */
+  readonly near: Metres;
+}
+
 /** Stable camera resource and view authority shared by controls and scene composition. */
 export interface OrbitCameraController {
   /** Stable scene camera resource; include it in `scene({ camera })`. */
@@ -18,7 +28,7 @@ export interface OrbitCameraController {
   /** Reads the latest committed orbit view without subscribing React. */
   readonly getView: () => OrbitCameraView;
   /** Updates clipping and field-of-view values on the stable camera resource. */
-  readonly setProjection: (projection: { readonly far: Metres; readonly fovY: Rads; readonly near: Metres }) => void;
+  readonly setProjection: (projection: OrbitCameraProjection) => void;
   /** Commits a complete orbit view to every renderer using `cameraResource`. */
   readonly setView: (view: OrbitCameraViewOptions) => void;
   /** Subscribes to committed view changes. */
@@ -50,6 +60,29 @@ const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
   });
 };
 
+const validOrbitCameraProjection = (input: unknown): OrbitCameraProjection => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new TypeError("Orbit camera projection must be an object");
+  }
+  const { far, fovY, near } = input as Partial<OrbitCameraProjection>;
+  if (typeof far !== "number" || !Number.isFinite(far)) {
+    throw new TypeError("Orbit camera projection far must be a finite number");
+  }
+  if (typeof fovY !== "number" || !Number.isFinite(fovY)) {
+    throw new TypeError("Orbit camera projection fovY must be a finite number");
+  }
+  if (typeof near !== "number" || !Number.isFinite(near)) {
+    throw new TypeError("Orbit camera projection near must be a finite number");
+  }
+  if (!(fovY > 0 && fovY < Math.PI)) {
+    throw new RangeError("Orbit camera projection fovY must be within (0, PI)");
+  }
+  if (!(near > 0 && far > near)) {
+    throw new RangeError("Orbit camera projection requires 0 < near < far");
+  }
+  return { far, fovY, near };
+};
+
 const sameOrbitCameraView = (left: OrbitCameraView, right: OrbitCameraView): boolean =>
   left.distance === right.distance
   && left.pitch === right.pitch
@@ -71,10 +104,14 @@ const writeOrbitCamera = (resource: PerspectiveCameraViewResource, view: OrbitCa
 
 export const createOrbitCameraController = (
   initial: OrbitCameraViewOptions,
-  projection: { readonly far: Metres; readonly fovY: Rads; readonly near: Metres },
+  projection: OrbitCameraProjection,
 ): OrbitCameraController => {
   let view = stableOrbitView(initial);
-  const cameraResource = createCameraViewResource(orbitPerspectiveCamera({ ...projection, view }));
+  const initialProjection = validOrbitCameraProjection(projection);
+  const cameraResource = createCameraViewResource(orbitPerspectiveCamera({
+    ...initialProjection,
+    view,
+  }));
   const setView = (next: OrbitCameraViewOptions): void => {
     const resolved = stableOrbitView(next);
     if (sameOrbitCameraView(view, resolved)) return;
@@ -84,14 +121,20 @@ export const createOrbitCameraController = (
   return {
     cameraResource,
     getView: () => view,
-    setProjection: ({ far, fovY, near }) => {
+    setProjection: (nextProjection) => {
+      const { far, fovY, near } = validOrbitCameraProjection(nextProjection);
       cameraResource.far = far;
       cameraResource.fovY = fovY;
       cameraResource.near = near;
       cameraResource.commit();
     },
     setView,
-    subscribeView: (listener) => cameraResource.subscribe(() => listener()),
+    subscribeView: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("Orbit camera subscribeView listener must be a function");
+      }
+      return cameraResource.subscribe(listener);
+    },
   };
 };
 

@@ -150,6 +150,19 @@ describe("OrbitControls", () => {
     orbit.setView(orbit.getView());
     expect(orbit.cameraResource.version).toBe(version + 1);
     expect(listener).toHaveBeenCalledTimes(1);
+
+    expect(() => orbit.subscribeView(
+      null as unknown as () => void,
+    )).toThrow("Orbit camera subscribeView listener must be a function");
+    expect(() => orbit.setProjection({
+      far: 0,
+      fovY: 1,
+      near: 0.1,
+    })).toThrow("Orbit camera projection requires 0 < near < far");
+    expect(orbit.cameraResource).toMatchObject({ far: 100, fovY: 1, near: 0.1 });
+
+    orbit.setProjection({ far: 200, fovY: 0.8, near: 0.01 });
+    expect(orbit.cameraResource).toMatchObject({ far: 200, fovY: 0.8, near: 0.01 });
   });
 
   it("zooms in and out from wheel input", () => {

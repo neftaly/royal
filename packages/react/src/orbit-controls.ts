@@ -27,6 +27,7 @@ export {
 } from "./orbit-camera-controller";
 export type {
   OrbitCameraController,
+  OrbitCameraProjection,
   UseOrbitCameraOptions,
 } from "./orbit-camera-controller";
 export { createOrbitControls } from "./orbit-controls-runtime";
