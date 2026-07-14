@@ -574,9 +574,19 @@ export const releaseIblTextureContextHandles = (arena: IblTextureArena): void =>
 export const dropIblTextureContext = (arena: IblTextureArena): void => {
   const state = arena as unknown as State;
   clearPublished(state, false);
-  for (const lease of state.textureLeases.values()) lease.release();
-  state.textureLeases.clear();
+  let firstFailure: unknown;
+  let failed = false;
+  for (const [texture, lease] of state.textureLeases) {
+    try {
+      lease.release();
+      state.textureLeases.delete(texture);
+    } catch (error) {
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  }
   state.ownedTextures.clear();
+  if (failed) throw firstFailure;
 };
 
 export const iblTextureArenaSnapshot = (arena: IblTextureArena): IblTextureArenaSnapshot => {

@@ -700,4 +700,40 @@ describe("IBL texture arena", () => {
     expect(recorded.state.releases).toBe(7);
     expect(iblTextureArenaSnapshot(arena).retainedLeaseCount).toBe(0);
   });
+
+  it("continues lost-context lease cleanup after the first release failure", () => {
+    const gl = new FakeGl();
+    const leases: Array<{ fail: boolean; released: boolean }> = [];
+    const arena = createIblTextureArena(context(gl), {
+      reserve: () => ({
+        cancel: () => undefined,
+        commit: () => {
+          const state = { fail: false, released: false };
+          leases.push(state);
+          return {
+            release: () => {
+              if (state.fail) throw new Error("lease release failed");
+              state.released = true;
+            },
+          };
+        },
+      }),
+    });
+    ensureStudioEnvironmentSpecularTexture(arena);
+    ensureGltfIblSpecularTexture(arena, specular, completeSources());
+    const retained = leases.filter(({ released }) => !released);
+    expect(retained).toHaveLength(2);
+    retained[0]!.fail = true;
+
+    expect(() => dropIblTextureContext(arena)).toThrow("lease release failed");
+    expect(retained[1]!.released).toBe(true);
+    expect(iblTextureArenaSnapshot(arena)).toMatchObject({
+      ownedTextureCount: 0,
+      retainedLeaseCount: 1,
+    });
+
+    retained[0]!.fail = false;
+    dropIblTextureContext(arena);
+    expect(iblTextureArenaSnapshot(arena).retainedLeaseCount).toBe(0);
+  });
 });
