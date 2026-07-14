@@ -149,14 +149,14 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushVirtualTextureManifest(root);
     expect(ControlledImage.instances).toHaveLength(0);
-    const denied = root.snapshot().resourceGovernor.denials;
+    const denied = root.snapshot().resourcePressure.denials;
 
     root.render(graph);
     root.render(graph);
     await flushMicrotasks();
 
     expect(ControlledImage.instances).toHaveLength(0);
-    expect(root.snapshot().resourceGovernor.denials).toBe(denied);
+    expect(root.snapshot().resourcePressure.denials).toBe(denied);
     expect(root.snapshot().diagnostics.join("\n")).toContain("requires 144 retained CPU bytes");
     root.dispose();
   });
@@ -184,7 +184,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushMicrotasks();
 
     expect(ControlledImage.instances).toHaveLength(2);
-    expect(root.snapshot().resourceGovernor.denialsByReason["cpu-decoded-capacity"])
+    expect(root.snapshot().resourcePressure.denialsByReason["cpu-decoded-capacity"])
       .toBeGreaterThan(0);
     root.dispose();
   });
@@ -207,7 +207,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushMicrotasks();
 
     expect(ControlledImage.instances).toHaveLength(1);
-    expect(root.snapshot().resourceGovernor.denialsByReason["cpu-decoded-capacity"])
+    expect(root.snapshot().resourcePressure.denialsByReason["cpu-decoded-capacity"])
       .toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBeGreaterThan(1);
 
@@ -216,7 +216,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     const settledImageCount = ControlledImage.instances.length;
     const settledWakeCount = requestAnimationFrame.mock.calls.length;
 
-    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().resourcePressure.total.jobs).toBe(0);
     expect(root.snapshot().virtualTexturing.pageLifecycleEntries).toBe(0);
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(settledImageCount);
@@ -228,7 +228,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
     const probe = createWebGlRoot(fakeCanvas(fakeGl().gl));
     probe.render(renderGeometryPressure(unlitMaterial({ color: [1, 1, 1, 1] }), 12));
-    const geometryBytes = probe.snapshot().resourceGovernor.byClass.geometry.persistentGpuBytes;
+    const geometryBytes = probe.snapshot().resourcePressure.byClass.geometry.persistentGpuBytes;
     probe.dispose();
 
     const fetchRequests = installFetchQueue();
@@ -260,7 +260,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     ControlledImage.instances[0]!.settleLoad();
     await flushMicrotasks();
     probe.render(renderOrdinaryTexturePressure(plainMaterial, ordinaryMaterial));
-    const probeGovernor = probe.snapshot().resourceGovernor;
+    const probeGovernor = probe.snapshot().resourcePressure;
     const geometryBytes = probeGovernor.byClass.geometry.persistentGpuBytes;
     const ordinaryBytes = probeGovernor.byClass["ordinary-texture"].persistentGpuBytes;
     expect(ordinaryBytes).toBeGreaterThan(0);
@@ -430,7 +430,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(pageUploads(calls)).toHaveLength(0);
     expect(ControlledImage.closeCalls).toBe(1);
-    expect(root.snapshot().resourceGovernor).toMatchObject({
+    expect(root.snapshot().resourcePressure).toMatchObject({
       byClass: { "virtual-texture": { cpuDecodedBytes: 0 } },
       total: { cpuDecodedBytes: 0 },
     });
@@ -471,7 +471,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     fetchRequests[0]!.resolve(responseJson(vtSinglePageManifest()));
     await flushVirtualTextureManifest(root);
     expect(root.snapshot().virtualTexturing.outstandingPageRequests).toBe(0);
-    expect(root.snapshot().resourceGovernor.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
 
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(graph);
@@ -525,9 +525,9 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(jsonRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest JSON decode failed: bad JSON/);
     expect(parseRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest parse failed/);
     expect(gpuRoot.snapshot().diagnostics.join("\n")).toMatch(/GPU resource admission failed: allocation rejected/);
-    expect(gpuRoot.snapshot().resourceGovernor.outstandingReservations).toBe(0);
+    expect(gpuRoot.snapshot().resourcePressure.outstandingReservations).toBe(0);
     expect(
-      gpuRoot.snapshot().resourceGovernor.byClass["virtual-texture"].persistentGpuBytes,
+      gpuRoot.snapshot().resourcePressure.byClass["virtual-texture"].persistentGpuBytes,
     ).toBe(148);
     expect(transportRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(jsonRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
@@ -792,7 +792,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushMicrotasks();
     expect(pageUploads(calls)).toHaveLength(0);
     const admittedSnapshot = root.snapshot();
-    expect(admittedSnapshot.resourceGovernor).toMatchObject({
+    expect(admittedSnapshot.resourcePressure).toMatchObject({
       byClass: {
         "virtual-texture": {
           cpuDecodedBytes: 6 * 6 * 4,
@@ -808,7 +808,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesWhileBlocked);
     expect(pageUploads(calls)).toHaveLength(0);
     expect(root.snapshot().virtualTexturing).toMatchObject({ atlasTextures: 0, cachedPages: 0 });
-    expect(root.snapshot().resourceGovernor).toMatchObject({
+    expect(root.snapshot().resourcePressure).toMatchObject({
       byClass: { "virtual-texture": { cpuDecodedBytes: 6 * 6 * 4 } },
       total: { persistentGpuBytes: 0 },
     });
@@ -819,9 +819,9 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(pageUploads(calls)).toHaveLength(1);
     const restoredSnapshot = root.snapshot();
     expect(restoredSnapshot.virtualTexturing).toMatchObject({ atlasTextures: 1, cachedPages: 1 });
-    expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].persistentGpuBytes)
+    expect(restoredSnapshot.resourcePressure.byClass["virtual-texture"].persistentGpuBytes)
       .toBe(restoredSnapshot.virtualTexturing.physicalAllocatedBytes);
-    expect(restoredSnapshot.resourceGovernor.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
+    expect(restoredSnapshot.resourcePressure.byClass["virtual-texture"].cpuDecodedBytes).toBe(0);
     root.render(graph);
     expect(pageUploads(calls)).toHaveLength(1);
   });
@@ -838,11 +838,11 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushVirtualTextureManifest(root);
 
     expect(ControlledImage.instances).toHaveLength(1);
-    expect(root.snapshot().resourceGovernor.total.jobs).toBe(1);
+    expect(root.snapshot().resourcePressure.total.jobs).toBe(1);
     canvas.dispatchContextEvent("webglcontextlost");
     await flushMicrotasks();
 
-    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().resourcePressure.total.jobs).toBe(0);
     expect(root.snapshot().virtualTexturing.pageLoadFailures).toBe(0);
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(renderScene(unlitMaterial({ texture: virtualTexture("/vt/abort-page.json") })));
@@ -885,7 +885,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       await flushMicrotasks();
 
       expect(ControlledImage.instances).toHaveLength(2);
-      expect(root.snapshot().resourceGovernor.total.jobs).toBe(1);
+      expect(root.snapshot().resourcePressure.total.jobs).toBe(1);
       expect(root.snapshot().virtualTexturing).toMatchObject({
         outstandingPageRequests: 1,
         pageLoadFailures: 0,
@@ -900,7 +900,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
       ControlledImage.instances[1]!.settleLoad();
       await flushMicrotasks();
       root.render(visible);
-      expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+      expect(root.snapshot().resourcePressure.total.jobs).toBe(0);
       expect(root.snapshot().virtualTexturing).toMatchObject({
         outstandingPageRequests: 0,
         pageLoadFailures: 0,
@@ -925,7 +925,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushVirtualTextureManifest(root);
 
     expect(ControlledImage.instances.length).toBeGreaterThan(0);
-    expect(root.snapshot().resourceGovernor.total.jobs).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.total.jobs).toBeGreaterThan(0);
     const wakesWhileLoading = requestAnimationFrame.mock.calls.length;
     root.render(visible);
     root.render(visible);
@@ -937,7 +937,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     await flushMicrotasks();
 
     expect(obsoleteImages.every((image) => image.src === "")).toBe(true);
-    expect(root.snapshot().resourceGovernor.total.jobs).toBe(0);
+    expect(root.snapshot().resourcePressure.total.jobs).toBe(0);
     expect(root.snapshot().virtualTexturing).toMatchObject({
       activePages: 0,
       outstandingPageRequests: 0,

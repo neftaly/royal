@@ -1361,7 +1361,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         imageQueueHighWater: gltfImages.ordinaryQueueHighWater,
         iblImageQueueHighWater: gltfImages.iblQueueHighWater,
       },
-      resourceGovernor: resourceGovernorSnapshot(this.#resourceGovernor),
+      resourcePressure: resourceGovernorSnapshot(this.#resourceGovernor),
       picking: this.#pickingController.snapshot(),
       textureResidency,
       virtualTexturing,

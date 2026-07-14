@@ -56,7 +56,7 @@ type BrowserBenchmarkOptions = {
 type RendererBenchmarkDeltaSnapshot = Pick<
   RendererBenchmarkSnapshot,
   'frame' | 'gltfInstancing' | 'virtualTexturing'
-> & { readonly resourceGovernor: null };
+> & { readonly resourcePressure: null };
 
 type BrowserBenchmarkReport = {
   readonly device: Record<string, unknown>;
@@ -322,7 +322,7 @@ const deltaRendererSnapshot = (
     // Governor snapshots mix cumulative counters with current/high-water gauges.
     // Keep the complete before/after snapshots instead of publishing a
     // misleading recursively-subtracted object as the frame delta.
-    resourceGovernor: null,
+    resourcePressure: null,
     virtualTexturing: deltaNumberRecord(after.virtualTexturing, before.virtualTexturing),
   };
 };

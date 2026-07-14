@@ -84,7 +84,7 @@ describe("React root public API", () => {
       "messages",
       "picking",
       "planning",
-      "resourceGovernor",
+      "resourcePressure",
       "resourceLifetime",
       "textureResidency",
       "virtualTexturing",
@@ -92,7 +92,7 @@ describe("React root public API", () => {
     expect(diagnostics).toMatchObject({
       gltfInstancing: expect.any(Object),
       gltfLoads: expect.any(Object),
-      resourceGovernor: expect.any(Object),
+      resourcePressure: expect.any(Object),
       virtualTexturing: expect.any(Object),
     });
     expect(diagnostics).not.toHaveProperty("context");

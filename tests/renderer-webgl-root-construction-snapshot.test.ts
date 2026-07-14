@@ -334,7 +334,7 @@ describe("WebGL root construction and snapshot regressions", () => {
     const deleteFailure = new Error("driver retained deleted texture");
     failNextTextureDelete(deleteFailure);
     expect(() => root.render(emptyScene())).toThrow(deleteFailure);
-    expect(root.snapshot().resourceGovernor.total.persistentGpuBytes).toBe(64);
+    expect(root.snapshot().resourcePressure.total.persistentGpuBytes).toBe(64);
     await flushMicrotasks();
 
     canvas.dispatchContextEvent("webglcontextlost");
@@ -345,8 +345,8 @@ describe("WebGL root construction and snapshot regressions", () => {
     const second = root.snapshot();
 
     expect(first.virtualTexturing.demandRetentionOverflows).toBe(0);
-    expect(second.resourceGovernor.total).toEqual(first.resourceGovernor.total);
-    expect(second.resourceGovernor.highWater).toEqual(first.resourceGovernor.highWater);
+    expect(second.resourcePressure.total).toEqual(first.resourcePressure.total);
+    expect(second.resourcePressure.highWater).toEqual(first.resourcePressure.highWater);
     expect(queueMicrotask).toHaveBeenCalledTimes(queuedBeforeSnapshots);
     expect(animationFrames).toHaveLength(framesBeforeSnapshots);
 

@@ -210,6 +210,12 @@ describe("renderer-core public API", () => {
       );
       const samePublicType: ReturnType<typeof webglApi.createWebGlRoot> = root;
       void samePublicType;
+      const pressure: import("@royal/renderer-webgl").WebGlResourcePressureSnapshot =
+        root.snapshot().resourcePressure;
+      const options: import("@royal/renderer-webgl").ResolvedWebGlRootOptions = root.options;
+      const lifecycle: import("@royal/renderer-webgl").WebGlContextLifecycle =
+        root.contextLifecycle;
+      void [pressure, options, lifecycle];
       // @ts-expect-error WebGlRoot is a factory-created handle type, not a public constructor.
       webglApi.WebGlRoot;
       // @ts-expect-error Backend scheduling policy is not a product-level root option.

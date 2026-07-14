@@ -139,7 +139,7 @@
       "gltfLoadDiagnostics",
       "lifecycle",
       "planning",
-      "resourceGovernor",
+      "resourcePressure",
       "resourceLifetime",
       "virtualTexturing"
     ]

@@ -574,13 +574,13 @@ describe("WebGL virtual-texture cold allocation reclamation", () => {
 
     expect(root.snapshot().virtualTexturing.physicalQuarantinedBytes).toBe(148);
     expect(
-      root.snapshot().resourceGovernor.byClass["virtual-texture"].persistentGpuBytes,
+      root.snapshot().resourcePressure.byClass["virtual-texture"].persistentGpuBytes,
     ).toBe(148);
     deleteFailure.enabled = false;
     canvas.dispatchContextEvent("webglcontextlost");
     expect(root.snapshot().virtualTexturing.physicalQuarantinedBytes).toBe(0);
     expect(
-      root.snapshot().resourceGovernor.byClass["virtual-texture"].persistentGpuBytes,
+      root.snapshot().resourcePressure.byClass["virtual-texture"].persistentGpuBytes,
     ).toBe(0);
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(secondVisible);

@@ -56,12 +56,12 @@ describe("WebGL root context lifecycle contracts", () => {
     const root = createWebGlRoot(fakeCanvas(gl), { resourceGovernorPolicy });
 
     expect(() => root.render(clusteredScene())).toThrow("Clustered-light CPU update denied");
-    expect(root.snapshot().resourceGovernor).toMatchObject({
+    expect(root.snapshot().resourcePressure).toMatchObject({
       denialsByReason: { "cpu-decoded-capacity": 1 },
       limits: { cpuDecodedBytes: 0 },
       total: { cpuDecodedBytes: 0 },
     });
-    expect(root.snapshot().resourceGovernor.highWater.cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.highWater.cpuDecodedBytes).toBe(0);
     root.dispose();
   });
 
@@ -659,10 +659,10 @@ describe("WebGL root context lifecycle contracts", () => {
     expect(attempts).toBe(4);
     // The failed HDR texture retains its target lease until deletion retries;
     // the clustered-light resources completed their independent cleanup.
-    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(1);
+    expect(root.snapshot().resourcePressure.outstandingLeases).toBe(1);
     expect(() => root.dispose()).not.toThrow();
     expect(attempts).toBe(5);
-    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(0);
+    expect(root.snapshot().resourcePressure.outstandingLeases).toBe(0);
     expect(() => root.dispose()).not.toThrow();
     expect(attempts).toBe(5);
   });
@@ -672,13 +672,13 @@ describe("WebGL root context lifecycle contracts", () => {
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas);
     root.render(clusteredScene());
-    expect(root.snapshot().resourceGovernor.outstandingLeases).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.outstandingLeases).toBeGreaterThan(0);
     const callsBeforeLoss = calls.length;
 
     canvas.dispatchContextEvent("webglcontextlost");
 
     expect(calls).toHaveLength(callsBeforeLoss);
-    expect(root.snapshot().resourceGovernor.outstandingLeases).toBe(0);
+    expect(root.snapshot().resourcePressure.outstandingLeases).toBe(0);
     expect(() => root.dispose()).not.toThrow();
   });
 

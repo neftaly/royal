@@ -1440,7 +1440,7 @@ const runReactLifecycleSmoke = async (session) => {
 };
 
 const disposedRendererResourcesReleased = (snapshot) => {
-  const governor = snapshot?.resourceGovernor;
+  const governor = snapshot?.resourcePressure;
   const virtualTexturing = snapshot?.virtualTexturing;
   return snapshot?.lifecycle?.state === 'disposed'
     && governor?.outstandingLeases === 0

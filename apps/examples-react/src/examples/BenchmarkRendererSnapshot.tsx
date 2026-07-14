@@ -134,7 +134,7 @@ export const BenchmarkRendererSnapshot = (): ReactNode => {
         gltfLoadDiagnostics: copyGltfLoadDiagnosticsSnapshot(diagnostics.gltfLoads),
         lifecycle: copyRendererLifecycleSnapshot(rootSnapshot.lifecycle),
         planning: copyNumberCounters(diagnostics.planning),
-        resourceGovernor: diagnostics.resourceGovernor,
+        resourcePressure: diagnostics.resourcePressure,
         resourceLifetime: copyNumberCounters(diagnostics.resourceLifetime),
         virtualTexturing: copyVirtualTexturingCounters(diagnostics.virtualTexturing),
       };

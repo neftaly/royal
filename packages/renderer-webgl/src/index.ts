@@ -1,6 +1,7 @@
 export { createWebGlRoot } from "./root";
 export type {
   WebGlContextSnapshot,
+  WebGlContextLifecycle,
   WebGlExternalRenderClock,
   WebGlFramePlanningSnapshot,
   WebGlResourceLifetimeSnapshot,
@@ -12,7 +13,10 @@ export type {
   WebGlRenderViewsOptions,
   WebGlGltfInstancingSnapshot,
   WebGlGltfLoadDiagnosticsAssetSnapshot,
+  WebGlGltfLoadDiagnosticsPhaseKey,
   WebGlGltfLoadDiagnosticsSnapshot,
+  WebGlResourcePressureSnapshot,
+  ResolvedWebGlRootOptions,
   WebGlRootSnapshot,
   WebGlTextureResidencySnapshot,
   WebGlVirtualTexturingSnapshot,

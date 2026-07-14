@@ -129,7 +129,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       .toBe(false);
     expect(root.snapshot().diagnostics.join("\n"))
       .toMatch(/declares up to .*prepared CPU bytes, exceeding its combined maximum/i);
-    expect(root.snapshot().resourceGovernor.total.cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.total.cpuDecodedBytes).toBe(0);
     root.dispose();
   });
 
@@ -146,8 +146,8 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, triangleDocument()))).toBe(true);
     await flushMicrotasks();
-    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
 
     root.render(renderScene([]));
     // The staged fetch double does not implement AbortSignal; settling it lets
@@ -156,8 +156,8 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushPreparedAssetBoundary();
 
-    expect(root.snapshot().resourceGovernor.total.cpuDecodedBytes).toBe(0);
-    expect(root.snapshot().resourceGovernor.total.transientPeakBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.total.cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.total.transientPeakBytes).toBe(0);
     root.dispose();
   });
 
@@ -209,7 +209,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       loader.fetchRequests.filter((request) => /second-capacity\.bin(?:$|[?#])/.test(request.url)),
       "the second asset must remain blocked before requesting its external buffer",
     ).toHaveLength(0);
-    const blockedUsage = root.snapshot().resourceGovernor;
+    const blockedUsage = root.snapshot().resourcePressure;
     expect(blockedUsage.byClass["asset-decode"].cpuDecodedBytes).toBeGreaterThan(0);
     expect(blockedUsage.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
     expect(blockedUsage.total.cpuDecodedBytes).toBeLessThanOrEqual(cpuBudget);
@@ -218,7 +218,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushPreparedAssetBoundary();
 
-    const shrunkenUsage = root.snapshot().resourceGovernor;
+    const shrunkenUsage = root.snapshot().resourcePressure;
     expect(shrunkenUsage.byClass["asset-decode"].cpuDecodedBytes)
       .toBeLessThan(blockedUsage.byClass["asset-decode"].cpuDecodedBytes);
     expect(shrunkenUsage.total.cpuDecodedBytes).toBeLessThan(blockedUsage.total.cpuDecodedBytes);
@@ -232,7 +232,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushPreparedAssetBoundary();
 
-    const completedUsage = root.snapshot().resourceGovernor;
+    const completedUsage = root.snapshot().resourcePressure;
     expect(completedUsage.byClass.geometry.cpuDecodedBytes)
       .toBeGreaterThan(shrunkenUsage.byClass.geometry.cpuDecodedBytes);
     expect(completedUsage.total.cpuDecodedBytes).toBeGreaterThan(shrunkenUsage.total.cpuDecodedBytes);
@@ -712,15 +712,15 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
       "glTF should draw fallback geometry before its base-color image settles",
     ).toBe(true);
-    expect(root.snapshot().resourceGovernor.byClass).toMatchObject({
+    expect(root.snapshot().resourcePressure.byClass).toMatchObject({
       "asset-decode": { cpuDecodedBytes: expect.any(Number) },
       geometry: { cpuDecodedBytes: expect.any(Number) },
     });
     // External image recipes retain a URL, not decoded binary bytes. The
     // pre-decode reservation is therefore shrunk to exact retained bytes while
     // the image request is pending.
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
-    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
 
     const drawsBeforeFailure = drawCalls(calls).length;
     const failedImage = new Error("staged base-color decode failed");
@@ -736,11 +736,11 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       .toBeGreaterThan(drawsBeforeFailure);
     expect(root.snapshot().diagnostics.some((message) =>
       /base-?color|image|texture/i.test(message))).toBe(true);
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
-    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass.geometry.cpuDecodedBytes).toBeGreaterThan(0);
 
     root.render(renderScene([]));
-    expect(root.snapshot().resourceGovernor.byClass.geometry.cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass.geometry.cpuDecodedBytes).toBe(0);
   });
 
   it("switches a prepared glTF draw from fallback color to settled base-color texture", async () => {
@@ -915,11 +915,11 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     await flushMicrotasks();
     await flushPreparedAssetBoundary();
     expect(loader.bitmapRequests).toHaveLength(1);
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(4);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(4);
     const firstBitmap = new CloseTrackedImageBitmap(4);
     loader.bitmapRequests[0]?.resolve(firstBitmap as unknown as ImageBitmap);
     await flushMicrotasks();
-    expect(root.snapshot().resourceGovernor.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass["asset-decode"].cpuDecodedBytes).toBe(0);
     await flushAnimationFrames(viewport.animationFrames);
     await waitForAnimationFrameWork(viewport.animationFrames, () => callCount(calls, "texImage2D") >= 1);
 

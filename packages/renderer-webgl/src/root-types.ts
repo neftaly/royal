@@ -36,6 +36,9 @@ export interface InternalWebGlRootOptions extends WebGlRootOptions {
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
 
+/** Observable root-wide resource usage, pressure, and admission outcomes. */
+export type WebGlResourcePressureSnapshot = ResourceGovernorSnapshot;
+
 export interface WebGlContextSnapshot {
   readonly generation: number;
   readonly lastError?: string;
@@ -68,7 +71,7 @@ export interface WebGlRootSnapshot {
   readonly planning: WebGlFramePlanningSnapshot;
   readonly resourceLifetime: WebGlResourceLifetimeSnapshot;
   /** Root-wide resource pressure and admission diagnostics. */
-  readonly resourceGovernor: ResourceGovernorSnapshot;
+  readonly resourcePressure: WebGlResourcePressureSnapshot;
   readonly picking: WebGlPickingSnapshot;
   readonly textureResidency: WebGlTextureResidencySnapshot;
   readonly virtualTexturing: WebGlVirtualTexturingSnapshot;

@@ -80,7 +80,7 @@ export interface RoyalRendererDiagnosticsSnapshot {
   /** Renderer resource acquisition and queue high-water counters. */
   readonly resourceLifetime: WebGlRootSnapshot["resourceLifetime"];
   /** Current resource budgets, usage, admissions, and denials. */
-  readonly resourceGovernor: WebGlRootSnapshot["resourceGovernor"];
+  readonly resourcePressure: WebGlRootSnapshot["resourcePressure"];
   /** Counters from the most recent picking query. */
   readonly picking: WebGlRootSnapshot["picking"];
   /** Current ordinary-texture lease and prepared-source counts. */
@@ -229,7 +229,7 @@ export const createRendererRoot = (
         messages: snapshot.diagnostics,
         picking: snapshot.picking,
         planning: snapshot.planning,
-        resourceGovernor: snapshot.resourceGovernor,
+        resourcePressure: snapshot.resourcePressure,
         resourceLifetime: snapshot.resourceLifetime,
         textureResidency: snapshot.textureResidency,
         virtualTexturing: snapshot.virtualTexturing,

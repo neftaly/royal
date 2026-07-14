@@ -65,7 +65,7 @@ export interface ResourceGovernorPolicy {
 
 /**
  * Nested overrides applied to the renderer's complete default resource policy.
- * A lowered hard ceiling also clamps inherited soft/floor values; explicit
+ * A lowered hard ceiling also clamps an inherited floor; explicit
  * dependent values remain authoritative. Lower root capacities may require
  * corresponding class-floor overrides.
  */

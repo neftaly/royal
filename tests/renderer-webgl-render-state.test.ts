@@ -104,7 +104,7 @@ describe("WebGL root render state contracts", () => {
     expect(root.snapshot()).toMatchObject({
       disposed: false,
       frame: 1,
-      resourceGovernor: {
+      resourcePressure: {
         frame: 1,
         limits: {
           cpuDecodedBytes: 512 * 1024 * 1024,

@@ -415,7 +415,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     await flushMicrotasks();
     ControlledImage.instances[1]!.settleLoad();
     await flushMicrotasks();
-    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
+    expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
     expect(ControlledImage.instances).toHaveLength(2);
 
     root.render(renderScene(boxGeometry(1), second));
@@ -424,7 +424,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     ControlledImage.instances[2]!.settleLoad();
     await flushMicrotasks();
     flushAnimationFrames(frames);
-    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
+    expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes).toBe(16);
     root.dispose();
   });
   it("bounds shader program initiation to one variant per rendered frame", () => {
@@ -590,7 +590,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     const afterSettle = resourceCounts(calls);
     expect(afterSettle.createTexture, "settling the image should admit and allocate its texture").toBeGreaterThan(0);
     const settledSnapshot = root.snapshot();
-    expect(settledSnapshot.resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes)
+    expect(settledSnapshot.resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes)
       .toBe(settledSnapshot.textureResidency.preparedBytes);
     expect(settledSnapshot.textureResidency.preparedBytes).toBe(2 * 2 * 4);
     expect(
@@ -599,7 +599,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     ).toBe(true);
 
     expect(() => root.dispose()).toThrow("image close failed");
-    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes)
+    expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes)
       .toBe(2 * 2 * 4);
     expect(() => root.dispose()).not.toThrow();
 
@@ -607,7 +607,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(afterDispose.deleteTexture, "dispose should delete every texture the root created").toBe(
       afterDispose.createTexture,
     );
-    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
   });
 
   it.each([
@@ -669,7 +669,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
     expect(ControlledImage.instances).toHaveLength(1);
     expect(countEvents(calls, "createTexture")).toBe(0);
     expect(animationFrames).toHaveLength(0);
-    expect(root.snapshot().resourceGovernor.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
+    expect(root.snapshot().resourcePressure.byClass["ordinary-texture"].cpuDecodedBytes).toBe(0);
     expect(() => root.dispose()).not.toThrow();
   });
 
