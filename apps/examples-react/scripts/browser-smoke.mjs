@@ -602,6 +602,55 @@ const assertRoute = (expected, state) => {
           failures.push('virtual texture resize did not converge after restoring its drawing buffer');
         }
       }
+      const orientation = interaction.orientation;
+      if (
+        orientation?.before?.error !== undefined
+        || orientation?.portrait?.error !== undefined
+        || orientation?.restored?.error !== undefined
+      ) {
+        failures.push('virtual texture orientation smoke could not read the canvas');
+      } else {
+        const before = orientation?.before;
+        const portrait = orientation?.portrait;
+        const restored = orientation?.restored;
+        if (portrait?.settled !== true || restored?.settled !== true) {
+          failures.push('virtual texture orientation change did not settle in both directions');
+        }
+        if (
+          portrait?.innerWidth !== 600
+          || portrait?.innerHeight !== 800
+          || restored?.innerWidth !== 800
+          || restored?.innerHeight !== 600
+        ) {
+          failures.push('virtual texture orientation smoke did not apply and restore viewport metrics');
+        }
+        if (!(portrait?.backingWidth < before?.backingWidth)) {
+          failures.push(`virtual texture portrait orientation did not shrink the drawing buffer (${before?.backingWidth ?? 'unknown'} -> ${portrait?.backingWidth ?? 'unknown'})`);
+        }
+        if (
+          Math.abs((restored?.backingWidth ?? Number.POSITIVE_INFINITY) - (before?.backingWidth ?? 0)) > 2
+          || Math.abs((restored?.backingHeight ?? Number.POSITIVE_INFINITY) - (before?.backingHeight ?? 0)) > 2
+        ) {
+          failures.push('virtual texture landscape restoration did not restore the drawing buffer');
+        }
+        for (const [label, sample] of [['portrait', portrait], ['restored', restored]]) {
+          if (
+            sample?.devicePixelRatio !== 2
+            || Math.abs(sample.backingWidth - sample.cssWidth * sample.devicePixelRatio) > 2
+            || Math.abs(sample.backingHeight - sample.cssHeight * sample.devicePixelRatio) > 2
+          ) {
+            failures.push(`virtual texture ${label} orientation drawing buffer did not track CSS pixels at DPR 2`);
+          }
+          if (
+            sample?.lifecycleState !== 'available'
+            || sample?.lifecycleError !== null
+            || sample?.pendingPages !== 0
+            || sample?.outstandingPageRequests !== 0
+          ) {
+            failures.push(`virtual texture ${label} orientation did not preserve a settled renderer`);
+          }
+        }
+      }
       const focusedRegions = [
         { label: 'NW', preset: 1, u: 0.25, v: 0.25 },
         { label: 'NE', preset: 2, u: 0.75, v: 0.25 },
@@ -784,6 +833,59 @@ const runPickingInteractionSmoke = async (session) => evaluate(session, `
 })()
 `);
 
+const runVirtualTextureViewportConvergence = async (session, previous = null) => evaluate(session, `
+(async () => {
+  const canvas = document.querySelector('canvas');
+  if (canvas === null) return { error: 'missing virtual texture canvas during viewport change' };
+  const previous = ${JSON.stringify(previous)};
+  const rendererSnapshot = () => ${rendererSnapshotExpression};
+  const deadline = performance.now() + 8000;
+  let lastState = '';
+  let stableFrames = 0;
+  let sample;
+  while (performance.now() < deadline && stableFrames < 8) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const renderer = rendererSnapshot();
+    const rect = canvas.getBoundingClientRect();
+    const vt = renderer?.virtualTexturing;
+    sample = {
+      backingHeight: canvas.height,
+      backingWidth: canvas.width,
+      cssHeight: rect.height,
+      cssWidth: rect.width,
+      devicePixelRatio: devicePixelRatio,
+      frame: renderer?.frame ?? null,
+      innerHeight,
+      innerWidth,
+      lifecycleError: renderer?.lifecycle?.error ?? null,
+      lifecycleState: renderer?.lifecycle?.state ?? null,
+      outstandingPageRequests: vt?.outstandingPageRequests ?? null,
+      pendingPages: vt?.pendingPages ?? null,
+    };
+    const changed = previous === null || (
+      sample.innerWidth !== previous.innerWidth
+      || sample.innerHeight !== previous.innerHeight
+      || sample.backingWidth !== previous.backingWidth
+      || sample.backingHeight !== previous.backingHeight
+    );
+    const advanced = previous === null || sample.frame > previous.frame;
+    const state = JSON.stringify(sample);
+    if (
+      changed
+      && advanced
+      && sample.lifecycleState === 'available'
+      && sample.lifecycleError === null
+      && sample.pendingPages === 0
+      && sample.outstandingPageRequests === 0
+      && state === lastState
+    ) stableFrames += 1;
+    else stableFrames = 0;
+    lastState = state;
+  }
+  return { ...sample, settled: stableFrames >= 8 };
+})()
+`);
+
 const runVirtualTextureInteractionSmoke = async (session) => {
   await session.call('Emulation.setDeviceMetricsOverride', {
     deviceScaleFactor: 2,
@@ -792,7 +894,7 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     width: 800,
   });
   try {
-    return await evaluate(session, `
+    const interaction = await evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
   if (canvas === null) return { error: 'missing virtual texture canvas' };
@@ -1000,6 +1102,22 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   }
 })()
     `);
+    const before = await runVirtualTextureViewportConvergence(session);
+    await session.call('Emulation.setDeviceMetricsOverride', {
+      deviceScaleFactor: 2,
+      height: 800,
+      mobile: false,
+      width: 600,
+    });
+    const portrait = await runVirtualTextureViewportConvergence(session, before);
+    await session.call('Emulation.setDeviceMetricsOverride', {
+      deviceScaleFactor: 2,
+      height: 600,
+      mobile: false,
+      width: 800,
+    });
+    const restored = await runVirtualTextureViewportConvergence(session, portrait);
+    return { ...interaction, orientation: { before, portrait, restored } };
   } finally {
     await session.call('Emulation.clearDeviceMetricsOverride');
   }

@@ -60,6 +60,16 @@ pre-frame, and post-frame renderer snapshots so newly added diagnostic fields
 cannot disappear from the artifact merely because the summary has not learned
 about them yet.
 
+The focused VT browser smoke covers overview/focus presets, close and far zoom,
+cache reactivation, camera pan, DPR-aware container resize, and a
+landscape-to-portrait-to-landscape viewport cycle. Every transition must settle
+with an available renderer and no pending VT work:
+
+```sh
+EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
+pnpm --filter @royal/examples-react test:browser
+```
+
 Fuller host report:
 
 ```sh
