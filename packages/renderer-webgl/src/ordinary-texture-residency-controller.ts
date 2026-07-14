@@ -27,6 +27,7 @@ import {
   ensureOrdinaryTextureGpuResource,
   ordinaryTextureGpuOutcome,
   ordinaryTextureGpuOutcomeCount,
+  ordinaryTextureGpuHasPendingUploads,
   ordinaryTextureGpuPendingUpload,
   ordinaryTextureGpuQuarantinedBytes,
   ordinaryTextureGpuResource,
@@ -175,6 +176,12 @@ export class OrdinaryTextureResidencyController {
     const before = ordinaryTextureGpuQuarantinedBytes(this.#gpu);
     const failure = capture(() => processOrdinaryTextureUploads(this.#gpu, frame, generation, admission));
     return this.#report(false, failure, undefined, before);
+  }
+
+  hasPendingWork(): boolean {
+    return ordinaryTextureGpuHasPendingUploads(this.#gpu)
+      || ordinaryTextureGpuOutcomeCount(this.#gpu) > 0
+      || this.#options.decodedSources.hasPendingOrdinary();
   }
 
   dropContext(): OrdinaryTextureResidencyGpuReport {

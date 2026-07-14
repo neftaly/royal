@@ -85,6 +85,10 @@ export class DecodedTextureSourceLifetime {
     this.#retry(this.#ordinary);
   }
 
+  hasPendingOrdinary(): boolean {
+    return this.#ordinary.pending.size > 0;
+  }
+
   retryPendingVirtualTexture(): void {
     this.#retry(this.#virtualTexture);
   }

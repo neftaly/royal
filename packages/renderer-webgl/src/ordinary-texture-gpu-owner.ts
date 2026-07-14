@@ -56,6 +56,7 @@ export class OrdinaryTextureGpuOwner {
   }
 
   processUploads(): void {
+    if (!this.#options.textures.hasPendingWork()) return;
     const releaseWakeSuppression = this.#options.capacityWakes.suppressPersistentGpuWake();
     let report!: ReturnType<OrdinaryTextureResidencyController["process"]>;
     let processFailure: CapturedFailure | undefined;
