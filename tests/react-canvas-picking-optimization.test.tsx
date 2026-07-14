@@ -153,6 +153,17 @@ describe("React Canvas picking optimization", () => {
     expect(root.pick).toHaveBeenCalledTimes(4);
     expect(onPointerMove.mock.calls[2]![0].clientX).toBe(122);
 
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(2, { clientX: 200 }));
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(3, { clientX: 300 }));
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(2, { clientX: 220 }));
+    const multiPointerFrame = frameCallbacks.entries().next().value as
+      | [number, FrameRequestCallback]
+      | undefined;
+    expect(multiPointerFrame).toBeDefined();
+    frameCallbacks.delete(multiPointerFrame![0]);
+    multiPointerFrame![1](32);
+    expect(onPointerMove.mock.calls.slice(3).map(([event]) => event.clientX)).toEqual([300, 220]);
+
     detach();
     vi.unstubAllGlobals();
   });

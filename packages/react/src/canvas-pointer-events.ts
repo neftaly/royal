@@ -83,12 +83,9 @@ export const attachCanvasPointerEventHandlers = ({
   sceneInteractionsRef,
   root,
 }: CanvasPointerEventBindings): (() => void) => {
-  let nextPointerMoveOrder = 0;
   let pointerMoveFrame: number | undefined;
-  const pendingPointerMoves = new Map<number, {
-    readonly event: PointerEvent;
-    readonly order: number;
-  }>();
+  const pendingPointerMoves = new Map<number, PointerEvent>();
+  const pendingPointerMoveScratch: PointerEvent[] = [];
   const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined => {
     const sceneInteractions = sceneInteractionsRef.current;
     if (!sceneInteractions.hasPointerEventTargets) return undefined;
@@ -128,14 +125,17 @@ export const attachCanvasPointerEventHandlers = ({
       globalThis.cancelAnimationFrame(pointerMoveFrame);
     }
     pointerMoveFrame = undefined;
-    const pending = Array.from(pendingPointerMoves.values())
-      .sort((left, right) => left.order - right.order);
+    for (const event of pendingPointerMoves.values()) pendingPointerMoveScratch.push(event);
     pendingPointerMoves.clear();
-    for (const { event } of pending) {
-      applyPointerInteraction(event, {
-        picked: pickedTargetAt(event),
-        type: "pointermove",
-      });
+    try {
+      for (const event of pendingPointerMoveScratch) {
+        applyPointerInteraction(event, {
+          picked: pickedTargetAt(event),
+          type: "pointermove",
+        });
+      }
+    } finally {
+      pendingPointerMoveScratch.length = 0;
     }
   };
 
@@ -158,11 +158,8 @@ export const attachCanvasPointerEventHandlers = ({
       });
       return;
     }
-    pendingPointerMoves.set(event.pointerId, {
-      event,
-      order: nextPointerMoveOrder,
-    });
-    nextPointerMoveOrder += 1;
+    pendingPointerMoves.delete(event.pointerId);
+    pendingPointerMoves.set(event.pointerId, event);
     pointerMoveFrame ??= globalThis.requestAnimationFrame(flushPendingPointerMoves);
   };
 
@@ -211,6 +208,7 @@ export const attachCanvasPointerEventHandlers = ({
     }
     pointerMoveFrame = undefined;
     pendingPointerMoves.clear();
+    pendingPointerMoveScratch.length = 0;
     canvas.removeEventListener("pointermove", handlePointerMove, true);
     canvas.removeEventListener("pointerdown", handlePointerDown, true);
     canvas.removeEventListener("pointerup", handlePointerUp, true);
