@@ -29,9 +29,10 @@ import {
   createRoyalScenePointerEventRegistry,
   type ScenePointerEvents,
 } from "./scene-interactions";
-import type {
-  RendererOptions,
-  RoyalRendererRoot,
+import {
+  validatePickInput,
+  type RendererOptions,
+  type RoyalRendererRoot,
 } from "./root";
 
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
@@ -91,8 +92,10 @@ export const useInvalidate = (): (() => void) => {
 export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) => {
   const root = useCanvasRoot();
 
-  return useCallback((input: PickInput): PickResult | undefined =>
-    root?.pick(input), [root]);
+  return useCallback((input: PickInput): PickResult | undefined => {
+    validatePickInput(input);
+    return root?.pick(input);
+  }, [root]);
 };
 
 const assignCanvasRef = (

@@ -63,6 +63,19 @@ export interface ResolvedRendererOptions {
   readonly automaticVirtualTextures: boolean;
 }
 
+/** @internal Distinguishes malformed public pick input from a legitimate miss. */
+export const validatePickInput = (input: PickInput): void => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new TypeError("Royal pick input must be an object with clientX and clientY coordinates");
+  }
+  if (typeof input.clientX !== "number" || !Number.isFinite(input.clientX)) {
+    throw new TypeError("Royal pick input clientX must be a finite number");
+  }
+  if (typeof input.clientY !== "number" || !Number.isFinite(input.clientY)) {
+    throw new TypeError("Royal pick input clientY must be a finite number");
+  }
+};
+
 /** Availability states for the renderer owned by a Canvas. */
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
@@ -302,7 +315,10 @@ export const createRendererRoot = (
       validateObserver(callback, "RoyalRendererRoot observeRenderFailures callback");
       return root.observeRenderFailures(callback);
     },
-    pick: (input: PickInput) => root.pick(input),
+    pick: (input: PickInput) => {
+      validatePickInput(input);
+      return root.pick(input);
+    },
     render: (scene: RenderRoot) => {
       root.render(scene);
     },

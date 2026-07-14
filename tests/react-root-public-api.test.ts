@@ -29,6 +29,19 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("rejects malformed pick coordinates instead of reporting a miss", () => {
+    const root = createRendererRoot(fakeCanvas());
+
+    expect(() => root.pick(null as unknown as { clientX: number; clientY: number }))
+      .toThrow("Royal pick input must be an object with clientX and clientY coordinates");
+    expect(() => root.pick({ clientX: Number.NaN, clientY: 10 }))
+      .toThrow("Royal pick input clientX must be a finite number");
+    expect(() => root.pick({ clientX: 10, clientY: Number.POSITIVE_INFINITY }))
+      .toThrow("Royal pick input clientY must be a finite number");
+
+    root.dispose();
+  });
+
   it("rejects malformed observer callbacks and glTF asset identities eagerly", () => {
     const root = createRendererRoot(fakeCanvas());
     const invalidCallback = null as unknown as () => void;
