@@ -539,7 +539,7 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
     } satisfies MaterialTextureSlotReplay,
   },
   {
-    label: "required clearcoat normal map is rejected",
+    label: "required clearcoat normal map is accepted",
     value: {
       document: {
         extensionsRequired: ["KHR_materials_clearcoat"],
@@ -552,8 +552,7 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
           },
         }],
       },
-      expectedMessage: /KHR_materials_clearcoat\.clearcoatNormalTexture.*material 0.*extension normal maps/i,
-      expectedPass: false,
+      expectedPass: true,
     } satisfies MaterialTextureSlotReplay,
   },
   {
@@ -713,8 +712,6 @@ const materialTextureSlotDocumentShouldPass = (document: GltfDocument): boolean 
   !document.materials?.some((material) =>
     (document.extensionsRequired?.includes("KHR_materials_anisotropy") === true
       && material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined)
-    || (document.extensionsRequired?.includes("KHR_materials_clearcoat") === true
-      && material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined)
     || (document.extensionsRequired?.includes("KHR_materials_diffuse_transmission") === true
       && (
         material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined

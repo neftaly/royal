@@ -40,6 +40,7 @@ export const SURFACE_MATERIAL_TEXTURE_BINDINGS = exhaustiveMaterialBindings([
   { feature: "specularColorTexture", key: "specularColorTexture", preferredUnit: 7, samplerUniform: "u_specularColorTexture", useUniform: "u_useSpecularColorTexture", uvUniformStem: "u_specularColorUv" },
   { feature: "clearcoatTexture", key: "clearcoatTexture", preferredUnit: 8, samplerUniform: "u_clearcoatTexture", useUniform: "u_useClearcoatTexture", uvUniformStem: "u_clearcoatUv" },
   { feature: "clearcoatRoughnessTexture", key: "clearcoatRoughnessTexture", preferredUnit: 9, samplerUniform: "u_clearcoatRoughnessTexture", useUniform: "u_useClearcoatRoughnessTexture", uvUniformStem: "u_clearcoatRoughnessUv" },
+  { feature: "clearcoatNormalTexture", key: "clearcoatNormalTexture", preferredUnit: 10, samplerUniform: "u_clearcoatNormalTexture", useUniform: "u_useClearcoatNormalTexture", uvUniformStem: "u_clearcoatNormalUv" },
   { feature: "sheenColorTexture", key: "sheenColorTexture", preferredUnit: 10, samplerUniform: "u_sheenColorTexture", useUniform: "u_useSheenColorTexture", uvUniformStem: "u_sheenColorUv" },
   { feature: "sheenRoughnessTexture", key: "sheenRoughnessTexture", preferredUnit: 11, samplerUniform: "u_sheenRoughnessTexture", useUniform: "u_useSheenRoughnessTexture", uvUniformStem: "u_sheenRoughnessUv" },
   { feature: "iridescenceTexture", key: "iridescenceTexture", preferredUnit: 12, samplerUniform: "u_iridescenceTexture", useUniform: "u_useIridescenceTexture", uvUniformStem: "u_iridescenceUv" },

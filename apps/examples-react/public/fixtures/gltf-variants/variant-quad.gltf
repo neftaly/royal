@@ -23,6 +23,7 @@
     "KHR_materials_variants"
   ],
   "extensionsUsed": [
+    "KHR_materials_clearcoat",
     "KHR_materials_unlit",
     "KHR_materials_variants"
   ],
@@ -30,6 +31,11 @@
     {
       "byteLength": 60,
       "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAAAAAAAPwAAAL8AAAAAAAAAPwAAAD8AAAAAAAAAvwAAAD8AAAAAAAABAAIAAAACAAMA"
+    }
+  ],
+  "images": [
+    {
+      "uri": "../../DamagedHelmet/Default_normal.jpg"
     }
   ],
   "bufferViews": [
@@ -88,7 +94,14 @@
     {
       "name": "ruby",
       "extensions": {
-        "KHR_materials_unlit": {}
+        "KHR_materials_clearcoat": {
+          "clearcoatFactor": 1,
+          "clearcoatNormalTexture": {
+            "index": 0,
+            "scale": 0.6
+          },
+          "clearcoatRoughnessFactor": 0.2
+        }
       },
       "pbrMetallicRoughness": {
         "baseColorFactor": [
@@ -96,7 +109,9 @@
           0.08,
           0.12,
           1
-        ]
+        ],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.35
       }
     },
     {
@@ -169,6 +184,11 @@
   "nodes": [
     {
       "mesh": 0
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
     }
   ],
   "scene": 0,

@@ -563,7 +563,10 @@ export class SurfaceExecutionArena {
     this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
     this.#bindTextureCoordinates(program, material, plan);
     uniformColor(this.#programs, program, "u_normalTextureSettings", [
-      material.kind === "standard" ? material.normalScale ?? 1 : 1, 0, 0, 0,
+      material.kind === "standard" ? material.normalScale ?? 1 : 1,
+      factors.clearcoatNormalScale,
+      0,
+      0,
     ]);
     uniformColor(this.#programs, program, "u_occlusionSettings", [
       surfaceMaterialOcclusionStrength(material), 0, 0, 0,

@@ -3,7 +3,7 @@ import {
   OrbitControls,
   useOrbitCamera,
 } from '@royal/react';
-import { gltf, scene } from '@royal/react/scene';
+import { gltf, scene, studioEnvironment } from '@royal/react/scene';
 import { useMemo, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
@@ -21,6 +21,7 @@ export const GltfVariants = (): ReactNode => {
   const renderScene = useMemo(() => scene({
     camera: orbit.cameraResource,
     ...colorAccuratePass,
+    environment: studioEnvironment({ radianceScaleNits: 80 }),
     nodes: [
       gltf({ src: variantSrc, transform: { position: [-1.05, 0, 0], rotation: [0, -0.16, 0], scale: [0.76, 0.76, 0.76] } }),
       gltf({ src: variantSrc, variant, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [0.76, 0.76, 0.76] } }),

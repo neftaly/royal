@@ -1152,13 +1152,14 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(uniform1iPayloads(calls, "u_useNormalTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_normalTexture")).toContain(1);
     expect(uniform4fvPayloads(calls, "u_normalTextureSettings").map(roundVector))
-      .toContainEqual([0.42, 0, 0, 0]);
+      .toContainEqual([0.42, 1, 0, 0]);
     expect(calls.some((call) =>
       call.name === "activeTexture"
       && call.args[0] === gl.TEXTURE0 + 1)).toBe(true);
     expect(sources).toContain("uniform sampler2D u_normalTexture;");
     expect(sources).toContain("dFdx(v_worldPosition)");
-    expect(sources).toContain("texture(u_normalTexture, materialTextureUv(u_normalUvSet");
+    expect(sources).toContain("vec2 normalUv = materialTextureUv(u_normalUvSet");
+    expect(sources).toContain("texture(u_normalTexture, normalUv)");
   });
 
   it("uploads and binds glTF TANGENT attributes for normal mapping", async () => {
@@ -1333,7 +1334,11 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(uniform1iPayloads(calls, "u_clearcoatTexture")).toContain(8);
     expect(uniform1iPayloads(calls, "u_useClearcoatRoughnessTexture")).toContain(1);
     expect(uniform1iPayloads(calls, "u_clearcoatRoughnessTexture")).toContain(9);
-    for (const unit of [6, 7, 8, 9]) {
+    expect(uniform1iPayloads(calls, "u_useClearcoatNormalTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_clearcoatNormalTexture")).toContain(10);
+    expect(uniform4fvPayloads(calls, "u_normalTextureSettings").map(roundVector))
+      .toContainEqual([1, 0.35, 0, 0]);
+    for (const unit of [6, 7, 8, 9, 10]) {
       expect(calls.some((call) =>
         call.name === "activeTexture"
         && call.args[0] === gl.TEXTURE0 + unit)).toBe(true);
@@ -1343,14 +1348,17 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     expect(sources).toContain("texture(u_specularColorTexture, materialTextureUv(u_specularColorUvSet");
     expect(sources).toContain("texture(u_clearcoatTexture, materialTextureUv(u_clearcoatUvSet");
     expect(sources).toContain("texture(u_clearcoatRoughnessTexture, materialTextureUv(u_clearcoatRoughnessUvSet");
+    expect(sources).toContain("texture(u_clearcoatNormalTexture, normalUv)");
+    expect(sources).toContain("vec3 clearcoatNormal = materialClearcoatNormal(geometricNormal);");
+    expect(sources).toContain("iblClearcoatRadiance(clearcoatNormal, viewDirection)");
     expect(diagnostics).not.toMatch(/KHR_materials_specular\.specularTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_specular\.specularColorTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatTexture.*ignored/i);
     expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatRoughnessTexture.*ignored/i);
-    expect(diagnostics).toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*extension normal maps/i);
+    expect(diagnostics).not.toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*ignored/i);
   });
 
-  it("rejects required KHR_materials_clearcoat normal maps before fetching dependent resources", async () => {
+  it("renders required KHR_materials_clearcoat normal maps", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -1370,27 +1378,22 @@ describe("WebGL renderer glTF instancing and lighting regressions", () => {
     root.render(renderGraph);
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
-        ...solidTriangleDocument(),
-        extensionsRequired: ["KHR_materials_clearcoat"],
-        extensionsUsed: ["KHR_materials_clearcoat"],
-        materials: [{
-          extensions: {
-            KHR_materials_clearcoat: {
-              clearcoatNormalTexture: { index: 0 },
-            },
-          },
-        }],
+        ...materialPbrExtensionTextureDiagnosticTriangleDocument(),
+        extensionsRequired: ["KHR_materials_clearcoat", "KHR_materials_specular"],
       }))).toBe(true);
     await flushMicrotasks();
+    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
+      responseWithBuffer(url, triangleBin()))).toBe(true);
+    await flushMicrotasks();
     await flushPreparedAssetBoundary();
-
-    expect(loader.fetchRequests.some((request) => /staged-triangle\.bin(?:$|[?#])/.test(request.url)))
-      .toBe(false);
-    expect(root.snapshot().diagnostics.some((message) =>
-      /glTF load failed for .*staged-triangle\.gltf/i.test(message))).toBe(true);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
 
     root.render(renderGraph);
-    expect(drawCalls(calls)).toHaveLength(0);
+    expect(drawCalls(calls).length).toBeGreaterThan(0);
+    expect(uniform1iPayloads(calls, "u_useClearcoatNormalTexture")).toContain(1);
+    expect(root.snapshot().diagnostics.join("\n"))
+      .not.toMatch(/KHR_materials_clearcoat\.clearcoatNormalTexture.*ignored/i);
   });
 
   it("renders required KHR material sheen and iridescence factors as visible shader uniforms", async () => {

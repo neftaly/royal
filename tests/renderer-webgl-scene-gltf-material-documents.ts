@@ -872,7 +872,7 @@ export const materialPbrExtensionTextureDiagnosticTriangleDocument = () => {
       {
         extensions: {
           KHR_materials_clearcoat: {
-            clearcoatNormalTexture: { index: 4 },
+            clearcoatNormalTexture: { index: 4, scale: 0.35 },
             clearcoatRoughnessTexture: { index: 3 },
             clearcoatTexture: { index: 2 },
           },

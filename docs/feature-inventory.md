@@ -144,7 +144,7 @@ Status meanings:
 | Alpha opaque/mask/blend and double-sided | ingestion/product | Core glTF. Keep. |
 | Texture transforms and UV-set selection | ingestion | Core fidelity for real assets. Keep. |
 | Unlit | ingestion/product | Keep. |
-| Clearcoat | ingestion/product | Keep for fidelity; complete clearcoat-normal support before claiming full support. |
+| Clearcoat | ingestion/product | Keep for fidelity; factors plus factor, roughness, and tangent-space normal textures are supported. |
 | Sheen | ingestion/product | Keep pending visual oracle. |
 | Specular and IOR | ingestion/product | Keep; foundational dielectric fidelity. |
 | Transmission and volume/attenuation | ingestion/product | Keep if screen-copy/refraction cost passes device gates. |

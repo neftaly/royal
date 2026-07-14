@@ -116,13 +116,6 @@ const requiredGltfMaterialExtensionFeatures = [
     reason: "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported",
   },
   {
-    extension: "KHR_materials_clearcoat",
-    field: "clearcoatNormalTexture",
-    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
-      material.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined,
-    reason: "Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support",
-  },
-  {
     extension: "KHR_materials_diffuse_transmission",
     field: "diffuseTransmissionTexture",
     hasUnsupportedFeature: (material: GltfMaterial): boolean =>

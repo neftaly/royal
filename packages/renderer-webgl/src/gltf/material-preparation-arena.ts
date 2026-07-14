@@ -19,6 +19,7 @@ import {
 } from "../webgl/materials";
 
 type LoadedGltfSurfaceTextures = {
+  readonly clearcoatNormalTexture?: TextureAssetUploadRef;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly emissiveTexture?: TextureAssetUploadRef;
@@ -69,6 +70,7 @@ const loadedGltfSurfaceMaterial = (
   return {
     ...common,
     kind: "standard",
+    ...(textures.clearcoatNormalTexture === undefined ? {} : { clearcoatNormalTexture: textures.clearcoatNormalTexture }),
     ...(textures.clearcoatRoughnessTexture === undefined
       ? {}
       : { clearcoatRoughnessTexture: textures.clearcoatRoughnessTexture }),

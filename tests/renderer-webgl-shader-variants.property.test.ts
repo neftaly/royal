@@ -21,6 +21,7 @@ const samplerDeclarations = {
   specularColorTexture: "uniform sampler2D u_specularColorTexture;",
   clearcoatTexture: "uniform sampler2D u_clearcoatTexture;",
   clearcoatRoughnessTexture: "uniform sampler2D u_clearcoatRoughnessTexture;",
+  clearcoatNormalTexture: "uniform sampler2D u_clearcoatNormalTexture;",
   sheenColorTexture: "uniform sampler2D u_sheenColorTexture;",
   sheenRoughnessTexture: "uniform sampler2D u_sheenRoughnessTexture;",
   iridescenceTexture: "uniform sampler2D u_iridescenceTexture;",
@@ -138,8 +139,10 @@ describe("surface shader variants", () => {
       }
       expect(source.includes("residentPageMax"), `${label} NPOT page stretching`).toBe(false);
       expect(source.includes("atlasSlotMax"), `${label} interior half-texel clamp`).toBe(false);
-      expect(source.includes("materialFallbackCotangentFrame(normal) * textureNormal"), label)
+      expect(source.includes("texture(u_normalTexture,"), `${label} base normal sampling`)
         .toBe(features.has("normalTexture"));
+      expect(source.includes("texture(u_clearcoatNormalTexture,"), `${label} clearcoat normal sampling`)
+        .toBe(features.has("clearcoatNormalTexture"));
       expect(source.includes("texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg"), label)
         .toBe(features.has("iblBrdfLut"));
     });

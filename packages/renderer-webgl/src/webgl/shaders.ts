@@ -25,6 +25,7 @@ export const SURFACE_SHADER_TEXTURE_FEATURES = [
   "specularColorTexture",
   "clearcoatTexture",
   "clearcoatRoughnessTexture",
+  "clearcoatNormalTexture",
   "sheenColorTexture",
   "sheenRoughnessTexture",
   "iridescenceTexture",
@@ -75,6 +76,9 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
     hasSurfaceShaderFeature(features, "clearcoatTexture") ? "uniform sampler2D u_clearcoatTexture;" : "",
     hasSurfaceShaderFeature(features, "clearcoatRoughnessTexture")
       ? "uniform sampler2D u_clearcoatRoughnessTexture;"
+      : "",
+    hasSurfaceShaderFeature(features, "clearcoatNormalTexture")
+      ? "uniform sampler2D u_clearcoatNormalTexture;"
       : "",
     hasSurfaceShaderFeature(features, "sheenColorTexture") ? "uniform sampler2D u_sheenColorTexture;" : "",
     hasSurfaceShaderFeature(features, "sheenRoughnessTexture")
@@ -262,7 +266,7 @@ const clusteredLightFunctions = `uint clusteredLightIndex(uint linearIndex) {
   ).r;
 }
 
-vec3 clusteredLightContribution(vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
+vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
   ivec2 tile = ivec2(floor((gl_FragCoord.xy - u_clusterViewportOrigin) / max(u_clusterDimensions.w, 1.0)));
   tile = clamp(tile, ivec2(0), ivec2(u_clusterDimensions.xy) - ivec2(1));
   float viewDepth = max(-(u_view * vec4(worldPosition, 1.0)).z, u_clusterDepth.z);
@@ -280,7 +284,7 @@ vec3 clusteredLightContribution(vec3 normal, vec3 viewDirection, vec3 worldPosit
     result += lightContributionData(
       int(colorAndKind.w + 0.5), colorAndKind.rgb, directionAndInner.xyz,
       positionAndRange.xyz, positionAndRange.w, directionAndInner.w, outer.x,
-      normal, viewDirection, worldPosition, baseColor
+      normal, clearcoatNormal, viewDirection, worldPosition, baseColor
     );
   }
   return result;
@@ -293,7 +297,7 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredL
     ["__CLUSTERED_LIGHT_UNIFORMS__", clusteredLights ? clusteredLightUniforms : ""],
     ["__CLUSTERED_LIGHT_FUNCTIONS__", clusteredLights
       ? clusteredLightFunctions
-      : "vec3 clusteredLightContribution(vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) { return vec3(0.0); }"],
+      : "vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) { return vec3(0.0); }"],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
     ["__SPECULAR_TEXTURE_EXPR__", surfaceTextureExpression(
@@ -319,6 +323,18 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredL
       "clearcoatRoughnessTexture",
       "u_useClearcoatRoughnessTexture ? texture(u_clearcoatRoughnessTexture, materialTextureUv(u_clearcoatRoughnessUvSet, u_clearcoatRoughnessUvRow0, u_clearcoatRoughnessUvRow1)).g : 1.0",
       "1.0",
+    )],
+    ["__MATERIAL_CLEARCOAT_NORMAL_BODY__", surfaceFeatureBlock(
+      features,
+      "clearcoatNormalTexture",
+      `if (!u_useClearcoatNormalTexture) {
+  return geometricNormal;
+}
+vec2 normalUv = materialTextureUv(u_clearcoatNormalUvSet, u_clearcoatNormalUvRow0, u_clearcoatNormalUvRow1);
+vec3 textureNormal = texture(u_clearcoatNormalTexture, normalUv).xyz * 2.0 - 1.0;
+textureNormal.xy *= u_normalTextureSettings.y;
+return materialTangentNormal(geometricNormal, textureNormal, normalUv);`,
+      "return geometricNormal;",
     )],
     ["__SHEEN_COLOR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
@@ -390,17 +406,10 @@ return mix(1.0, texture(u_occlusionTexture, materialTextureUv(u_occlusionUvSet, 
       `if (!u_useNormalTexture) {
   return geometricNormal;
 }
-vec3 textureNormal = texture(u_normalTexture, materialTextureUv(u_normalUvSet, u_normalUvRow0, u_normalUvRow1)).xyz * 2.0 - 1.0;
+vec2 normalUv = materialTextureUv(u_normalUvSet, u_normalUvRow0, u_normalUvRow1);
+vec3 textureNormal = texture(u_normalTexture, normalUv).xyz * 2.0 - 1.0;
 textureNormal.xy *= u_normalTextureSettings.x;
-vec3 normal = normalize(geometricNormal);
-if (v_tangent.w == 0.0) {
-  return normalize(materialFallbackCotangentFrame(normal) * textureNormal);
-}
-vec3 tangent = materialGeometryTangent(normal);
-vec3 bitangent = normalize(cross(normal, tangent))
-  * (v_tangent.w < 0.0 ? -1.0 : 1.0)
-  * materialFaceSign();
-return normalize(tangent * textureNormal.x + bitangent * textureNormal.y + normal * textureNormal.z);`,
+return materialTangentNormal(geometricNormal, textureNormal, normalUv);`,
       "return geometricNormal;",
     )],
     ["__MATERIAL_TRANSMISSION_SCREEN_BODY__", surfaceFeatureBlock(

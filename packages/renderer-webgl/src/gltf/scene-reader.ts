@@ -60,6 +60,11 @@ export type GltfMaterialExtensionTextureDefinition = {
 export const GLTF_MATERIAL_EXTENSION_TEXTURES = [
   {
     colorSpace: "linear",
+    key: "clearcoatNormalTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture,
+  },
+  {
+    colorSpace: "linear",
     key: "clearcoatRoughnessTexture",
     textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatRoughnessTexture,
   },
@@ -373,6 +378,7 @@ const readGltfMaterialExtensionFactors = (
     attenuationDistance: positiveFiniteNumber(volume?.attenuationDistance)
       ?? DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS.attenuationDistance,
     clearcoatFactor: clampedFiniteNumber(clearcoat?.clearcoatFactor, 0, 0, 1),
+    clearcoatNormalScale: finiteNumber(clearcoat?.clearcoatNormalTexture?.scale, 1),
     clearcoatRoughnessFactor: clampedFiniteNumber(clearcoat?.clearcoatRoughnessFactor, 0, 0, 1),
     diffuseTransmissionColorFactor: gltfDiffuseTransmissionColorFactor(diffuseTransmission?.diffuseTransmissionColorFactor),
     diffuseTransmissionFactor: clampedFiniteNumber(diffuseTransmission?.diffuseTransmissionFactor, 0, 0, 1),
@@ -506,11 +512,6 @@ const readGltfMaterial = (
     material?.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined,
     "KHR_materials_anisotropy.anisotropyTexture",
     "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported.",
-  );
-  unsupported(
-    material?.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture !== undefined,
-    "KHR_materials_clearcoat.clearcoatNormalTexture",
-    "Royal does not yet support extension normal maps; clearcoat normals require tangent-space normal-map support.",
   );
   unsupported(
     material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined,

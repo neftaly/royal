@@ -23,6 +23,7 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly baseColorFactor?: LinearRgba;
   readonly alphaCutoff?: number;
   readonly alphaMode?: SurfaceMaterialAlphaMode;
+  readonly clearcoatNormalTexture?: TextureAssetUploadRef;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly doubleSided?: boolean;
@@ -47,6 +48,7 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
 
 export type SurfaceMaterialTextureCoordinates = Partial<Readonly<Record<
   | "baseColorTexture"
+  | "clearcoatNormalTexture"
   | "clearcoatRoughnessTexture"
   | "clearcoatTexture"
   | "emissiveTexture"
@@ -70,6 +72,7 @@ export type SurfaceMaterialExtensionFactors = {
   readonly attenuationColor: Vec3;
   readonly attenuationDistance: number;
   readonly clearcoatFactor: number;
+  readonly clearcoatNormalScale: number;
   readonly clearcoatRoughnessFactor: number;
   readonly diffuseTransmissionColorFactor: Vec3;
   readonly diffuseTransmissionFactor: number;
@@ -93,6 +96,7 @@ export const DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS: SurfaceMaterialExtensio
   attenuationColor: [1, 1, 1],
   attenuationDistance: Infinity,
   clearcoatFactor: 0,
+  clearcoatNormalScale: 1,
   clearcoatRoughnessFactor: 0,
   diffuseTransmissionColorFactor: [1, 1, 1],
   diffuseTransmissionFactor: 0,
@@ -213,6 +217,7 @@ export const surfaceMaterialExtensionFactorsKey = (
     ...factors.specularColorFactor,
     factors.ior,
     factors.clearcoatFactor,
+    factors.clearcoatNormalScale,
     factors.clearcoatRoughnessFactor,
     factors.diffuseTransmissionFactor,
     ...factors.diffuseTransmissionColorFactor,
@@ -244,6 +249,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     material.specularTexture === undefined ? "" : textureCacheKey(material.specularTexture),
     material.specularColorTexture === undefined ? "" : textureCacheKey(material.specularColorTexture),
     material.clearcoatTexture === undefined ? "" : textureCacheKey(material.clearcoatTexture),
+    material.clearcoatNormalTexture === undefined ? "" : textureCacheKey(material.clearcoatNormalTexture),
     material.clearcoatRoughnessTexture === undefined ? "" : textureCacheKey(material.clearcoatRoughnessTexture),
     material.sheenColorTexture === undefined ? "" : textureCacheKey(material.sheenColorTexture),
     material.sheenRoughnessTexture === undefined ? "" : textureCacheKey(material.sheenRoughnessTexture),

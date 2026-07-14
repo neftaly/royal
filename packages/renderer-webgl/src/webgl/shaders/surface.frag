@@ -20,6 +20,7 @@ uniform bool u_useSpecularTexture;
 uniform bool u_useSpecularColorTexture;
 uniform bool u_useClearcoatTexture;
 uniform bool u_useClearcoatRoughnessTexture;
+uniform bool u_useClearcoatNormalTexture;
 uniform bool u_useSheenColorTexture;
 uniform bool u_useSheenRoughnessTexture;
 uniform bool u_useIridescenceTexture;
@@ -57,6 +58,9 @@ uniform vec4 u_clearcoatUvRow1;
 uniform int u_clearcoatRoughnessUvSet;
 uniform vec4 u_clearcoatRoughnessUvRow0;
 uniform vec4 u_clearcoatRoughnessUvRow1;
+uniform int u_clearcoatNormalUvSet;
+uniform vec4 u_clearcoatNormalUvRow0;
+uniform vec4 u_clearcoatNormalUvRow1;
 uniform int u_sheenColorUvSet;
 uniform vec4 u_sheenColorUvRow0;
 uniform vec4 u_sheenColorUvRow1;
@@ -306,10 +310,9 @@ float materialOcclusion() {
   __MATERIAL_OCCLUSION_BODY__
 }
 
-mat3 materialFallbackCotangentFrame(vec3 normal) {
+mat3 materialFallbackCotangentFrame(vec3 normal, vec2 normalUv) {
   vec3 positionDx = dFdx(v_worldPosition);
   vec3 positionDy = dFdy(v_worldPosition);
-  vec2 normalUv = materialTextureUv(u_normalUvSet, u_normalUvRow0, u_normalUvRow1);
   vec2 uvDx = dFdx(normalUv);
   vec2 uvDy = dFdy(normalUv);
   vec3 positionDyPerpendicular = cross(positionDy, normal);
@@ -343,11 +346,28 @@ vec3 materialGeometryTangent(vec3 normal) {
     }
   }
 
-  return materialFallbackCotangentFrame(normal)[0];
+  return materialFallbackCotangentFrame(normal, v_uv0)[0];
+}
+
+vec3 materialTangentNormal(vec3 geometricNormal, vec3 textureNormal, vec2 normalUv) {
+  vec3 normal = normalize(geometricNormal);
+  if (v_tangent.w == 0.0) {
+    return normalize(materialFallbackCotangentFrame(normal, normalUv) * textureNormal);
+  }
+  vec3 tangent = materialGeometryTangent(normal);
+  vec3 bitangent = normalize(cross(normal, tangent))
+    * (v_tangent.w < 0.0 ? -1.0 : 1.0)
+    * materialFaceSign();
+
+  return normalize(tangent * textureNormal.x + bitangent * textureNormal.y + normal * textureNormal.z);
 }
 
 vec3 materialNormal(vec3 geometricNormal) {
   __MATERIAL_NORMAL_BODY__
+}
+
+vec3 materialClearcoatNormal(vec3 geometricNormal) {
+  __MATERIAL_CLEARCOAT_NORMAL_BODY__
 }
 
 vec3 materialDielectricF0() {
@@ -625,6 +645,7 @@ vec3 lightContributionData(
   float innerConeCosine,
   float outerConeCosine,
   vec3 normal,
+  vec3 clearcoatNormal,
   vec3 viewDirection,
   vec3 worldPosition,
   vec3 baseColor
@@ -691,17 +712,19 @@ vec3 lightContributionData(
   lighting *= materialSheenAlbedoScale(NdotV);
   lighting += materialSheenContribution(normal, viewDirection, lightVector, halfVector, lambert, lightColor);
 
-  float clearcoat = materialClearcoatFresnel(normal, viewDirection);
+  float clearcoat = materialClearcoatFresnel(clearcoatNormal, viewDirection);
   if (clearcoat <= 0.0) {
     return lighting;
   }
 
-  float clearcoatShape = pow(NdotH, materialClearcoatShininess()) * lambert;
+  float clearcoatNdotH = max(dot(clearcoatNormal, halfVector), 0.0);
+  float clearcoatNdotL = max(dot(clearcoatNormal, lightVector), 0.0);
+  float clearcoatShape = pow(clearcoatNdotH, materialClearcoatShininess()) * clearcoatNdotL;
 
   return mix(lighting, vec3(clearcoatShape) * lightColor, clearcoat);
 }
 
-vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
+vec3 lightContribution(int index, vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) {
   return lightContributionData(
     u_surfaceLightKind[index],
     u_surfaceLightColor[index].rgb,
@@ -711,6 +734,7 @@ vec3 lightContribution(int index, vec3 normal, vec3 viewDirection, vec3 worldPos
     u_surfaceLightCone[index].x,
     u_surfaceLightCone[index].y,
     normal,
+    clearcoatNormal,
     viewDirection,
     worldPosition,
     baseColor
@@ -740,11 +764,13 @@ void main() {
   // side. Single-sided batches cull back faces, so this is branch-free in
   // effect for them and corrects dark back faces for double-sided materials.
   float faceSign = materialFaceSign();
-  vec3 normal = materialNormal(normalize(v_normal) * faceSign);
+  vec3 geometricNormal = normalize(v_normal) * faceSign;
+  vec3 normal = materialNormal(geometricNormal);
+  vec3 clearcoatNormal = materialClearcoatNormal(geometricNormal);
   vec3 viewVector = cameraWorldPosition() - v_worldPosition;
   vec3 viewDirection = length(viewVector) <= 0.0001 ? normal : normalize(viewVector);
   float occlusion = materialOcclusion();
-  float viewClearcoat = materialClearcoatFresnel(normal, viewDirection);
+  float viewClearcoat = materialClearcoatFresnel(clearcoatNormal, viewDirection);
   vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
   vec3 cosineWeightedIrradiance = ambientIrradiance / PI;
   float roughness = materialRoughnessFactor();
@@ -763,16 +789,16 @@ void main() {
   lit += baseSpecular
     * iblSpecularOcclusion(NdotV, occlusion, roughness)
     * (1.0 - viewClearcoat);
-  lit += iblClearcoatRadiance(normal, viewDirection) * occlusion;
+  lit += iblClearcoatRadiance(clearcoatNormal, viewDirection) * occlusion;
 
   for (int index = 0; index < MAX_SURFACE_LIGHTS; index += 1) {
     if (index >= u_surfaceLightCount) {
       break;
     }
 
-    lit += lightContribution(index, normal, viewDirection, v_worldPosition, baseColor.rgb);
+    lit += lightContribution(index, normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
   }
-  lit += clusteredLightContribution(normal, viewDirection, v_worldPosition, baseColor.rgb);
+  lit += clusteredLightContribution(normal, clearcoatNormal, viewDirection, v_worldPosition, baseColor.rgb);
 
   float emissiveScale = u_toneMappingSettings.z > 0.5 ? GLTF_EMISSIVE_REFERENCE_NITS : 1.0;
   lit += materialEmissiveColor() * emissiveScale;
