@@ -1503,7 +1503,7 @@ const benchmarkRoute = async (session, route, onSessionChanged) => {
     await session.call('Network.enable');
     await session.call('Performance.enable');
     await session.call('Page.bringToFront');
-    onSessionChanged(session, diagnostics);
+    await onSessionChanged(session, diagnostics);
   }
   const prepared = await prepareRouteForBenchmark(session, route);
   if (realXrEnabled && route.id === 'webxr-vr' && prepared?.active !== true) {
@@ -1865,6 +1865,8 @@ const main = async () => {
   let currentRoute;
   let performanceTrace;
   let traceReport;
+  let traceFailure;
+  const results = [];
   try {
     const size = await deploymentSize();
     await waitForHttp(baseUrl, 15_000);
@@ -1884,15 +1886,20 @@ const main = async () => {
     const gpu = await readWebGlGpu(session);
     assertRequestedGpu(gpu);
     console.log(`gpu=${gpu?.renderer ?? 'unavailable'} webgl=${gpu?.version ?? 'unavailable'}`);
-    if (traceEnabled) performanceTrace = await startPerformanceTrace(session);
+    // Real XR transfers debugger ownership after navigation so activation and
+    // measurement share a fresh Quest Browser attachment. Start tracing on
+    // that replacement attachment instead of the one this path closes.
+    if (traceEnabled && !realXrEnabled) performanceTrace = await startPerformanceTrace(session);
 
-    const results = [];
     for (const route of selectedRoutes()) {
       currentRoute = route;
       browserDiagnostics.reset();
-      const result = await benchmarkRoute(session, route, (nextSession, nextDiagnostics) => {
+      const result = await benchmarkRoute(session, route, async (nextSession, nextDiagnostics) => {
         session = nextSession;
         browserDiagnostics = mergeBrowserDiagnostics(browserDiagnostics, nextDiagnostics);
+        if (traceEnabled && performanceTrace === undefined) {
+          performanceTrace = await startPerformanceTrace(session);
+        }
       });
       results.push(result);
       const resourcesKb = result.performance.resources.totalTransferSize / 1024;
@@ -1978,10 +1985,17 @@ const main = async () => {
     currentRoute = undefined;
 
     if (performanceTrace !== undefined) {
-      traceReport = await performanceTrace.stop();
-      await mkdir(path.dirname(traceOutputPath), { recursive: true });
-      await writeFile(traceOutputPath, `${JSON.stringify(traceReport)}\n`);
-      console.log(`wrote ${traceOutputPath}`);
+      try {
+        traceReport = await performanceTrace.stop();
+        await mkdir(path.dirname(traceOutputPath), { recursive: true });
+        await writeFile(traceOutputPath, `${JSON.stringify(traceReport)}\n`);
+        console.log(`wrote ${traceOutputPath}`);
+      } catch (traceError) {
+        traceFailure = traceError instanceof Error
+          ? traceError.stack ?? traceError.message
+          : String(traceError);
+        console.warn(`performance trace unavailable: ${traceFailure}`);
+      }
     }
 
     const analysis = analyzeResults(results);
@@ -2023,6 +2037,16 @@ const main = async () => {
       gpu,
       browserDiagnostics: browserDiagnostics.snapshot(),
       routes: results,
+      ...(traceEnabled
+        ? { trace: {
+          enabled: true,
+          ...(traceFailure !== undefined
+            ? { failure: traceFailure }
+            : traceReport !== undefined
+              ? { outputPath: traceOutputPath }
+              : { failure: 'Performance trace did not start' }),
+        } }
+        : {}),
     };
 
     console.log(JSON.stringify({
@@ -2056,8 +2080,11 @@ const main = async () => {
       console.log(`wrote ${outputPath}`);
     }
   } catch (error) {
-    let traceFailure;
-    if (performanceTrace !== undefined && traceReport === undefined) {
+    if (
+      performanceTrace !== undefined
+      && traceReport === undefined
+      && traceFailure === undefined
+    ) {
       try {
         traceReport = await performanceTrace.stop();
         await mkdir(path.dirname(traceOutputPath), { recursive: true });

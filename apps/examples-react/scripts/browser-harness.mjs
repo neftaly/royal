@@ -284,8 +284,7 @@ const defaultTraceCategories = [
 export const startPerformanceTrace = async (session, options = {}) => {
   const events = [];
   const categories = options.categories ?? defaultTraceCategories;
-  let stopped = false;
-  let report;
+  let stopPromise;
   session.on('Tracing.dataCollected', ({ value }) => {
     events.push(...(value ?? []));
   });
@@ -295,17 +294,17 @@ export const startPerformanceTrace = async (session, options = {}) => {
   });
 
   return {
-    stop: async () => {
-      if (stopped) return report;
-      stopped = true;
-      const complete = session.once('Tracing.tracingComplete');
-      await session.call('Tracing.end');
-      await complete;
-      report = {
-        metadata: { categories },
-        traceEvents: events,
-      };
-      return report;
+    stop: () => {
+      stopPromise ??= (async () => {
+        const complete = session.once('Tracing.tracingComplete');
+        await session.call('Tracing.end');
+        await complete;
+        return {
+          metadata: { categories },
+          traceEvents: events,
+        };
+      })();
+      return stopPromise;
     },
   };
 };

@@ -138,7 +138,10 @@ describe('browser harness', () => {
     const trace = await startPerformanceTrace(session, { categories: ['devtools.timeline'] });
     session.emit('Tracing.dataCollected', { value: [{ name: 'RunTask' }] });
 
-    await expect(trace.stop()).resolves.toEqual({
+    const firstStop = trace.stop();
+    const secondStop = trace.stop();
+    expect(secondStop).toBe(firstStop);
+    await expect(firstStop).resolves.toEqual({
       metadata: { categories: ['devtools.timeline'] },
       traceEvents: [{ name: 'RunTask' }],
     });
@@ -149,5 +152,19 @@ describe('browser harness', () => {
       },
       { method: 'Tracing.end', params: undefined },
     ]);
+  });
+
+  it('retains a failed trace-stop result instead of issuing duplicate end commands', async () => {
+    const session = fakeSession();
+    session.call = async (method, params) => {
+      session.calls.push({ method, params });
+      if (method === 'Tracing.end') throw new Error('trace transport closed');
+      return {};
+    };
+    const trace = await startPerformanceTrace(session);
+
+    await expect(trace.stop()).rejects.toThrow('trace transport closed');
+    await expect(trace.stop()).rejects.toThrow('trace transport closed');
+    expect(session.calls.filter(({ method }) => method === 'Tracing.end')).toHaveLength(1);
   });
 });

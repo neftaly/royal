@@ -97,6 +97,10 @@ headset worn and the Browser foregrounded; a sleeping display is recorded as an
 activation/RAF failure rather than mistaken for a zero-millisecond result.
 Physical activation waits up to 20 seconds for Quest's immersive transition;
 `EXAMPLES_BENCH_XR_PREPARE_TIMEOUT_MS` overrides that window.
+With `EXAMPLES_BENCH_TRACE=1`, real-XR tracing starts on the fresh debugger
+attachment used for activation and measurement. Trace finalization is
+best-effort: a driver/CDP timeout is retained under `report.trace.failure` and
+does not discard otherwise complete route metrics.
 A background immersive session can continue owning Quest's single XR slot while
 Browser is foregrounded. The harness classifies that state as
 `immersive-session-already-active` and rejects it as a new performance run;

@@ -252,6 +252,18 @@ const checkBrowserDiagnostics = (value, label) => {
   });
 };
 
+const checkTrace = (value, label) => {
+  if (value === undefined) return;
+  if (!requireObject(value, label)) return;
+  requireBoolean(value.enabled, `${label}.enabled`);
+  if (value.failure !== undefined) {
+    requireString(value.failure, `${label}.failure`);
+    warnings.push(`${label} capture failed after route measurement: ${value.failure}`);
+    return;
+  }
+  requireString(value.outputPath, `${label}.outputPath`);
+};
+
 const checkGltfSampleEvidence = (gltfInstancing, frameStats, label, { animated }) => {
   if (!requireObject(gltfInstancing, label)) return;
   requireBoolean(gltfInstancing.available, `${label}.available`);
@@ -618,6 +630,7 @@ if (requireObject(report, 'report')) {
     checkGltfLoadReport(report);
   } else {
     checkBrowserDiagnostics(report.browserDiagnostics, 'report.browserDiagnostics');
+    checkTrace(report.trace, 'report.trace');
     const cameraDragEnabled = report.options?.cameraDragEnabled === true;
     const realXrEnabled = report.options?.realXrEnabled === true;
     if (requireArray(report.routes, 'report.routes')) {
