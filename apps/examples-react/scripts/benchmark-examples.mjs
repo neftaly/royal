@@ -1575,22 +1575,50 @@ const prepareVirtualTextureCloseView = async (session, route) => {
   await evaluate(session, 'globalThis.__royalBench?.startFrameRecorder?.()');
   const startedAt = performance.now();
   let finalDistance = initial.distance;
+  let inputMode = 'trusted-cdp';
   let wheelEvents = 0;
   let frameStats;
   try {
     while (finalDistance > virtualTextureCloseTarget && wheelEvents < 12) {
-      await session.call('Input.dispatchMouseEvent', {
-        type: 'mouseWheel',
-        x: initial.x,
-        y: initial.y,
-        deltaX: 0,
-        deltaY: -1_000,
-      });
+      const distanceBeforeEvent = finalDistance;
+      if (inputMode === 'trusted-cdp') {
+        await session.call('Input.dispatchMouseEvent', {
+          type: 'mouseWheel',
+          x: initial.x,
+          y: initial.y,
+          deltaX: 0,
+          deltaY: -1_000,
+        });
+      } else {
+        await evaluate(session, `
+document.querySelector('canvas[data-map-distance]')?.dispatchEvent(new WheelEvent('wheel', {
+  bubbles: true,
+  cancelable: true,
+  deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+  deltaY: -1_000,
+}))
+`);
+      }
       wheelEvents += 1;
       await sleep(50);
       finalDistance = await evaluate(session, `
 Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-map-distance'))
 `);
+      if (inputMode === 'trusted-cdp' && !(finalDistance < distanceBeforeEvent)) {
+        inputMode = 'dom-fallback';
+        await evaluate(session, `
+document.querySelector('canvas[data-map-distance]')?.dispatchEvent(new WheelEvent('wheel', {
+  bubbles: true,
+  cancelable: true,
+  deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+  deltaY: -1_000,
+}))
+`);
+        await sleep(50);
+        finalDistance = await evaluate(session, `
+Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-map-distance'))
+`);
+      }
     }
     await evaluate(session, `
 (async () => {
@@ -1652,6 +1680,7 @@ Number(document.querySelector('canvas[data-map-distance]')?.getAttribute('data-m
     frameStats,
     gl: glDelta,
     initialDistance: initial.distance,
+    inputMode,
     renderer: {
       after: rendererAfter,
       before: rendererBefore,

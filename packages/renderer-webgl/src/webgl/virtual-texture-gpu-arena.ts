@@ -24,6 +24,11 @@ import {
 import { textureUploadInternalFormat } from "./texture-upload";
 
 const MAX_PAGE_UPLOADS_PER_FRAME = 2;
+// Preserve two-page throughput for the 256px generated-VT path, while keeping
+// large authored pages from stacking multiple MiB-scale atlas writes into one
+// presentation frame. One page always makes progress even when it exceeds the
+// target by itself.
+const TARGET_MAX_ATLAS_UPLOAD_BYTES_PER_FRAME = 1024 * 1024;
 const PAGE_TABLE_UPLOAD_SCRATCH_BYTES = 64 * 1024;
 const WEBGL_LINEAR = 0x2601;
 const WEBGL_NEAREST = 0x2600;
@@ -234,6 +239,7 @@ type MutableResource = {
 
 type State = {
   allocatedBytes: number;
+  atlasUploadBytesThisFrame: number;
   readonly budgetBytes: number;
   readonly gl: WebGL2RenderingContext;
   readonly handles: TextureHandleArena;
@@ -268,6 +274,7 @@ export const createVirtualTextureGpuArena = (
   const maxTextureUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
   return {
     allocatedBytes: 0,
+    atlasUploadBytesThisFrame: 0,
     budgetBytes: options.maxPhysicalBytes,
     gl,
     handles,
@@ -951,6 +958,7 @@ const resumeInFlightUpload = (
       gl.UNSIGNED_BYTE,
       upload.image,
     );
+    state.atlasUploadBytesThisFrame += virtualTextureDecodedPageBytes(resource.options.manifest);
     inFlight.phase = "publish-page-table";
   }
   if (inFlight.phase === "publish-page-table") {
@@ -993,6 +1001,10 @@ const startUpload = (
 const atlasUploadWasSpent = (resource: MutableResource): boolean =>
   resource.inFlightUpload?.phase === "publish-page-table";
 
+const canSpendAtlasUploadBytes = (state: State, uploadBytes: number): boolean =>
+  state.atlasUploadBytesThisFrame === 0
+  || state.atlasUploadBytesThisFrame + uploadBytes <= TARGET_MAX_ATLAS_UPLOAD_BYTES_PER_FRAME;
+
 export const processVirtualTextureGpuUploads = (
   arena: VirtualTextureGpuArena,
   frame: number,
@@ -1002,6 +1014,7 @@ export const processVirtualTextureGpuUploads = (
   if (state.uploadFrame !== frame) {
     state.uploadFrame = frame;
     state.uploadsThisFrame = 0;
+    state.atlasUploadBytesThisFrame = 0;
   }
   let scansWithoutUpload = 0;
   while (
@@ -1022,8 +1035,10 @@ export const processVirtualTextureGpuUploads = (
     if (resource.inFlightUpload !== undefined) {
       const phaseBefore = resource.inFlightUpload.phase;
       const requiresAtlasUpload = resource.inFlightUpload.phase !== "publish-page-table";
+      const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+      if (requiresAtlasUpload && !canSpendAtlasUploadBytes(state, uploadBytes)) continue;
       const reservation = requiresAtlasUpload
-        ? admission?.reserve(virtualTextureDecodedPageBytes(resource.options.manifest))
+        ? admission?.reserve(uploadBytes)
         : undefined;
       if (requiresAtlasUpload && admission !== undefined && reservation === undefined) continue;
       try {
@@ -1047,7 +1062,9 @@ export const processVirtualTextureGpuUploads = (
     }
     const upload = resource.pendingUploads[resource.pendingHead];
     if (upload !== undefined && resource.inFlightUpload === undefined) {
-      const reservation = admission?.reserve(virtualTextureDecodedPageBytes(resource.options.manifest));
+      const uploadBytes = virtualTextureDecodedPageBytes(resource.options.manifest);
+      if (!canSpendAtlasUploadBytes(state, uploadBytes)) continue;
+      const reservation = admission?.reserve(uploadBytes);
       if (admission !== undefined && reservation === undefined) continue;
       try {
         const completed = startUpload(state, resource, allocation, upload, admission);
@@ -1373,6 +1390,7 @@ export const dropVirtualTextureGpuContext = (arena: VirtualTextureGpuArena): voi
     resource.visibleAssignments.clear();
   }
   state.allocatedBytes = 0;
+  state.atlasUploadBytesThisFrame = 0;
   state.quarantinedBytes = 0;
   state.uploadFrame = -1;
   state.uploadsThisFrame = 0;

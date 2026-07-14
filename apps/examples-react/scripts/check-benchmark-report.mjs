@@ -435,6 +435,15 @@ const checkVirtualTextureClose = (route, routeLabel, enabled) => {
   requirePositiveNumber(close.targetDistance, `${routeLabel}.virtualTextureClose.targetDistance`);
   requirePositiveNumber(close.wheelEvents, `${routeLabel}.virtualTextureClose.wheelEvents`);
   if (
+    close.inputMode !== undefined
+    && (
+      !requireString(close.inputMode, `${routeLabel}.virtualTextureClose.inputMode`)
+      || !['dom-fallback', 'trusted-cdp'].includes(close.inputMode)
+    )
+  ) {
+    errors.push(`${routeLabel}.virtualTextureClose.inputMode must be "trusted-cdp" or "dom-fallback"`);
+  }
+  if (
     isNumber(close.finalDistance)
     && isNumber(close.targetDistance)
     && close.finalDistance > close.targetDistance + 0.01

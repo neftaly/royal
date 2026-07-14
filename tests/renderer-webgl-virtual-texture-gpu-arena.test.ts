@@ -960,6 +960,35 @@ describe("virtual texture GPU arena", () => {
     expect(virtualTextureGpuOutcomeCount(arena)).toBe(3);
   });
 
+  it("paces MiB-scale authored pages at one atlas upload per frame", () => {
+    const { arena } = setup();
+    const largePageManifest: VirtualTextureManifestModel = {
+      ...manifest,
+      height: 512,
+      mipCount: 2,
+      pageSize: 512,
+      width: 1_024,
+    };
+    const resource = admitTestVirtualTextureGpuResource(
+      arena,
+      "large-pages",
+      1,
+      options({ manifest: largePageManifest, physicalSlots: 2 }),
+    );
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 0, y: 0 }, 1));
+    queueVirtualTextureGpuUpload(arena, resource, upload({ mip: 0, x: 1, y: 0 }, 2));
+
+    processVirtualTextureGpuUploads(arena, 1);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+    expect(virtualTextureGpuHasActionableUploads(arena)).toBe(true);
+    expect(consumeVirtualTextureGpuWake(arena)).toBe(true);
+    processVirtualTextureGpuUploads(arena, 1);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(1);
+
+    processVirtualTextureGpuUploads(arena, 2);
+    expect(virtualTextureGpuOutcomeCount(arena)).toBe(2);
+  });
+
   it("protects resident ancestors using page-grid mip semantics", () => {
     const { arena } = setup();
     const inferredMipManifest: VirtualTextureManifestModel = {

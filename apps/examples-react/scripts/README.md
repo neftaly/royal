@@ -47,8 +47,11 @@ EXAMPLES_BENCH_TRACE=1 \
 pnpm --filter @royal/examples-react bench:examples
 ```
 
-The harness sends trusted wheel input until the map camera reaches 0.12 world
-units, measures approach-frame pacing and WebGL/renderer deltas, waits for VT
+The harness prefers trusted wheel input until the map camera reaches 0.12 world
+units. If a remote/headless browser accepts the DevTools command without
+moving the React camera, it falls back to an equivalent DOM wheel event and
+records `inputMode: "dom-fallback"` instead of producing a false benchmark
+failure. It measures approach-frame pacing and WebGL/renderer deltas, waits for VT
 requests to settle, captures the canvas, then records the normal steady-state
 frame, heap, WebGL, trace, and renderer diagnostics. Override the target with
 `EXAMPLES_BENCH_VT_CLOSE_DISTANCE`; the run fails instead of silently accepting
