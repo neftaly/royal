@@ -19,6 +19,7 @@ import {
   virtualTextureNow,
   type GeneratedVirtualTextureSource,
   type VirtualTextureGeneratedPageSource,
+  type VirtualTextureImagePage,
   type VirtualTexturePageLoad,
   type VirtualTexturePageSource,
   type VirtualTextureRef,
@@ -494,11 +495,11 @@ export class VirtualTextureRuntimeShell {
     }
     const started = virtualTextureNow();
     state.stats.generatedPageRequests += 1;
-    const recordResult = (image: TexImageSource): TexImageSource => {
+    const recordResult = (result: VirtualTextureImagePage): VirtualTextureImagePage => {
       const elapsed = Math.max(0, virtualTextureNow() - started);
       state.stats.generatedPageRasterizeMs += elapsed;
       state.stats.generatedPageRasterizeMaxMs = Math.max(state.stats.generatedPageRasterizeMaxMs, elapsed);
-      return image;
+      return result;
     };
     try {
       const loaded = state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
@@ -546,7 +547,8 @@ export class VirtualTextureRuntimeShell {
           ? { kind: "absent" }
           : {
               kind: "image",
-              promise: this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal),
+              promise: this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal)
+                .then((image) => ({ image })),
             };
       },
       manifestUri,

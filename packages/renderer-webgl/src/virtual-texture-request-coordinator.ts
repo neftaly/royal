@@ -422,9 +422,9 @@ export class VirtualTextureRequestCoordinator {
       controller.abort();
       decodedReservation.cancel();
       job.release();
-      void pageImage.then((image) => {
+      void pageImage.then((result) => {
         try {
-          this.#options.decodedSources.closeVirtualTextureAsync(image);
+          this.#options.decodedSources.closeVirtualTextureAsync(result.image, result.close);
         } catch {
           // The lifetime retains failed closes and wakes its ordinary retry path.
         }
@@ -433,12 +433,13 @@ export class VirtualTextureRequestCoordinator {
     }
 
     this.#transition(requestState, pageKey, { kind: "grant" });
-    void pageImage.then((image) => {
+    void pageImage.then((result) => {
+      const { image } = result;
       let queued = false;
       try {
         const decodedLease = decodedReservation.commit();
         try {
-          this.#options.decodedSources.retainVirtualTexture(image, decodedLease);
+          this.#options.decodedSources.retainVirtualTexture(image, decodedLease, result.close);
         } catch (error) {
           decodedLease.release();
           throw error;

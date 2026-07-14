@@ -3,6 +3,7 @@ import { isDecodedRgbaTexture, loadedTextureSourceSize, type LoadedTextureSource
 
 type Lane<Source extends object> = {
   readonly close: (source: Source) => void;
+  readonly closers: WeakMap<Source, () => void>;
   readonly closed: WeakSet<Source>;
   readonly leases: WeakMap<Source, ResourceGovernorLease>;
   readonly pending: Set<Source>;
@@ -10,6 +11,7 @@ type Lane<Source extends object> = {
 
 const lane = <Source extends object>(close: (source: Source) => void): Lane<Source> => ({
   close,
+  closers: new WeakMap(),
   closed: new WeakSet(),
   leases: new WeakMap(),
   pending: new Set(),
@@ -48,8 +50,8 @@ export class DecodedTextureSourceLifetime {
     this.#retain(this.#ordinary, source, this.#reserveOrdinary(decodedTextureSourceBytes(source)));
   }
 
-  retainVirtualTexture(source: TexImageSource, lease: ResourceGovernorLease): void {
-    this.#retain(this.#virtualTexture, source, lease);
+  retainVirtualTexture(source: TexImageSource, lease: ResourceGovernorLease, close?: () => void): void {
+    this.#retain(this.#virtualTexture, source, lease, close);
   }
 
   closeOrdinary(source: LoadedTextureSource): void {
@@ -60,13 +62,13 @@ export class DecodedTextureSourceLifetime {
     this.#close(this.#ordinary, source);
   }
 
-  closeVirtualTexture(source: TexImageSource): void {
-    this.#close(this.#virtualTexture, source);
+  closeVirtualTexture(source: TexImageSource, close?: () => void): void {
+    this.#close(this.#virtualTexture, source, close);
   }
 
-  closeVirtualTextureAsync(source: TexImageSource): void {
+  closeVirtualTextureAsync(source: TexImageSource, close?: () => void): void {
     try {
-      this.closeVirtualTexture(source);
+      this.closeVirtualTexture(source, close);
     } catch {
       this.#scheduleRetry();
     }
@@ -95,24 +97,36 @@ export class DecodedTextureSourceLifetime {
     if (firstFailure !== undefined) throw firstFailure;
   }
 
-  #close<Source extends object>(owner: Lane<Source>, source: Source): void {
+  #close<Source extends object>(owner: Lane<Source>, source: Source, close?: () => void): void {
     if (!owner.closed.has(source)) {
+      if (close !== undefined) owner.closers.set(source, close);
       try {
-        owner.close(source);
+        const ownedClose = owner.closers.get(source);
+        if (ownedClose === undefined) owner.close(source);
+        else ownedClose();
       } catch (error) {
         owner.pending.add(source);
         throw error;
       }
       owner.closed.add(source);
+      owner.closers.delete(source);
     }
     owner.pending.delete(source);
     owner.leases.get(source)?.release();
     owner.leases.delete(source);
   }
 
-  #retain<Source extends object>(owner: Lane<Source>, source: Source, lease: ResourceGovernorLease): void {
+  #retain<Source extends object>(
+    owner: Lane<Source>,
+    source: Source,
+    lease: ResourceGovernorLease,
+    close?: () => void,
+  ): void {
     if (owner.closed.has(source) || owner.leases.has(source)) lease.release();
-    else owner.leases.set(source, lease);
+    else {
+      owner.leases.set(source, lease);
+      if (close !== undefined) owner.closers.set(source, close);
+    }
   }
 
   #retry<Source extends object>(owner: Lane<Source>): void {

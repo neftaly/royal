@@ -129,6 +129,30 @@ describe("decoded texture source lifetime", () => {
     expect(events).toEqual(["close", "release:virtual-texture"]);
   });
 
+  it("retains a page-owned VT closer across asynchronous retry", () => {
+    const source = decoded() as LoadedTextureSource & TexImageSource;
+    const scheduleRetry = vi.fn();
+    const events: string[] = [];
+    let attempts = 0;
+    const lifetime = new DecodedTextureSourceLifetime({
+      closeVirtualTexture: () => {
+        throw new Error("default closer must not own this payload");
+      },
+      ordinaryReferenceCount: () => 0,
+      reserveOrdinaryDecodedBytes: () => lease("ordinary", events),
+      scheduleRetry,
+    });
+    lifetime.retainVirtualTexture(source, lease("page", events), () => {
+      events.push(`close:${++attempts}`);
+      if (attempts === 1) throw new Error("busy");
+    });
+
+    lifetime.closeVirtualTextureAsync(source);
+    expect(scheduleRetry).toHaveBeenCalledOnce();
+    lifetime.retryPendingVirtualTexture();
+    expect(events).toEqual(["close:1", "close:2", "release:page"]);
+  });
+
   it("releases a duplicate VT settlement lease without replacing the owner", () => {
     const source = decoded() as LoadedTextureSource & TexImageSource;
     const events: string[] = [];

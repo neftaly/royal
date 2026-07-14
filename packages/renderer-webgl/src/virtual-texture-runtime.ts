@@ -45,9 +45,14 @@ export type VirtualTextureGeneratedPageSource = {
   readonly source: RasterVirtualTextureSource;
 };
 
+export type VirtualTextureImagePage = {
+  readonly close?: () => void;
+  readonly image: TexImageSource;
+};
+
 export type VirtualTexturePageLoad =
   | { readonly kind: "absent" }
-  | { readonly kind: "image"; readonly promise: Promise<TexImageSource> };
+  | { readonly kind: "image"; readonly promise: Promise<VirtualTextureImagePage> };
 
 type VirtualTexturePageLoader = (
   manifest: VirtualTextureManifestModel,
@@ -206,11 +211,13 @@ export const generatedVirtualTextureSource = (
       throwIfAborted(signal);
       return {
         kind: "image",
-        promise: Promise.resolve(generatedRasterVirtualTexturePageImage(
-          pageSource.source,
-          activeManifest,
-          page,
-        )),
+        promise: Promise.resolve({
+          image: generatedRasterVirtualTexturePageImage(
+            pageSource.source,
+            activeManifest,
+            page,
+          ),
+        }),
       };
     },
     manifest: { diagnostics: [], manifest },
