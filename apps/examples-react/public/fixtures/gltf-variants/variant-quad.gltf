@@ -23,6 +23,7 @@
     "KHR_materials_variants"
   ],
   "extensionsUsed": [
+    "KHR_materials_anisotropy",
     "KHR_materials_clearcoat",
     "KHR_materials_diffuse_transmission",
     "KHR_materials_unlit",
@@ -95,6 +96,13 @@
     {
       "name": "ruby",
       "extensions": {
+        "KHR_materials_anisotropy": {
+          "anisotropyRotation": 0.35,
+          "anisotropyStrength": 0.65,
+          "anisotropyTexture": {
+            "index": 0
+          }
+        },
         "KHR_materials_clearcoat": {
           "clearcoatFactor": 1,
           "clearcoatNormalTexture": {

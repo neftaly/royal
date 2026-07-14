@@ -20,6 +20,7 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
+  readonly anisotropyTexture?: TextureAssetUploadRef;
   readonly baseColorFactor?: LinearRgba;
   readonly alphaCutoff?: number;
   readonly alphaMode?: SurfaceMaterialAlphaMode;
@@ -49,6 +50,7 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
 };
 
 export type SurfaceMaterialTextureCoordinates = Partial<Readonly<Record<
+  | "anisotropyTexture"
   | "baseColorTexture"
   | "clearcoatNormalTexture"
   | "clearcoatRoughnessTexture"
@@ -246,6 +248,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     surfaceLightValueKey(surfaceMaterialAlphaCutoff(material)),
     textureCacheKey(material.baseColor),
     surfaceLightVectorKey(materialColor(material)),
+    material.anisotropyTexture === undefined ? "" : textureCacheKey(material.anisotropyTexture),
     material.emissiveTexture === undefined ? "" : textureCacheKey(material.emissiveTexture),
     material.metallicRoughnessTexture === undefined ? "" : textureCacheKey(material.metallicRoughnessTexture),
     material.normalTexture === undefined ? "" : `${textureCacheKey(material.normalTexture)}:${surfaceLightValueKey(material.normalScale ?? 1)}`,

@@ -21,6 +21,7 @@ export const SURFACE_SHADER_TEXTURE_FEATURES = [
   "metallicRoughnessTexture",
   "normalTexture",
   "occlusionTexture",
+  "anisotropyTexture",
   "specularTexture",
   "specularColorTexture",
   "clearcoatTexture",
@@ -71,6 +72,7 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
       : "",
     hasSurfaceShaderFeature(features, "normalTexture") ? "uniform sampler2D u_normalTexture;" : "",
     hasSurfaceShaderFeature(features, "occlusionTexture") ? "uniform sampler2D u_occlusionTexture;" : "",
+    hasSurfaceShaderFeature(features, "anisotropyTexture") ? "uniform sampler2D u_anisotropyTexture;" : "",
     hasSurfaceShaderFeature(features, "specularTexture") ? "uniform sampler2D u_specularTexture;" : "",
     hasSurfaceShaderFeature(features, "specularColorTexture")
       ? "uniform sampler2D u_specularColorTexture;"
@@ -308,6 +310,18 @@ const surfaceFragmentShaderSource = (features: SurfaceShaderFeatures, clusteredL
       : "vec3 clusteredLightContribution(vec3 normal, vec3 clearcoatNormal, vec3 viewDirection, vec3 worldPosition, vec3 baseColor) { return vec3(0.0); }"],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_UNIFORMS__", surfaceBaseColorVirtualTextureUniforms(features)],
     ["__BASE_COLOR_VIRTUAL_TEXTURE_FUNCTIONS__", surfaceBaseColorVirtualTextureFunctions(features)],
+    ["__ANISOTROPY_TEXTURE_EXPR__", surfaceTextureExpression(
+      features,
+      "anisotropyTexture",
+      "u_useAnisotropyTexture ? texture(u_anisotropyTexture, materialTextureUv(u_anisotropyUvSet, u_anisotropyUvRow0, u_anisotropyUvRow1)).rgb : vec3(1.0, 0.5, 1.0)",
+      "vec3(1.0, 0.5, 1.0)",
+    )],
+    ["__ANISOTROPY_UV_EXPR__", surfaceTextureExpression(
+      features,
+      "anisotropyTexture",
+      "materialTextureUv(u_anisotropyUvSet, u_anisotropyUvRow0, u_anisotropyUvRow1)",
+      "v_uv0",
+    )],
     ["__SPECULAR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,
       "specularTexture",

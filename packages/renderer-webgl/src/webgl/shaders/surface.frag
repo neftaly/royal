@@ -16,6 +16,7 @@ uniform bool u_useEmissiveTexture;
 uniform bool u_useMetallicRoughnessTexture;
 uniform bool u_useNormalTexture;
 uniform bool u_useOcclusionTexture;
+uniform bool u_useAnisotropyTexture;
 uniform bool u_useSpecularTexture;
 uniform bool u_useSpecularColorTexture;
 uniform bool u_useClearcoatTexture;
@@ -48,6 +49,9 @@ uniform vec4 u_normalUvRow1;
 uniform int u_occlusionUvSet;
 uniform vec4 u_occlusionUvRow0;
 uniform vec4 u_occlusionUvRow1;
+uniform int u_anisotropyUvSet;
+uniform vec4 u_anisotropyUvRow0;
+uniform vec4 u_anisotropyUvRow1;
 uniform int u_specularUvSet;
 uniform vec4 u_specularUvRow0;
 uniform vec4 u_specularUvRow1;
@@ -415,37 +419,79 @@ float materialGgxDistribution(float NdotH, float roughness) {
   return alphaSquared / max(PI * denominator * denominator, 0.0001);
 }
 
-vec3 materialAnisotropyDirection(vec3 normal) {
+vec3 materialAnisotropy() {
+  vec3 textureAnisotropy = __ANISOTROPY_TEXTURE_EXPR__;
+  vec2 textureDirection = textureAnisotropy.rg * 2.0 - vec2(1.0);
+  vec2 direction = dot(textureDirection, textureDirection) > 0.000001
+    ? normalize(textureDirection)
+    : vec2(1.0, 0.0);
+  float rotation = u_anisotropyFactors.y;
+  vec2 rotatedDirection = mat2(cos(rotation), sin(rotation), -sin(rotation), cos(rotation)) * direction;
+
+  return vec3(rotatedDirection, clamp(u_anisotropyFactors.x * textureAnisotropy.b, 0.0, 1.0));
+}
+
+vec2 materialAnisotropyUv() {
+  return __ANISOTROPY_UV_EXPR__;
+}
+
+vec3 materialAnisotropyDirection(vec3 normal, vec2 direction) {
+  if (v_tangent.w == 0.0) {
+    mat3 tangentFrame = materialFallbackCotangentFrame(normal, materialAnisotropyUv());
+    return normalize(tangentFrame[0] * direction.x + tangentFrame[1] * direction.y);
+  }
   vec3 tangent = materialGeometryTangent(normal);
   vec3 bitangent = normalize(cross(normal, tangent))
     * (v_tangent.w < 0.0 ? -1.0 : 1.0)
     * materialFaceSign();
-  float rotation = u_anisotropyFactors.y;
 
-  return normalize(tangent * cos(rotation) + bitangent * sin(rotation));
+  return normalize(tangent * direction.x + bitangent * direction.y);
 }
 
-float materialAnisotropicGgxDistribution(vec3 normal, vec3 halfVector, float roughness) {
+float materialSmithVisibility(float NdotL, float NdotV, float roughness);
+
+vec2 materialGgxTerms(
+  vec3 normal,
+  vec3 halfVector,
+  vec3 lightVector,
+  vec3 viewDirection,
+  float roughness
+) {
   float NdotH = max(dot(normal, halfVector), 0.0);
-  float strength = clamp(u_anisotropyFactors.x, 0.0, 1.0);
+  float NdotL = max(dot(normal, lightVector), 0.0);
+  float NdotV = max(dot(normal, viewDirection), 0.0);
+  vec3 anisotropy = materialAnisotropy();
+  float strength = anisotropy.z;
   if (strength <= 0.0) {
-    return materialGgxDistribution(NdotH, roughness);
+    return vec2(
+      materialGgxDistribution(NdotH, roughness),
+      materialSmithVisibility(NdotL, NdotV, roughness)
+    );
   }
 
-  // KHR_materials_anisotropy is approximated with an anisotropic GGX D term for direct lights.
-  vec3 tangent = materialAnisotropyDirection(normal);
+  vec3 tangent = materialAnisotropyDirection(normal, anisotropy.xy);
   vec3 bitangent = normalize(cross(normal, tangent));
   float alpha = max(roughness * roughness, 0.001);
-  float anisotropy = strength * 0.95;
-  float alphaT = max(alpha * (1.0 + anisotropy), 0.001);
-  float alphaB = max(alpha * (1.0 - anisotropy), 0.001);
+  float alphaT = mix(alpha, 1.0, strength * strength);
+  float alphaB = alpha;
   float TdotH = dot(tangent, halfVector);
   float BdotH = dot(bitangent, halfVector);
-  float denominator = TdotH * TdotH / (alphaT * alphaT)
+  float distributionDenominator = TdotH * TdotH / (alphaT * alphaT)
     + BdotH * BdotH / (alphaB * alphaB)
     + NdotH * NdotH;
+  float distribution = 1.0 / max(
+    PI * alphaT * alphaB * distributionDenominator * distributionDenominator,
+    0.0001
+  );
+  float TdotV = dot(tangent, viewDirection);
+  float BdotV = dot(bitangent, viewDirection);
+  float TdotL = dot(tangent, lightVector);
+  float BdotL = dot(bitangent, lightVector);
+  float visibilityV = NdotL * length(vec3(alphaT * TdotV, alphaB * BdotV, NdotV));
+  float visibilityL = NdotV * length(vec3(alphaT * TdotL, alphaB * BdotL, NdotL));
+  float visibility = 0.5 / max(visibilityV + visibilityL, 0.0001);
 
-  return 1.0 / max(PI * alphaT * alphaB * denominator * denominator, 0.0001);
+  return vec2(distribution, clamp(visibility, 0.0, 1.0));
 }
 
 float materialSmithVisibility(float NdotL, float NdotV, float roughness) {
@@ -715,7 +761,6 @@ vec3 lightContributionData(
   vec3 halfVectorInput = lightVector + viewDirection;
   vec3 halfVector = length(halfVectorInput) <= 0.0001 ? normal : normalize(halfVectorInput);
   float NdotV = max(dot(normal, viewDirection), 0.0);
-  float NdotH = max(dot(normal, halfVector), 0.0);
   float roughness = materialRoughnessFactor();
   float VdotH = max(dot(viewDirection, halfVector), 0.0);
   float specularFactor = materialSpecularFactor();
@@ -724,8 +769,9 @@ vec3 lightContributionData(
   vec3 f0 = mix(dielectricF0, baseColor, metallic);
   vec3 f90 = mix(vec3(specularFactor), vec3(1.0), metallic);
   vec3 fresnel = mix(f0, f90, fresnelPow(VdotH)) * materialIridescenceTint(VdotH);
-  float distribution = materialAnisotropicGgxDistribution(normal, halfVector, roughness);
-  float visibility = materialSmithVisibility(lambert, NdotV, roughness);
+  vec2 ggxTerms = materialGgxTerms(normal, halfVector, lightVector, viewDirection, roughness);
+  float distribution = ggxTerms.x;
+  float visibility = ggxTerms.y;
   vec3 specular = fresnel * min(distribution * visibility * lambert, 4.0) * lightColor;
   vec3 lighting = diffuse * (1.0 - clamp(maxComponent(fresnel), 0.0, 1.0)) + specular + diffuseTransmission;
 

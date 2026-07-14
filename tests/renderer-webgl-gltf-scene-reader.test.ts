@@ -125,7 +125,7 @@ describe("glTF scene reader", () => {
     expect(scene.primitives[0]?.materialLod?.levels).toHaveLength(2);
     expect(scene.primitives[0]?.materialVariants?.[0]?.variants).toEqual([0]);
     expect(diagnostics.some(({ key }) => key === "gltf-material-extension:KHR_materials_anisotropy.anisotropyTexture"))
-      .toBe(true);
+      .toBe(false);
   });
 
   it("terminates malformed cyclic child traversal at the reader boundary", () => {

@@ -19,6 +19,7 @@ import {
 } from "../webgl/materials";
 
 type LoadedGltfSurfaceTextures = {
+  readonly anisotropyTexture?: TextureAssetUploadRef;
   readonly clearcoatNormalTexture?: TextureAssetUploadRef;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
@@ -72,6 +73,7 @@ const loadedGltfSurfaceMaterial = (
   return {
     ...common,
     kind: "standard",
+    ...(textures.anisotropyTexture === undefined ? {} : { anisotropyTexture: textures.anisotropyTexture }),
     ...(textures.clearcoatNormalTexture === undefined ? {} : { clearcoatNormalTexture: textures.clearcoatNormalTexture }),
     ...(textures.clearcoatRoughnessTexture === undefined
       ? {}

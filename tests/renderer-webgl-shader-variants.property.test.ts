@@ -17,6 +17,7 @@ const samplerDeclarations = {
   metallicRoughnessTexture: "uniform sampler2D u_metallicRoughnessTexture;",
   normalTexture: "uniform sampler2D u_normalTexture;",
   occlusionTexture: "uniform sampler2D u_occlusionTexture;",
+  anisotropyTexture: "uniform sampler2D u_anisotropyTexture;",
   specularTexture: "uniform sampler2D u_specularTexture;",
   specularColorTexture: "uniform sampler2D u_specularColorTexture;",
   clearcoatTexture: "uniform sampler2D u_clearcoatTexture;",
@@ -145,6 +146,8 @@ describe("surface shader variants", () => {
         .toBe(features.has("normalTexture"));
       expect(source.includes("texture(u_clearcoatNormalTexture,"), `${label} clearcoat normal sampling`)
         .toBe(features.has("clearcoatNormalTexture"));
+      expect(source.includes("texture(u_anisotropyTexture,"), `${label} anisotropy sampling`)
+        .toBe(features.has("anisotropyTexture"));
       expect(source.includes("texture(u_iblBrdfLut, vec2(NdotV, roughness)).rg"), label)
         .toBe(features.has("iblBrdfLut"));
     });

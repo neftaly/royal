@@ -149,7 +149,7 @@ Status meanings:
 | Specular and IOR | ingestion/product | Keep; foundational dielectric fidelity. |
 | Transmission and volume/attenuation | ingestion/product | Keep if screen-copy/refraction cost passes device gates. |
 | Iridescence | ingestion/product | Keep pending visual oracle. |
-| Anisotropy | ingestion/product | Keep intent; texture form is currently incomplete. |
+| Anisotropy | ingestion/product | Keep. Ratified factor, rotation, and linear RGB direction/strength textures feed the direct-light anisotropic GGX path. |
 | Emissive strength | ingestion/product | Small and useful. Keep. |
 | Dispersion | ingestion/product | Keep the cheap three-channel screen-space approximation behind its material shader variant; validate visual quality and Quest/iPad cost. |
 | Diffuse transmission | ingestion/product | Keep. Factors and the linear-alpha strength / sRGB-color textures model thin scattering such as leaves and paper with energy-conserving direct and environment light mixing. |

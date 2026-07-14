@@ -1082,14 +1082,23 @@ const runGltfVariantsInteractionSmoke = async (session) => evaluate(session, `
   if (buttons.length !== 3 || buttons.some((button) => !(button instanceof HTMLButtonElement))) {
     return { error: 'missing glTF variant selection buttons' };
   }
+  const variantNames = buttons.map((button) => button.textContent?.trim() ?? '');
+  const currentRoot = () => document.querySelector('.gltf-variants');
   const selections = [];
   const pressed = [];
-  for (const button of buttons) {
+  for (const [index, expected] of variantNames.entries()) {
+    const currentButton = () => document.querySelectorAll('.gltf-variants-actions button')[index];
+    const button = currentButton();
+    if (!(button instanceof HTMLButtonElement)) return { error: 'glTF variant button list changed during interaction' };
     button.click();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    await globalThis.__royalExamplesRenderNow?.();
-    selections.push(root.dataset.selectedVariant ?? '');
-    pressed.push(button.getAttribute('aria-pressed') === 'true' ? button.textContent?.trim() ?? '' : '');
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await globalThis.__royalExamplesRenderNow?.();
+      if (currentRoot()?.getAttribute('data-selected-variant') === expected
+        && currentButton()?.getAttribute('aria-pressed') === 'true') break;
+    }
+    selections.push(currentRoot()?.getAttribute('data-selected-variant') ?? '');
+    pressed.push(currentButton()?.getAttribute('aria-pressed') === 'true' ? expected : '');
   }
   return { pressed, selections };
 })()

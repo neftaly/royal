@@ -60,6 +60,11 @@ export type GltfMaterialExtensionTextureDefinition = {
 export const GLTF_MATERIAL_EXTENSION_TEXTURES = [
   {
     colorSpace: "linear",
+    key: "anisotropyTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_anisotropy?.anisotropyTexture,
+  },
+  {
+    colorSpace: "linear",
     key: "clearcoatNormalTexture",
     textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatNormalTexture,
   },
@@ -503,26 +508,8 @@ const readGltfMaterial = (
   src: string,
   assetKey: string,
   materialIndex: number | undefined,
-  diagnostics: GltfSceneReaderDiagnosticSink,
 ): LoadedGltfMaterial => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
-  const unsupported = (
-    present: boolean,
-    field: string,
-    reason: string,
-  ): void => {
-    if (!present) return;
-    const label = materialIndex === undefined ? "default material" : `material ${materialIndex}`;
-    diagnostics.recordDiagnostic(
-      `glTF ${label} ${field} is ignored: ${reason}`,
-      `gltf-material-extension:${field}`,
-    );
-  };
-  unsupported(
-    material?.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined,
-    "KHR_materials_anisotropy.anisotropyTexture",
-    "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported.",
-  );
   const baseColorTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.baseColorTexture);
   const metallicRoughnessTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.metallicRoughnessTexture);
   const normalTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.normalTexture);
@@ -560,14 +547,13 @@ const readGltfMaterialLod = (
   src: string,
   assetKey: string,
   materialIndex: number | undefined,
-  diagnostics: GltfSceneReaderDiagnosticSink,
 ): LodSet<LoadedGltfMaterial> | undefined => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
   const lodIds = material?.extensions?.MSFT_lod?.ids ?? [];
   if (materialIndex === undefined || lodIds.length === 0) return undefined;
   const levels = [
-    readGltfMaterial(document, src, assetKey, materialIndex, diagnostics),
-    ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id, diagnostics)),
+    readGltfMaterial(document, src, assetKey, materialIndex),
+    ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id)),
   ];
   return { levels, thresholds: normalizeLodThresholds(material?.extras?.MSFT_screencoverage, levels.length) };
 };
@@ -578,7 +564,6 @@ const readGltfMaterialVariants = (
   assetKey: string,
   primitive: GltfMeshPrimitive,
   variantCount: number,
-  diagnostics: GltfSceneReaderDiagnosticSink,
 ): readonly LoadedGltfMaterialVariant[] =>
   (primitive.extensions?.KHR_materials_variants?.mappings ?? [])
     .map((mapping): LoadedGltfMaterialVariant | undefined => {
@@ -587,8 +572,8 @@ const readGltfMaterialVariants = (
         .filter((variant) => Number.isInteger(variant) && variant >= 0 && variant < variantCount);
       if (materialIndex === undefined || !Number.isInteger(materialIndex) || materialIndex < 0
         || document.materials?.[materialIndex] === undefined || variants.length === 0) return undefined;
-      const material = readGltfMaterial(document, src, assetKey, materialIndex, diagnostics);
-      const materialLod = readGltfMaterialLod(document, src, assetKey, materialIndex, diagnostics);
+      const material = readGltfMaterial(document, src, assetKey, materialIndex);
+      const materialLod = readGltfMaterialLod(document, src, assetKey, materialIndex);
       return { material, ...(materialLod === undefined ? {} : { materialLod }), variants };
     })
     .filter((mapping): mapping is LoadedGltfMaterialVariant => mapping !== undefined);
@@ -765,15 +750,14 @@ const appendNodeTreePrimitives = (
     const indices = dracoPrimitive?.indices
       ?? (primitive.indices === undefined ? undefined : readGltfIndices(context.document, context.buffers, primitive.indices));
     const normals = baseNormals ?? generateGltfPrimitiveNormals(positions, indices, mode);
-    const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material, context.diagnostics);
-    const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material, context.diagnostics);
+    const material = readGltfMaterial(context.document, context.src, context.assetKey, primitive.material);
+    const materialLod = readGltfMaterialLod(context.document, context.src, context.assetKey, primitive.material);
     const materialVariants = readGltfMaterialVariants(
       context.document,
       context.src,
       context.assetKey,
       primitive,
       context.variantCount,
-      context.diagnostics,
     );
     const baseMaterial: LoadedGltfPrimitiveMaterial = {
       material,

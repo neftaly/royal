@@ -36,6 +36,7 @@ export const SURFACE_MATERIAL_TEXTURE_BINDINGS = exhaustiveMaterialBindings([
   { feature: "metallicRoughnessTexture", key: "metallicRoughnessTexture", preferredUnit: 3, samplerUniform: "u_metallicRoughnessTexture", useUniform: "u_useMetallicRoughnessTexture", uvUniformStem: "u_metallicRoughnessUv" },
   { feature: "normalTexture", key: "normalTexture", preferredUnit: 1, samplerUniform: "u_normalTexture", useUniform: "u_useNormalTexture", uvUniformStem: "u_normalUv" },
   { feature: "occlusionTexture", key: "occlusionTexture", preferredUnit: 5, samplerUniform: "u_occlusionTexture", useUniform: "u_useOcclusionTexture", uvUniformStem: "u_occlusionUv" },
+  { feature: "anisotropyTexture", key: "anisotropyTexture", preferredUnit: 13, samplerUniform: "u_anisotropyTexture", useUniform: "u_useAnisotropyTexture", uvUniformStem: "u_anisotropyUv" },
   { feature: "specularTexture", key: "specularTexture", preferredUnit: 6, samplerUniform: "u_specularTexture", useUniform: "u_useSpecularTexture", uvUniformStem: "u_specularUv" },
   { feature: "specularColorTexture", key: "specularColorTexture", preferredUnit: 7, samplerUniform: "u_specularColorTexture", useUniform: "u_useSpecularColorTexture", uvUniformStem: "u_specularColorUv" },
   { feature: "clearcoatTexture", key: "clearcoatTexture", preferredUnit: 8, samplerUniform: "u_clearcoatTexture", useUniform: "u_useClearcoatTexture", uvUniformStem: "u_clearcoatUv" },

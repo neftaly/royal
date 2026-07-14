@@ -504,7 +504,7 @@ const materialTextureSlotExtensionNames = [
 
 const materialTextureSlotReplays: readonly FuzzReplay[] = [
   {
-    label: "required anisotropy texture is rejected",
+    label: "required anisotropy texture is accepted",
     value: {
       document: {
         extensionsRequired: ["KHR_materials_anisotropy"],
@@ -517,12 +517,11 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
           },
         }],
       },
-      expectedMessage: /KHR_materials_anisotropy\.anisotropyTexture.*material 0.*anisotropy textures/i,
-      expectedPass: false,
+      expectedPass: true,
     } satisfies MaterialTextureSlotReplay,
   },
   {
-    label: "optional anisotropy texture remains a fallback-compatible diagnostic path",
+    label: "optional anisotropy texture is accepted",
     value: {
       document: {
         extensionsUsed: ["KHR_materials_anisotropy"],
@@ -707,12 +706,6 @@ const randomMaterialTextureSlotDocument = (random: SeededRandom): GltfDocument =
   };
 };
 
-const materialTextureSlotDocumentShouldPass = (document: GltfDocument): boolean =>
-  !document.materials?.some((material) =>
-    (document.extensionsRequired?.includes("KHR_materials_anisotropy") === true
-      && material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined)
-  );
-
 describe("renderer-webgl glTF texture validation properties", () => {
   it("reports unsupported required extensions uniquely and in source order", () => {
     forEachFuzzCase({ cases: 32, seed: 0x7a9f5c31 }, ({ label, random }) => {
@@ -768,7 +761,7 @@ describe("renderer-webgl glTF texture validation properties", () => {
       const document = replayValue?.document ?? randomMaterialTextureSlotDocument(random);
       expectValidationOutcome(
         document,
-        replayValue?.expectedPass ?? materialTextureSlotDocumentShouldPass(document),
+        replayValue?.expectedPass ?? true,
         label,
         replayValue?.expectedMessage,
       );
