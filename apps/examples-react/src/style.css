@@ -314,6 +314,64 @@ canvas {
   min-block-size: 0;
 }
 
+.gltf-variants {
+  block-size: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  inline-size: 100%;
+}
+
+.gltf-variants-toolbar {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel), transparent 4%);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1rem;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+}
+
+.gltf-variants-toolbar > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.gltf-variants-toolbar strong {
+  font-size: 0.82rem;
+}
+
+.gltf-variants-toolbar span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.gltf-variants-toolbar .gltf-variants-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+}
+
+.gltf-variants-actions button {
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 650;
+  padding: 0.42rem 0.65rem;
+}
+
+.gltf-variants-actions button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.gltf-variants-canvas {
+  min-block-size: 0;
+}
+
 .gltf-lab {
   block-size: 100%;
   display: grid;

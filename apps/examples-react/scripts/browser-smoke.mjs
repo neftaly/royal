@@ -428,6 +428,19 @@ const assertRoute = (expected, state) => {
     }
   }
 
+  if (expected.id === 'gltf-variants') {
+    const interaction = state.variantInteraction;
+    if (interaction === undefined) {
+      failures.push('glTF variants route missed selection interaction smoke');
+    } else if (interaction.error !== undefined) {
+      failures.push(`glTF variants interaction smoke failed: ${interaction.error}`);
+    } else if (interaction.selections?.join(',') !== 'ruby,mint,slate') {
+      failures.push(`glTF variants selected ${interaction.selections?.join(',')}, expected ruby,mint,slate`);
+    } else if (interaction.pressed?.join(',') !== 'ruby,mint,slate') {
+      failures.push(`glTF variants pressed state was ${interaction.pressed?.join(',')}, expected ruby,mint,slate`);
+    }
+  }
+
   if (expected.id === 'virtual-texture-stress') {
     const interaction = state.virtualTextureInteraction;
     if (interaction === undefined) {
@@ -1061,6 +1074,27 @@ const runVirtualTextureInteractionSmoke = async (session) => {
   }
 };
 
+const runGltfVariantsInteractionSmoke = async (session) => evaluate(session, `
+(async () => {
+  const root = document.querySelector('.gltf-variants');
+  const buttons = [...document.querySelectorAll('.gltf-variants-actions button')];
+  if (!(root instanceof HTMLElement)) return { error: 'missing glTF variants root' };
+  if (buttons.length !== 3 || buttons.some((button) => !(button instanceof HTMLButtonElement))) {
+    return { error: 'missing glTF variant selection buttons' };
+  }
+  const selections = [];
+  const pressed = [];
+  for (const button of buttons) {
+    button.click();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await globalThis.__royalExamplesRenderNow?.();
+    selections.push(root.dataset.selectedVariant ?? '');
+    pressed.push(button.getAttribute('aria-pressed') === 'true' ? button.textContent?.trim() ?? '' : '');
+  }
+  return { pressed, selections };
+})()
+`);
+
 const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
@@ -1502,6 +1536,12 @@ const main = async () => {
         state = {
           ...state,
           pickingInteraction: await runPickingInteractionSmoke(session),
+        };
+      }
+      if (route.id === 'gltf-variants') {
+        state = {
+          ...state,
+          variantInteraction: await runGltfVariantsInteractionSmoke(session),
         };
       }
       if (route.id === 'virtual-texture-stress') {
