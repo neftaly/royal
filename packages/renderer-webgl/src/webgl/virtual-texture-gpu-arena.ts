@@ -230,6 +230,8 @@ type MutableResource = {
   pageTableUpdates: number;
   pendingHead: number;
   readonly pendingUploads: VirtualTextureGpuPendingUpload[];
+  readonly protectedAncestorPageKeys: Set<string>;
+  readonly protectedPageKeys: { has(pageKey: string): boolean };
   uploadedPageBytes: number;
   uploadedPages: number;
   uploadQueueWaitMaxMs: number;
@@ -581,9 +583,11 @@ export const admitVirtualTextureGpuResource = (
   );
   if (admission.kind === "unsupported") return admission;
   if (resource === undefined) {
+    const desiredPageKeys = new Set<string>();
+    const protectedAncestorPageKeys = new Set<string>();
     resource = {
       admission,
-      desiredPageKeys: new Set(),
+      desiredPageKeys,
       desiredPageKeysPublished: false,
       key,
       visibleAssignments: new Map(),
@@ -592,6 +596,10 @@ export const admitVirtualTextureGpuResource = (
       pageTableUpdates: 0,
       pendingHead: 0,
       pendingUploads: [],
+      protectedAncestorPageKeys,
+      protectedPageKeys: {
+        has: (pageKey) => desiredPageKeys.has(pageKey) || protectedAncestorPageKeys.has(pageKey),
+      },
       atlasUploadBytesPerChunkMax: 0,
       atlasUploadBytesPerChunkMin: 0,
       atlasUploadChunkSamples: 0,
@@ -887,19 +895,20 @@ const flushPageTable = (
 };
 
 const protectedUploadPages = (
-  manifest: VirtualTextureManifestModel,
+  resource: MutableResource,
   page: VirtualTexturePageId,
-  workingSet: ReadonlySet<string>,
-): ReadonlySet<string> => {
-  const protectedPages = new Set(workingSet);
+): { has(pageKey: string): boolean } => {
+  const protectedAncestors = resource.protectedAncestorPageKeys;
+  protectedAncestors.clear();
+  const manifest = resource.options.manifest;
   const maxMip = manifest.mipCount
     ?? derivedVirtualTextureMipCount(manifest.width, manifest.height, manifest.pageSize);
   let parent = parentVirtualTexturePage(page);
   while (parent.mip < maxMip) {
-    protectedPages.add(virtualTexturePageKey(parent));
+    protectedAncestors.add(virtualTexturePageKey(parent));
     parent = parentVirtualTexturePage(parent);
   }
-  return protectedPages;
+  return resource.protectedPageKeys;
 };
 
 const publish = (
@@ -1024,11 +1033,7 @@ const startUpload = (
   admission?: VirtualTextureGpuUploadAdmission,
 ): boolean => {
   const transaction = allocation.pageTable.planResident(upload.page, {
-    protectedPages: protectedUploadPages(
-      resource.options.manifest,
-      upload.page,
-      resource.desiredPageKeys,
-    ),
+    protectedPages: protectedUploadPages(resource, upload.page),
   });
   const assignment = transaction.assignment;
   const evictionNeedsInvalidation = assignment.evicted !== undefined

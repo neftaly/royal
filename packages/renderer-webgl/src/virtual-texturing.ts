@@ -78,6 +78,10 @@ export interface VirtualTextureResidentTransaction {
   readonly [residentTransactionAuthority]: "VirtualTextureResidentTransaction";
 }
 
+interface ProtectedVirtualTexturePageKeys {
+  has(pageKey: string): boolean;
+}
+
 type MutableVirtualTextureResidentTransaction = {
   readonly assignment: VirtualTextureAtlasAssignment;
   readonly baseRevision: number;
@@ -664,7 +668,7 @@ export class VirtualTextureAtlasPageTable {
 
   ensureResident(
     page: VirtualTexturePageId,
-    options: { readonly protectedPages?: ReadonlySet<string> } = {},
+    options: { readonly protectedPages?: ProtectedVirtualTexturePageKeys } = {},
   ): VirtualTextureAtlasAssignment {
     const transaction = this.planResident(page, options);
     this.commitResident(transaction);
@@ -673,7 +677,7 @@ export class VirtualTextureAtlasPageTable {
 
   planResident(
     page: VirtualTexturePageId,
-    options: { readonly protectedPages?: ReadonlySet<string> } = {},
+    options: { readonly protectedPages?: ProtectedVirtualTexturePageKeys } = {},
   ): VirtualTextureResidentTransaction {
     const pageKey = virtualTexturePageKey(page);
     const existing = this.#recordsByPage.get(pageKey);
@@ -838,7 +842,7 @@ export class VirtualTextureAtlasPageTable {
   }
 
 
-  #planSlot(protectedPages: ReadonlySet<string> | undefined): {
+  #planSlot(protectedPages: ProtectedVirtualTexturePageKeys | undefined): {
     readonly clearedReferenceSlots: ReadonlySet<number>;
     readonly clockHand: number;
     readonly evicted?: VirtualTextureResidentPage;
