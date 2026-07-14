@@ -10,6 +10,7 @@ import {
   selectVirtualTextureFrameWorkingSet,
   selectVirtualTextureWorkingSet,
   stabilizeVirtualTextureDesiredPagesInto,
+  virtualTextureDemandMipCount,
   virtualTextureDemandModelCount,
   virtualTextureDemandPageGrid,
   virtualTexturePagesForFootprint,
@@ -20,6 +21,7 @@ import { perspectiveCamera } from "@royal/renderer-core";
 import {
   identityMat4,
   projectionMat4,
+  transformMat4,
   viewMat4,
   type Mat4,
 } from "../packages/renderer-webgl/src/math/mat4";
@@ -322,6 +324,112 @@ describe("virtual texture pure demand planning", () => {
     expect(first.coverageCandidates?.length ?? 0).toBeLessThanOrEqual(16);
     expect(first.demandCandidates.length).toBeGreaterThan(0);
     expect(first.demandCandidates.length).toBeLessThanOrEqual(16);
+  });
+
+  it("keeps projected demand finite, valid, bounded, and deterministic under transform fuzz", () => {
+    forEachFuzzCase({ cases: 128, seed: 0xface_c105 }, ({ label, random }) => {
+      const near = 10 ** random.number(-3, 0);
+      const extent = 10 ** random.number(-3, 6);
+      const pageSize = random.pick([1, 64, 256, 1_024]);
+      const width = pageSize * (2 ** random.int(0, 19));
+      const height = pageSize * (2 ** random.int(0, 19));
+      const source = manifest({
+        height,
+        pageSize,
+        uriTemplate: "m{mip}-{x}-{y}.png",
+        width,
+      });
+      const viewportSize = [random.int(1, 4_097), random.int(1, 4_097)] as const;
+      const projection = projectionMat4(perspectiveCamera({
+        far: Math.max(near * 2, extent * 100),
+        fovY: random.number(0.2, Math.PI - 0.2),
+        near,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+      }), viewportSize[0], viewportSize[1]);
+      const z = random.pick([
+        -near * random.number(0.01, 0.99),
+        -near * random.number(1, 4),
+        -extent * random.number(0.5, 4),
+        near * random.number(0.01, 2),
+      ]);
+      const uvOrigin = random.number(-10_000, 10_000);
+      const uvSpan = 10 ** random.number(-5, 5);
+      const demandContext: VirtualTextureDrawDemandContext = {
+        modelSource: {
+          kind: "single",
+          model: transformMat4({
+            position: [
+              random.number(-extent, extent),
+              random.number(-extent, extent),
+              z,
+            ],
+            rotation: [
+              random.number(-Math.PI, Math.PI),
+              random.number(-Math.PI, Math.PI),
+              random.number(-Math.PI, Math.PI),
+            ],
+            scale: [
+              extent * (random.boolean() ? -1 : 1),
+              extent * (random.boolean() ? -1 : 1),
+              extent * (random.boolean() ? -1 : 1),
+            ],
+          }),
+        },
+        projection,
+        provider: prepareVirtualTextureCoverageProvider({
+          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+          positions: new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]),
+          texCoords: new Float32Array([
+            uvOrigin, uvOrigin,
+            uvOrigin + uvSpan, uvOrigin,
+            uvOrigin + uvSpan, uvOrigin + uvSpan,
+            uvOrigin, uvOrigin + uvSpan,
+          ]),
+        }),
+        view: identityMat4(),
+        viewportSize,
+        wrapS: random.pick(["clamp-to-edge", "mirrored-repeat", "repeat"]),
+        wrapT: random.pick(["clamp-to-edge", "mirrored-repeat", "repeat"]),
+      };
+      const limit = random.int(0, 33);
+      const input = { context: demandContext, limit, manifest: source } as const;
+      const projected = projectVirtualTextureScreenFootprint(demandContext, undefined, source);
+      const first = planVirtualTextureDrawDemand(input);
+      expect(planVirtualTextureDrawDemand(input), label).toEqual(first);
+
+      if (projected.kind === "visible") {
+        expect(Object.values(projected.footprint).every(Number.isFinite), label).toBe(true);
+        expect(projected.footprint.minU, label).toBeGreaterThanOrEqual(0);
+        expect(projected.footprint.maxU, label).toBeLessThanOrEqual(1);
+        expect(projected.footprint.minV, label).toBeGreaterThanOrEqual(0);
+        expect(projected.footprint.maxV, label).toBeLessThanOrEqual(1);
+        expect(projected.footprint.screenWidth, label).toBeGreaterThan(0);
+        expect(projected.footprint.screenHeight, label).toBeGreaterThan(0);
+      }
+
+      for (const pages of [
+        first.coverageCandidates ?? [],
+        first.demandCandidates,
+        first.preferredCandidates ?? [],
+      ]) {
+        expect(pages.length, label).toBeLessThanOrEqual(limit);
+        expect(new Set(pages.map((page) => `${page.mip}/${page.x}/${page.y}`)).size, label)
+          .toBe(pages.length);
+        for (const page of pages) {
+          const grid = virtualTextureDemandPageGrid(source, page.mip);
+          expect(Number.isSafeInteger(page.mip), label).toBe(true);
+          expect(Number.isSafeInteger(page.x), label).toBe(true);
+          expect(Number.isSafeInteger(page.y), label).toBe(true);
+          expect(page.mip, label).toBeGreaterThanOrEqual(0);
+          expect(page.mip, label).toBeLessThan(virtualTextureDemandMipCount(source));
+          expect(page.x, label).toBeGreaterThanOrEqual(0);
+          expect(page.x, label).toBeLessThan(grid.width);
+          expect(page.y, label).toBeGreaterThanOrEqual(0);
+          expect(page.y, label).toBeLessThan(grid.height);
+        }
+      }
+    });
   });
 
   it("reuses fixed planning memory through rapid viewport and near-field churn", () => {
