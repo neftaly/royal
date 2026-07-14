@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,12 @@ const packageDirectories = [
   'packages/react',
 ];
 
+const packageSizeBudgets = {
+  '@royal/react': 1024 * 1024,
+  '@royal/renderer-core': 512 * 1024,
+  '@royal/renderer-webgl': 8 * 1024 * 1024,
+};
+
 const readPackage = (directory) => JSON.parse(readFileSync(
   path.join(repoRoot, directory, 'package.json'),
   'utf8',
@@ -30,6 +36,12 @@ const readPackage = (directory) => JSON.parse(readFileSync(
 
 const packageTarballName = (manifest) =>
   `${manifest.name.replace('@', '').replace('/', '-')}-${manifest.version}.tgz`;
+
+const exportTargets = (value) => {
+  if (typeof value === 'string') return value.startsWith('./') ? [value] : [];
+  if (value === null || typeof value !== 'object') return [];
+  return Object.values(value).flatMap(exportTargets);
+};
 
 const listTarballEntries = (tarball) => {
   const archive = gunzipSync(readFileSync(tarball));
@@ -56,11 +68,25 @@ try {
     runPnpm(['--dir', path.join(repoRoot, directory), 'pack', '--out', tarball], { stdio: 'pipe' });
 
     const contents = listTarballEntries(tarball);
-    const leakedFile = contents.find((entry) =>
-      entry.startsWith('package/src/') || entry.endsWith('.tsbuildinfo'));
-    if (leakedFile !== undefined) {
-      throw new Error(`${manifest.name} packed development-only file: ${leakedFile}`);
+    const unexpectedFile = contents.find((entry) =>
+      entry !== 'package/package.json'
+      && entry !== 'package/README.md'
+      && !entry.startsWith('package/dist/'));
+    if (unexpectedFile !== undefined) {
+      throw new Error(`${manifest.name} packed unexpected file: ${unexpectedFile}`);
     }
+    const missingTarget = exportTargets(manifest.exports)
+      .map((target) => `package/${target.slice(2)}`)
+      .find((target) => !contents.includes(target));
+    if (missingTarget !== undefined) {
+      throw new Error(`${manifest.name} packed export target is missing: ${missingTarget}`);
+    }
+    const packedBytes = statSync(tarball).size;
+    const sizeBudget = packageSizeBudgets[manifest.name];
+    if (sizeBudget === undefined || packedBytes > sizeBudget) {
+      throw new Error(`${manifest.name} tarball is ${packedBytes} bytes; budget is ${sizeBudget ?? 0}`);
+    }
+    console.log(`ok packed ${manifest.name} ${Math.ceil(packedBytes / 1024)} KiB`);
   }
 
   const manifests = packageDirectories.map(readPackage);

@@ -65,6 +65,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check package entrypoints
+        run: pnpm check:package-imports
+
+      - name: Check packed package consumer
+        run: pnpm check:package-consumer
+
       - name: Examples browser smoke
         run: |
           if ! command -v chromium >/dev/null 2>&1; then

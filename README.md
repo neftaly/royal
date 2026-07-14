@@ -80,6 +80,8 @@ pnpm dev
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm check:package-imports
+pnpm check:package-consumer
 ```
 
 The example app runs through `pnpm dev` and contains the main task-oriented

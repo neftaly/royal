@@ -42,12 +42,13 @@ Royal is ready for application development inside this workspace, but the
 packages remain private. The initial pre-release version is `0.0.1`. Before
 registry publication:
 
-1. Add the root AGPL license text and release notes, remove `private`, and add an
-   explicit publish workflow.
+1. Add the root AGPL license text, remove `private`, and add an explicit publish
+   workflow.
 
 `pnpm check:package-consumer` now packs all three packages, rejects source and
 build-metadata leakage, installs the tarballs into a clean React app,
 typechecks the public React API, and imports every documented entrypoint.
+CI runs both the built-entrypoint and packed-consumer gates.
 
 ## Validation
 
