@@ -16,7 +16,6 @@ import {
   type RenderRoot,
   type TextureContentKey,
 } from "@royal/renderer-core";
-import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
 import {
   abortError,
   loadGltfBuffers,
@@ -38,7 +37,6 @@ import {
   detachResourceArenaImagePreparation,
   disposeResourceArena,
   publishResourceArenaContentKey,
-  resourceArenaContentKeys,
   resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
   resourceArenaHasPendingAssetEvents,
@@ -191,45 +189,20 @@ import {
   GltfPacketSelectionOwner,
   gltfMaterialLodSelectionKey,
 } from "./gltf/packet-selection-owner";
+import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
 import {
-  GLTF_PACKET_ROOT_SOURCE_KIND,
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
 } from "./gltf-packet-topology";
-import {
-  FRAME_PACKET_SIDEDNESS,
-  NO_FRAME_PACKET_ID,
-  type FramePacketRenderClass,
-} from "./frame-packets";
-import {
-  readPacketLocalModelInto,
-  readPacketRootSourceInto,
-  resolvePacketMaterial,
-  type MutablePacketRootSourceRow,
-} from "./packet-resource-tables";
-import {
-  appendGltfPacketSubmission,
-  resetGltfPacketSubmissionWorkspaceForFrame,
-  resetGltfPacketSubmissionWorkspaceForSegment,
-  resetGltfPacketSubmissionWorkspaceForView,
-  retainGltfPacketSubmissionLightBinding,
-  retainGltfPacketSubmissionMaterialBinding,
-  retainGltfPacketSubmissionRootBinding,
-} from "./gltf-packet-submission-workspace";
-import {
-  GltfFrameBatchArena,
-  type GltfFrameDrawBatch,
-} from "./gltf/frame-batch-arena";
+import type { GltfFrameDrawBatch } from "./gltf/frame-batch-arena";
 import {
   identityMat4,
   multiplyMat4,
   multiplyMat4Into,
   projectionMat4Into,
-  transformMat4,
   transformMat4Into,
   viewMat4Into,
   type Mat4,
-  type MutableMat4,
 } from "./math/mat4";
 import {
   isBoundsVisible,
@@ -426,10 +399,6 @@ const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMa
   preparedPrimitiveMaterials(asset.primitives);
 const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
-type WebGlGltfInstancingCounters = {
-  -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
-};
-
 type SceneToneMappingState = SurfaceToneMappingState;
 
 const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
@@ -469,19 +438,6 @@ const captureFirstFailure = (
   const nextFailure = captureFailure(action);
   return firstFailure ?? nextFailure;
 };
-
-const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
-  batchPlansBuilt: 0,
-  batchInstancesTotal: 0,
-  drawCalls: 0,
-  instancesDrawn: 0,
-  localModelUploadBytes: 0,
-  localModelUploadCalls: 0,
-  rootPoseUploadBytes: 0,
-  rootPoseUploadCalls: 0,
-  rootScaleUploadBytes: 0,
-  rootScaleUploadCalls: 0,
-});
 
 const maxVirtualTexturePageTableUploadBytes = (
   manifest: VirtualTextureManifestModel,
@@ -583,11 +539,6 @@ const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
 const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
   start === undefined || end === undefined ? undefined : Math.max(0, end - start);
 
-const mat4OrientationDeterminant = (matrix: Mat4): number =>
-  matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
-  - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
-  + matrix[8] * (matrix[1] * matrix[6] - matrix[5] * matrix[2]);
-
 /**
  * Minimal Royal WebGL2 renderer root. It implements the descriptor subset used
  * by the contracts while keeping all GPU ownership inside this root.
@@ -671,21 +622,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfInstanceTransforms,
     this.#sceneBindings,
   );
-  readonly #gltfFrameBatches = new GltfFrameBatchArena(this.#preparedGltf, this.#vertexInputs);
   readonly #gltfMaterials = new GltfMaterialPreparationArena();
-  readonly #gltfPacketLocalModelScratch: MutableMat4 = identityMat4();
-  readonly #gltfPacketRootSourceScratch: MutablePacketRootSourceRow = {
-    kind: 0,
-    outerIndex: 0,
-    planOccurrenceIndex: 0,
-  };
+  readonly #gltfPacketSubmissions: GltfPacketSubmissionOwner;
   readonly #textureHandles: TextureHandleArena;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  #gltfRenderOrdinal = 0;
   readonly #iblTextures: IblTextureArena;
   readonly #lightResolver: SurfaceLightResolver;
-  #gltfInstancingCounters = createWebGlGltfInstancingCounters();
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena({
     replace: (lease, cost) => {
       const reservation = replaceResourceGovernorLease(this.#resourceGovernor, lease, cost);
@@ -879,6 +822,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
         ensureGltfSpecular: (specular) => this.#ensureIblSpecularTexture(specular),
         studioSpecular: () => this.#studioEnvironmentSpecularTexture(),
       });
+      this.#gltfPacketSubmissions = new GltfPacketSubmissionOwner({
+        geometryRecipes: this.#geometryRecipes,
+        instanceTransforms: this.#gltfInstanceTransforms,
+        lightResolver: this.#lightResolver,
+        materials: this.#gltfMaterials,
+        resourceArena: this.#resourceArena,
+        runtime: this.#preparedGltf,
+        sceneBindings: this.#sceneBindings,
+        selection: this.#gltfPacketSelection,
+        vertexInputs: this.#vertexInputs,
+      });
       this.#textureHandles = createTextureHandleArena(gl);
       registerRollback(() => dropTextureHandleContext(this.#textureHandles));
       registerRollback(() => releaseTextureHandleContextHandles(this.#textureHandles));
@@ -949,7 +903,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         clusteredLights: this.#clusteredLights,
         geometry: this.#geometryDrawArena,
         gl,
-        gltfFrames: this.#gltfFrameBatches,
+        gltfFrames: this.#gltfPacketSubmissions.frameBatches,
         iblTextures: this.#iblTextures,
         ordinaryTextures: this.#ordinaryTextures,
         programs: this.#programArena,
@@ -1108,7 +1062,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderClock.beginRender();
     beginResourceGovernorFrame(this.#resourceGovernor);
     this.#applyPendingResourceArenaEvents();
-    this.#gltfRenderOrdinal = 0;
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     this.#virtualTextureRuntime.beginFrame();
@@ -1131,18 +1084,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
-      resetGltfPacketSubmissionWorkspaceForFrame(
-        this.#gltfFrameBatches.workspace,
-        plan.revision,
-        this.#preparedGltf.packetTopology.catalog,
-      );
-      this.#gltfFrameBatches.beginFrame();
+      this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         this.#virtualTextureRuntime.beginView(viewIndex);
-        // A scene occurrence has the same resource identity in every view.
-        // Resetting the ordinal across eyes avoids duplicate instance uploads
-        // and other occurrence-owned resources in XR.
-        this.#gltfRenderOrdinal = 0;
         gl.enable(gl.DEPTH_TEST);
         const viewportOffset = viewIndex * 4;
         const x = frameViews.viewports[viewportOffset]!;
@@ -1170,17 +1114,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
         viewportSize[1] = height;
         const sourceX = useHdr ? 0 : x;
         const sourceY = useHdr ? 0 : y;
-        resetGltfPacketSubmissionWorkspaceForView(
-          this.#gltfFrameBatches.workspace,
+        let { packetCursor, packetEnd } = this.#gltfPacketSubmissions.beginView(
           plan.revision,
-          this.#preparedGltf.packetTopology.catalog,
           viewIndex,
         );
-        let packetCursor = this.#gltfPacketSelection.selected.viewFirsts[viewIndex]!;
-        const packetEnd = packetCursor
-          + this.#gltfPacketSelection.selected.viewCounts[viewIndex]!;
         const flushGltfPacketSubmissions = (): void => {
-          if (this.#gltfFrameBatches.workspace.count === 0) return;
+          if (this.#gltfPacketSubmissions.submissionCount === 0) return;
           this.#drawGltfPacketSubmissions(
             projection,
             view,
@@ -1190,11 +1129,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
             sourceX,
             sourceY,
           );
-          resetGltfPacketSubmissionWorkspaceForSegment(
-            this.#gltfFrameBatches.workspace,
+          this.#gltfPacketSubmissions.resetSegment(
             plan.revision,
-            this.#preparedGltf.packetTopology.catalog,
-            this.#gltfFrameBatches.workspace.segment,
+            this.#gltfPacketSubmissions.segment,
           );
         };
 
@@ -1203,23 +1140,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
           if (node.kind === "gltf" || node.kind === "gltf-instances") {
             const orderingSegment = plan.orderSegments[nodeIndex]!;
-            if (this.#gltfFrameBatches.workspace.segment !== orderingSegment) {
+            if (this.#gltfPacketSubmissions.segment !== orderingSegment) {
               flushGltfPacketSubmissions();
-              resetGltfPacketSubmissionWorkspaceForSegment(
-                this.#gltfFrameBatches.workspace,
-                plan.revision,
-                this.#preparedGltf.packetTopology.catalog,
-                orderingSegment,
-              );
+              this.#gltfPacketSubmissions.resetSegment(plan.revision, orderingSegment);
             }
-            const renderInstanceOrdinal = this.#gltfRenderOrdinal;
-            this.#gltfRenderOrdinal += 1;
-            packetCursor = this.#appendSelectedGltfPacketDrawsForNode(
+            packetCursor = this.#gltfPacketSubmissions.appendNode(
               node,
               nodeIndex,
-              renderInstanceOrdinal,
               packetCursor,
               packetEnd,
+              plan.revision,
+              this.#gl,
+              this.#context.generation,
             );
             continue;
           }
@@ -1259,7 +1191,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       renderFailure,
       () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined),
     );
-    renderFailure = captureFirstFailure(renderFailure, () => this.#releaseUnusedGltfBatchResources());
+    renderFailure = captureFirstFailure(renderFailure, () => {
+      this.#gltfPacketSubmissions.releaseUnused(this.#gl, this.#context.generation);
+    });
     renderFailure = captureFirstFailure(
       renderFailure,
       () => endClusteredLightFrame(this.#clusteredLights, this.#framePublication.frame),
@@ -1390,7 +1324,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => dropIblTextureContext(this.#iblTextures));
     releaseFailure = captureFirstFailure(releaseFailure, () => dropTextureHandleContext(this.#textureHandles));
     releaseFailure = captureFirstFailure(releaseFailure, () => clearGeometryDrawArenaContext(this.#geometryDrawArena));
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#gltfFrameBatches.dropContext());
+    releaseFailure = captureFirstFailure(
+      releaseFailure,
+      () => this.#gltfPacketSubmissions.dropContext(),
+    );
     releaseFailure = captureFirstFailure(
       releaseFailure,
       () => this.#gltfInstanceTransforms.endFrame(false),
@@ -1481,7 +1418,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#virtualTextureRuntime.clearAutoMetadata();
     teardown(() => this.#preparedGltf.dispose());
-    teardown(() => this.#gltfFrameBatches.dispose());
+    teardown(() => this.#gltfPacketSubmissions.dispose());
     this.#gltfMaterials.clear();
     this.#lightResolver.clear();
     teardown(() => this.#sceneBindings.dispose());
@@ -2049,190 +1986,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
   }
 
-  #appendSelectedGltfPacketDrawsForNode(
-    node: AnyGltfNode,
-    nodeIndex: number,
-    renderInstanceOrdinal: number,
-    packetCursor: number,
-    packetEnd: number,
-  ): number {
-    const topology = this.#preparedGltf.packetTopology;
-    const catalog = topology.catalog;
-    const selected = this.#gltfPacketSelection.selected;
-    if (packetCursor >= packetEnd) return packetCursor;
-    const firstPacketIndex = selected.orderedPacketIndices[packetCursor]!;
-    readPacketRootSourceInto(
-      topology.resources,
-      catalog.rootSourceIds[firstPacketIndex]!,
-      this.#gltfPacketRootSourceScratch,
-    );
-    if (this.#gltfPacketRootSourceScratch.planOccurrenceIndex !== nodeIndex) {
-      if (this.#gltfPacketRootSourceScratch.planOccurrenceIndex < nodeIndex) {
-        throw new Error("Royal retained glTF packet selection is not in frame-plan order");
-      }
-      return packetCursor;
-    }
-    const state = this.#gltfState(node);
-    const instanceViews = node.kind === "gltf-instances"
-      ? this.#gltfInstanceTransforms.views(node.instances)
-      : undefined;
-    const rootHandle = node.kind === "gltf" ? this.#sceneBindings.handle(node) : undefined;
-    const ordinaryRootTransform = node.kind === "gltf"
-      ? rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle)
-      : undefined;
-    const ordinaryRootModel = node.kind === "gltf"
-      ? transformMat4(ordinaryRootTransform)
-      : undefined;
-    const ordinaryAssetLights = ordinaryRootModel === undefined
-      ? undefined
-      : this.#lightResolver.resolveGltfAsset(state, ordinaryRootModel);
-    const ordinaryLightScopeId = ordinaryAssetLights === undefined
-      ? 0
-      : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, 0);
-    const instanceAssetLights = instanceViews === undefined
-      ? undefined
-      : new Map<number, { readonly lights: SurfaceLightSet | undefined; readonly scopeId: number }>();
-    let cursor = packetCursor;
-
-    while (cursor < packetEnd) {
-      const packetIndex = selected.orderedPacketIndices[cursor]!;
-      readPacketRootSourceInto(
-        topology.resources,
-        catalog.rootSourceIds[packetIndex]!,
-        this.#gltfPacketRootSourceScratch,
-      );
-      const source = this.#gltfPacketRootSourceScratch;
-      if (source.planOccurrenceIndex !== nodeIndex) {
-        if (source.planOccurrenceIndex < nodeIndex) {
-          throw new Error("Royal retained glTF packet selection is not in frame-plan order");
-        }
-        break;
-      }
-      const expectedKind = node.kind === "gltf"
-        ? GLTF_PACKET_ROOT_SOURCE_KIND.gltf
-        : GLTF_PACKET_ROOT_SOURCE_KIND.gltfInstances;
-      if (source.kind !== expectedKind) {
-        throw new Error("Royal retained glTF packet root kind diverged from the frame plan");
-      }
-      const outerIndex = catalog.instanceFirsts[packetIndex]!;
-      if (source.outerIndex !== outerIndex || catalog.instanceCounts[packetIndex] !== 1) {
-        throw new Error("Royal retained glTF packet instance source is invalid");
-      }
-      const geometryId = catalog.geometryIds[packetIndex]!;
-      const primitive = this.#geometryRecipes.packetPrimitive(geometryId);
-      if (primitive === undefined) {
-        throw new Error(`Royal retained glTF packet geometry ${geometryId} has no prepared primitive`);
-      }
-      const loadedMaterial = resolvePacketMaterial(
-        topology.resources,
-        catalog.materialIds[packetIndex]!,
-      );
-      this.#preparedGltf.images.demandMaterial(state.key, loadedMaterial);
-      const baseColorImageUri = loadedMaterial.baseColorTexture?.imageUri;
-      const prepared = this.#gltfMaterials.prepare(
-        primitive,
-        loadedMaterial,
-        resourceArenaContentKeys(this.#resourceArena, state.key),
-        baseColorImageUri !== undefined
-          && this.#preparedGltf.images.imageReady(state.key, baseColorImageUri),
-      );
-      const geometry = this.#geometryResource(geometryId);
-      const localDeterminant = readPacketLocalModelInto(
-        topology.resources,
-        catalog.localModelIds[packetIndex]!,
-        this.#gltfPacketLocalModelScratch,
-      );
-      const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
-      const rootTransform = instanceViews?.transforms[outerIndex] ?? ordinaryRootTransform;
-      if (rootModel === undefined) {
-        throw new Error("Royal retained glTF packet root source has no current transform");
-      }
-      const rootDeterminant = mat4OrientationDeterminant(rootModel);
-      const packetSidedness = catalog.sidedness[packetIndex]!;
-      let assetLights = ordinaryAssetLights;
-      let lightScopeId = ordinaryLightScopeId;
-      if (instanceAssetLights !== undefined) {
-        const cachedLights = instanceAssetLights.get(outerIndex);
-        if (cachedLights !== undefined) {
-          assetLights = cachedLights.lights;
-          lightScopeId = cachedLights.scopeId;
-        } else {
-          assetLights = this.#lightResolver.resolveGltfAsset(state, rootModel);
-          lightScopeId = assetLights === undefined
-            ? 0
-            : this.#lightResolver.gltfScopeId(state.instanceKey, renderInstanceOrdinal, outerIndex);
-          instanceAssetLights.set(outerIndex, { lights: assetLights, scopeId: lightScopeId });
-        }
-      }
-      const materialBindingId = retainGltfPacketSubmissionMaterialBinding(
-        this.#gltfFrameBatches.workspace,
-        this.#scenePlan.plan!.revision,
-        catalog,
-        catalog.materialIds[packetIndex]!,
-        prepared.materialBatchClassId,
-        { material: prepared.material },
-      );
-      const rootBindingId = retainGltfPacketSubmissionRootBinding(
-        this.#gltfFrameBatches.workspace,
-        this.#scenePlan.plan!.revision,
-        catalog,
-        catalog.rootSourceIds[packetIndex]!,
-        outerIndex,
-        lightScopeId,
-        {
-          rootModel,
-          ...(instanceViews === undefined ? {} : { rootInstanceViews: instanceViews }),
-          ...(instanceViews !== undefined
-            ? {
-                rootPositionSignatureVersion: instanceViews.sourceKey,
-                rootRotationSignatureVersion: instanceViews.sourceKey,
-                rootScaleSignatureVersion: instanceViews.sourceKey,
-              }
-            : rootHandle === undefined
-              ? {}
-              : {
-                  rootPositionSignatureVersion: rootHandle.positionVersion,
-                  rootRotationSignatureVersion: rootHandle.rotationVersion,
-                  rootScaleSignatureVersion: rootHandle.scaleVersion,
-                }),
-          rootSignatureInstanceIndex: instanceViews === undefined ? -1 : outerIndex,
-          rootSignatureRenderInstanceOrdinal: renderInstanceOrdinal,
-          rootTransform,
-        },
-      );
-      const lightBindingId = assetLights === undefined
-        ? NO_FRAME_PACKET_ID
-        : retainGltfPacketSubmissionLightBinding(
-            this.#gltfFrameBatches.workspace,
-            this.#scenePlan.plan!.revision,
-            catalog,
-            lightScopeId,
-            assetLights,
-          );
-      appendGltfPacketSubmission(
-        this.#gltfFrameBatches.workspace,
-        this.#scenePlan.plan!.revision,
-        catalog,
-        {
-          geometryId,
-          geometryIdentityId: geometry.staticIdentityId,
-          lightBindingId,
-          lightScopeId,
-          localModelId: catalog.localModelIds[packetIndex]!,
-          materialBindingId,
-          packetIndex,
-          renderClass: catalog.renderClasses[packetIndex]! as FramePacketRenderClass,
-          rootBindingId,
-          sidedness: (packetSidedness & FRAME_PACKET_SIDEDNESS.doubleSided)
-            | (rootDeterminant * localDeterminant >= 0 ? FRAME_PACKET_SIDEDNESS.frontFaceCcw : 0),
-        },
-      );
-      cursor += 1;
-    }
-
-    return cursor;
-  }
-
   #drawGltfPacketSubmissions(
     projection: Mat4,
     view: Mat4,
@@ -2242,23 +1995,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
     sourceX: number,
     sourceY: number,
   ): void {
-    if (this.#gltfFrameBatches.workspace.count === 0) return;
+    if (this.#gltfPacketSubmissions.submissionCount === 0) return;
     const plan = this.#scenePlan.plan!;
-    const groups = this.#gltfFrameBatches.prepareSegment(
+    const groups = this.#gltfPacketSubmissions.prepareSegment(
       plan.revision,
       sceneLights,
       this.#gl,
       this.#context.generation,
-      this.#gltfInstancingCounters,
     );
-    for (let index = 0; index < groups.activeBatchCount; index += 1) {
-      const batch = this.#gltfFrameBatches.batch(groups.activeBatchIds[index]!);
-      this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
-    }
 
     for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
       this.#drawGltfPrimitiveDrawBatch(
-        this.#gltfFrameBatches.batch(groups.opaqueBatchIds[index]!),
+        this.#gltfPacketSubmissions.batch(groups.opaqueBatchIds[index]!),
         projection,
         view,
         toneMapping,
@@ -2277,7 +2025,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       for (let index = 0; index < groups.transmissiveBatchCount; index += 1) {
         this.#drawGltfPrimitiveDrawBatch(
-          this.#gltfFrameBatches.batch(groups.transmissiveBatchIds[index]!),
+          this.#gltfPacketSubmissions.batch(groups.transmissiveBatchIds[index]!),
           projection,
           view,
           toneMapping,
@@ -2288,7 +2036,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     for (let index = 0; index < groups.blendedBatchCount; index += 1) {
       this.#drawGltfPrimitiveDrawBatch(
-        this.#gltfFrameBatches.batch(groups.blendedBatchIds[index]!),
+        this.#gltfPacketSubmissions.batch(groups.blendedBatchIds[index]!),
         projection,
         view,
         toneMapping,
@@ -2326,7 +2074,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       baseColorResidency,
       batch,
       contextGeneration: this.#context.generation,
-      counters: this.#gltfInstancingCounters,
+      counters: this.#gltfPacketSubmissions.counters,
       frame: this.#framePublication.frame,
       projection,
       toneMapping,
@@ -2377,13 +2125,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       view,
       viewportSize,
     });
-  }
-
-  #releaseUnusedGltfBatchResources(): void {
-    this.#gltfFrameBatches.releaseUnused(
-      this.#gl,
-      this.#context.generation,
-    );
   }
 
   #virtualTextureDrawDemandContext(
@@ -3263,10 +3004,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (signals.wakeRequested) this.invalidate();
   }
 
-  #gltfState(node: AnyGltfNode): GltfState {
-    return this.#preparedGltf.stateForNode(node);
-  }
-
   #ensureGltfState(
     key: string,
     sourceUri: string,
@@ -3513,7 +3250,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
-    return { ...this.#gltfInstancingCounters };
+    return this.#gltfPacketSubmissions.snapshot();
   }
 
   #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {
