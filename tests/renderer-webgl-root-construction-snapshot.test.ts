@@ -7,7 +7,7 @@ import {
   scene,
   unlitMaterial,
 } from "@royal/renderer-core";
-import { createWebGlRoot } from "@royal/renderer-webgl";
+import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 import {
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
   type ResourceGovernorPolicy,

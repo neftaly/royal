@@ -9,10 +9,10 @@ import {
   type Material,
 } from "@royal/renderer-core";
 import {
-  createWebGlRoot,
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
   type ResourceGovernorPolicy,
-} from "@royal/renderer-webgl";
+} from "../packages/renderer-webgl/src/resource-governor";
+import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 
 type GlCall = { readonly args: readonly unknown[]; readonly name: string };
 type FetchRequest = { readonly resolve: (response: Response) => void; readonly url: string };

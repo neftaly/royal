@@ -537,21 +537,10 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(Object.isFrozen(root.options)).toBe(true);
     expect(root.snapshot().options).toBe(root.options);
     expect(Object.isFrozen(root.snapshot().options)).toBe(true);
-    expect(root.options).toMatchObject({
+    expect(root.options).toEqual({
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: true,
-      resourceGovernorPolicy: expect.objectContaining({
-        classes: expect.objectContaining({
-          "virtual-texture": expect.objectContaining({
-            persistentGpuBytes: {
-              hardLimit: 123_456,
-              mandatoryFloor: 0,
-              softLimit: 123_456,
-            },
-          }),
-        }),
-      }),
     });
     expect(root.snapshot()).toMatchObject({
       resourceGovernor: {

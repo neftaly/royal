@@ -15,10 +15,10 @@ import {
   type GltfInstanceTransforms,
 } from "@royal/renderer-core";
 import {
-  createWebGlRoot,
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
   type ResourceGovernorPolicy,
-} from "@royal/renderer-webgl";
+} from "../packages/renderer-webgl/src/resource-governor";
+import { createWebGlRootWithResourcePolicy as createWebGlRoot } from "../packages/renderer-webgl/src/root";
 import { forEachFuzzCase } from "./fuzz";
 import {
   camera,

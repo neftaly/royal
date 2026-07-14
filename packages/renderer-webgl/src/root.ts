@@ -51,6 +51,7 @@ import {
   subscribeResourceGovernorDurableCapacityRelease,
   type ResourceGovernor,
   type ResourceGovernorClass,
+  type ResourceGovernorPolicy,
 } from "./resource-governor";
 import {
   gltfRequestKey,
@@ -218,7 +219,8 @@ import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
 import { IblRuntimeOwner } from "./ibl-runtime-owner";
 import { normalizeWebGlRootOptions } from "./root-options";
 import type {
-  NormalizedWebGlRootOptions,
+  InternalWebGlRootOptions,
+  ResolvedWebGlRootOptions,
   WebGlExternalRenderClock,
   WebGlContextLifecycle,
   WebGlContextSnapshot,
@@ -349,7 +351,8 @@ type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameV
 class WebGlRootImpl implements InternalWebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
-  readonly #options: NormalizedWebGlRootOptions;
+  readonly #options: ResolvedWebGlRootOptions;
+  readonly #resourceGovernorPolicy: ResourceGovernorPolicy;
   readonly #contextCapabilities: WebGlContextCapabilityOwner;
   readonly #frameViews = createFrameViews();
   readonly #renderProjection = identityMat4();
@@ -504,7 +507,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }`);
     }
   };
-  constructor(canvas: HTMLCanvasElement, options?: WebGlRootOptions) {
+  constructor(canvas: HTMLCanvasElement, options?: InternalWebGlRootOptions) {
     const rollback: Array<() => void> = [
       () => this.#preparedGltf.dispose(),
       () => disposeVertexInputArena(this.#vertexInputs),
@@ -529,6 +532,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         renderObjectTransform: (node) => this.#sceneBindings.transform(node),
       });
       const requestedOptions = normalizeWebGlRootOptions(options);
+      this.#resourceGovernorPolicy = requestedOptions.resourceGovernorPolicy;
       this.#resourceGovernor = createResourceGovernor(requestedOptions.resourceGovernorPolicy);
       this.#preparedGltf.configureCpuOwnership({
         governor: this.#resourceGovernor,
@@ -582,7 +586,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#gl = gl;
       this.#contextCapabilities = new WebGlContextCapabilityOwner(gl, options);
       this.#options = Object.freeze({
-        ...requestedOptions,
+        generatedImageVirtualTextures: requestedOptions.generatedImageVirtualTextures,
         ...this.#contextCapabilities.attributes,
       });
       this.#clusteredLights = createClusteredLightArena(gl, {
@@ -691,11 +695,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         frame: () => this.#framePublication.frame,
         invalidate: () => this.invalidate(),
         maximumPersistentGpuBytes: maximumResourceGovernorClassDurableBytes(
-          this.#options.resourceGovernorPolicy,
+          this.#resourceGovernorPolicy,
           "ordinary-texture",
           "persistentGpuBytes",
         ),
-        policy: this.#options.resourceGovernorPolicy,
+        policy: this.#resourceGovernorPolicy,
         residencyIntent: this.#textureResidencyIntent,
         resourceGovernor: this.#resourceGovernor,
         synchronizeGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
@@ -726,7 +730,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       registerRollback(() => this.#unsubscribeResourceGovernorDurableCapacityRelease());
       this.#virtualTextureGpu = createVirtualTextureGpuArena(gl, this.#textureHandles, {
         maxPhysicalBytes: maximumResourceGovernorClassDurableBytes(
-          this.#options.resourceGovernorPolicy,
+          this.#resourceGovernorPolicy,
           "virtual-texture",
           "persistentGpuBytes",
         ),
@@ -755,11 +759,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         gpu: this.#virtualTextureGpu,
         invalidate: () => this.invalidate(),
         maximumPersistentGpuBytes: maximumResourceGovernorClassDurableBytes(
-          this.#options.resourceGovernorPolicy,
+          this.#resourceGovernorPolicy,
           "virtual-texture",
           "persistentGpuBytes",
         ),
-        maximumUploadBytes: this.#options.resourceGovernorPolicy.limits.uploadBytes,
+        maximumUploadBytes: this.#resourceGovernorPolicy.limits.uploadBytes,
         resourceGovernor: this.#resourceGovernor,
         runtime: this.#virtualTextureRuntime,
         suppressPersistentGpuWake: () => this.#capacityWakes.suppressPersistentGpuWake(),
@@ -868,7 +872,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return this.#scenePlan.latestScene;
   }
 
-  get options(): NormalizedWebGlRootOptions {
+  get options(): ResolvedWebGlRootOptions {
     return this.#options;
   }
 
@@ -1791,7 +1795,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {
-    const policy = this.#options.resourceGovernorPolicy;
+    const policy = this.#resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
   }
 
@@ -1962,4 +1966,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
 export const createWebGlRoot = (
   canvas: HTMLCanvasElement,
   options?: WebGlRootOptions,
+): WebGlRoot => new WebGlRootImpl(canvas, options);
+
+/** @internal Deterministic budget injection for backend tests. */
+export const createWebGlRootWithResourcePolicy = (
+  canvas: HTMLCanvasElement,
+  options?: InternalWebGlRootOptions,
 ): WebGlRoot => new WebGlRootImpl(canvas, options);

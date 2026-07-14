@@ -197,6 +197,8 @@ describe("renderer-core public API", () => {
   it("keeps public facades narrow at package boundaries", () => {
     expect(webglApi).toHaveProperty("createWebGlRoot");
     expect(webglApi).not.toHaveProperty("WebGlRoot");
+    expect(webglApi).not.toHaveProperty("DEFAULT_RESOURCE_GOVERNOR_POLICY");
+    expect(webglApi).not.toHaveProperty("defineResourceGovernorPolicy");
 
     if (false) {
       const root: import("@royal/renderer-webgl").WebGlRoot = webglApi.createWebGlRoot(
@@ -206,6 +208,9 @@ describe("renderer-core public API", () => {
       void samePublicType;
       // @ts-expect-error WebGlRoot is a factory-created handle type, not a public constructor.
       webglApi.WebGlRoot;
+      // @ts-expect-error Backend scheduling policy is not a product-level root option.
+      const internalPolicy = { resourceGovernorPolicy: {} } satisfies import("@royal/renderer-webgl").WebGlRootOptions;
+      void internalPolicy;
     }
   });
 

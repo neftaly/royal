@@ -10,10 +10,12 @@ import {
   type Material,
 } from "@royal/renderer-core";
 import {
-  createWebGlRoot as createRendererWebGlRoot,
   DEFAULT_RESOURCE_GOVERNOR_POLICY,
   type ResourceGovernorPolicy,
-} from "@royal/renderer-webgl";
+} from "../packages/renderer-webgl/src/resource-governor";
+import {
+  createWebGlRootWithResourcePolicy as createRendererWebGlRoot,
+} from "../packages/renderer-webgl/src/root";
 import type { SurfaceMaterial } from "../packages/renderer-webgl/src/webgl/materials";
 
 type CanvasSize = {

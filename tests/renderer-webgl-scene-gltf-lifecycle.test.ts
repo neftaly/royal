@@ -52,7 +52,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { boxGeometry, createCameraViewResource, directionalLight, gltf, mesh, planeGeometry, scene, standardMaterial, unlitMaterial } from "@royal/renderer-core";
 import type { RenderObjectHandle } from "@royal/renderer-core";
-import { createWebGlRoot as createWebGlRootBase } from "@royal/renderer-webgl";
+import { createWebGlRootWithResourcePolicy as createWebGlRootBase } from "../packages/renderer-webgl/src/root";
 import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "../packages/renderer-webgl/src/resource-governor";
 import type { ResourceGovernorPolicy } from "../packages/renderer-webgl/src/resource-governor";
 

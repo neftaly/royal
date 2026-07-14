@@ -4,7 +4,6 @@ import type {
   RenderRoot,
 } from "@royal/renderer-core";
 import type {
-  ResourceGovernorPolicy,
   ResourceGovernorPolicyInput,
   ResourceGovernorSnapshot,
 } from "./resource-governor";
@@ -25,16 +24,14 @@ export interface WebGlRootOptions {
    * @defaultValue `false`
    */
   readonly generatedImageVirtualTextures?: boolean;
-  /**
-   * Nested overrides for the immutable cross-class CPU/GPU/job/upload budget
-   * policy. Omitted fields inherit Royal's exported default policy. VT atlas
-   * and page-table storage uses the `virtual-texture` persistent-GPU class budget.
-   */
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
 }
 
-export type NormalizedWebGlRootOptions = Required<Omit<WebGlRootOptions, "resourceGovernorPolicy">>
-  & { readonly resourceGovernorPolicy: ResourceGovernorPolicy };
+export type ResolvedWebGlRootOptions = Required<WebGlRootOptions>;
+
+/** @internal Budget injection retained for deterministic backend tests. */
+export interface InternalWebGlRootOptions extends WebGlRootOptions {
+  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
+}
 
 export type WebGlContextLifecycle = "active" | "lost" | "restoring" | "disposed";
 
@@ -66,7 +63,7 @@ export interface WebGlRootSnapshot {
   /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: NormalizedWebGlRootOptions;
+  readonly options: ResolvedWebGlRootOptions;
   readonly planning: WebGlFramePlanningSnapshot;
   readonly resourceLifetime: WebGlResourceLifetimeSnapshot;
   /** Root-wide resource pressure and admission diagnostics. */
@@ -277,7 +274,7 @@ export interface WebGlRoot {
   readonly disposed: boolean;
   readonly frame: number;
   readonly latestScene: RenderRoot | undefined;
-  readonly options: NormalizedWebGlRootOptions;
+  readonly options: ResolvedWebGlRootOptions;
   contextSnapshot(): WebGlContextSnapshot;
   /** Suspends default-framebuffer scheduling until the returned release function runs. */
   acquireExternalRenderClock(): WebGlExternalRenderClock;
