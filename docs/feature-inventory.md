@@ -111,7 +111,7 @@ Status meanings:
 | Sparse accessors | ingestion | Core glTF compatibility with isolated implementation cost. Keep. |
 | Mesh/material variants | ingestion/product | Keep. Complete an intentional application selection API and demo rather than deleting latent renderer support. |
 | glTF punctual lights | ingestion | Low-cost lowering into Royal lights. Keep unless asset lights are unwanted by policy. |
-| glTF image-based lights | candidate | Redundant environment authority. Remove runtime ownership; optionally expose an ingestion suggestion later. |
+| glTF image-based lights | ingestion/product | Keep as asset-scoped fallback lighting. It cannot mutate the Royal scene, and an explicit Royal environment wins. |
 | glTF cameras | unsupported | Deliberately ignored; Royal scene owns the camera. |
 | Animations | unsupported | Deliberately out of scope. |
 | Skins | unsupported | Explicitly rejected. |
@@ -130,7 +130,7 @@ Status meanings:
 | `EXT_mesh_gpu_instancing` | ingestion | Correctly lowers into canonical instance transforms. Keep. |
 | `KHR_node_visibility` | ingestion/candidate | Small optional filtering extension. Delete if no production exporter uses it. |
 | `KHR_materials_variants` | ingestion/product | Keep and add an intentional selection API/workload. |
-| `EXT_lights_image_based` | ingestion/candidate | Real multi-vendor extension. Keep only as an explicit adapter into Royal's one environment type; remove automatic scene-global ownership. |
+| `EXT_lights_image_based` | ingestion | Real multi-vendor extension. Keep its existing adapter: imported IBL is asset-scoped fallback, scene environment wins, and no load-order authority exists. |
 | `MSFT_lod` | ingestion | Keep as declarations only; lower to canonical LOD. |
 | `GS_texture_svg` | ingestion | Garbo Succus vendor extension with core raster fallback. Keep minimal and format-only. |
 

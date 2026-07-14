@@ -26,18 +26,21 @@ use is preserving the authored look of a self-contained glTF scene.
 
 Royal commonly composes several glTF assets inside one application scene. An
 embedded asset must therefore not silently replace the whole Royal
-environment. The intended architecture is:
+environment. Royal's existing architecture is:
 
 - keep the decoder isolated as an ingestion adapter;
 - lower its value to Royal's canonical environment description;
-- expose that value as an explicit environment suggestion/import operation;
-- let an explicitly authored Royal scene environment win;
-- never choose between conflicting asset environments by load order.
+- scope the imported environment to draws belonging to that glTF asset;
+- combine Royal scene punctual lights with asset-local lighting;
+- let an explicitly authored Royal scene environment win for every draw;
+- never choose between asset environments by load order.
 
-Until that explicit selection API exists, automatic scene-global application of
-`EXT_lights_image_based` is a candidate for removal. Keeping the decoder is
-justified only if Royal needs faithful import of complete glTF scenes or known
-production assets use it.
+This is the desired wrapper behavior and is a strong reason to keep
+`EXT_lights_image_based`: a self-contained glTF scene retains its authored look,
+while several glTF assets remain composable. With no Royal scene environment,
+each asset may use its own embedded IBL; direct Royal meshes do not implicitly
+inherit an arbitrary asset's environment. That can produce deliberately
+different lighting between imported assets, but it is deterministic and local.
 
 ## Environment representation
 
