@@ -127,6 +127,12 @@ until their texels are usable. All `physical*Bytes` counters are byte counts.
 governor policy, allocated storage excludes quarantined storage, and both
 remain charged against that maximum.
 
+Page-source timing is format-agnostic: `pageLoadRequests`,
+`pageLoadDurationSamples`, `pageLoadDurationAverageMs`, and
+`pageLoadDurationMaxMs` cover authored image/KTX2 pages and automatic raster
+pages alike. `automaticManifestUses`, `automaticPagesTarget`, and
+`automaticSourceBytes` describe only automatic image VTs.
+
 Manifest fetch and parse, page fetch/decode, GPU admission, and upload happen
 asynchronously. Rendering continues with available fallback data while work is
 pending, and invalidation schedules later progress. Failures are reported in

@@ -512,7 +512,7 @@ const installBenchmarkHooks = async (session) => {
     if (manifestCount === 0) return true;
     const virtualTexturing = readRendererSnapshot()?.virtualTexturing;
     if (
-      (virtualTexturing?.generatedManifestUses ?? 0) > 0 &&
+      (virtualTexturing?.automaticManifestUses ?? 0) > 0 &&
       (virtualTexturing?.pendingPages ?? 0) === 0 &&
       (virtualTexturing?.uploadedPages ?? 0) > 0
     ) {
@@ -1082,12 +1082,13 @@ const buildReport = ({
         generatedPagePrep: rendererVirtualTexturing === null
           ? null
           : {
-              generatedManifestUses: rendererVirtualTexturing.generatedManifestUses ?? 0,
-              generatedPageFailures: rendererVirtualTexturing.generatedPageFailures ?? 0,
-              generatedPageRasterizeMaxMs: rendererVirtualTexturing.generatedPageRasterizeMaxMs ?? 0,
-              generatedPageRasterizeMs: rendererVirtualTexturing.generatedPageRasterizeMs ?? 0,
-              generatedPageRequests: rendererVirtualTexturing.generatedPageRequests ?? 0,
-              generatedPagesTarget: rendererVirtualTexturing.generatedPagesTarget ?? 0,
+              generatedManifestUses: rendererVirtualTexturing.automaticManifestUses ?? 0,
+              generatedPageFailures: rendererVirtualTexturing.pageLoadFailures ?? 0,
+              generatedPageRasterizeMaxMs: rendererVirtualTexturing.pageLoadDurationMaxMs ?? 0,
+              generatedPageRasterizeMs: (rendererVirtualTexturing.pageLoadDurationAverageMs ?? 0)
+                * (rendererVirtualTexturing.pageLoadDurationSamples ?? 0),
+              generatedPageRequests: rendererVirtualTexturing.pageLoadRequests ?? 0,
+              generatedPagesTarget: rendererVirtualTexturing.automaticPagesTarget ?? 0,
             },
         renderer: rendererVirtualTexturing,
       },

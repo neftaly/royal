@@ -816,15 +816,15 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     expect(shaderSources(calls).join("\n")).toContain("sampleVirtualBaseColor");
     expect(uniform1iPayloads(calls, "u_useVirtualTexture")).toContain(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 1,
-      generatedPageFailures: 0,
-      generatedPagesTarget: 5,
+      automaticManifestUses: 1,
+      pageLoadFailures: 0,
+      automaticPagesTarget: 5,
       manifestRequests: 0,
       manifestsReady: 1,
       cachedPages: expect.any(Number),
       uploadedPages: expect.any(Number),
     }));
-    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.cachedPages).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.uploadedPages).toBeGreaterThan(0);

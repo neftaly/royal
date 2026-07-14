@@ -373,9 +373,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.objectUrlBlobs).toHaveLength(1);
     expect(callCount(calls, "texImage2D")).toBe(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 0,
-      generatedPageFailures: 0,
-      generatedPagesTarget: 0,
+      automaticManifestUses: 0,
+      pageLoadFailures: 0,
+      automaticPagesTarget: 0,
       manifestsReady: 0,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);

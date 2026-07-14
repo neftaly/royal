@@ -87,7 +87,13 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     ControlledImage.instances[0]!.settleError();
     await flushMicrotasks();
     expect(requestAnimationFrame).toHaveBeenCalledTimes(wakesBeforeFailure + 1);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 1, manifestFailures: 0 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      manifestFailures: 0,
+      pageLoadDurationAverageMs: expect.any(Number),
+      pageLoadDurationMaxMs: expect.any(Number),
+      pageLoadFailures: 1,
+      pageLoadRequests: 1,
+    });
 
     root.render(graph);
     expect(ControlledImage.instances).toHaveLength(1);
@@ -107,7 +113,11 @@ describe("WebGL renderer virtual texturing scheduling and failures", () => {
     root.render(graph);
     await flushMicrotasks();
     expect(ControlledImage.instances).toHaveLength(3);
-    expect(root.snapshot().virtualTexturing).toMatchObject({ pageLoadFailures: 3, manifestFailures: 0 });
+    expect(root.snapshot().virtualTexturing).toMatchObject({
+      manifestFailures: 0,
+      pageLoadFailures: 3,
+      pageLoadRequests: 3,
+    });
     root.dispose();
     vi.useRealTimers();
   });

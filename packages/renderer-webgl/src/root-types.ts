@@ -190,17 +190,23 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly demandRetentionOverflows: number;
   /** Prior resident pages temporarily retained by demand hysteresis. */
   readonly demandRetentions: number;
-  readonly generatedManifestUses: number;
-  readonly generatedPageFailures: number;
-  readonly generatedPageRasterizeMaxMs: number;
-  readonly generatedPageRasterizeMs: number;
-  readonly generatedPageRequests: number;
-  readonly generatedPagesTarget: number;
+  /** Automatic image VTs whose generated manifest is currently in use. */
+  readonly automaticManifestUses: number;
+  /** Logical pages across the automatic image VTs currently in use. */
+  readonly automaticPagesTarget: number;
   /** Full decoded automatic-VT sources retained on CPU; also charged to ordinary-texture ownership. */
-  readonly generatedSourceBytes: number;
+  readonly automaticSourceBytes: number;
   readonly manifestFailures: number;
   readonly gpuAdmissionFailures: number;
   readonly pageLoadFailures: number;
+  /** Mean source fetch/decode/raster time for completed VT page requests. */
+  readonly pageLoadDurationAverageMs: number;
+  /** Slowest source fetch/decode/raster time for a completed VT page request. */
+  readonly pageLoadDurationMaxMs: number;
+  /** Completed page requests represented by the duration metrics. */
+  readonly pageLoadDurationSamples: number;
+  /** VT page-source requests, including authored and automatic sources. */
+  readonly pageLoadRequests: number;
   readonly manifestRequests: number;
   readonly manifestsReady: number;
   readonly pageTableTextures: number;

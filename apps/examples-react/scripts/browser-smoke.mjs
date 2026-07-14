@@ -1161,7 +1161,6 @@ const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(
     const beforeVt = before?.virtualTexturing;
     const cumulativeFailureCounters = [
       'demandRetentionOverflows',
-      'generatedPageFailures',
       'gpuAdmissionFailures',
       'manifestFailures',
       'pageLoadFailures',

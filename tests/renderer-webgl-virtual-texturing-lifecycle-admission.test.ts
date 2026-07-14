@@ -157,7 +157,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
 
     expect(ControlledImage.instances).toHaveLength(0);
     expect(root.snapshot().resourceGovernor.denials).toBe(denied);
-    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 144 decoded CPU bytes");
+    expect(root.snapshot().diagnostics.join("\n")).toContain("requires 144 retained CPU bytes");
     root.dispose();
   });
 

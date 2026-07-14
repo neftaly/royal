@@ -51,11 +51,11 @@ describe("WebGL renderer generated and material virtual texturing", () => {
 
     root.render(renderScene(material));
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 1,
-      generatedPagesTarget: 5,
-      generatedSourceBytes: 512 * 512 * 4,
+      automaticManifestUses: 1,
+      automaticPagesTarget: 5,
+      automaticSourceBytes: 512 * 512 * 4,
     }));
-    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
+    expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThan(0);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
       u_texture: expect.arrayContaining([0]),
       u_useTexture: expect.arrayContaining([1]),
@@ -80,15 +80,15 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     }
 
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedPageFailures: 0,
-      generatedPagesTarget: 5,
+      pageLoadFailures: 0,
+      automaticPagesTarget: 5,
       manifestFailures: 0,
       manifestRequests: 0,
       manifestsReady: 1,
       cachedPages: expect.any(Number),
       uploadedPages: expect.any(Number),
     }));
-    expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThanOrEqual(1);
+    expect(root.snapshot().virtualTexturing.pageLoadRequests).toBeGreaterThanOrEqual(1);
     expect(root.snapshot().virtualTexturing.cachedPages).toBeGreaterThanOrEqual(1);
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing.uploadedPageBytes).toBeGreaterThanOrEqual(258 * 258 * 4);
@@ -144,16 +144,16 @@ describe("WebGL renderer generated and material virtual texturing", () => {
 
     canvas.dispatchContextEvent("webglcontextlost");
     await flushMicrotasks();
-    expect(root.snapshot().virtualTexturing.generatedPageFailures).toBe(0);
+    expect(root.snapshot().virtualTexturing.pageLoadFailures).toBe(0);
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(renderScene(material));
 
     expect(objectUrlBlobs).toHaveLength(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 0,
-      generatedPageFailures: 0,
-      generatedPageRequests: 0,
-      generatedPagesTarget: 0,
+      automaticManifestUses: 0,
+      pageLoadFailures: 0,
+      pageLoadRequests: 0,
+      automaticPagesTarget: 0,
       manifestsReady: 0,
     }));
     expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
@@ -192,8 +192,8 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
     expect(objectUrlBlobs).toHaveLength(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 0,
-      generatedPagesTarget: 0,
+      automaticManifestUses: 0,
+      automaticPagesTarget: 0,
       manifestsReady: 0,
     }));
     expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
@@ -218,12 +218,12 @@ describe("WebGL renderer generated and material virtual texturing", () => {
 
     root.render(renderScene(material));
 
-    const generatedPageRequests = root.snapshot().virtualTexturing.generatedPageRequests;
-    expect(generatedPageRequests).toBeGreaterThan(0);
-    expect(generatedPageRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME);
-    expect(generatedPageRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS);
-    expect(canvases).toHaveLength(generatedPageRequests);
-    expect(contexts).toHaveLength(generatedPageRequests);
+    const pageLoadRequests = root.snapshot().virtualTexturing.pageLoadRequests;
+    expect(pageLoadRequests).toBeGreaterThan(0);
+    expect(pageLoadRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_PAGE_REQUESTS_PER_FRAME);
+    expect(pageLoadRequests).toBeLessThanOrEqual(VIRTUAL_TEXTURE_MAX_IN_FLIGHT_PAGE_LOADS);
+    expect(canvases).toHaveLength(pageLoadRequests);
+    expect(contexts).toHaveLength(pageLoadRequests);
     for (const canvas of canvases) {
       expect(canvas).toEqual(expect.objectContaining({ height: 258, width: 258 }));
     }

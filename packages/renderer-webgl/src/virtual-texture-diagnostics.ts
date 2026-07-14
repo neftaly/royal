@@ -23,17 +23,17 @@ export const virtualTextureDiagnosticsSnapshot = (
   let publishedDemandPages = 0;
   let demandRetentionOverflows = 0;
   let demandRetentions = 0;
-  let generatedManifestUses = 0;
-  let generatedPageFailures = 0;
-  let generatedPageRasterizeMaxMs = 0;
-  let generatedPageRasterizeMs = 0;
-  let generatedPageRequests = 0;
-  let generatedPagesTarget = 0;
-  let generatedSourceBytes = 0;
+  let automaticManifestUses = 0;
+  let automaticPagesTarget = 0;
+  let automaticSourceBytes = 0;
   let gpuAdmissionFailures = 0;
   let manifestFailures = 0;
   let manifestRequests = 0;
   let pageLoadFailures = 0;
+  let pageLoadDurationMaxMs = 0;
+  let pageLoadDurationMs = 0;
+  let pageLoadDurationSamples = 0;
+  let pageLoadRequests = 0;
   let manifestsReady = 0;
   let pageTableTextures = 0;
   let pageTableUpdates = 0;
@@ -67,20 +67,17 @@ export const virtualTextureDiagnosticsSnapshot = (
     publishedDemandPages += state.demandedPageKeys.size;
     demandRetentionOverflows += state.stats.demandRetentionOverflows;
     demandRetentions += state.stats.demandRetentions;
-    generatedManifestUses += state.stats.generatedManifestUses;
-    generatedPageFailures += state.stats.generatedPageFailures;
-    generatedPageRasterizeMaxMs = Math.max(
-      generatedPageRasterizeMaxMs,
-      state.stats.generatedPageRasterizeMaxMs,
-    );
-    generatedPageRasterizeMs += state.stats.generatedPageRasterizeMs;
-    generatedPageRequests += state.stats.generatedPageRequests;
-    generatedPagesTarget += state.stats.generatedPagesTarget;
-    generatedSourceBytes += state.stats.generatedSourceBytes;
+    automaticManifestUses += state.stats.automaticManifestUses;
+    automaticPagesTarget += state.stats.automaticPagesTarget;
+    automaticSourceBytes += state.stats.automaticSourceBytes;
     gpuAdmissionFailures += state.stats.gpuAdmissionFailures;
     manifestFailures += state.stats.manifestFailures;
     manifestRequests += state.stats.manifestRequests;
     pageLoadFailures += state.stats.pageLoadFailures;
+    pageLoadDurationMaxMs = Math.max(pageLoadDurationMaxMs, state.stats.pageLoadDurationMaxMs);
+    pageLoadDurationMs += state.stats.pageLoadDurationMs;
+    pageLoadDurationSamples += state.stats.pageLoadDurationSamples;
+    pageLoadRequests += state.stats.pageLoadRequests;
     if (state.status === "ready") manifestsReady += 1;
     pageTableUpdates += gpu?.pageTableUpdates ?? 0;
     const requests = runtime.requests.snapshot(state);
@@ -133,17 +130,17 @@ export const virtualTextureDiagnosticsSnapshot = (
     publishedDemandPages,
     demandRetentionOverflows,
     demandRetentions,
-    generatedManifestUses,
-    generatedPageFailures,
-    generatedPageRasterizeMaxMs,
-    generatedPageRasterizeMs,
-    generatedPageRequests,
-    generatedPagesTarget,
-    generatedSourceBytes,
+    automaticManifestUses,
+    automaticPagesTarget,
+    automaticSourceBytes,
     gpuAdmissionFailures,
     manifestFailures,
     manifestRequests,
     pageLoadFailures,
+    pageLoadDurationAverageMs: pageLoadDurationSamples === 0 ? 0 : pageLoadDurationMs / pageLoadDurationSamples,
+    pageLoadDurationMaxMs,
+    pageLoadDurationSamples,
+    pageLoadRequests,
     manifestsReady,
     pageTableTextures,
     pageTableUpdates,

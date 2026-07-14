@@ -102,6 +102,19 @@ const emptyResourceSnapshot = (): MutableResourceSnapshot => ({
 const virtualTexturePayloadSource = (payload: VirtualTexturePagePayload): object =>
   payload.kind === "image" ? payload.image : payload.data;
 
+const virtualTextureRequestNow = (): number =>
+  typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+
+const recordVirtualTexturePageLoadDuration = (
+  state: VirtualTextureRuntimeState,
+  startedAt: number,
+): void => {
+  const duration = Math.max(0, virtualTextureRequestNow() - startedAt);
+  state.stats.pageLoadDurationMs += duration;
+  state.stats.pageLoadDurationMaxMs = Math.max(state.stats.pageLoadDurationMaxMs, duration);
+  state.stats.pageLoadDurationSamples += 1;
+};
+
 const validVirtualTexturePayload = (
   manifest: NonNullable<VirtualTextureRuntimeState["manifest"]>,
   payload: VirtualTexturePagePayload,
@@ -417,17 +430,16 @@ export class VirtualTextureRequestCoordinator {
     const controller = new AbortController();
     requestState.abortControllers.set(pageKey, controller);
     const sourceGeneration = state.sourceGeneration;
+    const pageLoadStartedAt = virtualTextureRequestNow();
+    state.stats.pageLoadRequests += 1;
     let pageLoad: VirtualTexturePageLoad;
     try {
       pageLoad = this.#options.loadPage(state, page, controller.signal);
     } catch (error) {
-      requestState.abortControllers.delete(pageKey);
-      controller.abort();
-      decodedReservation.cancel();
-      job.release();
-      throw error;
+      pageLoad = { kind: "page", promise: Promise.reject(error) };
     }
     if (pageLoad.kind === "absent") {
+      recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
       decodedReservation.cancel();
       job.release();
       requestState.abortControllers.delete(pageKey);
@@ -435,7 +447,16 @@ export class VirtualTextureRequestCoordinator {
       this.#options.invalidate();
       return false;
     }
-    const pageImage = pageLoad.promise;
+    const pageImage = pageLoad.promise.then(
+      (payload) => {
+        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
+        return payload;
+      },
+      (error: unknown) => {
+        recordVirtualTexturePageLoadDuration(state, pageLoadStartedAt);
+        throw error;
+      },
+    );
 
     if (
       !this.#options.active()

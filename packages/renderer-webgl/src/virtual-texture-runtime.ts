@@ -84,21 +84,15 @@ type DeferredVirtualTexturePageSource = {
 
 /** Format adapter consumed by the runtime shell; demand and residency see only its manifest. */
 export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | DeferredVirtualTexturePageSource) & {
+  /** Optional source facts used only by aggregate diagnostics. */
+  readonly automaticSource?: { readonly retainedBytes: number };
   readonly loadPage: VirtualTexturePageLoader;
   readonly manifestUri: string;
-  /** Diagnostics only; scheduling and residency must never branch on this label. */
-  readonly telemetry?: {
-    readonly decodedSourceBytes: number;
-    readonly kind: "generated-raster";
-  };
 };
 
 export type GeneratedVirtualTextureSource = VirtualTexturePageSource & {
+  readonly automaticSource: { readonly retainedBytes: number };
   readonly manifest: VirtualTextureManifestParseResult;
-  readonly telemetry: {
-    readonly decodedSourceBytes: number;
-    readonly kind: "generated-raster";
-  };
 };
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
@@ -107,16 +101,16 @@ export type VirtualTextureRuntimeStats = {
   demandAdmissions: number;
   demandRetentionOverflows: number;
   demandRetentions: number;
-  generatedManifestUses: number;
-  generatedPageFailures: number;
-  generatedPageRasterizeMaxMs: number;
-  generatedPageRasterizeMs: number;
-  generatedPageRequests: number;
-  generatedPagesTarget: number;
-  generatedSourceBytes: number;
+  automaticManifestUses: number;
+  automaticPagesTarget: number;
+  automaticSourceBytes: number;
   manifestFailures: number;
   gpuAdmissionFailures: number;
   pageLoadFailures: number;
+  pageLoadDurationMaxMs: number;
+  pageLoadDurationMs: number;
+  pageLoadDurationSamples: number;
+  pageLoadRequests: number;
   manifestRequests: number;
   preparedResidencyResolutions: number;
   shaderBinds: number;
@@ -216,9 +210,6 @@ export const virtualTextureDemandPageDistance = (
 const generatedVirtualTextureManifestUri = (key: string): string =>
   `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
 
-export const virtualTextureNow = (): number =>
-  typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
-
 export const generatedVirtualTextureSource = (
   textureKey: string,
   pageSource: VirtualTextureGeneratedPageSource,
@@ -241,9 +232,8 @@ export const generatedVirtualTextureSource = (
     },
     manifest: { diagnostics: [], manifest },
     manifestUri: generatedVirtualTextureManifestUri(textureKey),
-    telemetry: {
-      decodedSourceBytes: pageSource.source.decodedBytes,
-      kind: "generated-raster",
+    automaticSource: {
+      retainedBytes: pageSource.source.decodedBytes,
     },
   };
 };

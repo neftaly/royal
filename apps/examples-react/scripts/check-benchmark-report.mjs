@@ -466,7 +466,6 @@ const checkVirtualTextureClose = (route, routeLabel, enabled) => {
   if (!requireObject(virtualTexturing.after, `${routeLabel}.virtualTextureClose.renderer.virtualTexturing.after`)) return;
   for (const counter of [
     'demandRetentionOverflows',
-    'generatedPageFailures',
     'gpuAdmissionFailures',
     'manifestFailures',
     'outstandingPageRequests',
@@ -658,7 +657,7 @@ const checkGltfLoadReport = (report) => {
   const vtRenderer = metrics.vt?.renderer;
   if (isObject(vtRenderer)) {
     requireZero(vtRenderer.pendingPages, 'report.metrics.vt.renderer.pendingPages');
-    requireZero(vtRenderer.generatedPageFailures, 'report.metrics.vt.renderer.generatedPageFailures');
+    requireZero(vtRenderer.pageLoadFailures, 'report.metrics.vt.renderer.pageLoadFailures');
     requireZero(vtRenderer.unsupportedDraws, 'report.metrics.vt.renderer.unsupportedDraws');
     if (generatedVt) {
       requirePositiveNumber(vtRenderer.uploadedPages, 'report.metrics.vt.renderer.uploadedPages');
