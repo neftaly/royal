@@ -102,7 +102,9 @@ const componentIndex = {
 
 let nextRenderObjectId = 1;
 
-const createMutableRenderObjectTransformState = (transform: Transform): MutableRenderObjectTransformState => ({
+const createMutableRenderObjectTransformState = (
+  transform: Transform,
+): MutableRenderObjectTransformState => ({
   position: copyVec3(transform.position),
   rotation: copyEulerRads(transform.rotation),
   scale: copyVec3(transform.scale)
@@ -110,6 +112,12 @@ const createMutableRenderObjectTransformState = (transform: Transform): MutableR
 
 export const createRenderObjectTransformState = (transform: Transform): RenderObjectTransformState =>
   createMutableRenderObjectTransformState(transform);
+
+const copyVec3Into = (target: MutableVec3, source: Vec3): void => {
+  target[0] = source[0];
+  target[1] = source[1];
+  target[2] = source[2];
+};
 
 export const renderObjectTransformStateToTransform = (
   state: RenderObjectTransformState
@@ -305,7 +313,7 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   setTransform(transform: RenderObjectTransformUpdate): void {
-    this.#applyTransformUpdate(transform);
+    this.#dispatch({ type: 'set-transform', transform });
   }
 
   [transformStateSymbol](): RenderObjectTransformState {
@@ -313,63 +321,23 @@ class MutableRenderObjectHandle implements RenderObjectHandle {
   }
 
   #dispatch(action: RenderObjectTransformAction): void {
-    switch (action.type) {
-      case 'set-transform':
-        this.#applyTransformUpdate(action.transform);
-        return;
-      case 'set-vector':
-        this.#commitSingleField(action.field, this.#applyVector(action.field, action.value));
-        return;
-      case 'set-component':
-        this.#commitSingleField(
-          action.field,
-          this.#applyComponent(action.field, action.component, action.value)
-        );
-        return;
-    }
-  }
-
-  #applyTransformUpdate(transform: RenderObjectTransformUpdate): void {
-    const positionChanged = transform.position === undefined ? false : this.#applyVector('position', transform.position);
-    const rotationChanged = transform.rotation === undefined ? false : this.#applyVector('rotation', transform.rotation);
-    const scaleChanged = transform.scale === undefined ? false : this.#applyVector('scale', transform.scale);
-    this.#commitChanges(positionChanged, rotationChanged, scaleChanged);
-  }
-
-  #applyVector(field: RenderObjectTransformField, value: Vec3): boolean {
-    const current = this.#state[field];
-    if (sameVec3(current, value)) return false;
-
-    current[0] = value[0];
-    current[1] = value[1];
-    current[2] = value[2];
-    return true;
-  }
-
-  #applyComponent(
-    field: RenderObjectTransformField,
-    component: RenderObjectTransformComponent,
-    value: number
-  ): boolean {
-    const current = this.#state[field];
-    const index = componentIndex[component];
-    if (Object.is(current[index], value)) return false;
-
-    current[index] = value;
-    return true;
-  }
-
-  #commitSingleField(field: RenderObjectTransformField, changed: boolean): void {
-    this.#commitChanges(field === 'position' && changed, field === 'rotation' && changed, field === 'scale' && changed);
-  }
-
-  #commitChanges(positionChanged: boolean, rotationChanged: boolean, scaleChanged: boolean): void {
-    if (!positionChanged && !rotationChanged && !scaleChanged) return;
+    const previous = this.#state;
+    const next = reduceRenderObjectTransform(previous, action);
+    if (next === previous) return;
 
     this.#transformVersion += 1;
-    if (positionChanged) this.#positionVersion += 1;
-    if (rotationChanged) this.#rotationVersion += 1;
-    if (scaleChanged) this.#scaleVersion += 1;
+    if (next.position !== previous.position) {
+      copyVec3Into(previous.position, next.position);
+      this.#positionVersion += 1;
+    }
+    if (next.rotation !== previous.rotation) {
+      copyVec3Into(previous.rotation, next.rotation);
+      this.#rotationVersion += 1;
+    }
+    if (next.scale !== previous.scale) {
+      copyVec3Into(previous.scale, next.scale);
+      this.#scaleVersion += 1;
+    }
     this.#onChange();
   }
 }
