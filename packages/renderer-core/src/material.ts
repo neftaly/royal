@@ -2,17 +2,14 @@ import type { LinearRgba } from './primitives';
 import { finiteNumber, positiveFiniteNumber } from './descriptor-values';
 import { solidTexture, type TextureRef } from './texture';
 
-export type MaterialColorInput = LinearRgba;
-export type MaterialTextureInput = TextureRef;
-
 export type MaterialSurfaceOptions =
   | {
-    readonly color: MaterialColorInput;
+    readonly color: LinearRgba;
     readonly texture?: never;
   }
   | {
     readonly color?: never;
-    readonly texture: MaterialTextureInput;
+    readonly texture: TextureRef;
   };
 
 /** Normalized lit material descriptor. Create with `standardMaterial({ color })` or `standardMaterial({ texture })`. */
@@ -48,7 +45,7 @@ export type StandardMaterialOptions = MaterialSurfaceOptions & {
 export type UnlitMaterialOptions = MaterialSurfaceOptions;
 
 export interface WireframeMaterialOptions {
-  readonly color: MaterialColorInput;
+  readonly color: LinearRgba;
   /** @defaultValue `1.25` */
   readonly width?: number;
 }

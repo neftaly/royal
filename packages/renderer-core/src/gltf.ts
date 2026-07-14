@@ -38,7 +38,7 @@ export interface GltfNode {
   readonly variant?: GltfMaterialVariantSelection;
 }
 
-export interface GltfSrcOptions {
+export interface GltfOptions {
   readonly bounds?: GltfAssetBounds;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;
@@ -53,9 +53,7 @@ export interface GltfSrcOptions {
   readonly version?: GltfAssetRef['version'];
 }
 
-export type GltfOptions = GltfSrcOptions;
-
-export type GltfInput = GltfOptions | GltfSrcOptions['src'];
+export type GltfInput = GltfOptions | GltfOptions['src'];
 
 const gltfOptions = (input: GltfInput): GltfOptions =>
   typeof input === 'string' ? { src: input } : input;
@@ -82,7 +80,7 @@ export const validateGltfVariant = (
 };
 
 export function gltf(src: string): GltfNode;
-export function gltf(options: GltfSrcOptions): GltfNode;
+export function gltf(options: GltfOptions): GltfNode;
 export function gltf(input: GltfInput): GltfNode {
   const options = gltfOptions(input);
   const asset = resolveGltfAsset(options);

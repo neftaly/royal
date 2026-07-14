@@ -67,9 +67,7 @@ export type {
 export type { CameraKind, GeometryKind, MaterialKind, RenderNodeKind } from './kind';
 export type {
   Material,
-  MaterialColorInput,
   MaterialSurfaceOptions,
-  MaterialTextureInput,
   StandardMaterial,
   StandardMaterialOptions,
   UnlitMaterial,
