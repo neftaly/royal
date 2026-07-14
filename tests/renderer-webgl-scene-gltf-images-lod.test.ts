@@ -1138,6 +1138,42 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(drawCount(lowDraws[0]!), "low coverage should select the referenced three-index LOD1 triangle").toBe(3);
   });
 
+  it("culls a node MSFT_lod set below its authored lowest screen coverage", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { calls, gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const scale = lodScaleForCoverage(0.005);
+    const document = nodeLodDocument();
+
+    root.render(renderScene([
+      gltf({
+        src: lodGltfSrc,
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [scale, scale, 1],
+        },
+        version: "node-lod-lowest-cutoff",
+      }),
+    ]));
+    await settleLodDocumentAndBuffer(loader, {
+      ...document,
+      nodes: [
+        {
+          ...document.nodes[0],
+          extras: { MSFT_screencoverage: [0.2, 0.01] },
+        },
+        document.nodes[1]!,
+      ],
+    });
+    await flushAnimationFrames(viewport.animationFrames);
+
+    expect(drawCalls(calls), "coverage below the lowest authored threshold draws no LOD member")
+      .toHaveLength(0);
+  });
+
   it("selects and hysteretically retains LOD0 when bounds cross the perspective near plane", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();

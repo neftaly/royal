@@ -562,8 +562,7 @@ const readGltfMaterialLod = (
   diagnostics: GltfSceneReaderDiagnosticSink,
 ): LodSet<LoadedGltfMaterial> | undefined => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
-  const lodIds = (material?.extensions?.MSFT_lod?.ids ?? [])
-    .filter((id) => Number.isInteger(id) && id >= 0 && document.materials?.[id] !== undefined);
+  const lodIds = material?.extensions?.MSFT_lod?.ids ?? [];
   if (materialIndex === undefined || lodIds.length === 0) return undefined;
   const levels = [
     readGltfMaterial(document, src, assetKey, materialIndex, diagnostics),

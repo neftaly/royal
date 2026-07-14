@@ -93,6 +93,7 @@ Status meanings:
 | Projected screen-coverage LOD selection | product | Keep; cheap runtime selection across prepared levels. |
 | Multi-view maximum coverage | product | Required for stereo XR and secondary views. |
 | LOD hysteresis | product | Required to prevent threshold flicker. |
+| Authored lowest-detail cutoff | product | Honor a positive final `MSFT_screencoverage` threshold by culling the whole set below it, with hysteresis at the boundary. |
 | Missing-level drawable fallback | fallback | Required for streaming and partial readiness. |
 | Automatic browser-side mesh simplification | candidate | Not currently implemented. Prefer offline/build generation; optional worker ingestion can be added for user uploads. |
 | `MSFT_lod` node/material declarations | ingestion | Keep as an adapter to canonical `LodSet`; both forms are part of the real vendor extension and no MSFT-specific runtime policy survives lowering. |

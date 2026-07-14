@@ -39,6 +39,10 @@ describe("glTF preparation admission", () => {
     expect(() => assertGltfNodeTraversalSafe({
       nodes: [{ extensions: { MSFT_lod: { ids: [-1] } } }],
     })).toThrow(/MSFT_lod references invalid node -1/i);
+
+    expect(() => estimateGltfPreparationCpu({
+      materials: [{ extensions: { MSFT_lod: { ids: [1] } } }],
+    })).toThrow(/material 0 MSFT_lod references invalid material 1/i);
   });
 
   it("estimates source, meshopt, geometry, and workspace bytes before decode", () => {

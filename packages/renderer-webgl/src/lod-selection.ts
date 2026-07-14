@@ -1,11 +1,12 @@
 export const NO_SHARED_VIEW_LOD_LEVEL = 0xffff_ffff;
+export const CULLED_SHARED_VIEW_LOD_LEVEL = 0xffff_fffe;
 
 export type SharedViewLodMetadataSource = {
   /** One byte per level; zero means unavailable, non-zero means drawable. */
   readonly drawableLevels: Uint8Array;
   readonly levelCount: number;
   readonly offset: number;
-  /** Descending screen-coverage thresholds, aligned with drawableLevels. */
+  /** Descending per-level thresholds; a positive final value is the cull cutoff. */
   readonly thresholds: Float64Array;
 };
 
@@ -150,12 +151,13 @@ export const observeSharedViewLodCoverage = (
   if (coverage > selections.maximumCoverages[index]!) selections.maximumCoverages[index] = coverage;
 };
 
-const fallbackThreshold = (level: number, levelCount: number): number =>
-  level >= levelCount - 1 ? 0 : 0.2 / (4 ** level);
-
 const threshold = (metadata: SharedViewLodMetadata, level: number): number =>
-  metadata.thresholds[metadata.offset + level] ?? fallbackThreshold(level, metadata.levelCount);
+  metadata.thresholds[metadata.offset + level]!;
 
+/**
+ * Selects a retained LOD level. The cull sentinel means the authored lowest-detail
+ * screen-coverage cutoff culls the set; it is distinct from an unobserved set.
+ */
 export const sharedViewHystereticLodLevel = (
   coverage: number,
   metadata: SharedViewLodMetadata,
@@ -165,26 +167,27 @@ export const sharedViewHystereticLodLevel = (
   if (!Number.isFinite(hysteresisRatio) || hysteresisRatio < 0 || hysteresisRatio > 1) {
     throw new Error("Royal shared-view LOD hysteresis ratio must be finite and between zero and one");
   }
-  let stateless = metadata.levelCount - 1;
+  let stateless = CULLED_SHARED_VIEW_LOD_LEVEL;
   for (let level = 0; level < metadata.levelCount; level += 1) {
     if (coverage >= threshold(metadata, level)) {
       stateless = level;
       break;
     }
   }
-  if (previousLevel === undefined || previousLevel < 0 || previousLevel >= metadata.levelCount) {
+  if (previousLevel === undefined || (previousLevel !== CULLED_SHARED_VIEW_LOD_LEVEL
+    && (previousLevel < 0 || previousLevel >= metadata.levelCount))) {
     return stateless;
   }
-  let level = previousLevel;
+  let level = previousLevel === CULLED_SHARED_VIEW_LOD_LEVEL ? metadata.levelCount : previousLevel;
   while (level > 0) {
     if (coverage < Math.min(1, threshold(metadata, level - 1) * (1 + hysteresisRatio))) break;
     level -= 1;
   }
-  while (level < metadata.levelCount - 1) {
+  while (level < metadata.levelCount) {
     if (coverage >= threshold(metadata, level) * (1 - hysteresisRatio)) break;
     level += 1;
   }
-  return level;
+  return level === metadata.levelCount ? CULLED_SHARED_VIEW_LOD_LEVEL : level;
 };
 
 const drawable = (metadata: SharedViewLodMetadata, level: number): boolean =>
@@ -195,6 +198,7 @@ const drawableLevel = (
   target: number,
   previous: number | undefined,
 ): number => {
+  if (target === CULLED_SHARED_VIEW_LOD_LEVEL) return target;
   if (drawable(metadata, target)) return target;
   if (previous !== undefined && previous >= 0 && previous < metadata.levelCount && drawable(metadata, previous)) {
     return previous;
@@ -268,5 +272,7 @@ export const sharedViewLodSelectedLevel = (
   id: number,
 ): number | undefined => {
   const selected = selections.selectedLevels[selectionId(selections, id)]!;
-  return selected === NO_SHARED_VIEW_LOD_LEVEL ? undefined : selected;
+  return selected === NO_SHARED_VIEW_LOD_LEVEL || selected === CULLED_SHARED_VIEW_LOD_LEVEL
+    ? undefined
+    : selected;
 };

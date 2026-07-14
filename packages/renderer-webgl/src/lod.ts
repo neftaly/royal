@@ -1,7 +1,11 @@
 /** Canonical prepared levels ordered from highest to lowest detail. */
 export type LodSet<Level> = {
   readonly levels: readonly Level[];
-  /** Descending normalized screen-coverage thresholds, one per level. */
+  /**
+   * Descending normalized screen coverage at which each aligned level begins.
+   * Coverage below a positive final threshold culls the complete set; a final
+   * zero keeps the lowest-detail level drawable at every visible size.
+   */
   readonly thresholds: readonly number[];
 };
 
@@ -11,7 +15,7 @@ export type LodLevelMembership = {
   readonly group: string;
   readonly level: number;
   readonly levelCount: number;
-  /** Descending normalized screen-coverage thresholds, one per level. */
+  /** See `LodSet.thresholds`; shared by every member of this prepared set. */
   readonly thresholds: readonly number[];
 };
 
@@ -21,7 +25,8 @@ const fallbackLodThreshold = (level: number, levelCount: number): number =>
 /**
  * Lowers optional source-format hints into Royal's complete runtime threshold
  * contract. Missing and invalid hints receive deterministic defaults; source
- * ordering cannot make a lower-detail level require more coverage.
+ * ordering cannot make a lower-detail level require more coverage. The final
+ * source hint is retained because it is the authored whole-set cull threshold.
  */
 export const normalizeLodThresholds = (
   hints: readonly unknown[] | undefined,

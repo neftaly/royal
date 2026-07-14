@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import {
   beginSharedViewLodSelections,
+  CULLED_SHARED_VIEW_LOD_LEVEL,
   createSharedViewLodSelections,
   finalizeSharedViewLodSelection,
   finalizeUnobservedSharedViewLodFallback,
@@ -33,18 +34,19 @@ const referenceHysteretic = (
   thresholds: readonly number[],
   previous: number | undefined,
 ): number => {
-  let stateless = thresholds.length - 1;
+  let stateless = CULLED_SHARED_VIEW_LOD_LEVEL;
   for (let level = 0; level < thresholds.length; level += 1) {
     if (coverage >= thresholds[level]!) {
       stateless = level;
       break;
     }
   }
-  if (previous === undefined || previous < 0 || previous >= thresholds.length) return stateless;
-  let level = previous;
+  if (previous === undefined || (previous !== CULLED_SHARED_VIEW_LOD_LEVEL
+    && (previous < 0 || previous >= thresholds.length))) return stateless;
+  let level = previous === CULLED_SHARED_VIEW_LOD_LEVEL ? thresholds.length : previous;
   while (level > 0 && coverage >= Math.min(1, thresholds[level - 1]! * (1 + HYSTERESIS))) level -= 1;
-  while (level < thresholds.length - 1 && coverage < thresholds[level]! * (1 - HYSTERESIS)) level += 1;
-  return level;
+  while (level < thresholds.length && coverage < thresholds[level]! * (1 - HYSTERESIS)) level += 1;
+  return level === thresholds.length ? CULLED_SHARED_VIEW_LOD_LEVEL : level;
 };
 
 const referenceDrawable = (
@@ -149,6 +151,24 @@ describe("retained shared-view LOD selection", () => {
     expect(selections.capacity).toBe(4_096);
     expect(selections.selectedLevels[0]).toBe(0);
     expect(selections.selectedLevels[1]).toBe(NO_SHARED_VIEW_LOD_LEVEL);
+  });
+
+  it("honors the authored lowest-level cutoff with hysteresis", () => {
+    const lod = metadata([0.5, 0.2, 0.01], [true, true, true]);
+    const selections = createSharedViewLodSelections();
+    const frame = (coverage: number): number | undefined => {
+      beginSharedViewLodSelections(selections);
+      observeSharedViewLodCoverage(selections, 0, coverage);
+      finalizeSharedViewLodSelection(selections, 0, lod);
+      return sharedViewLodSelectedLevel(selections, 0);
+    };
+
+    expect(frame(0.02)).toBe(2);
+    expect(frame(0.009), "the retained lowest level survives small cutoff jitter").toBe(2);
+    expect(frame(0.008), "coverage below the lower hysteresis edge culls the set").toBeUndefined();
+    expect(selections.selectionEpochs[0]).toBe(selections.epoch);
+    expect(frame(0.01), "a culled set stays culled inside the upper hysteresis edge").toBeUndefined();
+    expect(frame(0.012)).toBe(2);
   });
 
   it("finalizes an unobserved selection to the exact validated drawable fallback level", () => {

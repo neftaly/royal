@@ -42,6 +42,18 @@ const checkedNodeIndex = (
   return value;
 };
 
+const assertGltfMaterialLodReferencesValid = (document: GltfDocument): void => {
+  for (const [materialIndex, material] of (document.materials ?? []).entries()) {
+    for (const lod of material.extensions?.MSFT_lod?.ids ?? []) {
+      if (!Number.isSafeInteger(lod) || lod < 0 || document.materials?.[lod] === undefined) {
+        throw new Error(
+          `glTF material ${materialIndex} MSFT_lod references invalid material ${String(lod)}`,
+        );
+      }
+    }
+  }
+};
+
 const nodeEdges = (document: GltfDocument, nodeIndex: number): readonly number[] => {
   const node = document.nodes?.[nodeIndex];
   if (node === undefined) return [];
@@ -234,6 +246,7 @@ const estimateReachableGeometryBytes = (document: GltfDocument): number => {
 /** Computes reservations from declarations before external buffers/codecs run. */
 export const estimateGltfPreparationCpu = (document: GltfDocument): GltfPreparationCpuEstimate => {
   assertGltfNodeTraversalSafe(document);
+  assertGltfMaterialLodReferencesValid(document);
   let sourceBytes = 0;
   for (const [index, buffer] of (document.buffers ?? []).entries()) {
     const { byteLength } = buffer;
