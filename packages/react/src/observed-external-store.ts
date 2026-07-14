@@ -11,23 +11,24 @@ export const createObservedExternalStore = <Snapshot>(
 ): ObservedExternalStore<Snapshot> => {
   let current = initialSnapshot;
   let stopObserving: (() => void) | undefined;
-  const listeners = new Set<() => void>();
+  const listeners = new Map<object, () => void>();
 
   const publish = (next: Snapshot): void => {
     if (equal(current, next)) return;
     current = next;
-    for (const listener of listeners) listener();
+    for (const listener of listeners.values()) listener();
   };
 
   return {
     getSnapshot: () => current,
     subscribe: (listener) => {
-      listeners.add(listener);
+      const token = {};
+      listeners.set(token, listener);
       if (listeners.size === 1) {
         try {
           stopObserving = observe(publish);
         } catch (error) {
-          listeners.delete(listener);
+          listeners.delete(token);
           throw error;
         }
       }
@@ -35,7 +36,7 @@ export const createObservedExternalStore = <Snapshot>(
       return () => {
         if (!active) return;
         active = false;
-        listeners.delete(listener);
+        listeners.delete(token);
         if (listeners.size !== 0) return;
         stopObserving?.();
         stopObserving = undefined;

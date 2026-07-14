@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createXrSessionStore,
   selectXrSessionSnapshot,
@@ -166,6 +166,20 @@ describe("React XR session store", () => {
     expect(store.getState()).toBe(initial);
     expect(notifications).toBe(0);
     unsubscribe();
+  });
+
+  it("owns duplicate subscriber callbacks independently", () => {
+    const store = createXrSessionStore<TestXrSession>();
+    const listener = vi.fn();
+    const unsubscribeFirst = store.subscribe(listener);
+    const unsubscribeSecond = store.subscribe(listener);
+
+    store.getState().setAvailability(true);
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribeFirst();
+    store.getState().setAvailability(false);
+    expect(listener).toHaveBeenCalledTimes(3);
+    unsubscribeSecond();
   });
 
   it("uses semantic actions for session lifecycle state", () => {

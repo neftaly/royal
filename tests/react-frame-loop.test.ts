@@ -187,6 +187,41 @@ describe("React frame loop", () => {
     frameLoop.dispose();
   });
 
+  it("owns duplicate after-frame callbacks independently", () => {
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((frameCallback: FrameRequestCallback) => {
+      queuedFrames.push(frameCallback);
+      return queuedFrames.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const callback = vi.fn();
+    const frameLoop = createFrameLoop(() => undefined);
+    const releaseFirst = frameLoop.afterFrame(callback);
+    const releaseSecond = frameLoop.afterFrame(callback);
+    frameLoop.subscribe(() => undefined, 0);
+
+    releaseFirst();
+    queuedFrames[0]?.(16);
+    expect(callback).toHaveBeenCalledOnce();
+    releaseSecond();
+    releaseSecond();
+    frameLoop.dispose();
+  });
+
+  it("rolls back an activity observer whose immediate callback throws", () => {
+    const frameLoop = createFrameLoop(() => undefined);
+    const failure = new Error("activity observer failed");
+    const observer = vi.fn(() => {
+      throw failure;
+    });
+
+    expect(() => frameLoop.observeActivity(observer)).toThrow(failure);
+    expect(observer).toHaveBeenCalledOnce();
+    expect(() => frameLoop.subscribe(() => undefined, 0)).not.toThrow();
+    expect(observer).toHaveBeenCalledOnce();
+    frameLoop.dispose();
+  });
+
   it("reports an undefined after-frame throw", () => {
     const queuedFrames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {

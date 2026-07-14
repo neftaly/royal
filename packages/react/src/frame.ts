@@ -43,8 +43,8 @@ const canUseFrameLoop = (): boolean =>
   typeof cancelAnimationFrame === 'function';
 
 export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop => {
-  const afterFrameCallbacks = new Set<() => void>();
-  const activityObservers = new Set<(active: boolean) => void>();
+  const afterFrameCallbacks = new Map<object, () => void>();
+  const activityObservers = new Map<object, (active: boolean) => void>();
   const frame: MutableFrameSnapshot = {
     deltaMs: 0,
     elapsedSeconds: 0,
@@ -97,7 +97,7 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
 
   const notifyActivity = (active: boolean): void => {
     reportedActive = active;
-    for (const observer of activityObservers) observer(active);
+    for (const observer of activityObservers.values()) observer(active);
   };
 
   const syncActivity = (): void => {
@@ -159,7 +159,7 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
       try {
         let afterFrameError: unknown;
         let afterFrameFailed = false;
-        for (const callback of afterFrameCallbacks) {
+        for (const callback of afterFrameCallbacks.values()) {
           try {
             callback();
           } catch (error) {
@@ -179,10 +179,11 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
 
   return {
     afterFrame: (callback) => {
-      afterFrameCallbacks.add(callback);
+      const token = {};
+      afterFrameCallbacks.set(token, callback);
 
       return () => {
-        afterFrameCallbacks.delete(callback);
+        afterFrameCallbacks.delete(token);
       };
     },
     dispose: () => {
@@ -199,11 +200,17 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
       activityObservers.clear();
     },
     observeActivity: (callback) => {
-      activityObservers.add(callback);
-      callback(activeSubscriberCount > 0);
+      const token = {};
+      activityObservers.set(token, callback);
+      try {
+        callback(activeSubscriberCount > 0);
+      } catch (error) {
+        activityObservers.delete(token);
+        throw error;
+      }
 
       return () => {
-        activityObservers.delete(callback);
+        activityObservers.delete(token);
       };
     },
     setPaused: (nextPaused) => {

@@ -162,7 +162,7 @@ export const createXrSessionStore = <Session extends object = object>(
   initialState: XrSessionStoreInitialState = {},
 ): XrSessionStore<Session> => {
   const initialData = createInitialXrSessionStoreData<Session>(initialState);
-  const listeners = new Set<() => void>();
+  const listeners = new Map<object, () => void>();
   let data = initialData;
   let current: XrSessionStoreState<Session>;
   const apply = (transition: XrSessionTransition<Session>): void => {
@@ -170,7 +170,7 @@ export const createXrSessionStore = <Session extends object = object>(
     if (next === data) return;
     data = next;
     current = { ...data, ...actions };
-    for (const listener of listeners) listener();
+    for (const listener of listeners.values()) listener();
   };
   const actions: XrSessionStoreActions<Session> = {
     activateSession: (session, options) => apply({ options, session, type: "activate" }),
@@ -199,8 +199,11 @@ export const createXrSessionStore = <Session extends object = object>(
     getInitialState: () => initial,
     getState: () => current,
     subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+      const token = {};
+      listeners.set(token, listener);
+      return () => {
+        listeners.delete(token);
+      };
     },
   };
 };

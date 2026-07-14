@@ -68,4 +68,22 @@ describe("React observed external store", () => {
     expect(observe).toHaveBeenCalledTimes(2);
     expect(stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
   });
+
+  it("owns duplicate callback subscriptions independently", () => {
+    let publish!: (value: number) => void;
+    const store = createObservedExternalStore(0, (next) => {
+      publish = next;
+      return () => undefined;
+    });
+    const listener = vi.fn();
+    const unsubscribeFirst = store.subscribe(listener);
+    const unsubscribeSecond = store.subscribe(listener);
+
+    publish(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribeFirst();
+    publish(2);
+    expect(listener).toHaveBeenCalledTimes(3);
+    unsubscribeSecond();
+  });
 });
