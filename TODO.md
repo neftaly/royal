@@ -52,6 +52,8 @@ Completed in the current worktree:
   normalization, and material-variant resolution.
 - `WebGlContextCapabilityOwner` owns negotiated context attributes, restore
   validation, extension discovery, and immutable numeric capability snapshots.
+- `GeometryRecipeRegistry` owns retained CPU recipes, direct/glTF semantic
+  identity, local-bounds caching, and transient packet reverse lookup.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup

@@ -79,12 +79,11 @@ import {
   type CountedTextureDeclaration,
 } from "./frame-plan";
 import {
-  directGeometryDeclaration,
-  directGeometryDeclarationKey,
   geometryDeclarationBucketKey,
   gltfGeometryDeclaration,
   type CpuGeometry,
 } from "./geometry-recipes";
+import { GeometryRecipeRegistry } from "./geometry-recipe-registry";
 import {
   createVertexInputArena,
   disposeVertexInputArena,
@@ -241,8 +240,6 @@ import {
 } from "./math/mat4";
 import {
   isBoundsVisible,
-  worldBounds,
-  type Bounds3,
   type MutableBounds3,
 } from "./math/picking";
 import {
@@ -630,12 +627,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #context = new WebGlContextLifecycleOwner();
   readonly #framePublication = new WebGlFramePublicationOwner();
   readonly #programArena: ProgramArena;
-  readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
-  readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
+  readonly #geometryRecipes = new GeometryRecipeRegistry();
   /** Prepared CPU coverage survives WebGL context loss and follows semantic geometry ownership. */
   readonly #virtualTextureCoverageProviders = createVirtualTextureCoverageProviderCache();
-  readonly #gltfPrimitiveGeometryKeys = new WeakMap<LoadedGltfPrimitive, string>();
-  readonly #gltfPacketPrimitivesByGeometryId = new Map<number, LoadedGltfPrimitive>();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
@@ -801,8 +795,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#viewport = new WebGlCanvasViewportOwner(canvas, () => this.invalidate());
       this.#pickingController = new PickingController(canvas, {
         gltfInstanceRootModels: (node) => this.#gltfInstanceTransforms.views(node.instances).rootModels,
-        meshGeometry: (node) => this.#meshGeometry(node.geometry, node.material),
-        meshLocalBounds: (geometry) => this.#localGeometryBounds(geometry),
+        meshGeometry: (node) => this.#geometryRecipes.retainedDirectRecipe(node.geometry, node.material).recipe,
+        meshLocalBounds: (geometry) => this.#geometryRecipes.localBounds(geometry),
         preparedGltfPrimitives: (node) => {
           const state = this.#preparedGltf.get(gltfRequestKey(node.asset.uri, node.asset.version));
           return state?.status === "ready" ? state.primitives : undefined;
@@ -1495,9 +1489,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       teardown(() => this.#releaseVirtualTextureState(state));
     }
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
-    this.#retainedGeometryRecipes.clear();
+    this.#geometryRecipes.clearRetainedRecipes();
     clearVirtualTextureCoverageProviderCache(this.#virtualTextureCoverageProviders);
-    this.#gltfPacketPrimitivesByGeometryId.clear();
+    this.#geometryRecipes.clearPacketPrimitives();
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#virtualTextureRuntime.clearAutoMetadata();
     teardown(() => this.#preparedGltf.dispose());
@@ -1577,14 +1571,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
       ? selectedGltfVariantIndex(state.variants, node.variant)
       : undefined;
     return state.primitives.map((primitive) => {
-      const geometryKey = this.#gltfPrimitiveGeometryKeys.get(primitive);
-      const retainedGeometry = geometryKey === undefined
-        ? undefined
-        : this.#retainedGeometryRecipes.get(geometryKey);
+      const retainedGeometry = this.#geometryRecipes.retainedGltfRecipe(primitive);
       if (retainedGeometry === undefined) {
         throw new Error(`Royal glTF primitive geometry ${primitive.key} was not retained for packets`);
       }
-      this.#gltfPacketPrimitivesByGeometryId.set(retainedGeometry.id, primitive);
+      this.#geometryRecipes.bindPacketPrimitive(retainedGeometry.id, primitive);
       const primitiveMaterial = selectedVariantIndex === undefined
         ? primitive.baseMaterial
         : gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
@@ -1657,7 +1648,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #rebuildGltfPacketTopology(plan: FramePlan): void {
-    this.#gltfPacketPrimitivesByGeometryId.clear();
+    this.#geometryRecipes.clearPacketPrimitives();
     this.#preparedGltf.rebuildPacketTopology(
       plan.revision,
       plan.gltfRequestRows.map((row) => row.requestKey),
@@ -1688,7 +1679,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         index,
         geometryDeclarationBucketKey(declaration),
       ]);
-      this.#gltfPrimitiveGeometryKeys.set(primitive, key);
+      this.#geometryRecipes.associateGltfPrimitiveKey(primitive, key);
       return {
         count: 1,
         declaration,
@@ -1733,7 +1724,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       apply(
         "acquire",
         () => retainVertexInputGeometry(this.#vertexInputs, { geometryId: id, recipe }),
-        () => this.#retainedGeometryRecipes.set(key, { id, recipe }),
+        () => this.#geometryRecipes.retainRecipe(key, id, recipe),
       );
     }
     for (const { id, key } of changes.releasedGeometryDeclarations) {
@@ -1745,10 +1736,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
           } else releaseLostVertexInputGeometry(this.#vertexInputs, id);
         },
         () => {
-          if (this.#retainedGeometryRecipes.get(key)?.id === id) this.#retainedGeometryRecipes.delete(key);
+          this.#geometryRecipes.releaseRecipe(key, id);
         },
         () => releaseVirtualTextureCoverageProviders(this.#virtualTextureCoverageProviders, id),
-        () => this.#gltfPacketPrimitivesByGeometryId.delete(id),
+        () => this.#geometryRecipes.forgetPacketPrimitive(id),
       );
     }
     for (const { generation, request } of changes.acquiredGltfRequests) {
@@ -2049,10 +2040,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
   ): void {
-    const retainedGeometry = this.#meshGeometryRow(node.geometry, node.material);
+    const retainedGeometry = this.#geometryRecipes.retainedDirectRecipe(node.geometry, node.material);
     const cpu = retainedGeometry.recipe;
     const model = transformMat4Into(this.#meshModel, this.#sceneBindings.transform(node));
-    const localBounds = this.#localGeometryBounds(cpu);
+    const localBounds = this.#geometryRecipes.localBounds(cpu);
     if (!isBoundsVisible(
       localBounds,
       multiplyMat4Into(this.#meshViewProjectionModel, viewProjection, model),
@@ -2143,7 +2134,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         throw new Error("Royal retained glTF packet instance source is invalid");
       }
       const geometryId = catalog.geometryIds[packetIndex]!;
-      const primitive = this.#gltfPacketPrimitivesByGeometryId.get(geometryId);
+      const primitive = this.#geometryRecipes.packetPrimitive(geometryId);
       if (primitive === undefined) {
         throw new Error(`Royal retained glTF packet geometry ${geometryId} has no prepared primitive`);
       }
@@ -3326,34 +3317,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (consumeProgramArenaWake(this.#programArena)) this.invalidate();
     }
   }
-
-  #meshGeometryRow(
-    geometry: MeshNode["geometry"],
-    material: Material,
-  ): { readonly id: number; readonly recipe: CpuGeometry } {
-    const declaration = directGeometryDeclaration(
-      geometry,
-      material.kind === "wireframe" ? "wireframe" : "surface",
-    );
-    const key = directGeometryDeclarationKey(declaration);
-    const retained = this.#retainedGeometryRecipes.get(key);
-    if (retained === undefined) {
-      throw new Error(`Royal direct geometry ${key} was not semantically retained`);
-    }
-    return retained;
-  }
-
-  #meshGeometry(geometry: MeshNode["geometry"], material: Material): CpuGeometry {
-    return this.#meshGeometryRow(geometry, material).recipe;
-  }
-
-  #localGeometryBounds(geometry: CpuGeometry): Bounds3 | undefined {
-    if (this.#geometryLocalBounds.has(geometry.positions)) return this.#geometryLocalBounds.get(geometry.positions);
-    const bounds = worldBounds(geometry.positions, identityMat4());
-    this.#geometryLocalBounds.set(geometry.positions, bounds);
-    return bounds;
-  }
-
 
   #geometryResource(geometryId: number): GeometryResource {
     return vertexInputGeometry(
