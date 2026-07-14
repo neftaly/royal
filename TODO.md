@@ -19,12 +19,14 @@ Completed in the current worktree:
 - `PreparedGltfRuntime` owns state/node/generation identity, preparation
   scheduling, retryable prepared-event ordering, CPU and image-demand leases,
   shared-view LOD state, packet topology, and ready/error packet patching.
-
-Remaining:
-
-1. Extract frame batching/surface execution once it can directly compose the
-   packet, instance, target, program, geometry, lighting, IBL, and texture
-   arenas without root callbacks.
+- `GltfFrameBatchArena` owns packet-submission grouping, reusable draw-batch
+  storage, transform signatures, instance-buffer uploads, and stale-batch
+  release.
+- `SurfaceExecutionArena` owns direct/glTF shader selection, material and
+  sampler planning, ordinary/virtual texture binding, transmission-target
+  copies, lighting and IBL binding, scoped blend/cull state, and final
+  single/instanced geometry submission. Diagnostics and wakeups drain as data
+  at frame teardown rather than calling back into the root.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
@@ -36,5 +38,3 @@ remain explicit imperative ownership.
    available; they are explicitly deferred and do not block desktop work.
    Cover context loss, camera pan, close/far VT convergence, SVG/raster parity,
    window resize, and memory-pressure eviction.
-2. Measure cold/warm glTF load, a 4,096-instance scene, capacity growth, and
-   steady heap behavior before adding performance limits.

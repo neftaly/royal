@@ -1,6 +1,4 @@
 import {
-  bindClusteredLights,
-  clusteredLightTextureUnits,
   configureClusteredLightArena,
   createClusteredLightArena,
   dropClusteredLightContext,
@@ -23,8 +21,6 @@ import {
   type Rgba,
   type TextureContentKey,
   type TextureRef,
-  type TextureSampler,
-  type Transform,
 } from "@royal/renderer-core";
 import { readRenderObjectHandleTransform } from "@royal/renderer-core/render-object";
 import {
@@ -115,9 +111,6 @@ import {
 import {
   clearGeometryDrawArenaContext,
   createGeometryDrawArena,
-  drawGeometry,
-  prepareGeometryInstancedDraw,
-  submitGeometryInstancedDraw,
   type GeometryDrawArena,
 } from "./webgl/geometry-draw-arena";
 import {
@@ -127,13 +120,9 @@ import {
   type TextureHandleArena,
 } from "./webgl/texture-handle-arena";
 import {
-  type OrdinaryTextureGpuResource,
-} from "./webgl/ordinary-texture-gpu-arena";
-import {
   accumulateVirtualTextureGpuActivePagesByMip,
   accumulateVirtualTextureGpuCachedPagesByMip,
   admitVirtualTextureGpuResource,
-  bindVirtualTextureGpuResource,
   clearVirtualTextureGpuOutcomes,
   consumeVirtualTextureGpuWake,
   createVirtualTextureGpuArena,
@@ -156,14 +145,6 @@ import {
   type VirtualTextureGpuArena,
 } from "./webgl/virtual-texture-gpu-arena";
 import {
-  beginGltfInstanceBufferArenaFrame,
-  bindGltfInstanceBuffer,
-  clearGltfInstanceBufferArena,
-  createGltfInstanceBufferArena,
-  releaseUnusedGltfInstanceBuffers,
-} from "./gltf-instance-buffer-arena";
-import {
-  copyTransmissionScreenColorTexture,
   createSurfaceRenderTargetArena,
   dropSurfaceRenderTargetArenaContext,
   ensureHdrRenderTarget,
@@ -184,7 +165,6 @@ import { gltfCodecDemand } from "./gltf/codecs/demand";
 import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
 import {
   GltfInstanceTransformRegistry,
-  type GltfInstanceTransformView,
 } from "./gltf/instance-transform-registry";
 import {
   GltfImageDemandCoordinator,
@@ -204,10 +184,7 @@ import {
   type GltfDocument,
   type GltfMeshPrimitive,
 } from "./gltf/schema";
-import {
-  IDENTITY_GLTF_TEXTURE_COORDINATES,
-  type GltfTextureCoordinates,
-} from "./gltf/texture-coordinates";
+import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
 import {
   type GltfLoadMetrics,
   type LoadedGltfMaterial,
@@ -248,27 +225,17 @@ import {
 } from "./packet-resource-tables";
 import {
   appendGltfPacketSubmission,
-  clearGltfPacketSubmissionWorkspace,
-  createGltfPacketSubmissionWorkspace,
   resetGltfPacketSubmissionWorkspaceForFrame,
   resetGltfPacketSubmissionWorkspaceForSegment,
   resetGltfPacketSubmissionWorkspaceForView,
   retainGltfPacketSubmissionLightBinding,
   retainGltfPacketSubmissionMaterialBinding,
   retainGltfPacketSubmissionRootBinding,
-  type GltfPacketSubmissionWorkspace,
 } from "./gltf-packet-submission-workspace";
 import {
-  assertGltfPacketBatchSegmentGroupsCurrent,
-  beginGltfPacketBatchRegistryFrame,
-  clearGltfPacketBatchRegistry,
-  clearGltfPacketBatchSegmentGroups,
-  createGltfPacketBatchRegistry,
-  createGltfPacketBatchSegmentGroups,
-  groupGltfPacketSubmissionSegment,
-  type GltfPacketBatchRegistry,
-  type GltfPacketBatchSegmentGroups,
-} from "./gltf-packet-batch-registry";
+  GltfFrameBatchArena,
+  type GltfFrameDrawBatch,
+} from "./gltf/frame-batch-arena";
 import {
   identityMat4,
   inverseMat4,
@@ -338,33 +305,15 @@ import {
 } from "./virtual-texture-coverage-cache";
 import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
 import {
-  isBlendedSurfaceMaterial,
-  materialColor,
-  materialEmissiveColor,
-  surfaceMaterialAlphaCutoff,
-  surfaceMaterialAlphaMode,
-  surfaceMaterialMetallicFactor,
-  surfaceMaterialOcclusionStrength,
-  surfaceMaterialRoughnessFactor,
   surfaceMaterialBatchKey,
-  surfaceMaterialExtensionFactors,
   textureCacheKey,
   type SurfaceMaterial,
   type SurfaceMaterialTextureCoordinates,
   type TextureAssetUploadRef,
 } from "./webgl/materials";
 import {
-  SURFACE_MATERIAL_TEXTURE_BINDINGS,
-  planSurfaceTextureBindings,
-  resolveAdmittedSurfaceTextureBindings,
-  type SurfaceIndependentTextureFeature,
-  type SurfaceTextureBindingPlan as PureSurfaceTextureBindingPlan,
-  type SurfaceTextureCandidate,
-} from "./webgl/surface-texture-binding-plan";
-import {
   type ProgramKind,
   type SurfaceShaderFeatures,
-  type SurfaceShaderTextureFeature,
 } from "./webgl/shaders";
 import {
   configureProgramArenaParallelCompile,
@@ -373,21 +322,14 @@ import {
   dropProgramArenaContext,
   releaseProgramArenaContextHandles,
   requestProgram,
-  uniform1f,
   uniform1i,
   uniform2f,
-  uniform2fv,
-  uniformColor,
-  uniformMatrix,
   useProgram,
   type ProgramArena,
   type ProgramArenaResource,
 } from "./webgl/program-arena";
 import { rendererOwnedWebGl2Context, type RendererOwnedWebGl2Context } from "./webgl/context-lane";
 import {
-  combineSurfaceLightSets,
-  EMPTY_SURFACE_LIGHT_SET,
-  MAX_SURFACE_LIGHTS,
   surfaceLightSet,
   transformSurfaceIblIrradiance,
   transformSurfaceLight,
@@ -397,16 +339,13 @@ import {
   type SurfaceLightSet,
 } from "./webgl/lights";
 import {
-  bindSurfaceIbl,
   consumeIblTextureDiagnostics,
   consumeIblTextureFrameWake,
   createIblTextureArena,
   dropIblTextureContext,
   ensureGltfIblSpecularTexture,
   ensureStudioEnvironmentSpecularTexture,
-  IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
   markGltfIblSpecularTextureDirty,
-  prepareSurfaceIblBrdfLut,
   releaseGltfIblSpecularTexture,
   releaseIblTextureContextHandles,
   type IblSpecularTextureResource,
@@ -415,6 +354,10 @@ import {
   wakeIblTextureDurablePressure,
 } from "./webgl/ibl-texture-arena";
 import { prepareFrameBaseline } from "./webgl/imperative-state";
+import {
+  SurfaceExecutionArena,
+  type SurfaceToneMappingState,
+} from "./webgl/surface-execution-arena";
 import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
@@ -454,26 +397,6 @@ export type {
 
 type GeometryResource = VertexInputGeometry;
 
-type SurfaceBaseColorTextureBinding =
-  | { readonly kind: "none" }
-  | {
-      readonly kind: "ordinary";
-      readonly resource: Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
-    }
-  | {
-      readonly kind: "prepared-virtual";
-      readonly ordinaryFallback?: TextureAssetUploadRef;
-      readonly state: VirtualTextureRuntimeState;
-    };
-
-type SurfaceTextureBindingPlan = Omit<PureSurfaceTextureBindingPlan, "baseColor"> & {
-  readonly baseColor: SurfaceBaseColorTextureBinding;
-  readonly readyTextures: ReadonlyMap<SurfaceShaderTextureFeature, Extract<
-    OrdinaryTextureGpuResource,
-    { readonly uploaded: true }
-  >>;
-};
-
 type GltfBasisuCodecModule = typeof import("./gltf/codecs/basisu");
 type GltfDracoCodecModule = typeof import("./gltf/codecs/draco");
 type GltfMeshoptCodecModule = typeof import("./gltf/codecs/meshopt");
@@ -505,11 +428,6 @@ const importGltfCodecs = (document: GltfDocument): GltfCodecImports => {
       ? { meshopt: startGltfCodecImport(() => import("./gltf/codecs/meshopt")) }
       : {}),
   };
-};
-
-type DrawSidedness = {
-  readonly doubleSided: boolean;
-  readonly frontFaceCcw: boolean;
 };
 
 type LoadedGltfSurfaceTextures = {
@@ -610,41 +528,6 @@ const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMa
   preparedPrimitiveMaterials(asset.primitives);
 const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 
-type GltfPacketMaterialBinding = {
-  readonly material: SurfaceMaterial;
-};
-
-type GltfPacketRootBinding = {
-  readonly rootModel: Mat4;
-  readonly rootInstanceViews?: GltfInstanceTransformView;
-  readonly rootPositionSignatureVersion?: number;
-  readonly rootRotationSignatureVersion?: number;
-  readonly rootScaleSignatureVersion?: number;
-  readonly rootSignatureInstanceIndex: number;
-  readonly rootSignatureRenderInstanceOrdinal: number;
-  readonly rootTransform: Transform | undefined;
-};
-
-type GltfPrimitiveDrawBatch = {
-  cpuGeometry: CpuGeometry;
-  geometry: GeometryResource;
-  geometryId: number;
-  readonly key: number;
-  lights: SurfaceLightSet;
-  readonly localModelSignature: number[];
-  readonly localModels: Mat4[];
-  readonly localModelSlots: MutableMat4[];
-  material: SurfaceMaterial;
-  readonly rootPositionSignature: number[];
-  readonly rootRotationSignature: number[];
-  readonly rootScaleSignature: number[];
-  readonly rootModels: Mat4[];
-  readonly rootInstanceViews: Array<GltfInstanceTransformView | undefined>;
-  readonly rootLogicalIndices: number[];
-  readonly rootTransforms: Array<Transform | undefined>;
-  sidedness: DrawSidedness;
-};
-
 type GltfPreparedPrimitiveMaterial = {
   readonly material: SurfaceMaterial;
   readonly materialBatchClassId: number;
@@ -654,11 +537,7 @@ type WebGlGltfInstancingCounters = {
   -readonly [Key in keyof WebGlGltfInstancingSnapshot]: WebGlGltfInstancingSnapshot[Key];
 };
 
-type SceneToneMappingState = {
-  readonly exposure: number;
-  readonly hdrOutput: boolean;
-  readonly toneMapping: RenderToneMapping;
-};
+type SceneToneMappingState = SurfaceToneMappingState;
 
 const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
 const TEXTURE_COLOR: Rgba = [1, 1, 1, 1];
@@ -675,16 +554,7 @@ const EMPTY_FRAME_PLAN_RESOURCE_MANIFEST: FramePlanResourceManifest = {
   renderObjectRefs: [],
   virtualTextures: [],
 };
-const VT_WRAP_CLAMP_TO_EDGE = 0;
-const VT_WRAP_REPEAT = 1;
-const VT_WRAP_MIRRORED_REPEAT = 2;
 const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
-const IDENTITY_TRANSFORM: Transform = {
-  position: [0, 0, 0],
-  rotation: [0, 0, 0],
-  scale: [1, 1, 1],
-};
-
 const sceneToneMappingState = (
   scene: {
     readonly exposureEv100: number | undefined;
@@ -753,50 +623,6 @@ const captureFirstFailure = (
 ): CapturedFailure | undefined => {
   const nextFailure = captureFailure(action);
   return firstFailure ?? nextFailure;
-};
-
-const appendTransformVectorSignatureValues = (
-  signature: number[],
-  transform: Transform | undefined,
-  field: keyof Transform,
-): void => {
-  const resolved = transform ?? IDENTITY_TRANSFORM;
-  signature.push(resolved[field][0], resolved[field][1], resolved[field][2]);
-};
-
-const appendGltfRootSignatures = (
-  positionSignature: number[],
-  rotationSignature: number[],
-  scaleSignature: number[],
-  root: GltfPacketRootBinding,
-): void => {
-  if (root.rootPositionSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(positionSignature, root.rootTransform, "position");
-  } else {
-    positionSignature.push(
-      root.rootPositionSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
-  if (root.rootRotationSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(rotationSignature, root.rootTransform, "rotation");
-  } else {
-    rotationSignature.push(
-      root.rootRotationSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
-  if (root.rootScaleSignatureVersion === undefined) {
-    appendTransformVectorSignatureValues(scaleSignature, root.rootTransform, "scale");
-  } else {
-    scaleSignature.push(
-      root.rootScaleSignatureVersion,
-      root.rootSignatureRenderInstanceOrdinal,
-      root.rootSignatureInstanceIndex,
-    );
-  }
 };
 
 const createWebGlGltfInstancingCounters = (): WebGlGltfInstancingCounters => ({
@@ -998,20 +824,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #preparedGltf = new PreparedGltfRuntime(2, this.#admitGltfPreparationJob);
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   #gltfPreparationWakeCursor = 0;
-  readonly #gltfBatches: Array<GltfPrimitiveDrawBatch | undefined> = [];
-  readonly #gltfInstanceBufferArena = createGltfInstanceBufferArena(this.#vertexInputs);
+  readonly #gltfFrameBatches = new GltfFrameBatchArena(this.#preparedGltf, this.#vertexInputs);
   readonly #selectedGltfFramePackets: SelectedFramePackets = createSelectedFramePackets(
     this.#preparedGltf.packetTopology.catalog,
   );
-  readonly #gltfPacketSubmissionWorkspace: GltfPacketSubmissionWorkspace<
-    GltfPacketMaterialBinding,
-    GltfPacketRootBinding,
-    SurfaceLightSet
-  > = createGltfPacketSubmissionWorkspace();
-  readonly #gltfPacketBatchRegistry: GltfPacketBatchRegistry = createGltfPacketBatchRegistry();
-  readonly #gltfPacketBatchSegmentGroups: GltfPacketBatchSegmentGroups = createGltfPacketBatchSegmentGroups();
-  #gltfLiveBatchIds = new Uint32Array(1);
-  #gltfLiveBatchCount = 0;
   readonly #gltfMaterialBatchClassIds = new Map<string, number>();
   #gltfMaterialBatchClassIdCount = 0;
   readonly #gltfLightScopeIds = new Map<string, number>();
@@ -1072,6 +888,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
   readonly #geometryDrawArena: GeometryDrawArena;
+  readonly #surfaceExecution: SurfaceExecutionArena;
   readonly #virtualTextureDemandPlanning = createVirtualTextureDemandPlanningWorkspace();
   readonly #virtualTextureDemandPublicationStates: VirtualTextureRuntimeState[] = [];
   #unsupportedVirtualTextureDraws = 0;
@@ -1311,6 +1128,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#programArena = createProgramArena(gl);
       registerRollback(() => dropProgramArenaContext(this.#programArena));
       registerRollback(() => releaseProgramArenaContextHandles(this.#programArena));
+      this.#surfaceExecution = new SurfaceExecutionArena({
+        clusteredLights: this.#clusteredLights,
+        geometry: this.#geometryDrawArena,
+        gl,
+        gltfFrames: this.#gltfFrameBatches,
+        iblTextures: this.#iblTextures,
+        ordinaryTextures: this.#ordinaryTextures,
+        programs: this.#programArena,
+        renderTargets: this.#surfaceRenderTargets,
+        textureResidencyIntent: this.#textureResidencyIntent,
+        virtualTextures: this.#virtualTextureGpu,
+      });
       this.#probeContextCapabilities();
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       // Replace the no-context cleanup registered before construction with an
@@ -1350,6 +1179,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#hdrSupported = gl.getExtension("EXT_color_buffer_float") !== null;
     const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
     this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
+    this.#surfaceExecution.configureTextureUnits(this.#maxTextureImageUnits);
     const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
     this.#maxTextureSize = Number.isFinite(maxTextureSize) ? maxTextureSize : 0;
     configureClusteredLightArena(this.#clusteredLights, this.#maxTextureImageUnits, this.#maxTextureSize);
@@ -1571,12 +1401,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#prepareSharedViewGltfLodSelections(plan, frameViews);
       this.#selectGltfFramePackets(plan, frameViews);
       resetGltfPacketSubmissionWorkspaceForFrame(
-        this.#gltfPacketSubmissionWorkspace,
+        this.#gltfFrameBatches.workspace,
         plan.revision,
         this.#preparedGltf.packetTopology.catalog,
       );
-      beginGltfPacketBatchRegistryFrame(this.#gltfPacketBatchRegistry);
-      beginGltfInstanceBufferArenaFrame(this.#gltfInstanceBufferArena);
+      this.#gltfFrameBatches.beginFrame();
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
         this.#virtualTextureRuntime.beginView(viewIndex);
         // A scene occurrence has the same resource identity in every view.
@@ -1611,7 +1440,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const sourceX = useHdr ? 0 : x;
         const sourceY = useHdr ? 0 : y;
         resetGltfPacketSubmissionWorkspaceForView(
-          this.#gltfPacketSubmissionWorkspace,
+          this.#gltfFrameBatches.workspace,
           plan.revision,
           this.#preparedGltf.packetTopology.catalog,
           viewIndex,
@@ -1620,7 +1449,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         const packetEnd = packetCursor
           + this.#selectedGltfFramePackets.viewCounts[viewIndex]!;
         const flushGltfPacketSubmissions = (): void => {
-          if (this.#gltfPacketSubmissionWorkspace.count === 0) return;
+          if (this.#gltfFrameBatches.workspace.count === 0) return;
           this.#drawGltfPacketSubmissions(
             projection,
             view,
@@ -1631,10 +1460,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
             sourceY,
           );
           resetGltfPacketSubmissionWorkspaceForSegment(
-            this.#gltfPacketSubmissionWorkspace,
+            this.#gltfFrameBatches.workspace,
             plan.revision,
             this.#preparedGltf.packetTopology.catalog,
-            this.#gltfPacketSubmissionWorkspace.segment,
+            this.#gltfFrameBatches.workspace.segment,
           );
         };
 
@@ -1643,10 +1472,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
           if (node.kind === "directional-light" || node.kind === "point-light" || node.kind === "spot-light") continue;
           if (node.kind === "gltf" || node.kind === "gltf-instances") {
             const orderingSegment = plan.orderSegments[nodeIndex]!;
-            if (this.#gltfPacketSubmissionWorkspace.segment !== orderingSegment) {
+            if (this.#gltfFrameBatches.workspace.segment !== orderingSegment) {
               flushGltfPacketSubmissions();
               resetGltfPacketSubmissionWorkspaceForSegment(
-                this.#gltfPacketSubmissionWorkspace,
+                this.#gltfFrameBatches.workspace,
                 plan.revision,
                 this.#preparedGltf.packetTopology.catalog,
                 orderingSegment,
@@ -1694,6 +1523,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     } catch (value) {
       renderFailure = { value };
     }
+    renderFailure = captureFirstFailure(renderFailure, () => this.#consumeSurfaceExecutionSignals());
     renderFailure = captureFirstFailure(
       renderFailure,
       () => this.#gltfInstanceTransforms.endFrame(renderFailure === undefined),
@@ -1840,11 +1670,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => dropIblTextureContext(this.#iblTextures));
     releaseFailure = captureFirstFailure(releaseFailure, () => dropTextureHandleContext(this.#textureHandles));
     releaseFailure = captureFirstFailure(releaseFailure, () => clearGeometryDrawArenaContext(this.#geometryDrawArena));
-    this.#gltfBatches.length = 0;
-    this.#gltfLiveBatchCount = 0;
-    releaseFailure = captureFirstFailure(releaseFailure, () => {
-      clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups);
-    });
+    releaseFailure = captureFirstFailure(releaseFailure, () => this.#gltfFrameBatches.dropContext());
     releaseFailure = captureFirstFailure(
       releaseFailure,
       () => this.#gltfInstanceTransforms.endFrame(false),
@@ -1934,12 +1760,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#virtualTextureRuntime.clearAutoMetadata();
     teardown(() => this.#preparedGltf.dispose());
-    this.#gltfBatches.length = 0;
-    teardown(() => clearGltfInstanceBufferArena(this.#gltfInstanceBufferArena));
-    this.#gltfLiveBatchCount = 0;
-    teardown(() => clearGltfPacketBatchSegmentGroups(this.#gltfPacketBatchSegmentGroups));
-    teardown(() => clearGltfPacketBatchRegistry(this.#gltfPacketBatchRegistry));
-    teardown(() => clearGltfPacketSubmissionWorkspace(this.#gltfPacketSubmissionWorkspace));
+    teardown(() => this.#gltfFrameBatches.dispose());
     this.#gltfMaterialBatchClassIds.clear();
     this.#gltfMaterialBatchClassIdCount = 0;
     this.#gltfLightScopeIds.clear();
@@ -2674,24 +2495,19 @@ class WebGlRootImpl implements InternalWebGlRoot {
       multiplyMat4Into(this.#meshViewProjectionModel, viewProjection, model),
     )) return;
     const gpu = this.#geometryResource(retainedGeometry.id);
-    this.#applyDrawAlphaState(node.material);
-    try {
-      this.#drawGeometry(
-        gpu,
-        retainedGeometry.id,
-        node.material,
-        model,
-        projection,
-        view,
-        viewportSize,
-        lights,
-        toneMapping,
-        undefined,
-        cpu,
-      );
-    } finally {
-      this.#resetDrawAlphaState();
-    }
+    this.#drawGeometry(
+      gpu,
+      retainedGeometry.id,
+      node.material,
+      model,
+      projection,
+      view,
+      viewportSize,
+      lights,
+      toneMapping,
+      undefined,
+      cpu,
+    );
   }
 
   #appendSelectedGltfPacketDrawsForNode(
@@ -2803,7 +2619,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         }
       }
       const materialBindingId = retainGltfPacketSubmissionMaterialBinding(
-        this.#gltfPacketSubmissionWorkspace,
+        this.#gltfFrameBatches.workspace,
         this.#framePlan!.revision,
         catalog,
         catalog.materialIds[packetIndex]!,
@@ -2811,7 +2627,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         { material: prepared.material },
       );
       const rootBindingId = retainGltfPacketSubmissionRootBinding(
-        this.#gltfPacketSubmissionWorkspace,
+        this.#gltfFrameBatches.workspace,
         this.#framePlan!.revision,
         catalog,
         catalog.rootSourceIds[packetIndex]!,
@@ -2841,14 +2657,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const lightBindingId = assetLights === undefined
         ? NO_FRAME_PACKET_ID
         : retainGltfPacketSubmissionLightBinding(
-            this.#gltfPacketSubmissionWorkspace,
+            this.#gltfFrameBatches.workspace,
             this.#framePlan!.revision,
             catalog,
             lightScopeId,
             assetLights,
           );
       appendGltfPacketSubmission(
-        this.#gltfPacketSubmissionWorkspace,
+        this.#gltfFrameBatches.workspace,
         this.#framePlan!.revision,
         catalog,
         {
@@ -2903,33 +2719,23 @@ class WebGlRootImpl implements InternalWebGlRoot {
     sourceX: number,
     sourceY: number,
   ): void {
-    if (this.#gltfPacketSubmissionWorkspace.count === 0) return;
+    if (this.#gltfFrameBatches.workspace.count === 0) return;
     const plan = this.#framePlan!;
-    const catalog = this.#preparedGltf.packetTopology.catalog;
-    groupGltfPacketSubmissionSegment(
-      this.#gltfPacketBatchRegistry,
-      this.#gltfPacketBatchSegmentGroups,
-      this.#gltfPacketSubmissionWorkspace,
+    const groups = this.#gltfFrameBatches.prepareSegment(
       plan.revision,
-      catalog,
+      sceneLights,
+      this.#gl,
+      this.#context.generation,
+      this.#gltfInstancingCounters,
     );
-    assertGltfPacketBatchSegmentGroupsCurrent(
-      this.#gltfPacketBatchRegistry,
-      this.#gltfPacketBatchSegmentGroups,
-      this.#gltfPacketSubmissionWorkspace,
-      plan.revision,
-      catalog,
-    );
-    this.#prepareGltfPacketBatches(sceneLights);
-    const groups = this.#gltfPacketBatchSegmentGroups;
     for (let index = 0; index < groups.activeBatchCount; index += 1) {
-      const batch = this.#gltfBatches[groups.activeBatchIds[index]!]!;
+      const batch = this.#gltfFrameBatches.batch(groups.activeBatchIds[index]!);
       this.#gltfInstancingCounters.batchInstancesTotal += batch.localModels.length;
     }
 
     for (let index = 0; index < groups.opaqueBatchCount; index += 1) {
       this.#drawGltfPrimitiveDrawBatch(
-        this.#gltfBatches[groups.opaqueBatchIds[index]!]!,
+        this.#gltfFrameBatches.batch(groups.opaqueBatchIds[index]!),
         projection,
         view,
         toneMapping,
@@ -2939,9 +2745,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
 
     if (groups.transmissiveBatchCount > 0) {
-      const screenColorTexture = copyTransmissionScreenColorTexture(
-        this.#surfaceRenderTargets,
-        this.#gl,
+      const screenColorTexture = this.#surfaceExecution.copyTransmissionScreenColor(
         viewportSize[0],
         viewportSize[1],
         sourceX,
@@ -2950,7 +2754,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
       for (let index = 0; index < groups.transmissiveBatchCount; index += 1) {
         this.#drawGltfPrimitiveDrawBatch(
-          this.#gltfBatches[groups.transmissiveBatchIds[index]!]!,
+          this.#gltfFrameBatches.batch(groups.transmissiveBatchIds[index]!),
           projection,
           view,
           toneMapping,
@@ -2961,7 +2765,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     for (let index = 0; index < groups.blendedBatchCount; index += 1) {
       this.#drawGltfPrimitiveDrawBatch(
-        this.#gltfBatches[groups.blendedBatchIds[index]!]!,
+        this.#gltfFrameBatches.batch(groups.blendedBatchIds[index]!),
         projection,
         view,
         toneMapping,
@@ -2971,209 +2775,42 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #prepareGltfPacketBatches(sceneLights: SurfaceLightSet | undefined): void {
-    const workspace = this.#gltfPacketSubmissionWorkspace;
-    const groups = this.#gltfPacketBatchSegmentGroups;
-    for (let activeIndex = 0; activeIndex < groups.activeBatchCount; activeIndex += 1) {
-      const batchId = groups.activeBatchIds[activeIndex]!;
-      const memberFirst = groups.batchMemberFirsts[batchId]!;
-      const memberCount = groups.batchCounts[batchId]!;
-      const firstIndex = groups.memberIndices[memberFirst]!;
-      let batch = this.#gltfBatches[batchId];
-      if (batch === undefined) {
-        const geometryId = workspace.geometryIds[firstIndex]!;
-        const geometry = this.#geometryResource(geometryId);
-        const material = workspace.materialBindings[workspace.materialBindingIds[firstIndex]!]!;
-        const assetLights = workspace.lightBindingIds[firstIndex] === NO_FRAME_PACKET_ID
-          ? undefined
-          : workspace.lightBindings[workspace.lightBindingIds[firstIndex]!]!;
-        batch = {
-          cpuGeometry: geometry.source,
-          geometry,
-          geometryId,
-          key: batchId,
-          lights: combineSurfaceLightSets(sceneLights, assetLights),
-          localModelSignature: [],
-          localModels: [],
-          localModelSlots: [],
-          material: material.material,
-          rootPositionSignature: [],
-          rootRotationSignature: [],
-          rootScaleSignature: [],
-          rootModels: [],
-          rootInstanceViews: [],
-          rootLogicalIndices: [],
-          rootTransforms: [],
-          sidedness: {
-            doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-            frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
-          },
-        };
-        if (this.#gltfLiveBatchIds.length <= this.#gltfLiveBatchCount) {
-          const ids = new Uint32Array(this.#gltfLiveBatchIds.length * 2);
-          ids.set(this.#gltfLiveBatchIds);
-          this.#gltfLiveBatchIds = ids;
-        }
-        this.#gltfBatches[batchId] = batch;
-        this.#gltfLiveBatchIds[this.#gltfLiveBatchCount] = batchId;
-        this.#gltfLiveBatchCount += 1;
-        this.#gltfInstancingCounters.batchPlansBuilt += 1;
-      }
-      batch.localModelSignature.length = 0;
-      batch.localModels.length = 0;
-      batch.rootPositionSignature.length = 0;
-      batch.rootRotationSignature.length = 0;
-      batch.rootScaleSignature.length = 0;
-      batch.rootModels.length = 0;
-      batch.rootInstanceViews.length = 0;
-      batch.rootLogicalIndices.length = 0;
-      batch.rootTransforms.length = 0;
-      const geometryId = workspace.geometryIds[firstIndex]!;
-      const geometry = this.#geometryResource(geometryId);
-      const material = workspace.materialBindings[workspace.materialBindingIds[firstIndex]!]!;
-      const assetLights = workspace.lightBindingIds[firstIndex] === NO_FRAME_PACKET_ID
-        ? undefined
-        : workspace.lightBindings[workspace.lightBindingIds[firstIndex]!]!;
-      batch.cpuGeometry = geometry.source;
-      batch.geometry = geometry;
-      batch.geometryId = geometryId;
-      batch.lights = combineSurfaceLightSets(sceneLights, assetLights);
-      batch.material = material.material;
-      batch.sidedness = {
-        doubleSided: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.doubleSided) !== 0,
-        frontFaceCcw: (workspace.sidedness[firstIndex]! & FRAME_PACKET_SIDEDNESS.frontFaceCcw) !== 0,
-      };
-      for (let memberOffset = 0; memberOffset < memberCount; memberOffset += 1) {
-        this.#appendGltfWorkspaceSubmissionToBatch(
-          batch,
-          groups.memberIndices[memberFirst + memberOffset]!,
-        );
-      }
-    }
-  }
-
-  #appendGltfWorkspaceSubmissionToBatch(batch: GltfPrimitiveDrawBatch, index: number): void {
-    const workspace = this.#gltfPacketSubmissionWorkspace;
-    const root = workspace.rootBindings[workspace.rootBindingIds[index]!]!;
-    const localModelIndex = batch.localModels.length;
-    let localModel = batch.localModelSlots[localModelIndex];
-    if (localModel === undefined) {
-      localModel = identityMat4();
-      batch.localModelSlots.push(localModel);
-    }
-    readPacketLocalModelInto(
-      this.#preparedGltf.packetTopology.resources,
-      workspace.localModelIds[index]!,
-      localModel,
-    );
-    for (let component = 0; component < 16; component += 1) {
-      batch.localModelSignature.push(localModel[component]!);
-    }
-    appendGltfRootSignatures(
-      batch.rootPositionSignature,
-      batch.rootRotationSignature,
-      batch.rootScaleSignature,
-      root,
-    );
-    batch.localModels.push(localModel);
-    batch.rootModels.push(root.rootModel);
-    batch.rootInstanceViews.push(root.rootInstanceViews);
-    batch.rootLogicalIndices.push(root.rootSignatureInstanceIndex);
-    batch.rootTransforms.push(root.rootTransform);
-  }
-
   #drawGltfPrimitiveDrawBatch(
-    batch: GltfPrimitiveDrawBatch,
+    batch: GltfFrameDrawBatch,
     projection: Mat4,
     view: Mat4,
     toneMapping: SceneToneMappingState,
     viewportSize: ViewportSize,
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
   ): void {
-    this.#applyDrawSidedness(batch.sidedness);
-    this.#applyDrawAlphaState(batch.material);
-    try {
-      if (batch.localModels.length === 1) {
-        this.#drawGeometry(
-          batch.geometry,
-          batch.geometryId,
-          batch.material,
-          multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!),
-          projection,
-          view,
-          viewportSize,
-          batch.lights,
-          toneMapping,
-          transmissionScreenColorTexture,
-          batch.cpuGeometry,
-        );
-      } else {
-        this.#drawGeometryInstanced(
-          batch.geometry,
-          batch.geometryId,
-          batch.cpuGeometry,
-          batch.key,
-          batch.material,
-          batch.localModels,
-          batch.localModelSignature,
-          batch.rootModels,
-          batch.rootInstanceViews,
-          batch.rootLogicalIndices,
-          batch.rootTransforms,
-          batch.rootPositionSignature,
-          batch.rootRotationSignature,
-          batch.rootScaleSignature,
-          projection,
-          view,
-          viewportSize,
-          batch.lights,
-          toneMapping,
-          transmissionScreenColorTexture,
-        );
-      }
-    } finally {
-      this.#resetDrawAlphaState();
-      this.#resetDrawSidedness();
-    }
-  }
-
-  #applyDrawAlphaState(material: Material): void {
-    const gl = this.#gl;
-    if (material.kind !== "wireframe" && isBlendedSurfaceMaterial(material)) {
-      gl.enable(gl.BLEND);
-      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.depthMask(false);
-
-      return;
-    }
-
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-  }
-
-  #resetDrawAlphaState(): void {
-    const gl = this.#gl;
-    gl.disable(gl.BLEND);
-    gl.depthMask(true);
-  }
-
-  #applyDrawSidedness(sidedness: DrawSidedness): void {
-    const gl = this.#gl;
-    if (sidedness.doubleSided) {
-      gl.disable(gl.CULL_FACE);
-
-      return;
-    }
-
-    gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.BACK);
-    gl.frontFace(sidedness.frontFaceCcw ? gl.CCW : gl.CW);
-  }
-
-  #resetDrawSidedness(): void {
-    const gl = this.#gl;
-    gl.disable(gl.CULL_FACE);
-    gl.frontFace(gl.CCW);
+    const modelSource: VirtualTextureDrawDemandModelSource = batch.localModels.length === 1
+      ? { kind: "single", model: multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!) }
+      : { kind: "composed", localModels: batch.localModels, rootModels: batch.rootModels };
+    const baseColorResidency = this.#resolveBaseColorTextureResidency(
+      batch.geometry,
+      batch.material,
+      this.#virtualTextureDrawDemandContext(
+        batch.geometryId,
+        batch.cpuGeometry,
+        batch.material,
+        modelSource,
+        projection,
+        view,
+        viewportSize,
+      ),
+    );
+    this.#surfaceExecution.executeGltfBatch({
+      baseColorResidency,
+      batch,
+      contextGeneration: this.#context.generation,
+      counters: this.#gltfInstancingCounters,
+      frame: this.#frame,
+      projection,
+      toneMapping,
+      transmissionScreenColorTexture,
+      view,
+      viewportSize,
+    });
   }
 
   #sceneSurfaceLightSet(
@@ -3624,622 +3261,28 @@ class WebGlRootImpl implements InternalWebGlRoot {
         viewportSize,
       ),
     );
-    const programKind: ProgramKind = material.kind === "wireframe" ? "wireframe" : "surface";
-    const surfaceMaterial: SurfaceMaterial | undefined =
-      material.kind !== "wireframe" ? material : undefined;
-    const surfaceLights = surfaceMaterial?.kind === "standard"
-      ? lights ?? EMPTY_SURFACE_LIGHT_SET
-      : surfaceMaterial === undefined ? undefined : EMPTY_SURFACE_LIGHT_SET;
-    const surfaceTexturePlan = surfaceMaterial === undefined || surfaceLights === undefined
-      ? undefined
-      : this.#surfaceTextureBindingPlan(
-        surfaceMaterial,
-        transmissionScreenColorTexture,
-        surfaceLights,
-        baseColorResidency,
-      );
-    const clusteredLights = (surfaceLights?.punctuals.length ?? 0) > 0;
-    const programResource = this.#program(programKind, surfaceTexturePlan?.features, clusteredLights);
-    if (programResource === undefined) return;
-    const program = programResource.program;
-    useProgram(this.#programArena, program);
-
-    uniformMatrix(this.#programArena, program, "u_projection", projection);
-    uniformMatrix(this.#programArena, program, "u_view", view);
-    uniformMatrix(this.#programArena, program, "u_model", model);
-    uniformColor(
-      this.#programArena,
-      program,
-      "u_color",
-      surfaceTexturePlan?.baseColor.kind === "prepared-virtual"
-        ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
-        : materialColor(material),
-    );
-    uniform1i(this.#programArena, program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    if (surfaceTexturePlan !== undefined && surfaceLights !== undefined && surfaceMaterial !== undefined) {
-      uniformColor(this.#programArena, program, "u_emissiveColor", materialEmissiveColor(surfaceMaterial));
-      this.#bindSurfaceMaterialFactors(program, surfaceMaterial, transmissionScreenColorTexture, surfaceTexturePlan);
-      this.#bindSurfaceToneMapping(program, toneMapping);
-      this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
-    }
-
-    const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
-    uniform1i(this.#programArena, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
-    uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
-    drawGeometry(
-      this.#geometryDrawArena,
-      this.#context.generation,
-      geometryId,
-      geometry,
-      material.kind === "wireframe" ? material.width : undefined,
-    );
-  }
-
-  #drawGeometryInstanced(
-    geometry: GeometryResource,
-    geometryId: number,
-    cpuGeometry: CpuGeometry,
-    instanceBufferKey: number,
-    material: SurfaceMaterial,
-    localModels: readonly Mat4[],
-    localModelSignature: readonly number[],
-    rootModels: readonly Mat4[],
-    rootInstanceViews: readonly (GltfInstanceTransformView | undefined)[],
-    rootLogicalIndices: readonly number[],
-    rootTransforms: readonly (Transform | undefined)[],
-    rootPositionSignature: readonly number[],
-    rootRotationSignature: readonly number[],
-    rootScaleSignature: readonly number[],
-    projection: Mat4,
-    view: Mat4,
-    viewportSize: ViewportSize,
-    lights: SurfaceLightSet,
-    toneMapping: SceneToneMappingState,
-    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
-  ): void {
-    const surfaceLights = material.kind === "standard" ? lights : EMPTY_SURFACE_LIGHT_SET;
-    const baseColorResidency = this.#resolveBaseColorTextureResidency(
-      geometry,
-      material,
-      this.#virtualTextureDrawDemandContext(
-        geometryId,
-        cpuGeometry,
-        material,
-        { kind: "composed", localModels, rootModels },
-        projection,
-        view,
-        viewportSize,
-      ),
-    );
-    const surfaceTexturePlan = this.#surfaceTextureBindingPlan(
-      material,
-      transmissionScreenColorTexture,
-      surfaceLights,
+    this.#surfaceExecution.executeSingle({
       baseColorResidency,
-    );
-    const programKind: ProgramKind = "surface-instanced-split";
-    const clusteredLights = surfaceLights.punctuals.length > 0;
-    const programResource = this.#program(programKind, surfaceTexturePlan.features, clusteredLights);
-    if (programResource === undefined) return;
-    const program = programResource.program;
-    useProgram(this.#programArena, program);
-
-    uniformMatrix(this.#programArena, program, "u_projection", projection);
-    uniformMatrix(this.#programArena, program, "u_view", view);
-    uniformColor(
-      this.#programArena,
-      program,
-      "u_color",
-      surfaceTexturePlan.baseColor.kind === "prepared-virtual"
-        ? ("baseColorFactor" in material ? materialColor(material) : TEXTURE_COLOR)
-        : materialColor(material),
-    );
-    uniformColor(this.#programArena, program, "u_emissiveColor", materialEmissiveColor(material));
-    uniform1i(this.#programArena, program, "u_unlit", material.kind === "standard" ? 0 : 1);
-    this.#bindSurfaceMaterialFactors(program, material, transmissionScreenColorTexture, surfaceTexturePlan);
-    this.#bindSurfaceToneMapping(program, toneMapping);
-    this.#bindSurfaceLights(program, surfaceLights, surfaceTexturePlan, projection, view, viewportSize);
-
-    const baseColorBinding = this.#bindSurfaceBaseColorTexture(program, surfaceTexturePlan);
-    uniform1i(this.#programArena, program, "u_useTexture", baseColorBinding.kind === "ordinary" ? 1 : 0);
-    uniform1i(this.#programArena, program, "u_useVirtualTexture", baseColorBinding.kind === "prepared-virtual" ? 1 : 0);
-    const instanceAllocation = bindGltfInstanceBuffer(
-      this.#gltfInstanceBufferArena,
-      this.#gl,
-      this.#context.generation,
-      instanceBufferKey,
-      localModels,
-      localModelSignature,
-      rootTransforms,
-      rootInstanceViews,
-      rootLogicalIndices,
-      rootPositionSignature,
-      rootRotationSignature,
-      rootScaleSignature,
-      this.#gltfInstancingCounters,
-    );
-    prepareGeometryInstancedDraw(
-      this.#geometryDrawArena,
-      this.#context.generation,
-      geometryId,
+      contextGeneration: this.#context.generation,
+      frame: this.#frame,
       geometry,
-      instanceAllocation,
-    );
-    this.#gltfInstancingCounters.drawCalls += 1;
-    this.#gltfInstancingCounters.instancesDrawn += localModels.length;
-    submitGeometryInstancedDraw(this.#geometryDrawArena, geometry, localModels.length);
-  }
-
-  #bindSurfaceMaterialFactors(
-    program: WebGLProgram,
-    material: SurfaceMaterial,
-    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
-    plan: SurfaceTextureBindingPlan,
-  ): void {
-    const factors = surfaceMaterialExtensionFactors(material);
-    const alphaMode = surfaceMaterialAlphaMode(material);
-    const hasFiniteAttenuationDistance = Number.isFinite(factors.attenuationDistance);
-    uniformColor(this.#programArena, program, "u_alphaSettings", [
-      alphaMode === "MASK" ? 1 : alphaMode === "BLEND" ? 2 : 0,
-      surfaceMaterialAlphaCutoff(material),
-      0,
-      0,
-    ]);
-    uniformColor(this.#programArena, program, "u_materialPbrFactors", [
-      surfaceMaterialMetallicFactor(material),
-      surfaceMaterialRoughnessFactor(material),
-      0,
-      0,
-    ]);
-    uniformColor(this.#programArena, program, "u_specularColorFactor", [
-      factors.specularColorFactor[0],
-      factors.specularColorFactor[1],
-      factors.specularColorFactor[2],
-      1,
-    ]);
-    uniformColor(this.#programArena, program, "u_materialExtensionFactors", [
-      factors.specularFactor,
-      factors.ior,
-      factors.clearcoatFactor,
-      factors.clearcoatRoughnessFactor,
-    ]);
-    uniformColor(this.#programArena, program, "u_anisotropyFactors", [
-      factors.anisotropyStrength,
-      factors.anisotropyRotation,
-      0,
-      0,
-    ]);
-    uniformColor(this.#programArena, program, "u_diffuseTransmissionFactors", [
-      factors.diffuseTransmissionColorFactor[0],
-      factors.diffuseTransmissionColorFactor[1],
-      factors.diffuseTransmissionColorFactor[2],
-      factors.diffuseTransmissionFactor,
-    ]);
-    uniformColor(this.#programArena, program, "u_sheenColorFactor", [
-      factors.sheenColorFactor[0],
-      factors.sheenColorFactor[1],
-      factors.sheenColorFactor[2],
-      factors.sheenRoughnessFactor,
-    ]);
-    uniformColor(this.#programArena, program, "u_iridescenceFactors", [
-      factors.iridescenceFactor,
-      factors.iridescenceIor,
-      factors.iridescenceThicknessMinimum,
-      factors.iridescenceThicknessMaximum,
-    ]);
-    uniformColor(this.#programArena, program, "u_dispersionFactors", [
-      factors.dispersionFactor,
-      0,
-      0,
-      0,
-    ]);
-    uniformColor(this.#programArena, program, "u_attenuationColorFactor", [
-      factors.attenuationColor[0],
-      factors.attenuationColor[1],
-      factors.attenuationColor[2],
-      1,
-    ]);
-    uniformColor(this.#programArena, program, "u_transmissionVolumeFactors", [
-      factors.transmissionFactor,
-      factors.thicknessFactor,
-      hasFiniteAttenuationDistance ? factors.attenuationDistance : 0,
-      hasFiniteAttenuationDistance ? 1 : 0,
-    ]);
-    this.#bindTransmissionScreenColorTexture(program, transmissionScreenColorTexture, plan);
-    this.#bindSurfaceTextureCoordinates(program, material, plan);
-    uniformColor(this.#programArena, program, "u_normalTextureSettings", [
-      material.kind === "standard" ? material.normalScale ?? 1 : 1,
-      0,
-      0,
-      0,
-    ]);
-    uniformColor(this.#programArena, program, "u_occlusionSettings", [
-      surfaceMaterialOcclusionStrength(material),
-      0,
-      0,
-      0,
-    ]);
-    this.#bindSurfaceMaterialTextures(program, plan);
-  }
-
-  #bindSurfaceTextureCoordinates(
-    program: WebGLProgram,
-    material: SurfaceMaterial,
-    plan: SurfaceTextureBindingPlan,
-  ): void {
-    const bind = (
-      feature: SurfaceShaderTextureFeature,
-      key: keyof SurfaceMaterialTextureCoordinates,
-      uniformStem: string,
-      virtualBaseColor = false,
-    ): void => {
-      const preparedCoordinates = material.textureCoordinates?.[key];
-      const active = preparedCoordinates !== undefined
-        || plan.features.has(feature)
-        || (virtualBaseColor && (
-          plan.features.has("baseColorVirtualTextureAtlas")
-          || plan.features.has("baseColorVirtualTexturePageTable")
-        ));
-      if (!active) return;
-      const coordinates = preparedCoordinates ?? IDENTITY_GLTF_TEXTURE_COORDINATES;
-      uniform1i(this.#programArena, program, `${uniformStem}Set`, coordinates.set);
-      uniformColor(this.#programArena, program, `${uniformStem}Row0`, coordinates.row0);
-      uniformColor(this.#programArena, program, `${uniformStem}Row1`, coordinates.row1);
-    };
-    bind("baseColorTexture", "baseColorTexture", "u_baseColorUv", true);
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      bind(descriptor.feature, descriptor.key, descriptor.uvUniformStem);
-    }
-  }
-
-  #surfaceTextureBindingPlan(
-    material: SurfaceMaterial,
-    transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
-    lightSet: SurfaceLightSet,
-    baseColorResidency: BaseColorTextureResidency,
-  ): SurfaceTextureBindingPlan {
-    type ReadyOrdinaryTexture = Extract<OrdinaryTextureGpuResource, { readonly uploaded: true }>;
-    const declaredCandidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
-    const declaredTextures = new Map<SurfaceShaderTextureFeature, TextureAssetUploadRef>();
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      const texture = descriptor.key === "emissiveTexture"
-        ? material.emissiveTexture
-        : material.kind === "standard" ? material[descriptor.key] : undefined;
-      if (texture === undefined) continue;
-      declaredCandidates[descriptor.feature] = "ready";
-      declaredTextures.set(descriptor.feature, texture);
-    }
-    if (transmissionScreenColorTexture !== undefined) declaredCandidates.transmissionScreenTexture = "ready";
-    if (lightSet.specular !== undefined) {
-      declaredCandidates.iblSpecularCube = "ready";
-      declaredCandidates.iblBrdfLut = "ready";
-    }
-
-    const declaredBaseColor = (() => {
-      switch (baseColorResidency.kind) {
-        case "none": return { kind: "none" } as const;
-        case "ordinary": return { kind: "ordinary", ordinary: "ready" } as const;
-        case "prepared-virtual": return {
-          ...(baseColorResidency.ordinaryFallback === undefined ? {} : { fallback: "ready" as const }),
-          kind: "virtual" as const,
-          virtual: "ready" as const,
-        };
-      }
-    })();
-    const clusterUnits = clusteredLightTextureUnits(this.#clusteredLights);
-    const reserveClusterUnits = lightSet.punctuals.length > 0;
-    const reservedTextureUnits = reserveClusterUnits
-      ? new Set([clusterUnits.grid, clusterUnits.indices, clusterUnits.lights].filter((unit) => unit >= 0))
-      : new Set<number>();
-    const admission = planSurfaceTextureBindings({
-      baseColor: declaredBaseColor,
-      brdfLutPreferredUnit: reserveClusterUnits && clusterUnits.grid > 0
-        ? clusterUnits.grid - 1
-        : IBL_BRDF_LUT_PREFERRED_TEXTURE_UNIT,
-      candidates: declaredCandidates,
-      maxTextureUnits: this.#maxTextureImageUnits,
-      reservedTextureUnits,
-    });
-
-    const candidates: Partial<Record<SurfaceIndependentTextureFeature, SurfaceTextureCandidate>> = {};
-    const readyTextures = new Map<SurfaceShaderTextureFeature, ReadyOrdinaryTexture>();
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      if (!admission.features.has(descriptor.feature)) continue;
-      const texture = declaredTextures.get(descriptor.feature);
-      if (texture === undefined) continue;
-      const resource = this.#requestOrdinaryTexture(texture);
-      const ready = resource.uploaded ? resource : undefined;
-      candidates[descriptor.feature] = ready === undefined ? "unavailable" : "ready";
-      if (ready !== undefined) readyTextures.set(descriptor.feature, ready);
-    }
-
-    let ordinaryBaseColor: ReadyOrdinaryTexture | undefined;
-    let virtualFallbackTexture: TextureAssetUploadRef | undefined;
-    let virtualFallbackReady: ReadyOrdinaryTexture | undefined;
-    const baseColor = (() => {
-      switch (baseColorResidency.kind) {
-        case "none": return { kind: "none" } as const;
-        case "ordinary": {
-          if (admission.baseColor.kind === "ordinary") {
-            const resource = this.#requestOrdinaryTexture(baseColorResidency.texture);
-            ordinaryBaseColor = resource.uploaded ? resource : undefined;
-          }
-          return {
-            kind: "ordinary" as const,
-            ordinary: ordinaryBaseColor === undefined ? "unavailable" as const : "ready" as const,
-          };
-        }
-        case "prepared-virtual": {
-          const drawable = this.#isVirtualTextureDrawable(baseColorResidency.state);
-          if (!drawable) {
-            if (baseColorResidency.state.status === "unsupported") baseColorResidency.state.stats.unsupportedDraws += 1;
-            else baseColorResidency.state.stats.unreadyDraws += 1;
-          }
-          virtualFallbackTexture = baseColorResidency.ordinaryFallback;
-          let fallbackResource = virtualFallbackTexture === undefined
-            ? undefined
-            : this.#ordinaryTextures.peekGpuResource(textureCacheKey(virtualFallbackTexture));
-          if (
-            virtualFallbackTexture !== undefined
-            && admission.baseColor.kind !== "none"
-            && (admission.baseColor.kind === "ordinary" || !drawable)
-          ) fallbackResource = this.#requestOrdinaryTexture(virtualFallbackTexture);
-          virtualFallbackReady = fallbackResource?.uploaded === true ? fallbackResource : undefined;
-          return {
-            ...(virtualFallbackTexture === undefined || admission.baseColor.kind === "none"
-              ? {}
-              : { fallback: virtualFallbackReady === undefined ? "unavailable" as const : "ready" as const }),
-            kind: "virtual" as const,
-            virtual: admission.baseColor.kind === "virtual" && drawable
-              ? "ready" as const
-              : "unavailable" as const,
-          };
-        }
-      }
-    })();
-
-    if (transmissionScreenColorTexture !== undefined) {
-      candidates.transmissionScreenTexture = transmissionScreenColorTexture.uploaded ? "ready" : "unavailable";
-    }
-    if (lightSet.specular !== undefined) {
-      candidates.iblSpecularCube = "ready";
-      if (admission.features.has("iblBrdfLut")) {
-        let ready = false;
-        try {
-          ready = prepareSurfaceIblBrdfLut(this.#iblTextures);
-        } finally {
-          this.#consumeIblTextureSignals();
-        }
-        candidates.iblBrdfLut = ready ? "ready" : "unavailable";
-      }
-    }
-    const pure = resolveAdmittedSurfaceTextureBindings(admission, { baseColor, candidates });
-    this.#recordSurfaceTextureBindingOmissions(pure);
-    const selectedBaseColor: SurfaceBaseColorTextureBinding = pure.baseColor.kind === "ordinary"
-      ? ordinaryBaseColor === undefined && virtualFallbackReady !== undefined
-        ? { kind: "ordinary", resource: virtualFallbackReady }
-        : ordinaryBaseColor === undefined
-          ? { kind: "none" }
-          : { kind: "ordinary", resource: ordinaryBaseColor }
-      : pure.baseColor.kind === "virtual" && baseColorResidency.kind === "prepared-virtual"
-        ? {
-            kind: "prepared-virtual",
-            ...(virtualFallbackTexture === undefined ? {} : { ordinaryFallback: virtualFallbackTexture }),
-            state: baseColorResidency.state,
-          }
-        : { kind: "none" };
-    return { ...pure, baseColor: selectedBaseColor, readyTextures };
-  }
-
-  #recordSurfaceTextureBindingOmissions(plan: PureSurfaceTextureBindingPlan): void {
-    for (const omission of plan.omissions) {
-      if (omission.reason !== "unit-exhausted") continue;
-      const key = `surface-texture-unit-exhausted:${omission.feature}:${this.#maxTextureImageUnits}`;
-      this.#recordDiagnostic(
-        `Surface texture ${omission.feature} omitted because no fragment sampler unit was available`,
-        key,
-      );
-    }
-  }
-
-  #bindSurfaceToneMapping(program: WebGLProgram, toneMapping: SceneToneMappingState): void {
-    uniformColor(this.#programArena, program, "u_toneMappingSettings", [
-      toneMapping.toneMapping === "aces-fitted" ? 1 : toneMapping.toneMapping === "pbr-neutral" ? 2 : 0,
-      toneMapping.exposure,
-      toneMapping.hdrOutput ? 1 : 0,
-      0,
-    ]);
-  }
-
-  #bindSurfaceMaterialTextures(
-    program: WebGLProgram,
-    plan: SurfaceTextureBindingPlan,
-  ): void {
-    for (const descriptor of SURFACE_MATERIAL_TEXTURE_BINDINGS) {
-      this.#bindCachedTexture2d(program, descriptor, plan);
-    }
-  }
-
-  #bindCachedTexture2d(
-    program: WebGLProgram,
-    descriptor: (typeof SURFACE_MATERIAL_TEXTURE_BINDINGS)[number],
-    plan: SurfaceTextureBindingPlan,
-  ): void {
-    const resource = plan.readyTextures.get(descriptor.feature);
-    const gl = this.#gl;
-    const allocatedUnit = plan.textureUnits.get(descriptor.feature);
-    if (resource === undefined || allocatedUnit === undefined) {
-      uniform1i(this.#programArena, program, descriptor.useUniform, 0);
-      return;
-    }
-    gl.activeTexture(gl.TEXTURE0 + allocatedUnit);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    uniform1i(this.#programArena, program, descriptor.samplerUniform, allocatedUnit);
-    uniform1i(this.#programArena, program, descriptor.useUniform, 1);
-  }
-
-  #bindTransmissionScreenColorTexture(
-    program: WebGLProgram,
-    resource: ScreenColorTextureResource | undefined,
-    plan: SurfaceTextureBindingPlan,
-  ): void {
-    if (resource === undefined || !resource.uploaded) {
-      uniform1i(this.#programArena, program, "u_useTransmissionTexture", 0);
-      return;
-    }
-
-    const gl = this.#gl;
-    const textureUnit = plan.textureUnits.get("transmissionScreenTexture");
-    if (textureUnit === undefined) {
-      uniform1i(this.#programArena, program, "u_useTransmissionTexture", 0);
-      return;
-    }
-    uniform1i(this.#programArena, program, "u_useTransmissionTexture", 1);
-    gl.activeTexture(gl.TEXTURE0 + textureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, resource.texture);
-    uniform1i(this.#programArena, program, "u_transmissionScreenTexture", textureUnit);
-    uniform2fv(this.#programArena, program, "u_viewportOrigin", [resource.originX, resource.originY]);
-    uniform2fv(this.#programArena, program, "u_viewportSize", [resource.width, resource.height]);
-  }
-
-  #bindSurfaceLights(
-    program: WebGLProgram,
-    lightSet: SurfaceLightSet,
-    plan: SurfaceTextureBindingPlan,
-    projection: Mat4,
-    view: Mat4,
-    viewportSize: ViewportSize,
-  ): void {
-    try {
-      bindSurfaceIbl(
-        this.#iblTextures,
-        this.#programArena,
-        program,
-        lightSet,
-        plan.textureUnits.get("iblSpecularCube"),
-        plan.textureUnits.get("iblBrdfLut"),
-      );
-    } finally {
-      this.#consumeIblTextureSignals();
-    }
-
-    const lights = lightSet.directionals;
-    if (lights.length > MAX_SURFACE_LIGHTS) {
-      throw new Error(`Royal supports at most ${MAX_SURFACE_LIGHTS} directional lights per pass`);
-    }
-    uniform1i(this.#programArena, program, "u_surfaceLightCount", lights.length);
-
-    for (let index = 0; index < lights.length; index += 1) {
-      const light = lights[index];
-      if (light === undefined) continue;
-
-      const range = 0;
-      const direction = light.direction;
-      const position = [0, 0, 0] as const;
-      const cone = [1, 0, 0, 0] as const;
-      const kind = 0;
-
-      uniform1i(this.#programArena, program, `u_surfaceLightKind[${index}]`, kind);
-      uniformColor(this.#programArena, program, `u_surfaceLightColor[${index}]`, light.color);
-      uniformColor(this.#programArena, program, `u_surfaceLightDirection[${index}]`, [
-        direction[0],
-        direction[1],
-        direction[2],
-        range,
-      ]);
-      uniformColor(this.#programArena, program, `u_surfaceLightPosition[${index}]`, [
-        position[0],
-        position[1],
-        position[2],
-        0,
-      ]);
-      uniformColor(this.#programArena, program, `u_surfaceLightCone[${index}]`, cone);
-    }
-    bindClusteredLights(
-      this.#clusteredLights,
-      this.#programArena,
-      program,
-      lightSet.punctuals,
+      geometryId,
+      lights,
+      material,
+      model,
       projection,
+      toneMapping,
+      transmissionScreenColorTexture,
       view,
-      viewportSize[0],
-      viewportSize[1],
-      this.#frame,
-    );
-
+      viewportSize,
+    });
   }
 
   #releaseUnusedGltfBatchResources(): void {
-    const registry = this.#gltfPacketBatchRegistry;
-    for (let index = 0; index < this.#gltfLiveBatchCount; index += 1) {
-      const batchId = this.#gltfLiveBatchIds[index]!;
-      if (registry.batchTouchedEpochs[batchId] === registry.frameEpoch) continue;
-      this.#gltfBatches[batchId] = undefined;
-    }
-    releaseUnusedGltfInstanceBuffers(
-      this.#gltfInstanceBufferArena,
+    this.#gltfFrameBatches.releaseUnused(
       this.#gl,
       this.#context.generation,
     );
-    if (this.#gltfLiveBatchIds.length < registry.touchedBatchCount) {
-      let capacity = this.#gltfLiveBatchIds.length;
-      while (capacity < registry.touchedBatchCount) capacity *= 2;
-      this.#gltfLiveBatchIds = new Uint32Array(capacity);
-    }
-    this.#gltfLiveBatchIds.set(registry.touchedBatchIds.subarray(0, registry.touchedBatchCount));
-    this.#gltfLiveBatchCount = registry.touchedBatchCount;
-  }
-
-  #bindSurfaceBaseColorTexture(
-    program: WebGLProgram,
-    plan: SurfaceTextureBindingPlan | undefined,
-  ): SurfaceBaseColorTextureBinding {
-    if (plan === undefined) return { kind: "none" };
-    const binding = plan.baseColor;
-    switch (binding.kind) {
-      case "ordinary":
-        return this.#bindOrdinaryBaseColorTexture(program, binding, plan)
-          ? binding
-          : { kind: "none" };
-      case "prepared-virtual": {
-        if (this.#bindVirtualTexture(program, binding.state, plan)) {
-          if (binding.ordinaryFallback !== undefined) {
-            this.#textureResidencyIntent.recordVirtualBind(textureCacheKey(binding.ordinaryFallback));
-          }
-          return binding;
-        }
-        if (binding.ordinaryFallback !== undefined) {
-          const resource = this.#requestOrdinaryTexture(binding.ordinaryFallback);
-          if (!resource.uploaded) return { kind: "none" };
-          const fallback = { kind: "ordinary" as const, resource };
-          return this.#bindOrdinaryBaseColorTexture(program, fallback, plan)
-            ? fallback
-            : { kind: "none" };
-        }
-        return { kind: "none" };
-      }
-      case "none":
-        return { kind: "none" };
-    }
-  }
-
-  #requestOrdinaryTexture(texture: TextureAssetUploadRef): OrdinaryTextureGpuResource {
-    this.#textureResidencyIntent.requireOrdinary(textureCacheKey(texture));
-    return this.#ordinaryTextures.request(texture);
-  }
-
-  #bindOrdinaryBaseColorTexture(
-    program: WebGLProgram,
-    binding: Extract<SurfaceBaseColorTextureBinding, { readonly kind: "ordinary" }>,
-    plan: SurfaceTextureBindingPlan,
-  ): boolean {
-    const textureUnit = plan.textureUnits.get("baseColorTexture");
-    if (textureUnit === undefined) return false;
-    const gl = this.#gl;
-    gl.activeTexture(gl.TEXTURE0 + textureUnit);
-    gl.bindTexture(gl.TEXTURE_2D, binding.resource.texture);
-    uniform1i(this.#programArena, program, "u_texture", textureUnit);
-    return true;
   }
 
   #virtualTextureDrawDemandContext(
@@ -4891,58 +3934,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       ));
   }
 
-  #bindVirtualTexture(
-    program: WebGLProgram,
-    state: VirtualTextureRuntimeState,
-    plan: SurfaceTextureBindingPlan,
-  ): boolean {
-    const manifest = state.manifest;
-    if (manifest === undefined || !this.#isVirtualTextureDrawable(state)) return false;
-    const atlasTextureUnit = plan.textureUnits.get("baseColorVirtualTextureAtlas");
-    const pageTableTextureUnit = plan.textureUnits.get("baseColorVirtualTexturePageTable");
-    if (atlasTextureUnit === undefined || pageTableTextureUnit === undefined) return false;
-
-    const binding = bindVirtualTextureGpuResource(
-      this.#virtualTextureGpu,
-      state.key,
-      atlasTextureUnit,
-      pageTableTextureUnit,
-    );
-    if (binding === undefined) return false;
-    uniform1i(this.#programArena, program, "u_vtAtlas", atlasTextureUnit);
-    uniform1i(this.#programArena, program, "u_vtPageTable", pageTableTextureUnit);
-    uniform2f(this.#programArena, program, "u_vtPageTableSize", binding.pageTableWidth, binding.pageTableHeight);
-    uniform2f(this.#programArena, program, "u_vtAtlasGrid", binding.atlasGridColumns, binding.atlasGridRows);
-    uniform2f(
-      this.#programArena,
-      program,
-      "u_vtAtlasTexelSize",
-      1 / (binding.atlasGridColumns * binding.atlasCellSize),
-      1 / (binding.atlasGridRows * binding.atlasCellSize),
-    );
-    uniform1f(this.#programArena, program, "u_vtBorderTexels", binding.borderTexels);
-    uniform1f(this.#programArena, program, "u_vtPageSize", manifest.pageSize);
-    uniform2f(this.#programArena, program, "u_vtVirtualSize", manifest.width, manifest.height);
-    uniform1i(this.#programArena, program, "u_vtFlipY", (state.texture.flipY ?? true) ? 1 : 0);
-    uniform1i(this.#programArena, program, "u_vtWrapS", this.#virtualTextureWrapMode(state.texture.sampler?.wrapS));
-    uniform1i(this.#programArena, program, "u_vtWrapT", this.#virtualTextureWrapMode(state.texture.sampler?.wrapT));
-    state.stats.shaderBinds += 1;
-
-    return true;
-  }
-
-  #virtualTextureWrapMode(wrap: TextureSampler["wrapS"] | undefined): number {
-    switch (wrap) {
-      case "repeat":
-        return VT_WRAP_REPEAT;
-      case "mirrored-repeat":
-        return VT_WRAP_MIRRORED_REPEAT;
-      case "clamp-to-edge":
-      default:
-        return VT_WRAP_CLAMP_TO_EDGE;
-    }
-  }
-
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {
     try {
       return requestProgram(this.#programArena, this.#frame, kind, features, clusteredLights);
@@ -5190,6 +4181,14 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#recordDiagnostic(message, `ibl-governor:${message}`);
     }
     if (consumeIblTextureFrameWake(this.#iblTextures)) this.invalidate();
+  }
+
+  #consumeSurfaceExecutionSignals(): void {
+    const signals = this.#surfaceExecution.drainSignals();
+    for (const diagnostic of signals.diagnostics) {
+      this.#recordDiagnostic(diagnostic.message, diagnostic.key);
+    }
+    if (signals.wakeRequested) this.invalidate();
   }
 
   #gltfState(node: AnyGltfNode): GltfState {
