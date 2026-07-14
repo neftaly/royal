@@ -8,6 +8,9 @@ export {
 export type { CanvasProps } from './canvas';
 export type { ScenePointerEvents } from './scene-interactions';
 export type {
+  GltfInstancesPickTarget,
+  GltfPickTarget,
+  MeshPickTarget,
   PickInput,
   PickingId,
   PickResult,

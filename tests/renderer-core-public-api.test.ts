@@ -169,6 +169,7 @@ describe("renderer-core public API", () => {
   it("exposes scene primitives from the React scene subpath", () => {
     expect(reactSceneApi.metresPerWorldUnit).toBe(1);
     expect(reactSceneApi).toHaveProperty("boxGeometry");
+    expect(reactSceneApi.defaultImageTextureSampler).toBe(rendererCore.defaultImageTextureSampler);
     expect(reactSceneApi).toHaveProperty("linearRgbaFromSrgb");
     expect(reactSceneApi).toHaveProperty("mesh");
     expect(reactSceneApi).toHaveProperty("scene");
@@ -182,7 +183,10 @@ describe("renderer-core public API", () => {
       reactSceneApi.solidTexture({ color: [1, 0, 0, 1] });
     const asset: import("@royal/react/scene").TextureAssetRef =
       reactSceneApi.textureAsset({ src: "/albedo.png" });
+    const preset: import("@royal/react/scene").EnvironmentLightPreset = "studio";
+    const materialInput: import("@royal/react/scene").MaterialSurfaceOptions = { texture: asset };
     expect([solid.kind, asset.kind]).toEqual(["solid", "asset"]);
+    expect([preset, materialInput.texture]).toEqual(["studio", asset]);
   });
 
   it("keeps internal texture helpers out of the renderer-core barrel", () => {

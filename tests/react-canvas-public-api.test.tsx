@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CanvasProps,
+  GltfInstancesPickTarget,
+  GltfPickTarget,
+  MeshPickTarget,
   PickInput,
   PickingId,
   PickResult,
@@ -116,6 +119,18 @@ describe('Canvas public scene boundary', () => {
     const scenePickingId: ScenePickingId = pickingId;
     const input = { clientX: 10, clientY: 20 } satisfies PickInput;
     const acceptTarget = (target: PickTarget): PickTarget => target;
+    const targetIndex = (target: PickTarget): number => {
+      if (target.kind === 'gltf-instances') {
+        const instance: GltfInstancesPickTarget = target;
+        return instance.instanceIndex;
+      }
+      if (target.kind === 'gltf') {
+        const gltfTarget: GltfPickTarget = target;
+        return gltfTarget.primitiveKey === undefined ? -1 : 0;
+      }
+      const meshTarget: MeshPickTarget = target;
+      return meshTarget.node.kind === 'mesh' ? 0 : -1;
+    };
     const acceptResult = (result: PickResult): PickResult => ({
       ...result,
       target: acceptTarget(result.target),
@@ -125,6 +140,7 @@ describe('Canvas public scene boundary', () => {
     expect(scenePickingId).toBe('helmet');
     expect(input).toEqual({ clientX: 10, clientY: 20 });
     expect(typeof acceptResult).toBe('function');
+    expect(typeof targetIndex).toBe('function');
   });
 
   it('exposes asset and renderer failures as discriminated unions', () => {
