@@ -362,6 +362,7 @@ import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
+import { WebGlFramePublicationOwner } from "./frame-publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import type {
   NormalizedWebGlRootOptions,
@@ -769,8 +770,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #meshModel = identityMat4();
   readonly #meshViewProjectionModel = identityMat4();
   readonly #context = new WebGlContextLifecycleOwner();
-  readonly #renderFailureObservers = new Set<(failure: unknown) => void>();
-  readonly #frameObservers = new Set<(frame: number) => void>();
+  readonly #framePublication = new WebGlFramePublicationOwner();
   readonly #programArena: ProgramArena;
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
@@ -852,7 +852,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  #frame = 0;
   #gltfRenderOrdinal = 0;
   readonly #iblTextures: IblTextureArena;
   #gltfInstancingCounters = createWebGlGltfInstancingCounters();
@@ -882,7 +881,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     hasScene: () => this.#latestScene !== undefined,
     isContextActive: () => this.#context.lifecycle === "active",
     renderLatest: () => this.#renderLatestScene(),
-    reportScheduledFailure: (failure) => this.#notifyRenderFailure(failure),
+    reportScheduledFailure: (failure) => this.#framePublication.reportRenderFailure(failure),
   });
   #planRevision = 0;
   #planCompiles = 0;
@@ -1118,7 +1117,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         decodedSources: this.#decodedTextureSources,
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),
         disposed: () => this.#disposed,
-        frame: () => this.#frame,
+        frame: () => this.#framePublication.frame,
         generatedImageVirtualTextures: this.#options.generatedImageVirtualTextures,
         generatedSvgVirtualTextureRasterDensity: this.#options.generatedSvgVirtualTextureRasterDensity,
         gpu: this.#virtualTextureGpu,
@@ -1228,33 +1227,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #notifyRenderFailure(failure: unknown): void {
-    for (const observer of Array.from(this.#renderFailureObservers)) {
-      if (!this.#renderFailureObservers.has(observer)) continue;
-      try {
-        observer(failure);
-      } catch (observerFailure) {
-        try {
-          console.error("Royal WebGL render failure observer failed", observerFailure);
-        } catch {
-          // Failure delivery must never create a second uncaught async error.
-        }
-      }
-    }
-  }
-
-  #notifyFrameObservers(): void {
-    let firstFailure: unknown;
-    for (const observer of this.#frameObservers) {
-      try {
-        observer(this.#frame);
-      } catch (failure) {
-        firstFailure ??= failure;
-      }
-    }
-    if (firstFailure !== undefined) this.#notifyRenderFailure(firstFailure);
-  }
-
   get canvas(): HTMLCanvasElement {
     return this.#canvas;
   }
@@ -1280,24 +1252,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   observeRenderFailures(callback: (failure: unknown) => void): () => void {
-    if (this.#disposed) return () => undefined;
-    this.#renderFailureObservers.add(callback);
-    return () => {
-      this.#renderFailureObservers.delete(callback);
-    };
+    return this.#framePublication.observeRenderFailures(callback);
   }
 
   observeFrame(callback: (frame: number) => void): () => void {
-    callback(this.#frame);
-    if (this.#disposed) return () => undefined;
-    this.#frameObservers.add(callback);
-    return () => {
-      this.#frameObservers.delete(callback);
-    };
+    return this.#framePublication.observeFrame(callback);
   }
 
   get frame(): number {
-    return this.#frame;
+    return this.#framePublication.frame;
   }
 
   get latestScene(): RenderRoot | undefined {
@@ -1531,7 +1494,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     renderFailure = captureFirstFailure(renderFailure, () => this.#releaseUnusedGltfBatchResources());
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => endClusteredLightFrame(this.#clusteredLights, this.#frame),
+      () => endClusteredLightFrame(this.#clusteredLights, this.#framePublication.frame),
     );
     renderFailure = captureFirstFailure(
       renderFailure,
@@ -1544,9 +1507,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       renderFailure,
       () => this.#finalizeTextureResidencyIntent(renderFailure === undefined),
     );
-    renderFailure = captureFirstFailure(renderFailure, () => {
-      this.#frame += 1;
-    });
+    renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
     renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextureRuntime.requests.drain());
     renderFailure = captureFirstFailure(renderFailure, () => {
       if (virtualTextureGpuHasActionableUploads(this.#virtualTextureGpu)) this.invalidate();
@@ -1576,7 +1537,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     if (renderFailure !== undefined) throw renderFailure.value;
     if (normalizationFailure !== undefined) throw normalizationFailure.value;
-    this.#notifyFrameObservers();
+    this.#framePublication.publishFrame();
   }
 
   invalidate(): void {
@@ -1723,8 +1684,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const teardown = (operation: () => void): void => {
       firstFailure = captureFirstFailure(firstFailure, operation);
     };
-    this.#renderFailureObservers.clear();
-    this.#frameObservers.clear();
+    this.#framePublication.dispose();
     this.#renderClock.dispose();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
@@ -1783,7 +1743,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         retained: diagnostics.retained,
       },
       disposed: this.#disposed,
-      frame: this.#frame,
+      frame: this.#framePublication.frame,
       gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
       gltfInstancing: this.#gltfInstancingSnapshot(),
       latestScene: this.#latestScene,
@@ -2798,7 +2758,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       batch,
       contextGeneration: this.#context.generation,
       counters: this.#gltfInstancingCounters,
-      frame: this.#frame,
+      frame: this.#framePublication.frame,
       projection,
       toneMapping,
       transmissionScreenColorTexture,
@@ -3258,7 +3218,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#surfaceExecution.executeSingle({
       baseColorResidency,
       contextGeneration: this.#context.generation,
-      frame: this.#frame,
+      frame: this.#framePublication.frame,
       geometry,
       geometryId,
       lights,
@@ -3591,7 +3551,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (demandedStates.has(candidate)) continue;
       const resource = virtualTextureGpuResource(this.#virtualTextureGpu, candidate.key);
       if (resource === undefined || !virtualTextureGpuResourceSnapshot(resource).allocated) continue;
-      const demandAge = this.#frame - candidate.lastDemandFrame;
+      const demandAge = this.#framePublication.frame - candidate.lastDemandFrame;
       if (
         candidate.lastDemandFrame !== Number.NEGATIVE_INFINITY
         && demandAge <= VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES
@@ -3612,8 +3572,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #scheduleVirtualTextureAllocationRetry(): void {
-    if (this.#virtualTextureAllocationRetryFrame === this.#frame) return;
-    this.#virtualTextureAllocationRetryFrame = this.#frame;
+    if (this.#virtualTextureAllocationRetryFrame === this.#framePublication.frame) return;
+    this.#virtualTextureAllocationRetryFrame = this.#framePublication.frame;
     this.invalidate();
   }
 
@@ -3845,7 +3805,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => this.#touchPublishedVirtualTextureDemand(state),
       );
     }
-    if (commitFailure === undefined) this.#virtualTextureRuntime.commitPublication(publicationStates, this.#frame);
+    if (commitFailure === undefined) {
+      this.#virtualTextureRuntime.commitPublication(publicationStates, this.#framePublication.frame);
+    }
     const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
     this.#virtualTextureRuntime.requests.schedule();
     publicationStates.length = 0;
@@ -3930,7 +3892,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {
     try {
-      return requestProgram(this.#programArena, this.#frame, kind, features, clusteredLights);
+      return requestProgram(
+        this.#programArena,
+        this.#framePublication.frame,
+        kind,
+        features,
+        clusteredLights,
+      );
     } finally {
       if (consumeProgramArenaWake(this.#programArena)) this.invalidate();
     }
@@ -3993,7 +3961,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #processVirtualTextureGpuUploads(): void {
     const gpuFailure = captureFailure(() => {
-      processVirtualTextureGpuUploads(this.#virtualTextureGpu, this.#frame, {
+      processVirtualTextureGpuUploads(this.#virtualTextureGpu, this.#framePublication.frame, {
         reserve: (uploadBytes) => {
           const reserved = reserveResourceGovernor(this.#resourceGovernor, "virtual-texture", {
             uploadBytes,
@@ -4047,38 +4015,42 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #processOrdinaryTextureUploads(): void {
     const previouslySuppressed = this.#suppressPersistentGpuCapacityWake;
     this.#suppressPersistentGpuCapacityWake = true;
-    const report = this.#ordinaryTextures.process(this.#frame, this.#context.generation, {
-      reserve: (cost) => {
-        const limits = this.#options.resourceGovernorPolicy.limits;
-        const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
-        if (cost.persistentGpuBytes > persistentGpuMaximum) {
-          return {
-            limit: persistentGpuMaximum,
-            reason: "persistent-gpu-cost-exceeds-limit" as const,
-          };
-        }
-        const uploadLimit = limits.uploadBytes;
-        if (cost.uploadBytes > uploadLimit) {
-          return { limit: uploadLimit, reason: "upload-cost-exceeds-limit" };
-        }
-        const reserved = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
-        if (typeof reserved !== "string") {
-          return {
-            cancel: () => { reserved.cancel(); },
-            commit: () => reserved.commit(),
-          };
-        }
-        switch (reserved) {
-          case "persistent-gpu-capacity":
-          case "persistent-gpu-hard-limit":
-          case "persistent-gpu-mandatory-floor":
-          case "upload-capacity":
-            return { reason: reserved };
-          default:
-            throw new Error(`Unexpected ordinary texture admission denial: ${reserved}`);
-        }
+    const report = this.#ordinaryTextures.process(
+      this.#framePublication.frame,
+      this.#context.generation,
+      {
+        reserve: (cost) => {
+          const limits = this.#options.resourceGovernorPolicy.limits;
+          const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
+          if (cost.persistentGpuBytes > persistentGpuMaximum) {
+            return {
+              limit: persistentGpuMaximum,
+              reason: "persistent-gpu-cost-exceeds-limit" as const,
+            };
+          }
+          const uploadLimit = limits.uploadBytes;
+          if (cost.uploadBytes > uploadLimit) {
+            return { limit: uploadLimit, reason: "upload-cost-exceeds-limit" };
+          }
+          const reserved = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
+          if (typeof reserved !== "string") {
+            return {
+              cancel: () => { reserved.cancel(); },
+              commit: () => reserved.commit(),
+            };
+          }
+          switch (reserved) {
+            case "persistent-gpu-capacity":
+            case "persistent-gpu-hard-limit":
+            case "persistent-gpu-mandatory-floor":
+            case "upload-capacity":
+              return { reason: reserved };
+            default:
+              throw new Error(`Unexpected ordinary texture admission denial: ${reserved}`);
+          }
+        },
       },
-    });
+    );
     let processFailure = report.operationFailure === undefined
       ? undefined
       : { value: report.operationFailure.error };
