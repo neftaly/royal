@@ -36,6 +36,13 @@ export class SurfaceLightResolver {
   #gltfScopeIdCount = 0;
   readonly #gltfScopeIds = new Map<string, number>();
   readonly #options: SurfaceLightResolverOptions;
+  #sceneCache: {
+    readonly compiledLightSet: SurfaceLightSet | undefined;
+    readonly compiledLights: readonly SurfaceLight[];
+    readonly environment: EnvironmentLight;
+    readonly resolved: SurfaceLightSet;
+    readonly specular: StudioEnvironmentSpecularResource | undefined;
+  } | undefined;
 
   constructor(options: SurfaceLightResolverOptions) {
     this.#options = options;
@@ -47,14 +54,22 @@ export class SurfaceLightResolver {
     compiledLightSet: SurfaceLightSet | undefined,
   ): SurfaceLightSet | undefined {
     if (environment === undefined) return compiledLightSet;
+    const specular = this.#options.studioSpecular();
+    const cached = this.#sceneCache;
+    if (
+      cached !== undefined
+      && cached.environment === environment
+      && cached.compiledLights === compiledLights
+      && cached.compiledLightSet === compiledLightSet
+      && cached.specular === specular
+    ) return cached.resolved;
     const worldFromIbl = transformMat4({
       position: [0, 0, 0],
       rotation: environment.rotation,
       scale: [1, 1, 1],
     });
     const worldToIbl = inverseMat4(worldFromIbl) ?? identityMat4();
-    const specular = this.#options.studioSpecular();
-    return surfaceLightSet(
+    const resolved = surfaceLightSet(
       compiledLights,
       {
         coefficients: STUDIO_ENVIRONMENT_IRRADIANCE,
@@ -70,8 +85,10 @@ export class SurfaceLightResolver {
             mipCount: specular.mipCount,
             texture: specular.texture,
             worldToIbl,
-          },
+        },
     );
+    this.#sceneCache = { compiledLightSet, compiledLights, environment, resolved, specular };
+    return resolved;
   }
 
   resolveGltfAsset(state: GltfSurfaceLightSource, rootModel: Mat4): SurfaceLightSet | undefined {
@@ -105,6 +122,7 @@ export class SurfaceLightResolver {
   clear(): void {
     this.#gltfScopeIds.clear();
     this.#gltfScopeIdCount = 0;
+    this.#sceneCache = undefined;
   }
 
   #resolveGltfSpecular(

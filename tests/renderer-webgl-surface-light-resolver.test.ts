@@ -31,11 +31,12 @@ const state = (): GltfSurfaceLightSource => ({
 
 describe("SurfaceLightResolver", () => {
   it("preserves compiled scene lights without an environment and resolves studio IBL", () => {
-    const studioSpecular = vi.fn(() => ({
+    const studioResource = {
       key: "ibl:studio",
       mipCount: 4,
       texture,
-    }));
+    };
+    const studioSpecular = vi.fn(() => studioResource);
     const resolver = new SurfaceLightResolver({
       ensureGltfSpecular: vi.fn(),
       studioSpecular,
@@ -45,8 +46,9 @@ describe("SurfaceLightResolver", () => {
     expect(resolver.resolveScene(undefined, compiled.lights, compiled)).toBe(compiled);
     expect(studioSpecular).not.toHaveBeenCalled();
 
+    const environment = studioEnvironment({ radianceScaleNits: 3, rotation: [0, 0, 0] });
     const resolved = resolver.resolveScene(
-      studioEnvironment({ radianceScaleNits: 3, rotation: [0, 0, 0] }),
+      environment,
       compiled.lights,
       compiled,
     );
@@ -61,6 +63,11 @@ describe("SurfaceLightResolver", () => {
         texture,
       },
     });
+    expect(resolver.resolveScene(environment, compiled.lights, compiled)).toBe(resolved);
+    expect(studioSpecular).toHaveBeenCalledTimes(2);
+
+    resolver.clear();
+    expect(resolver.resolveScene(environment, compiled.lights, compiled)).not.toBe(resolved);
   });
 
   it("resolves transformed glTF lights and exposes specular only after upload", () => {

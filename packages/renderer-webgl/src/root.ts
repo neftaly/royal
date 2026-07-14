@@ -264,11 +264,12 @@ const sceneToneMappingState = (
     readonly exposureEv100: number | undefined;
     readonly toneMapping: RenderToneMapping | undefined;
   },
+  hdrOutput: boolean,
 ): SceneToneMappingState => ({
   exposure: scene.exposureEv100 === undefined
     ? DEFAULT_TONE_MAPPING_STATE.exposure
     : 1 / (1.2 * 2 ** scene.exposureEv100),
-  hdrOutput: false,
+  hdrOutput,
   toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
 });
 
@@ -929,7 +930,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#scenePlan.sceneSurfaceLights,
         this.#scenePlan.sceneSurfaceLightSet,
       );
-      const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
+      const toneMapping = sceneToneMappingState(plan, useHdr);
       this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       this.#gltfPacketSubmissions.beginFrame(plan.revision);
       for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
