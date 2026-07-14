@@ -4,6 +4,7 @@ import type {
   TextureSampler,
 } from "@royal/renderer-core";
 import type { LoadedTextureSource } from "../texture-sources";
+import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import type {
   SurfaceImageBasedLight,
   SurfaceImageBasedLightSpecular,
@@ -348,13 +349,9 @@ export class GltfImageDemandCoordinator {
     this.#registrationClaims.delete(key);
     const asset = this.#assets.get(key);
     if (asset === undefined) return;
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     const cleanup = (operation: () => void): void => {
-      try {
-        operation();
-      } catch (error) {
-        firstFailure ??= error;
-      }
+      failure = captureFirstFailure(failure, operation);
     };
     this.#assets.delete(key);
     asset.controller.abort();
@@ -380,21 +377,17 @@ export class GltfImageDemandCoordinator {
     // A detached source or recipe may fail after this asset has no remaining
     // jobs capable of reaching their `finally` retry hook.
     this.#scheduleCleanupRetry();
-    if (firstFailure !== undefined) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   dispose(): void {
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     const cleanup = (operation: () => void): void => {
-      try {
-        operation();
-      } catch (error) {
-        firstFailure ??= error;
-      }
+      failure = captureFirstFailure(failure, operation);
     };
     cleanup(() => this.#retryCleanupDebt());
     if (this.#disposed) {
-      if (firstFailure !== undefined) throw firstFailure;
+      if (failure !== undefined) throw failure.value;
       return;
     }
     this.#disposed = true;
@@ -405,7 +398,7 @@ export class GltfImageDemandCoordinator {
     cleanup(() => this.#ordinaryScheduler.dispose());
     cleanup(() => this.#iblScheduler.dispose());
     this.#pendingOutcomes.length = 0;
-    if (firstFailure !== undefined) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   wake(): void {
@@ -678,13 +671,9 @@ export class GltfImageDemandCoordinator {
   }
 
   #retryCleanupDebt(): void {
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     const cleanup = (operation: () => void): void => {
-      try {
-        operation();
-      } catch (error) {
-        firstFailure ??= error;
-      }
+      failure = captureFirstFailure(failure, operation);
     };
     for (const debt of Array.from(this.#sourceCleanupDebt)) {
       cleanup(() => this.#retrySourceCleanup(debt));
@@ -692,7 +681,7 @@ export class GltfImageDemandCoordinator {
     for (const ownership of Array.from(this.#recipeCleanupDebt)) {
       cleanup(() => this.#retryRecipeCleanup(ownership));
     }
-    if (firstFailure !== undefined) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   #retryRecipeCleanup(ownership: RecipeOwnership): void {

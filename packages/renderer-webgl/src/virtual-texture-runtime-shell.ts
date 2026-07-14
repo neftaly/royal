@@ -47,6 +47,7 @@ import {
 } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
+import { captureFailure, type CapturedFailure } from "./captured-failure";
 
 export type VirtualTextureRuntimeShellOptions = Omit<
   VirtualTextureRequestCoordinatorOptions,
@@ -161,16 +162,15 @@ export class VirtualTextureRuntimeShell {
     ];
     this.#gpuLeases.clear();
     this.#quarantinedGpuLeases.clear();
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     for (const lease of leases) {
-      try {
+      const releaseFailure = captureFailure(() => {
         lease.release();
-      } catch (error) {
-        firstFailure ??= error;
-        this.#quarantinedGpuLeases.add(lease);
-      }
+      });
+      if (releaseFailure !== undefined) this.#quarantinedGpuLeases.add(lease);
+      failure ??= releaseFailure;
     }
-    if (firstFailure !== undefined) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 
   scheduleGovernedAdmissionRetry(): void {

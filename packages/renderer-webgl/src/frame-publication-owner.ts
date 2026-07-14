@@ -1,3 +1,5 @@
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
+
 export type WebGlFrameObserver = (frame: number) => void;
 export type WebGlRenderFailureObserver = (failure: unknown) => void;
 
@@ -76,17 +78,13 @@ export class WebGlFramePublicationOwner {
     try {
       while (this.#frameHead < this.#frameQueue.length) {
         const frame = this.#frameQueue[this.#frameHead++]!;
-        let firstFailure: unknown;
+        let failure: CapturedFailure | undefined;
         for (const observer of Array.from(this.#frameObservers)) {
           if (!this.#frameObservers.has(observer) || observer.lastFrame >= frame) continue;
           observer.lastFrame = frame;
-          try {
-            observer.callback(frame);
-          } catch (failure) {
-            firstFailure ??= failure;
-          }
+          failure = captureFirstFailure(failure, () => observer.callback(frame));
         }
-        if (firstFailure !== undefined) this.reportRenderFailure(firstFailure);
+        if (failure !== undefined) this.reportRenderFailure(failure.value);
       }
     } finally {
       this.#frameQueue.length = 0;

@@ -1,4 +1,5 @@
 import type { ResourceGovernorLease } from "./resource-governor";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
   decodedTextureLevels,
   isDecodedCompressedTexture,
@@ -89,18 +90,10 @@ export class DecodedTextureSourceLifetime {
   }
 
   retryPending(): void {
-    let firstFailure: unknown;
-    try {
-      this.retryPendingOrdinary();
-    } catch (error) {
-      firstFailure = error;
-    }
-    try {
-      this.retryPendingVirtualTexture();
-    } catch (error) {
-      firstFailure ??= error;
-    }
-    if (firstFailure !== undefined) throw firstFailure;
+    let failure: CapturedFailure | undefined;
+    failure = captureFirstFailure(failure, () => this.retryPendingOrdinary());
+    failure = captureFirstFailure(failure, () => this.retryPendingVirtualTexture());
+    if (failure !== undefined) throw failure.value;
   }
 
   #close<Source extends object>(owner: Lane<Source>, source: Source, close?: () => void): void {
@@ -136,15 +129,11 @@ export class DecodedTextureSourceLifetime {
   }
 
   #retry<Source extends object>(owner: Lane<Source>): void {
-    let firstFailure: unknown;
+    let failure: CapturedFailure | undefined;
     for (const source of owner.pending) {
-      try {
-        this.#close(owner, source);
-      } catch (error) {
-        firstFailure ??= error;
-      }
+      failure = captureFirstFailure(failure, () => this.#close(owner, source));
     }
-    if (firstFailure !== undefined) throw firstFailure;
+    if (failure !== undefined) throw failure.value;
   }
 }
 
