@@ -101,6 +101,12 @@ describe("React root public API", () => {
     expect(diagnostics).not.toHaveProperty("latestScene");
     expect(diagnostics).not.toHaveProperty("options");
     expect(root.pick({ clientX: 1, clientY: 1 })).toBeUndefined();
+    const asset = { uri: "/not-retained.glb" };
+    expect(root.gltfAssetSnapshot(asset)).toEqual({ state: "idle", variantNames: [] });
+    const assetSnapshots: unknown[] = [];
+    const stopObservingAsset = root.observeGltfAsset(asset, (snapshot) => assetSnapshots.push(snapshot));
+    expect(assetSnapshots).toEqual([{ state: "idle", variantNames: [] }]);
+    stopObservingAsset();
 
     root.render(renderRoot);
 

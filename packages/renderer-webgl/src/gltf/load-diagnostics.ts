@@ -4,7 +4,7 @@ import type {
   WebGlGltfLoadDiagnosticsSnapshot,
 } from "../root-types";
 import type { GltfLoadMetrics } from "./prepared-asset";
-import type { PreparedGltfRuntime } from "./prepared-runtime";
+import type { PreparedGltfRuntime, PreparedGltfState } from "./prepared-runtime";
 
 export type GltfLoadDiagnosticsState = {
   readonly error?: string;
@@ -21,7 +21,7 @@ export type GltfLoadDiagnosticsState = {
 const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
   start === undefined || end === undefined ? undefined : Math.max(0, end - start);
 
-const assetSnapshot = (
+export const gltfLoadDiagnosticsAssetSnapshot = (
   state: GltfLoadDiagnosticsState,
 ): WebGlGltfLoadDiagnosticsAssetSnapshot => {
   const load = state.load;
@@ -64,7 +64,7 @@ const assetSnapshot = (
 export const gltfLoadDiagnosticsSnapshot = (
   states: Iterable<GltfLoadDiagnosticsState>,
 ): WebGlGltfLoadDiagnosticsSnapshot => {
-  const assets = [...states].map(assetSnapshot);
+  const assets = [...states].map(gltfLoadDiagnosticsAssetSnapshot);
   let errorAssets = 0;
   let loadingAssets = 0;
   let sceneReadyAssets = 0;
@@ -92,3 +92,20 @@ export const preparedGltfLoadDiagnosticsSnapshot = (
     variants: state.variants,
   })),
 );
+
+/** Focused projection for an observed prepared asset. */
+export const preparedGltfLoadDiagnosticsAssetSnapshot = (
+  state: PreparedGltfState | undefined,
+): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined => state === undefined
+  ? undefined
+  : gltfLoadDiagnosticsAssetSnapshot({
+    ...(state.error === undefined ? {} : { error: state.error }),
+    lightCount: state.lights.length,
+    load: state.load,
+    nodeCount: state.nodeCount,
+    primitiveCount: state.primitives.length,
+    sourceUri: state.sourceUri,
+    ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
+    status: state.status,
+    variants: state.variants,
+  });

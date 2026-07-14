@@ -7,6 +7,7 @@ import {
   type ClusteredLightArena,
 } from "./webgl/clustered-light-arena";
 import {
+  type GltfAssetRef,
   type Material,
   type MeshNode,
   type PickInput,
@@ -136,7 +137,10 @@ import {
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
 import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
 import { GltfAssetPreparationOwner } from "./gltf/asset-preparation-owner";
-import { preparedGltfLoadDiagnosticsSnapshot } from "./gltf/load-diagnostics";
+import {
+  preparedGltfLoadDiagnosticsAssetSnapshot,
+  preparedGltfLoadDiagnosticsSnapshot,
+} from "./gltf/load-diagnostics";
 import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-owner";
 import {
   type GltfPacketOccurrence,
@@ -224,6 +228,7 @@ import type {
   WebGlExternalRenderClock,
   WebGlContextLifecycle,
   WebGlContextSnapshot,
+  WebGlGltfLoadDiagnosticsAssetSnapshot,
   WebGlRoot,
   WebGlRootOptions,
   WebGlRootSnapshot,
@@ -418,7 +423,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
       },
     };
   };
-  readonly #preparedGltf = new PreparedGltfRuntime(2, this.#admitGltfPreparationJob);
+  readonly #preparedGltf = new PreparedGltfRuntime(
+    2,
+    this.#admitGltfPreparationJob,
+    (failure) => this.#framePublication.reportRenderFailure(failure),
+  );
   readonly #gltfPreparation: GltfAssetPreparationOwner;
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
@@ -862,6 +871,22 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   observeFrame(callback: (frame: number) => void): () => void {
     return this.#framePublication.observeFrame(callback);
+  }
+
+  gltfAssetSnapshot(asset: GltfAssetRef): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined {
+    return preparedGltfLoadDiagnosticsAssetSnapshot(
+      this.#preparedGltf.get(gltfRequestKey(asset.uri, asset.version)),
+    );
+  }
+
+  observeGltfAsset(
+    asset: GltfAssetRef,
+    callback: (snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined) => void,
+  ): () => void {
+    return this.#preparedGltf.observeState(
+      gltfRequestKey(asset.uri, asset.version),
+      (state) => callback(preparedGltfLoadDiagnosticsAssetSnapshot(state)),
+    );
   }
 
   get frame(): number {

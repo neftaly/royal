@@ -1,7 +1,8 @@
-import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
+import type { GltfAssetRef, PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
   type WebGlContextSnapshot,
+  type WebGlGltfLoadDiagnosticsAssetSnapshot,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
 import {
@@ -88,6 +89,19 @@ export interface RoyalRendererDiagnosticsSnapshot {
   readonly virtualTexturing: WebGlRootSnapshot["virtualTexturing"];
 }
 
+/** Focused state for one exact glTF asset identity retained by the renderer. */
+export type RoyalGltfAssetSnapshot =
+  | Readonly<{
+    readonly error?: never;
+    readonly state: "idle" | "loading" | "ready";
+    readonly variantNames: readonly string[];
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly state: "error";
+    readonly variantNames: readonly string[];
+  }>;
+
 /** Imperative renderer root bound to one canvas. */
 export interface RoyalRendererRoot {
   readonly canvas: HTMLCanvasElement;
@@ -101,10 +115,14 @@ export interface RoyalRendererRoot {
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
+  /** Reads one retained glTF asset without allocating the full diagnostics payload. */
+  gltfAssetSnapshot(asset: GltfAssetRef): RoyalGltfAssetSnapshot;
   /** Observes renderer availability without polling. Calls back immediately. */
   observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
   /** Observes completed renderer frames. Calls back immediately with the current frame index. */
   observeFrame(callback: (frame: number) => void): () => void;
+  /** Observes one exact glTF asset identity. Calls back immediately. */
+  observeGltfAsset(asset: GltfAssetRef, callback: (snapshot: RoyalGltfAssetSnapshot) => void): () => void;
   /** Observes failures from renderer-owned scheduled frames. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
   /** Returns the front-most render target under a DOM client coordinate. */
@@ -135,6 +153,25 @@ const royalLifecycleSnapshot = (
       ? "available"
       : snapshot.lifecycle === "disposed" ? "disposed" : "unavailable",
   });
+};
+
+const NO_GLTF_VARIANTS: readonly string[] = Object.freeze([]);
+
+const royalGltfAssetSnapshot = (
+  snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined,
+): RoyalGltfAssetSnapshot => {
+  if (snapshot === undefined) return Object.freeze({ state: "idle", variantNames: NO_GLTF_VARIANTS });
+  if (snapshot.status === "loading") {
+    return Object.freeze({ state: "loading", variantNames: NO_GLTF_VARIANTS });
+  }
+  if (snapshot.status === "error") {
+    return Object.freeze({
+      error: snapshot.error ?? "glTF asset failed to load",
+      state: "error",
+      variantNames: NO_GLTF_VARIANTS,
+    });
+  }
+  return Object.freeze({ state: "ready", variantNames: snapshot.variantNames });
 };
 
 /** @internal Transfers demand scheduling to a React-owned frame loop. */
@@ -204,6 +241,7 @@ export const createRendererRoot = (
     flushInvalidated: () => {
       root.flushInvalidated();
     },
+    gltfAssetSnapshot: (asset) => royalGltfAssetSnapshot(root.gltfAssetSnapshot(asset)),
     invalidate: () => {
       root.invalidate();
     },
@@ -211,6 +249,9 @@ export const createRendererRoot = (
       callback(royalLifecycleSnapshot(snapshot));
     }),
     observeFrame: (callback) => root.observeFrame(callback),
+    observeGltfAsset: (asset, callback) => root.observeGltfAsset(asset, (snapshot) => {
+      callback(royalGltfAssetSnapshot(snapshot));
+    }),
     observeRenderFailures: (callback) => root.observeRenderFailures(callback),
     pick: (input: PickInput) => root.pick(input),
     render: (scene: RenderRoot) => {

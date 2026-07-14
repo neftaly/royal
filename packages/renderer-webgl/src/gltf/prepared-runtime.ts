@@ -75,6 +75,8 @@ export type PreparedGltfCpuOwnership = {
   readonly scheduleCapacityWake: () => void;
 };
 
+export type PreparedGltfStateObserver = (state: PreparedGltfState | undefined) => void;
+
 /**
  * Owns prepared-asset identity, generation checks, preparation scheduling, and
  * the retryable arena-event publication queue. Packet and GPU arenas consume
@@ -93,13 +95,20 @@ export class PreparedGltfRuntime {
   }>();
   readonly #states = new Map<string, PreparedGltfState>();
   readonly #statesByNode = new WeakMap<AnyGltfNode, PreparedGltfState>();
+  readonly #stateObservers = new Map<string, Set<PreparedGltfStateObserver>>();
   readonly #packetOccurrenceIndices = new Map<string, number[]>();
   readonly packetTopology: GltfPacketTopology = createGltfPacketTopology();
   readonly sharedViewLods = new GltfSharedViewLodRegistry();
   #images: GltfImageDemandCoordinator | undefined;
+  readonly #reportObserverFailure: (failure: unknown) => void;
   readonly scheduler: GltfPreparationScheduler;
 
-  constructor(limit = 2, admit?: GltfPreparationJobAdmitter) {
+  constructor(
+    limit = 2,
+    admit?: GltfPreparationJobAdmitter,
+    reportObserverFailure: (failure: unknown) => void = () => undefined,
+  ) {
+    this.#reportObserverFailure = reportObserverFailure;
     this.scheduler = new GltfPreparationScheduler(limit, admit);
   }
 
@@ -140,6 +149,42 @@ export class PreparedGltfRuntime {
 
   get(key: string): PreparedGltfState | undefined {
     return this.#states.get(key);
+  }
+
+  /** Observes one semantic asset identity without scanning renderer diagnostics. */
+  observeState(key: string, observer: PreparedGltfStateObserver): () => void {
+    const observers = this.#stateObservers.get(key) ?? new Set<PreparedGltfStateObserver>();
+    observers.add(observer);
+    this.#stateObservers.set(key, observers);
+    const stop = (): void => {
+      observers.delete(observer);
+      if (observers.size === 0) this.#stateObservers.delete(key);
+    };
+    try {
+      observer(this.#states.get(key));
+    } catch (error) {
+      stop();
+      throw error;
+    }
+    return stop;
+  }
+
+  publishStateChange(key: string): void {
+    const state = this.#states.get(key);
+    const observers = this.#stateObservers.get(key);
+    if (observers === undefined) return;
+    let firstFailure: unknown;
+    let failed = false;
+    for (const observer of Array.from(observers)) {
+      if (!observers.has(observer)) continue;
+      try {
+        observer(state);
+      } catch (error) {
+        if (!failed) firstFailure = error;
+        failed = true;
+      }
+    }
+    if (failed) this.#reportObserverFailure(firstFailure);
   }
 
   stateForNode(node: AnyGltfNode): PreparedGltfState {
@@ -192,11 +237,14 @@ export class PreparedGltfRuntime {
     };
     this.#nextInstanceKey += 1;
     this.#states.set(key, state);
+    this.publishStateChange(key);
     return state;
   }
 
   delete(key: string): boolean {
-    return this.#states.delete(key);
+    const deleted = this.#states.delete(key);
+    if (deleted) this.publishStateChange(key);
+    return deleted;
   }
 
   rebuildPacketTopology(
@@ -278,7 +326,9 @@ export class PreparedGltfRuntime {
   clear(): void {
     this.#events.length = 0;
     this.#eventHead = 0;
+    const retainedKeys = [...this.#states.keys()];
     this.#states.clear();
+    for (const key of retainedKeys) this.publishStateChange(key);
   }
 
   dispose(): void {
@@ -286,6 +336,7 @@ export class PreparedGltfRuntime {
     this.disposeImages();
     for (const key of this.#cpuLeases.keys()) this.releaseCpuLeases(key);
     this.clear();
+    this.#stateObservers.clear();
   }
 
   reserveCpuAdmission(assetKey: string, estimate: GltfPreparationCpuEstimate): PreparedGltfCpuAdmission {

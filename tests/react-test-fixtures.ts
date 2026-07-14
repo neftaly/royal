@@ -50,6 +50,7 @@ export const fakeRendererRoot = ({
     diagnostics: vi.fn(() => diagnostics as ReturnType<RoyalRendererRoot["diagnostics"]>),
     dispose: vi.fn(),
     flushInvalidated: vi.fn(),
+    gltfAssetSnapshot: vi.fn(() => ({ state: "idle" as const, variantNames: [] })),
     invalidate: vi.fn(),
     observeLifecycle: vi.fn((callback: Parameters<RoyalRendererRoot["observeLifecycle"]>[0]) => {
       callback({ generation: 1, interruptions: 0, recoveries: 0, state: "available" });
@@ -59,6 +60,10 @@ export const fakeRendererRoot = ({
       callback(frame);
       frameObservers.add(callback);
       return () => frameObservers.delete(callback);
+    }),
+    observeGltfAsset: vi.fn((asset, callback) => {
+      callback(root.gltfAssetSnapshot(asset));
+      return () => undefined;
     }),
     observeRenderFailures: vi.fn(() => () => undefined),
     pick: vi.fn((input: PickInput) => pick(latestScene, input)),

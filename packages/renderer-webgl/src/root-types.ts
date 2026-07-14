@@ -1,4 +1,5 @@
 import type {
+  GltfAssetRef,
   PickInput,
   PickResult,
   RenderRoot,
@@ -283,12 +284,19 @@ export interface WebGlRoot {
   flushInvalidated(): void;
   /** Requests one render of the latest scene on the root's active render clock. */
   invalidate(): void;
+  /** Reads focused diagnostics for one retained glTF asset. */
+  gltfAssetSnapshot(asset: GltfAssetRef): WebGlGltfLoadDiagnosticsAssetSnapshot | undefined;
   /** Observes immutable context lifecycle transitions. Calls back immediately with the current state. */
   observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void;
   /** Observes failures from renderer-owned scheduled frames. Explicit render calls still throw synchronously. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
   /** Observes completed renderer frames. Calls back immediately with the current frame index. */
   observeFrame(callback: (frame: number) => void): () => void;
+  /** Observes one retained glTF asset without scanning the full diagnostics snapshot. */
+  observeGltfAsset(
+    asset: GltfAssetRef,
+    callback: (snapshot: WebGlGltfLoadDiagnosticsAssetSnapshot | undefined) => void,
+  ): () => void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;

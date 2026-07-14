@@ -89,6 +89,7 @@ export class PreparedAssetEventOwner {
       this.#options.recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
       const currentPlan = this.#currentPlan();
       if (currentPlan !== undefined) runtime.publishPacketError(snapshot.key, currentPlan.revision);
+      runtime.publishStateChange(state.key);
       return;
     }
     if (snapshot.status !== "ready") return;
@@ -125,10 +126,14 @@ export class PreparedAssetEventOwner {
         this.#options.detachImagePreparation(snapshot.key, snapshot.generation);
         runtime.releaseDecodeLease(snapshot.key);
       }
+      runtime.publishStateChange(state.key);
       return;
     }
     const images = asset.imagePreparation;
-    if (images === undefined) return;
+    if (images === undefined) {
+      runtime.publishStateChange(state.key);
+      return;
+    }
     const eventIsCurrent = (): boolean =>
       !this.#options.disposed()
       && runtime.get(snapshot.key) === state
@@ -162,6 +167,7 @@ export class PreparedAssetEventOwner {
       state.load.readyAt = nowMs();
       this.#options.recordDiagnostic(state.error, `gltf-images:${state.key}`);
     }
+    runtime.publishStateChange(state.key);
   }
 
   #currentPlan(): FramePlan | undefined {

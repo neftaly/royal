@@ -62,6 +62,30 @@ const createWebGlRoot = (...args: Parameters<typeof createWebGlRootBase>) =>
 describe("WebGL renderer scene and glTF lifecycle regressions", () => {
   afterEach(resetGltfSceneTestState);
 
+  it("observes one glTF asset without frame or full-snapshot polling", async () => {
+    vi.stubGlobal("devicePixelRatio", 1);
+    const viewport = installViewportInvalidationStubs();
+    const loader = installStagedGltfLoader();
+    const { gl } = fakeGl();
+    const root = createWebGlRoot(fakeCanvas(gl));
+    const node = gltf({ src: triangleGltfSrc, version: "focused-observer" });
+    const statuses: Array<string | undefined> = [];
+    const stop = root.observeGltfAsset(node.asset, (snapshot) => statuses.push(snapshot?.status));
+
+    expect(root.gltfAssetSnapshot(node.asset)).toBeUndefined();
+    root.render(renderScene([node]));
+    await settleDocumentAndBuffer(loader);
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => root.gltfAssetSnapshot(node.asset)?.status === "sceneReady",
+    );
+    root.render(renderScene([]));
+
+    expect(statuses).toEqual([undefined, "loading", "sceneReady", undefined]);
+    stop();
+    root.dispose();
+  });
+
   it("denies oversized declared geometry before requesting external buffers", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     installViewportInvalidationStubs();

@@ -50,6 +50,7 @@ export type {
 export { createRendererRoot } from './root';
 export type {
   RoyalRendererRoot,
+  RoyalGltfAssetSnapshot,
   RoyalRendererDiagnosticsSnapshot,
   RoyalRendererRootLifecycle,
   RoyalRendererRootLifecycleSnapshot,

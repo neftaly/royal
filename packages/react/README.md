@@ -209,9 +209,12 @@ parser or a duplicated manifest. Pass `node.asset` when using an explicit
 asset `version`.
 
 `useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
-and returns a status discriminated by `state`. It is frame-driven and does not
-poll renderer diagnostics. Pass the normalized `node.asset` instead of a string
-when using an explicit asset `version`.
+and returns a status discriminated by `state`. Prepared-asset transitions push
+focused snapshots; the hook neither waits for unrelated frames nor allocates
+the full renderer diagnostics payload. Pass the normalized `node.asset` instead
+of a string when using an explicit asset `version`. Imperative hosts can use
+`root.gltfAssetSnapshot(asset)` and `root.observeGltfAsset(asset, callback)` for
+the same exact asset identity.
 
 Both asset and renderer lifecycle results are discriminated unions: `error` is
 required only when `state === 'error'` for an asset or `state === 'failed'` for

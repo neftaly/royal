@@ -75,6 +75,35 @@ describe("renderer runtime ownership", () => {
     runtime.dispose();
   });
 
+  it("publishes focused prepared glTF state transitions by semantic asset key", () => {
+    const reportFailure = vi.fn();
+    const runtime = new PreparedGltfRuntime(2, undefined, reportFailure);
+    const key = gltfRequestKey("/observed.glb", "v1");
+    const observed: Array<string | undefined> = [];
+    const stop = runtime.observeState(key, (state) => observed.push(state?.status));
+
+    const state = runtime.ensure(key, "/observed.glb", "v1", 1, 10);
+    state.status = "ready";
+    runtime.publishStateChange(key);
+    runtime.delete(key);
+    stop();
+    runtime.ensure(key, "/observed.glb", "v1", 2, 20);
+
+    expect(observed).toEqual([undefined, "loading", "ready", undefined]);
+    const listenerFailure = new Error("listener failed");
+    let failListener = false;
+    runtime.observeState(key, () => {
+      if (failListener) throw listenerFailure;
+    });
+    const survivingListener = vi.fn();
+    runtime.observeState(key, survivingListener);
+    failListener = true;
+    runtime.publishStateChange(key);
+    expect(reportFailure).toHaveBeenCalledWith(listenerFailure);
+    expect(survivingListener).toHaveBeenCalledTimes(2);
+    runtime.dispose();
+  });
+
   it("retries a failed prepared event from the same queue head", () => {
     const runtime = new PreparedGltfRuntime();
     runtime.enqueueEvents([event("first"), event("second")]);
