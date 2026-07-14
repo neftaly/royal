@@ -25,9 +25,36 @@ export interface RendererOptions {
   readonly automaticVirtualTextures?: boolean;
 }
 
+/** @internal Validates the product-level root creation boundary. */
+export const validateRendererOptions = (options: RendererOptions | undefined): void => {
+  if (options === undefined) return;
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError("RendererOptions must be an object");
+  }
+  for (const name of Object.keys(options)) {
+    if (name !== "alpha" && name !== "antialias" && name !== "automaticVirtualTextures") {
+      throw new TypeError(`RendererOptions contain unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+  if (options.alpha !== undefined && typeof options.alpha !== "boolean") {
+    throw new TypeError("RendererOptions alpha must be a boolean");
+  }
+  if (options.antialias !== undefined && typeof options.antialias !== "boolean") {
+    throw new TypeError("RendererOptions antialias must be a boolean");
+  }
+  if (
+    options.automaticVirtualTextures !== undefined
+    && typeof options.automaticVirtualTextures !== "boolean"
+  ) {
+    throw new TypeError("RendererOptions automaticVirtualTextures must be a boolean");
+  }
+};
+
 /** @internal Canonical identity for the product-level options that own a React Canvas lifetime. */
-export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string =>
-  `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.automaticVirtualTextures ?? false}`;
+export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string => {
+  validateRendererOptions(options);
+  return `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.automaticVirtualTextures ?? false}`;
+};
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
 export interface ResolvedRendererOptions {
@@ -199,6 +226,7 @@ export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RendererOptions,
 ): RoyalRendererRoot => {
+  validateRendererOptions(options);
   const root = createWebGlRoot(canvas, options === undefined ? undefined : {
     ...(options.alpha === undefined ? {} : { alpha: options.alpha }),
     ...(options.antialias === undefined ? {} : { antialias: options.antialias }),

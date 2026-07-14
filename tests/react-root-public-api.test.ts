@@ -197,11 +197,18 @@ describe("React root public API", () => {
     expect(() => root.render(emptyScene())).toThrow("disposed Royal renderer root");
   });
 
-  it("rejects non-boolean renderer options before requesting a context", () => {
+  it("rejects malformed renderer options before requesting a context", () => {
     const canvas = fakeCanvas();
     expect(() => createRendererRoot(canvas, {
       alpha: "yes" as unknown as boolean,
-    })).toThrow(/WebGL root alpha must be a boolean/i);
+    })).toThrow("RendererOptions alpha must be a boolean");
+    expect(() => createRendererRoot(
+      canvas,
+      null as unknown as Parameters<typeof createRendererRoot>[1],
+    )).toThrow("RendererOptions must be an object");
+    expect(() => createRendererRoot(canvas, {
+      antiAlias: false,
+    } as unknown as Parameters<typeof createRendererRoot>[1])).toThrow(/unsupported option.*antiAlias/i);
     expect(canvas.getContext).not.toHaveBeenCalled();
   });
 

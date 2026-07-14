@@ -3,10 +3,22 @@ import {
   canvasContextOptionsSemanticKey,
   disposeCanvasRendererRoot,
 } from "../packages/react/src/canvas-renderer-runtime";
-import { rendererRootOptionsSemanticKey } from "../packages/react/src/root";
+import {
+  rendererRootOptionsSemanticKey,
+  validateRendererOptions,
+} from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
 describe("Canvas renderer root cleanup", () => {
+  it("rejects unknown renderer option names before deriving lifetime identity", () => {
+    expect(() => validateRendererOptions({
+      automaticVirtualTexture: true,
+    } as unknown as Parameters<typeof validateRendererOptions>[0]))
+      .toThrow(/unsupported option.*automaticVirtualTexture/i);
+    expect(() => rendererRootOptionsSemanticKey([] as unknown as Parameters<typeof rendererRootOptionsSemanticKey>[0]))
+      .toThrow("RendererOptions must be an object");
+  });
+
   it("replaces the DOM canvas only for immutable WebGL context attributes", () => {
     const defaults = canvasContextOptionsSemanticKey(undefined);
     expect(canvasContextOptionsSemanticKey({})).toBe(defaults);
