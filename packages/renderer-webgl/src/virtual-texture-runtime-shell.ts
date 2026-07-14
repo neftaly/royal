@@ -15,8 +15,8 @@ import {
 import type { VirtualTextureDemandSubmission } from "./virtual-texture-demand";
 import {
   GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
-  generatedVirtualTextureSource,
-  type GeneratedVirtualTextureSource,
+  automaticVirtualTextureSource,
+  type AutomaticVirtualTextureSource,
   type VirtualTextureGeneratedPageSource,
   type VirtualTexturePagePayload,
   type VirtualTexturePageLoad,
@@ -53,7 +53,7 @@ export type VirtualTextureRuntimeShellOptions = Omit<
 };
 
 export type AcquireVirtualTextureOptions = {
-  readonly generatedSource?: GeneratedVirtualTextureSource;
+  readonly automaticSource?: AutomaticVirtualTextureSource;
   readonly cacheNamespace?: string;
   readonly diagnosticsEnabled?: boolean;
 };
@@ -82,7 +82,7 @@ export class VirtualTextureRuntimeShell {
   readonly #demandCursors = new WeakMap<VirtualTextureRuntimeState, number>();
   readonly #frameDemand = createVirtualTextureFrameDemandWorkspace<VirtualTextureRuntimeState>();
   readonly #autoRefs = new Map<string, VirtualTextureRef>();
-  readonly #autoSources = new Map<string, GeneratedVirtualTextureSource>();
+  readonly #autoSources = new Map<string, AutomaticVirtualTextureSource>();
   readonly #options: VirtualTextureRuntimeShellOptions;
   readonly #resources = new Map<string, VirtualTextureRuntimeState>();
   readonly #gpuLeases = new Map<string, ResourceGovernorLease>();
@@ -188,7 +188,8 @@ export class VirtualTextureRuntimeShell {
       if (diagnosticsEnabled) cached.diagnosticsEnabled = true;
       return cached;
     }
-    const activeSource = options.generatedSource ?? this.#sidecarSource(texture.manifestUri);
+    const activeSource = options.automaticSource ?? this.#sidecarSource(texture.manifestUri);
+    const automaticManifest = options.automaticSource?.manifest.manifest;
     const state: VirtualTextureRuntimeState = {
       activeSource,
       admissionTicket: this.nextAdmissionTicket(),
@@ -207,9 +208,15 @@ export class VirtualTextureRuntimeShell {
         demandAdmissions: 0,
         demandRetentionOverflows: 0,
         demandRetentions: 0,
-        automaticManifestUses: 0,
-        automaticPagesTarget: 0,
-        automaticSourceBytes: 0,
+        automaticManifestUses: automaticManifest === undefined ? 0 : 1,
+        automaticPagesTarget: automaticManifest === undefined
+          ? 0
+          : generatedVirtualTexturePageCount(
+              automaticManifest.width,
+              automaticManifest.height,
+              automaticManifest.pageSize,
+            ),
+        automaticSourceBytes: options.automaticSource?.retainedSourceBytes ?? 0,
         gpuAdmissionFailures: 0,
         manifestFailures: 0,
         manifestRequests: activeSource.manifest === undefined ? 1 : 0,
@@ -231,7 +238,7 @@ export class VirtualTextureRuntimeShell {
     return state;
   }
 
-  autoSource(texture: TextureAssetUploadRef): GeneratedVirtualTextureSource | undefined {
+  autoSource(texture: TextureAssetUploadRef): AutomaticVirtualTextureSource | undefined {
     return this.#autoSources.get(textureCacheKey(texture));
   }
 
@@ -255,7 +262,7 @@ export class VirtualTextureRuntimeShell {
     return this.acquire(ref, {
       cacheNamespace: `auto-base-color:${textureKey}`,
       diagnosticsEnabled: false,
-      generatedSource: source,
+      automaticSource: source,
     });
   }
 
@@ -285,7 +292,7 @@ export class VirtualTextureRuntimeShell {
         width: Math.ceil(width),
       },
     };
-    this.#autoSources.set(textureKey, generatedVirtualTextureSource(textureKey, pageSource));
+    this.#autoSources.set(textureKey, automaticVirtualTextureSource(textureKey, pageSource));
   }
 
   releaseAutoMetadata(textureKey: string): void {
@@ -481,15 +488,6 @@ export class VirtualTextureRuntimeShell {
       return;
     }
     const manifest = parsed.manifest;
-    if (source.automaticSource !== undefined) {
-      state.stats.automaticManifestUses += 1;
-      state.stats.automaticPagesTarget = generatedVirtualTexturePageCount(
-        manifest.width,
-        manifest.height,
-        manifest.pageSize,
-      );
-      state.stats.automaticSourceBytes = source.automaticSource.retainedBytes;
-    }
     state.availablePageKeys = new Set(manifest.pages.map(virtualTexturePageKey));
     state.manifest = manifest;
     state.status = "ready";

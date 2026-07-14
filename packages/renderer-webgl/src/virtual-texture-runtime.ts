@@ -84,15 +84,13 @@ type DeferredVirtualTexturePageSource = {
 
 /** Format adapter consumed by the runtime shell; demand and residency see only its manifest. */
 export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | DeferredVirtualTexturePageSource) & {
-  /** Optional source facts used only by aggregate diagnostics. */
-  readonly automaticSource?: { readonly retainedBytes: number };
   readonly loadPage: VirtualTexturePageLoader;
   readonly manifestUri: string;
 };
 
-export type GeneratedVirtualTextureSource = VirtualTexturePageSource & {
-  readonly automaticSource: { readonly retainedBytes: number };
-  readonly manifest: VirtualTextureManifestParseResult;
+export type AutomaticVirtualTextureSource = VirtualTexturePageSource & {
+  readonly manifest: VirtualTextureManifestParseResult & { readonly manifest: VirtualTextureManifestModel };
+  readonly retainedSourceBytes: number;
 };
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
@@ -210,10 +208,10 @@ export const virtualTextureDemandPageDistance = (
 const generatedVirtualTextureManifestUri = (key: string): string =>
   `${GENERATED_VIRTUAL_TEXTURE_MANIFEST_URI_PREFIX}${encodeURIComponent(key)}`;
 
-export const generatedVirtualTextureSource = (
+export const automaticVirtualTextureSource = (
   textureKey: string,
   pageSource: VirtualTextureGeneratedPageSource,
-): GeneratedVirtualTextureSource => {
+): AutomaticVirtualTextureSource => {
   const manifest = generatedRasterVirtualTextureManifest(pageSource.source);
   return {
     loadPage: (activeManifest, page, signal) => {
@@ -232,9 +230,7 @@ export const generatedVirtualTextureSource = (
     },
     manifest: { diagnostics: [], manifest },
     manifestUri: generatedVirtualTextureManifestUri(textureKey),
-    automaticSource: {
-      retainedBytes: pageSource.source.decodedBytes,
-    },
+    retainedSourceBytes: pageSource.source.decodedBytes,
   };
 };
 

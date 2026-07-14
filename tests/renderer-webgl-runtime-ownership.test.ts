@@ -9,7 +9,7 @@ import {
 } from "../packages/renderer-webgl/src/resource-governor";
 import { GLTF_PACKET_OCCURRENCE_STATUS } from "../packages/renderer-webgl/src/gltf-packet-topology";
 import {
-  generatedVirtualTextureSource,
+  automaticVirtualTextureSource,
   type VirtualTextureRuntimeState,
 } from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import { VirtualTextureRuntimeShell } from "../packages/renderer-webgl/src/virtual-texture-runtime-shell";
@@ -119,10 +119,10 @@ describe("renderer runtime ownership", () => {
     expect(runtime.get("first")).toBeUndefined();
   });
 
-  it("owns generated VT source setup and abort-safe teardown", () => {
+  it("owns automatic VT source setup and abort-safe teardown", () => {
     const runtime = virtualTextureShell();
     const state = runtime.acquire({ kind: "virtual-asset", manifestUri: "/generated" }, {
-      generatedSource: generatedVirtualTextureSource("test", {
+      automaticSource: automaticVirtualTextureSource("test", {
         kind: "raster",
         source: {
           decodedBytes: 1024 * 1024 * 4,
