@@ -16,6 +16,8 @@ export interface VirtualTextureManifestModel {
   readonly colorSpace?: TextureColorSpace;
   readonly height: number;
   readonly mipCount?: number;
+  /** Whether every in-bounds logical page can be loaded, or only authored entries exist. */
+  readonly pageAddressing: "complete" | "sparse";
   /** Logical square page interior; decoded page images additionally include both gutters. */
   readonly pageSize: number;
   readonly pages: readonly VirtualTexturePageEntry[];
@@ -198,6 +200,7 @@ export const generatedVirtualTextureManifest = (
     borderTexels,
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
     height,
+    pageAddressing: "complete",
     pageSize,
     pages: [],
     physicalSlots,
@@ -435,6 +438,7 @@ export const parseVirtualTextureManifest = (input: unknown): VirtualTextureManif
       ...(colorSpace === undefined ? {} : { colorSpace }),
       height,
       ...(mipCount === undefined ? {} : { mipCount }),
+      pageAddressing: uriTemplate === undefined ? "sparse" : "complete",
       pageSize,
       pages: entries,
       ...(physicalByteBudget === undefined ? {} : { physicalByteBudget }),

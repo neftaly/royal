@@ -193,7 +193,6 @@ export class VirtualTextureGpuAdmissionOwner {
           virtualTextureDecodedPageBytes(manifest),
           maximumVirtualTexturePageTableUploadBytes(
             manifest,
-            state.activeSource.kind === "generated",
           ),
         );
         if (largestUploadBytes > this.#options.maximumUploadBytes) {

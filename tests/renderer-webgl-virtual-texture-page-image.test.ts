@@ -8,6 +8,7 @@ import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src
 const manifest: VirtualTextureManifestModel = {
   borderTexels: 2,
   height: 128,
+  pageAddressing: "sparse",
   pageSize: 64,
   pages: [],
   width: 128,

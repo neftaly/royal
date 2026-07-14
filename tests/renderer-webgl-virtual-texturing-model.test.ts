@@ -289,6 +289,7 @@ describe("WebGL virtual texturing runtime model", () => {
     expect(() => virtualTextureDecodedPageBytes({
       borderTexels: 1,
       height: 1,
+      pageAddressing: "sparse",
       pageSize: 1_000_000_000,
       pages: [],
       width: 1,

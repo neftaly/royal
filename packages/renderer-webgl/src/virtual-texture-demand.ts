@@ -30,7 +30,6 @@ export type VirtualTextureProjection =
   | { readonly footprint: VirtualTextureScreenFootprint; readonly kind: "visible" };
 
 export type VirtualTextureDemandSource = {
-  readonly generated: boolean;
   readonly manifest: VirtualTextureManifestModel;
   readonly pageUrisByKey?: ReadonlyMap<string, string>;
 };
@@ -859,7 +858,7 @@ const boundedVirtualTexturePagesForFootprint = (
   const maxX = Math.max(minX, Math.min(grid.width - 1, Math.ceil(footprint.maxU * source.manifest.width / span) - 1));
   const minY = Math.max(0, Math.min(grid.height - 1, Math.floor(footprint.minV * source.manifest.height / span)));
   const maxY = Math.max(minY, Math.min(grid.height - 1, Math.ceil(footprint.maxV * source.manifest.height / span) - 1));
-  if (source.manifest.uriTemplate === undefined && !source.generated) {
+  if (source.manifest.pageAddressing === "sparse") {
     const footprintCenterX = (footprint.minU + footprint.maxU) * 0.5 * source.manifest.width / span;
     const footprintCenterY = (footprint.minV + footprint.maxV) * 0.5 * source.manifest.height / span;
     const pages: VirtualTexturePageId[] = [];
@@ -983,9 +982,10 @@ const planBoundedExplicitOverflowDemand = (
 export const isVirtualTextureDemandPageAvailable = (
   source: VirtualTextureDemandSource,
   page: VirtualTexturePageId,
-): boolean => source.generated || virtualTexturePageUri(source.manifest, page, source.pageUrisByKey) !== undefined;
+): boolean => source.manifest.pageAddressing === "complete"
+  || virtualTexturePageUri(source.manifest, page, source.pageUrisByKey) !== undefined;
 
-/** Coarse-first bounded fallback; generated/template address spaces are produced only until limit. */
+/** Coarse-first bounded fallback; complete address spaces are produced only until limit. */
 export const planVirtualTextureBootstrapDemand = (
   source: VirtualTextureDemandSource,
   limit = VIRTUAL_TEXTURE_MAX_DEMAND_PAGES_PER_DRAW,
@@ -999,7 +999,7 @@ export const planVirtualTextureBootstrapDemand = (
     return candidates.size >= boundedLimit;
   };
 
-  if (source.manifest.uriTemplate !== undefined || source.generated) {
+  if (source.manifest.pageAddressing === "complete") {
     for (let mip = virtualTextureDemandMipCount(source.manifest) - 1; mip >= 0; mip -= 1) {
       const grid = virtualTextureDemandPageGrid(source.manifest, mip);
       for (let y = 0; y < grid.height; y += 1) {
@@ -1173,7 +1173,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
   if (workspace.overflowed) {
     const coarsestMip = virtualTextureDemandMipCount(input.manifest) - 1;
     let coverageMip = virtualTextureTargetMip(input.manifest, projection.footprint);
-    const completeAddressSpace = input.generated || input.manifest.uriTemplate !== undefined;
+    const completeAddressSpace = input.manifest.pageAddressing === "complete";
     while (
       completeAddressSpace
       &&
@@ -1202,7 +1202,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
       retentionOverflowed: true,
     };
   }
-  if (input.manifest.uriTemplate === undefined && !input.generated) {
+  if (input.manifest.pageAddressing === "sparse") {
     // Sparse explicit manifests do not promise a complete ancestor hierarchy;
     // preserve their availability-aware coarse-to-fine traversal.
     const targetMip = virtualTextureTargetMip(input.manifest, projection.footprint);

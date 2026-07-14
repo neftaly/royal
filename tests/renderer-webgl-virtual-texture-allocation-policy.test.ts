@@ -64,6 +64,7 @@ describe("virtual-texture page-table upload sizing", () => {
   const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({
     borderTexels: 0,
     height: 513,
+    pageAddressing: "complete",
     pageSize: 256,
     pages: [],
     width: 1025,
@@ -71,19 +72,20 @@ describe("virtual-texture page-table upload sizing", () => {
   });
 
   it("budgets the complete base table for generated and templated sources", () => {
-    expect(maximumVirtualTexturePageTableUploadBytes(manifest(), true)).toBe(5 * 3 * 4);
-    expect(maximumVirtualTexturePageTableUploadBytes(manifest({ uriTemplate: "{mip}/{x}/{y}" }), false))
+    expect(maximumVirtualTexturePageTableUploadBytes(manifest())).toBe(5 * 3 * 4);
+    expect(maximumVirtualTexturePageTableUploadBytes(manifest({ uriTemplate: "{mip}/{x}/{y}" })))
       .toBe(5 * 3 * 4);
   });
 
   it("budgets only the largest clamped coverage update for explicit pages", () => {
     expect(maximumVirtualTexturePageTableUploadBytes(manifest({
+      pageAddressing: "sparse",
       pages: [
         { mip: 0, uri: "small", x: 0, y: 0 },
         { mip: 1, uri: "largest", x: 1, y: 0 },
         { mip: 2, uri: "edge", x: 1, y: 0 },
       ],
-    }), false)).toBe(2 * 2 * 4);
-    expect(maximumVirtualTexturePageTableUploadBytes(manifest(), false)).toBe(0);
+    }))).toBe(2 * 2 * 4);
+    expect(maximumVirtualTexturePageTableUploadBytes(manifest({ pageAddressing: "sparse" }))).toBe(0);
   });
 });

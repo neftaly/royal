@@ -5,11 +5,10 @@ export const VIRTUAL_TEXTURE_COLD_ALLOCATION_GRACE_FRAMES = 2;
 /** Largest page-table write that admission must fit into one upload chunk. */
 export const maximumVirtualTexturePageTableUploadBytes = (
   manifest: VirtualTextureManifestModel,
-  generated: boolean,
 ): number => {
   const width = Math.ceil(manifest.width / manifest.pageSize);
   const height = Math.ceil(manifest.height / manifest.pageSize);
-  if (generated || manifest.uriTemplate !== undefined) return width * height * 4;
+  if (manifest.pageAddressing === "complete") return width * height * 4;
   let maximum = 0;
   for (const page of manifest.pages) {
     const coverage = 2 ** page.mip;

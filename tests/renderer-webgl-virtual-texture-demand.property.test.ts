@@ -29,6 +29,7 @@ import { forEachFuzzCase } from "./fuzz";
 
 const manifest = (overrides: Partial<VirtualTextureManifestModel> = {}): VirtualTextureManifestModel => ({
   height: 1_024,
+  pageAddressing: "complete",
   pageSize: 256,
   pages: [],
   uriTemplate: "pages/m{mip}-{x}-{y}.png",
@@ -93,13 +94,11 @@ describe("virtual texture pure demand planning", () => {
       expect(planVirtualTextureDrawDemand({
         context: invalid,
         flipY: false,
-        generated: true,
         limit: 4,
         manifest: manifest(),
       })).toEqual({
         coverageCandidates: [],
         demandCandidates: planVirtualTextureBootstrapDemand({
-          generated: true,
           manifest: manifest(),
         }, 4),
       });
@@ -123,7 +122,6 @@ describe("virtual texture pure demand planning", () => {
     expect(planVirtualTextureDrawDemand({
       context: context(new Float32Array([2, -0.5, 0, 3, -0.5, 0, 2, 0.5, 0])),
       flipY: true,
-      generated: true,
       manifest: manifest(),
     })).toEqual({ coverageCandidates: [], demandCandidates: [] });
   });
@@ -145,13 +143,11 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: crossing,
       flipY: true,
-      generated: true,
       limit: 32,
       manifest: manifest(),
     });
     expect(demand.coverageCandidates).not.toEqual([]);
     expect(demand.demandCandidates).not.toEqual(planVirtualTextureBootstrapDemand({
-      generated: true,
       manifest: manifest(),
     }, 32));
   });
@@ -186,7 +182,6 @@ describe("virtual texture pure demand planning", () => {
         },
       ),
       flipY: false,
-      generated: true,
       limit: 32,
       manifest: source,
     });
@@ -227,7 +222,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: { ...ground, view: viewMat4(camera), viewportSize: [1_800, 1_800] },
       flipY: false,
-      generated: true,
       limit: 32,
       manifest: manifest({
         height: 16_384,
@@ -273,7 +267,6 @@ describe("virtual texture pure demand planning", () => {
         },
       ),
       flipY: false,
-      generated: true,
       limit: 16,
       manifest: source,
     });
@@ -321,7 +314,6 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: repeatedGround,
       flipY: false,
-      generated: true,
       limit: 16,
       manifest: manifest({
         height: 16_384,
@@ -368,7 +360,6 @@ describe("virtual texture pure demand planning", () => {
     const outputs = sizes.map((viewportSize) => planVirtualTextureDrawDemand({
       context: { ...baseContext, viewportSize },
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
       workspace,
@@ -386,7 +377,6 @@ describe("virtual texture pure demand planning", () => {
     expect(planVirtualTextureDrawDemand({
       context: { ...baseContext, viewportSize: sizes[0] },
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
       workspace,
@@ -422,7 +412,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = (tile: number, wrap: "mirrored-repeat" | "repeat") => planVirtualTextureDrawDemand({
       context: tiledContext(tile, wrap),
       flipY: false,
-      generated: true,
       limit: 32,
       manifest: source,
     });
@@ -447,7 +436,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: crossing,
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: manifest({
         height: 16_384,
@@ -497,8 +485,8 @@ describe("virtual texture pure demand planning", () => {
       },
     );
     const source = manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" });
-    const first = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, generated: true, limit: 5, manifest: source });
-    const second = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, generated: true, limit: 5, manifest: source });
+    const first = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, limit: 5, manifest: source });
+    const second = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, limit: 5, manifest: source });
     expect(first).toEqual(second);
     expect(first.coverageCandidates).toEqual([{ mip: 2, x: 0, y: 0 }]);
     expect(first.demandCandidates[0]).toEqual({ mip: 2, x: 0, y: 0 });
@@ -527,7 +515,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: oblique,
       flipY: false,
-      generated: true,
       limit: 16,
       manifest: manifest({ mipCount: 4, pageSize: 128, uriTemplate: "m{mip}-{x}-{y}.png" }),
     });
@@ -550,7 +537,6 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: manyTriangles,
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
     } as const;
@@ -576,7 +562,6 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: context(positions, identityMat4(), { texCoords }),
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
       workspace: first,
@@ -634,7 +619,6 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: terrainContext,
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
       workspace,
@@ -693,12 +677,12 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: context(positions, identityMat4(), { texCoords }),
       flipY: false,
-      generated: false,
       limit: 4,
       manifest: {
         borderTexels: 1,
         height: 1_073_741_824,
         mipCount: 31,
+        pageAddressing: "sparse",
         pageSize: 1,
         pages: [{ mip: 30, uri: "only-page.png", x: 0, y: 0 }],
         width: 1_073_741_824,
@@ -717,6 +701,7 @@ describe("virtual texture pure demand planning", () => {
       borderTexels: 1,
       height: 2 ** 30,
       mipCount: 31,
+      pageAddressing: "sparse",
       pageSize: 1,
       pages: [],
       width: 2 ** 30,
@@ -744,7 +729,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: faceOn,
       flipY: false,
-      generated: false,
       limit: 4,
       manifest: sparse,
     });
@@ -759,6 +743,7 @@ describe("virtual texture pure demand planning", () => {
       borderTexels: 1,
       height: 2 ** 30,
       mipCount: 2,
+      pageAddressing: "complete",
       pageSize: 1,
       pages: [],
       uriTemplate: "pages/{mip}/{x}/{y}.png",
@@ -767,7 +752,6 @@ describe("virtual texture pure demand planning", () => {
     const input = {
       context: context(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0])),
       flipY: false,
-      generated: false,
       limit: 4,
       manifest: truncated,
     } as const;
@@ -822,7 +806,6 @@ describe("virtual texture pure demand planning", () => {
     const forward = planVirtualTextureDrawDemand({
       context: demandContext(triangleOrder([0, 1, 2], [3, 4, 5]), [small, large]),
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
       workspace: forwardWorkspace,
@@ -830,7 +813,6 @@ describe("virtual texture pure demand planning", () => {
     const reverse = planVirtualTextureDrawDemand({
       context: demandContext(triangleOrder([3, 4, 5], [0, 1, 2]), [large, small]),
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
       workspace: reverseWorkspace,
@@ -882,7 +864,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = (groups: readonly (readonly number[])[]) => planVirtualTextureDrawDemand({
       context: context(positions, identityMat4(), { indices: indices(groups), texCoords }),
       flipY: false,
-      generated: true,
       limit: 8,
       manifest: source,
     });
@@ -1162,11 +1143,11 @@ describe("virtual texture pure demand planning", () => {
     const leftContext = context(new Float32Array([-1, -1, 0, 0, -1, 0, -1, 1, 0]));
     const rightContext = context(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0]));
     const source = manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" });
-    const leftDemand = planVirtualTextureDrawDemand({ context: leftContext, flipY: false, generated: true, manifest: source, workspace: left });
+    const leftDemand = planVirtualTextureDrawDemand({ context: leftContext, flipY: false, manifest: source, workspace: left });
     const leftSnapshot = virtualTextureDemandPlanningWorkspaceSnapshot(left);
-    planVirtualTextureDrawDemand({ context: rightContext, flipY: false, generated: true, manifest: source, workspace: right });
+    planVirtualTextureDrawDemand({ context: rightContext, flipY: false, manifest: source, workspace: right });
     expect(virtualTextureDemandPlanningWorkspaceSnapshot(left)).toEqual(leftSnapshot);
-    expect(planVirtualTextureDrawDemand({ context: leftContext, flipY: false, generated: true, manifest: source, workspace: left }))
+    expect(planVirtualTextureDrawDemand({ context: leftContext, flipY: false, manifest: source, workspace: left }))
       .toEqual(leftDemand);
   });
 
@@ -1220,7 +1201,6 @@ describe("virtual texture pure demand planning", () => {
     const demand = planVirtualTextureDrawDemand({
       context: faceOnNpotSlice,
       flipY: false,
-      generated: true,
       limit: 64,
       manifest: source,
     });
@@ -1235,17 +1215,18 @@ describe("virtual texture pure demand planning", () => {
     const sparse: VirtualTextureManifestModel = {
       borderTexels: 1,
       height: 1_024,
+      pageAddressing: "sparse",
       pageSize: 256,
       pages: [{ mip: 1, uri: "parent.png", x: 0, y: 0 }],
       width: 1_024,
     };
     const pageUrisByKey = new Map([["1/0/0", "parent.png"]]);
-    expect(isVirtualTextureDemandPageAvailable({ generated: false, manifest: sparse, pageUrisByKey }, {
+    expect(isVirtualTextureDemandPageAvailable({ manifest: sparse, pageUrisByKey }, {
       mip: 1,
       x: 0,
       y: 0,
     })).toBe(true);
-    expect(isVirtualTextureDemandPageAvailable({ generated: false, manifest: sparse, pageUrisByKey }, {
+    expect(isVirtualTextureDemandPageAvailable({ manifest: sparse, pageUrisByKey }, {
       mip: 0,
       x: 0,
       y: 0,
@@ -1254,21 +1235,20 @@ describe("virtual texture pure demand planning", () => {
 
   it("bounds context-free bootstrap before traversing a huge logical address space", () => {
     const huge = manifest({ height: 2 ** 40, pageSize: 1, width: 2 ** 40 });
-    expect(planVirtualTextureBootstrapDemand({ generated: true, manifest: huge }, 3)).toEqual([
+    expect(planVirtualTextureBootstrapDemand({ manifest: huge }, 3)).toEqual([
       { mip: 40, x: 0, y: 0 },
       { mip: 39, x: 0, y: 0 },
       { mip: 39, x: 1, y: 0 },
     ]);
     expect(planVirtualTextureDrawDemand({
       flipY: true,
-      generated: true,
       limit: 2,
       manifest: huge,
     }).demandCandidates).toHaveLength(2);
   });
 
   it("plans coarse-to-fine demand and selects the established target-biased working set", () => {
-    const source = { generated: true, manifest: manifest() };
+    const source = { manifest: manifest() };
     const footprint = {
       maxU: 1,
       maxV: 1,

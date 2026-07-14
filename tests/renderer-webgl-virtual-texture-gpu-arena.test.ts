@@ -149,6 +149,7 @@ const manifest: VirtualTextureManifestModel = {
   borderTexels: 1,
   height: 8,
   mipCount: 4,
+  pageAddressing: "sparse",
   pageSize: 2,
   pages: [],
   width: 8,
@@ -994,6 +995,7 @@ describe("virtual texture GPU arena", () => {
     const inferredMipManifest: VirtualTextureManifestModel = {
       borderTexels: manifest.borderTexels,
       height: manifest.height,
+      pageAddressing: manifest.pageAddressing,
       pageSize: manifest.pageSize,
       pages: manifest.pages,
       width: manifest.width,
@@ -1021,6 +1023,7 @@ describe("virtual texture GPU arena", () => {
     const inferredManifest: VirtualTextureManifestModel = {
       borderTexels: 1,
       height: 10,
+      pageAddressing: "sparse",
       pageSize: 2,
       pages: [],
       width: 6,

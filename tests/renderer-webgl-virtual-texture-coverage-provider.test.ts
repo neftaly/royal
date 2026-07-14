@@ -61,6 +61,7 @@ const manifest: VirtualTextureManifestModel = {
   borderTexels: 1,
   height: 4_096,
   mipCount: 5,
+  pageAddressing: "complete",
   pageSize: 256,
   pages: [],
   uriTemplate: "m{mip}-{x}-{y}.png",
@@ -72,14 +73,12 @@ describe("prepared virtual-texture coverage", () => {
     const first = planVirtualTextureDrawDemand({
       context: context(),
       flipY: false,
-      generated: true,
       limit: 32,
       manifest,
     });
     const second = planVirtualTextureDrawDemand({
       context: context(),
       flipY: false,
-      generated: true,
       limit: 32,
       manifest,
     });
@@ -99,7 +98,6 @@ describe("prepared virtual-texture coverage", () => {
     expect(planVirtualTextureDrawDemand({
       context: context(prepared),
       flipY: false,
-      generated: true,
       limit: 4,
       manifest,
     }).coverageCandidates).toEqual([]);
@@ -135,20 +133,17 @@ describe("prepared virtual-texture coverage", () => {
     const left = planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([-0.4, 0, 0]) }),
       flipY: false,
-      generated: true,
       manifest,
     });
     const right = planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([0.4, 0, 0]) }),
       flipY: false,
-      generated: true,
       manifest,
     });
     expect(right.demandCandidates).not.toEqual(left.demandCandidates);
     expect(planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([-0.4, 0, 0]) }),
       flipY: false,
-      generated: true,
       manifest,
     })).toEqual(left);
   });
