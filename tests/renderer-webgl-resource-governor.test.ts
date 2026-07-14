@@ -10,7 +10,6 @@ import {
   reserveResourceGovernor,
   replaceResourceGovernorLease,
   resourceGovernorSnapshot,
-  setResourceGovernorObservedDurableUsage,
   subscribeResourceGovernorDurableCapacityRelease,
   type ResourceGovernorClassPolicy,
   type ResourceGovernorPolicy,
@@ -290,7 +289,7 @@ describe("root resource governor", () => {
     });
   });
 
-  it("publishes durable capacity release from leases, cancelled reservations, and observations", () => {
+  it("publishes durable capacity release from leases and cancelled reservations", () => {
     const governor = createResourceGovernor(policy());
     const released: Array<{ cpuDecodedBytes: number; persistentGpuBytes: number }> = [];
     const unsubscribe = subscribeResourceGovernorDurableCapacityRelease(governor, (capacity) => {
@@ -305,21 +304,11 @@ describe("root resource governor", () => {
       persistentGpuBytes: 11,
     })).commit();
     lease.release();
-    setResourceGovernorObservedDurableUsage(governor, "render-target", {
-      persistentGpuBytes: 13,
-    });
-    setResourceGovernorObservedDurableUsage(governor, "render-target", {
-      persistentGpuBytes: 5,
-    });
     unsubscribe();
-    setResourceGovernorObservedDurableUsage(governor, "render-target", {
-      persistentGpuBytes: 0,
-    });
 
     expect(released).toEqual([
       { cpuDecodedBytes: 0, persistentGpuBytes: 7 },
       { cpuDecodedBytes: 3, persistentGpuBytes: 11 },
-      { cpuDecodedBytes: 0, persistentGpuBytes: 8 },
     ]);
   });
 
@@ -552,54 +541,6 @@ describe("root resource governor", () => {
       highWater: { persistentGpuBytes: 60, transientPeakBytes: 30 },
       lastDenial: { reason: "persistent-gpu-capacity", resourceClass: "render-target" },
     });
-  });
-
-  it("bridges absolute observed usage without double-counting repeated samples", () => {
-    const governor = createResourceGovernor(policy());
-    setResourceGovernorObservedDurableUsage(governor, "virtual-texture", {
-      persistentGpuBytes: 60,
-    });
-    setResourceGovernorObservedDurableUsage(governor, "virtual-texture", {
-      persistentGpuBytes: 60,
-    });
-    setResourceGovernorObservedDurableUsage(governor, "ordinary-texture", {
-      cpuDecodedBytes: 25,
-    });
-    expect(resourceGovernorSnapshot(governor).total).toMatchObject({
-      cpuDecodedBytes: 25,
-      persistentGpuBytes: 60,
-    });
-    expect(reserveResourceGovernor(governor, "geometry", { persistentGpuBytes: 41 }))
-      .toBe("persistent-gpu-capacity");
-    setResourceGovernorObservedDurableUsage(governor, "virtual-texture", {
-      persistentGpuBytes: 10,
-    });
-    expect(resourceGovernorSnapshot(governor)).toMatchObject({
-      highWater: { persistentGpuBytes: 60 },
-      total: { persistentGpuBytes: 10 },
-    });
-  });
-
-  it("preserves safe aggregate observations at the numeric limit", () => {
-    const base = policy({ cpuDecodedBytes: Number.MAX_SAFE_INTEGER });
-    const configured: ResourceGovernorPolicy = {
-      ...base,
-      classes: {
-        ...base.classes,
-        geometry: classPolicy(0, 10, 0, 10),
-      },
-    };
-    const governor = createResourceGovernor(configured);
-    reservation(reserveResourceGovernor(governor, "geometry", { cpuDecodedBytes: 20 })).commit();
-    reservation(reserveResourceGovernor(governor, "geometry", { jobs: 1 })).cancel();
-
-    setResourceGovernorObservedDurableUsage(governor, "ordinary-texture", {
-      cpuDecodedBytes: Number.MAX_SAFE_INTEGER - 20,
-    });
-    expect(() => setResourceGovernorObservedDurableUsage(governor, "virtual-texture", {
-      cpuDecodedBytes: 1,
-    })).toThrow("observed total cpuDecodedBytes");
-    expect(resourceGovernorSnapshot(governor).total.cpuDecodedBytes).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   it("rejects invalid costs and impossible floor policies", () => {

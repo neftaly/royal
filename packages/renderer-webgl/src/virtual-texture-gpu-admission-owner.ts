@@ -59,7 +59,6 @@ type VirtualTextureGpuAdmissionOwnerOptions = {
   readonly resourceGovernor: ResourceGovernor;
   readonly runtime: VirtualTextureRuntimeShell;
   readonly suppressPersistentGpuWake: () => () => void;
-  readonly synchronizeResourceGovernorObservations: () => void;
   readonly wakePersistentGpuCapacity: () => void;
 };
 
@@ -101,8 +100,6 @@ export class VirtualTextureGpuAdmissionOwner {
       releaseError: undefined,
       releaseErrorPresent: false,
     };
-    // Logical ownership ends even when driver deletion fails. The arena's
-    // quarantined bytes remain observed until the context is dropped.
     const hadLease = this.#options.runtime.hasGpuLease(state.key);
     const releaseWakeSuppression = this.#options.suppressPersistentGpuWake();
     try {
@@ -111,14 +108,14 @@ export class VirtualTextureGpuAdmissionOwner {
           ? releaseVirtualTextureGpuResource(this.#options.gpu, state.key)
           : releaseVirtualTextureGpuAllocation(this.#options.gpu, state.key);
       });
-      releaseFailure = captureFirstFailure(
-        releaseFailure,
-        this.#options.synchronizeResourceGovernorObservations,
-      );
-      releaseFailure = captureFirstFailure(
-        releaseFailure,
-        () => this.#options.runtime.releaseGpuLease(state.key),
-      );
+      if (releaseFailure !== undefined || release.releaseErrorPresent) {
+        this.#options.runtime.quarantineGpuLease(state.key);
+      } else {
+        releaseFailure = captureFirstFailure(
+          releaseFailure,
+          () => this.#options.runtime.releaseGpuLease(state.key),
+        );
+      }
     } finally {
       releaseWakeSuppression();
     }
@@ -227,40 +224,36 @@ export class VirtualTextureGpuAdmissionOwner {
     const quarantineBeforeAdmission = virtualTextureGpuArenaSnapshot(this.#options.gpu).quarantinedBytes;
     const releaseWakeSuppression = this.#options.suppressPersistentGpuWake();
     try {
-      result = admitVirtualTextureGpuResource(
-        this.#options.gpu,
-        state.key,
-        this.#options.contextGeneration(),
-        admissionOptions,
-      );
-      this.#options.synchronizeResourceGovernorObservations();
-      if (result.kind === "ready" && governorReservation !== undefined) {
-        this.#options.runtime.commitGpuLease(state.key, governorReservation);
-        governorReservation = undefined;
-      } else if (governorReservation !== undefined) {
-        reservationCancelled = governorReservation.cancel();
-        governorReservation = undefined;
+      try {
+        result = admitVirtualTextureGpuResource(
+          this.#options.gpu,
+          state.key,
+          this.#options.contextGeneration(),
+          admissionOptions,
+        );
+      } catch (value) {
+        admissionFailure = { value };
       }
-    } catch (value) {
-      admissionFailure = { value };
-      admissionFailure = captureFirstFailure(
-        admissionFailure,
-        this.#options.synchronizeResourceGovernorObservations,
-      );
       if (governorReservation !== undefined) {
-        const cancellationFailure = captureFailure(() => {
-          reservationCancelled = governorReservation!.cancel();
+        const quarantineAfterAdmission = virtualTextureGpuArenaSnapshot(
+          this.#options.gpu,
+        ).quarantinedBytes;
+        const settlementFailure = captureFailure(() => {
+          if (quarantineAfterAdmission > quarantineBeforeAdmission) {
+            this.#options.runtime.commitQuarantinedGpuLease(governorReservation!);
+          } else if (result?.kind === "ready") {
+            this.#options.runtime.commitGpuLease(state.key, governorReservation!);
+          } else {
+            reservationCancelled = governorReservation!.cancel();
+          }
         });
-        admissionFailure ??= cancellationFailure;
+        admissionFailure ??= settlementFailure;
         governorReservation = undefined;
       }
     } finally {
       releaseWakeSuppression();
     }
-    const quarantineAfterAdmission = virtualTextureGpuArenaSnapshot(this.#options.gpu).quarantinedBytes;
-    if (reservationCancelled && quarantineAfterAdmission === quarantineBeforeAdmission) {
-      this.#options.wakePersistentGpuCapacity();
-    }
+    if (reservationCancelled) this.#options.wakePersistentGpuCapacity();
     if (admissionFailure !== undefined) throw admissionFailure.value;
     if (result === undefined) throw new Error("Virtual texture GPU admission did not produce a result");
     if (result.kind === "unsupported") {

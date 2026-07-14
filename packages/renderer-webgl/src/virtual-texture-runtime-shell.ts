@@ -91,6 +91,7 @@ export class VirtualTextureRuntimeShell {
   readonly #options: VirtualTextureRuntimeShellOptions;
   readonly #resources = new Map<string, VirtualTextureRuntimeState>();
   readonly #gpuLeases = new Map<string, ResourceGovernorLease>();
+  readonly #quarantinedGpuLeases = new Set<ResourceGovernorLease>();
   readonly requests: VirtualTextureRequestCoordinator;
   #basisuCodec: Promise<typeof import("./gltf/codecs/basisu")> | undefined;
   #nextAdmissionTicket = 1;
@@ -128,26 +129,45 @@ export class VirtualTextureRuntimeShell {
     this.#gpuLeases.set(key, reservation.commit());
   }
 
+  commitQuarantinedGpuLease(reservation: ResourceGovernorReservation): void {
+    this.#quarantinedGpuLeases.add(reservation.commit());
+  }
+
+  quarantineGpuLease(key: string): boolean {
+    const lease = this.#gpuLeases.get(key);
+    if (lease === undefined) return false;
+    this.#gpuLeases.delete(key);
+    this.#quarantinedGpuLeases.add(lease);
+    return true;
+  }
+
   releaseGpuLease(key: string): boolean {
     const lease = this.#gpuLeases.get(key);
     if (lease === undefined) return false;
+    this.#gpuLeases.delete(key);
     try {
       lease.release();
-    } finally {
-      this.#gpuLeases.delete(key);
+    } catch (error) {
+      this.#quarantinedGpuLeases.add(lease);
+      throw error;
     }
     return true;
   }
 
   releaseAllGpuLeases(): void {
+    const leases = [
+      ...this.#gpuLeases.values(),
+      ...this.#quarantinedGpuLeases,
+    ];
+    this.#gpuLeases.clear();
+    this.#quarantinedGpuLeases.clear();
     let firstFailure: unknown;
-    for (const [key, lease] of this.#gpuLeases) {
+    for (const lease of leases) {
       try {
         lease.release();
       } catch (error) {
         firstFailure ??= error;
-      } finally {
-        this.#gpuLeases.delete(key);
+        this.#quarantinedGpuLeases.add(lease);
       }
     }
     if (firstFailure !== undefined) throw firstFailure;

@@ -26,7 +26,6 @@ const captureFirstFailure = (
 type RootResourceReleaseOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;
   readonly ordinaryTextures: OrdinaryTextureResidencyController;
-  readonly synchronizeGovernorObservations: () => void;
   readonly virtualTextureAdmission: VirtualTextureGpuAdmissionOwner;
   readonly virtualTextureRuntime: VirtualTextureRuntimeShell;
 };
@@ -49,10 +48,6 @@ export class RootResourceReleaseOwner {
       if (report.operationFailure !== undefined) {
         releaseFailure ??= { value: report.operationFailure.error };
       }
-      releaseFailure = captureFirstFailure(
-        releaseFailure,
-        this.#options.synchronizeGovernorObservations,
-      );
     } finally {
       releaseWakeSuppression();
     }

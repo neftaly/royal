@@ -515,6 +515,9 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     vi.mocked(gpuGl.texImage2D).mockImplementation(() => {
       throw new Error("allocation rejected");
     });
+    vi.mocked(gpuGl.deleteTexture).mockImplementationOnce(() => {
+      throw new Error("rollback deletion rejected");
+    });
     fetchRequests[3]!.resolve(responseJson(vtSinglePageManifest()));
     await flushMicrotasks();
 
@@ -523,6 +526,9 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
     expect(parseRoot.snapshot().diagnostics.join("\n")).toMatch(/manifest parse failed/);
     expect(gpuRoot.snapshot().diagnostics.join("\n")).toMatch(/GPU resource admission failed: allocation rejected/);
     expect(gpuRoot.snapshot().resourceGovernor.outstandingReservations).toBe(0);
+    expect(
+      gpuRoot.snapshot().resourceGovernor.byClass["virtual-texture"].persistentGpuBytes,
+    ).toBe(148);
     expect(transportRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(jsonRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });
     expect(parseRoot.snapshot().virtualTexturing).toMatchObject({ manifestFailures: 1, gpuAdmissionFailures: 0 });

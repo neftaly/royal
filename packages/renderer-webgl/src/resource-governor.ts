@@ -337,7 +337,6 @@ interface ResourceGovernorState {
   readonly leases: Map<ResourceGovernorLease, ResourceGovernorLeaseRecord>;
   readonly durableCapacityReleaseListeners: Set<ResourceGovernorDurableCapacityReleaseListener>;
   nextId: number;
-  readonly observedByClass: MutableClassUsage;
   outstandingLeases: number;
   readonly policy: ResourceGovernorPolicy;
   readonly reservations: Map<number, { readonly cost: ResourceGovernorUsage; readonly resourceClass: ResourceGovernorClass }>;
@@ -432,7 +431,6 @@ export const createResourceGovernor = (
     leases: new Map(),
     durableCapacityReleaseListeners: new Set(),
     nextId: 1,
-    observedByClass: emptyClassUsage(),
     outstandingLeases: 0,
     policy,
     reservations: new Map(),
@@ -514,43 +512,6 @@ const updateHighWater = (state: ResourceGovernorState): void => {
   for (const key of Object.keys(state.highWater) as (keyof MutableUsage)[]) {
     state.highWater[key] = Math.max(state.highWater[key], state.total[key]);
   }
-};
-
-/**
- * Replaces observational durable usage for a subsystem not yet migrated to
- * reservations. A producer must use either observation or leases for the same
- * bytes, never both. Frame-local pressure is intentionally reservation-only.
- */
-export const setResourceGovernorObservedDurableUsage = (
-  governor: ResourceGovernor,
-  resourceClass: ResourceGovernorClass,
-  requestedCost: Pick<ResourceGovernorCost, "cpuDecodedBytes" | "persistentGpuBytes">,
-): void => {
-  const state = stateOf(governor);
-  const cost = checkedCost(requestedCost);
-  const previous = state.observedByClass[resourceClass];
-  const nextTotalCpuDecodedBytes = state.total.cpuDecodedBytes
-    - previous.cpuDecodedBytes + cost.cpuDecodedBytes;
-  const nextTotalPersistentGpuBytes = state.total.persistentGpuBytes
-    - previous.persistentGpuBytes + cost.persistentGpuBytes;
-  assertCount(nextTotalCpuDecodedBytes, "observed total cpuDecodedBytes");
-  assertCount(nextTotalPersistentGpuBytes, "observed total persistentGpuBytes");
-  const delta: ResourceGovernorUsage = {
-    cpuDecodedBytes: cost.cpuDecodedBytes - previous.cpuDecodedBytes,
-    jobs: 0,
-    persistentGpuBytes: cost.persistentGpuBytes - previous.persistentGpuBytes,
-    transientPeakBytes: 0,
-    uploadBytes: 0,
-  };
-  addUsage(state.total, delta, 1);
-  addUsage(state.byClass[resourceClass], delta, 1);
-  previous.cpuDecodedBytes = cost.cpuDecodedBytes;
-  previous.persistentGpuBytes = cost.persistentGpuBytes;
-  updateHighWater(state);
-  notifyDurableCapacityReleased(state, {
-    cpuDecodedBytes: Math.max(0, -delta.cpuDecodedBytes),
-    persistentGpuBytes: Math.max(0, -delta.persistentGpuBytes),
-  });
 };
 
 export const subscribeResourceGovernorDurableCapacityRelease = (

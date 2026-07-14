@@ -48,7 +48,6 @@ import {
   replaceResourceGovernorLease,
   reserveResourceGovernor,
   resourceGovernorSnapshot,
-  setResourceGovernorObservedDurableUsage,
   subscribeResourceGovernorDurableCapacityRelease,
   type ResourceGovernor,
   type ResourceGovernorClass,
@@ -93,7 +92,6 @@ import {
   createVirtualTextureGpuArena,
   dropVirtualTextureGpuContext,
   processVirtualTextureGpuUploads,
-  virtualTextureGpuArenaSnapshot,
   virtualTextureGpuHasActionableUploads,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
@@ -777,13 +775,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         resourceGovernor: this.#resourceGovernor,
         runtime: this.#virtualTextureRuntime,
         suppressPersistentGpuWake: () => this.#capacityWakes.suppressPersistentGpuWake(),
-        synchronizeResourceGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
         wakePersistentGpuCapacity: () => this.#capacityWakes.wakePersistentGpuCapacity(),
       });
       this.#resourceReleases = new RootResourceReleaseOwner({
         capacityWakes: this.#capacityWakes,
         ordinaryTextures: this.#ordinaryTextures,
-        synchronizeGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
         virtualTextureAdmission: this.#virtualTextureAdmission,
         virtualTextureRuntime: this.#virtualTextureRuntime,
       });
@@ -1211,10 +1207,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     releaseFailure = captureFirstFailure(releaseFailure, () => {
       dropVirtualTextureGpuContext(this.#virtualTextureGpu);
     });
-    releaseFailure = captureFirstFailure(
-      releaseFailure,
-      () => this.#synchronizeResourceGovernorObservations(),
-    );
     releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextureRuntime.releaseAllGpuLeases());
     if (deleteResources) {
       const gl = this.#gl;
@@ -1922,15 +1914,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #recordDiagnostic(message: string, key = message): void {
     const result = this.#diagnostics.record(key, message);
     if (result === "appended") console.warn(this.#diagnostics.latestMessage);
-  }
-
-  #synchronizeResourceGovernorObservations(): void {
-    const gpuArena = virtualTextureGpuArenaSnapshot(this.#virtualTextureGpu);
-    setResourceGovernorObservedDurableUsage(this.#resourceGovernor, "virtual-texture", {
-      // Migrated allocations are represented by durable governor leases. Only
-      // failed GL deletions remain observationally charged until context loss.
-      persistentGpuBytes: gpuArena.quarantinedBytes,
-    });
   }
 
   #recordUnsupportedVirtualTexture(texture: VirtualTextureRef, reason: string): void {
