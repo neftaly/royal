@@ -360,6 +360,44 @@ describe("surface render-target arena", () => {
     expect(recorded.released.value).toBe(2);
   });
 
+  it("continues context-loss lease cleanup and retains only failures for retry", () => {
+    const leases: Array<{ fail: boolean; released: boolean }> = [];
+    const reservation = () => ({
+      cancel: () => true,
+      commit: (): SurfaceRenderTargetGpuLease => {
+        const state = { fail: false, released: false };
+        leases.push(state);
+        return {
+          release: () => {
+            if (state.fail) throw new Error("render-target lease release failed");
+            if (state.released) return false;
+            state.released = true;
+            return true;
+          },
+        };
+      },
+    });
+    const governor: SurfaceRenderTargetGpuGovernor = {
+      replace: () => reservation(),
+      reserve: () => reservation(),
+    };
+    const gl = new FakeGl();
+    const arena = createSurfaceRenderTargetArena(governor);
+    ensureHdrRenderTarget(arena, context(gl), 20, 10);
+    copyTransmissionScreenColorTexture(arena, context(gl), 20, 10, 0, 0, false);
+    const retained = leases.filter(({ released }) => !released);
+    expect(retained).toHaveLength(2);
+    retained[0]!.fail = true;
+
+    expect(() => dropSurfaceRenderTargetArenaContext(arena, true))
+      .toThrow("render-target lease release failed");
+    expect(retained[1]!.released).toBe(true);
+
+    retained[0]!.fail = false;
+    dropSurfaceRenderTargetArenaContext(arena, true);
+    expect(retained[0]!.released).toBe(true);
+  });
+
   it("preserves the larger lease when an in-place HDR shrink fails partway", () => {
     const recorded = recordingGovernor();
     const gl = new FakeGl();

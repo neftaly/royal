@@ -297,15 +297,28 @@ export const dropSurfaceRenderTargetArenaContext = (
   contextStorageGone = true,
 ): void => {
   const state = arena as unknown as State;
+  let firstFailure: unknown;
+  let failed = false;
+  const release = (lease: SurfaceRenderTargetGpuLease): void => {
+    try {
+      lease.release();
+      state.quarantinedLeases.delete(lease);
+    } catch (error) {
+      state.quarantinedLeases.add(lease);
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  };
+  const previouslyQuarantined = [...state.quarantinedLeases];
   for (const lease of [state.hdr?.gpuLease, state.transmission?.gpuLease]) {
     if (lease === undefined) continue;
-    if (contextStorageGone) lease.release();
+    if (contextStorageGone) release(lease);
     else state.quarantinedLeases.add(lease);
   }
   if (contextStorageGone) {
-    for (const lease of state.quarantinedLeases) lease.release();
-    state.quarantinedLeases.clear();
+    for (const lease of previouslyQuarantined) release(lease);
   }
   state.framebuffers.clear(); state.renderbuffers.clear(); state.textures.clear();
   delete state.hdr; delete state.transmission;
+  if (failed) throw firstFailure;
 };
