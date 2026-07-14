@@ -106,6 +106,7 @@ export const attachCanvasPointerEventHandlers = ({
   root,
 }: CanvasPointerEventBindings): (() => void) => {
   let pointerMoveFrame: number | undefined;
+  let flushingPointerMoves = false;
   const pendingPointerMoves = new Map<number, PointerEvent>();
   const pendingPointerMoveScratch: PointerEvent[] = [];
   const pickedTargetAt = (event: PointerEvent): CanvasPickedPointerTarget | undefined => {
@@ -140,17 +141,27 @@ export const attachCanvasPointerEventHandlers = ({
       globalThis.cancelAnimationFrame(pointerMoveFrame);
     }
     pointerMoveFrame = undefined;
-    for (const event of pendingPointerMoves.values()) pendingPointerMoveScratch.push(event);
+    const reentrant = flushingPointerMoves;
+    const events = reentrant
+      ? Array.from(pendingPointerMoves.values())
+      : pendingPointerMoveScratch;
+    if (!reentrant) {
+      flushingPointerMoves = true;
+      for (const event of pendingPointerMoves.values()) events.push(event);
+    }
     pendingPointerMoves.clear();
     try {
-      for (const event of pendingPointerMoveScratch) {
+      for (const event of events) {
         applyPointerInteraction(event, {
           picked: pickedTargetAt(event),
           type: "pointermove",
         });
       }
     } finally {
-      pendingPointerMoveScratch.length = 0;
+      if (!reentrant) {
+        pendingPointerMoveScratch.length = 0;
+        flushingPointerMoves = false;
+      }
     }
   };
 

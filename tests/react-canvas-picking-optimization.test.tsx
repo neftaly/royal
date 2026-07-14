@@ -168,6 +168,56 @@ describe("React Canvas picking optimization", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not replay the outer pointer-move scratch during a nested gesture flush", () => {
+    const frameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextFrame = 1;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      const frame = nextFrame;
+      nextFrame += 1;
+      frameCallbacks.set(frame, callback);
+      return frame;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn((frame: number) => {
+      frameCallbacks.delete(frame);
+    }));
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const moves: number[] = [];
+    const order: string[] = [];
+    const renderRoot = renderScene();
+    const onPointerMove = vi.fn((event: RoyalPointerEvent) => {
+      moves.push(event.clientX);
+      order.push(`move:${event.clientX}`);
+      if (event.clientX !== 10) return;
+      canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { clientX: 20 }));
+      canvas.dispatchFakeEvent("pointerdown", pointerEvent(1, { clientX: 30 }));
+    });
+    const onPointerDown = vi.fn(() => order.push("down"));
+    root.render(renderRoot);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+      sceneInteractionsRef: {
+        current: interactionRegistry(renderRoot, interactions({ onPointerDown, onPointerMove })),
+      },
+      root,
+    });
+
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { clientX: 10 }));
+    const frame = frameCallbacks.entries().next().value as
+      | [number, FrameRequestCallback]
+      | undefined;
+    expect(frame).toBeDefined();
+    frameCallbacks.delete(frame![0]);
+    frame![1](16);
+
+    expect(moves).toEqual([10, 20]);
+    expect(order).toEqual(["move:10", "move:20", "down"]);
+    detach();
+    vi.unstubAllGlobals();
+  });
+
   it("forwards pointer event default and propagation controls to the native event", () => {
     const stopPropagation = vi.fn();
     const nativeEvent = pointerEvent(1, { stopPropagation });
