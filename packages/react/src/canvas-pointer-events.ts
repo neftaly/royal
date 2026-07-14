@@ -3,6 +3,7 @@ import {
   reduceCanvasPointerInteraction,
   type CanvasPickedPointerTarget,
   type CanvasPointerInteractionAction,
+  type CanvasPointerInteractionDispatch,
   type CanvasPointerInteractionState,
 } from "./canvas-pointer-interaction";
 import {
@@ -22,6 +23,29 @@ export type CanvasSceneInteractionsRef = {
 
 export type CanvasLastPointerEventRef = {
   current: PointerEvent | undefined;
+};
+
+const dispatchCanvasPointerInteraction = (
+  dispatches: readonly CanvasPointerInteractionDispatch[],
+  nativeEvent: PointerEvent,
+): void => {
+  let firstFailure: unknown;
+  let failed = false;
+  for (const dispatch of dispatches) {
+    const handler = handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type);
+    if (handler === undefined) continue;
+    try {
+      handler(createRoyalPointerEvent({
+        hit: dispatch.picked.hit,
+        nativeEvent,
+        type: dispatch.type,
+      }));
+    } catch (error) {
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  }
+  if (failed) throw firstFailure;
 };
 
 export interface CanvasPointerEventBindings {
@@ -65,15 +89,7 @@ export const reconcileCanvasPointerInteractionScene = ({
   pointerInteractionStateRef.current = result.state;
   const nativeEvent = lastPointerEventRef.current;
   if (nativeEvent === undefined) return;
-  for (const dispatch of result.dispatches) {
-    handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type)?.(
-      createRoyalPointerEvent({
-        hit: dispatch.picked.hit,
-        nativeEvent,
-        type: dispatch.type,
-      }),
-    );
-  }
+  dispatchCanvasPointerInteraction(result.dispatches, nativeEvent);
 };
 
 export const attachCanvasPointerEventHandlers = ({
@@ -110,14 +126,7 @@ export const attachCanvasPointerEventHandlers = ({
     lastPointerEventRef.current = event;
     const result = reduceCanvasPointerInteraction(pointerInteractionStateRef.current, action);
     pointerInteractionStateRef.current = result.state;
-    for (const dispatch of result.dispatches) {
-      const handler = handlerForRoyalPointerEvent(dispatch.picked.target, dispatch.type);
-      handler?.(createRoyalPointerEvent({
-        hit: dispatch.picked.hit,
-        nativeEvent: event,
-        type: dispatch.type,
-      }));
-    }
+    dispatchCanvasPointerInteraction(result.dispatches, event);
   };
 
   const flushPendingPointerMoves = (): void => {

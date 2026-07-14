@@ -197,6 +197,54 @@ describe("React Canvas picking optimization", () => {
     expect(stopPropagation).toHaveBeenCalledTimes(1);
   });
 
+  it("finishes pointer target transitions when an earlier handler throws", () => {
+    const canvas = fakeCanvas();
+    const first = mesh({
+      geometry: boxGeometry(1),
+      material: unlitMaterial({ color: [1, 0, 0, 1] }),
+      pickingId: "first",
+    });
+    const second = mesh({
+      geometry: boxGeometry(1),
+      material: unlitMaterial({ color: [0, 1, 0, 1] }),
+      pickingId: "second",
+    });
+    const renderRoot = scene({
+      camera: perspectiveCamera(perspectiveProps),
+      nodes: [first, second],
+    });
+    const root = fakeRendererRoot({
+      canvas,
+      pick: (_scene, input) => pickResultFor(input.clientX < 50 ? first : second, input),
+    });
+    const failure = new Error("pointerleave failed");
+    const onPointerEnter = vi.fn();
+    const onPointerMove = vi.fn();
+    root.render(renderRoot);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+      sceneInteractionsRef: {
+        current: interactionRegistry(renderRoot, {
+          first: { onPointerLeave: () => { throw failure; } },
+          second: { onPointerEnter, onPointerMove },
+        }),
+      },
+      root,
+    });
+
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1, { buttons: 1, clientX: 10 }));
+    expect(() => canvas.dispatchFakeEvent(
+      "pointermove",
+      pointerEvent(1, { buttons: 1, clientX: 100 }),
+    )).toThrow(failure);
+
+    expect(onPointerEnter).toHaveBeenCalledOnce();
+    expect(onPointerMove).toHaveBeenCalledOnce();
+    detach();
+  });
+
   it("skips root.pick for pointer events when rendered nodes have no pointer handlers", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
