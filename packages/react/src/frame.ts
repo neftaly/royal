@@ -130,7 +130,18 @@ export const createFrameLoop = (reportError: FrameLoopErrorHandler): FrameLoop =
 
   const notifyActivity = (active: boolean): void => {
     reportedActive = active;
-    for (const observer of activityObservers.values()) observer(active);
+    let firstFailure: unknown;
+    let failed = false;
+    for (const [token, observer] of activityObservers) {
+      try {
+        observer(active);
+      } catch (error) {
+        activityObservers.delete(token);
+        if (!failed) firstFailure = error;
+        failed = true;
+      }
+    }
+    if (failed) reportError(firstFailure);
   };
 
   const syncActivity = (): void => {

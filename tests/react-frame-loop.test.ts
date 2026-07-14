@@ -244,6 +244,29 @@ describe("React frame loop", () => {
     frameLoop.dispose();
   });
 
+  it("removes a failing activity observer without aborting frame subscription", () => {
+    const failure = new Error("activity transition failed");
+    const reportError = vi.fn();
+    const frameLoop = createFrameLoop(reportError);
+    const failing = vi.fn((active: boolean) => {
+      if (active) throw failure;
+    });
+    const healthyStates: boolean[] = [];
+    frameLoop.observeActivity(failing);
+    frameLoop.observeActivity((active) => healthyStates.push(active));
+
+    const unsubscribe = frameLoop.subscribe(() => undefined, 0);
+
+    expect(reportError).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(failure);
+    expect(healthyStates).toEqual([false, true]);
+    expect(failing).toHaveBeenCalledTimes(2);
+    unsubscribe();
+    expect(healthyStates).toEqual([false, true, false]);
+    expect(failing).toHaveBeenCalledTimes(2);
+    frameLoop.dispose();
+  });
+
   it("reports an undefined after-frame throw", () => {
     const queuedFrames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
