@@ -33,11 +33,10 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "src",
     "dist"
   ],
   "scripts": {
-    "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json",
+    "build": "vite build --config ../../vite.config.ts --logLevel warn && tsc -b tsconfig.build.json --force",
     "lint": "oxlint --type-aware --deny-warnings -D eslint/prefer-arrow-callback -D eslint/func-style",
     "prepack": "pnpm build",
     "test": "vitest run --root ../.. ../../tests/renderer-core-*.test.ts"

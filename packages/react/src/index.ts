@@ -34,6 +34,8 @@ export type {
   GltfAssetStatusInput,
 } from './gltf-status';
 
+export { useRendererLifecycle } from './renderer-lifecycle';
+
 export {
   OrbitControls,
   useOrbitCamera,

@@ -11,7 +11,7 @@
       "@royal/renderer-webgl/webxr": ["../renderer-webgl/dist/webxr.d.ts"]
     },
     "rootDir": "src",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src"],
   "references": [

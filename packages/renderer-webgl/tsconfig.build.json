@@ -8,7 +8,7 @@
       "@royal/renderer-core/render-object": ["../renderer-core/dist/render-object.d.ts"]
     },
     "rootDir": "src",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src"],
   "references": [{ "path": "../renderer-core/tsconfig.build.json" }]

@@ -4,11 +4,9 @@ import { useCanvasRoot } from "./canvas";
 
 export type GltfAssetLoadState = "error" | "idle" | "loading" | "ready";
 
-export type GltfAssetStatus = Readonly<{
-  /** Present when `state` is `error`. */
-  error?: string;
-  state: GltfAssetLoadState;
-}>;
+export type GltfAssetStatus =
+  | Readonly<{ error?: never; state: "idle" | "loading" | "ready" }>
+  | Readonly<{ error: string; state: "error" }>;
 
 export type GltfAssetStatusInput = string | GltfAssetRef;
 

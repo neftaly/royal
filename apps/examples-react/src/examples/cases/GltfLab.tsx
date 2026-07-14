@@ -4,6 +4,7 @@ import {
   OrbitControls,
   useGltfAssetStatus,
   useOrbitCamera,
+  useRendererLifecycle,
 } from '@royal/react';
 import { directionalLight, gltf, scene } from '@royal/react/scene';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -24,8 +25,14 @@ import {
 
 const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
   const status = useGltfAssetStatus(src);
-  const label = status.state === 'error' ? `error: ${status.error}` : status.state;
-  return <output className="gltf-lab-load-status">Renderer: {label}</output>;
+  const lifecycle = useRendererLifecycle();
+  const assetLabel = status.state === 'error' ? `error: ${status.error}` : status.state;
+  const rendererLabel = lifecycle.state === 'failed' ? `failed: ${lifecycle.error}` : lifecycle.state;
+  return (
+    <output className="gltf-lab-load-status">
+      Renderer: {rendererLabel}; asset: {assetLabel}
+    </output>
+  );
 };
 
 const selectedCaseName = (): string =>

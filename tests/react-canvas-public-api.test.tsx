@@ -9,9 +9,11 @@ import type {
   PickingId,
   PickResult,
   PickTarget,
+  GltfAssetStatus,
   ResourceGovernorPolicy,
   ResourceGovernorPolicyInput,
   RendererOptions,
+  RoyalRendererRootLifecycleSnapshot,
 } from '@royal/react';
 import type {
   TextureAssetRef,
@@ -133,5 +135,28 @@ describe('Canvas public scene boundary', () => {
     expect(scenePickingId).toBe('helmet');
     expect(input).toEqual({ clientX: 10, clientY: 20 });
     expect(typeof acceptResult).toBe('function');
+  });
+
+  it('exposes asset and renderer failures as discriminated unions', () => {
+    const asset = { error: 'missing buffer', state: 'error' } satisfies GltfAssetStatus;
+    const lifecycle = {
+      error: 'context recovery failed',
+      generation: 2,
+      interruptions: 1,
+      recoveries: 0,
+      state: 'failed',
+    } satisfies RoyalRendererRootLifecycleSnapshot;
+
+    expect(asset.error).toBe('missing buffer');
+    expect(lifecycle.error).toBe('context recovery failed');
+
+    if (false) {
+      // @ts-expect-error Asset failures require an error message.
+      const invalidAsset = { state: 'error' } satisfies GltfAssetStatus;
+      const acceptLifecycle = (_value: RoyalRendererRootLifecycleSnapshot): void => undefined;
+      // @ts-expect-error Available renderer snapshots cannot carry an error.
+      acceptLifecycle({ error: 'impossible', generation: 1, interruptions: 0, recoveries: 0, state: 'available' });
+      expect(invalidAsset).toHaveProperty('state', 'error');
+    }
   });
 });

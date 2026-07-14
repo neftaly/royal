@@ -170,6 +170,7 @@ describe("renderer-core public API", () => {
       "useInvalidate",
       "useOrbitCamera",
       "useOrbitCameraView",
+      "useRendererLifecycle",
     ]);
   });
 

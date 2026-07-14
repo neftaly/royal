@@ -23,15 +23,24 @@ export type ResolvedRendererOptions = WebGlRoot["options"];
 
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
-export interface RoyalRendererRootLifecycleSnapshot {
-  readonly error?: string;
+type RoyalRendererRootLifecycleCounters = Readonly<{
   readonly generation: number;
   /** Number of backend interruptions observed during this root's lifetime. */
   readonly interruptions: number;
   /** Number of successful recoveries from an interruption. */
   readonly recoveries: number;
-  readonly state: RoyalRendererRootLifecycle;
-}
+}>;
+
+export type RoyalRendererRootLifecycleSnapshot = RoyalRendererRootLifecycleCounters & (
+  | Readonly<{
+    readonly error?: never;
+    readonly state: Exclude<RoyalRendererRootLifecycle, "failed">;
+  }>
+  | Readonly<{
+    readonly error: string;
+    readonly state: "failed";
+  }>
+);
 
 export interface RoyalRendererRootSnapshot {
   readonly frame: number;
@@ -85,17 +94,23 @@ export interface RoyalRendererRoot {
 
 const royalLifecycleSnapshot = (
   snapshot: WebGlContextSnapshot,
-): RoyalRendererRootLifecycleSnapshot => Object.freeze({
-  ...(snapshot.lastError === undefined ? {} : { error: snapshot.lastError }),
-  generation: snapshot.generation,
-  interruptions: snapshot.losses,
-  recoveries: snapshot.restores,
-  state: snapshot.lifecycle === "active"
-    ? "available"
-    : snapshot.lifecycle === "disposed"
-      ? "disposed"
-      : snapshot.lastError === undefined ? "unavailable" : "failed",
-});
+): RoyalRendererRootLifecycleSnapshot => {
+  const counters = {
+    generation: snapshot.generation,
+    interruptions: snapshot.losses,
+    recoveries: snapshot.restores,
+  };
+  if (snapshot.lastError !== undefined) {
+    return Object.freeze({ ...counters, error: snapshot.lastError, state: "failed" });
+  }
+
+  return Object.freeze({
+    ...counters,
+    state: snapshot.lifecycle === "active"
+      ? "available"
+      : snapshot.lifecycle === "disposed" ? "disposed" : "unavailable",
+  });
+};
 
 /** @internal Transfers demand scheduling to a React-owned frame loop. */
 export type RoyalRendererFrameClock = {

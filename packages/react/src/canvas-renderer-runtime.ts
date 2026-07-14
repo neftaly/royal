@@ -52,7 +52,7 @@ export const applyCanvasRendererLifecycle = (
   const available = snapshot.state === "available";
   frameLoop.setPaused(!available);
   if (snapshot.state === "failed") {
-    reportError(new Error(snapshot.error ?? "Royal renderer recovery failed"));
+    reportError(new Error(snapshot.error));
   }
 };
 

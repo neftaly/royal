@@ -39,9 +39,10 @@ packages remain private and versioned `0.0.0`. Before registry publication:
 
 1. Choose the initial package version, add the root AGPL license text and release
    notes, remove `private`, and add an explicit publish workflow.
-2. Pack all three packages and install them into a clean React application so
-   the test covers only published files, export maps, peer dependencies, and the
-   documented Node/browser floor rather than workspace resolution.
+
+`pnpm check:package-consumer` now packs all three packages, rejects source and
+build-metadata leakage, installs the tarballs into a clean React app,
+typechecks the public React API, and imports every documented entrypoint.
 
 ## Validation
 

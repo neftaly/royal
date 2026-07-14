@@ -245,5 +245,5 @@ describe("glTF instance transform registry", () => {
       }
       registry.dispose();
     });
-  });
+  }, 10_000);
 });

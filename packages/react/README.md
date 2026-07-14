@@ -174,9 +174,25 @@ glTF material variants from `KHR_materials_variants` can be selected with
 index when an asset has unnamed variants.
 
 `useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
-and returns `{ state: 'idle' | 'loading' | 'ready' | 'error', error? }`. It is
-frame-driven and does not poll renderer diagnostics. Pass the normalized
-`node.asset` instead of a string when using an explicit asset `version`.
+and returns a status discriminated by `state`. It is frame-driven and does not
+poll renderer diagnostics. Pass the normalized `node.asset` instead of a string
+when using an explicit asset `version`.
+
+Both asset and renderer lifecycle results are discriminated unions: `error` is
+required only when `state === 'error'` for an asset or `state === 'failed'` for
+the renderer. `useRendererLifecycle()` observes the surrounding Canvas without
+polling and returns its availability, generation, interruption, and recovery
+counters. This makes status UI exhaustive and keeps recovery details out of
+the imperative root path:
+
+```tsx
+import { useRendererLifecycle } from '@royal/react';
+
+function RendererStatus() {
+  const lifecycle = useRendererLifecycle();
+  return <output>{lifecycle.state === 'failed' ? lifecycle.error : lifecycle.state}</output>;
+}
+```
 
 Interactive nodes provide an explicit `pickingId`; React handlers live in the
 separate `Canvas.scenePointerEvents` map under that ID. The ID is the logical gesture
@@ -243,5 +259,6 @@ pnpm install
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm check:package-consumer
 pnpm --filter @royal/examples-react test:browser
 ```

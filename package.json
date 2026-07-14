@@ -18,6 +18,7 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
+    "check:package-consumer": "node scripts/package-consumer-smoke.mjs",
     "check:package-imports": "node scripts/package-import-smoke.mjs",
     "check:gpu": "node scripts/gpu.ts check",
     "dev": "pnpm --filter @royal/examples-react dev",
