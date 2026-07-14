@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { GltfSharedViewLodRegistry } from "../packages/renderer-webgl/src/gltf/shared-view-lod-registry";
-import type {
-  GltfMaterialPrimitiveLod,
-  GltfNodePrimitiveLod,
-  LoadedGltfMaterial,
-  LoadedGltfPrimitive,
-} from "../packages/renderer-webgl/src/gltf/prepared-asset";
+import type { LoadedGltfMaterial, LoadedGltfPrimitive } from "../packages/renderer-webgl/src/gltf/prepared-asset";
+import type { LodLevelMembership, LodSet } from "../packages/renderer-webgl/src/lod";
 import { forEachFuzzCase } from "./fuzz";
 
-const materialLod = (thresholds: readonly number[]): GltfMaterialPrimitiveLod => ({
+const materialLod = (thresholds: readonly number[]): LodSet<LoadedGltfMaterial> => ({
   levels: thresholds.map(() => ({}) as LoadedGltfMaterial),
   thresholds,
 });
@@ -16,14 +12,14 @@ const materialLod = (thresholds: readonly number[]): GltfMaterialPrimitiveLod =>
 const nodeLod = (
   level: number,
   thresholds: readonly number[] = [0.2, 0],
-): GltfNodePrimitiveLod => ({
+): LodLevelMembership => ({
   group: "main",
   level,
   levelCount: thresholds.length,
   thresholds,
 });
 
-const nodePrimitive = (lod: GltfNodePrimitiveLod): LoadedGltfPrimitive =>
+const nodePrimitive = (lod: LodLevelMembership): LoadedGltfPrimitive =>
   ({ nodeLod: lod }) as LoadedGltfPrimitive;
 
 const observeMaterialFrame = (

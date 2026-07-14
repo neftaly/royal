@@ -1,4 +1,5 @@
 import type { LinearRgba, TextureContentKey, TextureSampler } from "@royal/renderer-core";
+import type { LodLevelMembership, LodSet } from "../lod";
 import type { GltfIndexArray } from "./accessors";
 import type { Mat4 } from "../math/mat4";
 import type { Bounds3 } from "../math/picking";
@@ -66,28 +67,16 @@ export type LoadedGltfMaterial = {
   readonly extensionTextures?: LoadedGltfMaterialExtensionTextures;
 };
 
-export type GltfMaterialPrimitiveLod = {
-  readonly levels: readonly LoadedGltfMaterial[];
-  readonly thresholds: readonly number[];
-};
-
 export type LoadedGltfMaterialVariant = {
   readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
+  readonly materialLod?: LodSet<LoadedGltfMaterial>;
   readonly variants: readonly number[];
 };
 
 export type LoadedGltfPrimitiveMaterial = {
   readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
+  readonly materialLod?: LodSet<LoadedGltfMaterial>;
   readonly selectionKey: string;
-};
-
-export type GltfNodePrimitiveLod = {
-  readonly group: string;
-  readonly level: number;
-  readonly levelCount: number;
-  readonly thresholds: readonly number[];
 };
 
 export type LoadedGltfPrimitive = {
@@ -100,12 +89,12 @@ export type LoadedGltfPrimitive = {
   readonly localModelDeterminants: readonly number[];
   readonly localModels: readonly Mat4[];
   readonly material: LoadedGltfMaterial;
-  readonly materialLod?: GltfMaterialPrimitiveLod;
+  readonly materialLod?: LodSet<LoadedGltfMaterial>;
   readonly materialVariants?: readonly LoadedGltfMaterialVariant[];
   readonly mode: GltfGeometryDrawMode;
   readonly meshNodeIndex: number;
   readonly nodePath: readonly number[];
-  readonly nodeLod?: GltfNodePrimitiveLod;
+  readonly nodeLod?: LodLevelMembership;
   readonly normals?: Float32Array;
   readonly objectBounds: Bounds3 | undefined;
   readonly positions: Float32Array;

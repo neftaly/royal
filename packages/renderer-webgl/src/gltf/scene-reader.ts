@@ -8,6 +8,7 @@ import {
   type Mat4,
 } from "../math/mat4";
 import { worldBounds } from "../math/picking";
+import { normalizeLodThresholds, type LodLevelMembership, type LodSet } from "../lod";
 import { resolveResourceUri } from "./io";
 import { gltfComponentCount, readGltfFloatAccessor, readGltfIndices } from "./accessors";
 import type { DecodedGltfDracoPrimitive } from "./codecs/draco";
@@ -18,7 +19,6 @@ import type {
   GltfContentExtras,
   GltfDocument,
   GltfImage,
-  GltfLodExtras,
   GltfMaterial,
   GltfMeshPrimitive,
   GltfPunctualLight,
@@ -35,8 +35,6 @@ import {
 } from "./transforms";
 import type {
   GltfGeometryDrawMode,
-  GltfMaterialPrimitiveLod,
-  GltfNodePrimitiveLod,
   LoadedGltfMaterial,
   LoadedGltfMaterialExtensionTextures,
   LoadedGltfMaterialTextureSlot,
@@ -479,21 +477,6 @@ const gltfVertexColors = (
   return output;
 };
 
-const gltfLodThresholds = (extras: GltfLodExtras | undefined, levelCount: number): readonly number[] => {
-  const thresholds: number[] = [];
-  let previous = 1;
-  for (let level = 0; level < levelCount; level += 1) {
-    const value = extras?.MSFT_screencoverage?.[level];
-    const threshold = Number.isFinite(value)
-      ? Math.max(0, Math.min(1, value as number))
-      : level >= levelCount - 1 ? 0 : 0.2 / (4 ** level);
-    const ordered = Math.min(previous, threshold);
-    thresholds.push(ordered);
-    previous = ordered;
-  }
-  return thresholds;
-};
-
 const mat4OrientationDeterminant = (matrix: Mat4): number =>
   matrix[0] * (matrix[5] * matrix[10] - matrix[9] * matrix[6])
   - matrix[4] * (matrix[1] * matrix[10] - matrix[9] * matrix[2])
@@ -577,7 +560,7 @@ const readGltfMaterialLod = (
   assetKey: string,
   materialIndex: number | undefined,
   diagnostics: GltfSceneReaderDiagnosticSink,
-): GltfMaterialPrimitiveLod | undefined => {
+): LodSet<LoadedGltfMaterial> | undefined => {
   const material = materialIndex === undefined ? undefined : document.materials?.[materialIndex];
   const lodIds = (material?.extensions?.MSFT_lod?.ids ?? [])
     .filter((id) => Number.isInteger(id) && id >= 0 && document.materials?.[id] !== undefined);
@@ -586,7 +569,7 @@ const readGltfMaterialLod = (
     readGltfMaterial(document, src, assetKey, materialIndex, diagnostics),
     ...lodIds.map((id) => readGltfMaterial(document, src, assetKey, id, diagnostics)),
   ];
-  return { levels, thresholds: gltfLodThresholds(material?.extras, levels.length) };
+  return { levels, thresholds: normalizeLodThresholds(material?.extras?.MSFT_screencoverage, levels.length) };
 };
 
 const readGltfMaterialVariants = (
@@ -716,7 +699,7 @@ const appendNodeTreePrimitives = (
   nodeIndex: number,
   parentModel: Mat4,
   parentPath: readonly number[],
-  nodeLod?: GltfNodePrimitiveLod,
+  nodeLod?: LodLevelMembership,
   applyOwnLod = true,
 ): void => {
   const sceneNode = context.document.nodes?.[nodeIndex];
@@ -734,7 +717,7 @@ const appendNodeTreePrimitives = (
     : [];
   if (lodIds.length > 0) {
     const levelCount = lodIds.length + 1;
-    const thresholds = gltfLodThresholds(sceneNode.extras, levelCount);
+    const thresholds = normalizeLodThresholds(sceneNode.extras?.MSFT_screencoverage, levelCount);
     const group = `node:${nodeIndex}`;
     appendNodeTreePrimitives(context, nodeIndex, parentModel, parentPath, { group, level: 0, levelCount, thresholds }, false);
     for (const [lodIndex, lodNodeIndex] of lodIds.entries()) {

@@ -1,8 +1,8 @@
 import type {
-  GltfMaterialPrimitiveLod,
-  GltfNodePrimitiveLod,
   LoadedGltfPrimitive,
+  LoadedGltfMaterial,
 } from "./prepared-asset";
+import type { LodLevelMembership, LodSet } from "../lod";
 import {
   beginSharedViewLodSelections,
   createSharedViewLodSelections,
@@ -16,7 +16,7 @@ import {
   validateSharedViewLodMetadata,
   type SharedViewLodMetadata,
   type SharedViewLodSelections,
-} from "./shared-view-lod-selection";
+} from "../lod-selection";
 
 type AssetSelections = {
   readonly ids: number[];
@@ -146,7 +146,7 @@ export class GltfSharedViewLodRegistry {
   nodeSelectionId(
     assetKey: string,
     selectionKey: string,
-    lod: GltfNodePrimitiveLod,
+    lod: LodLevelMembership,
     primitives: readonly LoadedGltfPrimitive[],
   ): number {
     const asset = this.#assetForWrite(assetKey);
@@ -171,7 +171,7 @@ export class GltfSharedViewLodRegistry {
   materialSelectionId(
     assetKey: string,
     selectionKey: string,
-    lod: GltfMaterialPrimitiveLod,
+    lod: LodSet<LoadedGltfMaterial>,
   ): number {
     const asset = this.#assetForWrite(assetKey);
     const metadataKey = `${lod.thresholds.join(",")}:${lod.levels.length}`;

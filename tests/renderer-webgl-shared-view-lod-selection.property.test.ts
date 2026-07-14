@@ -13,7 +13,7 @@ import {
   sharedViewLodWasObserved,
   type SharedViewLodMetadata,
   validateSharedViewLodMetadata,
-} from "../packages/renderer-webgl/src/gltf/shared-view-lod-selection";
+} from "../packages/renderer-webgl/src/lod-selection";
 import { forEachFuzzCase, type SeededRandom } from "./fuzz";
 
 const HYSTERESIS = 0.15;
