@@ -356,7 +356,7 @@ describe("WebGL renderer virtual texturing lifecycle and admission", () => {
             ...policy.classes,
             geometry: {
               ...policy.classes.geometry,
-              persistentGpuBytes: { mandatoryFloor: floor, softLimit: floor },
+              persistentGpuBytes: { mandatoryFloor: floor },
             },
           },
         };

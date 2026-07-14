@@ -557,13 +557,9 @@ export const vtSinglePageManifest = () => ({
 export const constrainedPolicy = (
   limits: Partial<ResourceGovernorPolicy["limits"]>,
 ): ResourceGovernorPolicy => {
-  const persistentGpuBytes = limits.persistentGpuBytes
-    ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes;
-  const cpuDecodedBytes = limits.cpuDecodedBytes
-    ?? DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.cpuDecodedBytes;
   const classPolicy = () => ({
-    cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuDecodedBytes },
-    persistentGpuBytes: { mandatoryFloor: 0, softLimit: persistentGpuBytes },
+    cpuDecodedBytes: { mandatoryFloor: 0 },
+    persistentGpuBytes: { mandatoryFloor: 0 },
   });
   return {
     classes: {
@@ -585,7 +581,7 @@ export const vtPersistentGpuHardLimitPolicy = (hardLimit: number): ResourceGover
       ...base.classes,
       "virtual-texture": {
         ...base.classes["virtual-texture"],
-        persistentGpuBytes: { hardLimit, mandatoryFloor: 0, softLimit: hardLimit },
+        persistentGpuBytes: { hardLimit, mandatoryFloor: 0 },
       },
     },
   };

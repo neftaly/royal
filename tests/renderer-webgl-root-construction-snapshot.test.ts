@@ -169,7 +169,6 @@ const texturePolicy = (persistentGpuBytes: number): ResourceGovernorPolicy => ({
       persistentGpuBytes: {
         hardLimit: persistentGpuBytes,
         mandatoryFloor: 0,
-        softLimit: persistentGpuBytes,
       },
     },
   },

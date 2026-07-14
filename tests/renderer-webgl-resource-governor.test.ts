@@ -20,12 +20,12 @@ import { forEachFuzzCase } from "./fuzz";
 
 const classPolicy = (
   gpuFloor = 0,
-  gpuSoft = 100,
+  _gpuSoft = 100,
   cpuFloor = 0,
-  cpuSoft = 100,
+  _cpuSoft = 100,
 ): ResourceGovernorClassPolicy => ({
-  cpuDecodedBytes: { mandatoryFloor: cpuFloor, softLimit: cpuSoft },
-  persistentGpuBytes: { mandatoryFloor: gpuFloor, softLimit: gpuSoft },
+  cpuDecodedBytes: { mandatoryFloor: cpuFloor },
+  persistentGpuBytes: { mandatoryFloor: gpuFloor },
 });
 
 const policy = (overrides: Partial<ResourceGovernorPolicy["limits"]> = {}): ResourceGovernorPolicy => ({
@@ -70,7 +70,7 @@ describe("root resource governor", () => {
     const configured = defineResourceGovernorPolicy({
       classes: {
         "virtual-texture": {
-          persistentGpuBytes: { hardLimit: 96, softLimit: 80 },
+          persistentGpuBytes: { hardLimit: 96, mandatoryFloor: 80 },
         },
       },
       limits: { jobs: 3, persistentGpuBytes: 128 },
@@ -83,7 +83,6 @@ describe("root resource governor", () => {
           persistentGpuBytes: {
             hardLimit: 96,
             mandatoryFloor: 80,
-            softLimit: 80,
           },
         },
       },
@@ -153,10 +152,7 @@ describe("root resource governor", () => {
     });
     expect(typeof borrowed).not.toBe("string");
     expect(resourceGovernorSnapshot(governor)).toMatchObject({
-      borrowAdmissions: 1,
-      softExcessByClass: {
-        geometry: { cpuDecodedBytes: 45, persistentGpuBytes: 45 },
-      },
+      total: { cpuDecodedBytes: 70, persistentGpuBytes: 70 },
     });
     expect(reserveResourceGovernor(governor, "geometry", { persistentGpuBytes: 1 }))
       .toBe("persistent-gpu-mandatory-floor");
@@ -182,8 +178,8 @@ describe("root resource governor", () => {
         ...base.classes,
         "ordinary-texture": classPolicy(20, 30, 10, 20),
         "virtual-texture": {
-          cpuDecodedBytes: { hardLimit: 55, mandatoryFloor: 0, softLimit: 30 },
-          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0, softLimit: 40 },
+          cpuDecodedBytes: { hardLimit: 55, mandatoryFloor: 0 },
+          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0 },
         },
       },
     };
@@ -204,7 +200,6 @@ describe("root resource governor", () => {
       persistentGpuBytes: 60,
     })).commit();
     expect(resourceGovernorSnapshot(governor)).toMatchObject({
-      borrowAdmissions: 1,
       maximumDurableBytesByClass: {
         geometry: { persistentGpuBytes: 80 },
         "virtual-texture": { cpuDecodedBytes: 55, persistentGpuBytes: 60 },
@@ -229,7 +224,7 @@ describe("root resource governor", () => {
         ...base.classes,
         "virtual-texture": {
           ...base.classes["virtual-texture"],
-          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0, softLimit: 40 },
+          persistentGpuBytes: { hardLimit: 60, mandatoryFloor: 0 },
         },
       },
     };
@@ -585,7 +580,7 @@ describe("root resource governor", () => {
     });
   });
 
-  it("counts only newly borrowed durable bytes and preserves safe aggregate observations", () => {
+  it("preserves safe aggregate observations at the numeric limit", () => {
     const base = policy({ cpuDecodedBytes: Number.MAX_SAFE_INTEGER });
     const configured: ResourceGovernorPolicy = {
       ...base,
@@ -596,9 +591,7 @@ describe("root resource governor", () => {
     };
     const governor = createResourceGovernor(configured);
     reservation(reserveResourceGovernor(governor, "geometry", { cpuDecodedBytes: 20 })).commit();
-    const jobsOnly = reservation(reserveResourceGovernor(governor, "geometry", { jobs: 1 }));
-    expect(resourceGovernorSnapshot(governor).borrowAdmissions).toBe(1);
-    jobsOnly.cancel();
+    reservation(reserveResourceGovernor(governor, "geometry", { jobs: 1 })).cancel();
 
     setResourceGovernorObservedDurableUsage(governor, "ordinary-texture", {
       cpuDecodedBytes: Number.MAX_SAFE_INTEGER - 20,
@@ -627,12 +620,12 @@ describe("root resource governor", () => {
         ...base.classes,
         geometry: {
           ...base.classes.geometry,
-          persistentGpuBytes: { hardLimit: 49, mandatoryFloor: 0, softLimit: 50 },
+          persistentGpuBytes: { hardLimit: 49, mandatoryFloor: 50 },
         },
       },
     };
     expect(() => createResourceGovernor(invalidHardLimit))
-      .toThrow("geometry.persistentGpuBytes soft limit exceeds its hard limit");
+      .toThrow("geometry.persistentGpuBytes mandatory floor exceeds its hard limit");
 
     const aboveRoot: ResourceGovernorPolicy = {
       ...base,
@@ -640,7 +633,7 @@ describe("root resource governor", () => {
         ...base.classes,
         geometry: {
           ...base.classes.geometry,
-          persistentGpuBytes: { hardLimit: 101, mandatoryFloor: 0, softLimit: 50 },
+          persistentGpuBytes: { hardLimit: 101, mandatoryFloor: 0 },
         },
       },
     };
@@ -687,7 +680,6 @@ describe("root resource governor", () => {
     })).commit();
 
     expect(resourceGovernorSnapshot(governor)).toMatchObject({
-      borrowAdmissions: 1,
       total: { cpuDecodedBytes: 800, persistentGpuBytes: 1_000 },
     });
     expect(reserveResourceGovernor(governor, "geometry", { cpuDecodedBytes: 1 }))
@@ -797,8 +789,8 @@ describe("root resource governor", () => {
         classes: {
           ...base.classes,
           "virtual-texture": {
-            cpuDecodedBytes: { hardLimit: 35, mandatoryFloor: 0, softLimit: 25 },
-            persistentGpuBytes: { hardLimit: 45, mandatoryFloor: 0, softLimit: 30 },
+            cpuDecodedBytes: { hardLimit: 35, mandatoryFloor: 0 },
+            persistentGpuBytes: { hardLimit: 45, mandatoryFloor: 0 },
           },
         },
       };

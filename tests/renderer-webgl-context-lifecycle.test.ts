@@ -40,8 +40,8 @@ describe("WebGL root context lifecycle contracts", () => {
   it("enforces a zero clustered-light CPU budget without observational overshoot", () => {
     const { gl } = fakeGl();
     const classPolicy = () => ({
-      cpuDecodedBytes: { mandatoryFloor: 0, softLimit: 0 },
-      persistentGpuBytes: { mandatoryFloor: 0, softLimit: 512 * 1024 * 1024 },
+      cpuDecodedBytes: { mandatoryFloor: 0 },
+      persistentGpuBytes: { mandatoryFloor: 0 },
     });
     const resourceGovernorPolicy = {
       classes: {

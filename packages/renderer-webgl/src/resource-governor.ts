@@ -43,8 +43,6 @@ export interface ResourceGovernorUsage {
 export interface ResourceGovernorDurableBudget {
   /** Byte capacity protected from borrowing while this class is below its floor. */
   readonly mandatoryFloor: number;
-  /** Byte threshold used for borrowing diagnostics; it is not a hard per-class cap. */
-  readonly softLimit: number;
   /**
    * Optional hard ceiling for this class. Other classes cannot lend capacity
    * above it. When omitted, the class may borrow every root-wide byte not
@@ -92,8 +90,6 @@ export type ResourceGovernorDenialReason =
 
 export interface ResourceGovernorAdmission {
   readonly admitted: boolean;
-  readonly borrowedCpuDecodedBytes: number;
-  readonly borrowedPersistentGpuBytes: number;
   readonly reason?: ResourceGovernorDenialReason;
 }
 
@@ -188,81 +184,54 @@ export const evaluateResourceGovernorAdmission = (
   const own = view.byClass[resourceClass];
   const gpuHardLimit = policy.classes[resourceClass].persistentGpuBytes.hardLimit;
   if (gpuHardLimit !== undefined && cost.persistentGpuBytes > gpuHardLimit - own.persistentGpuBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "persistent-gpu-hard-limit" };
+    return { admitted: false, reason: "persistent-gpu-hard-limit" };
   }
   if (cost.persistentGpuBytes > policy.limits.persistentGpuBytes - view.total.persistentGpuBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "persistent-gpu-capacity" };
+    return { admitted: false, reason: "persistent-gpu-capacity" };
   }
   if (cost.persistentGpuBytes > policy.limits.persistentGpuBytes
     - protectedCapacity(policy, view, resourceClass, "persistentGpuBytes")
     - view.total.persistentGpuBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "persistent-gpu-mandatory-floor" };
+    return { admitted: false, reason: "persistent-gpu-mandatory-floor" };
   }
   const cpuHardLimit = policy.classes[resourceClass].cpuDecodedBytes.hardLimit;
   if (cpuHardLimit !== undefined && cost.cpuDecodedBytes > cpuHardLimit - own.cpuDecodedBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "cpu-decoded-hard-limit" };
+    return { admitted: false, reason: "cpu-decoded-hard-limit" };
   }
   if (cost.cpuDecodedBytes > policy.limits.cpuDecodedBytes - view.total.cpuDecodedBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "cpu-decoded-capacity" };
+    return { admitted: false, reason: "cpu-decoded-capacity" };
   }
   if (cost.cpuDecodedBytes > policy.limits.cpuDecodedBytes
     - protectedCapacity(policy, view, resourceClass, "cpuDecodedBytes")
     - view.total.cpuDecodedBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "cpu-decoded-mandatory-floor" };
+    return { admitted: false, reason: "cpu-decoded-mandatory-floor" };
   }
   if (cost.transientPeakBytes > policy.limits.transientPeakBytes - view.total.transientPeakBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "transient-peak-capacity" };
+    return { admitted: false, reason: "transient-peak-capacity" };
   }
   if (cost.uploadBytes > policy.limits.uploadBytes - view.total.uploadBytes) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "upload-capacity" };
+    return { admitted: false, reason: "upload-capacity" };
   }
   if (cost.jobs > policy.limits.jobs - view.total.jobs) {
-    return { admitted: false, borrowedCpuDecodedBytes: 0, borrowedPersistentGpuBytes: 0,
-      reason: "job-capacity" };
+    return { admitted: false, reason: "job-capacity" };
   }
-  const cpuSoftLimit = policy.classes[resourceClass].cpuDecodedBytes.softLimit;
-  const gpuSoftLimit = policy.classes[resourceClass].persistentGpuBytes.softLimit;
-  return {
-    admitted: true,
-    borrowedCpuDecodedBytes: Math.max(
-      0,
-      own.cpuDecodedBytes + cost.cpuDecodedBytes - cpuSoftLimit,
-    ) - Math.max(
-      0,
-      own.cpuDecodedBytes - cpuSoftLimit,
-    ),
-    borrowedPersistentGpuBytes: Math.max(
-      0,
-      own.persistentGpuBytes + cost.persistentGpuBytes - gpuSoftLimit,
-    ) - Math.max(
-      0,
-      own.persistentGpuBytes - gpuSoftLimit,
-    ),
-  };
+  return { admitted: true };
 };
 
 const mib = (value: number): number => value * 1024 * 1024;
-const durable = (gpuFloor: number, gpuSoft: number, cpuFloor: number, cpuSoft: number) => Object.freeze({
-  cpuDecodedBytes: Object.freeze({ mandatoryFloor: mib(cpuFloor), softLimit: mib(cpuSoft) }),
-  persistentGpuBytes: Object.freeze({ mandatoryFloor: mib(gpuFloor), softLimit: mib(gpuSoft) }),
+const durable = (gpuFloor: number, cpuFloor: number) => Object.freeze({
+  cpuDecodedBytes: Object.freeze({ mandatoryFloor: mib(cpuFloor) }),
+  persistentGpuBytes: Object.freeze({ mandatoryFloor: mib(gpuFloor) }),
 });
 
 /** Conservative desktop defaults; device-derived policy can replace this later. */
 export const DEFAULT_RESOURCE_GOVERNOR_POLICY: ResourceGovernorPolicy = Object.freeze({
   classes: Object.freeze({
-    "asset-decode": durable(0, 0, 32, 192),
-    geometry: durable(32, 128, 16, 96),
-    "ordinary-texture": durable(32, 128, 24, 128),
-    "render-target": durable(48, 128, 0, 0),
-    "virtual-texture": durable(64, 192, 32, 128),
+    "asset-decode": durable(0, 32),
+    geometry: durable(32, 16),
+    "ordinary-texture": durable(32, 24),
+    "render-target": durable(48, 0),
+    "virtual-texture": durable(64, 32),
   }),
   limits: Object.freeze({
     cpuDecodedBytes: mib(512),
@@ -288,14 +257,12 @@ export const defineResourceGovernorPolicy = (
     const hardLimit = overrides !== undefined && "hardLimit" in overrides
       ? overrides.hardLimit
       : fallback.hardLimit;
-    const softLimit = overrides?.softLimit ?? (hardLimit === undefined
-      ? fallback.softLimit
-      : Math.min(fallback.softLimit, hardLimit));
-    const inheritedMandatoryFloor = Math.min(fallback.mandatoryFloor, softLimit);
+    const inheritedMandatoryFloor = hardLimit === undefined
+      ? fallback.mandatoryFloor
+      : Math.min(fallback.mandatoryFloor, hardLimit);
     return Object.freeze({
       ...(hardLimit === undefined ? {} : { hardLimit }),
       mandatoryFloor: overrides?.mandatoryFloor ?? inheritedMandatoryFloor,
-      softLimit,
     });
   };
   const resourceClass = (resourceClass: ResourceGovernorClass): ResourceGovernorClassPolicy => {
@@ -329,7 +296,6 @@ export const defineResourceGovernorPolicy = (
 
 export interface ResourceGovernorSnapshot {
   readonly admissions: number;
-  readonly borrowAdmissions: number;
   readonly byClass: Readonly<Record<ResourceGovernorClass, ResourceGovernorUsage>>;
   readonly denials: number;
   readonly denialsByReason: Readonly<Record<ResourceGovernorDenialReason, number>>;
@@ -347,11 +313,6 @@ export interface ResourceGovernorSnapshot {
   }>>;
   readonly outstandingLeases: number;
   readonly outstandingReservations: number;
-  /** Current durable usage above each class's soft, borrowable budget. */
-  readonly softExcessByClass: Readonly<Record<ResourceGovernorClass, {
-    readonly cpuDecodedBytes: number;
-    readonly persistentGpuBytes: number;
-  }>>;
   readonly total: ResourceGovernorUsage;
 }
 
@@ -367,7 +328,6 @@ type MutableClassUsage = Record<ResourceGovernorClass, MutableUsage>;
 
 interface ResourceGovernorState {
   admissions: number;
-  borrowAdmissions: number;
   readonly byClass: MutableClassUsage;
   denials: number;
   readonly denialsByReason: Record<ResourceGovernorDenialReason, number>;
@@ -442,15 +402,11 @@ const validatePolicy = (policy: ResourceGovernorPolicy): void => {
     for (const resourceClass of RESOURCE_GOVERNOR_CLASSES) {
       const budget = policy.classes[resourceClass][dimension];
       assertCount(budget.mandatoryFloor, `${resourceClass}.${dimension}.mandatoryFloor`);
-      assertCount(budget.softLimit, `${resourceClass}.${dimension}.softLimit`);
       if (budget.hardLimit !== undefined) {
         assertCount(budget.hardLimit, `${resourceClass}.${dimension}.hardLimit`);
       }
-      if (budget.mandatoryFloor > budget.softLimit) {
-        throw new RangeError(`${resourceClass}.${dimension} mandatory floor exceeds its soft limit`);
-      }
-      if (budget.hardLimit !== undefined && budget.softLimit > budget.hardLimit) {
-        throw new RangeError(`${resourceClass}.${dimension} soft limit exceeds its hard limit`);
+      if (budget.hardLimit !== undefined && budget.mandatoryFloor > budget.hardLimit) {
+        throw new RangeError(`${resourceClass}.${dimension} mandatory floor exceeds its hard limit`);
       }
       if (budget.hardLimit !== undefined && budget.hardLimit > policy.limits[dimension]) {
         throw new RangeError(`${resourceClass}.${dimension} hard limit exceeds root capacity`);
@@ -467,7 +423,6 @@ export const createResourceGovernor = (
   validatePolicy(policy);
   return {
     admissions: 0,
-    borrowAdmissions: 0,
     byClass: emptyClassUsage(),
     denials: 0,
     denialsByReason: Object.fromEntries(denialReasons.map((reason) => [reason, 0])),
@@ -644,9 +599,6 @@ export const reserveResourceGovernor = (
   const id = state.nextId;
   state.nextId += 1;
   state.admissions += 1;
-  if (admission.borrowedCpuDecodedBytes !== 0 || admission.borrowedPersistentGpuBytes !== 0) {
-    state.borrowAdmissions += 1;
-  }
   state.reservations.set(id, { cost, resourceClass });
   addUsage(state.total, cost, 1);
   addUsage(state.byClass[resourceClass], cost, 1);
@@ -724,9 +676,6 @@ export const replaceResourceGovernorLease = (
     return reason;
   }
   state.admissions += 1;
-  if (admission.borrowedCpuDecodedBytes !== 0 || admission.borrowedPersistentGpuBytes !== 0) {
-    state.borrowAdmissions += 1;
-  }
   const transactionCost: ResourceGovernorUsage = {
     cpuDecodedBytes: 0,
     jobs: cost.jobs,
@@ -796,7 +745,6 @@ export const resourceGovernorSnapshot = (governor: ResourceGovernor): ResourceGo
   const state = stateOf(governor);
   return {
     admissions: state.admissions,
-    borrowAdmissions: state.borrowAdmissions,
     byClass: Object.fromEntries(RESOURCE_GOVERNOR_CLASSES.map((resourceClass) => [
       resourceClass, { ...state.byClass[resourceClass] },
     ])) as unknown as Readonly<Record<ResourceGovernorClass, ResourceGovernorUsage>>,
@@ -823,17 +771,6 @@ export const resourceGovernorSnapshot = (governor: ResourceGovernor): ResourceGo
     ])) as unknown as ResourceGovernorSnapshot["maximumDurableBytesByClass"],
     outstandingLeases: state.outstandingLeases,
     outstandingReservations: state.reservations.size,
-    softExcessByClass: Object.fromEntries(RESOURCE_GOVERNOR_CLASSES.map((resourceClass) => {
-      const usage = state.byClass[resourceClass];
-      const classPolicy = state.policy.classes[resourceClass];
-      return [resourceClass, {
-        cpuDecodedBytes: Math.max(0, usage.cpuDecodedBytes - classPolicy.cpuDecodedBytes.softLimit),
-        persistentGpuBytes: Math.max(
-          0,
-          usage.persistentGpuBytes - classPolicy.persistentGpuBytes.softLimit,
-        ),
-      }];
-    })) as unknown as ResourceGovernorSnapshot["softExcessByClass"],
     total: { ...state.total },
   };
 };

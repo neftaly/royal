@@ -97,7 +97,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
         ([key, value]) => [key, {
           ...value,
-          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+          cpuDecodedBytes: { mandatoryFloor: 0 },
         }],
       )) as unknown as ResourceGovernorPolicy["classes"],
       limits: {
@@ -172,7 +172,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
       classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
         ([key, value]) => [key, {
           ...value,
-          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+          cpuDecodedBytes: { mandatoryFloor: 0 },
         }],
       )) as unknown as ResourceGovernorPolicy["classes"],
       limits: {

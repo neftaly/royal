@@ -90,8 +90,8 @@ const largeManifest = () => ({
 
 const constrainedPolicy = (virtualTextureBytes: number): ResourceGovernorPolicy => {
   const classPolicy = () => ({
-    cpuDecodedBytes: { mandatoryFloor: 0, softLimit: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.cpuDecodedBytes },
-    persistentGpuBytes: { mandatoryFloor: 0, softLimit: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes },
+    cpuDecodedBytes: { mandatoryFloor: 0 },
+    persistentGpuBytes: { mandatoryFloor: 0 },
   });
   return {
     ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
@@ -105,7 +105,6 @@ const constrainedPolicy = (virtualTextureBytes: number): ResourceGovernorPolicy 
         persistentGpuBytes: {
           hardLimit: virtualTextureBytes,
           mandatoryFloor: 0,
-          softLimit: virtualTextureBytes,
         },
       },
     },

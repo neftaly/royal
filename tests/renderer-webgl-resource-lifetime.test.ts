@@ -393,7 +393,7 @@ describe("WebGL renderer resource lifetime contracts", () => {
       classes: Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
         ([key, value]) => [key, {
           ...value,
-          cpuDecodedBytes: { mandatoryFloor: 0, softLimit: cpuBudget },
+          cpuDecodedBytes: { mandatoryFloor: 0 },
         }],
       )) as unknown as ResourceGovernorPolicy["classes"],
       limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, cpuDecodedBytes: cpuBudget },
@@ -685,8 +685,8 @@ describe("WebGL renderer resource lifetime contracts", () => {
       ([key, value]) => [key, {
         ...value,
         persistentGpuBytes: key === "geometry"
-          ? { mandatoryFloor: floor, softLimit: floor }
-          : { mandatoryFloor: 0, softLimit: value.persistentGpuBytes.softLimit },
+          ? { mandatoryFloor: floor }
+          : { mandatoryFloor: 0 },
       }],
     )) as unknown as ResourceGovernorPolicy["classes"];
     const root = createWebGlRoot(fakeCanvas(fakeGl().gl), {
@@ -721,8 +721,8 @@ describe("WebGL renderer resource lifetime contracts", () => {
       ([key, value]) => [key, {
         ...value,
         persistentGpuBytes: key === "geometry"
-          ? { mandatoryFloor: floor, softLimit: floor }
-          : { mandatoryFloor: 0, softLimit: value.persistentGpuBytes.softLimit },
+          ? { mandatoryFloor: floor }
+          : { mandatoryFloor: 0 },
       }],
     )) as unknown as ResourceGovernorPolicy["classes"];
     const root = createWebGlRoot(fakeCanvas(gl), {
