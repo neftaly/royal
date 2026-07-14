@@ -180,10 +180,12 @@ when using an explicit asset `version`.
 
 Both asset and renderer lifecycle results are discriminated unions: `error` is
 required only when `state === 'error'` for an asset or `state === 'failed'` for
-the renderer. `useRendererLifecycle()` observes the surrounding Canvas without
-polling and returns its availability, generation, interruption, and recovery
-counters. This makes status UI exhaustive and keeps recovery details out of
-the imperative root path:
+the renderer. Both hooks use React's external-store snapshot contract and
+return stable `idle`/`unavailable` snapshots during server rendering and before
+the Canvas root exists. `useRendererLifecycle()` observes the surrounding
+Canvas without polling and returns its availability, generation, interruption,
+and recovery counters. This makes status UI exhaustive and keeps recovery
+details out of the imperative root path:
 
 ```tsx
 import { useRendererLifecycle } from '@royal/react';

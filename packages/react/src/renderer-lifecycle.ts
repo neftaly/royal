@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { useCanvasRoot } from "./canvas";
+import { createObservedExternalStore } from "./observed-external-store";
 import type { RoyalRendererRootLifecycleSnapshot } from "./root";
 
 const UNAVAILABLE: RoyalRendererRootLifecycleSnapshot = Object.freeze({
@@ -18,21 +19,22 @@ const sameLifecycle = (
   && left.recoveries === right.recoveries
   && left.error === right.error;
 
-/** Observes the surrounding Canvas renderer lifecycle without polling. */
+/**
+ * Observes the surrounding Canvas renderer lifecycle without polling. Returns
+ * `unavailable` during server rendering and before the Canvas root is created.
+ */
 export const useRendererLifecycle = (): RoyalRendererRootLifecycleSnapshot => {
   const root = useCanvasRoot();
-  const [lifecycle, setLifecycle] = useState<RoyalRendererRootLifecycleSnapshot>(UNAVAILABLE);
-
-  useEffect(() => {
+  const store = useMemo(() => {
     if (root === null) {
-      setLifecycle(UNAVAILABLE);
-      return undefined;
+      return createObservedExternalStore(UNAVAILABLE, () => () => undefined, sameLifecycle);
     }
-
-    return root.observeLifecycle((next) => {
-      setLifecycle((current) => sameLifecycle(current, next) ? current : next);
-    });
+    return createObservedExternalStore(
+      root.snapshot().lifecycle,
+      (publish) => root.observeLifecycle(publish),
+      sameLifecycle,
+    );
   }, [root]);
 
-  return lifecycle;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => UNAVAILABLE);
 };
