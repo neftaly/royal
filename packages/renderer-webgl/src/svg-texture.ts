@@ -12,9 +12,9 @@ import {
 
 const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
 const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
-export const GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY = 4;
-export const GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY = 16;
+export const GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE;
 export const GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION = 16_384;
+export const GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION = GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION;
 const GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION = 1_024;
 
 const svgRootPattern = /<svg\b([^>]*)>/iu;
@@ -597,17 +597,17 @@ const loadSvgTextImage = async (
 
 export const generatedSvgVirtualTextureManifest = (
   source: SvgVirtualTextureDescription,
-  rasterDensity = 1,
+  maxDimension = GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
 ): VirtualTextureManifestModel => generatedVirtualTextureManifest({
   colorSpace: "srgb",
   ...(() => {
     if (
-      !Number.isFinite(rasterDensity)
-      || rasterDensity <= 0
-      || rasterDensity > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY
+      !Number.isSafeInteger(maxDimension)
+      || maxDimension < GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION
+      || maxDimension > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION
     ) {
       throw new RangeError(
-        `SVG virtual texture raster density must be finite, greater than zero, and at most ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}`,
+        `SVG virtual texture max dimension must be an integer from ${GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION} through ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION} logical texels`,
       );
     }
     if (!positiveFinite(source.width) || !positiveFinite(source.height)) {
@@ -615,12 +615,8 @@ export const generatedSvgVirtualTextureManifest = (
     }
 
     const largestSourceDimension = Math.max(source.width, source.height);
-    const needsCap = largestSourceDimension
-      > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / rasterDensity;
     const logicalDimension = (dimension: number): number => Math.max(1, Math.ceil(
-      needsCap
-        ? GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION * (dimension / largestSourceDimension)
-        : dimension * rasterDensity,
+      maxDimension * (dimension / largestSourceDimension),
     ));
     return {
       height: logicalDimension(source.height),

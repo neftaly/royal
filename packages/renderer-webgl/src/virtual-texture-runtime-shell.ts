@@ -50,7 +50,7 @@ export type VirtualTextureRuntimeShellOptions = Omit<
   "loadPage" | "resources"
 > & {
   readonly disposed: () => boolean;
-  readonly generatedSvgVirtualTextureRasterDensity: number;
+  readonly generatedSvgVirtualTextureMaxDimension: number;
   readonly generatedImageVirtualTextures: boolean;
   readonly loadImageSource: (uri: string, signal: AbortSignal) => Promise<TexImageSource>;
 };
@@ -514,7 +514,7 @@ export class VirtualTextureRuntimeShell {
       ? generatedRasterVirtualTextureManifest(source.source)
       : generatedSvgVirtualTextureManifest(
           source.source,
-          this.#options.generatedSvgVirtualTextureRasterDensity,
+          this.#options.generatedSvgVirtualTextureMaxDimension,
         );
   }
 

@@ -167,7 +167,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       generatedManifestUses: 1,
       generatedPageFailures: 0,
       generatedPageRequests: 2,
-      generatedPagesTarget: 341,
+      generatedPagesTarget: 5_461,
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
@@ -247,7 +247,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(contexts.length).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
-      generatedPagesTarget: 341,
+      generatedPagesTarget: 5_461,
       manifestsReady: 1,
     }));
     expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);

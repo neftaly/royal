@@ -1,6 +1,6 @@
 import type { NormalizedWebGlRootOptions, WebGlRootOptions } from "./root-types";
 import { defineResourceGovernorPolicy } from "./resource-governor";
-import { GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY } from "./svg-texture";
+import { GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION } from "./svg-texture";
 
 const canonicalOptionValue = (value: unknown): string => {
   if (value === null) return "null";
@@ -45,9 +45,9 @@ export const webGlRootOptionsSemanticKey = (
     alpha: options?.alpha ?? true,
     antialias: options?.antialias ?? true,
     generatedImageVirtualTextures: options?.generatedImageVirtualTextures ?? false,
-    generatedSvgVirtualTextureRasterDensity:
-      options?.generatedSvgVirtualTextureRasterDensity
-      ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY,
+    generatedSvgVirtualTextureMaxDimension:
+      options?.generatedSvgVirtualTextureMaxDimension
+      ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
     resourceGovernorPolicy: defineResourceGovernorPolicy(options?.resourceGovernorPolicy),
   };
   return canonicalOptionValue(normalized);

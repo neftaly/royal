@@ -56,7 +56,7 @@ describe('Canvas public scene boundary', () => {
   it('accepts VT root policy through Canvas rendererOptions', () => {
     const rendererOptions = {
       generatedImageVirtualTextures: true,
-      generatedSvgVirtualTextureRasterDensity: 8,
+      generatedSvgVirtualTextureMaxDimension: 8_192,
     } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;

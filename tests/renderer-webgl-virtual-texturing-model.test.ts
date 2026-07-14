@@ -71,7 +71,7 @@ const referencePageTableSlots = (
 });
 
 describe("WebGL virtual texturing runtime model", () => {
-  it("keeps generated raster and SVG manifest policy identical", () => {
+  it("gives SVGs a deeper virtual address space without changing bounded physical policy", () => {
     const dimensions = { height: 777.2, width: 1_023.1 };
     const raster = generatedRasterVirtualTextureManifest({
       ...dimensions,
@@ -84,7 +84,14 @@ describe("WebGL virtual texturing runtime model", () => {
       label: "vector",
     });
 
-    expect(svg).toEqual(raster);
+    expect(raster).toMatchObject({ height: 778, physicalSlots: 21, width: 1_024 });
+    expect(svg).toMatchObject({
+      colorSpace: raster.colorSpace,
+      pageSize: raster.pageSize,
+      physicalSlots: 64,
+      width: 16_384,
+    });
+    expect(svg.height / svg.width).toBeCloseTo(dimensions.height / dimensions.width, 3);
   });
 
   it("rejects invalid generated raster and SVG manifest dimensions without looping", () => {

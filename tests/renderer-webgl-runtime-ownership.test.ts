@@ -43,7 +43,7 @@ const virtualTextureShell = (): VirtualTextureRuntimeShell => new VirtualTexture
   disposed: () => false,
   frame: () => 0,
   generatedImageVirtualTextures: false,
-  generatedSvgVirtualTextureRasterDensity: 1,
+  generatedSvgVirtualTextureMaxDimension: 16_384,
   gpu: {} as never,
   invalidate: vi.fn(),
   loadImageSource: () => Promise.reject(new Error("unused")),

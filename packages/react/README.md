@@ -142,7 +142,7 @@ on `<Canvas>` recreates its renderer root.
 <Canvas
   rendererOptions={{
     generatedImageVirtualTextures: true,
-    generatedSvgVirtualTextureRasterDensity: 4,
+    generatedSvgVirtualTextureMaxDimension: 16384,
   }}
   scene={renderScene}
 />
@@ -164,13 +164,13 @@ The imperative root separates its two observational models:
   decoded raster sources qualify when their longest dimension is at least 257
   px. The ordinary texture remains active until generated coverage is ready.
   Authored `virtualTexture(...)` resources are unaffected.
-- `generatedSvgVirtualTextureRasterDensity` is the number of logical virtual
-  texels per authored SVG CSS pixel. It defaults to `4`, accepts values greater
-  than zero through `16`, and only has an effect when generated virtual textures
-  are enabled. It controls close-zoom texture detail without changing layout or
-  world size, preserves aspect ratio, and caps the generated longest side at
-  16384 logical texels. SVG `viewBox` coordinates are not treated as raster
-  pixels.
+- `generatedSvgVirtualTextureMaxDimension` is the long-edge mip-0 resolution
+  for generated SVG VTs. It defaults to `16384`, accepts integers from `256`
+  through `16384`, and only has an effect when generated virtual textures are
+  enabled. It controls close-zoom detail without changing layout, world size,
+  or the bounded physical page cache. Generated dimensions preserve aspect
+  ratio; SVG CSS or `viewBox` dimensions do not impose a raster-resolution
+  ceiling.
 - VT atlases and page tables participate in `resourceGovernorPolicy` as
   `classes['virtual-texture'].persistentGpuBytes`. Its `softLimit` marks
   borrowing for diagnostics, while optional `hardLimit` sets an exact class

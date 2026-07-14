@@ -17,8 +17,8 @@ describe("Canvas renderer root cleanup", () => {
   it("retains normalized scalar changes that recreate the renderer root", () => {
     expect(normalizeCanvasRendererOptions({ alpha: false })).toEqual({ alpha: false });
     expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({ alpha: true });
-    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureRasterDensity: 8 }))
-      .toEqual({ generatedSvgVirtualTextureRasterDensity: 8 });
+    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureMaxDimension: 8_192 }))
+      .toEqual({ generatedSvgVirtualTextureMaxDimension: 8_192 });
   });
 
   it("retains a supplied resource governor policy for root construction", () => {
@@ -60,7 +60,7 @@ describe("Canvas renderer root cleanup", () => {
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: false,
-      generatedSvgVirtualTextureRasterDensity: 4,
+      generatedSvgVirtualTextureMaxDimension: 16_384,
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
 

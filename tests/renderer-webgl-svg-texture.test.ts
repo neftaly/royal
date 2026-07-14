@@ -224,7 +224,7 @@ describe("SVG texture reference lifecycle", () => {
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(TestUrl.revokeObjectURL).toHaveBeenCalledWith("blob:royal-svg-1");
 
-    const manifest = generatedSvgVirtualTextureManifest(source!, 2);
+    const manifest = generatedSvgVirtualTextureManifest(source!, 4_100);
     const requestedPages: Array<{ readonly mip: number; readonly x: number; readonly y: number }> = [];
     let seed = 0x65_76_74;
     for (let index = 0; index < 32; index += 1) {
@@ -469,27 +469,27 @@ describe("generated SVG virtual texture density", () => {
       .resolves.toContain(`height="${String(Number.MIN_VALUE)}"`);
   });
 
-  it("scales authored pixels uniformly and caps extreme logical sizes", () => {
+  it("uses a configured long-edge resolution independent of authored SVG pixels", () => {
     const source = { height: 500, label: "wide vector", width: 1_000 };
-    expect(generatedSvgVirtualTextureManifest(source, 8)).toMatchObject({
+    expect(generatedSvgVirtualTextureManifest(source, 8_000)).toMatchObject({
       height: 4_000,
       physicalSlots: 64,
       width: 8_000,
     });
-    expect(generatedSvgVirtualTextureManifest({ ...source, height: 5_000, width: 10_000 }, 16)).toMatchObject({
+    expect(generatedSvgVirtualTextureManifest({ ...source, height: 5_000, width: 10_000 })).toMatchObject({
       height: GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / 2,
       physicalSlots: 64,
       width: GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
     });
-    expect(() => generatedSvgVirtualTextureManifest(source, 17)).toThrow("at most 16");
+    expect(() => generatedSvgVirtualTextureManifest(source, 16_385)).toThrow("through 16384");
   });
 
-  it("caps extreme dimensions before density multiplication can overflow", () => {
+  it("scales extreme authored dimensions without overflowing", () => {
     const manifest = generatedSvgVirtualTextureManifest({
       height: Number.MAX_VALUE / 2,
       label: "extreme vector",
       width: Number.MAX_VALUE,
-    }, 16);
+    });
     expect(manifest).toMatchObject({ height: 8_192, width: 16_384 });
     expect(Number.isSafeInteger(manifest.width)).toBe(true);
     expect(Number.isSafeInteger(manifest.height)).toBe(true);
@@ -498,13 +498,13 @@ describe("generated SVG virtual texture density", () => {
       height: Number.MIN_VALUE,
       label: "extreme aspect vector",
       width: Number.MAX_VALUE,
-    }, 16)).toMatchObject({ height: 1, width: 16_384 });
+    })).toMatchObject({ height: 1, width: 16_384 });
 
     expect(generatedSvgVirtualTextureManifest({
-      height: Number.MAX_VALUE,
-      label: "sub-unit density vector",
-      width: Number.MAX_VALUE,
-    }, Number.MIN_VALUE)).toMatchObject({ height: 1, width: 1 });
+      height: 1,
+      label: "minimum-resolution vector",
+      width: 1,
+    }, 256)).toMatchObject({ height: 256, width: 256 });
   });
 
   it("addresses a capped SVG's truncated NPOT edge from its logical texels", () => {
@@ -512,7 +512,7 @@ describe("generated SVG virtual texture density", () => {
       height: 3_333,
       label: "capped vector",
       width: 10_000,
-    }, 16);
+    }, 16_384);
     expect(capped).toMatchObject({ height: 5_461, width: 16_384 });
 
     // At mip 2 the final Y page begins at texel 5120 (V~=0.9376), not
@@ -532,7 +532,7 @@ describe("generated SVG virtual texture density", () => {
       height: 1_024,
       label: "close vector",
       width: 1_024,
-    }, 8);
+    }, 8_192);
     expect(virtualTextureTargetMip(manifest, {
       minU: 0.45,
       maxU: 0.55,

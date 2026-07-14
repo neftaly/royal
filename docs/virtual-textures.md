@@ -13,14 +13,12 @@ generated coverage is ready. Authored `virtualTexture(...)` resources are
 unaffected.
 
 Generated SVG image VTs use that same path. Their close-zoom
-detail is controlled by `generatedSvgVirtualTextureRasterDensity`, measured in
-logical mip-0 texels per authored SVG CSS pixel (96 CSS pixels per inch). It
-defaults to `4`, accepts finite values in `(0, 16]`, preserves aspect ratio, and
-caps the longest generated dimension at 16384 logical texels. The density
-changes texture detail only: it does not change the SVG's layout or world-space
-size. For a viewBox-only SVG, Royal first derives a stable intrinsic viewport
-whose longest side is 1024 CSS pixels; viewBox coordinates themselves are not
-treated as raster pixels.
+detail is controlled by `generatedSvgVirtualTextureMaxDimension`, the logical
+mip-0 resolution of the SVG's longest edge. It defaults to `16384`, accepts
+integers from `256` through `16384`, and preserves aspect ratio. The resolution
+changes texture detail only: it does not change the SVG's layout, world-space
+size, or bounded physical page cache. Authored CSS and `viewBox` dimensions are
+used for aspect and layout, not as a raster-resolution ceiling.
 
 ## Authored manifest contract
 

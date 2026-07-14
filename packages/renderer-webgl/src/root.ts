@@ -210,8 +210,9 @@ import {
   type LoadedTextureSource,
 } from "./texture-sources";
 import {
-  GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY,
-  GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY,
+  GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
+  GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
+  GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION,
   isSvgUri,
   loadSvgTextureFromUri,
 } from "./svg-texture";
@@ -432,22 +433,22 @@ const maxVirtualTexturePageTableUploadBytes = (
 };
 
 const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
-  const generatedSvgVirtualTextureRasterDensity = options.generatedSvgVirtualTextureRasterDensity
-    ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_RASTER_DENSITY;
+  const generatedSvgVirtualTextureMaxDimension = options.generatedSvgVirtualTextureMaxDimension
+    ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION;
   if (
-    !Number.isFinite(generatedSvgVirtualTextureRasterDensity)
-    || generatedSvgVirtualTextureRasterDensity <= 0
-    || generatedSvgVirtualTextureRasterDensity > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY
+    !Number.isSafeInteger(generatedSvgVirtualTextureMaxDimension)
+    || generatedSvgVirtualTextureMaxDimension < GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION
+    || generatedSvgVirtualTextureMaxDimension > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION
   ) {
     throw new RangeError(
-      `generatedSvgVirtualTextureRasterDensity must be finite and in (0, ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_RASTER_DENSITY}] logical texels per authored SVG CSS pixel, received ${String(generatedSvgVirtualTextureRasterDensity)}`,
+      `generatedSvgVirtualTextureMaxDimension must be an integer from ${GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION} through ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION} logical texels, received ${String(generatedSvgVirtualTextureMaxDimension)}`,
     );
   }
   return Object.freeze({
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
     generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
-    generatedSvgVirtualTextureRasterDensity,
+    generatedSvgVirtualTextureMaxDimension,
     resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
   });
 };
@@ -857,7 +858,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         disposed: () => this.#disposed,
         frame: () => this.#framePublication.frame,
         generatedImageVirtualTextures: this.#options.generatedImageVirtualTextures,
-        generatedSvgVirtualTextureRasterDensity: this.#options.generatedSvgVirtualTextureRasterDensity,
+        generatedSvgVirtualTextureMaxDimension: this.#options.generatedSvgVirtualTextureMaxDimension,
         gpu: this.#virtualTextureGpu,
         invalidate: () => this.invalidate(),
         loadImageSource: (uri, signal) => loadImage(uri, signal),

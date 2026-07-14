@@ -25,14 +25,13 @@ export interface WebGlRootOptions {
    */
   readonly generatedImageVirtualTextures?: boolean;
   /**
-   * Maximum mip-0 detail for generated SVG VTs, in logical texels per authored
-   * SVG CSS pixel. This changes close-zoom texture detail, not layout or world size.
-   * Must be finite and in `(0, 16]`; generated dimensions preserve aspect ratio
-   * and are capped at 16384 logical texels on their longest side. Only used when
-   * `generatedImageVirtualTextures` is enabled.
-   * @defaultValue `4`
+   * Long-edge mip-0 resolution for generated SVG VTs, in logical texels. This
+   * changes close-zoom texture detail, not layout or world size. Must be an
+   * integer from 256 through 16384; generated dimensions preserve aspect ratio.
+   * Only used when `generatedImageVirtualTextures` is enabled.
+   * @defaultValue `16384`
    */
-  readonly generatedSvgVirtualTextureRasterDensity?: number;
+  readonly generatedSvgVirtualTextureMaxDimension?: number;
   /**
    * Nested overrides for the immutable cross-class CPU/GPU/job/upload budget
    * policy. Omitted fields inherit Royal's exported default policy. VT atlas

@@ -16,7 +16,13 @@ import {
   virtualTextureTargetMip,
   virtualTextureDemandPlanningWorkspaceSnapshot,
 } from "../packages/renderer-webgl/src/virtual-texture-demand";
-import { identityMat4, type Mat4 } from "../packages/renderer-webgl/src/math/mat4";
+import { perspectiveCamera } from "@royal/renderer-core";
+import {
+  identityMat4,
+  projectionMat4,
+  viewMat4,
+  type Mat4,
+} from "../packages/renderer-webgl/src/math/mat4";
 import type { VirtualTextureDrawDemandContext } from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import type { VirtualTextureManifestModel } from "../packages/renderer-webgl/src/virtual-texturing";
 
@@ -147,6 +153,93 @@ describe("virtual texture pure demand planning", () => {
       generated: true,
       manifest: manifest(),
     }, 32));
+  });
+
+  it("refines a large textured plane monotonically as the viewer approaches the near plane", () => {
+    const projection = projectionMat4(perspectiveCamera({
+      far: 100,
+      fovY: Math.PI / 3,
+      near: 0.1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+    }), 1_000, 800);
+    const source = manifest({
+      height: 16_384,
+      mipCount: 7,
+      pageSize: 256,
+      uriTemplate: "m{mip}-{x}-{y}.png",
+      width: 16_384,
+    });
+    const demandAtDistance = (distance: number) => planVirtualTextureDrawDemand({
+      context: context(
+        new Float32Array([
+          -10, -10, -distance,
+          10, -10, -distance,
+          10, 10, -distance,
+          -10, 10, -distance,
+        ]),
+        projection,
+        {
+          indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+          texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+        },
+      ),
+      flipY: false,
+      generated: true,
+      limit: 32,
+      manifest: source,
+    });
+    const mipAtDistance = (distance: number): number => Math.min(
+      ...demandAtDistance(distance).demandCandidates.map((page) => page.mip),
+    );
+
+    const distantMip = mipAtDistance(10);
+    const nearMip = mipAtDistance(1);
+    const headsetCloseMip = mipAtDistance(0.101);
+    expect(nearMip).toBeLessThanOrEqual(distantMip);
+    expect(headsetCloseMip).toBeLessThanOrEqual(nearMip);
+    expect(headsetCloseMip).toBe(0);
+    expect(demandAtDistance(0.101).coverageCandidates).not.toEqual([]);
+  });
+
+  it("keeps near-field refinement on a grazing ground plane with a visible horizon", () => {
+    const camera = perspectiveCamera({
+      far: 1_000,
+      fovY: Math.PI / 2,
+      near: 0.01,
+      position: [0, 0.2, 0],
+      rotation: [-0.2, 0, 0],
+    });
+    const ground = context(
+      new Float32Array([
+        -100, 0, -100,
+        100, 0, -100,
+        100, 0, 100,
+        -100, 0, 100,
+      ]),
+      projectionMat4(camera, 1_800, 1_800),
+      {
+        indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+        texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+      },
+    );
+    const demand = planVirtualTextureDrawDemand({
+      context: { ...ground, view: viewMat4(camera), viewportSize: [1_800, 1_800] },
+      flipY: false,
+      generated: true,
+      limit: 32,
+      manifest: manifest({
+        height: 16_384,
+        mipCount: 7,
+        pageSize: 256,
+        uriTemplate: "m{mip}-{x}-{y}.png",
+        width: 16_384,
+      }),
+    });
+
+    expect(demand.coverageCandidates).not.toEqual([]);
+    expect(demand.demandCandidates).not.toEqual([]);
+    expect(Math.min(...demand.demandCandidates.map((page) => page.mip))).toBe(0);
   });
 
   it("clips indexed off-center triangles so invisible UVs do not demand opposite pages", () => {

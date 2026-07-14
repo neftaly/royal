@@ -11,7 +11,7 @@ import { exampleCanvasRendererOptions } from '../example-renderer-options';
 const tigerCardSrc = import.meta.env.BASE_URL + 'fixtures/gltf-svg-texture/ghostscript-tiger-card.gltf';
 const tigerCanvasRendererOptions = {
   ...exampleCanvasRendererOptions,
-  generatedSvgVirtualTextureRasterDensity: 8,
+  generatedSvgVirtualTextureMaxDimension: 16384,
 } as const;
 
 export const GltfGhostscriptTigerSvg = (): ReactNode => {
