@@ -7,6 +7,7 @@ import {
   createOrbitControls,
 } from "../packages/react/src/orbit-controls";
 import { validateUseOrbitCameraOptions } from "../packages/react/src/orbit-camera-controller";
+import { createOrbitGestureController } from "../packages/react/src/orbit-controls-core";
 
 type FakeEvent = Event & {
   readonly defaultPrevented: boolean;
@@ -105,6 +106,25 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
+  it("runs gesture transitions without DOM event or canvas ownership", () => {
+    const changes: OrbitCameraView[] = [];
+    const core = createOrbitGestureController(defaultView, { onChange: (view) => changes.push(view) });
+    expect(core.pointerDown({
+      button: 0,
+      clientX: 10,
+      clientY: 20,
+      modified: false,
+      pointerId: 7,
+    })).toEqual({ capture: 7, preventDefault: true });
+    expect(core.pointerMove({ clientX: 30, clientY: 10, pointerId: 7 }))
+      .toEqual({ preventDefault: true });
+    expect(core.getView().yaw).toBeCloseTo(defaultView.yaw + 20 * 0.006);
+    expect(changes).toHaveLength(1);
+    expect(core.setBehavior({ enabled: false })).toEqual([7]);
+    expect(core.pointerMove({ clientX: 50, clientY: 50, pointerId: 7 }))
+      .toEqual({ preventDefault: false });
+  });
+
   it("rejects malformed useOrbitCamera options before retaining hook state", () => {
     expect(() => validateUseOrbitCameraOptions(
       null as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0],

@@ -1,15 +1,11 @@
 import {
-  clampOrbitCameraView,
-  panOrbitCameraView,
-  resolveOrbitCameraView,
-  rotateOrbitCameraView,
-  zoomOrbitCameraView,
   type OrbitCameraView,
   type OrbitCameraViewOptions,
   type Metres,
   type Rads,
 } from "@royal/renderer-core";
 import { captureCanvasPointer, releaseCanvasPointer } from "./canvas-pointer";
+import { createOrbitGestureController } from "./orbit-controls-core";
 
 export type OrbitControlsBehaviorOptions = {
   /** Enables all configured camera gestures. @defaultValue `true` */
@@ -62,36 +58,6 @@ export type OrbitControlsOptions = OrbitControlsBehaviorOptions & {
   /** View used to initialize this imperative controls instance. */
   readonly initialView: OrbitCameraViewOptions;
 };
-
-type DragMode = "orbit" | "pan";
-
-type DragState = {
-  readonly kind: "drag";
-  readonly mode: DragMode;
-  readonly pointerId: number;
-  readonly startView: OrbitCameraView;
-  readonly startX: number;
-  readonly startY: number;
-};
-
-type PinchState = {
-  readonly kind: "pinch";
-  readonly pointerIds: readonly [number, number];
-  readonly startDistance: number;
-  readonly startView: OrbitCameraView;
-};
-
-type InteractionState = DragState | PinchState;
-
-type PointerContact = {
-  readonly clientX: number;
-  readonly clientY: number;
-  readonly pointerId: number;
-};
-
-const defaultPanSpeed = 0.0016;
-const defaultRotateSpeed = 0.006;
-const defaultZoomSpeed = 0.0018;
 
 const behaviorOptionNames = new Set<string>([
   "enabled",
@@ -186,7 +152,7 @@ export const orbitControlsBehaviorOptionsFrom = (
 
 const setViewOptionsFrom = (
   options: OrbitControlsSetViewOptions | undefined,
-): Required<OrbitControlsSetViewOptions> => {
+): { readonly clamp: boolean; readonly emitChange: boolean } => {
   if (options === undefined) return { clamp: true, emitChange: true };
   const value = optionObject(options, "OrbitControls setView options");
   for (const key of Object.keys(value)) {
@@ -206,26 +172,6 @@ const wheelDeltaPixels = (event: WheelEvent): number => {
   return event.deltaY;
 };
 
-const toPointerContact = (event: PointerEvent): PointerContact => ({
-  clientX: event.clientX,
-  clientY: event.clientY,
-  pointerId: event.pointerId,
-});
-
-const pointerDistance = (first: PointerContact, second: PointerContact): number =>
-  Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
-
-const sameOrbitCameraView = (
-  left: OrbitCameraView,
-  right: OrbitCameraView,
-): boolean =>
-  left.distance === right.distance &&
-  left.pitch === right.pitch &&
-  left.yaw === right.yaw &&
-  left.target[0] === right.target[0] &&
-  left.target[1] === right.target[1] &&
-  left.target[2] === right.target[2];
-
 export const createOrbitControls = (
   canvas: HTMLCanvasElement,
   options: OrbitControlsOptions,
@@ -236,177 +182,33 @@ export const createOrbitControls = (
     throw new TypeError("OrbitControls initialView is required");
   }
   let behaviorOptions = orbitControlsBehaviorOptionsFrom(options);
-  const currentPanSpeed = (): number => behaviorOptions.panSpeed ?? defaultPanSpeed;
-  const currentRotateSpeed = (): number => behaviorOptions.rotateSpeed ?? defaultRotateSpeed;
-  const currentZoomSpeed = (): number => behaviorOptions.zoomSpeed ?? defaultZoomSpeed;
-  let view: OrbitCameraView = clampOrbitCameraView(
-    resolveOrbitCameraView(options.initialView),
-    behaviorOptions,
-  );
-  let interaction: InteractionState | undefined;
-  const activePointers = new Map<number, PointerContact>();
-
-  const clampView = (nextView: OrbitCameraView): OrbitCameraView => clampOrbitCameraView(nextView, {
-    maxDistance: behaviorOptions.maxDistance,
-    maxPitch: behaviorOptions.maxPitch,
-    minDistance: behaviorOptions.minDistance,
-    minPitch: behaviorOptions.minPitch,
-  });
-
-  const applyView = (
-    nextView: OrbitCameraViewOptions,
-    {
-      clamp: shouldClamp = true,
-      emitChange = true,
-    }: Required<OrbitControlsSetViewOptions> = { clamp: true, emitChange: true },
-  ): void => {
-    const resolvedView = resolveOrbitCameraView(nextView);
-    const nextResolvedView = shouldClamp ? clampView(resolvedView) : resolvedView;
-    if (sameOrbitCameraView(view, nextResolvedView)) return;
-
-    view = nextResolvedView;
-    if (emitChange) {
-      behaviorOptions.onChange?.(view);
-    }
-  };
-
-  const applyZoomDelta = (deltaPixels: number, startView = view): void => {
-    applyView(zoomOrbitCameraView(startView, deltaPixels, currentZoomSpeed()));
-  };
-
-  const startPinch = (): boolean => {
-    if (behaviorOptions.enabled === false || behaviorOptions.enableZoom === false) return false;
-
-    const [first, second] = Array.from(activePointers.values());
-    if (first === undefined || second === undefined) return false;
-
-    interaction = {
-      kind: "pinch",
-      pointerIds: [first.pointerId, second.pointerId],
-      startDistance: pointerDistance(first, second),
-      startView: view,
-    };
-    return true;
-  };
-
+  const core = createOrbitGestureController(options.initialView, behaviorOptions);
   const startDrag = (event: PointerEvent): void => {
-    // Picking handlers run first on Canvas and consume object interactions by
-    // preventing the native event. Do not start a competing camera gesture.
     if (event.defaultPrevented) return;
-    if (behaviorOptions.enabled === false) return;
-    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
-    if (activePointers.size >= 2) return;
-
-    activePointers.set(event.pointerId, toPointerContact(event));
-    if (activePointers.size >= 2 && startPinch()) {
-      event.preventDefault();
-      captureCanvasPointer(canvas, event.pointerId);
-      return;
-    }
-    if (activePointers.size >= 2) {
-      activePointers.delete(event.pointerId);
-      return;
-    }
-
-    const mode: DragMode =
-      event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
-        ? "orbit"
-        : "pan";
-    if (mode === "orbit" && behaviorOptions.enableRotate === false) {
-      activePointers.delete(event.pointerId);
-      return;
-    }
-    if (mode === "pan" && behaviorOptions.enablePan === false) {
-      activePointers.delete(event.pointerId);
-      return;
-    }
-
-    event.preventDefault();
-    captureCanvasPointer(canvas, event.pointerId);
-    interaction = {
-      kind: "drag",
-      mode,
+    const decision = core.pointerDown({
+      button: event.button,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      modified: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
       pointerId: event.pointerId,
-      startView: view,
-      startX: event.clientX,
-      startY: event.clientY,
-    };
+    });
+    if (decision.preventDefault) event.preventDefault();
+    if (decision.capture !== undefined) captureCanvasPointer(canvas, decision.capture);
   };
-
   const moveDrag = (event: PointerEvent): void => {
     if (event.defaultPrevented) return;
-    if (!activePointers.has(event.pointerId)) return;
-    if (behaviorOptions.enabled === false) return;
-
-    event.preventDefault();
-    activePointers.set(event.pointerId, toPointerContact(event));
-    if (interaction === undefined) return;
-
-    if (interaction.kind === "pinch") {
-      if (behaviorOptions.enableZoom === false) return;
-      const [firstPointerId, secondPointerId] = interaction.pointerIds;
-      const first = activePointers.get(firstPointerId);
-      const second = activePointers.get(secondPointerId);
-      if (first === undefined || second === undefined) return;
-
-      applyZoomDelta(interaction.startDistance - pointerDistance(first, second), interaction.startView);
-      return;
-    }
-
-    if (interaction.pointerId !== event.pointerId) return;
-
-    const deltaX = event.clientX - interaction.startX;
-    const deltaY = event.clientY - interaction.startY;
-
-    if (interaction.mode === "orbit") {
-      if (behaviorOptions.enableRotate === false) return;
-      applyView(rotateOrbitCameraView(
-        interaction.startView,
-        deltaX,
-        deltaY,
-        currentRotateSpeed(),
-      ));
-      return;
-    }
-
-    if (behaviorOptions.enablePan === false) return;
-    applyView(panOrbitCameraView(
-      interaction.startView,
-      deltaX,
-      deltaY,
-      currentPanSpeed(),
-    ));
+    const decision = core.pointerMove(event);
+    if (decision.preventDefault) event.preventDefault();
   };
-
   const endDrag = (event: PointerEvent): void => {
-    if (!activePointers.has(event.pointerId)) return;
-
-    releaseCanvasPointer(canvas, event.pointerId);
-    activePointers.delete(event.pointerId);
-
-    if (interaction?.kind === "pinch" && interaction.pointerIds.includes(event.pointerId)) {
-      interaction = undefined;
-      return;
-    }
-
-    if (interaction?.kind === "drag" && interaction.pointerId === event.pointerId) {
-      interaction = undefined;
-    }
+    const decision = core.pointerEnd(event.pointerId);
+    if (decision.release !== undefined) releaseCanvasPointer(canvas, decision.release);
   };
-
   const zoomView = (event: WheelEvent): void => {
-    if (event.defaultPrevented) return;
-    if (behaviorOptions.enabled === false || behaviorOptions.enableZoom === false) return;
-
-    event.preventDefault();
-    applyZoomDelta(wheelDeltaPixels(event));
+    if (!event.defaultPrevented && core.wheel(wheelDeltaPixels(event))) event.preventDefault();
   };
-
   const blockContextMenu = (event: MouseEvent): void => {
-    if (event.defaultPrevented) return;
-    if (behaviorOptions.enabled !== false && behaviorOptions.enablePan !== false) {
-      event.preventDefault();
-    }
+    if (!event.defaultPrevented && core.contextMenu()) event.preventDefault();
   };
   const canvasStyle = canvas.style as CSSStyleDeclaration | undefined;
   const previousTouchAction = canvasStyle?.touchAction;
@@ -427,7 +229,7 @@ export const createOrbitControls = (
 
   return {
     dispose: () => {
-      for (const pointerId of activePointers.keys()) releaseCanvasPointer(canvas, pointerId);
+      for (const pointerId of core.cancel()) releaseCanvasPointer(canvas, pointerId);
       canvas.removeEventListener("contextmenu", blockContextMenu);
       canvas.removeEventListener("pointercancel", endDrag);
       canvas.removeEventListener("pointerdown", startDrag);
@@ -437,10 +239,8 @@ export const createOrbitControls = (
       if (canvasStyle !== undefined && previousTouchAction !== undefined) {
         canvasStyle.touchAction = previousTouchAction;
       }
-      activePointers.clear();
-      interaction = undefined;
     },
-    getView: () => view,
+    getView: () => core.getView(),
     setOptions: (nextOptions) => {
       validateOptionNames(
         optionObject(nextOptions, "OrbitControls setOptions options"),
@@ -452,19 +252,11 @@ export const createOrbitControls = (
         ...nextOptions,
       });
       updateTouchAction();
-      const interactionDisabled = behaviorOptions.enabled === false ||
-        (interaction?.kind === "pinch" && behaviorOptions.enableZoom === false) ||
-        (interaction?.kind === "drag" && interaction.mode === "orbit" && behaviorOptions.enableRotate === false) ||
-        (interaction?.kind === "drag" && interaction.mode === "pan" && behaviorOptions.enablePan === false);
-      if (interactionDisabled) {
-        for (const pointerId of activePointers.keys()) releaseCanvasPointer(canvas, pointerId);
-        activePointers.clear();
-        interaction = undefined;
-      }
-      applyView(view);
+      for (const pointerId of core.setBehavior(behaviorOptions)) releaseCanvasPointer(canvas, pointerId);
     },
     setView: (nextView, setViewOptions) => {
-      applyView(nextView, setViewOptionsFrom(setViewOptions));
+      const resolved = setViewOptionsFrom(setViewOptions);
+      core.setView(nextView, resolved.clamp, resolved.emitChange);
     },
   };
 };
