@@ -26,6 +26,8 @@ export const SURFACE_SHADER_TEXTURE_FEATURES = [
   "clearcoatTexture",
   "clearcoatRoughnessTexture",
   "clearcoatNormalTexture",
+  "diffuseTransmissionTexture",
+  "diffuseTransmissionColorTexture",
   "sheenColorTexture",
   "sheenRoughnessTexture",
   "iridescenceTexture",
@@ -79,6 +81,12 @@ const surfaceSamplerUniformDeclarations = (features: SurfaceShaderFeatures): str
       : "",
     hasSurfaceShaderFeature(features, "clearcoatNormalTexture")
       ? "uniform sampler2D u_clearcoatNormalTexture;"
+      : "",
+    hasSurfaceShaderFeature(features, "diffuseTransmissionTexture")
+      ? "uniform sampler2D u_diffuseTransmissionTexture;"
+      : "",
+    hasSurfaceShaderFeature(features, "diffuseTransmissionColorTexture")
+      ? "uniform sampler2D u_diffuseTransmissionColorTexture;"
       : "",
     hasSurfaceShaderFeature(features, "sheenColorTexture") ? "uniform sampler2D u_sheenColorTexture;" : "",
     hasSurfaceShaderFeature(features, "sheenRoughnessTexture")
@@ -335,6 +343,18 @@ vec3 textureNormal = texture(u_clearcoatNormalTexture, normalUv).xyz * 2.0 - 1.0
 textureNormal.xy *= u_normalTextureSettings.y;
 return materialTangentNormal(geometricNormal, textureNormal, normalUv);`,
       "return geometricNormal;",
+    )],
+    ["__DIFFUSE_TRANSMISSION_TEXTURE_EXPR__", surfaceTextureExpression(
+      features,
+      "diffuseTransmissionTexture",
+      "u_useDiffuseTransmissionTexture ? texture(u_diffuseTransmissionTexture, materialTextureUv(u_diffuseTransmissionUvSet, u_diffuseTransmissionUvRow0, u_diffuseTransmissionUvRow1)).a : 1.0",
+      "1.0",
+    )],
+    ["__DIFFUSE_TRANSMISSION_COLOR_TEXTURE_EXPR__", surfaceTextureExpression(
+      features,
+      "diffuseTransmissionColorTexture",
+      "u_useDiffuseTransmissionColorTexture ? texture(u_diffuseTransmissionColorTexture, materialTextureUv(u_diffuseTransmissionColorUvSet, u_diffuseTransmissionColorUvRow0, u_diffuseTransmissionColorUvRow1)).rgb : vec3(1.0)",
+      "vec3(1.0)",
     )],
     ["__SHEEN_COLOR_TEXTURE_EXPR__", surfaceTextureExpression(
       features,

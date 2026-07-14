@@ -37,6 +37,8 @@ export type LoadedGltfMaterialExtensionTextures = {
   readonly clearcoatNormalTexture?: LoadedGltfMaterialTextureSlot;
   readonly clearcoatRoughnessTexture?: LoadedGltfMaterialTextureSlot;
   readonly clearcoatTexture?: LoadedGltfMaterialTextureSlot;
+  readonly diffuseTransmissionColorTexture?: LoadedGltfMaterialTextureSlot;
+  readonly diffuseTransmissionTexture?: LoadedGltfMaterialTextureSlot;
   readonly iridescenceTexture?: LoadedGltfMaterialTextureSlot;
   readonly iridescenceThicknessTexture?: LoadedGltfMaterialTextureSlot;
   readonly materialTransmissionTexture?: LoadedGltfMaterialTextureSlot;

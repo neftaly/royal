@@ -22,6 +22,8 @@ type LoadedGltfSurfaceTextures = {
   readonly clearcoatNormalTexture?: TextureAssetUploadRef;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
+  readonly diffuseTransmissionColorTexture?: TextureAssetUploadRef;
+  readonly diffuseTransmissionTexture?: TextureAssetUploadRef;
   readonly emissiveTexture?: TextureAssetUploadRef;
   readonly iridescenceTexture?: TextureAssetUploadRef;
   readonly iridescenceThicknessTexture?: TextureAssetUploadRef;
@@ -75,6 +77,12 @@ const loadedGltfSurfaceMaterial = (
       ? {}
       : { clearcoatRoughnessTexture: textures.clearcoatRoughnessTexture }),
     ...(textures.clearcoatTexture === undefined ? {} : { clearcoatTexture: textures.clearcoatTexture }),
+    ...(textures.diffuseTransmissionColorTexture === undefined
+      ? {}
+      : { diffuseTransmissionColorTexture: textures.diffuseTransmissionColorTexture }),
+    ...(textures.diffuseTransmissionTexture === undefined
+      ? {}
+      : { diffuseTransmissionTexture: textures.diffuseTransmissionTexture }),
     ...(textures.iridescenceTexture === undefined ? {} : { iridescenceTexture: textures.iridescenceTexture }),
     ...(textures.iridescenceThicknessTexture === undefined
       ? {}

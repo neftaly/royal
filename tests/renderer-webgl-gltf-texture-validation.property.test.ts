@@ -556,7 +556,7 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
     } satisfies MaterialTextureSlotReplay,
   },
   {
-    label: "required diffuse transmission textures are rejected",
+    label: "required diffuse transmission textures are accepted",
     value: {
       document: {
         extensionsRequired: ["KHR_materials_diffuse_transmission"],
@@ -570,8 +570,7 @@ const materialTextureSlotReplays: readonly FuzzReplay[] = [
           },
         }],
       },
-      expectedMessage: /KHR_materials_diffuse_transmission\.diffuseTransmissionTexture.*material 0.*diffuse transmission textures/i,
-      expectedPass: false,
+      expectedPass: true,
     } satisfies MaterialTextureSlotReplay,
   },
   {
@@ -712,11 +711,7 @@ const materialTextureSlotDocumentShouldPass = (document: GltfDocument): boolean 
   !document.materials?.some((material) =>
     (document.extensionsRequired?.includes("KHR_materials_anisotropy") === true
       && material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined)
-    || (document.extensionsRequired?.includes("KHR_materials_diffuse_transmission") === true
-      && (
-        material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined
-        || material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture !== undefined
-      )));
+  );
 
 describe("renderer-webgl glTF texture validation properties", () => {
   it("reports unsupported required extensions uniquely and in source order", () => {

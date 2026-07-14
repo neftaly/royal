@@ -22,6 +22,8 @@ const samplerDeclarations = {
   clearcoatTexture: "uniform sampler2D u_clearcoatTexture;",
   clearcoatRoughnessTexture: "uniform sampler2D u_clearcoatRoughnessTexture;",
   clearcoatNormalTexture: "uniform sampler2D u_clearcoatNormalTexture;",
+  diffuseTransmissionTexture: "uniform sampler2D u_diffuseTransmissionTexture;",
+  diffuseTransmissionColorTexture: "uniform sampler2D u_diffuseTransmissionColorTexture;",
   sheenColorTexture: "uniform sampler2D u_sheenColorTexture;",
   sheenRoughnessTexture: "uniform sampler2D u_sheenRoughnessTexture;",
   iridescenceTexture: "uniform sampler2D u_iridescenceTexture;",

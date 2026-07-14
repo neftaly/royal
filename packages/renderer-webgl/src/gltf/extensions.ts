@@ -115,20 +115,6 @@ const requiredGltfMaterialExtensionFeatures = [
       material.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined,
     reason: "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported",
   },
-  {
-    extension: "KHR_materials_diffuse_transmission",
-    field: "diffuseTransmissionTexture",
-    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
-      material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined,
-    reason: "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported",
-  },
-  {
-    extension: "KHR_materials_diffuse_transmission",
-    field: "diffuseTransmissionColorTexture",
-    hasUnsupportedFeature: (material: GltfMaterial): boolean =>
-      material.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture !== undefined,
-    reason: "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported",
-  },
 ] as const;
 
 const assertRequiredMaterialExtensionFeatures = (src: string, document: GltfDocument): void => {

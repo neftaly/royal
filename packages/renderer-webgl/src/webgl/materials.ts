@@ -27,6 +27,8 @@ export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly doubleSided?: boolean;
+  readonly diffuseTransmissionColorTexture?: TextureAssetUploadRef;
+  readonly diffuseTransmissionTexture?: TextureAssetUploadRef;
   readonly emissive?: LinearRgba;
   readonly emissiveTexture?: TextureAssetUploadRef;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
@@ -51,6 +53,8 @@ export type SurfaceMaterialTextureCoordinates = Partial<Readonly<Record<
   | "clearcoatNormalTexture"
   | "clearcoatRoughnessTexture"
   | "clearcoatTexture"
+  | "diffuseTransmissionColorTexture"
+  | "diffuseTransmissionTexture"
   | "emissiveTexture"
   | "iridescenceTexture"
   | "iridescenceThicknessTexture"
@@ -251,6 +255,8 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     material.clearcoatTexture === undefined ? "" : textureCacheKey(material.clearcoatTexture),
     material.clearcoatNormalTexture === undefined ? "" : textureCacheKey(material.clearcoatNormalTexture),
     material.clearcoatRoughnessTexture === undefined ? "" : textureCacheKey(material.clearcoatRoughnessTexture),
+    material.diffuseTransmissionColorTexture === undefined ? "" : textureCacheKey(material.diffuseTransmissionColorTexture),
+    material.diffuseTransmissionTexture === undefined ? "" : textureCacheKey(material.diffuseTransmissionTexture),
     material.sheenColorTexture === undefined ? "" : textureCacheKey(material.sheenColorTexture),
     material.sheenRoughnessTexture === undefined ? "" : textureCacheKey(material.sheenRoughnessTexture),
     material.iridescenceTexture === undefined ? "" : textureCacheKey(material.iridescenceTexture),

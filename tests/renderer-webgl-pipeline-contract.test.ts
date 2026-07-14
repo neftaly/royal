@@ -885,7 +885,9 @@ describe("WebGL renderer pipeline contracts", () => {
     expect(sources).not.toContain("texture(u_iblBrdfLut");
     expect(sources).toContain("return vec2(-1.04, 1.04) * a004 + r.zw;");
     expect(sources).toContain("return 0.5 / max(lambdaV + lambdaL, 0.0001);");
-    expect(sources).toContain("vec3 diffuse = diffuseColor * (lambert / PI) * lightColor");
+    expect(sources).toContain(
+      "vec3 diffuse = diffuseColor * (1.0 - diffuseTransmissionFactor) * (lambert / PI) * lightColor",
+    );
     expect(sources).toContain("baseColor.rgb / max(u_toneMappingSettings.y, 0.000001)");
     expect(sources).toContain("? vec4(lit, baseColor.a)");
     expect(sources).not.toContain("pow(roughness + 1.0, 2.0) / 8.0");

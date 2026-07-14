@@ -29,6 +29,14 @@ const material = (textureUri = "texture:base"): LoadedGltfMaterial => ({
       coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
       textureUri: "texture:clearcoat",
     },
+    diffuseTransmissionColorTexture: {
+      coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+      textureUri: "texture:diffuse-transmission-color",
+    },
+    diffuseTransmissionTexture: {
+      coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+      textureUri: "texture:diffuse-transmission-strength",
+    },
   },
 });
 
@@ -62,8 +70,16 @@ describe("glTF material preparation arena", () => {
       }),
       expect.objectContaining({ colorSpace: "srgb", uri: "texture:emissive" }),
       expect.objectContaining({ colorSpace: "linear", uri: "texture:clearcoat" }),
+      expect.objectContaining({
+        colorSpace: "srgb",
+        uri: "texture:diffuse-transmission-color",
+      }),
+      expect.objectContaining({
+        colorSpace: "linear",
+        uri: "texture:diffuse-transmission-strength",
+      }),
     ]));
-    expect(refs).toHaveLength(3);
+    expect(refs).toHaveLength(5);
   });
 
   it("owns cache identity, reverse invalidation, and material batch classes", () => {

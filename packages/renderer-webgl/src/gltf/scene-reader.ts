@@ -74,6 +74,16 @@ export const GLTF_MATERIAL_EXTENSION_TEXTURES = [
     textureInfo: (material) => material?.extensions?.KHR_materials_clearcoat?.clearcoatTexture,
   },
   {
+    colorSpace: "srgb",
+    key: "diffuseTransmissionColorTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture,
+  },
+  {
+    colorSpace: "linear",
+    key: "diffuseTransmissionTexture",
+    textureInfo: (material) => material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture,
+  },
+  {
     colorSpace: "linear",
     key: "iridescenceTexture",
     textureInfo: (material) => material?.extensions?.KHR_materials_iridescence?.iridescenceTexture,
@@ -512,16 +522,6 @@ const readGltfMaterial = (
     material?.extensions?.KHR_materials_anisotropy?.anisotropyTexture !== undefined,
     "KHR_materials_anisotropy.anisotropyTexture",
     "Royal supports anisotropy factor and rotation, but anisotropy textures are not yet supported.",
-  );
-  unsupported(
-    material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionTexture !== undefined,
-    "KHR_materials_diffuse_transmission.diffuseTransmissionTexture",
-    "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported.",
-  );
-  unsupported(
-    material?.extensions?.KHR_materials_diffuse_transmission?.diffuseTransmissionColorTexture !== undefined,
-    "KHR_materials_diffuse_transmission.diffuseTransmissionColorTexture",
-    "Royal supports diffuse transmission factor and color factor, but diffuse transmission textures are not yet supported.",
   );
   const baseColorTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.baseColorTexture);
   const metallicRoughnessTexture = gltfMaterialTextureSlot(document, assetKey, src, material?.pbrMetallicRoughness?.metallicRoughnessTexture);

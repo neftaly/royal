@@ -4,4 +4,5 @@
 It renders one quad with a base material and three named variant materials:
 `ruby`, `mint`, and `slate`.
 The ruby variant also exercises `KHR_materials_clearcoat` tangent-space normal
-mapping so browser smoke covers that combined material path.
+mapping and both `KHR_materials_diffuse_transmission` textures so browser smoke
+covers their combined shader and texture-color-space path.

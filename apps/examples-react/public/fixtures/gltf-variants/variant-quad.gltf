@@ -24,6 +24,7 @@
   ],
   "extensionsUsed": [
     "KHR_materials_clearcoat",
+    "KHR_materials_diffuse_transmission",
     "KHR_materials_unlit",
     "KHR_materials_variants"
   ],
@@ -101,6 +102,20 @@
             "scale": 0.6
           },
           "clearcoatRoughnessFactor": 0.2
+        },
+        "KHR_materials_diffuse_transmission": {
+          "diffuseTransmissionColorFactor": [
+            1,
+            0.72,
+            0.76
+          ],
+          "diffuseTransmissionColorTexture": {
+            "index": 0
+          },
+          "diffuseTransmissionFactor": 0.18,
+          "diffuseTransmissionTexture": {
+            "index": 0
+          }
         }
       },
       "pbrMetallicRoughness": {

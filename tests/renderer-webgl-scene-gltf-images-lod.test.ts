@@ -15,6 +15,7 @@ import {
   ControlledImage,
   installViewportInvalidationStubs,
   flushMicrotasks,
+  flushPreparedAssetBoundary,
   flushAnimationFrames,
   waitForAnimationFrameWork,
   renderScene,
@@ -902,12 +903,13 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(sources).toContain("uniform vec4 u_anisotropyFactors;");
     expect(sources).toContain("uniform vec4 u_diffuseTransmissionFactors;");
     expect(sources).toContain("materialAnisotropicGgxDistribution");
-    expect(sources).toContain("diffuseTransmissionFactor = clamp(u_diffuseTransmissionFactors.a");
+    expect(sources).toContain("return clamp(u_diffuseTransmissionFactors.a * textureTransmission");
+    expect(sources).toContain("diffuseColor * (1.0 - diffuseTransmissionFactor)");
     expect(root.snapshot().diagnostics.some((message) =>
       /unsupported required glTF extension.*KHR_materials_anisotropy/i.test(message))).toBe(false);
   });
 
-  it("diagnoses optional KHR material extension textures while using scalar factors", async () => {
+  it("renders required diffuse-transmission textures while diagnosing optional anisotropy textures", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
@@ -928,7 +930,9 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
       responseWithJson(url, {
         ...solidTriangleDocument(),
+        extensionsRequired: ["KHR_materials_diffuse_transmission"],
         extensionsUsed: ["KHR_materials_anisotropy", "KHR_materials_diffuse_transmission"],
+        images: [{ uri: triangleImageUri }],
         materials: [
           {
             extensions: {
@@ -949,23 +953,39 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
             },
           },
         ],
+        textures: Array.from({ length: 3 }, () => ({ source: 0 })),
       }))).toBe(true);
     await flushMicrotasks();
     expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
       responseWithBuffer(url, triangleBin()))).toBe(true);
     await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
+    await flushPreparedAssetBoundary();
+    expect(ControlledImage.instances).toHaveLength(1);
+    ControlledImage.instances[0]?.settleLoad();
+    await flushMicrotasks();
+    await waitForAnimationFrameWork(
+      viewport.animationFrames,
+      () => uniform1iPayloads(calls, "u_useDiffuseTransmissionTexture").includes(1)
+        && uniform1iPayloads(calls, "u_useDiffuseTransmissionColorTexture").includes(1),
+    );
 
     expect(
       drawCalls(calls).some((call) => call.args[0] === gl.TRIANGLES && drawCount(call) === 3),
-      "optional anisotropy texture should leave the scalar-factor material drawable",
+      "supported diffuse-transmission textures keep the material drawable",
     ).toBe(true);
+    expect(uniform1iPayloads(calls, "u_useDiffuseTransmissionTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_diffuseTransmissionTexture")).toContain(11);
+    expect(uniform1iPayloads(calls, "u_useDiffuseTransmissionColorTexture")).toContain(1);
+    expect(uniform1iPayloads(calls, "u_diffuseTransmissionColorTexture")).toContain(12);
+    const sources = shaderSources(calls).join("\n");
+    expect(sources).toContain("texture(u_diffuseTransmissionTexture, materialTextureUv(u_diffuseTransmissionUvSet");
+    expect(sources).toContain(".a : 1.0");
+    expect(sources).toContain("texture(u_diffuseTransmissionColorTexture, materialTextureUv(u_diffuseTransmissionColorUvSet");
+    expect(sources).toContain(".rgb : vec3(1.0)");
     expect(root.snapshot().diagnostics.join("\n"))
       .toMatch(/KHR_materials_anisotropy\.anisotropyTexture.*factor and rotation.*textures are not yet supported/i);
     expect(root.snapshot().diagnostics.join("\n"))
-      .toMatch(/KHR_materials_diffuse_transmission\.diffuseTransmissionTexture.*factor and color factor.*textures are not yet supported/i);
-    expect(root.snapshot().diagnostics.join("\n"))
-      .toMatch(/KHR_materials_diffuse_transmission\.diffuseTransmissionColorTexture.*factor and color factor.*textures are not yet supported/i);
+      .not.toMatch(/KHR_materials_diffuse_transmission\..*ignored/i);
   });
 
   it("multiplies glTF COLOR_0 vertex colors into base color", async () => {

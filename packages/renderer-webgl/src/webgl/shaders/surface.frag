@@ -21,6 +21,8 @@ uniform bool u_useSpecularColorTexture;
 uniform bool u_useClearcoatTexture;
 uniform bool u_useClearcoatRoughnessTexture;
 uniform bool u_useClearcoatNormalTexture;
+uniform bool u_useDiffuseTransmissionTexture;
+uniform bool u_useDiffuseTransmissionColorTexture;
 uniform bool u_useSheenColorTexture;
 uniform bool u_useSheenRoughnessTexture;
 uniform bool u_useIridescenceTexture;
@@ -61,6 +63,12 @@ uniform vec4 u_clearcoatRoughnessUvRow1;
 uniform int u_clearcoatNormalUvSet;
 uniform vec4 u_clearcoatNormalUvRow0;
 uniform vec4 u_clearcoatNormalUvRow1;
+uniform int u_diffuseTransmissionUvSet;
+uniform vec4 u_diffuseTransmissionUvRow0;
+uniform vec4 u_diffuseTransmissionUvRow1;
+uniform int u_diffuseTransmissionColorUvSet;
+uniform vec4 u_diffuseTransmissionColorUvRow0;
+uniform vec4 u_diffuseTransmissionColorUvRow1;
 uniform int u_sheenColorUvSet;
 uniform vec4 u_sheenColorUvRow0;
 uniform vec4 u_sheenColorUvRow1;
@@ -228,6 +236,18 @@ float materialClearcoatRoughnessFactor() {
   float textureRoughness = __CLEARCOAT_ROUGHNESS_TEXTURE_EXPR__;
 
   return clamp(u_materialExtensionFactors.w * textureRoughness, 0.0, 1.0);
+}
+
+float materialDiffuseTransmissionFactor() {
+  float textureTransmission = __DIFFUSE_TRANSMISSION_TEXTURE_EXPR__;
+
+  return clamp(u_diffuseTransmissionFactors.a * textureTransmission, 0.0, 1.0);
+}
+
+vec3 materialDiffuseTransmissionColor() {
+  vec3 textureColor = __DIFFUSE_TRANSMISSION_COLOR_TEXTURE_EXPR__;
+
+  return clamp(u_diffuseTransmissionFactors.rgb * textureColor, vec3(0.0), vec3(1.0));
 }
 
 vec3 materialSheenColor() {
@@ -678,12 +698,12 @@ vec3 lightContributionData(
   vec3 lightColor = sourceColor * attenuation;
   float metallic = materialMetallicFactor();
   vec3 diffuseColor = baseColor * (1.0 - metallic);
-  float diffuseTransmissionFactor = clamp(u_diffuseTransmissionFactors.a, 0.0, 1.0);
-  vec3 diffuseTransmissionColorFactor = clamp(u_diffuseTransmissionFactors.rgb, vec3(0.0), vec3(1.0));
-  vec3 diffuse = diffuseColor * (lambert / PI) * lightColor;
+  float diffuseTransmissionFactor = materialDiffuseTransmissionFactor();
+  vec3 diffuseTransmissionColor = materialDiffuseTransmissionColor();
+  vec3 diffuse = diffuseColor * (1.0 - diffuseTransmissionFactor) * (lambert / PI) * lightColor;
   vec3 diffuseTransmission =
-    diffuseColor
-    * diffuseTransmissionColorFactor
+    diffuseTransmissionColor
+    * (1.0 - metallic)
     * diffuseTransmissionFactor
     * (diffuseTransmissionLambert / PI)
     * lightColor;
@@ -773,6 +793,9 @@ void main() {
   float viewClearcoat = materialClearcoatFresnel(clearcoatNormal, viewDirection);
   vec3 ambientIrradiance = iblDiffuseIrradiance(normal);
   vec3 cosineWeightedIrradiance = ambientIrradiance / PI;
+  float diffuseTransmission = materialDiffuseTransmissionFactor();
+  vec3 diffuseTransmissionColor = materialDiffuseTransmissionColor();
+  vec3 transmittedIrradiance = iblDiffuseIrradiance(-normal) / PI;
   float roughness = materialRoughnessFactor();
   float NdotV = max(dot(normal, viewDirection), 0.0);
   vec2 environmentBrdf = iblEnvironmentBrdf(roughness, NdotV);
@@ -780,6 +803,14 @@ void main() {
   vec3 totalScattering = scattering.single + scattering.multi;
   float diffuseEnergy = 1.0 - clamp(maxComponent(totalScattering), 0.0, 1.0);
   vec3 lit = materialDiffuseColor(baseColor.rgb) * cosineWeightedIrradiance
+    * (1.0 - diffuseTransmission)
+    * diffuseEnergy
+    * occlusion
+    * (1.0 - viewClearcoat);
+  lit += diffuseTransmissionColor
+    * (1.0 - materialMetallicFactor())
+    * transmittedIrradiance
+    * diffuseTransmission
     * diffuseEnergy
     * occlusion
     * (1.0 - viewClearcoat);

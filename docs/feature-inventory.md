@@ -152,7 +152,7 @@ Status meanings:
 | Anisotropy | ingestion/product | Keep intent; texture form is currently incomplete. |
 | Emissive strength | ingestion/product | Small and useful. Keep. |
 | Dispersion | ingestion/product | Keep the cheap three-channel screen-space approximation behind its material shader variant; validate visual quality and Quest/iPad cost. |
-| Diffuse transmission | ingestion/product | Keep. It models thin scattering such as leaves and paper; complete the two texture inputs and visual oracle. |
+| Diffuse transmission | ingestion/product | Keep. Factors and the linear-alpha strength / sRGB-color textures model thin scattering such as leaves and paper with energy-conserving direct and environment light mixing. |
 
 ## Interaction and XR
 
