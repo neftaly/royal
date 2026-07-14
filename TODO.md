@@ -38,6 +38,9 @@ Completed in the current worktree:
 - `WebGlCanvasViewportOwner` owns backing-buffer sizing, ResizeObserver and DPR
   media-query lifetime, listener rebinding, invalidation, construction rollback,
   and disposal.
+- `ResourceArenaSideEffectDebtOwner` owns ordered acquire/release side effects,
+  exact-step retries, re-entrant debt ordering, drain exclusion, and terminal
+  acquisition cancellation after semantic arena disposal.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup

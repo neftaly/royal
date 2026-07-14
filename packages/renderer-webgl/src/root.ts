@@ -365,6 +365,7 @@ import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
 import { WebGlFramePublicationOwner } from "./frame-publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
+import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
@@ -752,12 +753,6 @@ const mat4OrientationDeterminant = (matrix: Mat4): number =>
  */
 type InternalWebGlRoot = WebGlRoot & RendererOwnedWebGl2Context & RendererFrameViewLane;
 
-type ResourceArenaSideEffectDebt = {
-  nextStep: number;
-  readonly phase: "acquire" | "release";
-  readonly steps: readonly (() => void)[];
-};
-
 class WebGlRootImpl implements InternalWebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
@@ -788,10 +783,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
   /** Root authority for cross-subsystem resource admission and accounting. */
   readonly #resourceGovernor: ResourceGovernor;
   readonly #unsubscribeResourceGovernorDurableCapacityRelease: () => void;
+  readonly #resourceArenaSideEffects = new ResourceArenaSideEffectDebtOwner();
   #virtualTextureAllocationRetryFrame = -1;
-  #resourceArenaSideEffectDebt: ResourceArenaSideEffectDebt[] = [];
-  #resourceArenaAcquisitionsCancelled = false;
-  #resourceArenaSideEffectDrainInProgress = false;
   #cpuCapacityWakeScheduled = false;
   #suppressPersistentGpuCapacityWake = false;
   readonly #vertexInputs: VertexInputArena = createVertexInputArena({
@@ -1631,7 +1624,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   dispose(): void {
     if (
-      this.#resourceArenaSideEffectDrainInProgress
+      this.#resourceArenaSideEffects.draining
       || this.#preparedGltf.eventDrainInProgress
     ) {
       throw new Error("Cannot dispose while Royal is applying resource events");
@@ -1651,7 +1644,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         releaseClusteredLightContextHandles(this.#clusteredLights);
       });
       retryFailure = captureFirstFailure(retryFailure, () => this.#gltfInstanceTransforms.dispose());
-      retryFailure = captureFirstFailure(retryFailure, () => this.#drainResourceArenaSideEffectDebt());
+      retryFailure = captureFirstFailure(retryFailure, () => this.#resourceArenaSideEffects.drain());
       retryFailure = captureFirstFailure(retryFailure, () => this.#decodedTextureSources.retryPending());
       if (retryFailure !== undefined) throw retryFailure.value;
       return;
@@ -1688,7 +1681,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       // acquisition after its paired disposal release could resurrect state in
       // this disposed root; release debt still owns any partially-created
       // imperative resources and must continue normally.
-      this.#cancelResourceArenaAcquisitionDebt();
+      this.#resourceArenaSideEffects.cancelAcquisitions();
       const applyFailure = captureFailure(() => this.#applyResourceArenaChanges(disposal.changes));
       if (disposal.kind === "failed") throw disposal.error;
       if (applyFailure !== undefined) throw applyFailure.value;
@@ -1762,7 +1755,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (this.#framePlanReconciliationInProgress) {
       throw new Error("Cannot render while Royal is reconciling render-object refs");
     }
-    this.#drainResourceArenaSideEffectDebt();
+    this.#resourceArenaSideEffects.drain();
     const previous = this.#framePlan;
     if (this.#framePlanReconciliationPending) this.#finishFramePlanReconciliation();
     if (previous?.scene === scene) return previous;
@@ -1998,13 +1991,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
-    const apply = (
-      phase: ResourceArenaSideEffectDebt["phase"],
-      ...steps: readonly (() => void)[]
-    ): void => {
-      if (phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) return;
-      this.#resourceArenaSideEffectDebt.push({ nextStep: 0, phase, steps });
-    };
+    const apply = this.#resourceArenaSideEffects.enqueue.bind(this.#resourceArenaSideEffects);
     for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
       apply(
         "acquire",
@@ -2054,55 +2041,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (resourceArenaSourceReferenceCount(this.#resourceArena, source) !== 0) continue;
       apply("release", () => this.#decodedTextureSources.closeOrdinary(source));
     }
-    this.#drainResourceArenaSideEffectDebt();
-  }
-
-  #drainResourceArenaSideEffectDebt(): void {
-    if (
-      this.#resourceArenaSideEffectDrainInProgress
-      || this.#resourceArenaSideEffectDebt.length === 0
-    ) return;
-    const pending = this.#resourceArenaSideEffectDebt;
-    this.#resourceArenaSideEffectDebt = [];
-    this.#resourceArenaSideEffectDrainInProgress = true;
-    let firstFailure: CapturedFailure | undefined;
-    const remaining: ResourceArenaSideEffectDebt[] = [];
-    try {
-      for (const operation of pending) {
-        if (operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) continue;
-        while (operation.nextStep < operation.steps.length) {
-          const failure = captureFailure(operation.steps[operation.nextStep]!);
-          if (failure !== undefined) {
-            firstFailure ??= failure;
-            if (!(operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled)) {
-              remaining.push(operation);
-            }
-            break;
-          }
-          operation.nextStep += 1;
-          if (operation.phase === "acquire" && this.#resourceArenaAcquisitionsCancelled) break;
-        }
-      }
-    } finally {
-      this.#resourceArenaSideEffectDrainInProgress = false;
-      this.#resourceArenaSideEffectDebt = [
-        ...remaining,
-        ...this.#resourceArenaSideEffectDebt,
-      ];
-    }
-    if (firstFailure !== undefined) throw firstFailure.value;
-  }
-
-  #cancelResourceArenaAcquisitionDebt(): void {
-    this.#resourceArenaAcquisitionsCancelled = true;
-    this.#resourceArenaSideEffectDebt = this.#resourceArenaSideEffectDebt.filter(
-      (operation) => operation.phase !== "acquire",
-    );
+    this.#resourceArenaSideEffects.drain();
   }
 
   #applyPendingResourceArenaEvents(): void {
     if (this.#preparedGltf.eventDrainInProgress) return;
-    this.#drainResourceArenaSideEffectDebt();
+    this.#resourceArenaSideEffects.drain();
     // A retained event belongs to the already-applied arena generation. Drain
     // it before admitting newer arena events so same-key revisions cannot be
     // published in reverse order after a fallible imperative side effect.
