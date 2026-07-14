@@ -13,17 +13,6 @@ export type {
   PickResult,
   PickTarget,
 } from '@royal/renderer-core';
-export type {
-  ResourceGovernorClassPolicy,
-  ResourceGovernorDurableBudget,
-  ResourceGovernorPolicy,
-  ResourceGovernorPolicyInput,
-} from '@royal/renderer-webgl';
-export {
-  DEFAULT_RESOURCE_GOVERNOR_POLICY,
-  defineResourceGovernorPolicy,
-} from '@royal/renderer-webgl';
-
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';
 

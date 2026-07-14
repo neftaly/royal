@@ -1,8 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_RESOURCE_GOVERNOR_POLICY,
-  defineResourceGovernorPolicy,
-} from '@royal/react';
 import type {
   CanvasProps,
   PickInput,
@@ -10,8 +6,6 @@ import type {
   PickResult,
   PickTarget,
   GltfAssetStatus,
-  ResourceGovernorPolicy,
-  ResourceGovernorPolicyInput,
   RendererOptions,
   RoyalPointerEventHandlers,
   RoyalRendererRootLifecycleSnapshot,
@@ -55,38 +49,19 @@ describe('Canvas public scene boundary', () => {
     expect(invalid.scene).toBe(dom);
   });
 
-  it('accepts VT root policy through Canvas rendererOptions', () => {
+  it('keeps Canvas renderer options at product-level creation choices', () => {
     const rendererOptions = {
       generatedImageVirtualTextures: true,
     } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
     expect(props.rendererOptions).toEqual(rendererOptions);
-  });
 
-  it('accepts a typed resource governor policy through Canvas rendererOptions', () => {
-    const policy = DEFAULT_RESOURCE_GOVERNOR_POLICY satisfies ResourceGovernorPolicy;
-    const rendererOptions = {
-      resourceGovernorPolicy: policy,
-    } satisfies RendererOptions;
-
-    const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
-    expect(props.rendererOptions?.resourceGovernorPolicy).toBe(policy);
-  });
-
-  it('defines concise resource policy overrides without a backend import', () => {
-    const overrides = {
-      classes: {
-        'virtual-texture': { persistentGpuBytes: { hardLimit: 96 * 1024 * 1024 } },
-      },
-      limits: { jobs: 3 },
-    } satisfies ResourceGovernorPolicyInput;
-    const rendererOptions = { resourceGovernorPolicy: overrides } satisfies RendererOptions;
-    const policy = defineResourceGovernorPolicy(overrides);
-
-    expect(rendererOptions.resourceGovernorPolicy).toBe(overrides);
-    expect(policy.limits.jobs).toBe(3);
-    expect(policy.classes['virtual-texture'].persistentGpuBytes.hardLimit).toBe(96 * 1024 * 1024);
+    if (false) {
+      // @ts-expect-error Backend scheduling classes are not React renderer options.
+      const internalPolicy = { resourceGovernorPolicy: {} } satisfies RendererOptions;
+      expect(internalPolicy).toBeDefined();
+    }
   });
 
   it('does not expose the former context creation-options prop', () => {

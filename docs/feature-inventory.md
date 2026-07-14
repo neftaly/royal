@@ -27,7 +27,7 @@ Status meanings:
 | Renderer lifecycle snapshot and recovery | product | Needed for context loss and UI state. Keep small. |
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
 | Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Reduce after local budgets replace the governor. |
-| Public resource-governor policy | candidate | Leaks renderer scheduling into React. Delete and replace with local renderer defaults/caps. |
+| Public resource-governor policy | deleted from React | Backend admission remains observable in diagnostics, but byte/job classes no longer leak into `Canvas` or `createRendererRoot` options. Continue replacing the backend-wide policy with local caps. |
 
 ## Scene and camera
 

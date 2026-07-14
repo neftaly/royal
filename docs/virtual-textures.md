@@ -102,17 +102,13 @@ resident.
 
 ## Memory, loading, and errors
 
-VT atlases and page tables are governed as
-`classes['virtual-texture'].persistentGpuBytes` in the root's
-`resourceGovernorPolicy`. The class `softLimit` is a borrowing/diagnostic
-threshold rather than a second allocator cap. Set its optional `hardLimit` for
-an exact VT ceiling; otherwise VTs may borrow root GPU capacity not protected
-by other classes' mandatory floors. The default policy therefore scales beyond
-a fixed small atlas pool when a large terrain or many visible textures need it,
-while preserving geometry, ordinary-texture, and render-target floors.
+VT atlases and page tables use backend-owned GPU admission defaults. This keeps
+renderer scheduling classes out of the React API while still allowing VT
+residency to borrow unused capacity without displacing protected geometry,
+ordinary-texture, and render-target allocations.
 
 Manifest `physicalByteBudget` and `physicalSlots` remain per-resource quality
-and footprint ceilings; they cannot expand the governor's effective VT
+and footprint ceilings; they cannot expand the renderer's effective VT
 capacity. Each image physical page consumes
 `(pageSize + 2 * borderTexels)^2 * 4` RGBA8 bytes before atlas-grid padding.
 Each `ktx2-basis` page consumes one 16-byte ETC2/EAC block per four-by-four

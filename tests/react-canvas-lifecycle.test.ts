@@ -1,6 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_RESOURCE_GOVERNOR_POLICY } from "@royal/renderer-webgl";
-import type { RendererOptions } from "@royal/react";
 import {
   canvasContextOptionsSemanticKey,
   disposeCanvasRendererRoot,
@@ -29,33 +27,18 @@ describe("Canvas renderer root cleanup", () => {
     expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({ alpha: true });
   });
 
-  it("retains a supplied resource governor policy for root construction", () => {
-    expect(normalizeCanvasRendererOptions({
-      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
-    })).toEqual({ resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY });
-  });
-
   it("retains the root for equivalent rendererOptions and recreates it for semantic changes", () => {
     const first = rendererRootOptionsSemanticKey({
       alpha: true,
-      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
+      antialias: false,
     });
     const reordered = rendererRootOptionsSemanticKey({
-      resourceGovernorPolicy: {
-        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits },
-        classes: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.classes },
-      },
+      antialias: false,
       alpha: true,
     });
     const changed = rendererRootOptionsSemanticKey({
       alpha: true,
-      resourceGovernorPolicy: {
-        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
-        limits: {
-          ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits,
-          jobs: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.jobs + 1,
-        },
-      },
+      antialias: true,
     });
 
     expect(reordered).toBe(first);
@@ -68,35 +51,11 @@ describe("Canvas renderer root cleanup", () => {
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: false,
-      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
 
     expect(rendererRootOptionsSemanticKey({})).toBe(omitted);
     expect(explicit).toBe(omitted);
     expect(rendererRootOptionsSemanticKey({ alpha: false })).not.toBe(omitted);
-  });
-
-  it("gives concise and fully expanded resource overrides one semantic identity", () => {
-    const concise = rendererRootOptionsSemanticKey({
-      resourceGovernorPolicy: { limits: { jobs: 3 } },
-    });
-    const expanded = rendererRootOptionsSemanticKey({
-      resourceGovernorPolicy: {
-        ...DEFAULT_RESOURCE_GOVERNOR_POLICY,
-        limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, jobs: 3 },
-      },
-    });
-
-    expect(concise).toBe(expanded);
-  });
-
-  it("ignores unknown or undefined runtime policy fields in semantic identity", () => {
-    const noisy = {
-      resourceGovernorPolicy: { limits: { ignored: 1, jobs: undefined } },
-    } as unknown as RendererOptions;
-
-    expect(rendererRootOptionsSemanticKey(noisy))
-      .toBe(rendererRootOptionsSemanticKey(undefined));
   });
 
   it("releases ownership before surfacing a dispose failure", () => {

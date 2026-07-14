@@ -1,9 +1,6 @@
 import type { PickInput, PickResult, RenderRoot } from "@royal/renderer-core";
 import {
   createWebGlRoot,
-  webGlRootOptionsSemanticKey,
-  type ResourceGovernorPolicy,
-  type ResourceGovernorPolicyInput,
   type WebGlContextSnapshot,
   type WebGlRootSnapshot,
 } from "@royal/renderer-webgl";
@@ -24,20 +21,17 @@ export interface RendererOptions {
    * @defaultValue `false`
    */
   readonly generatedImageVirtualTextures?: boolean;
-  /** Immutable root-wide CPU, GPU, job, and upload budget overrides. */
-  readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
 }
 
-/** @internal Backend-owned semantic identity used by the React Canvas lifetime. */
+/** @internal Canonical identity for the product-level options that own a React Canvas lifetime. */
 export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string =>
-  webGlRootOptionsSemanticKey(options);
+  `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.generatedImageVirtualTextures ?? false}`;
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
 export interface ResolvedRendererOptions {
   readonly alpha: boolean;
   readonly antialias: boolean;
   readonly generatedImageVirtualTextures: boolean;
-  readonly resourceGovernorPolicy: ResourceGovernorPolicy;
 }
 
 /** Availability states for the renderer owned by a Canvas. */
@@ -163,8 +157,18 @@ export const createRendererRoot = (
   canvas: HTMLCanvasElement,
   options?: RendererOptions,
 ): RoyalRendererRoot => {
-  const root = createWebGlRoot(canvas, options);
-  const normalizedOptions = root.options;
+  const root = createWebGlRoot(canvas, options === undefined ? undefined : {
+    ...(options.alpha === undefined ? {} : { alpha: options.alpha }),
+    ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
+    ...(options.generatedImageVirtualTextures === undefined
+      ? {}
+      : { generatedImageVirtualTextures: options.generatedImageVirtualTextures }),
+  });
+  const normalizedOptions: ResolvedRendererOptions = Object.freeze({
+    alpha: root.options.alpha,
+    antialias: root.options.antialias,
+    generatedImageVirtualTextures: root.options.generatedImageVirtualTextures,
+  });
 
   const royalRoot: RoyalRendererRoot = {
     get canvas() {

@@ -4,10 +4,6 @@ import {
   type RoyalRendererDiagnosticsSnapshot,
 } from "@royal/react";
 import {
-  DEFAULT_RESOURCE_GOVERNOR_POLICY,
-  type ResourceGovernorPolicy,
-} from "@royal/renderer-webgl";
-import {
   perspectiveCamera,
   scene,
   type RenderRoot,
@@ -47,103 +43,6 @@ describe("React root public API", () => {
     root.dispose();
   });
 
-  it("normalizes concise resource overrides into the effective root policy", () => {
-    const root = createRendererRoot(fakeCanvas(), {
-      resourceGovernorPolicy: {
-        classes: {
-          "virtual-texture": {
-            persistentGpuBytes: { hardLimit: 96 * 1024 * 1024 },
-          },
-        },
-        limits: { jobs: 3 },
-      },
-    });
-
-    expect(root.options.resourceGovernorPolicy).toMatchObject({
-      classes: {
-        geometry: DEFAULT_RESOURCE_GOVERNOR_POLICY.classes.geometry,
-        "virtual-texture": {
-          persistentGpuBytes: {
-            hardLimit: 96 * 1024 * 1024,
-            mandatoryFloor:
-              DEFAULT_RESOURCE_GOVERNOR_POLICY.classes["virtual-texture"].persistentGpuBytes.mandatoryFloor,
-            softLimit: 96 * 1024 * 1024,
-          },
-        },
-      },
-      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, jobs: 3 },
-    });
-    expect(Object.isFrozen(root.options.resourceGovernorPolicy.classes["virtual-texture"])).toBe(true);
-    root.dispose();
-  });
-
-  it("defensively freezes a custom resource governor policy without changing default snapshots", () => {
-    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
-      ([resourceClass, value]) => [resourceClass, {
-        cpuDecodedBytes: { ...value.cpuDecodedBytes },
-        persistentGpuBytes: { ...value.persistentGpuBytes },
-      }],
-    )) as unknown as ResourceGovernorPolicy["classes"];
-    const customPolicy = {
-      classes: {
-        ...classes,
-        "virtual-texture": {
-          ...classes["virtual-texture"],
-          persistentGpuBytes: {
-            ...classes["virtual-texture"].persistentGpuBytes,
-            hardLimit: 256 * 1024 * 1024,
-          },
-        },
-      },
-      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits, uploadBytes: 8 * 1024 * 1024 },
-    } satisfies ResourceGovernorPolicy;
-    const root = createRendererRoot(fakeCanvas(), { resourceGovernorPolicy: customPolicy });
-    const retained = root.options.resourceGovernorPolicy;
-
-    expect(retained).toEqual(customPolicy);
-    expect(retained).not.toBe(customPolicy);
-    expect(Object.isFrozen(retained)).toBe(true);
-    expect(Object.isFrozen(retained?.classes)).toBe(true);
-    expect(Object.isFrozen(retained?.classes.geometry.cpuDecodedBytes)).toBe(true);
-    expect(retained?.classes["virtual-texture"].persistentGpuBytes.hardLimit)
-      .toBe(256 * 1024 * 1024);
-    customPolicy.limits.uploadBytes = 1;
-    expect(root.diagnostics().resourceGovernor.limits.uploadBytes).toBe(8 * 1024 * 1024);
-    root.dispose();
-
-    const defaultRoot = createRendererRoot(fakeCanvas());
-    expect(defaultRoot.options.resourceGovernorPolicy).toEqual(DEFAULT_RESOURCE_GOVERNOR_POLICY);
-    defaultRoot.dispose();
-  });
-
-  it("rejects an invalid resource governor policy before requesting a WebGL context", () => {
-    const canvas = fakeCanvas();
-    const classes = Object.fromEntries(Object.entries(DEFAULT_RESOURCE_GOVERNOR_POLICY.classes).map(
-      ([resourceClass, value]) => [resourceClass, {
-        cpuDecodedBytes: { ...value.cpuDecodedBytes },
-        persistentGpuBytes: { ...value.persistentGpuBytes },
-      }],
-    )) as unknown as ResourceGovernorPolicy["classes"];
-    const invalidPolicy = {
-      classes: {
-        ...classes,
-        geometry: {
-          ...classes.geometry,
-          persistentGpuBytes: {
-            mandatoryFloor: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
-            softLimit: DEFAULT_RESOURCE_GOVERNOR_POLICY.limits.persistentGpuBytes,
-          },
-        },
-      },
-      limits: { ...DEFAULT_RESOURCE_GOVERNOR_POLICY.limits },
-    } satisfies ResourceGovernorPolicy;
-
-    expect(() => createRendererRoot(canvas, {
-      resourceGovernorPolicy: invalidPolicy,
-    })).toThrow("persistentGpuBytes mandatory floors exceed capacity");
-    expect(canvas.contextRequests).toEqual([]);
-  });
-
   it("normalizes creation options and renders through the public root", () => {
     const canvas = fakeCanvas();
     const root = createRendererRoot(canvas, {
@@ -175,7 +74,6 @@ describe("React root public API", () => {
         alpha: false,
         antialias: true,
         generatedImageVirtualTextures: true,
-        resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
       },
     });
     const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
@@ -210,7 +108,6 @@ describe("React root public API", () => {
       alpha: false,
       antialias: true,
       generatedImageVirtualTextures: true,
-      resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
     expect(Object.isFrozen(root.options)).toBe(true);
     expect(Object.isFrozen(root.diagnostics())).toBe(true);

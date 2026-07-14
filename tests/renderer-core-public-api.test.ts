@@ -151,10 +151,8 @@ describe("renderer-core public API", () => {
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
     expect(Object.keys(reactRoyal).sort()).toEqual([
       "Canvas",
-      "DEFAULT_RESOURCE_GOVERNOR_POLICY",
       "OrbitControls",
       "createRendererRoot",
-      "defineResourceGovernorPolicy",
       "useCanvasElement",
       "useCanvasPick",
       "useCanvasRoot",

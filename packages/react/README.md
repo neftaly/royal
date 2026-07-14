@@ -167,12 +167,9 @@ The imperative root separates its two observational models:
   incompatible Canvas-derived page path. The ordinary texture remains active
   until generated coverage is ready. Authored `virtualTexture(...)` resources
   are unaffected.
-- VT atlases and page tables participate in `resourceGovernorPolicy` as
-  `classes['virtual-texture'].persistentGpuBytes`. Its `softLimit` marks
-  borrowing for diagnostics, while optional `hardLimit` sets an exact class
-  ceiling. With no hard limit, VTs may borrow root GPU capacity not protected
-  by another class's mandatory floor. Manifest `physicalByteBudget` and
-  `physicalSlots` remain per-texture quality and footprint ceilings.
+- Renderer CPU/GPU admission uses backend-owned defaults rather than exposing
+  scheduling classes through React. Manifest `physicalByteBudget` and
+  `physicalSlots` remain the authored VT quality and footprint ceilings.
 
 Use `virtualTexture('/terrain.vt.json')` from `@royal/react/scene` for an
 authored manifest. The string and the object form
