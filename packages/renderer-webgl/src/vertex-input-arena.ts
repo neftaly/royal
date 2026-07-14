@@ -1,5 +1,5 @@
 import type { CpuGeometry } from "./geometry-recipes";
-import type { CapturedFailure } from "./captured-failure";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
   findVerifiedGeometry,
@@ -295,26 +295,16 @@ const createVertexArray = (gl: WebGL2RenderingContext): WebGLVertexArrayObject =
   return vertexArray;
 };
 
-const NO_FAILURE: unique symbol = Symbol("vertex-input-no-failure");
-type Failure = CapturedFailure | typeof NO_FAILURE;
+type Failure = CapturedFailure | undefined;
 
 const firstFailure = (failure: Failure, next: Failure): Failure =>
-  failure === NO_FAILURE ? next : failure;
-
-const captureFirstFailure = (failure: Failure, action: () => void): Failure => {
-  try {
-    action();
-  } catch (error) {
-    return firstFailure(failure, { value: error });
-  }
-  return failure;
-};
+  failure ?? next;
 
 const deletePendingBuffers = (
   gl: WebGL2RenderingContext,
   buffers: Set<WebGLBuffer>,
 ): Failure => {
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   for (const buffer of buffers) {
     failure = captureFirstFailure(failure, () => {
       gl.deleteBuffer(buffer);
@@ -328,7 +318,7 @@ const deletePendingVertexArrays = (
   gl: WebGL2RenderingContext,
   vertexArrays: Set<WebGLVertexArrayObject>,
 ): Failure => {
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   for (const vertexArray of vertexArrays) {
     failure = captureFirstFailure(failure, () => {
       gl.deleteVertexArray(vertexArray);
@@ -339,7 +329,7 @@ const deletePendingVertexArrays = (
 };
 
 const throwFailure = (failure: Failure): void => {
-  if (failure !== NO_FAILURE) throw failure.value;
+  if (failure !== undefined) throw failure.value;
 };
 
 const reserveGpu = (
@@ -364,7 +354,7 @@ const reserveGpu = (
 };
 
 const releaseGpuLeases = (leases: VertexInputGpuLease[]): void => {
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   let retained = 0;
   for (const lease of leases) {
     try {
@@ -531,7 +521,7 @@ const uploadStaticGeometry = (
 };
 
 const forgetContextHandles = (state: VertexInputArenaState, dropped: boolean): void => {
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   const previouslyPendingLeases = state.pendingGpuLeases.splice(0);
   for (const geometry of state.staticGeometries) {
     const lease = geometry.gpuLease;
@@ -1145,7 +1135,7 @@ const removeStaticGeometry = (
   gl: WebGL2RenderingContext,
   geometry: StaticGeometry,
 ): void => {
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
     if (composite.geometryReferenceCount !== 0) continue;
     failure = captureFirstFailure(failure, () => {
@@ -1188,7 +1178,7 @@ const releaseVertexInputInstance = (
     const geometry = semantic?.staticGeometry;
     if (geometry !== undefined) geometries.add(geometry);
   }
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   for (const geometry of geometries) {
     const composite = geometry.compositeVertexArrays.get(instanceKey);
     if (composite === undefined) continue;
@@ -1290,7 +1280,7 @@ export const releaseVertexInputGeometry = (
       // driver deletion fails. A retry must not decrement the reference again.
       semantic.instanceKeys.delete(instanceKey);
     }
-    let releaseFailure: Failure = NO_FAILURE;
+    let releaseFailure: Failure;
     for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
       if (composite.geometryReferenceCount !== 0) continue;
       releaseFailure = captureFirstFailure(releaseFailure, () => {
@@ -1335,7 +1325,7 @@ const releaseContextHandles = (
   // owned by this arena can still retain it as ELEMENT_ARRAY_BUFFER state.
   // Every successful driver deletion is committed independently so a retry
   // never repeats it and multiple failures do not hide later progress.
-  let failure: Failure = NO_FAILURE;
+  let failure: Failure;
   for (const geometry of state.staticGeometries) {
     for (const [instanceKey, composite] of geometry.compositeVertexArrays) {
       failure = captureFirstFailure(failure, () => {
