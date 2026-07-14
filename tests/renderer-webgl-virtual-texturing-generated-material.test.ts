@@ -97,7 +97,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it("uses the opted-in generated VT policy for direct imageTexture SVG", async () => {
+  it("keeps direct SVG textures ordinary while sanitizing their source", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchRequests = installFetchQueue();
@@ -111,8 +111,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       static revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
-    const { contexts } = installCanvas2d();
-    const { gl } = fakeGl();
+    const { calls, gl } = fakeGl();
     const canvas = fakeCanvas(gl);
     const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
@@ -142,74 +141,26 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     root.render(renderScene(material));
     expect(fetchRequests.map((request) => request.url)).toEqual(["/textures/plain.svg"]);
 
-    for (let frame = 0; frame < 8 && contexts.length === 0; frame += 1) {
-      await flushMicrotasks();
-      root.render(renderScene(material));
-    }
-    expect(contexts.length).toBeGreaterThan(0);
     canvas.dispatchContextEvent("webglcontextlost");
     await flushMicrotasks();
     expect(root.snapshot().virtualTexturing.generatedPageFailures).toBe(0);
     canvas.dispatchContextEvent("webglcontextrestored");
     root.render(renderScene(material));
 
-    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
-      await flushMicrotasks();
-      root.render(renderScene(material));
-      await flushMicrotasks();
-    }
-
     expect(objectUrlBlobs).toHaveLength(1);
-    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
-      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
-    )))).toBe(true);
-    expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 1,
-      generatedPageFailures: 0,
-      generatedPageRequests: 2,
-      generatedPagesTarget: 5_461,
-      manifestsReady: 1,
-    }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-    expect(consoleWarn).not.toHaveBeenCalled();
-  });
-
-  it("keeps Apple WebKit SVG sources on the ordinary texture path", async () => {
-    vi.stubGlobal("navigator", {
-      userAgent: "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
-    });
-    vi.stubGlobal("Image", ControlledImage);
-    const fetchRequests = installFetchQueue();
-    class TestURL extends URL {
-      static createObjectURL = vi.fn(() => "blob:royal-svg-webkit");
-      static revokeObjectURL = vi.fn();
-    }
-    vi.stubGlobal("URL", TestURL);
-    const { contexts } = installCanvas2d();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
-    const material = unlitMaterial({ texture: imageTexture("/textures/webkit.svg") });
-
-    root.render(renderScene(material));
-    fetchRequests[0]!.resolve(responseText(
-      "/textures/webkit.svg",
-      '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512"/></svg>',
-    ));
-    await flushMicrotasks();
-    ControlledImage.instances[0]?.settleLoad();
-    await flushMicrotasks();
-    root.render(renderScene(material));
-
-    expect(contexts).toHaveLength(0);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 0,
       generatedPageFailures: 0,
       generatedPageRequests: 0,
+      generatedPagesTarget: 0,
+      manifestsReady: 0,
     }));
     expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
+    expect(consoleWarn).not.toHaveBeenCalled();
   });
 
-  it("uses generated SVG VT for direct imageTexture SVG data URIs", async () => {
+  it("keeps direct SVG data-URI textures ordinary", async () => {
     vi.stubGlobal("Image", ControlledImage);
     const fetchRequests = installFetchQueue();
     const objectUrlBlobs: Blob[] = [];
@@ -222,8 +173,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
       static revokeObjectURL = vi.fn();
     }
     vi.stubGlobal("URL", TestURL);
-    const { contexts } = installCanvas2d();
-    const { gl } = fakeGl();
+    const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#0af\"/></svg>";
     const svgUri = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
@@ -236,21 +186,17 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     ControlledImage.instances[0]?.settleLoad();
     await flushMicrotasks();
 
-    for (let frame = 0; frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0; frame += 1) {
-      await flushMicrotasks();
-      root.render(renderScene(material));
-      await flushMicrotasks();
-    }
+    root.render(renderScene(material));
 
     expect(fetchRequests.map((request) => request.url)).toEqual([svgUri]);
     expect(objectUrlBlobs).toHaveLength(1);
-    expect(contexts.length).toBeGreaterThan(0);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 1,
-      generatedPagesTarget: 5_461,
-      manifestsReady: 1,
+      generatedManifestUses: 0,
+      generatedPagesTarget: 0,
+      manifestsReady: 0,
     }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
+    expect(namedUniform1iValues(calls).u_useTexture).toContain(1);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
   });
 
   it("bounds large generated VT page preparation work per frame", async () => {

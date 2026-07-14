@@ -3,7 +3,6 @@ import {
   generatedRasterVirtualTextureManifest,
   orientVirtualTextureDemandVRange,
 } from "../packages/renderer-webgl/src/virtual-texture-runtime";
-import { generatedSvgVirtualTextureManifest } from "../packages/renderer-webgl/src/svg-texture";
 import {
   derivedVirtualTextureMipCount,
   encodeVirtualTexturePageTableRgba8,
@@ -71,7 +70,7 @@ const referencePageTableSlots = (
 });
 
 describe("WebGL virtual texturing runtime model", () => {
-  it("gives SVGs a deeper virtual address space without changing bounded physical policy", () => {
+  it("rounds generated raster address space while keeping bounded physical policy", () => {
     const dimensions = { height: 777.2, width: 1_023.1 };
     const raster = generatedRasterVirtualTextureManifest({
       ...dimensions,
@@ -79,32 +78,15 @@ describe("WebGL virtual texturing runtime model", () => {
       label: "raster",
       source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },
     });
-    const svg = generatedSvgVirtualTextureManifest({
-      ...dimensions,
-      label: "vector",
-    });
-
     expect(raster).toMatchObject({ height: 778, physicalSlots: 21, width: 1_024 });
-    expect(svg).toMatchObject({
-      colorSpace: raster.colorSpace,
-      pageSize: raster.pageSize,
-      physicalSlots: 64,
-      width: 16_384,
-    });
-    expect(svg.height / svg.width).toBeCloseTo(dimensions.height / dimensions.width, 3);
   });
 
-  it("rejects invalid generated raster and SVG manifest dimensions without looping", () => {
+  it("rejects invalid generated raster dimensions without looping", () => {
     expect(() => generatedRasterVirtualTextureManifest({
       height: 512,
       label: "invalid raster",
       source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },
       width: Number.POSITIVE_INFINITY,
-    })).toThrow(RangeError);
-    expect(() => generatedSvgVirtualTextureManifest({
-      height: Number.NaN,
-      label: "invalid vector",
-      width: 512,
     })).toThrow(RangeError);
     expect(() => generatedVirtualTexturePageCount(Number.MAX_SAFE_INTEGER, 2, 1))
       .toThrow("page count exceeds safe integer capacity");

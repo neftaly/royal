@@ -3,7 +3,6 @@ import {
   isDecodedRgbaTexture,
   type LoadedTextureSource,
 } from "./texture-sources";
-import type { SvgVirtualTextureSource } from "./svg-texture";
 import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
 import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-provider";
@@ -39,9 +38,10 @@ export type RasterVirtualTextureSource = {
   readonly width: number;
 };
 
-export type VirtualTextureGeneratedPageSource =
-  | { readonly kind: "raster"; readonly source: RasterVirtualTextureSource }
-  | { readonly kind: "svg"; readonly source: SvgVirtualTextureSource };
+export type VirtualTextureGeneratedPageSource = {
+  readonly kind: "raster";
+  readonly source: RasterVirtualTextureSource;
+};
 
 export type VirtualTextureManifestSource =
   | { readonly kind: "generated"; readonly manifestUri: string; readonly pageSource: VirtualTextureGeneratedPageSource }

@@ -1,31 +1,14 @@
 import type { NormalizedWebGlRootOptions, WebGlRootOptions } from "./root-types";
 import { defineResourceGovernorPolicy } from "./resource-governor";
-import {
-  GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
-  GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
-  GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION,
-} from "./svg-texture";
 
 /** Shared pure normalization boundary for construction and semantic identity. */
 export const normalizeWebGlRootOptions = (
   options: WebGlRootOptions = {},
 ): NormalizedWebGlRootOptions => {
-  const generatedSvgVirtualTextureMaxDimension = options.generatedSvgVirtualTextureMaxDimension
-    ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION;
-  if (
-    !Number.isSafeInteger(generatedSvgVirtualTextureMaxDimension)
-    || generatedSvgVirtualTextureMaxDimension < GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION
-    || generatedSvgVirtualTextureMaxDimension > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION
-  ) {
-    throw new RangeError(
-      `generatedSvgVirtualTextureMaxDimension must be an integer from ${GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION} through ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION} logical texels, received ${String(generatedSvgVirtualTextureMaxDimension)}`,
-    );
-  }
   return Object.freeze({
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
     generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
-    generatedSvgVirtualTextureMaxDimension,
     resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
   });
 };

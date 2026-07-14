@@ -24,11 +24,9 @@ describe("Canvas renderer root cleanup", () => {
     expect(canvasContextOptionsSemanticKey({ antialias: false })).not.toBe(defaults);
   });
 
-  it("retains normalized scalar changes that recreate the renderer root", () => {
+  it("retains normalized context changes that recreate the renderer root", () => {
     expect(normalizeCanvasRendererOptions({ alpha: false })).toEqual({ alpha: false });
     expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({ alpha: true });
-    expect(normalizeCanvasRendererOptions({ generatedSvgVirtualTextureMaxDimension: 8_192 }))
-      .toEqual({ generatedSvgVirtualTextureMaxDimension: 8_192 });
   });
 
   it("retains a supplied resource governor policy for root construction", () => {
@@ -70,7 +68,6 @@ describe("Canvas renderer root cleanup", () => {
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: false,
-      generatedSvgVirtualTextureMaxDimension: 16_384,
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
 
@@ -92,14 +89,6 @@ describe("Canvas renderer root cleanup", () => {
 
     expect(concise).toBe(expanded);
   });
-
-  it.each([255, 16_385, 512.5, Number.NaN])(
-    "rejects an invalid generated SVG size at the Canvas lifetime boundary (%s)",
-    (generatedSvgVirtualTextureMaxDimension) => {
-      expect(() => rendererRootOptionsSemanticKey({ generatedSvgVirtualTextureMaxDimension }))
-        .toThrow("generatedSvgVirtualTextureMaxDimension must be an integer from 256 through 16384");
-    },
-  );
 
   it("ignores unknown or undefined runtime policy fields in semantic identity", () => {
     const noisy = {

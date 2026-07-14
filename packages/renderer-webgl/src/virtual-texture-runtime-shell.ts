@@ -36,12 +36,7 @@ import {
   type VirtualTexturePageId,
 } from "./virtual-texturing";
 import { resolveResourceUri, throwIfAborted } from "./gltf/io";
-import {
-  generatedSvgVirtualTextureManifest,
-  loadGeneratedSvgVirtualTexturePageImage,
-  supportsGeneratedSvgVirtualTexturePages,
-  svgVirtualTextureSourceForImage,
-} from "./svg-texture";
+import { isLoadedSvgTextureSource } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
 
@@ -50,7 +45,6 @@ export type VirtualTextureRuntimeShellOptions = Omit<
   "loadPage" | "resources"
 > & {
   readonly disposed: () => boolean;
-  readonly generatedSvgVirtualTextureMaxDimension: number;
   readonly generatedImageVirtualTextures: boolean;
   readonly loadImageSource: (uri: string, signal: AbortSignal) => Promise<TexImageSource>;
 };
@@ -266,27 +260,23 @@ export class VirtualTextureRuntimeShell {
 
   registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void {
     if (!this.#options.generatedImageVirtualTextures) return;
+    // SVG paging is intentionally absent until VT v2 provides one generic
+    // page-source contract. Keep Royal's ordinary SVG texture as the baseline.
+    if (isLoadedSvgTextureSource(source)) return;
     const textureKey = textureCacheKey(texture);
-    const svgSource = svgVirtualTextureSourceForImage(source);
-    let pageSource: VirtualTextureGeneratedPageSource;
-    if (svgSource !== undefined) {
-      if (!supportsGeneratedSvgVirtualTexturePages()) return;
-      pageSource = { kind: "svg", source: svgSource };
-    } else {
-      const [width, height] = loadedTextureSourceSize(source);
-      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
-      if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
-      pageSource = {
-        kind: "raster",
-        source: {
-          ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
-          height: Math.ceil(height),
-          label: texture.uri,
-          source,
-          width: Math.ceil(width),
-        },
-      };
-    }
+    const [width, height] = loadedTextureSourceSize(source);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+    if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
+    const pageSource: VirtualTextureGeneratedPageSource = {
+      kind: "raster",
+      source: {
+        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+        height: Math.ceil(height),
+        label: texture.uri,
+        source,
+        width: Math.ceil(width),
+      },
+    };
     this.#autoSources.set(textureKey, generatedVirtualTextureSource(textureKey, pageSource));
   }
 
@@ -510,12 +500,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   #generatedManifest(source: VirtualTextureGeneratedPageSource): VirtualTextureManifestModel {
-    return source.kind === "raster"
-      ? generatedRasterVirtualTextureManifest(source.source)
-      : generatedSvgVirtualTextureManifest(
-          source.source,
-          this.#options.generatedSvgVirtualTextureMaxDimension,
-        );
+    return generatedRasterVirtualTextureManifest(source.source);
   }
 
   #pageImage(
@@ -549,14 +534,6 @@ export class VirtualTextureRuntimeShell {
       state.stats.generatedPageRasterizeMaxMs = Math.max(state.stats.generatedPageRasterizeMaxMs, elapsed);
       return image;
     };
-    const recordFailure = (error: unknown): never => {
-      if (!signal.aborted) state.stats.generatedPageFailures += 1;
-      throw error;
-    };
-    if (source.kind === "svg") {
-      return loadGeneratedSvgVirtualTexturePageImage(source.source, manifest, page, signal)
-        .then(recordResult, recordFailure);
-    }
     try {
       throwIfAborted(signal);
       return Promise.resolve(recordResult(generatedRasterVirtualTexturePageImage(source.source, manifest, page)));

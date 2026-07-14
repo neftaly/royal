@@ -24,12 +24,6 @@ export interface RendererOptions {
    * @defaultValue `false`
    */
   readonly generatedImageVirtualTextures?: boolean;
-  /**
-   * Long-edge mip-0 resolution for generated SVG VTs, from 256 through 16384
-   * logical texels. Only used when generated image VTs are enabled.
-   * @defaultValue `16384`
-   */
-  readonly generatedSvgVirtualTextureMaxDimension?: number;
   /** Immutable root-wide CPU, GPU, job, and upload budget overrides. */
   readonly resourceGovernorPolicy?: ResourceGovernorPolicyInput;
 }
@@ -43,7 +37,6 @@ export interface ResolvedRendererOptions {
   readonly alpha: boolean;
   readonly antialias: boolean;
   readonly generatedImageVirtualTextures: boolean;
-  readonly generatedSvgVirtualTextureMaxDimension: number;
   readonly resourceGovernorPolicy: ResourceGovernorPolicy;
 }
 

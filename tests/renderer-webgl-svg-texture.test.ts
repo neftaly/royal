@@ -1,23 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GltfPreparationScheduler } from "../packages/renderer-webgl/src/gltf/preparation-scheduler";
 import {
-  GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
-  generatedSvgVirtualTextureManifest,
-  loadGeneratedSvgVirtualTexturePageImage,
+  isLoadedSvgTextureSource,
   loadSvgTextureFromUri,
   prepareSvgTextForImage,
-  supportsGeneratedSvgVirtualTexturePages,
   svgTextureViewport,
-  svgVirtualTextureSourceForImage,
 } from "../packages/renderer-webgl/src/svg-texture";
-import {
-  virtualTexturePagesForFootprint,
-  virtualTextureTargetMip,
-} from "../packages/renderer-webgl/src/virtual-texture-demand";
-import {
-  virtualTextureMipTexelSize,
-  virtualTextureStoredPageSize,
-} from "../packages/renderer-webgl/src/virtual-texturing";
 
 const svg = (hrefs: readonly string[]): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8">${hrefs
@@ -157,7 +145,7 @@ describe("SVG texture reference lifecycle", () => {
     scheduler.dispose();
   });
 
-  it("reuses one decoded SVG across seeded periodic page rasters without embedding or reparsing its text", async () => {
+  it("loads one marked ordinary SVG source without constructing VT pages", async () => {
     const objectUrlBlobs: Blob[] = [];
     class TestUrl extends URL {
       static createObjectURL = vi.fn((blob: Blob) => {
@@ -166,221 +154,23 @@ describe("SVG texture reference lifecycle", () => {
       });
       static revokeObjectURL = vi.fn();
     }
-    const largePath = "M0 0h1v1z".repeat(8_192);
-    const canvases: Array<{ height: number; width: number }> = [];
-    const patterns: Array<{
-      image: CanvasImageSource;
-      repetition: string | null;
-      setTransform: ReturnType<typeof vi.fn>;
-    }> = [];
-    const contexts: Array<{
-      createPattern: ReturnType<typeof vi.fn>;
-      fillRect: ReturnType<typeof vi.fn>;
-      fillStyle: unknown;
-      getImageData: ReturnType<typeof vi.fn>;
-      imageSmoothingEnabled: boolean;
-      imageSmoothingQuality: ImageSmoothingQuality;
-    }> = [];
-    const pageImages: TexImageSource[] = [];
     vi.stubGlobal("Image", AutoLoadingImage);
     vi.stubGlobal("URL", TestUrl);
-    vi.stubGlobal("document", {
-      createElement: vi.fn(() => {
-        const context = {
-          createPattern: vi.fn((image: CanvasImageSource, repetition: string | null) => {
-            const pattern = { image, repetition, setTransform: vi.fn() };
-            patterns.push(pattern);
-            return pattern;
-          }),
-          fillRect: vi.fn(),
-          fillStyle: "#000",
-          getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
-            data: new Uint8ClampedArray(0),
-            height,
-            width,
-          }) as ImageData),
-          imageSmoothingEnabled: false,
-          imageSmoothingQuality: "low" as ImageSmoothingQuality,
-        };
-        contexts.push(context);
-        const canvas = {
-          getContext: vi.fn(() => context),
-          height: 0,
-          width: 0,
-        };
-        canvases.push(canvas);
-        return canvas;
-      }),
-    });
     vi.stubGlobal("fetch", vi.fn(async () => textResponse(
       "https://assets.test/large.svg",
-      `<svg width="2050" height="1300"><path d="${largePath}"/></svg>`,
+      '<svg width="2050" height="1300"><path d="M0 0h1v1z"/></svg>',
     )));
 
     const loaded = await loadSvgTextureFromUri("https://assets.test/large.svg");
-    const source = svgVirtualTextureSourceForImage(loaded.image);
-    expect(source).toBeDefined();
+    expect(isLoadedSvgTextureSource(loaded.image)).toBe(true);
     expect((loaded.image as unknown as AutoLoadingImage).crossOrigin).toBeNull();
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(TestUrl.revokeObjectURL).toHaveBeenCalledWith("blob:royal-svg-1");
-
-    const manifest = generatedSvgVirtualTextureManifest(source!, 4_100);
-    const requestedPages: Array<{ readonly mip: number; readonly x: number; readonly y: number }> = [];
-    let seed = 0x65_76_74;
-    for (let index = 0; index < 32; index += 1) {
-      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
-      const mip = seed % 4;
-      const scale = 2 ** mip;
-      const pagesWide = Math.ceil(manifest.width / (manifest.pageSize * scale));
-      const pagesHigh = Math.ceil(manifest.height / (manifest.pageSize * scale));
-      const page = {
-        mip,
-        x: (seed >>> 8) % pagesWide,
-        y: (seed >>> 16) % pagesHigh,
-      };
-      requestedPages.push(page);
-      pageImages.push(await loadGeneratedSvgVirtualTexturePageImage(source!, manifest, page));
-    }
-
-    expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(objectUrlBlobs).toHaveLength(1);
-    expect(contexts).toHaveLength(32);
-    expect(patterns).toHaveLength(32);
-    expect(pageImages).toHaveLength(32);
-    const storedPageSize = virtualTextureStoredPageSize(manifest);
-    for (const [index, pattern] of patterns.entries()) {
-      expect(pattern).toEqual(expect.objectContaining({
-        image: loaded.image,
-        repetition: "repeat",
-      }));
-      const page = requestedPages[index]!;
-      const [mipWidth, mipHeight] = virtualTextureMipTexelSize(manifest, page.mip);
-      expect(pattern.setTransform).toHaveBeenCalledWith({
-        a: mipWidth / source!.width,
-        b: 0,
-        c: 0,
-        d: mipHeight / source!.height,
-        e: manifest.borderTexels - page.x * manifest.pageSize,
-        f: manifest.borderTexels - page.y * manifest.pageSize,
-      });
-      expect(contexts[index]?.fillRect).toHaveBeenCalledWith(
-        0,
-        0,
-        storedPageSize,
-        storedPageSize,
-      );
-      expect(contexts[index]?.getImageData).toHaveBeenCalledWith(
-        0,
-        0,
-        storedPageSize,
-        storedPageSize,
-      );
-      expect(pageImages[index]).toEqual(expect.objectContaining({
-        height: storedPageSize,
-        width: storedPageSize,
-      }));
-      expect(contexts[index]?.fillStyle).toBe(pattern);
-      expect(canvases[index]).toEqual(expect.objectContaining({
-        height: storedPageSize,
-        width: storedPageSize,
-      }));
-    }
-    expect(contexts.every((context) => context.imageSmoothingEnabled)).toBe(true);
-    expect(contexts.every((context) => context.imageSmoothingQuality === "high")).toBe(true);
-  });
-
-  it("rejects origin-unclean SVG pages before they reach the WebGL upload queue", async () => {
-    class TestUrl extends URL {
-      static createObjectURL = vi.fn(() => "blob:royal-svg-security");
-      static revokeObjectURL = vi.fn();
-    }
-    vi.stubGlobal("Image", AutoLoadingImage);
-    vi.stubGlobal("URL", TestUrl);
-    vi.stubGlobal("document", {
-      createElement: vi.fn(() => {
-        const pattern = { setTransform: vi.fn() };
-        return {
-          getContext: vi.fn(() => ({
-            createPattern: vi.fn(() => pattern),
-            fillRect: vi.fn(),
-            fillStyle: "#000",
-            getImageData: vi.fn(() => {
-              const error = new Error("The operation is insecure");
-              error.name = "SecurityError";
-              throw error;
-            }),
-            imageSmoothingEnabled: false,
-            imageSmoothingQuality: "low",
-          })),
-          height: 0,
-          width: 0,
-        };
-      }),
-    });
-    vi.stubGlobal("fetch", vi.fn(async () => textResponse(
-      "https://assets.test/security.svg",
-      '<svg width="512" height="512"/>',
-    )));
-
-    const loaded = await loadSvgTextureFromUri("https://assets.test/security.svg");
-    const source = svgVirtualTextureSourceForImage(loaded.image)!;
-    const manifest = generatedSvgVirtualTextureManifest(source);
-
-    await expect(loadGeneratedSvgVirtualTexturePageImage(
-      source,
-      manifest,
-      { mip: 0, x: 0, y: 0 },
-    )).rejects.toThrow(/could not produce origin-clean pixels: The operation is insecure/u);
-  });
-
-  it("does not allocate a page canvas when source generation is aborted before its microtask", async () => {
-    class TestUrl extends URL {
-      static createObjectURL = vi.fn(() => "blob:royal-svg-abort-page");
-      static revokeObjectURL = vi.fn();
-    }
-    const createElement = vi.fn();
-    vi.stubGlobal("Image", AutoLoadingImage);
-    vi.stubGlobal("URL", TestUrl);
-    vi.stubGlobal("document", { createElement });
-    vi.stubGlobal("fetch", vi.fn(async () => textResponse(
-      "https://assets.test/retry.svg",
-      '<svg width="512" height="512"/>',
-    )));
-
-    const loaded = await loadSvgTextureFromUri("https://assets.test/retry.svg");
-    const source = svgVirtualTextureSourceForImage(loaded.image)!;
-    const manifest = generatedSvgVirtualTextureManifest(source);
-    const controller = new AbortController();
-    const pending = loadGeneratedSvgVirtualTexturePageImage(
-      source,
-      manifest,
-      { mip: 0, x: 0, y: 0 },
-      controller.signal,
-    );
-    controller.abort();
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(createElement).not.toHaveBeenCalled();
   });
 });
 
-describe("generated SVG browser capability", () => {
-  it("keeps Apple WebKit on its origin-clean ordinary SVG upload path", () => {
-    expect(supportsGeneratedSvgVirtualTexturePages(
-      "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
-    )).toBe(false);
-    expect(supportsGeneratedSvgVirtualTexturePages(
-      "Mozilla/5.0 AppleWebKit/605.1.15 CriOS/126.0 Mobile/15E148 Safari/604.1",
-    )).toBe(false);
-    expect(supportsGeneratedSvgVirtualTexturePages(
-      "Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
-    )).toBe(true);
-    expect(supportsGeneratedSvgVirtualTexturePages(
-      "Mozilla/5.0 Gecko/20100101 Firefox/128.0",
-    )).toBe(true);
-  });
-});
-
-describe("generated SVG virtual texture density", () => {
+describe("SVG texture viewport normalization", () => {
   it("reads only exact root width and height attribute names", async () => {
     const adversarial = [
       "<svg",
@@ -469,77 +259,4 @@ describe("generated SVG virtual texture density", () => {
       .resolves.toContain(`height="${String(Number.MIN_VALUE)}"`);
   });
 
-  it("uses a configured long-edge resolution independent of authored SVG pixels", () => {
-    const source = { height: 500, label: "wide vector", width: 1_000 };
-    expect(generatedSvgVirtualTextureManifest(source, 8_000)).toMatchObject({
-      height: 4_000,
-      physicalSlots: 64,
-      width: 8_000,
-    });
-    expect(generatedSvgVirtualTextureManifest({ ...source, height: 5_000, width: 10_000 })).toMatchObject({
-      height: GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION / 2,
-      physicalSlots: 64,
-      width: GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
-    });
-    expect(() => generatedSvgVirtualTextureManifest(source, 16_385)).toThrow("through 16384");
-  });
-
-  it("scales extreme authored dimensions without overflowing", () => {
-    const manifest = generatedSvgVirtualTextureManifest({
-      height: Number.MAX_VALUE / 2,
-      label: "extreme vector",
-      width: Number.MAX_VALUE,
-    });
-    expect(manifest).toMatchObject({ height: 8_192, width: 16_384 });
-    expect(Number.isSafeInteger(manifest.width)).toBe(true);
-    expect(Number.isSafeInteger(manifest.height)).toBe(true);
-
-    expect(generatedSvgVirtualTextureManifest({
-      height: Number.MIN_VALUE,
-      label: "extreme aspect vector",
-      width: Number.MAX_VALUE,
-    })).toMatchObject({ height: 1, width: 16_384 });
-
-    expect(generatedSvgVirtualTextureManifest({
-      height: 1,
-      label: "minimum-resolution vector",
-      width: 1,
-    }, 256)).toMatchObject({ height: 256, width: 256 });
-  });
-
-  it("addresses a capped SVG's truncated NPOT edge from its logical texels", () => {
-    const capped = generatedSvgVirtualTextureManifest({
-      height: 3_333,
-      label: "capped vector",
-      width: 10_000,
-    }, 16_384);
-    expect(capped).toMatchObject({ height: 5_461, width: 16_384 });
-
-    // At mip 2 the final Y page begins at texel 5120 (V~=0.9376), not
-    // at the equal-grid boundary 5/6. This footprint still belongs to y=4.
-    expect(virtualTexturePagesForFootprint(capped, 2, {
-      maxU: 0.12,
-      maxV: 0.9,
-      minU: 0.1,
-      minV: 0.86,
-      screenHeight: 200,
-      screenWidth: 200,
-    })).toEqual([{ mip: 2, x: 1, y: 4 }]);
-  });
-
-  it("retains mip-zero SVG detail when a close view renders enough physical pixels", () => {
-    const manifest = generatedSvgVirtualTextureManifest({
-      height: 1_024,
-      label: "close vector",
-      width: 1_024,
-    }, 8_192);
-    expect(virtualTextureTargetMip(manifest, {
-      minU: 0.45,
-      maxU: 0.55,
-      minV: 0.45,
-      maxV: 0.55,
-      screenHeight: 1_024,
-      screenWidth: 1_024,
-    })).toBe(0);
-  });
 });

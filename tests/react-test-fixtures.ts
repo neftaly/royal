@@ -27,7 +27,6 @@ export const fakeRendererRoot = ({
     alpha: true,
     antialias: true,
     generatedImageVirtualTextures: false,
-    generatedSvgVirtualTextureMaxDimension: 16_384,
     resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
   },
   diagnostics = {},

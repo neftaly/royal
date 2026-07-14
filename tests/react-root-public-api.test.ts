@@ -175,7 +175,6 @@ describe("React root public API", () => {
         alpha: false,
         antialias: true,
         generatedImageVirtualTextures: true,
-        generatedSvgVirtualTextureMaxDimension: 16_384,
         resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
       },
     });
@@ -211,7 +210,6 @@ describe("React root public API", () => {
       alpha: false,
       antialias: true,
       generatedImageVirtualTextures: true,
-      generatedSvgVirtualTextureMaxDimension: 16_384,
       resourceGovernorPolicy: DEFAULT_RESOURCE_GOVERNOR_POLICY,
     });
     expect(Object.isFrozen(root.options)).toBe(true);

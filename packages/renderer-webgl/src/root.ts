@@ -740,7 +740,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         disposed: () => this.#disposed,
         frame: () => this.#framePublication.frame,
         generatedImageVirtualTextures: this.#options.generatedImageVirtualTextures,
-        generatedSvgVirtualTextureMaxDimension: this.#options.generatedSvgVirtualTextureMaxDimension,
         gpu: this.#virtualTextureGpu,
         invalidate: () => this.invalidate(),
         loadImageSource: (uri, signal) => loadImage(uri, signal),

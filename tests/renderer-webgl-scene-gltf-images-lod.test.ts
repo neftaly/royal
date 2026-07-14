@@ -61,7 +61,6 @@ import {
   responseWithBuffer,
   responseWithText,
   installStagedGltfLoader,
-  installCanvas2d,
   installCanvasImageMimeTypeSupport,
   settleDocumentAndBuffer,
   settleLodDocumentAndBuffer,
@@ -331,12 +330,11 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(calls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_2D)).toBe(true);
   });
 
-  it("uses opted-in generated VT for plain glTF .svg image sources", async () => {
+  it("keeps SVG ordinary while generated raster VT is enabled", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
-    const { contexts } = installCanvas2d();
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
-    const { gl } = fakeGl();
+    const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
@@ -372,83 +370,15 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
     expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
 
-    for (
-      let frame = 0;
-      frame < 8
-      && root.snapshot().virtualTexturing.shaderBinds === 0;
-      frame += 1
-    ) {
-      await flushMicrotasks();
-      root.render(renderGraph);
-      await flushAnimationFrames(viewport.animationFrames);
-    }
-
     expect(loader.objectUrlBlobs).toHaveLength(1);
-    expect(contexts.length).toBeGreaterThan(0);
-    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
-      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
-    )))).toBe(true);
+    expect(callCount(calls, "texImage2D")).toBe(1);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      generatedManifestUses: 1,
+      generatedManifestUses: 0,
       generatedPageFailures: 0,
-      generatedPagesTarget: 5_461,
-      manifestsReady: 1,
+      generatedPagesTarget: 0,
+      manifestsReady: 0,
     }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
-  });
-
-  it("sizes generated GS_texture_svg VT residency for the source mip pyramid", async () => {
-    vi.stubGlobal("devicePixelRatio", 1);
-    const viewport = installViewportInvalidationStubs();
-    const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
-    const tigerSizedSvgTexture = [
-      "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\" width=\"1024\" height=\"1024\">",
-      "<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"#c7b084\"/>",
-      "<path d=\"M128 128h768v768H128z\" fill=\"#f60\"/>",
-      "</svg>",
-    ].join("");
-
-    root.render(renderScene([
-      directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
-      gltf({ src: triangleGltfSrc, version: "svg-generated-vt-budget" }),
-    ]));
-    expect(loader.resolvePendingFetch(/staged-triangle\.gltf(?:$|[?#])/, (url) =>
-      responseWithJson(url, {
-        ...triangleDocument(),
-        extensionsUsed: ["GS_texture_svg"],
-        images: [
-          { mimeType: "image/png", uri: triangleImageUri },
-          { mimeType: "image/svg+xml", uri: triangleSvgImageUri },
-        ],
-        textures: [{ extensions: { GS_texture_svg: { source: 1 } }, sampler: 0, source: 0 }],
-      }))).toBe(true);
-    await flushMicrotasks();
-    expect(loader.resolvePendingFetch(/staged-triangle\.bin(?:$|[?#])/, (url) =>
-      responseWithBuffer(url, triangleBin()))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(loader.resolvePendingFetch(/staged-triangle\.svg(?:$|[?#])/, (url) =>
-      responseWithText(url, tigerSizedSvgTexture, "image/svg+xml"))).toBe(true);
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    for (const image of ControlledImage.instances) image.settleLoad();
-    await flushMicrotasks();
-    await flushAnimationFrames(viewport.animationFrames);
-
-    expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
-
-    expect(
-      calls.some((call) =>
-        call.name === "texImage2D"
-        && call.args[0] === gl.TEXTURE_2D
-        && call.args[3] === 2064
-        && call.args[4] === 2064),
-      "a 1024px SVG at default 4x density should use its bounded 64-slot 8x8 bordered atlas",
-    ).toBe(true);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
   });
 
   it("preserves URI SVG asset base while normalizing viewBox-only SVG textures", async () => {

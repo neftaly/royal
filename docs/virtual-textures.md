@@ -6,9 +6,10 @@ generate VTs for ordinary base-color image textures used by triangle geometry
 with `TEXCOORD_0`, explicitly set
 `generatedImageVirtualTextures: true` in React `Canvas.rendererOptions` or
 `createRendererRoot(..., { generatedImageVirtualTextures: true })`. The default
-is `false`; Royal does not probe for a hidden `imageUri + '.vt.json'` sidecar. SVG sources are not
-subject to the raster size threshold; decoded raster sources qualify when their
-longest dimension is at least 257 px. The ordinary texture remains active until
+is `false`; Royal does not probe for a hidden `imageUri + '.vt.json'` sidecar.
+Decoded raster sources qualify when their longest dimension is at least 257 px.
+SVG sources remain ordinary until VT v2 provides one generic page-source path.
+The ordinary texture remains active until
 generated coverage is ready. Authored `virtualTexture(...)` resources are
 unaffected.
 
@@ -17,14 +18,6 @@ The authored object form is
 forms use `src`; authored VT objects use `manifestUri` so autocomplete states
 that the URI must resolve to a manifest. Pre-release aliases are intentionally
 not retained.
-
-Generated SVG image VTs use that same path. Their close-zoom
-detail is controlled by `generatedSvgVirtualTextureMaxDimension`, the logical
-mip-0 resolution of the SVG's longest edge. It defaults to `16384`, accepts
-integers from `256` through `16384`, and preserves aspect ratio. The resolution
-changes texture detail only: it does not change the SVG's layout, world-space
-size, or bounded physical page cache. Authored CSS and `viewBox` dimensions are
-used for aspect and layout, not as a raster-resolution ceiling.
 
 ## Authored manifest contract
 

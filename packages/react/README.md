@@ -142,7 +142,6 @@ on `<Canvas>` recreates its renderer root.
 <Canvas
   rendererOptions={{
     generatedImageVirtualTextures: true,
-    generatedSvgVirtualTextureMaxDimension: 16384,
   }}
   scene={renderScene}
 />
@@ -160,17 +159,10 @@ The imperative root separates its two observational models:
   WebGL context is created.
 - `generatedImageVirtualTextures` defaults to `false`. Enable it to generate
   VTs for ordinary base-color image textures used by triangle geometry with
-  `TEXCOORD_0`. SVG sources are not subject to the raster size threshold;
-  decoded raster sources qualify when their longest dimension is at least 257
-  px. The ordinary texture remains active until generated coverage is ready.
+  `TEXCOORD_0`. Decoded raster sources qualify when their longest dimension is
+  at least 257 px. SVG remains on the ordinary texture path until VT v2 provides
+  one generic page-source implementation. The ordinary texture remains active until generated coverage is ready.
   Authored `virtualTexture(...)` resources are unaffected.
-- `generatedSvgVirtualTextureMaxDimension` is the long-edge mip-0 resolution
-  for generated SVG VTs. It defaults to `16384`, accepts integers from `256`
-  through `16384`, and only has an effect when generated virtual textures are
-  enabled. It controls close-zoom detail without changing layout, world size,
-  or the bounded physical page cache. Generated dimensions preserve aspect
-  ratio; SVG CSS or `viewBox` dimensions do not impose a raster-resolution
-  ceiling.
 - VT atlases and page tables participate in `resourceGovernorPolicy` as
   `classes['virtual-texture'].persistentGpuBytes`. Its `softLimit` marks
   borrowing for diagnostics, while optional `hardLimit` sets an exact class
@@ -190,8 +182,8 @@ For very close inspection, keep the perspective near plane below the closest
 camera-to-surface distance. For example,
 `useOrbitCamera({ initial: { distance: 1 }, near: 0.01 })` pairs safely with
 `<OrbitControls orbit={orbit} minDistance={0.1} />`. This is geometric camera
-clipping and applies equally to ordinary textures, authored VTs, generated SVG
-VTs, and untextured meshes.
+clipping and applies equally to ordinary textures, authored VTs, generated
+raster VTs, and untextured meshes.
 
 The main `@royal/react` JSX runtime is ordinary React. Royal does not create a
 second React root, so outer Context, ErrorBoundary, and Suspense semantics stay

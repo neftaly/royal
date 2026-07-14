@@ -500,7 +500,7 @@ parity requires Damaged Helmet under the shared authored HDR environment and
 ACES presentation to reach SSIM >= 0.98 against the pinned Three.js oracle;
 unsupported deformation must fail explicitly rather than render a substitute.
 
-Retained evidence routes cover Damaged Helmet, SVG texture, SVG VT, automatic
+Retained evidence routes cover Damaged Helmet, ordinary SVG texture, automatic raster VT,
 instancing, transparency, picking, context restoration, immersive stereo, and
 the modern Khronos material-extension assets.
 Fuzzing/property tests cover pure preparation, batch grouping, range diffs,

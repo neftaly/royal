@@ -1,20 +1,9 @@
 import type { LoadedTextureSource } from "./texture-sources";
-import { rasterizeGeneratedVirtualTexturePageImageData } from "./virtual-texture-page-rasterizer";
 import {
   abortError,
   dataUriMediaType,
 } from "./gltf/io";
-import {
-  generatedVirtualTextureManifest,
-  type VirtualTextureManifestModel,
-  type VirtualTexturePageId,
-} from "./virtual-texturing";
 
-const GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE = 256;
-const GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP = 64;
-export const GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION = GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE;
-export const GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION = 16_384;
-export const GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION = GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION;
 const GENERATED_SVG_DERIVED_VIEWPORT_MAX_DIMENSION = 1_024;
 
 const svgRootPattern = /<svg\b([^>]*)>/iu;
@@ -28,25 +17,7 @@ const svgDimensionPattern = /^\s*([+-]?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:e[+-]?\d+)?
 const svgExternalReferenceMaxDepth = 8;
 const svgTextDecoder = new TextDecoder();
 const svgTextEncoder = new TextEncoder();
-const svgVirtualTextureSourceSymbol = Symbol("royal.svgVirtualTextureSource");
-
-export type SvgVirtualTextureDescription = {
-  readonly height: number;
-  readonly label: string;
-  readonly width: number;
-};
-
-export type SvgVirtualTexturePageProducer = {
-  loadPage(
-    manifest: VirtualTextureManifestModel,
-    page: VirtualTexturePageId,
-    signal?: AbortSignal,
-  ): TexImageSource;
-};
-
-export type SvgVirtualTextureSource = SvgVirtualTextureDescription & {
-  readonly pageProducer: SvgVirtualTexturePageProducer;
-};
+const loadedSvgTextureSources = new WeakSet<object>();
 
 export type LoadedSvgTexture = {
   readonly image: HTMLImageElement;
@@ -57,10 +28,6 @@ export type SvgTextureViewport = {
   readonly fromViewBox: boolean;
   readonly height: number;
   readonly width: number;
-};
-
-type SvgVirtualTextureSourceCarrier = {
-  [svgVirtualTextureSourceSymbol]?: SvgVirtualTextureSource;
 };
 
 type SvgImageReferenceContext = {
@@ -78,15 +45,9 @@ export const isSvgUri = (uri: string): boolean =>
     ? isSvgMimeType(dataUriMediaType(uri))
     : /\.svg(?:$|[?#])/iu.test(uri);
 
-/**
- * Apple WebKit accepts decoded SVG images as ordinary WebGL texture sources,
- * but can mark Canvas 2D pages derived from them as origin-unclean. Generated
- * VT therefore retains the ordinary SVG path on those browsers.
- */
-export const supportsGeneratedSvgVirtualTexturePages = (
-  userAgent = globalThis.navigator?.userAgent ?? "",
-): boolean => !/AppleWebKit\//u.test(userAgent)
-  || /(?:Chrome|Chromium|Edg|OPR)\//u.test(userAgent);
+/** True for sources produced by Royal's safe ordinary SVG ingestion path. */
+export const isLoadedSvgTextureSource = (source: LoadedTextureSource): boolean =>
+  typeof source === "object" && source !== null && loadedSvgTextureSources.has(source);
 
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
@@ -550,21 +511,6 @@ const loadImageFromBlob = async (
   }
 };
 
-const attachSvgVirtualTextureSource = (
-  image: HTMLImageElement,
-  source: SvgVirtualTextureSource,
-): HTMLImageElement => {
-  (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol] = source;
-  return image;
-};
-
-export const svgVirtualTextureSourceForImage = (
-  image: LoadedTextureSource,
-): SvgVirtualTextureSource | undefined =>
-  typeof image === "object" && image !== null
-    ? (image as SvgVirtualTextureSourceCarrier)[svgVirtualTextureSourceSymbol]
-    : undefined;
-
 const loadSvgTextImage = async (
   svgText: string,
   label: string,
@@ -579,87 +525,14 @@ const loadSvgTextImage = async (
       ...(signal === undefined ? {} : { signal }),
     },
   });
-  const viewport = svgTextureViewport(normalizedText);
   const image = await loadImageFromBlob(new Blob([normalizedText], { type: "image/svg+xml" }), label, signal);
+  loadedSvgTextureSources.add(image);
 
   return {
-    image: viewport === undefined
-      ? image
-      : attachSvgVirtualTextureSource(image, {
-        height: viewport.height,
-        label,
-        pageProducer: new GeneratedSvgVirtualTexturePageProducer(image, label, viewport),
-        width: viewport.width,
-      }),
+    image,
     text: normalizedText,
   };
 };
-
-export const generatedSvgVirtualTextureManifest = (
-  source: SvgVirtualTextureDescription,
-  maxDimension = GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
-): VirtualTextureManifestModel => generatedVirtualTextureManifest({
-  colorSpace: "srgb",
-  ...(() => {
-    if (
-      !Number.isSafeInteger(maxDimension)
-      || maxDimension < GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION
-      || maxDimension > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION
-    ) {
-      throw new RangeError(
-        `SVG virtual texture max dimension must be an integer from ${GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION} through ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION} logical texels`,
-      );
-    }
-    if (!positiveFinite(source.width) || !positiveFinite(source.height)) {
-      throw new RangeError("SVG virtual texture dimensions must be finite and greater than zero");
-    }
-
-    const largestSourceDimension = Math.max(source.width, source.height);
-    const logicalDimension = (dimension: number): number => Math.max(1, Math.ceil(
-      maxDimension * (dimension / largestSourceDimension),
-    ));
-    return {
-      height: logicalDimension(source.height),
-      width: logicalDimension(source.width),
-    };
-  })(),
-  pageSize: GENERATED_SVG_VIRTUAL_TEXTURE_PAGE_SIZE,
-  physicalSlotCap: GENERATED_SVG_VIRTUAL_TEXTURE_PHYSICAL_SLOT_CAP,
-});
-
-class GeneratedSvgVirtualTexturePageProducer implements SvgVirtualTexturePageProducer {
-  readonly #image: HTMLImageElement;
-  readonly #label: string;
-  readonly #viewport: SvgTextureViewport;
-
-  constructor(image: HTMLImageElement, label: string, viewport: SvgTextureViewport) {
-    this.#image = image;
-    this.#label = label;
-    this.#viewport = viewport;
-  }
-
-  loadPage(
-    manifest: VirtualTextureManifestModel,
-    page: VirtualTexturePageId,
-    signal?: AbortSignal,
-  ): TexImageSource {
-    if (signal?.aborted === true) throw abortError();
-    return rasterizeGeneratedVirtualTexturePageImageData({
-      height: this.#viewport.height,
-      image: this.#image,
-      label: this.#label,
-      width: this.#viewport.width,
-    }, manifest, page);
-  }
-}
-
-export const loadGeneratedSvgVirtualTexturePageImage = (
-  source: SvgVirtualTextureSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-  signal?: AbortSignal,
-): Promise<TexImageSource> =>
-  Promise.resolve().then(() => source.pageProducer.loadPage(manifest, page, signal));
 
 export const loadSvgTextureFromUri = async (url: string, signal?: AbortSignal): Promise<LoadedSvgTexture> => {
   if (signal?.aborted === true) throw abortError();

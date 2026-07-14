@@ -13,7 +13,6 @@ import {
 } from './browser-harness.mjs';
 import {
   exampleContract,
-  renderNowExpression,
   rendererSnapshotExpression,
   requireExampleRoute,
 } from './example-contract.mjs';
@@ -683,67 +682,6 @@ const assertRoute = (expected, state) => {
     }
   }
 
-  if (expected.id === 'gltf-ghostscript-tiger-svg') {
-    const interaction = state.svgVirtualTextureInteraction;
-    if (interaction === undefined) {
-      failures.push('SVG virtual texture route missed close zoom interaction smoke');
-    } else if (interaction.error !== undefined) {
-      failures.push(`SVG virtual texture close zoom failed: ${interaction.error}`);
-    } else {
-      if (interaction.lifecycleState !== 'available') {
-        failures.push(`SVG virtual texture close zoom left the renderer ${interaction.lifecycleState ?? 'unavailable'}`);
-      }
-      if (interaction.lifecycleError !== null) {
-        failures.push(`SVG virtual texture close zoom reported a renderer error: ${interaction.lifecycleError ?? 'unavailable'}`);
-      }
-      if (interaction.settled !== true) {
-        failures.push('SVG virtual texture close zoom did not converge');
-      }
-      if (interaction.pendingPages !== 0 || interaction.outstandingPageRequests !== 0) {
-        failures.push(`SVG virtual texture close zoom left work pending (${interaction.pendingPages ?? 'unknown'} pages, ${interaction.outstandingPageRequests ?? 'unknown'} requests)`);
-      }
-      if (!(Number.isFinite(interaction.finestActiveMip) && interaction.finestActiveMip <= 1)) {
-        failures.push(`SVG virtual texture close zoom stopped at mip ${interaction.finestActiveMip ?? 'unknown'} instead of reaching display-resolution detail`);
-      }
-      if (!(
-        Number.isFinite(interaction.distanceBefore) &&
-        Number.isFinite(interaction.distanceAfter) &&
-        interaction.distanceAfter < interaction.distanceBefore &&
-        interaction.distanceAfter <= 0.021
-      )) {
-        failures.push(`SVG virtual texture close zoom did not reach its near interaction limit (${interaction.distanceBefore ?? 'unknown'} -> ${interaction.distanceAfter ?? 'unknown'})`);
-      }
-      if (!(
-        Number.isFinite(interaction.finestActiveMipBefore) &&
-        Number.isFinite(interaction.finestActiveMip) &&
-        interaction.finestActiveMip < interaction.finestActiveMipBefore
-      )) {
-        failures.push(`SVG virtual texture close zoom did not refine beyond its initial mip (${interaction.finestActiveMipBefore ?? 'unknown'} -> ${interaction.finestActiveMip ?? 'unknown'})`);
-      }
-      if (!(
-        Number.isFinite(interaction.activePages) &&
-        Number.isFinite(interaction.cachedPages) &&
-        interaction.activePages <= interaction.cachedPages
-      )) {
-        failures.push('SVG virtual texture close zoom active pages exceeded its physical cache');
-      }
-      if (!(
-        Number.isFinite(interaction.cachedPages) &&
-        Number.isFinite(interaction.physicalPageCapacity) &&
-        interaction.cachedPages <= interaction.physicalPageCapacity
-      )) {
-        failures.push(`SVG virtual texture cache exceeded its physical capacity (${interaction.cachedPages ?? 'unknown'} > ${interaction.physicalPageCapacity ?? 'unknown'})`);
-      }
-      if (!(
-        Number.isFinite(interaction.physicalAllocatedBytes) &&
-        Number.isFinite(interaction.physicalBudgetBytes) &&
-        interaction.physicalAllocatedBytes <= interaction.physicalBudgetBytes
-      )) {
-        failures.push(`SVG virtual texture allocation exceeded its governed byte budget (${interaction.physicalAllocatedBytes ?? 'unknown'} > ${interaction.physicalBudgetBytes ?? 'unknown'})`);
-      }
-    }
-  }
-
   if (expected.id.startsWith('gltf-')) {
     const gltfLoadDiagnostics = state.renderer?.gltfLoadDiagnostics;
     const assets = gltfLoadDiagnostics?.assets;
@@ -1122,77 +1060,6 @@ const runVirtualTextureInteractionSmoke = async (session) => {
     await session.call('Emulation.clearDeviceMetricsOverride');
   }
 };
-
-const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session, `
-(async () => {
-  const canvas = document.querySelector('canvas');
-  if (canvas === null) return { error: 'missing SVG virtual texture canvas' };
-  const rendererSnapshot = () => ${rendererSnapshotExpression};
-  const before = rendererSnapshot();
-  const pagesByMip = (snapshot, prefix) => Array.from({ length: 16 }, (_, mip) => (
-    snapshot?.virtualTexturing?.[prefix + mip] ?? 0
-  ));
-  const finestActiveMip = (snapshot) => {
-    const mip = pagesByMip(snapshot, 'activePagesMip').findIndex((count) => count > 0);
-    return mip < 0 ? null : mip;
-  };
-  const distanceBefore = Number(canvas.dataset.cameraDistance);
-  for (let step = 0; step < 6; step += 1) {
-    canvas.dispatchEvent(new WheelEvent('wheel', {
-      bubbles: true,
-      cancelable: true,
-      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-      deltaY: -400,
-    }));
-    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-  }
-  await ${renderNowExpression};
-
-  const deadline = performance.now() + 10_000;
-  let lastActivePages = -1;
-  let lastCachedPages = -1;
-  let stableFrames = 0;
-  let renderer = rendererSnapshot();
-  while (performance.now() < deadline && stableFrames < 8) {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-    renderer = rendererSnapshot();
-    const vt = renderer?.virtualTexturing;
-    if (
-      vt?.activePages === lastActivePages &&
-      vt?.cachedPages === lastCachedPages &&
-      vt?.pendingPages === 0 &&
-      vt?.outstandingPageRequests === 0
-    ) stableFrames += 1;
-    else stableFrames = 0;
-    lastActivePages = vt?.activePages ?? -1;
-    lastCachedPages = vt?.cachedPages ?? -1;
-  }
-
-  const vt = renderer?.virtualTexturing;
-  const distanceAfter = Number(canvas.dataset.cameraDistance);
-  const rgbaPageBytes = 256 * 256 * 4;
-  return {
-    activePages: vt?.activePages ?? null,
-    activePagesByMip: pagesByMip(renderer, 'activePagesMip'),
-    cachedPagesByMip: pagesByMip(renderer, 'cachedPagesMip'),
-    distanceAfter: Number.isFinite(distanceAfter) ? distanceAfter : null,
-    distanceBefore: Number.isFinite(distanceBefore) ? distanceBefore : null,
-    finestActiveMip: finestActiveMip(renderer),
-    finestActiveMipBefore: finestActiveMip(before),
-    cachedPages: vt?.cachedPages ?? null,
-    lifecycleError: renderer?.lifecycle?.error ?? null,
-    lifecycleState: renderer?.lifecycle?.state ?? null,
-    outstandingPageRequests: vt?.outstandingPageRequests ?? null,
-    pendingPages: vt?.pendingPages ?? null,
-    physicalAllocatedBytes: vt?.physicalAllocatedBytes ?? null,
-    physicalBudgetBytes: vt?.physicalBudgetBytes ?? null,
-    physicalPageCapacity: Number.isFinite(vt?.physicalAllocatedBytes)
-      ? Math.floor(vt.physicalAllocatedBytes / rgbaPageBytes)
-      : null,
-    settled: stableFrames >= 8,
-  };
-})()
-`);
 
 const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(session, `
 (async () => {
@@ -1648,12 +1515,6 @@ const main = async () => {
           virtualTextureInteraction,
         };
       }
-      if (route.id === 'gltf-ghostscript-tiger-svg') {
-        state = {
-          ...state,
-          svgVirtualTextureInteraction: await runSvgVirtualTextureInteractionSmoke(session),
-        };
-      }
       try {
         assertRoute(effectiveRoute, state);
       } catch (error) {
@@ -1662,9 +1523,7 @@ const main = async () => {
           .map((resource) => `${resource.name} duration=${resource.duration}ms size=${resource.size}`)
           .join('; ');
         const interactionDiagnostics = state.virtualTextureInteraction === undefined
-          ? (state.svgVirtualTextureInteraction === undefined
-            ? ''
-            : JSON.stringify(state.svgVirtualTextureInteraction))
+          ? ''
           : JSON.stringify(state.virtualTextureInteraction);
         throw new Error(`${error instanceof Error ? error.message : String(error)}${
           recentConsole === '' ? '' : `; console: ${recentConsole}`

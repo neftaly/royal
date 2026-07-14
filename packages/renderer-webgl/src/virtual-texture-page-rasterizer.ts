@@ -18,7 +18,7 @@ export interface GeneratedVirtualTextureRasterSource {
 const positiveFinite = (value: number): boolean => Number.isFinite(value) && value > 0;
 
 /**
- * Produces the canonical periodic crop shared by generated raster and SVG VTs.
+ * Produces the canonical periodic crop for a generated raster VT.
  * The repeated full-mip pattern supplies internal gutters, outer wrap gutters,
  * and deterministic padding after partial NPOT edge pages in one operation.
  */
@@ -56,29 +56,4 @@ export const rasterizeGeneratedVirtualTexturePage = (
     throw new Error(`Generated virtual texture page ${source.label} has an invalid stored extent`);
   }
   return canvas;
-};
-
-/**
- * Returns owned RGBA pixels for sources whose browser provenance may not be
- * accepted directly by WebGL. The readback is intentionally performed while
- * the page is still owned by the async producer: an origin-unclean SVG fails
- * through the page retry/fallback path instead of throwing during a frame's GL
- * upload transaction.
- */
-export const rasterizeGeneratedVirtualTexturePageImageData = (
-  source: GeneratedVirtualTextureRasterSource,
-  manifest: VirtualTextureManifestModel,
-  page: VirtualTexturePageId,
-): ImageData => {
-  const canvas = rasterizeGeneratedVirtualTexturePage(source, manifest, page);
-  const storedPageSize = virtualTextureStoredPageSize(manifest);
-  const context = virtualTextureCanvasContext(canvas, source.label);
-  try {
-    return context.getImageData(0, 0, storedPageSize, storedPageSize);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Generated virtual texture page ${source.label} ${virtualTexturePageKey(page)} could not produce origin-clean pixels: ${detail}`,
-    );
-  }
 };

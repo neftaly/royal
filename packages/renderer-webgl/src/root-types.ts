@@ -17,21 +17,13 @@ export interface WebGlRootOptions {
   readonly antialias?: boolean;
   /**
    * Generate VTs for ordinary base-color image textures used by triangle
-   * geometry with `TEXCOORD_0`. SVG sources are not subject to the raster size
-   * threshold; decoded raster sources qualify when their longest dimension is
-   * at least 257 px. The ordinary texture remains active until generated
+   * geometry with `TEXCOORD_0`. Decoded raster sources qualify when their
+   * longest dimension is at least 257 px. SVG sources remain ordinary until
+   * VT v2 supplies one generic page-source path. The ordinary texture remains active until generated
    * coverage is ready. Authored `virtualTexture(...)` resources are unaffected.
    * @defaultValue `false`
    */
   readonly generatedImageVirtualTextures?: boolean;
-  /**
-   * Long-edge mip-0 resolution for generated SVG VTs, in logical texels. This
-   * changes close-zoom texture detail, not layout or world size. Must be an
-   * integer from 256 through 16384; generated dimensions preserve aspect ratio.
-   * Only used when `generatedImageVirtualTextures` is enabled.
-   * @defaultValue `16384`
-   */
-  readonly generatedSvgVirtualTextureMaxDimension?: number;
   /**
    * Nested overrides for the immutable cross-class CPU/GPU/job/upload budget
    * policy. Omitted fields inherit Royal's exported default policy. VT atlas

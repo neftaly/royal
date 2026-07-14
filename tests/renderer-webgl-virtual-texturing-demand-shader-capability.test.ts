@@ -552,7 +552,6 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
       generatedImageVirtualTextures: true,
-      generatedSvgVirtualTextureMaxDimension: 8_192,
       resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(123_456),
     });
 
@@ -563,7 +562,6 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
       alpha: true,
       antialias: true,
       generatedImageVirtualTextures: true,
-      generatedSvgVirtualTextureMaxDimension: 8_192,
       resourceGovernorPolicy: expect.objectContaining({
         classes: expect.objectContaining({
           "virtual-texture": expect.objectContaining({
@@ -587,13 +585,4 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     root.dispose();
   });
 
-  it("reports invalid VT root options with their units, range, and received value", () => {
-    const { gl } = fakeGl();
-    const canvas = fakeCanvas(gl);
-
-    expect(() => createWebGlRoot(canvas, { generatedSvgVirtualTextureMaxDimension: 16_385 }))
-      .toThrow(new RangeError(
-        "generatedSvgVirtualTextureMaxDimension must be an integer from 256 through 16384 logical texels, received 16385",
-      ));
-  });
 });
