@@ -4,6 +4,7 @@ import type {
   WebGlGltfLoadDiagnosticsSnapshot,
 } from "../root-types";
 import type { GltfLoadMetrics } from "./prepared-asset";
+import type { PreparedGltfRuntime } from "./prepared-runtime";
 
 export type GltfLoadDiagnosticsState = {
   readonly error?: string;
@@ -73,3 +74,20 @@ export const gltfLoadDiagnosticsSnapshot = (
   }
   return { assets, errorAssets, loadingAssets, sceneReadyAssets };
 };
+
+/** Reads live prepared state into detached facts before applying the pure projection. */
+export const preparedGltfLoadDiagnosticsSnapshot = (
+  runtime: PreparedGltfRuntime,
+): WebGlGltfLoadDiagnosticsSnapshot => gltfLoadDiagnosticsSnapshot(
+  [...runtime.states.values()].map((state) => ({
+    ...(state.error === undefined ? {} : { error: state.error }),
+    lightCount: state.lights.length,
+    load: state.load,
+    nodeCount: state.nodeCount,
+    primitiveCount: state.primitives.length,
+    sourceUri: state.sourceUri,
+    ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
+    status: state.status,
+    variantCount: state.variants.length,
+  })),
+);

@@ -22,6 +22,7 @@ import {
   DecodedTextureSourceLifetime,
 } from "./decoded-texture-source-lifetime";
 import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
+import { OrdinaryTextureGpuOwner } from "./ordinary-texture-gpu-owner";
 import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
   applyResourceDelta,
@@ -29,19 +30,12 @@ import {
   createResourceArena,
   detachResourceArenaImagePreparation,
   disposeResourceArena,
-  publishResourceArenaContentKey,
   resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
-  resourceArenaIblSources,
-  resourceArenaOrdinaryTextureResidencySnapshot,
   resourceArenaPreparedSourceKeys,
-  resourceArenaPreparedSourceValues,
   resourceArenaSourceReferenceCount,
-  rekeyPreparedAssetOrdinaryTextures,
   retainResourceArenaSourceLease,
-  retainResourceArenaIblSource,
   wakeResourceArenaPreparedAssetCpuCapacity,
-  type PreparedAssetOrdinaryTextureRekey,
   type ResourceArena,
   type ResourceArenaChanges,
 } from "./resource-arena";
@@ -92,8 +86,6 @@ import {
   type TextureHandleArena,
 } from "./webgl/texture-handle-arena";
 import {
-  accumulateVirtualTextureGpuActivePagesByMip,
-  accumulateVirtualTextureGpuCachedPagesByMip,
   clearVirtualTextureGpuOutcomes,
   consumeVirtualTextureGpuWake,
   createVirtualTextureGpuArena,
@@ -103,8 +95,6 @@ import {
   virtualTextureGpuHasActionableUploads,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
-  virtualTextureGpuResource,
-  virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
 } from "./webgl/virtual-texture-gpu-arena";
 import {
@@ -146,7 +136,8 @@ import {
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
 import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
 import { GltfAssetPreparationOwner } from "./gltf/asset-preparation-owner";
-import { gltfLoadDiagnosticsSnapshot } from "./gltf/load-diagnostics";
+import { preparedGltfLoadDiagnosticsSnapshot } from "./gltf/load-diagnostics";
+import { GltfReadyImagePublicationOwner } from "./gltf/ready-image-publication-owner";
 import {
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
@@ -167,11 +158,6 @@ import {
 import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
 import {
-  isDecodedRgbaTexture,
-  loadedTextureSourceSize,
-  type LoadedTextureSource,
-} from "./texture-sources";
-import {
   GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
   GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
   GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION,
@@ -187,10 +173,8 @@ import {
 import { VirtualTextureDemandOwner } from "./virtual-texture-demand-owner";
 import { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
 import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
-import {
-  textureCacheKey,
-  type TextureAssetUploadRef,
-} from "./webgl/materials";
+import { virtualTextureDiagnosticsSnapshot } from "./virtual-texture-diagnostics";
+import { textureResidencyDiagnosticsSnapshot } from "./texture-residency-diagnostics";
 import {
   type ProgramKind,
   type SurfaceShaderFeatures,
@@ -209,23 +193,13 @@ import {
   type ProgramArenaResource,
 } from "./webgl/program-arena";
 import { rendererOwnedWebGl2Context, type RendererOwnedWebGl2Context } from "./webgl/context-lane";
+import type { SurfaceLightSet } from "./webgl/lights";
 import {
-  type SurfaceImageBasedLightSpecular,
-  type SurfaceLightSet,
-} from "./webgl/lights";
-import {
-  consumeIblTextureDiagnostics,
-  consumeIblTextureFrameWake,
   createIblTextureArena,
   dropIblTextureContext,
-  ensureGltfIblSpecularTexture,
-  ensureStudioEnvironmentSpecularTexture,
-  markGltfIblSpecularTextureDirty,
   releaseGltfIblSpecularTexture,
   releaseIblTextureContextHandles,
-  type IblSpecularTextureResource,
   type IblTextureArena,
-  type StudioEnvironmentSpecularResource,
   wakeIblTextureDurablePressure,
 } from "./webgl/ibl-texture-arena";
 import { prepareFrameBaseline } from "./webgl/imperative-state";
@@ -245,19 +219,16 @@ import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
 import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-debt-owner";
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
 import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
+import { IblRuntimeOwner } from "./ibl-runtime-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
   WebGlContextLifecycle,
   WebGlContextSnapshot,
-  WebGlGltfInstancingSnapshot,
-  WebGlGltfLoadDiagnosticsSnapshot,
   WebGlRoot,
   WebGlRootOptions,
   WebGlRootSnapshot,
-  WebGlTextureResidencySnapshot,
   WebGlRenderViewsOptions,
-  WebGlVirtualTexturingSnapshot,
 } from "./root-types";
 
 export type {
@@ -285,7 +256,6 @@ const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
   hdrOutput: false,
   toneMapping: "linear-clamp",
 };
-const EMPTY_IBL_SOURCES: ReadonlyMap<string, LoadedTextureSource> = new Map();
 const sceneToneMappingState = (
   scene: {
     readonly exposureEv100: number | undefined;
@@ -417,6 +387,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #programArena: ProgramArena;
   readonly #geometryRecipes = new GeometryRecipeRegistry();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
+  readonly #ordinaryTextureGpu: OrdinaryTextureGpuOwner;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
   readonly #virtualTextureGpu: VirtualTextureGpuArena;
@@ -480,10 +451,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #gltfMaterials = new GltfMaterialPreparationArena();
   readonly #gltfPacketSubmissions: GltfPacketSubmissionOwner;
   readonly #preparedAssetEvents: PreparedAssetEventOwner;
+  readonly #readyGltfImages: GltfReadyImagePublicationOwner;
   readonly #textureHandles: TextureHandleArena;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
   readonly #iblTextures: IblTextureArena;
+  readonly #iblRuntime: IblRuntimeOwner;
   readonly #lightResolver: SurfaceLightResolver;
   readonly #surfaceRenderTargets = createSurfaceRenderTargetArena({
     replace: (lease, cost) => {
@@ -676,9 +649,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
       });
       registerRollback(() => dropIblTextureContext(this.#iblTextures));
       registerRollback(() => releaseIblTextureContextHandles(this.#iblTextures));
+      this.#iblRuntime = new IblRuntimeOwner({
+        contextLifecycle: () => this.#context.lifecycle,
+        decodedTextureSources: this.#decodedTextureSources,
+        diagnostics: (message, key) => this.#recordDiagnostic(message, key),
+        invalidate: () => this.invalidate(),
+        resourceArena: this.#resourceArena,
+        textures: this.#iblTextures,
+      });
       this.#lightResolver = new SurfaceLightResolver({
-        ensureGltfSpecular: (specular) => this.#ensureIblSpecularTexture(specular),
-        studioSpecular: () => this.#studioEnvironmentSpecularTexture(),
+        ensureGltfSpecular: (specular) => this.#iblRuntime.ensureSpecular(specular),
+        studioSpecular: () => this.#iblRuntime.studioSpecular(),
       });
       this.#gltfPacketSubmissions = new GltfPacketSubmissionOwner({
         geometryRecipes: this.#geometryRecipes,
@@ -727,6 +708,30 @@ class WebGlRootImpl implements InternalWebGlRoot {
         },
         resourceArena: this.#resourceArena,
         textureHandles: this.#textureHandles,
+      });
+      this.#ordinaryTextureGpu = new OrdinaryTextureGpuOwner({
+        capacityWakes: this.#capacityWakes,
+        contextGeneration: () => this.#context.generation,
+        frame: () => this.#framePublication.frame,
+        invalidate: () => this.invalidate(),
+        maximumPersistentGpuBytes: maximumResourceGovernorClassDurableBytes(
+          this.#options.resourceGovernorPolicy,
+          "ordinary-texture",
+          "persistentGpuBytes",
+        ),
+        policy: this.#options.resourceGovernorPolicy,
+        residencyIntent: this.#textureResidencyIntent,
+        resourceGovernor: this.#resourceGovernor,
+        synchronizeGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
+        textures: this.#ordinaryTextures,
+      });
+      this.#readyGltfImages = new GltfReadyImagePublicationOwner({
+        applyResourceChanges: (changes) => this.#applyResourceArenaChanges(changes),
+        ibl: this.#iblRuntime,
+        materials: this.#gltfMaterials,
+        ordinaryTextures: this.#ordinaryTextures,
+        resourceArena: this.#resourceArena,
+        runtime: this.#preparedGltf,
       });
       registerRollback(() => this.#ordinaryTextures.disposeSources());
       registerRollback(() => {
@@ -971,8 +976,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     try {
       gl.bindFramebuffer(gl.FRAMEBUFFER, frameViews.framebuffer);
       prepareFrameBaseline(gl, frameViews.scissor);
-      this.#stageReadyGltfImages();
-      this.#processOrdinaryTextureUploads();
+      this.#readyGltfImages.applyPending();
+      this.#ordinaryTextureGpu.processUploads();
       this.#gltfInstanceTransforms.beginFrame();
       const wantsHdr = this.#planWantsHdr(plan);
       if (wantsHdr && !this.#contextCapabilities.capabilities.hdrColorBuffer) {
@@ -1109,7 +1114,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#finalizeTextureResidencyIntent(renderFailure === undefined),
+      () => this.#ordinaryTextureGpu.finalizeResidencyIntent(renderFailure === undefined),
     );
     renderFailure = captureFirstFailure(renderFailure, () => this.#framePublication.advance());
     renderFailure = captureFirstFailure(renderFailure, () => this.#virtualTextureRuntime.requests.drain());
@@ -1333,8 +1338,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   snapshot(): WebGlRootSnapshot {
     const diagnostics = this.#diagnostics.snapshot();
-    const textureResidency = this.#textureResidencySnapshot();
-    const virtualTexturing = this.#virtualTexturingSnapshot();
+    const textureResidency = textureResidencyDiagnosticsSnapshot(
+      this.#resourceArena,
+      this.#ordinaryTextures,
+    );
+    const virtualTexturing = virtualTextureDiagnosticsSnapshot(
+      this.#virtualTextureRuntime,
+      this.#virtualTextureGpu,
+      this.#unsupportedVirtualTextureDraws,
+    );
     const gltfImages = this.#preparedGltf.images.snapshot();
     return {
       context: this.#context.snapshot(),
@@ -1347,8 +1359,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       },
       disposed: this.#disposed,
       frame: this.#framePublication.frame,
-      gltfLoadDiagnostics: this.#gltfLoadDiagnosticsSnapshot(),
-      gltfInstancing: this.#gltfInstancingSnapshot(),
+      gltfLoadDiagnostics: preparedGltfLoadDiagnosticsSnapshot(this.#preparedGltf),
+      gltfInstancing: this.#gltfPacketSubmissions.snapshot(),
       latestScene: this.#scenePlan.latestScene,
       options: this.#options,
       planning: this.#scenePlan.planningSnapshot(),
@@ -1808,11 +1820,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
   }
 
-  #maximumResourceClassPersistentGpuBytes(resourceClass: ResourceGovernorClass): number {
-    const policy = this.#options.resourceGovernorPolicy;
-    return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "persistentGpuBytes");
-  }
-
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {
     try {
       return requestProgram(
@@ -1875,176 +1882,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (closeFailure !== undefined) throw closeFailure.value;
   }
 
-  #finalizeTextureResidencyIntent(commit: boolean): void {
-    const suppressions = this.#textureResidencyIntent.finishFrame(commit);
-    if (suppressions.length === 0) return;
-    const releaseWakeSuppression = this.#capacityWakes.suppressPersistentGpuWake();
-    let capacityReleased = false;
-    let firstFailure: CapturedFailure | undefined;
-    try {
-      for (const key of suppressions) {
-        let report: ReturnType<OrdinaryTextureResidencyController["suppressGpuResidency"]> | undefined;
-        firstFailure = captureFirstFailure(firstFailure, () => {
-          report = this.#ordinaryTextures.suppressGpuResidency(key);
-          capacityReleased ||= report.capacityReleased;
-          if (report.operationFailure !== undefined) throw report.operationFailure.error;
-        });
-        const settledReport = report;
-        if (settledReport !== undefined) firstFailure = captureFirstFailure(firstFailure, () => {
-          const settlement = this.#ordinaryTextures.settleGpuReport(settledReport);
-          if (settlement !== undefined) throw settlement.error;
-        });
-      }
-      firstFailure = captureFirstFailure(
-        firstFailure,
-        () => this.#synchronizeResourceGovernorObservations(),
-      );
-    } finally {
-      releaseWakeSuppression();
-    }
-    if (capacityReleased) this.#capacityWakes.wakePersistentGpuCapacity();
-    if (firstFailure !== undefined) throw firstFailure.value;
-  }
-
-  #processOrdinaryTextureUploads(): void {
-    const releaseWakeSuppression = this.#capacityWakes.suppressPersistentGpuWake();
-    let report!: ReturnType<OrdinaryTextureResidencyController["process"]>;
-    let processFailure: CapturedFailure | undefined;
-    try {
-      report = this.#ordinaryTextures.process(
-        this.#framePublication.frame,
-        this.#context.generation,
-        {
-          reserve: (cost) => {
-            const limits = this.#options.resourceGovernorPolicy.limits;
-            const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("ordinary-texture");
-            if (cost.persistentGpuBytes > persistentGpuMaximum) {
-              return {
-                limit: persistentGpuMaximum,
-                reason: "persistent-gpu-cost-exceeds-limit" as const,
-              };
-            }
-            const uploadLimit = limits.uploadBytes;
-            if (cost.uploadBytes > uploadLimit) {
-              return { limit: uploadLimit, reason: "upload-cost-exceeds-limit" };
-            }
-            const reserved = reserveResourceGovernor(this.#resourceGovernor, "ordinary-texture", cost);
-            if (typeof reserved !== "string") {
-              return {
-                cancel: () => { reserved.cancel(); },
-                commit: () => reserved.commit(),
-              };
-            }
-            switch (reserved) {
-              case "persistent-gpu-capacity":
-              case "persistent-gpu-hard-limit":
-              case "persistent-gpu-mandatory-floor":
-              case "upload-capacity":
-                return { reason: reserved };
-              default:
-                throw new Error(`Unexpected ordinary texture admission denial: ${reserved}`);
-            }
-          },
-        },
-      );
-      processFailure = report.operationFailure === undefined
-        ? undefined
-        : { value: report.operationFailure.error };
-      processFailure = captureFirstFailure(
-        processFailure,
-        () => this.#synchronizeResourceGovernorObservations(),
-      );
-    } finally {
-      releaseWakeSuppression();
-    }
-    if (
-      processFailure !== undefined
-      && report.quarantinedBytesAfter === report.quarantinedBytesBefore
-    ) {
-      this.#capacityWakes.wakePersistentGpuCapacity();
-    }
-    const settlement = this.#ordinaryTextures.settleGpuReport(report);
-    if (report.wakeRequested) this.invalidate();
-    if (processFailure !== undefined) throw processFailure.value;
-    if (settlement !== undefined) throw settlement.error;
-  }
-
-  #recordUnsupportedGltfImageBasedLight(message: string): void {
-    this.#recordDiagnostic(message, `gltf-image-based-light:${message}`);
-  }
-
-  #ensureIblSpecularTexture(specular: SurfaceImageBasedLightSpecular): IblSpecularTextureResource {
-    try {
-      const resource = ensureGltfIblSpecularTexture(
-        this.#iblTextures,
-        specular,
-        resourceArenaIblSources(this.#resourceArena, specular.key) ?? EMPTY_IBL_SOURCES,
-      );
-      if (resource.unsupportedMessage !== undefined) {
-        this.#recordUnsupportedGltfImageBasedLight(resource.unsupportedMessage);
-      }
-      if (resource.uploadError !== undefined) throw resource.uploadError;
-      return resource;
-    } finally {
-      this.#consumeIblTextureSignals();
-    }
-  }
-
-  #settleIblSpecularImage(
-    specular: SurfaceImageBasedLightSpecular,
-    key: string,
-    image: LoadedTextureSource,
-  ): void {
-    const previous = retainResourceArenaIblSource(this.#resourceArena, specular.key, key, image);
-    markGltfIblSpecularTextureDirty(this.#iblTextures, specular.key);
-    if (
-      previous !== undefined
-      && previous !== image
-      && resourceArenaSourceReferenceCount(this.#resourceArena, previous) === 0
-    ) this.#decodedTextureSources.closeOrdinary(previous);
-    if (this.#context.lifecycle !== "active") return;
-    try {
-      const resource = ensureGltfIblSpecularTexture(
-        this.#iblTextures,
-        specular,
-        resourceArenaIblSources(this.#resourceArena, specular.key) ?? EMPTY_IBL_SOURCES,
-      );
-      if (resource.unsupportedMessage !== undefined) {
-        this.#recordUnsupportedGltfImageBasedLight(resource.unsupportedMessage);
-      }
-      const uploadError = resource.uploadError;
-      if (uploadError === undefined) return;
-      const uploadErrorMessage = uploadError instanceof Error
-        ? uploadError.message
-        : typeof uploadError === "string" ? uploadError : "unknown driver error";
-      this.#recordDiagnostic(
-        `glTF image-based light upload failed: ${uploadErrorMessage}`,
-        `gltf-image-based-light-upload:${specular.key}`,
-      );
-    } catch (error) {
-      this.#recordDiagnostic(
-        `glTF image-based light upload failed: ${error instanceof Error ? error.message : String(error)}`,
-        `gltf-image-based-light-upload:${specular.key}`,
-      );
-    } finally {
-      this.#consumeIblTextureSignals();
-    }
-  }
-
-  #studioEnvironmentSpecularTexture(): StudioEnvironmentSpecularResource | undefined {
-    try {
-      return ensureStudioEnvironmentSpecularTexture(this.#iblTextures);
-    } finally {
-      this.#consumeIblTextureSignals();
-    }
-  }
-
-  #consumeIblTextureSignals(): void {
-    for (const message of consumeIblTextureDiagnostics(this.#iblTextures)) {
-      this.#recordDiagnostic(message, `ibl-governor:${message}`);
-    }
-    if (consumeIblTextureFrameWake(this.#iblTextures)) this.invalidate();
-  }
 
   #consumeSurfaceExecutionSignals(): void {
     const signals = this.#surfaceExecution.drainSignals();
@@ -2058,79 +1895,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     detachResourceArenaImagePreparation(this.#resourceArena, assetKey, generation);
   }
 
-  #stageReadyGltfImages(): void {
-    const outcomes = this.#preparedGltf.images.pendingReadyOutcomes();
-    if (outcomes.length === 0) return;
-    for (const outcome of outcomes) {
-      const state = this.#preparedGltf.get(outcome.assetKey);
-      if (
-        state === undefined
-        || state.status !== "ready"
-        || state.instanceKey !== outcome.stateInstanceKey
-      ) {
-        outcome.acknowledge();
-        continue;
-      }
-      if (!outcome.referencesRekeyed) {
-        const rekeys: PreparedAssetOrdinaryTextureRekey[] = [];
-        for (const binding of outcome.bindings) {
-          if (binding.contentKey !== undefined || outcome.contentKey === undefined) continue;
-          const previousTexture: TextureAssetUploadRef = {
-            colorSpace: binding.colorSpace,
-            flipY: false,
-            kind: "asset",
-            ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-            uri: binding.textureUri,
-          };
-          const nextTexture: TextureAssetUploadRef = {
-            ...previousTexture,
-            contentKey: outcome.contentKey,
-          };
-          rekeys.push({
-            next: { count: binding.count, key: textureCacheKey(nextTexture), texture: nextTexture },
-            previous: { count: binding.count, key: textureCacheKey(previousTexture), texture: previousTexture },
-          });
-        }
-        const changes = rekeyPreparedAssetOrdinaryTextures(this.#resourceArena, outcome.assetKey, rekeys);
-        // The arena mutation above is the semantic commit. Record it before
-        // running fallible side effects so a retry never applies the same
-        // reference delta twice.
-        outcome.markReferencesRekeyed();
-        this.#applyResourceArenaChanges(changes);
-      }
-      if (outcome.contentKey !== undefined) {
-        // Idempotent on retry and deliberately outside the rekey checkpoint:
-        // a failure while draining rekey side effects must not suppress this
-        // identity publication on the next attempt.
-        for (const binding of outcome.bindings) {
-          if (binding.contentKey !== undefined) continue;
-          publishResourceArenaContentKey(
-            this.#resourceArena,
-            outcome.assetKey,
-            binding.textureUri,
-            outcome.contentKey,
-          );
-        }
-      }
-      for (const binding of outcome.bindings) {
-        const contentKey = binding.contentKey ?? outcome.contentKey;
-        const texture: TextureAssetUploadRef = {
-          colorSpace: binding.colorSpace,
-          ...(contentKey === undefined ? {} : { contentKey }),
-          flipY: false,
-          kind: "asset",
-          ...(binding.sampler === undefined ? {} : { sampler: binding.sampler }),
-          uri: binding.textureUri,
-        };
-        this.#ordinaryTextures.publishPrepared(texture, outcome.source);
-      }
-      if (outcome.iblSpecular !== undefined) {
-        this.#settleIblSpecularImage(outcome.iblSpecular, outcome.key, outcome.source);
-      }
-      this.#gltfMaterials.invalidate(outcome.materials);
-      outcome.acknowledge();
-    }
-  }
   #renderLatestScene(): void {
     const plan = this.#scenePlan.plan;
     if (plan === undefined) return;
@@ -2188,204 +1952,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #recordDiagnostic(message: string, key = message): void {
     const result = this.#diagnostics.record(key, message);
     if (result === "appended") console.warn(this.#diagnostics.latestMessage);
-  }
-
-  #gltfInstancingSnapshot(): WebGlGltfInstancingSnapshot {
-    return this.#gltfPacketSubmissions.snapshot();
-  }
-
-  #gltfLoadDiagnosticsSnapshot(): WebGlGltfLoadDiagnosticsSnapshot {
-    return gltfLoadDiagnosticsSnapshot(
-      [...this.#preparedGltf.states.values()].map((state) => ({
-        ...(state.error === undefined ? {} : { error: state.error }),
-        lightCount: state.lights.length,
-        load: state.load,
-        nodeCount: state.nodeCount,
-        primitiveCount: state.primitives.length,
-        sourceUri: state.sourceUri,
-        ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
-        status: state.status,
-        variantCount: state.variants.length,
-      })),
-    );
-  }
-
-  #textureResidencySnapshot(): WebGlTextureResidencySnapshot {
-    const sources = new Set<LoadedTextureSource>();
-    for (const prepared of resourceArenaPreparedSourceValues(this.#resourceArena)) {
-      sources.add(prepared.source);
-    }
-    let preparedBytes = 0;
-    for (const source of sources) {
-      if (isDecodedRgbaTexture(source)) preparedBytes += source.data.byteLength;
-      else {
-        const [width, height] = loadedTextureSourceSize(source);
-        if (Number.isFinite(width) && Number.isFinite(height)) {
-          preparedBytes += Math.max(0, Math.ceil(width)) * Math.max(0, Math.ceil(height)) * 4;
-        }
-      }
-    }
-    const ordinary = resourceArenaOrdinaryTextureResidencySnapshot(this.#resourceArena);
-    return {
-      activeLeases: ordinary.activeLeases,
-      activeReferences: ordinary.activeReferences,
-      preparedBytes,
-      preparedSources: sources.size,
-      resources: this.#ordinaryTextures.snapshot().resources,
-    };
-  }
-
-  #virtualTexturingSnapshot(): WebGlVirtualTexturingSnapshot {
-    let activePages = 0;
-    const activePagesByMip: number[] = [];
-    let atlasTextures = 0;
-    let cachedPages = 0;
-    let demandAdmissions = 0;
-    let publishedDemandPages = 0;
-    let demandRetentionOverflows = 0;
-    let demandRetentions = 0;
-    let generatedManifestUses = 0;
-    let generatedPageFailures = 0;
-    let generatedPageRasterizeMaxMs = 0;
-    let generatedPageRasterizeMs = 0;
-    let generatedPageRequests = 0;
-    let generatedPagesTarget = 0;
-    let gpuAdmissionFailures = 0;
-    let manifestFailures = 0;
-    let manifestRequests = 0;
-    let pageLoadFailures = 0;
-    let manifestsReady = 0;
-    let pageTableTextures = 0;
-    let pageTableUpdates = 0;
-    let pageLifecycleEntries = 0;
-    let pendingPages = 0;
-    let preparedResidencyResolutions = 0;
-    let outstandingPageRequests = 0;
-    const cachedPagesByMip: number[] = [];
-    let shaderBinds = 0;
-    let unreadyDraws = 0;
-    let unsupportedDraws = this.#unsupportedVirtualTextureDraws;
-    let uploadedPageBytes = 0;
-    let uploadedPages = 0;
-    let textureUploadBytesPerChunkMax = 0;
-    let textureUploadBytesPerChunkMin = 0;
-    let textureUploadChunkSamples = 0;
-    let uploadQueueWaitMaxMs = 0;
-    let uploadQueueWaitTotalMs = 0;
-    let uploadQueueWaitSamples = 0;
-    const uploadQueueWaitTotalMsByMip: number[] = [];
-    const uploadQueueWaitSamplesByMip: number[] = [];
-
-    for (const state of this.#virtualTextureRuntime.resources.values()) {
-      const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-      const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-      if (gpu?.allocated === true) {
-        atlasTextures += 1;
-        pageTableTextures += 1;
-      }
-      demandAdmissions += state.stats.demandAdmissions;
-      publishedDemandPages += state.demandedPageKeys.size;
-      demandRetentionOverflows += state.stats.demandRetentionOverflows;
-      demandRetentions += state.stats.demandRetentions;
-      generatedManifestUses += state.stats.generatedManifestUses;
-      generatedPageFailures += state.stats.generatedPageFailures;
-      generatedPageRasterizeMaxMs = Math.max(generatedPageRasterizeMaxMs, state.stats.generatedPageRasterizeMaxMs);
-      generatedPageRasterizeMs += state.stats.generatedPageRasterizeMs;
-      generatedPageRequests += state.stats.generatedPageRequests;
-      generatedPagesTarget += state.stats.generatedPagesTarget;
-      gpuAdmissionFailures += state.stats.gpuAdmissionFailures;
-      manifestFailures += state.stats.manifestFailures;
-      manifestRequests += state.stats.manifestRequests;
-      pageLoadFailures += state.stats.pageLoadFailures;
-      if (state.status === "ready") manifestsReady += 1;
-      pageTableUpdates += gpu?.pageTableUpdates ?? 0;
-      const requests = this.#virtualTextureRuntime.requests.snapshot(state);
-      pageLifecycleEntries += requests.lifecycleEntries;
-      pendingPages += requests.loadingPages + (gpu?.pendingUploads ?? 0);
-      preparedResidencyResolutions += state.stats.preparedResidencyResolutions;
-      outstandingPageRequests += requests.loadingPages + requests.queuedPages;
-      activePages += gpu?.activePages ?? 0;
-      cachedPages += gpu?.cachedPages ?? 0;
-      if (resource !== undefined) {
-        accumulateVirtualTextureGpuActivePagesByMip(resource, activePagesByMip);
-        accumulateVirtualTextureGpuCachedPagesByMip(resource, cachedPagesByMip);
-      }
-      shaderBinds += state.stats.shaderBinds;
-      unreadyDraws += state.stats.unreadyDraws;
-      unsupportedDraws += state.stats.unsupportedDraws;
-      uploadedPageBytes += gpu?.uploadedPageBytes ?? 0;
-      uploadedPages += gpu?.uploadedPages ?? 0;
-      if (gpu !== undefined) {
-        textureUploadBytesPerChunkMax = Math.max(
-          textureUploadBytesPerChunkMax,
-          gpu.atlasUploadBytesPerChunkMax,
-        );
-        if (gpu.atlasUploadBytesPerChunkMin > 0) {
-          textureUploadBytesPerChunkMin = textureUploadBytesPerChunkMin === 0
-            ? gpu.atlasUploadBytesPerChunkMin
-            : Math.min(textureUploadBytesPerChunkMin, gpu.atlasUploadBytesPerChunkMin);
-        }
-        textureUploadChunkSamples += gpu.atlasUploadChunkSamples;
-        uploadQueueWaitMaxMs = Math.max(uploadQueueWaitMaxMs, gpu.uploadQueueWaitMaxMs);
-        uploadQueueWaitTotalMs += gpu.uploadQueueWaitTotalMs;
-        uploadQueueWaitSamples += gpu.uploadQueueWaitSamples;
-        for (let mip = 0; mip < gpu.uploadQueueWaitTotalMsByMip.length; mip += 1) {
-          uploadQueueWaitTotalMsByMip[mip] = (uploadQueueWaitTotalMsByMip[mip] ?? 0)
-            + (gpu.uploadQueueWaitTotalMsByMip[mip] ?? 0);
-          uploadQueueWaitSamplesByMip[mip] = (uploadQueueWaitSamplesByMip[mip] ?? 0)
-            + (gpu.uploadQueueWaitSamplesByMip[mip] ?? 0);
-        }
-      }
-    }
-
-    const gpuArena = virtualTextureGpuArenaSnapshot(this.#virtualTextureGpu);
-
-    return {
-      activePages,
-      activePagesByMip,
-      cachedPages,
-      cachedPagesByMip,
-      atlasTextures,
-      demandAdmissions,
-      publishedDemandPages,
-      demandRetentionOverflows,
-      demandRetentions,
-      generatedManifestUses,
-      generatedPageFailures,
-      generatedPageRasterizeMaxMs,
-      generatedPageRasterizeMs,
-      generatedPageRequests,
-      generatedPagesTarget,
-      gpuAdmissionFailures,
-      manifestFailures,
-      manifestRequests,
-      pageLoadFailures,
-      manifestsReady,
-      pageTableTextures,
-      pageTableUpdates,
-      pageLifecycleEntries,
-      pendingPages,
-      physicalAllocatedBytes: gpuArena.allocatedBytes,
-      physicalBudgetBytes: gpuArena.budgetBytes,
-      physicalQuarantinedBytes: gpuArena.quarantinedBytes,
-      preparedResidencyResolutions,
-      outstandingPageRequests,
-      shaderBinds,
-      unreadyDraws,
-      unsupportedDraws,
-      uploadedPageBytes,
-      uploadedPages,
-      textureUploadBytesPerChunkMax,
-      textureUploadBytesPerChunkMin,
-      textureUploadChunkSamples,
-      uploadQueueWaitAverageMs: uploadQueueWaitSamples === 0
-        ? 0
-        : uploadQueueWaitTotalMs / uploadQueueWaitSamples,
-      uploadQueueWaitMaxMs,
-      uploadQueueWaitMsByMip: uploadQueueWaitTotalMsByMip.map((total, mip) =>
-        total / (uploadQueueWaitSamplesByMip[mip] ?? 1)),
-      uploadQueueWaitSamples,
-    };
   }
 
   #synchronizeResourceGovernorObservations(): void {
