@@ -108,6 +108,9 @@ export const reduceXrSessionStoreData = <Session extends object>(
 ): XrSessionStoreData<Session> => {
   switch (transition.type) {
     case "activate": {
+      if (state.session !== null && state.session !== transition.session) {
+        throw new Error("Cannot activate a different XR session while a live session is owned");
+      }
       const visibilityState = transition.options.visibilityState ?? "visible";
       const suspended = visibilityState === "hidden";
       return patchState(state, {
@@ -125,6 +128,9 @@ export const reduceXrSessionStoreData = <Session extends object>(
       });
     }
     case "begin":
+      if (state.session !== null && state.session !== transition.session) {
+        throw new Error("Cannot begin a different XR session while a live session is owned");
+      }
       return patchState(state, {
         active: false,
         blockReason: null,
@@ -218,7 +224,6 @@ export const reduceXrSessionStoreData = <Session extends object>(
       if (state.session !== null) {
         return patchState(state, {
           available: transition.available,
-          ...(transition.options.mode === undefined ? {} : { mode: transition.options.mode }),
         });
       }
       return patchState(state, {

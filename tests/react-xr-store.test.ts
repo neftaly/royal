@@ -209,6 +209,29 @@ describe("React XR session store", () => {
     });
   });
 
+  it("preserves live-session ownership and mode across unrelated actions", () => {
+    const session: TestXrSession = { id: "owned" };
+    const replacement: TestXrSession = { id: "replacement" };
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+    store.getState().activateSession(session, { mode: "immersive-vr" });
+
+    store.getState().setAvailability(false, { mode: "immersive-ar" });
+    expect(store.getState()).toMatchObject({
+      available: false,
+      mode: "immersive-vr",
+      session,
+      status: "active",
+    });
+    const ownedState = store.getState();
+    expect(() => store.getState().beginSession(replacement, {
+      mode: "immersive-ar",
+    })).toThrow("Cannot begin a different XR session while a live session is owned");
+    expect(() => store.getState().activateSession(replacement, {
+      mode: "immersive-ar",
+    })).toThrow("Cannot activate a different XR session while a live session is owned");
+    expect(store.getState()).toBe(ownedState);
+  });
+
   it("records why acquisition was blocked without claiming session ownership", () => {
     const store = createXrSessionStore<TestXrSession>({ available: true });
 
