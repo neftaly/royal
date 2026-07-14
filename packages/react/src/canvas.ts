@@ -37,23 +37,6 @@ import type {
 const CanvasElementContext = createContext<HTMLCanvasElement | null | undefined>(undefined);
 const CanvasRootContext = createContext<RoyalRendererRoot | null | undefined>(undefined);
 
-export {
-  attachCanvasPointerEventHandlers,
-  reconcileCanvasPointerInteractionScene,
-} from "./canvas-pointer-events";
-export type {
-  CanvasLastPointerEventRef,
-  CanvasPointerEventBindings,
-  CanvasPointerInteractionStateRef,
-  CanvasSceneInteractionsRef,
-} from "./canvas-pointer-events";
-export {
-  applyCanvasRendererFailure,
-  applyCanvasRendererLifecycle,
-  disposeCanvasRendererRoot,
-  normalizeCanvasRendererOptions,
-} from "./canvas-renderer-runtime";
-
 /** Props for the Royal-owned canvas element. */
 export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {

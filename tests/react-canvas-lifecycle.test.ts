@@ -2,17 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   canvasContextOptionsSemanticKey,
   disposeCanvasRendererRoot,
-  normalizeCanvasRendererOptions,
 } from "../packages/react/src/canvas-renderer-runtime";
 import { rendererRootOptionsSemanticKey } from "../packages/react/src/root";
 import { fakeRendererRoot } from "./react-test-fixtures";
 
 describe("Canvas renderer root cleanup", () => {
-  it("normalizes omitted and empty renderer options to the same effect identity", () => {
-    expect(normalizeCanvasRendererOptions(undefined)).toBeUndefined();
-    expect(normalizeCanvasRendererOptions({})).toBeUndefined();
-  });
-
   it("replaces the DOM canvas only for immutable WebGL context attributes", () => {
     const defaults = canvasContextOptionsSemanticKey(undefined);
     expect(canvasContextOptionsSemanticKey({})).toBe(defaults);
@@ -20,11 +14,6 @@ describe("Canvas renderer root cleanup", () => {
     expect(canvasContextOptionsSemanticKey({ automaticVirtualTextures: true })).toBe(defaults);
     expect(canvasContextOptionsSemanticKey({ alpha: false })).not.toBe(defaults);
     expect(canvasContextOptionsSemanticKey({ antialias: false })).not.toBe(defaults);
-  });
-
-  it("retains normalized context changes that recreate the renderer root", () => {
-    expect(normalizeCanvasRendererOptions({ alpha: false })).toEqual({ alpha: false });
-    expect(normalizeCanvasRendererOptions({ alpha: true })).toEqual({ alpha: true });
   });
 
   it("retains the root for equivalent rendererOptions and recreates it for semantic changes", () => {

@@ -86,16 +86,6 @@ export const disposeCanvasRendererRoot = (
   root.dispose();
 };
 
-/** @internal Normalizes semantically empty Canvas renderer options. */
-export const normalizeCanvasRendererOptions = (
-  rendererOptions: RendererOptions | undefined,
-): RendererOptions | undefined => {
-  if (rendererOptions === undefined || Object.values(rendererOptions).every((value) => value === undefined)) {
-    return undefined;
-  }
-  return rendererOptions;
-};
-
 /** @internal Identity for options browsers fix on a canvas's first WebGL context. */
 export const canvasContextOptionsSemanticKey = (
   rendererOptions: RendererOptions | undefined,
@@ -126,7 +116,7 @@ export const useRendererRootRuntime = (
   if (optionsRef.current?.key !== optionsKey) {
     optionsRef.current = {
       key: optionsKey,
-      options: normalizeCanvasRendererOptions(rendererOptions),
+      options: rendererOptions,
     };
   }
   const options = optionsRef.current.options;

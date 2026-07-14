@@ -141,12 +141,14 @@ describe('Canvas public scene boundary', () => {
     expect(lifecycle.error).toBe('context recovery failed');
 
     if (false) {
+      // @ts-expect-error Status state names come from the discriminated union instead of a parallel alias.
+      const legacyState: import('@royal/react').GltfAssetLoadState = 'ready';
       // @ts-expect-error Asset failures require an error message.
       const invalidAsset = { state: 'error' } satisfies GltfAssetStatus;
       const acceptLifecycle = (_value: RoyalRendererRootLifecycleSnapshot): void => undefined;
       // @ts-expect-error Available renderer snapshots cannot carry an error.
       acceptLifecycle({ error: 'impossible', generation: 1, interruptions: 0, recoveries: 0, state: 'available' });
-      expect(invalidAsset).toHaveProperty('state', 'error');
+      expect([legacyState, invalidAsset]).toHaveLength(2);
     }
   });
 

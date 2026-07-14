@@ -13,7 +13,7 @@ import {
 import {
   attachCanvasPointerEventHandlers,
   reconcileCanvasPointerInteractionScene,
-} from "../packages/react/src/canvas";
+} from "../packages/react/src/canvas-pointer-events";
 import { createCanvasPointerInteractionState } from "../packages/react/src/canvas-pointer-interaction";
 import {
   createRoyalPointerEvent,

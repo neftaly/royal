@@ -4,9 +4,6 @@ import { useCanvasRoot } from "./canvas";
 import { createObservedExternalStore } from "./observed-external-store";
 import type { RoyalGltfAssetSnapshot } from "./root";
 
-/** Readiness states reported for a glTF asset retained by the current scene. */
-export type GltfAssetLoadState = "error" | "idle" | "loading" | "ready";
-
 /** A discriminated glTF readiness snapshot; failures always include a message. */
 export type GltfAssetStatus =
   | Readonly<{ error?: never; state: "idle" | "loading" | "ready" }>
