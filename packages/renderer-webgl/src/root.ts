@@ -14,7 +14,6 @@ import {
   type RenderToneMapping,
   type RenderNode,
   type RenderRoot,
-  type TextureContentKey,
 } from "@royal/renderer-core";
 import {
   abortError,
@@ -30,7 +29,6 @@ import {
 import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
 import { SceneBindingRegistry } from "./scene-binding-registry";
 import {
-  applyPreparedAssetEvents,
   applyResourceDelta,
   clearResourceArenaPreparedSources,
   createResourceArena,
@@ -39,7 +37,6 @@ import {
   publishResourceArenaContentKey,
   resourceArenaCountersSnapshot,
   resourceArenaHasHdrReadyAsset,
-  resourceArenaHasPendingAssetEvents,
   resourceArenaIblSources,
   resourceArenaOrdinaryTextureResidencySnapshot,
   resourceArenaPreparedSourceKeys,
@@ -49,8 +46,6 @@ import {
   retainResourceArenaSourceLease,
   retainResourceArenaIblSource,
   wakeResourceArenaPreparedAssetCpuCapacity,
-  type PreparedAssetArenaEvent,
-  type PreparedAssetDependencyManifest,
   type PreparedAssetOrdinaryTextureRekey,
   type ResourceArena,
   type ResourceArenaChanges,
@@ -72,11 +67,8 @@ import {
 import {
   gltfRequestKey,
   type FramePlan,
-  type CountedTextureDeclaration,
 } from "./frame-plan";
 import {
-  geometryDeclarationBucketKey,
-  gltfGeometryDeclaration,
   type CpuGeometry,
 } from "./geometry-recipes";
 import { GeometryRecipeRegistry } from "./geometry-recipe-registry";
@@ -145,12 +137,8 @@ import {
 import {
   GltfImageDemandCoordinator,
   gltfImageDemandKeys,
-  type GltfImageRecipeLease,
 } from "./gltf/image-demand-coordinator";
-import {
-  createGltfImageSourceRecipes,
-  gltfImageSourceRecipeBytes,
-} from "./gltf/image-source-recipe";
+import { createGltfImageSourceRecipes } from "./gltf/image-source-recipe";
 import { estimateGltfPreparationCpu } from "./gltf/preparation-admission";
 import { readGltfScene } from "./gltf/scene-reader";
 import {
@@ -171,7 +159,6 @@ import {
 } from "./gltf/prepared-runtime";
 import {
   GltfMaterialPreparationArena,
-  gltfMaterialTextureRefs,
   gltfPrimitiveMaterialForVariant,
   selectedGltfVariantIndex,
 } from "./gltf/material-preparation-arena";
@@ -180,6 +167,7 @@ import {
   gltfMaterialLodSelectionKey,
 } from "./gltf/packet-selection-owner";
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
+import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
 import {
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
@@ -361,8 +349,6 @@ const preparedPrimitiveMaterials = (
   return [...materials];
 };
 
-const preparedAssetMaterials = (asset: PreparedGltfAsset): readonly LoadedGltfMaterial[] =>
-  preparedPrimitiveMaterials(asset.primitives);
 type SceneToneMappingState = SurfaceToneMappingState;
 
 const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
@@ -568,6 +554,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   );
   readonly #gltfMaterials = new GltfMaterialPreparationArena();
   readonly #gltfPacketSubmissions: GltfPacketSubmissionOwner;
+  readonly #preparedAssetEvents: PreparedAssetEventOwner;
   readonly #textureHandles: TextureHandleArena;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
@@ -774,6 +761,20 @@ class WebGlRootImpl implements InternalWebGlRoot {
         sceneBindings: this.#sceneBindings,
         selection: this.#gltfPacketSelection,
         vertexInputs: this.#vertexInputs,
+      });
+      this.#preparedAssetEvents = new PreparedAssetEventOwner({
+        applyResourceChanges: (changes) => this.#applyResourceArenaChanges(changes),
+        detachImagePreparation: (assetKey, generation) => (
+          this.#detachPreparedAssetImagePreparation(assetKey, generation)
+        ),
+        disposed: () => this.#disposed,
+        drainResourceSideEffects: () => this.#resourceArenaSideEffects.drain(),
+        geometryRecipes: this.#geometryRecipes,
+        packetOccurrence: (plan, occurrenceIndex) => this.#gltfPacketOccurrence(plan, occurrenceIndex),
+        plan: () => this.#scenePlan.plan,
+        recordDiagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        resourceArena: this.#resourceArena,
+        runtime: this.#preparedGltf,
       });
       this.#textureHandles = createTextureHandleArena(gl);
       registerRollback(() => dropTextureHandleContext(this.#textureHandles));
@@ -1033,7 +1034,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     // callback checks its generation before drawing.
     this.#renderClock.beginRender();
     beginResourceGovernorFrame(this.#resourceGovernor);
-    this.#applyPendingResourceArenaEvents();
+    this.#preparedAssetEvents.applyPending();
     const gl = this.#gl;
     let renderFailure: CapturedFailure | undefined;
     this.#virtualTextureRuntime.beginFrame();
@@ -1241,7 +1242,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   #retainPlanWhileContextUnavailable(): void {
-    this.#applyPendingResourceArenaEvents();
+    this.#preparedAssetEvents.applyPending();
     this.#renderClock.retain();
   }
 
@@ -1550,68 +1551,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
   }
 
-  #preparedAssetDependencyManifest(
-    asset: PreparedGltfAsset,
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
-    assetKey: string,
-  ): PreparedAssetDependencyManifest {
-    const geometries = asset.primitives.map((primitive, index) => {
-      const declaration = gltfGeometryDeclaration({
-        ...(primitive.colors === undefined ? {} : { colors: primitive.colors }),
-        ...(primitive.indices === undefined ? {} : { indices: primitive.indices }),
-        mode: primitive.mode,
-        ...(primitive.normals === undefined ? {} : { normals: primitive.normals }),
-        positions: primitive.positions,
-        ...(primitive.tangents === undefined ? {} : { tangents: primitive.tangents }),
-        ...(primitive.texCoords0 === undefined ? {} : { texCoords0: primitive.texCoords0 }),
-        ...(primitive.texCoords1 === undefined ? {} : { texCoords1: primitive.texCoords1 }),
-      });
-      const key = JSON.stringify([
-        "gltf-geometry-owner-v1",
-        assetKey,
-        primitive.key,
-        index,
-        geometryDeclarationBucketKey(declaration),
-      ]);
-      this.#geometryRecipes.associateGltfPrimitiveKey(primitive, key);
-      return {
-        count: 1,
-        declaration,
-        key,
-      };
-    });
-    return {
-      ...this.#materialDependencyManifest(preparedAssetMaterials(asset), contentKeys),
-      geometries,
-      iblKeys: asset.imageBasedLight?.specular === undefined
-        ? []
-        : [{ count: 1, key: asset.imageBasedLight.specular.key }],
-      wantsHdr: asset.lights.length !== 0 || asset.imageBasedLight !== undefined,
-    };
-  }
-
-  #materialDependencyManifest(
-    materials: readonly LoadedGltfMaterial[],
-    contentKeys: ReadonlyMap<string, TextureContentKey>,
-  ): PreparedAssetDependencyManifest {
-    const byKey = new Map<string, CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }>();
-    const ordinaryTextures: Array<CountedTextureDeclaration<TextureAssetUploadRef> & { count: number }> = [];
-    for (const material of materials) {
-      for (const texture of gltfMaterialTextureRefs(material, contentKeys)) {
-        const key = textureCacheKey(texture);
-        const existing = byKey.get(key);
-        if (existing === undefined) {
-          const entry = { count: 1, key, texture };
-          byKey.set(key, entry);
-          ordinaryTextures.push(entry);
-        } else {
-          existing.count += 1;
-        }
-      }
-    }
-    return { geometries: [], iblKeys: [], ordinaryTextures, virtualTextures: [], wantsHdr: false };
-  }
-
   #applyResourceArenaChanges(changes: ResourceArenaChanges): void {
     const apply = this.#resourceArenaSideEffects.enqueue.bind(this.#resourceArenaSideEffects);
     for (const { id, key, recipe } of changes.acquiredGeometryDeclarations) {
@@ -1664,133 +1603,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       apply("release", () => this.#decodedTextureSources.closeOrdinary(source));
     }
     this.#resourceArenaSideEffects.drain();
-  }
-
-  #applyPendingResourceArenaEvents(): void {
-    if (this.#preparedGltf.eventDrainInProgress) return;
-    this.#resourceArenaSideEffects.drain();
-    // A retained event belongs to the already-applied arena generation. Drain
-    // it before admitting newer arena events so same-key revisions cannot be
-    // published in reverse order after a fallible imperative side effect.
-    this.#drainPendingPreparedAssetEvents();
-    if (resourceArenaHasPendingAssetEvents(this.#resourceArena)) {
-      const applied = applyPreparedAssetEvents(
-        this.#resourceArena,
-        (asset, contentKeys, assetKey) => this.#preparedAssetDependencyManifest(asset, contentKeys, assetKey),
-      );
-      // The arena consumes its pending keys transactionally. Retain the event
-      // batch before running fallible imperative side effects so their retry
-      // cannot strand semantic publication on the old renderer generation.
-      this.#preparedGltf.enqueueEvents(applied.events);
-      this.#applyResourceArenaChanges(applied.changes);
-    }
-    this.#drainPendingPreparedAssetEvents();
-  }
-
-  #drainPendingPreparedAssetEvents(): void {
-    this.#preparedGltf.drainEvents((event) => this.#applyPreparedAssetEvent(event));
-  }
-
-  #applyPreparedAssetEvent(event: PreparedAssetArenaEvent): void {
-    const snapshot = event.snapshot;
-    const state = this.#preparedGltf.get(snapshot.key);
-    if (state === undefined || state.preparedGeneration !== snapshot.generation) return;
-    if (snapshot.status === "error") {
-      this.#releaseGltfImageAssetForReplacement(snapshot.key);
-      state.status = "error";
-      state.error = snapshot.error;
-      state.load.readyAt = nowMs();
-      this.#recordDiagnostic(snapshot.error, `gltf-asset:${state.key}`);
-      const plan = this.#scenePlan.plan;
-      if (plan !== undefined) this.#preparedGltf.publishPacketError(snapshot.key, plan.revision);
-      return;
-    }
-    if (snapshot.status !== "ready") return;
-    const asset = snapshot.asset;
-    this.#releaseGltfImageAssetForReplacement(snapshot.key);
-    const replacesReadyAsset = state.status === "ready";
-    state.hasMaterialLod = asset.hasMaterialLod;
-    state.hasMaterialVariants = asset.hasMaterialVariants;
-    state.hasNodeLod = asset.hasNodeLod;
-    if (asset.imageBasedLight === undefined) delete state.imageBasedLight;
-    else state.imageBasedLight = asset.imageBasedLight;
-    state.lights = asset.lights;
-    state.materials = preparedAssetMaterials(asset);
-    state.load = asset.load;
-    delete state.error;
-    state.nodeCount = asset.nodeCount;
-    state.primitives = asset.primitives;
-    state.status = "ready";
-    state.variants = asset.variants;
-    const plan = this.#scenePlan.plan;
-    try {
-      this.#preparedGltf.publishReadyPackets(
-        snapshot.key,
-        plan?.revision,
-        replacesReadyAsset,
-        (occurrenceIndex) => this.#gltfPacketOccurrence(plan!, occurrenceIndex),
-      );
-    } catch (error) {
-      // Asset state and packet ranges must never describe different generations.
-      state.status = "error";
-      state.error = error instanceof Error ? error.message : String(error);
-      state.load.readyAt = nowMs();
-      this.#recordDiagnostic(state.error, `gltf-packets:${state.key}`);
-      if (asset.imagePreparation !== undefined) {
-        this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
-        this.#preparedGltf.releaseDecodeLease(snapshot.key);
-      }
-      return;
-    }
-    const images = asset.imagePreparation;
-    if (images === undefined) return;
-    const eventIsCurrent = (): boolean =>
-      !this.#disposed
-      && this.#preparedGltf.get(snapshot.key) === state
-      && state.preparedGeneration === snapshot.generation;
-    let recipeLease: GltfImageRecipeLease | undefined;
-    try {
-      recipeLease = this.#preparedGltf.takeDecodeRecipeLease(
-        state.key,
-        gltfImageSourceRecipeBytes(images.recipes),
-      );
-      this.#preparedGltf.images.registerAsset({
-        ...(state.imageBasedLight === undefined ? {} : { imageBasedLight: state.imageBasedLight }),
-        key: state.key,
-        load: state.load,
-        materials: state.materials,
-        recipeLease,
-        recipes: images.recipes,
-        stateInstanceKey: state.instanceKey,
-      });
-      if (!eventIsCurrent()) {
-        this.#releaseGltfImageAssetForReplacement(state.key);
-        return;
-      }
-      this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
-    } catch (error) {
-      recipeLease?.release();
-      if (!eventIsCurrent()) return;
-      this.#detachPreparedAssetImagePreparation(snapshot.key, snapshot.generation);
-      state.status = "error";
-      state.error = error instanceof Error ? error.message : String(error);
-      state.load.readyAt = nowMs();
-      this.#recordDiagnostic(state.error, `gltf-images:${state.key}`);
-    }
-  }
-
-  #releaseGltfImageAssetForReplacement(key: string): void {
-    try {
-      this.#preparedGltf.images.releaseAsset(key);
-    } catch (error) {
-      // releaseAsset removes the old generation before fallible cleanup and
-      // retains failed work as coordinator cleanup debt. Do not strand an
-      // already-consumed prepared-asset event outside the replacement path.
-      this.#recordDiagnostic(
-        `glTF image asset cleanup failed for ${key}: ${error instanceof Error ? error.message : String(error)}`,
-        `gltf-image-cleanup:${key}`,
-      );
-    }
   }
 
   #releaseOrdinaryTexture(key: string): void {
