@@ -8,10 +8,12 @@ with `TEXCOORD_0`, explicitly set
 `createRendererRoot(..., { generatedImageVirtualTextures: true })`. The default
 is `false`; Royal does not probe for a hidden `imageUri + '.vt.json'` sidecar.
 Decoded raster sources qualify when their longest dimension is at least 257 px.
-SVG sources remain ordinary until VT v2 provides one generic page-source path.
-The ordinary texture remains active until
-generated coverage is ready. Authored `virtualTexture(...)` resources are
-unaffected.
+Browser-decoded SVG sources use the same page-source contract at a fixed
+16,384-texel long edge, preserving vector detail without allocating a full
+16K bitmap. Safari retains the ordinary SVG fallback because WebKit currently
+rejects the derived Canvas page path. The ordinary texture remains active
+until generated coverage is ready. Authored `virtualTexture(...)` resources
+are unaffected.
 
 The authored object form is
 `virtualTexture({ manifestUri: '/terrain.vt.json', ...options })`. Image object

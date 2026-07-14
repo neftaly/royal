@@ -18,9 +18,10 @@ export interface WebGlRootOptions {
   /**
    * Generate VTs for ordinary base-color image textures used by triangle
    * geometry with `TEXCOORD_0`. Decoded raster sources qualify when their
-   * longest dimension is at least 257 px. SVG sources remain ordinary until
-   * VT v2 supplies one generic page-source path. The ordinary texture remains active until generated
-   * coverage is ready. Authored `virtualTexture(...)` resources are unaffected.
+   * longest dimension is at least 257 px. Browser-decoded SVG sources use the
+   * same page-source path except on Safari, which retains the ordinary fallback.
+   * The ordinary texture remains active until generated coverage is ready.
+   * Authored `virtualTexture(...)` resources are unaffected.
    * @defaultValue `false`
    */
   readonly generatedImageVirtualTextures?: boolean;

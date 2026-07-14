@@ -42,11 +42,6 @@ export type RasterVirtualTextureSource = {
   readonly width: number;
 };
 
-export type VirtualTextureGeneratedPageSource = {
-  readonly kind: "raster";
-  readonly source: RasterVirtualTextureSource;
-};
-
 export type VirtualTexturePagePayload =
   | {
       readonly close?: () => void;
@@ -90,6 +85,12 @@ export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | Defe
 
 export type AutomaticVirtualTextureSource = VirtualTexturePageSource & {
   readonly manifest: VirtualTextureManifestParseResult & { readonly manifest: VirtualTextureManifestModel };
+  readonly retainedSourceBytes: number;
+};
+
+export type AutomaticVirtualTextureSourceDefinition = {
+  readonly loadPage: VirtualTexturePageLoader;
+  readonly manifest: VirtualTextureManifestModel;
   readonly retainedSourceBytes: number;
 };
 
@@ -210,29 +211,31 @@ const generatedVirtualTextureManifestUri = (key: string): string =>
 
 export const automaticVirtualTextureSource = (
   textureKey: string,
-  pageSource: VirtualTextureGeneratedPageSource,
-): AutomaticVirtualTextureSource => {
-  const manifest = generatedRasterVirtualTextureManifest(pageSource.source);
-  return {
-    loadPage: (activeManifest, page, signal) => {
-      throwIfAborted(signal);
-      return {
-        kind: "page",
-        promise: Promise.resolve({
-          image: generatedRasterVirtualTexturePageImage(
-            pageSource.source,
-            activeManifest,
-            page,
-          ),
-          kind: "image",
-        }),
-      };
-    },
-    manifest: { diagnostics: [], manifest },
-    manifestUri: generatedVirtualTextureManifestUri(textureKey),
-    retainedSourceBytes: pageSource.source.decodedBytes,
-  };
-};
+  definition: AutomaticVirtualTextureSourceDefinition,
+): AutomaticVirtualTextureSource => ({
+  loadPage: definition.loadPage,
+  manifest: { diagnostics: [], manifest: definition.manifest },
+  manifestUri: generatedVirtualTextureManifestUri(textureKey),
+  retainedSourceBytes: definition.retainedSourceBytes,
+});
+
+export const automaticRasterVirtualTextureSource = (
+  textureKey: string,
+  source: RasterVirtualTextureSource,
+): AutomaticVirtualTextureSource => automaticVirtualTextureSource(textureKey, {
+  loadPage: (activeManifest, page, signal) => {
+    throwIfAborted(signal);
+    return {
+      kind: "page",
+      promise: Promise.resolve({
+        image: generatedRasterVirtualTexturePageImage(source, activeManifest, page),
+        kind: "image",
+      }),
+    };
+  },
+  manifest: generatedRasterVirtualTextureManifest(source),
+  retainedSourceBytes: source.decodedBytes,
+});
 
 export const generatedRasterVirtualTextureManifest = (
   source: RasterVirtualTextureSource,

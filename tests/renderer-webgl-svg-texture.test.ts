@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GltfPreparationScheduler } from "../packages/renderer-webgl/src/gltf/preparation-scheduler";
 import {
+  automaticSvgVirtualTextureManifest,
   isLoadedSvgTextureSource,
   loadSvgTextureFromUri,
   prepareSvgTextForImage,
+  supportsAutomaticSvgVirtualTexturePages,
   svgTextureViewport,
+  svgVirtualTextureSourceForImage,
 } from "../packages/renderer-webgl/src/svg-texture";
 
 const svg = (hrefs: readonly string[]): string =>
@@ -107,7 +110,7 @@ describe("SVG texture reference lifecycle", () => {
     scheduler.dispose();
   });
 
-  it("loads one marked ordinary SVG source without constructing VT pages", async () => {
+  it("loads one browser-decoded SVG with optional generic VT source metadata", async () => {
     const objectUrlBlobs: Blob[] = [];
     class TestUrl extends URL {
       static createObjectURL = vi.fn((blob: Blob) => {
@@ -125,10 +128,27 @@ describe("SVG texture reference lifecycle", () => {
 
     const loaded = await loadSvgTextureFromUri("https://assets.test/large.svg");
     expect(isLoadedSvgTextureSource(loaded.image)).toBe(true);
+    const source = svgVirtualTextureSourceForImage(loaded.image);
+    expect(source).toMatchObject({ height: 1300, width: 2050 });
+    expect(source === undefined ? undefined : automaticSvgVirtualTextureManifest(source)).toMatchObject({
+      height: 10_390,
+      pageAddressing: "complete",
+      pageEncoding: "image",
+      width: 16_384,
+    });
     expect((loaded.image as unknown as AutoLoadingImage).crossOrigin).toBeNull();
     expect(TestUrl.createObjectURL).toHaveBeenCalledTimes(1);
     expect(TestUrl.revokeObjectURL).toHaveBeenCalledWith("blob:royal-svg-1");
     expect(objectUrlBlobs).toHaveLength(1);
+  });
+
+  it("gates the known Apple WebKit canvas-source failure without hiding Chromium", () => {
+    expect(supportsAutomaticSvgVirtualTexturePages(
+      "Mozilla/5.0 AppleWebKit/605.1.15 Version/17.14 Safari/605.1.15",
+    )).toBe(false);
+    expect(supportsAutomaticSvgVirtualTexturePages(
+      "Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
+    )).toBe(true);
   });
 });
 

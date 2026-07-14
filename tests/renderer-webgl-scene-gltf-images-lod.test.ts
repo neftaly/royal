@@ -61,6 +61,7 @@ import {
   responseWithBuffer,
   responseWithText,
   installStagedGltfLoader,
+  installCanvas2d,
   installCanvasImageMimeTypeSupport,
   settleDocumentAndBuffer,
   settleLodDocumentAndBuffer,
@@ -330,11 +331,12 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(calls.some((call) => call.name === "generateMipmap" && call.args[0] === gl.TEXTURE_2D)).toBe(true);
   });
 
-  it("keeps SVG ordinary while generated raster VT is enabled", async () => {
+  it("uses opted-in automatic VT for plain glTF SVG image sources", async () => {
     vi.stubGlobal("devicePixelRatio", 1);
+    const { contexts } = installCanvas2d();
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
-    const { calls, gl } = fakeGl();
+    const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({ color: [1, 1, 1, 1], direction: [0, 0, -1] }),
@@ -370,15 +372,28 @@ describe("WebGL renderer glTF image, primitive, and LOD regressions", () => {
     expect(loader.fetchRequests.some((request) => request.url.includes(".vt.json"))).toBe(false);
     expect(loader.fetchRequests.some((request) => request.url.includes("svg-uri:"))).toBe(false);
 
+    for (
+      let frame = 0;
+      frame < 8 && root.snapshot().virtualTexturing.shaderBinds === 0;
+      frame += 1
+    ) {
+      await flushMicrotasks();
+      root.render(renderGraph);
+      await flushAnimationFrames(viewport.animationFrames);
+    }
+
     expect(loader.objectUrlBlobs).toHaveLength(1);
-    expect(callCount(calls, "texImage2D")).toBe(1);
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts.every((context) => context.createPattern.mock.calls.some((call) => (
+      call[0] === ControlledImage.instances[0] && call[1] === "repeat"
+    )))).toBe(true);
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
-      automaticManifestUses: 0,
+      automaticManifestUses: 1,
       pageLoadFailures: 0,
-      automaticPagesTarget: 0,
-      manifestsReady: 0,
+      automaticPagesTarget: 5_461,
+      manifestsReady: 1,
     }));
-    expect(root.snapshot().virtualTexturing.shaderBinds).toBe(0);
+    expect(root.snapshot().virtualTexturing.shaderBinds).toBeGreaterThan(0);
   });
 
   it("does not parse, sanitize, or fetch dependencies inside SVG image content", async () => {

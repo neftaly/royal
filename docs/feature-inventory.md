@@ -72,7 +72,7 @@ Status meanings:
 | Public `flipY` | deleted | Ordinary, glTF, and virtual textures share an upper-left authored origin. Upload and ingestion normalize once; orientation is not a shader or VT policy. |
 | Authored VT manifest | candidate | Useful for pre-tiled assets. Version 2 now has one page-source boundary and supports independently addressable image or KTX2/Basis pages; continue judging the public JSON shape as VT v2 settles. |
 | Automatic raster-image VT | candidate | Product intent is keep, implementation is v1 and will be replaced. Small images should remain ordinary. |
-| Generated SVG VT v1 | deleted | Removed. Reintroduce SVG only as a generic VT v2 page producer. |
+| Automatic SVG VT | product/fallback | Uses the generic VT v2 page-source boundary with a 16,384-texel long edge and no full-size bitmap. Safari retains the ordinary SVG fallback for its incompatible Canvas-derived page path. |
 | Ordinary SVG raster fallback | fallback | Retain for correctness isolation, startup and devices where vector paging is unavailable. |
 
 ## SVG ingestion

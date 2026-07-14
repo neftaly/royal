@@ -162,9 +162,11 @@ The imperative root separates its two observational models:
 - `generatedImageVirtualTextures` defaults to `false`. Enable it to generate
   VTs for ordinary base-color image textures used by triangle geometry with
   `TEXCOORD_0`. Decoded raster sources qualify when their longest dimension is
-  at least 257 px. SVG remains on the ordinary texture path until VT v2 provides
-  one generic page-source implementation. The ordinary texture remains active until generated coverage is ready.
-  Authored `virtualTexture(...)` resources are unaffected.
+  at least 257 px. Browser-decoded SVG uses the same page-source implementation
+  at a 16,384-texel long edge; Safari retains the ordinary fallback for its
+  incompatible Canvas-derived page path. The ordinary texture remains active
+  until generated coverage is ready. Authored `virtualTexture(...)` resources
+  are unaffected.
 - VT atlases and page tables participate in `resourceGovernorPolicy` as
   `classes['virtual-texture'].persistentGpuBytes`. Its `softLimit` marks
   borrowing for diagnostics, while optional `hardLimit` sets an exact class

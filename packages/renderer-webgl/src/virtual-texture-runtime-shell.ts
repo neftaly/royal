@@ -15,9 +15,9 @@ import {
 import type { VirtualTextureDemandSubmission } from "./virtual-texture-demand";
 import {
   GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
+  automaticRasterVirtualTextureSource,
   automaticVirtualTextureSource,
   type AutomaticVirtualTextureSource,
-  type VirtualTextureGeneratedPageSource,
   type VirtualTexturePagePayload,
   type VirtualTexturePageLoad,
   type VirtualTexturePageSource,
@@ -39,7 +39,12 @@ import {
   type VirtualTexturePageId,
 } from "./virtual-texturing";
 import { resolveResourceUri, throwIfAborted } from "./gltf/io";
-import { isLoadedSvgTextureSource } from "./svg-texture";
+import {
+  automaticSvgVirtualTextureManifest,
+  loadAutomaticSvgVirtualTexturePageImage,
+  supportsAutomaticSvgVirtualTexturePages,
+  svgVirtualTextureSourceForImage,
+} from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
 
@@ -268,31 +273,45 @@ export class VirtualTextureRuntimeShell {
 
   registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void {
     if (!this.#options.generatedImageVirtualTextures) return;
-    // SVG paging is intentionally absent until VT v2 provides one generic
-    // page-source contract. Keep Royal's ordinary SVG texture as the baseline.
-    if (isLoadedSvgTextureSource(source) || isDecodedCompressedTexture(source)) return;
+    if (isDecodedCompressedTexture(source)) return;
     const textureKey = textureCacheKey(texture);
+    const retainedSourceBytes = (() => {
+      try {
+        return decodedTextureSourceBytes(source);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (retainedSourceBytes === undefined) return;
+    const svgSource = svgVirtualTextureSourceForImage(source);
+    if (svgSource !== undefined) {
+      if (!supportsAutomaticSvgVirtualTexturePages()) return;
+      this.#autoSources.set(textureKey, automaticVirtualTextureSource(textureKey, {
+        loadPage: (manifest, page, signal) => {
+          throwIfAborted(signal);
+          return {
+            kind: "page",
+            promise: loadAutomaticSvgVirtualTexturePageImage(svgSource, manifest, page, signal)
+              .then((image) => ({ image, kind: "image" })),
+          };
+        },
+        manifest: automaticSvgVirtualTextureManifest(svgSource),
+        retainedSourceBytes,
+      }));
+      return;
+    }
     const [width, height] = loadedTextureSourceSize(source);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
     if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
-    let decodedBytes: number;
-    try {
-      decodedBytes = decodedTextureSourceBytes(source);
-    } catch {
-      return;
-    }
-    const pageSource: VirtualTextureGeneratedPageSource = {
-      kind: "raster",
-      source: {
-        ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
-        decodedBytes,
-        height: Math.ceil(height),
-        label: texture.uri,
-        source,
-        width: Math.ceil(width),
-      },
+    const pageSource = {
+      ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+      decodedBytes: retainedSourceBytes,
+      height: Math.ceil(height),
+      label: texture.uri,
+      source,
+      width: Math.ceil(width),
     };
-    this.#autoSources.set(textureKey, automaticVirtualTextureSource(textureKey, pageSource));
+    this.#autoSources.set(textureKey, automaticRasterVirtualTextureSource(textureKey, pageSource));
   }
 
   releaseAutoMetadata(textureKey: string): void {
