@@ -312,6 +312,19 @@ describe("virtual texture frame-demand workspace", () => {
     expect(finalizeVirtualTextureFrameDemand(workspace, true, () => 0)).toEqual([]);
   });
 
+  it("reuses the empty result across idle and aborted collections", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    beginVirtualTextureFrameDemand(workspace);
+    const idle = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+    beginVirtualTextureFrameDemand(workspace);
+    const repeatedIdle = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+    beginVirtualTextureFrameDemand(workspace);
+    const aborted = finalizeVirtualTextureFrameDemand(workspace, false, () => 0);
+
+    expect(repeatedIdle).toBe(idle);
+    expect(aborted).toBe(idle);
+  });
+
   it("reuses resource, view, and group maps after commit and abort without stale demand", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
     const first = page(1);

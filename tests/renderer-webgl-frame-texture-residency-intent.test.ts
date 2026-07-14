@@ -3,6 +3,20 @@ import { FrameTextureResidencyIntent } from "../packages/renderer-webgl/src/fram
 import { forEachFuzzCase } from "./fuzz";
 
 describe("frame texture residency intent", () => {
+  it("reuses the empty result when no virtual texture can be suppressed", () => {
+    const intent = new FrameTextureResidencyIntent();
+    const inactive = intent.finishFrame(true);
+    intent.beginFrame();
+    intent.requireOrdinary("ordinary-only");
+    const ordinaryOnly = intent.finishFrame(true);
+    intent.beginFrame();
+    intent.recordVirtualBind("aborted");
+    const aborted = intent.finishFrame(false);
+
+    expect(ordinaryOnly).toBe(inactive);
+    expect(aborted).toBe(inactive);
+  });
+
   it.each([
     ["ordinary-first", ["ordinary", "virtual"]],
     ["virtual-first", ["virtual", "ordinary"]],

@@ -58,6 +58,8 @@ export interface VirtualTextureFrameDemandCommit<K> {
   readonly viewCursorUpdate?: number;
 }
 
+const EMPTY_FRAME_DEMAND_COMMITS: readonly VirtualTextureFrameDemandCommit<never>[] = Object.freeze([]);
+
 export const createVirtualTextureFrameDemandWorkspace = <K>(): VirtualTextureFrameDemandWorkspace<K> => ({
   active: false,
   availableViews: [],
@@ -396,11 +398,15 @@ export const finalizeVirtualTextureFrameDemand = <K>(
 ): readonly VirtualTextureFrameDemandCommit<K>[] => {
   if (!workspace.active) throw new Error("Virtual texture frame-demand collection is not active");
   workspace.active = false;
-  const commits: VirtualTextureFrameDemandCommit<K>[] = [];
   if (!commit) {
     releasePools(workspace);
-    return commits;
+    return EMPTY_FRAME_DEMAND_COMMITS;
   }
+  if (workspace.resources.size === 0) {
+    releasePools(workspace);
+    return EMPTY_FRAME_DEMAND_COMMITS;
+  }
+  const commits: VirtualTextureFrameDemandCommit<K>[] = [];
   const retainedResources = [...workspace.resources.values()].sort((left, right) => (
     cyclicOrderDistance(left.order, workspace.resourceCursor)
     - cyclicOrderDistance(right.order, workspace.resourceCursor)

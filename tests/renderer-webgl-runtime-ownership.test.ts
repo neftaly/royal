@@ -225,6 +225,13 @@ describe("renderer runtime ownership", () => {
     expect(runtime.get("first")).toBeUndefined();
   });
 
+  it("skips VT publication when a frame has no runtime resources", () => {
+    const runtime = virtualTextureShell();
+    runtime.beginFrame();
+    expect(runtime.finishFrame(true)).toBeUndefined();
+    expect(runtime.activeFrame).toBe(false);
+  });
+
   it("owns automatic VT source setup and abort-safe teardown", () => {
     const runtime = virtualTextureShell();
     const state = runtime.acquire({ kind: "virtual-asset", manifestUri: "/generated" }, {

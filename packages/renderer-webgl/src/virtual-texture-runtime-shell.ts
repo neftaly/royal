@@ -398,6 +398,7 @@ export class VirtualTextureRuntimeShell {
     this.#commits.clear();
     this.#demanded.clear();
     this.#admissions.length = 0;
+    if (this.#resources.size === 0) return undefined;
     for (const entry of commits) {
       this.#commits.set(entry.resource, entry);
       const demandedPageKeys = entry.resource.demandedPageKeysScratch;
