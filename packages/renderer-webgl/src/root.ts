@@ -116,12 +116,7 @@ import {
   processVirtualTextureGpuUploads,
   releaseVirtualTextureGpuAllocation,
   releaseVirtualTextureGpuResource,
-  setVirtualTextureGpuDesiredPageKeys,
-  touchVirtualTextureGpuResidency,
   virtualTextureGpuArenaSnapshot,
-  virtualTextureGpuCachedResidency,
-  virtualTextureGpuDrawable,
-  virtualTextureGpuExactResidency,
   virtualTextureGpuHasActionableUploads,
   virtualTextureGpuOutcome,
   virtualTextureGpuOutcomeCount,
@@ -221,41 +216,19 @@ import {
   loadSvgTextureFromUri,
 } from "./svg-texture";
 import {
-  generatedVirtualTexturePageCount,
   virtualTextureDecodedPageBytes,
-  virtualTexturePageKey,
   type VirtualTextureManifestModel,
-  type VirtualTexturePageId,
 } from "./virtual-texturing";
 import {
-  type BaseColorTextureResidency,
-  type GeneratedVirtualTextureSource,
-  type VirtualTextureDrawDemand,
-  type VirtualTextureDrawDemandContext,
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureRef,
   type VirtualTextureRuntimeState,
   type ViewportSize,
 } from "./virtual-texture-runtime";
-import {
-  createVirtualTextureDemandPlanningWorkspace,
-  planVirtualTextureDrawDemand,
-  selectVirtualTextureFrameWorkingSet,
-  selectVirtualTextureWorkingSet,
-  stabilizeVirtualTextureDesiredPagesInto,
-  virtualTextureDemandMipCount,
-  virtualTextureDemandModelCount,
-} from "./virtual-texture-demand";
-import {
-  cachedVirtualTextureCoverageProvider,
-  clearVirtualTextureCoverageProviderCache,
-  createVirtualTextureCoverageProviderCache,
-  releaseVirtualTextureCoverageProviders,
-} from "./virtual-texture-coverage-cache";
+import { VirtualTextureDemandOwner } from "./virtual-texture-demand-owner";
 import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
 import {
   textureCacheKey,
-  type SurfaceMaterial,
   type TextureAssetUploadRef,
 } from "./webgl/materials";
 import {
@@ -561,13 +534,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #framePublication = new WebGlFramePublicationOwner();
   readonly #programArena: ProgramArena;
   readonly #geometryRecipes = new GeometryRecipeRegistry();
-  /** Prepared CPU coverage survives WebGL context loss and follows semantic geometry ownership. */
-  readonly #virtualTextureCoverageProviders = createVirtualTextureCoverageProviderCache();
   readonly #ordinaryTextures: OrdinaryTextureResidencyController;
   readonly #textureResidencyIntent = new FrameTextureResidencyIntent();
   readonly #decodedTextureSources: DecodedTextureSourceLifetime;
   readonly #virtualTextureGpu: VirtualTextureGpuArena;
   readonly #virtualTextureRuntime: VirtualTextureRuntimeShell;
+  readonly #virtualTextureDemand: VirtualTextureDemandOwner;
   readonly #resourceArena: ResourceArena;
   /** Root authority for cross-subsystem resource admission and accounting. */
   readonly #resourceGovernor: ResourceGovernor;
@@ -656,8 +628,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #viewport: WebGlCanvasViewportOwner;
   readonly #geometryDrawArena: GeometryDrawArena;
   readonly #surfaceExecution: SurfaceExecutionArena;
-  readonly #virtualTextureDemandPlanning = createVirtualTextureDemandPlanningWorkspace();
-  readonly #virtualTextureDemandPublicationStates: VirtualTextureRuntimeState[] = [];
   #unsupportedVirtualTextureDraws = 0;
   readonly #contextLostListener = (event: Event): void => {
     event.preventDefault();
@@ -893,6 +863,16 @@ class WebGlRootImpl implements InternalWebGlRoot {
         loadImageSource: (uri, signal) => loadImage(uri, signal),
         maximumDecodedCpuBytes: this.#maximumResourceClassCpuBytes("virtual-texture"),
         resourceGovernor: this.#resourceGovernor,
+      });
+      this.#virtualTextureDemand = new VirtualTextureDemandOwner({
+        consumeGpuOutcomes: () => this.#consumeVirtualTextureGpuOutcomes(),
+        ensureGpuResource: (state, manifest, demandedStates) => (
+          this.#ensureVirtualTextureGpuResource(state, manifest, demandedStates)
+        ),
+        frame: () => this.#framePublication.frame,
+        gpu: this.#virtualTextureGpu,
+        recordUnsupported: (texture, reason) => this.#recordUnsupportedVirtualTexture(texture, reason),
+        runtime: this.#virtualTextureRuntime,
       });
       this.#geometryDrawArena = createGeometryDrawArena(gl, this.#vertexInputs);
       registerRollback(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
@@ -1200,7 +1180,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     renderFailure = captureFirstFailure(
       renderFailure,
-      () => this.#finalizeVirtualTextureFrameDemand(renderFailure === undefined),
+      () => this.#virtualTextureDemand.finishFrame(renderFailure === undefined),
     );
     if (renderFailure === undefined) {
       renderFailure = captureFirstFailure(renderFailure, () => this.#processVirtualTextureGpuUploads());
@@ -1413,7 +1393,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#geometryRecipes.clearRetainedRecipes();
-    clearVirtualTextureCoverageProviderCache(this.#virtualTextureCoverageProviders);
+    this.#virtualTextureDemand.clear();
     this.#geometryRecipes.clearPacketPrimitives();
     teardown(() => clearResourceArenaPreparedSources(this.#resourceArena));
     this.#virtualTextureRuntime.clearAutoMetadata();
@@ -1660,7 +1640,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         () => {
           this.#geometryRecipes.releaseRecipe(key, id);
         },
-        () => releaseVirtualTextureCoverageProviders(this.#virtualTextureCoverageProviders, id),
+        () => this.#virtualTextureDemand.releaseGeometry(id),
         () => this.#geometryRecipes.forgetPacketPrimitive(id),
       );
     }
@@ -2057,10 +2037,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     const modelSource: VirtualTextureDrawDemandModelSource = batch.localModels.length === 1
       ? { kind: "single", model: multiplyMat4(batch.rootModels[0]!, batch.localModels[0]!) }
       : { kind: "composed", localModels: batch.localModels, rootModels: batch.rootModels };
-    const baseColorResidency = this.#resolveBaseColorTextureResidency(
+    const baseColorResidency = this.#virtualTextureDemand.resolveBaseColorResidency(
       batch.geometry,
       batch.material,
-      this.#virtualTextureDrawDemandContext(
+      this.#virtualTextureDemand.drawDemandContext(
         batch.geometryId,
         batch.cpuGeometry,
         batch.material,
@@ -2097,10 +2077,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
     transmissionScreenColorTexture: ScreenColorTextureResource | undefined,
     cpuGeometry: CpuGeometry,
   ): void {
-    const baseColorResidency = this.#resolveBaseColorTextureResidency(
+    const baseColorResidency = this.#virtualTextureDemand.resolveBaseColorResidency(
       geometry,
       material,
-      this.#virtualTextureDrawDemandContext(
+      this.#virtualTextureDemand.drawDemandContext(
         geometryId,
         cpuGeometry,
         material,
@@ -2125,124 +2105,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       view,
       viewportSize,
     });
-  }
-
-  #virtualTextureDrawDemandContext(
-    geometryId: number,
-    geometry: CpuGeometry,
-    material: Material,
-    modelSource: VirtualTextureDrawDemandModelSource,
-    projection: Mat4,
-    view: Mat4,
-    viewportSize: ViewportSize,
-  ): VirtualTextureDrawDemandContext | undefined {
-    const texture = material.baseColor;
-    if (
-      material.kind === "wireframe"
-      || texture.kind === "solid"
-      || (texture.kind === "asset" && this.#virtualTextureRuntime.autoSource(texture) === undefined)
-      || geometry.texCoords0 === undefined
-      || geometry.mode !== "triangles"
-      || virtualTextureDemandModelCount(modelSource) === 0
-    ) {
-      return undefined;
-    }
-    const baseColorCoordinates = (material as SurfaceMaterial).textureCoordinates?.baseColorTexture;
-    const requestedSet = baseColorCoordinates?.set === 1 && geometry.texCoords1 !== undefined ? 1 : 0;
-    const provider = cachedVirtualTextureCoverageProvider(
-      this.#virtualTextureCoverageProviders,
-      geometryId,
-      geometry,
-      requestedSet,
-    );
-    if (provider === undefined) return undefined;
-    return {
-      modelSource,
-      projection,
-      provider,
-      ...(baseColorCoordinates === undefined ? {} : { textureCoordinates: baseColorCoordinates }),
-      view,
-      viewportSize,
-    };
-  }
-
-  #resolveBaseColorTextureResidency(
-    geometry: GeometryResource,
-    material: Material,
-    demandContext: VirtualTextureDrawDemandContext | undefined,
-  ): BaseColorTextureResidency {
-    const texture = material.baseColor;
-    switch (texture.kind) {
-      case "solid":
-        return { kind: "none" };
-      case "asset":
-        return this.#resolveAutoBaseColorTextureResidency(geometry, material, texture, demandContext);
-      case "virtual-asset":
-        return this.#resolvePreparedVirtualTextureResidency(geometry, material, texture, demandContext);
-    }
-  }
-
-  #resolveAutoBaseColorTextureResidency(
-    geometry: GeometryResource,
-    material: Material,
-    texture: TextureAssetUploadRef,
-    demandContext: VirtualTextureDrawDemandContext | undefined,
-  ): BaseColorTextureResidency {
-    const ordinary: BaseColorTextureResidency = { kind: "ordinary", texture };
-    if (material.kind === "wireframe" || geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
-      return ordinary;
-    }
-
-    const state = this.#virtualTextureRuntime.acquireAuto(texture);
-    if (state === undefined) return ordinary;
-    state.stats.preparedResidencyResolutions += 1;
-    const drawDemand = state.status === "ready"
-      ? this.#virtualTextureDrawDemand(state, demandContext)
-      : undefined;
-    if (drawDemand !== undefined) {
-      this.#demandVirtualTexturePageCandidates(
-        state,
-        drawDemand.demandCandidates,
-        true,
-        drawDemand.preferredCandidates,
-      );
-    }
-
-    return this.#isAutoVirtualTextureCoverageReady(state, drawDemand)
-      ? { kind: "prepared-virtual", ordinaryFallback: texture, state }
-      : ordinary;
-  }
-
-  #resolvePreparedVirtualTextureResidency(
-    geometry: GeometryResource,
-    material: Material,
-    texture: VirtualTextureRef,
-    demandContext: VirtualTextureDrawDemandContext | undefined,
-  ): BaseColorTextureResidency {
-    if (material.kind === "wireframe") {
-      this.#recordUnsupportedVirtualTexture(texture, "virtual textures require surface materials");
-      return { kind: "none" };
-    }
-    if (geometry.mode !== "triangles" || geometry.texCoord0Buffer === undefined) {
-      this.#recordUnsupportedVirtualTexture(texture, "virtual textures require triangle geometry with UVs");
-      return { kind: "none" };
-    }
-
-    const state = this.#virtualTexture(texture);
-    state.stats.preparedResidencyResolutions += 1;
-    if (state.status === "ready") this.#demandVirtualTexturePages(state, demandContext);
-    return { kind: "prepared-virtual", state };
-  }
-
-  #virtualTexture(
-    texture: VirtualTextureRef,
-    options: {
-      readonly generatedSource?: GeneratedVirtualTextureSource;
-      readonly cacheNamespace?: string;
-      readonly diagnosticsEnabled?: boolean;
-    } = {},
-  ): VirtualTextureRuntimeState {
-    return this.#virtualTextureRuntime.acquire(texture, options);
   }
 
   #attemptVirtualTextureGpuAdmission(
@@ -2463,277 +2325,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.invalidate();
   }
 
-  #demandVirtualTexturePages(
-    state: VirtualTextureRuntimeState,
-    context?: VirtualTextureDrawDemandContext,
-  ): void {
-    const drawDemand = this.#virtualTextureDrawDemand(state, context);
-    this.#demandVirtualTexturePageCandidates(
-      state,
-      drawDemand.demandCandidates,
-      context !== undefined || state.activeSource.kind === "generated",
-      drawDemand.preferredCandidates,
-    );
-  }
-
-  #demandVirtualTexturePageCandidates(
-    state: VirtualTextureRuntimeState,
-    candidates: readonly VirtualTexturePageId[],
-    preferTargetMip = false,
-    preferredCandidates?: readonly VirtualTexturePageId[],
-  ): void {
-    const manifest = state.manifest;
-    if (manifest === undefined || state.status !== "ready") return;
-    const demandedPageKeys = state.demandedPageKeysScratch;
-    if (!this.#virtualTextureRuntime.activeFrame) {
-      demandedPageKeys.clear();
-      for (const page of candidates) demandedPageKeys.add(virtualTexturePageKey(page));
-      if (preferredCandidates !== undefined) {
-        for (const page of preferredCandidates) demandedPageKeys.add(virtualTexturePageKey(page));
-      }
-    }
-    const convergentCandidates = this.#convergentVirtualTextureCandidates(state, candidates);
-    const convergentPreferredCandidates = preferredCandidates === undefined
-      ? undefined
-      : this.#convergentVirtualTextureCandidates(state, preferredCandidates);
-    if (this.#virtualTextureRuntime.activeFrame) {
-      const nonconvergentCandidates = convergentCandidates.length === candidates.length
-        && (preferredCandidates === undefined
-          || convergentPreferredCandidates?.length === preferredCandidates.length)
-        ? []
-        : [...candidates, ...(preferredCandidates ?? [])].filter((page) => (
-            !this.#virtualTextureRuntime.requests.canBecomeResident(state, virtualTexturePageKey(page))
-          ));
-      this.#virtualTextureRuntime.submit(
-        state,
-        this.#virtualTextureFrameDemandCapacity(state),
-        {
-          candidates: convergentCandidates,
-          preferTargetMip,
-          ...(convergentPreferredCandidates === undefined
-            ? {}
-            : { preferredCandidates: convergentPreferredCandidates }),
-        },
-        nonconvergentCandidates,
-      );
-      return;
-    }
-    this.#applyVirtualTextureDemand(
-      state,
-      convergentPreferredCandidates === undefined
-        ? selectVirtualTextureWorkingSet(
-            convergentCandidates,
-            this.#virtualTextureDemandCapacity(state),
-            preferTargetMip,
-          )
-        : selectVirtualTextureFrameWorkingSet(
-            [{
-              candidates: convergentCandidates,
-              preferTargetMip,
-              preferredCandidates: convergentPreferredCandidates,
-            }],
-            this.#virtualTextureDemandCapacity(state),
-          ),
-      true,
-    );
-  }
-
-  #convergentVirtualTextureCandidates(
-    state: VirtualTextureRuntimeState,
-    candidates: readonly VirtualTexturePageId[],
-  ): readonly VirtualTexturePageId[] {
-    let includesTerminalPage = false;
-    for (const page of candidates) {
-      if (!this.#virtualTextureRuntime.requests.canBecomeResident(state, virtualTexturePageKey(page))) {
-        includesTerminalPage = true;
-        break;
-      }
-    }
-    if (!includesTerminalPage) return candidates;
-    return candidates.filter((page) => this.#virtualTextureRuntime.requests.canBecomeResident(
-      state,
-      virtualTexturePageKey(page),
-    ));
-  }
-
-  #virtualTextureDemandCapacity(state: VirtualTextureRuntimeState): number {
-    const manifest = state.manifest;
-    if (manifest === undefined) return 0;
-    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-    const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-    return gpu?.allocated === true ? gpu.effectiveSlots : 0;
-  }
-
-  #virtualTextureFrameDemandCapacity(state: VirtualTextureRuntimeState): number {
-    const manifest = state.manifest;
-    if (manifest === undefined) return 1;
-    const allocated = this.#virtualTextureDemandCapacity(state);
-    if (allocated > 0) return allocated;
-    return Math.min(
-      manifest.physicalSlots ?? 4,
-      generatedVirtualTexturePageCount(manifest.width, manifest.height, manifest.pageSize),
-    );
-  }
-
-  #prepareVirtualTextureDemand(
-    state: VirtualTextureRuntimeState,
-    workingCandidates: readonly VirtualTexturePageId[],
-  ): boolean {
-    const manifest = state.manifest;
-    if (manifest === undefined || state.status !== "ready") return false;
-    const desiredPageKeys = state.desiredPageKeysScratch;
-    const desiredPages = state.desiredPagesScratch;
-    const capacity = this.#virtualTextureDemandCapacity(state);
-    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-    const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
-    const stabilized = stabilizeVirtualTextureDesiredPagesInto(
-      workingCandidates,
-      state.desiredPages,
-      state.desiredPageKeys,
-      gpu?.occupiedSlots ?? 0,
-      (page) => virtualTextureGpuCachedResidency(this.#virtualTextureGpu, state.key, page) !== undefined,
-      capacity,
-      desiredPages,
-      desiredPageKeys,
-      (page) => this.#virtualTextureRuntime.requests.canBecomeResident(state, virtualTexturePageKey(page)),
-    );
-    state.stats.demandAdmissions += stabilized.admissions;
-    state.stats.demandRetentions += stabilized.retentions;
-    return true;
-  }
-
-  #commitPreparedVirtualTextureDemand(
-    state: VirtualTextureRuntimeState,
-    commitDemandedPageKeys = false,
-  ): void {
-    const previousPageKeys = state.desiredPageKeys;
-    const previousPages = state.desiredPages;
-    state.desiredPageKeys = state.desiredPageKeysScratch;
-    state.desiredPages = state.desiredPagesScratch;
-    state.desiredPageKeysScratch = previousPageKeys;
-    state.desiredPagesScratch = previousPages;
-    if (commitDemandedPageKeys) {
-      const previousDemandedPageKeys = state.demandedPageKeys;
-      state.demandedPageKeys = state.demandedPageKeysScratch;
-      state.demandedPageKeysScratch = previousDemandedPageKeys;
-    }
-    state.demandPublished = true;
-    const resource = virtualTextureGpuResource(this.#virtualTextureGpu, state.key);
-    if (resource !== undefined) {
-      setVirtualTextureGpuDesiredPageKeys(this.#virtualTextureGpu, resource, state.desiredPageKeys);
-    }
-    this.#virtualTextureRuntime.requests.reconcileDemand(state, previousPageKeys);
-    // Convergence is woken by decode/upload settlement. Invalidating here
-    // would repeatedly reconsider the same nonresident admissions and erode
-    // transition coverage before any page can become drawable.
-  }
-
-  #touchPublishedVirtualTextureDemand(state: VirtualTextureRuntimeState): void {
-    const manifest = state.manifest;
-    if (manifest === undefined || state.status !== "ready") return;
-    for (const page of state.desiredPages) {
-      touchVirtualTextureGpuResidency(
-        this.#virtualTextureGpu,
-        state.key,
-        page,
-        virtualTextureDemandMipCount(manifest) - 1,
-      );
-    }
-  }
-
-  #applyVirtualTextureDemand(
-    state: VirtualTextureRuntimeState,
-    workingCandidates: readonly VirtualTexturePageId[],
-    commitDemandedPageKeys = false,
-  ): void {
-    if (!this.#prepareVirtualTextureDemand(state, workingCandidates)) return;
-    this.#commitPreparedVirtualTextureDemand(state, commitDemandedPageKeys);
-    this.#touchPublishedVirtualTextureDemand(state);
-    const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
-    this.#virtualTextureRuntime.requests.schedule();
-    if (closeFailure !== undefined) throw closeFailure.value;
-  }
-
-  #finalizeVirtualTextureFrameDemand(commit: boolean): void {
-    const publication = this.#virtualTextureRuntime.finishFrame(commit);
-    if (publication === undefined) return;
-    let commitFailure: CapturedFailure | undefined;
-    for (const state of publication.admissions) {
-      if (commitFailure !== undefined) break;
-      commitFailure = captureFirstFailure(commitFailure, () => {
-        this.#ensureVirtualTextureGpuResource(state, state.manifest!, publication.demanded);
-      });
-    }
-    const publicationStates = this.#virtualTextureDemandPublicationStates;
-    publicationStates.length = 0;
-    if (commitFailure === undefined) {
-      for (const state of this.#virtualTextureRuntime.resources.values()) {
-        const entry = publication.commits.get(state);
-        const submissions = entry?.submissions ?? [];
-        const pages = selectVirtualTextureFrameWorkingSet(
-          submissions,
-          this.#virtualTextureDemandCapacity(state),
-          entry?.startSubmission ?? 0,
-        );
-        if (!this.#prepareVirtualTextureDemand(state, pages)) continue;
-        publicationStates.push(state);
-      }
-    }
-    for (const state of publicationStates) {
-      commitFailure = captureFirstFailure(
-        commitFailure,
-        () => this.#commitPreparedVirtualTextureDemand(state, true),
-      );
-    }
-    for (const state of publicationStates) {
-      commitFailure = captureFirstFailure(
-        commitFailure,
-        () => this.#touchPublishedVirtualTextureDemand(state),
-      );
-    }
-    if (commitFailure === undefined) {
-      this.#virtualTextureRuntime.commitPublication(publicationStates, this.#framePublication.frame);
-    }
-    const closeFailure = captureFailure(() => this.#consumeVirtualTextureGpuOutcomes());
-    this.#virtualTextureRuntime.requests.schedule();
-    publicationStates.length = 0;
-    this.#virtualTextureRuntime.clearFinishedFrame();
-    if (commitFailure !== undefined) throw commitFailure.value;
-    if (closeFailure !== undefined) throw closeFailure.value;
-  }
-
-  #virtualTextureDrawDemand(
-    state: VirtualTextureRuntimeState,
-    context: VirtualTextureDrawDemandContext | undefined,
-  ): VirtualTextureDrawDemand {
-    const manifest = state.manifest;
-    if (manifest === undefined) {
-      return context === undefined
-        ? { demandCandidates: [] }
-        : { coverageCandidates: [], demandCandidates: [] };
-    }
-
-    const demand = planVirtualTextureDrawDemand({
-      ...(context === undefined ? {} : { context }),
-      flipY: state.texture.flipY ?? true,
-      generated: state.activeSource.kind === "generated",
-      manifest,
-      workspace: this.#virtualTextureDemandPlanning,
-      ...(state.pageUrisByKey === undefined ? {} : { pageUrisByKey: state.pageUrisByKey }),
-    });
-    if (demand.retentionOverflowed === true) {
-      state.stats.demandRetentionOverflows += 1;
-      if (state.stats.demandRetentionOverflows === 1) {
-        this.#virtualTextureRuntime.diagnose(
-          state,
-          `Virtual texture ${state.activeSource.manifestUri} exceeded the retained-polygon demand workspace; using bounded conservative refinement`,
-          `virtual-texture-demand-retention-overflow:${state.activeSource.manifestUri}`,
-        );
-      }
-    }
-    return demand;
-  }
-
   #maximumResourceClassCpuBytes(resourceClass: ResourceGovernorClass): number {
     const policy = this.#options.resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "cpuDecodedBytes");
@@ -2742,25 +2333,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #maximumResourceClassPersistentGpuBytes(resourceClass: ResourceGovernorClass): number {
     const policy = this.#options.resourceGovernorPolicy;
     return maximumResourceGovernorClassDurableBytes(policy, resourceClass, "persistentGpuBytes");
-  }
-
-  #isVirtualTextureDrawable(state: VirtualTextureRuntimeState): boolean {
-    return state.status === "ready"
-      && virtualTextureGpuDrawable(this.#virtualTextureGpu, state.key);
-  }
-
-  #isAutoVirtualTextureCoverageReady(
-    state: VirtualTextureRuntimeState,
-    drawDemand: VirtualTextureDrawDemand | undefined,
-  ): boolean {
-    if (!this.#isVirtualTextureDrawable(state)) return false;
-    const candidates = drawDemand?.coverageCandidates;
-    if (candidates === undefined) return true;
-
-    return candidates.length > 0
-      && candidates.every((page) => (
-        virtualTextureGpuExactResidency(this.#virtualTextureGpu, state.key, page) !== undefined
-      ));
   }
 
   #program(kind: ProgramKind, features?: SurfaceShaderFeatures, clusteredLights = false): ProgramArenaResource | undefined {
