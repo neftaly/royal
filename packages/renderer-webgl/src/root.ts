@@ -362,6 +362,7 @@ import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
+import { WebGlRenderClockOwner } from "./render-clock-owner";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
@@ -851,7 +852,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #dprMediaQuery: MediaQueryList | undefined;
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
-  readonly #externalRenderClocks = new Set<object>();
   #frame = 0;
   #gltfRenderOrdinal = 0;
   readonly #iblTextures: IblTextureArena;
@@ -877,6 +877,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #framePlanSurfaceLights: readonly SurfaceLight[] = [];
   #framePlanSurfaceLightSet: SurfaceLightSet | undefined;
   #latestScene: RenderRoot | undefined;
+  readonly #renderClock = new WebGlRenderClockOwner({
+    contextGeneration: () => this.#context.generation,
+    hasScene: () => this.#latestScene !== undefined,
+    isContextActive: () => this.#context.lifecycle === "active",
+    renderLatest: () => this.#renderLatestScene(),
+    reportScheduledFailure: (failure) => this.#notifyRenderFailure(failure),
+  });
   #planRevision = 0;
   #planCompiles = 0;
   #compileNodeVisits = 0;
@@ -884,9 +891,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
   #maxTextureImageUnits = 0;
   #maxTextureSize = 0;
   readonly #pickingController: PickingController;
-  #renderDirty = false;
-  #renderScheduleGeneration = 0;
-  #scheduledRenderGeneration = 0;
   #resizeObserver: ResizeObserver | undefined;
   readonly #geometryDrawArena: GeometryDrawArena;
   readonly #surfaceExecution: SurfaceExecutionArena;
@@ -903,8 +907,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #contextLostListener = (event: Event): void => {
     event.preventDefault();
     this.#context.lose(() => {
-      this.#renderDirty ||= this.#latestScene !== undefined;
-      this.#scheduledRenderGeneration = 0;
+      this.#renderClock.interrupt();
       this.#dropGpuState(false);
     });
   };
@@ -932,8 +935,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#probeContextCapabilities();
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       this.#ordinaryTextures.restoreContext(this.#context.generation);
-      this.#renderDirty ||= this.#latestScene !== undefined;
-      if (this.#context.finishRestore()) this.#scheduleRender();
+      this.#renderClock.retain();
+      if (this.#context.finishRestore()) this.#renderClock.resume();
     } catch (error) {
       const dropFailure = captureFailure(() => this.#dropGpuState(true));
       const restoreMessage = error instanceof Error ? error.message : String(error);
@@ -1306,31 +1309,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   acquireExternalRenderClock(): WebGlExternalRenderClock {
-    if (this.#disposed) {
-      throw new Error("Cannot acquire a render clock from a disposed Royal renderer root");
-    }
-
-    const token = {};
-    this.#externalRenderClocks.add(token);
-    this.#scheduledRenderGeneration = 0;
-    let released = false;
-
-    return {
-      flushInvalidated: () => {
-        if (
-          released
-          || !this.#externalRenderClocks.has(token)
-          || this.#externalRenderClocks.size !== 1
-        ) return;
-        this.flushInvalidated();
-      },
-      release: () => {
-        if (released) return;
-        released = true;
-        this.#externalRenderClocks.delete(token);
-        if (this.#externalRenderClocks.size === 0) this.#scheduleRender();
-      },
-    };
+    return this.#renderClock.acquireExternalClock();
   }
 
   render(scene: RenderRoot): void {
@@ -1398,8 +1377,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
     // An immediate render consumes any queued demand render. The queued
     // callback checks its generation before drawing.
-    this.#renderDirty = false;
-    this.#scheduledRenderGeneration = 0;
+    this.#renderClock.beginRender();
     beginResourceGovernorFrame(this.#resourceGovernor);
     this.#applyPendingResourceArenaEvents();
     this.#gltfRenderOrdinal = 0;
@@ -1602,20 +1580,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
   }
 
   invalidate(): void {
-    if (this.#disposed || this.#latestScene === undefined) return;
-
-    this.#renderDirty = true;
-    this.#scheduleRender();
+    this.#renderClock.invalidate();
   }
 
   flushInvalidated(): void {
-    if (
-      this.#disposed
-      || this.#context.lifecycle !== "active"
-      || !this.#renderDirty
-      || this.#latestScene === undefined
-    ) return;
-    this.#renderLatestScene();
+    this.#renderClock.flushInvalidated();
   }
 
   pick(input: PickInput): PickResult | undefined {
@@ -1638,7 +1607,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
 
   #retainPlanWhileContextUnavailable(): void {
     this.#applyPendingResourceArenaEvents();
-    this.#renderDirty = true;
+    this.#renderClock.retain();
   }
 
   #dropGpuState(deleteResources: boolean, contextGeneration = this.#context.generation): void {
@@ -1756,7 +1725,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     };
     this.#renderFailureObservers.clear();
     this.#frameObservers.clear();
-    this.#externalRenderClocks.clear();
+    this.#renderClock.dispose();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
     teardown(() => this.#preparedGltf.disposeImages());
@@ -1791,8 +1760,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#gltfLightScopeIdCount = 0;
     teardown(() => this.#sceneBindings.dispose());
     teardown(() => this.#gltfInstanceTransforms.dispose());
-    this.#renderDirty = false;
-    this.#scheduledRenderGeneration = 0;
     teardown(() => this.#resizeObserver?.disconnect());
     this.#resizeObserver = undefined;
     teardown(() => this.#unwatchDevicePixelRatio());
@@ -4412,41 +4379,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       outcome.acknowledge();
     }
   }
-  #scheduleRender(): void {
-    if (
-      this.#disposed ||
-      this.#context.lifecycle !== "active" ||
-      !this.#renderDirty ||
-      this.#externalRenderClocks.size > 0 ||
-      this.#scheduledRenderGeneration !== 0 ||
-      this.#latestScene === undefined
-    ) return;
-    const requestFrame = globalThis.requestAnimationFrame;
-    const generation = this.#renderScheduleGeneration + 1;
-    const contextGeneration = this.#context.generation;
-    this.#renderScheduleGeneration = generation;
-    this.#scheduledRenderGeneration = generation;
-    const renderIfCurrent = (): void => {
-      if (
-        this.#scheduledRenderGeneration !== generation ||
-        this.#context.generation !== contextGeneration ||
-        this.#context.lifecycle !== "active" ||
-        !this.#renderDirty ||
-        this.#externalRenderClocks.size > 0
-      ) return;
-      this.#scheduledRenderGeneration = 0;
-      if (!this.#disposed && this.#context.lifecycle === "active" && this.#latestScene !== undefined) {
-        try {
-          this.#renderLatestScene();
-        } catch (failure) {
-          this.#notifyRenderFailure(failure);
-        }
-      }
-    };
-    if (typeof requestFrame === "function") requestFrame(renderIfCurrent);
-    else queueMicrotask(renderIfCurrent);
-  }
-
   #renderLatestScene(): void {
     const plan = this.#framePlan;
     if (plan === undefined) return;

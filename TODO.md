@@ -27,6 +27,10 @@ Completed in the current worktree:
   copies, lighting and IBL binding, scoped blend/cull state, and final
   single/instanced geometry submission. Diagnostics and wakeups drain as data
   at frame teardown rather than calling back into the root.
+- `WebGlRenderClockOwner` owns invalidation coalescing, scheduled-generation
+  cancellation, context interruption/resume, external-clock arbitration, and
+  scheduled-render failure routing. The root retains frame execution and frame
+  publication.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
