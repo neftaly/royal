@@ -271,6 +271,31 @@ describe("React Canvas picking optimization", () => {
     detach();
   });
 
+  it("skips hover picking when targets only handle click gestures", () => {
+    const canvas = fakeCanvas();
+    const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });
+    const onClick = vi.fn();
+    const renderRoot = renderScene();
+    const sceneInteractions = interactionRegistry(renderRoot, interactions({ onClick }));
+    root.render(renderRoot);
+    const detach = attachCanvasPointerEventHandlers({
+      canvas,
+      lastPointerEventRef: { current: undefined },
+      pointerInteractionStateRef: { current: createCanvasPointerInteractionState() },
+      sceneInteractionsRef: { current: sceneInteractions },
+      root,
+    });
+
+    canvas.dispatchFakeEvent("pointermove", pointerEvent(1));
+    expect(root.pick).not.toHaveBeenCalled();
+    canvas.dispatchFakeEvent("pointerdown", pointerEvent(1));
+    canvas.dispatchFakeEvent("pointerup", pointerEvent(1));
+
+    expect(root.pick).toHaveBeenCalledTimes(2);
+    expect(onClick).toHaveBeenCalledOnce();
+    detach();
+  });
+
   it("calls root.pick and dispatches pointer handlers when rendered nodes have handlers", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });

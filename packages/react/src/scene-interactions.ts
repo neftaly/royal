@@ -9,6 +9,7 @@ import {
 export type ScenePointerEvents = Readonly<Record<PickingId, RoyalPointerEventHandlers>>;
 
 export interface RoyalScenePointerEventRegistry {
+  readonly hasHoverEventTargets: boolean;
   readonly hasPointerEventTargets: boolean;
   pointerEventTarget(pickingId: string | undefined): RoyalPointerEventTarget | undefined;
 }
@@ -39,6 +40,7 @@ export const createRoyalScenePointerEventRegistry = (
     throw new TypeError("Canvas scenePointerEvents must be an object keyed by pickingId");
   }
   const targets = new Map<string, RoyalPointerEventTarget>();
+  let hasHoverEventTargets = false;
 
   for (const [pickingId, handlers] of Object.entries(interactions ?? {})) {
     validateRoyalPointerEventHandlers(
@@ -57,9 +59,13 @@ export const createRoyalScenePointerEventRegistry = (
       );
     }
     targets.set(pickingId, { handlers });
+    hasHoverEventTargets ||= handlers.onPointerEnter !== undefined
+      || handlers.onPointerLeave !== undefined
+      || handlers.onPointerMove !== undefined;
   }
 
   return {
+    hasHoverEventTargets,
     hasPointerEventTargets: targets.size > 0,
     pointerEventTarget: (pickingId) => pickingId === undefined ? undefined : targets.get(pickingId),
   };

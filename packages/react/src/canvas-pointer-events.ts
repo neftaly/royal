@@ -9,6 +9,7 @@ import {
 import {
   createRoyalPointerEvent,
   handlerForRoyalPointerEvent,
+  type RoyalPointerEventTarget,
 } from "./picking-events";
 import type { RoyalRendererRoot } from "./root";
 import type { RoyalScenePointerEventRegistry } from "./scene-interactions";
@@ -24,6 +25,11 @@ export type CanvasSceneInteractionsRef = {
 export type CanvasLastPointerEventRef = {
   current: PointerEvent | undefined;
 };
+
+const hasHoverEventHandlers = (target: RoyalPointerEventTarget): boolean =>
+  target.handlers.onPointerEnter !== undefined
+  || target.handlers.onPointerLeave !== undefined
+  || target.handlers.onPointerMove !== undefined;
 
 const dispatchCanvasPointerInteraction = (
   dispatches: readonly CanvasPointerInteractionDispatch[],
@@ -73,7 +79,7 @@ export const reconcileCanvasPointerInteractionScene = ({
   if (hovered === undefined || typeof pickingId !== "string") return;
 
   const nextTarget = sceneInteractions.pointerEventTarget(pickingId);
-  if (nextTarget !== undefined) {
+  if (nextTarget !== undefined && hasHoverEventHandlers(nextTarget)) {
     if (nextTarget !== hovered.target) {
       pointerInteractionStateRef.current = {
         ...pointerInteractionStateRef.current,
@@ -152,6 +158,7 @@ export const attachCanvasPointerEventHandlers = ({
     // Active drags stay synchronous so object handlers can still consume the
     // native move before bubble-phase camera/gesture controls. Hover-only moves
     // are safe to collapse to the newest position for each pointer per frame.
+    if (!sceneInteractionsRef.current.hasHoverEventTargets) return;
     if (event.buttons !== 0) {
       flushPendingPointerMoves();
       applyPointerInteraction(event, {
