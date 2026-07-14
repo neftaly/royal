@@ -85,6 +85,24 @@ describe("glTF instance transform properties", () => {
     expect(transforms.scaleVersion).toBe(2);
   });
 
+  it('owns duplicate callback subscriptions independently', () => {
+    const transforms = createGltfInstanceTransforms({ count: 1 });
+    const listener = vi.fn();
+    const unsubscribeFirst = transforms.subscribe(listener);
+    const unsubscribeSecond = transforms.subscribe(listener);
+
+    transforms.commitPose();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribeFirst();
+    transforms.commitPose();
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    unsubscribeSecond();
+    transforms.commitPose();
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
   it('rejects reentrant commits before subscriber versions can be inverted', () => {
     const transforms = createGltfInstanceTransforms({ count: 1 });
     const versions: number[] = [];

@@ -135,7 +135,7 @@ export const createGltfInstanceTransforms = (
   options: CreateGltfInstanceTransformsOptions,
 ): GltfInstanceTransforms => {
   const count = positiveCount(options.count);
-  const listeners = new Set<GltfInstanceTransformsListener>();
+  const listeners = new Map<object, GltfInstanceTransformsListener>();
   let poseVersion = 1;
   let scaleVersion = 1;
   const positions = copyChannel(options.positions, count, 0, 'positions');
@@ -152,7 +152,7 @@ export const createGltfInstanceTransforms = (
     rangeCount: number,
     version: number,
   ): void => {
-    const cohort = [...listeners];
+    const cohort = [...listeners.values()];
     let failed = false;
     let firstFailure: unknown;
     notifying = true;
@@ -208,12 +208,13 @@ export const createGltfInstanceTransforms = (
     },
     scales,
     subscribe: (listener) => {
-      listeners.add(listener);
+      const token = {};
+      listeners.set(token, listener);
       let subscribed = true;
       return () => {
         if (!subscribed) return;
         subscribed = false;
-        listeners.delete(listener);
+        listeners.delete(token);
       };
     },
   };
