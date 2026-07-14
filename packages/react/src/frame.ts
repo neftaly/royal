@@ -29,14 +29,26 @@ export interface UseFrameOptions {
 
 /** @internal Validates the public hook boundary without allocating normalized options. */
 export const validateUseFrameOptions = (options: UseFrameOptions): void => {
-  if (typeof options !== "object" || options === null) {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw new TypeError("useFrame options must be an object");
+  }
+  for (const name of Object.keys(options)) {
+    if (name !== "active" && name !== "priority") {
+      throw new TypeError(`useFrame options contain unsupported option ${JSON.stringify(name)}`);
+    }
   }
   if (options.active !== undefined && typeof options.active !== "boolean") {
     throw new TypeError("useFrame active must be a boolean");
   }
   if (options.priority !== undefined && !Number.isFinite(options.priority)) {
     throw new TypeError("useFrame priority must be a finite number");
+  }
+};
+
+/** @internal Validates the public hook boundary before subscribing an effect. */
+export const validateUseFrameCallback = (callback: unknown): void => {
+  if (typeof callback !== "function") {
+    throw new TypeError("useFrame callback must be a function");
   }
 };
 
@@ -311,6 +323,7 @@ const useFrameSubscription = (
  * snapshot object, so copy scalar fields that must outlive the callback.
  */
 export const useFrame = (callback: FrameCallback, options: UseFrameOptions = {}): void => {
+  validateUseFrameCallback(callback);
   validateUseFrameOptions(options);
   useFrameSubscription(callback, options);
 };

@@ -5,6 +5,7 @@ import {
 } from "@royal/renderer-core";
 import {
   createFrameLoop,
+  validateUseFrameCallback,
   validateUseFrameOptions,
   type FrameSnapshot,
 } from "../packages/react/src/frame";
@@ -34,6 +35,7 @@ describe("React frame loop", () => {
   });
 
   it("rejects malformed public frame scheduling options", () => {
+    expect(() => validateUseFrameCallback(null)).toThrow("useFrame callback must be a function");
     expect(() => validateUseFrameOptions({
       active: "false" as unknown as boolean,
     })).toThrow("useFrame active must be a boolean");
@@ -41,6 +43,12 @@ describe("React frame loop", () => {
       .toThrow("useFrame priority must be a finite number");
     expect(() => validateUseFrameOptions(-1 as unknown as object))
       .toThrow("useFrame options must be an object");
+    expect(() => validateUseFrameOptions([] as unknown as object))
+      .toThrow("useFrame options must be an object");
+    expect(() => validateUseFrameOptions({
+      prioirty: 1,
+    } as unknown as Parameters<typeof validateUseFrameOptions>[0]))
+      .toThrow(/unsupported option.*prioirty/i);
   });
 
   it("normalizes opaque scheduled-render failures for ErrorBoundary delivery", () => {
