@@ -205,7 +205,7 @@ describe("renderer-core descriptor contract", () => {
     expect(() => textureAsset({ src: "/textures/a.png", version: Number.NaN }))
       .toThrow(/texture asset version must be finite/);
     expect(() => textureAsset({ contentKey: "", src: "/textures/a.png" }))
-      .toThrow(/texture asset contentKey must not be empty/);
+      .toThrow(/texture asset contentKey must be a non-empty string/);
     expect(() => virtualTexture({ manifestUri: "/textures/a.vt.json", version: Infinity }))
       .toThrow(/virtual texture version must be finite/);
   });
@@ -232,7 +232,13 @@ describe("renderer-core descriptor contract", () => {
     expect(() => gltf({ src: "/models/avatar.glb", version: Number.NaN }))
       .toThrow(/glTF asset version must be finite/);
     expect(() => gltf({ src: "/models/avatar.glb", version: "" }))
-      .toThrow(/glTF asset version must not be empty/);
+      .toThrow(/glTF asset version must be a non-empty string/);
+    expect(() => gltf({ src: 42 as unknown as string }))
+      .toThrow(/glTF source must be a non-empty string/);
+    expect(() => textureAsset({
+      contentKey: false as unknown as string,
+      src: "/textures/a.png",
+    })).toThrow(/texture asset contentKey must be a non-empty string/);
   });
 
   it("preserves selected glTF material variants by name or index", () => {

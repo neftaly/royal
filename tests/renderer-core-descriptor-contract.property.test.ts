@@ -299,7 +299,7 @@ describe("renderer-core descriptor properties", () => {
       expect(() => boxGeometry(nonFinite), `${label} geometry`).toThrow(/finite/);
       expect(() => studioEnvironment({ radianceScaleNits: nonFinite }), `${label} environment`).toThrow(/finite/);
       expect(() => directionalLight({ direction: [0, 0, 0] }), `${label} direction`).toThrow(/non-zero/);
-      expect(() => gltf(""), `${label} source`).toThrow(/must not be empty/);
+      expect(() => gltf(""), `${label} source`).toThrow(/must be a non-empty string/);
       expect(() => gltf({ src: "/model.glb", variant: -1 }), `${label} variant`).toThrow(/non-negative integer/);
       expect(() => gltf({
         bounds: { max: [0, 0, 0], min: [1, 0, 0] },

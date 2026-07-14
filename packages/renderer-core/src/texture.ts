@@ -1,5 +1,5 @@
 import type { LinearRgba } from './primitives';
-import { frozenRgba, identityScalar, stringChoice } from './descriptor-values';
+import { frozenRgba, identityScalar, nonEmptyString, stringChoice } from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
 
@@ -133,13 +133,6 @@ const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | un
   return Object.freeze({ ...sampler });
 };
 
-const nonEmptySource = (value: string, label: string): string => {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`${label} must be a non-empty string`);
-  }
-  return value;
-};
-
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
   return Object.freeze({
     kind: 'solid',
@@ -148,7 +141,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
 };
 
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
-  const uri = nonEmptySource(options.src, 'texture asset "src"');
+  const uri = nonEmptyString(options.src, 'texture asset "src"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'texture asset colorSpace');
   const sampler = frozenSampler(options.sampler);
   const contentKey = options.contentKey === undefined
@@ -173,7 +166,7 @@ export function imageTexture(options: ImageTextureOptions): TextureAssetRef;
 export function imageTexture(srcOrOptions: string | ImageTextureOptions): TextureAssetRef {
   const options: ImageTextureOptions =
     typeof srcOrOptions === 'string' ? { src: srcOrOptions } : srcOrOptions;
-  const uri = nonEmptySource(options.src, 'image texture "src"');
+  const uri = nonEmptyString(options.src, 'image texture "src"');
 
   return textureAsset({
     colorSpace: options.colorSpace ?? 'srgb',
@@ -187,7 +180,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 }
 
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
-  const manifestUri = nonEmptySource(options.manifestUri, 'virtual texture "manifestUri"');
+  const manifestUri = nonEmptyString(options.manifestUri, 'virtual texture "manifestUri"');
   const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'virtual texture colorSpace');
   const sampler = frozenSampler(options.sampler);
   const contentKey = options.contentKey === undefined

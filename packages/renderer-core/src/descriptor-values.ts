@@ -56,8 +56,10 @@ export const frozenBounds3 = <Bounds extends { readonly max: Vec3; readonly min:
   return Object.freeze({ min, max }) as Bounds;
 };
 
-export const nonEmptyString = (value: string, label: string): string => {
-  if (value.length === 0) throw new Error(`${label} must not be empty`);
+export const nonEmptyString = (value: unknown, label: string): string => {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
   return value;
 };
 
