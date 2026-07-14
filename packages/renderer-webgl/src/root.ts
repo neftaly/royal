@@ -169,12 +169,12 @@ import {
 import {
   type VirtualTextureDrawDemandModelSource,
   type VirtualTextureRef,
-  type VirtualTextureRuntimeState,
   type ViewportSize,
 } from "./virtual-texture-runtime";
 import { VirtualTextureDemandOwner } from "./virtual-texture-demand-owner";
 import { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
 import { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
+import { RootResourceReleaseOwner } from "./root-resource-release-owner";
 import { virtualTextureDiagnosticsSnapshot } from "./virtual-texture-diagnostics";
 import { textureResidencyDiagnosticsSnapshot } from "./texture-residency-diagnostics";
 import {
@@ -379,6 +379,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #virtualTextureRuntime: VirtualTextureRuntimeShell;
   readonly #virtualTextureAdmission: VirtualTextureGpuAdmissionOwner;
   readonly #virtualTextureDemand: VirtualTextureDemandOwner;
+  readonly #resourceReleases: RootResourceReleaseOwner;
   readonly #resourceArena: ResourceArena;
   /** Root authority for cross-subsystem resource admission and accounting. */
   readonly #resourceGovernor: ResourceGovernor;
@@ -779,6 +780,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
         suppressPersistentGpuWake: () => this.#capacityWakes.suppressPersistentGpuWake(),
         synchronizeResourceGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
         wakePersistentGpuCapacity: () => this.#capacityWakes.wakePersistentGpuCapacity(),
+      });
+      this.#resourceReleases = new RootResourceReleaseOwner({
+        capacityWakes: this.#capacityWakes,
+        ordinaryTextures: this.#ordinaryTextures,
+        synchronizeGovernorObservations: () => this.#synchronizeResourceGovernorObservations(),
+        virtualTextureAdmission: this.#virtualTextureAdmission,
+        virtualTextureRuntime: this.#virtualTextureRuntime,
       });
       this.#virtualTextureDemand = new VirtualTextureDemandOwner({
         consumeGpuOutcomes: () => this.#consumeVirtualTextureGpuOutcomes(),
@@ -1323,10 +1331,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       if (applyFailure !== undefined) throw applyFailure.value;
     });
     for (const key of resourceArenaPreparedSourceKeys(this.#resourceArena)) {
-      teardown(() => this.#releaseOrdinaryTexture(key));
+      teardown(() => this.#resourceReleases.releaseOrdinaryTexture(key));
     }
     for (const state of this.#virtualTextureRuntime.resources.values()) {
-      teardown(() => this.#releaseVirtualTextureState(state));
+      teardown(() => this.#resourceReleases.releaseVirtualTextureState(state));
     }
     teardown(() => clearGeometryDrawArenaContext(this.#geometryDrawArena));
     this.#geometryRecipes.clearRetainedRecipes();
@@ -1541,10 +1549,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
     }
     for (const key of changes.releasedOrdinaryTextureKeys) {
-      apply("release", () => this.#releaseOrdinaryTexture(key));
+      apply("release", () => this.#resourceReleases.releaseOrdinaryTexture(key));
     }
     for (const key of changes.releasedVirtualTextureKeys) {
-      apply("release", () => this.#releaseVirtualTexture(key));
+      apply("release", () => this.#resourceReleases.releaseVirtualTexture(key));
     }
     for (const key of changes.releasedIblKeys) {
       apply("release", () => releaseGltfIblSpecularTexture(this.#iblTextures, key));
@@ -1554,57 +1562,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       apply("release", () => this.#decodedTextureSources.closeOrdinary(source));
     }
     this.#resourceArenaSideEffects.drain();
-  }
-
-  #releaseOrdinaryTexture(key: string): void {
-    let releaseFailure = captureFailure(() => this.#releaseAutoVirtualTextures(key));
-    this.#virtualTextureRuntime.releaseAutoMetadata(key);
-    const releaseWakeSuppression = this.#capacityWakes.suppressPersistentGpuWake();
-    let report: ReturnType<OrdinaryTextureResidencyController["release"]> | undefined;
-    try {
-      report = this.#ordinaryTextures.release(key);
-      if (report.operationFailure !== undefined) {
-        releaseFailure ??= { value: report.operationFailure.error };
-      }
-      releaseFailure = captureFirstFailure(
-        releaseFailure,
-        () => this.#synchronizeResourceGovernorObservations(),
-      );
-    } finally {
-      releaseWakeSuppression();
-    }
-    if (report?.capacityReleased === true) this.#capacityWakes.wakePersistentGpuCapacity();
-    if (report !== undefined) releaseFailure = captureFirstFailure(releaseFailure, () => {
-      const settlement = this.#ordinaryTextures.settleGpuReport(report);
-      if (settlement !== undefined) throw settlement.error;
-    });
-    if (releaseFailure !== undefined) throw releaseFailure.value;
-  }
-
-  #releaseAutoVirtualTextures(textureKey: string): void {
-    const prefix = `auto-base-color:${textureKey}:`;
-    let releaseFailure: CapturedFailure | undefined;
-    for (const [key, state] of this.#virtualTextureRuntime.resources) {
-      if (!key.startsWith(prefix)) continue;
-      releaseFailure = captureFirstFailure(releaseFailure, () => this.#releaseVirtualTextureState(state));
-    }
-    if (releaseFailure !== undefined) throw releaseFailure.value;
-  }
-
-  #releaseVirtualTexture(key: string): void {
-    const state = this.#virtualTextureRuntime.get(key);
-    if (state === undefined) return;
-    this.#releaseVirtualTextureState(state);
-  }
-
-  #releaseVirtualTextureState(state: VirtualTextureRuntimeState): void {
-    let releaseFailure: CapturedFailure | undefined;
-    releaseFailure = captureFirstFailure(releaseFailure, () => this.#virtualTextureRuntime.forget(state));
-    releaseFailure = captureFirstFailure(
-      releaseFailure,
-      () => this.#virtualTextureAdmission.release(state, true),
-    );
-    if (releaseFailure !== undefined) throw releaseFailure.value;
   }
 
   #drawNode(
