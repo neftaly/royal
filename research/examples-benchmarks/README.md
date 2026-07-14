@@ -44,3 +44,16 @@ mistaken for current baselines.
 iPad Safari runs collected through `ios_webkit_debug_proxy` go under
 `ipad-safari/`. Treat them as device baselines only when `frameStats.complete`
 is true and `warnings` is empty or understood.
+
+2026-07-14 iPad Safari pass:
+
+- `2026-07-14T05-24-35-291Z-virtual-texture-stress.json` completed 24/24
+  frames at `18ms` p95 on the physical Apple WebGL2 renderer. It converged with
+  zero outstanding page requests, page-load failures, manifest failures, GPU
+  admission failures, or quarantined bytes.
+- `2026-07-14T05-24-54-125Z-gltf-instancing.json` completed 24/24 frames at
+  `61ms` p95 while drawing 98,304 sampled instances. That improves on the
+  comparable 24-frame July 4 baseline (`126ms` p95), but remains well outside
+  a 60fps frame budget and should stay a constrained-device optimization target.
+- The SVG route's frame collector completed, but did not attach a WebGL or
+  renderer snapshot, so it was rejected rather than saved as device evidence.
