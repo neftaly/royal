@@ -64,7 +64,6 @@ export interface WebGlRootSnapshot {
   readonly gltfLoadDiagnostics: WebGlGltfLoadDiagnosticsSnapshot;
   /** Renderer-owned counters for tests, examples benchmarks, and host diagnostics. */
   readonly gltfInstancing: WebGlGltfInstancingSnapshot;
-  readonly latestScene: RenderRoot | undefined;
   readonly options: ResolvedWebGlRootOptions;
   readonly planning: WebGlFramePlanningSnapshot;
   readonly resourceLifetime: WebGlResourceLifetimeSnapshot;

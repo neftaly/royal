@@ -1352,7 +1352,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       frame: this.#framePublication.frame,
       gltfLoadDiagnostics: preparedGltfLoadDiagnosticsSnapshot(this.#preparedGltf),
       gltfInstancing: this.#gltfPacketSubmissions.snapshot(),
-      latestScene: this.#scenePlan.latestScene,
       options: this.#options,
       planning: this.#scenePlan.planningSnapshot(),
       resourceLifetime: {
