@@ -61,6 +61,17 @@ export const nonEmptyString = (value: string, label: string): string => {
   return value;
 };
 
+export const stringChoice = <Choice extends string>(
+  value: unknown,
+  choices: readonly Choice[],
+  label: string,
+): Choice => {
+  if (typeof value !== 'string' || !choices.includes(value as Choice)) {
+    throw new Error(`${label} must be one of ${choices.join(', ')}`);
+  }
+  return value as Choice;
+};
+
 export const identityScalar = <Value extends number | string>(
   value: Value,
   label: string,

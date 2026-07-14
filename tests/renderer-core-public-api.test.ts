@@ -148,6 +148,22 @@ describe("renderer-core public API", () => {
     expect(virtual).not.toHaveProperty("flipY");
   });
 
+  it("rejects misspelled rendering choices at the descriptor boundary", () => {
+    expect(() => imageTexture({
+      sampler: { wrapS: "sideways" as import("@royal/renderer-core").TextureSamplerWrap },
+      src: "/albedo.png",
+    })).toThrow(/texture sampler wrapS must be one of/i);
+    expect(() => textureAsset({
+      colorSpace: "display-p3" as import("@royal/renderer-core").TextureColorSpace,
+      src: "/albedo.png",
+    })).toThrow(/texture asset colorSpace must be one of/i);
+    expect(() => scene({
+      camera: perspectiveCamera({}),
+      nodes: [],
+      toneMapping: "filmic-ish" as import("@royal/renderer-core").RenderToneMapping,
+    })).toThrow(/scene toneMapping must be one of/i);
+  });
+
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
     if (false) {
       const frameOptions: import("@royal/react").UseFrameOptions = {

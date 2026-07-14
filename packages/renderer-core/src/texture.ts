@@ -1,5 +1,5 @@
 import type { LinearRgba } from './primitives';
-import { frozenRgba, identityScalar } from './descriptor-values';
+import { frozenRgba, identityScalar, stringChoice } from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
 
@@ -14,9 +14,13 @@ export type TextureSamplerFilter =
 export type TextureSamplerWrap = 'clamp-to-edge' | 'mirrored-repeat' | 'repeat';
 
 export interface TextureSampler {
+  /** Filter used when texture texels are magnified across screen pixels. */
   readonly magFilter?: Extract<TextureSamplerFilter, 'linear' | 'nearest'>;
+  /** Filter used when texture texels are minified; `mipmap` values select between mip levels. */
   readonly minFilter?: TextureSamplerFilter;
+  /** Addressing along glTF/WebGL S, equivalent to the horizontal U coordinate. */
   readonly wrapS?: TextureSamplerWrap;
+  /** Addressing along glTF/WebGL T, equivalent to the vertical V coordinate. */
   readonly wrapT?: TextureSamplerWrap;
 }
 
@@ -98,8 +102,36 @@ export const defaultImageTextureSampler: TextureSampler = Object.freeze({
   wrapT: 'clamp-to-edge'
 });
 
-const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined =>
-  sampler === undefined ? undefined : Object.freeze({ ...sampler });
+const TEXTURE_COLOR_SPACES = ['linear', 'srgb'] as const;
+const TEXTURE_MAG_FILTERS = ['linear', 'nearest'] as const;
+const TEXTURE_MIN_FILTERS = [
+  'linear',
+  'linear-mipmap-linear',
+  'linear-mipmap-nearest',
+  'nearest',
+  'nearest-mipmap-linear',
+  'nearest-mipmap-nearest',
+] as const;
+const TEXTURE_WRAPS = ['clamp-to-edge', 'mirrored-repeat', 'repeat'] as const;
+
+const optionalChoice = <Choice extends string>(
+  value: unknown,
+  choices: readonly Choice[],
+  label: string,
+): Choice | undefined => value === undefined ? undefined : stringChoice(value, choices, label);
+
+const frozenSampler = (sampler: TextureSampler | undefined): TextureSampler | undefined => {
+  if (sampler === undefined) return undefined;
+  if (sampler.magFilter !== undefined) {
+    stringChoice(sampler.magFilter, TEXTURE_MAG_FILTERS, 'texture sampler magFilter');
+  }
+  if (sampler.minFilter !== undefined) {
+    stringChoice(sampler.minFilter, TEXTURE_MIN_FILTERS, 'texture sampler minFilter');
+  }
+  if (sampler.wrapS !== undefined) stringChoice(sampler.wrapS, TEXTURE_WRAPS, 'texture sampler wrapS');
+  if (sampler.wrapT !== undefined) stringChoice(sampler.wrapT, TEXTURE_WRAPS, 'texture sampler wrapT');
+  return Object.freeze({ ...sampler });
+};
 
 const nonEmptySource = (value: string, label: string): string => {
   if (typeof value !== 'string' || value.length === 0) {
@@ -117,6 +149,7 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
 
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
   const uri = nonEmptySource(options.src, 'texture asset "src"');
+  const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'texture asset colorSpace');
   const sampler = frozenSampler(options.sampler);
   const contentKey = options.contentKey === undefined
     ? undefined
@@ -127,7 +160,7 @@ export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
 
   return Object.freeze({
     kind: 'asset',
-    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(colorSpace === undefined ? {} : { colorSpace }),
     ...(contentKey === undefined ? {} : { contentKey }),
     ...(sampler === undefined ? {} : { sampler }),
     uri,
@@ -155,6 +188,7 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
   const manifestUri = nonEmptySource(options.manifestUri, 'virtual texture "manifestUri"');
+  const colorSpace = optionalChoice(options.colorSpace, TEXTURE_COLOR_SPACES, 'virtual texture colorSpace');
   const sampler = frozenSampler(options.sampler);
   const contentKey = options.contentKey === undefined
     ? undefined
@@ -165,7 +199,7 @@ const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextur
 
   return Object.freeze({
     kind: 'virtual-asset',
-    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
+    ...(colorSpace === undefined ? {} : { colorSpace }),
     ...(contentKey === undefined ? {} : { contentKey }),
     manifestUri,
     ...(sampler === undefined ? {} : { sampler }),
