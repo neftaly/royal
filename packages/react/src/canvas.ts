@@ -24,7 +24,7 @@ import { FrameLoopContext } from "./frame";
 import {
   createRoyalScenePickingIndex,
   createRoyalScenePointerEventRegistry,
-  type CanvasInteractions,
+  type ScenePointerEvents,
 } from "./scene-interactions";
 import type {
   RendererOptions,
@@ -56,8 +56,8 @@ export interface CanvasProps
   extends Omit<ComponentPropsWithoutRef<"canvas">, "children"> {
   /** Ordinary React controls and imperative controllers rendered under Canvas context. */
   readonly children?: ReactNode;
-  /** React-owned pointer handlers keyed by stable pickingId values in the pure scene. */
-  readonly interactions?: CanvasInteractions;
+  /** React-owned pointer handlers keyed by stable `pickingId` values in the pure scene. */
+  readonly scenePointerEvents?: ScenePointerEvents;
   readonly ref?: Ref<HTMLCanvasElement>;
   /**
    * Renderer creation options. Changing a value disposes and recreates the
@@ -119,7 +119,7 @@ const assignCanvasRef = (
 /** Renders one pure Royal scene into a Royal-owned canvas element. */
 export const Canvas = ({
   children,
-  interactions,
+  scenePointerEvents,
   ref,
   rendererOptions,
   scene,
@@ -133,8 +133,8 @@ export const Canvas = ({
   } = useRendererRootRuntime(canvasRef, rendererOptions);
   const scenePickingIndex = useMemo(() => createRoyalScenePickingIndex(scene), [scene]);
   const sceneInteractions = useMemo(
-    () => createRoyalScenePointerEventRegistry(scenePickingIndex, interactions),
-    [interactions, scenePickingIndex],
+    () => createRoyalScenePointerEventRegistry(scenePickingIndex, scenePointerEvents),
+    [scenePickingIndex, scenePointerEvents],
   );
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {

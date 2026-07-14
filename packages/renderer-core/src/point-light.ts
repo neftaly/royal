@@ -1,9 +1,9 @@
 import { frozenRgba, frozenVec3 } from './descriptor-values';
-import type { Metres, Rgba, WorldPosition3 } from './primitives';
+import type { LinearRgba, Metres, WorldPosition3 } from './primitives';
 
 export interface PointLightNode {
   readonly kind: 'point-light';
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
   /** World-space position in metres. */
@@ -13,7 +13,8 @@ export interface PointLightNode {
 }
 
 export interface PointLightOptions {
-  readonly color?: Rgba;
+  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. */
+  readonly color?: LinearRgba;
   /** Luminous intensity in candela. */
   readonly intensityCandela: number;
   /** World-space position in metres. */
@@ -22,7 +23,7 @@ export interface PointLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: Rgba = frozenRgba([1, 1, 1, 1], 'point light color');
+const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'point light color');
 const finitePositive = (value: number | undefined, label: string): number | undefined => {
   if (value === undefined) return undefined;
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`);

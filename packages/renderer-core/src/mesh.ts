@@ -1,4 +1,4 @@
-import type { Geometry, GeometryKindValue } from './geometry';
+import type { Geometry } from './geometry';
 import type { Material } from './material';
 import {
   resolveTransform,
@@ -11,7 +11,7 @@ import type { RenderObjectRef } from './render-object';
 /** Geometry plus material, with an optional transform. */
 export interface MeshNode {
   readonly kind: 'mesh';
-  readonly geometry: Geometry<GeometryKindValue>;
+  readonly geometry: Geometry;
   readonly material: Material;
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
@@ -19,7 +19,7 @@ export interface MeshNode {
 }
 
 export interface MeshOptions {
-  readonly geometry: Geometry<GeometryKindValue>;
+  readonly geometry: Geometry;
   readonly material: Material;
   /** Stable application id returned from renderer picking. */
   readonly pickingId?: PickingId;

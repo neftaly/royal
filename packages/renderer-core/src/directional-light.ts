@@ -1,11 +1,11 @@
 import { frozenDirection3, frozenRgba } from './descriptor-values';
-import type { Direction3, Rgba } from './primitives';
+import type { Direction3, LinearRgba } from './primitives';
 
 /** Directional light in world space. */
 export interface DirectionalLightNode {
   readonly kind: 'directional-light';
   readonly direction: Direction3;
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   /** Incident illuminance in lux. */
   readonly illuminanceLux: number;
 }
@@ -13,12 +13,13 @@ export interface DirectionalLightNode {
 export interface DirectionalLightOptions {
   /** World-space light direction. */
   readonly direction: Direction3;
-  readonly color?: Rgba;
+  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. */
+  readonly color?: LinearRgba;
   /** Incident illuminance in lux. */
   readonly illuminanceLux?: number;
 }
 
-const WHITE: Rgba = frozenRgba([1, 1, 1, 1], 'directional light color');
+const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'directional light color');
 
 const nonNegativeFinite = (value: number, label: string): number => {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be a non-negative finite number`);

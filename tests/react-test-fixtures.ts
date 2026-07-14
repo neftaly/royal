@@ -40,6 +40,7 @@ export const fakeRendererRoot = ({
 } = {}): RoyalRendererRoot => {
   let frame = 0;
   let latestScene: RenderRoot | undefined;
+  const frameObservers = new Set<(frame: number) => void>();
   const root: RoyalRendererRoot = {
     canvas,
     get disposed() {
@@ -57,11 +58,17 @@ export const fakeRendererRoot = ({
       callback({ generation: 1, interruptions: 0, recoveries: 0, state: "available" });
       return () => undefined;
     }),
+    observeFrame: vi.fn((callback: Parameters<RoyalRendererRoot["observeFrame"]>[0]) => {
+      callback(frame);
+      frameObservers.add(callback);
+      return () => frameObservers.delete(callback);
+    }),
     observeRenderFailures: vi.fn(() => () => undefined),
     pick: vi.fn((input: PickInput) => pick(latestScene, input)),
     render: vi.fn((scene: RenderRoot) => {
       latestScene = scene;
       frame += 1;
+      for (const observer of frameObservers) observer(frame);
     }),
     snapshot: vi.fn(() => ({
       frame: root.frame,

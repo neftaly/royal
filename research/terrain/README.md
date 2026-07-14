@@ -84,8 +84,10 @@ server-side asset tooling, not in renderer-core.
 Current Royal facts:
 
 - `@royal/renderer-core` has `Scene`, `RenderPass`, `RenderNode`, `mesh`, `boxGeometry`, materials, glTF, lights, text, transforms, and explicit coordinate-system helpers.
-- `MeshNode.geometry` is typed as `Geometry<GeometryKindValue>`, so source types leave room for custom geometry kinds.
-- The WebGL adapter rejects every mesh geometry except `GeometryKind.Box`; custom terrain geometry cannot draw today without backend work.
+- `MeshNode.geometry` is the closed union of renderer-supported box and plane
+  geometry; it does not advertise custom geometry that WebGL cannot draw.
+- Custom terrain geometry cannot draw today without the planned typed
+  `Primitive` boundary and corresponding backend work.
 - Materials are flat `StandardMaterial | UnlitMaterial`; there is no shader-node/material graph.
 - `@royal/tarstate-lens` already models app-owned stores as relation rows with diagnostics and write routes. That is a good fit for terrain pipeline state: chunks, assets, readback status, generation jobs, and failures.
 

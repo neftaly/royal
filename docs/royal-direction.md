@@ -71,6 +71,7 @@ The intended friendly vocabulary is deliberately small:
 - one scene with a camera, environment/presentation options, and effects;
 - glTF assets;
 - bulk glTF instances;
+- a small built-in mesh, geometry, material, and texture vocabulary;
 - a minimal shader primitive escape hatch;
 - camera/orbit controls;
 - picking for renderable nodes and instances;
@@ -508,8 +509,9 @@ Delete rather than preserve compatibility for:
 
 - text shaping, fonts, editing, forms, HUD, UI semantics, menus, and focus;
 - the public pass/render-graph API;
-- public mesh/box/plane and standard/unlit/wireframe material/texture systems
-  after `Primitive` replaces their useful escape-hatch role;
+- unsupported or backend-specific geometry/material variants; the small built-in
+  mesh, box/plane, standard/unlit/wireframe, and texture vocabulary remains the
+  friendly path, while `Primitive` is an additive expert escape hatch;
 - public animation/deformation controllers and their frame machinery;
 - generic render-object mutation refs beyond stable picking identity;
 - public VT internals, codec registries, glTF schema, shader features, GL

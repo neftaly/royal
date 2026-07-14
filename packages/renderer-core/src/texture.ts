@@ -1,4 +1,4 @@
-import type { Rgba } from './primitives';
+import type { LinearRgba } from './primitives';
 import { frozenRgba } from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
@@ -25,7 +25,7 @@ export type TextureContentKey = number | string;
 
 export interface SolidTextureRef {
   readonly kind: 'solid';
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly colorSpace?: TextureColorSpace;
   readonly version?: TextureVersion;
 }
@@ -57,7 +57,7 @@ export interface VirtualTextureAssetRef {
 export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAssetRef;
 
 export interface SolidTextureOptions {
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly colorSpace?: TextureColorSpace;
   readonly version?: TextureVersion;
 }

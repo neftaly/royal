@@ -9,7 +9,7 @@ import {
   wireframeMaterial,
   type Geometry,
   type Material,
-  type Rgba,
+  type LinearRgba,
 } from "@royal/renderer-core";
 import {
   createWebGlRoot,
@@ -321,7 +321,7 @@ const camera = () => orthographicCamera({
   top: 1,
 });
 
-const material = (color: Rgba = [1, 1, 1, 1]): Material => unlitMaterial({ color });
+const material = (color: LinearRgba = [1, 1, 1, 1]): Material => unlitMaterial({ color });
 
 const renderScene = (
   geometry: Geometry = boxGeometry(1),

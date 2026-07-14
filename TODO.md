@@ -32,6 +32,17 @@ Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
 remain explicit imperative ownership.
 
+## Package release
+
+Royal is ready for application development inside this workspace, but the
+packages remain private and versioned `0.0.0`. Before registry publication:
+
+1. Choose the initial package version, add the root AGPL license text and release
+   notes, remove `private`, and add an explicit publish workflow.
+2. Pack all three packages and install them into a clean React application so
+   the test covers only published files, export maps, peer dependencies, and the
+   documented Node/browser floor rather than workspace resolution.
+
 ## Validation
 
 1. Re-run physical iPad Safari and Quest 2 checks when those devices are next

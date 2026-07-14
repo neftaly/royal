@@ -18,7 +18,7 @@ import {
   type RenderToneMapping,
   type RenderNode,
   type RenderRoot,
-  type Rgba,
+  type LinearRgba,
   type TextureContentKey,
   type TextureRef,
 } from "@royal/renderer-core";
@@ -539,8 +539,8 @@ type WebGlGltfInstancingCounters = {
 
 type SceneToneMappingState = SurfaceToneMappingState;
 
-const DEFAULT_COLOR: Rgba = [0.5, 0.5, 0.5, 1];
-const TEXTURE_COLOR: Rgba = [1, 1, 1, 1];
+const DEFAULT_COLOR: LinearRgba = [0.5, 0.5, 0.5, 1];
+const TEXTURE_COLOR: LinearRgba = [1, 1, 1, 1];
 const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
   exposure: 1 / 1.2,
   hdrOutput: false,
@@ -571,7 +571,7 @@ const sceneToneMappingState = (
 const compileSceneSurfaceLights = (
   lights: readonly (DirectionalLightNode | PointLightNode | SpotLightNode)[],
 ): readonly SurfaceLight[] => {
-  const scaleColor = (color: Rgba, intensity: number): Rgba => [
+  const scaleColor = (color: LinearRgba, intensity: number): LinearRgba => [
     color[0] * intensity,
     color[1] * intensity,
     color[2] * intensity,
@@ -769,6 +769,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #meshViewProjectionModel = identityMat4();
   readonly #context = new WebGlContextLifecycleOwner();
   readonly #renderFailureObservers = new Set<(failure: unknown) => void>();
+  readonly #frameObservers = new Set<(frame: number) => void>();
   readonly #programArena: ProgramArena;
   readonly #geometryLocalBounds = new WeakMap<Float32Array, Bounds3 | undefined>();
   readonly #retainedGeometryRecipes = new Map<string, { readonly id: number; readonly recipe: CpuGeometry }>();
@@ -1239,6 +1240,18 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
+  #notifyFrameObservers(): void {
+    let firstFailure: unknown;
+    for (const observer of this.#frameObservers) {
+      try {
+        observer(this.#frame);
+      } catch (failure) {
+        firstFailure ??= failure;
+      }
+    }
+    if (firstFailure !== undefined) this.#notifyRenderFailure(firstFailure);
+  }
+
   get canvas(): HTMLCanvasElement {
     return this.#canvas;
   }
@@ -1268,6 +1281,15 @@ class WebGlRootImpl implements InternalWebGlRoot {
     this.#renderFailureObservers.add(callback);
     return () => {
       this.#renderFailureObservers.delete(callback);
+    };
+  }
+
+  observeFrame(callback: (frame: number) => void): () => void {
+    callback(this.#frame);
+    if (this.#disposed) return () => undefined;
+    this.#frameObservers.add(callback);
+    return () => {
+      this.#frameObservers.delete(callback);
     };
   }
 
@@ -1576,6 +1598,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     );
     if (renderFailure !== undefined) throw renderFailure.value;
     if (normalizationFailure !== undefined) throw normalizationFailure.value;
+    this.#notifyFrameObservers();
   }
 
   invalidate(): void {
@@ -1732,6 +1755,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       firstFailure = captureFirstFailure(firstFailure, operation);
     };
     this.#renderFailureObservers.clear();
+    this.#frameObservers.clear();
     this.#externalRenderClocks.clear();
 
     teardown(() => this.#ordinaryTextures.disposeSources());
@@ -2086,7 +2110,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       );
     }
     for (const { generation, request } of changes.acquiredGltfRequests) {
-      apply("acquire", () => this.#ensureGltfState(request.key, generation));
+      apply(
+        "acquire",
+        () => this.#ensureGltfState(request.key, request.sourceUri, request.version, generation),
+      );
     }
     for (const key of changes.releasedGltfKeys) {
       apply(
@@ -4195,8 +4222,13 @@ class WebGlRootImpl implements InternalWebGlRoot {
     return this.#preparedGltf.stateForNode(node);
   }
 
-  #ensureGltfState(key: string, preparedGeneration: number): GltfState {
-    return this.#preparedGltf.ensure(key, preparedGeneration, nowMs());
+  #ensureGltfState(
+    key: string,
+    sourceUri: string,
+    sourceVersion: number | string | undefined,
+    preparedGeneration: number,
+  ): GltfState {
+    return this.#preparedGltf.ensure(key, sourceUri, sourceVersion, preparedGeneration, nowMs());
   }
 
   async #prepareGltfAsset(
@@ -4504,11 +4536,12 @@ class WebGlRootImpl implements InternalWebGlRoot {
         imageFailures: load.imageFailures,
         imageLoaded: load.imageLoaded,
         imageRequests: load.imageRequests,
-        key: state.key,
         lightCount: state.lights.length,
         nodeCount: state.nodeCount,
         phaseMs,
         primitiveCount: state.primitives.length,
+        sourceUri: state.sourceUri,
+        ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
         status: state.status === "ready" ? "sceneReady" : state.status,
         variantCount: state.variants.length,
       };

@@ -1,8 +1,8 @@
-import type { Rgba } from './primitives';
+import type { LinearRgba } from './primitives';
 import { finiteNumber, positiveFiniteNumber } from './descriptor-values';
 import { solidTexture, type TextureRef } from './texture';
 
-export type MaterialColorInput = Rgba;
+export type MaterialColorInput = LinearRgba;
 export type MaterialTextureInput = TextureRef;
 
 export type MaterialSurfaceOptions =

@@ -7,7 +7,7 @@ import {
   scene,
   unlitMaterial,
   type RenderNode,
-  type Rgba,
+  type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import { SeededRandom } from "./fuzz";
@@ -372,7 +372,7 @@ const camera = () => orthographicCamera({
 
 const renderScene = (
   children: readonly RenderNode[],
-  clearColor: Rgba = [0, 0, 0, 0],
+  clearColor: LinearRgba = [0, 0, 0, 0],
 ) => scene({
   camera: camera(),
   nodes: children,

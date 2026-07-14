@@ -3,6 +3,7 @@ import {
   boxGeometry,
   defineCoordinateSystem,
   imageTexture,
+  linearRgbaFromSrgb,
   metresPerWorldUnit,
   mesh,
   orthographicCamera,
@@ -80,6 +81,36 @@ describe("renderer-core public API", () => {
     });
   });
 
+  it("provides concise, normalized camera and transform defaults", () => {
+    expect(perspectiveCamera({})).toEqual({
+      far: 1000,
+      fovY: Math.PI / 4,
+      kind: "perspective-camera",
+      near: 0.1,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+    });
+
+    expect(mesh({
+      geometry: boxGeometry(1),
+      material: standardMaterial({ color: [1, 1, 1, 1] }),
+      transform: { position: [2, 0, 0] },
+    }).transform).toEqual({
+      position: [2, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    });
+  });
+
+  it("makes conversion from artist-authored sRGB to scene-linear color explicit", () => {
+    const color: import("@royal/renderer-core").LinearRgba = linearRgbaFromSrgb([0.5, 0.25, 1, 0.75]);
+    expect(color[0]).toBeCloseTo(0.214041, 5);
+    expect(color[1]).toBeCloseTo(0.050876, 5);
+    expect(color[2]).toBe(1);
+    expect(color[3]).toBe(0.75);
+    expect(Object.isFrozen(color)).toBe(true);
+  });
+
   it("builds plain render descriptors without backend state", () => {
     const camera = perspectiveCamera({
       far: 100,
@@ -135,6 +166,7 @@ describe("renderer-core public API", () => {
       "useCanvasPick",
       "useCanvasRoot",
       "useFrame",
+      "useGltfAssetStatus",
       "useInvalidate",
       "useOrbitCamera",
       "useOrbitCameraView",
@@ -144,6 +176,7 @@ describe("renderer-core public API", () => {
   it("exposes scene primitives from the React scene subpath", () => {
     expect(reactSceneApi.metresPerWorldUnit).toBe(1);
     expect(reactSceneApi).toHaveProperty("boxGeometry");
+    expect(reactSceneApi).toHaveProperty("linearRgbaFromSrgb");
     expect(reactSceneApi).toHaveProperty("mesh");
     expect(reactSceneApi).toHaveProperty("scene");
     expect(reactSceneApi).toHaveProperty("solidTexture");

@@ -1,12 +1,13 @@
 import {
   Canvas,
   OrbitControls,
-  type CanvasInteractions,
+  type ScenePointerEvents,
   useOrbitCamera,
 } from '@royal/react';
 import {
   directionalLight,
   gltf,
+  linearRgbaFromSrgb,
   mesh,
   planeGeometry,
   scene,
@@ -19,7 +20,6 @@ import {
 } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
-import { srgbColor } from '../color';
 import {
   showcaseEnvironment,
   showcaseFillLight,
@@ -28,7 +28,7 @@ import {
 } from '../presentation';
 
 const backplateGeometry = planeGeometry([4.4, 2.65]);
-const backplateMaterial = unlitMaterial({ color: srgbColor([0.08, 0.1, 0.12, 1]) });
+const backplateMaterial = unlitMaterial({ color: linearRgbaFromSrgb([0.08, 0.1, 0.12, 1]) });
 const helmetSrc = import.meta.env.BASE_URL + 'DamagedHelmet/DamagedHelmet.gltf';
 
 const createPickingScene = (
@@ -79,14 +79,14 @@ export const Picking = (): ReactNode => {
       onPointerEnter: () => setHovered(true),
       onPointerLeave: () => setHovered(false),
     },
-  }) satisfies CanvasInteractions, []);
+  }) satisfies ScenePointerEvents, []);
 
   return (
     <Canvas
       aria-label="Pickable helmet"
       data-royal-picking-hovered-id={hoveredId}
       data-royal-picking-readout={`Target ${readoutText}`}
-      interactions={interactions}
+      scenePointerEvents={interactions}
       rendererOptions={exampleCanvasRendererOptions}
       style={{ cursor: 'pointer', touchAction: 'none' }}
       scene={renderScene}

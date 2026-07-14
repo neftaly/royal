@@ -70,6 +70,8 @@ export interface RoyalRendererRoot {
   invalidate(): void;
   /** Observes renderer availability without polling. Calls back immediately. */
   observeLifecycle(callback: (snapshot: RoyalRendererRootLifecycleSnapshot) => void): () => void;
+  /** Observes completed renderer frames. Calls back immediately with the current frame index. */
+  observeFrame(callback: (frame: number) => void): () => void;
   /** Observes failures from renderer-owned scheduled frames. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
   /** Returns the front-most render target under a DOM client coordinate. */
@@ -158,6 +160,7 @@ export const createRendererRoot = (
     observeLifecycle: (callback) => root.observeContextLifecycle((snapshot) => {
       callback(royalLifecycleSnapshot(snapshot));
     }),
+    observeFrame: (callback) => root.observeFrame(callback),
     observeRenderFailures: (callback) => root.observeRenderFailures(callback),
     pick: (input: PickInput) => root.pick(input),
     render: (scene: RenderRoot) => {

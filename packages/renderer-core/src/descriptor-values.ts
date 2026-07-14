@@ -1,4 +1,4 @@
-import type { EulerRads, Rgba, Transform, TransformOptions, Vec3 } from './primitives';
+import type { EulerRads, LinearRgba, Transform, TransformOptions, Vec3 } from './primitives';
 
 export const finiteNumber = (value: number, label: string): number => {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite; received ${String(value)}`);
@@ -25,16 +25,16 @@ export const frozenDirection3 = (value: Vec3, label: string): Vec3 => {
   return direction;
 };
 
-export const frozenRgba = (value: Rgba, label: string): Rgba => Object.freeze([
+export const frozenRgba = (value: LinearRgba, label: string): LinearRgba => Object.freeze([
   finiteNumber(value[0], `${label}[0]`),
   finiteNumber(value[1], `${label}[1]`),
   finiteNumber(value[2], `${label}[2]`),
   finiteNumber(value[3], `${label}[3]`),
-]) as Rgba;
+]) as LinearRgba;
 
 export const frozenTransform = (options: TransformOptions): Transform => Object.freeze({
-  position: frozenVec3(options.position, 'transform position'),
-  rotation: frozenVec3(options.rotation, 'transform rotation') as EulerRads,
+  position: frozenVec3(options.position ?? [0, 0, 0], 'transform position'),
+  rotation: frozenVec3(options.rotation ?? [0, 0, 0], 'transform rotation') as EulerRads,
   scale: frozenVec3(options.scale ?? [1, 1, 1], 'transform scale'),
 });
 

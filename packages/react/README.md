@@ -36,6 +36,7 @@ import {
   directionalLight,
   gltf,
   gltfInstances,
+  linearRgbaFromSrgb,
   mesh,
   scene,
   standardMaterial,
@@ -43,7 +44,7 @@ import {
 import { useMemo } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: [1, 0, 0, 1] });
+const red = standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.2, 0.16, 1]) });
 const helmetSrc = '/DamagedHelmet/DamagedHelmet.gltf';
 
 export function App() {
@@ -67,6 +68,11 @@ export function App() {
   );
 }
 ```
+
+Public color fields use scene-linear `LinearRgba` tuples. Convert normalized
+artist-authored sRGB values with `linearRgbaFromSrgb(...)`; image textures use
+sRGB by default. Mesh and glTF transforms default omitted `position` and
+`rotation` to `[0, 0, 0]` and omitted `scale` to `[1, 1, 1]`.
 
 `useOrbitCamera({ initial: ... })` reads `initial` once. It returns a stable,
 explicit `cameraResource`; orbit gestures stage pose values and commit them
@@ -167,10 +173,24 @@ glTF material variants from `KHR_materials_variants` can be selected with
 `gltf({ src, variant })`. Pass a variant name, or pass a zero-based variant
 index when an asset has unnamed variants.
 
+`useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
+and returns `{ state: 'idle' | 'loading' | 'ready' | 'error', error? }`. It is
+frame-driven and does not poll renderer diagnostics. Pass the normalized
+`node.asset` instead of a string when using an explicit asset `version`.
+
 Interactive nodes provide an explicit `pickingId`; React handlers live in the
-separate `Canvas.interactions` map under that ID. The ID is the logical gesture
+separate `Canvas.scenePointerEvents` map under that ID. The ID is the logical gesture
 identity, so handler-only changes do not resubmit the scene and pointer-down/up
 and hover stay coherent across immutable scene replacement.
+
+```tsx
+<Canvas
+  scene={renderScene}
+  scenePointerEvents={{
+    helmet: { onClick: ({ hit }) => select(hit.target) },
+  }}
+/>
+```
 
 For many copies of one asset, create one stable transform resource and render
 one `gltfInstances(...)` node instead of thousands of individual nodes.

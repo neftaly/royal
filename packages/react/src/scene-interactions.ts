@@ -5,8 +5,8 @@ import {
   type RoyalPointerEventTarget,
 } from "./picking-events";
 
-/** React-owned handlers keyed by stable picking IDs declared in pure scene data. */
-export type CanvasInteractions = Readonly<Record<PickingId, RoyalPointerEventHandlers>>;
+/** React-owned pointer handlers keyed by stable `pickingId` values declared in the scene. */
+export type ScenePointerEvents = Readonly<Record<PickingId, RoyalPointerEventHandlers>>;
 
 export interface RoyalScenePointerEventRegistry {
   readonly hasPointerEventTargets: boolean;
@@ -29,7 +29,7 @@ export const createRoyalScenePickingIndex = (scene: RenderRoot): RoyalScenePicki
 
 export const createRoyalScenePointerEventRegistry = (
   pickingIndex: RoyalScenePickingIndex,
-  interactions: CanvasInteractions | undefined,
+  interactions: ScenePointerEvents | undefined,
 ): RoyalScenePointerEventRegistry => {
   const targets = new Map<string, RoyalPointerEventTarget>();
 

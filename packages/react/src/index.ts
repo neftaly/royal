@@ -6,30 +6,12 @@ export {
   useInvalidate,
 } from './canvas';
 export type { CanvasProps } from './canvas';
-export type { CanvasInteractions } from './scene-interactions';
+export type { ScenePointerEvents } from './scene-interactions';
 export type {
   PickInput,
   PickingId,
   PickResult,
   PickTarget,
-  SolidTextureOptions,
-  SolidTextureRef,
-  TextureAssetOptions,
-  TextureAssetRef,
-  TextureAssetSrcOptions,
-  TextureAssetUriOptions,
-  TextureColorSpace,
-  TextureContentKey,
-  TextureRef,
-  TextureSampler,
-  TextureSamplerFilter,
-  TextureSamplerWrap,
-  TextureVersion,
-  VirtualTextureAssetOptions,
-  VirtualTextureAssetManifestOptions,
-  VirtualTextureAssetRef,
-  VirtualTextureAssetSrcOptions,
-  VirtualTextureInput,
 } from '@royal/renderer-core';
 export type {
   ResourceGovernorClassPolicy,
@@ -44,6 +26,13 @@ export {
 
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';
+
+export { useGltfAssetStatus } from './gltf-status';
+export type {
+  GltfAssetLoadState,
+  GltfAssetStatus,
+  GltfAssetStatusInput,
+} from './gltf-status';
 
 export {
   OrbitControls,

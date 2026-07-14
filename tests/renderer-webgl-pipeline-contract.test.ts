@@ -12,7 +12,7 @@ import {
   unlitMaterial,
   type Geometry,
   type RenderNode,
-  type Rgba,
+  type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 import { vertexShaderSource } from "../packages/renderer-webgl/src/webgl/shaders";
@@ -441,7 +441,7 @@ const isValidTriangleDraw = (
   return false;
 };
 
-const unlitBox = (color: Rgba = [1, 1, 1, 1]) =>
+const unlitBox = (color: LinearRgba = [1, 1, 1, 1]) =>
   mesh({
     geometry: boxGeometry(1),
     material: unlitMaterial({ color }),
@@ -580,7 +580,7 @@ describe("WebGL renderer pipeline contracts", () => {
   });
 
   it("sends an unlit solid color through uniform4fv", () => {
-    const color: Rgba = [0.125, 0.5, 0.875, 0.75];
+    const color: LinearRgba = [0.125, 0.5, 0.875, 0.75];
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
@@ -980,7 +980,7 @@ describe("WebGL renderer pipeline contracts", () => {
   it("throws a deterministic error for unknown geometry kinds", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
-    const unsupportedGeometry = { kind: "custom-pyramid" } satisfies Geometry<"custom-pyramid">;
+    const unsupportedGeometry = { kind: "custom-pyramid" } as unknown as Geometry;
 
     expect(() => root.render(scene({
       camera: orthographicCamera({

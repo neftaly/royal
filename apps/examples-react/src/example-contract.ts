@@ -17,11 +17,12 @@ export type GltfLoadDiagnosticsAsset = {
   readonly imageFailures: number;
   readonly imageLoaded: number;
   readonly imageRequests: number;
-  readonly key: string;
   readonly lightCount: number;
   readonly nodeCount: number;
   readonly phaseMs: Record<string, number>;
   readonly primitiveCount: number;
+  readonly sourceUri: string;
+  readonly sourceVersion?: number | string;
   readonly status: string;
   readonly variantCount: number;
 };

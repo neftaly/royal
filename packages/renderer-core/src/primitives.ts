@@ -38,13 +38,36 @@ export const metresPerWorldUnit = 1 as const;
 export type Ms = number;
 /** Angle in radians. */
 export type Rads = number;
-/** Normalized RGBA color. */
-export type Rgba = readonly [r: number, g: number, b: number, a: number];
+/** Scene-linear RGBA color. RGB values are linear, not CSS/sRGB values. */
+export type LinearRgba = readonly [r: number, g: number, b: number, a: number];
+/** Artist-authored normalized sRGB color accepted by `linearRgbaFromSrgb`. */
+export type SrgbRgba = readonly [r: number, g: number, b: number, a: number];
 /** Dimensionless world-space direction; constructors normalize where required. */
 export type Direction3 = readonly [x: number, y: number, z: number];
 
 /** XYZ Euler rotation in radians. */
 export type EulerRads = readonly [x: Rads, y: Rads, z: Rads];
+
+const linearChannelFromSrgb = (value: number): number => {
+  if (!Number.isFinite(value)) throw new Error(`sRGB color channel must be finite; received ${String(value)}`);
+  const channel = Math.min(1, Math.max(0, value));
+  return channel <= 0.04045
+    ? channel / 12.92
+    : ((channel + 0.055) / 1.055) ** 2.4;
+};
+
+const normalizedAlpha = (value: number): number => {
+  if (!Number.isFinite(value)) throw new Error(`sRGB color alpha must be finite; received ${String(value)}`);
+  return Math.min(1, Math.max(0, value));
+};
+
+/** Converts an artist-authored normalized sRGB tuple to Royal's scene-linear color domain. */
+export const linearRgbaFromSrgb = (color: SrgbRgba): LinearRgba => Object.freeze([
+  linearChannelFromSrgb(color[0]),
+  linearChannelFromSrgb(color[1]),
+  linearChannelFromSrgb(color[2]),
+  normalizedAlpha(color[3]),
+]);
 
 export interface Transform {
   /** Translation in metres. */
@@ -55,9 +78,10 @@ export interface Transform {
 }
 
 export interface TransformOptions {
-  /** Translation in metres. */
-  readonly position: WorldPosition3;
-  readonly rotation: EulerRads;
+  /** Translation in metres. @defaultValue `[0, 0, 0]` */
+  readonly position?: WorldPosition3;
+  /** XYZ Euler rotation in radians. @defaultValue `[0, 0, 0]` */
+  readonly rotation?: EulerRads;
   /** Dimensionless multiplier. @defaultValue `[1, 1, 1]` */
   readonly scale?: Scale3;
 }

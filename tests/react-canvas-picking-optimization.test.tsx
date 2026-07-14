@@ -23,7 +23,7 @@ import { createOrbitControls } from "../packages/react/src/orbit-controls";
 import {
   createRoyalScenePickingIndex,
   createRoyalScenePointerEventRegistry,
-  type CanvasInteractions,
+  type ScenePointerEvents,
 } from "../packages/react/src/scene-interactions";
 import { fakeCanvas, fakeRendererRoot } from "./react-test-fixtures";
 
@@ -92,12 +92,12 @@ const renderScene = (): RenderRoot => scene({
 });
 
 const interactions = (
-  handlers: CanvasInteractions[string],
-): CanvasInteractions => ({ pickable: handlers });
+  handlers: ScenePointerEvents[string],
+): ScenePointerEvents => ({ pickable: handlers });
 
 const interactionRegistry = (
   renderScene: RenderRoot,
-  handlers?: CanvasInteractions,
+  handlers?: ScenePointerEvents,
 ) => createRoyalScenePointerEventRegistry(createRoyalScenePickingIndex(renderScene), handlers);
 
 describe("React Canvas picking optimization", () => {

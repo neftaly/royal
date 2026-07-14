@@ -1,6 +1,6 @@
 import type {
   Material,
-  Rgba,
+  LinearRgba,
   StandardMaterial,
   TextureRef,
   UnlitMaterial,
@@ -21,13 +21,13 @@ export type TextureAssetUploadRef = Extract<TextureRef, { readonly kind: "asset"
 export type SurfaceMaterialAlphaMode = "OPAQUE" | "MASK" | "BLEND";
 
 export type SurfaceMaterial = (StandardMaterial | UnlitMaterial) & {
-  readonly baseColorFactor?: Rgba;
+  readonly baseColorFactor?: LinearRgba;
   readonly alphaCutoff?: number;
   readonly alphaMode?: SurfaceMaterialAlphaMode;
   readonly clearcoatRoughnessTexture?: TextureAssetUploadRef;
   readonly clearcoatTexture?: TextureAssetUploadRef;
   readonly doubleSided?: boolean;
-  readonly emissive?: Rgba;
+  readonly emissive?: LinearRgba;
   readonly emissiveTexture?: TextureAssetUploadRef;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
   readonly iridescenceTexture?: TextureAssetUploadRef;
@@ -111,7 +111,7 @@ export const DEFAULT_SURFACE_MATERIAL_EXTENSION_FACTORS: SurfaceMaterialExtensio
   transmissionFactor: 0,
 };
 
-const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: Rgba = [1, 0, 1, 1];
+const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: LinearRgba = [1, 0, 1, 1];
 
 type TextureCacheScalar = number | string;
 
@@ -174,7 +174,7 @@ export const textureCacheKey = (texture: TextureRef): string => {
   ]);
 };
 
-export const materialEmissiveColor = (material: Material): Rgba =>
+export const materialEmissiveColor = (material: Material): LinearRgba =>
   "emissive" in material && Array.isArray(material.emissive) && material.emissive.length >= 3
     ? [
         material.emissive[0] ?? 0,
@@ -268,7 +268,7 @@ export const surfaceMaterialBatchKey = (material: SurfaceMaterial): string =>
     surfaceMaterialExtensionFactorsKey(surfaceMaterialExtensionFactors(material)),
   ].join(":");
 
-export const materialColor = (material: Material): Rgba => {
+export const materialColor = (material: Material): LinearRgba => {
   if ("baseColorFactor" in material && Array.isArray(material.baseColorFactor)) {
     const base = material.baseColor.kind === "solid" ? material.baseColor.color : [1, 1, 1, 1];
     return [

@@ -1,4 +1,4 @@
-import type { Rgba, TextureContentKey, TextureSampler } from "@royal/renderer-core";
+import type { LinearRgba, TextureContentKey, TextureSampler } from "@royal/renderer-core";
 import type { GltfIndexArray } from "./accessors";
 import type { Mat4 } from "../math/mat4";
 import type { Bounds3 } from "../math/picking";
@@ -49,9 +49,9 @@ export type LoadedGltfMaterial = {
   readonly alphaCutoff?: number;
   readonly alphaMode: SurfaceMaterialAlphaMode;
   readonly baseColorTexture?: LoadedGltfMaterialTextureSlot;
-  readonly color?: Rgba;
+  readonly color?: LinearRgba;
   readonly doubleSided: boolean;
-  readonly emissive?: Rgba;
+  readonly emissive?: LinearRgba;
   readonly emissiveTexture?: LoadedGltfMaterialTextureSlot;
   readonly extensionFactors?: SurfaceMaterialExtensionFactors;
   readonly metallicRoughnessTexture?: LoadedGltfMaterialTextureSlot;

@@ -131,7 +131,6 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly imageFailures: number;
   readonly imageLoaded: number;
   readonly imageRequests: number;
-  readonly key: string;
   readonly lightCount: number;
   readonly nodeCount: number;
   readonly phaseMs: {
@@ -145,6 +144,10 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
     readonly toSceneReady?: number;
   };
   readonly primitiveCount: number;
+  /** Source URI supplied by the public glTF descriptor. */
+  readonly sourceUri: string;
+  /** Optional application-supplied asset version used for cache identity. */
+  readonly sourceVersion?: number | string;
   readonly status: "loading" | "sceneReady" | "error";
   readonly variantCount: number;
 }
@@ -285,6 +288,8 @@ export interface WebGlRoot {
   observeContextLifecycle(callback: (snapshot: WebGlContextSnapshot) => void): () => void;
   /** Observes failures from renderer-owned scheduled frames. Explicit render calls still throw synchronously. */
   observeRenderFailures(callback: (failure: unknown) => void): () => void;
+  /** Observes completed renderer frames. Calls back immediately with the current frame index. */
+  observeFrame(callback: (frame: number) => void): () => void;
   pick(input: PickInput): PickResult | undefined;
   render(scene: RenderRoot): void;
   renderViews(scene: RenderRoot, options: WebGlRenderViewsOptions): void;

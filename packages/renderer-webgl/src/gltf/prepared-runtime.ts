@@ -51,6 +51,8 @@ export type PreparedGltfState = {
   readonly instanceKey: number;
   readonly key: string;
   readonly preparedGeneration: number;
+  readonly sourceUri: string;
+  readonly sourceVersion?: number | string;
   error?: string;
   lights: readonly SurfaceLight[];
   load: GltfLoadMetrics;
@@ -150,7 +152,13 @@ export class PreparedGltfRuntime {
     return state;
   }
 
-  ensure(key: string, preparedGeneration: number, startedAt: number): PreparedGltfState {
+  ensure(
+    key: string,
+    sourceUri: string,
+    sourceVersion: number | string | undefined,
+    preparedGeneration: number,
+    startedAt: number,
+  ): PreparedGltfState {
     const existing = this.#states.get(key);
     if (existing !== undefined) {
       if (existing.preparedGeneration !== preparedGeneration) {
@@ -167,6 +175,8 @@ export class PreparedGltfRuntime {
       instanceKey: this.#nextInstanceKey,
       key,
       preparedGeneration,
+      sourceUri,
+      ...(sourceVersion === undefined ? {} : { sourceVersion }),
       lights: [],
       load: {
         imageFailures: 0,

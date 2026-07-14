@@ -1,16 +1,12 @@
-import type { GeometryKind } from './kind';
 import { positiveFiniteNumber } from './descriptor-values';
 import type { Metres, WorldSize3 } from './primitives';
 
-/** Discriminant type for built-in and custom geometry kinds. */
-export type GeometryKindValue = string;
-
-export interface Geometry<Kind extends GeometryKindValue = GeometryKind> {
+interface GeometryDescriptor<Kind extends string> {
   readonly kind: Kind;
 }
 
 /** Box geometry with physical dimensions in metres. */
-export interface BoxGeometry extends Geometry<'box'> {
+export interface BoxGeometry extends GeometryDescriptor<'box'> {
   readonly size: WorldSize3;
 }
 
@@ -22,7 +18,7 @@ export interface BoxGeometryOptions {
 }
 
 /** XY plane geometry sized in metres with UVs mapped from bottom-left to top-right. */
-export interface PlaneGeometry extends Geometry<'plane'> {
+export interface PlaneGeometry extends GeometryDescriptor<'plane'> {
   readonly size: readonly [width: Metres, height: Metres];
 }
 
@@ -35,6 +31,9 @@ export interface PlaneGeometryOptions {
 
 export type BoxGeometryInput = BoxGeometryOptions | BoxGeometrySizeInput;
 export type PlaneGeometryInput = PlaneGeometryOptions | PlaneGeometrySizeInput;
+
+/** Geometry supported by Royal's public mesh node. */
+export type Geometry = BoxGeometry | PlaneGeometry;
 
 const boxSize = (input: BoxGeometryInput): WorldSize3 => {
   const size = typeof input === 'number' ? input : 'size' in input ? input.size : input;

@@ -224,7 +224,6 @@ export interface GltfInstancesNode {
   readonly instances: GltfInstanceTransforms;
   readonly kind: 'gltf-instances';
   readonly pickingId?: PickingId;
-  readonly src: string;
   /** Selected `KHR_materials_variants` variant name or index. */
   readonly variant?: number | string;
 }
@@ -246,7 +245,6 @@ export const gltfInstances = (options: GltfInstancesOptions): GltfInstancesNode 
     instances: options.instances,
     kind: 'gltf-instances',
     ...(options.pickingId === undefined ? {} : { pickingId: options.pickingId }),
-    src: asset.uri,
     ...(variant === undefined ? {} : { variant }),
   });
 };

@@ -1,5 +1,5 @@
 import type {
-  Rgba,
+  LinearRgba,
   Vec3,
 } from "@royal/renderer-core";
 import {
@@ -46,20 +46,20 @@ export type SurfaceIblSpecular = {
 };
 
 export type SurfaceDirectionalLight = {
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly direction: Vec3;
   readonly kind: "directional";
 };
 
 export type SurfacePointLight = {
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly kind: "point";
   readonly position: Vec3;
   readonly range?: number;
 };
 
 export type SurfaceSpotLight = {
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly direction: Vec3;
   readonly innerConeAngle: number;
   readonly kind: "spot";

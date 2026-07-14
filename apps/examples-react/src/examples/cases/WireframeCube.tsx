@@ -1,5 +1,6 @@
 import {
   boxGeometry,
+  linearRgbaFromSrgb,
   mesh,
   scene,
   type EulerRads,
@@ -18,11 +19,10 @@ import {
   type ReactNode,
 } from 'react';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
-import { srgbColor } from '../color';
 
 const cubeGeometry = boxGeometry({ size: [2.25, 2.25, 2.25] });
 const cubeMaterial = wireframeMaterial({
-  color: srgbColor([0.38, 0.85, 0.95, 1]),
+  color: linearRgbaFromSrgb([0.38, 0.85, 0.95, 1]),
 });
 
 const SpinController = ({

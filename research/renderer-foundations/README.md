@@ -138,7 +138,8 @@ Why third:
 Decomplection:
 
 - Split geometry data, geometry upload, and draw binding.
-- Keep the existing public `Geometry<Kind>` escape hatch untouched.
+- Keep the public `Geometry` union limited to renderer-supported geometry;
+  future custom drawing belongs behind the planned typed `Primitive` API.
 - Do not expose `IndexedGeometry` publicly until examples prove the shape.
 
 ### 4. SVG Path Geometry

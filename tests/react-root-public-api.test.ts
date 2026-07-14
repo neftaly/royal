@@ -33,6 +33,20 @@ afterEach(() => {
 });
 
 describe("React root public API", () => {
+  it("observes completed frames without diagnostics polling", () => {
+    const root = createRendererRoot(fakeCanvas());
+    const frames: number[] = [];
+    const stop = root.observeFrame((frame) => frames.push(frame));
+
+    root.render(emptyScene());
+    root.render(emptyScene());
+    stop();
+    root.render(emptyScene());
+
+    expect(frames).toEqual([0, 1, 2]);
+    root.dispose();
+  });
+
   it("normalizes concise resource overrides into the effective root policy", () => {
     const root = createRendererRoot(fakeCanvas(), {
       resourceGovernorPolicy: {

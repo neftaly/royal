@@ -82,7 +82,7 @@ const dimensions = (value: unknown, count: number, label: string): number[] => {
 };
 
 export const directGeometryDeclaration = (
-  geometry: Geometry<string>,
+  geometry: Geometry,
   topology: DirectGeometryTopology,
 ): DirectGeometryDeclaration => {
   switch (geometry.kind) {
@@ -108,9 +108,9 @@ export const directGeometryDeclaration = (
         topology,
       });
     }
-    default:
-      throw new Error(`Unsupported geometry kind "${geometry.kind}"`);
   }
+  const unsupported = geometry as unknown as { readonly kind?: unknown };
+  throw new Error(`Unsupported geometry kind "${String(unsupported.kind)}"`);
 };
 
 export const directGeometryDeclarationKey = (declaration: DirectGeometryDeclaration): string => {

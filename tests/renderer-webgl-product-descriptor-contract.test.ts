@@ -11,7 +11,7 @@ import {
   virtualTexture,
   wireframeMaterial,
   type RenderNode,
-  type Rgba,
+  type LinearRgba,
 } from "@royal/renderer-core";
 import { createWebGlRoot } from "@royal/renderer-webgl";
 
@@ -405,7 +405,7 @@ const camera = () => orthographicCamera({
 
 const renderScene = (
   children: readonly RenderNode[],
-  clearColor: Rgba = [0, 0, 0, 0],
+  clearColor: LinearRgba = [0, 0, 0, 0],
 ) => scene({
   camera: camera(),
   nodes: children,
@@ -816,7 +816,7 @@ describe("WebGL renderer product descriptor contracts", () => {
   });
 
   it("renders wireframeMaterial through line draw calls", () => {
-    const color: Rgba = [1, 0.8, 0.15, 1];
+    const color: LinearRgba = [1, 0.8, 0.15, 1];
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
 
@@ -836,8 +836,8 @@ describe("WebGL renderer product descriptor contracts", () => {
   });
 
   it("applies directionalLight data to standardMaterial draws", () => {
-    const materialColor: Rgba = [0.55, 0.35, 0.2, 1];
-    const lightColor: Rgba = [0.9, 0.95, 1, 1];
+    const materialColor: LinearRgba = [0.55, 0.35, 0.2, 1];
+    const lightColor: LinearRgba = [0.9, 0.95, 1, 1];
     const lightDirection = [0, -1, 0] as const;
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
@@ -954,8 +954,8 @@ describe("WebGL renderer product descriptor contracts", () => {
   });
 
   it("keeps virtual textures on non-surface materials diagnostic", () => {
-    const removedFallbackColor: Rgba = [0.08, 0.1, 0.12, 1];
-    const unsupportedColor: Rgba = [1, 0, 1, 1];
+    const removedFallbackColor: LinearRgba = [0.08, 0.1, 0.12, 1];
+    const unsupportedColor: LinearRgba = [1, 0, 1, 1];
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);

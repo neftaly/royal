@@ -1,4 +1,4 @@
-import type { Rgba, TextureContentKey, TextureSampler, Vec3 } from "@royal/renderer-core";
+import type { LinearRgba, TextureContentKey, TextureSampler, Vec3 } from "@royal/renderer-core";
 import { canvasSupportsImageMimeType } from "../capabilities";
 import {
   identityMat4,
@@ -304,7 +304,7 @@ const gltfMaterialExtensionTextureSlots = (
   return Object.keys(slots).length === 0 ? undefined : slots;
 };
 
-const gltfColor = (values: readonly number[] | undefined): Rgba | undefined => {
+const gltfColor = (values: readonly number[] | undefined): LinearRgba | undefined => {
   if (values === undefined || values.length < 3) return undefined;
   return [values[0] ?? 1, values[1] ?? 1, values[2] ?? 1, values[3] ?? 1];
 };
@@ -399,7 +399,7 @@ const readGltfMaterialExtensionFactors = (
   };
 };
 
-const gltfLightColor = (light: GltfPunctualLight): Rgba => {
+const gltfLightColor = (light: GltfPunctualLight): LinearRgba => {
   const intensity = Math.max(0, finiteNumber(light.intensity, 1));
   return [
     (light.color?.[0] ?? 1) * intensity,
@@ -415,10 +415,10 @@ const gltfSpotConeAngles = (light: GltfPunctualLight): { readonly innerConeAngle
   return { innerConeAngle, outerConeAngle };
 };
 
-const gltfEmissiveColor = (material: GltfMaterial | undefined): Rgba | undefined => {
+const gltfEmissiveColor = (material: GltfMaterial | undefined): LinearRgba | undefined => {
   const factor = material?.emissiveFactor;
   const strength = Math.max(0, finiteNumber(material?.extensions?.KHR_materials_emissive_strength?.emissiveStrength, 1));
-  const emissive: Rgba = [
+  const emissive: LinearRgba = [
     (factor?.[0] ?? 0) * strength,
     (factor?.[1] ?? 0) * strength,
     (factor?.[2] ?? 0) * strength,

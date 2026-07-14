@@ -55,15 +55,15 @@ describe("renderer runtime ownership", () => {
   it("keeps prepared glTF generations and node identity in one registry", () => {
     const runtime = new PreparedGltfRuntime();
     const key = gltfRequestKey("/asset.glb", undefined);
-    const first = runtime.ensure(key, 3, 10);
+    const first = runtime.ensure(key, "/asset.glb", undefined, 3, 10);
     const node = { asset: { uri: "/asset.glb" }, kind: "gltf" } as never;
 
-    expect(runtime.ensure(key, 3, 20)).toBe(first);
+    expect(runtime.ensure(key, "/asset.glb", undefined, 3, 20)).toBe(first);
     expect(runtime.stateForNode(node)).toBe(first);
-    expect(() => runtime.ensure(key, 4, 20)).toThrow(/generation 4 conflicts with 3/i);
+    expect(() => runtime.ensure(key, "/asset.glb", undefined, 4, 20)).toThrow(/generation 4 conflicts with 3/i);
 
     runtime.delete(key);
-    const replacement = runtime.ensure(key, 4, 30);
+    const replacement = runtime.ensure(key, "/asset.glb", undefined, 4, 30);
     expect(replacement.instanceKey).toBeGreaterThan(first.instanceKey);
     expect(runtime.stateForNode(node)).toBe(replacement);
     runtime.dispose();

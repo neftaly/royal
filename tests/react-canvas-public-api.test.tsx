@@ -12,6 +12,8 @@ import type {
   ResourceGovernorPolicy,
   ResourceGovernorPolicyInput,
   RendererOptions,
+} from '@royal/react';
+import type {
   TextureAssetRef,
   TextureColorSpace,
   TextureSampler,
@@ -19,7 +21,7 @@ import type {
   VirtualTextureAssetRef,
   VirtualTextureAssetSrcOptions,
   VirtualTextureInput,
-} from '@royal/react';
+} from '@royal/react/scene';
 import {
   perspectiveCamera,
   scene,

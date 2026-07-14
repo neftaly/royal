@@ -43,15 +43,16 @@ export interface OrthographicCamera {
 }
 
 export interface PerspectiveCameraOptions {
-  /** World-space position in metres. */
-  readonly position: WorldPosition3;
-  readonly rotation: EulerRads;
-  /** Vertical field of view in radians. */
-  readonly fovY: Rads;
-  /** Near clipping distance in metres. */
-  readonly near: Metres;
-  /** Far clipping distance in metres. */
-  readonly far: Metres;
+  /** World-space position in metres. @defaultValue `[0, 0, 0]` */
+  readonly position?: WorldPosition3;
+  /** XYZ Euler rotation in radians. @defaultValue `[0, 0, 0]` */
+  readonly rotation?: EulerRads;
+  /** Vertical field of view in radians. @defaultValue `Math.PI / 4` */
+  readonly fovY?: Rads;
+  /** Near clipping distance in metres. @defaultValue `0.1` */
+  readonly near?: Metres;
+  /** Far clipping distance in metres. @defaultValue `1000` */
+  readonly far?: Metres;
 }
 
 export interface OrthographicCameraOptions {
@@ -72,13 +73,18 @@ export interface OrthographicCameraOptions {
 export type Camera = PerspectiveCamera | OrthographicCamera;
 
 export const perspectiveCamera = (options: PerspectiveCameraOptions): PerspectiveCamera => {
-  validatePose(options.position, options.rotation);
-  finite(options.fovY, 'fovY'); finite(options.near, 'near'); finite(options.far, 'far');
-  if (!(options.fovY > 0 && options.fovY < Math.PI)) throw new Error('perspective camera fovY must be within 0..PI');
-  if (!(options.near > 0 && options.far > options.near)) throw new Error('perspective camera requires 0 < near < far');
+  const position = options.position ?? [0, 0, 0];
+  const rotation = options.rotation ?? [0, 0, 0];
+  const fovY = options.fovY ?? Math.PI / 4;
+  const near = options.near ?? 0.1;
+  const far = options.far ?? 1000;
+  validatePose(position, rotation);
+  finite(fovY, 'fovY'); finite(near, 'near'); finite(far, 'far');
+  if (!(fovY > 0 && fovY < Math.PI)) throw new Error('perspective camera fovY must be within 0..PI');
+  if (!(near > 0 && far > near)) throw new Error('perspective camera requires 0 < near < far');
   return Object.freeze({
-    kind: 'perspective-camera', position: frozenVec3(options.position), rotation: frozenVec3(options.rotation),
-    fovY: options.fovY, near: options.near, far: options.far
+    kind: 'perspective-camera', position: frozenVec3(position), rotation: frozenVec3(rotation),
+    fovY, near, far
   });
 };
 

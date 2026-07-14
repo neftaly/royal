@@ -5,24 +5,39 @@ interface scenes. `@royal/react` exposes `<Canvas>` as the primary React API:
 it owns the canvas element, renders one Royal scene, and lets React-only
 controls live beside that scene.
 
-## Quickstart
+## Development status
 
-Install the React facade and its React peer:
+Royal is currently a source-level pre-release: its packages are private and
+versioned `0.0.0`. Develop against it inside this pnpm workspace, using
+`apps/examples-react` as the starter application. A normal registry install is
+not available yet.
+
+From the repository root:
 
 ```bash
-pnpm add @royal/react react react-dom
+pnpm install
+pnpm dev
 ```
+
+## React quickstart
 
 `@royal/react` uses the ordinary React JSX runtime. Scenes are explicit pure
 data; build and memoize them separately from React controls.
 
 ```tsx
 import { Canvas, OrbitControls, useOrbitCamera } from '@royal/react';
-import { boxGeometry, directionalLight, mesh, scene, standardMaterial } from '@royal/react/scene';
+import {
+  boxGeometry,
+  directionalLight,
+  linearRgbaFromSrgb,
+  mesh,
+  scene,
+  standardMaterial,
+} from '@royal/react/scene';
 import { useMemo } from 'react';
 
 const cube = boxGeometry({ size: [1, 1, 1] });
-const red = standardMaterial({ color: [1, 0, 0, 1] });
+const red = standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.2, 0.16, 1]) });
 
 export function App() {
   const orbit = useOrbitCamera({ initial: { distance: 5 } });
@@ -53,7 +68,7 @@ There is no second React root. Read Context or external stores in the React
 component, then pass immutable snapshots to pure scene builders. Controls and
 imperative `useFrame` controllers remain ordinary children under `<Canvas>`.
 Interactive nodes declare a stable `pickingId`; React handlers are supplied
-separately through `Canvas.interactions` under that ID.
+separately through `Canvas.scenePointerEvents` under that ID.
 
 ## Local Development
 

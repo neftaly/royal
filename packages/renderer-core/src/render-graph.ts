@@ -1,7 +1,7 @@
 import type { CameraSource } from './camera-resource';
 import { frozenRgba } from './descriptor-values';
 import type { EnvironmentLight } from './environment-light';
-import type { Rgba } from './primitives';
+import type { LinearRgba } from './primitives';
 import type { RenderNode } from './render-node';
 
 const TRANSPARENT_BLACK = frozenRgba([0, 0, 0, 0], 'scene clearColor');
@@ -13,7 +13,7 @@ export interface RenderRoot {
   readonly kind: 'scene';
   readonly camera: CameraSource;
   readonly nodes: readonly RenderNode[];
-  readonly clearColor: Rgba;
+  readonly clearColor: LinearRgba;
   readonly environment?: EnvironmentLight;
   readonly exposureEv100?: number;
   readonly toneMapping?: RenderToneMapping;
@@ -23,7 +23,7 @@ export interface SceneOptions {
   readonly camera: CameraSource;
   readonly nodes: readonly RenderNode[];
   /** @defaultValue `[0, 0, 0, 0]` */
-  readonly clearColor?: Rgba;
+  readonly clearColor?: LinearRgba;
   readonly environment?: EnvironmentLight;
   /** Camera exposure value at ISO 100. Higher values produce a darker image. */
   readonly exposureEv100?: number;

@@ -1,6 +1,7 @@
 import {
   boxGeometry,
   directionalLight,
+  linearRgbaFromSrgb,
   mesh,
   perspectiveCamera,
   planeGeometry,
@@ -23,7 +24,6 @@ import {
   type XrSessionStatus,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { srgbColor } from '../color';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
@@ -43,22 +43,22 @@ const renderScene = scene({
     directionalLight(showcaseFillLight),
     mesh({
       geometry: planeGeometry([7.2, 7.2]),
-      material: standardMaterial({ color: srgbColor([0.42, 0.39, 0.31, 1]) }),
+      material: standardMaterial({ color: linearRgbaFromSrgb([0.42, 0.39, 0.31, 1]) }),
       transform: { position: [0, -0.04, -1.2], rotation: [-Math.PI / 2, 0, 0] },
     }),
     mesh({
       geometry: boxGeometry([0.82, 0.82, 0.82]),
-      material: standardMaterial({ color: srgbColor([0.1, 0.72, 0.64, 1]) }),
+      material: standardMaterial({ color: linearRgbaFromSrgb([0.1, 0.72, 0.64, 1]) }),
       transform: { position: [-1.25, 0.52, -1.55], rotation: [0.08, 0.46, 0.02] },
     }),
     mesh({
       geometry: boxGeometry([1.12, 1.12, 1.12]),
-      material: standardMaterial({ color: srgbColor([0.9, 0.34, 0.2, 1]) }),
+      material: standardMaterial({ color: linearRgbaFromSrgb([0.9, 0.34, 0.2, 1]) }),
       transform: { position: [0.15, 0.74, -2.1], rotation: [0.28, -0.2, 0.1] },
     }),
     mesh({
       geometry: boxGeometry([0.72, 0.72, 0.72]),
-      material: standardMaterial({ color: srgbColor([0.54, 0.46, 0.9, 1]) }),
+      material: standardMaterial({ color: linearRgbaFromSrgb([0.54, 0.46, 0.9, 1]) }),
       transform: { position: [1.45, 0.44, -1.25], rotation: [-0.16, -0.66, 0.2] },
     }),
   ],

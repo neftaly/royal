@@ -6,6 +6,7 @@ import {
 import {
   boxGeometry,
   directionalLight,
+  linearRgbaFromSrgb,
   mesh,
   planeGeometry,
   pointLight,
@@ -13,7 +14,6 @@ import {
   standardMaterial,
 } from '@royal/react/scene';
 import { useMemo, type ReactNode } from 'react';
-import { srgbColor } from '../color';
 import { exampleCanvasRendererOptions } from '../example-renderer-options';
 import { interactiveCanvasStyle, showcaseEnvironment, showcaseFillLight, showcaseKeyLight, showcasePass } from '../presentation';
 
@@ -27,7 +27,7 @@ export const StandardLighting = (): ReactNode => {
     const angle = index * 2.399963229728653;
     const radius = 1.2 + (index % 7) * 0.32;
     return {
-      color: srgbColor([
+      color: linearRgbaFromSrgb([
         0.72 + 0.28 * Math.max(0, Math.cos(angle)),
         0.72 + 0.28 * Math.max(0, Math.cos(angle - 2.094)),
         0.72 + 0.28 * Math.max(0, Math.cos(angle + 2.094)),
@@ -54,22 +54,22 @@ export const StandardLighting = (): ReactNode => {
       })),
       mesh({
         geometry: planeGeometry([5.2, 3.2]),
-        material: standardMaterial({ color: srgbColor([0.16, 0.2, 0.22, 1]) }),
+        material: standardMaterial({ color: linearRgbaFromSrgb([0.16, 0.2, 0.22, 1]) }),
         transform: { position: [0, -0.78, -0.35], rotation: [-Math.PI / 2, 0, 0] },
       }),
       mesh({
         geometry: boxGeometry([0.92, 0.92, 0.92]),
-        material: standardMaterial({ color: srgbColor([0.08, 0.74, 0.67, 1]) }),
+        material: standardMaterial({ color: linearRgbaFromSrgb([0.08, 0.74, 0.67, 1]) }),
         transform: { position: [-1.55, 0.05, 0], rotation: [0.38, 0.62, 0.08] },
       }),
       mesh({
         geometry: boxGeometry([0.92, 0.92, 0.92]),
-        material: standardMaterial({ color: srgbColor([0.94, 0.34, 0.22, 1]) }),
+        material: standardMaterial({ color: linearRgbaFromSrgb([0.94, 0.34, 0.22, 1]) }),
         transform: { position: [0, 0.05, 0], rotation: [0.28, -0.42, 0.22] },
       }),
       mesh({
         geometry: boxGeometry([0.92, 0.92, 0.92]),
-        material: standardMaterial({ color: srgbColor([0.5, 0.44, 0.9, 1]) }),
+        material: standardMaterial({ color: linearRgbaFromSrgb([0.5, 0.44, 0.9, 1]) }),
         transform: { position: [1.55, 0.05, 0], rotation: [0.12, -0.82, -0.08] },
       }),
     ],

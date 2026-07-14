@@ -49,6 +49,7 @@ export interface CountedGltfRequest {
   readonly count: number;
   readonly key: string;
   readonly sourceUri: string;
+  readonly version?: number | string;
 }
 
 export interface CountedDirectGeometryDeclaration {
@@ -257,6 +258,7 @@ export const compileFramePlan = (scene: RenderRoot, revision: number): FramePlan
         count: 1,
         key: requestKey,
         sourceUri: node.asset.uri,
+        ...(node.asset.version === undefined ? {} : { version: node.asset.version }),
       }));
     } else if (node.kind === "mesh") {
       const topology = node.material.kind === "wireframe" ? "wireframe" : "surface";

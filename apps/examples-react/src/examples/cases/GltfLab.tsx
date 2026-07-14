@@ -2,7 +2,7 @@
 import {
   Canvas,
   OrbitControls,
-  useCanvasRoot,
+  useGltfAssetStatus,
   useOrbitCamera,
 } from '@royal/react';
 import { directionalLight, gltf, scene } from '@royal/react/scene';
@@ -23,34 +23,9 @@ import {
 } from '../presentation';
 
 const GltfLabLoadStatus = ({ src }: { readonly src: string }): ReactNode => {
-  const root = useCanvasRoot();
-  const [status, setStatus] = useState('loading');
-
-  useEffect(() => {
-    if (root === null) return undefined;
-    let active = true;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const startedAt = performance.now();
-    const inspect = (): void => {
-      if (!active) return;
-      const asset = root.diagnostics().gltfLoads.assets.find(
-        (candidate) => candidate.key.includes(src),
-      );
-      const next = asset?.error === undefined ? asset?.status : `error: ${asset.error}`;
-      if (next !== undefined) setStatus(next);
-      const terminal = next === 'sceneReady' || next === 'error' || next?.startsWith('error:');
-      if (!terminal && performance.now() - startedAt < 20_000) {
-        timeout = setTimeout(inspect, 100);
-      }
-    };
-    inspect();
-    return () => {
-      active = false;
-      if (timeout !== undefined) clearTimeout(timeout);
-    };
-  }, [root, src]);
-
-  return <output className="gltf-lab-load-status">Renderer: {status}</output>;
+  const status = useGltfAssetStatus(src);
+  const label = status.state === 'error' ? `error: ${status.error}` : status.state;
+  return <output className="gltf-lab-load-status">Renderer: {label}</output>;
 };
 
 const selectedCaseName = (): string =>

@@ -135,16 +135,12 @@ instancing invariants and keep browser fuzz rows as replayed perf probes.
 ## Review Notes
 
 Fast fuzzers should keep deterministic replay rows next to the generator that
-found or protects the edge case. Good next targets are:
-
-- glTF material/texture normalization: fuzz optional extension source conflicts,
-  image-key identity, missing image references, and cache-key reuse before adding
-  more enumerated renderer scene regressions.
-- Picking math: migrate the notched-bounds replay rows from
-  `research/picking-fuzz` into a fast property test that checks ray/triangle
-  agreement before broader WebGL picking smoke coverage.
-- Text: fuzz layout metrics, keyboard/edit intents, texture cache keys, and
-  atlas upload invalidation before adding more visual regression fixtures.
+found or protects the edge case. glTF material/texture normalization is covered
+by `tests/renderer-webgl-gltf-texture-validation.property.test.ts`; the notched
+bounds replay and ray/triangle agreement are covered by
+`tests/renderer-webgl-picking-math.test.ts`. Add new fuzz targets from observed
+failures or measured coverage gaps rather than restoring enumerated scene
+regressions. Text/UI rendering is outside Royal's renderer scope.
 
 Use benchmark output as a decomposition guide by sorting routes through
 `analysis.slowestRoutesByP95`, `analysis.heaviestDrawRoutes`,

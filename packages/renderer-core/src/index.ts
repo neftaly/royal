@@ -38,7 +38,6 @@ export type {
   BoxGeometryInput,
   BoxGeometryOptions,
   Geometry,
-  GeometryKindValue,
   PlaneGeometry,
   PlaneGeometryInput,
   PlaneGeometryOptions
@@ -64,7 +63,7 @@ export type {
   GltfInstancesNode,
   GltfInstancesOptions,
 } from './gltf-instances';
-export type { CameraKind, GeometryKind, MaterialKind, RenderGraphKind, RenderNodeKind } from './kind';
+export type { CameraKind, GeometryKind, MaterialKind, RenderNodeKind } from './kind';
 export type {
   Material,
   MaterialColorInput,
@@ -149,7 +148,8 @@ export type {
   Ms,
   Metres,
   Rads,
-  Rgba,
+  LinearRgba,
+  SrgbRgba,
   Scale3,
   SceneSource,
   Transform,
@@ -161,6 +161,7 @@ export type {
 } from './primitives';
 export {
   defineCoordinateSystem,
+  linearRgbaFromSrgb,
   metresPerWorldUnit,
   sceneSource,
   yUpRightHanded,

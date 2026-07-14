@@ -899,13 +899,14 @@ const roundedGltfLoadDiagnostics = (snapshot) => {
         imageFailures: asset.imageFailures ?? 0,
         imageLoaded: asset.imageLoaded ?? 0,
         imageRequests: asset.imageRequests ?? 0,
-        key: asset.key,
         lightCount: asset.lightCount ?? 0,
         nodeCount: asset.nodeCount ?? 0,
         phaseMs: Object.fromEntries(
           Object.entries(asset.phaseMs ?? {}).map(([key, value]) => [key, round(value)]),
         ),
         primitiveCount: asset.primitiveCount ?? 0,
+        sourceUri: asset.sourceUri,
+        ...(asset.sourceVersion === undefined ? {} : { sourceVersion: asset.sourceVersion }),
         status: asset.status,
         variantCount: asset.variantCount ?? 0,
       }))
@@ -925,9 +926,10 @@ const phaseValue = (asset, phase) => {
 };
 
 const assetPhaseSummary = (asset, phase) => ({
-  key: asset.key,
   nodeCount: asset.nodeCount,
   primitiveCount: asset.primitiveCount,
+  sourceUri: asset.sourceUri,
+  ...(asset.sourceVersion === undefined ? {} : { sourceVersion: asset.sourceVersion }),
   status: asset.status,
   valueMs: phaseValue(asset, phase),
 });
@@ -947,9 +949,10 @@ const topAssetsByCount = (assets, key, limit = 8) =>
     .map((asset) => ({
       count: asset[key],
       imageFailures: asset.imageFailures,
-      key: asset.key,
       nodeCount: asset.nodeCount,
       primitiveCount: asset.primitiveCount,
+      sourceUri: asset.sourceUri,
+      ...(asset.sourceVersion === undefined ? {} : { sourceVersion: asset.sourceVersion }),
       status: asset.status,
     }));
 
@@ -1120,7 +1123,7 @@ const printSummary = (report) => {
     return name.length > 38 ? `${name.slice(0, 35)}...` : name;
   };
   const topPhaseText = (asset) =>
-    asset?.valueMs === undefined ? 'n/a' : `${shortKey(asset.key)}:${asset.valueMs}ms`;
+    asset?.valueMs === undefined ? 'n/a' : `${shortKey(asset.sourceUri)}:${asset.valueMs}ms`;
   console.log(
     `gltf load ${report.route.path}: firstDraw=${metrics.firstDrawMs}ms` +
       ` firstTextureUpload=${metrics.firstTextureUploadMs ?? 'n/a'}ms` +

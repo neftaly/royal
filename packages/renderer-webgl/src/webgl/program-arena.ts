@@ -1,4 +1,4 @@
-import type { Rgba } from "@royal/renderer-core";
+import type { LinearRgba } from "@royal/renderer-core";
 import type { Mat4 } from "../math/mat4";
 import {
   fragmentShaderSource,
@@ -339,7 +339,7 @@ export const uniformMatrix = (arena: ProgramArena, program: WebGLProgram, name: 
   cacheValue(state, program, name, value, 16);
 };
 
-export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: string, value: Rgba): void => {
+export const uniformColor = (arena: ProgramArena, program: WebGLProgram, name: string, value: LinearRgba): void => {
   const state = arena as unknown as State;
   const location = prepareVectorUniform(state, program, name, value, 4);
   if (location === undefined) return;

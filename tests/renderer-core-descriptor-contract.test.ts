@@ -89,7 +89,6 @@ describe("renderer-core descriptor contract", () => {
       },
       kind: "gltf",
       pickingId: "helmet",
-      src: "/models/helmet.gltf",
     });
   });
 
@@ -210,14 +209,13 @@ describe("renderer-core descriptor contract", () => {
         version: 12,
       },
       kind: "gltf",
-      src: "/models/avatar.glb",
     });
   });
 
   it("preserves selected glTF material variants by name or index", () => {
     const src = "/models/chair.gltf";
     const cases: Array<[string, NonNullable<Parameters<typeof gltf>[0]["variant"]>, object]> = [
-      ["named variant", "walnut", { asset: { uri: src }, kind: "gltf", src, variant: "walnut" }],
+      ["named variant", "walnut", { asset: { uri: src }, kind: "gltf", variant: "walnut" }],
       ["indexed variant", 2, { kind: "gltf", variant: 2 }],
     ];
 

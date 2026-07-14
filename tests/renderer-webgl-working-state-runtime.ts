@@ -7,7 +7,7 @@ import {
   scene,
   standardMaterial,
   unlitMaterial,
-  type Rgba,
+  type LinearRgba,
 } from "@royal/renderer-core";
 
 export type CanvasSize = {
@@ -262,12 +262,12 @@ export const camera = () => orthographicCamera({
   top: 1,
 });
 
-export const cube = (color: Rgba) => mesh({
+export const cube = (color: LinearRgba) => mesh({
   geometry: boxGeometry(1),
   material: unlitMaterial({ color }),
 });
 
-export const drawableScene = (clearColor: Rgba, color: Rgba = [1, 1, 1, 1]) => scene({
+export const drawableScene = (clearColor: LinearRgba, color: LinearRgba = [1, 1, 1, 1]) => scene({
   camera: camera(),
   nodes: [cube(color)],
   clearColor,

@@ -1,9 +1,9 @@
 import { frozenDirection3, frozenRgba, frozenVec3 } from './descriptor-values';
-import type { Direction3, Metres, Rads, Rgba, WorldPosition3 } from './primitives';
+import type { Direction3, LinearRgba, Metres, Rads, WorldPosition3 } from './primitives';
 
 export interface SpotLightNode {
   readonly kind: 'spot-light';
-  readonly color: Rgba;
+  readonly color: LinearRgba;
   readonly direction: Direction3;
   readonly innerConeAngle: Rads;
   /** Luminous intensity in candela. */
@@ -16,7 +16,8 @@ export interface SpotLightNode {
 }
 
 export interface SpotLightOptions {
-  readonly color?: Rgba;
+  /** Scene-linear light color. Use `linearRgbaFromSrgb` for artist-authored sRGB values. */
+  readonly color?: LinearRgba;
   readonly direction: Direction3;
   /** Inner cone angle in radians. */
   readonly innerConeAngle?: Rads;
@@ -30,7 +31,7 @@ export interface SpotLightOptions {
   readonly range?: Metres;
 }
 
-const WHITE: Rgba = frozenRgba([1, 1, 1, 1], 'spot light color');
+const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'spot light color');
 const positive = (value: number, label: string): number => {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`);
   return value;
