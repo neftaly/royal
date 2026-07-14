@@ -15,12 +15,7 @@ import {
   type RenderNode,
   type RenderRoot,
 } from "@royal/renderer-core";
-import {
-  abortError,
-  loadGltfBuffers,
-  loadGltfDocument,
-  throwIfAborted,
-} from "./gltf/io";
+import { abortError } from "./gltf/io";
 import { BoundedDiagnosticLog } from "./diagnostics";
 import {
   closeDecodedTextureSource,
@@ -128,33 +123,15 @@ import {
   type FrameViews,
 } from "./frame-views";
 import { rendererFrameViews, type RendererFrameViewLane } from "./webgl/frame-view-lane";
-import type { DecodedGltfDracoPrimitive } from "./gltf/codecs/draco";
-import { gltfCodecDemand } from "./gltf/codecs/demand";
-import { assertSupportedRequiredGltfExtensions } from "./gltf/extensions";
 import {
   GltfInstanceTransformRegistry,
 } from "./gltf/instance-transform-registry";
 import {
   GltfImageDemandCoordinator,
-  gltfImageDemandKeys,
 } from "./gltf/image-demand-coordinator";
-import { createGltfImageSourceRecipes } from "./gltf/image-source-recipe";
-import { estimateGltfPreparationCpu } from "./gltf/preparation-admission";
-import { readGltfScene } from "./gltf/scene-reader";
-import {
-  type GltfDocument,
-  type GltfMeshPrimitive,
-} from "./gltf/schema";
-import {
-  type GltfLoadMetrics,
-  type LoadedGltfMaterial,
-  type LoadedGltfPrimitive,
-  type PreparedGltfAsset,
-} from "./gltf/prepared-asset";
 import {
   PreparedGltfRuntime,
   type AnyGltfNode,
-  type PreparedGltfCpuAdmission as PreparedAssetCpuAdmission,
   type PreparedGltfState as GltfState,
 } from "./gltf/prepared-runtime";
 import {
@@ -168,6 +145,7 @@ import {
 } from "./gltf/packet-selection-owner";
 import { GltfPacketSubmissionOwner } from "./gltf/packet-submission-owner";
 import { PreparedAssetEventOwner } from "./gltf/prepared-asset-event-owner";
+import { GltfAssetPreparationOwner } from "./gltf/asset-preparation-owner";
 import {
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
@@ -301,54 +279,6 @@ export type {
 
 type GeometryResource = VertexInputGeometry;
 
-type GltfBasisuCodecModule = typeof import("./gltf/codecs/basisu");
-type GltfDracoCodecModule = typeof import("./gltf/codecs/draco");
-type GltfMeshoptCodecModule = typeof import("./gltf/codecs/meshopt");
-
-type GltfCodecImports = {
-  readonly basisu?: Promise<GltfBasisuCodecModule>;
-  readonly draco?: Promise<GltfDracoCodecModule>;
-  readonly meshopt?: Promise<GltfMeshoptCodecModule>;
-};
-
-const startGltfCodecImport = <Module>(load: () => Promise<Module>): Promise<Module> => {
-  const pending = load();
-  // Buffer and image IO intentionally overlap module loading. Mark an early
-  // import failure handled until the original promise is awaited at its phase.
-  void pending.catch(() => undefined);
-  return pending;
-};
-
-const importGltfCodecs = (document: GltfDocument): GltfCodecImports => {
-  const demand = gltfCodecDemand(document);
-  return {
-    ...(demand.basisu
-      ? { basisu: startGltfCodecImport(() => import("./gltf/codecs/basisu")) }
-      : {}),
-    ...(demand.draco
-      ? { draco: startGltfCodecImport(() => import("./gltf/codecs/draco")) }
-      : {}),
-    ...(demand.meshopt
-      ? { meshopt: startGltfCodecImport(() => import("./gltf/codecs/meshopt")) }
-      : {}),
-  };
-};
-
-const preparedPrimitiveMaterials = (
-  primitives: readonly LoadedGltfPrimitive[],
-): readonly LoadedGltfMaterial[] => {
-  const materials = new Set<LoadedGltfMaterial>();
-  for (const primitive of primitives) {
-    materials.add(primitive.material);
-    for (const material of primitive.materialLod?.levels ?? []) materials.add(material);
-    for (const variant of primitive.materialVariants ?? []) {
-      materials.add(variant.material);
-      for (const material of variant.materialLod?.levels ?? []) materials.add(material);
-    }
-  }
-  return [...materials];
-};
-
 type SceneToneMappingState = SurfaceToneMappingState;
 
 const DEFAULT_TONE_MAPPING_STATE: SceneToneMappingState = {
@@ -465,8 +395,6 @@ const getNodeKind = (node: RenderNode): string =>
     ? node.kind
     : "unknown";
 
-const nowMs = (): number => globalThis.performance?.now?.() ?? Date.now();
-
 const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
   start === undefined || end === undefined ? undefined : Math.max(0, end - start);
 
@@ -545,6 +473,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     };
   };
   readonly #preparedGltf = new PreparedGltfRuntime(2, this.#admitGltfPreparationJob);
+  readonly #gltfPreparation: GltfAssetPreparationOwner;
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
   readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
   readonly #gltfPacketSelection = new GltfPacketSelectionOwner(
@@ -661,6 +590,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
         policy: requestedOptions.resourceGovernorPolicy,
         scheduleCapacityWake: () => this.#capacityWakes.scheduleCpuCapacityWake(),
       });
+      this.#gltfPreparation = new GltfAssetPreparationOwner({
+        recordDiagnostic: (message, key) => this.#recordDiagnostic(message, key),
+        runtime: this.#preparedGltf,
+      });
       this.#decodedTextureSources = new DecodedTextureSourceLifetime({
         ordinaryReferenceCount: (source) => resourceArenaSourceReferenceCount(this.#resourceArena, source),
         reserveOrdinaryDecodedBytes: (decodedBytes) => {
@@ -679,7 +612,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         scheduleRetry: () => this.invalidate(),
       });
       this.#resourceArena = createResourceArena(
-        (request, signal) => this.#prepareGltfAsset(request.src, request.key, signal),
+        (request, signal) => this.#gltfPreparation.prepare(request.src, request.key, signal),
         () => this.invalidate(),
         { retain: (source) => this.#decodedTextureSources.retainOrdinary(source) },
       );
@@ -1578,7 +1511,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
     for (const { generation, request } of changes.acquiredGltfRequests) {
       apply(
         "acquire",
-        () => this.#ensureGltfState(request.key, request.sourceUri, request.version, generation),
+        () => this.#gltfPreparation.ensure(request.key, request.sourceUri, request.version, generation),
       );
     }
     for (const key of changes.releasedGltfKeys) {
@@ -2125,117 +2058,8 @@ class WebGlRootImpl implements InternalWebGlRoot {
     if (signals.wakeRequested) this.invalidate();
   }
 
-  #ensureGltfState(
-    key: string,
-    sourceUri: string,
-    sourceVersion: number | string | undefined,
-    preparedGeneration: number,
-  ): GltfState {
-    return this.#preparedGltf.ensure(key, sourceUri, sourceVersion, preparedGeneration, nowMs());
-  }
-
-  async #prepareGltfAsset(
-    src: string,
-    assetKey: string,
-    signal: AbortSignal,
-  ): Promise<PreparedGltfAsset> {
-    try {
-      const asset = await this.#preparedGltf.scheduler.run(
-        signal,
-        () => this.#prepareGltfAssetAdmitted(src, assetKey, signal),
-      );
-      throwIfAborted(signal);
-      return asset;
-    } catch (error) {
-      // The admitted job installs its final leases immediately before return.
-      // Abort may win between that return and this outer boundary.
-      this.#preparedGltf.releaseCpuLeases(assetKey);
-      throw error;
-    }
-  }
-
   #detachPreparedAssetImagePreparation(assetKey: string, generation: number): void {
     detachResourceArenaImagePreparation(this.#resourceArena, assetKey, generation);
-  }
-
-  async #prepareGltfAssetAdmitted(
-    src: string,
-    assetKey: string,
-    signal: AbortSignal,
-  ): Promise<PreparedGltfAsset> {
-    const load: GltfLoadMetrics = {
-      imageFailures: 0,
-      imageLoaded: 0,
-      imageRequests: 0,
-      startedAt: nowMs(),
-    };
-    let cpuAdmission: PreparedAssetCpuAdmission | undefined;
-    try {
-      const { binaryChunk, document } = await loadGltfDocument(src, signal);
-      load.documentLoadedAt = nowMs();
-      throwIfAborted(signal);
-      assertSupportedRequiredGltfExtensions(src, document);
-      throwIfAborted(signal);
-      const cpuEstimate = estimateGltfPreparationCpu(document);
-      cpuAdmission = this.#preparedGltf.reserveCpuAdmission(assetKey, cpuEstimate);
-      throwIfAborted(signal);
-      const codecs = importGltfCodecs(document);
-      const loadedBuffers = await loadGltfBuffers(src, document, binaryChunk, signal);
-      load.buffersLoadedAt = nowMs();
-      throwIfAborted(signal);
-      const { buffers, document: decodedDocument } = codecs.meshopt === undefined
-        ? { buffers: loadedBuffers, document }
-        : await (await codecs.meshopt).decodeGltfMeshoptBufferViews(document, loadedBuffers);
-      load.meshoptDecodedAt = nowMs();
-      throwIfAborted(signal);
-      const dracoPrimitives = codecs.draco === undefined
-        ? new Map<GltfMeshPrimitive, DecodedGltfDracoPrimitive>()
-        : (await codecs.draco).decodeGltfDracoPrimitives(decodedDocument, buffers);
-      load.dracoDecodedAt = nowMs();
-      throwIfAborted(signal);
-      const scene = readGltfScene({
-        assetKey,
-        buffers,
-        diagnostics: {
-          recordDiagnostic: (message, dedupeKey) => this.#recordDiagnostic(message, dedupeKey),
-        },
-        document: decodedDocument,
-        dracoPrimitives,
-        src,
-      });
-      load.sceneReadAt = nowMs();
-      load.readyAt = nowMs();
-      const materials = preparedPrimitiveMaterials(scene.primitives);
-      const imageRecipes = createGltfImageSourceRecipes(
-        assetKey,
-        src,
-        decodedDocument,
-        buffers,
-        gltfImageDemandKeys(materials, scene.imageBasedLight),
-        codecs.basisu,
-      );
-      const asset: PreparedGltfAsset = {
-        hasMaterialLod: scene.hasMaterialLod,
-        hasMaterialVariants: scene.hasMaterialVariants,
-        hasNodeLod: scene.hasNodeLod,
-        ...(scene.imageBasedLight === undefined ? {} : { imageBasedLight: scene.imageBasedLight }),
-        ...(imageRecipes.length === 0 ? {} : { imagePreparation: { recipes: imageRecipes } }),
-        lights: scene.lights,
-        load,
-        nodeCount: decodedDocument.nodes?.length ?? 0,
-        primitives: scene.primitives,
-        variants: scene.variants,
-      };
-      this.#preparedGltf.finalizeCpuAdmission(assetKey, cpuEstimate, asset, cpuAdmission);
-      cpuAdmission = undefined;
-      return asset;
-    } catch (error) {
-      load.readyAt = nowMs();
-      if (cpuAdmission !== undefined) {
-        this.#preparedGltf.discardCpuAdmission(cpuAdmission);
-      }
-      throw error;
-    }
   }
 
   #stageReadyGltfImages(): void {
