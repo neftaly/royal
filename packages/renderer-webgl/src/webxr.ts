@@ -136,8 +136,58 @@ const REFERENCE_SPACE_TYPES: readonly WebXrReferenceSpaceType[] = [
   "unbounded",
 ];
 
+const objectOption = (value: unknown, label: string): Record<string, unknown> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+};
+
+const rejectUnknownOptions = (
+  options: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string,
+): void => {
+  for (const name of Object.keys(options)) {
+    if (!allowed.includes(name)) {
+      throw new TypeError(`${label} contain unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+};
+
 const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
+  const rootOptions = objectOption(options, "Royal WebXR options");
+  rejectUnknownOptions(
+    rootOptions,
+    ["advanced", "onFrameSnapshot", "referenceSpacePreference", "webGlLayer"],
+    "Royal WebXR options",
+  );
+  if (options.onFrameSnapshot !== undefined && typeof options.onFrameSnapshot !== "function") {
+    throw new TypeError("Royal WebXR onFrameSnapshot must be a function");
+  }
+  if (options.advanced !== undefined) {
+    const advanced = objectOption(options.advanced, "Royal WebXR advanced options");
+    rejectUnknownOptions(
+      advanced,
+      ["xrWebGLLayerConstructor"],
+      "Royal WebXR advanced options",
+    );
+    if (
+      options.advanced.xrWebGLLayerConstructor !== undefined
+      && typeof options.advanced.xrWebGLLayerConstructor !== "function"
+    ) {
+      throw new TypeError("Royal WebXR advanced xrWebGLLayerConstructor must be a constructor");
+    }
+  }
   const layer = options.webGlLayer;
+  if (layer !== undefined) {
+    const layerOptions = objectOption(layer, "Royal WebXR webGlLayer");
+    rejectUnknownOptions(
+      layerOptions,
+      ["antialias", "framebufferScaleFactor"],
+      "Royal WebXR webGlLayer options",
+    );
+  }
   if (layer?.antialias !== undefined && typeof layer.antialias !== "boolean") {
     throw new TypeError("Royal WebXR webGlLayer.antialias must be a boolean");
   }
@@ -148,6 +198,9 @@ const validateOptions = (options: WebGlXrSessionRendererOptions): void => {
     throw new RangeError("Royal WebXR webGlLayer.framebufferScaleFactor must be positive and finite");
   }
   const preference = options.referenceSpacePreference;
+  if (preference !== undefined && !Array.isArray(preference)) {
+    throw new TypeError("Royal WebXR referenceSpacePreference must be an array");
+  }
   if (preference !== undefined && preference.length === 0) {
     throw new RangeError("Royal WebXR referenceSpacePreference must contain at least one reference space type");
   }

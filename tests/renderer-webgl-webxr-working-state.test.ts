@@ -41,6 +41,27 @@ describe("WebGL root WebXR working state contracts", () => {
       // @ts-expect-error Runtime validation protects JavaScript callers.
       referenceSpacePreference: ["stage"],
     })).rejects.toThrow("entries must be one of");
+    await expect(createWebXrSessionRenderer(
+      root,
+      session,
+      null as unknown as Parameters<typeof createWebXrSessionRenderer>[2],
+    )).rejects.toThrow("Royal WebXR options must be an object");
+    await expect(createWebXrSessionRenderer(root, session, {
+      layerOptions: {},
+    } as unknown as Parameters<typeof createWebXrSessionRenderer>[2]))
+      .rejects.toThrow(/unsupported option.*layerOptions/i);
+    await expect(createWebXrSessionRenderer(root, session, {
+      onFrameSnapshot: true,
+    } as unknown as Parameters<typeof createWebXrSessionRenderer>[2]))
+      .rejects.toThrow("onFrameSnapshot must be a function");
+    await expect(createWebXrSessionRenderer(root, session, {
+      referenceSpacePreference: "local",
+    } as unknown as Parameters<typeof createWebXrSessionRenderer>[2]))
+      .rejects.toThrow("referenceSpacePreference must be an array");
+    await expect(createWebXrSessionRenderer(root, session, {
+      webGlLayer: { antiAlias: true },
+    } as unknown as Parameters<typeof createWebXrSessionRenderer>[2]))
+      .rejects.toThrow(/webGlLayer options.*unsupported option.*antiAlias/i);
   });
 
   it("renders caller-owned views with supplied matrices and scissored viewports", () => {
