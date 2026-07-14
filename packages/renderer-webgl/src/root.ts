@@ -173,7 +173,6 @@ import {
   type GltfLoadMetrics,
   type LoadedGltfMaterial,
   type LoadedGltfPrimitive,
-  type LoadedGltfPrimitiveMaterial,
   type PreparedGltfAsset,
 } from "./gltf/prepared-asset";
 import {
@@ -189,24 +188,20 @@ import {
   selectedGltfVariantIndex,
 } from "./gltf/material-preparation-arena";
 import {
+  GltfPacketSelectionOwner,
+  gltfMaterialLodSelectionKey,
+} from "./gltf/packet-selection-owner";
+import {
   GLTF_PACKET_ROOT_SOURCE_KIND,
   type GltfPacketOccurrence,
   type GltfPacketPreparedPrimitive,
 } from "./gltf-packet-topology";
 import {
-  appendSelectedFramePacket,
-  beginSelectedFramePacketView,
-  beginSelectedFramePacketViews,
-  createSelectedFramePackets,
-  endSelectedFramePacketView,
   FRAME_PACKET_SIDEDNESS,
-  framePacketLodRequirementsMatch,
   NO_FRAME_PACKET_ID,
   type FramePacketRenderClass,
-  type SelectedFramePackets,
 } from "./frame-packets";
 import {
-  readPacketBoundsInto,
   readPacketLocalModelInto,
   readPacketRootSourceInto,
   resolvePacketMaterial,
@@ -238,12 +233,7 @@ import {
 } from "./math/mat4";
 import {
   isBoundsVisible,
-  type MutableBounds3,
 } from "./math/picking";
-import {
-  createProjectedBoundsWorkspace,
-  projectedBoundsScreenCoverage,
-} from "./math/projected-bounds";
 import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
 import {
@@ -675,23 +665,21 @@ class WebGlRootImpl implements InternalWebGlRoot {
   };
   readonly #preparedGltf = new PreparedGltfRuntime(2, this.#admitGltfPreparationJob);
   readonly #gltfInstanceTransforms = new GltfInstanceTransformRegistry(() => this.invalidate());
-  readonly #gltfFrameBatches = new GltfFrameBatchArena(this.#preparedGltf, this.#vertexInputs);
-  readonly #selectedGltfFramePackets: SelectedFramePackets = createSelectedFramePackets(
-    this.#preparedGltf.packetTopology.catalog,
+  readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
+  readonly #gltfPacketSelection = new GltfPacketSelectionOwner(
+    this.#preparedGltf,
+    this.#gltfInstanceTransforms,
+    this.#sceneBindings,
   );
+  readonly #gltfFrameBatches = new GltfFrameBatchArena(this.#preparedGltf, this.#vertexInputs);
   readonly #gltfMaterials = new GltfMaterialPreparationArena();
-  readonly #gltfPacketBoundsScratch: MutableBounds3 = { max: [0, 0, 0], min: [0, 0, 0] };
-  readonly #projectedBoundsWorkspace = createProjectedBoundsWorkspace();
   readonly #gltfPacketLocalModelScratch: MutableMat4 = identityMat4();
   readonly #gltfPacketRootSourceScratch: MutablePacketRootSourceRow = {
     kind: 0,
     outerIndex: 0,
     planOccurrenceIndex: 0,
   };
-  readonly #sharedViewLodRootModel = identityMat4();
-  readonly #sharedViewLodRootViewProjection = identityMat4();
   readonly #textureHandles: TextureHandleArena;
-  readonly #sceneBindings = new SceneBindingRegistry(() => this.invalidate());
   readonly #diagnostics = new BoundedDiagnosticLog();
   #disposed = false;
   #gltfRenderOrdinal = 0;
@@ -1142,8 +1130,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         this.#scenePlan.sceneSurfaceLightSet,
       );
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
-      this.#prepareSharedViewGltfLodSelections(plan, frameViews);
-      this.#selectGltfFramePackets(plan, frameViews);
+      this.#gltfPacketSelection.prepareFrame(plan, frameViews);
       resetGltfPacketSubmissionWorkspaceForFrame(
         this.#gltfFrameBatches.workspace,
         plan.revision,
@@ -1189,9 +1176,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
           this.#preparedGltf.packetTopology.catalog,
           viewIndex,
         );
-        let packetCursor = this.#selectedGltfFramePackets.viewFirsts[viewIndex]!;
+        let packetCursor = this.#gltfPacketSelection.selected.viewFirsts[viewIndex]!;
         const packetEnd = packetCursor
-          + this.#selectedGltfFramePackets.viewCounts[viewIndex]!;
+          + this.#gltfPacketSelection.selected.viewCounts[viewIndex]!;
         const flushGltfPacketSubmissions = (): void => {
           if (this.#gltfFrameBatches.workspace.count === 0) return;
           this.#drawGltfPacketSubmissions(
@@ -1591,7 +1578,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
             const localIndex = index % primitive.localModels.length;
             return this.#preparedGltf.sharedViewLods.materialSelectionId(
               state.key,
-              this.#gltfMaterialLodSelectionKey(
+              gltfMaterialLodSelectionKey(
                 state,
                 renderInstanceKey(outerIndex),
                 primitive,
@@ -2071,7 +2058,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   ): number {
     const topology = this.#preparedGltf.packetTopology;
     const catalog = topology.catalog;
-    const selected = this.#selectedGltfFramePackets;
+    const selected = this.#gltfPacketSelection.selected;
     if (packetCursor >= packetEnd) return packetCursor;
     const firstPacketIndex = selected.orderedPacketIndices[packetCursor]!;
     readPacketRootSourceInto(
@@ -2347,181 +2334,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       view,
       viewportSize,
     });
-  }
-
-  #prepareSharedViewGltfLodSelections(plan: FramePlan, frameViews: FrameViews): void {
-    this.#preparedGltf.sharedViewLods.beginFrame();
-
-    for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
-      copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
-      this.#visitGltfLodRoots(plan, this.#renderViewProjection, 1);
-    }
-    this.#preparedGltf.sharedViewLods.finalizeNodes();
-
-    for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
-      copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
-      this.#visitGltfLodRoots(plan, this.#renderViewProjection, 2);
-    }
-    this.#preparedGltf.sharedViewLods.finalizeMaterials();
-  }
-
-  #selectGltfFramePackets(plan: FramePlan, frameViews: FrameViews): void {
-    const topology = this.#preparedGltf.packetTopology;
-    const selected = this.#selectedGltfFramePackets;
-    const packetSelections = this.#preparedGltf.sharedViewLods.packetSelections;
-    beginSelectedFramePacketViews(selected, topology.catalog, frameViews.count);
-    for (let viewIndex = 0; viewIndex < frameViews.count; viewIndex += 1) {
-      beginSelectedFramePacketView(selected, topology.catalog, viewIndex);
-      copyFrameViewMatrixInto(this.#renderViewProjection, frameViews.viewProjections, viewIndex);
-      for (let occurrenceIndex = 0; occurrenceIndex < topology.occurrenceCount; occurrenceIndex += 1) {
-        const requestRow = plan.gltfRequestRows[occurrenceIndex]!;
-        const node = plan.nodes[requestRow.nodeIndex] as AnyGltfNode;
-        const instanceViews = node.kind === "gltf-instances"
-          ? this.#gltfInstanceTransforms.views(node.instances)
-          : undefined;
-        const rootHandle = node.kind === "gltf" ? this.#sceneBindings.handle(node) : undefined;
-        const ordinaryRootModel = node.kind === "gltf"
-          ? transformMat4Into(
-              this.#sharedViewLodRootModel,
-              rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle),
-            )
-          : undefined;
-        const first = topology.occurrenceFirsts[occurrenceIndex]!;
-        const end = first + topology.occurrenceCounts[occurrenceIndex]!;
-        for (let packetIndex = first; packetIndex < end; packetIndex += 1) {
-          if (!framePacketLodRequirementsMatch(
-            topology.catalog,
-            topology.requirements,
-            packetIndex,
-            packetSelections.selectedLevels,
-            packetSelections.selectionEpochs,
-            packetSelections.epoch,
-          )) continue;
-          const outerIndex = topology.catalog.instanceFirsts[packetIndex]!;
-          const rootModel = instanceViews?.rootModels[outerIndex] ?? ordinaryRootModel;
-          if (rootModel === undefined) continue;
-          multiplyMat4Into(this.#sharedViewLodRootViewProjection, this.#renderViewProjection, rootModel);
-          const hasBounds = readPacketBoundsInto(
-            topology.resources,
-            topology.catalog.boundsIds[packetIndex]!,
-            this.#gltfPacketBoundsScratch,
-          );
-          if (!isBoundsVisible(
-            hasBounds ? this.#gltfPacketBoundsScratch : undefined,
-            this.#sharedViewLodRootViewProjection,
-          )) continue;
-          appendSelectedFramePacket(selected, topology.catalog, packetIndex);
-        }
-      }
-      endSelectedFramePacketView(selected, topology.catalog, viewIndex);
-    }
-  }
-
-  #visitGltfLodRoots(
-    plan: FramePlan,
-    viewProjection: Mat4,
-    phase: 1 | 2,
-  ): void {
-    let renderInstanceOrdinal = 0;
-    for (const planNode of plan.nodes) {
-      if (planNode.kind !== "gltf" && planNode.kind !== "gltf-instances") continue;
-      const node = planNode;
-      const ordinal = renderInstanceOrdinal;
-      renderInstanceOrdinal += 1;
-      const state = this.#gltfState(node);
-      if (state.status !== "ready" || (!state.hasNodeLod && !state.hasMaterialLod)) continue;
-      if (node.kind === "gltf-instances") {
-        const views = this.#gltfInstanceTransforms.views(node.instances);
-        for (let outerIndex = 0; outerIndex < node.instances.count; outerIndex += 1) {
-          const rootModel = views.rootModels[outerIndex]!;
-          multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, rootModel);
-          this.#observeSharedViewGltfLodRoot(
-            state, node, `instance:${ordinal}:${outerIndex}`, this.#sharedViewLodRootViewProjection, phase,
-          );
-        }
-        continue;
-      }
-      const rootHandle = this.#sceneBindings.handle(node);
-      const rootTransform = rootHandle === undefined ? node.transform : readRenderObjectHandleTransform(rootHandle);
-      transformMat4Into(this.#sharedViewLodRootModel, rootTransform);
-      multiplyMat4Into(this.#sharedViewLodRootViewProjection, viewProjection, this.#sharedViewLodRootModel);
-      this.#observeSharedViewGltfLodRoot(
-        state, node, `instance:${ordinal}`, this.#sharedViewLodRootViewProjection, phase,
-      );
-    }
-  }
-
-  #observeSharedViewGltfLodRoot(
-    state: GltfState,
-    node: AnyGltfNode,
-    renderInstanceKey: string,
-    rootViewProjectionModel: Mat4,
-    phase: 1 | 2,
-  ): void {
-    const selectedVariantIndex = phase === 2 && state.hasMaterialVariants
-      ? selectedGltfVariantIndex(state.variants, node.variant)
-      : undefined;
-    for (const primitive of state.primitives) {
-      const nodeLod = primitive.nodeLod;
-      if (phase === 1) {
-        if (nodeLod === undefined) continue;
-        const selectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
-        const id = this.#preparedGltf.sharedViewLods.nodeSelectionId(
-          state.key,
-          selectionKey,
-          nodeLod,
-          state.primitives,
-        );
-        this.#preparedGltf.sharedViewLods.touchNode(id);
-        if (nodeLod.level !== 0) {
-          for (const bounds of primitive.localBounds) {
-            if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
-            this.#preparedGltf.sharedViewLods.observeNodeFallback(id, nodeLod.level);
-          }
-          continue;
-        }
-        for (const bounds of primitive.localBounds) {
-          if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
-          this.#preparedGltf.sharedViewLods.observeCoverage(
-            id,
-            projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
-          );
-        }
-        continue;
-      }
-      if (nodeLod !== undefined) {
-        const nodeSelectionKey = `${state.key}:${renderInstanceKey}:node:${nodeLod.group}`;
-        if (this.#preparedGltf.sharedViewLods.selectedLevel(state.key, nodeSelectionKey) !== nodeLod.level) continue;
-      }
-      const primitiveMaterial = selectedVariantIndex === undefined
-        ? primitive.baseMaterial
-        : gltfPrimitiveMaterialForVariant(selectedVariantIndex, primitive);
-      const materialLod = primitiveMaterial.materialLod;
-      if (materialLod === undefined) continue;
-      for (let instanceIndex = 0; instanceIndex < primitive.localBounds.length; instanceIndex += 1) {
-        const bounds = primitive.localBounds[instanceIndex];
-        if (!isBoundsVisible(bounds, rootViewProjectionModel)) continue;
-        const selectionKey = this.#gltfMaterialLodSelectionKey(
-          state, renderInstanceKey, primitive, primitiveMaterial, instanceIndex,
-        );
-        const id = this.#preparedGltf.sharedViewLods.materialSelectionId(state.key, selectionKey, materialLod);
-        this.#preparedGltf.sharedViewLods.touchMaterial(id);
-        this.#preparedGltf.sharedViewLods.observeCoverage(
-          id,
-          projectedBoundsScreenCoverage(bounds, rootViewProjectionModel, this.#projectedBoundsWorkspace),
-        );
-      }
-    }
-  }
-
-  #gltfMaterialLodSelectionKey(
-    state: GltfState,
-    renderInstanceKey: string,
-    primitive: LoadedGltfPrimitive,
-    primitiveMaterial: LoadedGltfPrimitiveMaterial,
-    instanceIndex: number,
-  ): string {
-    return `${state.key}:${renderInstanceKey}:material:${primitive.key}:${primitiveMaterial.selectionKey}:instance:${instanceIndex}`;
   }
 
   #drawGeometry(

@@ -56,6 +56,8 @@ Completed in the current worktree:
   identity, local-bounds caching, and transient packet reverse lookup.
 - `SurfaceLightResolver` owns scene/studio and glTF light-set resolution,
   upload-readiness projection, transforms, and stable glTF light-scope identity.
+- `GltfPacketSelectionOwner` owns shared-view node/material LOD observation,
+  visibility workspaces, and retained per-view packet selection.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
