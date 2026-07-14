@@ -137,6 +137,67 @@ describe("renderer runtime ownership", () => {
     runtime.dispose();
   });
 
+  it("finishes prepared runtime disposal after an image-owner failure", async () => {
+    const runtime = new PreparedGltfRuntime();
+    const key = gltfRequestKey("/dispose.glb", undefined);
+    runtime.ensure(key, "/dispose.glb", undefined, 1, 0);
+    const observed: Array<string | undefined> = [];
+    runtime.observeState(key, (state) => observed.push(state?.status));
+    runtime.configureImages({
+      dispose: () => {
+        throw new Error("image disposal failed");
+      },
+    } as never);
+
+    expect(() => runtime.dispose()).toThrow("image disposal failed");
+    expect(runtime.states.size).toBe(0);
+    expect(observed).toEqual(["loading", undefined]);
+    await expect(runtime.scheduler.run(new AbortController().signal, () => undefined))
+      .rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("discards every prepared CPU admission owner after a release failure", () => {
+    const runtime = new PreparedGltfRuntime();
+    let failAsset = true;
+    let geometryReleases = 0;
+    let transientCancels = 0;
+    const admission = {
+      assetDecode: {
+        release: () => {
+          if (failAsset) throw new Error("asset lease release failed");
+          return true;
+        },
+      },
+      geometry: {
+        release: () => {
+          geometryReleases += 1;
+          return true;
+        },
+      },
+      transient: {
+        cancel: () => {
+          transientCancels += 1;
+          return true;
+        },
+        commit: () => ({ release: () => true }),
+      },
+    };
+
+    expect(() => runtime.discardCpuAdmission(admission))
+      .toThrow("asset lease release failed");
+    expect({ geometryReleases, transientCancels }).toEqual({
+      geometryReleases: 1,
+      transientCancels: 1,
+    });
+    expect(admission.geometry).toBeUndefined();
+    expect(admission.transient).toBeUndefined();
+
+    failAsset = false;
+    runtime.discardCpuAdmission(admission);
+    expect(admission.assetDecode).toBeUndefined();
+    runtime.dispose();
+  });
+
   it("owns VT request identity and rotates frame admission fairly", () => {
     const runtime = virtualTextureShell();
     const first = virtualTextureState("first", runtime.nextAdmissionTicket());

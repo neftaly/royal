@@ -75,6 +75,30 @@ export type PreparedGltfCpuOwnership = {
   readonly scheduleCapacityWake: () => void;
 };
 
+type PreparedGltfCpuLeases = {
+  assetDecode: ResourceGovernorLease | undefined;
+  geometry: ResourceGovernorLease | undefined;
+};
+
+const releasePreparedGltfCpuLeases = (leases: PreparedGltfCpuLeases): void => {
+  let firstFailure: unknown;
+  let failed = false;
+  const release = (key: keyof PreparedGltfCpuLeases): void => {
+    const lease = leases[key];
+    if (lease === undefined) return;
+    try {
+      lease.release();
+      leases[key] = undefined;
+    } catch (error) {
+      if (!failed) firstFailure = error;
+      failed = true;
+    }
+  };
+  release("assetDecode");
+  release("geometry");
+  if (failed) throw firstFailure;
+};
+
 export type PreparedGltfStateObserver = (state: PreparedGltfState | undefined) => void;
 
 /**
@@ -89,10 +113,7 @@ export class PreparedGltfRuntime {
   #nextInstanceKey = 1;
   #cpuOwnership: PreparedGltfCpuOwnership | undefined;
   #cpuCapacityWakeSuppressed = false;
-  readonly #cpuLeases = new Map<string, {
-    assetDecode?: ResourceGovernorLease;
-    geometry?: ResourceGovernorLease;
-  }>();
+  readonly #cpuLeases = new Map<string, PreparedGltfCpuLeases>();
   readonly #states = new Map<string, PreparedGltfState>();
   readonly #statesByNode = new WeakMap<AnyGltfNode, PreparedGltfState>();
   readonly #stateObservers = new Map<string, Set<PreparedGltfStateObserver>>();
@@ -332,11 +353,22 @@ export class PreparedGltfRuntime {
   }
 
   dispose(): void {
-    this.scheduler.dispose();
-    this.disposeImages();
-    for (const key of this.#cpuLeases.keys()) this.releaseCpuLeases(key);
-    this.clear();
+    let firstFailure: unknown;
+    let failed = false;
+    const cleanup = (action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        if (!failed) firstFailure = error;
+        failed = true;
+      }
+    };
+    cleanup(() => this.scheduler.dispose());
+    cleanup(() => this.disposeImages());
+    for (const key of Array.from(this.#cpuLeases.keys())) cleanup(() => this.releaseCpuLeases(key));
+    cleanup(() => this.clear());
     this.#stateObservers.clear();
+    if (failed) throw firstFailure;
   }
 
   reserveCpuAdmission(assetKey: string, estimate: GltfPreparationCpuEstimate): PreparedGltfCpuAdmission {
@@ -456,45 +488,59 @@ export class PreparedGltfRuntime {
       if (capacityReleased && !previouslySuppressed) ownership.scheduleCapacityWake();
     }
     this.#cpuLeases.set(assetKey, {
-      ...(admission.assetDecode === undefined ? {} : { assetDecode: admission.assetDecode }),
-      ...(admission.geometry === undefined ? {} : { geometry: admission.geometry }),
+      assetDecode: admission.assetDecode,
+      geometry: admission.geometry,
     });
   }
 
   discardCpuAdmission(admission: PreparedGltfCpuAdmission): void {
     const previouslySuppressed = this.#cpuCapacityWakeSuppressed;
     this.#cpuCapacityWakeSuppressed = true;
+    let firstFailure: unknown;
+    let failed = false;
+    const cleanup = (action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        if (!failed) firstFailure = error;
+        failed = true;
+      }
+    };
     try {
-      admission.transient?.cancel();
-      admission.transient = undefined;
-      admission.assetDecode?.release();
-      admission.assetDecode = undefined;
-      admission.geometry?.release();
-      admission.geometry = undefined;
+      if (admission.transient !== undefined) cleanup(() => {
+        admission.transient!.cancel();
+        admission.transient = undefined;
+      });
+      cleanup(() => releasePreparedGltfCpuLeases(admission));
     } finally {
       this.#cpuCapacityWakeSuppressed = previouslySuppressed;
     }
+    if (failed) throw firstFailure;
   }
 
   releaseCpuLeases(assetKey: string): void {
     const leases = this.#cpuLeases.get(assetKey);
     if (leases === undefined) return;
-    leases.assetDecode?.release();
-    leases.geometry?.release();
-    this.#cpuLeases.delete(assetKey);
+    try {
+      releasePreparedGltfCpuLeases(leases);
+    } finally {
+      if (leases.assetDecode === undefined && leases.geometry === undefined) {
+        this.#cpuLeases.delete(assetKey);
+      }
+    }
   }
 
   releaseDecodeLease(assetKey: string): void {
     const leases = this.#cpuLeases.get(assetKey);
     leases?.assetDecode?.release();
-    if (leases !== undefined) delete leases.assetDecode;
+    if (leases !== undefined) leases.assetDecode = undefined;
   }
 
   takeDecodeRecipeLease(assetKey: string, initialBytes: number): GltfImageRecipeLease {
     const ownership = this.#requireCpuOwnership();
     const leases = this.#cpuLeases.get(assetKey);
     let lease = leases?.assetDecode;
-    if (leases !== undefined) delete leases.assetDecode;
+    if (leases !== undefined) leases.assetDecode = undefined;
     let released = false;
     let retainedBytes = initialBytes;
     if (lease === undefined && initialBytes !== 0) {
