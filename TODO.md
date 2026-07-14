@@ -50,6 +50,8 @@ Completed in the current worktree:
 - `GltfMaterialPreparationArena` owns prepared surface-material caches, reverse
   image-readiness invalidation, batch-class identity, texture-slot
   normalization, and material-variant resolution.
+- `WebGlContextCapabilityOwner` owns negotiated context attributes, restore
+  validation, extension discovery, and immutable numeric capability snapshots.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup

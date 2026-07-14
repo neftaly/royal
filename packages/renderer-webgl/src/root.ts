@@ -350,6 +350,10 @@ import {
   STUDIO_ENVIRONMENT_IRRADIANCE,
 } from "./webgl/studio-environment";
 import { WebGlContextLifecycleOwner } from "./context-lifecycle-owner";
+import {
+  WebGlContextCapabilityOwner,
+  type WebGlContextCapabilities,
+} from "./context-capability-owner";
 import { WebGlFramePublicationOwner } from "./frame-publication-owner";
 import { WebGlRenderClockOwner } from "./render-clock-owner";
 import { WebGlCanvasViewportOwner } from "./canvas-viewport-owner";
@@ -615,7 +619,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
   readonly #canvas: HTMLCanvasElement;
   readonly #gl: WebGL2RenderingContext;
   readonly #options: NormalizedWebGlRootOptions;
-  readonly #requestedContextOptions: WebGlRootOptions;
+  readonly #contextCapabilities: WebGlContextCapabilityOwner;
   readonly #frameViews = createFrameViews();
   readonly #renderProjection = identityMat4();
   readonly #renderView = identityMat4();
@@ -719,7 +723,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
       return typeof reservation === "string" ? undefined : reservation;
     },
   });
-  #hdrSupported = false;
   readonly #clusteredLights: ClusteredLightArena;
   readonly #scenePlan = new ScenePlanTransactionOwner({
     rebuildTopology: (plan) => this.#rebuildGltfPacketTopology(plan),
@@ -733,8 +736,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
     renderLatest: () => this.#renderLatestScene(),
     reportScheduledFailure: (failure) => this.#framePublication.reportRenderFailure(failure),
   });
-  #maxTextureImageUnits = 0;
-  #maxTextureSize = 0;
   readonly #pickingController: PickingController;
   readonly #viewport: WebGlCanvasViewportOwner;
   readonly #geometryDrawArena: GeometryDrawArena;
@@ -769,8 +770,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       releaseSurfaceRenderTargetContextHandles(this.#surfaceRenderTargets, this.#gl);
       releaseProgramArenaContextHandles(this.#programArena);
       releaseClusteredLightContextHandles(this.#clusteredLights);
-      this.#validateRestoredContextAttributes();
-      this.#probeContextCapabilities();
+      this.#configureContextCapabilities(this.#contextCapabilities.validateRestoreAndProbe());
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       this.#ordinaryTextures.restoreContext(this.#context.generation);
       this.#renderClock.retain();
@@ -810,10 +810,6 @@ class WebGlRootImpl implements InternalWebGlRoot {
         renderObjectTransform: (node) => this.#sceneBindings.transform(node),
       });
       const requestedOptions = normalizeOptions(options);
-      this.#requestedContextOptions = {
-        ...options,
-        resourceGovernorPolicy: requestedOptions.resourceGovernorPolicy,
-      };
       this.#resourceGovernor = createResourceGovernor(requestedOptions.resourceGovernorPolicy);
       this.#preparedGltf.configureCpuOwnership({
         governor: this.#resourceGovernor,
@@ -861,7 +857,11 @@ class WebGlRootImpl implements InternalWebGlRoot {
         throw new Error("Royal WebGL renderer requires a WebGL2 context");
       }
       this.#gl = gl;
-      this.#options = this.#validatedContextOptions(requestedOptions);
+      this.#contextCapabilities = new WebGlContextCapabilityOwner(gl, options);
+      this.#options = Object.freeze({
+        ...requestedOptions,
+        ...this.#contextCapabilities.attributes,
+      });
       this.#clusteredLights = createClusteredLightArena(gl, {
         replace: (lease, cost) => {
           const reservation = replaceResourceGovernorLease(this.#resourceGovernor, lease, cost);
@@ -980,7 +980,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         textureResidencyIntent: this.#textureResidencyIntent,
         virtualTextures: this.#virtualTextureGpu,
       });
-      this.#probeContextCapabilities();
+      this.#configureContextCapabilities(this.#contextCapabilities.probe());
       restoreVertexInputArenaContext(this.#vertexInputs, this.#context.generation);
       // Replace the no-context cleanup registered before construction with an
       // active-context cleanup now that the vertex arena owns this generation.
@@ -1002,58 +1002,17 @@ class WebGlRootImpl implements InternalWebGlRoot {
     }
   }
 
-  #probeContextCapabilities(): void {
-    const gl = this.#gl;
+  #configureContextCapabilities(capabilities: WebGlContextCapabilities): void {
     configureProgramArenaParallelCompile(
       this.#programArena,
-      gl.getExtension("KHR_parallel_shader_compile") ?? undefined,
+      capabilities.parallelShaderCompile,
     );
-    this.#hdrSupported = gl.getExtension("EXT_color_buffer_float") !== null;
-    const maxTextureImageUnits = Number(gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS));
-    this.#maxTextureImageUnits = Number.isFinite(maxTextureImageUnits) ? maxTextureImageUnits : 0;
-    this.#surfaceExecution.configureTextureUnits(this.#maxTextureImageUnits);
-    const maxTextureSize = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE));
-    this.#maxTextureSize = Number.isFinite(maxTextureSize) ? maxTextureSize : 0;
-    configureClusteredLightArena(this.#clusteredLights, this.#maxTextureImageUnits, this.#maxTextureSize);
-  }
-
-  #validatedContextOptions(base: NormalizedWebGlRootOptions): NormalizedWebGlRootOptions {
-    const attributes = this.#gl.getContextAttributes();
-    if (
-      attributes === null
-      || typeof attributes.alpha !== "boolean"
-      || typeof attributes.antialias !== "boolean"
-    ) {
-      throw new Error("Royal WebGL context attributes are unavailable");
-    }
-    const { alpha, antialias } = attributes;
-    if (this.#requestedContextOptions.alpha !== undefined && alpha !== this.#requestedContextOptions.alpha) {
-      throw new Error(
-        `Royal WebGL context requested alpha=${this.#requestedContextOptions.alpha} but received alpha=${alpha}`,
-      );
-    }
-    if (
-      this.#requestedContextOptions.antialias !== undefined
-      && antialias !== this.#requestedContextOptions.antialias
-    ) {
-      throw new Error(
-        `Royal WebGL context requested antialias=${this.#requestedContextOptions.antialias} but received antialias=${antialias}`,
-      );
-    }
-    return Object.freeze({
-      alpha,
-      antialias,
-      generatedImageVirtualTextures: base.generatedImageVirtualTextures,
-      generatedSvgVirtualTextureRasterDensity: base.generatedSvgVirtualTextureRasterDensity,
-      resourceGovernorPolicy: base.resourceGovernorPolicy,
-    });
-  }
-
-  #validateRestoredContextAttributes(): void {
-    const restored = this.#validatedContextOptions(this.#options);
-    if (restored.alpha !== this.#options.alpha || restored.antialias !== this.#options.antialias) {
-      throw new Error("Royal WebGL context restoration changed renderer context attributes");
-    }
+    this.#surfaceExecution.configureTextureUnits(capabilities.maxTextureImageUnits);
+    configureClusteredLightArena(
+      this.#clusteredLights,
+      capabilities.maxTextureImageUnits,
+      capabilities.maxTextureSize,
+    );
   }
 
   get canvas(): HTMLCanvasElement {
@@ -1184,10 +1143,10 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#processOrdinaryTextureUploads();
       this.#gltfInstanceTransforms.beginFrame();
       const wantsHdr = this.#planWantsHdr(plan);
-      if (wantsHdr && !this.#hdrSupported) {
+      if (wantsHdr && !this.#contextCapabilities.capabilities.hdrColorBuffer) {
         throw new Error("Royal physical lighting requires EXT_color_buffer_float");
       }
-      const useHdr = wantsHdr && this.#hdrSupported;
+      const useHdr = wantsHdr && this.#contextCapabilities.capabilities.hdrColorBuffer;
       const surfaceLights = this.#sceneSurfaceLightSet(plan.environment);
       const toneMapping = { ...sceneToneMappingState(plan), hdrOutput: useHdr };
       this.#prepareSharedViewGltfLodSelections(plan, frameViews);
@@ -2857,9 +2816,9 @@ class WebGlRootImpl implements InternalWebGlRoot {
       const gpuArena = virtualTextureGpuArenaSnapshot(this.#virtualTextureGpu);
       const admission = virtualTextureGpuAdmission(
         options,
-        this.#maxTextureSize,
+        this.#contextCapabilities.capabilities.maxTextureSize,
         gpuArena.budgetBytes - gpuArena.chargedBytes,
-        this.#maxTextureImageUnits,
+        this.#contextCapabilities.capabilities.maxTextureImageUnits,
       );
       const persistentGpuMaximum = this.#maximumResourceClassPersistentGpuBytes("virtual-texture");
       if (admission.kind === "dormant" && admission.requiredBytes > persistentGpuMaximum) {
