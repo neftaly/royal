@@ -53,7 +53,7 @@ export type VirtualTextureRuntimeShellOptions = Omit<
   "loadPage" | "resources"
 > & {
   readonly disposed: () => boolean;
-  readonly generatedImageVirtualTextures: boolean;
+  readonly automaticVirtualTextures: boolean;
   readonly loadImageSource: (uri: string, signal: AbortSignal) => Promise<TexImageSource>;
 };
 
@@ -272,7 +272,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   registerAutoDecodedSource(texture: TextureAssetUploadRef, source: LoadedTextureSource): void {
-    if (!this.#options.generatedImageVirtualTextures) return;
+    if (!this.#options.automaticVirtualTextures) return;
     if (isDecodedCompressedTexture(source)) return;
     const textureKey = textureCacheKey(texture);
     const retainedSourceBytes = (() => {

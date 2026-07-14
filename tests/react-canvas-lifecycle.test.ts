@@ -17,7 +17,7 @@ describe("Canvas renderer root cleanup", () => {
     const defaults = canvasContextOptionsSemanticKey(undefined);
     expect(canvasContextOptionsSemanticKey({})).toBe(defaults);
     expect(canvasContextOptionsSemanticKey({ alpha: true, antialias: true })).toBe(defaults);
-    expect(canvasContextOptionsSemanticKey({ generatedImageVirtualTextures: true })).toBe(defaults);
+    expect(canvasContextOptionsSemanticKey({ automaticVirtualTextures: true })).toBe(defaults);
     expect(canvasContextOptionsSemanticKey({ alpha: false })).not.toBe(defaults);
     expect(canvasContextOptionsSemanticKey({ antialias: false })).not.toBe(defaults);
   });
@@ -50,7 +50,7 @@ describe("Canvas renderer root cleanup", () => {
     const explicit = rendererRootOptionsSemanticKey({
       alpha: true,
       antialias: true,
-      generatedImageVirtualTextures: false,
+      automaticVirtualTextures: false,
     });
 
     expect(rendererRootOptionsSemanticKey({})).toBe(omitted);

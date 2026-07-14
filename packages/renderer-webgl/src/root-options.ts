@@ -13,7 +13,7 @@ export const normalizeWebGlRootOptions = (
   return Object.freeze({
     alpha: options.alpha ?? true,
     antialias: options.antialias ?? true,
-    generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
+    automaticVirtualTextures: options.automaticVirtualTextures ?? false,
     resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
   });
 };

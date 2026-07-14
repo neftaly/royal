@@ -51,7 +51,7 @@ describe('Canvas public scene boundary', () => {
 
   it('keeps Canvas renderer options at product-level creation choices', () => {
     const rendererOptions = {
-      generatedImageVirtualTextures: true,
+      automaticVirtualTextures: true,
     } satisfies RendererOptions;
 
     const props = { rendererOptions, scene: renderScene } satisfies CanvasProps;
@@ -60,7 +60,9 @@ describe('Canvas public scene boundary', () => {
     if (false) {
       // @ts-expect-error Backend scheduling classes are not React renderer options.
       const internalPolicy = { resourceGovernorPolicy: {} } satisfies RendererOptions;
-      expect(internalPolicy).toBeDefined();
+      // @ts-expect-error The implementation-shaped pre-release option was removed.
+      const legacyAutomaticVt = { generatedImageVirtualTextures: true } satisfies RendererOptions;
+      expect([internalPolicy, legacyAutomaticVt]).toHaveLength(2);
     }
   });
 

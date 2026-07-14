@@ -530,7 +530,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
   it("freezes normalized root options", () => {
     const { gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl), {
-      generatedImageVirtualTextures: true,
+      automaticVirtualTextures: true,
       resourceGovernorPolicy: vtPersistentGpuHardLimitPolicy(123_456),
     });
 
@@ -540,7 +540,7 @@ describe("WebGL renderer virtual texturing demand, shaders, and capabilities", (
     expect(root.options).toEqual({
       alpha: true,
       antialias: true,
-      generatedImageVirtualTextures: true,
+      automaticVirtualTextures: true,
     });
     expect(root.snapshot()).toMatchObject({
       resourceGovernor: {

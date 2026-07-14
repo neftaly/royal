@@ -210,7 +210,9 @@ describe("renderer-core public API", () => {
       webglApi.WebGlRoot;
       // @ts-expect-error Backend scheduling policy is not a product-level root option.
       const internalPolicy = { resourceGovernorPolicy: {} } satisfies import("@royal/renderer-webgl").WebGlRootOptions;
-      void internalPolicy;
+      // @ts-expect-error The implementation-shaped pre-release option was removed.
+      const legacyAutomaticVt = { generatedImageVirtualTextures: true } satisfies import("@royal/renderer-webgl").WebGlRootOptions;
+      void [internalPolicy, legacyAutomaticVt];
     }
   });
 

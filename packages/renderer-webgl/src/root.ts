@@ -586,7 +586,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
       this.#gl = gl;
       this.#contextCapabilities = new WebGlContextCapabilityOwner(gl, options);
       this.#options = Object.freeze({
-        generatedImageVirtualTextures: requestedOptions.generatedImageVirtualTextures,
+        automaticVirtualTextures: requestedOptions.automaticVirtualTextures,
         ...this.#contextCapabilities.attributes,
       });
       this.#clusteredLights = createClusteredLightArena(gl, {
@@ -743,7 +743,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         diagnostic: (message, key) => this.#recordDiagnostic(message, key),
         disposed: () => this.#disposed,
         frame: () => this.#framePublication.frame,
-        generatedImageVirtualTextures: this.#options.generatedImageVirtualTextures,
+        automaticVirtualTextures: this.#options.automaticVirtualTextures,
         gpu: this.#virtualTextureGpu,
         invalidate: () => this.invalidate(),
         loadImageSource: (uri, signal) => loadImage(uri, signal),

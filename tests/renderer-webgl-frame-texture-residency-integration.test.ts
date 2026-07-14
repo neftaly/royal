@@ -57,7 +57,7 @@ describe("WebGL frame texture residency arbitration", () => {
     vi.stubGlobal("Image", ControlledImage);
     installCanvas2d();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const texture = imageTexture("/textures/shared-order.png");
     const virtual = unlitMaterial({ texture });
     const ordinary = ordinaryConsumer(texture);
@@ -82,7 +82,7 @@ describe("WebGL frame texture residency arbitration", () => {
     installCanvas2d();
     const marker = new Error("post-bind frame failure");
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const texture = imageTexture("/textures/frame-rollback.png");
     const virtual = unlitMaterial({ texture });
     const ordinary = ordinaryConsumer(texture);
@@ -102,7 +102,7 @@ describe("WebGL frame texture residency arbitration", () => {
     vi.stubGlobal("Image", ControlledImage);
     installCanvas2d();
     const { calls, gl } = fakeGl({ maxTextureImageUnits: 1 });
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/constrained.png") });
 
     root.render(renderScene(material));
@@ -136,7 +136,7 @@ describe("WebGL frame texture residency arbitration", () => {
       },
     });
     canvas = fakeCanvas(gl);
-    const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(canvas, { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/re-promote.png") });
     await prepareGeneratedVirtualTexture(root, material);
     const sourceCount = ControlledImage.instances.length;

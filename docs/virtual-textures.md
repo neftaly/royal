@@ -4,8 +4,8 @@ Royal has two deliberately separate virtual-texture entry points. Use
 `virtualTexture('/terrain.vt.json')` for authored data. To let the renderer
 generate VTs for ordinary base-color image textures used by triangle geometry
 with `TEXCOORD_0`, explicitly set
-`generatedImageVirtualTextures: true` in React `Canvas.rendererOptions` or
-`createRendererRoot(..., { generatedImageVirtualTextures: true })`. The default
+`automaticVirtualTextures: true` in React `Canvas.rendererOptions` or
+`createRendererRoot(..., { automaticVirtualTextures: true })`. The default
 is `false`; Royal does not probe for a hidden `imageUri + '.vt.json'` sidecar.
 Decoded raster sources qualify when their longest dimension is at least 257 px.
 Browser-decoded SVG sources use the same page-source contract at a fixed

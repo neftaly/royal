@@ -38,7 +38,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const { canvases, contexts } = installCanvas2d();
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/generated.png") });
 
     root.render(renderScene(material));
@@ -115,7 +115,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const { contexts } = installCanvas2d();
     const { calls, gl } = fakeGl();
     const canvas = fakeCanvas(gl);
-    const root = createWebGlRoot(canvas, { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(canvas, { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/plain.svg") });
     const svgText = [
       "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\" onload=\"alert(1)\">",
@@ -187,7 +187,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     vi.stubGlobal("URL", TestURL);
     const { contexts } = installCanvas2d();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const svgText = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" fill=\"#0af\"/></svg>";
     const svgUri = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
     const material = unlitMaterial({ texture: imageTexture(svgUri) });
@@ -229,7 +229,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     vi.stubGlobal("URL", TestURL);
     const { contexts } = installCanvas2d();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/webkit.svg") });
 
     root.render(renderScene(material));
@@ -256,7 +256,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     const { canvases, contexts } = installCanvas2d();
     installFetchQueue();
     const { gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const material = unlitMaterial({ texture: imageTexture("/textures/large-generated.png") });
 
     root.render(renderScene(material));

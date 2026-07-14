@@ -25,7 +25,7 @@ export const fakeRendererRoot = ({
   options = {
     alpha: true,
     antialias: true,
-    generatedImageVirtualTextures: false,
+    automaticVirtualTextures: false,
   },
   diagnostics = {},
   pick = () => undefined,

@@ -23,7 +23,7 @@ export interface WebGlRootOptions {
    * Authored `virtualTexture(...)` resources are unaffected.
    * @defaultValue `false`
    */
-  readonly generatedImageVirtualTextures?: boolean;
+  readonly automaticVirtualTextures?: boolean;
 }
 
 export type ResolvedWebGlRootOptions = Required<WebGlRootOptions>;

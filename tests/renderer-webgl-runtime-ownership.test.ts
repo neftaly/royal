@@ -49,7 +49,7 @@ const virtualTextureShell = (): VirtualTextureRuntimeShell => new VirtualTexture
   diagnostic: vi.fn(),
   disposed: () => false,
   frame: () => 0,
-  generatedImageVirtualTextures: false,
+  automaticVirtualTextures: false,
   gpu: {} as never,
   invalidate: vi.fn(),
   loadImageSource: () => Promise.reject(new Error("unused")),

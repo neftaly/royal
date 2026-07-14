@@ -143,7 +143,7 @@ on `<Canvas>` recreates its renderer root.
 ```tsx
 <Canvas
   rendererOptions={{
-    generatedImageVirtualTextures: true,
+    automaticVirtualTextures: true,
   }}
   scene={renderScene}
 />
@@ -159,7 +159,7 @@ The imperative root separates its two observational models:
 
 - `alpha` and `antialias` both default to `true` and are requests made when the
   WebGL context is created.
-- `generatedImageVirtualTextures` defaults to `false`. Enable it to generate
+- `automaticVirtualTextures` defaults to `false`. Enable it to generate
   VTs for ordinary base-color image textures used by triangle geometry with
   `TEXCOORD_0`. Decoded raster sources qualify when their longest dimension is
   at least 257 px. Browser-decoded SVG uses the same page-source implementation

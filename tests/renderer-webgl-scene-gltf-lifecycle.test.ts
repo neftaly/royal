@@ -760,7 +760,7 @@ describe("WebGL renderer scene and glTF lifecycle regressions", () => {
     const viewport = installViewportInvalidationStubs();
     const loader = installStagedGltfLoader();
     const { calls, gl } = fakeGl();
-    const root = createWebGlRoot(fakeCanvas(gl), { generatedImageVirtualTextures: true });
+    const root = createWebGlRoot(fakeCanvas(gl), { automaticVirtualTextures: true });
     const renderGraph = renderScene([
       directionalLight({
         color: [1, 1, 1, 1],

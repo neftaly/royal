@@ -20,18 +20,18 @@ export interface RendererOptions {
    * ordinary texture remains active until generated coverage is ready.
    * @defaultValue `false`
    */
-  readonly generatedImageVirtualTextures?: boolean;
+  readonly automaticVirtualTextures?: boolean;
 }
 
 /** @internal Canonical identity for the product-level options that own a React Canvas lifetime. */
 export const rendererRootOptionsSemanticKey = (options?: RendererOptions): string =>
-  `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.generatedImageVirtualTextures ?? false}`;
+  `${options?.alpha ?? true}:${options?.antialias ?? true}:${options?.automaticVirtualTextures ?? false}`;
 
 /** Normalized creation options retained for the lifetime of a renderer root. */
 export interface ResolvedRendererOptions {
   readonly alpha: boolean;
   readonly antialias: boolean;
-  readonly generatedImageVirtualTextures: boolean;
+  readonly automaticVirtualTextures: boolean;
 }
 
 /** Availability states for the renderer owned by a Canvas. */
@@ -160,14 +160,14 @@ export const createRendererRoot = (
   const root = createWebGlRoot(canvas, options === undefined ? undefined : {
     ...(options.alpha === undefined ? {} : { alpha: options.alpha }),
     ...(options.antialias === undefined ? {} : { antialias: options.antialias }),
-    ...(options.generatedImageVirtualTextures === undefined
+    ...(options.automaticVirtualTextures === undefined
       ? {}
-      : { generatedImageVirtualTextures: options.generatedImageVirtualTextures }),
+      : { automaticVirtualTextures: options.automaticVirtualTextures }),
   });
   const normalizedOptions: ResolvedRendererOptions = Object.freeze({
     alpha: root.options.alpha,
     antialias: root.options.antialias,
-    generatedImageVirtualTextures: root.options.generatedImageVirtualTextures,
+    automaticVirtualTextures: root.options.automaticVirtualTextures,
   });
 
   const royalRoot: RoyalRendererRoot = {

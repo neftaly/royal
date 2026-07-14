@@ -47,7 +47,7 @@ describe("React root public API", () => {
     const canvas = fakeCanvas();
     const root = createRendererRoot(canvas, {
       alpha: false,
-      generatedImageVirtualTextures: true,
+      automaticVirtualTextures: true,
     });
     const renderRoot = emptyScene();
 
@@ -73,7 +73,7 @@ describe("React root public API", () => {
       options: {
         alpha: false,
         antialias: true,
-        generatedImageVirtualTextures: true,
+        automaticVirtualTextures: true,
       },
     });
     const diagnostics: RoyalRendererDiagnosticsSnapshot = root.diagnostics();
@@ -107,7 +107,7 @@ describe("React root public API", () => {
     expect(root.options).toEqual({
       alpha: false,
       antialias: true,
-      generatedImageVirtualTextures: true,
+      automaticVirtualTextures: true,
     });
     expect(Object.isFrozen(root.options)).toBe(true);
     expect(Object.isFrozen(root.diagnostics())).toBe(true);
