@@ -238,7 +238,7 @@ checks lifecycle/glTF-status observer resubscription and scheduled-frame
 failure delivery through an ErrorBoundary followed by a clean reset. Disposed
 checkpoints must have no live governor leases, GPU allocations, or VT work. The
 context-option checkpoint also requires a distinct connected canvas, a detached
-old canvas, callback-ref `null` before reattachment, and no stale coalesced
+old canvas, callback-ref cleanup before reattachment, and no stale coalesced
 pointer move after replacement. The probe is code-split from the ordinary app
 path and is not an example route or
 package export.

@@ -47,6 +47,7 @@ export interface ResolvedRendererOptions {
   readonly resourceGovernorPolicy: ResourceGovernorPolicy;
 }
 
+/** Availability states for the renderer owned by a Canvas. */
 export type RoyalRendererRootLifecycle = "available" | "disposed" | "failed" | "unavailable";
 
 type RoyalRendererRootLifecycleCounters = Readonly<{
@@ -57,6 +58,7 @@ type RoyalRendererRootLifecycleCounters = Readonly<{
   readonly recoveries: number;
 }>;
 
+/** Immutable renderer availability and recovery counters at one point in time. */
 export type RoyalRendererRootLifecycleSnapshot = RoyalRendererRootLifecycleCounters & (
   | Readonly<{
     readonly error?: never;
@@ -68,6 +70,7 @@ export type RoyalRendererRootLifecycleSnapshot = RoyalRendererRootLifecycleCount
   }>
 );
 
+/** Small, stable snapshot for rendering lifecycle UI without diagnostic payloads. */
 export interface RoyalRendererRootSnapshot {
   readonly frame: number;
   readonly lifecycle: RoyalRendererRootLifecycleSnapshot;
@@ -123,6 +126,7 @@ export interface RoyalRendererRoot {
   render(scene: RenderRoot): void;
   /** Canonical resource cleanup hook. */
   dispose(): void;
+  /** Reads the current frame, lifecycle, and normalized creation options. */
   snapshot(): RoyalRendererRootSnapshot;
 }
 

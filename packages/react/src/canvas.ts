@@ -61,18 +61,21 @@ export interface CanvasProps
   readonly children?: ReactNode;
   /** React-owned pointer handlers keyed by stable `pickingId` values in the pure scene. */
   readonly scenePointerEvents?: ScenePointerEvents;
+  /** The owned canvas element, with React 19 callback-ref cleanup semantics preserved. */
   readonly ref?: Ref<HTMLCanvasElement>;
   /**
    * Renderer creation options. Changing a value disposes and recreates the
    * renderer root. Changing `alpha` or `antialias` also replaces the canvas
    * element because browsers fix those attributes on its first WebGL context;
-   * callback and object refs receive `null` before the replacement element.
+   * refs release the old element before receiving the replacement. Callback
+   * refs that return a cleanup use that cleanup instead of a `null` call.
    */
   readonly rendererOptions?: RendererOptions;
   /** Pure renderer data, eagerly lowered before Canvas renders. */
   readonly scene: RenderRoot;
 }
 
+/** Returns the owned canvas, or `null` before it is attached. */
 export const useCanvasElement = (): HTMLCanvasElement | null => {
   const canvas = useContext(CanvasElementContext);
   if (canvas === undefined) {
@@ -82,6 +85,7 @@ export const useCanvasElement = (): HTMLCanvasElement | null => {
   return canvas;
 };
 
+/** Returns the active renderer root, or `null` while Canvas is creating it. */
 export const useCanvasRoot = (): RoyalRendererRoot | null => {
   const root = useContext(CanvasRootContext);
   if (root === undefined) {
@@ -111,15 +115,16 @@ export const useCanvasPick = (): ((input: PickInput) => PickResult | undefined) 
 const assignCanvasRef = (
   ref: Ref<HTMLCanvasElement> | undefined,
   canvas: HTMLCanvasElement | null,
-): void => {
-  if (ref === undefined || ref === null) return;
+): (() => void) | undefined => {
+  if (ref === undefined || ref === null) return undefined;
 
   if (typeof ref === "function") {
-    ref(canvas);
-    return;
+    const cleanup = ref(canvas);
+    return typeof cleanup === "function" ? cleanup : undefined;
   }
 
   ref.current = canvas;
+  return undefined;
 };
 
 /** Renders one pure Royal scene into a Royal-owned canvas element. */
@@ -147,7 +152,14 @@ export const Canvas = ({
   const setCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
     setCanvasElement(canvas);
-    assignCanvasRef(ref, canvas);
+    const externalCleanup = assignCanvasRef(ref, canvas);
+    if (canvas === null) return externalCleanup;
+    return () => {
+      canvasRef.current = null;
+      setCanvasElement(null);
+      if (externalCleanup === undefined) assignCanvasRef(ref, null);
+      else externalCleanup();
+    };
   }, [ref]);
 
   const canvasElementNode = createElement("canvas", {

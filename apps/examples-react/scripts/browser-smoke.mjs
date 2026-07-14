@@ -1283,12 +1283,12 @@ const runReactLifecycleSmoke = async (session) => {
   const replacementCanvas = document.querySelector('canvas');
   const refEventsAfterReplacement = document.querySelector('[data-react-lifecycle-probe]')
     ?.getAttribute('data-canvas-ref-events')?.split(',') ?? [];
-  const lastNullRef = refEventsAfterReplacement.lastIndexOf('null');
+  const lastCleanupRef = refEventsAfterReplacement.findLastIndex((event) => event.startsWith('cleanup-canvas-'));
   const canvasReplacement = {
     newCanvasConnected: replacementCanvas?.isConnected ?? false,
     oldCanvasConnected: initialCanvas.isConnected,
     queuedPointerMoveCancelled,
-    refDetachedBeforeAttach: lastNullRef >= 0 && lastNullRef < refEventsAfterReplacement.length - 1,
+    refCleanupBeforeAttach: lastCleanupRef >= 0 && lastCleanupRef < refEventsAfterReplacement.length - 1,
     refEventsAfterReplacement,
     replaced: replacementCanvas instanceof HTMLCanvasElement && replacementCanvas !== initialCanvas,
   };
@@ -1607,7 +1607,7 @@ const main = async () => {
         || lifecycle?.canvasReplacement?.oldCanvasConnected !== false
         || lifecycle?.canvasReplacement?.newCanvasConnected !== true
         || lifecycle?.canvasReplacement?.queuedPointerMoveCancelled !== true
-        || lifecycle?.canvasReplacement?.refDetachedBeforeAttach !== true
+        || lifecycle?.canvasReplacement?.refCleanupBeforeAttach !== true
         || lifecycle?.remountedObserverState?.lifecycle !== 'available'
         || lifecycle?.remountedObserverState?.asset !== 'idle'
         || lifecycle?.recovered?.lifecycle?.state !== 'available'

@@ -190,6 +190,7 @@ export interface OrbitCameraController {
   readonly subscribeView: (listener: () => void) => () => void;
 }
 
+/** Options for one stable orbit camera controller created by `useOrbitCamera`. */
 export interface UseOrbitCameraOptions {
   /** Initial-only target and distance in metres; angles are radians. */
   readonly initial: OrbitCameraViewOptions;
@@ -251,9 +252,11 @@ export const createOrbitCameraController = (
   };
 };
 
+/** Subscribes React to the controller's latest committed orbit view. */
 export const useOrbitCameraView = (orbit: OrbitCameraController): OrbitCameraView =>
   useSyncExternalStore(orbit.subscribeView, orbit.getView, orbit.getView);
 
+/** Creates one stable orbit camera controller for the lifetime of the component. */
 export const useOrbitCamera = ({
   initial,
   far = 100,
@@ -500,6 +503,7 @@ export const createOrbitControls = (
   };
 };
 
+/** Attaches orbit, pan, wheel, and pinch gestures to the surrounding Canvas. */
 export const OrbitControls = ({
   enabled,
   enablePan,

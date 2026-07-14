@@ -95,12 +95,20 @@ export const ReactLifecycleProbe = (): ReactNode => {
   const canvasRefEvents = useRef<string[]>([]);
   const canvasSerial = useRef(0);
   const observeCanvasRef = useCallback((canvas: HTMLCanvasElement | null) => {
-    const event = canvas === null ? 'null' : `canvas-${canvasSerial.current += 1}`;
-    canvasRefEvents.current.push(event);
-    queueMicrotask(() => {
-      document.querySelector('[data-react-lifecycle-probe]')
-        ?.setAttribute('data-canvas-ref-events', canvasRefEvents.current.join(','));
-    });
+    const record = (event: string): void => {
+      canvasRefEvents.current.push(event);
+      queueMicrotask(() => {
+        document.querySelector('[data-react-lifecycle-probe]')
+          ?.setAttribute('data-canvas-ref-events', canvasRefEvents.current.join(','));
+      });
+    };
+    if (canvas === null) {
+      record('null');
+      return undefined;
+    }
+    const event = `canvas-${canvasSerial.current += 1}`;
+    record(event);
+    return () => record(`cleanup-${event}`);
   }, []);
 
   return (
