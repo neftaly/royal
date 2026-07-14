@@ -70,6 +70,7 @@ type VirtualTextureDemandOwnerOptions = {
  * publication. GPU allocation remains an injected root policy decision.
  */
 export class VirtualTextureDemandOwner {
+  readonly #advanceablePublicationStates: VirtualTextureRuntimeState[] = [];
   readonly #coverageProviders = createVirtualTextureCoverageProviderCache();
   readonly #options: VirtualTextureDemandOwnerOptions;
   readonly #planning = createVirtualTextureDemandPlanningWorkspace();
@@ -147,6 +148,7 @@ export class VirtualTextureDemandOwner {
       });
     }
     this.#publicationStates.length = 0;
+    this.#advanceablePublicationStates.length = 0;
     if (commitFailure === undefined) {
       for (const state of this.#options.runtime.resources.values()) {
         const entry = publication.commits.get(state);
@@ -156,8 +158,11 @@ export class VirtualTextureDemandOwner {
           this.#demandCapacity(state),
           entry?.startSubmission ?? 0,
         );
-        if (!this.#prepareDemand(state, pages)) continue;
+        const prepared = this.#prepareDemand(state, pages);
+        if (prepared === undefined) continue;
         this.#publicationStates.push(state);
+        const requiresConvergence = submissions.some((submission) => submission.viewportDominant === true);
+        if (prepared || !requiresConvergence) this.#advanceablePublicationStates.push(state);
       }
     }
     for (const state of this.#publicationStates) {
@@ -173,11 +178,15 @@ export class VirtualTextureDemandOwner {
       );
     }
     if (commitFailure === undefined) {
-      this.#options.runtime.commitPublication(this.#publicationStates, this.#options.frame());
+      this.#options.runtime.commitPublication(
+        this.#advanceablePublicationStates,
+        this.#options.frame(),
+      );
     }
     const closeFailure = captureFailure(this.#options.consumeGpuOutcomes);
     this.#options.runtime.requests.schedule();
     this.#publicationStates.length = 0;
+    this.#advanceablePublicationStates.length = 0;
     this.#options.runtime.clearFinishedFrame();
     if (commitFailure !== undefined) throw commitFailure.value;
     if (closeFailure !== undefined) throw closeFailure.value;
@@ -188,6 +197,7 @@ export class VirtualTextureDemandOwner {
   }
 
   clear(): void {
+    this.#advanceablePublicationStates.length = 0;
     this.#publicationStates.length = 0;
     clearVirtualTextureCoverageProviderCache(this.#coverageProviders);
   }
@@ -215,6 +225,7 @@ export class VirtualTextureDemandOwner {
         drawDemand.demandCandidates,
         true,
         drawDemand.preferredCandidates,
+        drawDemand.viewportDominant,
       );
     }
 
@@ -254,6 +265,7 @@ export class VirtualTextureDemandOwner {
       drawDemand.demandCandidates,
       context !== undefined || state.manifest?.pageAddressing === "complete",
       drawDemand.preferredCandidates,
+      drawDemand.viewportDominant,
     );
   }
 
@@ -262,6 +274,7 @@ export class VirtualTextureDemandOwner {
     candidates: readonly VirtualTexturePageId[],
     preferTargetMip = false,
     preferredCandidates?: readonly VirtualTexturePageId[],
+    viewportDominant?: true,
   ): void {
     const manifest = state.manifest;
     if (manifest === undefined || state.status !== "ready") return;
@@ -294,6 +307,7 @@ export class VirtualTextureDemandOwner {
           ...(convergentPreferredCandidates === undefined
             ? {}
             : { preferredCandidates: convergentPreferredCandidates }),
+          ...(viewportDominant === undefined ? {} : { viewportDominant }),
         },
         nonconvergentCandidates,
       );
@@ -358,9 +372,9 @@ export class VirtualTextureDemandOwner {
   #prepareDemand(
     state: VirtualTextureRuntimeState,
     workingCandidates: readonly VirtualTexturePageId[],
-  ): boolean {
+  ): boolean | undefined {
     const manifest = state.manifest;
-    if (manifest === undefined || state.status !== "ready") return false;
+    if (manifest === undefined || state.status !== "ready") return undefined;
     const resource = virtualTextureGpuResource(this.#options.gpu, state.key);
     const gpu = resource === undefined ? undefined : virtualTextureGpuResourceSnapshot(resource);
     const stabilized = stabilizeVirtualTextureDesiredPagesInto(
@@ -376,7 +390,7 @@ export class VirtualTextureDemandOwner {
     );
     state.stats.demandAdmissions += stabilized.admissions;
     state.stats.demandRetentions += stabilized.retentions;
-    return true;
+    return !stabilized.deferred;
   }
 
   #commitPreparedDemand(
@@ -422,7 +436,7 @@ export class VirtualTextureDemandOwner {
     workingCandidates: readonly VirtualTexturePageId[],
     commitDemandedPageKeys = false,
   ): void {
-    if (!this.#prepareDemand(state, workingCandidates)) return;
+    if (this.#prepareDemand(state, workingCandidates) === undefined) return;
     this.#commitPreparedDemand(state, commitDemandedPageKeys);
     this.#touchPublishedDemand(state);
     const closeFailure = captureFailure(this.#options.consumeGpuOutcomes);

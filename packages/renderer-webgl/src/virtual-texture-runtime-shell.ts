@@ -434,12 +434,13 @@ export class VirtualTextureRuntimeShell {
     };
   }
 
+  /** Advances fairness for windows whose publication policy is satisfied. */
   commitPublication(
-    published: readonly VirtualTextureRuntimeState[],
+    advanceable: readonly VirtualTextureRuntimeState[],
     frame: number,
   ): void {
     for (const state of this.#demanded) state.lastDemandFrame = frame;
-    for (const state of published) {
+    for (const state of advanceable) {
       const entry = this.#commits.get(state);
       if (entry === undefined) continue;
       if (entry.submissions.length > 1) {

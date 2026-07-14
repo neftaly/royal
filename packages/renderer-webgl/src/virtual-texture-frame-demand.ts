@@ -3,7 +3,9 @@ import { virtualTexturePageKey, type VirtualTexturePageId } from "./virtual-text
 
 const MAX_POOLED_RESOURCES = 64;
 const MAX_POOLED_VIEWS = 256;
-export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES = 64;
+// This bounds transient collection evidence, including the after-cursor and
+// wrap windows. It does not allocate physical atlas slots or request pages.
+export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES = 128;
 export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCES = 64;
 export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_VIEWS = 8;
 export const VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_TOTAL_PAGES =
@@ -15,6 +17,7 @@ type MutableViewDemand = {
   preferTargetMip: boolean;
   readonly preferredAfterCursor: Map<string, PreferredItem>;
   readonly preferredWrap: Map<string, PreferredItem>;
+  viewportDominant: boolean;
 };
 
 type PreferredItem = {
@@ -23,18 +26,21 @@ type PreferredItem = {
   readonly signature: string;
 };
 
+type PreferredCursor = Pick<PreferredItem, "index" | "signature">;
+
 type MutableResourceDemand<K> = {
   capacity: number;
   order: number;
   resource?: K;
   viewCursor: number;
+  viewportDominant: boolean;
   readonly views: Map<number, MutableViewDemand>;
 };
 
 export interface VirtualTextureFrameDemandWorkspace<K> {
   active: boolean;
   readonly availableViews: MutableViewDemand[];
-  readonly preferenceCursors: Map<K, Map<number, string>>;
+  readonly preferenceCursors: Map<K, Map<number, PreferredCursor>>;
   resourcePoolIndex: number;
   resourceCursor: number;
   readonly resourcePool: Array<MutableResourceDemand<K>>;
@@ -48,7 +54,7 @@ export interface VirtualTextureFrameDemandCommit<K> {
   readonly nextStartSubmission: number;
   readonly nonconvergentCandidates: readonly VirtualTexturePageId[];
   readonly preferenceCursorUpdates: readonly {
-    readonly next: string;
+    readonly next: PreferredCursor;
     readonly viewIndex: number;
   }[];
   readonly resource: K;
@@ -84,6 +90,9 @@ export const beginVirtualTextureFrameDemand = <K>(workspace: VirtualTextureFrame
 const comparePreferredItems = (left: PreferredItem, right: PreferredItem): number =>
   left.signature.localeCompare(right.signature) || left.index - right.index;
 
+const comparePreferredItemToCursor = (item: PreferredItem, cursor: PreferredCursor): number =>
+  item.signature.localeCompare(cursor.signature) || item.index - cursor.index;
+
 const retainBoundedPreferredItem = (
   target: Map<string, PreferredItem>,
   key: string,
@@ -110,6 +119,7 @@ const clearView = (view: MutableViewDemand): void => {
   view.preferTargetMip = false;
   view.preferredAfterCursor.clear();
   view.preferredWrap.clear();
+  view.viewportDominant = false;
 };
 
 const acquireView = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): MutableViewDemand => {
@@ -123,6 +133,7 @@ const acquireView = <K>(workspace: VirtualTextureFrameDemandWorkspace<K>): Mutab
       preferTargetMip: false,
       preferredAfterCursor: new Map(),
       preferredWrap: new Map(),
+      viewportDominant: false,
     };
     workspace.viewPool.push(view);
   } else clearView(view);
@@ -144,9 +155,21 @@ const releaseResourceViews = <K>(
 const evidenceLimits = <K>(
   resource: MutableResourceDemand<K>,
 ): { readonly candidates: number; readonly nonconvergent: number; readonly preferred: number } => {
-  const evidence = Math.floor(VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES / resource.views.size);
-  const candidates = Math.min(resource.capacity, Math.max(1, Math.ceil(evidence / 2)));
-  const nonconvergent = Math.min(resource.capacity, Math.floor((evidence - candidates) / 3));
+  const { viewportDominant } = resource;
+  const resourceEvidence = viewportDominant
+    ? VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES
+    : VIRTUAL_TEXTURE_FRAME_DEMAND_MAX_RESOURCE_PAGES / 2;
+  const evidence = Math.floor(resourceEvidence / resource.views.size);
+  // A viewport-dominant surface preserves a broad quality window. Ordinary
+  // draws retain the established compact hierarchy and terminal evidence.
+  const candidates = Math.min(
+    resource.capacity,
+    Math.max(1, Math.ceil(evidence / (viewportDominant ? 4 : 2))),
+  );
+  const nonconvergent = Math.min(
+    resource.capacity,
+    viewportDominant ? Math.floor(evidence / 16) : Math.floor((evidence - candidates) / 3),
+  );
   return {
     candidates,
     nonconvergent,
@@ -280,6 +303,7 @@ export const submitVirtualTextureFrameDemand = <K>(
           order: resourceOrder,
           resource,
           viewCursor: workspace.viewCursors.get(resource) ?? -1,
+          viewportDominant: false,
           views: new Map(),
         };
         workspace.resourcePool.push(resourceDemand);
@@ -291,6 +315,7 @@ export const submitVirtualTextureFrameDemand = <K>(
     retainedResource.order = resourceOrder;
     retainedResource.resource = resource;
     retainedResource.viewCursor = workspace.viewCursors.get(resource) ?? -1;
+    retainedResource.viewportDominant = false;
     retainedResource.views.clear();
     workspace.resources.set(resource, retainedResource);
     resourceDemand = retainedResource;
@@ -300,6 +325,11 @@ export const submitVirtualTextureFrameDemand = <K>(
   const activeResource = resourceDemand!;
   const viewDemand = retainedView(workspace, activeResource, viewIndex);
   if (viewDemand === undefined) return;
+  if (submission.viewportDominant === true && !viewDemand.viewportDominant) {
+    viewDemand.viewportDominant = true;
+    activeResource.viewportDominant = true;
+    rebalanceEvidence(activeResource);
+  }
   const limits = evidenceLimits(activeResource);
   for (const page of submission.candidates) {
     if (viewDemand.candidates.size >= limits.candidates) break;
@@ -319,7 +349,7 @@ export const submitVirtualTextureFrameDemand = <K>(
     const key = `${signature}#${String(index).padStart(3, "0")}`;
     const item = { index, page, signature };
     retainBoundedPreferredItem(viewDemand.preferredWrap, key, item, limits.preferred);
-    if (cursor === undefined || signature > cursor) {
+    if (cursor === undefined || comparePreferredItemToCursor(item, cursor) > 0) {
       retainBoundedPreferredItem(viewDemand.preferredAfterCursor, key, item, limits.preferred);
     }
   }
@@ -328,11 +358,14 @@ export const submitVirtualTextureFrameDemand = <K>(
 const orderedPreferredCandidates = (
   view: MutableViewDemand,
   capacity: number,
-): { readonly cursor?: string; readonly pages: readonly VirtualTexturePageId[] } => {
+): { readonly cursor?: PreferredCursor; readonly pages: readonly VirtualTexturePageId[] } => {
   // The fallback candidate can itself be the first preferred page, so retain
   // `capacity` preferred entries to still expose `capacity - 1` distinct
   // refinements after global deduplication.
-  const limit = Math.max(0, capacity);
+  const limit = Math.min(
+    Math.max(0, capacity),
+    Math.max(view.preferredAfterCursor.size, view.preferredWrap.size),
+  );
   const items = [...view.preferredAfterCursor.values()].sort(comparePreferredItems);
   const wrap = [...view.preferredWrap.values()].sort(comparePreferredItems);
   const ordered: VirtualTexturePageId[] = [];
@@ -344,7 +377,7 @@ const orderedPreferredCandidates = (
     selectedKeys.add(virtualTexturePageKey(fallback));
     selectedCount = 1;
   }
-  let cursor: string | undefined;
+  let cursor: PreferredCursor | undefined;
   for (const item of [...items, ...wrap]) {
     if (ordered.length >= limit) break;
     const key = virtualTexturePageKey(item.page);
@@ -354,7 +387,10 @@ const orderedPreferredCandidates = (
     if (selectedCount < capacity && !selectedKeys.has(key)) {
       selectedKeys.add(key);
       selectedCount += 1;
-      cursor = item.signature;
+      cursor = {
+        index: view.viewportDominant ? item.index : Number.MAX_SAFE_INTEGER,
+        signature: item.signature,
+      };
     }
   }
   return { ...(cursor === undefined ? {} : { cursor }), pages: ordered };
@@ -434,12 +470,13 @@ export const finalizeVirtualTextureFrameDemand = <K>(
         ...(!view.preferTargetMip || preferred.pages.length === 0
           ? {}
           : { preferredCandidates: preferred.pages }),
+        ...(view.viewportDominant ? { viewportDominant: true as const } : {}),
       };
     });
     const startSubmission = submissions.length <= 1
       ? 0
       : Math.max(0, cursorFor(resource)) % submissions.length;
-    const preferenceCursorUpdates: Array<{ next: string; viewIndex: number }> = [];
+    const preferenceCursorUpdates: Array<{ next: PreferredCursor; viewIndex: number }> = [];
     for (const [viewIndex] of views) {
       const next = preferredByView.get(viewIndex)!.cursor;
       if (next !== undefined) preferenceCursorUpdates.push({ next, viewIndex });
@@ -481,7 +518,7 @@ export const advanceVirtualTextureFrameDemand = <K>(
     workspace.preferenceCursors.delete(commit.resource);
     return;
   }
-  const resourceCursors = new Map<number, string>();
+  const resourceCursors = new Map<number, PreferredCursor>();
   for (const update of commit.preferenceCursorUpdates) resourceCursors.set(update.viewIndex, update.next);
   workspace.preferenceCursors.set(commit.resource, resourceCursors);
 };

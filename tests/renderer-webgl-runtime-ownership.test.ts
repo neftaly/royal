@@ -225,6 +225,32 @@ describe("renderer runtime ownership", () => {
     expect(runtime.get("first")).toBeUndefined();
   });
 
+  it("advances VT view and page fairness only after the published window converges", () => {
+    const runtime = virtualTextureShell();
+    const state = virtualTextureState("close-surface", runtime.nextAdmissionTicket());
+    runtime.register(state);
+    const collect = () => {
+      runtime.beginFrame();
+      runtime.beginView(0);
+      runtime.submit(state, 2, { candidates: [{ mip: 2, x: 0, y: 0 }, { mip: 0, x: 0, y: 0 }], preferTargetMip: true }, []);
+      runtime.beginView(1);
+      runtime.submit(state, 2, { candidates: [{ mip: 2, x: 0, y: 0 }, { mip: 0, x: 1, y: 0 }], preferTargetMip: true }, []);
+      return runtime.finishFrame(true)!.commits.get(state)!;
+    };
+
+    const awaitingPages = collect();
+    expect(awaitingPages.startSubmission).toBe(0);
+    runtime.commitPublication([], 1);
+    runtime.clearFinishedFrame();
+
+    const retry = collect();
+    expect(retry.startSubmission).toBe(0);
+    runtime.commitPublication([state], 2);
+    runtime.clearFinishedFrame();
+
+    expect(collect().startSubmission).toBe(1);
+  });
+
   it("skips VT publication when a frame has no runtime resources", () => {
     const runtime = virtualTextureShell();
     runtime.beginFrame();

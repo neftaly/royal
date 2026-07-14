@@ -161,6 +161,43 @@ describe("virtual texture frame-demand workspace", () => {
     expect(selectFrame()).toEqual([parent, left]);
   });
 
+  it("visits every page in a stable close-detail frontier beyond its evidence window", () => {
+    const workspace = createVirtualTextureFrameDemandWorkspace<string>();
+    const coarse = page(0, 8);
+    const preferred = [coarse, ...Array.from({ length: 63 }, (_value, index) => page(index + 1))];
+    const seen = new Set<string>();
+    let firstWindowSize = 0;
+
+    for (let frame = 0; frame < 4; frame += 1) {
+      beginVirtualTextureFrameDemand(workspace);
+      submitBoundedVirtualTextureFrameDemand(
+        workspace,
+        "close-surface",
+        resourceOrder("close-surface"),
+        0,
+        64,
+        {
+          candidates: preferred,
+          preferTargetMip: true,
+          preferredCandidates: preferred,
+          viewportDominant: true,
+        },
+      );
+      const [commit] = finalizeVirtualTextureFrameDemand(workspace, true, () => 0);
+      const selected = selectVirtualTextureFrameWorkingSet(commit!.submissions, 64);
+      if (frame === 0) firstWindowSize = selected.length;
+      for (const selectedPage of selected) {
+        seen.add(`${selectedPage.mip}/${selectedPage.x}/${selectedPage.y}`);
+      }
+      advanceVirtualTextureFrameDemand(workspace, commit!);
+    }
+
+    expect(seen).toEqual(new Set(preferred.map((candidate) => (
+      `${candidate.mip}/${candidate.x}/${candidate.y}`
+    ))));
+    expect(firstWindowSize).toBeGreaterThan(32);
+  });
+
   it("advances group preference only after publication and accepts a retained prepared commit", () => {
     const workspace = createVirtualTextureFrameDemandWorkspace<string>();
     const parent = page(0, 2);

@@ -230,6 +230,7 @@ describe("virtual texture pure demand planning", () => {
     expect(demand.coverageCandidates).not.toEqual([]);
     expect(demand.demandCandidates).not.toEqual([]);
     expect(Math.min(...demand.demandCandidates.map((page) => page.mip))).toBe(0);
+    expect(demand.viewportDominant).toBe(true);
   });
 
   it("keeps demand bounded while a large plane crosses the perspective near and eye planes", () => {

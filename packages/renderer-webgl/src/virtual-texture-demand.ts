@@ -1169,6 +1169,12 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     // fallback until projection produces a determinate footprint.
     return { coverageCandidates: [], demandCandidates: fallback };
   }
+  const perspectiveProjection = input.context.projection[15] === 0;
+  const viewportDominant = perspectiveProjection && (
+    projection.footprint.screenWidth >= input.context.viewportSize[0] * 0.75
+    || projection.footprint.screenHeight >= input.context.viewportSize[1] * 0.75
+  );
+  const viewportDemand = viewportDominant ? { viewportDominant: true as const } : {};
   if (workspace.overflowed || workspace.conservativeAddressing) {
     const coarsestMip = virtualTextureDemandMipCount(input.manifest) - 1;
     let coverageMip = virtualTextureTargetMip(input.manifest, projection.footprint);
@@ -1187,6 +1193,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     );
     const preferredCandidates = planBoundedFinestRegionDemand(input, workspace, limit);
     return {
+      ...viewportDemand,
       coverageCandidates,
       demandCandidates: completeAddressSpace
         ? planVirtualTextureCoarseToFineDemand(
@@ -1213,6 +1220,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
       limit,
     );
     return {
+      ...viewportDemand,
       coverageCandidates,
       demandCandidates: planVirtualTextureCoarseToFineDemand(
         input,
@@ -1231,6 +1239,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     limit,
   );
   return {
+    ...viewportDemand,
     ...hierarchical,
     preferredCandidates: hierarchical.demandCandidates,
   };
@@ -1339,6 +1348,7 @@ export interface VirtualTextureDemandSubmission {
   readonly candidates: readonly VirtualTexturePageId[];
   readonly preferTargetMip: boolean;
   readonly preferredCandidates?: readonly VirtualTexturePageId[];
+  readonly viewportDominant?: true;
 }
 
 const selectVirtualTextureSubmissionWorkingSet = (

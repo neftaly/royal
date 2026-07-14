@@ -187,6 +187,8 @@ export type VirtualTextureDrawDemand = {
   readonly preferredCandidates?: readonly VirtualTexturePageId[];
   /** Fixed retained-polygon workspace overflowed; demand uses bounded conservative refinement. */
   readonly retentionOverflowed?: true;
+  /** The visible surface occupies most of one viewport axis and needs a broader active quality window. */
+  readonly viewportDominant?: true;
 };
 
 export const normalizeVirtualTextureDemandUvRange = (
