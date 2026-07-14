@@ -6,6 +6,7 @@ import {
 } from "./resource-arena";
 import type { WebGlTextureResidencySnapshot } from "./root-types";
 import {
+  decodedRgbaTextureLevels,
   isDecodedRgbaTexture,
   loadedTextureSourceSize,
   type LoadedTextureSource,
@@ -22,7 +23,9 @@ export const textureResidencyDiagnosticsSnapshot = (
   }
   let preparedBytes = 0;
   for (const source of sources) {
-    if (isDecodedRgbaTexture(source)) preparedBytes += source.data.byteLength;
+    if (isDecodedRgbaTexture(source)) {
+      for (const level of decodedRgbaTextureLevels(source)) preparedBytes += level.data.byteLength;
+    }
     else {
       const [width, height] = loadedTextureSourceSize(source);
       if (Number.isFinite(width) && Number.isFinite(height)) {

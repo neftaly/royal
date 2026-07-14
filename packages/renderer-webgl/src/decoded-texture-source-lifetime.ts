@@ -1,5 +1,10 @@
 import type { ResourceGovernorLease } from "./resource-governor";
-import { isDecodedRgbaTexture, loadedTextureSourceSize, type LoadedTextureSource } from "./texture-sources";
+import {
+  decodedRgbaTextureLevels,
+  isDecodedRgbaTexture,
+  loadedTextureSourceSize,
+  type LoadedTextureSource,
+} from "./texture-sources";
 
 type Lane<Source extends object> = {
   readonly close: (source: Source) => void;
@@ -143,7 +148,14 @@ export class DecodedTextureSourceLifetime {
 }
 
 export const decodedTextureSourceBytes = (source: LoadedTextureSource): number => {
-  if (isDecodedRgbaTexture(source)) return source.data.byteLength;
+  if (isDecodedRgbaTexture(source)) {
+    const bytes = decodedRgbaTextureLevels(source)
+      .reduce((sum, level) => sum + level.data.byteLength, 0);
+    if (!Number.isSafeInteger(bytes)) {
+      throw new RangeError("Decoded texture source byte size exceeds safe integer capacity");
+    }
+    return bytes;
+  }
   const [width, height] = loadedTextureSourceSize(source);
   const bytes = Math.ceil(width) * Math.ceil(height) * 4;
   if (!Number.isSafeInteger(bytes) || bytes < 0) {

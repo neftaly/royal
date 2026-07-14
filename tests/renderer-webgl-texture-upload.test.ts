@@ -123,6 +123,28 @@ describe("texture upload kernel", () => {
     expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
   });
 
+  it("uploads a complete authored RGBA mip chain without regenerating it", () => {
+    const gl = new FakeGl();
+    const source = decoded();
+    const mip1 = new Uint8Array(2 * 1 * 4).fill(1);
+    const mip2 = new Uint8Array(1 * 1 * 4).fill(2);
+    uploadTexture(context(gl), handle, {
+      ...source,
+      levels: [
+        { data: source.data, height: 2, width: 4 },
+        { data: mip1, height: 1, width: 2 },
+        { data: mip2, height: 1, width: 1 },
+      ],
+    }, texture({ sampler: { minFilter: "linear-mipmap-linear" } }));
+
+    expect(gl.calls.filter(({ name }) => name === "texImage2D").map(({ args }) => args)).toEqual([
+      [gl.TEXTURE_2D, 0, gl.RGBA, 4, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, source.data],
+      [gl.TEXTURE_2D, 1, gl.RGBA, 2, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, mip1],
+      [gl.TEXTURE_2D, 2, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, mip2],
+    ]);
+    expect(gl.calls.some(({ name }) => name === "generateMipmap")).toBe(false);
+  });
+
   it("uses the DOM-source overload, authored sampler state, and mipmap generation", () => {
     const gl = new FakeGl();
     const source = { height: 8, width: 8 } as unknown as HTMLImageElement;

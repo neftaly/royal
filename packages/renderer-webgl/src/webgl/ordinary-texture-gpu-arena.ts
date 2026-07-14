@@ -1,4 +1,10 @@
-import { loadedTextureSourceSize, type LoadedTextureSource } from "../texture-sources";
+import {
+  decodedRgbaTextureHasCompleteMipChain,
+  decodedRgbaTextureLevels,
+  isDecodedRgbaTexture,
+  loadedTextureSourceSize,
+  type LoadedTextureSource,
+} from "../texture-sources";
 import type { TextureAssetUploadRef } from "./materials";
 import {
   createOwnedTexture,
@@ -358,8 +364,12 @@ export const ordinaryTextureUploadCost = (
     }
   }
   const [sourceWidth, sourceHeight] = size;
-  const uploadBytes = checkedTextureDimension(sourceWidth, "ordinary texture width")
-    * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
+  const uploadBytes = isDecodedRgbaTexture(upload.source)
+    && mipmapped
+    && decodedRgbaTextureHasCompleteMipChain(upload.source)
+      ? decodedRgbaTextureLevels(upload.source).reduce((sum, level) => sum + level.data.byteLength, 0)
+      : checkedTextureDimension(sourceWidth, "ordinary texture width")
+        * checkedTextureDimension(sourceHeight, "ordinary texture height") * 4;
   if (!Number.isSafeInteger(uploadBytes)) {
     throw new RangeError("ordinary texture upload byte size exceeds safe integer range");
   }

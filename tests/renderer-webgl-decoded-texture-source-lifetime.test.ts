@@ -207,6 +207,15 @@ describe("decoded texture source lifetime", () => {
 
   it("calculates decoded byte ownership without unsafe integer overflow", () => {
     expect(decodedTextureSourceBytes(decoded(3, 5))).toBe(60);
+    const base = decoded(2, 2);
+    if (!("data" in base)) throw new Error("expected decoded RGBA fixture");
+    expect(decodedTextureSourceBytes({
+      ...base,
+      levels: [
+        { data: base.data, height: 2, width: 2 },
+        { data: new Uint8Array(4), height: 1, width: 1 },
+      ],
+    })).toBe(20);
     const oversized = { height: Number.MAX_SAFE_INTEGER, width: 2 } as unknown as LoadedTextureSource;
     expect(() => decodedTextureSourceBytes(oversized)).toThrow(RangeError);
   });

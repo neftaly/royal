@@ -1,4 +1,6 @@
 import {
+  decodedRgbaTextureHasCompleteMipChain,
+  decodedRgbaTextureLevels,
   isDecodedRgbaTexture,
   type LoadedTextureSource,
 } from "../texture-sources";
@@ -56,18 +58,26 @@ export const uploadTexture = (
   prepareTextureUpload(gl);
   gl.bindTexture(gl.TEXTURE_2D, textureHandle);
   const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
+  const mipmapped = usesMipmaps(texture.sampler?.minFilter);
+  let uploadedCompleteMipChain = false;
   if (isDecodedRgbaTexture(source)) {
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      internalFormat,
-      source.width,
-      source.height,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      source.data,
-    );
+    uploadedCompleteMipChain = mipmapped && decodedRgbaTextureHasCompleteMipChain(source);
+    const levels = uploadedCompleteMipChain
+      ? decodedRgbaTextureLevels(source)
+      : decodedRgbaTextureLevels(source).slice(0, 1);
+    for (const [levelIndex, level] of levels.entries()) {
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        levelIndex,
+        internalFormat,
+        level.width,
+        level.height,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        level.data,
+      );
+    }
   } else {
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -99,5 +109,5 @@ export const uploadTexture = (
     gl.TEXTURE_WRAP_T,
     samplerConstant(gl, sampler?.wrapT, gl.CLAMP_TO_EDGE),
   );
-  if (usesMipmaps(sampler?.minFilter)) gl.generateMipmap(gl.TEXTURE_2D);
+  if (mipmapped && !uploadedCompleteMipChain) gl.generateMipmap(gl.TEXTURE_2D);
 };
