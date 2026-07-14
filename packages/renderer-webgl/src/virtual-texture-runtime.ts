@@ -1,4 +1,4 @@
-import type { TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
+import type { TextureColorSpace, TextureRef, TextureSamplerWrap } from "@royal/renderer-core";
 import {
   isDecodedCompressedTexture,
   isDecodedRgbaTexture,
@@ -34,7 +34,7 @@ export type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-as
 
 export type RasterVirtualTextureSource = {
   canvasSource?: CanvasImageSource;
-  readonly colorSpace?: NonNullable<TextureRef["colorSpace"]>;
+  readonly colorSpace?: TextureColorSpace;
   readonly decodedBytes: number;
   readonly height: number;
   readonly label: string;

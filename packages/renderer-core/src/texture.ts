@@ -26,8 +26,6 @@ export type TextureContentKey = number | string;
 export interface SolidTextureRef {
   readonly kind: 'solid';
   readonly color: LinearRgba;
-  readonly colorSpace?: TextureColorSpace;
-  readonly version?: TextureVersion;
 }
 
 export interface TextureAssetRef {
@@ -54,8 +52,6 @@ export type TextureRef = SolidTextureRef | TextureAssetRef | VirtualTextureAsset
 
 export interface SolidTextureOptions {
   readonly color: LinearRgba;
-  readonly colorSpace?: TextureColorSpace;
-  readonly version?: TextureVersion;
 }
 
 interface TextureAssetBaseOptions {
@@ -113,9 +109,7 @@ const nonEmptySource = (value: string, label: string): string => {
 export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
   return Object.freeze({
     kind: 'solid',
-    color: frozenRgba(options.color, 'solid texture color'),
-    ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-    ...(options.version === undefined ? {} : { version: options.version })
+    color: frozenRgba(options.color, 'solid texture color')
   });
 };
 

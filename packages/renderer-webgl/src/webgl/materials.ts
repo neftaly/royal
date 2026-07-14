@@ -146,12 +146,7 @@ const textureSourceCacheKey = (texture: TextureRef): readonly unknown[] => {
 
 export const textureCacheKey = (texture: TextureRef): string => {
   if (texture.kind === "solid") {
-    return textureCacheTupleKey([
-      "solid",
-      texture.color,
-      texture.colorSpace ?? null,
-      textureCacheScalarKey(texture.version),
-    ]);
+    return textureCacheTupleKey(["solid", texture.color]);
   }
   if (texture.kind === "asset") {
     const sampler = texture.sampler;

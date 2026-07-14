@@ -132,6 +132,12 @@ describe("renderer-core descriptor contract", () => {
       // @ts-expect-error cross-URI identity is explicit through textureAsset.
       imageTexture({ contentKey: "sha256:albedo", src: "/textures/albedo.png" });
 
+      // @ts-expect-error solid colors are already canonical linear RGBA values.
+      solidTexture({ color: [1, 0, 1, 1], colorSpace: "srgb" });
+
+      // @ts-expect-error solid colors have no external source bytes to version.
+      solidTexture({ color: [1, 0, 1, 1], version: 2 });
+
       // @ts-expect-error fallback is not a public render fallback for texture assets.
       textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, src: "/textures/mask.ktx2" });
 

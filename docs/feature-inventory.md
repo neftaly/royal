@@ -63,7 +63,7 @@ Status meanings:
 
 | Feature | Status | Coupling and recommendation |
 | --- | --- | --- |
-| Solid-colour texture | product | Cheap convenience/fallback. |
+| Solid-colour texture | product | Cheap canonical-linear RGBA convenience/fallback; no source identity or versioning. |
 | Ordinary image texture | product | Required baseline and fallback. |
 | Authored texture asset with content/version identity | product | `version` invalidates bytes behind one stable URI; advanced `textureAsset({ contentKey })` deduplicates identical decoded content across different URIs. The friendly `imageTexture` helper intentionally omits cross-URI identity. |
 | sRGB and linear texture colour spaces | product | Correctness requirement. |

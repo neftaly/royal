@@ -1,5 +1,6 @@
 import type {
   LinearRgba,
+  TextureColorSpace,
   TextureContentKey,
   TextureRef,
 } from "@royal/renderer-core";
@@ -39,8 +40,6 @@ type LoadedGltfSurfaceTextures = {
   readonly thicknessTexture?: TextureAssetUploadRef;
   readonly textureCoordinates?: SurfaceMaterialTextureCoordinates;
 };
-
-type TextureColorSpace = NonNullable<TextureRef["colorSpace"]>;
 
 export type GltfPreparedPrimitiveMaterial = {
   readonly material: SurfaceMaterial;
