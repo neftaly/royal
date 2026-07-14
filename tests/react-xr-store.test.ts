@@ -60,6 +60,29 @@ describe("React XR session store", () => {
     expect(store.getState()).toMatchObject({ available: true, status: "available" });
   });
 
+  it("serializes reentrant actions so every subscriber observes each committed state", () => {
+    const store = createXrSessionStore<TestXrSession>();
+    const firstObserved: boolean[] = [];
+    const secondObserved: boolean[] = [];
+    let reentered = false;
+    store.subscribe(() => {
+      firstObserved.push(store.getState().available);
+      if (!reentered && store.getState().available) {
+        reentered = true;
+        store.getState().setAvailability(false);
+      }
+    });
+    store.subscribe(() => {
+      secondObserved.push(store.getState().available);
+    });
+
+    store.getState().setAvailability(true);
+
+    expect(firstObserved).toEqual([true, false]);
+    expect(secondObserved).toEqual([true, false]);
+    expect(store.getState()).toMatchObject({ available: false, status: "unavailable" });
+  });
+
   it("rejects malformed semantic action payloads before committing state", () => {
     const store = createXrSessionStore<TestXrSession>();
     const initial = store.getState();

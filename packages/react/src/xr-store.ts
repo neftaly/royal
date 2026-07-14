@@ -273,22 +273,36 @@ export const createXrSessionStore = <Session extends object = object>(
 ): XrSessionStore<Session> => {
   const initialData = createInitialXrSessionStoreData<Session>(initialState);
   const listeners = new Map<object, () => void>();
+  const transitionQueue: XrSessionTransition<Session>[] = [];
   let data = initialData;
   let current: XrSessionStoreState<Session>;
+  let drainingTransitions = false;
+  let transitionHead = 0;
   const apply = (transition: XrSessionTransition<Session>): void => {
-    const next = reduceXrSessionStoreData(data, transition);
-    if (next === data) return;
-    data = next;
-    current = { ...data, ...actions };
+    transitionQueue.push(transition);
+    if (drainingTransitions) return;
+    drainingTransitions = true;
     let firstFailure: unknown;
     let failed = false;
-    for (const listener of listeners.values()) {
-      try {
-        listener();
-      } catch (error) {
-        if (!failed) firstFailure = error;
-        failed = true;
+    try {
+      while (transitionHead < transitionQueue.length) {
+        const next = reduceXrSessionStoreData(data, transitionQueue[transitionHead++]!);
+        if (next === data) continue;
+        data = next;
+        current = { ...data, ...actions };
+        for (const listener of listeners.values()) {
+          try {
+            listener();
+          } catch (error) {
+            if (!failed) firstFailure = error;
+            failed = true;
+          }
+        }
       }
+    } finally {
+      transitionQueue.length = 0;
+      transitionHead = 0;
+      drainingTransitions = false;
     }
     if (failed) throw firstFailure;
   };
