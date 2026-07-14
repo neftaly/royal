@@ -56,6 +56,8 @@ const pointerHandlerProps = [
   'onPointerUp',
 ] as const satisfies readonly PointerHandlerProp[];
 
+const pointerHandlerPropSet: ReadonlySet<string> = new Set(pointerHandlerProps);
+
 const pointerEventHandlerProp = {
   click: 'onClick',
   pointercancel: 'onPointerCancel',
@@ -65,11 +67,6 @@ const pointerEventHandlerProp = {
   pointermove: 'onPointerMove',
   pointerup: 'onPointerUp',
 } as const satisfies Record<RoyalPointerEventType, PointerHandlerProp>;
-
-export const hasRoyalPointerEventHandlers = (
-  props: Record<string, unknown>,
-): boolean =>
-  pointerHandlerProps.some((prop) => typeof props[prop] === 'function');
 
 export const royalPointerEventHandlersFrom = (
   props: Record<string, unknown>,
@@ -84,6 +81,34 @@ export const royalPointerEventHandlersFrom = (
   }
 
   return handlers;
+};
+
+type RoyalPointerEventHandlersValidator = (
+  value: unknown,
+  label: string,
+) => asserts value is RoyalPointerEventHandlers;
+
+export const validateRoyalPointerEventHandlers: RoyalPointerEventHandlersValidator = (
+  value,
+  label,
+) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${label} must be an object of Royal pointer event handlers`);
+  }
+
+  let handlerCount = 0;
+  for (const [prop, handler] of Object.entries(value)) {
+    if (!pointerHandlerPropSet.has(prop)) {
+      throw new TypeError(`${label} contains unsupported handler ${JSON.stringify(prop)}`);
+    }
+    if (handler !== undefined && typeof handler !== 'function') {
+      throw new TypeError(`${label}.${prop} must be a function when provided`);
+    }
+    if (typeof handler === 'function') handlerCount += 1;
+  }
+  if (handlerCount === 0) {
+    throw new TypeError(`${label} must provide at least one Royal pointer event handler`);
+  }
 };
 
 export const handlerForRoyalPointerEvent = (

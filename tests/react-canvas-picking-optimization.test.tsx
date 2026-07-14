@@ -457,6 +457,27 @@ describe("React Canvas picking optimization", () => {
     )).toThrow(/ambiguous/);
   });
 
+  it("rejects malformed scene pointer handlers instead of silently ignoring them", () => {
+    const pickingIndex = createRoyalScenePickingIndex(renderScene());
+
+    expect(() => createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      null as unknown as ScenePointerEvents,
+    )).toThrow(/scenePointerEvents must be an object/i);
+    expect(() => createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      { pickable: { onClick: "click" } } as unknown as ScenePointerEvents,
+    )).toThrow(/scenePointerEvents.*onClick must be a function/i);
+    expect(() => createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      { pickable: { onClik: vi.fn() } } as unknown as ScenePointerEvents,
+    )).toThrow(/unsupported handler.*onClik/i);
+    expect(() => createRoyalScenePointerEventRegistry(
+      pickingIndex,
+      { pickable: {} },
+    )).toThrow(/at least one Royal pointer event handler/i);
+  });
+
   it("emits pointerleave when a hovered pickingId is removed by a scene commit", () => {
     const canvas = fakeCanvas();
     const root = fakeRendererRoot({ canvas, pick: pickFirstMesh });

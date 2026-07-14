@@ -240,7 +240,9 @@ function RendererStatus() {
 Interactive nodes provide an explicit `pickingId`; React handlers live in the
 separate `Canvas.scenePointerEvents` map under that ID. The ID is the logical gesture
 identity, so handler-only changes do not resubmit the scene and pointer-down/up
-and hover stay coherent across immutable scene replacement.
+and hover stay coherent across immutable scene replacement. Every map entry must
+contain at least one supported function handler; invalid or misspelled handlers
+throw during render instead of becoming silent no-ops.
 
 ```tsx
 <Canvas

@@ -1,6 +1,6 @@
 import type { PickingId, RenderRoot } from "@royal/renderer-core";
 import {
-  hasRoyalPointerEventHandlers,
+  validateRoyalPointerEventHandlers,
   type RoyalPointerEventHandlers,
   type RoyalPointerEventTarget,
 } from "./picking-events";
@@ -31,9 +31,20 @@ export const createRoyalScenePointerEventRegistry = (
   pickingIndex: RoyalScenePickingIndex,
   interactions: ScenePointerEvents | undefined,
 ): RoyalScenePointerEventRegistry => {
+  if (interactions !== undefined && (
+    typeof interactions !== "object"
+    || interactions === null
+    || Array.isArray(interactions)
+  )) {
+    throw new TypeError("Canvas scenePointerEvents must be an object keyed by pickingId");
+  }
   const targets = new Map<string, RoyalPointerEventTarget>();
 
   for (const [pickingId, handlers] of Object.entries(interactions ?? {})) {
+    validateRoyalPointerEventHandlers(
+      handlers,
+      `Canvas scenePointerEvents[${JSON.stringify(pickingId)}]`,
+    );
     const count = pickingIndex.count(pickingId);
     if (count === 0) {
       throw new Error(
@@ -45,9 +56,7 @@ export const createRoyalScenePointerEventRegistry = (
         `Canvas interaction ${JSON.stringify(pickingId)} is ambiguous because ${count} scene nodes use that pickingId`,
       );
     }
-    if (hasRoyalPointerEventHandlers(handlers as Record<string, unknown>)) {
-      targets.set(pickingId, { handlers });
-    }
+    targets.set(pickingId, { handlers });
   }
 
   return {
