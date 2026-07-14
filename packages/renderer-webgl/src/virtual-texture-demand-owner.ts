@@ -1,6 +1,7 @@
 import type { Material } from "@royal/renderer-core";
 import type { CpuGeometry } from "./geometry-recipes";
 import type { Mat4 } from "./math/mat4";
+import { captureFailure, type CapturedFailure } from "./captured-failure";
 import type { VertexInputGeometry } from "./vertex-input-arena";
 import {
   cachedVirtualTextureCoverageProvider,
@@ -44,17 +45,6 @@ import {
   virtualTextureGpuResourceSnapshot,
   type VirtualTextureGpuArena,
 } from "./webgl/virtual-texture-gpu-arena";
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): CapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
-};
 
 const captureFirstFailure = (
   firstFailure: CapturedFailure | undefined,

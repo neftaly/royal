@@ -9,6 +9,7 @@ import type {
   Transform,
   Vec3,
 } from "@royal/renderer-core";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
   attachRenderObjectRef,
   readRenderObjectHandleTransform,
@@ -58,20 +59,6 @@ const sameTransform = (left: Transform, right: Transform): boolean =>
   sameVec3(left.position, right.position)
   && sameVec3(left.rotation, right.rotation)
   && sameVec3(left.scale, right.scale);
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFirstFailure = (
-  first: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => {
-  try {
-    action();
-  } catch (error) {
-    return first ?? { value: error };
-  }
-  return first;
-};
 
 /**
  * Owns every fallible external attachment derived from the current frame plan.

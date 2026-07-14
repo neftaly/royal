@@ -1,20 +1,11 @@
+import { captureFailure, type CapturedFailure } from "./captured-failure";
+
 export type ResourceArenaSideEffectPhase = "acquire" | "release";
 
 type ResourceArenaSideEffectDebt = {
   nextStep: number;
   readonly phase: ResourceArenaSideEffectPhase;
   readonly steps: readonly (() => void)[];
-};
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): CapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
 };
 
 /**

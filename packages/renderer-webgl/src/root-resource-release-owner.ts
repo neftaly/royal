@@ -3,25 +3,7 @@ import type { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
 import type { VirtualTextureGpuAdmissionOwner } from "./virtual-texture-gpu-admission-owner";
 import type { VirtualTextureRuntimeState } from "./virtual-texture-runtime";
 import type { VirtualTextureRuntimeShell } from "./virtual-texture-runtime-shell";
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): CapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
-};
-
-const captureFirstFailure = (
-  firstFailure: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => {
-  const nextFailure = captureFailure(action);
-  return firstFailure ?? nextFailure;
-};
+import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
 
 type RootResourceReleaseOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;

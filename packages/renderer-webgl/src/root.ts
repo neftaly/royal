@@ -18,6 +18,7 @@ import {
 } from "@royal/renderer-core";
 import { abortError } from "./gltf/io";
 import { BoundedDiagnosticLog } from "./diagnostics";
+import { captureFailure, captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
   closeDecodedTextureSource,
   DecodedTextureSourceLifetime,
@@ -271,25 +272,6 @@ const sceneToneMappingState = (
   hdrOutput: false,
   toneMapping: scene.toneMapping ?? DEFAULT_TONE_MAPPING_STATE.toneMapping,
 });
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): CapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
-};
-
-const captureFirstFailure = (
-  firstFailure: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => {
-  const nextFailure = captureFailure(action);
-  return firstFailure ?? nextFailure;
-};
 
 const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
   const ImageConstructor = globalThis.Image;

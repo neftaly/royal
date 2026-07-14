@@ -1,4 +1,5 @@
 import type { CpuGeometry } from "./geometry-recipes";
+import type { CapturedFailure } from "./captured-failure";
 import { claimMonotonicId, MAX_RESOURCE_ID } from "./resource-id";
 import {
   findVerifiedGeometry,
@@ -295,7 +296,6 @@ const createVertexArray = (gl: WebGL2RenderingContext): WebGLVertexArrayObject =
 };
 
 const NO_FAILURE: unique symbol = Symbol("vertex-input-no-failure");
-type CapturedFailure = { readonly value: unknown };
 type Failure = CapturedFailure | typeof NO_FAILURE;
 
 const firstFailure = (failure: Failure, next: Failure): Failure =>

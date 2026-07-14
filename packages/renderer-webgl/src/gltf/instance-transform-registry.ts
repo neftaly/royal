@@ -5,6 +5,7 @@ import type {
   Vec3,
 } from "@royal/renderer-core";
 import { GltfInstanceChangeTracker } from "./instance-changes";
+import { captureFirstFailure, type CapturedFailure } from "../captured-failure";
 import {
   identityMat4,
   transformMat4Into,
@@ -43,20 +44,6 @@ type GltfInstanceTransformViewState = {
 type GltfInstanceTransformSubscription = {
   readonly unsubscribe: () => void;
   readonly views: GltfInstanceTransformViewState;
-};
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFirstFailure = (
-  first: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => {
-  try {
-    action();
-  } catch (error) {
-    return first ?? { value: error };
-  }
-  return first;
 };
 
 export class GltfInstanceTransformRegistry {

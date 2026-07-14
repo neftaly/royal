@@ -2,6 +2,7 @@ import type {
   WebGlContextLifecycle,
   WebGlContextSnapshot,
 } from "./root-types";
+import type { CapturedFailure } from "./captured-failure";
 
 export type WebGlContextLifecycleObserver = (snapshot: WebGlContextSnapshot) => void;
 export type WebGlContextLifecycleObserverFailureReporter = (failure: unknown) => void;
@@ -25,10 +26,6 @@ type Publication = BroadcastPublication | {
   readonly observer: ObserverRecord;
   readonly sequence: number;
   readonly snapshot: WebGlContextSnapshot;
-};
-
-type CapturedFailure = {
-  readonly value: unknown;
 };
 
 const initialSnapshot = (): WebGlContextSnapshot => Object.freeze({

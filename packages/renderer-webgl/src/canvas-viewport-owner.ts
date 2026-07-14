@@ -1,9 +1,9 @@
+import type { CapturedFailure } from "./captured-failure";
+
 export type CanvasViewportSize = Readonly<{
   height: number;
   width: number;
 }>;
-
-type CapturedFailure = { readonly value: unknown };
 
 /** Owns canvas backing-buffer sizing and viewport invalidation listener lifetime. */
 export class WebGlCanvasViewportOwner {

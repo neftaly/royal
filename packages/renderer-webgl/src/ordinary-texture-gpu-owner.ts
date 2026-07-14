@@ -1,30 +1,12 @@
 import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
 import { OrdinaryTextureResidencyController } from "./ordinary-texture-residency-controller";
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
+import { captureFirstFailure, type CapturedFailure } from "./captured-failure";
 import {
   reserveResourceGovernor,
   type ResourceGovernor,
   type ResourceGovernorPolicy,
 } from "./resource-governor";
-
-type CapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): CapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
-};
-
-const captureFirstFailure = (
-  firstFailure: CapturedFailure | undefined,
-  action: () => void,
-): CapturedFailure | undefined => {
-  const nextFailure = captureFailure(action);
-  return firstFailure ?? nextFailure;
-};
 
 type OrdinaryTextureGpuOwnerOptions = {
   readonly capacityWakes: ResourceCapacityWakeOwner;

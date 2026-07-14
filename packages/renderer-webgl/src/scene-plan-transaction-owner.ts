@@ -1,4 +1,5 @@
 import type { LinearRgba, RenderRoot } from "@royal/renderer-core";
+import { captureFailure, type CapturedFailure } from "./captured-failure";
 import {
   compileFramePlan,
   createResourceManifestDiffScratch,
@@ -22,16 +23,7 @@ const EMPTY_RESOURCE_MANIFEST: FramePlanResourceManifest = {
   virtualTextures: [],
 };
 
-export type ScenePlanCapturedFailure = { readonly value: unknown };
-
-const captureFailure = (action: () => void): ScenePlanCapturedFailure | undefined => {
-  try {
-    action();
-    return undefined;
-  } catch (value) {
-    return { value };
-  }
-};
+export type ScenePlanCapturedFailure = CapturedFailure;
 
 const compileSurfaceLights = (plan: FramePlan): readonly SurfaceLight[] => {
   const scaleColor = (color: LinearRgba, intensity: number): LinearRgba => [
