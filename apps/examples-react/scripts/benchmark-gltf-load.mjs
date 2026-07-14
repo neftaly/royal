@@ -460,7 +460,7 @@ const installBenchmarkHooks = async (session) => {
     return assets.every((asset) =>
       asset.status !== 'loading' &&
       (!requireSuccess || asset.status === 'sceneReady') &&
-      (asset.imageLoaded ?? 0) + (asset.imageFailures ?? 0) >= (asset.imageRequests ?? 0) &&
+      (asset.imagesLoaded ?? 0) + (asset.imageFailures ?? 0) >= (asset.imageRequests ?? 0) &&
       (!requireSuccess || (asset.imageFailures ?? 0) === 0));
   };
   const updateFirstUsable = () => {
@@ -897,7 +897,7 @@ const roundedGltfLoadDiagnostics = (snapshot) => {
     ? snapshot.assets.map((asset) => ({
         ...(typeof asset.error === 'string' ? { error: asset.error } : {}),
         imageFailures: asset.imageFailures ?? 0,
-        imageLoaded: asset.imageLoaded ?? 0,
+        imagesLoaded: asset.imagesLoaded ?? 0,
         imageRequests: asset.imageRequests ?? 0,
         lightCount: asset.lightCount ?? 0,
         nodeCount: asset.nodeCount ?? 0,
@@ -961,7 +961,7 @@ const gltfLoadDiagnosticsSummary = (diagnostics) => {
   const assets = Array.isArray(diagnostics?.assets) ? diagnostics.assets : [];
   const totals = assets.reduce((next, asset) => ({
     imageFailures: next.imageFailures + asset.imageFailures,
-    imageLoaded: next.imageLoaded + asset.imageLoaded,
+    imagesLoaded: next.imagesLoaded + asset.imagesLoaded,
     imageRequests: next.imageRequests + asset.imageRequests,
     lights: next.lights + asset.lightCount,
     nodes: next.nodes + asset.nodeCount,
@@ -969,7 +969,7 @@ const gltfLoadDiagnosticsSummary = (diagnostics) => {
     variants: next.variants + asset.variantCount,
   }), {
     imageFailures: 0,
-    imageLoaded: 0,
+    imagesLoaded: 0,
     imageRequests: 0,
     lights: 0,
     nodes: 0,
@@ -1134,7 +1134,7 @@ const printSummary = (report) => {
       ` gltfAssets=${summary?.assets ?? 0}` +
       ` sceneReadyAssets=${summary?.sceneReadyAssets ?? 0}` +
       ` imageRequests=${summary?.totals?.imageRequests ?? 0}` +
-      ` imageLoaded=${summary?.totals?.imageLoaded ?? 0}` +
+      ` imagesLoaded=${summary?.totals?.imagesLoaded ?? 0}` +
       ` imageFailures=${summary?.totals?.imageFailures ?? 0}` +
       ` slowScene=${topPhaseText(slowestScene)}` +
       ` slowImages=${topPhaseText(slowestImages)}` +

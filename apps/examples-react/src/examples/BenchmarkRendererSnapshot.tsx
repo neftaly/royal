@@ -60,7 +60,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
   const phaseMs = copyNumberCounters(value.phaseMs);
   if (
     typeof value.imageFailures !== 'number' ||
-    typeof value.imageLoaded !== 'number' ||
+    typeof value.imagesLoaded !== 'number' ||
     typeof value.imageRequests !== 'number' ||
     typeof value.lightCount !== 'number' ||
     typeof value.nodeCount !== 'number' ||
@@ -76,7 +76,7 @@ const copyGltfLoadDiagnosticsAsset = (value: unknown): GltfLoadDiagnosticsAsset 
   return {
     ...(typeof value.error === 'string' ? { error: value.error } : {}),
     imageFailures: value.imageFailures,
-    imageLoaded: value.imageLoaded,
+    imagesLoaded: value.imagesLoaded,
     imageRequests: value.imageRequests,
     lightCount: value.lightCount,
     nodeCount: value.nodeCount,

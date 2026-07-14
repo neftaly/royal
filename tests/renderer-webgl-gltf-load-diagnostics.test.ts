@@ -40,7 +40,7 @@ describe("glTF load diagnostics core", () => {
     expect(gltfLoadDiagnosticsSnapshot([input])).toEqual({
       assets: [{
         imageFailures: 1,
-        imageLoaded: 2,
+        imagesLoaded: 2,
         imageRequests: 3,
         lightCount: 0,
         nodeCount: 4,

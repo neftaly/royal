@@ -598,7 +598,7 @@ const checkGltfLoadReport = (report) => {
     requireZero(metrics.gltfLoadSummary.loadingAssets, 'report.metrics.gltfLoadSummary.loadingAssets');
     if (requireObject(metrics.gltfLoadSummary.totals, 'report.metrics.gltfLoadSummary.totals')) {
       requireZero(metrics.gltfLoadSummary.totals.imageFailures, 'report.metrics.gltfLoadSummary.totals.imageFailures');
-      requirePositiveNumber(metrics.gltfLoadSummary.totals.imageLoaded, 'report.metrics.gltfLoadSummary.totals.imageLoaded');
+      requirePositiveNumber(metrics.gltfLoadSummary.totals.imagesLoaded, 'report.metrics.gltfLoadSummary.totals.imagesLoaded');
       requirePositiveNumber(metrics.gltfLoadSummary.totals.imageRequests, 'report.metrics.gltfLoadSummary.totals.imageRequests');
     }
   }

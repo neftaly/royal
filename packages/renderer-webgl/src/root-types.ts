@@ -120,7 +120,7 @@ export interface WebGlTextureResidencySnapshot {
 export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly error?: string;
   readonly imageFailures: number;
-  readonly imageLoaded: number;
+  readonly imagesLoaded: number;
   readonly imageRequests: number;
   readonly lightCount: number;
   readonly nodeCount: number;
@@ -139,6 +139,7 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   readonly sourceUri: string;
   /** Optional application-supplied asset version used for cache identity. */
   readonly sourceVersion?: number | string;
+  /** `sceneReady` is renderable; image completion metrics may still advance afterward. */
   readonly status: "loading" | "sceneReady" | "error";
   /** Ordered `KHR_materials_variants` names accepted by public glTF descriptors. */
   readonly variantNames: readonly string[];

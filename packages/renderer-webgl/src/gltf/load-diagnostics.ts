@@ -46,7 +46,7 @@ export const gltfLoadDiagnosticsAssetSnapshot = (
   return {
     ...(state.error === undefined ? {} : { error: state.error }),
     imageFailures: load.imageFailures,
-    imageLoaded: load.imageLoaded,
+    imagesLoaded: load.imageLoaded,
     imageRequests: load.imageRequests,
     lightCount: state.lightCount,
     nodeCount: state.nodeCount,
