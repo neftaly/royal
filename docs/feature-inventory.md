@@ -23,7 +23,7 @@ Status meanings:
 | --- | --- | --- |
 | `Canvas` and `createRendererRoot` | product | Primary React host and lower-level imperative host. Keep. |
 | Demand rendering and explicit invalidation | product | Core battery/performance behavior. Keep. |
-| `useFrame` | product | Opts a settled renderer into time-driven work. Keep, but do not make it the default clock. |
+| `useFrame` | product | Opts a settled renderer into time-driven work. Named `active` and `priority` options expose subscription and ordering costs; inactive hooks release the frame clock. Keep, but do not make it the default clock. |
 | Renderer lifecycle snapshot and recovery | product | Needed for context loss and UI state. Keep small. |
 | glTF asset status hook | product | Useful React loading/error surface. Keep. |
 | Large diagnostic snapshots | candidate | Useful during development, but should be bounded observations rather than a public control model. Scene data and static policy-derived ceiling tables are omitted; retain measured limits, usage, high-water, admissions and denials. |

@@ -149,6 +149,16 @@ describe("renderer-core public API", () => {
   });
 
   it("keeps React as an adapter instead of a renderer-core barrel", () => {
+    if (false) {
+      const frameOptions: import("@royal/react").UseFrameOptions = {
+        active: false,
+        priority: -1,
+      };
+      reactRoyal.useFrame(() => undefined, frameOptions);
+      // @ts-expect-error Frame priority is named so call sites expose scheduling policy.
+      reactRoyal.useFrame(() => undefined, -1);
+    }
+
     expect(Object.keys(reactRoyal).sort()).toEqual([
       "Canvas",
       "OrbitControls",

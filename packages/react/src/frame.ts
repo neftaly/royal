@@ -19,6 +19,14 @@ type MutableFrameSnapshot = {
 
 export type FrameCallback = (frame: FrameSnapshot) => void;
 
+/** Scheduling controls for one Canvas frame subscription. */
+export interface UseFrameOptions {
+  /** Releases the frame subscription and renderer clock while false. @defaultValue `true` */
+  readonly active?: boolean;
+  /** Lower priorities run first; equal priorities retain subscription order. @defaultValue `0` */
+  readonly priority?: number;
+}
+
 type FrameSubscriber = {
   active: boolean;
   readonly callback: FrameCallback;
@@ -272,8 +280,7 @@ const useCanvasFrameLoop = (): FrameLoop => {
 
 const useFrameSubscription = (
   callback: FrameCallback,
-  priority: number,
-  active: boolean,
+  { active = true, priority = 0 }: UseFrameOptions,
 ): void => {
   const frameLoop = useCanvasFrameLoop();
   const callbackRef = useCommittedRef(callback);
@@ -290,11 +297,6 @@ const useFrameSubscription = (
  * priorities run in subscription order. The callback receives one reused
  * snapshot object, so copy scalar fields that must outlive the callback.
  */
-export const useFrame = (callback: FrameCallback, priority = 0): void => {
-  useFrameSubscription(callback, priority, true);
-};
-
-/** @internal Subscribes only while active without conditionally calling hooks. */
-export const useFrameWhile = (callback: FrameCallback, active: boolean, priority = 0): void => {
-  useFrameSubscription(callback, priority, active);
+export const useFrame = (callback: FrameCallback, options: UseFrameOptions = {}): void => {
+  useFrameSubscription(callback, options);
 };

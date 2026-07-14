@@ -17,7 +17,7 @@ export type {
   PickTarget,
 } from '@royal/renderer-core';
 export { useFrame } from './frame';
-export type { FrameCallback, FrameSnapshot } from './frame';
+export type { FrameCallback, FrameSnapshot, UseFrameOptions } from './frame';
 
 export { useGltfAssetStatus, useGltfAssetVariants } from './gltf-status';
 export type {

@@ -198,7 +198,10 @@ events. Royal render-object refs already invalidate the current canvas when
 their transform changes. `useFrame()` supplies animation timing but does not
 redraw by itself: a React state commit, a render-object mutation, or an explicit
 `useInvalidate()` call requests the next render. Multiple invalidations before
-that render are coalesced.
+that render are coalesced. Pass `useFrame(callback, { active: false })` to
+release the continuous frame subscription and renderer clock without calling a
+hook conditionally. Named `priority` values order callbacks from lower to
+higher priority.
 
 glTF material variants from `KHR_materials_variants` can be selected with
 `gltf({ src, variant })`. Pass a variant name, or pass a zero-based variant
