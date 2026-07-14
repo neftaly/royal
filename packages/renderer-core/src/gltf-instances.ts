@@ -3,6 +3,7 @@ import {
   validateGltfVariant,
   type GltfAssetBounds,
   type GltfAssetRef,
+  type GltfMaterialVariantSelection,
 } from './gltf';
 import type { PickingId } from './picking';
 
@@ -224,8 +225,8 @@ export interface GltfInstancesNode {
   readonly instances: GltfInstanceTransforms;
   readonly kind: 'gltf-instances';
   readonly pickingId?: PickingId;
-  /** Selected `KHR_materials_variants` variant name or index. */
-  readonly variant?: number | string;
+  /** Unknown names or out-of-range indices fall back to the base material. */
+  readonly variant?: GltfMaterialVariantSelection;
 }
 
 export interface GltfInstancesOptions {
@@ -233,7 +234,8 @@ export interface GltfInstancesOptions {
   readonly instances: GltfInstanceTransforms;
   readonly pickingId?: PickingId;
   readonly src: string;
-  readonly variant?: number | string;
+  /** Select by exact name or zero-based declaration index. */
+  readonly variant?: GltfMaterialVariantSelection;
   readonly version?: GltfAssetRef['version'];
 }
 

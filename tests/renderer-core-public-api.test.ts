@@ -160,6 +160,7 @@ describe("renderer-core public API", () => {
       "useCanvasRoot",
       "useFrame",
       "useGltfAssetStatus",
+      "useGltfAssetVariants",
       "useInvalidate",
       "useOrbitCamera",
       "useOrbitCameraView",

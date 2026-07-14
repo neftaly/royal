@@ -21,6 +21,12 @@ export interface GltfAssetRef {
   readonly version?: number | string;
 }
 
+/**
+ * Selects one `KHR_materials_variants` entry by its exact name or zero-based
+ * declaration index. An asset without that selection renders its base material.
+ */
+export type GltfMaterialVariantSelection = string | number;
+
 /** glTF asset node loaded from a source URL. */
 export interface GltfNode {
   readonly kind: 'gltf';
@@ -28,8 +34,8 @@ export interface GltfNode {
   readonly pickingId?: PickingId;
   readonly ref?: RenderObjectRef;
   readonly transform?: Transform;
-  /** Selected `KHR_materials_variants` variant name or index. */
-  readonly variant?: number | string;
+  /** Unknown names or out-of-range indices fall back to the base material. */
+  readonly variant?: GltfMaterialVariantSelection;
 }
 
 export interface GltfSrcOptions {
@@ -41,8 +47,8 @@ export interface GltfSrcOptions {
   readonly src: string;
   /** Omit for an identity transform. */
   readonly transform?: TransformOptions;
-  /** Selected `KHR_materials_variants` variant name or index. */
-  readonly variant?: number | string;
+  /** Unknown names or out-of-range indices fall back to the base material. */
+  readonly variant?: GltfMaterialVariantSelection;
   /** Preferred asset version override for cache keys. */
   readonly version?: GltfAssetRef['version'];
 }
@@ -64,7 +70,9 @@ export const resolveGltfAsset = (options: {
   ...(options.version === undefined ? {} : { version: options.version })
 });
 
-export const validateGltfVariant = (variant: number | string | undefined): number | string | undefined => {
+export const validateGltfVariant = (
+  variant: GltfMaterialVariantSelection | undefined,
+): GltfMaterialVariantSelection | undefined => {
   if (variant === undefined) return undefined;
   if (typeof variant === 'string') return nonEmptyString(variant, 'glTF material variant');
   if (!Number.isInteger(variant) || variant < 0) {

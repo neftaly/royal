@@ -110,7 +110,7 @@ Status meanings:
 | POSITION, NORMAL, TANGENT, TEXCOORD_0/1 and COLOR_0 | ingestion | Current prepared vertex profile. Keep unless a narrower asset contract is chosen. |
 | Generated normals when missing | fallback | Convenience rather than strict glTF behavior. Review whether malformed/underspecified assets should instead fail or render unlit. |
 | Sparse accessors | ingestion | Core glTF compatibility with isolated implementation cost. Keep. |
-| Mesh/material variants | ingestion/product | Keep. Complete an intentional application selection API and demo rather than deleting latent renderer support. |
+| Mesh/material variants | ingestion/product | Keep. Applications select by named type-safe descriptor value, discover ready names through `useGltfAssetVariants`, and can exercise the interactive demo. |
 | glTF punctual lights | ingestion | Low-cost lowering into Royal lights. Keep unless asset lights are unwanted by policy. |
 | glTF image-based lights | ingestion/product | Keep as asset-scoped fallback lighting. It cannot mutate the Royal scene, and an explicit Royal environment wins. |
 | glTF cameras | unsupported | Deliberately ignored; Royal scene owns the camera. |
@@ -130,7 +130,7 @@ Status meanings:
 | `KHR_mesh_quantization` | ingestion | Mostly accessor acceptance; useful and low runtime cost. Keep. |
 | `EXT_mesh_gpu_instancing` | ingestion | Correctly lowers into canonical instance transforms. Keep. |
 | `KHR_node_visibility` | ingestion/candidate | Small optional filtering extension. Delete if no production exporter uses it. |
-| `KHR_materials_variants` | ingestion/product | Keep and add an intentional selection API/workload. |
+| `KHR_materials_variants` | ingestion/product | Keep; canonical selection, React discovery API, LOD interaction tests, and an interactive workload are present. |
 | `EXT_lights_image_based` | ingestion | Real multi-vendor extension. Keep its existing adapter: imported IBL is asset-scoped fallback, scene environment wins, and no load-order authority exists. |
 | `MSFT_lod` | ingestion | Keep as declarations only; lower to canonical LOD. |
 | `GS_texture_svg` | ingestion | Garbo Succus vendor extension with core raster fallback. Keep minimal and format-only. |

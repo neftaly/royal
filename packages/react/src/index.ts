@@ -27,7 +27,7 @@ export {
 export { useFrame } from './frame';
 export type { FrameCallback, FrameSnapshot } from './frame';
 
-export { useGltfAssetStatus } from './gltf-status';
+export { useGltfAssetStatus, useGltfAssetVariants } from './gltf-status';
 export type {
   GltfAssetLoadState,
   GltfAssetStatus,

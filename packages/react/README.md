@@ -205,7 +205,11 @@ that render are coalesced.
 
 glTF material variants from `KHR_materials_variants` can be selected with
 `gltf({ src, variant })`. Pass a variant name, or pass a zero-based variant
-index when an asset has unnamed variants.
+index. Unknown selections render the primitive's base material. Inside the
+surrounding Canvas, `useGltfAssetVariants(src)` returns the ordered names once
+the exact asset is ready, so asset-driven controls do not need a second glTF
+parser or a duplicated manifest. Pass `node.asset` when using an explicit
+asset `version`.
 
 `useGltfAssetStatus(src)` observes an asset retained by the surrounding Canvas
 and returns a status discriminated by `state`. It is frame-driven and does not

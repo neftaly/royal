@@ -141,6 +141,8 @@ export interface WebGlGltfLoadDiagnosticsAssetSnapshot {
   /** Optional application-supplied asset version used for cache identity. */
   readonly sourceVersion?: number | string;
   readonly status: "loading" | "sceneReady" | "error";
+  /** Ordered `KHR_materials_variants` names accepted by public glTF descriptors. */
+  readonly variantNames: readonly string[];
   readonly variantCount: number;
 }
 

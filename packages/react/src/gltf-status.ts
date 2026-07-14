@@ -17,17 +17,27 @@ export type GltfAssetStatusInput = string | GltfAssetRef;
 const IDLE: GltfAssetStatus = Object.freeze({ state: "idle" });
 const LOADING: GltfAssetStatus = Object.freeze({ state: "loading" });
 const READY: GltfAssetStatus = Object.freeze({ state: "ready" });
+const NO_VARIANTS: readonly string[] = Object.freeze([]);
 
 const sameStatus = (left: GltfAssetStatus, right: GltfAssetStatus): boolean =>
   left.state === right.state && left.error === right.error;
+
+const sameVariants = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((name, index) => name === right[index]);
+
+const matchingAsset = (
+  root: NonNullable<ReturnType<typeof useCanvasRoot>>,
+  sourceUri: string,
+  sourceVersion: GltfAssetRef["version"],
+) => root.diagnostics().gltfLoads.assets.find((candidate) =>
+  candidate.sourceUri === sourceUri && candidate.sourceVersion === sourceVersion);
 
 const readStatus = (
   root: NonNullable<ReturnType<typeof useCanvasRoot>>,
   sourceUri: string,
   sourceVersion: GltfAssetRef["version"],
 ): GltfAssetStatus => {
-  const asset = root.diagnostics().gltfLoads.assets.find((candidate) =>
-    candidate.sourceUri === sourceUri && candidate.sourceVersion === sourceVersion);
+  const asset = matchingAsset(root, sourceUri, sourceVersion);
   return asset === undefined
     ? IDLE
     : asset.status === "loading"
@@ -59,4 +69,31 @@ export const useGltfAssetStatus = (input: GltfAssetStatusInput): GltfAssetStatus
   }, [root, sourceUri, sourceVersion]);
 
   return useSyncExternalStore(store.subscribe, store.getSnapshot, () => IDLE);
+};
+
+/**
+ * Observes the ordered `KHR_materials_variants` names declared by one retained
+ * glTF asset. Returns an empty immutable list until that exact asset is ready.
+ * The names can be passed directly to the scene descriptor's `variant` option.
+ */
+export const useGltfAssetVariants = (input: GltfAssetStatusInput): readonly string[] => {
+  const root = useCanvasRoot();
+  const sourceUri = typeof input === "string" ? input : input.uri;
+  const sourceVersion = typeof input === "string" ? undefined : input.version;
+  const store = useMemo(() => {
+    if (root === null) {
+      return createObservedExternalStore(NO_VARIANTS, () => () => undefined, sameVariants);
+    }
+    const read = (): readonly string[] => {
+      const asset = matchingAsset(root, sourceUri, sourceVersion);
+      return asset?.status === "sceneReady" ? asset.variantNames : NO_VARIANTS;
+    };
+    return createObservedExternalStore(
+      read(),
+      (publish) => root.observeFrame(() => publish(read())),
+      sameVariants,
+    );
+  }, [root, sourceUri, sourceVersion]);
+
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => NO_VARIANTS);
 };

@@ -15,7 +15,7 @@ export type GltfLoadDiagnosticsState = {
   readonly sourceUri: string;
   readonly sourceVersion?: number | string;
   readonly status: "error" | "loading" | "ready";
-  readonly variantCount: number;
+  readonly variants: readonly string[];
 };
 
 const elapsedMs = (start: number | undefined, end: number | undefined): number | undefined =>
@@ -55,7 +55,8 @@ const assetSnapshot = (
     sourceUri: state.sourceUri,
     ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
     status: state.status === "ready" ? "sceneReady" : state.status,
-    variantCount: state.variantCount,
+    variantCount: state.variants.length,
+    variantNames: Object.freeze([...state.variants]),
   };
 };
 
@@ -88,6 +89,6 @@ export const preparedGltfLoadDiagnosticsSnapshot = (
     sourceUri: state.sourceUri,
     ...(state.sourceVersion === undefined ? {} : { sourceVersion: state.sourceVersion }),
     status: state.status,
-    variantCount: state.variants.length,
+    variants: state.variants,
   })),
 );

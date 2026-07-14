@@ -29,7 +29,7 @@ const state = (
   primitiveCount: 5,
   sourceUri,
   status,
-  variantCount: 6,
+  variants: ["ruby", "mint"],
   ...overrides,
 });
 
@@ -58,13 +58,15 @@ describe("glTF load diagnostics core", () => {
         sourceUri: "model.glb",
         sourceVersion: "revision-a",
         status: "sceneReady",
-        variantCount: 6,
+        variantCount: 2,
+        variantNames: ["ruby", "mint"],
       }],
       errorAssets: 0,
       loadingAssets: 0,
       sceneReadyAssets: 1,
     });
     expect(input.status).toBe("ready");
+    expect(Object.isFrozen(gltfLoadDiagnosticsSnapshot([input]).assets[0]?.variantNames)).toBe(true);
   });
 
   it("counts each status and omits unavailable phases", () => {

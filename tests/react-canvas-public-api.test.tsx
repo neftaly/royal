@@ -20,6 +20,7 @@ import type {
   TextureAssetRef,
   TextureAssetOptions,
   TextureColorSpace,
+  GltfMaterialVariantSelection,
   TextureSampler,
   VirtualTextureAssetOptions,
   VirtualTextureAssetRef,
@@ -170,5 +171,11 @@ describe('Canvas public scene boundary', () => {
       acceptLifecycle({ error: 'impossible', generation: 1, interruptions: 0, recoveries: 0, state: 'available' });
       expect(invalidAsset).toHaveProperty('state', 'error');
     }
+  });
+
+  it('names the glTF material-variant selection contract', () => {
+    const byName = 'ruby' satisfies GltfMaterialVariantSelection;
+    const byIndex = 1 satisfies GltfMaterialVariantSelection;
+    expect([byName, byIndex]).toEqual(['ruby', 1]);
   });
 });

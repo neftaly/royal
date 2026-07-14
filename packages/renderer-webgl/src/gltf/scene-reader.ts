@@ -813,8 +813,8 @@ const appendNodeTreePrimitives = (
 export const readGltfScene = (input: ReadGltfSceneInput): GltfSceneFacts => {
   const lights: SurfaceLight[] = [];
   const primitives: LoadedGltfPrimitive[] = [];
-  const variants = (input.document.extensions?.KHR_materials_variants?.variants ?? [])
-    .map((variant, index) => typeof variant.name === "string" ? variant.name : String(index));
+  const variants = Object.freeze((input.document.extensions?.KHR_materials_variants?.variants ?? [])
+    .map((variant, index) => typeof variant.name === "string" ? variant.name : String(index)));
   const sceneIndex = input.document.scene ?? 0;
   const imageBasedLight = readGltfSceneImageBasedLight(input.document, input.src, input.assetKey, sceneIndex, {
     recordDiagnostic: (message) => input.diagnostics.recordDiagnostic(message),

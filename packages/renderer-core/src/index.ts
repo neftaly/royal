@@ -47,6 +47,7 @@ export type {
   GltfAssetBounds,
   GltfAssetRef,
   GltfInput,
+  GltfMaterialVariantSelection,
   GltfNode,
   GltfOptions
 } from './gltf';
