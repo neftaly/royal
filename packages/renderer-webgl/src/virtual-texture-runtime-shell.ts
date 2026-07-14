@@ -16,12 +16,10 @@ import type { VirtualTextureDemandSubmission } from "./virtual-texture-demand";
 import {
   GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION,
   generatedVirtualTextureSource,
-  generatedRasterVirtualTextureManifest,
-  generatedRasterVirtualTexturePageImage,
   virtualTextureNow,
   type GeneratedVirtualTextureSource,
   type VirtualTextureGeneratedPageSource,
-  type VirtualTextureManifestSource,
+  type VirtualTexturePageSource,
   type VirtualTextureRef,
   type VirtualTextureRuntimeState,
 } from "./virtual-texture-runtime";
@@ -32,10 +30,9 @@ import {
   virtualTextureExplicitPageUrisByKey,
   virtualTexturePageKey,
   virtualTexturePageUri,
-  type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
-import { resolveResourceUri, throwIfAborted } from "./gltf/io";
+import { resolveResourceUri } from "./gltf/io";
 import { isLoadedSvgTextureSource } from "./svg-texture";
 import { textureCacheKey, type TextureAssetUploadRef } from "./webgl/materials";
 import type { ResourceGovernorLease, ResourceGovernorReservation } from "./resource-governor";
@@ -184,10 +181,7 @@ export class VirtualTextureRuntimeShell {
       if (diagnosticsEnabled) cached.diagnosticsEnabled = true;
       return cached;
     }
-    const activeSource = options.generatedSource ?? {
-      kind: "sidecar" as const,
-      manifestUri: texture.manifestUri,
-    };
+    const activeSource = options.generatedSource ?? this.#sidecarSource(texture.manifestUri);
     const state: VirtualTextureRuntimeState = {
       activeSource,
       admissionTicket: this.nextAdmissionTicket(),
@@ -214,7 +208,7 @@ export class VirtualTextureRuntimeShell {
         generatedPagesTarget: 0,
         gpuAdmissionFailures: 0,
         manifestFailures: 0,
-        manifestRequests: activeSource.kind === "sidecar" ? 1 : 0,
+        manifestRequests: activeSource.manifest === undefined ? 1 : 0,
         preparedResidencyResolutions: 0,
         pageLoadFailures: 0,
         shaderBinds: 0,
@@ -418,8 +412,8 @@ export class VirtualTextureRuntimeShell {
   }
 
   #startSource(state: VirtualTextureRuntimeState): void {
-    if (state.activeSource.kind === "generated") {
-      this.#useGeneratedManifest(state, state.activeSource);
+    if (state.activeSource.manifest !== undefined) {
+      this.#useManifest(state, state.activeSource.manifest);
       return;
     }
     state.manifestAbortController = new AbortController();
@@ -434,31 +428,27 @@ export class VirtualTextureRuntimeShell {
 
   async #loadManifest(state: VirtualTextureRuntimeState, signal: AbortSignal): Promise<void> {
     const source = state.activeSource;
-    if (source.kind !== "sidecar") return;
+    if (source.loadManifest === undefined) return;
     const sourceGeneration = state.sourceGeneration;
-    let response: Response;
+    let parsed;
     try {
-      response = await fetch(source.manifestUri, { signal });
-      if (!this.#current(state, sourceGeneration)) return;
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      parsed = await source.loadManifest(signal);
     } catch (error) {
       if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
       if (!this.#current(state, sourceGeneration)) return;
-      this.#fail(state, `manifest transport failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.#fail(state, error instanceof Error ? error.message : String(error));
       return;
     }
-    let payload: unknown;
-    try {
-      payload = await response.json() as unknown;
-      if (!this.#current(state, sourceGeneration)) return;
-      if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
-    } catch (error) {
-      if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
-      if (!this.#current(state, sourceGeneration)) return;
-      this.#fail(state, `manifest JSON decode failed: ${error instanceof Error ? error.message : String(error)}`);
-      return;
-    }
-    const parsed = parseVirtualTextureManifest(payload);
+    if (!this.#current(state, sourceGeneration)) return;
+    if (state.manifestAbortController?.signal === signal) delete state.manifestAbortController;
+    this.#useManifest(state, parsed);
+  }
+
+  #useManifest(
+    state: VirtualTextureRuntimeState,
+    parsed: ReturnType<typeof parseVirtualTextureManifest>,
+  ): void {
+    const source = state.activeSource;
     for (const diagnostic of parsed.diagnostics) {
       if (!state.diagnosticsEnabled) continue;
       this.#options.diagnostic(
@@ -475,31 +465,19 @@ export class VirtualTextureRuntimeShell {
       this.markUnsupported(state, unsupported.message);
       return;
     }
-    state.manifest = parsed.manifest;
+    const manifest = parsed.manifest;
+    if (source.telemetryKind === "generated-raster") {
+      state.stats.generatedManifestUses += 1;
+      state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
+        manifest.width,
+        manifest.height,
+        manifest.pageSize,
+      );
+    }
+    state.manifest = manifest;
     state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
     state.status = "ready";
     this.#options.invalidate();
-  }
-
-  #useGeneratedManifest(
-    state: VirtualTextureRuntimeState,
-    source: Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>,
-  ): void {
-    const manifest = this.#generatedManifest(source.pageSource);
-    state.stats.generatedManifestUses += 1;
-    state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
-      manifest.width,
-      manifest.height,
-      manifest.pageSize,
-    );
-    state.manifest = manifest;
-    state.pageUrisByKey = new Map();
-    state.status = "ready";
-    this.#options.invalidate();
-  }
-
-  #generatedManifest(source: VirtualTextureGeneratedPageSource): VirtualTextureManifestModel {
-    return generatedRasterVirtualTextureManifest(source.source);
   }
 
   #pageImage(
@@ -509,22 +487,10 @@ export class VirtualTextureRuntimeShell {
   ): Promise<TexImageSource> | undefined {
     const manifest = state.manifest;
     if (manifest === undefined) return undefined;
-    if (state.activeSource.kind === "generated") {
-      return this.#generatedPageImage(state, state.activeSource.pageSource, manifest, page, signal);
+    const pageUrisByKey = state.pageUrisByKey ?? new Map<string, string>();
+    if (state.activeSource.telemetryKind !== "generated-raster") {
+      return state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
     }
-    const uri = virtualTexturePageUri(manifest, page, state.pageUrisByKey);
-    return uri === undefined
-      ? undefined
-      : this.#options.loadImageSource(resolveResourceUri(state.activeSource.manifestUri, uri), signal);
-  }
-
-  #generatedPageImage(
-    state: VirtualTextureRuntimeState,
-    source: VirtualTextureGeneratedPageSource,
-    manifest: VirtualTextureManifestModel,
-    page: VirtualTexturePageId,
-    signal: AbortSignal,
-  ): Promise<TexImageSource> {
     const started = virtualTextureNow();
     state.stats.generatedPageRequests += 1;
     const recordResult = (image: TexImageSource): TexImageSource => {
@@ -534,12 +500,50 @@ export class VirtualTextureRuntimeShell {
       return image;
     };
     try {
-      throwIfAborted(signal);
-      return Promise.resolve(recordResult(generatedRasterVirtualTexturePageImage(source.source, manifest, page)));
+      const loaded = state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
+      if (loaded === undefined) return undefined;
+      return loaded.then(recordResult, (error: unknown) => {
+        if (!signal.aborted) state.stats.generatedPageFailures += 1;
+        throw error;
+      });
     } catch (error) {
       if (!signal.aborted) state.stats.generatedPageFailures += 1;
       return Promise.reject(error);
     }
+  }
+
+  #sidecarSource(manifestUri: string): VirtualTexturePageSource {
+    return {
+      loadManifest: async (signal) => {
+        let response: Response;
+        try {
+          response = await fetch(manifestUri, { signal });
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        } catch (error) {
+          throw new Error(
+            `manifest transport failed: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
+        let payload: unknown;
+        try {
+          payload = await response.json() as unknown;
+        } catch (error) {
+          throw new Error(
+            `manifest JSON decode failed: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
+        return parseVirtualTextureManifest(payload);
+      },
+      loadPage: (manifest, page, pageUrisByKey, signal) => {
+        const uri = virtualTexturePageUri(manifest, page, pageUrisByKey);
+        return uri === undefined
+          ? undefined
+          : this.#options.loadImageSource(resolveResourceUri(manifestUri, uri), signal);
+      },
+      manifestUri,
+    };
   }
 
   #fail(state: VirtualTextureRuntimeState, reason: string): void {

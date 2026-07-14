@@ -5,11 +5,13 @@ import {
 } from "./texture-sources";
 import type { Mat4 } from "./math/mat4";
 import type { GltfTextureCoordinates } from "./gltf/texture-coordinates";
+import { throwIfAborted } from "./gltf/io";
 import type { VirtualTextureCoverageProvider } from "./virtual-texture-coverage-provider";
 import type { TextureAssetUploadRef } from "./webgl/materials";
 import {
   generatedVirtualTextureManifest,
   type VirtualTextureManifestModel,
+  type VirtualTextureManifestParseResult,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
 import { createVirtualTextureCanvas, virtualTextureCanvasContext } from "./virtual-texture-canvas";
@@ -43,11 +45,35 @@ export type VirtualTextureGeneratedPageSource = {
   readonly source: RasterVirtualTextureSource;
 };
 
-export type VirtualTextureManifestSource =
-  | { readonly kind: "generated"; readonly manifestUri: string; readonly pageSource: VirtualTextureGeneratedPageSource }
-  | { readonly kind: "sidecar"; readonly manifestUri: string };
+type VirtualTexturePageLoader = (
+  manifest: VirtualTextureManifestModel,
+  page: VirtualTexturePageId,
+  pageUrisByKey: ReadonlyMap<string, string>,
+  signal: AbortSignal,
+) => Promise<TexImageSource> | undefined;
 
-export type GeneratedVirtualTextureSource = Extract<VirtualTextureManifestSource, { readonly kind: "generated" }>;
+type ImmediateVirtualTexturePageSource = {
+  readonly loadManifest?: never;
+  readonly manifest: VirtualTextureManifestParseResult;
+};
+
+type DeferredVirtualTexturePageSource = {
+  readonly loadManifest: (signal: AbortSignal) => Promise<VirtualTextureManifestParseResult>;
+  readonly manifest?: never;
+};
+
+/** Format adapter consumed by the runtime shell; demand and residency see only its manifest. */
+export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | DeferredVirtualTexturePageSource) & {
+  readonly loadPage: VirtualTexturePageLoader;
+  readonly manifestUri: string;
+  /** Diagnostics only; scheduling and residency must never branch on this label. */
+  readonly telemetryKind?: "generated-raster";
+};
+
+export type GeneratedVirtualTextureSource = VirtualTexturePageSource & {
+  readonly manifest: VirtualTextureManifestParseResult;
+  readonly telemetryKind: "generated-raster";
+};
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
 
@@ -72,7 +98,7 @@ export type VirtualTextureRuntimeStats = {
 };
 
 export type VirtualTextureRuntimeState = {
-  activeSource: VirtualTextureManifestSource;
+  activeSource: VirtualTexturePageSource;
   /** Stable root-policy ordering for admission and cold-reclamation ties. */
   readonly admissionTicket: number;
   demandPublished: boolean;
@@ -169,11 +195,22 @@ export const virtualTextureNow = (): number =>
 export const generatedVirtualTextureSource = (
   textureKey: string,
   pageSource: VirtualTextureGeneratedPageSource,
-): GeneratedVirtualTextureSource => ({
-  kind: "generated",
-  manifestUri: generatedVirtualTextureManifestUri(textureKey),
-  pageSource,
-});
+): GeneratedVirtualTextureSource => {
+  const manifest = generatedRasterVirtualTextureManifest(pageSource.source);
+  return {
+    loadPage: (activeManifest, page, _pageUrisByKey, signal) => {
+      throwIfAborted(signal);
+      return Promise.resolve(generatedRasterVirtualTexturePageImage(
+        pageSource.source,
+        activeManifest,
+        page,
+      ));
+    },
+    manifest: { diagnostics: [], manifest },
+    manifestUri: generatedVirtualTextureManifestUri(textureKey),
+    telemetryKind: "generated-raster",
+  };
+};
 
 export const generatedRasterVirtualTextureManifest = (
   source: RasterVirtualTextureSource,

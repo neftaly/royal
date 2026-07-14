@@ -8,7 +8,10 @@ import {
   resourceGovernorSnapshot,
 } from "../packages/renderer-webgl/src/resource-governor";
 import { GLTF_PACKET_OCCURRENCE_STATUS } from "../packages/renderer-webgl/src/gltf-packet-topology";
-import type { VirtualTextureRuntimeState } from "../packages/renderer-webgl/src/virtual-texture-runtime";
+import {
+  generatedVirtualTextureSource,
+  type VirtualTextureRuntimeState,
+} from "../packages/renderer-webgl/src/virtual-texture-runtime";
 import { VirtualTextureRuntimeShell } from "../packages/renderer-webgl/src/virtual-texture-runtime-shell";
 
 const event = (key: string): PreparedAssetArenaEvent => ({
@@ -16,7 +19,11 @@ const event = (key: string): PreparedAssetArenaEvent => ({
 });
 
 const virtualTextureState = (key: string, admissionTicket: number): VirtualTextureRuntimeState => ({
-  activeSource: { kind: "sidecar", manifestUri: `/${key}.json` },
+  activeSource: {
+    loadManifest: async () => ({ diagnostics: [] }),
+    loadPage: () => undefined,
+    manifestUri: `/${key}.json`,
+  },
   admissionTicket,
   demandPublished: false,
   demandedPageKeys: new Set(),
@@ -115,19 +122,15 @@ describe("renderer runtime ownership", () => {
   it("owns generated VT source setup and abort-safe teardown", () => {
     const runtime = virtualTextureShell();
     const state = runtime.acquire({ kind: "virtual-asset", manifestUri: "/generated" }, {
-      generatedSource: {
-        kind: "generated",
-        manifestUri: "royal-generated-vt:test",
-        pageSource: {
-          kind: "raster",
-          source: {
-            height: 1024,
-            label: "generated",
-            source: {} as never,
-            width: 1024,
-          },
+      generatedSource: generatedVirtualTextureSource("test", {
+        kind: "raster",
+        source: {
+          height: 1024,
+          label: "generated",
+          source: {} as never,
+          width: 1024,
         },
-      },
+      }),
     });
 
     expect(state.status).toBe("ready");

@@ -261,7 +261,7 @@ export class VirtualTextureDemandOwner {
     this.#demandPageCandidates(
       state,
       drawDemand.demandCandidates,
-      context !== undefined || state.activeSource.kind === "generated",
+      context !== undefined || state.manifest?.pageAddressing === "complete",
       drawDemand.preferredCandidates,
     );
   }
