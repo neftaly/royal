@@ -58,6 +58,14 @@ Completed in the current worktree:
   upload-readiness projection, transforms, and stable glTF light-scope identity.
 - `GltfPacketSelectionOwner` owns shared-view node/material LOD observation,
   visibility workspaces, and retained per-view packet selection.
+- `normalizeWebGlRootOptions` is the single pure defaulting and validation
+  boundary used by both root construction and React Canvas semantic identity.
+
+The remaining root is the deliberate composition shell: construction rollback
+and context wiring, exact frame-transaction ordering, cross-owner resource
+delta application, and teardown failure precedence. Extract it further only
+when a new authority can own state or delete coupling; callback façades around
+those transactions do not count.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup

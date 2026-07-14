@@ -93,6 +93,14 @@ describe("Canvas renderer root cleanup", () => {
     expect(concise).toBe(expanded);
   });
 
+  it.each([255, 16_385, 512.5, Number.NaN])(
+    "rejects an invalid generated SVG size at the Canvas lifetime boundary (%s)",
+    (generatedSvgVirtualTextureMaxDimension) => {
+      expect(() => rendererRootOptionsSemanticKey({ generatedSvgVirtualTextureMaxDimension }))
+        .toThrow("generatedSvgVirtualTextureMaxDimension must be an integer from 256 through 16384");
+    },
+  );
+
   it("ignores unknown or undefined runtime policy fields in semantic identity", () => {
     const noisy = {
       resourceGovernorPolicy: { limits: { ignored: 1, jobs: undefined } },

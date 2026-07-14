@@ -42,7 +42,6 @@ import {
 import {
   beginResourceGovernorFrame,
   createResourceGovernor,
-  defineResourceGovernorPolicy,
   maximumResourceGovernorClassDurableBytes,
   ResourceGovernorCpuCapacityError,
   replaceResourceGovernorLease,
@@ -158,9 +157,6 @@ import {
 import { PickingController } from "./picking-controller";
 import { FrameTextureResidencyIntent } from "./frame-texture-residency-intent";
 import {
-  GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION,
-  GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION,
-  GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION,
   isSvgUri,
   loadSvgTextureFromUri,
 } from "./svg-texture";
@@ -220,6 +216,7 @@ import { ResourceArenaSideEffectDebtOwner } from "./resource-arena-side-effect-d
 import { ResourceCapacityWakeOwner } from "./resource-capacity-wake-owner";
 import { ScenePlanTransactionOwner } from "./scene-plan-transaction-owner";
 import { IblRuntimeOwner } from "./ibl-runtime-owner";
+import { normalizeWebGlRootOptions } from "./root-options";
 import type {
   NormalizedWebGlRootOptions,
   WebGlExternalRenderClock,
@@ -286,27 +283,6 @@ const captureFirstFailure = (
 ): CapturedFailure | undefined => {
   const nextFailure = captureFailure(action);
   return firstFailure ?? nextFailure;
-};
-
-const normalizeOptions = (options: WebGlRootOptions = {}): NormalizedWebGlRootOptions => {
-  const generatedSvgVirtualTextureMaxDimension = options.generatedSvgVirtualTextureMaxDimension
-    ?? GENERATED_SVG_VIRTUAL_TEXTURE_DEFAULT_MAX_DIMENSION;
-  if (
-    !Number.isSafeInteger(generatedSvgVirtualTextureMaxDimension)
-    || generatedSvgVirtualTextureMaxDimension < GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION
-    || generatedSvgVirtualTextureMaxDimension > GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION
-  ) {
-    throw new RangeError(
-      `generatedSvgVirtualTextureMaxDimension must be an integer from ${GENERATED_SVG_VIRTUAL_TEXTURE_MIN_DIMENSION} through ${GENERATED_SVG_VIRTUAL_TEXTURE_MAX_DIMENSION} logical texels, received ${String(generatedSvgVirtualTextureMaxDimension)}`,
-    );
-  }
-  return Object.freeze({
-    alpha: options.alpha ?? true,
-    antialias: options.antialias ?? true,
-    generatedImageVirtualTextures: options.generatedImageVirtualTextures ?? false,
-    generatedSvgVirtualTextureMaxDimension,
-    resourceGovernorPolicy: defineResourceGovernorPolicy(options.resourceGovernorPolicy),
-  });
 };
 
 const loadImage = (src: string, signal?: AbortSignal): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
@@ -552,7 +528,7 @@ class WebGlRootImpl implements InternalWebGlRoot {
         },
         renderObjectTransform: (node) => this.#sceneBindings.transform(node),
       });
-      const requestedOptions = normalizeOptions(options);
+      const requestedOptions = normalizeWebGlRootOptions(options);
       this.#resourceGovernor = createResourceGovernor(requestedOptions.resourceGovernorPolicy);
       this.#preparedGltf.configureCpuOwnership({
         governor: this.#resourceGovernor,
