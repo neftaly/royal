@@ -414,6 +414,9 @@ from the canvas. Start failure, session `end`, context loss, and root disposal
 all release the external clock exactly once, cancel pending callbacks, and
 restore Royal-owned GL state around the borrowed framebuffer. No error path may
 strand continuous rendering or delete runtime-owned framebuffer resources.
+The public session runtime is the single owner of that renderer, the session
+RAF, visibility/end listeners, and root-lifecycle observation; examples and
+application components own only support detection and acquisition policy.
 
 ## WebGL Contract
 

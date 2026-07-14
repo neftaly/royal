@@ -122,8 +122,18 @@ try {
     include: ['app.tsx'],
   }, null, 2)}\n`);
   writeFileSync(path.join(temporaryRoot, 'app.tsx'), `
-import { Canvas, useGltfAssetStatus, useRendererLifecycle } from '@royal/react';
+import {
+  Canvas,
+  useGltfAssetStatus,
+  useRendererLifecycle,
+  type RoyalRendererRoot,
+} from '@royal/react';
 import { gltf, perspectiveCamera, scene } from '@royal/react/scene';
+import {
+  createXrSessionRuntime,
+  createXrSessionStore,
+  type XrSession,
+} from '@royal/react/xr';
 import type { ReactNode } from 'react';
 
 const asset = gltf({ src: '/model.glb' });
@@ -141,6 +151,10 @@ const Status = (): ReactNode => {
 };
 
 export const App = (): ReactNode => <Canvas scene={renderScene}><Status /></Canvas>;
+
+const xrStore = createXrSessionStore<XrSession>();
+export const startXr = (root: RoyalRendererRoot, session: XrSession) =>
+  createXrSessionRuntime(root, xrStore, session, { mode: 'immersive-vr' });
 `);
   writeFileSync(path.join(temporaryRoot, 'imports.mjs'), `
 const entrypoints = [

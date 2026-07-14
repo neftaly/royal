@@ -89,6 +89,15 @@ describe("React XR session store", () => {
       status: "ending",
     });
 
+    store.getState().failSessionEnd(new Error("end rejected"));
+    expect(store.getState()).toMatchObject({
+      active: true,
+      error: "end rejected",
+      session,
+      status: "active",
+    });
+    store.getState().beginSessionEnd();
+
     store.getState().setAvailability(false);
     expect(store.getState()).toMatchObject({
       available: false,

@@ -104,6 +104,8 @@ export type XrSessionStoreActions<Session extends object = object> = {
     error: unknown,
     options?: XrSessionFailureOptions,
   ) => void;
+  /** Restores a still-owned session after `session.end()` rejects. */
+  readonly failSessionEnd: (error: unknown) => void;
   readonly recordFrame: (frame?: XrSessionFrameRecord) => void;
   readonly reset: (state?: XrSessionStoreInitialState) => void;
   readonly setAvailability: (
@@ -335,6 +337,16 @@ export const createXrSessionStore = <Session extends object = object>(
       if (options.available !== undefined) patch.available = options.available;
       if (options.mode !== undefined) patch.mode = options.mode;
       set(patch);
+    },
+    failSessionEnd: (error) => {
+      if (current.session === null || current.status !== "ending") return;
+      const suspended = current.visibilityState === "hidden";
+      set({
+        active: !suspended,
+        blockReason: null,
+        error: errorMessageFromUnknown(error),
+        status: suspended ? "suspended" : "active",
+      });
     },
     recordFrame: (frame = {}) => {
       if (current.session === null) return;

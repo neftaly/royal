@@ -17,7 +17,10 @@ afterEach(() => {
 
 const xrSessionEventMethods = (target: EventTarget) => ({
   addEventListener: target.addEventListener.bind(target),
+  cancelAnimationFrame: vi.fn(),
+  end: vi.fn(async () => undefined),
   removeEventListener: target.removeEventListener.bind(target),
+  requestAnimationFrame: vi.fn(() => 1),
 });
 
 describe("React XR renderer capability", () => {

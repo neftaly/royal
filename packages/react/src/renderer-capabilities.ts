@@ -3,7 +3,7 @@ import type {
   XrSession,
   XrSessionRenderer,
   XrSessionRendererOptions,
-} from "./xr";
+} from "./xr-renderer";
 
 /** @internal Backend operations used by optional React renderer integrations. */
 export interface RoyalRendererCapabilities {

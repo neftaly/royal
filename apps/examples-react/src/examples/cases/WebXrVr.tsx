@@ -14,15 +14,13 @@ import {
   useCanvasRoot,
 } from '@royal/react';
 import {
-  createXrSessionRenderer,
+  createXrSessionRuntime,
   createXrSessionStore,
   useXrSessionSelector,
-  type XrFrame,
   type XrSession,
-  type XrSessionRenderer,
+  type XrSessionRuntime,
   type XrSessionStore,
   type XrSessionStatus,
-  type XrSessionVisibilityState,
 } from '@royal/react/xr';
 import { createElement, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../BenchmarkRendererSnapshot';
@@ -66,12 +64,6 @@ const renderScene = scene({
   ],
 });
 
-type BrowserXrSession = XrSession & {
-  cancelAnimationFrame(handle: number): void;
-  end(): Promise<void>;
-  requestAnimationFrame(callback: (time: number, frame: XrFrame) => void): number;
-};
-
 type BrowserXrSessionInit = {
   readonly optionalFeatures?: readonly string[];
 };
@@ -80,7 +72,7 @@ type BrowserXrSessionMode = 'immersive-ar' | 'immersive-vr';
 
 type BrowserXrSystem = {
   isSessionSupported(mode: BrowserXrSessionMode): Promise<boolean>;
-  requestSession(mode: BrowserXrSessionMode, options?: BrowserXrSessionInit): Promise<BrowserXrSession>;
+  requestSession(mode: BrowserXrSessionMode, options?: BrowserXrSessionInit): Promise<XrSession>;
 };
 
 type XrNavigator = Navigator & {
@@ -99,9 +91,6 @@ const xrStatusLabel = (status: XrSessionStatus, error: string | null): string =>
   if (status === 'blocked' || status === 'error') return error ?? status;
   return status;
 };
-
-const sessionVisibilityState = (session: BrowserXrSession): XrSessionVisibilityState =>
-  session.visibilityState ?? 'visible';
 
 const immersiveSessionAlreadyActive = (error: unknown): boolean =>
   (error instanceof DOMException && error.name === 'InvalidStateError')
@@ -136,11 +125,12 @@ const getPreferredBrowserXrSessionMode = async (
 const XrSessionControl = (): ReactNode => {
   const canvas = useCanvasElement();
   const root = useCanvasRoot();
-  const storeRef = useRef<XrSessionStore<BrowserXrSession> | undefined>(undefined);
+  const storeRef = useRef<XrSessionStore<XrSession> | undefined>(undefined);
   const rootRef = useRef(root);
-  const frameCleanupRef = useRef<(() => void) | undefined>(undefined);
+  const runtimeRef = useRef<XrSessionRuntime | undefined>(undefined);
+  const runtimeGenerationRef = useRef(0);
   if (storeRef.current === undefined) {
-    storeRef.current = createXrSessionStore<BrowserXrSession>();
+    storeRef.current = createXrSessionStore<XrSession>();
   }
 
   const store = storeRef.current;
@@ -149,34 +139,39 @@ const XrSessionControl = (): ReactNode => {
   const error = useXrSessionSelector(store, (state) => state.error);
   const session = useXrSessionSelector(store, (state) => state.session);
   const status = useXrSessionSelector(store, (state) => state.status);
-  const activateSession = useXrSessionSelector(store, (state) => state.activateSession);
   const beginSession = useXrSessionSelector(store, (state) => state.beginSession);
   const beginSessionEnd = useXrSessionSelector(store, (state) => state.beginSessionEnd);
   const blockSession = useXrSessionSelector(store, (state) => state.blockSession);
   const endSession = useXrSessionSelector(store, (state) => state.endSession);
   const failSession = useXrSessionSelector(store, (state) => state.failSession);
+  const failSessionEnd = useXrSessionSelector(store, (state) => state.failSessionEnd);
   const setAvailability = useXrSessionSelector(store, (state) => state.setAvailability);
-  const setSessionVisibility = useXrSessionSelector(store, (state) => state.setSessionVisibility);
   const visibleStatus = xrStatusLabel(status, error);
 
-  const cleanupFrameLoop = useCallback(() => {
-    frameCleanupRef.current?.();
-    frameCleanupRef.current = undefined;
-  }, []);
-
   const stopActiveSession = useCallback(() => {
-    cleanupFrameLoop();
+    runtimeGenerationRef.current += 1;
+    const runtime = runtimeRef.current;
+    runtimeRef.current = undefined;
+    if (runtime !== undefined) {
+      runtime.dispose();
+      return;
+    }
+
     const currentSession = store.getState().session;
     if (currentSession === null) return;
 
     beginSessionEnd();
-    void currentSession.end().catch(() => undefined);
-  }, [beginSessionEnd, cleanupFrameLoop, store]);
+    void currentSession.end().then(
+      () => endSession(),
+      (endError: unknown) => failSessionEnd(endError),
+    );
+  }, [beginSessionEnd, endSession, failSessionEnd, store]);
 
   const startXrSession = useCallback(async (
-    session: BrowserXrSession,
+    session: XrSession,
     mode: BrowserXrSessionMode,
   ) => {
+    const generation = ++runtimeGenerationRef.current;
     if (root === null || root.disposed || rootRef.current !== root) {
       await session.end().catch(() => undefined);
       return;
@@ -187,96 +182,23 @@ const XrSessionControl = (): ReactNode => {
       return;
     }
 
-    cleanupFrameLoop();
-    beginSession(session, { mode });
-
-    let renderer: XrSessionRenderer;
-    try {
-      renderer = await createXrSessionRenderer(root, session, {
+    const runtime = await createXrSessionRuntime(root, store, session, {
+      mode,
+      renderer: {
         layerOptions: {
           antialias: true,
           framebufferScaleFactor: 0.85,
         },
         referenceSpacePreference: ['local-floor', 'local'],
-      });
-    } catch (error) {
-      endSession();
-      await session.end().catch(() => undefined);
-      throw error;
-    }
-    if (root.disposed || rootRef.current !== root || store.getState().session !== session) {
-      renderer.dispose();
-      endSession();
-      await session.end().catch(() => undefined);
+      },
+    });
+    if (generation !== runtimeGenerationRef.current || rootRef.current !== root) {
+      runtime.dispose();
       return;
     }
-
-    let stopped = false;
-    let frameHandle: number | undefined;
-    const isCurrentFrameLoop = (): boolean =>
-      !stopped &&
-      !root.disposed &&
-      rootRef.current === root &&
-      store.getState().session === session;
-    const cleanupCurrentFrameLoop = (): void => {
-      if (stopped) return;
-      stopped = true;
-      if (frameHandle !== undefined) {
-        session.cancelAnimationFrame(frameHandle);
-        frameHandle = undefined;
-      }
-      session.removeEventListener('end', onEnd);
-      session.removeEventListener('visibilitychange', onVisibilityChange);
-      renderer.dispose();
-      if (frameCleanupRef.current === cleanupCurrentFrameLoop) {
-        frameCleanupRef.current = undefined;
-      }
-    };
-    const requestNextFrame = (): void => {
-      if (!isCurrentFrameLoop()) return;
-      frameHandle = session.requestAnimationFrame(onFrame);
-    };
-    const onFrame = (_time: number, frame: XrFrame): void => {
-      frameHandle = undefined;
-      if (!isCurrentFrameLoop()) {
-        cleanupCurrentFrameLoop();
-        if (store.getState().session === session) {
-          endSession();
-        }
-        void session.end().catch(() => undefined);
-        return;
-      }
-
-      try {
-        renderer.renderFrame(frame);
-        requestNextFrame();
-      } catch (error) {
-        cleanupCurrentFrameLoop();
-        failSession(error);
-        void session.end().catch(() => undefined);
-      }
-    };
-    const onEnd = (): void => {
-      cleanupCurrentFrameLoop();
-      endSession();
-    };
-    const onVisibilityChange = (): void => {
-      setSessionVisibility(sessionVisibilityState(session));
-    };
-
-    frameCleanupRef.current = cleanupCurrentFrameLoop;
-    session.addEventListener('end', onEnd);
-    session.addEventListener('visibilitychange', onVisibilityChange);
-    activateSession(session, { mode, visibilityState: sessionVisibilityState(session) });
-    requestNextFrame();
+    runtimeRef.current = runtime;
   }, [
-    activateSession,
-    beginSession,
-    cleanupFrameLoop,
-    endSession,
-    failSession,
     root,
-    setSessionVisibility,
     store,
   ]);
 
@@ -325,12 +247,22 @@ const XrSessionControl = (): ReactNode => {
 
     const currentSession = store.getState().session;
     if (currentSession !== null) {
-      beginSessionEnd();
-      await currentSession.end();
+      const runtime = runtimeRef.current;
+      if (runtime !== undefined) {
+        await runtime.end().catch(() => undefined);
+        if (runtime.disposed && runtimeRef.current === runtime) {
+          runtimeRef.current = undefined;
+        }
+      } else {
+        beginSessionEnd();
+        await currentSession.end().then(
+          () => endSession(),
+          (endError: unknown) => failSessionEnd(endError),
+        );
+      }
       return;
     }
 
-    cleanupFrameLoop();
     beginSession();
     const mode = await getPreferredBrowserXrSessionMode(xr);
     if (mode === null) {
@@ -338,19 +270,26 @@ const XrSessionControl = (): ReactNode => {
       return;
     }
 
-    setAvailability(true, { mode });
+    beginSession(undefined, { mode });
     const session = await xr.requestSession(mode, immersiveSessionOptions);
     await startXrSession(session, mode);
   }, [
     beginSession,
     beginSessionEnd,
     canvas,
-    cleanupFrameLoop,
+    endSession,
+    failSessionEnd,
     root,
     setAvailability,
     startXrSession,
     store,
   ]);
+
+  const acquiring = session === null && status === 'starting';
+  const ending = status === 'ending';
+  const buttonLabel = acquiring
+    ? 'Entering XR…'
+    : ending ? 'Exiting XR…' : session === null ? 'Enter XR' : 'Exit XR';
 
   return createElement(
     'div',
@@ -363,13 +302,15 @@ const XrSessionControl = (): ReactNode => {
       'button',
       {
         className: 'xr-session-button',
-        disabled: (session === null && !available) || root === null || canvas === null,
+        disabled:
+          acquiring
+          || ending
+          || (session === null && !available)
+          || root === null
+          || canvas === null,
         onClick: () => {
           void enterXr().catch((error: unknown) => {
-            if (store.getState().session !== null) {
-              cleanupFrameLoop();
-              failSession(error);
-            } else if (immersiveSessionAlreadyActive(error)) {
+            if (immersiveSessionAlreadyActive(error)) {
               blockSession('immersive-session-already-active', error, {
                 available: true,
                 mode: 'immersive-vr',
@@ -386,7 +327,7 @@ const XrSessionControl = (): ReactNode => {
         },
         type: 'button',
       },
-      session === null ? 'Enter XR' : 'Exit XR',
+      buttonLabel,
     ),
     createElement('span', { className: 'xr-session-status' }, visibleStatus),
   );
