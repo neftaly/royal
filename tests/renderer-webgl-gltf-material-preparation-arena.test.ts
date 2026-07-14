@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+import type { TextureContentKey } from "@royal/renderer-core";
+import {
+  GltfMaterialPreparationArena,
+  gltfMaterialTextureRefs,
+  gltfPrimitiveMaterialForVariant,
+  selectedGltfVariantIndex,
+} from "../packages/renderer-webgl/src/gltf/material-preparation-arena";
+import type {
+  LoadedGltfMaterial,
+  LoadedGltfPrimitive,
+} from "../packages/renderer-webgl/src/gltf/prepared-asset";
+import { IDENTITY_GLTF_TEXTURE_COORDINATES } from "../packages/renderer-webgl/src/gltf/texture-coordinates";
+
+const material = (textureUri = "texture:base"): LoadedGltfMaterial => ({
+  alphaMode: "OPAQUE",
+  baseColorTexture: {
+    coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+    imageUri: "image:base",
+    textureUri,
+  },
+  doubleSided: false,
+  emissiveTexture: {
+    coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+    textureUri: "texture:emissive",
+  },
+  extensionTextures: {
+    clearcoatTexture: {
+      coordinates: IDENTITY_GLTF_TEXTURE_COORDINATES,
+      textureUri: "texture:clearcoat",
+    },
+  },
+});
+
+const primitive = (
+  baseMaterial: LoadedGltfMaterial,
+  variants: readonly LoadedGltfMaterial[] = [],
+): LoadedGltfPrimitive => ({
+  baseMaterial: { material: baseMaterial, selectionKey: "base" },
+  material: baseMaterial,
+  materialVariants: variants.map((entry, index) => ({
+    material: entry,
+    variants: [index],
+  })),
+} as unknown as LoadedGltfPrimitive);
+
+describe("glTF material preparation arena", () => {
+  it("normalizes every material texture dependency with stable upload semantics", () => {
+    const loadedMaterial = material();
+    const baseContentKey = "content:base" as TextureContentKey;
+    const refs = gltfMaterialTextureRefs(loadedMaterial, new Map([
+      ["texture:base", baseContentKey],
+    ]));
+
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        colorSpace: "srgb",
+        contentKey: baseContentKey,
+        flipY: false,
+        kind: "asset",
+        preparedOnly: true,
+        uri: "texture:base",
+      }),
+      expect.objectContaining({ colorSpace: "srgb", uri: "texture:emissive" }),
+      expect.objectContaining({ colorSpace: "linear", uri: "texture:clearcoat" }),
+    ]));
+    expect(refs).toHaveLength(3);
+  });
+
+  it("owns cache identity, reverse invalidation, and material batch classes", () => {
+    const arena = new GltfMaterialPreparationArena();
+    const loadedMaterial = material();
+    const firstPrimitive = primitive(loadedMaterial);
+    const secondPrimitive = primitive(loadedMaterial);
+    const contentKeys = new Map<string, TextureContentKey>();
+
+    const pending = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, false);
+    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true)).toBe(pending);
+    expect(pending.material.baseColor).toMatchObject({ kind: "solid" });
+
+    arena.invalidate([loadedMaterial]);
+    const ready = arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true);
+    const otherPrimitiveReady = arena.prepare(secondPrimitive, loadedMaterial, contentKeys, true);
+    expect(ready).not.toBe(pending);
+    expect(ready.material.baseColor).toMatchObject({
+      colorSpace: "srgb",
+      kind: "asset",
+      preparedOnly: true,
+      uri: "texture:base",
+    });
+    expect(otherPrimitiveReady.materialBatchClassId).toBe(ready.materialBatchClassId);
+
+    arena.clear();
+    expect(arena.prepare(firstPrimitive, loadedMaterial, contentKeys, true)).not.toBe(ready);
+  });
+
+  it("resolves named and numeric variants without accepting invalid selections", () => {
+    const base = material("texture:base");
+    const red = material("texture:red");
+    const blue = material("texture:blue");
+    const loadedPrimitive = primitive(base, [red, blue]);
+
+    expect(selectedGltfVariantIndex(["red", "blue"], "blue")).toBe(1);
+    expect(selectedGltfVariantIndex(["red", "blue"], 0)).toBe(0);
+    expect(selectedGltfVariantIndex(["red", "blue"], "missing")).toBeUndefined();
+    expect(selectedGltfVariantIndex(["red", "blue"], 2)).toBeUndefined();
+    expect(gltfPrimitiveMaterialForVariant(1, loadedPrimitive)).toMatchObject({
+      material: blue,
+      selectionKey: "variant:1",
+    });
+    expect(gltfPrimitiveMaterialForVariant(8, loadedPrimitive)).toBe(loadedPrimitive.baseMaterial);
+  });
+});

@@ -47,6 +47,9 @@ Completed in the current worktree:
 - `ResourceCapacityWakeOwner` owns CPU wake coalescing, persistent-GPU wake
   suppression, durable-capacity routing, fair preparation-peer wake order, and
   terminal cancellation on disposal.
+- `GltfMaterialPreparationArena` owns prepared surface-material caches, reverse
+  image-readiness invalidation, batch-class identity, texture-slot
+  normalization, and material-variant resolution.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
