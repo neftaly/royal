@@ -8,7 +8,7 @@ controls live beside that scene.
 ## Development status
 
 Royal is currently a source-level pre-release: its packages are private and
-versioned `0.0.0`. Develop against it inside this pnpm workspace, using
+versioned `0.0.1`. Develop against it inside this pnpm workspace, using
 `apps/examples-react` as the starter application. A normal registry install is
 not available yet.
 
