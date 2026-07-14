@@ -2,6 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { createObservedExternalStore } from "../packages/react/src/observed-external-store";
 
 describe("React observed external store", () => {
+  it("rejects malformed subscribers before starting observation", () => {
+    const observe = vi.fn(() => () => undefined);
+    const store = createObservedExternalStore(0, observe);
+
+    expect(() => store.subscribe(null as unknown as () => void))
+      .toThrow("Observed external store listener must be a function");
+    expect(observe).not.toHaveBeenCalled();
+  });
+
   it("starts lazily, multicasts changes, and stops after the final subscriber", () => {
     let publish!: (value: number) => void;
     const stop = vi.fn();
@@ -85,5 +94,34 @@ describe("React observed external store", () => {
     publish(2);
     expect(listener).toHaveBeenCalledTimes(3);
     unsubscribeSecond();
+  });
+
+  it("notifies every subscriber and serializes reentrant publications", () => {
+    let publish!: (value: number) => void;
+    const store = createObservedExternalStore(0, (next) => {
+      publish = next;
+      return () => undefined;
+    });
+    const firstObserved: number[] = [];
+    const secondObserved: number[] = [];
+    const failure = new Error("subscriber failed");
+    let reentered = false;
+    store.subscribe(() => {
+      firstObserved.push(store.getSnapshot());
+      if (!reentered) {
+        reentered = true;
+        publish(2);
+      }
+      if (store.getSnapshot() === 2) throw failure;
+    });
+    store.subscribe(() => {
+      secondObserved.push(store.getSnapshot());
+    });
+
+    expect(() => publish(1)).toThrow(failure);
+
+    expect(firstObserved).toEqual([1, 2]);
+    expect(secondObserved).toEqual([1, 2]);
+    expect(store.getSnapshot()).toBe(2);
   });
 });
