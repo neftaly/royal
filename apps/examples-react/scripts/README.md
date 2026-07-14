@@ -214,6 +214,19 @@ node --check apps/examples-react/scripts/check-benchmark-report.mjs
 pnpm --filter @royal/examples-react bench:examples:instancing
 ```
 
+Context restoration is also exercised against real texture residency rather
+than only an empty/simple scene. The focused VT routes require active atlas and
+page-table resources to reconverge with no pending work, new failures or
+overflows, or quarantined bytes after `WEBGL_lose_context` restoration:
+
+```sh
+EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=virtual-texture-stress \
+pnpm --filter @royal/examples-react test:browser
+
+EXAMPLES_SMOKE_CONTEXT_LOSS=1 EXAMPLES_SMOKE_ROUTE=gltf-ghostscript-tiger-svg \
+pnpm --filter @royal/examples-react test:browser
+```
+
 ## glTF Load Probe
 
 `benchmark-gltf-load.mjs` is a narrow browser probe for textured glTF load

@@ -62,6 +62,7 @@ const smokeExpectations = {
     ],
     minColorBuckets: 8,
     minPaintedRatio: 0.02,
+    virtualTextureRecovery: true,
   },
   'standard-lighting': {
     minColorBuckets: 12,
@@ -83,6 +84,7 @@ const smokeExpectations = {
   'gltf-ghostscript-tiger-svg': {
     minColorBuckets: 18,
     minPaintedRatio: 0.006,
+    virtualTextureRecovery: true,
   },
   'gltf-lod': {
     minColorBuckets: 8,
@@ -649,8 +651,23 @@ const assertRoute = (expected, state) => {
       if (interaction.pendingPages !== 0 || interaction.outstandingPageRequests !== 0) {
         failures.push(`SVG virtual texture close zoom left work pending (${interaction.pendingPages ?? 'unknown'} pages, ${interaction.outstandingPageRequests ?? 'unknown'} requests)`);
       }
-      if (!(interaction.activePagesMip0 > 0)) {
-        failures.push('SVG virtual texture close zoom did not activate mip-0 pages');
+      if (!(Number.isFinite(interaction.finestActiveMip) && interaction.finestActiveMip <= 1)) {
+        failures.push(`SVG virtual texture close zoom stopped at mip ${interaction.finestActiveMip ?? 'unknown'} instead of reaching display-resolution detail`);
+      }
+      if (!(
+        Number.isFinite(interaction.distanceBefore) &&
+        Number.isFinite(interaction.distanceAfter) &&
+        interaction.distanceAfter < interaction.distanceBefore &&
+        interaction.distanceAfter <= 0.021
+      )) {
+        failures.push(`SVG virtual texture close zoom did not reach its near interaction limit (${interaction.distanceBefore ?? 'unknown'} -> ${interaction.distanceAfter ?? 'unknown'})`);
+      }
+      if (!(
+        Number.isFinite(interaction.finestActiveMipBefore) &&
+        Number.isFinite(interaction.finestActiveMip) &&
+        interaction.finestActiveMip < interaction.finestActiveMipBefore
+      )) {
+        failures.push(`SVG virtual texture close zoom did not refine beyond its initial mip (${interaction.finestActiveMipBefore ?? 'unknown'} -> ${interaction.finestActiveMip ?? 'unknown'})`);
       }
       if (!(
         Number.isFinite(interaction.activePages) &&
@@ -992,6 +1009,14 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
   if (canvas === null) return { error: 'missing SVG virtual texture canvas' };
   const rendererSnapshot = () => ${rendererSnapshotExpression};
   const before = rendererSnapshot();
+  const pagesByMip = (snapshot, prefix) => Array.from({ length: 16 }, (_, mip) => (
+    snapshot?.virtualTexturing?.[prefix + mip] ?? 0
+  ));
+  const finestActiveMip = (snapshot) => {
+    const mip = pagesByMip(snapshot, 'activePagesMip').findIndex((count) => count > 0);
+    return mip < 0 ? null : mip;
+  };
+  const distanceBefore = Number(canvas.dataset.cameraDistance);
   for (let step = 0; step < 6; step += 1) {
     canvas.dispatchEvent(new WheelEvent('wheel', {
       bubbles: true,
@@ -1016,8 +1041,7 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
       vt?.activePages === lastActivePages &&
       vt?.cachedPages === lastCachedPages &&
       vt?.pendingPages === 0 &&
-      vt?.outstandingPageRequests === 0 &&
-      (vt?.activePagesMip0 ?? 0) > 0
+      vt?.outstandingPageRequests === 0
     ) stableFrames += 1;
     else stableFrames = 0;
     lastActivePages = vt?.activePages ?? -1;
@@ -1025,11 +1049,16 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
   }
 
   const vt = renderer?.virtualTexturing;
+  const distanceAfter = Number(canvas.dataset.cameraDistance);
   const rgbaPageBytes = 256 * 256 * 4;
   return {
     activePages: vt?.activePages ?? null,
-    activePagesMip0: vt?.activePagesMip0 ?? null,
-    beforeActivePagesMip0: before?.virtualTexturing?.activePagesMip0 ?? null,
+    activePagesByMip: pagesByMip(renderer, 'activePagesMip'),
+    cachedPagesByMip: pagesByMip(renderer, 'cachedPagesMip'),
+    distanceAfter: Number.isFinite(distanceAfter) ? distanceAfter : null,
+    distanceBefore: Number.isFinite(distanceBefore) ? distanceBefore : null,
+    finestActiveMip: finestActiveMip(renderer),
+    finestActiveMipBefore: finestActiveMip(before),
     cachedPages: vt?.cachedPages ?? null,
     lifecycleError: renderer?.lifecycle?.error ?? null,
     lifecycleState: renderer?.lifecycle?.state ?? null,
@@ -1045,7 +1074,7 @@ const runSvgVirtualTextureInteractionSmoke = async (session) => evaluate(session
 })()
 `);
 
-const runContextLossSmoke = async (session) => evaluate(session, `
+const runContextLossSmoke = async (session, expectVirtualTexturing) => evaluate(session, `
 (async () => {
   const canvas = document.querySelector('canvas');
   const snapshot = () => ${rendererSnapshotExpression};
@@ -1068,6 +1097,9 @@ const runContextLossSmoke = async (session) => evaluate(session, `
     return snapshot();
   };
   const before = snapshot();
+  if (${expectVirtualTexturing ? 'true' : 'false'} && (before?.virtualTexturing?.cachedPages ?? 0) <= 0) {
+    return { status: 'error', reason: 'VT recovery route had no resident pages before interruption', before };
+  }
   extension.loseContext();
   const lost = await waitFor((value) => value?.lifecycle?.state === 'unavailable');
   if (lost?.lifecycle?.state !== 'unavailable') {
@@ -1091,33 +1123,76 @@ const runContextLossSmoke = async (session) => evaluate(session, `
   globalThis.__royalExamplesRenderNow?.();
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   globalThis.__royalExamplesRenderNow?.();
-
-  const sample = document.createElement('canvas');
-  sample.width = Math.max(1, Math.min(160, canvas.width));
-  sample.height = Math.max(1, Math.min(160, canvas.height));
-  const context = sample.getContext('2d', { willReadFrequently: true });
-  if (context === null) return { status: 'error', reason: '2D capture context unavailable', restored };
-  context.drawImage(canvas, 0, 0, sample.width, sample.height);
-  const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
-  let paintedPixels = 0;
-  let checksum = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    if (pixels[index + 3] !== 0) paintedPixels += 1;
-    checksum = (checksum + pixels[index] * 3 + pixels[index + 1] * 5 + pixels[index + 2] * 7 + pixels[index + 3]) >>> 0;
+  const recoveredResources = ${expectVirtualTexturing ? 'true' : 'false'}
+    ? await waitFor((value) => {
+      const vt = value?.virtualTexturing;
+      return value?.lifecycle?.state === 'available'
+        && (vt?.activePages ?? 0) > 0
+        && (vt?.cachedPages ?? 0) > 0
+        && (vt?.atlasTextures ?? 0) > 0
+        && (vt?.pageTableTextures ?? 0) > 0
+        && vt?.pendingPages === 0
+        && vt?.outstandingPageRequests === 0;
+    }, 10_000)
+    : restored;
+  if (${expectVirtualTexturing ? 'true' : 'false'}) {
+    const vt = recoveredResources?.virtualTexturing;
+    const beforeVt = before?.virtualTexturing;
+    const cumulativeFailureCounters = [
+      'demandRetentionOverflows',
+      'generatedPageFailures',
+      'gpuAdmissionFailures',
+      'manifestFailures',
+      'pageLoadFailures',
+      'unsupportedDraws',
+    ];
+    const newFailures = cumulativeFailureCounters.filter((name) => (
+      !Number.isFinite(vt?.[name])
+      || !Number.isFinite(beforeVt?.[name])
+      || vt[name] > beforeVt[name]
+    ));
+    if (
+      (vt?.activePages ?? 0) <= 0
+      || (vt?.cachedPages ?? 0) <= 0
+      || (vt?.atlasTextures ?? 0) <= 0
+      || (vt?.pageTableTextures ?? 0) <= 0
+      || vt?.pendingPages !== 0
+      || vt?.outstandingPageRequests !== 0
+      || vt?.physicalQuarantinedBytes !== 0
+      || newFailures.length > 0
+    ) {
+      return {
+        status: 'error',
+        reason: 'VT resources did not converge cleanly after context restoration',
+        before,
+        newFailures,
+        recoveredResources,
+      };
+    }
   }
+  globalThis.__royalExamplesRenderNow?.();
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  globalThis.__royalExamplesRenderNow?.();
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
   const afterCapture = snapshot();
-  if (paintedPixels === 0 || checksum === 0 || afterCapture?.frame <= lost.frame) {
+  if (afterCapture?.frame <= lost.frame) {
     return {
       status: 'error',
-      reason: 'restored renderer did not produce a fresh usable pixel capture',
+      reason: 'restored renderer did not produce a fresh frame',
       afterCapture,
-      checksum,
       lost,
-      paintedPixels,
       restored,
     };
   }
-  return { status: 'ok', afterCapture, before, checksum, lost, paintedPixels, restored };
+  return {
+    status: 'ok',
+    afterCapture,
+    before,
+    lost,
+    recoveredResources,
+    restored,
+  };
 })()
 `);
 
@@ -1261,14 +1336,27 @@ const main = async () => {
         }`);
       }
       if (contextLossSmoke && !contextLossChecked) {
-        const lifecycle = await runContextLossSmoke(session);
+        const lifecycle = await runContextLossSmoke(session, route.virtualTextureRecovery === true);
         if (lifecycle.status === 'error') {
           throw new Error(`context-loss smoke failed: ${lifecycle.reason}; ${JSON.stringify(lifecycle)}`);
+        }
+        const restoredSample = lifecycle.status === 'ok'
+          ? await compositedCanvasSample(session)
+          : undefined;
+        if (
+          lifecycle.status === 'ok'
+          && (
+            restoredSample === undefined
+            || restoredSample.paintedPixels <= 0
+            || restoredSample.colorBuckets < (effectiveRoute.minColorBuckets ?? 1)
+          )
+        ) {
+          throw new Error(`context-loss smoke failed: restored compositor surface was unusable; ${JSON.stringify({ lifecycle, restoredSample })}`);
         }
         contextLossChecked = true;
         console.log(lifecycle.status === 'unsupported'
           ? `skip context-loss ${lifecycle.reason}`
-          : `ok context-loss generation=${lifecycle.restored.lifecycle.generation} painted=${lifecycle.paintedPixels}`);
+          : `ok context-loss generation=${lifecycle.restored.lifecycle.generation} painted=${restoredSample.paintedPixels}`);
       }
       const canvasSummary = state.canvas?.sample === undefined
         ? ''
