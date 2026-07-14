@@ -201,6 +201,13 @@ describe("renderer-core descriptor contract", () => {
       kind: "asset",
       uri: "/textures/mask-a.ktx2",
     });
+
+    expect(() => textureAsset({ src: "/textures/a.png", version: Number.NaN }))
+      .toThrow(/texture asset version must be finite/);
+    expect(() => textureAsset({ contentKey: "", src: "/textures/a.png" }))
+      .toThrow(/texture asset contentKey must not be empty/);
+    expect(() => virtualTexture({ manifestUri: "/textures/a.vt.json", version: Infinity }))
+      .toThrow(/virtual texture version must be finite/);
   });
 
   it("normalizes glTF source, version, and bounds into asset identity", () => {
@@ -221,6 +228,11 @@ describe("renderer-core descriptor contract", () => {
       },
       kind: "gltf",
     });
+
+    expect(() => gltf({ src: "/models/avatar.glb", version: Number.NaN }))
+      .toThrow(/glTF asset version must be finite/);
+    expect(() => gltf({ src: "/models/avatar.glb", version: "" }))
+      .toThrow(/glTF asset version must not be empty/);
   });
 
   it("preserves selected glTF material variants by name or index", () => {

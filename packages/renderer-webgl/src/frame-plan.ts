@@ -141,7 +141,11 @@ export interface ResourceManifestDiffScratch {
 }
 
 export const gltfRequestKey = (sourceUri: string, version: string | number | undefined): string =>
-  JSON.stringify(["gltf-source-v1", sourceUri, version ?? null]);
+  JSON.stringify([
+    "gltf-source-v1",
+    sourceUri,
+    version === undefined ? null : [typeof version, String(version)],
+  ]);
 
 const isDirectTexture = (value: unknown): value is TextureAssetRef | VirtualTextureAssetRef =>
   typeof value === "object"

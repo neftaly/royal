@@ -124,8 +124,8 @@ const UNSUPPORTED_VIRTUAL_TEXTURE_COLOR: LinearRgba = [1, 0, 1, 1];
 
 type TextureCacheScalar = number | string;
 
-const textureCacheScalarKey = (value: TextureCacheScalar | undefined): readonly [string, TextureCacheScalar] | null =>
-  value === undefined ? null : [typeof value, value];
+const textureCacheScalarKey = (value: TextureCacheScalar | undefined): readonly [string, string] | null =>
+  value === undefined ? null : [typeof value, String(value)];
 
 const textureCacheTupleKey = (parts: readonly unknown[]): string =>
   JSON.stringify(parts);

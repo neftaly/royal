@@ -1,5 +1,5 @@
 import type { LinearRgba } from './primitives';
-import { frozenRgba } from './descriptor-values';
+import { frozenRgba, identityScalar } from './descriptor-values';
 
 export type TextureColorSpace = 'linear' | 'srgb';
 
@@ -20,7 +20,9 @@ export interface TextureSampler {
   readonly wrapT?: TextureSamplerWrap;
 }
 
+/** A non-empty string or finite number identifying one revision of source bytes. */
 export type TextureVersion = number | string;
+/** A non-empty string or finite number identifying equal decoded content across sources. */
 export type TextureContentKey = number | string;
 
 export interface SolidTextureRef {
@@ -116,14 +118,20 @@ export const solidTexture = (options: SolidTextureOptions): SolidTextureRef => {
 export const textureAsset = (options: TextureAssetOptions): TextureAssetRef => {
   const uri = nonEmptySource(options.src, 'texture asset "src"');
   const sampler = frozenSampler(options.sampler);
+  const contentKey = options.contentKey === undefined
+    ? undefined
+    : identityScalar(options.contentKey, 'texture asset contentKey');
+  const version = options.version === undefined
+    ? undefined
+    : identityScalar(options.version, 'texture asset version');
 
   return Object.freeze({
     kind: 'asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
+    ...(contentKey === undefined ? {} : { contentKey }),
     ...(sampler === undefined ? {} : { sampler }),
     uri,
-    ...(options.version === undefined ? {} : { version: options.version })
+    ...(version === undefined ? {} : { version })
   });
 };
 
@@ -148,14 +156,20 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
 const virtualTextureAsset = (options: VirtualTextureAssetOptions): VirtualTextureAssetRef => {
   const manifestUri = nonEmptySource(options.manifestUri, 'virtual texture "manifestUri"');
   const sampler = frozenSampler(options.sampler);
+  const contentKey = options.contentKey === undefined
+    ? undefined
+    : identityScalar(options.contentKey, 'virtual texture contentKey');
+  const version = options.version === undefined
+    ? undefined
+    : identityScalar(options.version, 'virtual texture version');
 
   return Object.freeze({
     kind: 'virtual-asset',
     ...(options.colorSpace === undefined ? {} : { colorSpace: options.colorSpace }),
-    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
+    ...(contentKey === undefined ? {} : { contentKey }),
     manifestUri,
     ...(sampler === undefined ? {} : { sampler }),
-    ...(options.version === undefined ? {} : { version: options.version })
+    ...(version === undefined ? {} : { version })
   });
 };
 

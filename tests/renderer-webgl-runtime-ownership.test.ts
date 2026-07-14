@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { gltfRequestKey } from "../packages/renderer-webgl/src/frame-plan";
+import { textureCacheKey } from "../packages/renderer-webgl/src/webgl/materials";
 import { PreparedGltfRuntime } from "../packages/renderer-webgl/src/gltf/prepared-runtime";
 import type { PreparedAssetArenaEvent } from "../packages/renderer-webgl/src/resource-arena";
 import {
@@ -58,6 +59,21 @@ const virtualTextureShell = (): VirtualTextureRuntimeShell => new VirtualTexture
 });
 
 describe("renderer runtime ownership", () => {
+  it("keeps bypassed non-finite scalar identities collision-safe", () => {
+    expect(gltfRequestKey("/asset.glb", Number.NaN))
+      .not.toBe(gltfRequestKey("/asset.glb", Number.POSITIVE_INFINITY));
+    expect(gltfRequestKey("/asset.glb", Number.POSITIVE_INFINITY))
+      .not.toBe(gltfRequestKey("/asset.glb", Number.NEGATIVE_INFINITY));
+
+    const key = (version: number): string => textureCacheKey({
+      kind: "asset",
+      uri: "/texture.png",
+      version,
+    });
+    expect(key(Number.NaN)).not.toBe(key(Number.POSITIVE_INFINITY));
+    expect(key(Number.POSITIVE_INFINITY)).not.toBe(key(Number.NEGATIVE_INFINITY));
+  });
+
   it("keeps prepared glTF generations and node identity in one registry", () => {
     const runtime = new PreparedGltfRuntime();
     const key = gltfRequestKey("/asset.glb", undefined);

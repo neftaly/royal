@@ -3,7 +3,7 @@ import {
   type Transform,
   type TransformOptions
 } from './primitives';
-import { frozenBounds3, nonEmptyString } from './descriptor-values';
+import { frozenBounds3, identityScalar, nonEmptyString } from './descriptor-values';
 import type { WorldPosition3 } from './primitives';
 import type { PickingId } from './picking';
 import type { RenderObjectRef } from './render-object';
@@ -18,6 +18,7 @@ export interface GltfAssetBounds {
 export interface GltfAssetRef {
   readonly bounds?: GltfAssetBounds;
   readonly uri: string;
+  /** Non-empty string or finite number identifying one revision of source bytes. */
   readonly version?: number | string;
 }
 
@@ -62,11 +63,16 @@ export const resolveGltfAsset = (options: {
   readonly bounds?: GltfAssetBounds;
   readonly src: string;
   readonly version?: GltfAssetRef['version'];
-}): GltfAssetRef => Object.freeze({
-  ...(options.bounds === undefined ? {} : { bounds: frozenBounds3(options.bounds, 'glTF asset bounds') }),
-  uri: nonEmptyString(options.src, 'glTF source'),
-  ...(options.version === undefined ? {} : { version: options.version })
-});
+}): GltfAssetRef => {
+  const version = options.version === undefined
+    ? undefined
+    : identityScalar(options.version, 'glTF asset version');
+  return Object.freeze({
+    ...(options.bounds === undefined ? {} : { bounds: frozenBounds3(options.bounds, 'glTF asset bounds') }),
+    uri: nonEmptyString(options.src, 'glTF source'),
+    ...(version === undefined ? {} : { version })
+  });
+};
 
 export const validateGltfVariant = (
   variant: GltfMaterialVariantSelection | undefined,

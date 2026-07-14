@@ -60,3 +60,12 @@ export const nonEmptyString = (value: string, label: string): string => {
   if (value.length === 0) throw new Error(`${label} must not be empty`);
   return value;
 };
+
+export const identityScalar = <Value extends number | string>(
+  value: Value,
+  label: string,
+): Value => {
+  if (typeof value === 'number') finiteNumber(value, label);
+  else nonEmptyString(value, label);
+  return value;
+};
