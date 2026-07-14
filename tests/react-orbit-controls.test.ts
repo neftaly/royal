@@ -6,6 +6,7 @@ import {
   createOrbitCameraController,
   createOrbitControls,
 } from "../packages/react/src/orbit-controls";
+import { validateUseOrbitCameraOptions } from "../packages/react/src/orbit-camera-controller";
 
 type FakeEvent = Event & {
   readonly defaultPrevented: boolean;
@@ -104,6 +105,20 @@ const wheelEvent = (deltaY: number): WheelEvent & FakeEvent => preventable({
 }) as unknown as WheelEvent & FakeEvent;
 
 describe("OrbitControls", () => {
+  it("rejects malformed useOrbitCamera options before retaining hook state", () => {
+    expect(() => validateUseOrbitCameraOptions(
+      null as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0],
+    )).toThrow("useOrbitCamera options must be an object");
+    expect(() => validateUseOrbitCameraOptions({
+      initialView: defaultView,
+    } as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0]))
+      .toThrow(/unsupported option.*initialView/i);
+    expect(() => validateUseOrbitCameraOptions({
+      initial: null,
+    } as unknown as Parameters<typeof validateUseOrbitCameraOptions>[0]))
+      .toThrow("useOrbitCamera initial must be an OrbitCameraViewOptions object");
+  });
+
   it("rejects malformed behavior options before attaching interactions", () => {
     const canvas = fakeCanvas();
     expect(() => createOrbitControls(canvas, {

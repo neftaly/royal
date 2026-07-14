@@ -50,6 +50,25 @@ export interface UseOrbitCameraOptions {
   readonly near?: Metres;
 }
 
+/** @internal Validates hook-only option shape before React state is retained. */
+export const validateUseOrbitCameraOptions = (options: UseOrbitCameraOptions): void => {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError("useOrbitCamera options must be an object");
+  }
+  for (const name of Object.keys(options)) {
+    if (name !== "far" && name !== "fovY" && name !== "initial" && name !== "near") {
+      throw new TypeError(`useOrbitCamera options contain unsupported option ${JSON.stringify(name)}`);
+    }
+  }
+  if (
+    typeof options.initial !== "object"
+    || options.initial === null
+    || Array.isArray(options.initial)
+  ) {
+    throw new TypeError("useOrbitCamera initial must be an OrbitCameraViewOptions object");
+  }
+};
+
 const stableOrbitView = (input: OrbitCameraViewOptions): OrbitCameraView => {
   const view = resolveOrbitCameraView(input);
   return Object.freeze({
@@ -143,12 +162,14 @@ export const useOrbitCameraView = (orbit: OrbitCameraController): OrbitCameraVie
   useSyncExternalStore(orbit.subscribeView, orbit.getView, orbit.getView);
 
 /** Creates one stable orbit camera controller for the lifetime of the component. */
-export const useOrbitCamera = ({
-  initial,
-  far = 100,
-  fovY = Math.PI / 4,
-  near = 0.1,
-}: UseOrbitCameraOptions): OrbitCameraController => {
+export const useOrbitCamera = (options: UseOrbitCameraOptions): OrbitCameraController => {
+  validateUseOrbitCameraOptions(options);
+  const {
+    initial,
+    far = 100,
+    fovY = Math.PI / 4,
+    near = 0.1,
+  } = options;
   const controllerRef = useRef<OrbitCameraController | undefined>(undefined);
   if (controllerRef.current === undefined) {
     controllerRef.current = createOrbitCameraController(initial, { far, fovY, near });
