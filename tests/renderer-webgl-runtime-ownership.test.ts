@@ -125,6 +125,7 @@ describe("renderer runtime ownership", () => {
       generatedSource: generatedVirtualTextureSource("test", {
         kind: "raster",
         source: {
+          decodedBytes: 1024 * 1024 * 4,
           height: 1024,
           label: "generated",
           source: {} as never,

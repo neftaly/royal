@@ -196,6 +196,8 @@ export interface WebGlVirtualTexturingSnapshot {
   readonly generatedPageRasterizeMs: number;
   readonly generatedPageRequests: number;
   readonly generatedPagesTarget: number;
+  /** Full decoded automatic-VT sources retained on CPU; also charged to ordinary-texture ownership. */
+  readonly generatedSourceBytes: number;
   readonly manifestFailures: number;
   readonly gpuAdmissionFailures: number;
   readonly pageLoadFailures: number;

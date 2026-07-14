@@ -34,6 +34,7 @@ export type VirtualTextureRef = Extract<TextureRef, { readonly kind: "virtual-as
 export type RasterVirtualTextureSource = {
   canvasSource?: CanvasImageSource;
   readonly colorSpace?: NonNullable<TextureRef["colorSpace"]>;
+  readonly decodedBytes: number;
   readonly height: number;
   readonly label: string;
   readonly source: LoadedTextureSource;
@@ -75,12 +76,18 @@ export type VirtualTexturePageSource = (ImmediateVirtualTexturePageSource | Defe
   readonly loadPage: VirtualTexturePageLoader;
   readonly manifestUri: string;
   /** Diagnostics only; scheduling and residency must never branch on this label. */
-  readonly telemetryKind?: "generated-raster";
+  readonly telemetry?: {
+    readonly decodedSourceBytes: number;
+    readonly kind: "generated-raster";
+  };
 };
 
 export type GeneratedVirtualTextureSource = VirtualTexturePageSource & {
   readonly manifest: VirtualTextureManifestParseResult;
-  readonly telemetryKind: "generated-raster";
+  readonly telemetry: {
+    readonly decodedSourceBytes: number;
+    readonly kind: "generated-raster";
+  };
 };
 
 type VirtualTextureRuntimeStatus = "error" | "loading" | "ready" | "unsupported";
@@ -95,6 +102,7 @@ export type VirtualTextureRuntimeStats = {
   generatedPageRasterizeMs: number;
   generatedPageRequests: number;
   generatedPagesTarget: number;
+  generatedSourceBytes: number;
   manifestFailures: number;
   gpuAdmissionFailures: number;
   pageLoadFailures: number;
@@ -221,7 +229,10 @@ export const generatedVirtualTextureSource = (
     },
     manifest: { diagnostics: [], manifest },
     manifestUri: generatedVirtualTextureManifestUri(textureKey),
-    telemetryKind: "generated-raster",
+    telemetry: {
+      decodedSourceBytes: pageSource.source.decodedBytes,
+      kind: "generated-raster",
+    },
   };
 };
 

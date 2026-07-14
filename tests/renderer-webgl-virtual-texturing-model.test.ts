@@ -74,6 +74,7 @@ describe("WebGL virtual texturing runtime model", () => {
     const raster = generatedRasterVirtualTextureManifest({
       ...dimensions,
       colorSpace: "srgb",
+      decodedBytes: 0,
       label: "raster",
       source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },
     });
@@ -82,6 +83,7 @@ describe("WebGL virtual texturing runtime model", () => {
 
   it("rejects invalid generated raster dimensions without looping", () => {
     expect(() => generatedRasterVirtualTextureManifest({
+      decodedBytes: 0,
       height: 512,
       label: "invalid raster",
       source: { data: new Uint8Array(), height: 1, kind: "rgba-texture", width: 1 },

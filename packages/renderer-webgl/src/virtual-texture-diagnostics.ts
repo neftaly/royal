@@ -29,6 +29,7 @@ export const virtualTextureDiagnosticsSnapshot = (
   let generatedPageRasterizeMs = 0;
   let generatedPageRequests = 0;
   let generatedPagesTarget = 0;
+  let generatedSourceBytes = 0;
   let gpuAdmissionFailures = 0;
   let manifestFailures = 0;
   let manifestRequests = 0;
@@ -75,6 +76,7 @@ export const virtualTextureDiagnosticsSnapshot = (
     generatedPageRasterizeMs += state.stats.generatedPageRasterizeMs;
     generatedPageRequests += state.stats.generatedPageRequests;
     generatedPagesTarget += state.stats.generatedPagesTarget;
+    generatedSourceBytes += state.stats.generatedSourceBytes;
     gpuAdmissionFailures += state.stats.gpuAdmissionFailures;
     manifestFailures += state.stats.manifestFailures;
     manifestRequests += state.stats.manifestRequests;
@@ -137,6 +139,7 @@ export const virtualTextureDiagnosticsSnapshot = (
     generatedPageRasterizeMs,
     generatedPageRequests,
     generatedPagesTarget,
+    generatedSourceBytes,
     gpuAdmissionFailures,
     manifestFailures,
     manifestRequests,

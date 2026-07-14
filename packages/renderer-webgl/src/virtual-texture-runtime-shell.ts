@@ -26,6 +26,7 @@ import {
   type VirtualTextureRuntimeState,
 } from "./virtual-texture-runtime";
 import { loadedTextureSourceSize, type LoadedTextureSource } from "./texture-sources";
+import { decodedTextureSourceBytes } from "./decoded-texture-source-lifetime";
 import {
   generatedVirtualTexturePageCount,
   parseVirtualTextureManifest,
@@ -208,6 +209,7 @@ export class VirtualTextureRuntimeShell {
         generatedPageRasterizeMs: 0,
         generatedPageRequests: 0,
         generatedPagesTarget: 0,
+        generatedSourceBytes: 0,
         gpuAdmissionFailures: 0,
         manifestFailures: 0,
         manifestRequests: activeSource.manifest === undefined ? 1 : 0,
@@ -262,10 +264,17 @@ export class VirtualTextureRuntimeShell {
     const [width, height] = loadedTextureSourceSize(source);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
     if (Math.max(width, height) < GENERATED_RASTER_VIRTUAL_TEXTURE_MIN_DIMENSION) return;
+    let decodedBytes: number;
+    try {
+      decodedBytes = decodedTextureSourceBytes(source);
+    } catch {
+      return;
+    }
     const pageSource: VirtualTextureGeneratedPageSource = {
       kind: "raster",
       source: {
         ...(texture.colorSpace === undefined ? {} : { colorSpace: texture.colorSpace }),
+        decodedBytes,
         height: Math.ceil(height),
         label: texture.uri,
         source,
@@ -468,13 +477,14 @@ export class VirtualTextureRuntimeShell {
       return;
     }
     const manifest = parsed.manifest;
-    if (source.telemetryKind === "generated-raster") {
+    if (source.telemetry?.kind === "generated-raster") {
       state.stats.generatedManifestUses += 1;
       state.stats.generatedPagesTarget = generatedVirtualTexturePageCount(
         manifest.width,
         manifest.height,
         manifest.pageSize,
       );
+      state.stats.generatedSourceBytes = source.telemetry.decodedSourceBytes;
     }
     state.availablePageKeys = new Set(manifest.pages.map(virtualTexturePageKey));
     state.manifest = manifest;
@@ -489,7 +499,7 @@ export class VirtualTextureRuntimeShell {
   ): VirtualTexturePageLoad {
     const manifest = state.manifest;
     if (manifest === undefined) return { kind: "absent" };
-    if (state.activeSource.telemetryKind !== "generated-raster") {
+    if (state.activeSource.telemetry?.kind !== "generated-raster") {
       return state.activeSource.loadPage(manifest, page, signal);
     }
     const started = virtualTextureNow();

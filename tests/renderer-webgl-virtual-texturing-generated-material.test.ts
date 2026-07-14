@@ -53,6 +53,7 @@ describe("WebGL renderer generated and material virtual texturing", () => {
     expect(root.snapshot().virtualTexturing).toEqual(expect.objectContaining({
       generatedManifestUses: 1,
       generatedPagesTarget: 5,
+      generatedSourceBytes: 512 * 512 * 4,
     }));
     expect(root.snapshot().virtualTexturing.generatedPageRequests).toBeGreaterThan(0);
     expect(namedUniform1iValues(calls)).toEqual(expect.objectContaining({
