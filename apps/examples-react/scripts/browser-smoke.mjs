@@ -1291,15 +1291,59 @@ const runReactLifecycleSmoke = async (session) => {
   if (typeof remountedReader !== 'function') return { error: 'Canvas did not create a fresh root after remount' };
   await globalThis[renderNowKey]?.();
   await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const remountedObserver = document.querySelector('[data-probe-lifecycle-state]');
+  const remountedObserverState = remountedObserver instanceof HTMLElement
+    ? {
+      asset: remountedObserver.dataset.probeAssetState,
+      lifecycle: remountedObserver.dataset.probeLifecycleState,
+    }
+    : null;
+  const remountedSnapshot = safeSnapshot(remountedReader);
+
+  action('fail-frame');
+  const boundaryError = await waitFor(() => {
+    const output = document.querySelector('[data-probe-error]');
+    return output?.textContent?.includes('React lifecycle probe frame failure') === true
+      && globalThis[snapshotKey] === undefined
+      ? output.textContent
+      : undefined;
+  });
+  if (typeof boundaryError !== 'string') return { error: 'scheduled frame failure did not reach the ErrorBoundary' };
+  const failedRoot = safeSnapshot(remountedReader);
+
+  action('recover');
+  const recoveredReader = await waitFor(() => {
+    const reader = globalThis[snapshotKey];
+    return reader !== remountedReader && safeSnapshot(reader)?.lifecycle?.state === 'available'
+      ? reader
+      : undefined;
+  });
+  if (typeof recoveredReader !== 'function') return { error: 'ErrorBoundary reset did not create a fresh renderer root' };
+  const recoveredObserver = await waitFor(() => {
+    const output = document.querySelector('[data-probe-lifecycle-state]');
+    return output instanceof HTMLElement
+      && output.dataset.probeLifecycleState === 'available'
+      && output.dataset.probeAssetState === 'idle'
+      ? {
+        asset: output.dataset.probeAssetState,
+        lifecycle: output.dataset.probeLifecycleState,
+      }
+      : undefined;
+  });
 
   return {
     animationEnd,
     animationStart,
     disposedAfterFrames,
     disposedFrame,
+    boundaryError,
+    failedRoot,
     initialAfterReplacement: safeSnapshot(initialReader),
     manifestRequestsAtUnmount,
-    remounted: safeSnapshot(remountedReader),
+    recovered: safeSnapshot(recoveredReader),
+    recoveredObserver,
+    remounted: remountedSnapshot,
+    remountedObserverState,
     replacementAfterUnmount: safeSnapshot(replacementReader),
   };
 })()
@@ -1313,6 +1357,25 @@ const runReactLifecycleSmoke = async (session) => {
       uploadThroughput: -1,
     });
   }
+};
+
+const disposedRendererResourcesReleased = (snapshot) => {
+  const governor = snapshot?.resourceGovernor;
+  const virtualTexturing = snapshot?.virtualTexturing;
+  return snapshot?.lifecycle?.state === 'disposed'
+    && governor?.outstandingLeases === 0
+    && governor?.outstandingReservations === 0
+    && Object.entries(governor?.total ?? {})
+      .every(([name, value]) => name === 'uploadBytes' || value === 0)
+    && virtualTexturing?.activePages === 0
+    && virtualTexturing?.atlasTextures === 0
+    && virtualTexturing?.cachedPages === 0
+    && virtualTexturing?.outstandingPageRequests === 0
+    && virtualTexturing?.pageLifecycleEntries === 0
+    && virtualTexturing?.pageTableTextures === 0
+    && virtualTexturing?.pendingPages === 0
+    && virtualTexturing?.physicalAllocatedBytes === 0
+    && virtualTexturing?.physicalQuarantinedBytes === 0;
 };
 
 const main = async () => {
@@ -1491,14 +1554,21 @@ const main = async () => {
       const lifecycle = await runReactLifecycleSmoke(session);
       if (
         lifecycle?.error !== undefined
-        || lifecycle?.initialAfterReplacement?.lifecycle?.state !== 'disposed'
-        || lifecycle?.replacementAfterUnmount?.lifecycle?.state !== 'disposed'
+        || !disposedRendererResourcesReleased(lifecycle?.initialAfterReplacement)
+        || !disposedRendererResourcesReleased(lifecycle?.replacementAfterUnmount)
+        || !disposedRendererResourcesReleased(lifecycle?.failedRoot)
         || lifecycle?.disposedAfterFrames?.lifecycle?.state !== 'disposed'
         || lifecycle?.disposedAfterFrames?.frame !== lifecycle?.disposedFrame
         || lifecycle?.remounted?.lifecycle?.state !== 'available'
         || !(lifecycle?.remounted?.frame > 0)
         || !(lifecycle?.animationEnd >= lifecycle?.animationStart + 3)
         || !(lifecycle?.manifestRequestsAtUnmount > 0)
+        || lifecycle?.boundaryError !== 'React lifecycle probe frame failure'
+        || lifecycle?.remountedObserverState?.lifecycle !== 'available'
+        || lifecycle?.remountedObserverState?.asset !== 'idle'
+        || lifecycle?.recovered?.lifecycle?.state !== 'available'
+        || lifecycle?.recoveredObserver?.lifecycle !== 'available'
+        || lifecycle?.recoveredObserver?.asset !== 'idle'
       ) {
         throw new Error(`React Canvas lifecycle smoke failed: ${JSON.stringify(lifecycle)}`);
       }

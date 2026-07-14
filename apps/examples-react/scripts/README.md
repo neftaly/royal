@@ -233,9 +233,12 @@ pnpm --filter @royal/examples-react test:browser
 The unfiltered browser smoke also opens the query-only React lifecycle probe.
 It verifies StrictMode cleanup plus semantic renderer-option replacement, an
 active `useFrame` clock stopping on unmount, disposal during a delayed VT
-manifest request, and creation of a fresh usable root on remount. The probe is
-code-split from the ordinary app path and is not an example route or package
-export.
+manifest request, and creation of a fresh usable root on remount. It also
+checks lifecycle/glTF-status observer resubscription and scheduled-frame
+failure delivery through an ErrorBoundary followed by a clean reset. Disposed
+checkpoints must have no live governor leases, GPU allocations, or VT work. The
+probe is code-split from the ordinary app path and is not an example route or
+package export.
 
 For a focused rerun without visiting every example first:
 

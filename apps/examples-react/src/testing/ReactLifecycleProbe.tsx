@@ -1,7 +1,9 @@
 import {
   Canvas,
   useFrame,
+  useGltfAssetStatus,
   useInvalidate,
+  useRendererLifecycle,
 } from '@royal/react';
 import {
   boxGeometry,
@@ -13,7 +15,7 @@ import {
   unlitMaterial,
   virtualTexture,
 } from '@royal/react/scene';
-import { useState, type ReactNode } from 'react';
+import { Component, useState, type ReactNode } from 'react';
 import { BenchmarkRendererSnapshot } from '../examples/BenchmarkRendererSnapshot';
 
 const fixtureRoot = import.meta.env.BASE_URL + 'fixtures/virtual-texture-stress/';
@@ -46,9 +48,48 @@ const ActiveFrameProbe = (): ReactNode => {
   return null;
 };
 
+const FailingFrameProbe = (): ReactNode => {
+  useFrame(() => {
+    throw new Error('React lifecycle probe frame failure');
+  });
+  return null;
+};
+
+const RendererObserverProbe = (): ReactNode => {
+  const asset = useGltfAssetStatus('/fixtures/lifecycle-probe-absent.gltf');
+  const lifecycle = useRendererLifecycle();
+  return (
+    <output
+      data-probe-asset-state={asset.state}
+      data-probe-lifecycle-state={lifecycle.state}
+    >
+      {lifecycle.state}/{asset.state}
+    </output>
+  );
+};
+
+class ProbeErrorBoundary extends Component<
+  { readonly children: ReactNode },
+  { readonly error?: string }
+> {
+  override state: { readonly error?: string } = {};
+
+  static getDerivedStateFromError(error: unknown): { readonly error: string } {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  override render(): ReactNode {
+    return this.state.error === undefined
+      ? this.props.children
+      : <output data-probe-error="">{this.state.error}</output>;
+  }
+}
+
 /** Query-only browser fixture; deliberately absent from example routes and package exports. */
 export const ReactLifecycleProbe = (): ReactNode => {
   const [antialias, setAntialias] = useState(true);
+  const [failureEpoch, setFailureEpoch] = useState(0);
+  const [failFrame, setFailFrame] = useState(false);
   const [mode, setMode] = useState<'animate' | 'ordinary' | 'virtual-texture'>('ordinary');
   const [mounted, setMounted] = useState(true);
 
@@ -70,18 +111,36 @@ export const ReactLifecycleProbe = (): ReactNode => {
       <button data-probe-action="toggle-mount" onClick={() => setMounted((value) => !value)} type="button">
         Toggle mount
       </button>
-      {mounted ? (
-        <Canvas
-          aria-label="React renderer lifecycle probe"
-          height={320}
-          rendererOptions={{ antialias }}
-          scene={mode === 'virtual-texture' ? virtualTextureScene : ordinaryScene}
-          width={480}
-        >
-          <BenchmarkRendererSnapshot />
-          {mode === 'animate' ? <ActiveFrameProbe /> : null}
-        </Canvas>
-      ) : <output data-probe-unmounted="">Canvas unmounted</output>}
+      <button data-probe-action="fail-frame" onClick={() => setFailFrame(true)} type="button">
+        Fail frame
+      </button>
+      <button
+        data-probe-action="recover"
+        onClick={() => {
+          setFailFrame(false);
+          setFailureEpoch((value) => value + 1);
+          setMounted(true);
+        }}
+        type="button"
+      >
+        Recover
+      </button>
+      <ProbeErrorBoundary key={failureEpoch}>
+        {mounted ? (
+          <Canvas
+            aria-label="React renderer lifecycle probe"
+            height={320}
+            rendererOptions={{ antialias }}
+            scene={mode === 'virtual-texture' ? virtualTextureScene : ordinaryScene}
+            width={480}
+          >
+            <BenchmarkRendererSnapshot />
+            <RendererObserverProbe />
+            {mode === 'animate' ? <ActiveFrameProbe /> : null}
+            {failFrame ? <FailingFrameProbe /> : null}
+          </Canvas>
+        ) : <output data-probe-unmounted="">Canvas unmounted</output>}
+      </ProbeErrorBoundary>
     </main>
   );
 };
