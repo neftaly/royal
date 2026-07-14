@@ -72,13 +72,11 @@ describe("prepared virtual-texture coverage", () => {
   it("preserves exact demand candidates across separately prepared adapters", () => {
     const first = planVirtualTextureDrawDemand({
       context: context(),
-      flipY: false,
       limit: 32,
       manifest,
     });
     const second = planVirtualTextureDrawDemand({
       context: context(),
-      flipY: false,
       limit: 32,
       manifest,
     });
@@ -92,12 +90,11 @@ describe("prepared virtual-texture coverage", () => {
     malformedPositions[0] = -1;
     const workspace = createVirtualTextureDemandPlanningWorkspace();
 
-    expect(projectVirtualTextureScreenFootprint(context(prepared), false, workspace, manifest)).toEqual({
+    expect(projectVirtualTextureScreenFootprint(context(prepared), workspace, manifest)).toEqual({
       kind: "indeterminate",
     });
     expect(planVirtualTextureDrawDemand({
       context: context(prepared),
-      flipY: false,
       limit: 4,
       manifest,
     }).coverageCandidates).toEqual([]);
@@ -108,7 +105,7 @@ describe("prepared virtual-texture coverage", () => {
     { label: "partial index triangle", prepared: () => provider({ indices: new Uint16Array([0, 1]) }) },
     { label: "out-of-range index", prepared: () => provider({ indices: new Uint16Array([0, 1, 9]) }) },
   ])("makes $label indeterminate without entering the exact scan", ({ prepared }) => {
-    expect(projectVirtualTextureScreenFootprint(context(prepared()), false)).toEqual({ kind: "indeterminate" });
+    expect(projectVirtualTextureScreenFootprint(context(prepared()))).toEqual({ kind: "indeterminate" });
   });
 
   it("asserts composed model-array parity instead of silently truncating instances", () => {
@@ -116,7 +113,7 @@ describe("prepared virtual-texture coverage", () => {
       kind: "composed",
       localModels: [identityMat4(), identityMat4()],
       rootModels: [identityMat4()],
-    }), false)).toThrow("matching lengths");
+    }))).toThrow("matching lengths");
   });
 
   it("ignores a projected zero-area triangle", () => {
@@ -125,30 +122,27 @@ describe("prepared virtual-texture coverage", () => {
       positions: new Float32Array([-1, 0, 0, 0, 0, 0, 1, 0, 0]),
       texCoords: new Float32Array([0, 0, 0.5, 0.5, 1, 1]),
     });
-    expect(projectVirtualTextureScreenFootprint(context(degenerate), false)).toEqual({ kind: "not-visible" });
+    expect(projectVirtualTextureScreenFootprint(context(degenerate))).toEqual({ kind: "not-visible" });
   });
 
   it("reuses one provider across stereo views without leaking the other eye's workspace", () => {
     const prepared = provider();
     const left = planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([-0.4, 0, 0]) }),
-      flipY: false,
       manifest,
     });
     const right = planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([0.4, 0, 0]) }),
-      flipY: false,
       manifest,
     });
     expect(right.demandCandidates).not.toEqual(left.demandCandidates);
     expect(planVirtualTextureDrawDemand({
       context: context(prepared, { kind: "single", model: translationMat4([-0.4, 0, 0]) }),
-      flipY: false,
       manifest,
     })).toEqual(left);
   });
 
-  it("keeps a near-edge sliver visible and applies texture transform plus flipY", () => {
+  it("keeps a near-edge sliver visible and applies the texture transform", () => {
     const prepared = provider({
       indices: new Uint16Array([0, 1, 2]),
       positions: new Float32Array([0.99, -1, 0, 1.01, -1, 0, 0.99, 1, 0]),
@@ -161,11 +155,11 @@ describe("prepared virtual-texture coverage", () => {
         row1: [0, 0.5, 0.25, 0],
         set: 0,
       },
-    }, true);
+    });
     expect(projected.kind).toBe("visible");
     if (projected.kind !== "visible") return;
     expect(projected.footprint.minU).toBeCloseTo(0.25);
-    expect(projected.footprint.maxV).toBeCloseTo(0.75);
+    expect(projected.footprint.maxV).toBeCloseTo(0.375);
     expect(projected.footprint.screenWidth).toBeGreaterThan(0);
   });
 });

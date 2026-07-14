@@ -15,7 +15,6 @@ export type VirtualTextureCoverageGeometry = {
 };
 
 export type VirtualTextureCoverageQuery = {
-  readonly flipY: boolean;
   readonly modelSource: VirtualTextureDrawDemandModelSource;
   readonly projection: Mat4;
   readonly textureCoordinates?: GltfTextureCoordinates;

@@ -473,7 +473,7 @@ const allocate = (
   try {
     atlasTexture = createOwnedTexture(state.handles);
     pageTableTexture = createOwnedTexture(state.handles);
-    prepareTextureUpload(gl, false);
+    prepareTextureUpload(gl);
     gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -790,7 +790,7 @@ const flushNextPageTableUpdate = (
   const { gl } = state;
   let attempted = false;
   try {
-    prepareTextureUpload(gl, false);
+    prepareTextureUpload(gl);
     gl.bindTexture(gl.TEXTURE_2D, allocation.pageTableTexture);
     if (region !== undefined) {
       const texel = encodeVirtualTexturePageTableRgba8({
@@ -947,7 +947,7 @@ const resumeInFlightUpload = (
   if (inFlight.phase === "upload-atlas") {
     const { gl } = state;
     const atlasCellSize = virtualTextureStoredPageSize(resource.options.manifest);
-    prepareTextureUpload(gl, false);
+    prepareTextureUpload(gl);
     gl.bindTexture(gl.TEXTURE_2D, allocation.atlasTexture);
     gl.texSubImage2D(
       gl.TEXTURE_2D,

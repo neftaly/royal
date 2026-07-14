@@ -53,7 +53,7 @@ export const uploadTexture = (
 ): void => {
   // Royal and glTF both define authored (0, 0) at the upper-left. WebGL maps
   // the first decoded image row to v=0 when upload flipping is disabled.
-  prepareTextureUpload(gl, false);
+  prepareTextureUpload(gl);
   gl.bindTexture(gl.TEXTURE_2D, textureHandle);
   const internalFormat = textureUploadInternalFormat(gl, texture.colorSpace);
   if (isDecodedRgbaTexture(source)) {

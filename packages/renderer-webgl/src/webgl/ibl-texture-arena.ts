@@ -297,7 +297,7 @@ const uploadGltfSpecularIfReady = (
     state.textureLeases.set(texture, allocation.commit());
   }
   const gl = state.gl;
-  prepareTextureUpload(gl, false);
+    prepareTextureUpload(gl);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
   let uploadOrdinal = 0;
   for (let mipIndex = 0; mipIndex < specular.imageLoadKeys.length; mipIndex += 1) {

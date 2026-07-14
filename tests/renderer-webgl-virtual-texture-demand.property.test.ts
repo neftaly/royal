@@ -67,10 +67,9 @@ describe("virtual texture pure demand planning", () => {
     })).toThrow("matching lengths");
   });
 
-  it("projects visible geometry and preserves flipY demand orientation", () => {
+  it("projects visible geometry in Royal's canonical texture orientation", () => {
     const projected = projectVirtualTextureScreenFootprint(
       context(new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0])),
-      true,
     );
     expect(projected.kind).toBe("visible");
     if (projected.kind !== "visible") return;
@@ -87,13 +86,12 @@ describe("virtual texture pure demand planning", () => {
         identityMat4(),
         { texCoords: new Float32Array([nonFinite, 0, 1, 0, 0, 1]) },
       );
-      expect(projectVirtualTextureScreenFootprint(invalid, false, workspace, manifest())).toEqual({
+      expect(projectVirtualTextureScreenFootprint(invalid, workspace, manifest())).toEqual({
         kind: "indeterminate",
       });
       expect(virtualTextureDemandPlanningWorkspaceSnapshot(workspace).finestRegionCount).toBe(0);
       expect(planVirtualTextureDrawDemand({
         context: invalid,
-        flipY: false,
         limit: 4,
         manifest: manifest(),
       })).toEqual({
@@ -110,18 +108,15 @@ describe("virtual texture pure demand planning", () => {
     behindProjection[15] = -1;
     const behind = projectVirtualTextureScreenFootprint(
       context(new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0]), behindProjection as unknown as Mat4),
-      true,
     );
     expect(behind).toEqual({ kind: "not-visible" });
 
     const offscreen = projectVirtualTextureScreenFootprint(
       context(new Float32Array([2, -0.5, 0, 3, -0.5, 0, 2, 0.5, 0])),
-      true,
     );
     expect(offscreen).toEqual({ kind: "not-visible" });
     expect(planVirtualTextureDrawDemand({
       context: context(new Float32Array([2, -0.5, 0, 3, -0.5, 0, 2, 0.5, 0])),
-      flipY: true,
       manifest: manifest(),
     })).toEqual({ coverageCandidates: [], demandCandidates: [] });
   });
@@ -134,15 +129,14 @@ describe("virtual texture pure demand planning", () => {
       crossingProjection as unknown as Mat4,
       { texCoords: new Float32Array([1, 1, 0, 0, 0, 0.25]) },
     );
-    const projected = projectVirtualTextureScreenFootprint(crossing, true);
+    const projected = projectVirtualTextureScreenFootprint(crossing);
     expect(projected.kind).toBe("visible");
     if (projected.kind !== "visible") return;
     expect(projected.footprint.maxU).toBeCloseTo(0.25);
-    expect(projected.footprint.maxV).toBeCloseTo(1);
-    expect(projected.footprint.minV).toBeCloseTo(0.5625);
+    expect(projected.footprint.maxV).toBeCloseTo(0.4375);
+    expect(projected.footprint.minV).toBeCloseTo(0);
     const demand = planVirtualTextureDrawDemand({
       context: crossing,
-      flipY: true,
       limit: 32,
       manifest: manifest(),
     });
@@ -181,7 +175,6 @@ describe("virtual texture pure demand planning", () => {
           texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
         },
       ),
-      flipY: false,
       limit: 32,
       manifest: source,
     });
@@ -221,7 +214,6 @@ describe("virtual texture pure demand planning", () => {
     );
     const demand = planVirtualTextureDrawDemand({
       context: { ...ground, view: viewMat4(camera), viewportSize: [1_800, 1_800] },
-      flipY: false,
       limit: 32,
       manifest: manifest({
         height: 16_384,
@@ -266,7 +258,6 @@ describe("virtual texture pure demand planning", () => {
           texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
         },
       ),
-      flipY: false,
       limit: 16,
       manifest: source,
     });
@@ -313,7 +304,6 @@ describe("virtual texture pure demand planning", () => {
     };
     const input = {
       context: repeatedGround,
-      flipY: false,
       limit: 16,
       manifest: manifest({
         height: 16_384,
@@ -359,7 +349,6 @@ describe("virtual texture pure demand planning", () => {
     const sizes = [[1_800, 1_800], [320, 2_400], [4_096, 256], [1, 1], [0, 0]] as const;
     const outputs = sizes.map((viewportSize) => planVirtualTextureDrawDemand({
       context: { ...baseContext, viewportSize },
-      flipY: false,
       limit: 8,
       manifest: source,
       workspace,
@@ -376,7 +365,6 @@ describe("virtual texture pure demand planning", () => {
     });
     expect(planVirtualTextureDrawDemand({
       context: { ...baseContext, viewportSize: sizes[0] },
-      flipY: false,
       limit: 8,
       manifest: source,
       workspace,
@@ -411,7 +399,6 @@ describe("virtual texture pure demand planning", () => {
     });
     const demand = (tile: number, wrap: "mirrored-repeat" | "repeat") => planVirtualTextureDrawDemand({
       context: tiledContext(tile, wrap),
-      flipY: false,
       limit: 32,
       manifest: source,
     });
@@ -435,7 +422,6 @@ describe("virtual texture pure demand planning", () => {
     };
     const demand = planVirtualTextureDrawDemand({
       context: crossing,
-      flipY: false,
       limit: 8,
       manifest: manifest({
         height: 16_384,
@@ -466,7 +452,7 @@ describe("virtual texture pure demand planning", () => {
         texCoords: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
       },
     );
-    const projected = projectVirtualTextureScreenFootprint(clipped, false);
+    const projected = projectVirtualTextureScreenFootprint(clipped);
     expect(projected.kind).toBe("visible");
     if (projected.kind !== "visible") return;
     expect(projected.footprint.minU).toBeCloseTo(4 / 7);
@@ -485,8 +471,8 @@ describe("virtual texture pure demand planning", () => {
       },
     );
     const source = manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" });
-    const first = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, limit: 5, manifest: source });
-    const second = planVirtualTextureDrawDemand({ context: faceOn, flipY: false, limit: 5, manifest: source });
+    const first = planVirtualTextureDrawDemand({ context: faceOn, limit: 5, manifest: source });
+    const second = planVirtualTextureDrawDemand({ context: faceOn, limit: 5, manifest: source });
     expect(first).toEqual(second);
     expect(first.coverageCandidates).toEqual([{ mip: 2, x: 0, y: 0 }]);
     expect(first.demandCandidates[0]).toEqual({ mip: 2, x: 0, y: 0 });
@@ -514,7 +500,6 @@ describe("virtual texture pure demand planning", () => {
     );
     const demand = planVirtualTextureDrawDemand({
       context: oblique,
-      flipY: false,
       limit: 16,
       manifest: manifest({ mipCount: 4, pageSize: 128, uriTemplate: "m{mip}-{x}-{y}.png" }),
     });
@@ -536,7 +521,6 @@ describe("virtual texture pure demand planning", () => {
     const manyTriangles = context(positions, identityMat4(), { texCoords });
     const input = {
       context: manyTriangles,
-      flipY: false,
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
     } as const;
@@ -561,7 +545,6 @@ describe("virtual texture pure demand planning", () => {
     }
     const input = {
       context: context(positions, identityMat4(), { texCoords }),
-      flipY: false,
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
       workspace: first,
@@ -618,7 +601,6 @@ describe("virtual texture pure demand planning", () => {
     });
     const input = {
       context: terrainContext,
-      flipY: false,
       limit: 8,
       manifest: source,
       workspace,
@@ -676,7 +658,6 @@ describe("virtual texture pure demand planning", () => {
     }
     const input = {
       context: context(positions, identityMat4(), { texCoords }),
-      flipY: false,
       limit: 4,
       manifest: {
         borderTexels: 1,
@@ -707,7 +688,7 @@ describe("virtual texture pure demand planning", () => {
       width: 2 ** 30,
     } satisfies VirtualTextureManifestModel;
     const faceOn = context(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0]));
-    const projected = projectVirtualTextureScreenFootprint(faceOn, false);
+    const projected = projectVirtualTextureScreenFootprint(faceOn);
     expect(projected.kind).toBe("visible");
     if (projected.kind !== "visible") return;
     const targetMip = virtualTextureTargetMip(huge, projected.footprint);
@@ -728,7 +709,6 @@ describe("virtual texture pure demand planning", () => {
 
     const demand = planVirtualTextureDrawDemand({
       context: faceOn,
-      flipY: false,
       limit: 4,
       manifest: sparse,
     });
@@ -751,7 +731,6 @@ describe("virtual texture pure demand planning", () => {
     };
     const input = {
       context: context(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0])),
-      flipY: false,
       limit: 4,
       manifest: truncated,
     } as const;
@@ -805,14 +784,12 @@ describe("virtual texture pure demand planning", () => {
     const reverseWorkspace = createVirtualTextureDemandPlanningWorkspace();
     const forward = planVirtualTextureDrawDemand({
       context: demandContext(triangleOrder([0, 1, 2], [3, 4, 5]), [small, large]),
-      flipY: false,
       limit: 8,
       manifest: source,
       workspace: forwardWorkspace,
     });
     const reverse = planVirtualTextureDrawDemand({
       context: demandContext(triangleOrder([3, 4, 5], [0, 1, 2]), [large, small]),
-      flipY: false,
       limit: 8,
       manifest: source,
       workspace: reverseWorkspace,
@@ -863,7 +840,6 @@ describe("virtual texture pure demand planning", () => {
     });
     const demand = (groups: readonly (readonly number[])[]) => planVirtualTextureDrawDemand({
       context: context(positions, identityMat4(), { indices: indices(groups), texCoords }),
-      flipY: false,
       limit: 8,
       manifest: source,
     });
@@ -1143,11 +1119,11 @@ describe("virtual texture pure demand planning", () => {
     const leftContext = context(new Float32Array([-1, -1, 0, 0, -1, 0, -1, 1, 0]));
     const rightContext = context(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0]));
     const source = manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" });
-    const leftDemand = planVirtualTextureDrawDemand({ context: leftContext, flipY: false, manifest: source, workspace: left });
+    const leftDemand = planVirtualTextureDrawDemand({ context: leftContext, manifest: source, workspace: left });
     const leftSnapshot = virtualTextureDemandPlanningWorkspaceSnapshot(left);
-    planVirtualTextureDrawDemand({ context: rightContext, flipY: false, manifest: source, workspace: right });
+    planVirtualTextureDrawDemand({ context: rightContext, manifest: source, workspace: right });
     expect(virtualTextureDemandPlanningWorkspaceSnapshot(left)).toEqual(leftSnapshot);
-    expect(planVirtualTextureDrawDemand({ context: leftContext, flipY: false, manifest: source, workspace: left }))
+    expect(planVirtualTextureDrawDemand({ context: leftContext, manifest: source, workspace: left }))
       .toEqual(leftDemand);
   });
 
@@ -1200,7 +1176,6 @@ describe("virtual texture pure demand planning", () => {
     );
     const demand = planVirtualTextureDrawDemand({
       context: faceOnNpotSlice,
-      flipY: false,
       limit: 64,
       manifest: source,
     });
@@ -1241,7 +1216,6 @@ describe("virtual texture pure demand planning", () => {
       { mip: 39, x: 1, y: 0 },
     ]);
     expect(planVirtualTextureDrawDemand({
-      flipY: true,
       limit: 2,
       manifest: huge,
     }).demandCandidates).toHaveLength(2);

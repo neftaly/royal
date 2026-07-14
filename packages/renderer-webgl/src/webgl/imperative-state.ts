@@ -27,11 +27,10 @@ export const prepareFrameBaseline = (
 /** Makes texture upload meaning independent of prior pass state. */
 export const prepareTextureUpload = (
   gl: WebGL2RenderingContext,
-  flipY: boolean,
 ): void => {
   gl.activeTexture(gl.TEXTURE0 + TEXTURE_UPLOAD_UNIT);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 0);
   gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);

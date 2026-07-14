@@ -36,7 +36,6 @@ export type VirtualTextureDemandSource = {
 
 export type VirtualTextureDrawDemandInput = VirtualTextureDemandSource & {
   readonly context?: VirtualTextureDrawDemandContext;
-  readonly flipY: boolean;
   readonly limit?: number;
   readonly workspace?: VirtualTextureDemandPlanningWorkspace;
 };
@@ -336,8 +335,7 @@ const retainWrappedVisiblePolygon = (
   for (let vertex = 0; vertex < vertexCount; vertex += 1) {
     const offset = vertex * CLIPPED_VERTEX_COMPONENTS;
     const u = polygon[offset + 4]!;
-    const sourceV = polygon[offset + 5]!;
-    const v = query.flipY ? 1 - sourceV : sourceV;
+    const v = polygon[offset + 5]!;
     rawMinU = Math.min(rawMinU, u);
     rawMaxU = Math.max(rawMaxU, u);
     orientedMinV = Math.min(orientedMinV, v);
@@ -365,9 +363,8 @@ const retainWrappedVisiblePolygon = (
       polygon[offset + 4]!,
       wrapS,
     );
-    const sourceV = polygon[offset + 5]!;
     workspace.wrappedPolygon[offset + 5] = wrapVirtualTextureDemandCoordinate(
-      query.flipY ? 1 - sourceV : sourceV,
+      polygon[offset + 5]!,
       wrapT,
     );
   }
@@ -663,7 +660,6 @@ export const prepareVirtualTextureCoverageProvider = (
 
 export const projectVirtualTextureScreenFootprint = (
   context: VirtualTextureDrawDemandContext,
-  flipY: boolean,
   workspace = createVirtualTextureDemandPlanningWorkspace(),
   manifest?: VirtualTextureManifestModel,
 ): VirtualTextureProjection => {
@@ -671,7 +667,6 @@ export const projectVirtualTextureScreenFootprint = (
   return queryVirtualTextureCoverage(
     context.provider,
     {
-      flipY,
       modelSource: context.modelSource,
       projection: context.projection,
       ...(context.textureCoordinates === undefined ? {} : { textureCoordinates: context.textureCoordinates }),
@@ -1161,7 +1156,7 @@ export const planVirtualTextureDrawDemand = (input: VirtualTextureDrawDemandInpu
     return { demandCandidates: planVirtualTextureBootstrapDemand(input, limit) };
   }
   const workspace = input.workspace ?? createVirtualTextureDemandPlanningWorkspace();
-  const projection = projectVirtualTextureScreenFootprint(input.context, input.flipY, workspace, input.manifest);
+  const projection = projectVirtualTextureScreenFootprint(input.context, workspace, input.manifest);
   if (projection.kind === "not-visible") return { coverageCandidates: [], demandCandidates: [] };
   if (projection.kind === "indeterminate") {
     const fallback = planVirtualTextureBootstrapDemand(input, limit);

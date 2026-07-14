@@ -113,7 +113,7 @@ export const uploadStudioEnvironmentSpecularTexture = (
   gl: WebGL2RenderingContext,
   texture: WebGLTexture,
 ): StudioEnvironmentSpecularResource => {
-  prepareTextureUpload(gl, false);
+  prepareTextureUpload(gl);
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
 
   for (const [mipIndex, mipSize] of STUDIO_ENVIRONMENT_SPECULAR_MIP_SIZES.entries()) {

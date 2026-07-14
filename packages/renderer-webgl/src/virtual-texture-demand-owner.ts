@@ -452,7 +452,6 @@ export class VirtualTextureDemandOwner {
 
     const demand = planVirtualTextureDrawDemand({
       ...(context === undefined ? {} : { context }),
-      flipY: false,
       manifest,
       workspace: this.#planning,
       ...(state.pageUrisByKey === undefined ? {} : { pageUrisByKey: state.pageUrisByKey }),
