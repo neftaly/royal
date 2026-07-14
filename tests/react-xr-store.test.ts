@@ -5,8 +5,11 @@ import {
   type XrSessionActivationOptions,
   type XrSessionAvailabilityOptions,
   type XrSessionBeginOptions,
+  type XrSessionBlockOptions,
+  type XrSessionBlockReason,
   type XrSessionEndOptions,
   type XrSessionFailureOptions,
+  type XrSessionStoreInitialState,
   type XrSessionStatus,
   useXrSessionSnapshot,
 } from "@royal/react/xr";
@@ -17,11 +20,25 @@ type TestXrSession = {
 };
 
 describe("React XR session store", () => {
+  it("derives a consistent acquisition status from initial availability", () => {
+    expect(createXrSessionStore().getState()).toMatchObject({
+      available: false,
+      status: "checking",
+    });
+    expect(createXrSessionStore({ available: true }).getState()).toMatchObject({
+      available: true,
+      status: "available",
+    });
+    expect(createXrSessionStore({ available: false }).getState()).toMatchObject({
+      available: false,
+      status: "unavailable",
+    });
+  });
+
   it("keeps snapshots serializable while live session control stays imperative", () => {
     const session: TestXrSession = { id: "session-a" };
     const store = createXrSessionStore<TestXrSession>({
       available: true,
-      offerStatus: "pending",
     });
 
     store.getState().beginSession(session, { mode: "immersive-vr" });
@@ -31,13 +48,115 @@ describe("React XR session store", () => {
     expect(snapshot).toMatchObject({
       active: true,
       available: true,
+      blockReason: null,
       mode: "immersive-vr",
-      offerStatus: "pending",
       status: "active",
+      visibilityState: "visible",
     });
     expect("session" in snapshot).toBe(false);
     expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
     expect("activateSession" in snapshot).toBe(false);
+  });
+
+  it("distinguishes live-session suspension from acquisition blocking", () => {
+    const session: TestXrSession = { id: "session-hidden" };
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+
+    store.getState().beginSession(session, { mode: "immersive-vr" });
+    store.getState().activateSession(session, {
+      mode: "immersive-vr",
+      visibilityState: "hidden",
+    });
+    expect(store.getState()).toMatchObject({
+      active: false,
+      session,
+      status: "suspended",
+      visibilityState: "hidden",
+    });
+
+    store.getState().setSessionVisibility("visible-blurred");
+    expect(store.getState()).toMatchObject({
+      active: true,
+      session,
+      status: "active",
+      visibilityState: "visible-blurred",
+    });
+
+    store.getState().beginSessionEnd();
+    expect(store.getState()).toMatchObject({
+      active: false,
+      session,
+      status: "ending",
+    });
+
+    store.getState().setAvailability(false);
+    expect(store.getState()).toMatchObject({
+      available: false,
+      session,
+      status: "ending",
+    });
+
+    store.getState().endSession();
+    expect(store.getState()).toMatchObject({
+      active: false,
+      available: false,
+      session: null,
+      status: "unavailable",
+      visibilityState: null,
+    });
+  });
+
+  it("records why acquisition was blocked without claiming session ownership", () => {
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+
+    store.getState().beginSession(undefined, { mode: "immersive-vr" });
+    store.getState().blockSession(
+      "immersive-session-already-active",
+      new Error("another immersive session owns the device"),
+      { available: true, mode: "immersive-vr" },
+    );
+    expect(store.getState()).toMatchObject({
+      active: false,
+      available: true,
+      blockReason: "immersive-session-already-active",
+      error: "another immersive session owns the device",
+      mode: "immersive-vr",
+      session: null,
+      status: "blocked",
+    });
+
+    store.getState().setAvailability(true);
+    expect(store.getState()).toMatchObject({
+      blockReason: null,
+      error: null,
+      status: "available",
+    });
+  });
+
+  it("does not misclassify a failure after session ownership as blocked acquisition", () => {
+    const session: TestXrSession = { id: "owned-session" };
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+    store.getState().activateSession(session, { mode: "immersive-vr" });
+
+    expect(() => {
+      store.getState().blockSession("immersive-session-already-active");
+    }).toThrow("Cannot block XR acquisition while a live session is owned");
+    expect(store.getState()).toMatchObject({ session, status: "active" });
+  });
+
+  it("ignores live-session-only actions until a session is owned", () => {
+    const store = createXrSessionStore<TestXrSession>({ available: true });
+    const initial = store.getState();
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => notifications += 1);
+
+    store.getState().beginSessionEnd();
+    store.getState().setSessionVisibility("hidden");
+    store.getState().recordFrame({ frameIndex: 42 });
+
+    expect(store.getState()).toBe(initial);
+    expect(notifications).toBe(0);
+    unsubscribe();
   });
 
   it("uses semantic actions for session lifecycle state", () => {
@@ -98,6 +217,12 @@ describe("React XR session store", () => {
     const invalidEnd = { status: "active" } satisfies XrSessionEndOptions;
     // @ts-expect-error Failure always enters error.
     const invalidFailure = { status: "available" } satisfies XrSessionFailureOptions;
+    // @ts-expect-error Blocking cannot override its derived status.
+    const invalidBlock = { status: "error" } satisfies XrSessionBlockOptions;
+    // @ts-expect-error Block reasons are a closed, inspectable vocabulary.
+    const invalidBlockReason = "unknown" satisfies XrSessionBlockReason;
+    // @ts-expect-error A store cannot begin with an active session it does not own.
+    const invalidInitial = { active: true } satisfies XrSessionStoreInitialState;
     // @ts-expect-error No lifecycle action produces an ended status.
     const invalidStatus = "ended" satisfies XrSessionStatus;
     expect([
@@ -106,8 +231,11 @@ describe("React XR session store", () => {
       invalidActivation,
       invalidEnd,
       invalidFailure,
+      invalidBlock,
+      invalidBlockReason,
+      invalidInitial,
       invalidStatus,
-    ]).toHaveLength(6);
+    ]).toHaveLength(9);
 
     const store = createXrSessionStore<TestXrSession>();
     if (false) {
@@ -121,7 +249,9 @@ describe("React XR session store", () => {
   });
 
   it("retains unrelated selector snapshots across frame records", () => {
+    const session = { id: "selector-session" };
     const store = createXrSessionStore({ available: true });
+    store.getState().activateSession(session, { mode: "immersive-vr" });
     const readers = createXrSessionSelectionReaders(
       store,
       (state) => ({ available: state.available, status: state.status }),

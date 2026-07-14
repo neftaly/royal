@@ -5,18 +5,21 @@ export type XrSessionMode = "immersive-ar" | "immersive-vr" | "inline";
 export type XrSessionStatus =
   | "active"
   | "available"
+  | "blocked"
   | "checking"
+  | "ending"
   | "error"
   | "starting"
+  | "suspended"
   | "unavailable";
 
-export type XrSessionOfferStatus =
-  | "accepted"
-  | "error"
-  | "idle"
-  | "offered"
-  | "pending"
-  | "unsupported";
+/** Why acquisition failed even though immersive XR remains supported. */
+export type XrSessionBlockReason =
+  | "immersive-session-already-active"
+  | "session-request-denied";
+
+/** The browser-owned visibility state of a live XR session. */
+export type XrSessionVisibilityState = "hidden" | "visible" | "visible-blurred";
 
 export type XrViewport = {
   readonly height: number;
@@ -28,12 +31,12 @@ export type XrViewport = {
 export type XrSessionState = {
   readonly active: boolean;
   readonly available: boolean;
+  readonly blockReason: XrSessionBlockReason | null;
   readonly error: string | null;
   readonly frameIndex: number;
   readonly mode: XrSessionMode | null;
-  readonly offerError: string | null;
-  readonly offerStatus: XrSessionOfferStatus;
   readonly status: XrSessionStatus;
+  readonly visibilityState: XrSessionVisibilityState | null;
   readonly viewCount: number;
   readonly viewports: readonly XrViewport[];
 };
@@ -42,7 +45,11 @@ export type XrSessionControlSnapshot<Session extends object = object> = {
   readonly session: Session | null;
 };
 
-export type XrSessionStoreInitialState = Partial<XrSessionState>;
+/** Acquisition state accepted before any browser-owned session exists. */
+export type XrSessionStoreInitialState = {
+  readonly available?: boolean;
+  readonly mode?: XrSessionMode | null;
+};
 
 export type XrSessionAvailabilityOptions = {
   readonly mode?: XrSessionMode | null;
@@ -54,6 +61,12 @@ export type XrSessionBeginOptions = {
 
 export type XrSessionActivationOptions = {
   readonly mode: XrSessionMode;
+  readonly visibilityState?: XrSessionVisibilityState;
+};
+
+export type XrSessionBlockOptions = {
+  readonly available?: boolean;
+  readonly mode?: XrSessionMode | null;
 };
 
 export type XrSessionEndOptions = {
@@ -80,6 +93,12 @@ export type XrSessionStoreActions<Session extends object = object> = {
     session?: Session | null,
     options?: XrSessionBeginOptions,
   ) => void;
+  readonly beginSessionEnd: () => void;
+  readonly blockSession: (
+    reason: XrSessionBlockReason,
+    error?: unknown,
+    options?: XrSessionBlockOptions,
+  ) => void;
   readonly endSession: (options?: XrSessionEndOptions) => void;
   readonly failSession: (
     error: unknown,
@@ -87,14 +106,11 @@ export type XrSessionStoreActions<Session extends object = object> = {
   ) => void;
   readonly recordFrame: (frame?: XrSessionFrameRecord) => void;
   readonly reset: (state?: XrSessionStoreInitialState) => void;
-  readonly setOfferStatus: (
-    offerStatus: XrSessionOfferStatus,
-    offerError?: string | null,
-  ) => void;
   readonly setAvailability: (
     available: boolean,
     options?: XrSessionAvailabilityOptions,
   ) => void;
+  readonly setSessionVisibility: (visibilityState: XrSessionVisibilityState) => void;
 };
 
 export type XrSessionStoreState<Session extends object = object> =
@@ -119,13 +135,13 @@ type XrSessionStoreData<Session extends object> =
 type XrSessionStorePatch<Session extends object> = {
   active?: boolean;
   available?: boolean;
+  blockReason?: XrSessionBlockReason | null;
   error?: string | null;
   frameIndex?: number;
   mode?: XrSessionMode | null;
-  offerError?: string | null;
-  offerStatus?: XrSessionOfferStatus;
   session?: Session | null;
   status?: XrSessionStatus;
+  visibilityState?: XrSessionVisibilityState | null;
   viewCount?: number;
   viewports?: readonly XrViewport[];
 };
@@ -143,27 +159,25 @@ const availabilityStatus = (available: boolean): XrSessionStatus =>
 
 const createXrSessionState = (
   state: XrSessionStoreInitialState = {},
-): XrSessionState => {
-  const viewports = copyXrViewports(state.viewports);
-
-  return {
-    active: state.active ?? false,
-    available: state.available ?? false,
-    error: state.error ?? null,
-    frameIndex: state.frameIndex ?? 0,
-    mode: state.mode ?? null,
-    offerError: state.offerError ?? null,
-    offerStatus: state.offerStatus ?? "idle",
-    status: state.status ?? "checking",
-    viewCount: state.viewCount ?? viewports.length,
-    viewports,
-  };
-};
+): XrSessionState => ({
+  active: false,
+  available: state.available ?? false,
+  blockReason: null,
+  error: null,
+  frameIndex: 0,
+  mode: state.mode ?? null,
+  status: state.available === undefined
+    ? "checking"
+    : availabilityStatus(state.available),
+  visibilityState: null,
+  viewCount: 0,
+  viewports: [],
+});
 
 const createXrSessionStoreData = <Session extends object>(
-  state: XrSessionStoreInitialState = {},
+  state: XrSessionState,
 ): XrSessionStoreData<Session> => ({
-  ...createXrSessionState(state),
+  ...state,
   session: null,
 });
 
@@ -173,6 +187,7 @@ const createAvailabilityPatch = <Session extends object>(
 ): XrSessionStorePatch<Session> => {
   const patch: XrSessionStorePatch<Session> = {
     available,
+    blockReason: null,
     error: null,
     status: availabilityStatus(available),
   };
@@ -182,6 +197,7 @@ const createAvailabilityPatch = <Session extends object>(
     patch.active = false;
     patch.mode = options.mode ?? null;
     patch.session = null;
+    patch.visibilityState = null;
     patch.viewCount = 0;
     patch.viewports = [];
   }
@@ -194,12 +210,12 @@ export const selectXrSessionSnapshot = <Session extends object>(
 ): XrSessionState => ({
   active: state.active,
   available: state.available,
+  blockReason: state.blockReason,
   error: state.error,
   frameIndex: state.frameIndex,
   mode: state.mode,
-  offerError: state.offerError,
-  offerStatus: state.offerStatus,
   status: state.status,
+  visibilityState: state.visibilityState,
   viewCount: state.viewCount,
   viewports: copyXrViewports(state.viewports),
 });
@@ -229,14 +245,18 @@ export const createXrSessionStore = <Session extends object = object>(
   };
   const actions: XrSessionStoreActions<Session> = {
     activateSession: (session, options) => {
+      const visibilityState = options.visibilityState ?? "visible";
+      const suspended = visibilityState === "hidden";
       set({
-        active: true,
+        active: !suspended,
         available: true,
+        blockReason: null,
         error: null,
         frameIndex: 0,
         mode: options.mode,
         session,
-        status: "active",
+        status: suspended ? "suspended" : "active",
+        visibilityState,
         viewCount: 0,
         viewports: [],
       });
@@ -244,13 +264,42 @@ export const createXrSessionStore = <Session extends object = object>(
     beginSession: (session = null, options = {}) => {
       const patch: XrSessionStorePatch<Session> = {
         active: false,
+        blockReason: null,
         error: null,
         frameIndex: 0,
         session,
         status: "starting",
+        visibilityState: null,
         viewCount: 0,
         viewports: [],
       };
+      if (options.mode !== undefined) patch.mode = options.mode;
+      set(patch);
+    },
+    beginSessionEnd: () => {
+      if (current.session === null) return;
+      set({
+        active: false,
+        error: null,
+        status: "ending",
+      });
+    },
+    blockSession: (reason, error, options = {}) => {
+      if (current.session !== null) {
+        throw new Error("Cannot block XR acquisition while a live session is owned");
+      }
+      const patch: XrSessionStorePatch<Session> = {
+        active: false,
+        blockReason: reason,
+        error: error === undefined ? null : errorMessageFromUnknown(error),
+        frameIndex: 0,
+        session: null,
+        status: "blocked",
+        viewCount: 0,
+        viewports: [],
+        visibilityState: null,
+      };
+      if (options.available !== undefined) patch.available = options.available;
       if (options.mode !== undefined) patch.mode = options.mode;
       set(patch);
     },
@@ -260,10 +309,12 @@ export const createXrSessionStore = <Session extends object = object>(
         return {
           active: false,
           available,
+          blockReason: null,
           error: null,
           mode: null,
           session: null,
           status: availabilityStatus(available),
+          visibilityState: null,
           viewCount: 0,
           viewports: [],
         };
@@ -272,10 +323,12 @@ export const createXrSessionStore = <Session extends object = object>(
     failSession: (error, options = {}) => {
       const patch: XrSessionStorePatch<Session> = {
         active: false,
+        blockReason: null,
         error: errorMessageFromUnknown(error),
         frameIndex: 0,
         session: null,
         status: "error",
+        visibilityState: null,
         viewCount: 0,
         viewports: [],
       };
@@ -284,6 +337,7 @@ export const createXrSessionStore = <Session extends object = object>(
       set(patch);
     },
     recordFrame: (frame = {}) => {
+      if (current.session === null) return;
       set((state) => {
         const viewports = frame.viewports === undefined
           ? state.viewports
@@ -297,13 +351,32 @@ export const createXrSessionStore = <Session extends object = object>(
       });
     },
     reset: (state) => {
-      set(createXrSessionStoreData<Session>(state ?? initialSnapshot));
+      const snapshot = state === undefined
+        ? initialSnapshot
+        : createXrSessionState(state);
+      set(createXrSessionStoreData<Session>(snapshot));
     },
     setAvailability: (available, options) => {
-      set(createAvailabilityPatch(available, options));
+      if (current.session === null) {
+        set(createAvailabilityPatch(available, options));
+        return;
+      }
+
+      const patch: XrSessionStorePatch<Session> = { available };
+      if (options?.mode !== undefined) patch.mode = options.mode;
+      set(patch);
     },
-    setOfferStatus: (offerStatus, offerError = null) => {
-      set({ offerError, offerStatus });
+    setSessionVisibility: (visibilityState) => {
+      if (current.session === null) return;
+      set((state) => {
+        if (visibilityState === "hidden" && state.status === "active") {
+          return { active: false, status: "suspended", visibilityState };
+        }
+        if (visibilityState !== "hidden" && state.status === "suspended") {
+          return { active: true, status: "active", visibilityState };
+        }
+        return { visibilityState };
+      });
     },
   };
   current = { ...initialData, ...actions };

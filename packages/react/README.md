@@ -94,12 +94,24 @@ descriptors as `Canvas.scene`. It does not create or evaluate React elements.
 `@royal/react/xr` provides an explicit session store and the renderer bridge;
 it does not own an application's WebXR workflow. `createXrSessionStore()` keeps
 serializable UI state separate from the live session object and exposes
-semantic actions for availability, offers, lifecycle transitions, and optional
-frame telemetry. `createXrSessionRenderer()` owns the Royal render layer and
-reference space until disposal.
+semantic actions for availability, blocked acquisition, live-session lifecycle
+transitions, and optional frame telemetry. A live session moves through
+`starting`, `active` or `suspended`, and `ending`; `blocked` means no session was
+acquired, with a closed `blockReason` that UI can inspect. The serializable
+snapshot exposes only lifecycle data, while `selectXrSessionControlSnapshot()`
+exposes the browser-owned session object. `createXrSessionRenderer()` owns the
+Royal render layer and reference space until disposal.
 
-The application owns support detection, session offer/request/end policy, the
-animation-frame loop, and controller or input picking. Frame snapshots are
+The store's initial state accepts only `available` and `mode`, because a newly
+created store cannot already own a browser session. Omit `available` to begin in
+`checking`; pass it explicitly to begin in `available` or `unavailable`.
+
+The application owns support detection, session request/end policy, the
+animation-frame loop, and controller or input picking. Forward the session's
+`visibilitychange` events through `setSessionVisibility()` so a hidden session
+remains owned but is reported as `suspended`. Use `blockSession()` only when a
+request failed before ownership, such as another immersive session already
+being active. Frame snapshots are
 opt-in telemetry: only connect `onFrameSnapshot` to `recordFrame` when UI or
 diagnostics actually consume per-frame viewport data.
 

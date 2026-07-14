@@ -401,13 +401,19 @@ framebuffer is never deleted by Royal. Effects and owned HDR intermediates must
 declare an XR path and may be disabled or resolution-scaled by the Quest quality
 tier. Multiview is an optional optimization, not a required architecture.
 
-An XR session has explicit `idle -> starting -> running -> ending -> idle`
-states, with `disposed` reachable from every state. It uses the root's existing
-context rather than reacquiring one from the canvas. Start failure, session
-`end`, context loss, and root disposal all release the external clock exactly
-once, cancel pending callbacks, and restore Royal-owned GL state around the
-borrowed framebuffer. No error path may strand continuous rendering or delete
-runtime-owned framebuffer resources.
+XR acquisition and XR ownership are separate state domains. Support detection
+produces `available` or `unavailable`; a failed request can produce `blocked`
+with an inspectable reason without claiming a session. Once owned, a session
+moves through `starting -> active <-> suspended -> ending`. `suspended` means
+the owned session is browser-hidden, including the valid case where immersive
+XR continues in the background while the 2D browser is foregrounded. It is not
+an acquisition failure and must retain the live session handle.
+
+The XR renderer uses the root's existing context rather than reacquiring one
+from the canvas. Start failure, session `end`, context loss, and root disposal
+all release the external clock exactly once, cancel pending callbacks, and
+restore Royal-owned GL state around the borrowed framebuffer. No error path may
+strand continuous rendering or delete runtime-owned framebuffer resources.
 
 ## WebGL Contract
 

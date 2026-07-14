@@ -1,6 +1,6 @@
 import type { RoyalRendererRoot } from "./root";
 import { royalRendererCapabilitiesFor } from "./renderer-capabilities";
-import type { XrViewport } from "./xr-store";
+import type { XrSessionVisibilityState, XrViewport } from "./xr-store";
 
 export interface XrReferenceSpace {
   readonly __royalXrReferenceSpace?: never;
@@ -31,13 +31,14 @@ export interface XrFrame {
 }
 
 export interface XrSession {
+  readonly visibilityState?: XrSessionVisibilityState;
   addEventListener(
-    type: "end",
+    type: "end" | "visibilitychange",
     listener: EventListenerOrEventListenerObject,
     options?: AddEventListenerOptions | boolean,
   ): void;
   removeEventListener(
-    type: "end",
+    type: "end" | "visibilitychange",
     listener: EventListenerOrEventListenerObject,
     options?: EventListenerOptions | boolean,
   ): void;
@@ -89,18 +90,20 @@ export type {
   XrSessionActivationOptions,
   XrSessionAvailabilityOptions,
   XrSessionBeginOptions,
+  XrSessionBlockOptions,
+  XrSessionBlockReason,
   XrSessionControlSnapshot,
   XrSessionEndOptions,
   XrSessionFailureOptions,
   XrSessionFrameRecord,
   XrSessionMode,
-  XrSessionOfferStatus,
   XrSessionState,
   XrSessionStore,
   XrSessionStoreActions,
   XrSessionStoreInitialState,
   XrSessionStoreState,
   XrSessionStatus,
+  XrSessionVisibilityState,
   XrSessionSelectorEquality,
   XrViewport,
 } from "./xr-store";
