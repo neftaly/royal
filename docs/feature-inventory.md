@@ -82,9 +82,9 @@ Status meanings:
 | Plain glTF `image/svg+xml` images | ingestion/candidate | Nonconformant core glTF. Accept only as a lenient local-input convenience, not as Royal's recommended asset contract. |
 | `GS_texture_svg` source selection with a core raster fallback | ingestion | Garbo Succus vendor extension. Keep tiny and register the `GS` prefix if assets leave the private pipeline; it must lower to an ordinary image source. |
 | SVG viewport/viewBox normalization | ingestion | Required for deterministic raster dimensions. Keep. |
-| Regex script/event/unsafe-URL stripping | deleted/target | It is not a trustworthy sanitizer and creates a false security promise. Browser image decoding is the execution boundary. |
-| Runtime nested/external SVG image resolution | deleted/target | Canvas only rasterizes after decode; resolving dependency graphs is separate parser/IO complexity. Flatten or embed dependencies offline. |
-| Relative URL, `xml:base`, SVG cycle/depth and dependency caches | deleted/target | Consequences of runtime external-resource support; delete with that support. |
+| Regex script/event/unsafe-URL stripping | deleted | It is not a trustworthy sanitizer and creates a false security promise. Browser image decoding is the execution boundary. |
+| Runtime nested/external SVG image resolution | deleted | Canvas only rasterizes after decode; resolving dependency graphs is separate parser/IO complexity. Flatten or embed dependencies offline. |
+| Relative URL, `xml:base`, SVG cycle/depth and dependency caches | deleted | These were consequences of runtime external-resource support and are absent with it. |
 
 ## Geometry LOD and visibility
 

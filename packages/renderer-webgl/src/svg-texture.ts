@@ -47,7 +47,7 @@ export const isSvgUri = (uri: string): boolean =>
     ? isSvgMimeType(dataUriMediaType(uri))
     : /\.svg(?:$|[?#])/iu.test(uri);
 
-/** True for sources produced by Royal's safe ordinary SVG ingestion path. */
+/** True for sources decoded through Royal's ordinary SVG image path. */
 export const isLoadedSvgTextureSource = (source: LoadedTextureSource): boolean =>
   typeof source === "object" && source !== null && loadedSvgTextureSources.has(source);
 

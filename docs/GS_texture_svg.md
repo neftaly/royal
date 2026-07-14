@@ -6,8 +6,9 @@ Royal treats this as a supported beta feature in the WebGL renderer: product
 examples may use it, validation and regression tests cover the current
 behavior, and assets should include a core raster fallback. The extension name
 and exact fallback rules are not yet a stable ecosystem compatibility promise.
-Royal sanitizes SVG text before rasterization by removing script elements,
-event-handler attributes, and unsafe `javascript:` or `data:text/html` hrefs.
+Royal normalizes only finite root image dimensions, then passes the SVG to the
+browser's non-document image decoder. It does not parse or sanitize active
+content and does not resolve nested external resources.
 
 ## Extension Name
 
@@ -176,15 +177,20 @@ SHOULD expose diagnostics when caps can affect visual quality.
 SVG data MUST be treated as untrusted asset data.
 
 Implementations MUST NOT allow script execution during SVG decode or
-rasterization. Implementations SHOULD reject or sanitize active content before
-rasterization. External image references MUST be resolved by the implementation's
-normal asset loading and origin policy. Implementations SHOULD keep SVG
-rasterization deterministic for a fixed set of resolved resources.
+rasterization. Rewriting selected elements or attributes is not a sufficient
+security boundary and implementations MUST NOT describe such rewriting as
+sanitization. SVG bytes SHOULD be decoded as an image rather than inserted into
+a document DOM.
 
-Royal's WebGL renderer sanitizes before image decode, content-key generation,
-and generated virtual texture page creation. It strips `<script>` elements,
-inline event-handler attributes, and unsafe `javascript:` or `data:text/html`
-hrefs.
+SVG sources for this extension MUST be self-contained. Fragment references
+within the same SVG are allowed; runtime fetching of relative or absolute
+resources, `xml:base` processing, dependency cycles, and nested SVG resolution
+are outside this extension. Authoring pipelines should flatten or embed those
+resources and retain the core raster fallback for incompatible decoders.
+
+Royal preserves source content other than finite root `width`/`height`
+normalization and decodes a renderer-created Blob URL through `Image`. It does
+not issue fetches for URLs found inside the SVG text.
 
 ## JSON Schema
 
