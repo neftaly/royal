@@ -1,17 +1,5 @@
+import { finiteNumber, frozenVec3 } from './descriptor-values';
 import type { EulerRads, Metres, Rads, WorldPosition3 } from './primitives';
-
-const frozenVec3 = (value: WorldPosition3): WorldPosition3 => Object.freeze([value[0], value[1], value[2]]) as WorldPosition3;
-
-const finite = (value: number, label: string): void => {
-  if (!Number.isFinite(value)) throw new Error(`camera ${label} must be finite; received ${String(value)}`);
-};
-
-const validatePose = (position: WorldPosition3, rotation: EulerRads): void => {
-  for (let index = 0; index < 3; index += 1) {
-    finite(position[index]!, `position[${index}]`);
-    finite(rotation[index]!, `rotation[${index}]`);
-  }
-};
 
 /** Perspective camera for a scene. */
 export interface PerspectiveCamera {
@@ -58,6 +46,7 @@ export interface PerspectiveCameraOptions {
 export interface OrthographicCameraOptions {
   /** World-space position in metres. @defaultValue `[0, 0, 0]` */
   readonly position?: WorldPosition3;
+  /** XYZ Euler rotation in radians. @defaultValue `[0, 0, 0]` */
   readonly rotation?: EulerRads;
   /** Orthographic bounds relative to the camera, in metres. */
   readonly left: Metres;
@@ -73,33 +62,37 @@ export interface OrthographicCameraOptions {
 export type Camera = PerspectiveCamera | OrthographicCamera;
 
 export const perspectiveCamera = (options: PerspectiveCameraOptions): PerspectiveCamera => {
-  const position = options.position ?? [0, 0, 0];
-  const rotation = options.rotation ?? [0, 0, 0];
+  const position = frozenVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;
+  const rotation = frozenVec3(options.rotation ?? [0, 0, 0], 'camera rotation') as EulerRads;
   const fovY = options.fovY ?? Math.PI / 4;
   const near = options.near ?? 0.1;
   const far = options.far ?? 1000;
-  validatePose(position, rotation);
-  finite(fovY, 'fovY'); finite(near, 'near'); finite(far, 'far');
-  if (!(fovY > 0 && fovY < Math.PI)) throw new Error('perspective camera fovY must be within 0..PI');
+  finiteNumber(fovY, 'camera fovY');
+  finiteNumber(near, 'camera near');
+  finiteNumber(far, 'camera far');
+  if (!(fovY > 0 && fovY < Math.PI)) throw new Error('perspective camera fovY must be within (0, PI)');
   if (!(near > 0 && far > near)) throw new Error('perspective camera requires 0 < near < far');
   return Object.freeze({
-    kind: 'perspective-camera', position: frozenVec3(position), rotation: frozenVec3(rotation),
+    kind: 'perspective-camera', position, rotation,
     fovY, near, far
   });
 };
 
 export const orthographicCamera = (options: OrthographicCameraOptions): OrthographicCamera => {
-  const position = options.position ?? [0, 0, 0];
-  const rotation = options.rotation ?? [0, 0, 0];
+  const position = frozenVec3(options.position ?? [0, 0, 0], 'camera position') as WorldPosition3;
+  const rotation = frozenVec3(options.rotation ?? [0, 0, 0], 'camera rotation') as EulerRads;
   const near = options.near ?? -1000;
   const far = options.far ?? 1000;
-  validatePose(position, rotation);
-  finite(options.left, 'left'); finite(options.right, 'right'); finite(options.bottom, 'bottom'); finite(options.top, 'top');
-  finite(near, 'near'); finite(far, 'far');
+  finiteNumber(options.left, 'camera left');
+  finiteNumber(options.right, 'camera right');
+  finiteNumber(options.bottom, 'camera bottom');
+  finiteNumber(options.top, 'camera top');
+  finiteNumber(near, 'camera near');
+  finiteNumber(far, 'camera far');
   if (options.left === options.right || options.bottom === options.top) throw new Error('orthographic camera bounds must have non-zero width and height');
   if (!(far > near)) throw new Error('orthographic camera requires near < far');
   return Object.freeze({
-    kind: 'orthographic-camera', position: frozenVec3(position), rotation: frozenVec3(rotation),
+    kind: 'orthographic-camera', position, rotation,
     left: options.left, right: options.right, bottom: options.bottom, top: options.top, near, far
   });
 };
