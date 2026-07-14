@@ -1,4 +1,10 @@
-import { frozenDirection3, frozenRgba, frozenVec3 } from './descriptor-values';
+import {
+  frozenDirection3,
+  frozenRgba,
+  frozenVec3,
+  nonNegativeFiniteNumber,
+  positiveFiniteNumber,
+} from './descriptor-values';
 import type { Direction3, LinearRgba, Metres, Rads, WorldPosition3 } from './primitives';
 
 export interface SpotLightNode {
@@ -32,11 +38,6 @@ export interface SpotLightOptions {
 }
 
 const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'spot light color');
-const positive = (value: number, label: string): number => {
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`);
-  return value;
-};
-
 export const spotLight = (options: SpotLightOptions): SpotLightNode => {
   const outerConeAngle = options.outerConeAngle ?? Math.PI / 4;
   const innerConeAngle = options.innerConeAngle ?? 0;
@@ -51,9 +52,14 @@ export const spotLight = (options: SpotLightOptions): SpotLightNode => {
     color: options.color === undefined ? WHITE : frozenRgba(options.color, 'spot light color'),
     direction: frozenDirection3(options.direction, 'spot light direction'),
     innerConeAngle,
-    intensityCandela: positive(options.intensityCandela, 'spot light intensityCandela'),
+    intensityCandela: nonNegativeFiniteNumber(
+      options.intensityCandela,
+      'spot light intensityCandela',
+    ),
     outerConeAngle,
     position: frozenVec3(options.position, 'spot light position'),
-    ...(options.range === undefined ? {} : { range: positive(options.range, 'spot light range') })
+    ...(options.range === undefined
+      ? {}
+      : { range: positiveFiniteNumber(options.range, 'spot light range') })
   });
 };

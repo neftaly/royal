@@ -7,7 +7,9 @@ import {
   imageTexture,
   mesh,
   perspectiveCamera,
+  pointLight,
   scene,
+  spotLight,
   standardMaterial,
   studioEnvironment,
   textureAsset,
@@ -243,6 +245,23 @@ describe("renderer-core descriptor contract", () => {
       illuminanceLux: 1,
       kind: "directional-light",
     });
+  });
+
+  it("accepts zero-output lights while rejecting negative intensity", () => {
+    expect(pointLight({ intensityCandela: 0, position: [0, 1, 0] }).intensityCandela).toBe(0);
+    expect(spotLight({
+      direction: [0, -1, 0],
+      intensityCandela: 0,
+      position: [0, 1, 0],
+    }).intensityCandela).toBe(0);
+
+    expect(() => pointLight({ intensityCandela: -1, position: [0, 1, 0] }))
+      .toThrow(/intensityCandela must be non-negative/);
+    expect(() => spotLight({
+      direction: [0, -1, 0],
+      intensityCandela: -1,
+      position: [0, 1, 0],
+    })).toThrow(/intensityCandela must be non-negative/);
   });
 
 });

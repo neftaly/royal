@@ -11,6 +11,12 @@ export const positiveFiniteNumber = (value: number, label: string): number => {
   return value;
 };
 
+export const nonNegativeFiniteNumber = (value: number, label: string): number => {
+  finiteNumber(value, label);
+  if (value < 0) throw new Error(`${label} must be non-negative; received ${String(value)}`);
+  return value;
+};
+
 export const frozenVec3 = (value: Vec3, label: string): Vec3 => Object.freeze([
   finiteNumber(value[0], `${label}[0]`),
   finiteNumber(value[1], `${label}[1]`),

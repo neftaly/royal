@@ -1,4 +1,9 @@
-import { frozenRgba, frozenVec3 } from './descriptor-values';
+import {
+  frozenRgba,
+  frozenVec3,
+  nonNegativeFiniteNumber,
+  positiveFiniteNumber,
+} from './descriptor-values';
 import type { LinearRgba, Metres, WorldPosition3 } from './primitives';
 
 export interface PointLightNode {
@@ -24,18 +29,17 @@ export interface PointLightOptions {
 }
 
 const WHITE: LinearRgba = frozenRgba([1, 1, 1, 1], 'point light color');
-const finitePositive = (value: number | undefined, label: string): number | undefined => {
-  if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`);
-  return value;
-};
-
 export const pointLight = (options: PointLightOptions): PointLightNode => {
-  const range = finitePositive(options.range, 'point light range');
+  const range = options.range === undefined
+    ? undefined
+    : positiveFiniteNumber(options.range, 'point light range');
   return Object.freeze({
     kind: 'point-light',
     color: options.color === undefined ? WHITE : frozenRgba(options.color, 'point light color'),
-    intensityCandela: finitePositive(options.intensityCandela, 'point light intensityCandela')!,
+    intensityCandela: nonNegativeFiniteNumber(
+      options.intensityCandela,
+      'point light intensityCandela',
+    ),
     position: frozenVec3(options.position, 'point light position'),
     ...(range === undefined ? {} : { range })
   });
