@@ -44,6 +44,9 @@ Completed in the current worktree:
 - `ScenePlanTransactionOwner` owns authoritative plan generations, manifest
   diffing, scene-light compilation, planning counters, and retryable topology,
   render-object-ref, and bulk-instance reconciliation.
+- `ResourceCapacityWakeOwner` owns CPU wake coalescing, persistent-GPU wake
+  suppression, durable-capacity routing, fair preparation-peer wake order, and
+  terminal cancellation on disposal.
 
 Keep the functional core / imperative shell split: frame planning, LOD, demand,
 and admission stay pure where possible; browser, WebGL, scheduling, and cleanup
