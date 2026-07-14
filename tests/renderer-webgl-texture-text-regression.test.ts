@@ -532,7 +532,6 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     const { calls, gl } = fakeGl();
     const root = createWebGlRoot(fakeCanvas(gl));
     const sharedTexture = imageTexture({
-      contentKey: "shared-card-art",
       src: "/textures/card-front.png",
     });
     const sharedMaterial = unlitMaterial({ texture: sharedTexture });
@@ -585,7 +584,6 @@ describe("WebGL texture, box UV, and text geometry regressions", () => {
     const root = createWebGlRoot(fakeCanvas(gl));
     const random = new SeededRandom(0x7e57_cafe);
     const textures = Array.from({ length: 4 }, (_value, index) => imageTexture({
-      contentKey: `fuzz-texture-${index}`,
       src: `/textures/fuzz-${index}.png`,
     }));
 

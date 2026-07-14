@@ -72,7 +72,8 @@ export interface TextureAssetOptions extends TextureAssetBaseOptions {
   readonly src: string;
 }
 
-export type ImageTextureOptions = TextureAssetOptions;
+/** Friendly image options; use `textureAsset` for explicit cross-URI content identity. */
+export type ImageTextureOptions = Omit<TextureAssetOptions, 'contentKey'>;
 
 interface VirtualTextureAssetBaseOptions {
   /** Color-space override. Otherwise the manifest declaration is used when available. */
@@ -146,7 +147,6 @@ export function imageTexture(srcOrOptions: string | ImageTextureOptions): Textur
       ...options.sampler
     },
     src: uri,
-    ...(options.contentKey === undefined ? {} : { contentKey: options.contentKey }),
     ...(options.version === undefined ? {} : { version: options.version })
   });
 }

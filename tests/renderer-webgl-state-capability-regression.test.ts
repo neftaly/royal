@@ -5,6 +5,7 @@ import {
   mesh,
   orthographicCamera,
   scene,
+  textureAsset,
   unlitMaterial,
   wireframeMaterial,
   type Geometry,
@@ -483,7 +484,7 @@ describe("WebGL renderer state and capability regressions", () => {
     const sharedSource = "/textures/shared-albedo.png";
     const sharedContentKey = "sha256:shared-albedo";
     const nearestSrgb = unlitMaterial({
-      texture: imageTexture({
+      texture: textureAsset({
         colorSpace: "srgb",
         contentKey: sharedContentKey,
         sampler: {
@@ -497,7 +498,7 @@ describe("WebGL renderer state and capability regressions", () => {
       }),
     });
     const linearLinear = unlitMaterial({
-      texture: imageTexture({
+      texture: textureAsset({
         colorSpace: "linear",
         contentKey: sharedContentKey,
         sampler: {
@@ -558,7 +559,8 @@ describe("WebGL renderer state and capability regressions", () => {
     const leftSource = "/textures/content-a.png";
     const rightSource = "/textures/content-b.png";
     const left = unlitMaterial({
-      texture: imageTexture({
+      texture: textureAsset({
+        colorSpace: "srgb",
         contentKey: sharedContentKey,
         sampler,
         src: leftSource,
@@ -566,7 +568,8 @@ describe("WebGL renderer state and capability regressions", () => {
       }),
     });
     const right = unlitMaterial({
-      texture: imageTexture({
+      texture: textureAsset({
+        colorSpace: "srgb",
         contentKey: sharedContentKey,
         sampler,
         src: rightSource,

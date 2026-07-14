@@ -108,7 +108,6 @@ describe("renderer-core descriptor properties", () => {
         wrapS: random.boolean() ? "repeat" as const : "mirrored-repeat" as const,
       };
       const texture = imageTexture({
-        contentKey: `sha256:${seed.toString(16)}`,
         sampler,
         src: `/textures/${seed.toString(16)}.png`,
         version: `v${random.int(1, 1000)}`,
@@ -132,7 +131,7 @@ describe("renderer-core descriptor properties", () => {
         : unlitMaterial({ texture: virtual });
 
       expect(texture.colorSpace, `${label} image texture srgb default`).toBe("srgb");
-      expect(texture.contentKey, `${label} image texture content key preserved`).toBe(`sha256:${seed.toString(16)}`);
+      expect(texture, `${label} friendly image texture omits cross-URI identity`).not.toHaveProperty("contentKey");
       expect(texture.sampler, `${label} sampler default merge`).toEqual({
         magFilter: sampler.magFilter,
         minFilter: "linear-mipmap-linear",

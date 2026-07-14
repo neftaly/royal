@@ -4,11 +4,11 @@ import {
   directionalLight,
   gltf,
   gltfInstances,
-  imageTexture,
   mesh,
   perspectiveCamera,
   scene,
   standardMaterial,
+  textureAsset,
   virtualTexture,
   type RenderNode,
   type RenderObjectRef,
@@ -35,7 +35,7 @@ const camera = perspectiveCamera({
 });
 const geometry = boxGeometry(1);
 const ordinaryTextures = Array.from({ length: 4 }, (_value, index) =>
-  imageTexture({ contentKey: `image-${index}`, src: `/image-${index}.png`, version: index }));
+  textureAsset({ contentKey: `image-${index}`, src: `/image-${index}.png`, version: index }));
 const virtualTextures = Array.from({ length: 3 }, (_value, index) =>
   virtualTexture({ contentKey: `virtual-${index}`, manifestUri: `/virtual-${index}.json`, version: index }));
 const refs: readonly RenderObjectRef[] = Array.from({ length: 4 }, () => ({ current: null }));

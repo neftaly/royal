@@ -129,6 +129,9 @@ describe("renderer-core descriptor contract", () => {
       // @ts-expect-error fallbackColor is not a public render fallback for image textures.
       imageTexture({ fallbackColor: [1, 0, 1, 1], src: "/textures/albedo.png" });
 
+      // @ts-expect-error cross-URI identity is explicit through textureAsset.
+      imageTexture({ contentKey: "sha256:albedo", src: "/textures/albedo.png" });
+
       // @ts-expect-error fallback is not a public render fallback for texture assets.
       textureAsset({ fallback: { color: [1, 0, 1, 1], kind: "solid" }, src: "/textures/mask.ktx2" });
 
@@ -159,8 +162,10 @@ describe("renderer-core descriptor contract", () => {
   });
 
   it("preserves explicit texture content keys for renderer-level sharing", () => {
-    expect(imageTexture({
+    expect(textureAsset({
+      colorSpace: "srgb",
       contentKey: "sha256:albedo",
+      sampler: defaultImageTextureSampler,
       src: "/textures/albedo-a.png",
     })).toEqual({
       colorSpace: "srgb",
@@ -169,6 +174,7 @@ describe("renderer-core descriptor contract", () => {
       sampler: defaultImageTextureSampler,
       uri: "/textures/albedo-a.png",
     });
+    expect(imageTexture({ src: "/textures/albedo-a.png" })).not.toHaveProperty("contentKey");
 
     expect(virtualTexture({
       contentKey: "sha256:albedo-vt",

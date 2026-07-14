@@ -65,7 +65,7 @@ Status meanings:
 | --- | --- | --- |
 | Solid-colour texture | product | Cheap convenience/fallback. |
 | Ordinary image texture | product | Required baseline and fallback. |
-| Authored texture asset with content/version identity | product | `version` invalidates bytes behind one stable URI; `contentKey` deduplicates identical decoded content across different URIs. Keep the capability, but consider hiding `contentKey` from the friendly `imageTexture` helper. |
+| Authored texture asset with content/version identity | product | `version` invalidates bytes behind one stable URI; advanced `textureAsset({ contentKey })` deduplicates identical decoded content across different URIs. The friendly `imageTexture` helper intentionally omits cross-URI identity. |
 | sRGB and linear texture colour spaces | product | Correctness requirement. |
 | Nearest/linear/mipmap sampler filters | ingestion/product | WebGL/glTF consequence with low incremental cost. Keep. |
 | Clamp, repeat and mirrored-repeat wrapping | ingestion/product | Required for glTF and VT sampling parity. Keep. |

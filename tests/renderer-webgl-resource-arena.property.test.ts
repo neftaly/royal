@@ -1,4 +1,4 @@
-import { boxGeometry, imageTexture } from "@royal/renderer-core";
+import { boxGeometry, imageTexture, textureAsset } from "@royal/renderer-core";
 import { describe, expect, it } from "vitest";
 import {
   createResourceManifestDiffScratch,
@@ -293,7 +293,7 @@ describe("semantic resource arena properties", () => {
         const dependencies = (suffix: string): PreparedAssetDependencyManifest => ({
           geometries: [], iblKeys: [],
           ordinaryTextures: [{ count: 1, key: `ordinary:${suffix}`,
-            texture: imageTexture({ contentKey: `content:${suffix}`, src: `/texture-${suffix}.png` }) }],
+            texture: textureAsset({ contentKey: `content:${suffix}`, src: `/texture-${suffix}.png` }) }],
           virtualTextures: [], wantsHdr: false,
         });
         const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
@@ -360,7 +360,7 @@ describe("semantic resource arena properties", () => {
             const merged = {
               count: 1,
               key: `ordinary:rekey-${op.revision}`,
-              texture: imageTexture({ contentKey: `rekey-${op.revision}`, src: `/rekey-${op.revision}.png` }),
+              texture: textureAsset({ contentKey: `rekey-${op.revision}`, src: `/rekey-${op.revision}.png` }),
             };
             rekeyPreparedAssetOrdinaryTextures(arena, key, previous.map((row) => ({
               next: { ...merged, count: row.count },
