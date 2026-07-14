@@ -57,7 +57,6 @@ export type VirtualTexturePageLoad =
 type VirtualTexturePageLoader = (
   manifest: VirtualTextureManifestModel,
   page: VirtualTexturePageId,
-  pageUrisByKey: ReadonlyMap<string, string>,
   signal: AbortSignal,
 ) => VirtualTexturePageLoad;
 
@@ -108,6 +107,7 @@ export type VirtualTextureRuntimeStats = {
 
 export type VirtualTextureRuntimeState = {
   activeSource: VirtualTexturePageSource;
+  availablePageKeys?: ReadonlySet<string>;
   /** Stable root-policy ordering for admission and cold-reclamation ties. */
   readonly admissionTicket: number;
   demandPublished: boolean;
@@ -126,7 +126,6 @@ export type VirtualTextureRuntimeState = {
   lastDemandFrame: number;
   manifestAbortController?: AbortController;
   manifest?: VirtualTextureManifestModel;
-  pageUrisByKey?: ReadonlyMap<string, string>;
   sourceGeneration: number;
   stats: VirtualTextureRuntimeStats;
   status: VirtualTextureRuntimeStatus;
@@ -207,7 +206,7 @@ export const generatedVirtualTextureSource = (
 ): GeneratedVirtualTextureSource => {
   const manifest = generatedRasterVirtualTextureManifest(pageSource.source);
   return {
-    loadPage: (activeManifest, page, _pageUrisByKey, signal) => {
+    loadPage: (activeManifest, page, signal) => {
       throwIfAborted(signal);
       return {
         kind: "image",

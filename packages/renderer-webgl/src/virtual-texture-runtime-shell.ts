@@ -476,8 +476,8 @@ export class VirtualTextureRuntimeShell {
         manifest.pageSize,
       );
     }
+    state.availablePageKeys = new Set(manifest.pages.map(virtualTexturePageKey));
     state.manifest = manifest;
-    state.pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
     state.status = "ready";
     this.#options.invalidate();
   }
@@ -489,9 +489,8 @@ export class VirtualTextureRuntimeShell {
   ): VirtualTexturePageLoad {
     const manifest = state.manifest;
     if (manifest === undefined) return { kind: "absent" };
-    const pageUrisByKey = state.pageUrisByKey ?? new Map<string, string>();
     if (state.activeSource.telemetryKind !== "generated-raster") {
-      return state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
+      return state.activeSource.loadPage(manifest, page, signal);
     }
     const started = virtualTextureNow();
     state.stats.generatedPageRequests += 1;
@@ -502,7 +501,7 @@ export class VirtualTextureRuntimeShell {
       return result;
     };
     try {
-      const loaded = state.activeSource.loadPage(manifest, page, pageUrisByKey, signal);
+      const loaded = state.activeSource.loadPage(manifest, page, signal);
       if (loaded.kind === "absent") return loaded;
       return {
         kind: "image",
@@ -518,6 +517,7 @@ export class VirtualTextureRuntimeShell {
   }
 
   #sidecarSource(manifestUri: string): VirtualTexturePageSource {
+    let pageUrisByKey: ReadonlyMap<string, string> = new Map();
     return {
       loadManifest: async (signal) => {
         let response: Response;
@@ -539,9 +539,13 @@ export class VirtualTextureRuntimeShell {
             { cause: error },
           );
         }
-        return parseVirtualTextureManifest(payload);
+        const parsed = parseVirtualTextureManifest(payload);
+        if (parsed.manifest !== undefined) {
+          pageUrisByKey = virtualTextureExplicitPageUrisByKey(parsed.manifest);
+        }
+        return parsed;
       },
-      loadPage: (manifest, page, pageUrisByKey, signal) => {
+      loadPage: (manifest, page, signal) => {
         const uri = virtualTexturePageUri(manifest, page, pageUrisByKey);
         return uri === undefined
           ? { kind: "absent" }

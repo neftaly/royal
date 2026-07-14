@@ -19,7 +19,6 @@ import {
   derivedVirtualTextureMipCount,
   virtualTextureMipDimension,
   virtualTexturePageKey,
-  virtualTexturePageUri,
   type VirtualTextureManifestModel,
   type VirtualTexturePageId,
 } from "./virtual-texturing";
@@ -30,8 +29,8 @@ export type VirtualTextureProjection =
   | { readonly footprint: VirtualTextureScreenFootprint; readonly kind: "visible" };
 
 export type VirtualTextureDemandSource = {
+  readonly availablePageKeys?: ReadonlySet<string>;
   readonly manifest: VirtualTextureManifestModel;
-  readonly pageUrisByKey?: ReadonlyMap<string, string>;
 };
 
 export type VirtualTextureDrawDemandInput = VirtualTextureDemandSource & {
@@ -978,7 +977,7 @@ export const isVirtualTextureDemandPageAvailable = (
   source: VirtualTextureDemandSource,
   page: VirtualTexturePageId,
 ): boolean => source.manifest.pageAddressing === "complete"
-  || virtualTexturePageUri(source.manifest, page, source.pageUrisByKey) !== undefined;
+  || source.availablePageKeys?.has(virtualTexturePageKey(page)) === true;
 
 /** Coarse-first bounded fallback; complete address spaces are produced only until limit. */
 export const planVirtualTextureBootstrapDemand = (

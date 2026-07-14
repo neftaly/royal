@@ -544,6 +544,7 @@ describe("virtual texture pure demand planning", () => {
       texCoords.set([0, 0, 1, 0, 0, 1], triangle * 6);
     }
     const input = {
+      availablePageKeys: new Set(["30/0/0"]),
       context: context(positions, identityMat4(), { texCoords }),
       limit: 8,
       manifest: manifest({ mipCount: 3, uriTemplate: "m{mip}-{x}-{y}.png" }),
@@ -708,6 +709,7 @@ describe("virtual texture pure demand planning", () => {
     };
 
     const demand = planVirtualTextureDrawDemand({
+      availablePageKeys: new Set(sparse.pages.map((page) => `${page.mip}/${page.x}/${page.y}`)),
       context: faceOn,
       limit: 4,
       manifest: sparse,
@@ -1195,13 +1197,13 @@ describe("virtual texture pure demand planning", () => {
       pages: [{ mip: 1, uri: "parent.png", x: 0, y: 0 }],
       width: 1_024,
     };
-    const pageUrisByKey = new Map([["1/0/0", "parent.png"]]);
-    expect(isVirtualTextureDemandPageAvailable({ manifest: sparse, pageUrisByKey }, {
+    const availablePageKeys = new Set(["1/0/0"]);
+    expect(isVirtualTextureDemandPageAvailable({ availablePageKeys, manifest: sparse }, {
       mip: 1,
       x: 0,
       y: 0,
     })).toBe(true);
-    expect(isVirtualTextureDemandPageAvailable({ manifest: sparse, pageUrisByKey }, {
+    expect(isVirtualTextureDemandPageAvailable({ availablePageKeys, manifest: sparse }, {
       mip: 0,
       x: 0,
       y: 0,

@@ -451,10 +451,10 @@ export class VirtualTextureDemandOwner {
     }
 
     const demand = planVirtualTextureDrawDemand({
+      ...(state.availablePageKeys === undefined ? {} : { availablePageKeys: state.availablePageKeys }),
       ...(context === undefined ? {} : { context }),
       manifest,
       workspace: this.#planning,
-      ...(state.pageUrisByKey === undefined ? {} : { pageUrisByKey: state.pageUrisByKey }),
     });
     if (demand.retentionOverflowed === true) {
       state.stats.demandRetentionOverflows += 1;
